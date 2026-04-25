@@ -300,3 +300,38 @@ Files removed:
 Re-rendering: `scripts/render-worldmap.sh`. ~5 seconds. Required when the world geometry changes (rare — voidscape doesn't actively edit the landscape) or when bumping the `rsc-mapgen` vendor.
 
 Pixel↔tile mapping (for slice 5 click handling): the per-floor image is 2304 × 2736. The world is 1008 × 944 tiles per floor — the renderer crops empty outer regions, so the image isn't a 1:1 grid. Slice 5 will calibrate empirically (click a known landmark, derive the affine transform).
+
+### 2026-04-25 — World-map auto-walker, slice 5 (UI panel + click-to-walk)
+
+The visible feature. RSCR2-style modal dialog, opened via a "World Map" button that appears under the minimap on hover.
+
+Files added:
+- `Client_Base/src/orsc/graphics/gui/WorldMapPanel.java` — windowed dialog. Title bar with "Voidscape World Map" + "Close window" link. Floor tabs (Ground / Up 1 / Up 2 / Dungeon). Zoom +/− / Reset buttons in the right column. Map content centered on the player, scaled by current zoom (default 10×, range 1× to 24× via scroll wheel or the buttons). Yellow player marker + "You are here" label. Hand-baked landmark labels for ~13 F2P locations.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java`:
+  - `worldMapPanel` field; `worldWalkRouteX/Y/Reason` fields are now read by the panel for the route polyline.
+  - "World Map" hover button rendered in `drawUiTabMinimap` when the cursor is over the minimap, the minimap-tab-icon area, or the button itself.
+  - `drawUi` top: intercept clicks on the panel before any other handler can fire (using last frame's window rect, so side-panel handlers don't receive a click meant for the dialog).
+  - `drawUi` bottom: render the panel last, so it draws on top of side panels, minimap, and chat tabs.
+  - `runScroll`: routes the wheel to `worldMapPanel.adjustZoom()` when the dialog is open.
+
+Pixel ↔ tile transform: rsc-mapgen renders sectors X=48..63 (covering world tile X 0..768) × Y=37..55 (world tile Y 0..912) at 3 px/tile, then flips the whole image on the X axis. Map math:
+- `pngX = 2303 − worldX × 3`
+- `pngY = (worldY % 944) × 3`
+
+World tiles X=768..1008 and Y=912..944 are not rendered — those regions fall outside the PNG. Voidscape's F2P content all lives within the rendered range, so this is fine in practice.
+
+Click flow: `mudclient.handleClick` → world tile via the inverse transform → `sendWorldWalkRequest(x, y)` → server's `WorldWalkRequest` runs the pathfinder + drives `AutoWalkEvent` (slice 1) → `SEND_WORLD_WALK_ROUTE` (slice 2) → panel renders the polyline in green dots.
+
+Discovery notes:
+- The Ctrl+M hotkey was tried first but doesn't work on macOS — `controlPressed` doesn't track the macOS Command/Control through this client's input stack reliably. The hover-button is the canonical opener.
+- The grayscale "::rendermap" command from slice 4's first attempt has been retired in favour of the `rsc-mapgen`-based PNG.
+
+Caveats / known gaps versus RSCRevolution2's reference:
+- No POI icons (altars, cooking guilds, etc.) on the map.
+- Hand-baked landmark list is ~13 names; RSCR2 ships dozens with smart placement.
+- No search box, no favourites bar.
+- These are deferred to slice 6 (polyline polish) and beyond.
+
+Reversibility: revert the two files. The committed `Cache/worldmap/floor*.png` PNGs from slice 4 stay either way.

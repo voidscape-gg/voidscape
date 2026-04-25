@@ -143,11 +143,15 @@ public final class mudclient implements Runnable {
 	private final int[] pathZ = new int[8000];
 
 	// World-map auto-walker route (slice 2). Populated by SEND_WORLD_WALK_ROUTE.
-	// Slice 5 will render this as a polyline overlay on the world map.
+	// Slice 5 renders this as a polyline overlay on the world map panel.
 	public boolean worldWalkRouteOk;
 	public int worldWalkRouteReason;
 	public int[] worldWalkRouteX = new int[0];
 	public int[] worldWalkRouteY = new int[0];
+
+	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
+	// appears below the minimap on hover.
+	public final orsc.graphics.gui.WorldMapPanel worldMapPanel = new orsc.graphics.gui.WorldMapPanel();
 	private final int[] playerClothingColors = new int[]{0xFF0000, 16744448, 16769024, 10543104, '\ue000', '\u8000',
 		'\ua080', '\ub0ff', '\u80ff', 12528, 14680288, 3158064, 6307840, 8409088, 0xFFFFFF};
 	private final int[] playerHairColors = new int[]{16760880, 16752704, 8409136, 6307872, 3158064, 16736288,
@@ -7384,6 +7388,25 @@ public final class mudclient implements Runnable {
 
 			boolean var2 = false;
 
+			// World-map auto-walker (slice 5). Click intercept at the *top*
+			// of drawUi using the previous frame's window rect (so side
+			// panels don't process clicks meant for the dialog). The actual
+			// render happens at the *bottom* of drawUi so the dialog draws
+			// on top of side panels and chat tabs.
+			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME
+				&& this.mouseButtonClick == 1) {
+				int[] outWorld = new int[2];
+				orsc.graphics.gui.WorldMapPanel.ClickResult result =
+					this.worldMapPanel.handleClick(this.mouseX, this.mouseY,
+						this.getGameWidth(), outWorld);
+				if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.MAP_TILE) {
+					this.sendWorldWalkRequest(outWorld[0], outWorld[1]);
+				}
+				if (result != orsc.graphics.gui.WorldMapPanel.ClickResult.OUTSIDE) {
+					this.mouseButtonClick = 0;
+				}
+			}
+
 			try {
 				mainComponent.renderComponent();
 			} catch (Exception e) {
@@ -7589,6 +7612,15 @@ public final class mudclient implements Runnable {
 				if (this.topMouseMenuVisible && !this.optionsMenuShow) {
 					this.drawMenu();
 				}
+			}
+			// World-map auto-walker (slice 5). Render at the very end so the
+			// dialog sits on top of side-panel tabs, minimap, and chat tabs.
+			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+				this.worldMapPanel.render(this.getSurface(),
+					this.getGameWidth(), this.getGameHeight(),
+					this.playerLocalX + this.midRegionBaseX,
+					this.playerLocalZ + this.midRegionBaseZ,
+					this.worldWalkRouteX, this.worldWalkRouteY);
 			}
 			this.mouseButtonClick = 0;
 		} catch (RuntimeException var4) {
@@ -9187,6 +9219,40 @@ public final class mudclient implements Runnable {
 					this.mouseButtonClick = 0;
 				}
 
+			}
+
+			// World-map auto-walker (slice 5). "World Map" button below the
+			// minimap, visible while hovering the minimap, the minimap-tab
+			// icon to its left, or the button itself. Mac users can't rely
+			// on Ctrl+M (modifier-state quirk in this client), so this is
+			// the canonical opener.
+			int mmW = 156;
+			int mmH = 152;
+			int mmLeft = this.getSurface().width2 - (C_CUSTOM_UI ? 168 : 159);
+			int mmTop = C_CUSTOM_UI ? 12 : 36;
+			// MINIMAPTAB sprite sits at (mmLeft - 49, 3) per drawUiTabMinimap.
+			int hoverLeft = mmLeft - 50;
+			int hoverTop = 0;
+			int hoverRight = mmLeft + mmW;
+			int hoverBottom = mmTop + mmH;
+			int btnW = 80;
+			int btnH = 18;
+			int btnX = mmLeft + (mmW - btnW) / 2;
+			int btnY = mmTop + mmH + 4;
+			boolean overHover = this.mouseX >= hoverLeft && this.mouseX < hoverRight
+				&& this.mouseY >= hoverTop && this.mouseY < hoverBottom;
+			boolean overButton = this.mouseX >= btnX && this.mouseX < btnX + btnW
+				&& this.mouseY >= btnY && this.mouseY < btnY + btnH;
+			if (overHover || overButton) {
+				int bg = overButton ? 0x808040 : 0x404040;
+				this.getSurface().drawBox(btnX, btnY, btnW, btnH, bg);
+				this.getSurface().drawBoxBorder(btnX, btnW, btnY, btnH, 0xC0C0C0);
+				this.getSurface().drawColoredStringCentered(btnX + btnW / 2,
+					"World Map", 0xFFFFFF, 0, 1, btnY + btnH / 2 + 4);
+				if (overButton && this.mouseButtonClick == 1) {
+					this.worldMapPanel.toggleVisible();
+					this.mouseButtonClick = 0;
+				}
 			}
 		} catch (RuntimeException var18) {
 			throw GenUtil.makeThrowable(var18, "client.HD(" + var1 + ',' + var2 + ')');
@@ -18114,6 +18180,11 @@ public final class mudclient implements Runnable {
 			x += x;
 		else if (x < -1)
 			x -= (-x);
+		// World-map auto-walker (slice 5): scroll wheel zooms.
+		if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+			this.worldMapPanel.adjustZoom(x);
+			return;
+		}
 		if (showUiTab == Config.SKILLS_AND_QUESTS_TAB) { // Quest list.
 			if (uiTabPlayerInfoSubTab == 1) {
 				panelQuestInfo.scrollMethodList(controlQuestInfoPanel, x);
