@@ -5,6 +5,7 @@ import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.Path;
 import com.openrsc.server.model.Path.PathType;
 import com.openrsc.server.model.Point;
+import com.openrsc.server.model.TelePointGraph;
 import com.openrsc.server.model.WorldPathfinder;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -73,9 +74,20 @@ public class AutoWalkEvent extends GameTickEvent {
 			return;
 		}
 
-		// If the player isn't where the path expects, try to recover.
 		final Point head = remaining.peekFirst();
-		if (Math.abs(head.getX() - player.getX()) > 1 || Math.abs(head.getY() - player.getY()) > 1) {
+		final boolean adjacent = Math.abs(head.getX() - player.getX()) <= 1
+			&& Math.abs(head.getY() - player.getY()) <= 1;
+
+		if (!adjacent) {
+			// Two reasons head can be non-adjacent: a planned telepoint hop
+			// (slice 3 — ladder/stair edge from the TelePointGraph) or the
+			// player got displaced (knock-back, teleport spell, etc.).
+			final TelePointGraph graph = player.getWorld().getTelePointGraph();
+			if (graph != null && graph.hasEdge(player.getX(), player.getY(), head.getX(), head.getY())) {
+				player.teleport(head.getX(), head.getY(), false);
+				remaining.pollFirst();
+				return; // let the teleport settle; resume walking next tick
+			}
 			if (!repathFromCurrent(player)) {
 				player.cancelAutoWalk();
 				return;
@@ -99,9 +111,19 @@ public class AutoWalkEvent extends GameTickEvent {
 	private void feedChunk(final Player player) {
 		final Path path = new Path(player, PathType.WALK_TO_POINT);
 		int taken = 0;
+		Point last = player.getLocation();
 		while (taken < CHUNK_SIZE && !remaining.isEmpty()) {
-			final Point step = remaining.pollFirst();
-			path.addStep(step.getX(), step.getY());
+			final Point next = remaining.peekFirst();
+			// Stop at telepoint boundaries: a non-adjacent step shouldn't
+			// be fed to Path.addStep (which would interpolate through walls
+			// trying to reach it). The next tick will detect the boundary,
+			// teleport via the TelePointGraph, and resume.
+			if (Math.abs(next.getX() - last.getX()) > 1 || Math.abs(next.getY() - last.getY()) > 1) {
+				break;
+			}
+			path.addStep(next.getX(), next.getY());
+			remaining.pollFirst();
+			last = next;
 			taken++;
 		}
 		path.finish();

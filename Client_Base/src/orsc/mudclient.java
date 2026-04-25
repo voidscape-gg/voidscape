@@ -7553,9 +7553,8 @@ public final class mudclient implements Runnable {
 					int worldX = this.playerLocalX + this.midRegionBaseX;
 					int worldY = this.playerLocalZ + this.midRegionBaseZ;
 					int floor = worldY / 944;
-					int floorY = worldY % 944;
 					this.getSurface().drawShadowText(
-						worldX + ", " + floorY + " (F" + floor + ")",
+						worldX + ", " + worldY + " (F" + floor + ")",
 						7, 14, 0xFFFFFF, 1, false);
 				}
 

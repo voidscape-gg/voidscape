@@ -42,14 +42,20 @@ public class WorldPathfinder {
 	private final World world;
 	private final Player owner;
 	private final boolean filterP2P;
+	private final TelePointGraph telePointGraph;
 
 	private Reason lastReason = Reason.OK;
 	private int nodesExplored;
 
 	public WorldPathfinder(final World world, final Player owner) {
+		this(world, owner, world == null ? null : world.getTelePointGraph());
+	}
+
+	public WorldPathfinder(final World world, final Player owner, final TelePointGraph telePointGraph) {
 		this.world = world;
 		this.owner = owner;
 		this.filterP2P = !world.getServer().getConfig().MEMBER_WORLD;
+		this.telePointGraph = telePointGraph;
 	}
 
 	public Reason getLastReason() { return lastReason; }
@@ -69,7 +75,9 @@ public class WorldPathfinder {
 			lastReason = Reason.SAME_TILE;
 			return Collections.emptyList();
 		}
-		if (Formulae.getHeight(start) != Formulae.getHeight(end)) {
+		if (telePointGraph == null && Formulae.getHeight(start) != Formulae.getHeight(end)) {
+			// Without a graph there is no way to cross floors; reject early so
+			// we don't waste 50k-node frontier exploring a same-floor dead end.
 			lastReason = Reason.CROSS_FLOOR;
 			return null;
 		}
@@ -132,16 +140,33 @@ public class WorldPathfinder {
 				if (filterP2P && !Formulae.isF2PLocation(Point.location(nx, ny))) continue;
 
 				final int stepCost = (dx == 0 || dy == 0) ? BASIC_COST : DIAG_COST;
-				final int g = cur.gCost + stepCost;
-				final long k = key(nx, ny);
-				final Node existing = visited.get(k);
-				if (existing != null && existing.gCost <= g) continue;
-
-				final Node n = new Node(nx, ny, g, g + heuristic(nx, ny, ex, ey), cur);
-				visited.put(k, n);
-				open.add(n);
+				addNeighbor(cur, nx, ny, stepCost, ex, ey, open, visited);
 			}
 		}
+
+		// Telepoint hops: zero-or-low-cost long-range edges sourced from
+		// ObjectTelePoints.xml. They span floors (Y % 944 changes), which is
+		// the whole point of slice 3.
+		if (telePointGraph != null) {
+			for (TelePointGraph.Edge edge : telePointGraph.edgesAt(cur.x, cur.y)) {
+				if (filterP2P && !Formulae.isF2PLocation(Point.location(edge.destX, edge.destY))) continue;
+				final TileValue dst = world.getTile(edge.destX, edge.destY);
+				if (dst == null) continue;
+				addNeighbor(cur, edge.destX, edge.destY, BASIC_COST, ex, ey, open, visited);
+			}
+		}
+	}
+
+	private void addNeighbor(final Node cur, final int nx, final int ny, final int stepCost,
+	                          final int ex, final int ey,
+	                          final PriorityQueue<Node> open, final HashMap<Long, Node> visited) {
+		final int g = cur.gCost + stepCost;
+		final long k = key(nx, ny);
+		final Node existing = visited.get(k);
+		if (existing != null && existing.gCost <= g) return;
+		final Node n = new Node(nx, ny, g, g + heuristic(nx, ny, ex, ey), cur);
+		visited.put(k, n);
+		open.add(n);
 	}
 
 	/**

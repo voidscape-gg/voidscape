@@ -96,6 +96,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	private final Server server;
 	private final RegionManager regionManager;
+	private volatile com.openrsc.server.model.TelePointGraph telePointGraph; // lazy-built on first access
 	private final EntityList<Npc> npcs;
 	private final PlayerList players;
 
@@ -1034,6 +1035,22 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		return regionManager;
 	}
 
+	/** voidscape — cross-floor TelePoint graph used by the world-map auto-walker (slice 3).
+	 * Lazily constructed on first access so EntityHandler is guaranteed loaded. */
+	public com.openrsc.server.model.TelePointGraph getTelePointGraph() {
+		com.openrsc.server.model.TelePointGraph local = telePointGraph;
+		if (local == null) {
+			synchronized (this) {
+				local = telePointGraph;
+				if (local == null) {
+					local = new com.openrsc.server.model.TelePointGraph(this);
+					telePointGraph = local;
+				}
+			}
+		}
+		return local;
+	}
+
 	public synchronized CombatOdysseyData getCombatOdyssey() {
 		return combatOdysseyData;
 	}
@@ -1068,6 +1085,11 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public Integer getSceneryLoc(final Point point) {
 		return sceneryLocs.getOrDefault(point, -1);
+	}
+
+	/** voidscape — full scenery placement map for {@link com.openrsc.server.model.TelePointGraph}. */
+	public java.util.Map<Point, Integer> getSceneryLocs() {
+		return sceneryLocs;
 	}
 
 	@Override

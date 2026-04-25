@@ -976,6 +976,11 @@ public final class EntityHandler {
 		return null;
 	}
 
+	/** voidscape — full TelePoint map for cross-floor pathfinding (slice 3). */
+	public java.util.Map<Point, TelePoint> getObjectTelePoints() {
+		return objectTelePoints;
+	}
+
 	public ObjectRunecraftDef getObjectRunecraftDef(int id) {
 		return objectRunecraft.get(id);
 	}
