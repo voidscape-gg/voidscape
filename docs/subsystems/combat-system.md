@@ -1,0 +1,198 @@
+# Combat System
+
+Damage formulas, accuracy, prayer effects, weapon styles, special attacks, and NPC AI. Plugin/scripting architecture is in `scripting-plugins.md`; the tick loop is in `world-tick-loop.md`.
+
+## Combat tick and state
+
+Combat is driven by `CombatEvent` — `server/src/com/openrsc/server/event/rsc/impl/combat/CombatEvent.java`. Extends `GameTickEvent`. Implements turn-based alternation between attacker and defender each tick cycle.
+
+Tracking:
+- `setOpponent(Mob)` and `setCombatEvent(CombatEvent)` set "in combat".
+- `CombatState` enum — `server/src/com/openrsc/server/model/states/CombatState.java`: `ERROR`, `LOST`, `RUNNING`, `WAITING`, `WON`.
+- Combat continues while both mobs are adjacent, logged in, not respawning, not removed.
+
+Tick cycle:
+- **PvE** default: 3-tick attacker round, 1-tick defender round.
+- **PvP standard**: 3-1 vs 2-2 depending on PID order (lower PID gets the 2-2).
+- **PvP duel**: always 2-2.
+- **NPC attacking player**: forced 2-2.
+
+`CombatEvent.run()` executes per tick, alternating `roundNumber % 2` (attacker vs defender) and applying delays via `setDelayTicks()`.
+
+## Damage formula
+
+`server/src/com/openrsc/server/event/rsc/impl/combat/CombatFormula.java`.
+
+**Melee max hit**:
+```
+maxRoll = floor(StrengthLevel * prayerBonus) + bonusConstant + styleBonus
+maxRoll *= (weaponPowerPoints + 64)
+damageNumerator = nextInt(maxRoll) + 320
+damage = damageNumerator / 640
+```
+- `bonusConstant`: 8 (player), 0 (NPC).
+- `styleBonus`: +3 for matching aggressive/accurate/defensive, +1 for controlled.
+- Strength prayers: 1.05 (Burst of Strength), 1.10 (Superhuman), 1.15 (Ultimate Strength).
+
+**Ranged max hit**:
+```
+maxRoll = (RangedLevel + 8) * (arrowPower + 1 + 64)
+```
+- Arrow powers: bronze darts 15, rune darts 50, dragon arrows 50, spears 29–69.
+- Bow aim bonus: shortbow 10, longbow 15, magic longbow 40.
+
+**Magic damage**: uniform roll from 0 to floor(spellPower); no accuracy check. God spells up to 18, charged +7.
+
+**Accuracy / hit chance**:
+```
+if (accuracy > defence):
+    hitChance = 1 - ((defence + 2) / (2 * (accuracy + 1)))
+else:
+    hitChance = accuracy / (2 * (defence + 1))
+```
+- Melee accuracy: `(AttackLevel + bonusConstant + styleBonus) * (weaponAim + 64)`
+- Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (armourPoints + 64)`
+
+**Special mechanics**:
+- **Defence cape**: blocks 50% of melee damage to player.
+- **Attack cape**: prevents zero hits (re-rolls misses).
+- **Strength cape**: +20% damage on hits ≥ 50% of max hit.
+- **Poison**: 10 levels; each tick reduces power by 2, deals `floor(power/10)` damage.
+- **Ring of Recoil**: reflects 10% of damage taken; breaks at 40 reflected total.
+
+## Prayer effects
+
+`server/src/com/openrsc/server/model/entity/player/Prayers.java`.
+
+Offensive (Attack):
+- Clarity of Thought (×1.05)
+- Improved Reflexes (×1.10)
+- Incredible Reflexes (×1.15)
+
+Offensive (Strength):
+- Burst of Strength (×1.05)
+- Superhuman Strength (×1.10)
+- Ultimate Strength (×1.15)
+
+Defensive (Defence):
+- Thick Skin (×1.05)
+- Rock Skin (×1.10)
+- Steel Skin (×1.15)
+
+Utility: Rapid Restore, Rapid Heal, Protect Items, Paralyze Monster, Protect from Missiles.
+
+Drain rate: `server/src/com/openrsc/server/event/rsc/impl/PrayerDrainEvent.java`.
+
+## Weapon styles
+
+`server/src/com/openrsc/server/net/rsc/handlers/CombatStyleHandler.java`.
+
+Constants in `server/src/com/openrsc/server/constants/Skills.java`: `CONTROLLED_MODE`, `AGGRESSIVE_MODE`, `ACCURATE_MODE`, `DEFENSIVE_MODE`.
+
+Applied via `styleBonus()` in `CombatFormula` — modifies Attack/Strength/Defense by +3 (or Attack +3 for controlled).
+
+## Special attacks (combat scripts)
+
+Location: `server/src/com/openrsc/server/event/rsc/impl/combat/scripts/all/`.
+
+Interface: `CombatScript` with `executeScript(attacker, victim)` and `shouldExecute()`.
+
+Loaded by `CombatScriptLoader` via reflection from package `com.openrsc.server.event.rsc.impl.combat.scripts.all`.
+
+Examples:
+- `Salarin.java` — drains player Attack/Strength by 50% on aggro.
+- `SilverlightEffect.java` — reduces demon stats by 15% when attacked with Silverlight.
+- `ElvargPrayerDrain.java` — drains prayer points during combat.
+- `DragonFireBreath.java` — AOE magic damage.
+- `NpcPoisonPlayerScript.java` — applies poison on hit.
+
+## PvP vs PvE
+
+`CombatEvent.isPvPCombat` flag set when both combatants are players.
+
+Branches:
+- PvP tick cycling: PID-based 3-1 vs 2-2 (`CombatEvent.java:43–73`).
+- NPC vs player: forced 2-tick (`:41`).
+- Duel flag (`:45`) overrides to 2-2.
+
+PvP-specific:
+- Immunity check (`canBeReattacked()` in `AttackHandler`) prevents re-engagement for X ticks in wilderness.
+- Wilderness PK check: `pl.getLocation().inWilderness() || player.getConfig().USES_PK_MODE` (`:60`).
+- PvE only: combat scripts, aggression ranges, respawning.
+
+XP distribution:
+- PvP: `combatExperience()` formula.
+- PvE: `Npc.handleXpDistribution()` based on damage tracking.
+
+## Multi-combat zones, retreating, freezing
+
+**Wilderness / multi-combat**:
+- Defined in `server/src/com/openrsc/server/model/Point.java` static block.
+- `WildernessLocation` objects with bounds and `WildState` (`MEMBERS_WILD`, `F2P_WILD`).
+- Helpers: `inWilderness()`, `inFreeWild()`, `wildernessLevel()`.
+- Multi-combat check: combine `getLocation().inWilderness()` with aggression flags.
+
+**Retreating**:
+- NPC behavior states `State.RETREAT` and `State.TACKLE_RETREAT` in `server/src/com/openrsc/server/model/entity/npc/NpcBehavior.java`.
+- Triggered by `shouldRetreat()` (per-NPC override).
+- Retreat fires on NPC's own turn in `CombatEvent` (`:176–179`) before damage.
+- Combat timer reset at `resetRanAwayTimer()`.
+
+**Freezing / paralyze**:
+- Prayer paralyze: `Prayers.PARALYZE_MONSTER` blocks NPC damage (`CombatEvent.java:237–238`).
+- Ice spells: handled via combat scripts or spell handler (not in core formula).
+- Movement: `WalkToAction` blocked by `PathValidation` if mob is busy/in combat.
+
+## NPC combat AI
+
+`NpcBehavior.java`:
+
+State machine:
+- `ROAM` — idle, scanning for aggro targets
+- `AGGRO` — chasing target
+- `COMBAT` — engaged
+- `RETREAT` — running away
+- `TACKLE` — gnome ball minigame state
+
+`handleRoam()` target picking:
+1. Check aggression flag and location (wilderness, player aggro radius, etc.).
+2. Iterate `getViewArea().getPlayersInView()`.
+3. Filter by `withinRange(npc, aggroRadius)` (default 4–10 tiles, config-dependent).
+4. `canAggro(player)` (level diff, immunity, etc.).
+5. Last-opponent timeout (15-tick threshold before re-aggro).
+6. Trigger `AggroEvent`, set `state = State.AGGRO`.
+
+`handleCombat()`:
+- Guarded by `npc.inCombat()`.
+- Checks `shouldRetreat()`.
+- Tracks damagers for PvE XP.
+
+Special behaviors:
+- `blackKnightsFortress` flag → always aggressive
+- Draynor Manor skeleton — ignores aggression rules
+- Tackling — gnome ball minigame special-case
+
+Retaliation: implicit via `setOpponent()` in `AttackHandler`; combat event loop handles the rest.
+
+## Pitfalls / non-obvious
+
+1. **Tick-cycle math depends on PID and combat type.** PvP 3-1 vs 2-2 swap is determined by lower PID; if `SHUFFLE_PID_ORDER` is on, this can desync subtly mid-fight.
+2. **Combat scripts load via reflection.** Order is undefined when multiple match `shouldExecute()`. Don't rely on script ordering for stacking effects.
+3. **Damage formula uses `(power + 64)` × inflated rolls.** Small changes to `bonusConstant` (8 vs 0) have outsized effects via the multiplier.
+4. **Style bonus is +3, not +1.** Easy to misread when reverse-engineering authentic formulas.
+5. **Prayer drain rate is opaque.** Stored externally in `PrayerDef.xml`; no in-code formula doc — read both sides if tuning.
+6. **NPC aggro radius is partly hardcoded.** `BLACK_KNIGHT` and `BANDIT_AGGRESSIVE` ranges baked into `NpcBehavior` constructor, not data-driven.
+7. **Defence cape 50% block is unconditional.** Players wearing it dramatically reduce melee damage; balance accordingly when tuning content.
+8. **Strength cape +20%** only fires on hits ≥50% of max hit — easy to forget when computing expected DPS.
+9. **No cross-formula tests.** If you change `CombatFormula`, run combat scenarios manually; there's no automated harness.
+
+## Glossary candidates
+
+- **CombatEvent** — per-fight `GameTickEvent` orchestrating attacker/defender alternation.
+- **Combat script** — pluggable NPC-specific effect (poison, drain, AOE) loaded by reflection.
+- **Style bonus** — Attack/Strength/Defense modifier from selected combat mode.
+- **Prayer bonus** — multiplier applied to a stat when its prayer is active.
+- **Attacker/Defender** — combat roles per round; swap every 2-3 ticks.
+- **PID-based round assignment** — PvP uses login order (PID) to decide which player gets the 2-2 vs 3-1 cycle.
+- **Aggro / aggression range** — NPC scan radius for choosing players to attack.
+- **Last-opponent timeout** — 15 ticks before an NPC may re-aggro the same target.
