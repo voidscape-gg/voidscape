@@ -177,3 +177,9 @@ upstream/openrsc-snapshot/
 # Voidscape build/run artifacts
 /tmp-build/
 /run-state/
+
+# Runtime SQLite databases (schema source lives in server/database/sqlite/)
+server/inc/sqlite/*.db
+server/inc/sqlite/*.db-journal
+server/inc/sqlite/*.db-shm
+server/inc/sqlite/*.db-wal

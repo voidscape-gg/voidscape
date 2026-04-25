@@ -27,7 +27,21 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
-_(Empty — vendor commit is the baseline.)_
+### 2026-04-24 — bootstrap of `server/local.conf` (voidscape preset)
+
+Created `server/local.conf` from `preservation.conf` as voidscape's working preset. **Not tracked in git** (gitignored per upstream + voidscape rules) — bootstrap on a fresh checkout via:
+
+```bash
+cp server/preservation.conf server/local.conf
+# then re-apply the overrides below
+```
+
+Voidscape overrides applied:
+- `database.db_name: voidscape` — distinct DB so vanilla preservation DBs aren't shadowed
+- `world.server_name: Voidscape` (and `server_name_welcome`, `welcome_text`)
+- `world.want_fatigue: false` — first deliberate QoL divergence from authentic. Reason: fatigue is the most universally disliked authentic mechanic and the user's stated goal is "mostly authentic with QoL". All other progression knobs (`game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`, etc.) remain authentic.
+
+Verified: server boots in ~1.9s, listens on TCP 43596 + WS 43496, loads 836 NPCs / 1593 items / 27782 scenery / 3609 NPC spawns / 1019 ground items / 50 quests / 9 minigames / 455 plugin handlers; identifies itself as "Voidscape" in logs.
 
 ## Re-syncing with upstream (future)
 

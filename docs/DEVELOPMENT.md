@@ -27,10 +27,14 @@ OpenRSC's build is **Ant-driven**, with Gradle as an IDE convenience layer. The 
 
 **Local environment** (verified): `openjdk 25.0.2 2026-01-20` (Homebrew, arm64).
 
-**Will it compile?** Yes — Java 25 can compile to 1.8 bytecode. **But:**
-- Ant predates the module system; you'll see warnings like `[options] system modules path not set in conjunction with -source 8`. Harmless but noisy.
-- Some libraries OpenRSC depends on may not be tested against JDK 25.
-- Recommendation: install **JDK 11 or 17** and point your build at it. Stable, widely used by other OpenRSC contributors.
+**Will it compile?** **Yes — verified on macOS arm64 + JDK 25.0.2 (Homebrew) at vendor SHA fc74d38e.** Build completes in ~5 seconds across server core, plugins, Client_Base, PC_Client, and PC_Launcher.
+
+Cosmetic warnings to expect (all from upstream code, not voidscape):
+- `[options] target value 8 is obsolete and will be removed in a future release` — harmless; switch to JDK 11/17 to silence.
+- `[options] bootstrap class path is not set in conjunction with -source 8` — Ant's classpath model predates the module system. Harmless.
+- Deprecated APIs in upstream code: `java.applet.Applet` (PC_Client), `URL(String)` constructor (PC_Launcher). Upstream issues, not blockers.
+
+Recommendation: **JDK 11 or 17** for a quieter build. Not strictly required — JDK 25 works.
 
 ### Recommended: SDKMAN + Corretto 11
 
