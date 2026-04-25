@@ -91,6 +91,7 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 				return;
 			}
 		}
+		player.cancelAutoWalk();
 		player.resetAll();
 		player.resetPath();
 

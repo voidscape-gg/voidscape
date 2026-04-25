@@ -187,3 +187,6 @@ server/inc/sqlite/*.db-wal
 # Per-developer client cache config (ip + port are written by scripts/run-client.sh)
 Client_Base/Cache/ip.txt
 Client_Base/Cache/port.txt
+
+# Claude Code per-session skills (workflow scaffolding, not project content)
+.claude/skills/

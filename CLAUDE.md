@@ -49,6 +49,7 @@ Subsystem-specific guidance lives in `<subsystem>/CLAUDE.md` (e.g. `server/CLAUD
 
 ## Workflow
 
+- **For new features, use `/feature <description>`** — runs discovery → plan → slices with user gates. Don't start coding a multi-subsystem feature without it.
 - For a substantive change: read the relevant `docs/recipes/` or `docs/subsystems/` doc first.
 - The build is the test. `scripts/build.sh` should pass before claiming work done.
 - For UI / client changes: actually run the client and test the feature. Type-checking ≠ working.

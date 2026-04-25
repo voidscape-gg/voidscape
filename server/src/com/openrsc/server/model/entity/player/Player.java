@@ -91,6 +91,7 @@ public final class Player extends Mob {
 	private DelayedEvent unregisterEvent;
 	private ThrowingEvent throwingEvent;
 	private DelayedEvent chargeEvent = null;
+	private com.openrsc.server.event.rsc.impl.AutoWalkEvent autoWalkEvent;
 	private boolean sleeping = false;
 	private int activity = 0;
 	private int kills = 0;
@@ -1484,6 +1485,22 @@ public final class Player extends Mob {
 
 	public void setThrowingEvent(final ThrowingEvent event) {
 		throwingEvent = event;
+	}
+
+	public com.openrsc.server.event.rsc.impl.AutoWalkEvent getAutoWalkEvent() {
+		return autoWalkEvent;
+	}
+
+	public void setAutoWalkEvent(final com.openrsc.server.event.rsc.impl.AutoWalkEvent event) {
+		autoWalkEvent = event;
+	}
+
+	public void cancelAutoWalk() {
+		if (autoWalkEvent != null) {
+			autoWalkEvent.stop();
+			autoWalkEvent = null;
+			getWalkingQueue().setPath(null);
+		}
 	}
 
 	public String getStaffName() {

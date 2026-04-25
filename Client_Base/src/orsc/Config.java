@@ -34,22 +34,23 @@ public class Config {
 	public static final int OPTIONS_TAB = 6;
 
 	/* Configurable: */
-	public static boolean C_EXPERIENCE_DROPS = false;
+	public static boolean C_EXPERIENCE_DROPS = true;
 	public static boolean C_TOTAL_NPC_KC = false;
 	public static boolean C_RECENT_NPC_KC = false;
-	public static boolean C_BATCH_PROGRESS_BAR = false;
-	public static boolean C_HIDE_ROOFS = false;
+	public static boolean C_BATCH_PROGRESS_BAR = true;
+	public static boolean C_HIDE_ROOFS = true;
 	public static boolean C_HIDE_FOG = false;
 	public static boolean C_HIDE_UNDERGROUND_FLICKER = false;
 	public static int C_SHOW_GROUND_ITEMS = 0;
-	public static boolean C_GROUND_ITEM_NAMES = false;
+	public static boolean C_GROUND_ITEM_NAMES = true;
 	public static boolean C_WANT_NATURE_RUNE_PROTECTION = true; // Important that nature rune protection is true by default, otherwise we might have some very unhappy players!
 	public static boolean C_MESSAGE_TAB_SWITCH = false;
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
+	public static boolean C_SHOW_COORDS = true;
 	public static boolean C_KILL_FEED = false;
 	public static int C_FIGHT_MENU = 1;
-	public static boolean C_INV_COUNT = false;
+	public static boolean C_INV_COUNT = true;
 	public static boolean C_PARTY_INV = false;
 	public static int C_ZOOM;
 	public static boolean C_CUSTOM_UI = false; // Enables a osrs style UI
@@ -60,7 +61,7 @@ public class Config {
 	/* Experience Config Menu */
 	public static int C_EXPERIENCE_COUNTER = 1;
 	public static int C_EXPERIENCE_COUNTER_MODE = 0;
-	public static int C_EXPERIENCE_COUNTER_COLOR = 0;
+	public static int C_EXPERIENCE_COUNTER_COLOR = 4;
 	public static int C_EXPERIENCE_DROP_SPEED = 1;
 	public static boolean C_EXPERIENCE_CONFIG_SUBMENU = false;
 
@@ -74,23 +75,23 @@ public class Config {
 	public static boolean S_WANT_SKILL_MENUS = false;
 	public static boolean S_WANT_QUEST_MENUS = false;
 	public static boolean S_WANT_EXPERIENCE_ELIXIRS = false;
-	public static int S_WANT_KEYBOARD_SHORTCUTS = 0;
+	public static int S_WANT_KEYBOARD_SHORTCUTS = 2;
 	public static boolean S_WANT_CUSTOM_BANKS = false;
 	public static boolean S_WANT_BANK_PINS = false;
-	public static boolean S_WANT_BANK_NOTES = false;
+	public static boolean S_WANT_BANK_NOTES = true;
 	public static boolean S_WANT_CERT_DEPOSIT = false;
 	public static boolean S_CUSTOM_FIREMAKING = false;
 	public static boolean S_WANT_RUNECRAFT = false;
-	public static boolean S_WANT_DROP_X = false;
+	public static boolean S_WANT_DROP_X = true;
 	public static boolean S_WANT_EXP_INFO = false;
 	public static boolean S_WANT_WOODCUTTING_GUILD = false;
 	public static boolean S_WANT_DECANTING = false;
 	public static boolean S_WANT_CERTS_TO_BANK = false;
 	public static boolean S_WANT_CUSTOM_RANK_DISPLAY = false;
-	public static boolean S_RIGHT_CLICK_BANK = false;
-	public static boolean S_RIGHT_CLICK_TRADE = false;
+	public static boolean S_RIGHT_CLICK_BANK = true;
+	public static boolean S_RIGHT_CLICK_TRADE = true;
 	public static boolean S_WANT_EQUIPMENT_TAB = false;
-	public static boolean S_WANT_BANK_PRESETS = false;
+	public static boolean S_WANT_BANK_PRESETS = true;
 	public static boolean S_WANT_LEFTCLICK_WEBS = false;
 	public static boolean S_NPC_KILL_COUNTERS = false;
 	// if you change these, and the config file,
@@ -99,21 +100,21 @@ public class Config {
 	// additional options on the 1-tab layout.)
 	public static boolean S_WANT_CLANS = false;
 	public static boolean S_WANT_KILL_FEED = false;
-	public static boolean S_FOG_TOGGLE = false;
+	public static boolean S_FOG_TOGGLE = true;
 	public static boolean S_GROUND_ITEM_TOGGLE = false;
-	public static boolean S_GROUND_ITEM_NAMES = false;
+	public static boolean S_GROUND_ITEM_NAMES = true;
 	public static boolean S_WANT_NATURE_RUNE_PROTECTION = true; // Important that nature rune protection is true by default, otherwise we might have some very unhappy players!
 	public static boolean S_AUTO_MESSAGE_SWITCH_TOGGLE = false;
-	public static boolean S_BATCH_PROGRESSION = false;
+	public static boolean S_BATCH_PROGRESSION = true;
 	public static boolean S_SIDE_MENU_TOGGLE = false;
-	public static boolean S_INVENTORY_COUNT_TOGGLE = false;
-	public static boolean S_ZOOM_VIEW_TOGGLE = false;
+	public static boolean S_INVENTORY_COUNT_TOGGLE = true;
+	public static boolean S_ZOOM_VIEW_TOGGLE = true;
 	public static boolean S_MENU_COMBAT_STYLE_TOGGLE = false;
 	public static boolean S_FIGHTMODE_SELECTOR_TOGGLE = false;
 	public static boolean S_EXPERIENCE_COUNTER_TOGGLE = false;
-	public static boolean S_EXPERIENCE_DROPS_TOGGLE = false;
+	public static boolean S_EXPERIENCE_DROPS_TOGGLE = true;
 	public static boolean S_ITEMS_ON_DEATH_MENU = false;
-	public static boolean S_SHOW_ROOF_TOGGLE = false;
+	public static boolean S_SHOW_ROOF_TOGGLE = true;
 	public static boolean S_SHOW_UNDERGROUND_FLICKER_TOGGLE = false;
 	public static boolean S_WANT_GLOBAL_CHAT = false;
 	public static boolean S_WANT_GLOBAL_FRIEND = false;

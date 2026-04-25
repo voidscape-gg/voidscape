@@ -752,7 +752,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 			if (!inScrollable && zoomable && (S_ZOOM_VIEW_TOGGLE || mudclient.getLocalPlayer().isStaff())) {
 				e.consume();
-				final int zoomIncrement = 10;
+				final int zoomIncrement = 40;
 				int zoomAmount = e.getWheelRotation() * zoomIncrement;
 				int newZoom = C_LAST_ZOOM + zoomAmount;
 				// Keep C_LAST_ZOOM aka the zoom increments on the range of [0, 255]
@@ -785,6 +785,19 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				updateControlShiftState(var1);
 				char keyChar = var1.getKeyChar();
 				int keyCode = var1.getKeyCode();
+
+				// voidscape: backtick → macOS screencapture (silent, full screen)
+				if (keyChar == '`') {
+					try {
+						new ProcessBuilder("screencapture", "-x", "/tmp/voidscape-screenshot.png").start();
+						mudclient.showMessage(false, null, "Screenshot saved: /tmp/voidscape-screenshot.png",
+							orsc.enumerations.MessageType.GAME, 0, null);
+					} catch (java.io.IOException ex) {
+						// ignore — screencapture missing or path unwritable
+					}
+					return;
+				}
+
 				boolean hitInputFilter = false;
 				mudclient.handleKeyPress((byte) 126, (int) keyChar);
 				mudclient.lastMouseAction = 0;

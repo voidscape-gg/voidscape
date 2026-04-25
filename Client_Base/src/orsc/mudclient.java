@@ -7542,6 +7542,16 @@ public final class mudclient implements Runnable {
 					this.getSurface().drawShadowText(this.inventoryItemCount + "/30", this.getGameWidth() - 19, getUITabsY() + 14, (0x00FFFFFF << (int) Math.floor((this.inventoryItemCount / 15)) * 8) & 0x00FFFFFF, 1, true);
 				}
 
+				if (C_SHOW_COORDS) {
+					int worldX = this.playerLocalX + this.midRegionBaseX;
+					int worldY = this.playerLocalZ + this.midRegionBaseZ;
+					int floor = worldY / 944;
+					int floorY = worldY % 944;
+					this.getSurface().drawShadowText(
+						worldX + ", " + floorY + " (F" + floor + ")",
+						7, 14, 0xFFFFFF, 1, false);
+				}
+
 				if (C_CUSTOM_UI && drawMinimap) {
 					this.drawUiTabMinimap(mustDrawMenu, (byte) 125);
 				} else {
@@ -9701,16 +9711,6 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		// fog toggle
-		if (S_FOG_TOGGLE) {
-			if (!C_HIDE_FOG) {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Fog - @red@Off", 27, null, null);
-			} else {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Fog - @gre@On", 27, null, null);
-			}
-		}
 
 		// underground lighting flicker toggle
 		if (S_SHOW_UNDERGROUND_FLICKER_TOGGLE) {
@@ -12237,10 +12237,7 @@ public final class mudclient implements Runnable {
 						this.cameraRotation = 255 & this.cameraRotation - 2;
 					} else if (this.keyDown) {
 						if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
-							// Don't want to go over 255
-							if (osConfig.C_LAST_ZOOM < 254) {
-								osConfig.C_LAST_ZOOM += 2;
-							}
+							osConfig.C_LAST_ZOOM = Math.min(255, osConfig.C_LAST_ZOOM + 8);
 						} else {
 							if (this.cameraAllowPitchModification) {
 								this.cameraPitch = (this.cameraPitch + 4) & 1023;
@@ -12255,10 +12252,7 @@ public final class mudclient implements Runnable {
 						}
 					} else if (this.keyUp) {
 						if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
-							// Don't want to go under 0
-							if (osConfig.C_LAST_ZOOM > 1) {
-								osConfig.C_LAST_ZOOM -= 2;
-							}
+							osConfig.C_LAST_ZOOM = Math.max(0, osConfig.C_LAST_ZOOM - 8);
 						} else {
 							if (this.cameraAllowPitchModification) {
 								this.cameraPitch = (this.cameraPitch + 1024 - 4) & 1023;
@@ -18229,7 +18223,7 @@ public final class mudclient implements Runnable {
 	}
 
 	public void setOptionHideFog(boolean b) {
-		C_HIDE_FOG = b;
+		C_HIDE_FOG = false;
 	}
 
 	public void setOptionAutoMessageSwitch(boolean b) {

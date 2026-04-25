@@ -146,7 +146,7 @@ public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implement
 			player = conn_attachment.player.get();
 		}
 		if (player != null) {
-			player.unregister(UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Channel closed");
+			player.unregister(UnregisterForcefulness.FORCED, "Channel closed");
 		}
 	}
 
