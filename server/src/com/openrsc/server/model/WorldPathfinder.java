@@ -81,21 +81,35 @@ public class WorldPathfinder {
 			lastReason = Reason.CROSS_FLOOR;
 			return null;
 		}
+		// Snap unwalkable destinations (walls, building roofs, coastlines, and
+		// — on F2P worlds — P2P-restricted regions) to the nearest walkable
+		// tile within minimap radius. Without this, world-map clicks anywhere
+		// off the path mesh fail with reason=NO_PATH.
 		final TileValue endTile = world.getTile(end.getX(), end.getY());
-		if (endTile == null || (endTile.traversalMask & CollisionFlag.FULL_BLOCK) != 0) {
-			lastReason = Reason.NO_PATH;
-			return null;
-		}
-		if (filterP2P && !Formulae.isF2PLocation(end)) {
-			lastReason = Reason.NO_PATH;
-			return null;
+		final boolean endBlocked = endTile == null
+			|| (endTile.traversalMask & CollisionFlag.FULL_BLOCK) != 0
+			|| (filterP2P && !Formulae.isF2PLocation(end));
+		final Point target;
+		if (endBlocked) {
+			final Point snapped = nearestWalkable(end, 5);
+			if (snapped == null) {
+				lastReason = Reason.NO_PATH;
+				return null;
+			}
+			if (start.getX() == snapped.getX() && start.getY() == snapped.getY()) {
+				lastReason = Reason.SAME_TILE;
+				return Collections.emptyList();
+			}
+			target = snapped;
+		} else {
+			target = end;
 		}
 
 		final HashMap<Long, Node> visited = new HashMap<>();
 		final PriorityQueue<Node> open = new PriorityQueue<>((a, b) -> Integer.compare(a.fCost, b.fCost));
 
 		final Node startNode = new Node(start.getX(), start.getY(), 0,
-			heuristic(start.getX(), start.getY(), end.getX(), end.getY()), null);
+			heuristic(start.getX(), start.getY(), target.getX(), target.getY()), null);
 		visited.put(key(startNode.x, startNode.y), startNode);
 		open.add(startNode);
 
@@ -107,7 +121,7 @@ public class WorldPathfinder {
 			if (bestKnown != current && current.gCost > bestKnown.gCost) continue;
 			current.closed = true;
 
-			if (current.x == end.getX() && current.y == end.getY()) {
+			if (current.x == target.getX() && current.y == target.getY()) {
 				found = current;
 				break;
 			}
@@ -118,7 +132,7 @@ public class WorldPathfinder {
 				return null;
 			}
 
-			expand(current, end.getX(), end.getY(), open, visited);
+			expand(current, target.getX(), target.getY(), open, visited);
 		}
 
 		if (found == null) {
@@ -127,6 +141,40 @@ public class WorldPathfinder {
 		}
 		lastReason = Reason.OK;
 		return reconstruct(found);
+	}
+
+	/**
+	 * Snap an unwalkable destination to the nearest walkable tile within
+	 * {@code radius} (Chebyshev). Used so a world-map click on a wall, a
+	 * building roof, or a coastline routes to the boundary tile instead of
+	 * silently failing.
+	 *
+	 * Maintains the same floor as {@code end} (y / 944) and respects the F2P
+	 * region filter on F2P worlds, so we never snap a free player across the
+	 * F2P/P2P boundary.
+	 */
+	private Point nearestWalkable(final Point end, final int radius) {
+		final int ex = end.getX();
+		final int ey = end.getY();
+		final int floor = Formulae.getHeight(end);
+		for (int r = 1; r <= radius; r++) {
+			for (int dy = -r; dy <= r; dy++) {
+				for (int dx = -r; dx <= r; dx++) {
+					if (Math.max(Math.abs(dx), Math.abs(dy)) != r) continue;
+					final int nx = ex + dx;
+					final int ny = ey + dy;
+					if (nx < 0 || ny < 0) continue;
+					final Point candidate = Point.location(nx, ny);
+					if (Formulae.getHeight(candidate) != floor) continue;
+					final TileValue t = world.getTile(nx, ny);
+					if (t == null) continue;
+					if ((t.traversalMask & CollisionFlag.FULL_BLOCK) != 0) continue;
+					if (filterP2P && !Formulae.isF2PLocation(candidate)) continue;
+					return candidate;
+				}
+			}
+		}
+		return null;
 	}
 
 	private void expand(final Node cur, final int ex, final int ey,

@@ -648,6 +648,9 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
 				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
 
+				// World-map panel owns drag-pan when visible — don't rotate camera underneath.
+				if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) return;
+
 				if (mudclient.mouseLastProcessedX != 0 && mudclient.mouseLastProcessedY != 0) {
 					int distanceX = (mudclient.mouseX - mudclient.mouseLastProcessedX)/2;
 					int distanceY = (mudclient.mouseY - mudclient.mouseLastProcessedY)/2;
@@ -795,6 +798,13 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 					} catch (java.io.IOException ex) {
 						// ignore — screencapture missing or path unwritable
 					}
+					return;
+				}
+
+				// World-map search bar owns the keyboard while focused — consume
+				// keys here so they don't also land in the chat input buffer.
+				if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isSearchFocused()) {
+					mudclient.worldMapPanel.handleSearchKey(keyChar, keyCode);
 					return;
 				}
 

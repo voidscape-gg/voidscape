@@ -7388,16 +7388,16 @@ public final class mudclient implements Runnable {
 
 			boolean var2 = false;
 
-			// World-map auto-walker (slice 5). Click intercept at the *top*
-			// of drawUi using the previous frame's window rect (so side
-			// panels don't process clicks meant for the dialog). The actual
-			// render happens at the *bottom* of drawUi so the dialog draws
+			// World-map auto-walker (slice 5). pollMouse runs every frame so
+			// it can manage drag-pan transitions (press → hold → release)
+			// internally; click-to-walk only fires on a non-drag release.
+			// Render happens at the *bottom* of drawUi so the dialog draws
 			// on top of side panels and chat tabs.
-			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME
-				&& this.mouseButtonClick == 1) {
+			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 				int[] outWorld = new int[2];
 				orsc.graphics.gui.WorldMapPanel.ClickResult result =
-					this.worldMapPanel.handleClick(this.mouseX, this.mouseY,
+					this.worldMapPanel.pollMouse(this.mouseX, this.mouseY,
+						this.currentMouseButtonDown == 1,
 						this.getGameWidth(), outWorld);
 				if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.MAP_TILE) {
 					this.sendWorldWalkRequest(outWorld[0], outWorld[1]);
@@ -9243,7 +9243,9 @@ public final class mudclient implements Runnable {
 				&& this.mouseY >= hoverTop && this.mouseY < hoverBottom;
 			boolean overButton = this.mouseX >= btnX && this.mouseX < btnX + btnW
 				&& this.mouseY >= btnY && this.mouseY < btnY + btnH;
-			if (overHover || overButton) {
+			// Persistent while the minimap tab is the active side panel; hover-
+			// gated otherwise (so it doesn't clutter inventory / magic / etc).
+			if (overHover || overButton || this.showUiTab == Config.MINIMAP_AND_COMPASS_TAB) {
 				int bg = overButton ? 0x808040 : 0x404040;
 				this.getSurface().drawBox(btnX, btnY, btnW, btnH, bg);
 				this.getSurface().drawBoxBorder(btnX, btnW, btnY, btnH, 0xC0C0C0);
@@ -17690,9 +17692,22 @@ public final class mudclient implements Runnable {
 		this.worldWalkRouteReason = reason;
 		this.worldWalkRouteX = xs;
 		this.worldWalkRouteY = ys;
-		String msg = ok
-			? "@gre@World-walk: @whi@" + xs.length + " tiles."
-			: "@red@World-walk failed: @whi@reason=" + reason;
+		String msg;
+		if (ok) {
+			msg = "@gre@World-walk: @whi@" + xs.length + " tiles.";
+		} else {
+			// Reason codes mirror WorldWalkRequest.REASON_* (server side).
+			switch (reason) {
+				case 1: msg = "@red@Can't find a path there."; break;
+				case 2: msg = "@red@Too far to plot a route from here."; break;
+				case 3: msg = "@red@Invalid destination."; break;
+				case 4: return;  // SAME_TILE — already there, stay silent.
+				case 5: msg = "@red@Can't reach that floor from here."; break;
+				case 6: msg = "@red@Finish what you're doing first."; break;
+				case 7: msg = "@red@Can't world-walk during combat."; break;
+				default: msg = "@red@World-walk failed.";
+			}
+		}
 		this.showMessage(false, null, msg, MessageType.GAME, 0, null);
 	}
 
@@ -18180,9 +18195,9 @@ public final class mudclient implements Runnable {
 			x += x;
 		else if (x < -1)
 			x -= (-x);
-		// World-map auto-walker (slice 5): scroll wheel zooms.
+		// World-map auto-walker (slice 5): scroll wheel zooms about the cursor.
 		if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
-			this.worldMapPanel.adjustZoom(x);
+			this.worldMapPanel.adjustZoom(x, this.mouseX, this.mouseY);
 			return;
 		}
 		if (showUiTab == Config.SKILLS_AND_QUESTS_TAB) { // Quest list.

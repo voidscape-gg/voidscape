@@ -1,0 +1,112 @@
+# vendored from 2003scape/rsc-world-map@70f488a res/labels.json
+# text\tx\ty\tsize\talign\tbold\tcolour    (text uses \n for newline)
+Swamp	244	1304	10	center	0	
+Gnome Ball\nField	201	1334	10	left	0	
+Grand tree	308	1353	10	center	0	
+Tree Gnome\nStronghold	277	1403	12	left	1	
+Baxtorian\nFalls	478	1406	10	left	0	
+Agility\ntraining\narea	362	1482	10	left	0	
+Underground\npass	261	1733	10	left	0	
+Combat\ntraining\ncamp	442	1596	10	left	0	
+West\nArdougne	429	1718	12	center	1	
+Battle field	470	1954	10	left	0	
+Tree Gnome\nVillage	472	2072	10	left	0	
+Coal\ntrucks	643	1316	10	left	0	
+Fishing\nGuild	664	1540	10	center	0	
+Zoo	701	1840	10	center	0	
+Fight\nArena	608	2104	10	left	0	
+Yanille	589	2257	10	center	0	
+Wizards\nGuild	616	2276	10	center	0	
+McGrubor's\nWood	762	1345	10	center	0	
+Hemenster	719	1473	10	center	0	
+Kingdom of\nKandarin	793	1493	12	center	1	rgb(254, 165, 0)
+Windmill	729	1595	8	center	0	
+East\nArdougne	716	1722	12	center	1	
+Necromancer	741	1941	8	left	0	
+Port\nKhazard	800	2079	10	left	0	
+Seer's\nVillage	905	1367	10	center	0	
+Sorcerors\nTower	911	1506	10	center	0	
+Camelot\nCastle	1022	1329	10	center	0	
+Flax	979	1455	10	left	0	
+Beehives	1020	1456	10	left	0	
+Keep\nLeFaye	1052	1549	10	center	0	
+Barbarian\nOutpost	970	1631	10	center	0	
+Agility training\narea	962	1686	10	left	0	
+Fishing\nPlatform	985	1843	10	left	0	
+Brimhaven	1052	2064	10	center	0	
+Tai Bwo Wannai	1061	2264	10	center	0	
+White Wolf\nMountain	1189	1354	10	center	0	
+Catherby	1153	1480	10	center	0	
+Entrana	1163	1616	12	center	1	rgb(254, 165, 0)
+Crandor	1161	1861	12	center	1	rgb(254, 165, 0)
+Karamja	1265	2097	12	center	1	rgb(254, 165, 0)
+Ship yard	1228	2238	10	left	0	
+Hero's\nGuild	1319	1321	10	center	0	
+Druid's\nCircle	1342	1372	10	center	0	
+Taverley	1312	1493	10	center	0	
+Dark Wizards\nTower	1326	1703	10	center	0	
+Make over\nmage	1337	1742	10	left	0	
+Crafting\nGuild	1382	1808	10	center	0	
+Melzar's\nMaze	1398	1887	10	center	0	
+Chaos\nTemple	1453	1298	8	center	0	
+Goblin\nVillage	1444	1354	10	center	0	
+White Knights	1480	1696	8	center	0	
+Rimmington	1453	1957	11	left	0	
+Black\nKnights	1601	1305	8	center	0	
+Monastery	1654	1385	10	center	0	
+Ice\nMountain	1550	1394	12	center	1	
+Dwarven\nMine	1586	1492	10	center	0	
+Park	1565	1608	10	center	0	
+Falador	1512	1653	12	center	1	
+Mining\nGuild	1602	1685	10	center	0	
+Kingdom of\nAsgarnia	1521	1753	12	center	1	rgb(254, 165, 0)
+Port\nSarim	1655	1936	12	center	0	
+Edgeville	1819	1360	10	center	0	
+Barbarian\nVillage	1754	1535	10	center	0	
+Draynor Manor	1765	1676	10	center	0	
+Draynor\nVillage	1809	1861	10	center	0	
+Market	1755	1890	10	center	0	
+Jail	1840	1914	10	center	0	
+Wizard's\nTower	1804	2068	10	center	0	
+Tutorial\nIsland	1792	2209	10	left	0	
+Cooks\nGuild	1905	1436	10	center	0	
+Champions\nGuild	1955	1657	10	center	0	
+Windmill	1930	1798	8	center	0	
+Palace	2036	1406	10	center	0	
+Varrock	2028	1526	12	center	1	
+Kingdom of\nMisthalin	2021	1730	12	center	1	rgb(254, 165, 0)
+Lumbridge	2042	1964	11	center	0	
+Toll\ngate	2163	1933	9	center	0	
+Al Kharid	2199	2057	12	center	1	
+Dig Site	2364	1532	10	left	0	
+Exam Centre	2324	1691	10	left	0	
+Shantay Pass	2222	2168	10	center	0	
+Bedabin\nCamp	1906	2384	10	center	0	
+Kharidian\nDesert	2124	2288	12	center	1	rgb(254, 165, 0)
+Desert Mining\nCamp	2150	2404	10	center	0	
+Lumber\nMill	2240	1310	10	center	0	
+Legends'\nGuild	884	1602	10	center	0	
+Sinclair\nMansion	950	1172	10	center	0	
+Gu'Tanoth	474	2348	10	left	0	
+Feldip\nHills	556	2486	12	center	1	rgb(254, 165, 0)
+Observatory	272	2116	10	left	0	
+Shilo Village	1191	2494	10	left	0	
+Kharazi Jungle	1170	2642	10	left	0	
+Chaos\nTemple	2078	1068	10	center	0	
+Dark Warriors'\nFortress	1638	1048	10	center	0	
+Bandit\nCamp	1612	901	10	center	0	
+Ruins	1458	886	10	left	0	
+Graveyard	1892	946	10	center	0	
+Bone Yard	2074	782	10	left	0	
+Ruins	1944	766	10	left	0	
+Red Dragon\nIsle	1968	596	10	center	0	
+Lava Maze	1694	557	10	left	0	
+Demonic\nRuins	2174	476	10	center	0	
+Agility\ntraining\narea	1543	300	10	center	0	
+Pirates'\nHideout	1628	312	10	center	0	
+Frozen Waste\nPlateau	1422	390	10	center	0	
+Mage Arena	1728	386	10	center	0	
+Deserted\nKeep	1880	352	10	center	0	
+Scorpion\nPit	2036	336	10	center	0	
+Rouges'\nHouse	2197	314	8	center	0	
+The Wilderness	1801	692	14	center	1	rgb(254, 165, 0)
