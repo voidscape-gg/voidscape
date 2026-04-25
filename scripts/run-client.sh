@@ -10,10 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Default port: extract from local.conf if present, otherwise 43594
+# Default port: extract from local.conf if present, otherwise 43594.
+# local.conf is YAML-ish with tab-indented keys: `\tserver_port: 43596 # ...`.
+# Grep allows leading whitespace; awk picks the value field (not the comment).
 DEFAULT_PORT=43594
 if [[ -f server/local.conf ]]; then
-    PORT_FROM_CONF=$(grep -E '^server_port' server/local.conf | head -1 | awk '{print $NF}' || true)
+    PORT_FROM_CONF=$(grep -E '^[[:space:]]*server_port:' server/local.conf | head -1 | awk '{print $2}' || true)
     DEFAULT_PORT="${PORT_FROM_CONF:-43594}"
 fi
 

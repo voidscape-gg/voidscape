@@ -183,3 +183,7 @@ server/inc/sqlite/*.db
 server/inc/sqlite/*.db-journal
 server/inc/sqlite/*.db-shm
 server/inc/sqlite/*.db-wal
+
+# Per-developer client cache config (ip + port are written by scripts/run-client.sh)
+Client_Base/Cache/ip.txt
+Client_Base/Cache/port.txt
