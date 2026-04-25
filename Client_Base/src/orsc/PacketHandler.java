@@ -268,6 +268,9 @@ public class PacketHandler {
 				// Set Server Configs
 			else if (opcode == 19) setServerConfiguration();
 
+				// voidscape — world-map auto-walker route
+			else if (opcode == 100) handleWorldWalkRoute(length);
+
 			else this.handlePacket2(opcode, length);
 
 		} catch (RuntimeException var11) {
@@ -925,6 +928,25 @@ public class PacketHandler {
 		String var13 = packetsIncoming.readString();
 		String var14 = RSBufferUtils.getEncryptedString(packetsIncoming);
 		mc.showMessage(false, var13, var14, MessageType.PRIVATE_SEND, 0, var13);
+	}
+
+	/**
+	 * voidscape — receive route from a WORLD_WALK_REQUEST. Wire format:
+	 * byte ok; byte reason; short count; count × { short x; short y }.
+	 * Stored on mudclient for slice-5 polyline rendering; for now we just
+	 * surface the result in chat.
+	 */
+	private void handleWorldWalkRoute(int length) {
+		int ok = packetsIncoming.getByte();
+		int reason = packetsIncoming.getByte();
+		int count = packetsIncoming.getShort();
+		int[] xs = new int[count];
+		int[] ys = new int[count];
+		for (int i = 0; i < count; i++) {
+			xs[i] = packetsIncoming.getShort();
+			ys[i] = packetsIncoming.getShort();
+		}
+		mc.setWorldWalkRoute(ok != 0, reason, xs, ys);
 	}
 
 	private void setServerConfiguration() {

@@ -103,4 +103,6 @@ public enum OpcodeOut {
 	SEND_YOPTIN, // added by mudclient 61 (or earlier, but post 40) and missing by 93 (present in mudclient 75)
 	SEND_INVENTORY_SIZE, // known to be in mudclient69 to 75
     SEND_UNLOCKED_APPEARANCES, // custom
+
+	SEND_WORLD_WALK_ROUTE, // voidscape — world-map auto-walker
 }

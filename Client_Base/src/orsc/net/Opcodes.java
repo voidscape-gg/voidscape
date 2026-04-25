@@ -109,6 +109,9 @@ public class Opcodes {
 		ON_TUTORIAL_ISLAND(84),
 		ON_BLACK_HOLE(86),
 		NPC_DEFINITION_REQUEST(89),
+
+		// voidscape — world-map auto-walker
+		WORLD_WALK_REQUEST(35),
 		;
 
 		private int opcode;

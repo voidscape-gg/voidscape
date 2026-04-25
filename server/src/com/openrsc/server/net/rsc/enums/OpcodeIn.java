@@ -115,4 +115,6 @@ public enum OpcodeIn {
 
 	SEND_DEBUG_INFO, // part of rsc era protocol
 	KNOWN_PLAYERS, // part of rsc era protocol
+
+	WORLD_WALK_REQUEST, // voidscape — world-map auto-walker
 }

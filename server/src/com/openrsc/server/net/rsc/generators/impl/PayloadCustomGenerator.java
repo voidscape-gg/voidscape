@@ -116,6 +116,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 		put(OpcodeOut.SEND_DUEL_OTHER_ACCEPTED, 253);
 		put(OpcodeOut.SEND_EQUIPMENT, 254); // custom
 		put(OpcodeOut.SEND_EQUIPMENT_UPDATE, 255); // custom
+		put(OpcodeOut.SEND_WORLD_WALK_ROUTE, 100); // voidscape — world-map auto-walker
 	}};
 
 	@Override
@@ -1003,6 +1004,20 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						builder.writeBits(uas.unlockedBottomColours[i] ? 1 : 0, 1);
 					}
 					builder.finishBitAccess();
+					break;
+
+				case SEND_WORLD_WALK_ROUTE:
+					WorldWalkRouteStruct wwr = (WorldWalkRouteStruct) payload;
+					builder.writeByte((byte) (wwr.ok ? 1 : 0));
+					builder.writeByte((byte) wwr.reason);
+					int wwrCount = wwr.route == null ? 0 : wwr.route.size();
+					builder.writeShort(wwrCount);
+					if (wwrCount > 0) {
+						for (Point p : wwr.route) {
+							builder.writeShort(p.getX());
+							builder.writeShort(p.getY());
+						}
+					}
 					break;
 			}
 		}

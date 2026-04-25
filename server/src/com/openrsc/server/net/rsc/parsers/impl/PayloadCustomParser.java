@@ -293,6 +293,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case 196:
 				opcode = OpcodeIn.CANCEL_RECOVERY_REQUEST;
 				break;
+			case 35:
+				opcode = OpcodeIn.WORLD_WALK_REQUEST;
+				break;
 			default:
 				break;
 		}
@@ -455,6 +458,8 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case WALK_TO_POINT:
 			case WALK_TO_ENTITY:
 				return packet.getLength() >= 4;
+			case WORLD_WALK_REQUEST:
+				return packet.getLength() == 4;
 		}
 		return true;
 	}
@@ -1058,6 +1063,13 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					w.steps.add(new Point(packet.readByte(), packet.readByte()));
 				}
 				result = w;
+				break;
+
+			case WORLD_WALK_REQUEST:
+				WorldWalkStruct ww = new WorldWalkStruct();
+				ww.destX = packet.readShort();
+				ww.destY = packet.readShort();
+				result = ww;
 				break;
 		}
 

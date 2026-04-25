@@ -162,6 +162,20 @@ public class ActionSender {
 	}
 
 	/**
+	 * Server reply to a world-map auto-walker request. {@code ok} signals
+	 * whether the route is being driven; {@code reason} is a non-zero failure
+	 * code when {@code ok = false}; {@code route} is the planned tile list
+	 * (empty on failure).
+	 */
+	public static void sendWorldWalkRoute(Player player, boolean ok, int reason, List<Point> route) {
+		WorldWalkRouteStruct struct = new WorldWalkRouteStruct();
+		struct.ok = ok;
+		struct.reason = reason;
+		struct.route = route == null ? java.util.Collections.emptyList() : route;
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_WORLD_WALK_ROUTE, struct, player);
+	}
+
+	/**
 	 * Inform client to start displaying the appearance changing screen.
 	 *
 	 * @param player

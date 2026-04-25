@@ -141,6 +141,13 @@ public final class mudclient implements Runnable {
 	private final ORSCharacter[] npcsServer = new ORSCharacter[5000];
 	private final int[] pathX = new int[8000];
 	private final int[] pathZ = new int[8000];
+
+	// World-map auto-walker route (slice 2). Populated by SEND_WORLD_WALK_ROUTE.
+	// Slice 5 will render this as a polyline overlay on the world map.
+	public boolean worldWalkRouteOk;
+	public int worldWalkRouteReason;
+	public int[] worldWalkRouteX = new int[0];
+	public int[] worldWalkRouteY = new int[0];
 	private final int[] playerClothingColors = new int[]{0xFF0000, 16744448, 16769024, 10543104, '\ue000', '\u8000',
 		'\ua080', '\ub0ff', '\u80ff', 12528, 14680288, 3158064, 6307840, 8409088, 0xFFFFFF};
 	private final int[] playerHairColors = new int[]{16760880, 16752704, 8409136, 6307872, 3158064, 16736288,
@@ -12111,6 +12118,19 @@ public final class mudclient implements Runnable {
 								devMenuNpcID = Integer.parseInt(var11.split(" ")[1]);
 							} else if (var11.equalsIgnoreCase("::overlay") && S_SIDE_MENU_TOGGLE) {
 								C_SIDE_MENU_OVERLAY = !C_SIDE_MENU_OVERLAY;
+							} else if (var11.startsWith("::wmw ") || var11.startsWith("::wmw\t")) {
+								// voidscape — debug client trigger for the world-map auto-walker
+								// (slice 2). Slice 5 routes this through the map-click UI.
+								String[] wmwArgs = var11.split("\\s+");
+								if (wmwArgs.length >= 3) {
+									try {
+										int wmwX = Integer.parseInt(wmwArgs[1]);
+										int wmwY = Integer.parseInt(wmwArgs[2]);
+										this.sendWorldWalkRequest(wmwX, wmwY);
+									} catch (NumberFormatException nfe) {
+										// silently swallow; user can re-type
+									}
+								}
 							} else if (var11.startsWith("::wiki")) {
 								String[] args = var11.split(" ");
 								// args[0] should be ::wiki
@@ -17584,6 +17604,31 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var13, "client.DD(" + x1 + ',' + walkToEntity + ',' + startX + ',' + z1 + ',' + startZ
 				+ ',' + x2 + ',' + reachBorder + ',' + z2 + ',' + "dummy" + ')');
 		}
+	}
+
+	/**
+	 * voidscape — world-map auto-walker. Send a destination (absolute world
+	 * coords; floor encoded as Y / 944) to the server. Server pathfinds and
+	 * drives walking; the route comes back via SEND_WORLD_WALK_ROUTE (opcode
+	 * 100) and is stored in {@code worldWalkRouteX/Y} for the slice-5 UI.
+	 */
+	public void sendWorldWalkRequest(int destX, int destY) {
+		this.packetHandler.getClientStream().newPacket(orsc.net.Opcodes.Out.WORLD_WALK_REQUEST.getOpcode());
+		this.packetHandler.getClientStream().bufferBits.putShort(destX);
+		this.packetHandler.getClientStream().bufferBits.putShort(destY);
+		this.packetHandler.getClientStream().finishPacket();
+	}
+
+	/** Receiver for SEND_WORLD_WALK_ROUTE; called from PacketHandler. */
+	public void setWorldWalkRoute(boolean ok, int reason, int[] xs, int[] ys) {
+		this.worldWalkRouteOk = ok;
+		this.worldWalkRouteReason = reason;
+		this.worldWalkRouteX = xs;
+		this.worldWalkRouteY = ys;
+		String msg = ok
+			? "@gre@World-walk: @whi@" + xs.length + " tiles."
+			: "@red@World-walk failed: @whi@reason=" + reason;
+		this.showMessage(false, null, msg, MessageType.GAME, 0, null);
 	}
 
 	private void walkToGroundItem(int startX, int startZ, int destX, int destZ, boolean var5) {
