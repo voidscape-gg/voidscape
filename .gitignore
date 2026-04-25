@@ -190,3 +190,7 @@ Client_Base/Cache/port.txt
 
 # Claude Code per-session skills (workflow scaffolding, not project content)
 .claude/skills/
+
+# rsc-mapgen working dir — restaged from server/.../maps on each render
+tools/rsc-mapgen/input/
+tools/rsc-mapgen/map.png
