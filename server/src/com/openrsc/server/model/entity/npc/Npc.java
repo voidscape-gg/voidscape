@@ -432,7 +432,14 @@ public class Npc extends Mob {
 			if (!worldAllowsDrop(item)) {
 				continue;
 			}
-			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), item.getAmount(), owner);
+			// voidscape: Void Amulet boosts stackable drops by 1.5x. Common NPCs (men, goblins)
+			// drop coins via the invariableItems path, not dropStackItem.
+			int amount = item.getAmount();
+			if (getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogId()).isStackable()
+				&& owner.getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_AMULET.id())) {
+				amount = (int) (amount * 1.5);
+			}
+			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), amount, owner);
 			groundItem.setAttribute("npcdrop", true);
 			owner.getWorld().registerItem(groundItem);
 		}
@@ -597,6 +604,12 @@ public class Npc extends Mob {
 		if (dropID == ItemId.COINS.id() && owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_SPLENDOR.id())) {
 			amount += Formulae.getSplendorBoost(amount);
 			owner.message("Your ring of splendor shines brightly!");
+		}
+		// voidscape: Void Amulet boosts stackable NPC drops by 1.5x for the wearer (the kill owner).
+		// Applies on top of Ring of Splendor's coin bonus (multiplicative). Only stackable drops
+		// route through this method, so no per-item-stackable check is needed.
+		if (owner.getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_AMULET.id())) {
+			amount = (int) (amount * 1.5);
 		}
 		final int finalAmount = amount;
 		getWorld().getServer().submitSqlLogging(() -> {

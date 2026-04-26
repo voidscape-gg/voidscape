@@ -1,0 +1,14 @@
+Recolor and restyle the reference image as a "Void Amulet" inventory icon for a RuneScape Classic-style game. The reference shows a gold chain forming a circle with a small dangling gem at the bottom.
+
+CRITICAL: The output must be FULLY FILLED PIXEL ART, NOT a line drawing or outline. The chain must be a solid color block (like the reference's filled gold chain), not empty/transparent. Think 16-bit RPG sprite art (e.g. classic RuneScape, Castlevania, RPG Maker), not concept-art line work.
+
+CANVAS FILL: the amulet silhouette must fill the canvas EDGE TO EDGE, with the chain ring occupying most of the width and the gem hanging prominently below. The chain should be VISUALLY CHUNKY — at least 60-90 pixels thick at the 1024×1024 working size, so the silhouette survives heavy downscaling to ~42×23 and remains readable as an amulet.
+
+Repaint:
+- Chain ring: solid deep matte black (think obsidian / void onyx), fully filled. 1-pixel-wide edge highlight in dark amethyst purple for definition.
+- Gem (the dangling pendant): solid vivid amethyst purple, fully filled, MUCH LARGER than the reference's tiny gem — at least 20% of the canvas area. Faceted look with 1-2 pixels of pale lavender highlight on the upper-left edge of the gem to suggest light.
+- Optional: 1-pixel violet halo around the whole amulet suggesting void energy.
+
+STYLE: clean and simple — no engravings, runes, glyphs, or fantasy ornamentation. Just a sleek black chain with a glowing amethyst void gem.
+
+Transparent background (no white, no checkerboard). Pixel-art aesthetic with chunky 1×1 to 2×2 blocks. No anti-aliased gradients. No text, no extra elements — just the amulet. Same orientation and proportions as the reference (chain on top, gem hanging below).
