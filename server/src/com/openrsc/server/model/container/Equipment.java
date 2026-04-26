@@ -665,6 +665,16 @@ public class Equipment {
 			}
 		}
 
+		// voidscape: def-driven secondary skill requirement (e.g. Void Scimitar Magic 70).
+		int secondaryLevel = item.getDef(player.getWorld()).getSecondaryRequiredLevel();
+		int secondarySkillIndex = item.getDef(player.getWorld()).getSecondaryRequiredSkillIndex();
+		if (hasRequirement && secondaryLevel >= 0 && secondarySkillIndex >= 0
+			&& player.getSkills().getMaxStat(secondarySkillIndex) < secondaryLevel) {
+			player.message("You are not a high enough level to use this item");
+			player.message("You need to have a " + player.getWorld().getServer().getConstants().getSkills().getSkillName(secondarySkillIndex) + " level of " + secondaryLevel);
+			ableToWield = false;
+		}
+
 		// Incorrect sex for armour type
 		if (item.getDef(player.getWorld()).isFemaleOnly() && player.isMale()) {
 			player.message("It doesn't fit!");

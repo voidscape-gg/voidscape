@@ -1092,6 +1092,16 @@ public final class Player extends Mob {
 				}
 			}
 
+			// voidscape: def-driven secondary skill requirement.
+			int secondaryLevel2 = item.getDef(getWorld()).getSecondaryRequiredLevel();
+			int secondarySkillIndex2 = item.getDef(getWorld()).getSecondaryRequiredSkillIndex();
+			if (secondaryLevel2 >= 0 && secondarySkillIndex2 >= 0
+				&& getSkills().getMaxStat(secondarySkillIndex2) < secondaryLevel2) {
+				message("You are not a high enough level to use this item");
+				message("You need to have a " + getWorld().getServer().getConstants().getSkills().getSkillName(secondarySkillIndex2) + " level of " + secondaryLevel2);
+				unWield = true;
+			}
+
 			if (unWield) {
 				UnequipRequest request = new UnequipRequest();
 				request.item = item;
@@ -1167,6 +1177,16 @@ public final class Player extends Mob {
 						message("You need to have a " + getWorld().getServer().getConstants().getSkills().getSkillName(optionalSkillIndex.get()) + " level of " + optionalLevel.get());
 						unWield = true;
 					}
+				}
+
+				// voidscape: def-driven secondary skill requirement.
+				int secondaryLevel3 = item.getDef(getWorld()).getSecondaryRequiredLevel();
+				int secondarySkillIndex3 = item.getDef(getWorld()).getSecondaryRequiredSkillIndex();
+				if (secondaryLevel3 >= 0 && secondarySkillIndex3 >= 0
+					&& getSkills().getMaxStat(secondarySkillIndex3) < secondaryLevel3) {
+					message("You are not a high enough level to use this item");
+					message("You need to have a " + getWorld().getServer().getConstants().getSkills().getSkillName(secondarySkillIndex3) + " level of " + secondaryLevel3);
+					unWield = true;
 				}
 
 				if (unWield) {

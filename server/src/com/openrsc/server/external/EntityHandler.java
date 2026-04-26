@@ -396,6 +396,14 @@ public final class EntityHandler {
 					item.getInt("isNoteable") == 1
 				);
 
+				// voidscape: optional dual-skill requirement. Defaults (-1) leave existing items unchanged.
+				if (item.has("secondaryRequiredLevel")) {
+					toAdd.setSecondaryRequiredLevel(item.getInt("secondaryRequiredLevel"));
+				}
+				if (item.has("secondaryRequiredSkillID")) {
+					toAdd.setSecondaryRequiredSkillIndex(item.getInt("secondaryRequiredSkillID"));
+				}
+
 				if (toAdd.getCommand().length == 1 && "".equals(toAdd.getCommand()[0])) {
 					toAdd.nullCommand();
 				}

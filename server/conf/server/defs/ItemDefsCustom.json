@@ -6968,6 +6968,31 @@
             "prayerBonus": 0,
             "basePrice": 1,
             "isNoteable": 0
+        },
+        {
+            "id": 1593,
+            "name": "Void Scimitar",
+            "description": "A scimitar pulsing with otherworldly energy.",
+            "command": "",
+            "isFemaleOnly": 0,
+            "isMembersOnly": 0,
+            "isStackable": 0,
+            "isUntradable": 1,
+            "isWearable": 1,
+            "appearanceID": 230,
+            "wearableID": 16,
+            "wearSlot": 4,
+            "requiredLevel": 70,
+            "requiredSkillID": 0,
+            "secondaryRequiredLevel": 70,
+            "secondaryRequiredSkillID": 6,
+            "armourBonus": 0,
+            "weaponAimBonus": 55,
+            "weaponPowerBonus": 55,
+            "magicBonus": 8,
+            "prayerBonus": 0,
+            "basePrice": 64000,
+            "isNoteable": 1
         }
     ]
 }

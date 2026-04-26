@@ -10,11 +10,11 @@ Adds a new item to voidscape. Authentic items go in `ItemDefs.json`; voidscape-o
 | `server/src/com/openrsc/server/constants/NpcDrops.java` | (optional) add to NPC drop tables — recompile |
 | `server/conf/server/defs/locs/GroundItems.json` | (optional) place as world spawn |
 | `server/plugins/.../<Shop>.java` | (optional) add to shop inventory — recompile plugins |
-| `Client_Base/` | **Only if** the item needs a new sprite asset; otherwise no client change |
+| `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java` | **Always**, for any new item id. Append `items.add(new ItemDef(...))` at the end of `loadItemDefinitions()` so the client-side list count stays aligned with the server's. The client sends `EntityHandler.itemCount() - 1` as `maxItemId` at login (`mudclient.java:15111`); if the server has an item id > that value, `Inventory.add()` rejects it with "Your client could not receive ..." (`Inventory.java:115`). Recompile `Client_Base` afterwards. |
 
 ## Steps
 
-1. **Pick an ID** above the highest currently in `ItemDefsCustom.json`. Voidscape custom items: keep them above 10000 so they never collide with future authentic items.
+1. **Pick an ID** that is **next sequential after the highest existing item ID** across both `ItemDefs.json` (authentic, ends at 1289) and `ItemDefsCustom.json` (custom, ends wherever the last entry sits — currently 1593 after the Void Scimitar). Voidscape custom items continue the sequence; they are NOT placed at ≥ 10000. **Why**: `EntityHandler.getItemDef(int)` does `items.get(id)` against a positional `ArrayList` (`server/src/com/openrsc/server/external/EntityHandler.java:842-847`); the load order in JSON IS the position, so any gap means `::item <id>` returns null. Same constraint that the Edgar NPC entry in `docs/DIVERGENCE.md` flagged for NPCs.
 2. **Append the def** to `ItemDefsCustom.json`. Required fields: `id`, `name`, `description`, `command`, `isFemaleOnly`, `isMembersOnly`, `isStackable`, `isUntradable`, `isWearable`, `appearanceID`, `wearSlot`, `requiredLevel`, `requiredSkillID`, `defaultPrice`, plus `bonuses` for wearable items. Mirror an existing similar item's shape.
 3. **Sprite/appearance**: `appearanceID` references a sprite slot the client already knows. If you need a new sprite, that's a client cache change — see `docs/subsystems/client-cache.md`. (For authenticity, prefer reusing an existing sprite.)
 4. **Spawn it (optional)**:
@@ -32,7 +32,7 @@ Adds a new item to voidscape. Authentic items go in `ItemDefs.json`; voidscape-o
 - [ ] Stackable: stacks correctly in inventory and bank.
 - [ ] Tradable/untradable: trade dialog respects the flag.
 - [ ] Members-only: F2P worlds block the item if `member_world: false`.
-- [ ] Voidscape-original items have IDs ≥ 10000 (no collision with future authentic).
+- [ ] New custom item ID is the next sequential after the previous highest (no gaps — `EntityHandler` indexes `items.get(id)` positionally).
 
 ## Common pitfalls
 

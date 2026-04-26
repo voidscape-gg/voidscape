@@ -118,6 +118,11 @@ public final class ItemDefinition extends EntityDef {
 	 */
 	private int requiredSkillIndex;
 
+	// voidscape: optional second skill requirement (e.g. Void Scimitar = Att 70 + Magic 70).
+	// -1 = no secondary requirement (preserves behavior for every existing item).
+	private int secondaryRequiredLevel = -1;
+	private int secondaryRequiredSkillIndex = -1;
+
 	/**
 	 * The weapon aim-bonus for an <code>InventoryItem</code>,
 	 * or a <code>GroundItem</code> represented by
@@ -396,6 +401,20 @@ public final class ItemDefinition extends EntityDef {
 	}
 	public void setRequiredSkillIndex(int index) {
 		this.requiredSkillIndex = index;
+	}
+
+	public final int getSecondaryRequiredLevel() {
+		return secondaryRequiredLevel;
+	}
+	public void setSecondaryRequiredLevel(int level) {
+		this.secondaryRequiredLevel = level;
+	}
+
+	public final int getSecondaryRequiredSkillIndex() {
+		return secondaryRequiredSkillIndex;
+	}
+	public void setSecondaryRequiredSkillIndex(int index) {
+		this.secondaryRequiredSkillIndex = index;
 	}
 
 	/**

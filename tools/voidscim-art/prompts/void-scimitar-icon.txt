@@ -1,0 +1,10 @@
+Recolor and restyle the reference image as a "Void Scimitar" inventory icon for a RuneScape Classic-style game. The reference shows a curved single-edged scimitar with a thick FILLED white/grey blade and a small green-and-brown grip on the lower-left.
+
+CRITICAL: The output must be FULLY FILLED PIXEL ART, NOT a line drawing or outline. Every interior pixel of the blade and grip must be a solid color block (like the reference's filled white blade), not empty/transparent. Think 16-bit RPG sprite art (e.g. classic RuneScape, Castlevania, RPG Maker), not concept-art line work.
+
+Preserve the diagonal curved blade silhouette and lower-left grip pose EXACTLY as in the reference. Repaint:
+- Blade interior: solid deep indigo / royal purple, fully filled (matching the reference's solid white-blade fill but in purple). 1-pixel-wide darker violet edge along the cutting curve for definition.
+- Hilt and pommel: solid matte obsidian black, fully filled, with 1-2 pixels of light amethyst on the crossguard and pommel cap for accent.
+- Optional: 1-pixel violet halo around the blade silhouette.
+
+Transparent background (no white, no checkerboard). Pixel-art aesthetic with chunky 1×1 to 2×2 blocks. No anti-aliased gradients. No text, no extra elements — just the sword. Same orientation and proportions as the reference.
