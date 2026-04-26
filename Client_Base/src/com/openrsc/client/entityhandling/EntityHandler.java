@@ -2336,6 +2336,8 @@ public class EntityHandler {
 		npcs.add(new NPCDef("McGrubor", "Grumpy old McGruber", "", 20, 20, 20, 20, false, sprites, 0xAAAAAA, 12277060, 0x007900, 15523536, 160, 220, 6, 6, 5, i++));
 		sprites = new int[]{0, 557, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 		npcs.add(new NPCDef("Ash", "Groovy", "", 20, 20, 20, 20, false, sprites, 0x50321E, 0x00137F, 0x794B1E, 15523536, 160, 220, 6, 6, 5, i++));
+		sprites = new int[]{0, 1, 2, -1, -1, 77, 76, 81, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Edgar", "An old wizard", "Teleport to Edgeville", 0, 0, 5, 0, false, sprites, 16777215, 255, 255, 15523536, 145, 220, 6, 6, 5, i++));
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
