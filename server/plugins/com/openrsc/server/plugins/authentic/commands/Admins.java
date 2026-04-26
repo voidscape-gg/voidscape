@@ -103,6 +103,8 @@ public final class Admins implements CommandTrigger {
 
 		if (command.equalsIgnoreCase("saveall")) {
 			saveAll(player);
+		} else if (command.equalsIgnoreCase("pf")) {
+			pathfindDebug(player, args);
 		} else if (command.equalsIgnoreCase("holidaydrop")) {
 			startHolidayDrop(player, command, args, false);
 		} else if (command.equalsIgnoreCase("stopholidaydrop") || command.equalsIgnoreCase("cancelholidaydrop") || command.equalsIgnoreCase("christmasiscancelled")) {
@@ -435,6 +437,40 @@ public final class Admins implements CommandTrigger {
 			count++;
 		}
 		player.message(messagePrefix + "Saved " + count + " players on server!");
+	}
+
+	/** Voidscape debug: ::pf <x> <y>  — runs the world-walk pathfinder against
+	 *  the given world tile and reports the outcome (path length, explored
+	 *  node count, last reason). For diagnosing "Can't find a path there"
+	 *  failures without sending the player anywhere. */
+	private void pathfindDebug(Player player, String[] args) {
+		if (args.length < 2) {
+			player.message(messagePrefix + "Usage: ::pf <x> <y>");
+			return;
+		}
+		int x, y;
+		try {
+			x = Integer.parseInt(args[0]);
+			y = Integer.parseInt(args[1]);
+		} catch (NumberFormatException ex) {
+			player.message(messagePrefix + "Bad coords. Usage: ::pf <x> <y>");
+			return;
+		}
+		final com.openrsc.server.model.Point start = player.getLocation();
+		final com.openrsc.server.model.Point end = com.openrsc.server.model.Point.location(x, y);
+		final com.openrsc.server.model.WorldPathfinder pf =
+			new com.openrsc.server.model.WorldPathfinder(player.getWorld(), player);
+		final java.util.List<com.openrsc.server.model.Point> path = pf.findPath(start, end);
+		final int explored = pf.getNodesExplored();
+		final com.openrsc.server.model.WorldPathfinder.Reason reason = pf.getLastReason();
+		if (path == null) {
+			player.message(messagePrefix + "@red@FAIL: " + start.getX() + "," + start.getY()
+				+ " → " + x + "," + y + " — reason=" + reason + ", explored=" + explored);
+		} else {
+			player.message(messagePrefix + "@gre@OK: " + start.getX() + "," + start.getY()
+				+ " → " + x + "," + y + " — " + path.size() + " tiles, explored=" + explored
+				+ ", reason=" + reason);
+		}
 	}
 
 	private void cabbageHalloweenDrop(Player player, String command, String[] args) {

@@ -1,7 +1,10 @@
 package com.openrsc.server.model;
 
+import com.openrsc.server.model.entity.GameObject;
+import com.openrsc.server.model.entity.GameObjectType;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.model.world.region.Region;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.util.rsc.CollisionFlag;
 import com.openrsc.server.util.rsc.Formulae;
@@ -32,7 +35,10 @@ import java.util.PriorityQueue;
  */
 public class WorldPathfinder {
 
-	public static final int DEFAULT_NODE_CAP = 50_000;
+	// Generous enough for any F2P cross-region walk (Edgeville → Lumbridge,
+	// Falador → Al Kharid, etc.). Earlier 50k cap exhausted on dense urban
+	// routes — Varrock alone has thousands of wall edges to detour around.
+	public static final int DEFAULT_NODE_CAP = 500_000;
 
 	private static final int BASIC_COST = 10;
 	private static final int DIAG_COST = 14;
@@ -220,15 +226,21 @@ public class WorldPathfinder {
 	/**
 	 * Geometric-only adjacency check: walls on either tile's facing edges,
 	 * full-block tiles, diagonal corner clipping. Does not consult mobs.
+	 *
+	 * Voidscape: when the geometric check would reject a step but there's an
+	 * auto-openable closed gate adjacent to the source or destination, allow
+	 * it — the {@link WalkingQueue} auto-opens those on contact. Scenery
+	 * gates set wall flags on a 1×2 (or 2×1) footprint that's offset from
+	 * their registered tile, so we scan a small neighbourhood instead of
+	 * trying to back-trace the exact flag source.
 	 */
 	private boolean canStep(final int sx, final int sy, final int dx, final int dy,
 	                        final int xdir, final int ydir) {
 		final TileValue st = world.getTile(sx, sy);
 		final TileValue dt = world.getTile(dx, dy);
 		if (st == null || dt == null) return false;
-		if ((dt.traversalMask & CollisionFlag.FULL_BLOCK) != 0) return false;
 
-		final boolean diagonal = xdir != 0 && ydir != 0;
+		final boolean fullBlocked = (dt.traversalMask & CollisionFlag.FULL_BLOCK) != 0;
 
 		// Wall on the X-facing edge of source or destination.
 		boolean xBlocked = false;
@@ -249,20 +261,66 @@ public class WorldPathfinder {
 				|| isBlocked(dt, CollisionFlag.WALL_SOUTH, false);
 		}
 
+		final boolean diagonal = xdir != 0 && ydir != 0;
+		boolean blocked;
 		if (!diagonal) {
-			return !(xBlocked || yBlocked);
+			blocked = fullBlocked || xBlocked || yBlocked;
+		} else if (fullBlocked || xBlocked || yBlocked) {
+			blocked = true;
+		} else {
+			// For diagonal moves, require both cardinal half-steps to be clear
+			// AND the diagonal corner-pass to be unobstructed.
+			final TileValue xMid = world.getTile(sx + xdir, sy);
+			final TileValue yMid = world.getTile(sx, sy + ydir);
+			if (xMid == null || yMid == null) blocked = true;
+			else if ((xMid.traversalMask & CollisionFlag.FULL_BLOCK) != 0) blocked = true;
+			else if ((yMid.traversalMask & CollisionFlag.FULL_BLOCK) != 0) blocked = true;
+			else blocked = PathValidation.checkDiagonalPassThroughCollisions(world,
+				Point.location(sx, sy), Point.location(dx, dy));
 		}
 
-		// For diagonal moves, require both cardinal half-steps to be clear AND
-		// the diagonal corner-pass to be unobstructed.
-		if (xBlocked || yBlocked) return false;
-		final TileValue xMid = world.getTile(sx + xdir, sy);
-		final TileValue yMid = world.getTile(sx, sy + ydir);
-		if (xMid == null || yMid == null) return false;
-		if ((xMid.traversalMask & CollisionFlag.FULL_BLOCK) != 0) return false;
-		if ((yMid.traversalMask & CollisionFlag.FULL_BLOCK) != 0) return false;
-		return !PathValidation.checkDiagonalPassThroughCollisions(world,
-			Point.location(sx, sy), Point.location(dx, dy));
+		if (!blocked) return true;
+
+		// Voidscape bypass: if there's an auto-openable closed gate within the
+		// step's neighbourhood, allow — walker auto-opens on contact.
+		if (filterP2P && !Formulae.isF2PLocation(Point.location(dx, dy))) return false;
+		return isAutoOpenableGateNear(sx, sy) || isAutoOpenableGateNear(dx, dy);
+	}
+
+	/**
+	 * Voidscape: is there an auto-openable closed gate in the 3×3 neighbourhood
+	 * of (x, y)? Scenery gates are typically 1×2 with the GameObject registered
+	 * at one tile but wall flags set on both tiles of the footprint (and the
+	 * adjacent tile across the wall edge), so the gate object itself isn't at
+	 * (x, y) when its flags are blocking a step there. The 3×3 scan catches
+	 * the gate regardless of which corner of its footprint we're at.
+	 *
+	 * Match: scenery with {@code GameObjectDef.name == "gate"} (case-insensitive
+	 * exact — excludes "metal gate", "metalic dungeon gate", "ardounge wall
+	 * gateway", "gnome stronghold gate", etc.) AND {@code command1 == "open"}
+	 * (so we only target closed instances).
+	 */
+	private boolean isAutoOpenableGateNear(final int cx, final int cy) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (isAutoOpenableGateAt(cx + dx, cy + dy)) return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isAutoOpenableGateAt(final int x, final int y) {
+		final Point loc = Point.location(x, y);
+		final Region region = world.getRegionManager().getRegion(loc);
+		if (region == null) return false;
+		final GameObject scenery = region.getGameObject(loc);
+		if (scenery == null || scenery.getGameObjectType() != GameObjectType.SCENERY) return false;
+		final com.openrsc.server.external.GameObjectDef def = scenery.getGameObjectDef();
+		if (def == null) return false;
+		final String name = def.getName();
+		if (name == null || !"gate".equalsIgnoreCase(name.trim())) return false;
+		final String cmd = def.getCommand1();
+		return cmd != null && "open".equalsIgnoreCase(cmd.trim());
 	}
 
 	private static boolean isBlocked(final TileValue tile, final int flag, final boolean isSource) {
