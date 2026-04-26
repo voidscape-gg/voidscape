@@ -4874,6 +4874,8 @@ public class EntityHandler {
 	@SuppressWarnings("unchecked")
 	private static void loadSpellDefinitions() {
 		LinkedHashMap<Integer, Integer> runes = new LinkedHashMap<Integer, Integer>();
+		spells.add(new SpellDef("Home teleport", "Teleports you to Lumbridge",
+			0, 0, 0, (LinkedHashMap<Integer, Integer>) runes.clone()));
 		runes.put(33, 1);
 		runes.put(35, 1);
 		spells.add(new SpellDef("Wind strike", "A strength 1 missile attack",

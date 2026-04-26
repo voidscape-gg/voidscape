@@ -1872,6 +1872,9 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			}
 		}
 		switch (spellEnum) {
+			case HOME_TELEPORT:
+				player.teleport(120, 648, true);
+				break;
 			case VARROCK_TELEPORT:
 				player.teleport(120, 504, true);
 				break;

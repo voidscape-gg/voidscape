@@ -1,5 +1,16 @@
 <SpellDef-array>
     <SpellDef>
+      <reqLevel>0</reqLevel>
+      <type>0</type>
+      <runeCount>0</runeCount>
+      <requiredRunes></requiredRunes>
+      <exp>0</exp>
+      <name>Home teleport</name>
+      <description>Teleports you to Lumbridge</description>
+	  <members>false</members>
+	  <evil>false</evil>
+    </SpellDef>
+    <SpellDef>
       <reqLevel>1</reqLevel>
       <type>2</type>
       <runeCount>2</runeCount>
