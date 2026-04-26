@@ -37,11 +37,12 @@ public class RangeUtils {
             ItemId.MAPLE_LONGBOW.id(), ItemId.MAPLE_SHORTBOW.id(),
             ItemId.YEW_LONGBOW.id(), ItemId.YEW_SHORTBOW.id(),
             ItemId.MAGIC_LONGBOW.id(), ItemId.MAGIC_SHORTBOW.id(),
-            ItemId.DRAGON_LONGBOW.id()
+            ItemId.DRAGON_LONGBOW.id(),
+            ItemId.VOID_BOW.id()
     );
     private final static Set<Integer> CROSSBOWS = ImmutableSet.of(ItemId.PHOENIX_CROSSBOW.id(), ItemId.CROSSBOW.id(), ItemId.DRAGON_CROSSBOW.id());
 	private final static Set<Integer> SHORT_BOWS = ImmutableSet.of(ItemId.SHORTBOW.id(), ItemId.OAK_SHORTBOW.id(), ItemId.WILLOW_SHORTBOW.id(),
-		ItemId.MAPLE_SHORTBOW.id(), ItemId.YEW_SHORTBOW.id(), ItemId.MAGIC_SHORTBOW.id());
+		ItemId.MAPLE_SHORTBOW.id(), ItemId.YEW_SHORTBOW.id(), ItemId.MAGIC_SHORTBOW.id(), ItemId.VOID_BOW.id());
 
     private final static Set<Integer> BASIC_ARROWS = ImmutableSet.of(ItemId.BRONZE_ARROWS.id(), ItemId.POISON_BRONZE_ARROWS.id(), ItemId.IRON_ARROWS.id(), ItemId.POISON_IRON_ARROWS.id());
     private final static Set<Integer> STEEL_ARROWS = ImmutableSet.of(ItemId.STEEL_ARROWS.id(), ItemId.POISON_STEEL_ARROWS.id());
@@ -80,6 +81,7 @@ public class RangeUtils {
         allowedProjectilesMap.put(ItemId.MAGIC_SHORTBOW.id(), combine(BASIC_ARROWS, STEEL_ARROWS, MITHRIL_ARROWS, ADDY_ARROWS, RUNE_ARROWS, ICE_ARROWS));
         allowedProjectilesMap.put(ItemId.MAGIC_LONGBOW.id(), combine(BASIC_ARROWS, STEEL_ARROWS, MITHRIL_ARROWS, ADDY_ARROWS, RUNE_ARROWS, ICE_ARROWS));
         allowedProjectilesMap.put(ItemId.DRAGON_LONGBOW.id(), combine(BASIC_ARROWS, STEEL_ARROWS, MITHRIL_ARROWS, ADDY_ARROWS, RUNE_ARROWS, DRAGON_ARROWS, ICE_ARROWS));
+        allowedProjectilesMap.put(ItemId.VOID_BOW.id(), combine(BASIC_ARROWS, STEEL_ARROWS, MITHRIL_ARROWS, ADDY_ARROWS, RUNE_ARROWS, DRAGON_ARROWS, ICE_ARROWS));
 
         // Crossbow
         allowedProjectilesMap.put(ItemId.CROSSBOW.id(), BASIC_BOLTS);
@@ -183,6 +185,8 @@ public class RangeUtils {
     }
 
     public static void handleArrowLossAndDrop(World world, Player player, Mob target, int damage, int arrowId) {
+        // Void Bow uses no ammo — nothing to drop on the target.
+        if (isVoidBow(arrowId)) return;
         if (Formulae.loseArrow(damage)) {
             GroundItem arrows = getArrows(arrowId, target, player);
             if (!DropTable.handleRingOfAvarice(player, new Item(arrowId, 1))) {
@@ -248,5 +252,9 @@ public class RangeUtils {
 
     public static boolean isBow(int weaponId) {
         return BOWS.contains(weaponId);
+    }
+
+    public static boolean isVoidBow(int weaponId) {
+        return weaponId == ItemId.VOID_BOW.id();
     }
 }

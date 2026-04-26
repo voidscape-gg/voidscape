@@ -131,7 +131,12 @@ public class RangeEvent extends GameTickEvent {
 		final int ammoId;
 		final boolean isCrossbow = RangeUtils.isCrossbow(weaponId);
 
-		if (config.WANT_EQUIPMENT_TAB) {
+		if (RangeUtils.isVoidBow(weaponId)) {
+			// Void Bow fires without consuming ammo. Pass the bow id itself as the
+			// "ammo" id so downstream power lookup (CombatFormula.rangedPower) and
+			// the no-drop guard in handleArrowLossAndDrop both key off it.
+			ammoId = weaponId;
+		} else if (config.WANT_EQUIPMENT_TAB) {
 			ammoId = takeAmmoFromEquipment(weaponId, isCrossbow);
 		} else {
 			ammoId = takeAmmoFromInventory(weaponId, isCrossbow);

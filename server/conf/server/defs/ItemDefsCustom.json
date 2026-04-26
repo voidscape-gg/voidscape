@@ -6993,6 +6993,29 @@
             "prayerBonus": 0,
             "basePrice": 64000,
             "isNoteable": 1
+        },
+        {
+            "id": 1594,
+            "name": "Void Shortbow",
+            "description": "A bow humming with void energy. Needs no arrows.",
+            "command": "",
+            "isFemaleOnly": 0,
+            "isMembersOnly": 0,
+            "isStackable": 0,
+            "isUntradable": 0,
+            "isWearable": 1,
+            "appearanceID": 231,
+            "wearableID": 24,
+            "wearSlot": 3,
+            "requiredLevel": 80,
+            "requiredSkillID": 4,
+            "armourBonus": 0,
+            "weaponAimBonus": 0,
+            "weaponPowerBonus": 0,
+            "magicBonus": 0,
+            "prayerBonus": 0,
+            "basePrice": 5000,
+            "isNoteable": 1
         }
     ]
 }

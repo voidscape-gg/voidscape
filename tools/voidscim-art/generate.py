@@ -49,11 +49,14 @@ def call_edits(reference: Path, prompt: str, n: int, size: str, api_key: str, mo
         files = [('image', (reference.name, ref_f.read(), 'image/png'))]
     data = {
         'model': model, 'prompt': prompt, 'n': str(n), 'size': size, 'quality': 'high',
-        'background': 'transparent', 'output_format': 'png',
+        'output_format': 'png',
     }
+    if not model.startswith('gpt-image-2'):
+        # gpt-image-2 family rejects transparent background; older models support it.
+        data['background'] = 'transparent'
     backoff = 2.0
     for attempt in range(4):
-        r = requests.post(API_URL, headers=headers, data=data, files=files, timeout=180)
+        r = requests.post(API_URL, headers=headers, data=data, files=files, timeout=420)
         if r.status_code == 429 or r.status_code >= 500:
             print(f'  HTTP {r.status_code}; retrying in {backoff:.0f}s', file=sys.stderr)
             time.sleep(backoff)

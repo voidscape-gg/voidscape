@@ -4134,6 +4134,9 @@ public class EntityHandler {
 		// voidscape: Void Scimitar (id 1593). spriteID 607 = AI-generated void icon at archive index 2757 (= 2150 + 607). pictureMask=0 so the icon's own colors are used as-is, no tint.
 		items.add(new ItemDef("Void Scimitar", "A scimitar pulsing with otherworldly energy.", "", 64000, 607, "items:607", false, true, 16, 0, false, true, true, 1593));
 
+		// voidscape: Void Shortbow (id 1594). spriteID 608 = AI-generated icon at archive index 2758. F2P (membersItem=false), tradeable, noteable.
+		items.add(new ItemDef("Void Shortbow", "A bow humming with void energy. Needs no arrows.", "", 5000, 608, "items:608", false, true, 24, 0, false, false, true, 1594));
+
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
@@ -4880,6 +4883,7 @@ public class EntityHandler {
 		// false. Reuses the "sword" sprite block (the existing wielded shape used by all authentic
 		// sword/scimitar tiers) with a deep void-purple charColour.
 		animations.add(new AnimationDef("sword", "equipment", 0x6a0dad, 0, true, false, 0)); // voidscape: void scimitar (runtime idx 229 with S_WANT_CUSTOM_SPRITES=false)
+		animations.add(new AnimationDef("voidbow", "equipment", 0, 0, false, false, 0)); // voidscape: void bow (runtime idx 230, JSON appearanceID 231). References a custom 'voidbow' sprite block in Custom_Sprites.osar — clone of 'longbow' with the 4-color palette swapped to void purples (charColour-based tinting doesn't work on bow sprites since 'longbow' has no reserved-tint palette index).
 	}
 
 	@SuppressWarnings("unchecked")
