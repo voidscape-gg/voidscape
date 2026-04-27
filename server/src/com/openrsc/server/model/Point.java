@@ -20,6 +20,10 @@ public class Point {
 		wildernessLocations.add(new WildernessLocation(WildState.MEMBERS_WILD, 129, 180, 163, 219));
 		/* Underground Lava maze, always P2P */
 		wildernessLocations.add(new WildernessLocation(WildState.MEMBERS_WILD, 243, 2988, 283, 3020));
+		/* Void Enclave — safe-zone hub south of the Graveyard of Shadows.
+		 * Bounds use strict inequality in getWildernessLocation(), so the
+		 * playable interior is X=208..229, Y=341..361 (Wild level ~11-14). */
+		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 207, 340, 230, 362));
 	}
 
 	protected short x, y;
@@ -71,6 +75,10 @@ public class Point {
 
 		else if (inModRoom()) {
 			return "Mod Room";
+		}
+
+		else if (isInSafeZone()) {
+			return "Void Enclave";
 		}
 
 		else if (inFreeWild()) {
@@ -205,6 +213,11 @@ public class Point {
 			}
 		}
 		return null;
+	}
+
+	public boolean isInSafeZone() {
+		WildernessLocation loc = getWildernessLocation();
+		return loc != null && loc.getWildState() == WildState.SAFE_ZONE;
 	}
 
 	public final boolean withinRange(Point point, int radius) {

@@ -2353,4 +2353,72 @@
     <doorType>1</doorType>
     <unknown>1</unknown>
   </DoorDef>
+  <!-- Voidscape: Void Wall (id 214) — sanctum wall textured with the AI-generated
+       voidbricks (TextureDef id 55). modelVar1=192 = standard interior height. -->
+  <DoorDef>
+    <name>Void Wall</name>
+    <description>An ancient stone wall pulsing with void energy</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>55</modelVar2>
+    <modelVar3>55</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <!-- Voidscape: Void Highwall (id 215) — outer perimeter, tall (modelVar1=275)
+       + voidouter texture (TextureDef id 56). -->
+  <DoorDef>
+    <name>Void Highwall</name>
+    <description>An imposing wall of ancient void stone</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>275</modelVar1>
+    <modelVar2>56</modelVar2>
+    <modelVar3>56</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <!-- Voidscape: Void Sigil Wall (id 216) — accent wall mural with inscribed
+       pentagram (TextureDef id 57). Same height as Void Wall. -->
+  <DoorDef>
+    <name>Void Sigil Wall</name>
+    <description>A wall mural inscribed with a glowing pentagram</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>57</modelVar2>
+    <modelVar3>57</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <!-- Voidscape: Void Web (id 217) — glowing cobweb at perimeter gates
+       (TextureDef id 58). Tall (wallObjectHeight=275) to match perimeter Highwall.
+       unknown=0 so it renders via .orsc tile-byte path (vanilla web's unknown=1
+       only renders via JSON-scenery path which we don't use for the gates).
+       CutWeb.java (extended) handles cutting via knife/weapon. -->
+  <DoorDef>
+    <name>Void Web</name>
+    <description>A thick cobweb of void energy seals the gate</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>275</modelVar1>
+    <modelVar2>58</modelVar2>
+    <modelVar3>58</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <!-- Voidscape: Void Window (id 218) — stained-glass arched window for sanctum
+       E/W walls (TextureDef id 59). -->
+  <DoorDef>
+    <name>Void Window</name>
+    <description>A stained-glass window depicting the void sigil</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>59</modelVar2>
+    <modelVar3>59</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
 </DoorDef-array>

@@ -124,4 +124,28 @@
     <unknown>3</unknown>
     <objectType>0</objectType>
   </TileDef>
+  <!-- Voidscape: Void Floor — primary courtyard tile (id 25). RGB555 (10, 10, 10) = -10571,
+       renders RGB888 (80, 80, 80) — neutral medium-dark grey. Purple accents come from
+       TileDef 26/27 (sigil dots + ritual circle). -->
+  <TileDef>
+    <colour>-10571</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
+  <!-- Voidscape: Void Floor Accent (id 26). RGB555 (25, 6, 20) = -20698,
+       renders RGB888 (200, 48, 160) — brighter magenta-purple. Used for the central
+       ritual circle inside the sanctum AND scattered rune dots across the courtyard. -->
+  <TileDef>
+    <colour>-20698</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
+  <!-- Voidscape: Void Floor Mid (id 27). RGB555 (15, 8, 18) = -16915,
+       renders RGB888 (144, 64, 120) — mid-purple, used for accent rings around
+       the central ritual circle to create depth. -->
+  <TileDef>
+    <colour>-16915</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
 </TileDef-array>

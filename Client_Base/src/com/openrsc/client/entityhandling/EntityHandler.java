@@ -237,6 +237,15 @@ public class EntityHandler {
 		tiles.add(new TileDef(-17793, 2, 0));
 		tiles.add(new TileDef(-14594, 1, 1));
 		tiles.add(new TileDef(1, 3, 0));
+		// Voidscape: Void Floor — primary courtyard (id 25). -10571 = R=10, G=10, B=10 →
+		// RGB888(80, 80, 80), neutral grey. Purple comes from accent tiles 26/27.
+		tiles.add(new TileDef(-10571, 3, 0));
+		// Voidscape: Void Floor Accent (id 26). -20698 = R=25, G=6, B=20 → RGB888(200, 48, 160),
+		// bright magenta-purple. Used for the central ritual circle + scattered rune dots.
+		tiles.add(new TileDef(-20698, 3, 0));
+		// Voidscape: Void Floor Mid (id 27). -16915 = R=15, G=8, B=18 → RGB888(144, 64, 120),
+		// mid-purple. Used for accent ring around the central ritual circle.
+		tiles.add(new TileDef(-16915, 3, 0));
 	}
 
 	private static void loadElevationDefinitions() {
@@ -304,6 +313,23 @@ public class EntityHandler {
 		textures.add(new TextureDef("cavern", "crumbled"));
 		textures.add(new TextureDef("cavern2", "crumbled"));
 		textures.add(new TextureDef("lava", "flames"));
+
+		// voidscape: Void Bricks (id 55) — AI-generated wall texture for the Void Enclave sanctum.
+		// Inserted BEFORE the S_WANT_CUSTOM_SPRITES conditional so it always loads.
+		// Sprite at archive index 3280 (= spriteTexture 3225 + 55). Used by DoorDef "Void Wall".
+		textures.add(new TextureDef("voidbricks", ""));
+		// voidscape: Void Outer (id 56) — AI-generated megalithic stone for outer perimeter walls.
+		// Sprite at archive index 3281. Used by DoorDef "Void Highwall".
+		textures.add(new TextureDef("voidouter", ""));
+		// voidscape: Void Sigil Wall (id 57) — AI-generated wall mural with inscribed pentagram.
+		// Sprite at archive index 3282. Used by DoorDef "Void Sigil Wall" as accent on sanctum walls.
+		textures.add(new TextureDef("voidsigilwall", ""));
+		// voidscape: Void Web (id 58) — AI-generated bright magenta cobweb. Black pixels in the
+		// sprite become transparent (engine convention). Sprite at archive index 3283.
+		textures.add(new TextureDef("voidweb", ""));
+		// voidscape: Void Window (id 59) — AI-generated stained-glass arched window with pentagram.
+		// Sprite at archive index 3284. Used by DoorDef "Void Window" on sanctum E/W walls.
+		textures.add(new TextureDef("voidwindow", ""));
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			loadCustomTextureDefinitions();
@@ -5643,6 +5669,29 @@ public class EntityHandler {
 			"Use", "Search", 1, 1, 275, 2, 2, i++));
 		doors.add(new DoorDef("Door", "The door is shut", "Open", "Examine", 1,
 			1, 192, 0, 0, i++));
+		// voidscape: Void Wall (id 214) — sanctum wall textured with the AI-generated voidbricks
+		// (TextureDef id 55). modelVar1=192 = standard interior wall height. doorType=1 (blocking).
+		doors.add(new DoorDef("Void Wall", "An ancient stone wall pulsing with void energy",
+			"WalkTo", "Examine", 1, 0, 192, 55, 55, i++));
+		// voidscape: Void Highwall (id 215) — outer perimeter wall, modelVar1=275 (tall) +
+		// voidouter texture (id 56). Imposing megalithic void stone.
+		doors.add(new DoorDef("Void Highwall", "An imposing wall of ancient void stone",
+			"WalkTo", "Examine", 1, 0, 275, 56, 56, i++));
+		// voidscape: Void Sigil Wall (id 216) — accent wall mural with inscribed pentagram
+		// (TextureDef id 57). Same height as Void Wall.
+		doors.add(new DoorDef("Void Sigil Wall", "A wall mural inscribed with a glowing pentagram",
+			"WalkTo", "Examine", 1, 0, 192, 57, 57, i++));
+		// voidscape: Void Web (id 217) — glowing cobweb at perimeter gates (TextureDef id 58).
+		// wallObjectHeight=275 = same as Void Highwall so it visually fills the tall gate.
+		// unknown=0 so the engine actually renders it (unknown=1 like vanilla web → invisible
+		// via the .orsc tile-byte path; vanilla webs render via JSON scenery loader instead).
+		// Cut by CutWeb.java (extended to recognize id 217). doorType=1 (blocking).
+		doors.add(new DoorDef("Void Web", "A thick cobweb of void energy seals the gate",
+			"WalkTo", "Examine", 1, 0, 275, 58, 58, i++));
+		// voidscape: Void Window (id 218) — stained-glass arched window for sanctum
+		// E/W walls (TextureDef id 59).
+		doors.add(new DoorDef("Void Window", "A stained-glass window depicting the void sigil",
+			"WalkTo", "Examine", 1, 0, 192, 59, 59, i++));
 	}
 
 	private static void loadGameObjectDefinitionsA() { // GOOD
@@ -6966,6 +7015,9 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Exhausted Tree", "Someone has taken the last of the produce!", "WalkTo", "Examine", 1, 1, 1, 0, "depleteddragonfruit", ++i)); //1294
 
 		objects.add(new GameObjectDef("Stepping Stone", "It looks like I could jump on this", "jump to", "Examine", 1, 1, 1, 0, "stonedisc", ++i)); //1295
+
+		// Voidscape: Healing pool — Void Enclave amenity. Reuses the fountain model, but with a "Drink" command.
+		objects.add(new GameObjectDef("Healing pool", "Crystal-clear water that mends wounds", "Drink", "Examine", 1, 2, 2, 0, "fountain", ++i)); //1296
 	}
 
 	public static void load(boolean loadMembers) {

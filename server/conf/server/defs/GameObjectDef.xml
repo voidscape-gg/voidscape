@@ -14254,4 +14254,15 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>stonedisc</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Healing pool</name>
+    <description>Crystal-clear water that mends wounds</description>
+    <command1>Drink</command1>
+    <command2>Examine</command2>
+    <type>1</type>
+    <width>2</width>
+    <height>2</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>fountain</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

@@ -841,6 +841,10 @@ public abstract class Mob extends Entity {
 				}
 			}
 
+			if (getLocation().isInSafeZone() || mob.getLocation().isInSafeZone()) {
+				return false;
+			}
+
 			int myWildLvl = getLocation().wildernessLevel();
 			int victimWildLvl = mob.getLocation().wildernessLevel();
 			if (myWildLvl < 1 || victimWildLvl < 1) {

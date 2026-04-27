@@ -68,8 +68,31 @@ def call_edits(reference: Path, prompt: str, n: int, size: str, api_key: str, mo
     raise RuntimeError('exhausted retries')
 
 
-def downscale_and_quantize(src_png: bytes, target_w: int, target_h: int, palette_size: int = 32) -> Image.Image:
+def chroma_key_to_alpha(img: Image.Image, key_rgb: tuple[int, int, int], tol: int) -> Image.Image:
+    """Replace pixels close to key_rgb with full transparency.
+
+    Workaround for gpt-image-2 not supporting transparent backgrounds: prompt for
+    a specific chroma-key bg color (e.g. magenta), then strip it client-side.
+    """
+    img = img.convert('RGBA')
+    px = img.load()
+    kr, kg, kb = key_rgb
+    w, h = img.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if abs(r - kr) <= tol and abs(g - kg) <= tol and abs(b - kb) <= tol:
+                px[x, y] = (0, 0, 0, 0)
+    return img
+
+
+def downscale_and_quantize(src_png: bytes, target_w: int, target_h: int, palette_size: int = 32,
+                           chroma_key: tuple[int, int, int] | None = None,
+                           chroma_tol: int = 24) -> Image.Image:
     img = Image.open(__import__('io').BytesIO(src_png)).convert('RGBA')
+    # Chroma-key BEFORE downscale so the alpha mask is computed at full resolution.
+    if chroma_key is not None:
+        img = chroma_key_to_alpha(img, chroma_key, chroma_tol)
     img = img.resize((target_w, target_h), Image.LANCZOS)
     if palette_size > 0:
         # Quantize to a small palette but preserve alpha for transparent pixels.
@@ -79,6 +102,13 @@ def downscale_and_quantize(src_png: bytes, target_w: int, target_h: int, palette
         rgb.putalpha(orig_a)
         img = rgb
     return img
+
+
+def parse_hex_rgb(s: str) -> tuple[int, int, int]:
+    s = s.lstrip('#')
+    if len(s) != 6:
+        raise ValueError(f'expected #RRGGBB, got {s!r}')
+    return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
 
 
 def make_placeholder(w: int, h: int, idx: int) -> Image.Image:
@@ -100,6 +130,12 @@ def main() -> int:
     ap.add_argument('--target-size', default='48x32', help='final output size after downscale (WxH)')
     ap.add_argument('--palette', type=int, default=32, help='palette size for quantization (0 = skip)')
     ap.add_argument('--model', default=DEFAULT_MODEL, help=f'model id (default: {DEFAULT_MODEL})')
+    ap.add_argument('--bg-key', default=None,
+                    help='Chroma-key BG color as #RRGGBB. Pixels close to this color become '
+                         'transparent in post. Use with gpt-image-2 (no transparent-bg support) — '
+                         'prompt must demand this exact color as background.')
+    ap.add_argument('--chroma-tol', type=int, default=24,
+                    help='per-channel tolerance for --bg-key matching (default 24)')
     ap.add_argument('--dry-run', action='store_true', help='skip API, write solid-color placeholders')
     args = ap.parse_args()
 
@@ -127,12 +163,14 @@ def main() -> int:
         return 1
     prompt = load_prompt(args.prompt_file)
 
+    chroma_key = parse_hex_rgb(args.bg_key) if args.bg_key else None
+
     print(f'calling {args.model} (n={args.variants}, api_size={args.api_size}) ...')
     raw_pngs = call_edits(args.reference, prompt, args.variants, args.api_size, api_key, args.model)
     for i, raw in enumerate(raw_pngs):
         raw_path = args.out_dir / f'raw_{i:02d}.png'
         raw_path.write_bytes(raw)
-        out = downscale_and_quantize(raw, target_w, target_h, args.palette)
+        out = downscale_and_quantize(raw, target_w, target_h, args.palette, chroma_key, args.chroma_tol)
         out_path = args.out_dir / f'variant_{i:02d}.png'
         out.save(out_path)
         print(f'  wrote raw -> {raw_path}, downscaled -> {out_path}')

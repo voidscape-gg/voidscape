@@ -1,0 +1,15 @@
+Repaint this seamless tileable stone wall texture in deep void-purple colors, for a cult temple in a RuneScape Classic-style game. The reference is a 128×128 dark grey mossy brick wall — KEEP the same brick layout (vertical stack of horizontal stone blocks separated by thin mortar gaps), KEEP the worn/cracked surface character, but completely recolor the palette into "void-purple" tones.
+
+CRITICAL — SEAMLESSLY TILEABLE: this texture will repeat across large wall surfaces. The TOP edge must continuously connect to the BOTTOM edge, and the LEFT edge must continuously connect to the RIGHT edge. NO border, NO frame, NO margin, NO obvious centerpiece. Fill edge to edge with brick pattern.
+
+CRITICAL — NO PURE BLACK: the engine treats RGB(0,0,0) pixels as transparent. The DARKEST color you use must be RGB(15, 2, 30) or darker indigo, but never pure black. Treat black as forbidden.
+
+PALETTE (use these exact tones, no others):
+- Mortar gaps / cracks: very deep indigo, around RGB(20, 5, 35) — almost-black void
+- Brick fill (the dominant area): mid void-purple, around RGB(50, 25, 80)
+- Brick highlights / worn edges: brighter purple, around RGB(110, 50, 160)
+- Glowing accent veins (sparse): bright magenta-purple, around RGB(190, 80, 240) — appearing as faint cracks of void energy running through some bricks, like the stone is leaking magic. Only 5-10% coverage.
+
+STYLE: FLAT pixel art, top-down brick texture viewed straight-on (camera perpendicular to the wall surface). NO 3D shading, NO smooth gradients, NO drop shadows beyond what dithering provides. Chunky 1x1 to 2x2 pixel blocks at 128×128 final scale. Limited palette of ~16-32 colors maximum (will be quantized).
+
+NO TEXT, no symbols, no skulls, no glyphs — just void-themed bricks. The whole 1024×1024 canvas must be filled with the brick pattern, no padding.

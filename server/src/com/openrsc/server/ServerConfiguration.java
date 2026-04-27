@@ -136,6 +136,7 @@ public class ServerConfiguration {
 	public boolean WANT_DROP_X;
 	public boolean WANT_EXP_INFO;
 	public boolean WANT_WOODCUTTING_GUILD;
+	public boolean WANT_VOID_ENCLAVE;
 	public boolean WANT_MISSING_GUILD_GREETINGS;
 	public boolean WANT_DECANTING;
 	public boolean WANT_CERTER_BANK_EXCHANGE;
@@ -600,6 +601,7 @@ public class ServerConfiguration {
 		WANT_DROP_X = tryReadBool("want_drop_x").orElse(false);
 		WANT_EXP_INFO = tryReadBool("want_exp_info").orElse(false);
 		WANT_WOODCUTTING_GUILD = tryReadBool("want_woodcutting_guild").orElse(false);
+		WANT_VOID_ENCLAVE = tryReadBool("want_void_enclave").orElse(false);
 		WANT_MISSING_GUILD_GREETINGS = tryReadBool("want_missing_guild_greetings").orElse(false);
 		WANT_DECANTING = tryReadBool("want_decanting").orElse(false);
 		PLAYER_COMMANDS = tryReadBool("player_commands").orElse(false);

@@ -501,12 +501,12 @@ public class WorldLoader {
 		if (jagArchive == null && memArchive == null) {
 			try {
 				File archiveFile;
-				if (config.MEMBER_WORLD) {
-					if (config.WANT_CUSTOM_LANDSCAPE) {
-						archiveFile = new File("./conf/server/data/Custom_Landscape.orsc");
-					} else {
-						archiveFile = new File("./conf/server/data/Authentic_Landscape.orsc"); // Members landscape
-					}
+				// voidscape: WANT_CUSTOM_LANDSCAPE wins over MEMBER_WORLD so the Void Enclave's
+				// patched walls/floors load on F2P worlds too.
+				if (config.WANT_CUSTOM_LANDSCAPE) {
+					archiveFile = new File("./conf/server/data/Custom_Landscape.orsc");
+				} else if (config.MEMBER_WORLD) {
+					archiveFile = new File("./conf/server/data/Authentic_Landscape.orsc"); // Members landscape
 				} else {
 					archiveFile = new File("./conf/server/data/F2PLandscape.orsc"); // Free landscape
 				}

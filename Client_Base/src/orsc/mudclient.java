@@ -5388,7 +5388,14 @@ public final class mudclient implements Runnable {
 							centerX = -50;
 						}
 
-						if (centerX > 0) {
+						// Voidscape: Void Enclave is a safe-zone carve-out inside the wilderness
+						// (server bounds in WildernessLocation). Suppress the wilderness overlay
+						// inside it so players see they're in a safe area.
+						int serverX = this.worldOffsetX + this.playerLocalX + this.midRegionBaseX - 2304;
+						int serverY = this.playerLocalZ + this.worldOffsetZ + this.midRegionBaseZ - 1776;
+						boolean inVoidEnclave = serverX >= 208 && serverX <= 229 && serverY >= 341 && serverY <= 361;
+
+						if (centerX > 0 && !inVoidEnclave) {
 							inWild = true;
 							centerZ = centerX / 6 + 1;
 							this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), this.getGameWidth() - 59, this.getGameHeight() - 56);

@@ -18,7 +18,7 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10012;
+	public static final int CLIENT_VERSION = 10018;
 	private static final int CACHE_VERSION = 4;
 	public static boolean MEMBER_WORLD = false;
 	public static boolean DISPLAY_LOGO_SPRITE = false;
@@ -129,7 +129,7 @@ public class Config {
 	public static boolean S_LENIENT_CONTACT_DETAILS = false;
 	public static boolean S_WANT_FATIGUE = true;
 	public static boolean S_WANT_CUSTOM_SPRITES = false;
-	public static boolean S_WANT_CUSTOM_LANDSCAPE = false;
+	public static boolean S_WANT_CUSTOM_LANDSCAPE = true;
 	public static boolean S_WANT_PLAYER_COMMANDS = false;
 	public static boolean S_WANT_PETS = false;
 	public static int S_MAX_WALKING_SPEED = 1;

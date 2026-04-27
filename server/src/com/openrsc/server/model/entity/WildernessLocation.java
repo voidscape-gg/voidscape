@@ -53,6 +53,7 @@ public class WildernessLocation {
 	public enum WildState {
 		DEFAULT_RULES,
 		FREE_WILD,
-		MEMBERS_WILD
+		MEMBERS_WILD,
+		SAFE_ZONE
 	}
 }

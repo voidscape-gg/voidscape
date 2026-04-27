@@ -1,0 +1,17 @@
+Repaint this seamless tileable stone wall texture as the OUTER PERIMETER WALL of a cult temple in a RuneScape Classic-style game. The reference is a 128×128 dark grey mossy brick wall — keep the seamless tile structure but transform it into IMPOSING, MASSIVE void-purple fortress stone.
+
+CRITICAL — SEAMLESSLY TILEABLE: top edge connects continuously to bottom, left to right. NO border, NO frame, NO obvious centerpiece. Pure repeating pattern.
+
+CRITICAL — NO PURE BLACK: the engine treats RGB(0,0,0) as transparent. Darkest color must be RGB(15, 5, 25) or darker indigo, never pure black.
+
+LAYOUT — different from the inner sanctum walls: BIGGER, fewer blocks per tile (3-4 huge megalithic stones stacked, like ancient cyclopean masonry, not small bricks). Heavy slabs with deep mortar grooves. Rough-hewn surface, weathered.
+
+PALETTE:
+- Mortar grooves: very deep indigo, around RGB(20, 8, 38) — almost-black void
+- Stone fill (dominant): dark void purple, around RGB(45, 22, 75) — slightly DARKER than the inner sanctum bricks for a more imposing/foreboding feel
+- Stone highlights / weathered edges: muted purple, around RGB(95, 45, 140)
+- Sparse glowing rune marks (5-10% coverage): bright magenta-purple, around RGB(190, 80, 240) — small etched runes/glyphs scattered across some stones, not big symbols, just hints
+
+STYLE: FLAT pixel art, viewed straight-on. NO 3D shading, NO smooth gradients, NO drop shadows. Chunky 2x2 to 4x4 pixel blocks for the megalithic feel. Limited palette ~16-32 colors.
+
+NO TEXT, no centerpiece sigil, no big symbols — just imposing fortress stone with subtle rune etchings. Whole 1024×1024 canvas filled.

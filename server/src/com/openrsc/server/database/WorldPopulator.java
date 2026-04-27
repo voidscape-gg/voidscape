@@ -68,6 +68,18 @@ public final class WorldPopulator {
 			}
 			loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + authenticBoundaryFile, LocType.Boundary);
 			loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + authenticSceneryFile, LocType.Scenery);
+			// Strip pre-existing scenery + boundaries inside the Void Enclave footprint
+			// (trees, gravestones, wilderness ruins, etc.) BEFORE loading our own
+			// enclave loc files. Bounds match Point.WildernessLocation registration.
+			if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+				int minX = 208, maxX = 229, minY = 341, maxY = 361;
+				int before = gameobjlocs.size();
+				gameobjlocs.removeIf(g -> {
+					int gx = g.getLocation().getX(), gy = g.getLocation().getY();
+					return gx >= minX && gx <= maxX && gy >= minY && gy <= maxY;
+				});
+				LOGGER.info("Void Enclave filter stripped {} pre-existing scenery/boundaries from inside the footprint", box(before - gameobjlocs.size()));
+			}
 			loadCustomLocs(LocType.Boundary);
 			loadCustomLocs(LocType.Scenery);
 			// SceneryObject objects[] = getWorld().getServer().getDatabase().getObjects();
@@ -198,6 +210,9 @@ public final class WorldPopulator {
 						//loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsExpansion.json", type);
 					}
 				}
+				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidEnclave.json", type);
+				}
 				return;
 			}
 			case Scenery: {
@@ -231,6 +246,9 @@ public final class WorldPopulator {
 						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsWoodcuttingGuild.json", type);
 					}
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsOther.json", type);
+				}
+				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidEnclave.json", type);
 				}
 				return;
 			}

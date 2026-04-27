@@ -16,15 +16,20 @@ public class CutWeb implements UseBoundTrigger,
 	OpBoundTrigger {
 
 	private static int WEB = 24;
+	private static int VOID_WEB = 217;   // voidscape: AI-textured perimeter web at Void Enclave gates
+
+	private static boolean isWeb(int id) {
+		return id == WEB || id == VOID_WEB;
+	}
 
 	@Override
 	public boolean blockUseBound(Player player, GameObject obj, Item item) {
-		return obj.getID() == WEB;
+		return isWeb(obj.getID());
 	}
 
 	@Override
 	public void onUseBound(Player player, GameObject obj, Item item) {
-		if (obj.getID() == WEB) {
+		if (isWeb(obj.getID())) {
 			ItemDefinition def = item.getDef(player.getWorld());
 			String name = def.getName().toLowerCase();
 			if (name.contains("staff") || name.contains("bow") || name.contains("cythe") ||
@@ -49,7 +54,7 @@ public class CutWeb implements UseBoundTrigger,
 	@Override
 	public boolean blockOpBound(Player player, GameObject obj, Integer click) {
 		return player.getConfig().WANT_LEFTCLICK_WEBS
-			&& obj.getID() == WEB;
+			&& isWeb(obj.getID());
 	}
 
 	@Override

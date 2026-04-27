@@ -1,0 +1,16 @@
+Recreate the reference image as a "Void Spider Web" — a thick, glowing pentagram-pattern spider web texture for a cult temple gateway in a RuneScape Classic-style game. The reference is a 64×64 faint white spider web; reuse the radial cobweb structure but make it MUCH MORE VISIBLE and void-themed.
+
+CRITICAL — NO PURE BLACK: the engine treats RGB(0,0,0) as transparent. The DARKEST opaque color must be RGB(15, 5, 25) or darker indigo, never pure black. PURE BLACK pixels become transparent (this is intentional for the gaps between web strands).
+
+LAYOUT — radial spider web, viewed straight-on:
+- A central knot/anchor in the middle of the canvas
+- 8 radial strands going from center outward to the edges
+- 3-4 concentric polygon rings connecting the radial strands
+- Strands should be CHUNKY (4-6 pixels thick at 1024 scale, surviving downscale to 64×64)
+- BACKGROUND between strands: PURE BLACK RGB(0,0,0) — this becomes transparent and lets you see through
+- WEB STRANDS: bright magenta-purple, RGB(220, 100, 255), with occasional darker accent strands in deep void purple RGB(140, 60, 200)
+- A faint glowing aura along the strands (1-2 pixel halo of brighter pink RGB(255, 180, 255))
+
+STYLE: FLAT pixel art viewed straight-on (no 3D, no perspective). NO smooth gradients. Chunky 1x1 to 2x2 pixel blocks. Limited palette — only 2-3 purples + black background.
+
+FILL the entire 1024×1024 canvas with the web pattern (web reaches all four edges). NO TEXT, no central spider, no other elements — just the glowing void cobweb on black.

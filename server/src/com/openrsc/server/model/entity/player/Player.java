@@ -889,6 +889,11 @@ public final class Player extends Mob {
 				}
 			}
 
+			if (getLocation().isInSafeZone() || victim.getLocation().isInSafeZone()) {
+				message("You can't attack other players in this safe area");
+				return false;
+			}
+
 			if (getConfig().USES_PK_MODE) {
 				if (getPkMode() == 0 || victim.getPkMode() == 0) {
 					message("You are not allowed to attack that person");

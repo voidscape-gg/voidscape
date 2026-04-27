@@ -1,0 +1,15 @@
+Recreate the reference image as a "Void Sigil" — a TOP-DOWN view of a flat ritual pentagram inscribed on the floor of a cult temple, for a RuneScape Classic-style game. The reference is a void-purple amulet; reuse its color palette but completely redesign the SHAPE into a flat circular sigil seen from directly above (90° overhead view, NOT a side/3D angle).
+
+CRITICAL — BACKGROUND: the entire background OUTSIDE the sigil's circular boundary MUST be solid pure magenta #FF00FF (R=255 G=0 B=255), edge-to-edge, with absolutely no other elements, no gradient, no shading, no glow bleeding outside the circle. This pure-magenta region will be removed in post-processing to make the background transparent — DO NOT use any magenta inside the sigil itself.
+
+SHAPE: a perfect circle filling 90% of the canvas. Inside the circle:
+- An outer ring band (1-2 pixels thick at final 64×64 scale) in glowing void-purple (think bright RGB 200,80,255).
+- An inscribed five-pointed pentagram (star) touching the outer ring, in obsidian black with thin glowing void-purple edge highlights.
+- An inner ring inside the pentagram, also glowing void-purple.
+- Tiny geometric runic marks (dots, short slashes) between the outer ring and the pentagram points — sparse, decorative, void-purple.
+
+COLORS: only three colors should appear inside the sigil — (1) deep obsidian black (~RGB 15,8,20) as the dominant fill, (2) bright glowing void-purple (~RGB 180,60,230) for lines and highlights, (3) a single accent of pale lavender (~RGB 220,180,255) at the very center for a focal "void energy" point. NO white, no other hues.
+
+STYLE: FLAT pixel art, viewed straight down. Chunky 1x1 to 2x2 pixel blocks. NO anti-aliasing, NO smooth gradients, NO perspective, NO 3D shading, NO drop shadows. Think classic 2D top-down RPG floor decals. The sigil must read clearly when downscaled to ~64×64 pixels — every line at least 6-8 pixels thick at the 1024×1024 working resolution.
+
+NO TEXT, no letters, no numbers, no other objects. Just the sigil filling a circular area on a pure-magenta background.
