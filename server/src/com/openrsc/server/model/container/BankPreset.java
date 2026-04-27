@@ -15,7 +15,7 @@ import java.util.*;
 import static com.openrsc.server.model.struct.EquipRequest.RequestType.FROM_BANK;
 
 public class BankPreset {
-	public static final int PRESET_COUNT = 2;
+	public static final int PRESET_COUNT = 3;
 
 	/**
 	 * Array holding the inventory of the preset
@@ -204,7 +204,10 @@ public class BankPreset {
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipment(player);
 		ActionSender.sendEquipmentStats(player);
-		player.resetBank();
+		// voidscape: was player.resetBank() (which calls hideBank → closes the bank UI).
+		// We want the bank to stay open after a loadout load; re-send the bank contents so
+		// the client UI reflects the new state without closing the dialog.
+		ActionSender.showBank(player);
 		player.save();
  	}
 }

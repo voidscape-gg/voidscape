@@ -21,7 +21,7 @@ public final class CustomBankInterface extends BankInterface {
 	private static int fontSize = Config.isAndroid() ? C_MENU_SIZE : 1;
 	private static int fontSizeHeight;
 	private int[] equipmentViewOrder = new int[]{0, 1, 2, 7, 4, 3, 8, 9, 5, 6, 10};
-	private final int presetCount = 2;
+	private final int presetCount = 3;
 	public Preset[] presets = new Preset[presetCount];
 	public int selectedInventorySlot = -1;
 	private int selectedEquipmentSlot = -1;
@@ -42,6 +42,7 @@ public final class CustomBankInterface extends BankInterface {
 	private int draggingBankSlot = -1;
 	private boolean swapNoteMode;
 	private boolean swapCertMode;
+	private int pendingSavePresetSlot = -1; // -1 = no pending save, otherwise slot index awaiting confirm
 	private int x, y;
 	private int[] bankItemSelector = {0, 0, 40, 80, 120, 160, 200};
 	private BankTabShow bankTabShow = BankTabShow.FIRST_ITEM_IN_TAB;
@@ -67,13 +68,20 @@ public final class CustomBankInterface extends BankInterface {
 		y = (mc.getGameHeight() - height) / 2 - 3;
 		bank.reposition(bankSearch, x + 375 + 6, y + 44, 110, 18);
 		bank.reposition(bankScroll, x + 4, y + 57, width - 5, 137);
-		int tapPresetXOffset = x + 380 - presetCount * 17;
+		// voidscape: bigger labeled loadout buttons (was 17 wide, hard to click and unlabeled)
+		int loadoutButtonWidth = 22;
+		int tapPresetXOffset = x + 380 - presetCount * loadoutButtonWidth;
 		int tapPresetYOffset = y + 3;
 		fontSizeHeight = mc.getSurface().fontHeight(fontSize);
 
 		if (presetMode) {
 			renderPresetEdit();
 			mc.setMouseClick(0);
+			return true;
+		}
+
+		if (pendingSavePresetSlot != -1) {
+			renderSaveConfirm(pendingSavePresetSlot);
 			return true;
 		}
 
@@ -85,6 +93,9 @@ public final class CustomBankInterface extends BankInterface {
 					break;
 				case (int)'2':
 					loadPreset(1);
+					break;
+				case (int)'3':
+					loadPreset(2);
 					break;
 				case 4:
 					if (equipmentMode)
@@ -105,40 +116,51 @@ public final class CustomBankInterface extends BankInterface {
 
 		mc.getSurface().drawBox(x, y, width, 21, 192);
 		int colour = 0x989898;
-		mc.getSurface().drawBoxAlpha(x, y + 21, width, 309, colour, 160);
+		// voidscape: lowered alpha 160 → 100 so the world is visible behind the bank panel
+		mc.getSurface().drawBoxAlpha(x, y + 21, width, 309, colour, 100);
 		mc.getSurface().drawBoxBorder(x, width, y, 331, 0x000000);
 
-		int wealthLength = String.valueOf(totalWealth).length();
-		drawString("Total wealth: " + this.totalWealth + " gp", x + (196 - (4 * wealthLength)), y + 15, 1, 0xFFFF00);
-
+		// voidscape: total-wealth header removed (cluttered the title bar; wasn't worth the real estate)
 		int j3 = 0xFFFFFF;
 		if (mc.getMouseX() > x + 415 && mc.getMouseY() >= y && mc.getMouseX() < x + width && mc.getMouseY() < y + 12 + 9) {
 			j3 = 16711680;
 		}
 		if (S_WANT_BANK_PRESETS) {
-			if (mc.getMouseX() >= tapPresetXOffset && mc.getMouseX() < tapPresetXOffset + presetCount * 17
-				&& mc.getMouseY() >= tapPresetYOffset && mc.getMouseY() < tapPresetYOffset + 17) {
-				if (mc.mouseButtonClick == 0)
-					selectedPresetTab = (mc.getMouseX() - tapPresetXOffset) / 17;
-				else if (selectedPresetTab != -1){
-					loadPreset(selectedPresetTab);
+			// "Loadouts:" label sits to the left of the button row
+			drawString("Loadouts:", tapPresetXOffset - 52, tapPresetYOffset + fontSizeHeight, 1, 0xF89922);
+
+			// Hover/click logic: hover sets selectedPresetTab, click acts on it.
+			// Empty slot click → save current inv+equip. Filled slot click → load.
+			// Right-click on filled → overwrite with current inv+equip.
+			if (mc.getMouseX() >= tapPresetXOffset
+					&& mc.getMouseX() < tapPresetXOffset + presetCount * loadoutButtonWidth
+					&& mc.getMouseY() >= tapPresetYOffset
+					&& mc.getMouseY() < tapPresetYOffset + 17) {
+				if (mc.mouseButtonClick == 0) {
+					selectedPresetTab = (mc.getMouseX() - tapPresetXOffset) / loadoutButtonWidth;
+				} else if (selectedPresetTab != -1) {
+					boolean empty = isPresetEmpty(selectedPresetTab);
+					if (empty || mc.mouseButtonClick == 2) {
+						// Empty slot OR right-click overwrite: open save confirmation modal
+						pendingSavePresetSlot = selectedPresetTab;
+					} else {
+						loadPreset(selectedPresetTab);
+					}
 					mc.mouseButtonClick = 0;
 				}
-			} else if (mc.mouseButtonClick == 1 && mc.getMouseX() > x + 380 && mc.getMouseX() < x + 420
-				&& mc.getMouseY() >= y && mc.getMouseY() < y + 12 + 9) {
-				presetMode = true;
-			} else
+			} else {
 				selectedPresetTab = -1;
-
-			for (int p = 0; p < presetCount; p++) {
-				mc.getSurface().drawBoxAlpha(tapPresetXOffset + 17 * p, tapPresetYOffset, 17, 17, selectedPresetTab == p ? 0x7E1F1C : 0x5A5A55 , 160);
-				mc.getSurface().drawBoxBorder(tapPresetXOffset + 17 * p, 17, tapPresetYOffset, 17, 0x000000);
-				drawString("" + (p + 1), tapPresetXOffset + 17 * p + 6, tapPresetYOffset + fontSizeHeight, 1, 0xFFFFFF);
-
 			}
 
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.GUIPARTS.BANK_PRESET_OPTIONS.getDef()),
-				x + 390, y + 3, 17, 17, 0, 0, 0,false, 0, 0, 0xCCFFFFFF);
+			for (int p = 0; p < presetCount; p++) {
+				int bx = tapPresetXOffset + loadoutButtonWidth * p;
+				mc.getSurface().drawBoxAlpha(bx, tapPresetYOffset, loadoutButtonWidth, 17,
+					selectedPresetTab == p ? 0x7E1F1C : 0x5A5A55, 160);
+				mc.getSurface().drawBoxBorder(bx, loadoutButtonWidth, tapPresetYOffset, 17, 0x000000);
+				int labelColor = isPresetEmpty(p) ? 0xFFFFFF : 0x00FFFF;
+				drawString("" + (p + 1), bx + loadoutButtonWidth / 2 - 3,
+					tapPresetYOffset + fontSizeHeight, 1, labelColor);
+			}
 		}
 
 		drawString("Close Window", x + 401 + 19, y + 15, 1, j3);
@@ -472,7 +494,7 @@ public final class CustomBankInterface extends BankInterface {
 		mc.getSurface().drawBoxAlpha(x + 6, settingsY - 1, 75, 16, 0x5A5A55, 192);
 		mc.getSurface().drawBoxBorder(x + 6, 75, settingsY - 1, 16, 0x2D2C24);
 		mc.getSurface().drawBoxBorder(x + 7, 73, settingsY, 14, 0x706452);
-		drawString("Deposit All", x + 12, settingsY + 11, 1, 0xffffff);
+		drawString("Deposit Inv.", x + 11, settingsY + 11, 1, 0xffffff);
 
 		if (Config.S_WANT_EQUIPMENT_TAB) {
 			mc.getSurface().drawBoxAlpha(modeOffset - 68, settingsY - 10, 28, 28, equipmentMode ? 0x5A5A55 : 0x7E1F1C, 192);
@@ -1255,6 +1277,93 @@ public final class CustomBankInterface extends BankInterface {
 		for (int p = 0; p < presetCount; p++)
 			presets[p] = new Preset();
 
+	}
+
+	private void renderSaveConfirm(int slot) {
+		// Modal "Save Loadout N?" overlay: shows current inventory + Save/Cancel buttons.
+		// Grid is 6 cols × 5 rows of 49×34 boxes = 294×170; sized so contents have ~12px padding.
+		int modalW = 318;
+		int modalH = 268;
+		int modalX = (mc.getGameWidth() - modalW) / 2;
+		int modalY = (mc.getGameHeight() - modalH) / 2 - 3;
+
+		// Backdrop + panel
+		mc.getSurface().drawBoxAlpha(modalX, modalY, modalW, modalH, 0x202020, 220);
+		mc.getSurface().drawBoxBorder(modalX, modalW, modalY, modalH, 0x000000);
+		mc.getSurface().drawBox(modalX, modalY, modalW, 22, 192);
+		drawString("Save Loadout " + (slot + 1) + "?", modalX + modalW / 2 - 50, modalY + 15, 1, 0xFFFFFF);
+
+		// Hint
+		drawString("Save current inventory to this slot:",
+			modalX + 22, modalY + 38, 1, 0xF89922);
+
+		// Inventory grid: 6 cols × 5 rows = 30 slots, each 49×34, total 294×170
+		int gridX = modalX + (modalW - 6 * 49) / 2;
+		int gridY = modalY + 48;
+		int invSlot = 0;
+		for (int r = 0; r < 5; r++) {
+			for (int c = 0; c < 6; c++) {
+				int dx = gridX + c * 49;
+				int dy = gridY + r * 34;
+				mc.getSurface().drawBoxAlpha(dx, dy, 49, 34, 0xd0d0d0, 160);
+				mc.getSurface().drawBoxBorder(dx, 50, dy, 35, 0);
+				if (invSlot < mc.getInventoryItemCount() && mc.getInventoryItemID(invSlot) != -1) {
+					ItemDef def = mc.getInventoryItem(invSlot).getItemDef();
+					if (mc.getInventoryItem(invSlot).getNoted()) {
+						def = ItemDef.asNote(def);
+					}
+					mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), dx, dy, 48, 32,
+						def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+					if (def.isStackable()) {
+						drawString(mudclient.formatStackAmount(mc.getInventoryItemAmount(invSlot)),
+							dx + 1, dy + 10, 1, 0xFFFF00);
+					}
+				}
+				invSlot++;
+			}
+		}
+
+		// Save / Cancel buttons below the grid
+		int btnW = 90;
+		int btnH = 22;
+		int btnY = gridY + 5 * 34 + 12;
+		int saveX = modalX + modalW / 2 - btnW - 8;
+		int cancelX = modalX + modalW / 2 + 8;
+
+		boolean hoverSave = mc.getMouseX() >= saveX && mc.getMouseX() < saveX + btnW
+			&& mc.getMouseY() >= btnY && mc.getMouseY() < btnY + btnH;
+		boolean hoverCancel = mc.getMouseX() >= cancelX && mc.getMouseX() < cancelX + btnW
+			&& mc.getMouseY() >= btnY && mc.getMouseY() < btnY + btnH;
+
+		mc.getSurface().drawBoxAlpha(saveX, btnY, btnW, btnH, hoverSave ? 0x7E1F1C : 0x5A5A55, 220);
+		mc.getSurface().drawBoxBorder(saveX, btnW, btnY, btnH, 0x000000);
+		drawString("Save", saveX + btnW / 2 - 9, btnY + 15, 1, 0xFFFFFF);
+
+		mc.getSurface().drawBoxAlpha(cancelX, btnY, btnW, btnH, hoverCancel ? 0x7E1F1C : 0x5A5A55, 220);
+		mc.getSurface().drawBoxBorder(cancelX, btnW, btnY, btnH, 0x000000);
+		drawString("Cancel", cancelX + btnW / 2 - 12, btnY + 15, 1, 0xFFFFFF);
+
+		if (mc.mouseButtonClick != 0) {
+			if (hoverSave) {
+				saveSetup(slot);
+				pendingSavePresetSlot = -1;
+			} else if (hoverCancel) {
+				pendingSavePresetSlot = -1;
+			}
+			mc.mouseButtonClick = 0;
+			mc.setMouseClick(0);
+		}
+	}
+
+	private boolean isPresetEmpty(int slot) {
+		if (slot < 0 || slot >= presetCount || presets[slot] == null) return true;
+		for (Item item : presets[slot].inventory) {
+			if (item != null && item.getItemDef() != null) return false;
+		}
+		for (Item item : presets[slot].equipment) {
+			if (item != null && item.getItemDef() != null) return false;
+		}
+		return true;
 	}
 
 	public void updatePreset(int id, Item[] inventoryItems, Item[] equipmentItems) {

@@ -346,8 +346,18 @@ public class GraphicsController {
 	}
 
 	public Sprite spriteSelect(SpriteDef sprite) {
-		if (!Config.S_WANT_CUSTOM_SPRITES)
-			return sprites[sprite.getAuthenticSpriteID()];
+		if (!Config.S_WANT_CUSTOM_SPRITES) {
+			// voidscape: GUIparts slots 38–53 (EQUIPSLOT_*, BANK_EQUIP_*, BANK_PRESET_OPTIONS, KEPT_ON_DEATH)
+			// have authenticSpriteID = -1 — they only resolve via the OpenRSC custom-sprite archive.
+			// Without this guard, drawing them throws ArrayIndexOutOfBoundsException, which the render
+			// loop catches and refires every frame ("client freezes on bank open"). Return a placeholder
+			// so missing sprites render visibly without taking down the UI thread.
+			int id = sprite.getAuthenticSpriteID();
+			if (id < 0 || id >= sprites.length) {
+				return Sprite.getUnknownSprite(28, 28);
+			}
+			return sprites[id];
+		}
 
 		String[] location = sprite.getSpriteLocation().split(":");
 

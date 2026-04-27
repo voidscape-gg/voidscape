@@ -110,11 +110,9 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				player.getBank().depositAllFromEquipment();
 				break;
 			case BANK_LOAD_PRESET:
-				if (!player.getConfig().WANT_EQUIPMENT_TAB) {
-					player.setSuspiciousPlayer(true, "bank load preset on authentic world");
-					return;
-				}
-
+				// voidscape: equipment-tab gate removed — bank presets are independent of the equipment-tab UI.
+				// Upstream gated both load and save on WANT_EQUIPMENT_TAB and even flagged the player as suspicious,
+				// so on a server with bank presets but no equipment tab (like voidscape), every load/save was silently refused.
 				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) {
 					player.setSuspiciousPlayer(true, "Player loading preset without feature enabled");
 					return;
@@ -132,13 +130,10 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				}
 				player.setLastExchangeTime();
 				player.getBank().getBankPreset(presetSlot).attemptPresetLoadout();
+				player.message("Loaded loadout " + (presetSlot + 1) + ".");
 				break;
 			case BANK_SAVE_PRESET:
-				if (!player.getConfig().WANT_EQUIPMENT_TAB) {
-					player.setSuspiciousPlayer(true, "bank save preset on authentic world");
-					return;
-				}
-
+				// voidscape: see BANK_LOAD_PRESET comment above re: removed equipment-tab gate.
 				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) {
 					player.setSuspiciousPlayer(true, "Player saving preset without feature enabled");
 					return;
@@ -169,6 +164,7 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 					else
 						player.getBank().getBankPreset(presetSlot).getEquipment()[k] = new Item(ItemId.NOTHING.id(),0);
 				}
+				player.message("Saved current loadout to slot " + (presetSlot + 1) + ".");
 				break;
 			default:
 				return;

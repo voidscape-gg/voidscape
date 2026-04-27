@@ -146,7 +146,7 @@ public class Config {
 	public static boolean S_WANT_HARVESTING = false;
 	public static boolean S_FEATURES_SLEEP = true;
 	public static boolean S_WANT_EXTENDED_CATS_BEHAVIOR = false;
-	public static boolean S_WANT_CERT_AS_NOTES = false;
+	public static boolean S_WANT_CERT_AS_NOTES = true;
 	public static boolean S_WANT_OPENPK_POINTS = false;
 	public static int S_OPENPK_POINTS_TO_GP_RATIO = 1;
 	public static boolean S_WANT_OPENPK_PRESETS = false;
