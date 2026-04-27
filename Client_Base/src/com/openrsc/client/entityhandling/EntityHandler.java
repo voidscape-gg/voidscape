@@ -2365,6 +2365,12 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, -1, 77, 76, 81, -1, -1, -1, -1};
 		npcs.add(new NPCDef("Edgar", "An old wizard", "Teleport to Edgeville", 0, 0, 5, 0, false, sprites, 16777215, 255, 255, 15523536, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Void Auctioneer at Edgeville bank (server NpcId.VOID_AUCTIONEER = 837)
+		// sprites: head, shirt, pants, shield, weapon=scythe(228), hat=white-party-hat(154),
+		//          body, legs, gloves=46 (auctioneer signature), boots, amulet, cape
+		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Auctioneer", "A figure cloaked in shadow. The void hums where their gaze should be.", "Auction", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

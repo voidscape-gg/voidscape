@@ -265,12 +265,12 @@ public final class WorldPopulator {
 						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsOpenPk.json");
 					}
 				}
+				if (getWorld().getServer().getConfig().SPAWN_AUCTION_NPCS) {
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
+				}
 				if (getWorld().getServer().getConfig().LOCATION_DATA == 2) {
 					if (getWorld().getServer().getConfig().WANT_DECORATED_MOD_ROOM) {
 						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsModRoom.json");
-					}
-					if (getWorld().getServer().getConfig().SPAWN_AUCTION_NPCS) {
-						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 					}
 					if (getWorld().getServer().getConfig().SPAWN_IRON_MAN_NPCS) {
 						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsIronman.json");

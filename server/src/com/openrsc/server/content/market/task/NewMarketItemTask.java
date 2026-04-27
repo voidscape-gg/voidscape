@@ -22,6 +22,8 @@ public class NewMarketItemTask extends MarketTask {
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
 
+	private static final int MAX_LISTINGS_PER_PLAYER = 6;
+
 	private MarketItem newItem;
 	private Player owner;
 	private ArrayList<Item> itemsToAuction;
@@ -52,6 +54,18 @@ public class NewMarketItemTask extends MarketTask {
 
 		// Ensure we have enough to satisfy the amount
 		if (owner.getCarriedItems().getInventory().countId(newItem.getCatalogID(), Optional.empty()) < newItem.getAmount()) {
+			return;
+		}
+
+		// voidscape: cap concurrent listings per player
+		try {
+			int currentListings = owner.getWorld().getServer().getDatabase().queryPlayerAuctionCount(owner.getDatabaseID());
+			if (currentListings >= MAX_LISTINGS_PER_PLAYER) {
+				ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ You already have " + MAX_LISTINGS_PER_PLAYER + " active listings. % Cancel one before posting another.", false);
+				return;
+			}
+		} catch (GameDatabaseException e) {
+			LOGGER.catching(e);
 			return;
 		}
 

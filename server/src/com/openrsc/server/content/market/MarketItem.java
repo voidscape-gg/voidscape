@@ -1,9 +1,8 @@
 package com.openrsc.server.content.market;
 
 public class MarketItem {
-	// #TIMELIMIT
-	// private static final int TIME_LIMIT = (60 * 60 * 24 * 5); // Number of hours an auction lasts until it expires - 5 days
-	private static final int TIME_LIMIT = Integer.MAX_VALUE;
+	// voidscape: auction listings expire after 7 days; expired stock returns to the seller via the auctioneer's Collect path.
+	private static final int TIME_LIMIT = (60 * 60 * 24 * 7);
 
 	private int auctionID, catalogID, amount, amount_left, price;
 	private String buyers;

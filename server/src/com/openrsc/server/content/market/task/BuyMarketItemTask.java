@@ -62,37 +62,16 @@ public class BuyMarketItemTask extends MarketTask {
 			}
 
 			ItemDefinition def = playerBuyer.getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogID());
-			if (!playerBuyer.getCarriedItems().getInventory().full()
-				&& (!def.isStackable() && playerBuyer.getCarriedItems().getInventory().size() + amount <= 30)) {
-				if (!def.isStackable() && amount == 1)
-					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), 1));
-				else
-					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), amount, !def.isStackable()));
-				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
-				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
-				updateDiscord = true;
-				playerBuyer.save();
-			} else if (!playerBuyer.getBank().full()) {
-				playerBuyer.getBank().add(new Item(item.getCatalogID(), amount), false);
-				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
-				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your bank.", false);
-				updateDiscord = true;
-				playerBuyer.save();
-			} else {
+			boolean toInventory = !playerBuyer.getCarriedItems().getInventory().full()
+				&& (!def.isStackable() && playerBuyer.getCarriedItems().getInventory().size() + amount <= 30);
+			boolean toBank = !toInventory && !playerBuyer.getBank().full();
+			if (!toInventory && !toBank) {
 				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ Unable to buy auction, no space left in your inventory or bank.", false);
 				return;
 			}
 
 			int sellerUsernameID = item.getSeller();
-			Player sellerPlayer = playerBuyer.getWorld().getPlayerID(sellerUsernameID);
 
-			if (sellerPlayer != null) {
-				sellerPlayer.message("@gre@[Auction House]@lre@ " + amount + "x " + def.getName() + "@whi@ has been sold!");
-				sellerPlayer.message("@gre@[Auction House]@whi@ You can collect your earnings from a bank.");
-				sellerPlayer.save();
-			}
-
-			playerBuyer.getWorld().getServer().getDatabase().addExpiredAuction("Sold " + def.getName() + "(" + item.getCatalogID() + ") x" + amount + " for " + auctionPrice + "gp", 10, auctionPrice, sellerUsernameID);
 			item.setBuyers(!item.getBuyers().isEmpty() ? item.getBuyers() + ", \n" + "[" + (System.currentTimeMillis() / 1000) + ": "
 				+ playerBuyer.getUsername() + ": x" + amount + "]" : "[" + (System.currentTimeMillis() / 1000) + ": "
 				+ playerBuyer.getUsername() + ": x" + amount + "]");
@@ -100,11 +79,42 @@ public class BuyMarketItemTask extends MarketTask {
 			item.setAmountLeft(item.getAmountLeft() - amount);
 			item.setPrice(item.getAmountLeft() * priceForEach);
 
-			try {
-				if (item.getAmountLeft() == 0) playerBuyer.getWorld().getServer().getDatabase().setSoldOut(item);
-				else playerBuyer.getWorld().getServer().getDatabase().updateAuction(item);
-			} catch (GameDatabaseException e) {
-				LOGGER.catching(e);
+			// voidscape: 5% on-sale tax — destroyed at point of sale (gp sink)
+			final int sellerProceeds = auctionPrice - (auctionPrice / 20);
+			final MarketItem finalItem = item;
+			final int finalSellerProceeds = sellerProceeds;
+			final int finalSeller = sellerUsernameID;
+			final String soldExplanation = "Sold " + def.getName() + "(" + item.getCatalogID() + ") x" + amount + " for " + sellerProceeds + "gp (after 5% tax of " + (auctionPrice - sellerProceeds) + "gp)";
+			boolean dbOk = playerBuyer.getWorld().getServer().getDatabase().atomically(() -> {
+				playerBuyer.getWorld().getServer().getDatabase().addExpiredAuction(soldExplanation, ItemId.COINS.id(), finalSellerProceeds, finalSeller);
+				if (finalItem.getAmountLeft() == 0) playerBuyer.getWorld().getServer().getDatabase().setSoldOut(finalItem);
+				else playerBuyer.getWorld().getServer().getDatabase().updateAuction(finalItem);
+			});
+			if (!dbOk) {
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
+				return;
+			}
+
+			if (toInventory) {
+				if (!def.isStackable() && amount == 1)
+					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), 1));
+				else
+					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), amount, !def.isStackable()));
+				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
+				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
+			} else {
+				playerBuyer.getBank().add(new Item(item.getCatalogID(), amount), false);
+				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
+				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your bank.", false);
+			}
+			updateDiscord = true;
+			playerBuyer.save();
+
+			Player sellerPlayer = playerBuyer.getWorld().getPlayerID(sellerUsernameID);
+			if (sellerPlayer != null) {
+				sellerPlayer.message("@gre@[Auction House]@lre@ " + amount + "x " + def.getName() + "@whi@ has been sold!");
+				sellerPlayer.message("@gre@[Auction House]@whi@ You can collect your earnings from a bank.");
+				sellerPlayer.save();
 			}
 
 			for (MarketItem marketItem : playerBuyer.getWorld().getMarket().getAuctionItems()) {
