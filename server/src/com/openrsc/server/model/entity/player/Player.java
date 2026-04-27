@@ -2267,6 +2267,10 @@ public final class Player extends Mob {
 			player.message(String.format("You have defeated %s!", getUsername()));
 			ActionSender.sendSound(player, "victory");
 
+			getWorld().getServer().getPluginHandler().handlePlugin(
+				com.openrsc.server.plugins.triggers.PlayerKilledPlayerTrigger.class,
+				player, new Object[]{player, this});
+
 			if (player.getLocation().inWilderness()) {
 				final int killTypeId;
 

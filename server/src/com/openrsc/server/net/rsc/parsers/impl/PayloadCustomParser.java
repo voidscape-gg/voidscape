@@ -296,6 +296,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case 35:
 				opcode = OpcodeIn.WORLD_WALK_REQUEST;
 				break;
+			case 36:
+				opcode = OpcodeIn.ITEM_EXAMINE_REQUEST;
+				break;
 			default:
 				break;
 		}
@@ -460,6 +463,8 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				return packet.getLength() >= 4;
 			case WORLD_WALK_REQUEST:
 				return packet.getLength() == 4;
+			case ITEM_EXAMINE_REQUEST:
+				return packet.getLength() == 2;
 		}
 		return true;
 	}
@@ -1070,6 +1075,12 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				ww.destX = packet.readShort();
 				ww.destY = packet.readShort();
 				result = ww;
+				break;
+
+			case ITEM_EXAMINE_REQUEST:
+				ItemExamineRequestStruct ie = new ItemExamineRequestStruct();
+				ie.slot = packet.readShort();
+				result = ie;
 				break;
 		}
 

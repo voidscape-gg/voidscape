@@ -818,6 +818,7 @@ public abstract class GameDatabase {
 			inventory[i].noted = player.getCarriedItems().getInventory().get(i).getNoted();
 			inventory[i].catalogID = player.getCarriedItems().getInventory().get(i).getCatalogId();
 			inventory[i].durability = 100;
+			inventory[i].killLog = player.getCarriedItems().getInventory().get(i).getItemStatus().getKillLog();
 		}
 
 		savePlayerInventory(player.getDatabaseID(), inventory);

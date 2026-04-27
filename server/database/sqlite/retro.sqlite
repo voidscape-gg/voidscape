@@ -499,7 +499,8 @@ CREATE TABLE IF NOT EXISTS `itemstatuses`
     `amount`     int(10)    NOT NULL DEFAULT 1,
     `noted`      tinyint(1) NOT NULL DEFAULT 0,
     `wielded`    tinyint(1) NOT NULL DEFAULT 0,
-    `durability` int(5)     NOT NULL DEFAULT 0
+    `durability` int(5)     NOT NULL DEFAULT 0,
+    `kill_log`   TEXT       DEFAULT NULL
 );
 
 DROP TABLE IF EXISTS `ironman`;

@@ -117,4 +117,5 @@ public enum OpcodeIn {
 	KNOWN_PLAYERS, // part of rsc era protocol
 
 	WORLD_WALK_REQUEST, // voidscape — world-map auto-walker
+	ITEM_EXAMINE_REQUEST, // voidscape — per-instance item examine (Item Memory)
 }

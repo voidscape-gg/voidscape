@@ -649,6 +649,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 				invItem.item.getItemStatus().setNoted(result.getInt("noted") == 1);
 				invItem.item.getItemStatus().setWielded(result.getInt("wielded") == 1);
 				invItem.item.getItemStatus().setDurability(result.getInt("durability"));
+				invItem.item.getItemStatus().setKillLog(result.getString("kill_log"));
 				list.add(invItem);
 			}
 		} catch (final SQLException ex) {
@@ -674,6 +675,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 					itemStatus.setNoted(result.getInt("noted") == 1);
 					itemStatus.setWielded(result.getInt("wielded") == 1);
 					itemStatus.setDurability(result.getInt("durability"));
+					itemStatus.setKillLog(result.getString("kill_log"));
 					equipped.itemStatus = itemStatus;
 
 					list.add(equipped);
@@ -701,6 +703,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 				itemStatus.setNoted(result.getInt("noted") == 1);
 				itemStatus.setWielded(result.getInt("wielded") == 1);
 				itemStatus.setDurability(result.getInt("durability"));
+				itemStatus.setKillLog(result.getString("kill_log"));
 				bankItem.itemStatus = itemStatus;
 
 				list.add(bankItem);
@@ -1617,6 +1620,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 				statement2.setInt(4, item.noted ? 1 : 0);
 				statement2.setInt(5, item.wielded ? 1 : 0);
 				statement2.setInt(6, item.durability);
+				statement2.setString(7, item.killLog);
 				statement2.addBatch();
 			}
 
@@ -1645,6 +1649,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 				statement2.setInt(4, item.itemStatus.getNoted() ? 1 : 0);
 				statement2.setInt(5, 1);
 				statement2.setInt(6, item.itemStatus.getDurability());
+				statement2.setString(7, item.itemStatus.getKillLog());
 				statement2.addBatch();
 			}
 
@@ -1676,6 +1681,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 					statement2.setInt(4, item.itemStatus.getNoted() ? 1 : 0);
 					statement2.setInt(5, 0);
 					statement2.setInt(6, item.itemStatus.getDurability());
+					statement2.setString(7, item.itemStatus.getKillLog());
 					statement2.addBatch();
 				}
 
@@ -2016,6 +2022,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.setInt(3, item.getItemStatus().getNoted() ? 1 : 0);
 			statement.setInt(4, item.getItemStatus().isWielded() ? 1 : 0);
 			statement.setInt(5, item.getItemStatus().getDurability());
+			statement.setString(6, item.getItemStatus().getKillLog());
 			statement.executeUpdate();
 
 			try (final ResultSet rs = statement.getGeneratedKeys()) {
@@ -2053,7 +2060,8 @@ public class MySqlGameDatabase extends JDBCDatabase {
 				statement.setInt(2, item.getNoted() ? 1 : 0);
 				statement.setInt(3, item.isWielded() ? 1 : 0);
 				statement.setInt(4, item.getItemStatus().getDurability());
-				statement.setLong(5, item.getItemId());
+				statement.setString(5, item.getItemStatus().getKillLog());
+				statement.setLong(6, item.getItemId());
 
 				statement.executeUpdate();
 			}

@@ -134,6 +134,7 @@ public class PayloadProcessorManager {
 		bind(OpcodeIn.KNOWN_PLAYERS, KnownPlayersHandler.class); // TODO: class logic needs to be implemented
 
 		bind(OpcodeIn.WORLD_WALK_REQUEST, WorldWalkRequest.class); // voidscape — world-map auto-walker
+		bind(OpcodeIn.ITEM_EXAMINE_REQUEST, ItemExamineRequest.class); // voidscape — per-instance item examine
 	}
 
 	private static void bind(OpcodeIn opcode, Class<?> clazz) {

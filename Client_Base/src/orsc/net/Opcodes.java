@@ -112,6 +112,8 @@ public class Opcodes {
 
 		// voidscape — world-map auto-walker
 		WORLD_WALK_REQUEST(35),
+		// voidscape — per-instance item examine (Item Memory)
+		ITEM_EXAMINE_REQUEST(36),
 		;
 
 		private int opcode;

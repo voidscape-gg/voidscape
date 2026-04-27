@@ -570,6 +570,7 @@ CREATE TABLE IF NOT EXISTS `itemstatuses`
     `noted`      tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
     `wielded`    tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
     `durability` int(5) UNSIGNED     NOT NULL DEFAULT 0,
+    `kill_log`   TEXT                NULL     DEFAULT NULL,
     PRIMARY KEY (`itemID`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8;

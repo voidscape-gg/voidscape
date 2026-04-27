@@ -6,6 +6,7 @@ public class ItemStatus {
 	private boolean noted;
 	private boolean wielded;
 	private int durability;
+	private String killLog;
 
 	public ItemStatus() {
 		this.catalogId = -1;
@@ -13,6 +14,7 @@ public class ItemStatus {
 		this.noted = false;
 		this.wielded = false;
 		this.durability = 100;
+		this.killLog = null;
 	}
 
 	public int getCatalogId() {
@@ -57,5 +59,13 @@ public class ItemStatus {
 			durability = 100;
 		}
 		this.durability = durability;
+	}
+
+	public String getKillLog() {
+		return killLog;
+	}
+
+	public void setKillLog(String killLog) {
+		this.killLog = killLog;
 	}
 }

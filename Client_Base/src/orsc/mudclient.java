@@ -8200,7 +8200,9 @@ public final class mudclient implements Runnable {
 									this.menuCommon.addCharacterItem(var5, MenuItemAction.ITEM_DROP_ALL, "Drop All",
 										"@lre@" + EntityHandler.getItemDef(id, item.getNoted()).getName());
 								}
-								this.menuCommon.addCharacterItem(vId, MenuItemAction.ITEM_EXAMINE, "Examine",
+								// voidscape — pass inventory slot instead of catalog id so the
+								// server can resolve the per-instance Item for dynamic examine.
+								this.menuCommon.addCharacterItem(var5, MenuItemAction.ITEM_EXAMINE, "Examine",
 									"@lre@" + EntityHandler.getItemDef(id, item.getNoted()).getName()
 										+ (localPlayer.isDev() ? " @or1@(" + id + ")" : ""));
 							} else {
@@ -13081,15 +13083,12 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_EXAMINE: {
-					//if (EntityHandler.getItemDef(indexOrX).stackable) {
-					//	this.showMessage(false, (String) null,
-					//			StringUtil.formatItemCount(getInventoryCount(indexOrX)) + (getInventoryCount(indexOrX) < 1000 ? "x" : "") + " - "
-					//					+ EntityHandler.getItemDef(indexOrX).getDescription(),
-					//					MessageType.GAME, 0, (String) null, (String) null);
-					//} else {
-					this.showMessage(false, null, EntityHandler.getItemDef(indexOrX).getDescription(),
-						MessageType.GAME, 0, null);
-					//}
+					// voidscape — server renders dynamic per-instance examine text
+					// (Item Memory) and replies via SEND_MESSAGE. indexOrX is the
+					// inventory slot (changed from catalog id for this purpose).
+					this.packetHandler.getClientStream().newPacket(orsc.net.Opcodes.Out.ITEM_EXAMINE_REQUEST.getOpcode());
+					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
+					this.packetHandler.getClientStream().finishPacket();
 					break;
 				}
 				case WALL_CAST_SPELL: {

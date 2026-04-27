@@ -11,4 +11,5 @@ public class PlayerInventory {
 	public boolean noted;
 	public int catalogID;
 	public int durability;
+	public String killLog;
 }

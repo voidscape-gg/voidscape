@@ -1,0 +1,2 @@
+ALTER TABLE "_PREFIX_itemstatuses"
+  ADD COLUMN "kill_log" TEXT DEFAULT NULL;

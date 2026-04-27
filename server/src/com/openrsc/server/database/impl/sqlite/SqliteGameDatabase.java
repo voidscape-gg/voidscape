@@ -89,6 +89,7 @@ public class SqliteGameDatabase extends MySqlGameDatabase {
                     statement2.setInt(4, item.itemStatus.getNoted() ? 1 : 0);
                     statement2.setInt(5, 0);
                     statement2.setInt(6, item.itemStatus.getDurability());
+                    statement2.setString(7, item.itemStatus.getKillLog());
                     statement2.addBatch();
                 }
 
@@ -119,6 +120,7 @@ public class SqliteGameDatabase extends MySqlGameDatabase {
                 statement2.setInt(4, item.noted ? 1 : 0);
                 statement2.setInt(5, item.wielded ? 1 : 0);
                 statement2.setInt(6, item.durability);
+                statement2.setString(7, item.killLog);
                 statement2.addBatch();
             }
 
