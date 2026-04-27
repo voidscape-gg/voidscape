@@ -4564,7 +4564,7 @@
             "isStackable": 0,
             "isUntradable": 1,
             "isWearable": 0,
-            "appearanceID":0,
+            "appearanceID": 0,
             "wearableID": 0,
             "wearSlot": 0,
             "requiredLevel": 0,
@@ -4876,7 +4876,7 @@
             "basePrice": 1,
             "isNoteable": 0
         },
-		{
+        {
             "id": 1502,
             "name": "Crown mould",
             "description": "Used to make gold crowns",
@@ -4899,7 +4899,7 @@
             "basePrice": 5,
             "isNoteable": 1
         },
-		{
+        {
             "id": 1503,
             "name": "Gold Crown",
             "description": "I wonder what an enchantment would do on this valuable",
@@ -5014,7 +5014,7 @@
             "basePrice": 3825,
             "isNoteable": 1
         },
-		{
+        {
             "id": 1508,
             "name": "Dragonstone Crown",
             "description": "I wonder what an enchantment would do on this valuable",
@@ -5037,7 +5037,7 @@
             "basePrice": 19125,
             "isNoteable": 1
         },
-		{
+        {
             "id": 1509,
             "name": "Crown of dew",
             "description": "It gives me a humidifier sense",
@@ -5129,7 +5129,7 @@
             "basePrice": 3825,
             "isNoteable": 1
         },
-		{
+        {
             "id": 1513,
             "name": "Crown of the herbalist",
             "description": "It gives me a sense to be one with herbs",
@@ -5152,7 +5152,7 @@
             "basePrice": 19125,
             "isNoteable": 1
         },
-		{
+        {
             "id": 1514,
             "name": "Crown of the occult",
             "description": "It gives me a sense to be one with bones",
@@ -7063,6 +7063,29 @@
             "magicBonus": 0,
             "prayerBonus": 0,
             "basePrice": 30000,
+            "isNoteable": 1
+        },
+        {
+            "id": 1597,
+            "name": "Cursed Greatsword",
+            "description": "A greatsword wreathed in dark, vengeful energy.",
+            "command": "",
+            "isFemaleOnly": 0,
+            "isMembersOnly": 0,
+            "isStackable": 0,
+            "isUntradable": 0,
+            "isWearable": 1,
+            "appearanceID": 235,
+            "wearableID": 8216,
+            "wearSlot": 4,
+            "requiredLevel": 40,
+            "requiredSkillID": 0,
+            "armourBonus": 0,
+            "weaponAimBonus": 70,
+            "weaponPowerBonus": 70,
+            "magicBonus": 0,
+            "prayerBonus": 0,
+            "basePrice": 100,
             "isNoteable": 1
         }
     ]

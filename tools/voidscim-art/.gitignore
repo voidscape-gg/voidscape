@@ -1,4 +1,8 @@
 out/
+new_items/
+registrations/
+voidscim/items/
+voidscim/style/
 __pycache__/
 *.pyc
 .env

@@ -20,10 +20,15 @@ Pull a sprite out of `Authentic_Sprites.orsc` (or any RSC .orsc ZIP) as PNG + si
 # List entries
 python extract_ref.py --archive ../../Client_Base/Cache/video/Authentic_Sprites.orsc --list
 
-# Extract one (Rune Scimitar inventory icon = appearanceID 53 + spriteItem 2150 = entry 2203)
+# Extract one. NOTE: archive index = CLIENT spriteID + 2150 (mudclient.spriteItem),
+# where spriteID is the 5th constructor arg in Client_Base/.../EntityHandler.java's
+# items.add(new ItemDef(...)) calls. The server JSON `appearanceID` is a DIFFERENT
+# field and gives wrong answers. Use `python -m voidscim inspect <idx>` to look up
+# the linked items at any archive index. E.g. rune Scimitar has client spriteID=83,
+# so its inventory icon is at archive entry 83 + 2150 = 2233:
 python extract_ref.py \
   --archive ../../Client_Base/Cache/video/Authentic_Sprites.orsc \
-  --index 2203 \
+  --index 2233 \
   --out out/rune_scim_icon.png
 ```
 

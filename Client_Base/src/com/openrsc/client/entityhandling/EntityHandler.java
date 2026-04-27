@@ -4183,6 +4183,8 @@ public class EntityHandler {
 		// voidscape: Void Mace (id 1596). spriteID 610 = AI-generated icon at archive index 2760. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
 		items.add(new ItemDef("Void Mace", "A heavy mace crackling with void energy. Crushes monsters with otherworldly force.", "", 30000, 610, "items:610", false, true, 16, 0, false, false, true, 1596));
 
+		// voidscape: Cursed Greatsword (id 1597). spriteID 612 = AI-generated icon at archive index 2762. Inherits wieldability from id 81 ('rune 2-handed Sword').
+		items.add(new ItemDef("Cursed Greatsword", "A greatsword wreathed in dark, vengeful energy.", "", 100, 612, "items:612", false, true, 8216, 0, false, false, true, 1597));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
@@ -4933,6 +4935,7 @@ public class EntityHandler {
 		animations.add(new AnimationDef("voidneck", "equipment", 0, 0, true, false, 0)); // voidscape: void amulet wielded (runtime idx 231, JSON appearanceID 232). Custom name "voidneck" gets a unique animationNumber slot at startup; we pack pre-recolored necklace frames (purple chain + purple gem, no yellow leak) at sprites[number..number+17].
 		animations.add(new AnimationDef("voidmace", "equipment", 0, 0, true, false, 0)); // voidscape: void mace wielded (runtime idx 232, JSON appearanceID 233). Custom name "voidmace" → unique animationNumber slot at startup; we pack pre-recolored mace frames at sprites[number..number+17].
 		animations.add(new AnimationDef("voidling", "npc", 0, 0, true, false, 0)); // voidscape: voidling NPC sprite. Unique name → unique animationNumber slot at startup; we pack the AI-generated voidling sprite at sprites[number..number+17] (same sprite at all 18 slots — no rotation/walk animation, just static void wisp).
+			animations.add(new AnimationDef("cursed_greatsword", "equipment", 0, 0, true, false, 0));
 	}
 
 	@SuppressWarnings("unchecked")
