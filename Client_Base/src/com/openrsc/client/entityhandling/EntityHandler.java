@@ -2371,6 +2371,10 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Auctioneer", "A figure cloaked in shadow. The void hums where their gaze should be.", "Auction", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Voidling at wilderness lvl 11 (server NpcId.VOIDLING = 838); references AnimationDef "voidling" at runtime idx 233. Camera1=145, camera2=220 = humanoid shape (1:1.52 aspect) — NOT rat 346x136 (squat 4-legged); the voidling is taller-than-wide, so a rat-shaped camera box squashes it.
+		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Voidling", "A skittering fragment of the void.", "", 16, 15, 10, 12, true, sprites, 0, 0, 0, 0, 145, 220, 7, 7, 30, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};
@@ -4924,6 +4928,7 @@ public class EntityHandler {
 		animations.add(new AnimationDef("voidbow", "equipment", 0, 0, false, false, 0)); // voidscape: void bow (runtime idx 230, JSON appearanceID 231). References a custom 'voidbow' sprite block in Custom_Sprites.osar — clone of 'longbow' with the 4-color palette swapped to void purples (charColour-based tinting doesn't work on bow sprites since 'longbow' has no reserved-tint palette index).
 		animations.add(new AnimationDef("voidneck", "equipment", 0, 0, true, false, 0)); // voidscape: void amulet wielded (runtime idx 231, JSON appearanceID 232). Custom name "voidneck" gets a unique animationNumber slot at startup; we pack pre-recolored necklace frames (purple chain + purple gem, no yellow leak) at sprites[number..number+17].
 		animations.add(new AnimationDef("voidmace", "equipment", 0, 0, true, false, 0)); // voidscape: void mace wielded (runtime idx 232, JSON appearanceID 233). Custom name "voidmace" → unique animationNumber slot at startup; we pack pre-recolored mace frames at sprites[number..number+17].
+		animations.add(new AnimationDef("voidling", "npc", 0, 0, true, false, 0)); // voidscape: voidling NPC sprite. Unique name → unique animationNumber slot at startup; we pack the AI-generated voidling sprite at sprites[number..number+17] (same sprite at all 18 slots — no rotation/walk animation, just static void wisp).
 	}
 
 	@SuppressWarnings("unchecked")

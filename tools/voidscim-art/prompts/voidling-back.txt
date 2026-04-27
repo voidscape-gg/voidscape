@@ -1,0 +1,12 @@
+The reference image shows an existing voidling creature sprite from a sprite sheet — a dark purple bipedal hunched humanoid creature with cyan glowing eyes, viewed from BEHIND (back of the head visible, facing away from the viewer). I need you to generate a NEW sprite of THIS SAME CREATURE viewed from the back at a slightly different walking pose, matching the EXACT style, palette, and pixel-art chunkiness of the reference.
+
+CRITICAL — STYLE MATCH:
+- Match the reference's pixel-art look EXACTLY: chunky 1×1 to 3×3 color blocks, NO smooth gradients, NO 3D shading, NO anti-aliasing, NO sparkles, NO glow effects. Hand-placed pixels.
+- Same dark purple body (the reference's main body color), same darker shadow tones, same overall silhouette and proportions. The creature is a hunched bipedal figure with arms hanging by its sides, slightly larger upper body than lower.
+- Same canvas dimensions and creature SIZE as the reference. The creature must occupy the same proportion of the canvas (most of the height, centered horizontally with small margins).
+
+CRITICAL — POSE: Pure BACK view (creature facing AWAY from the camera). The back of the head, shoulders, back, and rear should be visible. NO eyes visible (eyes are on the front). Slightly different walking pose than the reference — one foot stepped slightly forward, mid-stride. Arms hanging naturally with one slightly forward.
+
+CRITICAL — BACKGROUND: solid CHARCOAL GREY around RGB(53, 51, 47) — same color as the reference background. Fill the canvas edge-to-edge with charcoal grey except where the creature is. NO transparency, NO white, NO magenta. Just charcoal grey BG matching the reference.
+
+NO TEXT, no status icons, no shadow, no extra elements. Just one voidling viewed from behind, mid-stride, on a flat charcoal-grey background.

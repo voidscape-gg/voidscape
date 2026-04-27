@@ -1741,6 +1741,23 @@ public class NpcDrops {
 		currentNpcDrops.addEmptyDrop(128 - currentNpcDrops.getTotalWeight());
 		this.npcDrops.put(NpcId.SHADOW_WARRIOR.id(), currentNpcDrops);
 
+		// voidscape: Voidling (838) — wilderness lvl 11 aggressive creature, lvl 13 stats
+		currentNpcDrops = new DropTable("Voidling (838)");
+		currentNpcDrops.addItemDrop(ItemId.AIR_RUNE.id(), 5, 14);
+		currentNpcDrops.addItemDrop(ItemId.FIRE_RUNE.id(), 4, 10);
+		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 25, 8);
+		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 40, 8);
+		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 80, 4);
+		currentNpcDrops.addItemDrop(ItemId.CHAOS_RUNE.id(), 2, 4);
+		currentNpcDrops.addItemDrop(ItemId.IRON_BAR.id(), 1, 4);
+		currentNpcDrops.addItemDrop(ItemId.MEDIUM_BRONZE_HELMET.id(), 1, 4);
+		currentNpcDrops.addItemDrop(ItemId.STEEL_AXE.id(), 1, 2);
+		currentNpcDrops.addItemDrop(ItemId.IRON_2_HANDED_SWORD.id(), 1, 2);
+		currentNpcDrops.addItemDrop(ItemId.NATURE_RUNE.id(), 2, 2);
+		currentNpcDrops.addItemDrop(ItemId.LAW_RUNE.id(), 4, 1);
+		currentNpcDrops.addEmptyDrop(128 - currentNpcDrops.getTotalWeight());
+		this.npcDrops.put(NpcId.VOIDLING.id(), currentNpcDrops);
+
 	}
 
 	/** Custom Drop Tables **/
