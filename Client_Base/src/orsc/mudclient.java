@@ -14474,7 +14474,10 @@ public final class mudclient implements Runnable {
 		loadSprite(spriteUtil + 2, "media", 4);
 		loadSprite(spriteUtil + 6, "media", 2);
 		loadSprite(spriteProjectile, "media", 7);
-		loadSprite(3284, "media", 11);
+		// voidscape: slots 3284/3285 are now void-enclave textures (voidwindow + stale).
+		// Skip them and load grey/gold mod crowns from their relocated slots 3296/3297.
+		loadSprite(3286, "media", 9);
+		loadSprite(3296, "media", 2);
 		// loadSprite(spriteLogo, "media", 1);
 
 		int i = EntityHandler.invPictureCount();

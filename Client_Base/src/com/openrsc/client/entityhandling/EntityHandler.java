@@ -529,8 +529,12 @@ public class EntityHandler {
 	}
 
 	private static void loadCrowns() {
-		crowns.add(new SpriteDef("grey mod crown", 3284, "crowns:0", 0));
-		crowns.add(new SpriteDef("gold mod crown", 3285, "crowns:1", 1));
+		// voidscape: grey + gold mod crown PNGs moved from authentic slots 3284/3285
+		// to 3296/3297 because the Void Enclave commit packed voidwindow + a stale
+		// texture into 3284/3285 (texture loader at spriteTexture+i now extends to
+		// slot 3284). Other crowns kept at original slots 3286-3288.
+		crowns.add(new SpriteDef("grey mod crown", 3296, "crowns:0", 0));
+		crowns.add(new SpriteDef("gold mod crown", 3297, "crowns:1", 1));
 		crowns.add(new SpriteDef("dark grey mod crown", 3286, "crowns:2", 2));
 		crowns.add(new SpriteDef("star", 3287, "crowns:3", 3));
 		crowns.add(new SpriteDef("key", 3288, "crowns:4", 4));
