@@ -2033,6 +2033,11 @@ public final class mudclient implements Runnable {
 		// type 2 is for world with classes and global pk mode
 		int factor = type > 0 ? 2 : 1;
 		try {
+			if (this.useVoidscapeLogin() && type == 0) {
+				this.createVoidscapeAppearancePanel(var1);
+				return;
+			}
+
 			this.panelAppearance = new Panel(this.getSurface(), 100);
 
 			this.panelAppearance.addCenteredText(256, 10, "Please design Your Character", 4, true);
@@ -2133,6 +2138,40 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var5) {
 			throw GenUtil.makeThrowable(var5, "client.J(" + var1 + ',' + type + ')');
 		}
+	}
+
+	private void createVoidscapeAppearancePanel(int var1) {
+		this.panelAppearance = new Panel(this.getSurface(), 100);
+		if (var1 != -24595) {
+			this.renderLoginScreenViewports(-127);
+		}
+
+		int cx = halfGameWidth();
+		int panelWidth = Math.min(500, this.getGameWidth() - 12);
+		int panelX = cx - panelWidth / 2;
+		int rowY = 88;
+		int leftX = panelX + 308;
+		int rightX = panelX + 423;
+		int arrowOffset = 42;
+
+		this.controlButtonAppearanceHeadMinus = this.panelAppearance.addButton(leftX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceHeadPlus = this.panelAppearance.addButton(leftX + arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceHair1 = this.panelAppearance.addButton(rightX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceHair2 = this.panelAppearance.addButton(rightX + arrowOffset, rowY, 20, 20);
+
+		rowY += 62;
+		this.controlButtonAppearanceGender1 = this.panelAppearance.addButton(leftX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceGender2 = this.panelAppearance.addButton(leftX + arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceTop1 = this.panelAppearance.addButton(rightX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceTop2 = this.panelAppearance.addButton(rightX + arrowOffset, rowY, 20, 20);
+
+		rowY += 62;
+		this.controlButtonAppearanceSkin1 = this.panelAppearance.addButton(leftX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceSkin2 = this.panelAppearance.addButton(leftX + arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceBottom1 = this.panelAppearance.addButton(rightX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceBottom2 = this.panelAppearance.addButton(rightX + arrowOffset, rowY, 20, 20);
+
+		this.controlButtonAppearanceAccept = this.panelAppearance.addButton(panelX + 382, Math.min(this.getGameHeight() - 21, 296), 220, 30);
 	}
 
 	private void createLoginPanels(int var1) {
@@ -2785,8 +2824,14 @@ public final class mudclient implements Runnable {
 		try {
 
 			this.getSurface().interlace = false;
-			this.getSurface().blackScreen(true);
-			this.panelAppearance.drawPanel();
+			if (this.useVoidscapeLogin() && type == 0) {
+				this.drawVoidscapeAppearancePanel();
+				this.panelAppearance.drawPanel();
+			} else {
+				this.getSurface().blackScreen(true);
+				this.panelAppearance.drawPanel();
+			}
+			boolean voidscapeAppearance = this.useVoidscapeLogin() && type == 0;
 			short var2 = 140;
 			int var5 = var2 + 116;
 
@@ -2794,6 +2839,12 @@ public final class mudclient implements Runnable {
 
 			byte var3 = 50;
 			int y = var3 - 25;
+			if (voidscapeAppearance) {
+				int panelWidth = Math.min(500, this.getGameWidth() - 12);
+				int panelX = halfGameWidth() - panelWidth / 2;
+				var5 = panelX + 128;
+				y = 65;
+			}
 
 			// pants
 			this.getSurface().spriteClip3(var5 - 87, this.getPlayerClothingColors()[this.characterBottomColour],
@@ -2839,6 +2890,63 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.GD(" + var1 + ',' + type + ')');
 		}
+	}
+
+	private void drawVoidscapeAppearancePanel() {
+		int cx = halfGameWidth();
+		int panelWidth = Math.min(500, this.getGameWidth() - 12);
+		int panelX = cx - panelWidth / 2;
+		int panelHeight = Math.min(this.getGameHeight() - 13, 330);
+		int panelY = 11;
+
+		drawVoidscapeLoginBackground();
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 56);
+		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "DESIGN YOUR CHARACTER", 0xf3d46b, 1, panelY + 22);
+
+		int previewCenterX = panelX + 128;
+		int dividerX = panelX + 252;
+		this.getSurface().drawLineVert(dividerX, panelY + 46, 0x59636d, panelHeight - 76);
+		this.getSurface().drawLineVert(dividerX + 1, panelY + 46, 0x070809, panelHeight - 76);
+		drawVoidscapeCenteredText(previewCenterX - 55, "Front", 0xe6e3d8, 1, 191);
+		drawVoidscapeCenteredText(previewCenterX, "Side", 0xe6e3d8, 1, 191);
+		drawVoidscapeCenteredText(previewCenterX + 55, "Back", 0xe6e3d8, 1, 191);
+
+		int leftX = panelX + 308;
+		int rightX = panelX + 423;
+		int rowY = 88;
+		drawVoidscapeAppearanceSelector(leftX, rowY, "Head", "Type");
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Hair", "Color");
+		rowY += 62;
+		drawVoidscapeAppearanceSelector(leftX, rowY, "Body", "Type");
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Top", "Color");
+		rowY += 62;
+		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", "Color");
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", "Color");
+
+		drawVoidscapeButton(panelX + 382, Math.min(this.getGameHeight() - 21, 296), 220, 30, "Accept", true);
+	}
+
+	private void drawVoidscapeAppearanceSelector(int cx, int cy, String topLabel, String bottomLabel) {
+		int boxX = cx - 27;
+		int boxY = cy - 20;
+		this.getSurface().drawBoxAlpha(boxX, boxY, 54, 40, 0x0b0e13, 228);
+		this.getSurface().drawBoxBorder(boxX, 54, boxY, 40, 0x070809);
+		this.getSurface().drawBoxBorder(boxX + 1, 52, boxY + 1, 38, 0x59636d);
+		drawVoidscapeCenteredText(cx, topLabel, 0xf3d46b, 0, cy - 6);
+		drawVoidscapeCenteredText(cx, bottomLabel, 0xe6e3d8, 0, cy + 8);
+		drawVoidscapeAppearanceArrow(cx - 42, cy, true);
+		drawVoidscapeAppearanceArrow(cx + 42, cy, false);
+	}
+
+	private void drawVoidscapeAppearanceArrow(int cx, int cy, boolean left) {
+		int x = cx - 10;
+		int y = cy - 10;
+		boolean hover = this.mouseX >= x && this.mouseX <= x + 20 && this.mouseY >= y && this.mouseY <= y + 20;
+		if (hover) {
+			this.getSurface().drawBoxAlpha(x, y, 20, 20, 0x3b444d, 180);
+		}
+		this.getSurface().drawSprite(spriteSelect((left ? GUIPARTS.LEFTARROW : GUIPARTS.RIGHTARROW).getDef()), x + 2, y + 2);
 	}
 
 	public Sprite spriteSelect(ItemDef item) {
@@ -3720,6 +3828,10 @@ public final class mudclient implements Runnable {
 	private void drawDialogOptionsMenu(int var1) {
 		try {
 
+			if (isVoidscapePathMenu()) {
+				drawVoidscapePathMenu();
+				return;
+			}
 
 			if (isAndroid()) {
 				int startY = 25;
@@ -3816,6 +3928,103 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.FB(" + var1 + ')');
 		}
+	}
+
+	private boolean isVoidscapePathMenu() {
+		return this.useVoidscapeLogin()
+			&& this.optionsMenuCount == 3
+			&& this.optionsMenuText[0] != null
+			&& this.optionsMenuText[1] != null
+			&& this.optionsMenuText[2] != null
+			&& this.optionsMenuText[0].startsWith("Warrior's Path - 2x XP:")
+			&& this.optionsMenuText[1].startsWith("Forager's Path - 2x XP:")
+			&& this.optionsMenuText[2].startsWith("Arcanist's Path - 2x XP:");
+	}
+
+	private void drawVoidscapePathMenu() {
+		ensureVoidscapeLoginAssetsLoaded();
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 138);
+
+		int cx = halfGameWidth();
+		int panelWidth = Math.min(470, this.getGameWidth() - 20);
+		int panelHeight = Math.min(284, this.getGameHeight() - 20);
+		int panelX = cx - panelWidth / 2;
+		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
+
+		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "CHOOSE YOUR PATH", 0xf3d46b, 1, panelY + 24);
+		drawVoidscapeCenteredText(cx, "One choice per account. Each path grants 2x XP in its listed skills.", 0xe6e3d8, 0, panelY + 42);
+
+		int cardGap = 8;
+		int cardWidth = (panelWidth - 36 - cardGap * 2) / 3;
+		int cardHeight = panelHeight - 72;
+		int cardY = panelY + 56;
+		int firstCardX = panelX + 18;
+
+		drawVoidscapePathCard(0, firstCardX, cardY, cardWidth, cardHeight, "Warrior's Path", "2x XP", "Attack / Defense", "Strength", 81, 0xb85a3c);
+		drawVoidscapePathCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Forager's Path", "2x XP", "Fishing / Cooking", "Mining", 1262, 0x4ba074);
+		drawVoidscapePathCard(2, firstCardX + (cardWidth + cardGap) * 2, cardY, cardWidth, cardHeight, "Arcanist's Path", "2x XP", "Ranged / Magic", "", 657, 0x8e64d7);
+
+		if (this.mouseButtonClick != 0) {
+			int choice = -1;
+			for (int i = 0; i < 3; i++) {
+				int x = firstCardX + i * (cardWidth + cardGap);
+				if (this.mouseX >= x && this.mouseX <= x + cardWidth && this.mouseY >= cardY && this.mouseY <= cardY + cardHeight) {
+					choice = i;
+					break;
+				}
+			}
+			sendOptionsMenuChoice(choice);
+		}
+	}
+
+	private void drawVoidscapePathCard(int index, int x, int y, int width, int height, String title, String multiplier, String skillsTop, String skillsBottom, int itemId, int accent) {
+		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+		int fill = hover ? 0x252d35 : 0x14181e;
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 242);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0x070809);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, hover ? 0xf3d46b : 0x59636d);
+		this.getSurface().drawLineHoriz(x + 4, y + 4, width - 8, accent);
+
+		int artX = x + 8;
+		int artY = y + 11;
+		int artW = width - 16;
+		int artH = Math.max(54, Math.min(78, height / 3));
+		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, 0x05070a, 206);
+		this.getSurface().drawBoxBorder(artX, artW, artY, artH, 0x0b0d10);
+		this.getSurface().drawBoxBorder(artX + 1, artW - 2, artY + 1, artH - 2, accent);
+		drawVoidscapePathItemIcon(itemId, artX, artY, artW, artH, accent);
+
+		drawVoidscapeCenteredText(x + width / 2, title, 0xf3d46b, 0, artY + artH + 17);
+		drawVoidscapeCenteredText(x + width / 2, multiplier, 0xffffff, 1, artY + artH + 37);
+		drawVoidscapeCenteredText(x + width / 2, skillsTop, 0xd9d5cb, 0, artY + artH + 54);
+		if (skillsBottom.length() > 0) {
+			drawVoidscapeCenteredText(x + width / 2, skillsBottom, 0xd9d5cb, 0, artY + artH + 68);
+		}
+		drawVoidscapeCenteredText(x + width / 2, "(" + (index + 1) + ")", hover ? 0xf3d46b : 0x9aa2a9, 0, y + height - 12);
+	}
+
+	private void drawVoidscapePathItemIcon(int itemId, int x, int y, int width, int height, int accent) {
+		try {
+			ItemDef item = EntityHandler.getItemDef(itemId);
+			Sprite sprite = spriteSelect(item);
+			int iconW = Math.min(width - 18, 96);
+			int iconH = Math.min(height - 12, 64);
+			int iconX = x + (width - iconW) / 2;
+			int iconY = y + (height - iconH) / 2;
+			this.getSurface().drawSpriteClipping(sprite, iconX, iconY, iconW, iconH, item.getPictureMask(), 0,
+				item.getBlueMask(), false, 0, 1);
+		} catch (RuntimeException ex) {
+			this.getSurface().drawBoxAlpha(x + 10, y + 10, width - 20, height - 20, accent, 128);
+		}
+	}
+
+	private void sendOptionsMenuChoice(int choice) {
+		this.packetHandler.getClientStream().newPacket(116);
+		this.packetHandler.getClientStream().bufferBits.putByte(choice);
+		this.packetHandler.getClientStream().finishPacket();
+		this.optionsMenuShow = false;
+		this.mouseButtonClick = 0;
 	}
 
 	private void drawDialogServerMessage(byte var1) {

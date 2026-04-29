@@ -987,3 +987,29 @@ Restored the Voidscape-specific PC login presentation as a login-only client cha
 - Android login flow keeps the original OpenRSC panel path via `useVoidscapeLogin() == false`.
 
 **Reversibility**: remove the `useVoidscapeLogin()` branch and the cache image to return to stock login rendering. No packets, server behavior, gameplay UI, or account flow semantics changed.
+
+### 2026-04-29 — Voidscape starter flow: appearance screen, Void Island, one-time paths
+
+New-account first-login flow now skips Tutorial Island after appearance confirmation and routes players to a small isolated **Void Island** starter area. This is a bespoke custom-landscape island, not the Wilderness Void Enclave.
+
+**Client changes**:
+- `mudclient.java` — `character_creation_mode: 0` uses a simple Voidscape-styled appearance panel over the login background. The original invisible control wiring remains; only the chrome/spacing changed.
+- `mudclient.java` — the specific three-option Void Herald menu is intercepted and rendered as a custom modal with three large cards instead of the stock text option list.
+- The path cards render native RSC item sprites directly: rune 2h for Warrior, rune pickaxe for Forager, and magic shortbow for Arcanist. No separate path-art PNGs are required.
+
+**World / server changes**:
+- `scripts/patch-void-enclave-landscape.py` — now also patches sector `h0x48y37`, creating a small isolated island around `(24,24)` in an unused F2P ocean sector. The earlier experimental east-map island sector `h0x63y55` is restored from authentic bytes each run so no stale island remains.
+- `server/conf/server/data/Custom_Landscape.orsc` and `Client_Base/Cache/video/Custom_Landscape.orsc` — rebuilt from that script.
+- `VoidPath.java` — persistent cache key `void_path`; new-player island entry `(24,26)`.
+- `PlayerAppearanceUpdater.java` — after first appearance submit, unchosen players teleport to Void Island.
+- `NpcId.VOID_HERALD(839)`, matching server/client NPC definitions, and `NpcLocsVoidIsland.json` — Void Herald now spawns at `(24,24)`. Important gotcha: the first attempt used `(742,887)` and terrain loaded, but the F2P NPC spawn filter skipped it because `Formulae.isP2P(false, x, y)` treats `x >= 431` as members territory.
+- `LoginPacketHandler.java` / `VoidPath.java` — unchosen test characters saved on the earlier east-map island bounds `(734..750, 880..894)`, Tutorial Island, or the Tutorial Landing are routed to the current Void Island spawn during login.
+- `VoidHerald.java` — NPC says exactly `choose your path`, then sends the three path options. After a choice it writes `void_path` and teleports the player to the configured respawn location.
+- `Player.incExp()` — selected path doubles XP for its skills:
+  - Warrior's Path: Attack, Defense, Strength.
+  - Forager's Path: Fishing, Cooking, Mining.
+  - Arcanist's Path: Ranged, Magic (`MAGIC`, `GOODMAGIC`, `EVILMAGIC` covered).
+
+**Persistence**: no schema migration. The one-time path choice uses the existing `player_cache` table. Existing accounts with no `void_path` can still choose once if they reach the Void Herald.
+
+**Reversibility**: restore the landscape archives via the patch script after removing the `VOID_ISLAND_SECTOR` patch, remove the NPC loc/defs/plugin, and remove the `VoidPath` hooks from appearance submit and XP gain. No protocol or client-version bump.

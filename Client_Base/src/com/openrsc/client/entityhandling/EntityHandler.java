@@ -2379,6 +2379,10 @@ public class EntityHandler {
 		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 		npcs.add(new NPCDef("Voidling", "A skittering fragment of the void.", "", 16, 15, 10, 12, true, sprites, 0, 0, 0, 0, 145, 220, 7, 7, 30, i++));
 
+		// voidscape: Void Herald at Void Island (server NpcId.VOID_HERALD = 839)
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Herald", "A silent figure watching the edge of the void.", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

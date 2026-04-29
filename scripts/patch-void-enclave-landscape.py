@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Patch Custom_Landscape.orsc with the Void Enclave's walls (and later: roofs/floors)
-baked directly into landscape tile bytes.
+Patch Custom_Landscape.orsc with Voidscape-specific terrain baked directly into
+landscape tile bytes.
 
 Why this exists: walls registered via BoundaryLocs*.json are runtime-only — they
 collide and render in 3D, but they don't appear on the minimap and the engine
@@ -24,7 +24,7 @@ Tile byte layout (per server/src/com/openrsc/server/io/Tile.java):
 
 Sector layout (per Sector.java:52): tile_index = x * 48 + y (column-major).
 
-Coordinate transform: our enclave at worldX=208..230, worldY=341..362 fits
+Coordinate transform: the enclave at worldX=208..230, worldY=341..362 fits
 entirely in sector h0x52y44 which covers worldX=192..239, worldY=336..383.
 Local tile coords: tx = worldX - 192, ty = worldY - 336.
 """
@@ -39,9 +39,16 @@ AUTHENTIC = REPO / "server/conf/server/data/Authentic_Landscape.orsc"
 CUSTOM    = REPO / "server/conf/server/data/Custom_Landscape.orsc"
 # Client reads its own copy when S_WANT_CUSTOM_LANDSCAPE is true (World.java:80-81).
 CLIENT_CUSTOM = REPO / "Client_Base/Cache/video/Custom_Landscape.orsc"
-SECTOR    = "h0x52y44"
-SECTOR_BASE_X = 192   # worldX of local tx=0
-SECTOR_BASE_Y = 336   # worldY of local ty=0
+ENCLAVE_SECTOR = "h0x52y44"
+ENCLAVE_SECTOR_BASE_X = 192   # worldX of local tx=0
+ENCLAVE_SECTOR_BASE_Y = 336   # worldY of local ty=0
+
+VOID_ISLAND_SECTOR = "h0x48y37"
+VOID_ISLAND_SECTOR_BASE_X = 0
+VOID_ISLAND_SECTOR_BASE_Y = 0
+VOID_ISLAND_CENTER_X = 24
+VOID_ISLAND_CENTER_Y = 24
+LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 
 # DoorDef IDs
 HIGHWALL = 7
@@ -143,16 +150,16 @@ def enclave_walls():
     return walls
 
 
-def patch_sector(sector_bytes: bytes) -> bytes:
+def patch_enclave_sector(sector_bytes: bytes) -> bytes:
     """Apply enclave wall + floor + roof patches to a 23040-byte sector."""
     assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
     buf = bytearray(sector_bytes)
 
     def tile_offset(worldX, worldY):
-        tx = worldX - SECTOR_BASE_X
-        ty = worldY - SECTOR_BASE_Y
+        tx = worldX - ENCLAVE_SECTOR_BASE_X
+        ty = worldY - ENCLAVE_SECTOR_BASE_Y
         if not (0 <= tx < 48 and 0 <= ty < 48):
-            raise ValueError(f"({worldX}, {worldY}) outside sector {SECTOR}")
+            raise ValueError(f"({worldX}, {worldY}) outside sector {ENCLAVE_SECTOR}")
         return (tx * 48 + ty) * 10
 
     # 1. Walls
@@ -177,16 +184,66 @@ def patch_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
+def patch_void_island_sector(sector_bytes: bytes) -> bytes:
+    """Create a small isolated Void Island inside an otherwise ocean sector."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - VOID_ISLAND_SECTOR_BASE_X
+        ty = worldY - VOID_ISLAND_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {VOID_ISLAND_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    land = set()
+    for x in range(VOID_ISLAND_CENTER_X - 8, VOID_ISLAND_CENTER_X + 9):
+        for y in range(VOID_ISLAND_CENTER_Y - 7, VOID_ISLAND_CENTER_Y + 8):
+            dx = abs(x - VOID_ISLAND_CENTER_X)
+            dy = abs(y - VOID_ISLAND_CENTER_Y)
+            if (dx * 1.15) + dy <= 9.0:
+                land.add((x, y))
+
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        inner_ring = abs(x - VOID_ISLAND_CENTER_X) + abs(y - VOID_ISLAND_CENTER_Y) in (2, 3)
+        center = abs(x - VOID_ISLAND_CENTER_X) <= 1 and abs(y - VOID_ISLAND_CENTER_Y) <= 1
+
+        buf[off + 0] = 52 if edge else 68
+        buf[off + 1] = (112 + ((x * 7 + y * 3) % 20)) & 0xFF
+        if center:
+            buf[off + 2] = FLOOR_RITUAL
+        elif inner_ring:
+            buf[off + 2] = FLOOR_MID
+        else:
+            buf[off + 2] = FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
 def main():
-    # 1. Read clean source sector from Authentic
+    # 1. Read clean source sectors from Authentic
     with zipfile.ZipFile(AUTHENTIC) as z:
-        source = z.read(SECTOR)
-    print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{SECTOR}")
+        enclave_source = z.read(ENCLAVE_SECTOR)
+        island_source = z.read(VOID_ISLAND_SECTOR)
+        legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
+    print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
+    print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
 
     # 2. Apply patches
     walls = enclave_walls()
-    patched = patch_sector(source)
-    print(f"Patched {len(walls)} walls into sector {SECTOR}")
+    patched_sectors = {
+        ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
+        VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
+    }
+    patched_sectors.update(legacy_sources)
+    print(f"Patched {len(walls)} enclave walls into sector {ENCLAVE_SECTOR}")
+    print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
     # server copy and the client cache copy (client reads its own when
@@ -194,17 +251,18 @@ def main():
     for target in (CUSTOM, CLIENT_CUSTOM):
         tmp = target.with_suffix(".orsc.tmp")
         with zipfile.ZipFile(target, "r") as src, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as dst:
-            replaced = False
+            replaced = set()
             for info in src.infolist():
-                if info.filename == SECTOR:
-                    dst.writestr(info, patched)
-                    replaced = True
+                if info.filename in patched_sectors:
+                    dst.writestr(info, patched_sectors[info.filename])
+                    replaced.add(info.filename)
                 else:
                     dst.writestr(info, src.read(info.filename))
-            if not replaced:
-                raise RuntimeError(f"sector {SECTOR} missing from {target}")
+            missing = set(patched_sectors) - replaced
+            if missing:
+                raise RuntimeError(f"sector(s) {', '.join(sorted(missing))} missing from {target}")
         shutil.move(str(tmp), str(target))
-        print(f"Wrote patched sector into {target.relative_to(REPO)}")
+        print(f"Wrote patched sectors into {target.relative_to(REPO)}")
 
 
 if __name__ == "__main__":

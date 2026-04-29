@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.content.PlayerClass;
+import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.model.PlayerAppearance;
 import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.container.Item;
@@ -115,6 +116,10 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 			if (player.getConfig().CHARACTER_CREATION_MODE == 1) {
 				player.setIronMan(ironmanMode);
 				player.setOneXp(isOneXp == 1);
+			}
+
+			if (!VoidPath.hasChosen(player)) {
+				player.teleport(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y, false);
 			}
 		}
 	}

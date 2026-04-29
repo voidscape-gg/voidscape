@@ -57,6 +57,10 @@ public class Point {
 			return "Hero's Quest Range Room";
 		}
 
+		else if (inVoidIsland()) {
+			return "Void Island";
+		}
+
 		else if (inTutorialLanding()) {
 			return "Tutorial Landing";
 		}
@@ -256,6 +260,10 @@ public class Point {
 
 	public boolean inHeroQuestRangeRoom() {
 		return inBounds(459, 672, 460, 673);
+	}
+
+	public boolean inVoidIsland() {
+		return inBounds(16, 17, 32, 31);
 	}
 
 	public boolean onTutorialIsland() {

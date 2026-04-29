@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.database.struct.PlayerLoginData;
 import com.openrsc.server.database.struct.PlayerRecoveryQuestions;
 import com.openrsc.server.login.*;
@@ -70,6 +71,12 @@ public class LoginPacketHandler {
 			s.writeZeroQuotedString(loadedPlayer.getUsername());
 			s.writeZeroQuotedString(loadedPlayer.getCurrentIP());
 			attachment.pcapLogger.get().addPacket(s.toPacket(), true);
+		}
+	}
+
+	private void routeUnchosenStarterPlayer(Player loadedPlayer) {
+		if (VoidPath.shouldRouteToVoidIsland(loadedPlayer)) {
+			loadedPlayer.setInitialLocation(Point.location(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y));
 		}
 	}
 
@@ -220,6 +227,7 @@ public class LoginPacketHandler {
 									loadedPlayer.setInitialLocation(firstTimeLocation);
 									loadedPlayer.setChangingAppearance(true);
 								}
+								routeUnchosenStarterPlayer(loadedPlayer);
 
 								loadedPlayer.setClientVersion((short) getVersion(clientVersion.get(), loadedPlayer));
 								loadedPlayer.setClientLimitations(cl);
@@ -302,6 +310,7 @@ public class LoginPacketHandler {
 									loadedPlayer.setInitialLocation(firstTimeLocation);
 									loadedPlayer.setChangingAppearance(true);
 								}
+								routeUnchosenStarterPlayer(loadedPlayer);
 
 								loadedPlayer.setClientVersion((short) getVersion(clientVersion.get(), loadedPlayer));
 								loadedPlayer.setClientLimitations(cl);
@@ -383,6 +392,7 @@ public class LoginPacketHandler {
 										loadedPlayer.setInitialLocation(firstTimeLocation);
 										loadedPlayer.setChangingAppearance(true);
 									}
+									routeUnchosenStarterPlayer(loadedPlayer);
 
 									loadedPlayer.setClientVersion((short) getVersion(clientVersion.get(), loadedPlayer));
 									loadedPlayer.setClientLimitations(cl);
@@ -451,6 +461,7 @@ public class LoginPacketHandler {
 									loadedPlayer.setInitialLocation(firstTimeLocation);
 									loadedPlayer.setChangingAppearance(true);
 								}
+								routeUnchosenStarterPlayer(loadedPlayer);
 
 								loadedPlayer.setClientVersion((short) getVersion(clientVersion.get(), loadedPlayer));
 								loadedPlayer.setClientLimitations(cl);
@@ -558,6 +569,7 @@ public class LoginPacketHandler {
 								loadedPlayer.setInitialLocation(firstTimeLocation);
 								loadedPlayer.setChangingAppearance(true);
 							}
+							routeUnchosenStarterPlayer(loadedPlayer);
 
 							loadedPlayer.setClientVersion(clientVersion);
 							loadedPlayer.setClientLimitations(cl);

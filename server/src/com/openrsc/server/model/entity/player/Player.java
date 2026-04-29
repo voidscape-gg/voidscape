@@ -3,6 +3,7 @@ package com.openrsc.server.model.entity.player;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanInvite;
@@ -1854,6 +1855,10 @@ public final class Player extends Mob {
 		if (doubledXp) {
 			this.playerServerMessage(MessageType.QUEST, "Your crown shines and you become more experienced");
 			EnchantedCrowns.useCharge(this, ItemId.CROWN_OF_THE_ARTISAN);
+		}
+
+		if (VoidPath.boostsSkill(this, skill)) {
+			skillXP *= 2;
 		}
 
 		// Player cannot gain more than 200 fishing xp on tutorial island

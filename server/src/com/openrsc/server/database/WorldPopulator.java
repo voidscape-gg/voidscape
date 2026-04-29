@@ -268,6 +268,7 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().SPAWN_AUCTION_NPCS) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 				}
+				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
 				if (getWorld().getServer().getConfig().LOCATION_DATA == 2) {
 					if (getWorld().getServer().getConfig().WANT_DECORATED_MOD_ROOM) {
 						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsModRoom.json");
