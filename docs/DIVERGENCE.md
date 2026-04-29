@@ -976,3 +976,14 @@ Conclusion: gpt-image-1.5 cannot do shape-different + per-frame angle-preserved 
 **Reversibility**: `python -m voidscim restore 1597 --commit` reverts the 3 registration edits. Archive bytes at slots `2762` + `1782..1799` remain (would orphan); `restore` could be extended to truncate/zero them but that's not implemented.
 
 **Lesson — AI image gen for game sprites**: gpt-image-1.5 is good at *generating new authentic-style icons* (single canonical view, no constraints) and bad at *steering* — preserving an exact pose, an exact rotation, or matching across many calls. For pixel-art that needs per-frame consistency (rotation, lighting, animation), AI-edit is the wrong tool; recolor + procedural transforms beat it.
+
+### 2026-04-29 — Voidscape PC login screen refresh
+
+Restored the Voidscape-specific PC login presentation as a login-only client change. Gameplay HUD/dialog rendering remains upstream/OpenRSC baseline.
+
+**Client changes**:
+- `Client_Base/Cache/login/voidscape-login-background.png` — cached 512×346 generated login background with no baked-in buttons, menus, counters, or other fake UI.
+- `Client_Base/src/orsc/mudclient.java` — PC login renderer now draws the Voidscape background, stone modal frames, actual OpenRSC actions (`New User`, `Existing User`, submit/cancel, forgot password), and custom field chrome for login, account creation, and password recovery.
+- Android login flow keeps the original OpenRSC panel path via `useVoidscapeLogin() == false`.
+
+**Reversibility**: remove the `useVoidscapeLogin()` branch and the cache image to return to stock login rendering. No packets, server behavior, gameplay UI, or account flow semantics changed.

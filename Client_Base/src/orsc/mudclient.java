@@ -40,6 +40,8 @@ import orsc.util.GenUtil;
 import orsc.util.StringUtil;
 import orsc.util.Utils;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
 //import java.lang.management.ManagementFactory; //Commented out for Android
 import java.nio.charset.StandardCharsets;
@@ -579,6 +581,8 @@ public final class mudclient implements Runnable {
 	private Panel panelAppearance;
 	private Panel panelLogin;
 	private Panel panelLoginWelcome;
+	private Sprite voidscapeLoginBackground;
+	private boolean voidscapeLoginAssetLoadAttempted = false;
 	private Panel panelSetRecoveryQuestion;
 	private Panel panelRecovery;
 	private Panel panelContact;
@@ -1862,6 +1866,11 @@ public final class mudclient implements Runnable {
 	}
 
 	private void createPasswordRecoveryPanel() {
+		if (this.useVoidscapeLogin()) {
+			this.createVoidscapePasswordRecoveryPanel();
+			return;
+		}
+
 		this.panelRecovery = new Panel(this.getSurface(), 100);
 		int i1 = 10;
 		this.instructPassRecovery1 = this.panelRecovery.addCenteredText(256, i1, "@yel@To prove this is your account please provide the answers to", 1, true);
@@ -2128,6 +2137,10 @@ public final class mudclient implements Runnable {
 
 	private void createLoginPanels(int var1) {
 		try {
+			if (this.useVoidscapeLogin()) {
+				this.createVoidscapeLoginPanels();
+				return;
+			}
 
 			this.panelLoginWelcome = new Panel(this.getSurface(), 50);
 			byte yOffsetWelcome = 40;
@@ -2294,6 +2307,92 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.B(" + var1 + ')');
 		}
+	}
+
+	private void createVoidscapeLoginPanels() {
+		int cx = halfGameWidth();
+
+		this.panelLoginWelcome = new Panel(this.getSurface(), 8);
+		this.loginButtonNewUser = this.panelLoginWelcome.addButton(cx, 181, 176, 34);
+		this.loginButtonExistingUser = this.panelLoginWelcome.addButton(cx, 223, 176, 34);
+
+		this.panelLogin = new Panel(this.getSurface(), 50);
+		this.controlLoginStatus1 = this.panelLogin.addCenteredText(cx, 125, "", 1, true);
+		this.controlLoginStatus2 = this.panelLogin.addCenteredText(cx, 139, "", 0, true);
+		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, 170, 210, 320, 22, 1, false, true);
+		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, 212, 210, 20, 22, 1, true, true);
+
+		if (Remember()) {
+			String cred = ClientPort.loadCredentials();
+			if (cred.length() > 0) {
+				String[] split = cred.split(",");
+				if (split.length == 2) {
+					this.panelLogin.setText(this.controlLoginUser, split[0]);
+					this.panelLogin.setText(this.controlLoginPass, split[1]);
+				}
+			}
+		}
+
+		this.m_be = this.panelLogin.addButton(cx - 46, 272, 84, 28);
+		this.m_Xi = this.panelLogin.addButton(cx + 46, 272, 84, 28);
+		this.lostPasswordButtonIdx = this.panelLogin.addButton(cx, 305, 176, 25);
+		this.panelLogin.setFocus(this.controlLoginUser);
+
+		if (S_WANT_HIDE_IP) {
+			this.settingsHideIP = ClientPort.loadHideIp();
+			this.hideIpButtonIdx = this.panelLogin.addButton(cx + 54, 243, 96, 24);
+		}
+		if (Remember()) {
+			this.rememberButtonIdx = this.panelLogin.addButton(cx - 54, 243, 96, 24);
+		}
+
+		this.menuNewUser = new Panel(getSurface(), 50);
+		this.menuNewUserUsername = this.menuNewUser.addCenteredTextEntry(cx, 153, 214, 12, 22, 1, false, true);
+		if (!wantEmail()) {
+			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, 215, 120, 20, 22, 1, true, true);
+			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, 215, 120, 20, 22, 1, true, true);
+			this.menuNewUserEmail = this.menuNewUser.addButton(-1000, -1000, 1, 1);
+			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, 268, "To create an account please enter", 1, true);
+			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, 282, "all the requested details", 1, true);
+			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, 307, 86, 28);
+			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, 307, 86, 28);
+		} else {
+			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, 205, 120, 20, 22, 1, true, true);
+			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, 205, 120, 20, 22, 1, true, true);
+			this.menuNewUserEmail = this.menuNewUser.addCenteredTextEntry(cx, 251, 214, 40, 22, 1, false, true);
+			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, 281, "To create an account please enter", 1, true);
+			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, 294, "all the requested details", 1, true);
+			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, 316, 86, 28);
+			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, 316, 86, 28);
+		}
+	}
+
+	private void createVoidscapePasswordRecoveryPanel() {
+		int cx = halfGameWidth();
+		this.panelRecovery = new Panel(this.getSurface(), 100);
+		this.instructPassRecovery1 = this.panelRecovery.addCenteredText(cx, 31,
+			"@yel@To prove this is your account please provide the answers to", 1, true);
+		this.instructPassRecovery2 = this.panelRecovery.addCenteredText(cx, 45,
+			"@yel@your security questions. You will then be able to reset your password", 1, true);
+
+		int y = 73;
+		for (int j1 = 0; j1 < 5; j1++) {
+			this.controlPassQuestion[j1] = this.panelRecovery.addCenteredText(cx, y - 8, (j1 + 1) + ": question?", 1, true);
+			this.controlPassAnswer[j1] = this.panelRecovery.addCenteredTextEntry(cx, y + 7, 310, 80, 26, 1, true, true);
+			y += 28;
+		}
+
+		this.panelRecovery.setFocus(this.controlPassAnswer[0]);
+		this.panelRecovery.addCenteredText(cx, y - 7, "If you know it, enter a previous password used on this account", 1, true);
+		this.controlPreviousPassword = this.panelRecovery.addCenteredTextEntry(cx, y + 8, 310, 80, 26, 1, true, true);
+		y += 31;
+		this.panelRecovery.addCenteredText(cx - 88, y - 7, "Choose a NEW password", 1, true);
+		this.controlNewPassword = this.panelRecovery.addCenteredTextEntry(cx - 88, y + 8, 150, 80, 26, 1, true, true);
+		this.panelRecovery.addCenteredText(cx + 88, y - 7, "Confirm new password", 1, true);
+		this.controlConfirmation = this.panelRecovery.addCenteredTextEntry(cx + 88, y + 8, 150, 80, 26, 1, true, true);
+		y += 34;
+		this.passwordRecoverSubmit = this.panelRecovery.addButton(cx - 46, y, 86, 28);
+		this.passwordRecoverCancel = this.panelRecovery.addButton(cx + 46, y, 86, 28);
 	}
 
 	private void createMessageTabPanel(int var1) {
@@ -6194,8 +6293,198 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private boolean useVoidscapeLogin() {
+		return !isAndroid();
+	}
+
+	private void ensureVoidscapeLoginAssetsLoaded() {
+		if (this.voidscapeLoginAssetLoadAttempted) {
+			return;
+		}
+		this.voidscapeLoginAssetLoadAttempted = true;
+		this.voidscapeLoginBackground = readPngAsSprite(new File("Cache/login/voidscape-login-background.png"));
+	}
+
+	private static Sprite readPngAsSprite(File file) {
+		try {
+			BufferedImage image = ImageIO.read(file);
+			if (image == null) {
+				return null;
+			}
+			int width = image.getWidth();
+			int height = image.getHeight();
+			int[] pixels = new int[width * height];
+			image.getRGB(0, 0, width, height, pixels, 0, width);
+			for (int i = 0; i < pixels.length; i++) {
+				if ((pixels[i] >>> 24) < 128) {
+					pixels[i] = 0;
+				}
+			}
+			return new Sprite(pixels, width, height);
+		} catch (IOException ex) {
+			return null;
+		}
+	}
+
+	private void drawVoidscapeLogin() {
+		this.getSurface().interlace = false;
+		this.welcomeScreenShown = false;
+		this.getSurface().blackScreen(true);
+		drawVoidscapeLoginBackground();
+
+		if (this.loginScreenNumber == 0) {
+			drawVoidscapeLoginHome();
+			this.panelLoginWelcome.drawPanel();
+		} else if (this.loginScreenNumber == 1) {
+			drawVoidscapeNewUser();
+			this.menuNewUser.drawPanel();
+		} else if (this.loginScreenNumber == 2) {
+			drawVoidscapeExistingUser();
+			this.panelLogin.drawPanel();
+		} else if (this.loginScreenNumber == 3) {
+			drawVoidscapeFrame(96, 104, 320, 156);
+			panelLoginOptions.drawPanel();
+		} else if (this.loginScreenNumber == 4) {
+			drawVoidscapeRecovery();
+			this.panelRecovery.drawPanel();
+			drawVoidscapeButton(halfGameWidth() - 46, 278, 86, 28, "Submit", true);
+			drawVoidscapeButton(halfGameWidth() + 46, 278, 86, 28, "Cancel", false);
+		}
+
+		clientPort.draw();
+	}
+
+	private void drawVoidscapeLoginBackground() {
+		ensureVoidscapeLoginAssetsLoaded();
+		if (this.voidscapeLoginBackground != null) {
+			this.getSurface().drawSprite(this.voidscapeLoginBackground, 0, 0, this.getGameWidth(), this.getGameHeight(), 5924);
+		} else {
+			this.getSurface().drawVerticalGradient(0, 0, this.getGameWidth(), this.getGameHeight(), 0x111318, 0x020203);
+		}
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 10);
+	}
+
+	private void drawVoidscapeLoginHome() {
+		int cx = halfGameWidth();
+		drawVoidscapeFrame(cx - 97, 118, 194, 185);
+		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", 0xf3d46b, 1, 143);
+		drawVoidscapeCenteredText(cx, "Relive the classic.", 0xffffff, 1, 160);
+		drawVoidscapeButton(cx, 181, 176, 34, "New User", true);
+		drawVoidscapeButton(cx, 223, 176, 34, "Existing User", false);
+		drawVoidscapeCenteredText(cx, "The void awaits.", 0xb66cff, 1, 271);
+	}
+
+	private void drawVoidscapeExistingUser() {
+		int cx = halfGameWidth();
+		drawVoidscapeFrame(cx - 128, 93, 256, 232);
+		drawVoidscapeCenteredText(cx, "EXISTING USER", 0xf3d46b, 1, 112);
+		drawVoidscapeField(cx, 170, 210, 23, "Username", this.panelLogin.focusOn(this.controlLoginUser));
+		drawVoidscapeField(cx, 212, 210, 23, "Password", this.panelLogin.focusOn(this.controlLoginPass));
+		if (S_WANT_HIDE_IP) {
+			String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
+			drawVoidscapeButton(cx + 54, 243, 96, 24, text, false);
+		}
+		if (Remember()) {
+			drawVoidscapeButton(cx - 54, 243, 96, 24, "Save", false);
+		}
+		drawVoidscapeButton(cx - 46, 272, 84, 28, "Ok", true);
+		drawVoidscapeButton(cx + 46, 272, 84, 28, "Cancel", false);
+		drawVoidscapeButton(cx, 305, 176, 25, "Forgot password", false);
+	}
+
+	private void drawVoidscapeNewUser() {
+		int cx = halfGameWidth();
+		int panelY = wantEmail() ? 66 : 78;
+		int panelH = wantEmail() ? 270 : 251;
+		drawVoidscapeFrame(cx - 203, panelY, 406, panelH);
+		drawVoidscapeCenteredText(cx, "START A NEW GAME", 0xf3d46b, 1, panelY + 19);
+		drawVoidscapeCenteredText(cx, "Username: 2-12 letters, numbers, or spaces", 0xffd98a, 0, panelY + 39);
+		drawVoidscapeField(cx, 153, 214, 23, "Username", this.menuNewUser.focusOn(this.menuNewUserUsername));
+
+		if (!wantEmail()) {
+			drawVoidscapeField(cx - 63, 215, 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
+			drawVoidscapeField(cx + 63, 215, 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
+			drawVoidscapeButton(cx + 67, 307, 86, 28, "Submit", true);
+			drawVoidscapeButton(cx + 159, 307, 86, 28, "Cancel", false);
+		} else {
+			drawVoidscapeField(cx - 63, 205, 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
+			drawVoidscapeField(cx + 63, 205, 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
+			drawVoidscapeField(cx, 251, 214, 23, "E-mail address", this.menuNewUser.focusOn(this.menuNewUserEmail));
+			drawVoidscapeButton(cx + 67, 316, 86, 28, "Submit", true);
+			drawVoidscapeButton(cx + 159, 316, 86, 28, "Cancel", false);
+		}
+	}
+
+	private void drawVoidscapeRecovery() {
+		int cx = halfGameWidth();
+		drawVoidscapeFrame(cx - 226, 16, 452, 313);
+
+		int y = 73;
+		for (int i = 0; i < 5; i++) {
+			drawVoidscapeField(cx, y + 7, 310, 23, null, this.panelRecovery.focusOn(this.controlPassAnswer[i]));
+			y += 28;
+		}
+		drawVoidscapeField(cx, y + 8, 310, 24, null, this.panelRecovery.focusOn(this.controlPreviousPassword));
+		y += 31;
+		drawVoidscapeField(cx - 88, y + 8, 150, 24, null, this.panelRecovery.focusOn(this.controlNewPassword));
+		drawVoidscapeField(cx + 88, y + 8, 150, 24, null, this.panelRecovery.focusOn(this.controlConfirmation));
+	}
+
+	private void drawVoidscapeFrame(int x, int y, int width, int height) {
+		this.getSurface().drawBoxAlpha(x, y, width, height, 0x101216, 232);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0x0a0b0d);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x7f8992);
+		this.getSurface().drawBoxBorder(x + 3, width - 6, y + 3, height - 6, 0x2f363d);
+		this.getSurface().drawLineHoriz(x + 6, y + 6, width - 12, 0xc3ccd2);
+		this.getSurface().drawLineHoriz(x + 6, y + height - 7, width - 12, 0x050506);
+	}
+
+	private void drawVoidscapeButton(int cx, int cy, int width, int height, String text, boolean primary) {
+		int x = cx - width / 2;
+		int y = cy - height / 2;
+		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+		int fill = hover ? 0x3b444d : 0x252b32;
+		if (primary && !hover) {
+			fill = 0x303842;
+		}
+
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 245);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0x070809);
+		this.getSurface().drawLineHoriz(x + 2, y + 2, width - 4, 0xaeb8c0);
+		this.getSurface().drawLineVert(x + 2, y + 2, 0x87939c, height - 4);
+		this.getSurface().drawLineHoriz(x + 2, y + height - 3, width - 4, 0x050607);
+		this.getSurface().drawLineVert(x + width - 3, y + 2, 0x070809, height - 4);
+		if (hover || primary) {
+			this.getSurface().drawBoxBorder(x + 3, width - 6, y + 3, height - 6, 0x9a7a31);
+		}
+		int font = height < 28 ? 1 : 4;
+		int textY = font == 4 ? cy + 4 : cy + 3;
+		drawVoidscapeCenteredText(cx, text, 0xf1d56c, font, textY);
+	}
+
+	private void drawVoidscapeField(int cx, int cy, int width, int height, String label, boolean focused) {
+		int x = cx - width / 2;
+		int y = cy - height / 2;
+		if (label != null) {
+			drawVoidscapeCenteredText(cx, label, 0xe6e3d8, 1, y - 7);
+		}
+		this.getSurface().drawBoxAlpha(x, y, width, height, 0x07090c, 218);
+		this.getSurface().drawBoxBorder(x, width, y, height, focused ? 0xb68aff : 0x56606a);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x12171d);
+	}
+
+	private void drawVoidscapeCenteredText(int x, String text, int color, int font, int y) {
+		this.getSurface().drawColoredStringCentered(x, text, 0x0f0f10, 0, font, y + 1);
+		this.getSurface().drawColoredStringCentered(x, text, color, 0, font, y);
+	}
+
 	private void drawLogin() {
 		try {
+			if (this.useVoidscapeLogin()) {
+				this.drawVoidscapeLogin();
+				return;
+			}
+
 			this.getSurface().interlace = false;
 			this.welcomeScreenShown = false;
 			this.getSurface().blackScreen(true);
@@ -12900,7 +13189,7 @@ public final class mudclient implements Runnable {
 					if (isAndroid()) clientPort.drawKeyboard(); // launches the Android soft keyboard
 					this.loginScreenNumber = 2;
 					this.panelLogin.setText(this.controlLoginStatus1, "");
-					this.panelLogin.setText(this.controlLoginStatus2, "Please enter your username and password");
+					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
 					if (isAndroid()) clientPort.drawKeyboard();
