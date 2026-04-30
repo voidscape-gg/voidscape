@@ -1140,7 +1140,7 @@ public final class GameStateUpdater {
 				if (offsetX > -128 && offsetY > -128 && offsetX < 128 && offsetY < 128) {
 					// respawnTime = -1 to indicate to clear not on range
 					itemLocs.add(new ItemLoc(groundItem.getID(), offsetX, offsetY, groundItem.getAmount(), -1,
-						groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0));
+						groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0, false));
 				} else {
 					playerToUpdate.getLocationsToClear().add(groundItem.getLocation());
 				}
@@ -1148,7 +1148,7 @@ public final class GameStateUpdater {
 				changed = true;
 			} else if (groundItem.isRemoved() || groundItem.isInvisibleTo(playerToUpdate)) {
 				itemLocs.add(new ItemLoc(groundItem.getID() + 32768, offsetX, offsetY, groundItem.getAmount(), 0,
-					groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0));
+					groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0, false));
 				//System.out.println("Removing " + groundItem + " with isRemoved() remove: " + offsetX + ", " + offsetY);
 				it$.remove();
 				changed = true;
@@ -1164,7 +1164,8 @@ public final class GameStateUpdater {
 			final int offsetX = groundItem.getX() - playerToUpdate.getX();
 			final int offsetY = groundItem.getY() - playerToUpdate.getY();
 			itemLocs.add(new ItemLoc(groundItem.getID(), offsetX, offsetY, groundItem.getAmount(), 0,
-				groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0));
+				groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0,
+				groundItem.getAttribute(GroundItem.RARE_DROP_BEAM_ATTRIBUTE, false)));
 			playerToUpdate.getLocalGroundItems().add(groundItem);
 			changed = true;
 		}

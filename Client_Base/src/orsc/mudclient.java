@@ -134,6 +134,7 @@ public final class mudclient implements Runnable {
 	private final String[] optionsMenuText = new String[20];
 	private final int[] groundItemHeight = new int[5000];
 	private final boolean[] groundItemNoted = new boolean[5000];
+	private final boolean[] groundItemRareDropBeam = new boolean[5000];
 	private final int character2Colour = 2;
 	private final RSModel[] modelCache = new RSModel[1000];
 	private final int[] newBankItems = new int[500];
@@ -153,6 +154,8 @@ public final class mudclient implements Runnable {
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
+	private final int[] rareDropBeamBaseProjection = new int[3];
+	private final int[] rareDropBeamTopProjection = new int[3];
 
 	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
 	// appears below the minimap on hover.
@@ -5459,12 +5462,7 @@ public final class mudclient implements Runnable {
 					if (C_SHOW_GROUND_ITEMS != 1) {
 
 						for (centerX = 0; centerX < this.groundItemCount; ++centerX) {
-							if (C_SHOW_GROUND_ITEMS == 4 && (this.groundItemID[centerX] == 181)) {
-								continue;
-							} else if (C_SHOW_GROUND_ITEMS == 3
-								&& (this.groundItemID[centerX] == 20 || this.groundItemID[centerX] == 814 || this.groundItemID[centerX] == 413 || this.groundItemID[centerX] == 604)) {
-								continue;
-							} else if (C_SHOW_GROUND_ITEMS == 2 && (this.groundItemID[centerX] != 20 && this.groundItemID[centerX] != 814 && this.groundItemID[centerX] != 413 && this.groundItemID[centerX] != 604)) {
+							if (!shouldRenderGroundItem(centerX)) {
 								continue;
 							}
 							centerZ = this.groundItemX[centerX] * this.tileSize + 64;
@@ -5571,6 +5569,7 @@ public final class mudclient implements Runnable {
 					this.scene.endScene(-113);
 					drawVoidscapeSceneOverlay();
 					drawWorldWalkSceneRoute();
+					drawRareDropBeams();
 
 					// Only draw ground item names if the feature is enabled
 					// and a panel/the keyboard isn't open.
@@ -6028,6 +6027,208 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	private boolean shouldRenderGroundItem(final int index) {
+		if (C_SHOW_GROUND_ITEMS == 1) {
+			return false;
+		}
+		final int itemID = this.groundItemID[index];
+		if (C_SHOW_GROUND_ITEMS == 4 && itemID == 181) {
+			return false;
+		}
+		if (C_SHOW_GROUND_ITEMS == 3 && (itemID == 20 || itemID == 814 || itemID == 413 || itemID == 604)) {
+			return false;
+		}
+		return C_SHOW_GROUND_ITEMS != 2 || itemID == 20 || itemID == 814 || itemID == 413 || itemID == 604;
+	}
+
+	private void drawRareDropBeams() {
+		if (this.getSurface() == null || this.world == null || this.scene == null) {
+			return;
+		}
+
+		for (int i = 0; i < this.groundItemCount; i++) {
+			if (!this.groundItemRareDropBeam[i] || !shouldRenderGroundItem(i) || hasEarlierRareDropBeamOnTile(i)) {
+				continue;
+			}
+
+			final int sceneX = this.groundItemX[i] * this.tileSize + 64;
+			final int sceneZ = this.groundItemZ[i] * this.tileSize + 64;
+			final int baseY = -this.world.getElevation(sceneX, sceneZ) - this.groundItemHeight[i];
+			if (!this.scene.projectToScreen(sceneX, baseY, sceneZ, this.rareDropBeamBaseProjection)) {
+				continue;
+			}
+			if (!projectRareDropBeamTop(sceneX, baseY, sceneZ)) {
+				continue;
+			}
+
+			drawRareDropBeam(i, this.rareDropBeamBaseProjection, this.rareDropBeamTopProjection);
+		}
+	}
+
+	private boolean hasEarlierRareDropBeamOnTile(final int index) {
+		for (int i = 0; i < index; i++) {
+			if (this.groundItemRareDropBeam[i]
+				&& shouldRenderGroundItem(i)
+				&& this.groundItemX[i] == this.groundItemX[index]
+				&& this.groundItemZ[i] == this.groundItemZ[index]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean projectRareDropBeamTop(final int sceneX, final int baseY, final int sceneZ) {
+		final int[] heights = {320, 270, 220, 170};
+		for (int height : heights) {
+			if (this.scene.projectToScreen(sceneX, baseY - height, sceneZ, this.rareDropBeamTopProjection)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void drawRareDropBeam(final int index, final int[] base, final int[] top) {
+		final MudClientGraphics surface = this.getSurface();
+		final int baseX = base[0];
+		final int baseY = base[1] - 4;
+		final int topX = top[0];
+		final int topY = top[1];
+		final int slowFrame = this.getFrameCounter() / 2;
+		final int phase = (slowFrame * 3 + index * 19) & 63;
+		final int pulse = phase < 32 ? phase : 63 - phase;
+		final int centerAlpha = 166 + pulse;
+
+		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x7A35D8, 6, 92 + (pulse / 2), 24, slowFrame, index, 3);
+		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x8F45EA, 4, 112, 28, slowFrame, index + 7, 2);
+		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 0, 188, 0x6B22D8, centerAlpha, slowFrame, index + 3, 2);
+		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 188, 256, 0x6B22D8, 58 + (pulse / 3), slowFrame, index + 3, 1);
+
+		final int ring = 7 + (phase / 10);
+		surface.drawCircle(baseX, baseY + 2, ring + 10, 0x5D23B8, 24, 0);
+		surface.drawCircle(baseX, baseY + 2, ring + 4, 0x9D5CFF, 46, 0);
+		surface.drawCircle(baseX, baseY + 2, 3, 0x7A35D8, 54, 0);
+
+		for (int sparkle = 0; sparkle < 5; sparkle++) {
+			final int progress = 34 + ((slowFrame * (sparkle + 1) + index * 29 + sparkle * 43) & 159);
+			final int offsetPhase = (slowFrame + index * 11 + sparkle * 17) & 63;
+			final int offsetPulse = offsetPhase < 32 ? offsetPhase : 63 - offsetPhase;
+			final int offset = ((sparkle & 1) == 0 ? -1 : 1) * (2 + sparkle) + (offsetPulse / 12);
+			final int x = interpolateBeamPoint(baseX, topX, progress) + offset;
+			final int y = interpolateBeamPoint(baseY, topY, progress);
+				final int twinkle = ((slowFrame * 2 + sparkle * 23) & 63);
+				final int alpha = 56 + (twinkle < 32 ? twinkle : 63 - twinkle) - sparkle * 5;
+				drawRareDropSparkle(surface, x, y, sparkle == 0 ? 4 : 3, 0x8F45EA, alpha);
+		}
+	}
+
+	private void drawRareDropBeamRibbon(final int baseX, final int baseY, final int topX, final int topY,
+										final int start, final int end, final int startWidth, final int endWidth,
+										final int color, final int alpha) {
+		drawRareDropBeamRibbon(baseX, baseY, topX, topY, start, end, startWidth, endWidth, color, alpha, 0, 0);
+	}
+
+	private void drawRareDropBeamRibbon(final int baseX, final int baseY, final int topX, final int topY,
+										final int start, final int end, final int startWidth, final int endWidth,
+										final int color, final int alpha, final int startCenterOffset,
+										final int endCenterOffset) {
+		final int startX = interpolateBeamPoint(baseX, topX, start);
+		final int startY = interpolateBeamPoint(baseY, topY, start);
+		final int endX = interpolateBeamPoint(baseX, topX, end);
+		final int endY = interpolateBeamPoint(baseY, topY, end);
+		final int dx = endX - startX;
+		final int dy = endY - startY;
+		final int length = Math.max(1, (int)Math.sqrt(dx * dx + dy * dy));
+		final int perpX = -dy * 256 / length;
+		final int perpY = dx * 256 / length;
+		final int baseOffsetX = perpX * startWidth / 256;
+		final int baseOffsetY = perpY * startWidth / 256;
+		final int topOffsetX = perpX * endWidth / 256;
+		final int topOffsetY = perpY * endWidth / 256;
+		final int startCenterOffsetX = perpX * startCenterOffset / 256;
+		final int startCenterOffsetY = perpY * startCenterOffset / 256;
+		final int endCenterOffsetX = perpX * endCenterOffset / 256;
+		final int endCenterOffsetY = perpY * endCenterOffset / 256;
+
+		this.getSurface().drawQuadrilateralAlpha(
+			startX + startCenterOffsetX - baseOffsetX, startY + startCenterOffsetY - baseOffsetY,
+			endX + endCenterOffsetX - topOffsetX, endY + endCenterOffsetY - topOffsetY,
+			endX + endCenterOffsetX + topOffsetX, endY + endCenterOffsetY + topOffsetY,
+			startX + startCenterOffsetX + baseOffsetX, startY + startCenterOffsetY + baseOffsetY,
+			color, alpha);
+	}
+
+	private void drawRareDropBeamTaperedFade(final int baseX, final int baseY, final int topX, final int topY,
+											 final int color, final int baseWidth, final int baseAlpha, final int topAlpha,
+											 final int slowFrame, final int seed, final int swirlAmount) {
+		final int[] stops = {0, 64, 128, 192, 256};
+		for (int i = 0; i < stops.length - 1; i++) {
+			final int start = stops[i];
+			final int end = stops[i + 1];
+			final int startWidth = Math.max(0, baseWidth * (256 - start) / 256);
+			final int endWidth = Math.max(0, baseWidth * (256 - end) / 256);
+			final int alpha = topAlpha + ((baseAlpha - topAlpha) * (256 - start) / 256);
+			final int startSwirl = getRareDropBeamSwirl(start, slowFrame, seed, swirlAmount);
+			final int endSwirl = getRareDropBeamSwirl(end, slowFrame, seed, swirlAmount);
+			drawRareDropBeamRibbon(baseX, baseY, topX, topY, start, end, startWidth, endWidth, color, alpha,
+				startSwirl, endSwirl);
+		}
+	}
+
+	private void drawRareDropBeamLine(final int baseX, final int baseY, final int topX, final int topY,
+									  final int start, final int end, final int color, final int alpha) {
+		drawRareDropBeamLine(baseX, baseY, topX, topY, start, end, color, alpha, 0, 0);
+	}
+
+	private void drawRareDropBeamLine(final int baseX, final int baseY, final int topX, final int topY,
+									  final int start, final int end, final int color, final int alpha,
+									  final int startCenterOffset, final int endCenterOffset) {
+		final int startX = interpolateBeamPoint(baseX, topX, start);
+		final int startY = interpolateBeamPoint(baseY, topY, start);
+		final int endX = interpolateBeamPoint(baseX, topX, end);
+		final int endY = interpolateBeamPoint(baseY, topY, end);
+		final int dx = endX - startX;
+		final int dy = endY - startY;
+		final int length = Math.max(1, (int)Math.sqrt(dx * dx + dy * dy));
+		final int perpX = -dy * 256 / length;
+		final int perpY = dx * 256 / length;
+		this.getSurface().drawLineAlpha(
+			startX + (perpX * startCenterOffset / 256),
+			startY + (perpY * startCenterOffset / 256),
+			endX + (perpX * endCenterOffset / 256),
+			endY + (perpY * endCenterOffset / 256),
+			color, alpha);
+	}
+
+	private void drawRareDropBeamLineSwirl(final int baseX, final int baseY, final int topX, final int topY,
+										   final int start, final int end, final int color, final int alpha,
+										   final int slowFrame, final int seed, final int swirlAmount) {
+		final int range = end - start;
+		int segmentStart = start;
+		for (int i = 1; i <= 4; i++) {
+			final int segmentEnd = start + range * i / 4;
+			drawRareDropBeamLine(baseX, baseY, topX, topY, segmentStart, segmentEnd, color, alpha,
+				getRareDropBeamSwirl(segmentStart, slowFrame, seed, swirlAmount),
+				getRareDropBeamSwirl(segmentEnd, slowFrame, seed, swirlAmount));
+			segmentStart = segmentEnd;
+		}
+	}
+
+	private int getRareDropBeamSwirl(final int progress, final int slowFrame, final int seed, final int amount) {
+		final int taperedAmount = amount * Math.min(progress, 256 - progress) / 128;
+		return (int)(Math.sin((progress + slowFrame * 5 + seed * 17) * 0.055D) * taperedAmount);
+	}
+
+	private int interpolateBeamPoint(final int start, final int end, final int progress) {
+		return start + ((end - start) * progress / 256);
+	}
+
+	private void drawRareDropSparkle(final MudClientGraphics surface, final int x, final int y,
+									 final int size, final int color, final int alpha) {
+		surface.drawLineAlpha(x - size, y, x + size, y, color, alpha);
+		surface.drawLineAlpha(x, y - size, x, y + size, color, alpha);
+		surface.drawCircle(x, y, 1, 0x9D5CFF, Math.min(78, alpha + 8), 0);
 	}
 
 	private void drawVoidscapeSceneOverlay() {
@@ -17030,6 +17231,14 @@ public final class mudclient implements Runnable {
 
 	public boolean getGroundItemNoted(int i) {
 		return this.groundItemNoted[i];
+	}
+
+	public void setGroundItemRareDropBeam(int i, boolean n) {
+		this.groundItemRareDropBeam[i] = n;
+	}
+
+	public boolean getGroundItemRareDropBeam(int i) {
+		return this.groundItemRareDropBeam[i];
 	}
 
 	public ORSCharacter getPlayerFromServer(int i) {

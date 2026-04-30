@@ -118,6 +118,22 @@ public class NpcDrops {
 		return kbdTableCustom;
 	}
 
+	public boolean isRareDropItem(int itemId) {
+		for (DropTable dropTable : npcDrops.values()) {
+			if (dropTable.containsRareItemDrop(itemId)) {
+				return true;
+			}
+		}
+		return containsRareItemDrop(rareDropTable, itemId)
+			|| containsRareItemDrop(megaRareDropTable, itemId)
+			|| containsRareItemDrop(ultraRareDropTable, itemId)
+			|| containsRareItemDrop(kbdTableCustom, itemId);
+	}
+
+	private boolean containsRareItemDrop(DropTable dropTable, int itemId) {
+		return dropTable != null && dropTable.containsRareItemDrop(itemId);
+	}
+
 	public World getWorld() {
 		return world;
 	}

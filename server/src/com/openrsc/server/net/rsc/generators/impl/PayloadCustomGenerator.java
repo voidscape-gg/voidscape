@@ -865,6 +865,8 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						builder.writeByte((byte) it.getY());
 						if (player.getConfig().WANT_BANK_NOTES)
 							builder.writeByte((byte) it.getNoted());
+						if (player.getClientVersion() >= 10030)
+							builder.writeByte((byte) (it.getRareDropBeam() ? 1 : 0));
 					}
 					break;
 

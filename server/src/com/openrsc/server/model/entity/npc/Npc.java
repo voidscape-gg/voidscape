@@ -441,6 +441,7 @@ public class Npc extends Mob {
 			}
 			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), amount, owner);
 			groundItem.setAttribute("npcdrop", true);
+			markRareDropBeam(groundItem, item);
 			owner.getWorld().registerItem(groundItem);
 		}
 
@@ -459,7 +460,7 @@ public class Npc extends Mob {
 					}
 
 					if (getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogId()).isStackable()) {
-						dropStackItem(item.getCatalogId(), item.getAmount(), owner);
+						dropStackItem(item, owner);
 					} else {
 						dropStandardItem(item, owner);
 					}
@@ -526,6 +527,7 @@ public class Npc extends Mob {
 				for (Item item : kbdSpecificLoot) {
 					GroundItem groundItem = new GroundItem(getWorld(), item.getCatalogId(), getX(), getY(), item.getAmount(), owner);
 					groundItem.setAttribute("npcdrop", true);
+					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
 					getWorld().getServer().submitSqlLogging(() -> {
 						try {
@@ -599,7 +601,9 @@ public class Npc extends Mob {
 		return getConfig().ONLY_REGULAR_BONES ? ItemId.BONES.id() : boneId;
 	}
 
-	private void dropStackItem(final int dropID, int amount, Player owner) {
+	private void dropStackItem(final Item item, Player owner) {
+		final int dropID = item.getCatalogId();
+		int amount = item.getAmount();
 		// Gold Drops
 		if (dropID == ItemId.COINS.id() && owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_SPLENDOR.id())) {
 			amount += Formulae.getSplendorBoost(amount);
@@ -623,6 +627,7 @@ public class Npc extends Mob {
 		if (!DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
 			GroundItem groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner);
 			groundItem.setAttribute("npcdrop", true);
+			markRareDropBeam(groundItem, item);
 			getWorld().registerItem(groundItem);
 		}
 	}
@@ -661,6 +666,7 @@ public class Npc extends Mob {
 				if (!destroyHerbs) {
 					groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner, item.getNoted());
 					groundItem.setAttribute("npcdrop", true);
+					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
 				} else {
 					EnchantedCrowns.giveHerbExperience(owner, new Item(item.getCatalogId()));
@@ -669,6 +675,12 @@ public class Npc extends Mob {
 				}
 
 			}
+		}
+	}
+
+	private void markRareDropBeam(GroundItem groundItem, Item item) {
+		if (item.getAttribute(DropTable.RARE_DROP_ATTRIBUTE, false)) {
+			groundItem.setAttribute(GroundItem.RARE_DROP_BEAM_ATTRIBUTE, true);
 		}
 	}
 

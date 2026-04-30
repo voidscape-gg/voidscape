@@ -2037,6 +2037,7 @@ public class PacketHandler {
 						mc.setGroundItemHeight(newIndex, mc.getGroundItemHeight(oldIndex));
 						if (Config.S_WANT_BANK_NOTES)
 							mc.setGroundItemNoted(newIndex, mc.getGroundItemNoted(oldIndex));
+						mc.setGroundItemRareDropBeam(newIndex, mc.getGroundItemRareDropBeam(oldIndex));
 					}
 
 					++newIndex;
@@ -2820,6 +2821,7 @@ public class PacketHandler {
 		while (length > packetsIncoming.packetEnd) {
 
 			boolean groundItemNoted = false;
+			boolean groundItemRareDropBeam = false;
 
 			// Ground items that are in range
 			if (packetsIncoming.getUnsignedByte() != 255) {
@@ -2829,6 +2831,8 @@ public class PacketHandler {
 				int groundItemY = mc.getLocalPlayerZ() + packetsIncoming.getByte();
 				if (Config.S_WANT_BANK_NOTES)
 					groundItemNoted = packetsIncoming.getByte() == 1;
+				if (Config.CLIENT_VERSION >= 10030)
+					groundItemRareDropBeam = packetsIncoming.getByte() == 1;
 
 				// Currently visible ground items
 				if ((groundItemID & 32768) != 0) {
@@ -2850,6 +2854,7 @@ public class PacketHandler {
 								mc.setGroundItemHeight(newIndex, mc.getGroundItemHeight(oldIndex));
 								if (Config.S_WANT_BANK_NOTES)
 									mc.setGroundItemNoted(newIndex, mc.getGroundItemNoted(oldIndex));
+								mc.setGroundItemRareDropBeam(newIndex, mc.getGroundItemRareDropBeam(oldIndex));
 							}
 
 							++newIndex;
@@ -2868,6 +2873,7 @@ public class PacketHandler {
 					if (Config.S_WANT_BANK_NOTES) {
 						mc.setGroundItemNoted(mc.getGroundItemCount(), groundItemNoted);
 					}
+					mc.setGroundItemRareDropBeam(mc.getGroundItemCount(), groundItemRareDropBeam);
 
 					for (int var7 = 0; mc.getGameObjectInstanceCount() > var7; ++var7) {
 						if (mc.getGameObjectInstanceX(var7) == groundItemX
@@ -2891,6 +2897,8 @@ public class PacketHandler {
 
 				if (Config.S_WANT_BANK_NOTES)
 					groundItemNoted = packetsIncoming.getByte() == 1;
+				if (Config.CLIENT_VERSION >= 10030)
+					groundItemRareDropBeam = packetsIncoming.getByte() == 1;
 
 				for (int oldIndex = 0; mc.getGroundItemCount() > oldIndex; ++oldIndex) {
 					int tileX = (mc.getGroundItemX(oldIndex) >> 3) - offsetX;
@@ -2903,6 +2911,7 @@ public class PacketHandler {
 							mc.setGroundItemHeight(newIndex, mc.getGroundItemHeight(oldIndex));
 							if (Config.S_WANT_BANK_NOTES)
 								mc.setGroundItemNoted(newIndex, mc.getGroundItemNoted(oldIndex));
+							mc.setGroundItemRareDropBeam(newIndex, mc.getGroundItemRareDropBeam(oldIndex));
 						}
 						++newIndex;
 					}

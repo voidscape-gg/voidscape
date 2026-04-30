@@ -6,6 +6,10 @@ public class ItemLoc {
 	 */
 	public int noted;
 	/**
+	 * Custom-client visual marker for rare NPC drops.
+	 */
+	public boolean rareDropBeam;
+	/**
 	 * Amount of item (stackables)
 	 */
 	public int amount;
@@ -33,15 +37,22 @@ public class ItemLoc {
 	}
 
 	public ItemLoc(int id, int x, int y, int amount, int respawnTime, int noted) {
+		this(id, x, y, amount, respawnTime, noted, false);
+	}
+
+	public ItemLoc(int id, int x, int y, int amount, int respawnTime, int noted, boolean rareDropBeam) {
 		this.id = id;
 		this.x = x;
 		this.y = y;
 		this.amount = amount;
 		this.respawnTime = respawnTime;
 		this.noted = noted;
+		this.rareDropBeam = rareDropBeam;
 	}
 
 	public int getNoted() { return noted; }
+
+	public boolean getRareDropBeam() { return rareDropBeam; }
 
 	public int getAmount() {
 		return amount;

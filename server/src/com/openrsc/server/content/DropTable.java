@@ -18,6 +18,7 @@ import java.util.Iterator;
 public class DropTable {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+	public static final String RARE_DROP_ATTRIBUTE = "rare_drop";
 
 	ArrayList<Drop> drops;
 	ArrayList<Accessor> accessors;
@@ -97,6 +98,24 @@ public class DropTable {
 
 	public String getDropTableId() {
 		return dropTableId;
+	}
+
+	public boolean containsRareItemDrop(int itemId) {
+		return containsRareItemDrop(itemId, false);
+	}
+
+	private boolean containsRareItemDrop(int itemId, boolean parentTableIsRare) {
+		boolean rareContext = parentTableIsRare || rare;
+		for (Drop drop : drops) {
+			if (drop.type == dropType.ITEM && rareContext && drop.id == itemId) {
+				return true;
+			}
+			if (drop.type == dropType.TABLE && drop.table != null
+				&& drop.table.containsRareItemDrop(itemId, rareContext)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public void addEmptyDrop(int weight) {
@@ -206,6 +225,7 @@ public class DropTable {
 				}
 			}
 		}
+		markRareDrops(items);
 		return items;
 	}
 
@@ -232,10 +252,24 @@ public class DropTable {
 				// we will award the item with slightly different logic.
 				if (handleRingOfAvarice(owner, item)) continue;
 
+				markRareDrop(item);
 				items.add(item);
 			}
 		}
 		return items;
+	}
+
+	private void markRareDrops(ArrayList<Item> items) {
+		if (!rare) return;
+		for (Item item : items) {
+			markRareDrop(item);
+		}
+	}
+
+	private void markRareDrop(Item item) {
+		if (rare && item != null) {
+			item.setAttribute(RARE_DROP_ATTRIBUTE, true);
+		}
 	}
 
 	public static boolean handleRingOfAvarice(final Player player, final Item item) {

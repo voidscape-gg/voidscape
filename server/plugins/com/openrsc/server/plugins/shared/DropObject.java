@@ -77,6 +77,11 @@ public class DropObject {
 		}
 
 		GroundItem groundItem = new GroundItem(player.getWorld(), item.getCatalogId(), player.getX(), player.getY(), removingThisIteration, player, item.getNoted());
+		if (!item.getNoted()
+			&& !item.getDef(player.getWorld()).isStackable()
+			&& player.getWorld().getNpcDrops().isRareDropItem(item.getCatalogId())) {
+			groundItem.setAttribute(GroundItem.RARE_DROP_BEAM_ATTRIBUTE, true);
+		}
 		ActionSender.sendSound(player, "dropobject");
 
 		if (player.getWorld().getPlayer(DataConversions.usernameToHash(player.getUsername())) == null) {

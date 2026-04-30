@@ -64,8 +64,13 @@ public final class Admins implements CommandTrigger {
 
 	public static String messagePrefix = null;
 	public static String badSyntaxPrefix = null;
+	private static final int DROPWAVE_DEFAULT_COUNT = 20;
+	private static final int DROPWAVE_MAX_COUNT = 20;
+	private static final int DROPWAVE_MAX_RADIUS = 8;
+	private static final long DROPWAVE_COOLDOWN_MILLIS = 5000L;
 
 	private Player petOwnerA;
+	private final HashMap<Long, Long> dropWaveLastUse = new HashMap<>();
 
 	private Point getRandomLocation(Player player) {
 		Point location = Point.location(DataConversions.random(48, 91), DataConversions.random(575, 717));
@@ -226,6 +231,8 @@ public final class Admins implements CommandTrigger {
 			sendYoptinScreen(player, args);
 		} else if (command.equalsIgnoreCase("spawnnpc")) {
 			spawnNpc(player, command, args);
+		} else if (command.equalsIgnoreCase("dropwave") || command.equalsIgnoreCase("farmdrops") || command.equalsIgnoreCase("spawndrops")) {
+			spawnNpcDropWave(player, command, args);
 		} else if (command.equalsIgnoreCase("winterholidayevent") || command.equalsIgnoreCase("toggleholiday")) {
 			winterHolidayEvent(player, command, args);
 		} else if (command.equalsIgnoreCase("santaclausiscomingtotown")) {
@@ -2957,6 +2964,102 @@ public final class Admins implements CommandTrigger {
 		});
 
 		player.message(messagePrefix + "You have spawned " + player.getWorld().getServer().getEntityHandler().getNpcDef(id).getName() + ", radius: " + radius + " for " + time + " minutes");
+	}
+
+	private void spawnNpcDropWave(Player player, String command, String[] args) {
+		if (args.length < 1) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [npc_id] (count 1-" + DROPWAVE_MAX_COUNT
+				+ ") (radius 0-" + DROPWAVE_MAX_RADIUS + ")");
+			return;
+		}
+
+		int id;
+		try {
+			id = Integer.parseInt(args[0]);
+		} catch (NumberFormatException ex) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [npc_id] (count 1-" + DROPWAVE_MAX_COUNT
+				+ ") (radius 0-" + DROPWAVE_MAX_RADIUS + ")");
+			return;
+		}
+
+		NPCDef npcDef = player.getWorld().getServer().getEntityHandler().getNpcDef(id);
+		if (npcDef == null) {
+			player.message(messagePrefix + "Invalid npc id");
+			return;
+		}
+
+		int count = DROPWAVE_DEFAULT_COUNT;
+		if (args.length >= 2) {
+			try {
+				count = Integer.parseInt(args[1]);
+			} catch (NumberFormatException ex) {
+				player.message(badSyntaxPrefix + command.toUpperCase() + " [npc_id] (count 1-" + DROPWAVE_MAX_COUNT
+					+ ") (radius 0-" + DROPWAVE_MAX_RADIUS + ")");
+				return;
+			}
+		}
+
+		int radius = 2;
+		if (args.length >= 3) {
+			try {
+				radius = Integer.parseInt(args[2]);
+			} catch (NumberFormatException ex) {
+				player.message(badSyntaxPrefix + command.toUpperCase() + " [npc_id] (count 1-" + DROPWAVE_MAX_COUNT
+					+ ") (radius 0-" + DROPWAVE_MAX_RADIUS + ")");
+				return;
+			}
+		}
+
+		if (count < 1 || count > DROPWAVE_MAX_COUNT) {
+			player.message(messagePrefix + "Count must be between 1 and " + DROPWAVE_MAX_COUNT + ".");
+			return;
+		}
+		if (radius < 0 || radius > DROPWAVE_MAX_RADIUS) {
+			player.message(messagePrefix + "Radius must be between 0 and " + DROPWAVE_MAX_RADIUS + ".");
+			return;
+		}
+
+		long now = System.currentTimeMillis();
+		Long lastUse = dropWaveLastUse.get(player.getUsernameHash());
+		if (lastUse != null && now - lastUse < DROPWAVE_COOLDOWN_MILLIS) {
+			long secondsLeft = (DROPWAVE_COOLDOWN_MILLIS - (now - lastUse) + 999L) / 1000L;
+			player.message(messagePrefix + "Dropwave is cooling down for " + secondsLeft + " more second"
+				+ (secondsLeft == 1 ? "." : "s."));
+			return;
+		}
+		dropWaveLastUse.put(player.getUsernameHash(), now);
+
+		int spawned = 0;
+		int killed = 0;
+		int span = radius * 2 + 1;
+		for (int i = 0; i < count; i++) {
+			int x = player.getX();
+			int y = player.getY();
+			if (radius > 0) {
+				x += (i % span) - radius;
+				y += ((i / span) % span) - radius;
+			}
+			if (!player.getWorld().withinWorld(x, y)) {
+				x = player.getX();
+				y = player.getY();
+			}
+
+			Npc npc = new Npc(player.getWorld(), id, x, y, x, x, y, y);
+			npc.setShouldRespawn(false);
+			player.getWorld().registerNpc(npc);
+			spawned++;
+
+			int damage = Math.max(1, npc.getSkills().getLevel(Skill.HITS.id()));
+			npc.getUpdateFlags().setDamage(new Damage(npc, damage));
+			npc.getSkills().setLevel(Skill.HITS.id(), 0);
+			if (npc.killed) {
+				npc.killed = false;
+			}
+			npc.killedBy(player);
+			killed++;
+		}
+
+		player.message(messagePrefix + "Dropwave killed " + killed + " of " + spawned + " " + npcDef.getName() + ".");
 	}
 
 	private void winterHolidayEvent(Player player, String command, String[] args) {

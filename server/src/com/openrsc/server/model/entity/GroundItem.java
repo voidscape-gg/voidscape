@@ -13,6 +13,8 @@ import com.openrsc.server.model.world.World;
 import java.util.Objects;
 
 public class GroundItem extends Entity {
+	public static final String RARE_DROP_BEAM_ATTRIBUTE = "rare_drop_beam";
+
 	/**
 	 * Amount (for stackables)
 	 */

@@ -1466,3 +1466,35 @@ Files touched:
 - `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
 - `scripts/perf-load.sh`
 - `docs/PERFORMANCE.md`
+
+### 2026-04-30 - Rare drop loot beams
+
+Added an OSRS-style rare drop beam for NPC drops that come from rare drop tables.
+
+Changes:
+- `DropTable` now marks `Item` instances returned from tables flagged `rare`.
+- `Npc` transfers that marker onto the spawned `GroundItem`, preserving existing stackable, noted, Void Amulet, Splendor, and Ring of Avarice behavior.
+- Player-dropped inventory/equipment items also get the beam when their unnoted, non-stackable item ID appears in a rare NPC drop table, which gives a cheap manual visual test path without making generic stacks like coins glow.
+- The custom ground-item packet appends one rare-beam byte for client versions `10030+`; older/custom-admin clients remain on the previous packet shape.
+- The Java client stores the flag per ground item and draws a projected void-purple tapered cone, base pulse, purple-only sparkles, and subtle swirl motion after the 3D scene render and before ground-item names.
+- Rare beams are coalesced by ground tile on the client, so stacked rare drops draw one beam instead of compounding the translucent effect.
+- Added the admin test command `::dropwave <npc_id> [count] [radius]` to spawn and immediately player-credit-kill a capped batch of NPCs using their normal drop tables. The command is capped at 20 NPCs, radius 8, with a 5 second per-player cooldown.
+
+Protocol:
+- `Client_Base/src/orsc/Config.java:CLIENT_VERSION` bumped `10029` -> `10030`.
+- `server/local.conf:client_version` bumped `10029` -> `10030`.
+
+Files touched:
+- `server/src/com/openrsc/server/content/DropTable.java`
+- `server/src/com/openrsc/server/constants/NpcDrops.java`
+- `server/src/com/openrsc/server/model/entity/npc/Npc.java`
+- `server/src/com/openrsc/server/model/entity/GroundItem.java`
+- `server/src/com/openrsc/server/external/ItemLoc.java`
+- `server/src/com/openrsc/server/GameStateUpdater.java`
+- `server/src/com/openrsc/server/net/rsc/generators/impl/PayloadCustomGenerator.java`
+- `Client_Base/src/orsc/PacketHandler.java`
+- `Client_Base/src/orsc/mudclient.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
+- `server/plugins/com/openrsc/server/plugins/shared/DropObject.java`
+- `server/local.conf` (gitignored)
