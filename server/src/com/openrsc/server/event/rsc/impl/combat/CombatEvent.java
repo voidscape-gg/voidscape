@@ -10,7 +10,6 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.KillType;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
-import com.openrsc.server.model.entity.npc.NpcBehavior;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Damage;
@@ -166,7 +165,6 @@ public class CombatEvent extends GameTickEvent {
 			target.setLastCombatState(CombatState.ERROR);
 			resetCombat();
 		} else {
-
 			if (hitter.isPlayer() && hitter.getConfig().WANT_POISON_NPCS && checkPoisonousWeapons(hitter) && target.getCurrentPoisonPower() < 10 && DataConversions.random(1, 50) == 1) {
 				target.setPoisonDamage(60);
 				target.startPoisonEvent();

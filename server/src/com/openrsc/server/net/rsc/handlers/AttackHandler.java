@@ -20,27 +20,17 @@ import com.openrsc.server.plugins.triggers.AttackPlayerTrigger;
 import static com.openrsc.server.plugins.Functions.inArray;
 
 public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn> {
+	private static final String PK_CATCHING_SIM_OWNER = "pkcatchsim_owner";
+	private static final String PK_CATCHING_SIM_COMBAT_ACTIVE = "pkcatchsim_combat_active";
+	private static final int PK_CATCHING_SIM_PVP_DISTANCE = 2;
+
 	public void process(TargetMobStruct payload, Player player) throws Exception {
 		OpcodeIn pID = payload.getOpcode();
-
-
-		if (player.inCombat()) {
-			player.message("You are already busy fighting!");
-			player.resetPath();
-			return;
-		}
 
 		if (player.getDuel().isDueling()) {
 			return;
 		}
 
-		if (player.isBusy()) {
-			player.resetPath();
-			return;
-		}
-
-
-		player.resetAll();
 		Mob affectedMob = null;
 		if (pID == OpcodeIn.PLAYER_ATTACK) {
 			affectedMob = player.getWorld().getPlayer(payload.serverIndex);
@@ -51,6 +41,29 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			player.resetPath();
 			return;
 		}
+
+		boolean pkCatchingSimulatorTarget = isPkCatchingSimulatorTarget(affectedMob);
+		if (pkCatchingSimulatorTarget && isPkCatchingSimulatorReattackBlocked(player, affectedMob)) {
+			player.resetPath();
+			player.resetFollowing();
+			player.setWalkToAction(null);
+			return;
+		}
+
+		if (player.inCombat()) {
+			if (!pkCatchingSimulatorTarget || !clearStalePkCatchingSimulatorCombat(player, affectedMob)) {
+				player.message("You are already busy fighting!");
+				player.resetPath();
+				return;
+			}
+		}
+
+		if (player.isBusy() && !pkCatchingSimulatorTarget) {
+			player.resetPath();
+			return;
+		}
+
+		player.resetAll();
 
 		if (affectedMob.isPlayer()) {
 			assert affectedMob instanceof Player;
@@ -93,7 +106,7 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 
 			if (affectedMob.isPlayer() && !player.finishedPath() && !affectedMob.finishedPath()) {
 				int pidlessCatchingDistanceOffset = 0;
-				if (player.getConfig().PIDLESS_CATCHING && !player.willBeProcessedBefore((Player)affectedMob)) {
+				if (affectedMob.isPlayer() && player.getConfig().PIDLESS_CATCHING && !player.willBeProcessedBefore((Player)affectedMob)) {
 					// other player has already moved this tick, meaning the gap is 1 more than is rendered on either person's client
 					pidlessCatchingDistanceOffset += 1;
 				}
@@ -108,16 +121,23 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 
 			player.setFollowing(affectedMob, 0, false, true);
 
-			int radius = affectedMob.isPlayer() ? player.getConfig().PVP_CATCHING_DISTANCE : player.getConfig().PVM_CATCHING_DISTANCE;
+			int radius = affectedMob.isPlayer() || pkCatchingSimulatorTarget
+				? (pkCatchingSimulatorTarget
+					? Math.max(player.getConfig().PVP_CATCHING_DISTANCE, PK_CATCHING_SIM_PVP_DISTANCE)
+					: player.getConfig().PVP_CATCHING_DISTANCE)
+				: player.getConfig().PVM_CATCHING_DISTANCE;
 			player.setWalkToAction(new WalkToMobAction(player, affectedMob, radius, true, ActionType.ATTACK) {
 				public void executeInternal() {
 					getPlayer().resetFollowing();
 
-					if (mob.inCombat() && getPlayer().getRangeEquip() < 0 && getPlayer().getThrowingEquip() < 0) {
+					if (mob.inCombat() && !isPkCatchingSimulatorTarget(mob)
+						&& getPlayer().getRangeEquip() < 0 && getPlayer().getThrowingEquip() < 0) {
 						getPlayer().message("I can't get close enough");
 						return;
 					}
-					if (getPlayer().isBusy() || mob.isBusy() || !getPlayer().checkAttack(mob, false)) {
+					if ((!pkCatchingSimulatorTarget && getPlayer().isBusy())
+						|| (!pkCatchingSimulatorTarget && mob.isBusy())
+						|| !getPlayer().checkAttack(mob, false)) {
 						return;
 					}
 					if (mob.isNpc()) {
@@ -127,6 +147,11 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 					} else {
 						getPlayer().getWorld().getServer().getPluginHandler().handlePlugin(AttackPlayerTrigger.class, getPlayer(), new Object[]{getPlayer(), mob}, this);
 					}
+				}
+
+				@Override
+				public boolean isPvPAttack() {
+					return pkCatchingSimulatorTarget || super.isPvPAttack();
 				}
 			});
 		} else { // Attack with ranged instead of melee
@@ -219,5 +244,54 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 				}
 			});
 		}
+	}
+
+	private boolean isPkCatchingSimulatorTarget(Mob mob) {
+		return mob != null && mob.isNpc() && mob.getAttribute(PK_CATCHING_SIM_OWNER, null) != null;
+	}
+
+	private boolean isPkCatchingSimulatorReattackBlocked(Player player, Mob target) {
+		long ranAwayTick = target.getRanAwayTimer();
+		return ranAwayTick > 0
+			&& ranAwayTick + player.getConfig().PVP_REATTACK_TIMER > player.getWorld().getServer().getCurrentTick();
+	}
+
+	private boolean clearStalePkCatchingSimulatorCombat(Player player, Mob target) {
+		if (player.getAttribute(PK_CATCHING_SIM_COMBAT_ACTIVE, false)
+			|| target.getAttribute(PK_CATCHING_SIM_COMBAT_ACTIVE, false)) {
+			return false;
+		}
+
+		if (player.getOpponent() != target && target.getOpponent() != player) {
+			return !player.inCombat();
+		}
+
+		if (player.getCombatEvent() != null) {
+			player.getCombatEvent().stop();
+		}
+		if (target.getCombatEvent() != null) {
+			target.getCombatEvent().stop();
+		}
+		player.setCombatEvent(null);
+		target.setCombatEvent(null);
+		player.setOpponent(null);
+		target.setOpponent(null);
+		player.setLastOpponent(null);
+		target.setLastOpponent(null);
+		player.setHitsMade(0);
+		target.setHitsMade(0);
+		player.setBusy(false);
+		target.setBusy(false);
+		player.resetFollowing();
+		target.resetFollowing();
+		player.removeAttribute(PK_CATCHING_SIM_COMBAT_ACTIVE);
+		target.removeAttribute(PK_CATCHING_SIM_COMBAT_ACTIVE);
+		if (player.getSprite() > 7) {
+			player.setSprite(4);
+		}
+		if (target.getSprite() > 7) {
+			target.setSprite(4);
+		}
+		return true;
 	}
 }

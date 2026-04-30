@@ -6,6 +6,7 @@ import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.player.Player;
 
 public abstract class WalkToMobAction extends WalkToAction {
+	private static final String PK_CATCHING_SIM_OWNER = "pkcatchsim_owner";
 
 	protected final Mob mob;
 	private final int radius;
@@ -41,6 +42,9 @@ public abstract class WalkToMobAction extends WalkToAction {
 		Some interactions work like this in RS2 as well.
 		 */
 		Point checkedPoint = ignoreProjectileAllowed ? getPlayer().getWalkingQueue().getNextMovement() : getPlayer().getLocation();
+		if (isPkCatchingSimulatorAttack()) {
+			return checkedPoint.withinRange(mob.getLocation(), radius);
+		}
 		boolean pathingCheckPassed = PathValidation.checkAdjacentDistance(getPlayer().getWorld(), checkedPoint, mob.getLocation(), ignoreProjectileAllowed, !ignoreProjectileAllowed);
 		boolean actionExecutedThisTick = checkedPoint.withinRange(mob.getLocation(), radius) && pathingCheckPassed;
 		if (actionType == ActionType.ATTACKMAGIC && getPlayer().inCombat() && !actionExecutedThisTick) {
@@ -54,5 +58,10 @@ public abstract class WalkToMobAction extends WalkToAction {
 	public boolean isPvPAttack() {
 		return mob.isPlayer() && (actionType == ActionType.ATTACK || actionType == ActionType.ATTACKMAGIC);
 	}
-}
 
+	private boolean isPkCatchingSimulatorAttack() {
+		return actionType == ActionType.ATTACK
+			&& mob.isNpc()
+			&& mob.getAttribute(PK_CATCHING_SIM_OWNER, null) != null;
+	}
+}

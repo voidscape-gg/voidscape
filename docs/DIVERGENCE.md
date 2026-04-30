@@ -1013,3 +1013,63 @@ New-account first-login flow now skips Tutorial Island after appearance confirma
 **Persistence**: no schema migration. The one-time path choice uses the existing `player_cache` table. Existing accounts with no `void_path` can still choose once if they reach the Void Herald.
 
 **Reversibility**: restore the landscape archives via the patch script after removing the `VOID_ISLAND_SECTOR` patch, remove the NPC loc/defs/plugin, and remove the `VoidPath` hooks from appearance submit and XP gain. No protocol or client-version bump.
+
+### 2026-04-29 — PK Catching Simulator: PvP-style catching trainer
+
+New server-side training minigame for practicing RSC-style PK catching without automating a real client. Players talk to the **PK catching trainer** at `(214, 437)`, confirm a five-minute drill, get assigned one of three ocean-island arenas, and chase a synthetic player-like target. `::leave` exits early. Right-click **Highscore** on the trainer shows the player's rank plus the top 10 completed five-minute catch counts.
+
+**Gameplay shape**:
+- Target starts still at `(360, 71)`-equivalent inside the assigned arena and only begins running after the first successful attack. This avoids the confusing "already running while I load in" state.
+- One mixed mode rolls easy/medium/hard movement internally instead of exposing three player-facing modes. The target alternates straight lines, diagonals, cutbacks, corner goals, obstacle routes, and center resets so it does not just trace the arena border.
+- Catch distance is PvP-style range 2 using Chebyshev distance (`Point.withinRange`) and checks both the player's current tile and next queued movement tile. This was required for the visual/server-position gap on two-square straight and diagonal catches.
+- Successful catches enter a simulator-owned combat lock: player and target are placed on the same tile, opponents are set for the normal combat look, zero-damage bubbles/sounds are emitted, no XP/HP loss/drops happen, and the target runs again after the PvP retreat condition.
+- Drill duration uses the existing system-update timer packet; the client label was generalized from "Automatic server restart in" to "Time remaining" so the timer makes sense for minigames.
+- Completed five-minute rounds persist best catch count to `conf/server/data/pk_catching_sim_highscores.properties`. The file is runtime data and gitignored.
+
+**Arena / multiplayer support**:
+- `scripts/patch-void-enclave-landscape.py` now bakes three identical walkable ocean islands into `Custom_Landscape.orsc` for both server and client cache:
+  - arena 1: sector `h0x55y38`, bounds `344..378, 56..86`
+  - arena 2: sector `h0x56y38`, +48 X offset
+  - arena 3: sector `h0x57y38`, +96 X offset
+- Runtime arena slots reserve one arena per player and spawn one target per session. A fourth simultaneous player receives a busy message. This is not true instancing, but it gives isolated practice lanes without new protocol or region-loader work.
+- Temporary walls and obstacles are registered as GameObjects and tile traversal masks are saved/restored on cleanup. This fixed the earlier "walked through pillar borders" issue: visual obstacles alone are not enough; the traversal mask must also block.
+- The target stepper uses `PathValidation.checkAdjacent(...)` and tile masks (`CollisionFlag.FULL_BLOCK`) before each one-tile move so the runner cannot cut through arena walls or obstacles.
+
+**NPCs and rendering**:
+- Added custom NPC ids 840 and 841. The server and client must append them in the same order because NPC ids are positional in the loader; a missing client-side append falls back to the "Ana (not in a barrel)" sentinel.
+- Trainer id 840 is non-attackable, has `Highscore` as its right-click command, and is spawned by `NpcLocsVoidIsland.json` at `(214, 437)`.
+- Target id 841 is attackable and rendered like a geared player: rune-style plate/legs/medium helm/kite, beard, and standard humanoid camera bounds. It is still an NPC on the wire; the simulator owns the player-like behavior.
+
+**PvP-combat lessons learned**:
+- Normal NPC combat cannot be used directly for this trainer. It caused target-first attacks, early fight termination, "fighting air" phantom combat, and re-attack lockouts because the NPC combat event and player-vs-player timing rules do not share the same state machine.
+- The stable approach is a synthetic NPC with a `pkcatchsim_owner` attribute and a simulator-only combat event. `AttackHandler` and `WalkToMobAction` special-case that owned NPC just enough to treat attack pathing as PvP catching while still routing through the normal client attack click path.
+- Do not make the runner a real player session or automate client input. The target is server-side only; it simulates the state transitions a fleeing player creates.
+- Reattack too fast is real PvP behavior. The simulator sets both `player.setRanAwayTimer()` and `target.setRanAwayTimer()` when the combat lock releases, and `AttackHandler` blocks too-early reattacks using `PVP_REATTACK_TIMER`. This makes early clicks stop the player instead of instantly starting another fight.
+- "Clicked from too far" should not cancel pursuit. Real PvP attack clicks keep the attacker following the target and fire when range becomes valid. The simulator preserves following + `WalkToMobAction` and inspects the pending action each tick instead of stopping the player on the original out-of-range click.
+- The fake combat round uses the PvP retreat rule we observed: release after the catcher's third made swing. The event alternates zero-damage swings on a two-tick cadence and increments `hitsMade`; no normal NPC damage calculation runs.
+- Phantom combat was cleared by aggressively removing stale normal combat state on both mobs: stop combat events, clear opponents/last opponents, reset hits made, following, busy flags, simulator combat attributes, and combat sprites. Mixing normal `CombatEvent` state with simulator state is what left the client attacking empty air.
+- Attack clicks while already locked must be consumed with a "Wait for the combat lock to end." message; attack clicks after unlock but before the PvP reattack timer expires must be blocked by the reattack timer path.
+- Real player combat is blocked while either player is in a catching session, including melee, ranged, and spell triggers, so the training island cannot become an accidental PvP arena.
+
+**Tick/update-order lessons**:
+- NPC movement normally processes before player packets. That made the target effectively one tick "in the future" relative to what the player saw, especially on two-square catches. `SyntheticPvpTarget.updatePosition()` now only resets path; simulator movement happens later in the minigame tick after attack checks, matching the client's recently rendered position much more closely.
+- `Mob.face(...)` should not be blindly called on a moving NPC. The engine comment is correct: it marks a separate sprite update and can make the client show a stationary run-in-place frame before the movement step. The simulator now sets the facing needed for the movement packet, calls `resetSpriteChanged()`, then `setLocation(next, false)`.
+- After combat unlock, `nextMoveTick = tick` is important. `tick + 1` creates a visible pause where the target stands/runs in place before escaping.
+
+**Files touched**:
+- `server/plugins/com/openrsc/server/plugins/custom/minigames/PkCatchingSimulator.java` — new minigame plugin, session slots, target AI, fake PvP combat, scoring, highscores, `::leave`, login return handling.
+- `server/src/com/openrsc/server/net/rsc/handlers/AttackHandler.java` and `server/src/com/openrsc/server/model/action/WalkToMobAction.java` — simulator-owned target uses PvP catch distance/pathing/re-attack behavior while remaining an NPC.
+- `server/conf/server/defs/NpcDefsCustom.json`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/locs/NpcLocsVoidIsland.json` — trainer/target definitions and trainer spawn.
+- `scripts/patch-void-enclave-landscape.py`, `server/conf/server/data/Custom_Landscape.orsc`, `Client_Base/Cache/video/Custom_Landscape.orsc` — three ocean-island arena floors.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java`, `Commands.md` — player-visible `::leave` documentation.
+- `Client_Base/src/orsc/mudclient.java` — timer label generalized to "Time remaining".
+- `.gitignore` — runtime catching highscore file ignored.
+
+**Testing notes**:
+- Rebuild plugins after simulator edits: `ant -f server/build.xml compile_plugins`.
+- Rebuild core when touching `AttackHandler` / `WalkToMobAction`: `ant -f server/build.xml compile_core`.
+- Rebuild client when touching `EntityHandler` / `mudclient`: `ant -f Client_Base/build.xml compile`.
+- Regenerate arenas after patcher edits: `python3 scripts/patch-void-enclave-landscape.py`.
+- End-to-end manual test: log in, talk to trainer at `(214, 437)`, confirm, verify target stands still until first attack, verify two-square straight/diagonal catches, verify no phantom combat after repeated locks, verify early reattack is blocked, verify `::leave`, verify full timer completion records personal best/top 10.
+
+**Reversibility**: remove the plugin, NPC defs/locs/client defs, attack/walk special-cases, and arena sector patch. Restore `Custom_Landscape.orsc` by rerunning the patcher after deleting the catchsim sector logic. Delete the runtime properties highscore file if a clean leaderboard is desired. No schema migration and no opcode change.

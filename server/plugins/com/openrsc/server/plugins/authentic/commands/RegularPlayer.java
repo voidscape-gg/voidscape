@@ -1338,6 +1338,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@lre@Type :: before you enter your command, see the list below. %",
 		" %", // this adds a line of whitespace for readability
 		"@whi@::gameinfo - shows player and server information %",
+		"@whi@::leave - leaves PK catching practice early %",
 		"@whi@::online - shows players currently online %",
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",

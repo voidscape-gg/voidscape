@@ -2383,6 +2383,15 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Herald", "A silent figure watching the edge of the void.", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: PK catching trainer at Edgeville wilderness edge (server id 840)
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("PK catching trainer", "He teaches pursuit timing.", "Highscore", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: PK catching target spawned only inside the catching simulator (server id 841)
+		int runeKiteSprite = Config.S_WANT_CUSTOM_SPRITES ? 242 : 102;
+		sprites = new int[]{6, 33, 41, runeKiteSprite, -1, 74, -1, -1, 46, 11, -1, -1};
+		npcs.add(new NPCDef("PK catching target", "A runner for PK catching practice.", "", 1, 1, 99, 1, true, sprites, 6307872, 65535, 65535, 15523536, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

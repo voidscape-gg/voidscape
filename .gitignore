@@ -184,6 +184,9 @@ server/inc/sqlite/*.db-journal
 server/inc/sqlite/*.db-shm
 server/inc/sqlite/*.db-wal
 
+# Runtime minigame leaderboards
+server/conf/server/data/pk_catching_sim_highscores.properties
+
 # Per-developer client cache config (ip + port are written by scripts/run-client.sh)
 Client_Base/Cache/ip.txt
 Client_Base/Cache/port.txt

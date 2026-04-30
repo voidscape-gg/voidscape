@@ -50,6 +50,19 @@ VOID_ISLAND_CENTER_X = 24
 VOID_ISLAND_CENTER_Y = 24
 LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 
+CATCHSIM_SECTORS = (
+    # (sector name, sector base X, sector base Y, arena X offset, arena Y offset)
+    ("h0x55y38", 336, 48, 0, 0),
+    ("h0x56y38", 384, 48, 48, 0),
+    ("h0x57y38", 432, 48, 96, 0),
+)
+CATCHSIM_ISLAND_MIN_X, CATCHSIM_ISLAND_MAX_X = 340, 382
+CATCHSIM_ISLAND_MIN_Y, CATCHSIM_ISLAND_MAX_Y = 52, 90
+CATCHSIM_ISLAND_CENTER_X = 361
+CATCHSIM_ISLAND_CENTER_Y = 71
+CATCHSIM_ISLAND_RADIUS_X = 21.0
+CATCHSIM_ISLAND_RADIUS_Y = 19.0
+
 # DoorDef IDs
 HIGHWALL = 7
 HIGH_DOOR = 8
@@ -226,14 +239,62 @@ def patch_void_island_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
+def patch_catchsim_island_sector(sector_bytes: bytes, sector_name: str, sector_base_x: int, sector_base_y: int,
+                                 offset_x: int, offset_y: int) -> bytes:
+    """Bake a large walkable ocean island for the PK Catching Simulator."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - sector_base_x
+        ty = worldY - sector_base_y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {sector_name}")
+        return (tx * 48 + ty) * 10
+
+    land = set()
+    min_x = CATCHSIM_ISLAND_MIN_X + offset_x
+    max_x = CATCHSIM_ISLAND_MAX_X + offset_x
+    min_y = CATCHSIM_ISLAND_MIN_Y + offset_y
+    max_y = CATCHSIM_ISLAND_MAX_Y + offset_y
+    center_x = CATCHSIM_ISLAND_CENTER_X + offset_x
+    center_y = CATCHSIM_ISLAND_CENTER_Y + offset_y
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
+            nx = abs(x - center_x) / CATCHSIM_ISLAND_RADIUS_X
+            ny = abs(y - center_y) / CATCHSIM_ISLAND_RADIUS_Y
+            # Superellipse keeps the island compact while preserving a broad,
+            # rectangular practice floor for catching lines and corner turns.
+            if (nx ** 4) + (ny ** 4) <= 1.0:
+                land.add((x, y))
+
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        center_lane = x == center_x or y == center_y
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (104 + ((x * 5 + y * 11) % 28)) & 0xFF
+        buf[off + 2] = FLOOR_MID if center_lane else FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
 def main():
     # 1. Read clean source sectors from Authentic
     with zipfile.ZipFile(AUTHENTIC) as z:
         enclave_source = z.read(ENCLAVE_SECTOR)
         island_source = z.read(VOID_ISLAND_SECTOR)
+        catchsim_sources = {sector: z.read(sector) for sector, _, _, _, _ in CATCHSIM_SECTORS}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
     print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
     print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
+    for sector, source in catchsim_sources.items():
+        print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
 
     # 2. Apply patches
     walls = enclave_walls()
@@ -241,9 +302,14 @@ def main():
         ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
         VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
     }
+    for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
+        patched_sectors[sector] = patch_catchsim_island_sector(
+            catchsim_sources[sector], sector, base_x, base_y, offset_x, offset_y
+        )
     patched_sectors.update(legacy_sources)
     print(f"Patched {len(walls)} enclave walls into sector {ENCLAVE_SECTOR}")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
+    print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
     # server copy and the client cache copy (client reads its own when

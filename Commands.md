@@ -791,6 +791,10 @@ Regular Player Commands
 - gameinfo
   - Usage: `::gameinfo`
   - Shows your coordinates and total time played.
+- leave
+  - Usage: `::leave`
+  - Leaves the PK Catching Simulator early.
+  - Start the simulator by talking to the PK catching trainer at 214,437.
 - event
   - Usage: `::event`
   - Join the currently running server PK Event.

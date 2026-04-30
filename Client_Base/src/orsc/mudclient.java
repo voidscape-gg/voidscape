@@ -5626,11 +5626,11 @@ public final class mudclient implements Runnable {
 						centerX %= 60;
 						if (centerX < 10) {
 							this.getSurface().drawColoredStringCentered(256,
-								"Automatic server restart in: " + centerZ + ":0" + centerX, 0xFFFF00, 0, 1,
+								"Time remaining: " + centerZ + ":0" + centerX, 0xFFFF00, 0, 1,
 								this.getGameHeight() - 7);
 						} else {
 							this.getSurface().drawColoredStringCentered(256,
-								"Automatic server restart in: " + centerZ + ":" + centerX, 0xFFFF00, 0, 1,
+								"Time remaining: " + centerZ + ":" + centerX, 0xFFFF00, 0, 1,
 								this.getGameHeight() - 7);
 						}
 					}
