@@ -17,7 +17,6 @@ import com.openrsc.server.plugins.Functions;
  * runtime and retry the blocked step.
  */
 public final class AutoOpenRouteObstacle {
-	private static final int OPEN_DOOR_ID = 11;
 	private static final int CLOSED_BANK_DOORS_ID = 64;
 	private static final int OPEN_BANK_DOORS_ID = 63;
 
@@ -32,7 +31,7 @@ public final class AutoOpenRouteObstacle {
 		if (player == null) return false;
 		final Candidate candidate = find(player.getWorld(), cur, next);
 		if (candidate == null) return false;
-		return candidate.open(player, next);
+		return candidate.open(player);
 	}
 
 	private static Candidate find(final World world, final Point cur, final Point next) {
@@ -60,7 +59,10 @@ public final class AutoOpenRouteObstacle {
 			if (region != null) door = region.getWallGameObject(wallLoc, 1);
 		}
 		if (isAutoOpenableBoundaryDoor(door)) {
-			return new Candidate(door, OPEN_DOOR_ID, false, true);
+			// Open doorframe id 11 still has doorType=1, so replacing a boundary
+			// door with it leaves collision behind. Remove briefly and let the
+			// walking queue retry the step through the cleared edge.
+			return new Candidate(door, -1, true);
 		}
 
 		// Some RSC doors are diagonal boundary objects (dirs 2/3). They block
@@ -69,7 +71,9 @@ public final class AutoOpenRouteObstacle {
 		door = findBoundaryDoorAt(world, next, 2);
 		if (door == null) door = findBoundaryDoorAt(world, next, 3);
 		if (isAutoOpenableBoundaryDoor(door)) {
-			return new Candidate(door, OPEN_DOOR_ID, false, true);
+			// Diagonal boundary doors set FULL_BLOCK_A/B on their own tile; do
+			// not force-place the player onto that tile while it is still blocked.
+			return new Candidate(door, -1, true);
 		}
 		return null;
 	}
@@ -107,12 +111,12 @@ public final class AutoOpenRouteObstacle {
 		if (def.getType() != 1 && def.getType() != 2) return null;
 
 		if (object.getID() == CLOSED_BANK_DOORS_ID && !isLockedBankDoor(object)) {
-			return new Candidate(object, OPEN_BANK_DOORS_ID, false, false);
+			return new Candidate(object, OPEN_BANK_DOORS_ID, false);
 		}
 
 		if (!isDoorOrGateName(def.getName())) return null;
 		final int replacementId = passableSceneryReplacement(object.getID());
-		return new Candidate(object, replacementId, replacementId < 0, false);
+		return new Candidate(object, replacementId, replacementId < 0);
 	}
 
 	private static int passableSceneryReplacement(final int closedId) {
@@ -151,16 +155,14 @@ public final class AutoOpenRouteObstacle {
 		private final GameObject object;
 		private final int replacementId;
 		private final boolean removeOnly;
-		private final boolean passThrough;
 
-		private Candidate(final GameObject object, final int replacementId, final boolean removeOnly, final boolean passThrough) {
+		private Candidate(final GameObject object, final int replacementId, final boolean removeOnly) {
 			this.object = object;
 			this.replacementId = replacementId;
 			this.removeOnly = removeOnly;
-			this.passThrough = passThrough;
 		}
 
-		private boolean open(final Player player, final Point next) {
+		private boolean open(final Player player) {
 			if (object == null || object.isRemoved()) return false;
 			if (!removeOnly && object.getID() == replacementId) return false;
 			player.playSound("opendoor");
@@ -171,14 +173,7 @@ public final class AutoOpenRouteObstacle {
 					replacementId, object.getDirection(), object.getType());
 				Functions.changeloc(object, opened);
 			}
-			if (!passThrough) {
-				Functions.addloc(object.getWorld(), object.getLoc(), 3000);
-			}
-			if (passThrough && next != null) {
-				player.face(next);
-				player.setLocation(next);
-				player.stepIncrementActivity();
-			}
+			Functions.addloc(object.getWorld(), object.getLoc(), 3000);
 			return true;
 		}
 	}

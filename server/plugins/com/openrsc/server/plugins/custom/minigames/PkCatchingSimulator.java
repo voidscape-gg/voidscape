@@ -317,7 +317,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 	}
 
 	private boolean isTrainer(Npc npc) {
-		return npc != null && npc.getID() == TRAINER_NPC_ID && npc.getX() == TRAINER_X && npc.getY() == TRAINER_Y;
+		return npc != null && npc.getID() == TRAINER_NPC_ID;
 	}
 
 	private boolean involvesSimulatorPlayer(Player first, Player second) {

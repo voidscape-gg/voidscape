@@ -18,7 +18,7 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10019;
+	public static final int CLIENT_VERSION = 10029;
 	private static final int CACHE_VERSION = 4;
 	public static boolean MEMBER_WORLD = false;
 	public static boolean DISPLAY_LOGO_SPRITE = false;
@@ -57,6 +57,7 @@ public class Config {
 	public static boolean C_HIDE_LOGIN_BOX = false;
 	public static boolean C_BLOCK_GLOBAL_FRIEND = false;
 	public static int C_MOVE_PER_FRAME = 4;
+	public static boolean C_VOIDSCAPE_SCENE_OVERLAY = true;
 
 	/* Experience Config Menu */
 	public static int C_EXPERIENCE_COUNTER = 1;
@@ -92,7 +93,7 @@ public class Config {
 	public static boolean S_RIGHT_CLICK_TRADE = true;
 	public static boolean S_WANT_EQUIPMENT_TAB = false;
 	public static boolean S_WANT_BANK_PRESETS = true;
-	public static boolean S_WANT_LEFTCLICK_WEBS = false;
+	public static boolean S_WANT_LEFTCLICK_WEBS = true;
 	public static boolean S_NPC_KILL_COUNTERS = false;
 	// if you change these, and the config file,
 	// they will also change the options menu to

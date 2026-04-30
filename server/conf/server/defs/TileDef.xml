@@ -148,4 +148,11 @@
     <unknown>3</unknown>
     <objectType>0</objectType>
   </TileDef>
+  <!-- Voidscape: V3 ritual floor (id 28). Positive colour 64 references the
+       generated voidv3floor TextureDef on the client. -->
+  <TileDef>
+    <colour>64</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
 </TileDef-array>

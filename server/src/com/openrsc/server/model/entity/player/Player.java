@@ -3453,6 +3453,14 @@ public final class Player extends Mob {
 		return false;
 	}
 
+	public boolean getVoidscapeSceneOverlay() {
+		if (getCache().hasKey("setting_voidscape_scene_overlay")) {
+			return getCache().getBoolean("setting_voidscape_scene_overlay");
+		}
+
+		return true;
+	}
+
 	public int getFightModeSelectorToggle() {
 		if (getWorld().getServer().getConfig().FIGHTMODE_SELECTOR_TOGGLE) {
 			if (getCache().hasKey("setting_fightmode_selector")) {

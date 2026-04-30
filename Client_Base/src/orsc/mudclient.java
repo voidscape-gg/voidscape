@@ -5569,6 +5569,7 @@ public final class mudclient implements Runnable {
 					}
 
 					this.scene.endScene(-113);
+					drawVoidscapeSceneOverlay();
 					drawWorldWalkSceneRoute();
 
 					// Only draw ground item names if the feature is enabled
@@ -5705,7 +5706,7 @@ public final class mudclient implements Runnable {
 						// inside it so players see they're in a safe area.
 						int serverX = this.worldOffsetX + this.playerLocalX + this.midRegionBaseX - 2304;
 						int serverY = this.playerLocalZ + this.worldOffsetZ + this.midRegionBaseZ - 1776;
-						boolean inVoidEnclave = serverX >= 208 && serverX <= 229 && serverY >= 341 && serverY <= 361;
+						boolean inVoidEnclave = serverX >= 102 && serverX <= 123 && serverY >= 305 && serverY <= 325;
 
 						if (centerX > 0 && !inVoidEnclave) {
 							inWild = true;
@@ -6027,6 +6028,151 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	private void drawVoidscapeSceneOverlay() {
+		if (!C_VOIDSCAPE_SCENE_OVERLAY || this.getSurface() == null) {
+			return;
+		}
+
+		MudClientGraphics surface = this.getSurface();
+		int width = Math.min(this.getGameWidth(), surface.width2);
+		int height = Math.min(this.getGameHeight(), surface.height2);
+		if (width <= 0 || height <= 0 || surface.pixelData == null) {
+			return;
+		}
+
+		int[] pixels = surface.pixelData;
+		int cx = width / 2;
+		int cy = height / 2;
+		int maxDistance = Math.max(1, cx * cx + cy * cy);
+		int pulse = (int)(Math.sin((double)this.getFrameCounter() * 0.045D) * 5.0D);
+
+		for (int y = 0; y < height; y++) {
+			int dy = y - cy;
+			int row = y * surface.width2;
+			int scanline = ((y + this.getFrameCounter()) & 3) == 0 ? 5 : 0;
+			for (int x = 0; x < width; x++) {
+				int dx = x - cx;
+				int pixel = pixels[row + x] & 0xFFFFFF;
+				int r = (pixel >> 16) & 0xFF;
+				int g = (pixel >> 8) & 0xFF;
+				int b = pixel & 0xFF;
+				int luma = (r * 3 + g * 4 + b) >> 3;
+				int shadow = 255 - luma;
+				int maxChannel = Math.max(r, Math.max(g, b));
+				int minChannel = Math.min(r, Math.min(g, b));
+				boolean vegetation = g > 42 && g >= r + 8 && g >= b + 6;
+				boolean warmMaterial = r > 44 && g > 24 && r >= g && g >= b && r >= b + 18;
+				boolean stoneMaterial = luma > 28 && maxChannel - minChannel < 38;
+
+				r = (r * 206 + luma * 22) >> 8;
+				g = (g * 198 + luma * 24) >> 8;
+				b = (b * 220 + luma * 16) >> 8;
+
+				r += shadow / 34;
+				b += shadow / 12;
+
+				if (vegetation) {
+					r = mixVoidscapeChannel(r, 18 + luma / 7, 156);
+					g = mixVoidscapeChannel(g, 24 + luma / 11, 168);
+					b = mixVoidscapeChannel(b, 48 + luma / 4, 148);
+				} else if (warmMaterial) {
+					r = mixVoidscapeChannel(r, 50 + luma / 8, 118);
+					g = mixVoidscapeChannel(g, 29 + luma / 13, 132);
+					b = mixVoidscapeChannel(b, 58 + luma / 5, 122);
+				} else if (stoneMaterial) {
+					r = mixVoidscapeChannel(r, 38 + luma / 6, 82);
+					g = mixVoidscapeChannel(g, 34 + luma / 8, 92);
+					b = mixVoidscapeChannel(b, 58 + luma / 5, 92);
+				}
+
+				if (g > r && g > b) {
+					int excess = g - Math.max(r, b);
+					g -= excess * 3 / 5;
+					b += excess / 3;
+				}
+
+				int distance = dx * dx + dy * dy;
+				int vignette = distance * 120 / maxDistance - 22;
+				if (vignette > 0) {
+					int darken = Math.min(82, vignette);
+					int keep = 256 - darken;
+					r = (r * keep >> 8) + darken / 8;
+					g = (g * keep >> 8) + darken / 14;
+					b = (b * keep >> 8) + darken / 3;
+				}
+
+				if (scanline != 0) {
+					r = Math.max(0, r - scanline);
+					g = Math.max(0, g - scanline);
+					b = Math.max(0, b - scanline + pulse / 2);
+				}
+
+				pixels[row + x] = clampColor(r) << 16 | clampColor(g) << 8 | clampColor(b);
+			}
+		}
+
+		drawVoidscapeGlow(width / 10, height - height / 8, Math.max(44, width / 6), 0x8F3DFF, 35 + pulse);
+		drawVoidscapeGlow(width - width / 8, height / 7, Math.max(36, width / 8), 0x6D38D8, 22 + pulse);
+		surface.drawBoxAlpha(0, 0, width, 18, 0x020304, 36);
+		surface.drawBoxAlpha(0, height - 24, width, 24, 0x030206, 32);
+	}
+
+	private void drawVoidscapeGlow(int centerX, int centerY, int radius, int color, int strength) {
+		MudClientGraphics surface = this.getSurface();
+		int width = Math.min(this.getGameWidth(), surface.width2);
+		int height = Math.min(this.getGameHeight(), surface.height2);
+		int left = Math.max(0, centerX - radius);
+		int right = Math.min(width - 1, centerX + radius);
+		int top = Math.max(0, centerY - radius);
+		int bottom = Math.min(height - 1, centerY + radius);
+		int radiusSq = radius * radius;
+		int[] pixels = surface.pixelData;
+		int tr = (color >> 16) & 0xFF;
+		int tg = (color >> 8) & 0xFF;
+		int tb = color & 0xFF;
+
+		for (int y = top; y <= bottom; y++) {
+			int dy = y - centerY;
+			int row = y * surface.width2;
+			for (int x = left; x <= right; x++) {
+				int dx = x - centerX;
+				int distance = dx * dx + dy * dy;
+				if (distance >= radiusSq) {
+					continue;
+				}
+
+				int alpha = strength * (radiusSq - distance) / radiusSq;
+				if (alpha <= 0) {
+					continue;
+				}
+
+				int pixel = pixels[row + x] & 0xFFFFFF;
+				int r = (pixel >> 16) & 0xFF;
+				int g = (pixel >> 8) & 0xFF;
+				int b = pixel & 0xFF;
+				int keep = 256 - alpha;
+				r = (r * keep + tr * alpha) >> 8;
+				g = (g * keep + tg * alpha) >> 8;
+				b = (b * keep + tb * alpha) >> 8;
+				pixels[row + x] = r << 16 | g << 8 | b;
+			}
+		}
+	}
+
+	private static int clampColor(int value) {
+		if (value < 0) {
+			return 0;
+		}
+		if (value > 255) {
+			return 255;
+		}
+		return value;
+	}
+
+	private static int mixVoidscapeChannel(int value, int target, int alpha) {
+		return (value * (256 - alpha) + target * alpha) >> 8;
 	}
 
 	private void drawInputX() {
@@ -10352,6 +10498,10 @@ public final class mudclient implements Runnable {
 			}
 		}
 
+		this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+			"@whi@Game Look - " + (C_VOIDSCAPE_SCENE_OVERLAY ? "@mag@Voidscape" : "@red@Classic"),
+			48, null, null);
+
 		// ground items
 		if (S_GROUND_ITEM_TOGGLE) {
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
@@ -10866,6 +11016,14 @@ public final class mudclient implements Runnable {
 			this.packetHandler.getClientStream().bufferBits.putByte(45);
 			boolean setting = C_GROUND_ITEM_NAMES;
 			this.packetHandler.getClientStream().bufferBits.putByte(setting ? 1 : 0);
+			this.packetHandler.getClientStream().finishPacket();
+		}
+
+		if (settingIndex == 48 && this.mouseButtonClick == 1) {
+			C_VOIDSCAPE_SCENE_OVERLAY = !C_VOIDSCAPE_SCENE_OVERLAY;
+			this.packetHandler.getClientStream().newPacket(111);
+			this.packetHandler.getClientStream().bufferBits.putByte(47);
+			this.packetHandler.getClientStream().bufferBits.putByte(C_VOIDSCAPE_SCENE_OVERLAY ? 1 : 0);
 			this.packetHandler.getClientStream().finishPacket();
 		}
 
@@ -15020,10 +15178,10 @@ public final class mudclient implements Runnable {
 		loadSprite(spriteUtil + 2, "media", 4);
 		loadSprite(spriteUtil + 6, "media", 2);
 		loadSprite(spriteProjectile, "media", 7);
-		// voidscape: slots 3284/3285 are now void-enclave textures (voidwindow + stale).
-		// Skip them and load grey/gold mod crowns from their relocated slots 3296/3297.
-		loadSprite(3286, "media", 9);
-		loadSprite(3296, "media", 2);
+		// voidscape: architecture textures now occupy the old 3285+ media range.
+		// Load those UI/media sprites from their relocated safe slots instead.
+		loadSprite(3318, "media", 9);
+		loadSprite(3345, "media", 2);
 		// loadSprite(spriteLogo, "media", 1);
 
 		int i = EntityHandler.invPictureCount();
@@ -18869,6 +19027,10 @@ public final class mudclient implements Runnable {
 
 	public void setNatureRuneProtection(boolean b) {
 		C_WANT_NATURE_RUNE_PROTECTION = b;
+	}
+
+	public void setVoidscapeSceneOverlay(boolean b) {
+		C_VOIDSCAPE_SCENE_OVERLAY = b;
 	}
 
 	public void setFightModeSelectorToggle(int i) {

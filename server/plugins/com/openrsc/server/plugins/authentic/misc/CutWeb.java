@@ -15,11 +15,21 @@ import static com.openrsc.server.plugins.Functions.*;
 public class CutWeb implements UseBoundTrigger,
 	OpBoundTrigger {
 
-	private static int WEB = 24;
-	private static int VOID_WEB = 217;   // voidscape: AI-textured perimeter web at Void Enclave gates
+	private static final int WEB = 24;
+	private static final int VOID_WEB = 217;   // voidscape: AI-textured perimeter web at Void Enclave gates
 
 	private static boolean isWeb(int id) {
 		return id == WEB || id == VOID_WEB;
+	}
+
+	private static String targetName(GameObject obj) {
+		return obj.getID() == VOID_WEB ? "void web" : "web";
+	}
+
+	private static String successMessage(GameObject obj) {
+		return obj.getID() == VOID_WEB
+			? "You slice through the void web"
+			: "You slice through the web";
 	}
 
 	@Override
@@ -38,10 +48,10 @@ public class CutWeb implements UseBoundTrigger,
 				player.message("Nothing interesting happens");
 				return;
 			}
-			mes("You try to destroy the web...");
+			mes("You try to destroy the " + targetName(obj) + "...");
 			delay(3);
 			if (Formulae.cutWeb()) {
-				player.message("You slice through the web");
+				player.message(successMessage(obj));
 				ActionSender.sendSound(player, "combat1");
 				changeloc(obj, 30000, 16);
 			} else {
@@ -53,8 +63,8 @@ public class CutWeb implements UseBoundTrigger,
 
 	@Override
 	public boolean blockOpBound(Player player, GameObject obj, Integer click) {
-		return player.getConfig().WANT_LEFTCLICK_WEBS
-			&& isWeb(obj.getID());
+		return isWeb(obj.getID())
+			&& (player.getConfig().WANT_LEFTCLICK_WEBS || obj.getID() == VOID_WEB);
 	}
 
 	@Override
@@ -85,10 +95,10 @@ public class CutWeb implements UseBoundTrigger,
 		}
 
 		if (canCut) {
-			mes("You try to destroy the web...");
+			mes("You try to destroy the " + targetName(obj) + "...");
 			delay(3);
 			if (Formulae.cutWeb()) {
-				player.message("You slice through the web");
+				player.message(successMessage(obj));
 				delay();
 				delloc(obj);
 				addloc(obj.getWorld(), obj.getLoc(), 30000);

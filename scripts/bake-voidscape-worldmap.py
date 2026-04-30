@@ -28,6 +28,7 @@ VOID_DEEP = (35, 22, 48, 255)
 VOID_MID = (72, 48, 96, 255)
 VOID_ACCENT = (200, 48, 160, 255)
 VOID_EDGE = (15, 8, 28, 255)
+VOID_CLEAR = (56, 32, 0, 255)
 VOID_TEXT = "rgb(200,48,160)"
 
 
@@ -94,51 +95,92 @@ def draw_catchsim_islands(draw: ImageDraw.ImageDraw) -> None:
             draw_tile(draw, x, y, VOID_EDGE if edge else VOID_PURPLE if lane else VOID_MID)
 
 
-def enclave_wall_tiles() -> list[tuple[int, int]]:
-    walls = []
-    for x in range(208, 230):
-        if x != 219:
-            walls.append((x, 341))
-            walls.append((x, 362))
-    for y in range(341, 362):
-        if y != 351:
-            walls.append((208, y))
-            walls.append((230, y))
-    # Main sanctum and two shrines. This mirrors the landscape patcher enough
-    # for the world map to read as the same compound shape.
-    for x in range(214, 223):
-        walls.append((x, 347))
-        if x != 218:
-            walls.append((x, 355))
-    for y in range(347, 355):
-        walls.append((214, y))
-        walls.append((223, y))
-    for x in range(210, 214):
-        walls.append((x, 347))
-        if x != 212:
-            walls.append((x, 351))
-    for y in range(347, 351):
-        walls.append((210, y))
-        walls.append((214, y))
-    for x in range(224, 228):
-        walls.append((x, 347))
-        if x != 225:
-            walls.append((x, 351))
-    for y in range(347, 351):
-        walls.append((224, y))
-        walls.append((228, y))
+def is_enclave_floor(x: int, y: int) -> bool:
+    if not (102 <= x <= 123 and 305 <= y <= 325):
+        return False
+    if x < 105 and y < 308 and (105 - x) + (308 - y) > 3:
+        return False
+    if x < 105 and y > 322 and (105 - x) + (y - 322) > 3:
+        return False
+    if x > 120 and y < 308 and (x - 120) + (308 - y) > 3:
+        return False
+    if x > 120 and y > 322 and (x - 120) + (y - 322) > 3:
+        return False
+    return True
+
+
+def enclave_floor_tiles() -> set[tuple[int, int]]:
+    return {(x, y) for x in range(102, 124) for y in range(305, 326) if is_enclave_floor(x, y)}
+
+
+def enclave_floor_color(x: int, y: int) -> tuple[int, int, int, int]:
+    center_x, center_y = 113, 315
+    dx = abs(x - center_x)
+    dy = abs(y - center_y)
+    dist2 = dx * dx + dy * dy
+    if (dx <= 1 and dy <= 1) or (dx == 0 and dy <= 4) or (dy == 0 and dx <= 4):
+        return VOID_ACCENT
+    if 8 <= dist2 <= 18 or x == center_x or y == center_y:
+        return VOID_PURPLE
+    if (x, y) in ((110, 312), (116, 312), (110, 318), (116, 318)):
+        return VOID_ACCENT
+    return VOID_DEEP
+
+
+def enclave_wall_tiles() -> set[tuple[int, int]]:
+    walls = set()
+    floor = enclave_floor_tiles()
+    gates = {(113, 305), (113, 326), (102, 315), (124, 315)}
+    for x, y in floor:
+        for nx, ny, wx, wy in (
+            (x, y - 1, x, y),
+            (x, y + 1, x, y + 1),
+            (x - 1, y, x, y),
+            (x + 1, y, x + 1, y),
+        ):
+            if (nx, ny) not in floor and (wx, wy) not in gates:
+                walls.add((wx, wy))
+
+    for x in range(108, 119):
+        walls.add((x, 308))
+        if x < 112 or x > 114:
+            walls.add((x, 313))
+    for y in range(308, 313):
+        walls.add((108, y))
+        walls.add((119, y))
+    for x in range(104, 110):
+        walls.add((x, 312))
+        walls.add((x, 318))
+    for y in range(312, 318):
+        walls.add((104, y))
+        if y not in (314, 315):
+            walls.add((110, y))
+    for x in range(116, 122):
+        walls.add((x, 312))
+        walls.add((x, 318))
+    for y in range(312, 318):
+        if y not in (314, 315):
+            walls.add((116, y))
+        walls.add((122, y))
     return walls
 
 
 def draw_void_enclave(draw: ImageDraw.ImageDraw) -> None:
-    for x in range(208, 230):
-        for y in range(341, 362):
-            draw_tile(draw, x, y, VOID_DEEP)
+    # Clear the previous baked enclave footprint first. The TSV block is
+    # idempotent, but the PNG itself is a baked raster layer.
+    for x in range(208, 231):
+        for y in range(341, 363):
+            draw_tile(draw, x, y, VOID_CLEAR)
+    for x in range(100, 127):
+        for y in range(303, 329):
+            draw_tile(draw, x, y, VOID_CLEAR)
+    for x, y in enclave_floor_tiles():
+        draw_tile(draw, x, y, enclave_floor_color(x, y))
     for x, y in enclave_wall_tiles():
         draw_tile(draw, x, y, VOID_PURPLE)
-    for x, y in ((219, 341), (219, 362), (208, 351), (230, 351)):
+    for x, y in ((113, 305), (113, 326), (102, 315), (124, 315)):
         draw_plus(draw, x, y, VOID_ACCENT)
-    for x, y in ((212, 349), (217, 442), (225, 349), (210, 439), (217, 460), (214, 437)):
+    for x, y in ((105, 314), (112, 309), (119, 314), (217, 442), (210, 439), (217, 460), (214, 437)):
         draw_plus(draw, x, y, VOID_ACCENT)
 
 
@@ -173,7 +215,7 @@ def point_row(kind: str, world_x: int, world_y: int) -> str:
 def bake_tsv() -> None:
     custom_labels = [
         label_row("Void\\nIsland", 24, 16, 10, 1),
-        label_row("Void\\nEnclave", 219, 351, 10, 1),
+        label_row("Void\\nEnclave", 113, 315, 10, 1),
         label_row("PK Catching\\nSimulator", 409, 72, 10, 1),
         label_row("Void\\nAuctioneer", 217, 460, 8, 0),
         label_row("Edgar", 124, 640, 8, 0),
@@ -187,8 +229,8 @@ def bake_tsv() -> None:
         point_row("bank", 210, 439),           # Edgeville chest
         point_row("altar", 217, 442),          # Edgeville altar
         point_row("combat-practice", 214, 437),
-        point_row("bank", 215, 347),           # Enclave bank shrine
-        point_row("altar", 223, 348),          # Enclave altar
+        point_row("bank", 105, 314),           # Enclave bank shrine
+        point_row("altar", 112, 309),          # Enclave altar
         point_row("combat-practice", 409, 72),
     ]
     points = strip_custom_block(POINTS)

@@ -681,10 +681,10 @@ Long iteration on top of the original slice-5 enclave to push the visual identit
 | voidbricks | 55 | 3280 | DoorDef "Void Wall" (id 214) — sanctum interior walls |
 | voidouter | 56 | 3281 | DoorDef "Void Highwall" (id 215) — outer perimeter, tall |
 | voidsigilwall | 57 | 3282 | DoorDef "Void Sigil Wall" (id 216) — pentagram-mural accents |
-| voidweb | 58 | 3283 | DoorDef "Void Web" (id 217) — **orphan**, unused, replaced by vanilla web |
+| voidweb | 58 | 3283 | DoorDef "Void Web" (id 217) — four cuttable perimeter gate webs |
 | voidwindow | 59 | 3284 | DoorDef "Void Window" (id 218) — sanctum E/W walls |
 
-Plus two orphan sprites at index 2761 (a "Void Sigil" item-icon attempt before realising the user wanted landscape assets, not items) and the two `Authentic_Sprites.orsc.bak*` snapshots already on disk for rollback.
+Plus two orphan sprites at index 2761 (a "Void Sigil" item-icon attempt before realising the user wanted landscape assets, not items). Temporary `Authentic_Sprites.orsc.bak*` snapshots were created during local sprite-packing work but are not part of the committed artifact set.
 
 **DoorDef structure surprise** (`server/src/.../external/DoorDef.java` vs `Client_Base/.../entityhandling/defs/DoorDef.java`). Server-side field name is `modelVar1` (matches the XML element); client-side field name is `wallObjectHeight`. The XStream-style XML deserializer maps element names to server fields directly, so the XML stays valid. The client constructor's 7th positional arg is `wallObjectHeight` — same value, different name. modelVar1=192 = standard interior wall height, 275 = Highwall, 70 = battlement. Knowing that the integer is a *height* (not a model-id) is what made it possible to set custom-textured walls at the right scale (e.g. `Void Highwall` uses 275 to match the perimeter Highwall it replaces).
 
@@ -694,7 +694,7 @@ Plus two orphan sprites at index 2761 (a "Void Sigil" item-icon attempt before r
 
 **Bank chest F2P bypass** (`ShantayPassNpcs.java:458-465`). `BANK_CHEST` (id 942) is normally gated by `MEMBER_WORLD` — F2P worlds get "you must be on a members' world to do that" instead of opening the bank. We'd reused id 942 for the enclave bank chest, so on voidscape (F2P) it was rejecting players. Patched to bypass the member check when the chest's world coords are inside the enclave footprint. Same pattern works for any future F2P-bypass-on-coords needs.
 
-**Outcome — final aesthetic state**. Outer perimeter is tall AI-textured void stone (`voidouter`) with 4 web-sealed gates (vanilla web id 24, JSON-registered, cuttable). Sanctum interior walls are AI-textured void brick (`voidbricks`) with a pentagram-mural sigil at the north midpoint and stained-glass void windows at the east + west midpoints. Bank shrine + healing-pool shrine use the same voidbricks with one sigil-mural accent each. Floor is plain neutral grey (`TileDef` id 25, RGB 80/80/80) — purple lives only in the wall textures + sigil murals + windows for contrast. Pre-existing wilderness scenery (trees, gravestones, mushrooms — 19 items per the boot log) stripped at boot via `WorldPopulator`'s `WANT_VOID_ENCLAVE` filter. Bank chest, prayer altar, healing pool sit free-standing in the courtyard.
+**Outcome — final aesthetic state**. Outer perimeter is tall AI-textured void stone (`voidouter`) with 4 web-sealed gates (custom Void web id 217, JSON-registered, cuttable). Sanctum interior walls are AI-textured void brick (`voidbricks`) with a pentagram-mural sigil at the north midpoint and stained-glass void windows at the east + west midpoints. Bank shrine + healing-pool shrine use the same voidbricks with one sigil-mural accent each. Floor is plain neutral grey (`TileDef` id 25, RGB 80/80/80) — purple lives only in the wall textures + sigil murals + windows for contrast. Pre-existing wilderness scenery (trees, gravestones, mushrooms — 19 items per the boot log) stripped at boot via `WorldPopulator`'s `WANT_VOID_ENCLAVE` filter. Bank chest, prayer altar, healing pool sit free-standing in the courtyard.
 
 **`CLIENT_VERSION` evolution this session**: 10012 (slice-5 baseline) → 10013 (custom Healing pool def) → 10014 (`S_WANT_CUSTOM_LANDSCAPE = true` for custom landscape archive) → 10015 (added Void Floor TileDef) → 10016 (Void Wall DoorDef + voidbricks TextureDef) → 10017 (added voidouter + voidsigilwall TextureDefs and DoorDefs + 2nd TileDef) → 10018 (added voidweb + voidwindow TextureDefs and DoorDefs + 3rd TileDef). Each bump matched in `local.conf`'s `client_version`. Server enforces version match via `enforce_custom_client_version: true` so stale clients are rejected at login.
 
@@ -705,12 +705,12 @@ Plus two orphan sprites at index 2761 (a "Void Sigil" item-icon attempt before r
 - `server/conf/server/defs/DoorDef.xml` — five new void DoorDefs (Void Wall 214, Void Highwall 215, Void Sigil Wall 216, Void Web 217, Void Window 218). Void Web is currently orphan.
 - `server/conf/server/defs/TileDef.xml` — three new TileDefs (25 grey, 26 bright magenta, 27 mid purple).
 - `server/conf/server/defs/GameObjectDef.xml` — Healing pool (id 1296).
-- `server/conf/server/defs/locs/BoundaryLocsVoidEnclave.json` — 4 vanilla-web (id 24) BoundaryLocs at the perimeter gates.
+- `server/conf/server/defs/locs/BoundaryLocsVoidEnclave.json` — 4 custom Void web (id 217) BoundaryLocs at the perimeter gates.
 - `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json` — 19 amenity/atmosphere placements.
 - `server/conf/server/data/Custom_Landscape.orsc` — patched sector h0x52y44 (binary, regenerable via `scripts/patch-void-enclave-landscape.py`).
 - `server/local.conf` — `want_void_enclave: true`, `custom_landscape: true` (with the trailing duplicate removed), `client_version: 10018`.
 - `server/plugins/.../authentic/npcs/alkharid/ShantayPassNpcs.java:458-465` — F2P bank-chest bypass on enclave coords.
-- `server/plugins/.../authentic/misc/CutWeb.java` — `isWeb()` helper recognises both vanilla web id 24 and (orphan) Void Web id 217.
+- `server/plugins/.../authentic/misc/CutWeb.java` — `isWeb()` helper recognises both vanilla web id 24 and custom Void web id 217.
 - `server/plugins/.../custom/misc/VoidEnclaveHealingPool.java` — new OpLocTrigger for fountain id 1296.
 - `Client_Base/src/orsc/Config.java` — `S_WANT_CUSTOM_LANDSCAPE = true`, `CLIENT_VERSION = 10018`.
 - `Client_Base/src/orsc/mudclient.java:5391-5398` — wilderness skull/level overlay suppression inside enclave bounds (slice 4, kept).
@@ -723,15 +723,15 @@ Plus two orphan sprites at index 2761 (a "Void Sigil" item-icon attempt before r
 
 **Reversibility**: 
 - Set `want_void_enclave: false` and `custom_landscape: false` in `local.conf` → enclave content + custom landscape both dormant; wall/floor/scenery byte additions in `Custom_Landscape.orsc` simply aren't loaded.
-- The orphan DoorDefs (Void Web id 217), TextureDefs (voidweb id 58), and sprite (3283) don't render but also don't cost anything — leaving them in place avoids id-shift cascades through the wall byte values for everything else.
+- The custom Void Web DoorDef (id 217), TextureDef (voidweb id 58), and sprite (3283) are live at the four enclave gate boundaries. Reverting them requires restoring those BoundaryLocs to vanilla web id 24 or another gate object.
 - `WorldLoader.java` change is a pure ordering tweak; preservation/authentic worlds with `custom_landscape: false` get exactly the same behaviour as before.
 - The `ShantayPassNpcs.java` bypass is bounds-gated to the enclave coords only; no other bank chest in the world is affected.
-- All AI-generated sprites have `Authentic_Sprites.orsc.bak` and `.bak.preSigil` snapshots on disk for rollback.
+- Rollback should use git history for the tracked sprite archive; temporary local `.bak*` sprite snapshots are not part of the committed artifact set.
 
 **Open follow-ups** (deferred):
 - Custom Void Acolyte NPC standing in the sanctum (Edgar pipeline + AI-generated character sprite).
 - Roofs over the buildings — last attempt with `roofTexture=1` looked broken when the user toggled "show roofs" on; needs an AI-textured roof variant + verifying the `roofTexture` byte's lookup path (TileDef? something else?).
-- Cleanup pass to remove the orphan Void Web DoorDef, voidweb TextureDef, voidweb sprite, and Void Sigil ground-item sprite (low priority — they don't break anything).
+- Cleanup pass to remove the orphan Void Sigil ground-item sprite (low priority — it doesn't break anything).
 - World-map PNG regeneration (`scripts/render-worldmap.sh`) so the in-game minimap world-view shows the enclave silhouette.
 
 
@@ -1043,6 +1043,7 @@ New server-side training minigame for practicing RSC-style PK catching without a
 **PvP-combat lessons learned**:
 - Normal NPC combat cannot be used directly for this trainer. It caused target-first attacks, early fight termination, "fighting air" phantom combat, and re-attack lockouts because the NPC combat event and player-vs-player timing rules do not share the same state machine.
 - The stable approach is a synthetic NPC with a `pkcatchsim_owner` attribute and a simulator-only combat event. `AttackHandler` and `WalkToMobAction` special-case that owned NPC just enough to treat attack pathing as PvP catching while still routing through the normal client attack click path.
+- Follow-up fix: `PluginHandler` now resolves trigger methods by assignable parameter types after exact lookup misses, so NPC subclasses such as the simulator's synthetic target still match `AttackNpcTrigger.blockAttackNpc(Player, Npc)` and `onAttackNpc(Player, Npc)` without reflection errors.
 - Do not make the runner a real player session or automate client input. The target is server-side only; it simulates the state transitions a fleeing player creates.
 - Reattack too fast is real PvP behavior. The simulator sets both `player.setRanAwayTimer()` and `target.setRanAwayTimer()` when the combat lock releases, and `AttackHandler` blocks too-early reattacks using `PVP_REATTACK_TIMER`. This makes early clicks stop the player instead of instantly starting another fight.
 - "Clicked from too far" should not cancel pursuit. Real PvP attack clicks keep the attacker following the target and fire when range becomes valid. The simulator preserves following + `WalkToMobAction` and inspects the pending action each tick instead of stopping the player on the original out-of-range click.
@@ -1058,6 +1059,7 @@ New server-side training minigame for practicing RSC-style PK catching without a
 
 **Files touched**:
 - `server/plugins/com/openrsc/server/plugins/custom/minigames/PkCatchingSimulator.java` — new minigame plugin, session slots, target AI, fake PvP combat, scoring, highscores, `::leave`, login return handling.
+- `server/src/com/openrsc/server/plugins/handler/PluginHandler.java` — trigger method lookup supports subclass arguments such as the synthetic catching target.
 - `server/src/com/openrsc/server/net/rsc/handlers/AttackHandler.java` and `server/src/com/openrsc/server/model/action/WalkToMobAction.java` — simulator-owned target uses PvP catch distance/pathing/re-attack behavior while remaining an NPC.
 - `server/conf/server/defs/NpcDefsCustom.json`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/locs/NpcLocsVoidIsland.json` — trainer/target definitions and trainer spawn.
 - `scripts/patch-void-enclave-landscape.py`, `server/conf/server/data/Custom_Landscape.orsc`, `Client_Base/Cache/video/Custom_Landscape.orsc` — three ocean-island arena floors.
@@ -1127,3 +1129,246 @@ Files touched:
 - `server/src/com/openrsc/server/model/WorldPathfinder.java`
 
 Reversibility: remove the `Tiles` button/scene projection helper and revert `WalkingQueue`/`WorldPathfinder` to the old inline gate-only checks. No protocol change, DB migration, or client-version bump.
+
+### 2026-04-30 — Void Enclave v2 aesthetic pass
+
+Reworked the Wilderness Void Enclave from a rectangular utility compound into a stepped obsidian citadel.
+
+**Visual / layout changes**:
+- Generated a new five-panel enclave texture sheet and packed replacement texture sprites into the existing TextureDef slots `55..59` (`Authentic_Sprites.orsc` indices `3280..3284`). No new TextureDefs were added, avoiding another crown/media-slot collision.
+- `scripts/patch-void-enclave-landscape.py` now builds the enclave from a stepped octagonal floor mask, generates the outer wall bytes from that mask, adds a north altar apse plus west/east amenity alcoves, and paints a ritual-floor pattern through the central court.
+- The four clickable gate boundaries use custom DoorDef id `217` as "Void web". `CutWeb.java` handles both knife/weapon use and direct `Slice` clicks, so each side of the enclosure has a cuttable entrance.
+- `SceneryLocsVoidEnclave.json` was re-staged around the new plan: altar in the north apse, bank chest west, healing pool east, obelisks/candles around the central ritual court, skulls/cauldron/pillars as perimeter set dressing. Edgeville chest/altar entries are retained.
+- `bake-voidscape-worldmap.py` mirrors the new footprint and now clears the old baked enclave raster area before drawing, making repeated bakes idempotent for this overlay.
+
+Files touched:
+- `tools/voidscim-art/out/void-enclave-v2/*` — generated concept sheet, cropped texture PNGs, and sidecar metadata.
+- `Client_Base/Cache/video/Authentic_Sprites.orsc` — replacement texture sprites at `3280..3284`.
+- `scripts/patch-void-enclave-landscape.py`, `server/conf/server/data/Custom_Landscape.orsc`, `Client_Base/Cache/video/Custom_Landscape.orsc`.
+- `server/conf/server/defs/locs/{BoundaryLocsVoidEnclave.json,SceneryLocsVoidEnclave.json}`.
+- `server/conf/server/defs/DoorDef.xml`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/plugins/com/openrsc/server/plugins/authentic/misc/CutWeb.java`.
+- `scripts/bake-voidscape-worldmap.py`, `Client_Base/Cache/worldmap/{plane-0.png,labels.tsv,points.tsv}`.
+- `Client_Base/src/orsc/Config.java` — client version `10019` → `10020` for the cache/client definition refresh; matching local server config updated in gitignored `server/local.conf`.
+
+Reversibility: restore `Authentic_Sprites.orsc` from git history, rerun the landscape patcher after reverting the footprint/scenery edits, and rerun the world-map bake from a clean world-map base. No schema migration or protocol change.
+
+### 2026-04-30 — Autowalk boundary-door stuck fix
+
+Fixed a blocker where the world-map autowalker could leave movement feeling disabled after opening a boundary door.
+
+Cause: `AutoOpenRouteObstacle` replaced closed boundary doors with DoorDef id `11` and manually moved the player onto the next tile. Id `11` is visually an open doorframe, but it still has `doorType=1`, so it leaves collision behind. For diagonal boundary doors that collision is `FULL_BLOCK_A/B` on the destination tile itself, which can make the next movement packet fail immediately.
+
+Fix: autowalk-opened boundary doors are now temporarily removed, scheduled to respawn after 3 seconds, and the blocked step is retried by `WalkingQueue` on the next tick. Scenery doors/gates keep the existing passable-replacement-or-temporary-removal behavior.
+
+Files touched:
+- `server/src/com/openrsc/server/model/AutoOpenRouteObstacle.java`
+
+Runtime note: rebuild `server/core.jar` and fully restart the server. No client change or version bump.
+
+### 2026-04-30 — Void Enclave cuttable gate webs
+
+The v2 enclave gate objects are now proper cuttable web gates instead of decorative boundary walls, and global left-click web cutting is enabled.
+
+Changes:
+- DoorDef id `217` is named `Void web` with client/server `Slice` + `Examine` commands.
+- `CutWeb.java` always handles direct clicks on Void web id `217`.
+- Global `want_leftclick_webs` is now enabled, and the client static default `S_WANT_LEFTCLICK_WEBS` is true, so vanilla web id `24` also gets `Slice` as its primary action.
+- Client version bumped `10020` → `10022` so stale clients with old boundary definitions are rejected.
+
+Files touched:
+- `server/conf/server/defs/DoorDef.xml`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/misc/CutWeb.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 — Void Enclave Acolyte NPC
+
+Added a resident NPC to make the enclave feel inhabited instead of purely utilitarian.
+
+Details:
+- New custom NPC id `842`: `Void Acolyte`, a non-attackable robed figure with the `Commune` command.
+- Spawned at `(219, 348)` in the enclave sanctum via `NpcLocsVoidEnclave.json`, loaded only when `WANT_VOID_ENCLAVE` is enabled.
+- New `VoidAcolyte` plugin handles both talk and `Commune`, with dialogue about the enclave, its safe-zone walls, and the web-sealed gates.
+- Client NPC definition appended in positional order after id `841`; client version bumped `10022` → `10023`.
+
+Files touched:
+- `server/conf/server/defs/NpcDefsCustom.json`
+- `server/conf/server/defs/locs/NpcLocsVoidEnclave.json`
+- `server/src/com/openrsc/server/database/WorldPopulator.java`
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidAcolyte.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 — Void Enclave General Store
+
+Added a F2P-only themed general store inside the Void Enclave.
+
+Details:
+- New custom NPC id `843`: `Void Quartermaster`, a non-attackable trader with the `Trade` command.
+- Spawned at `(212, 349)` near the enclave's west-side bank chest via `NpcLocsVoidEnclave.json`.
+- New `VoidGeneralStore` plugin registers a true general store named `Void Enclave`.
+- Stock is intentionally limited to server definitions with `isMembersOnly: 0`: web-cutting supplies, food, black robes, black weapons/armour, F2P runes, bronze arrows, skulls, and silk.
+- Client NPC definition appended after id `842`; client version bumped `10023` → `10024`.
+
+Files touched:
+- `server/conf/server/defs/NpcDefsCustom.json`
+- `server/conf/server/defs/locs/NpcLocsVoidEnclave.json`
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidGeneralStore.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 - Void Rifts prototype removed
+
+We prototyped a dynamic world event outside the Void Enclave, tested it through an admin spawn command, then removed it before committing because the current direction moved away from rift events.
+
+Removed behavior:
+- Scheduled `VoidRifts` registrar that opened timed world rifts.
+- Runtime rift markers using object id `1147` with a `void_rift` attribute.
+- Temporary Voidling spawns around rift sites.
+- Admin/dev command `::voidrift` and aliases `::spawnrift`, `::forcerift`, `::vrift`.
+
+Learned:
+- The prototype was cleanly isolated to one registrar/plugin and one command, so removal did not require cache changes, definition id cleanup, or a client version bump.
+- If world events return later, keep them behind an explicit config flag from the start and document the reward loop before enabling scheduled spawns.
+
+Files removed or updated:
+- Removed `server/plugins/com/openrsc/server/plugins/custom/misc/VoidRifts.java`
+- Removed `server/plugins/com/openrsc/server/plugins/custom/commands/VoidRiftCommand.java`
+- Updated `Commands.md`
+
+### 2026-04-30 — In-game Voidscape visual overlay
+
+Added an optional in-game visual style that echoes the Voidscape login screen while preserving the classic view as a player choice.
+
+Details:
+- The client now applies a world-scene-only post-render pass when enabled: charcoal/purple color grading, a soft vignette, subtle scanline texture, and low-strength animated purple edge glows.
+- The post-render pass also remaps obvious vegetation, warm wood/roof materials, and neutral stone into the Voidscape palette so trees, fences, roofs, and walls do not retain the classic green/brown/gray look.
+- The pass runs immediately after `Scene.endScene` and before UI rendering, so chat, inventory, minimap, overhead labels, route highlights, and menus stay readable/classic.
+- General settings now exposes `Game Look - Voidscape/Classic`.
+- The choice is persisted through the normal game-settings packet as custom setting byte `47` (`setting_voidscape_scene_overlay`) and defaults to `Voidscape` for new/unset players.
+- Client version bumped `10024` → `10025` for the extra settings byte; matching local server config updated.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/src/orsc/PacketHandler.java`
+- `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/net/rsc/handlers/GameSettingHandler.java`
+- `server/src/com/openrsc/server/model/entity/player/Player.java`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 — Void Enclave V3 architecture and scenery pass
+
+First real world-art pass after the global Voidscape overlay. This moves the enclave beyond post-processing by giving the baked map its own generated material set, clearer building silhouettes, and denser themed scenery.
+
+Details:
+- Generated a six-cell Voidscape architecture atlas and cropped it into 128x128 texture sprites: outer crystal stone, inner obsidian brickwork, sigil panel, slate roof, cracked ritual floor, and arched void window.
+- Packed those textures into `Authentic_Sprites.orsc` at archive slots `3285-3290` and registered TextureDef ids `60-65`.
+- Relocated the remaining media/crown sprites out of the texture-loader growth range: `3286-3294` now mirror at `3318-3326`, and the grey/gold crowns now mirror at `3345-3346`. `mudclient.loadSprites()` and `EntityHandler.loadCrowns()` load the relocated slots.
+- Added DoorDef ids `219-223` for V3 bastion walls, inner walls, sigil panels, roof edging, and rift windows. Added TileDef id `28` for the generated cracked-stone floor and a client ElevationDef for the generated roof material.
+- Reworked `patch-void-enclave-landscape.py`: perimeter walls now use the V3 bastion/sigil textures, the north sanctum is an enclosed shrine with a south entrance, the west shop/bank and east healing-pool huts now have actual facades and door openings, and enclave floors use the generated cracked-stone tile outside the ritual accents.
+- Added decorative object defs `1297-1302` (`Void brazier`, `Void obelisk`, `Void monolith`, `Void crystal`, `Void supply crate`, `Void dead tree`) and placed them through `SceneryLocsVoidEnclave.json`.
+- Regenerated both server and client `Custom_Landscape.orsc` copies. Client version bumped `10025` → `10026`.
+
+Files touched:
+- `Client_Base/Cache/video/Authentic_Sprites.orsc`
+- `Client_Base/Cache/video/Custom_Landscape.orsc`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/src/orsc/mudclient.java`
+- `server/conf/server/data/Custom_Landscape.orsc`
+- `server/conf/server/defs/DoorDef.xml`
+- `server/conf/server/defs/GameObjectDef.xml`
+- `server/conf/server/defs/TileDef.xml`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `scripts/patch-void-enclave-landscape.py`
+- `tools/voidscim-art/prompts/void-enclave-v3-architecture-atlas.txt`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 - Void Enclave cleanup and vanilla-style web recolor
+
+Toned the V3 enclave back down after the first scenery pass overfilled the space, then replaced the custom door-like web art with a purple recolor of the original web silhouette.
+
+Details:
+- Reduced `SceneryLocsVoidEnclave.json` to the core readable props: altar, bank chest, healing pool, two braziers, two dead trees, and the retained Edgeville one-offs.
+- Widened the west/east hut entrances in `patch-void-enclave-landscape.py` so shop and healing entrances stay visually and physically clear.
+- Repacked archive slot `3283` (`voidweb`, TextureDef id `58`) with a purple recolor of the authentic web texture source. The custom DoorDef id stays `217`, so the four perimeter gates remain cuttable without shifting ids.
+- Matched the client and server DoorDef height to the authentic web height (`192`) and kept the primary command as `Slice`.
+- Client version bumped `10026` -> `10027` for the changed cache/definition pair.
+
+Files touched:
+- `Client_Base/Cache/video/Authentic_Sprites.orsc`
+- `Client_Base/Cache/video/Custom_Landscape.orsc`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/conf/server/data/Custom_Landscape.orsc`
+- `server/conf/server/defs/DoorDef.xml`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `scripts/patch-void-enclave-landscape.py`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 - Void Enclave relocation to 113,315
+
+Moved the whole enclave to a new west-Wilderness position centered on `(113,315)`.
+
+Details:
+- `patch-void-enclave-landscape.py` now bakes the enclave into sector `h0x50y43` and restores the old sector `h0x52y44` from authentic landscape data so the previous location is removed.
+- Runtime boundary, scenery, safe-zone, healing-pool, F2P bank-chest, and client wilderness-overlay checks now use the moved footprint (`X=102..123`, `Y=305..325`; gate webs at `(113,305)`, `(113,326)`, `(102,315)`, `(124,315)`).
+- `WorldPopulator` clears authentic scenery/boundaries and base NPC spawns from a buffered rectangle around the new footprint (`X=100..126`, `Y=303..328`) before custom enclave content loads, removing the local trees, stumps, and wilderness clutter.
+- The two enclave NPCs now have small roaming boxes, and the Edgeville Void Auctioneer plus PK catching trainer also roam instead of standing on a single tile.
+- World-map overlay label/POIs were moved to the new enclave coordinates. Client version bumped `10027` -> `10028`.
+- Follow-up fix: the PK catching trainer plugin now identifies the trainer by dedicated NPC id `840` instead of exact coordinate `(214,437)`, so `Talk-to` and `Highscore` continue to work while the trainer roams.
+
+Files touched:
+- `scripts/patch-void-enclave-landscape.py`
+- `server/conf/server/data/Custom_Landscape.orsc`
+- `Client_Base/Cache/video/Custom_Landscape.orsc`
+- `server/conf/server/defs/locs/BoundaryLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/NpcLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/NpcLocsAuction.json`
+- `server/conf/server/defs/locs/NpcLocsVoidIsland.json`
+- `server/src/com/openrsc/server/database/WorldPopulator.java`
+- `server/src/com/openrsc/server/model/Point.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/npcs/alkharid/ShantayPassNpcs.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidEnclaveHealingPool.java`
+- `server/plugins/com/openrsc/server/plugins/custom/minigames/PkCatchingSimulator.java`
+- `Client_Base/src/orsc/mudclient.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/Cache/worldmap/plane-0.png`
+- `Client_Base/Cache/worldmap/labels.tsv`
+- `Client_Base/Cache/worldmap/points.tsv`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 - Void Enclave waystones
+
+Added useful scenery to the open south entry wings without blocking movement.
+
+Details:
+- Added object id `1303`, `Void waystone`, using the existing obelisk model with a `Return` command.
+- Placed paired waystones at `(106,321)` and `(120,321)` inside the moved enclave.
+- Added `VoidEnclaveWaystone` plugin support so either waystone sends players back near Edgeville at `(217,449)`.
+- Client version bumped `10028` -> `10029` for the new object definition.
+
+Files touched:
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/conf/server/defs/GameObjectDef.xml`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidEnclaveWaystone.java`
+- `server/local.conf` (gitignored)
+
+### 2026-04-30 - Voidscape pass maintenance notes
+
+Things learned during the auto-walker, overlay, and enclave passes that should guide future changes:
+
+- Client/server definition arrays are positional. Adding object, NPC, tile, door, texture, or packet-backed settings must keep ids aligned and should bump the client version when the client-visible contract changes.
+- The enclave now has several coordinate-bound systems that must move together: baked landscape, boundary locs, scenery locs, NPC locs, safe-zone checks, healing pool bounds, bank-chest bypass, wilderness-overlay suppression, world-map labels, and `WorldPopulator` cleanup.
+- If an NPC is allowed to roam, plugins should not identify it by exact `x,y` unless the coordinate is intentionally part of the interaction contract. The PK catching trainer regression came from moving id `840` to a roaming box while its minigame handler still required `(214,437)`.
+- `scripts/patch-void-enclave-landscape.py` is the source of truth for the baked enclave shape. Manual edits to `Custom_Landscape.orsc` will drift unless the script is updated first and both server/client cache copies are regenerated.
+- Custom web gates remain DoorDef id `217` with TextureDef id `58`; `CutWeb` recognizes them alongside authentic webs. The current art is a purple recolor of the vanilla web silhouette, which reads better than the earlier door-like web texture.
+- Keep the enclave readable. Dense random props made the space feel premium in screenshots but hurt navigation and blocked entrances. Prefer a few functional anchors: bank chest, shop NPC, healing pool, altar, cuttable webs, and return waystones.
+- Runtime pathing bugs around auto-walk and doors should be tested by opening a door through auto-walk and immediately clicking a second destination; this catches disabled-walk state regressions quickly.

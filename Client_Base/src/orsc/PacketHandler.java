@@ -2174,6 +2174,7 @@ public class PacketHandler {
 		mc.setShowRecentNPCKC(packetsIncoming.getUnsignedByte() == 1); // 44
 		mc.setGroundItemNames(packetsIncoming.getUnsignedByte() == 1); // 45
 		mc.setNatureRuneProtection(packetsIncoming.getUnsignedByte() == 1); // 46
+		mc.setVoidscapeSceneOverlay(packetsIncoming.getUnsignedByte() == 1); // 47
 	}
 
 	private void togglePrayer(int length) {

@@ -1,0 +1,14 @@
+Use case: stylized-concept
+Asset type: game texture atlas for a RuneScape Classic style fantasy MMORPG, to be cropped into six seamless 128x128 wall/floor textures.
+Primary request: Create a single square 3x2 texture atlas containing six distinct seamless tile textures for a premium Voidscape enclave architecture pack.
+Layout: exactly six equal square cells, three columns by two rows, no margins, no labels, no text, no UI, no perspective scene.
+Style: low-resolution game texture art, hand-painted pixel/painted hybrid, dark eldritch fantasy, premium but readable at tiny size, compatible with 2001 isometric RPG walls.
+Palette: charcoal stone, deep violet, muted teal, dark red accents, pale cyan glowing cracks. Avoid bright neon except tiny rune highlights.
+Cells left-to-right, top row then bottom row:
+1. jagged outer fortress stone with angular void crystals embedded
+2. refined inner obsidian brickwork with thin violet mortar glow
+3. ritual sigil wall panel with subtle rune geometry and no readable text
+4. dark slate roof/shingle texture with purple weathering
+5. cracked ritual floor tile with restrained cyan-violet fissures
+6. arched void window/stained glass texture with dark frame and faint cyan-purple glow
+Technical constraints: seamless/tileable within each cell, front-facing orthographic texture only, no cast shadows, no pure black (#000000), no pure magenta (#ff00ff), no white background, no text, no watermark.

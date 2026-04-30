@@ -695,6 +695,7 @@ public class ActionSender {
 			customOptions.add(player.getShowRecentNPCKC() ? 1 : 0);
 			customOptions.add(player.getGroundItemNames() ? 1 : 0);
 			customOptions.add(player.getNatureRuneProtection() ? 1 : 0);
+			customOptions.add(player.getVoidscapeSceneOverlay() ? 1 : 0);
 		}
 		struct.customOptions = customOptions;
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_GAME_SETTINGS, struct, player);

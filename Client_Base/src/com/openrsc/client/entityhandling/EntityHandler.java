@@ -246,6 +246,9 @@ public class EntityHandler {
 		// Voidscape: Void Floor Mid (id 27). -16915 = R=15, G=8, B=18 → RGB888(144, 64, 120),
 		// mid-purple. Used for accent ring around the central ritual circle.
 		tiles.add(new TileDef(-16915, 3, 0));
+		// Voidscape: V3 ritual floor (id 28). Positive colour 64 references TextureDef id 64
+		// (archive slot 3289), giving the enclave a generated cracked-stone floor.
+		tiles.add(new TileDef(64, 3, 0));
 	}
 
 	private static void loadElevationDefinitions() {
@@ -255,6 +258,8 @@ public class EntityHandler {
 		elevation.add(new ElevationDef(80, 33));
 		elevation.add(new ElevationDef(80, 15));
 		elevation.add(new ElevationDef(90, 49));
+		// Voidscape: V3 roof material. Roof byte 7 maps to TextureDef id 63.
+		elevation.add(new ElevationDef(96, 63));
 	}
 
 	private static void loadTextureDefinitions() {
@@ -324,12 +329,21 @@ public class EntityHandler {
 		// voidscape: Void Sigil Wall (id 57) — AI-generated wall mural with inscribed pentagram.
 		// Sprite at archive index 3282. Used by DoorDef "Void Sigil Wall" as accent on sanctum walls.
 		textures.add(new TextureDef("voidsigilwall", ""));
-		// voidscape: Void Web (id 58) — AI-generated bright magenta cobweb. Black pixels in the
-		// sprite become transparent (engine convention). Sprite at archive index 3283.
+		// voidscape: Void Web (id 58) — AI-generated cuttable gate web texture.
+		// Sprite at archive index 3283. Kept as dataName "voidweb" to avoid texture-id churn.
 		textures.add(new TextureDef("voidweb", ""));
 		// voidscape: Void Window (id 59) — AI-generated stained-glass arched window with pentagram.
 		// Sprite at archive index 3284. Used by DoorDef "Void Window" on sanctum E/W walls.
 		textures.add(new TextureDef("voidwindow", ""));
+
+		// voidscape: V3 architecture textures (ids 60-65). These occupy archive slots 3285-3290.
+		// The old media/crown sprites that lived in this range were relocated to 3318+ and 3345+.
+		textures.add(new TextureDef("voidv3outer", ""));
+		textures.add(new TextureDef("voidv3inner", ""));
+		textures.add(new TextureDef("voidv3sigil", ""));
+		textures.add(new TextureDef("voidv3roof", ""));
+		textures.add(new TextureDef("voidv3floor", ""));
+		textures.add(new TextureDef("voidv3window", ""));
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			loadCustomTextureDefinitions();
@@ -529,15 +543,13 @@ public class EntityHandler {
 	}
 
 	private static void loadCrowns() {
-		// voidscape: grey + gold mod crown PNGs moved from authentic slots 3284/3285
-		// to 3296/3297 because the Void Enclave commit packed voidwindow + a stale
-		// texture into 3284/3285 (texture loader at spriteTexture+i now extends to
-		// slot 3284). Other crowns kept at original slots 3286-3288.
-		crowns.add(new SpriteDef("grey mod crown", 3296, "crowns:0", 0));
-		crowns.add(new SpriteDef("gold mod crown", 3297, "crowns:1", 1));
-		crowns.add(new SpriteDef("dark grey mod crown", 3286, "crowns:2", 2));
-		crowns.add(new SpriteDef("star", 3287, "crowns:3", 3));
-		crowns.add(new SpriteDef("key", 3288, "crowns:4", 4));
+		// voidscape: moved out of the texture-loader range so new architecture
+		// textures can grow past spriteTexture+59 without corrupting chat crowns.
+		crowns.add(new SpriteDef("grey mod crown", 3345, "crowns:0", 0));
+		crowns.add(new SpriteDef("gold mod crown", 3346, "crowns:1", 1));
+		crowns.add(new SpriteDef("dark grey mod crown", 3318, "crowns:2", 2));
+		crowns.add(new SpriteDef("star", 3319, "crowns:3", 3));
+		crowns.add(new SpriteDef("key", 3320, "crowns:4", 4));
 
 	}
 
@@ -2391,6 +2403,14 @@ public class EntityHandler {
 		int runeKiteSprite = Config.S_WANT_CUSTOM_SPRITES ? 242 : 102;
 		sprites = new int[]{6, 33, 41, runeKiteSprite, -1, 74, -1, -1, 46, 11, -1, -1};
 		npcs.add(new NPCDef("PK catching target", "A runner for PK catching practice.", "", 1, 1, 99, 1, true, sprites, 6307872, 65535, 65535, 15523536, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: Void Acolyte in the Void Enclave sanctum (server id 842)
+		sprites = new int[]{0, 1, 2, -1, 228, 77, 76, 81, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Acolyte", "A robed acolyte tending the void altar.", "Commune", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: Void Enclave general store keeper (server id 843)
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, 81, 46, 11, -1, -1};
+		npcs.add(new NPCDef("Void Quartermaster", "A trader carrying supplies for those who pass the web.", "Trade", 0, 0, 5, 0, false, sprites, 0, 2106401, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
@@ -5712,17 +5732,25 @@ public class EntityHandler {
 		// (TextureDef id 57). Same height as Void Wall.
 		doors.add(new DoorDef("Void Sigil Wall", "A wall mural inscribed with a glowing pentagram",
 			"WalkTo", "Examine", 1, 0, 192, 57, 57, i++));
-		// voidscape: Void Web (id 217) — glowing cobweb at perimeter gates (TextureDef id 58).
-		// wallObjectHeight=275 = same as Void Highwall so it visually fills the tall gate.
-		// unknown=0 so the engine actually renders it (unknown=1 like vanilla web → invisible
-		// via the .orsc tile-byte path; vanilla webs render via JSON scenery loader instead).
-		// Cut by CutWeb.java (extended to recognize id 217). doorType=1 (blocking).
-		doors.add(new DoorDef("Void Web", "A thick cobweb of void energy seals the gate",
-			"WalkTo", "Examine", 1, 0, 275, 58, 58, i++));
+		// voidscape: Void Web (id 217) — vanilla web silhouette recoloured purple.
+		// Height matches the authentic web so gate blockers read as webbing, not doors.
+		doors.add(new DoorDef("Void web", "A shimmering web of void energy seals the gate",
+			"Slice", "Examine", 1, 0, 192, 58, 58, i++));
 		// voidscape: Void Window (id 218) — stained-glass arched window for sanctum
 		// E/W walls (TextureDef id 59).
 		doors.add(new DoorDef("Void Window", "A stained-glass window depicting the void sigil",
 			"WalkTo", "Examine", 1, 0, 192, 59, 59, i++));
+		// voidscape: V3 generated architecture pack (ids 219-223).
+		doors.add(new DoorDef("Void Bastion", "A jagged wall of void stone and crystal",
+			"WalkTo", "Examine", 1, 0, 292, 60, 60, i++));
+		doors.add(new DoorDef("Void Inner Wall", "Obsidian brickwork lit by violet mortar",
+			"WalkTo", "Examine", 1, 0, 192, 61, 61, i++));
+		doors.add(new DoorDef("Void Sigil Panel", "A ritual wall panel carved with void geometry",
+			"WalkTo", "Examine", 1, 0, 192, 62, 62, i++));
+		doors.add(new DoorDef("Void Roof Edge", "Dark slate edging weathered by void energy",
+			"WalkTo", "Examine", 1, 0, 96, 63, 63, i++));
+		doors.add(new DoorDef("Void Rift Window", "An arched window glowing with cyan and violet light",
+			"WalkTo", "Examine", 1, 0, 192, 65, 65, i++));
 	}
 
 	private static void loadGameObjectDefinitionsA() { // GOOD
@@ -7049,6 +7077,13 @@ public class EntityHandler {
 
 		// Voidscape: Healing pool — Void Enclave amenity. Reuses the fountain model, but with a "Drink" command.
 		objects.add(new GameObjectDef("Healing pool", "Crystal-clear water that mends wounds", "Drink", "Examine", 1, 2, 2, 0, "fountain", ++i)); //1296
+		objects.add(new GameObjectDef("Void brazier", "A cold flame burns inside the void metal", "WalkTo", "Examine", 0, 1, 1, 0, "skulltorcha1", ++i)); //1297
+		objects.add(new GameObjectDef("Void obelisk", "A narrow stone humming with void energy", "WalkTo", "Examine", 0, 1, 1, 0, "obelisk", ++i)); //1298
+		objects.add(new GameObjectDef("Void monolith", "A heavy shrine stone etched with old sigils", "WalkTo", "Examine", 0, 2, 2, 0, "dolmen", ++i)); //1299
+		objects.add(new GameObjectDef("Void crystal", "A jagged crystal growing through the stone", "WalkTo", "Examine", 0, 1, 1, 0, "giantcrystal", ++i)); //1300
+		objects.add(new GameObjectDef("Void supply crate", "Supplies lashed shut with dark cord", "WalkTo", "Examine", 0, 1, 1, 0, "crate", ++i)); //1301
+		objects.add(new GameObjectDef("Void dead tree", "A tree drained into brittle purple shadow", "WalkTo", "Examine", 0, 1, 1, 0, "deadtree1", ++i)); //1302
+		objects.add(new GameObjectDef("Void waystone", "A humming marker pointed toward Edgeville", "Return", "Examine", 0, 1, 1, 0, "obelisk", ++i)); //1303
 	}
 
 	public static void load(boolean loadMembers) {

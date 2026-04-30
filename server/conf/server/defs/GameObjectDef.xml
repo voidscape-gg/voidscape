@@ -14265,4 +14265,81 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>fountain</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void brazier</name>
+    <description>A cold flame burns inside the void metal</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>skulltorcha1</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void obelisk</name>
+    <description>A narrow stone humming with void energy</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>obelisk</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void monolith</name>
+    <description>A heavy shrine stone etched with old sigils</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>2</width>
+    <height>2</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>dolmen</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void crystal</name>
+    <description>A jagged crystal growing through the stone</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>giantcrystal</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void supply crate</name>
+    <description>Supplies lashed shut with dark cord</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>crate</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void dead tree</name>
+    <description>A tree drained into brittle purple shadow</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>deadtree1</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void waystone</name>
+    <description>A humming marker pointed toward Edgeville</description>
+    <command1>Return</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>obelisk</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

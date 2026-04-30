@@ -2392,17 +2392,14 @@
     <doorType>1</doorType>
     <unknown>0</unknown>
   </DoorDef>
-  <!-- Voidscape: Void Web (id 217) — glowing cobweb at perimeter gates
-       (TextureDef id 58). Tall (wallObjectHeight=275) to match perimeter Highwall.
-       unknown=0 so it renders via .orsc tile-byte path (vanilla web's unknown=1
-       only renders via JSON-scenery path which we don't use for the gates).
-       CutWeb.java (extended) handles cutting via knife/weapon. -->
+  <!-- Voidscape: Void Web (id 217) — vanilla web silhouette recoloured purple.
+       Height matches the authentic web so gate blockers read as webbing, not doors. -->
   <DoorDef>
-    <name>Void Web</name>
-    <description>A thick cobweb of void energy seals the gate</description>
-    <command1>WalkTo</command1>
+    <name>Void web</name>
+    <description>A shimmering web of void energy seals the gate</description>
+    <command1>Slice</command1>
     <command2>Examine</command2>
-    <modelVar1>275</modelVar1>
+    <modelVar1>192</modelVar1>
     <modelVar2>58</modelVar2>
     <modelVar3>58</modelVar3>
     <doorType>1</doorType>
@@ -2418,6 +2415,63 @@
     <modelVar1>192</modelVar1>
     <modelVar2>59</modelVar2>
     <modelVar3>59</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <!-- Voidscape V3: generated architecture pack. TextureDef ids 60-65 live at
+       archive slots 3285-3290 after relocating the UI media/crown sprites. -->
+  <DoorDef>
+    <name>Void Bastion</name>
+    <description>A jagged wall of void stone and crystal</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>292</modelVar1>
+    <modelVar2>60</modelVar2>
+    <modelVar3>60</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <DoorDef>
+    <name>Void Inner Wall</name>
+    <description>Obsidian brickwork lit by violet mortar</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>61</modelVar2>
+    <modelVar3>61</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <DoorDef>
+    <name>Void Sigil Panel</name>
+    <description>A ritual wall panel carved with void geometry</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>62</modelVar2>
+    <modelVar3>62</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <DoorDef>
+    <name>Void Roof Edge</name>
+    <description>Dark slate edging weathered by void energy</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>96</modelVar1>
+    <modelVar2>63</modelVar2>
+    <modelVar3>63</modelVar3>
+    <doorType>1</doorType>
+    <unknown>0</unknown>
+  </DoorDef>
+  <DoorDef>
+    <name>Void Rift Window</name>
+    <description>An arched window glowing with cyan and violet light</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <modelVar1>192</modelVar1>
+    <modelVar2>65</modelVar2>
+    <modelVar3>65</modelVar3>
     <doorType>1</doorType>
     <unknown>0</unknown>
   </DoorDef>

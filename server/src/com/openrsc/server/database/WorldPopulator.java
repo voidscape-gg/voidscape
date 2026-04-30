@@ -37,6 +37,11 @@ public final class WorldPopulator {
 
 	private final ArrayList<ItemLoc> itemlocs = new ArrayList<>();
 
+	private static final int VOID_ENCLAVE_CLEAR_MIN_X = 100;
+	private static final int VOID_ENCLAVE_CLEAR_MAX_X = 126;
+	private static final int VOID_ENCLAVE_CLEAR_MIN_Y = 303;
+	private static final int VOID_ENCLAVE_CLEAR_MAX_Y = 328;
+
 	public WorldPopulator(final World world) {
 		this.world = world;
 	}
@@ -70,13 +75,13 @@ public final class WorldPopulator {
 			loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + authenticSceneryFile, LocType.Scenery);
 			// Strip pre-existing scenery + boundaries inside the Void Enclave footprint
 			// (trees, gravestones, wilderness ruins, etc.) BEFORE loading our own
-			// enclave loc files. Bounds match Point.WildernessLocation registration.
+			// enclave loc files. The clear box includes a small buffer around the
+			// walls/gates so nearby trees and stumps do not crowd the entrances.
 			if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
-				int minX = 208, maxX = 229, minY = 341, maxY = 361;
 				int before = gameobjlocs.size();
 				gameobjlocs.removeIf(g -> {
 					int gx = g.getLocation().getX(), gy = g.getLocation().getY();
-					return gx >= minX && gx <= maxX && gy >= minY && gy <= maxY;
+					return inVoidEnclaveClearBounds(gx, gy);
 				});
 				LOGGER.info("Void Enclave filter stripped {} pre-existing scenery/boundaries from inside the footprint", box(before - gameobjlocs.size()));
 			}
@@ -106,6 +111,11 @@ public final class WorldPopulator {
 
 			// LOAD NPC LOCS //
 			loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + authenticMobFile);
+			if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+				int before = npclocs.size();
+				npclocs.removeIf(n -> inVoidEnclaveClearBounds(n.startX(), n.startY()));
+				LOGGER.info("Void Enclave filter stripped {} pre-existing NPC spawns from inside the footprint", box(before - npclocs.size()));
+			}
 			loadCustomLocs(LocType.NPC);
 			// NpcLocation[] npcLocations = getWorld().getServer().getDatabase().getNpcLocs();
 			// for (NpcLocation npcLocation : npcLocations) {
@@ -201,6 +211,11 @@ public final class WorldPopulator {
 		return world;
 	}
 
+	private static boolean inVoidEnclaveClearBounds(int x, int y) {
+		return x >= VOID_ENCLAVE_CLEAR_MIN_X && x <= VOID_ENCLAVE_CLEAR_MAX_X
+			&& y >= VOID_ENCLAVE_CLEAR_MIN_Y && y <= VOID_ENCLAVE_CLEAR_MAX_Y;
+	}
+
 	private void loadCustomLocs(LocType type) {
 		switch (type) {
 			case Boundary: {
@@ -269,6 +284,9 @@ public final class WorldPopulator {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 				}
 				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
+				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");
+				}
 				if (getWorld().getServer().getConfig().LOCATION_DATA == 2) {
 					if (getWorld().getServer().getConfig().WANT_DECORATED_MOD_ROOM) {
 						loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsModRoom.json");

@@ -94,6 +94,8 @@ public final class GameSettingHandler implements PayloadProcessor<GameSettingStr
 				player.getCache().store("setting_ground_item_names", value == 1);
 			} else if (idx == 46) {
 				player.getCache().store("want_nature_rune_protection", value == 1);
+			} else if (idx == 47) {
+				player.getCache().store("setting_voidscape_scene_overlay", value == 1);
 			}
 			return;
 		}

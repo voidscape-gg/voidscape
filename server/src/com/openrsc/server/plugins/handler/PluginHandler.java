@@ -202,10 +202,7 @@ public final class PluginHandler implements IPluginHandler {
             } else {
                 for (Object trigger : triggerInstances) {
                     try {
-                        final Class<?>[] dataClasses = Arrays.stream(data)
-                                .map(Object::getClass)
-                                .toArray(Class<?>[]::new);
-                        final Method method = triggerType.getMethod("block" + triggerName, dataClasses);
+                        final Method method = getTriggerMethod(triggerType, "block" + triggerName, data);
                         final boolean shouldBlock = (Boolean) method.invoke(trigger, data);
                         if (shouldBlock) {
                             shouldBlockDefault = true;
@@ -241,14 +238,10 @@ public final class PluginHandler implements IPluginHandler {
         }
 
         try {
-            final Class<?>[] dataClasses = Arrays.stream(data)
-                    .map(Object::getClass)
-                    .toArray(Class<?>[]::new);
-
             final String simpleName = triggerType.getSimpleName();
             String triggerName = simpleName.substring(0, simpleName.indexOf("Trigger"));
             try {
-                final Method method = triggerType.getMethod("on" + triggerName, dataClasses);
+                final Method method = getTriggerMethod(triggerType, "on" + triggerName, data);
                 final String pluginName = triggerInstance.getClass().getSimpleName() + "." + method.getName();
 
                 final PluginTask task = new PluginTask(server.getWorld(), player, triggerName, data) {
@@ -300,6 +293,24 @@ public final class PluginHandler implements IPluginHandler {
             }
         } catch (final Exception e) {
             LOGGER.error("Exception at plugin handling: ", e);
+        }
+    }
+
+    private Method getTriggerMethod(Class<?> triggerType, String methodName, Object[] data) throws NoSuchMethodException {
+        final Class<?>[] dataClasses = Arrays.stream(data)
+                .map(Object::getClass)
+                .toArray(Class<?>[]::new);
+
+        try {
+            return triggerType.getMethod(methodName, dataClasses);
+        } catch (NoSuchMethodException exactMiss) {
+            for (Method method : triggerType.getMethods()) {
+                if (method.getName().equals(methodName)
+                        && ClassUtils.isAssignable(dataClasses, method.getParameterTypes(), true)) {
+                    return method;
+                }
+            }
+            throw exactMiss;
         }
     }
 

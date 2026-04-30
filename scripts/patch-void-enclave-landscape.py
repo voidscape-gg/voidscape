@@ -24,9 +24,9 @@ Tile byte layout (per server/src/com/openrsc/server/io/Tile.java):
 
 Sector layout (per Sector.java:52): tile_index = x * 48 + y (column-major).
 
-Coordinate transform: the enclave at worldX=208..230, worldY=341..362 fits
-entirely in sector h0x52y44 which covers worldX=192..239, worldY=336..383.
-Local tile coords: tx = worldX - 192, ty = worldY - 336.
+Coordinate transform: the enclave centered at worldX=113, worldY=315 fits
+entirely in sector h0x50y43 which covers worldX=96..143, worldY=288..335.
+Local tile coords: tx = worldX - 96, ty = worldY - 288.
 """
 
 import io
@@ -39,9 +39,10 @@ AUTHENTIC = REPO / "server/conf/server/data/Authentic_Landscape.orsc"
 CUSTOM    = REPO / "server/conf/server/data/Custom_Landscape.orsc"
 # Client reads its own copy when S_WANT_CUSTOM_LANDSCAPE is true (World.java:80-81).
 CLIENT_CUSTOM = REPO / "Client_Base/Cache/video/Custom_Landscape.orsc"
-ENCLAVE_SECTOR = "h0x52y44"
-ENCLAVE_SECTOR_BASE_X = 192   # worldX of local tx=0
-ENCLAVE_SECTOR_BASE_Y = 336   # worldY of local ty=0
+ENCLAVE_SECTOR = "h0x50y43"
+ENCLAVE_SECTOR_BASE_X = 96    # worldX of local tx=0
+ENCLAVE_SECTOR_BASE_Y = 288   # worldY of local ty=0
+LEGACY_ENCLAVE_SECTORS = ("h0x52y44",)
 
 VOID_ISLAND_SECTOR = "h0x48y37"
 VOID_ISLAND_SECTOR_BASE_X = 0
@@ -72,93 +73,158 @@ WEB = 24               # vanilla spider web — CutWeb.java handles cutting (kep
 VOID_WALL = 214        # voidbricks-textured sanctum wall (DoorDef slot 214)
 VOID_HIGHWALL = 215    # voidouter-textured perimeter wall, tall (DoorDef slot 215)
 VOID_SIGIL_WALL = 216  # voidsigilwall accent (DoorDef slot 216) — pentagram mural
-VOID_WEB = 217         # AI-textured glowing void cobweb at gates, tall (modelVar1=275)
+VOID_WEB = 217         # purple vanilla-style void web at gates
 VOID_WINDOW = 218      # AI-textured stained-glass arched window with pentagram
+VOID_V3_BASTION = 219  # generated jagged outer fortress stone, taller than v2 highwall
+VOID_V3_WALL = 220     # generated refined inner obsidian brickwork
+VOID_V3_SIGIL = 221    # generated ritual/sigil wall panel
+VOID_V3_ROOF_EDGE = 222
+VOID_V3_WINDOW = 223   # generated arched cyan/violet void window
 
 # Tile texture IDs (empirically found from Authentic_Landscape buildings)
 ROOF_STANDARD = 1     # most-common indoor roof texture (4535 tile occurrences)
+ROOF_VOID_V3 = 7      # client ElevationDef id 6 -> TextureDef id 63 (voidv3roof)
 # Overlay byte = TileDef index + 1.
 FLOOR_INDOOR = 26     # Void Floor (TileDef 25): dark charcoal with subtle purple — main floor
 FLOOR_RITUAL = 27     # Void Floor Accent (TileDef 26): bright magenta-purple — ritual circle + dots
 FLOOR_MID    = 28     # Void Floor Mid (TileDef 27): mid-purple — ring around ritual circle
+FLOOR_V3_STONE = 29   # Void V3 generated cracked-stone floor (TileDef 28 -> TextureDef 64)
 
 # === Enclave footprint ===
-ENCLAVE_MIN_X, ENCLAVE_MAX_X = 208, 229
-ENCLAVE_MIN_Y, ENCLAVE_MAX_Y = 341, 361
-
-# Building interiors (roof rendered above these tiles, indoor floor underneath)
-BUILDING_INTERIORS = [
-    # (minX, maxX, minY, maxY)
-    (215, 222, 348, 354),  # central sanctum (8x7 floor)
-    (211, 213, 348, 350),  # west bank shrine (3x3 floor)
-    (225, 227, 348, 350),  # east pool shrine (3x3 floor)
-]
+ENCLAVE_MIN_X, ENCLAVE_MAX_X = 102, 123
+ENCLAVE_MIN_Y, ENCLAVE_MAX_Y = 305, 325
 
 # === Layout (mirrors what we generate into BoundaryLocsVoidEnclave.json today) ===
+
+def is_enclave_floor(x: int, y: int) -> bool:
+    """Stepped octagonal floor mask for the Void Enclave citadel."""
+    if not (ENCLAVE_MIN_X <= x <= ENCLAVE_MAX_X and ENCLAVE_MIN_Y <= y <= ENCLAVE_MAX_Y):
+        return False
+    if x < 105 and y < 308 and (105 - x) + (308 - y) > 3:
+        return False
+    if x < 105 and y > 322 and (105 - x) + (y - 322) > 3:
+        return False
+    if x > 120 and y < 308 and (x - 120) + (308 - y) > 3:
+        return False
+    if x > 120 and y > 322 and (x - 120) + (y - 322) > 3:
+        return False
+    return True
+
+
+def enclave_floor_tiles():
+    """Return the full set of walkable/courtyard tiles for the enclave."""
+    return {
+        (x, y)
+        for x in range(ENCLAVE_MIN_X, ENCLAVE_MAX_X + 1)
+        for y in range(ENCLAVE_MIN_Y, ENCLAVE_MAX_Y + 1)
+        if is_enclave_floor(x, y)
+    }
+
+
+def enclave_floor_overlay(x: int, y: int) -> int:
+    """Choose a floor overlay for the V3 generated ritual-court pattern."""
+    center_x, center_y = 113, 315
+    dx = abs(x - center_x)
+    dy = abs(y - center_y)
+    dist2 = dx * dx + dy * dy
+
+    if (dx <= 1 and dy <= 1) or (dx == 0 and dy <= 4) or (dy == 0 and dx <= 4):
+        return FLOOR_RITUAL
+    if 8 <= dist2 <= 18:
+        return FLOOR_MID
+    if x == center_x or y == center_y:
+        return FLOOR_MID
+    if (x, y) in ((110, 312), (116, 312), (110, 318), (116, 318)):
+        return FLOOR_RITUAL
+    return FLOOR_V3_STONE
+
+
+def enclave_roof_tiles():
+    """Return tiles covered by V3 generated roofs when the client shows roofs."""
+    roof = set()
+    # North sanctum.
+    for x in range(109, 118):
+        for y in range(309, 313):
+            roof.add((x, y))
+    # West bank/shop hut.
+    for x in range(105, 110):
+        for y in range(313, 318):
+            roof.add((x, y))
+    # East healing-pool hut.
+    for x in range(117, 122):
+        for y in range(313, 318):
+            roof.add((x, y))
+    return roof
+
 
 def enclave_walls():
     """Yield (worldX, worldY, direction, doorDefId) for every wall in the enclave."""
     walls = []
+    seen = set()
 
     def b(x, y, direction, id_):
+        key = (x, y, direction)
+        if key in seen:
+            return
+        seen.add(key)
         walls.append((x, y, direction, id_))
 
-    # Outer perimeter (interior X=208..229, Y=341..361). Gates at N/S/W/E center.
-    # Void Highwall = AI-textured imposing void stone. Gate tiles are LEFT EMPTY in
-    # the landscape (no wall byte) — webs are placed as JSON BoundaryLocs entries
-    # in BoundaryLocsVoidEnclave.json so they have GameObjects that CutWeb.java can
-    # hook for the cut interaction. Landscape-baked walls have no GameObject and
-    # are therefore unclickable.
-    for x in range(208, 230):
-        if x != 219:
-            b(x, 341, 0, VOID_HIGHWALL)
-            b(x, 362, 0, VOID_HIGHWALL)
-    for y in range(341, 362):
-        if y != 351:
-            b(208, y, 1, VOID_HIGHWALL)
-            b(230, y, 1, VOID_HIGHWALL)
+    # Outer perimeter is generated from the stepped floor mask so walls, floor,
+    # minimap, and collision always describe the same citadel silhouette.
+    # Gate walls are left empty in the landscape: the clickable/cuttable Void
+    # Breach boundaries live in BoundaryLocsVoidEnclave.json instead.
+    floor = enclave_floor_tiles()
+    gates = {
+        (113, 305, 0),
+        (113, 326, 0),
+        (102, 315, 1),
+        (124, 315, 1),
+    }
+    gate_flanks = {
+        (112, 305, 0), (114, 305, 0),
+        (112, 326, 0), (114, 326, 0),
+        (102, 314, 1), (102, 316, 1),
+        (124, 314, 1), (124, 316, 1),
+    }
+    for x, y in sorted(floor):
+        for nx, ny, wx, wy, direction in (
+            (x, y - 1, x, y, 0),
+            (x, y + 1, x, y + 1, 0),
+            (x - 1, y, x, y, 1),
+            (x + 1, y, x + 1, y, 1),
+        ):
+            if (nx, ny) not in floor and (wx, wy, direction) not in gates:
+                wall_id = VOID_V3_SIGIL if (wx, wy, direction) in gate_flanks else VOID_V3_BASTION
+                b(wx, wy, direction, wall_id)
 
-    # Central sanctum, interior X=214..222, Y=347..354. Open south at X=218.
-    # Most walls = voidbricks. North midpoint = pentagram mural (Sigil Wall).
-    # West and East midpoints = stained-glass void windows for cathedral feel.
-    SIGIL_NORTH_X = 218
-    WINDOW_WEST_Y = 351
-    WINDOW_EAST_Y = 351
-    for x in range(214, 223):
-        b(x, 347, 0, VOID_SIGIL_WALL if x == SIGIL_NORTH_X else VOID_WALL)
-    for x in range(214, 223):
-        if x == 218:
-            continue   # south door opening
-        b(x, 355, 0, VOID_WALL)
-    for y in range(347, 355):
-        b(214, y, 1, VOID_WINDOW if y == WINDOW_WEST_Y else VOID_WALL)
-        b(223, y, 1, VOID_WINDOW if y == WINDOW_EAST_Y else VOID_WALL)
+    # North sanctum. A proper enclosed shrine with a three-tile south entrance.
+    for x in range(108, 119):
+        b(x, 308, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
+        if x < 112 or x > 114:
+            b(x, 313, 0, VOID_V3_WALL)
+    for y in range(308, 313):
+        b(108, y, 1, VOID_V3_WINDOW if y == 310 else VOID_V3_WALL)
+        b(119, y, 1, VOID_V3_WINDOW if y == 310 else VOID_V3_WALL)
 
-    # West bank shrine — same Void Wall (voidbricks) as the sanctum + 1 sigil mural
-    # on the north wall midpoint. Interior X=210..213, Y=347..350. Open south at X=212.
-    BANK_SIGIL_X = 212
-    for x in range(210, 214):
-        b(x, 347, 0, VOID_SIGIL_WALL if x == BANK_SIGIL_X else VOID_WALL)
-    for x in range(210, 214):
-        if x == 212:
-            continue
-        b(x, 351, 0, VOID_WALL)
-    for y in range(347, 351):
-        b(210, y, 1, VOID_WALL)
-        b(214, y, 1, VOID_WALL)
+    # West bank/shop hut. Open east into the courtyard with a two-tile mouth so
+    # the shop does not feel pinched or blocked by NPC/object placement.
+    for x in range(104, 110):
+        b(x, 312, 0, VOID_V3_SIGIL if x in (106, 107) else VOID_V3_WALL)
+        b(x, 318, 0, VOID_V3_WALL)
+    for y in range(312, 318):
+        b(104, y, 1, VOID_V3_WINDOW if y == 314 else VOID_V3_WALL)
+        if y not in (314, 315):
+            b(110, y, 1, VOID_V3_WALL)
 
-    # East pool shrine — same Void Wall + 1 sigil mural on north wall midpoint.
-    # Interior X=224..227, Y=347..350. Open south at X=225.
-    POOL_SIGIL_X = 225
-    for x in range(224, 228):
-        b(x, 347, 0, VOID_SIGIL_WALL if x == POOL_SIGIL_X else VOID_WALL)
-    for x in range(224, 228):
-        if x == 225:
-            continue
-        b(x, 351, 0, VOID_WALL)
-    for y in range(347, 351):
-        b(224, y, 1, VOID_WALL)
-        b(228, y, 1, VOID_WALL)
+    # East healing-pool hut. Open west into the courtyard with the same clear
+    # two-tile mouth.
+    for x in range(116, 122):
+        b(x, 312, 0, VOID_V3_SIGIL if x in (118, 119) else VOID_V3_WALL)
+        b(x, 318, 0, VOID_V3_WALL)
+    for y in range(312, 318):
+        if y not in (314, 315):
+            b(116, y, 1, VOID_V3_WALL)
+        b(122, y, 1, VOID_V3_WINDOW if y == 314 else VOID_V3_WALL)
 
     return walls
 
@@ -185,14 +251,14 @@ def patch_enclave_sector(sector_bytes: bytes) -> bytes:
         # So: dir 0 -> verticalWall (byte 5), dir 1 -> horizontalWall (byte 4).
         buf[off + (5 if direction == 0 else 4)] = (doorDefId + 1) & 0xFF
 
-    # 2. Floor: plain grey across the whole enclave. No patterns, no accents — the
-    # void walls + sigil murals + windows are the visual story.
-    for x in range(ENCLAVE_MIN_X, ENCLAVE_MAX_X + 1):
-        for y in range(ENCLAVE_MIN_Y, ENCLAVE_MAX_Y + 1):
-            buf[tile_offset(x, y) + 2] = FLOOR_INDOOR
+    # 2. Floor: a stepped citadel slab with a ritual-court inlay and gate axes.
+    for x, y in enclave_floor_tiles():
+        buf[tile_offset(x, y) + 2] = enclave_floor_overlay(x, y)
 
-    # 3. Roofs: intentionally NOT set. The roof models in this engine read poorly
-    #    inside RSC's small viewport when toggled on, so we leave the byte at 0.
+    # 3. Roofs: default client config hides roofs, but when enabled these rooms
+    #    now use a generated slate texture instead of the stock roof material.
+    for x, y in enclave_roof_tiles():
+        buf[tile_offset(x, y) + 3] = ROOF_VOID_V3
 
     return bytes(buf)
 
@@ -291,6 +357,7 @@ def main():
         island_source = z.read(VOID_ISLAND_SECTOR)
         catchsim_sources = {sector: z.read(sector) for sector, _, _, _, _ in CATCHSIM_SECTORS}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
+        legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
     print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
     print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
     for sector, source in catchsim_sources.items():
@@ -307,7 +374,9 @@ def main():
             catchsim_sources[sector], sector, base_x, base_y, offset_x, offset_y
         )
     patched_sectors.update(legacy_sources)
+    patched_sectors.update(legacy_enclave_sources)
     print(f"Patched {len(walls)} enclave walls into sector {ENCLAVE_SECTOR}")
+    print(f"Restored {len(LEGACY_ENCLAVE_SECTORS)} legacy enclave sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
 
