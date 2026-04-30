@@ -9,6 +9,7 @@ import com.openrsc.server.model.TelePointGraph;
 import com.openrsc.server.model.WorldPathfinder;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.net.rsc.ActionSender;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -31,10 +32,17 @@ public class AutoWalkEvent extends GameTickEvent {
 	/** How many tiles to feed the WalkingQueue per refill. Stays comfortably below {@code Path.MAXIMUM_SIZE}. */
 	private static final int CHUNK_SIZE = 40;
 
-	/** Recovery cap when re-pathfinding mid-route (the player got displaced). Smaller than the initial cap. */
-	private static final int RECOVERY_NODE_CAP = 5_000;
+	/**
+	 * Recovery cap when re-pathfinding mid-route.
+	 *
+	 * Keep this equal to the initial pathfinder budget. The old 5k cap was
+	 * enough for tiny displacements, but a queue reset inside a long fed chunk
+	 * can require a full cross-region route from the current tile.
+	 */
+	private static final int RECOVERY_NODE_CAP = WorldPathfinder.DEFAULT_NODE_CAP;
 
 	private final Deque<Point> remaining;
+	private final Point goal;
 
 	public AutoWalkEvent(final World world, final Player owner, final List<Point> path) {
 		// ALLOW_MULTIPLE because cancelAutoWalk() stops the previous event
@@ -42,6 +50,7 @@ public class AutoWalkEvent extends GameTickEvent {
 		// ONE_PER_MOB would reject the replacement.
 		super(world, owner, 0, "Auto Walk Event", DuplicationStrategy.ALLOW_MULTIPLE);
 		this.remaining = new ArrayDeque<>(path);
+		this.goal = path.isEmpty() ? owner.getLocation() : path.get(path.size() - 1);
 	}
 
 	@Override
@@ -70,8 +79,14 @@ public class AutoWalkEvent extends GameTickEvent {
 		}
 
 		if (remaining.isEmpty()) {
-			player.cancelAutoWalk();
-			return;
+			if (isAtGoal(player)) {
+				player.cancelAutoWalk();
+				return;
+			}
+			if (!repathFromCurrent(player) || remaining.isEmpty()) {
+				player.cancelAutoWalk();
+				return;
+			}
 		}
 
 		final Point head = remaining.peekFirst();
@@ -88,7 +103,7 @@ public class AutoWalkEvent extends GameTickEvent {
 				remaining.pollFirst();
 				return; // let the teleport settle; resume walking next tick
 			}
-			if (!repathFromCurrent(player)) {
+			if (!repathFromCurrent(player) || remaining.isEmpty()) {
 				player.cancelAutoWalk();
 				return;
 			}
@@ -98,17 +113,20 @@ public class AutoWalkEvent extends GameTickEvent {
 	}
 
 	private boolean repathFromCurrent(final Player player) {
-		final Point goal = remaining.peekLast();
-		if (goal == null) return false;
+		if (isAtGoal(player)) return true;
 		final WorldPathfinder pf = new WorldPathfinder(player.getWorld(), player);
 		final List<Point> fresh = pf.findPath(player.getLocation(), goal, RECOVERY_NODE_CAP);
 		if (fresh == null) return false;
 		remaining.clear();
 		remaining.addAll(fresh);
+		if (!fresh.isEmpty()) {
+			ActionSender.sendWorldWalkRoute(player, true, 0, fresh);
+		}
 		return true;
 	}
 
 	private void feedChunk(final Player player) {
+		if (remaining.isEmpty()) return;
 		final Path path = new Path(player, PathType.WALK_TO_POINT);
 		int taken = 0;
 		Point last = player.getLocation();
@@ -126,7 +144,12 @@ public class AutoWalkEvent extends GameTickEvent {
 			last = next;
 			taken++;
 		}
+		if (taken == 0) return;
 		path.finish();
 		player.getWalkingQueue().setPath(path);
+	}
+
+	private boolean isAtGoal(final Player player) {
+		return player.getX() == goal.getX() && player.getY() == goal.getY();
 	}
 }

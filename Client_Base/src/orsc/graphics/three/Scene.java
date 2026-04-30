@@ -2975,6 +2975,52 @@ public final class Scene {
 		}
 	}
 
+	public final boolean projectToScreen(int worldX, int worldY, int worldZ, int[] out) {
+		if (out == null || out.length < 3) return false;
+		int x = worldX - this.rot1024_off_x;
+		int y = worldY - this.rot1024_off_y;
+		int z = worldZ - this.rot1024_off_z;
+		int sin;
+		int cos;
+		int tmp;
+
+		if (this.cameraProjZ != 0) {
+			sin = FastMath.trigTable1024[this.cameraProjZ];
+			cos = FastMath.trigTable1024[this.cameraProjZ + 1024];
+			tmp = y * sin + cos * x >> 15;
+			y = y * cos - x * sin >> 15;
+			x = tmp;
+		}
+
+		if (this.cameraProjY != 0) {
+			sin = FastMath.trigTable1024[this.cameraProjY];
+			cos = FastMath.trigTable1024[this.cameraProjY + 1024];
+			tmp = cos * x + z * sin >> 15;
+			z = cos * z - x * sin >> 15;
+			x = tmp;
+		}
+
+		if (this.cameraProjX != 0) {
+			sin = FastMath.trigTable1024[this.cameraProjX];
+			cos = FastMath.trigTable1024[this.cameraProjX + 1024];
+			tmp = y * cos - sin * z >> 15;
+			z = sin * y + cos * z >> 15;
+			y = tmp;
+		}
+
+		if (z <= this.rot1024_zTop || z >= this.fogLandscapeDistance) return false;
+		final int projectedX = (x << this.rot1024_vp_src) / z;
+		final int projectedY = (y << this.rot1024_vp_src) / z;
+		if (projectedX < -this.m_A - 16 || projectedX > this.m_A + 16
+			|| projectedY < -this.m_wb - 16 || projectedY > this.m_wb + 16) {
+			return false;
+		}
+		out[0] = this.m_Zb + projectedX;
+		out[1] = this.m_Nb + projectedY;
+		out[2] = z;
+		return true;
+	}
+
 	public final void setCombatXOffset(int var1, int var2, int var3) {
 		try {
 			if (var1 <= 15) {

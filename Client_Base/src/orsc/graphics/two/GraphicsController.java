@@ -1424,6 +1424,110 @@ public class GraphicsController {
 		}
 	}
 
+	public final void drawQuadrilateralAlpha(int x0, int y0, int x1, int y1, int x2, int y2,
+											 int x3, int y3, int color, int alpha) {
+		try {
+			if (alpha <= 0) return;
+			final int[] xs = new int[]{x0, x1, x2, x3};
+			final int[] ys = new int[]{y0, y1, y2, y3};
+			int minY = Math.min(Math.min(y0, y1), Math.min(y2, y3));
+			int maxY = Math.max(Math.max(y0, y1), Math.max(y2, y3));
+			if (minY < this.clipTop) minY = this.clipTop;
+			if (maxY >= this.clipBottom) maxY = this.clipBottom - 1;
+			if (minY > maxY) return;
+			int yStep = 1;
+			if (this.interlace) {
+				if ((minY & 1) != 0) minY++;
+				yStep = 2;
+			}
+
+			final int[] intersections = new int[4];
+			for (int py = minY; py <= maxY; py += yStep) {
+				int count = 0;
+				for (int i = 0; i < 4; i++) {
+					final int j = (i + 1) & 3;
+					final int ya = ys[i];
+					final int yb = ys[j];
+					if (ya == yb) continue;
+					if ((ya <= py && yb > py) || (yb <= py && ya > py)) {
+						intersections[count++] = xs[i] + (py - ya) * (xs[j] - xs[i]) / (yb - ya);
+					}
+				}
+				if (count < 2) continue;
+				for (int i = 0; i < count - 1; i++) {
+					for (int j = i + 1; j < count; j++) {
+						if (intersections[i] > intersections[j]) {
+							final int tmp = intersections[i];
+							intersections[i] = intersections[j];
+							intersections[j] = tmp;
+						}
+					}
+				}
+				int startX = intersections[0];
+				int endX = intersections[count - 1];
+				if (startX < this.clipLeft) startX = this.clipLeft;
+				if (endX >= this.clipRight) endX = this.clipRight - 1;
+				if (startX <= endX) {
+					drawAlphaRun(startX, endX, py, color, alpha);
+				}
+			}
+		} catch (RuntimeException var14) {
+			throw GenUtil.makeThrowable(var14, "ua.drawQuadrilateralAlpha(" + x0 + ',' + y0 + ',' + x1 + ',' + y1
+				+ ',' + x2 + ',' + y2 + ',' + x3 + ',' + y3 + ',' + color + ',' + alpha + ')');
+		}
+	}
+
+	public final void drawLineAlpha(int x0, int y0, int x1, int y1, int color, int alpha) {
+		try {
+			if (alpha <= 0) return;
+			int dx = Math.abs(x1 - x0);
+			int dy = Math.abs(y1 - y0);
+			int sx = x0 < x1 ? 1 : -1;
+			int sy = y0 < y1 ? 1 : -1;
+			int err = dx - dy;
+
+			while (true) {
+				blendPixelAlpha(x0, y0, color, alpha);
+				if (x0 == x1 && y0 == y1) break;
+				int e2 = err << 1;
+				if (e2 > -dy) {
+					err -= dy;
+					x0 += sx;
+				}
+				if (e2 < dx) {
+					err += dx;
+					y0 += sy;
+				}
+			}
+		} catch (RuntimeException var12) {
+			throw GenUtil.makeThrowable(var12,
+				"ua.drawLineAlpha(" + x0 + ',' + y0 + ',' + x1 + ',' + y1 + ',' + color + ',' + alpha + ')');
+		}
+	}
+
+	private void drawAlphaRun(int startX, int endX, int y, int color, int alpha) {
+		int pxi = startX + this.width2 * y;
+		for (int x = startX; x <= endX; x++) {
+			this.pixelData[pxi] = mixAlpha(this.pixelData[pxi], color, alpha);
+			pxi++;
+		}
+	}
+
+	private void blendPixelAlpha(int x, int y, int color, int alpha) {
+		if (x < this.clipLeft || x >= this.clipRight || y < this.clipTop || y >= this.clipBottom) return;
+		final int pxi = x + this.width2 * y;
+		this.pixelData[pxi] = mixAlpha(this.pixelData[pxi], color, alpha);
+	}
+
+	private static int mixAlpha(int dest, int color, int alpha) {
+		if (alpha >= 256) return color;
+		final int mixOld = 256 - alpha;
+		final int r = ((dest >> 16 & 255) * mixOld + (color >> 16 & 255) * alpha) >> 8;
+		final int g = ((dest >> 8 & 255) * mixOld + (color >> 8 & 255) * alpha) >> 8;
+		final int b = ((dest & 255) * mixOld + (color & 255) * alpha) >> 8;
+		return (r << 16) + (g << 8) + b;
+	}
+
 	public final void drawBoxBorder(int x, int width, int y, int height, int color) {
 		try {
 			this.drawLineHoriz(x, y, width, color);

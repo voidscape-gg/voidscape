@@ -1073,3 +1073,57 @@ New server-side training minigame for practicing RSC-style PK catching without a
 - End-to-end manual test: log in, talk to trainer at `(214, 437)`, confirm, verify target stands still until first attack, verify two-square straight/diagonal catches, verify no phantom combat after repeated locks, verify early reattack is blocked, verify `::leave`, verify full timer completion records personal best/top 10.
 
 **Reversibility**: remove the plugin, NPC defs/locs/client defs, attack/walk special-cases, and arena sector patch. Restore `Custom_Landscape.orsc` by rerunning the patcher after deleting the catchsim sector logic. Delete the runtime properties highscore file if a clean leaderboard is desired. No schema migration and no opcode change.
+
+### 2026-04-30 — World-map autowalk reliability + Voidscape map overlays
+
+Two fixes to make the world-map walker feel like a real navigation tool instead of a debug slice.
+
+**Autowalk recovery.** `AutoWalkEvent` used to remove a 40-tile chunk from its master route as soon as it fed the `WalkingQueue`. If the normal movement queue reset anywhere inside that chunk (NPC block, door/gate timing, diagonal mismatch, etc.), the consumed tiles were gone. In the final chunk this meant `remaining.isEmpty()` and the event silently ended even though the player was not at the destination; in earlier chunks it tried to recover with only a 5k-node search budget, which was too small for many cross-region routes. The event now stores the final goal, treats an empty `remaining` deque as "done" only when the player is actually on that goal tile, otherwise re-paths from the current tile with the full `WorldPathfinder.DEFAULT_NODE_CAP`, and sends the recovered route back to the client so the green polyline stays honest.
+
+**Destination snap radius.** `WorldPathfinder` now snaps blocked world-map clicks within 12 tiles instead of 5. This handles imprecise clicks on roofs, walls, coasts, and custom compounds more gracefully while still requiring the resulting snapped tile to be walkable and F2P-valid.
+
+**Custom world-map overlays.** Added `scripts/bake-voidscape-worldmap.py`, which draws Voidscape-only custom terrain onto `Client_Base/Cache/worldmap/plane-0.png` and appends idempotent custom blocks to `labels.tsv` / `points.tsv`. It covers Void Island, Void Enclave, the three PK Catching Simulator arenas, Edgeville custom amenities/trainer, the Void Auctioneer, Edgar, and the Voidling marker. `UPSTREAM.md` now includes this script in the world-map refresh procedure so future upstream map refreshes don't erase the custom layer.
+
+Files touched:
+- `server/src/com/openrsc/server/event/rsc/impl/AutoWalkEvent.java`
+- `server/src/com/openrsc/server/model/WorldPathfinder.java`
+- `scripts/bake-voidscape-worldmap.py`
+- `Client_Base/Cache/worldmap/{plane-0.png,labels.tsv,points.tsv,UPSTREAM.md}`
+
+Reversibility: restore the map PNG/TSV files from git and remove the bake script for the visual layer; revert the two server source files for walker behaviour. No protocol change, DB migration, or client-version bump.
+
+### 2026-04-30 — Autowalk scene route overlay + broader door/gate opening
+
+The world-map route can now be shown in the main 3D game view as green tile overlays for each tile in the active route. The world-map panel has a `Tiles` toggle for this overlay, defaulting off; it is client-only and uses the existing `WORLD_WALK_ROUTE` data, so there is no opcode or version bump.
+
+Autowalk door/gate handling now uses shared server-side rules via `AutoOpenRouteObstacle`. `WorldPathfinder` plans through the same simple closed doors/gates that `WalkingQueue` can open at runtime. Boundary doors/gates with route-style commands (`Open`, `Walk through`, `Go through`) move the player onto the destination tile in the same movement tick after opening, avoiding the "open, close, still stuck" failure. This includes diagonal boundary doors (dirs 2/3) that block as `FULL_BLOCK_A/B` instead of as cardinal wall edges. Autowalk-opened boundary doors are left open instead of scheduling the original closed door to respawn. Blocking scenery doors/gates use known passable replacements where available; otherwise they are briefly removed and respawned so the route can continue instead of stalling on a closed pass-through.
+
+Runtime/testing note: this feature touches server core classes, client Java, and cache-backed world-map assets. For server Java changes (`AutoWalkEvent`, `WorldPathfinder`, `WalkingQueue`, `AutoOpenRouteObstacle`), rebuild `server/core.jar` and fully restart the server; the JVM does not hot-reload core classes. For client Java changes (`mudclient`, `Scene`, `GraphicsController`, `WorldMapPanel`), rebuild and relaunch the client. For cache/world-map PNG/TSV changes, relaunch the client so it reads the updated cache files.
+
+Recommended full local test cycle:
+
+```bash
+scripts/build.sh
+SERVER_PID=$(lsof -tiTCP:43596 -sTCP:LISTEN || true)
+[ -n "$SERVER_PID" ] && kill "$SERVER_PID"
+pkill -f 'orsc.OpenRSC' 2>/dev/null || true
+
+# terminal 1: keep this running
+scripts/run-server.sh
+
+# terminal 2: after the server logs "Game world is now online"
+scripts/run-client.sh
+```
+
+Use `lsof -tiTCP:43596 -sTCP:LISTEN` for the server PID. The running server command line is a generic `java -classpath ... com.openrsc.server.Server local.conf`, so broad `pkill -f openrsc` patterns often miss it and leave stale code running. `scripts/run-client.sh` writes `Client_Base/Cache/ip.txt` and `port.txt` from `server/local.conf`, which prevents local client/server port drift during testing.
+
+Files touched:
+- `Client_Base/src/orsc/graphics/two/GraphicsController.java`
+- `Client_Base/src/orsc/graphics/three/Scene.java`
+- `Client_Base/src/orsc/mudclient.java`
+- `Client_Base/src/orsc/graphics/gui/WorldMapPanel.java`
+- `server/src/com/openrsc/server/model/AutoOpenRouteObstacle.java`
+- `server/src/com/openrsc/server/model/WalkingQueue.java`
+- `server/src/com/openrsc/server/model/WorldPathfinder.java`
+
+Reversibility: remove the `Tiles` button/scene projection helper and revert `WalkingQueue`/`WorldPathfinder` to the old inline gate-only checks. No protocol change, DB migration, or client-version bump.

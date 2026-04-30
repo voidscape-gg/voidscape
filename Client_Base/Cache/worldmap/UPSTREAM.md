@@ -52,6 +52,10 @@ with open(f"{DEST}/points.tsv", "w") as o:
 PY
 # Bake the scenery objects overlay into the plane PNGs:
 scripts/bake-worldmap-objects.py /tmp/rsc-world-map/res/objects.json
+
+# Re-apply Voidscape-only overlays: Void Island, Void Enclave,
+# PK Catching Simulator arenas, labels, and POIs.
+scripts/bake-voidscape-worldmap.py
 ```
 
 Update the SHA above and add a `docs/DIVERGENCE.md` entry noting the upstream version.

@@ -150,6 +150,9 @@ public final class mudclient implements Runnable {
 	public int worldWalkRouteReason;
 	public int[] worldWalkRouteX = new int[0];
 	public int[] worldWalkRouteY = new int[0];
+	private final int[][] worldWalkSceneTileProjection = new int[][]{
+		new int[3], new int[3], new int[3], new int[3]
+	};
 
 	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
 	// appears below the minimap on hover.
@@ -5566,6 +5569,7 @@ public final class mudclient implements Runnable {
 					}
 
 					this.scene.endScene(-113);
+					drawWorldWalkSceneRoute();
 
 					// Only draw ground item names if the feature is enabled
 					// and a panel/the keyboard isn't open.
@@ -5979,6 +5983,50 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var14) {
 			throw GenUtil.makeThrowable(var14, "client.AB(" + var1 + ')');
 		}
+	}
+
+	private void drawWorldWalkSceneRoute() {
+		if (!this.worldWalkRouteOk || !this.worldMapPanel.isSceneRouteVisible()) return;
+		if (this.worldWalkRouteX == null || this.worldWalkRouteY == null) return;
+		final int count = Math.min(this.worldWalkRouteX.length, this.worldWalkRouteY.length);
+		if (count == 0) return;
+
+		final int currentFloor = (this.playerLocalZ + this.midRegionBaseZ) / 944;
+		final int routeColor = 0x40FF40;
+		for (int i = 0; i < count; i++) {
+			final int worldX = this.worldWalkRouteX[i];
+			final int worldY = this.worldWalkRouteY[i];
+			if (worldY / 944 != currentFloor) continue;
+
+			final int localX = worldX - this.midRegionBaseX;
+			final int localZ = worldY - this.midRegionBaseZ;
+			if (localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) continue;
+
+			final int x0 = localX * this.tileSize;
+			final int z0 = localZ * this.tileSize;
+			final int x1 = x0 + this.tileSize;
+			final int z1 = z0 + this.tileSize;
+			if (!projectWorldWalkTileCorner(0, x0, z0)) continue;
+			if (!projectWorldWalkTileCorner(1, x1, z0)) continue;
+			if (!projectWorldWalkTileCorner(2, x1, z1)) continue;
+			if (!projectWorldWalkTileCorner(3, x0, z1)) continue;
+
+			final int[] p0 = this.worldWalkSceneTileProjection[0];
+			final int[] p1 = this.worldWalkSceneTileProjection[1];
+			final int[] p2 = this.worldWalkSceneTileProjection[2];
+			final int[] p3 = this.worldWalkSceneTileProjection[3];
+			this.getSurface().drawQuadrilateralAlpha(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1],
+				p3[0], p3[1], routeColor, 80);
+			this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], routeColor, 150);
+			this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], routeColor, 150);
+			this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], routeColor, 150);
+			this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], routeColor, 150);
+		}
+	}
+
+	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
 	}
 
 	private void drawInputX() {

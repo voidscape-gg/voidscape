@@ -87,6 +87,7 @@ public final class WorldMapPanel {
 
 	private boolean visible;
 	private int currentFloor;
+	private boolean sceneRouteVisible = false;
 
 	// Discrete zoom + pan state. panX,panY is the screen-space offset of the
 	// plane PNG's (0,0) — i.e. where on screen the top-left of the unscaled
@@ -125,9 +126,10 @@ public final class WorldMapPanel {
 	private int winX, winY, winW, winH;
 	private int contentX, contentY, contentW, contentH;
 	private int closeLinkX, closeLinkY;
-	private int btnZoomInY, btnZoomOutY, btnResetY, btnX;
+	private int btnZoomInY, btnZoomOutY, btnResetY, btnTilesY, btnX;
 
 	public boolean isVisible() { return visible; }
+	public boolean isSceneRouteVisible() { return sceneRouteVisible; }
 	public void setVisible(boolean v) {
 		this.visible = v;
 		if (v) panInitialized = false;  // re-center on next render
@@ -209,6 +211,7 @@ public final class WorldMapPanel {
 		btnZoomInY = contentY + 4;
 		btnZoomOutY = btnZoomInY + BTN_H + 4;
 		btnResetY = btnZoomOutY + BTN_H + 4;
+		btnTilesY = btnResetY + BTN_H + 4;
 
 		// Search box at bottom-left of content (overlay).
 		searchBoxW = 200;
@@ -315,6 +318,7 @@ public final class WorldMapPanel {
 		drawFlatButton(surface, btnX, btnZoomInY, BTN_W, BTN_H, "+", zoomLevel < ZOOM_MAX_LEVEL);
 		drawFlatButton(surface, btnX, btnZoomOutY, BTN_W, BTN_H, "-", zoomLevel > ZOOM_MIN_LEVEL);
 		drawFlatButton(surface, btnX, btnResetY, BTN_W, BTN_H, "Reset", true);
+		drawFlatButton(surface, btnX, btnTilesY, BTN_W, BTN_H, "Tiles", true, sceneRouteVisible);
 
 		// Search box overlay (bottom-left).
 		drawSearchBox(surface);
@@ -363,6 +367,10 @@ public final class WorldMapPanel {
 				if (my >= btnResetY && my < btnResetY + BTN_H) {
 					zoomReset();
 					return ClickResult.ZOOM;
+				}
+				if (my >= btnTilesY && my < btnTilesY + BTN_H) {
+					sceneRouteVisible = !sceneRouteVisible;
+					return ClickResult.UI_BUTTON;
 				}
 			}
 			if (clickedSearch) {
@@ -524,10 +532,15 @@ public final class WorldMapPanel {
 	// ─── Render helpers ─────────────────────────────────────────────────────
 
 	private void drawFlatButton(GraphicsController surface, int x, int y, int w, int h, String label, boolean enabled) {
+		drawFlatButton(surface, x, y, w, h, label, enabled, false);
+	}
+
+	private void drawFlatButton(GraphicsController surface, int x, int y, int w, int h, String label, boolean enabled, boolean active) {
 		boolean hover = enabled
 			&& lastMouseX >= x && lastMouseX < x + w
 			&& lastMouseY >= y && lastMouseY < y + h;
-		int bg = hover ? 0x808040 : 0x404040;
+		int bg = active ? 0x2E7D32 : (hover ? 0x808040 : 0x404040);
+		if (active && hover) bg = 0x3F9B43;
 		surface.drawBox(x, y, w, h, bg);
 		surface.drawBoxBorder(x, w, y, h, 0xC0C0C0);
 		int textColor = enabled ? 0xFFFFFF : 0x808080;

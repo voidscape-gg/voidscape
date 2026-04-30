@@ -110,3 +110,11 @@ Deserted\nKeep	1880	352	10	center	0
 Scorpion\nPit	2036	336	10	center	0	
 Rouges'\nHouse	2197	314	8	center	0	
 The Wilderness	1801	692	14	center	1	rgb(254, 165, 0)
+# voidscape custom overlay begin
+Void\nIsland	2374	47	10	center	1	rgb(200,48,160)
+Void\nEnclave	1789	1052	10	center	1	rgb(200,48,160)
+PK Catching\nSimulator	1219	215	10	center	1	rgb(200,48,160)
+Void\nAuctioneer	1795	1379	8	center	0	rgb(200,48,160)
+Edgar	2074	1919	8	center	0	rgb(200,48,160)
+Voidling	2257	1088	8	center	0	rgb(200,48,160)
+# voidscape custom overlay end

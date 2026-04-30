@@ -1,10 +1,7 @@
 package com.openrsc.server.model;
 
-import com.openrsc.server.model.entity.GameObject;
-import com.openrsc.server.model.entity.GameObjectType;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
-import com.openrsc.server.model.world.region.Region;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.util.rsc.CollisionFlag;
 import com.openrsc.server.util.rsc.Formulae;
@@ -42,6 +39,7 @@ public class WorldPathfinder {
 
 	private static final int BASIC_COST = 10;
 	private static final int DIAG_COST = 14;
+	private static final int DESTINATION_SNAP_RADIUS = 12;
 
 	public enum Reason { OK, NO_PATH, CAP_EXHAUSTED, INVALID_INPUT, SAME_TILE, CROSS_FLOOR }
 
@@ -97,7 +95,7 @@ public class WorldPathfinder {
 			|| (filterP2P && !Formulae.isF2PLocation(end));
 		final Point target;
 		if (endBlocked) {
-			final Point snapped = nearestWalkable(end, 5);
+			final Point snapped = nearestWalkable(end, DESTINATION_SNAP_RADIUS);
 			if (snapped == null) {
 				lastReason = Reason.NO_PATH;
 				return null;
@@ -228,11 +226,8 @@ public class WorldPathfinder {
 	 * full-block tiles, diagonal corner clipping. Does not consult mobs.
 	 *
 	 * Voidscape: when the geometric check would reject a step but there's an
-	 * auto-openable closed gate adjacent to the source or destination, allow
-	 * it — the {@link WalkingQueue} auto-opens those on contact. Scenery
-	 * gates set wall flags on a 1×2 (or 2×1) footprint that's offset from
-	 * their registered tile, so we scan a small neighbourhood instead of
-	 * trying to back-trace the exact flag source.
+	 * auto-openable closed door/gate adjacent to the blocked edge, allow it —
+	 * the {@link WalkingQueue} opens those on contact and retries the step.
 	 */
 	private boolean canStep(final int sx, final int sy, final int dx, final int dy,
 	                        final int xdir, final int ydir) {
@@ -281,46 +276,10 @@ public class WorldPathfinder {
 
 		if (!blocked) return true;
 
-		// Voidscape bypass: if there's an auto-openable closed gate within the
-		// step's neighbourhood, allow — walker auto-opens on contact.
+		// Voidscape bypass: if there's an auto-openable closed route obstacle,
+		// allow — walker auto-opens on contact.
 		if (filterP2P && !Formulae.isF2PLocation(Point.location(dx, dy))) return false;
-		return isAutoOpenableGateNear(sx, sy) || isAutoOpenableGateNear(dx, dy);
-	}
-
-	/**
-	 * Voidscape: is there an auto-openable closed gate in the 3×3 neighbourhood
-	 * of (x, y)? Scenery gates are typically 1×2 with the GameObject registered
-	 * at one tile but wall flags set on both tiles of the footprint (and the
-	 * adjacent tile across the wall edge), so the gate object itself isn't at
-	 * (x, y) when its flags are blocking a step there. The 3×3 scan catches
-	 * the gate regardless of which corner of its footprint we're at.
-	 *
-	 * Match: scenery with {@code GameObjectDef.name == "gate"} (case-insensitive
-	 * exact — excludes "metal gate", "metalic dungeon gate", "ardounge wall
-	 * gateway", "gnome stronghold gate", etc.) AND {@code command1 == "open"}
-	 * (so we only target closed instances).
-	 */
-	private boolean isAutoOpenableGateNear(final int cx, final int cy) {
-		for (int dy = -1; dy <= 1; dy++) {
-			for (int dx = -1; dx <= 1; dx++) {
-				if (isAutoOpenableGateAt(cx + dx, cy + dy)) return true;
-			}
-		}
-		return false;
-	}
-
-	private boolean isAutoOpenableGateAt(final int x, final int y) {
-		final Point loc = Point.location(x, y);
-		final Region region = world.getRegionManager().getRegion(loc);
-		if (region == null) return false;
-		final GameObject scenery = region.getGameObject(loc);
-		if (scenery == null || scenery.getGameObjectType() != GameObjectType.SCENERY) return false;
-		final com.openrsc.server.external.GameObjectDef def = scenery.getGameObjectDef();
-		if (def == null) return false;
-		final String name = def.getName();
-		if (name == null || !"gate".equalsIgnoreCase(name.trim())) return false;
-		final String cmd = def.getCommand1();
-		return cmd != null && "open".equalsIgnoreCase(cmd.trim());
+		return AutoOpenRouteObstacle.canOpenBetween(world, Point.location(sx, sy), Point.location(dx, dy));
 	}
 
 	private static boolean isBlocked(final TileValue tile, final int flag, final boolean isSource) {
