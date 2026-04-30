@@ -342,7 +342,7 @@ public class PacketHandler {
 			else if (opcode == 15) tradeSelfDecision();
 
 				// Options Menu Settings
-			else if (opcode == 240) updateOptionsMenuSettings();
+				else if (opcode == 240) updateOptionsMenuSettings(length);
 
 			else if (opcode == 206) togglePrayer(length);
 
@@ -2137,7 +2137,7 @@ public class PacketHandler {
 		}
 	}
 
-	private void updateOptionsMenuSettings() {
+	private void updateOptionsMenuSettings(int length) {
 		mc.setOptionCameraModeAuto(packetsIncoming.getUnsignedByte() == 1); // byte index 0
 		mc.setOptionMouseButtonOne(packetsIncoming.getUnsignedByte() == 1); // 1
 		mc.setOptionSoundDisabled(packetsIncoming.getUnsignedByte() == 1); // 2
@@ -2175,7 +2175,27 @@ public class PacketHandler {
 		mc.setShowRecentNPCKC(packetsIncoming.getUnsignedByte() == 1); // 44
 		mc.setGroundItemNames(packetsIncoming.getUnsignedByte() == 1); // 45
 		mc.setNatureRuneProtection(packetsIncoming.getUnsignedByte() == 1); // 46
-		mc.setVoidscapeSceneOverlay(packetsIncoming.getUnsignedByte() == 1); // 47
+		mc.setGameLookMode(packetsIncoming.getUnsignedByte()); // 47
+		if (length - packetsIncoming.packetEnd >= 2) {
+			mc.setRareDropBeams(packetsIncoming.getUnsignedByte() == 1); // 48
+			mc.setHideCombatXpDrops(packetsIncoming.getUnsignedByte() == 1); // 49
+		}
+		if (length - packetsIncoming.packetEnd >= 7) {
+			int path = packetsIncoming.getUnsignedByte();
+			int combatRateTenths = packetsIncoming.getUnsignedByte();
+			int skillingRateTenths = packetsIncoming.getUnsignedByte();
+			long totalPlayedSeconds = packetsIncoming.get32() & 0xffffffffL;
+			mc.setProfileStats(path, combatRateTenths, skillingRateTenths, totalPlayedSeconds);
+		}
+		if (length - packetsIncoming.packetEnd >= 6) {
+			mc.setHdVisualSettings(
+				packetsIncoming.getUnsignedByte(),
+				packetsIncoming.getUnsignedByte(),
+				packetsIncoming.getUnsignedByte() == 1,
+				packetsIncoming.getUnsignedByte() == 1,
+				packetsIncoming.getUnsignedByte() == 1,
+				packetsIncoming.getUnsignedByte() == 1);
+		}
 	}
 
 	private void togglePrayer(int length) {
@@ -2370,13 +2390,18 @@ public class PacketHandler {
 		}
 
 		if (Config.S_EXPERIENCE_DROPS_TOGGLE && Config.C_EXPERIENCE_DROPS) {
-			if (receivedXp > 0) {
+			boolean hideRegularXpDrop = Config.C_HIDE_COMBAT_XP_DROPS && isCombatXpSkill(skill);
+			if (receivedXp > 0 && !hideRegularXpDrop) {
 				mc.addXpNotification(skill, receivedXp, false);
 			}
 			if (oldLvl < mc.getPlayerStatBase(skill)) {
 				mc.addXpNotification(skill, 1, true);
 			}
 		}
+	}
+
+	private boolean isCombatXpSkill(int skill) {
+		return skill == 0 || skill == 1 || skill == 2 || skill == 3 || skill == 4 || skill == 5 || skill == 6;
 	}
 
 	private void duelDecision() {

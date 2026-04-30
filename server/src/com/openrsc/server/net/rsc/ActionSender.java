@@ -8,6 +8,7 @@ import com.openrsc.server.content.clan.ClanPlayer;
 import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
+import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.database.struct.UsernameChangeType;
 import com.openrsc.server.event.custom.HolidayDropEvent;
 import com.openrsc.server.model.Point;
@@ -708,10 +709,34 @@ public class ActionSender {
 			customOptions.add(player.getShowRecentNPCKC() ? 1 : 0);
 			customOptions.add(player.getGroundItemNames() ? 1 : 0);
 			customOptions.add(player.getNatureRuneProtection() ? 1 : 0);
-			customOptions.add(player.getVoidscapeSceneOverlay() ? 1 : 0);
+			customOptions.add(player.getGameLookMode());
+			customOptions.add(player.getRareDropBeams() ? 1 : 0);
+			customOptions.add(player.getHideCombatXpDrops() ? 1 : 0);
 		}
 		struct.customOptions = customOptions;
+		struct.voidPath = VoidPath.get(player);
+		struct.combatExpRateTenths = clampRateTenths(player.getConfig().COMBAT_EXP_RATE);
+		struct.skillingExpRateTenths = clampRateTenths(player.getConfig().SKILLING_EXP_RATE);
+		struct.totalPlayedSeconds = getTotalPlayedSeconds(player);
+		struct.hdIntensity = player.getHdIntensity();
+		struct.hdSaturation = player.getHdSaturation();
+		struct.hdBloom = player.getHdBloom() ? 1 : 0;
+		struct.hdVignette = player.getHdVignette() ? 1 : 0;
+		struct.hdWaterShimmer = player.getHdWaterShimmer() ? 1 : 0;
+		struct.hdSunlight = player.getHdSunlight() ? 1 : 0;
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_GAME_SETTINGS, struct, player);
+	}
+
+	private static int clampRateTenths(double rate) {
+		return Math.max(0, Math.min(255, (int) Math.round(rate * 10.0)));
+	}
+
+	private static int getTotalPlayedSeconds(Player player) {
+		long totalPlayed = player.getSessionPlay();
+		if (player.getCache().hasKey("total_played")) {
+			totalPlayed += player.getCache().getLong("total_played");
+		}
+		return (int) Math.min(Integer.MAX_VALUE, totalPlayed / 1000L);
 	}
 
 	public static void sendInitialServerConfigs(Server server, Channel channel) {

@@ -57,7 +57,19 @@ public class Config {
 	public static boolean C_HIDE_LOGIN_BOX = false;
 	public static boolean C_BLOCK_GLOBAL_FRIEND = false;
 	public static int C_MOVE_PER_FRAME = 4;
-	public static boolean C_VOIDSCAPE_SCENE_OVERLAY = true;
+	public static final int GAME_LOOK_CLASSIC = 0;
+	public static final int GAME_LOOK_HD = 1;
+	public static final int GAME_LOOK_VOIDSCAPE = 2;
+	public static int C_GAME_LOOK_MODE = GAME_LOOK_CLASSIC;
+	public static boolean C_VOIDSCAPE_SCENE_OVERLAY = false;
+	public static int C_HD_INTENSITY = 2;
+	public static int C_HD_SATURATION = 2;
+	public static boolean C_HD_BLOOM = true;
+	public static boolean C_HD_VIGNETTE = true;
+	public static boolean C_HD_WATER_SHIMMER = true;
+	public static boolean C_HD_SUNLIGHT = true;
+	public static boolean C_RARE_DROP_BEAMS = true;
+	public static boolean C_HIDE_COMBAT_XP_DROPS = false;
 
 	/* Experience Config Menu */
 	public static int C_EXPERIENCE_COUNTER = 1;

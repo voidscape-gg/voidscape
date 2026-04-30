@@ -95,7 +95,25 @@ public final class GameSettingHandler implements PayloadProcessor<GameSettingStr
 			} else if (idx == 46) {
 				player.getCache().store("want_nature_rune_protection", value == 1);
 			} else if (idx == 47) {
-				player.getCache().store("setting_voidscape_scene_overlay", value == 1);
+				int mode = Math.max(0, Math.min(2, payload.value));
+				player.getCache().set("setting_game_look_mode", mode);
+				player.getCache().store("setting_voidscape_scene_overlay", mode == 2);
+			} else if (idx == 48) {
+				player.getCache().store("setting_rare_drop_beams", value == 1);
+			} else if (idx == 49) {
+				player.getCache().store("setting_hide_combat_xp_drops", value == 1);
+			} else if (idx == 50) {
+				player.getCache().set("setting_hd_intensity", Math.max(0, Math.min(3, value)));
+			} else if (idx == 51) {
+				player.getCache().set("setting_hd_saturation", Math.max(0, Math.min(3, value)));
+			} else if (idx == 52) {
+				player.getCache().store("setting_hd_bloom", value == 1);
+			} else if (idx == 53) {
+				player.getCache().store("setting_hd_vignette", value == 1);
+			} else if (idx == 54) {
+				player.getCache().store("setting_hd_water_shimmer", value == 1);
+			} else if (idx == 55) {
+				player.getCache().store("setting_hd_sunlight", value == 1);
 			}
 			return;
 		}

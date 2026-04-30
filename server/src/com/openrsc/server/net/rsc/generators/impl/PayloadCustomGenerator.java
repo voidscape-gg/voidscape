@@ -390,6 +390,16 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					for (int customOpt : gs.customOptions) {
 						builder.writeByte((byte) customOpt);
 					}
+					builder.writeByte((byte) gs.voidPath);
+					builder.writeByte((byte) gs.combatExpRateTenths);
+					builder.writeByte((byte) gs.skillingExpRateTenths);
+					builder.writeInt(gs.totalPlayedSeconds);
+					builder.writeByte((byte) gs.hdIntensity);
+					builder.writeByte((byte) gs.hdSaturation);
+					builder.writeByte((byte) gs.hdBloom);
+					builder.writeByte((byte) gs.hdVignette);
+					builder.writeByte((byte) gs.hdWaterShimmer);
+					builder.writeByte((byte) gs.hdSunlight);
 					break;
 
 				case SEND_PRIVACY_SETTINGS:

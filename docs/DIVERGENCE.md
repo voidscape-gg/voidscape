@@ -1239,26 +1239,28 @@ Files removed or updated:
 - Removed `server/plugins/com/openrsc/server/plugins/custom/commands/VoidRiftCommand.java`
 - Updated `Commands.md`
 
-### 2026-04-30 — In-game Voidscape visual overlay
+### 2026-04-30 — In-game visual modes
 
-Added an optional in-game visual style that echoes the Voidscape login screen while preserving the classic view as a player choice.
+Added optional in-game visual styles while preserving the classic view as the default player choice.
 
 Details:
-- The client now applies a world-scene-only post-render pass when enabled: charcoal/purple color grading, a soft vignette, subtle scanline texture, and low-strength animated purple edge glows.
+- The client can apply a world-scene-only post-render pass when enabled. `Voidscape` mode uses charcoal/purple color grading, a soft vignette, subtle scanline texture, and low-strength animated purple edge glows.
+- `HD` mode is an HD-lite post-process, not a GPU renderer: it adds adjustable contrast/saturation, warmer top lighting, water/vegetation/material tuning, optional water shimmer, optional bloom on bright pixels, optional vignette, and low-strength scene glows while leaving UI untouched.
 - The post-render pass also remaps obvious vegetation, warm wood/roof materials, and neutral stone into the Voidscape palette so trees, fences, roofs, and walls do not retain the classic green/brown/gray look.
 - The pass runs immediately after `Scene.endScene` and before UI rendering, so chat, inventory, minimap, overhead labels, route highlights, and menus stay readable/classic.
-- General settings now exposes `Game Look - Voidscape/Classic`.
-- The choice is persisted through the normal game-settings packet as custom setting byte `47` (`setting_voidscape_scene_overlay`) and defaults to `Voidscape` for new/unset players.
-- Client version bumped `10024` → `10025` for the extra settings byte; matching local server config updated.
+- Settings now exposes `Game Look - Classic/HD/Voidscape`. When `HD` is selected, Advanced → Visuals also exposes HD intensity, HD color, sunlight, water shimmer, soft bloom, and vignette controls.
+- The choice is persisted through the normal game-settings packet as custom setting byte `47` (`setting_game_look_mode`, values `0=Classic`, `1=HD`, `2=Voidscape`). The older boolean cache key `setting_voidscape_scene_overlay` is still read as a compatibility fallback.
+- HD tuning is persisted as game setting indexes `50`-`55` (`setting_hd_intensity`, `setting_hd_saturation`, `setting_hd_bloom`, `setting_hd_vignette`, `setting_hd_water_shimmer`, `setting_hd_sunlight`) and is sent as optional trailing bytes after profile stats.
 
 Files touched:
 - `Client_Base/src/orsc/mudclient.java`
 - `Client_Base/src/orsc/Config.java`
 - `Client_Base/src/orsc/PacketHandler.java`
 - `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/net/rsc/generators/impl/PayloadCustomGenerator.java`
 - `server/src/com/openrsc/server/net/rsc/handlers/GameSettingHandler.java`
+- `server/src/com/openrsc/server/net/rsc/struct/outgoing/GameSettingsStruct.java`
 - `server/src/com/openrsc/server/model/entity/player/Player.java`
-- `server/local.conf` (gitignored)
 
 ### 2026-04-30 — Void Enclave V3 architecture and scenery pass
 
@@ -1498,3 +1500,25 @@ Files touched:
 - `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
 - `server/plugins/com/openrsc/server/plugins/shared/DropObject.java`
 - `server/local.conf` (gitignored)
+
+### 2026-04-30 - Profile wrench + advanced settings window
+
+Reworked the custom wrench so the first panel is player-focused instead of a two-tab social/game settings list.
+
+Changes:
+- The desktop wrench now opens a single `Profile` panel with current XP rates, chosen Void path, the path's 2x skill bonus, total played time, and only the normal social privacy toggles. Security rows and the online-list shortcut were removed from this view.
+- Added a centered advanced settings window opened from `Advanced settings` at the bottom of the wrench panel. It groups gameplay, loot, visual, chat, and interface options into a custom-drawn modal instead of sending players through the old dense list.
+- Added advanced controls for the new rare loot beams, hide combat XP drops, hide bones, ground item labels/modes, Classic/HD/Voidscape game look, roofs/fog/flicker, XP drops/counter, inventory count, batch progress, fight menu, side menu, kill feed, name tags, and related client toggles.
+- Added persisted game-setting bytes `48` (`setting_rare_drop_beams`) and `49` (`setting_hide_combat_xp_drops`). The settings packet now also appends Void path, combat/skilling XP-rate tenths, and total played seconds for the profile panel.
+- The loot-beam renderer now respects the `Rare loot beams` toggle, and regular combat XP drops can be suppressed while preserving level-up drops.
+- Follow-up: `Game look` now defaults to Classic for new/unset players so the base game opens with the vanilla scene palette. The profile section headings use purple accent text instead of dark text on the gray panel.
+
+Files touched:
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/src/orsc/PacketHandler.java`
+- `Client_Base/src/orsc/mudclient.java`
+- `server/src/com/openrsc/server/model/entity/player/Player.java`
+- `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/net/rsc/generators/impl/PayloadCustomGenerator.java`
+- `server/src/com/openrsc/server/net/rsc/handlers/GameSettingHandler.java`
+- `server/src/com/openrsc/server/net/rsc/struct/outgoing/GameSettingsStruct.java`

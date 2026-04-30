@@ -3314,6 +3314,20 @@ public final class Player extends Mob {
 		}
 	}
 
+	public boolean getRareDropBeams() {
+		if (getCache().hasKey("setting_rare_drop_beams")) {
+			return getCache().getBoolean("setting_rare_drop_beams");
+		}
+		return true;
+	}
+
+	public boolean getHideCombatXpDrops() {
+		if (getCache().hasKey("setting_hide_combat_xp_drops")) {
+			return getCache().getBoolean("setting_hide_combat_xp_drops");
+		}
+		return false;
+	}
+
 	public Boolean getHideFog() {
 		if (getWorld().getServer().getConfig().FOG_TOGGLE) {
 			if (getCache().hasKey("setting_showfog")) {
@@ -3469,11 +3483,63 @@ public final class Player extends Mob {
 		return false;
 	}
 
-	public boolean getVoidscapeSceneOverlay() {
+	public int getGameLookMode() {
+		if (getCache().hasKey("setting_game_look_mode")) {
+			int mode = getCache().getInt("setting_game_look_mode");
+			return mode >= 0 && mode <= 2 ? mode : 0;
+		}
 		if (getCache().hasKey("setting_voidscape_scene_overlay")) {
-			return getCache().getBoolean("setting_voidscape_scene_overlay");
+			return getCache().getBoolean("setting_voidscape_scene_overlay") ? 2 : 0;
 		}
 
+		return 0;
+	}
+
+	public boolean getVoidscapeSceneOverlay() {
+		return getGameLookMode() == 2;
+	}
+
+	public int getHdIntensity() {
+		if (getCache().hasKey("setting_hd_intensity")) {
+			int value = getCache().getInt("setting_hd_intensity");
+			return value >= 0 && value <= 3 ? value : 2;
+		}
+		return 2;
+	}
+
+	public int getHdSaturation() {
+		if (getCache().hasKey("setting_hd_saturation")) {
+			int value = getCache().getInt("setting_hd_saturation");
+			return value >= 0 && value <= 3 ? value : 2;
+		}
+		return 2;
+	}
+
+	public boolean getHdBloom() {
+		if (getCache().hasKey("setting_hd_bloom")) {
+			return getCache().getBoolean("setting_hd_bloom");
+		}
+		return true;
+	}
+
+	public boolean getHdVignette() {
+		if (getCache().hasKey("setting_hd_vignette")) {
+			return getCache().getBoolean("setting_hd_vignette");
+		}
+		return true;
+	}
+
+	public boolean getHdWaterShimmer() {
+		if (getCache().hasKey("setting_hd_water_shimmer")) {
+			return getCache().getBoolean("setting_hd_water_shimmer");
+		}
+		return true;
+	}
+
+	public boolean getHdSunlight() {
+		if (getCache().hasKey("setting_hd_sunlight")) {
+			return getCache().getBoolean("setting_hd_sunlight");
+		}
 		return true;
 	}
 
