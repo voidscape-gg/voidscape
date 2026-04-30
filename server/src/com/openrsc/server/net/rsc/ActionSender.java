@@ -49,6 +49,19 @@ public class ActionSender {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final Payload38Generator PAYLOAD_38_GENERATOR = new Payload38Generator();
+	private static final Payload69Generator PAYLOAD_69_GENERATOR = new Payload69Generator();
+	private static final Payload115Generator PAYLOAD_115_GENERATOR = new Payload115Generator();
+	private static final Payload140Generator PAYLOAD_140_GENERATOR = new Payload140Generator();
+	private static final Payload177Generator PAYLOAD_177_GENERATOR = new Payload177Generator();
+	private static final Payload196Generator PAYLOAD_196_GENERATOR = new Payload196Generator();
+	private static final Payload198Generator PAYLOAD_198_GENERATOR = new Payload198Generator();
+	private static final Payload199Generator PAYLOAD_199_GENERATOR = new Payload199Generator();
+	private static final Payload201Generator PAYLOAD_201_GENERATOR = new Payload201Generator();
+	private static final Payload202Generator PAYLOAD_202_GENERATOR = new Payload202Generator();
+	private static final Payload203Generator PAYLOAD_203_GENERATOR = new Payload203Generator();
+	private static final Payload235Generator PAYLOAD_235_GENERATOR = new Payload235Generator();
+	private static final PayloadCustomGenerator PAYLOAD_CUSTOM_GENERATOR = new PayloadCustomGenerator();
 
 	/**
 	 * Get respective generator
@@ -56,31 +69,31 @@ public class ActionSender {
 	public static PayloadGenerator<OpcodeOut> getGenerator(Player player) {
 		PayloadGenerator<OpcodeOut> generator;
 		if (player.isUsing38CompatibleClient() || player.isUsing39CompatibleClient()) {
-			generator = new Payload38Generator();
+			generator = PAYLOAD_38_GENERATOR;
 		} else if (player.isUsing69CompatibleClient()) {
-			generator = new Payload69Generator();
+			generator = PAYLOAD_69_GENERATOR;
 		} else if (player.isUsing233CompatibleClient()) {
-			generator = new Payload235Generator();
+			generator = PAYLOAD_235_GENERATOR;
 		} else if (player.isUsing203CompatibleClient()) {
-			generator = new Payload203Generator();
+			generator = PAYLOAD_203_GENERATOR;
 		} else if (player.isUsing202CompatibleClient()) {
-			generator = new Payload202Generator();
+			generator = PAYLOAD_202_GENERATOR;
 		} else if (player.isUsing201CompatibleClient()) {
-			generator = new Payload201Generator();
+			generator = PAYLOAD_201_GENERATOR;
 		} else if (player.isUsing199CompatibleClient()) {
-			generator = new Payload199Generator();
+			generator = PAYLOAD_199_GENERATOR;
 		} else if (player.isUsing198CompatibleClient()) {
-			generator = new Payload198Generator();
+			generator = PAYLOAD_198_GENERATOR;
 		} else if (player.isUsing196CompatibleClient()) {
-			generator = new Payload196Generator();
+			generator = PAYLOAD_196_GENERATOR;
 		} else if (player.isUsing177CompatibleClient()) {
-			generator = new Payload177Generator();
+			generator = PAYLOAD_177_GENERATOR;
 		} else if (player.isUsing140CompatibleClient()) {
-			generator = new Payload140Generator();
+			generator = PAYLOAD_140_GENERATOR;
 		} else if (player.isUsing115CompatibleClient()) {
-			generator = new Payload115Generator();
+			generator = PAYLOAD_115_GENERATOR;
 		} else {
-			generator = new PayloadCustomGenerator();
+			generator = PAYLOAD_CUSTOM_GENERATOR;
 		}
 		return generator;
 	}

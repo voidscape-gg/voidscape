@@ -49,6 +49,8 @@ public final class PluginHandler implements IPluginHandler {
     private ThreadPoolExecutor executor;
     private boolean reloading = true;
     private Object defaultHandler = null;
+    private final Map<MethodCacheKey, Optional<Method>> triggerMethodCache = new ConcurrentHashMap<>();
+    private final Set<Class<?>> loggedMissingTriggerTypes = ConcurrentHashMap.newKeySet();
 
     public PluginHandler(final Server server) {
         this.server = server;
@@ -176,6 +178,8 @@ public final class PluginHandler implements IPluginHandler {
 
         triggerTypeToInstance.clear();
         pluginInstances.clear();
+        triggerMethodCache.clear();
+        loggedMissingTriggerTypes.clear();
         loader.clear();
 
         executor = null;
@@ -198,7 +202,9 @@ public final class PluginHandler implements IPluginHandler {
 
             Collection<Object> triggerInstances = triggerTypeToInstance.get(triggerType);
             if (triggerInstances.isEmpty()) {
-                LOGGER.warn("Unable to handle unknown plugin: {}", simpleName);
+                if (loggedMissingTriggerTypes.add(triggerType)) {
+                    LOGGER.warn("Unable to handle unknown plugin: {}", simpleName);
+                }
             } else {
                 for (Object trigger : triggerInstances) {
                     try {
@@ -248,7 +254,9 @@ public final class PluginHandler implements IPluginHandler {
                     @Override
                     public int action() {
                         try {
-                            LOGGER.info("Tick " + getWorld().getServer().getCurrentTick() + " : " + pluginName + " : " + Arrays.deepToString(data));
+                            if (LOGGER.isDebugEnabled()) {
+                                LOGGER.debug("Tick " + getWorld().getServer().getCurrentTick() + " : " + pluginName + " : " + Arrays.deepToString(data));
+                            }
                             method.invoke(triggerInstance, data);
                             return 1;
                         } catch (final InvocationTargetException ex) {
@@ -300,17 +308,65 @@ public final class PluginHandler implements IPluginHandler {
         final Class<?>[] dataClasses = Arrays.stream(data)
                 .map(Object::getClass)
                 .toArray(Class<?>[]::new);
+        final MethodCacheKey key = new MethodCacheKey(triggerType, methodName, dataClasses);
+        final Optional<Method> cached = triggerMethodCache.get(key);
+        if (cached != null) {
+            if (cached.isPresent()) {
+                return cached.get();
+            }
+            throw new NoSuchMethodException(key.toString());
+        }
 
         try {
-            return triggerType.getMethod(methodName, dataClasses);
+            final Method method = triggerType.getMethod(methodName, dataClasses);
+            triggerMethodCache.put(key, Optional.of(method));
+            return method;
         } catch (NoSuchMethodException exactMiss) {
             for (Method method : triggerType.getMethods()) {
                 if (method.getName().equals(methodName)
                         && ClassUtils.isAssignable(dataClasses, method.getParameterTypes(), true)) {
+                    triggerMethodCache.put(key, Optional.of(method));
                     return method;
                 }
             }
+            triggerMethodCache.put(key, Optional.empty());
             throw exactMiss;
+        }
+    }
+
+    private static final class MethodCacheKey {
+        private final Class<?> triggerType;
+        private final String methodName;
+        private final Class<?>[] dataClasses;
+        private final int hashCode;
+
+        private MethodCacheKey(Class<?> triggerType, String methodName, Class<?>[] dataClasses) {
+            this.triggerType = triggerType;
+            this.methodName = methodName;
+            this.dataClasses = dataClasses.clone();
+            int result = Objects.hash(triggerType, methodName);
+            result = 31 * result + Arrays.hashCode(this.dataClasses);
+            this.hashCode = result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof MethodCacheKey)) return false;
+            MethodCacheKey other = (MethodCacheKey) obj;
+            return triggerType == other.triggerType
+                    && Objects.equals(methodName, other.methodName)
+                    && Arrays.equals(dataClasses, other.dataClasses);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
+
+        @Override
+        public String toString() {
+            return triggerType.getName() + "." + methodName + Arrays.toString(dataClasses);
         }
     }
 

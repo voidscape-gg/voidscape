@@ -128,6 +128,22 @@ public class LoginExecutor implements Runnable {
 		loginsProcessedThisTick = 0;
 	}
 
+	public int getLoginQueueSize() {
+		return loginRequests.size();
+	}
+
+	public int getSaveQueueSize() {
+		return saveRequests.size();
+	}
+
+	public int getGenericQueueSize() {
+		return genericRequests.size();
+	}
+
+	public int getLoginsProcessedThisTick() {
+		return loginsProcessedThisTick;
+	}
+
 	private <T> void processAndClearSet(Set<T> set, Consumer<T> processor) {
 		Iterator<T> iterator = set.iterator();
 		while (iterator.hasNext()) {

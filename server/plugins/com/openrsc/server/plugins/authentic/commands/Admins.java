@@ -103,6 +103,8 @@ public final class Admins implements CommandTrigger {
 
 		if (command.equalsIgnoreCase("saveall")) {
 			saveAll(player);
+		} else if (command.equalsIgnoreCase("loadbots") || command.equalsIgnoreCase("loadtest")) {
+			loadBots(player, args);
 		} else if (command.equalsIgnoreCase("pf")) {
 			pathfindDebug(player, args);
 		} else if (command.equalsIgnoreCase("holidaydrop")) {
@@ -433,10 +435,43 @@ public final class Admins implements CommandTrigger {
 	private void saveAll(Player player) {
 		int count = 0;
 		for (Player playerToSave : player.getWorld().getPlayers()) {
+			if (playerToSave.getAttribute("dummyplayer", false)) continue;
 			playerToSave.save(false, true);
 			count++;
 		}
 		player.message(messagePrefix + "Saved " + count + " players on server!");
+	}
+
+	private void loadBots(Player player, String[] args) {
+		if (args.length < 1) {
+			player.message(messagePrefix + "Usage: ::loadbots start <count> [radius] [intervalTicks], ::loadbots stop, ::loadbots status");
+			return;
+		}
+		final String action = args[0].toLowerCase();
+		if (action.equals("stop")) {
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().stop());
+			return;
+		}
+		if (action.equals("status")) {
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().status());
+			return;
+		}
+		if (!action.equals("start")) {
+			player.message(messagePrefix + "Usage: ::loadbots start <count> [radius] [intervalTicks], ::loadbots stop, ::loadbots status");
+			return;
+		}
+		if (args.length < 2) {
+			player.message(messagePrefix + "Usage: ::loadbots start <count> [radius] [intervalTicks]");
+			return;
+		}
+		try {
+			final int count = Integer.parseInt(args[1]);
+			final int radius = args.length >= 3 ? Integer.parseInt(args[2]) : 18;
+			final int intervalTicks = args.length >= 4 ? Integer.parseInt(args[3]) : 2;
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().start(count, radius, intervalTicks));
+		} catch (NumberFormatException ex) {
+			player.message(messagePrefix + "count, radius, and intervalTicks must be integers");
+		}
 	}
 
 	/** Voidscape debug: ::pf <x> <y>  — runs the world-walk pathfinder against

@@ -1372,3 +1372,97 @@ Things learned during the auto-walker, overlay, and enclave passes that should g
 - Custom web gates remain DoorDef id `217` with TextureDef id `58`; `CutWeb` recognizes them alongside authentic webs. The current art is a purple recolor of the vanilla web silhouette, which reads better than the earlier door-like web texture.
 - Keep the enclave readable. Dense random props made the space feel premium in screenshots but hurt navigation and blocked entrances. Prefer a few functional anchors: bank chest, shop NPC, healing pool, altar, cuttable webs, and return waystones.
 - Runtime pathing bugs around auto-walk and doors should be tested by opening a door through auto-walk and immediately clicking a second destination; this catches disabled-walk state regressions quickly.
+
+### 2026-04-30 - Server performance pass 1
+
+First lag-reduction pass after reviewing the current server hot paths.
+
+Changes:
+- `Player.processOutgoingPackets()` now writes all queued packets for a player and flushes Netty once per player tick instead of `writeAndFlush` per packet. This reduces syscall / event-loop churn without changing packet order.
+- `ActionSender` now reuses stateless payload generators, and `Player` caches its inbound payload parser after login, avoiding per-packet parser/generator allocation.
+- `PluginHandler` now caches resolved trigger methods, logs missing trigger types once, and moves per-plugin action traces from INFO to DEBUG. This cuts reflection and disk-log churn during normal gameplay.
+- `World.load()` now builds the auto-walk `TelePointGraph` and preloads `WaypointGraph` during startup instead of on the first world-map walk request, removing first-click disk/graph stalls.
+- `WorldPathfinder` avoids repeated `Point` allocation for F2P checks, pre-sizes its open/visited structures from route distance, and uses an int-coordinate `AutoOpenRouteObstacle` path for blocked-edge probing.
+- `PcapLoggerService` now stays stopped when `want_pcap_logging` is false, and drops overflow jobs with a warning instead of throwing if packet capture is intentionally enabled and overrun.
+- `server/local.conf` now has `want_pcap_logging: false`; packet capture is a targeted debugging tool, not a default runtime setting.
+- Corrected `docs/subsystems/world-tick-loop.md` to record `Constants.REGION_SIZE = 48`, not `8`.
+
+Files touched:
+- `server/src/com/openrsc/server/model/entity/player/Player.java`
+- `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/plugins/handler/PluginHandler.java`
+- `server/src/com/openrsc/server/model/world/World.java`
+- `server/src/com/openrsc/server/model/WorldPathfinder.java`
+- `server/src/com/openrsc/server/model/AutoOpenRouteObstacle.java`
+- `server/src/com/openrsc/server/util/rsc/Formulae.java`
+- `server/src/com/openrsc/server/service/PcapLoggerService.java`
+- `server/local.conf` (gitignored)
+- `docs/subsystems/world-tick-loop.md`
+- `docs/PERFORMANCE.md`
+
+### 2026-04-30 - Autowalk collision correctness + waypoint guide
+
+Fixes the wall-punching/stuck failure mode in the world-map autowalker.
+
+Changes:
+- `WorldPathfinder` now uses a terrain-only variant of the server's real `PathValidation.checkAdjacent` rules instead of maintaining a second hand-rolled wall check. The old planner had an east/west wall-direction mismatch, so it could accept route edges the `WalkingQueue` later rejected.
+- `PathValidation.checkAdjacentStatic(...)` mirrors player movement collision while deliberately ignoring NPC/player blockers. Dynamic blockers remain a runtime recovery concern; static walls and full-block tiles now match between planning and walking.
+- `AutoOpenRouteObstacle` now only treats a closed scenery door/gate as passable when that object actually blocks the candidate step. The previous 3x3 nearby-object scan could let an unrelated nearby gate make a wall edge look passable.
+- Added `WaypointGraph`, a Java loader for `waypoints.rev` (`16,038` nodes / `57,036` edges on the local copy). Long same-floor routes may use it as a high-level guide, but graph legs are still validated by server collision and only fall back to bounded local A*, so stale waypoint edges and ignored gate metadata cannot authorize walking through walls.
+
+Runtime notes:
+- The loader tries `server/conf/server/data/waypoints.rev` first, then `~/RSCRevolution2/waypoints.rev`. It is warmed during world load; if neither exists, autowalk falls back to grid A* and logs that no waypoint graph was found.
+- The TypeScript source at `/Users/s/Desktop/dizb0t/src/game/waypoints.ts` is useful documentation for the binary format, but its walker straight-lines between graph nodes and ignores `gates.dat`; Voidscape intentionally does not copy that trust model.
+
+Files touched:
+- `server/src/com/openrsc/server/model/PathValidation.java`
+- `server/src/com/openrsc/server/model/WorldPathfinder.java`
+- `server/src/com/openrsc/server/model/AutoOpenRouteObstacle.java`
+- `server/src/com/openrsc/server/model/WaypointGraph.java`
+
+### 2026-04-30 - Server performance telemetry
+
+Added a low-overhead rolling telemetry stream for general server optimization.
+
+Changes:
+- `ServerPerformanceTracker` samples every game tick and logs compact `PERF` summaries when `perf_telemetry` is enabled. The summary includes tick `p50/p95/p99/max`, late/skipped tick counts, packet totals, queue pressure, and stage `p95` timings for world update, NPCs, players, events, walk-to-actions, messages, client update generation, incoming packets, outgoing packets, and cleanup.
+- `LoginExecutor` exposes queue sizes so save/login pressure is visible without attaching a debugger.
+- `Server` now exposes SQL executor queue sizes and feeds packet counts/stage durations into the tracker from the existing tick benchmark path.
+- Added `scripts/perf-watch.sh` to tail only `PERF` lines and late-tick warnings from the server log.
+- Added `scripts/perf-smoke.sh` to drive a quick local path/save pulse through the visible Java client and print the resulting telemetry.
+- Local `server/local.conf` enables telemetry at 30-second intervals with a 512-tick window.
+
+Files touched:
+- `server/src/com/openrsc/server/util/ServerPerformanceTracker.java`
+- `server/src/com/openrsc/server/Server.java`
+- `server/src/com/openrsc/server/ServerConfiguration.java`
+- `server/src/com/openrsc/server/LoginExecutor.java`
+- `scripts/perf-watch.sh`
+- `scripts/perf-smoke.sh`
+- `server/local.conf` (gitignored)
+- `docs/PERFORMANCE.md`
+
+### 2026-04-30 - Synthetic server load harness
+
+Added an in-process synthetic player swarm for repeatable game-thread load tests.
+
+Changes:
+- `SyntheticLoadService` can spawn up to 500 dummy `Player` instances into the real world player list/regions. They use normal player tick processing, walking queues, region membership, AOI scans, NPC/player update generation, and event scheduling, but are marked as `dummyplayer` / `loadtest`.
+- Admins can run `::loadbots start <count> [radius] [intervalTicks]`, `::loadbots status`, and `::loadbots stop` in-game. `::loadtest` is an alias.
+- Dummy players are excluded from `::saveall`, autosaves, and database-backed logout saves. They also bypass auth and socket lifecycle paths.
+- `ClientLimitations(int clientVersion)` is public so the load service can build valid dummy player capability state without a network login.
+- Added `scripts/perf-load.sh`, which uses the visible logged-in Java client to start/stop the swarm and print recent telemetry.
+
+Verification:
+- `./scripts/build.sh` passes.
+- `./scripts/perf-load.sh 50 130 18 2` held 50 synthetic players plus the real client across the autosave boundary with 0 late/skipped ticks; warm tick `p95` stayed in the `12.6-16.5ms` range, update-generation `p95` stayed in the `3.6-6.7ms` range, and the next full interval after stop returned to one real player.
+
+Files touched:
+- `server/src/com/openrsc/server/util/SyntheticLoadService.java`
+- `server/src/com/openrsc/server/Server.java`
+- `server/src/com/openrsc/server/net/rsc/ClientLimitations.java`
+- `server/src/com/openrsc/server/model/entity/player/Player.java`
+- `server/src/com/openrsc/server/login/PlayerSaveRequest.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
+- `scripts/perf-load.sh`
+- `docs/PERFORMANCE.md`

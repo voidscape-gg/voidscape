@@ -571,19 +571,23 @@ public final class Formulae {
 	}
 
 	public static boolean isF2PLocation(Point location) {
+		return isF2PLocation(location.getX(), location.getY());
+	}
+
+	public static boolean isF2PLocation(int x, int y) {
 		for (java.awt.Point[] p2pLoc : P2P_LOCS) {
 			for (int ele = 0; ele < 4; ele++) {
-				if (location.getX() >= p2pLoc[0].getX() && location.getX() <= p2pLoc[1].getX()
-					&& location.getY() >= p2pLoc[0].getY() + ((ele) * 944)
-					&& location.getY() <= p2pLoc[1].getY() + ((ele) * 944))
+				if (x >= p2pLoc[0].getX() && x <= p2pLoc[1].getX()
+					&& y >= p2pLoc[0].getY() + ((ele) * 944)
+					&& y <= p2pLoc[1].getY() + ((ele) * 944))
 					return false;
 			}
 		}
 		for (java.awt.Point[] f2pwildLoc : F2PWILD_LOCS) {
 			for (int ele = 0; ele < 4; ele++) {
-				if (location.getX() >= f2pwildLoc[0].getX() && location.getX() <= f2pwildLoc[1].getX()
-					&& location.getY() >= f2pwildLoc[0].getY() + ((ele) * 944)
-					&& location.getY() <= f2pwildLoc[1].getY() + ((ele) * 944)) {
+				if (x >= f2pwildLoc[0].getX() && x <= f2pwildLoc[1].getX()
+					&& y >= f2pwildLoc[0].getY() + ((ele) * 944)
+					&& y <= f2pwildLoc[1].getY() + ((ele) * 944)) {
 					return true;
 				}
 			}

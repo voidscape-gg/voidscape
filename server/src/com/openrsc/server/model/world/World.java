@@ -23,6 +23,7 @@ import com.openrsc.server.model.GlobalMessage;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.Shop;
+import com.openrsc.server.model.WaypointGraph;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.GroundItem;
@@ -416,6 +417,8 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			}
 			getRegionManager().load();
 			getWorldLoader().getWorldPopulator().populateWorld();
+			getTelePointGraph();
+			WaypointGraph.getDefault();
 			getNpcDrops().load();
 
 			if (PathValidation.DEBUG) {
@@ -466,6 +469,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		}
 		getRegionManager().unload();
 		getNpcDrops().unload();
+		telePointGraph = null;
 		npcs.clear();
 		sceneryLocs.clear();
 		players.clear();

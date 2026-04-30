@@ -39,6 +39,16 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 
 	protected void processInternal() {
 //		LOGGER.info("Saved player " + player.getUsername() + "");
+		if (player.getAttribute("dummyplayer", false)) {
+			if (this.logout) {
+				logoutSaveSuccess();
+			}
+			getPlayer().setSaving(false);
+			if (this.logout) {
+				getPlayer().setLoggingOut(false);
+			}
+			return;
+		}
 		try {
 			boolean success = getServer().getPlayerService().savePlayer(player);
 			if (success && this.logout) {

@@ -24,37 +24,40 @@ public final class AutoOpenRouteObstacle {
 	}
 
 	public static boolean canOpenBetween(final World world, final Point cur, final Point next) {
-		return find(world, cur, next) != null;
+		if (cur == null || next == null) return false;
+		return canOpenBetween(world, cur.getX(), cur.getY(), next.getX(), next.getY());
+	}
+
+	public static boolean canOpenBetween(final World world, final int curX, final int curY, final int nextX, final int nextY) {
+		return find(world, curX, curY, nextX, nextY) != null;
 	}
 
 	public static boolean tryOpenBetween(final Player player, final Point cur, final Point next) {
-		if (player == null) return false;
-		final Candidate candidate = find(player.getWorld(), cur, next);
+		if (player == null || cur == null || next == null) return false;
+		final Candidate candidate = find(player.getWorld(), cur.getX(), cur.getY(), next.getX(), next.getY());
 		if (candidate == null) return false;
 		return candidate.open(player);
 	}
 
-	private static Candidate find(final World world, final Point cur, final Point next) {
-		if (world == null || cur == null || next == null) return null;
-		Candidate candidate = findBoundaryDoor(world, cur, next);
+	private static Candidate find(final World world, final int curX, final int curY, final int nextX, final int nextY) {
+		if (world == null) return null;
+		Candidate candidate = findBoundaryDoor(world, curX, curY, nextX, nextY);
 		if (candidate != null) return candidate;
-		candidate = findSceneryNear(world, cur.getX(), cur.getY());
-		if (candidate != null) return candidate;
-		return findSceneryNear(world, next.getX(), next.getY());
+		return findSceneryBlockingStep(world, curX, curY, nextX, nextY);
 	}
 
-	private static Candidate findBoundaryDoor(final World world, final Point cur, final Point next) {
-		final int dx = next.getX() - cur.getX();
-		final int dy = next.getY() - cur.getY();
+	private static Candidate findBoundaryDoor(final World world, final int curX, final int curY, final int nextX, final int nextY) {
+		final int dx = nextX - curX;
+		final int dy = nextY - curY;
 		GameObject door = null;
 		if (dx == 0 && dy != 0) {
-			final int wallY = Math.max(cur.getY(), next.getY());
-			final Point wallLoc = Point.location(cur.getX(), wallY);
+			final int wallY = Math.max(curY, nextY);
+			final Point wallLoc = Point.location(curX, wallY);
 			final Region region = world.getRegionManager().getRegion(wallLoc);
 			if (region != null) door = region.getWallGameObject(wallLoc, 0);
 		} else if (dy == 0 && dx != 0) {
-			final int wallX = Math.max(cur.getX(), next.getX());
-			final Point wallLoc = Point.location(wallX, cur.getY());
+			final int wallX = Math.max(curX, nextX);
+			final Point wallLoc = Point.location(wallX, curY);
 			final Region region = world.getRegionManager().getRegion(wallLoc);
 			if (region != null) door = region.getWallGameObject(wallLoc, 1);
 		}
@@ -68,6 +71,7 @@ public final class AutoOpenRouteObstacle {
 		// Some RSC doors are diagonal boundary objects (dirs 2/3). They block
 		// by setting FULL_BLOCK_A/B on their own tile, not by setting a wall
 		// flag on the edge between two tiles, so look on the destination tile.
+		final Point next = Point.location(nextX, nextY);
 		door = findBoundaryDoorAt(world, next, 2);
 		if (door == null) door = findBoundaryDoorAt(world, next, 3);
 		if (isAutoOpenableBoundaryDoor(door)) {
@@ -91,17 +95,70 @@ public final class AutoOpenRouteObstacle {
 		return isRouteDoorCommand(def.getCommand1()) && isDoorOrGateName(def.getName());
 	}
 
-	private static Candidate findSceneryNear(final World world, final int cx, final int cy) {
-		for (int dy = -1; dy <= 1; dy++) {
-			for (int dx = -1; dx <= 1; dx++) {
-				final Point loc = Point.location(cx + dx, cy + dy);
+	private static Candidate findSceneryBlockingStep(final World world, final int curX, final int curY,
+	                                                 final int nextX, final int nextY) {
+		if (Math.abs(nextX - curX) > 1 || Math.abs(nextY - curY) > 1) return null;
+		final int minX = Math.min(curX, nextX) - 2;
+		final int maxX = Math.max(curX, nextX) + 2;
+		final int minY = Math.min(curY, nextY) - 2;
+		final int maxY = Math.max(curY, nextY) + 2;
+		for (int y = minY; y <= maxY; y++) {
+			for (int x = minX; x <= maxX; x++) {
+				if (x < 0 || y < 0) continue;
+				final Point loc = Point.location(x, y);
 				final Region region = world.getRegionManager().getRegion(loc);
 				if (region == null) continue;
-				final Candidate candidate = sceneryCandidate(region.getGameObject(loc));
+				final GameObject object = region.getGameObject(loc);
+				if (!sceneryBlocksStep(object, curX, curY, nextX, nextY)) continue;
+				final Candidate candidate = sceneryCandidate(object);
 				if (candidate != null) return candidate;
 			}
 		}
 		return null;
+	}
+
+	private static boolean sceneryBlocksStep(final GameObject object, final int curX, final int curY,
+	                                         final int nextX, final int nextY) {
+		if (object == null || object.getGameObjectType() != GameObjectType.SCENERY) return false;
+		final GameObjectDef def = object.getGameObjectDef();
+		if (def == null) return false;
+		final int dir = object.getDirection();
+		final int width;
+		final int height;
+		if (dir == 0 || dir == 4) {
+			width = def.getWidth();
+			height = def.getHeight();
+		} else {
+			height = def.getWidth();
+			width = def.getHeight();
+		}
+
+		if (def.getType() == 1) {
+			return pointInFootprint(object.getX(), object.getY(), width, height, curX, curY)
+				|| pointInFootprint(object.getX(), object.getY(), width, height, nextX, nextY);
+		}
+
+		if (def.getType() != 2) return false;
+		for (int x = object.getX(); x < object.getX() + width; x++) {
+			for (int y = object.getY(); y < object.getY() + height; y++) {
+				if (dir == 0 && sameStep(curX, curY, nextX, nextY, x, y, x - 1, y)) return true;
+				if (dir == 2 && sameStep(curX, curY, nextX, nextY, x, y, x, y + 1)) return true;
+				if (dir == 4 && sameStep(curX, curY, nextX, nextY, x, y, x + 1, y)) return true;
+				if (dir == 6 && sameStep(curX, curY, nextX, nextY, x, y, x, y - 1)) return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean pointInFootprint(final int objectX, final int objectY, final int width, final int height,
+	                                        final int x, final int y) {
+		return x >= objectX && x < objectX + width && y >= objectY && y < objectY + height;
+	}
+
+	private static boolean sameStep(final int curX, final int curY, final int nextX, final int nextY,
+	                                final int ax, final int ay, final int bx, final int by) {
+		return (curX == ax && curY == ay && nextX == bx && nextY == by)
+			|| (curX == bx && curY == by && nextX == ax && nextY == ay);
 	}
 
 	private static Candidate sceneryCandidate(final GameObject object) {

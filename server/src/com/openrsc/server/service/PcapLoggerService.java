@@ -34,6 +34,10 @@ public final class PcapLoggerService implements Runnable {
 
 	public void start() {
 		synchronized (running) {
+			if (!server.getConfig().WANT_PCAP_LOGGING) {
+				running.set(false);
+				return;
+			}
 			running.set(true);
 			scheduledExecutor = Executors.newSingleThreadScheduledExecutor(
 				new ServerAwareThreadFactory(
@@ -47,6 +51,11 @@ public final class PcapLoggerService implements Runnable {
 
 	public void stop() {
 		synchronized (running) {
+			if (scheduledExecutor == null) {
+				clearJobs();
+				running.set(false);
+				return;
+			}
 			scheduledExecutor.shutdown();
 			try {
 				final boolean terminationResult = scheduledExecutor.awaitTermination(1, TimeUnit.MINUTES);
@@ -93,7 +102,9 @@ public final class PcapLoggerService implements Runnable {
 		if (!running.get()) {
 			return;
 		}
-		jobs.add(runnable);
+		if (!jobs.offer(runnable)) {
+			LOGGER.warn("Dropping pcap export job because the queue is full");
+		}
 	}
 
 	public void run(final Runnable runnable) {

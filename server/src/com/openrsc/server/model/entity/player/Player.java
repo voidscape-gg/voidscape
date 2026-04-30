@@ -37,6 +37,7 @@ import com.openrsc.server.net.Packet;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.ClientLimitations;
 import com.openrsc.server.net.rsc.PayloadProcessorManager;
+import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.parsers.PayloadParser;
 import com.openrsc.server.net.rsc.parsers.impl.*;
 import com.openrsc.server.net.rsc.struct.AbstractStruct;
@@ -180,6 +181,7 @@ public final class Player extends Mob {
 	 * Current active packets - used on packets that should be rated to 1-per-player.
 	 */
 	private final ArrayList<Integer> activePackets = new ArrayList<>();
+	private PayloadParser<OpcodeIn> incomingPayloadParser;
 	/**
 	 * The last menu reply this player gave in a quest
 	 */
@@ -2534,35 +2536,7 @@ public final class Player extends Mob {
 					final long packetTime = getWorld().getServer().bench(
 						() -> {
 							activePackets.remove(activePackets.indexOf(curPacket.getID()));
-							PayloadParser<com.openrsc.server.net.rsc.enums.OpcodeIn> parser;
-							if (isUsing38CompatibleClient() || isUsing39CompatibleClient()) {
-								parser = new Payload38Parser();
-							} else if (isUsing69CompatibleClient()) {
-								parser = new Payload69Parser();
-							} else if (isUsing233CompatibleClient()) {
-								parser = new Payload235Parser();
-							} else if (isUsing203CompatibleClient()) {
-								parser = new Payload203Parser();
-							} else if (isUsing202CompatibleClient()) {
-								parser = new Payload202Parser();
-							} else if (isUsing201CompatibleClient()) {
-								parser = new Payload201Parser();
-							} else if (isUsing199CompatibleClient()) {
-								parser = new Payload199Parser();
-							} else if (isUsing198CompatibleClient()) {
-								parser = new Payload198Parser();
-							} else if (isUsing196CompatibleClient()) {
-								parser = new Payload196Parser();
-							} else if (isUsing177CompatibleClient()) {
-								parser = new Payload177Parser();
-							} else if (isUsing140CompatibleClient()) {
-								parser = new Payload140Parser();
-							} else if (isUsing115CompatibleClient()) {
-								parser = new Payload115Parser();
-							} else {
-								parser = new PayloadCustomParser();
-							}
-							AbstractStruct<com.openrsc.server.net.rsc.enums.OpcodeIn> res = parser.parse(curPacket, this);
+							AbstractStruct<OpcodeIn> res = getIncomingPayloadParser().parse(curPacket, this);
 							if (res != null) {
 								boolean couldProcess;
 								try {
@@ -2588,6 +2562,40 @@ public final class Player extends Mob {
 		});
 	}
 
+	private PayloadParser<OpcodeIn> getIncomingPayloadParser() {
+		if (incomingPayloadParser != null) {
+			return incomingPayloadParser;
+		}
+		if (isUsing38CompatibleClient() || isUsing39CompatibleClient()) {
+			incomingPayloadParser = new Payload38Parser();
+		} else if (isUsing69CompatibleClient()) {
+			incomingPayloadParser = new Payload69Parser();
+		} else if (isUsing233CompatibleClient()) {
+			incomingPayloadParser = new Payload235Parser();
+		} else if (isUsing203CompatibleClient()) {
+			incomingPayloadParser = new Payload203Parser();
+		} else if (isUsing202CompatibleClient()) {
+			incomingPayloadParser = new Payload202Parser();
+		} else if (isUsing201CompatibleClient()) {
+			incomingPayloadParser = new Payload201Parser();
+		} else if (isUsing199CompatibleClient()) {
+			incomingPayloadParser = new Payload199Parser();
+		} else if (isUsing198CompatibleClient()) {
+			incomingPayloadParser = new Payload198Parser();
+		} else if (isUsing196CompatibleClient()) {
+			incomingPayloadParser = new Payload196Parser();
+		} else if (isUsing177CompatibleClient()) {
+			incomingPayloadParser = new Payload177Parser();
+		} else if (isUsing140CompatibleClient()) {
+			incomingPayloadParser = new Payload140Parser();
+		} else if (isUsing115CompatibleClient()) {
+			incomingPayloadParser = new Payload115Parser();
+		} else {
+			incomingPayloadParser = new PayloadCustomParser();
+		}
+		return incomingPayloadParser;
+	}
+
 	public long processOutgoingPackets() {
 		// Unsure if we want to clear right now. Probably OK not to since the player should be cleaned up when the channel is no longer open.
 		/*if(!channel.isOpen() || !isLoggedIn()) {
@@ -2600,14 +2608,19 @@ public final class Player extends Mob {
 			}
 			synchronized (outgoingPackets) {
 				try {
+					boolean wrotePackets = false;
 					for (final Packet outgoing : outgoingPackets) {
 						final long packetTime = getWorld().getServer().bench(
 							() -> {
-								channel.writeAndFlush(outgoing);
+								channel.write(outgoing);
 							}
 						);
+						wrotePackets = true;
 						getWorld().getServer().addOutgoingPacketDuration(outgoing.getID(), packetTime);
 						getWorld().getServer().incrementOutgoingPacketCount(outgoing.getID());
+					}
+					if (wrotePackets) {
+						channel.flush();
 					}
 				} catch (final Exception e) {
 					LOGGER.error("Unable to process outgoing packets for player with username: {}", username, e);
@@ -2755,6 +2768,9 @@ public final class Player extends Mob {
 	}
 
 	public void save(boolean logout, boolean force) {
+		if (getAttribute("dummyplayer", false) && !logout) {
+			return;
+		}
 		//If we want to log out (but we already mass-saved earlier in the same tick), we prioritize logging out over mass-saves so the player can log out the same tick. We make sure to check if they are already logging out in the same tick so that we only have one logout save per tick per player. Force saves always save.
 		if ((!logout || isLoggingOut()) && isSaving() && !force) {
 			return;

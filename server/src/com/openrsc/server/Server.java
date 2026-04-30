@@ -84,6 +84,8 @@ public class Server implements Runnable {
 	private final EntityHandler entityHandler;
 	private final MySqlGameLogger gameLogger;
 	private final PcapLoggerService pcapLogger;
+	private final ServerPerformanceTracker performanceTracker;
+	private final SyntheticLoadService syntheticLoadService;
 	private final GameDatabase database;
 	private final AchievementSystem achievementSystem;
 	private final Constants constants;
@@ -133,6 +135,9 @@ public class Server implements Runnable {
 	private final ListeningExecutorService sqlLoggingThreadPool;
 	private final ListeningExecutorService sqlThreadPool;
 	private final ListeningExecutorService onlineMonitorThreadPool;
+	private final ThreadPoolExecutor sqlLoggingExecutor;
+	private final ThreadPoolExecutor sqlExecutor;
+	private final ThreadPoolExecutor onlineMonitorExecutor;
 
 	private volatile boolean onlineReachable = true;
 
@@ -286,23 +291,25 @@ public class Server implements Runnable {
 		gameUpdater = new GameStateUpdater(this);
 		gameLogger = new MySqlGameLogger(this, (MySqlGameDatabase)database);
 		pcapLogger = new PcapLoggerService(this);
+		performanceTracker = new ServerPerformanceTracker();
+		syntheticLoadService = new SyntheticLoadService(this);
 		entityHandler = new EntityHandler(this);
 		achievementSystem = new AchievementSystem(this);
 		playerService = new PlayerService(world, config, database);
 		i18nService = new I18NService(this);
-		ThreadPoolExecutor sqlLoggingExecutor = new ThreadPoolExecutor(
+		sqlLoggingExecutor = new ThreadPoolExecutor(
 			1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>()
 		);
 		sqlLoggingExecutor.allowCoreThreadTimeOut(false);
 		sqlLoggingExecutor.setThreadFactory(new NamedThreadFactory(getName() + " : SqlLoggingThread", getConfig()));
 		sqlLoggingThreadPool = MoreExecutors.listeningDecorator(sqlLoggingExecutor);
-		ThreadPoolExecutor sqlExecutor = new ThreadPoolExecutor(
+		sqlExecutor = new ThreadPoolExecutor(
 			1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>()
 		);
 		sqlExecutor.allowCoreThreadTimeOut(false);
 		sqlExecutor.setThreadFactory(new NamedThreadFactory(getName() + " : SqlThread", getConfig()));
 		sqlThreadPool = MoreExecutors.listeningDecorator(sqlExecutor);
-		ThreadPoolExecutor onlineMonitorExecutor = new ThreadPoolExecutor(
+		onlineMonitorExecutor = new ThreadPoolExecutor(
 			1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>()
 		);
 		onlineMonitorExecutor.allowCoreThreadTimeOut(false);
@@ -916,6 +923,21 @@ public class Server implements Runnable {
 			final String message = "Tick " + currentTick + " " + getTimeLate() / 1000000 + "ms behind. Skipping " + ticksLate + " " + ticksSkipped;
 			sendMonitoringWarning(message, false);
 		}
+		performanceTracker.record(
+			this,
+			currentTick,
+			isLastTickLate,
+			isServerLate ? ticksLate : 0,
+			totalPacketCount(incomingCountPerPacketOpcode),
+			totalPacketCount(outgoingCountPerPacketOpcode));
+	}
+
+	private static int totalPacketCount(final Map<Integer, Integer> packetCounts) {
+		int total = 0;
+		for (Integer count : packetCounts.values()) {
+			total += count;
+		}
+		return total;
 	}
 
 	private void sendMonitoringWarning(final String message, final boolean showEventData) {
@@ -1050,6 +1072,22 @@ public class Server implements Runnable {
 
 	public final LoginExecutor getLoginExecutor() {
 		return loginExecutor;
+	}
+
+	public SyntheticLoadService getSyntheticLoadService() {
+		return syntheticLoadService;
+	}
+
+	public int getSqlQueueSize() {
+		return sqlExecutor.getQueue().size();
+	}
+
+	public int getSqlLoggingQueueSize() {
+		return sqlLoggingExecutor.getQueue().size();
+	}
+
+	public int getOnlineMonitorQueueSize() {
+		return onlineMonitorExecutor.getQueue().size();
 	}
 
 	public final RSCPacketFilter getPacketFilter() {

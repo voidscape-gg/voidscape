@@ -24,7 +24,7 @@ public class ClientLimitations {
 	public boolean supportsMessageBox = false;
 	public boolean isAndroidClient = false;
 
-	ClientLimitations(int clientVersion) {
+	public ClientLimitations(int clientVersion) {
 		setKnownLimitations(clientVersion);
 	}
 

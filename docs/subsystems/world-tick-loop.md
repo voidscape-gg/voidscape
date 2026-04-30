@@ -164,7 +164,7 @@ world.getServer().getGameEventHandler().add(event);
 
 `RegionManager` — `server/src/com/openrsc/server/model/world/region/RegionManager.java`
 - 2D hash: `ConcurrentHashMap<Integer, ConcurrentHashMap<Integer, Region>>`
-- Each region is an 8×8 tile grid (`Constants.REGION_SIZE = 8`).
+- Each region is a 48×48 tile grid (`Constants.REGION_SIZE = 48`), matching RSC sector size.
 - Indexed by region X, Y.
 
 `Region` — `server/src/com/openrsc/server/model/world/region/Region.java`

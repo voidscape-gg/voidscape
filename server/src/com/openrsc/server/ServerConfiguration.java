@@ -78,6 +78,9 @@ public class ServerConfiguration {
 	public int MAX_PASSWORD_GUESSES_PER_FIVE_MINUTES;
 	public int NETWORK_FLOOD_IP_BAN_MINUTES;
 	public boolean WANT_PCAP_LOGGING;
+	public boolean PERF_TELEMETRY;
+	public int PERF_TELEMETRY_INTERVAL_SECONDS;
+	public int PERF_TELEMETRY_WINDOW_TICKS;
 	public boolean WANT_THREADING__BREAK_PID_PRIORITY;
 	public boolean BREAK_NPC_LOCATION_CACHE;
 	public boolean IS_LOCALHOST_RESTRICTED;
@@ -439,6 +442,9 @@ public class ServerConfiguration {
 		AVATAR_GENERATOR = tryReadBool("avatar_generator").orElse(false);
 		MEMBER_WORLD = tryReadBool("member_world").orElse(true);
 		WANT_PCAP_LOGGING = tryReadBool("want_pcap_logging").orElse(false);
+		PERF_TELEMETRY = tryReadBool("perf_telemetry").orElse(false);
+		PERF_TELEMETRY_INTERVAL_SECONDS = Math.max(1, tryReadInt("perf_telemetry_interval_seconds").orElse(30));
+		PERF_TELEMETRY_WINDOW_TICKS = Math.max(32, Math.min(4096, tryReadInt("perf_telemetry_window_ticks").orElse(512)));
 		WANT_THREADING__BREAK_PID_PRIORITY = tryReadBool("want_threading__break_pid_priority").orElse(false);
 		BREAK_NPC_LOCATION_CACHE = tryReadBool("break_npc_location_cache").orElse(false);
 		WORLD_NUMBER = tryReadInt("world_number").orElse(1);
