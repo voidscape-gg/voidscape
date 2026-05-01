@@ -256,6 +256,7 @@ public class CombatEvent extends GameTickEvent {
 			Player player = ((Player) hitter);
 			damage = Math.min(damage, lastHits);
 			n.addCombatDamage(player, damage);
+			n.awardMeleeHitExperience(player, damage);
 		}
 
 		// Update players sound and party.

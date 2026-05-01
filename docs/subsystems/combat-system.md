@@ -122,7 +122,10 @@ PvP-specific:
 
 XP distribution:
 - PvP: `combatExperience()` formula.
-- PvE: `Npc.handleXpDistribution()` based on damage tracking.
+- PvE melee, authentic mode: `Npc.handleXpDistribution()` awards XP after NPC death based on damage tracking.
+- PvE melee, Voidscape/on-hit mode: `melee_gives_xp_hit` awards successful melee-hit XP immediately through `Npc.awardMeleeHitExperience()`, while death distribution still uses damage tracking for loot ownership. Per-NPC XP-paid damage is capped to the NPC's base hit total, so healing/regeneration cannot create more than one NPC-life of melee XP.
+- PvE ranged: `ranged_gives_xp_hit` can award ranged XP immediately, with death distribution subtracting already-paid hit XP.
+- Magic: damage spells award configured spell XP on successful cast/finalization rather than kill XP.
 
 ## Multi-combat zones, retreating, freezing
 
@@ -185,6 +188,7 @@ Retaliation: implicit via `setOpponent()` in `AttackHandler`; combat event loop 
 7. **Defence cape 50% block is unconditional.** Players wearing it dramatically reduce melee damage; balance accordingly when tuning content.
 8. **Strength cape +20%** only fires on hits ≥50% of max hit — easy to forget when computing expected DPS.
 9. **No cross-formula tests.** If you change `CombatFormula`, run combat scenarios manually; there's no automated harness.
+10. **On-hit melee XP is a deliberate Voidscape divergence.** Keep PvP death-based unless specifically rebalanced; PvP on-hit XP is much easier to farm between cooperating players.
 
 ## Glossary candidates
 

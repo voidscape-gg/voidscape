@@ -1624,3 +1624,28 @@ Files touched:
 - `server/src/com/openrsc/server/constants/ItemId.java`
 - `server/src/com/openrsc/server/constants/NpcDrops.java`
 - `server/src/com/openrsc/server/model/entity/npc/Npc.java`
+
+### 2026-05-01 - PvE melee XP awarded on successful hits
+
+Added `world.melee_gives_xp_hit` as a combat XP timing divergence. The tracked presets keep the flag disabled by default; Voidscape's gitignored `server/local.conf` enables it.
+
+Details:
+- Successful player melee hits against NPCs now award the corresponding Attack/Strength/Defense/Hits XP immediately when `melee_gives_xp_hit` is enabled.
+- PvP melee XP remains death-based.
+- Ranged and magic code behavior are unchanged: ranged still uses `ranged_gives_xp_hit`, and magic still awards spell XP on successful cast/finalization.
+- Voidscape's gitignored `server/local.conf` enables both `melee_gives_xp_hit` and `ranged_gives_xp_hit`, so local PvE melee and ranged XP are both awarded on successful hits.
+- NPC death still uses tracked melee damage for loot ownership, but skips the melee XP payout when on-hit melee XP is enabled to avoid double awards.
+- On-hit melee XP is capped by total paid melee-XP damage per NPC life. If an NPC heals or regenerates, the same spawned NPC cannot produce more than one base-HP worth of melee hit XP before it dies and respawns.
+
+Files touched:
+- `server/src/com/openrsc/server/ServerConfiguration.java`
+- `server/src/com/openrsc/server/event/rsc/impl/combat/CombatEvent.java`
+- `server/src/com/openrsc/server/model/entity/npc/Npc.java`
+- `server/default.conf`
+- `server/preservation.conf`
+- `server/uranium.conf`
+- `server/rsccabbage.conf`
+- `server/rsccoleslaw.conf`
+- `server/openpk.conf`
+- `server/2001scape.conf`
+- `docs/subsystems/combat-system.md`

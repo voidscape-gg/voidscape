@@ -79,6 +79,7 @@ public class Npc extends Mob {
 	 * Holds players that did damage with range
 	 */
 	private Map<UUID, Pair<Integer, Long>> rangeDamagers = new HashMap<UUID, Pair<Integer,Long>>();
+	private int meleeXpDamagePaid = 0;
 
 
 	/**
@@ -149,6 +150,29 @@ public class Npc extends Mob {
 		} else {
 			combatDamagers.put(mob.getUUID(), Pair.of(damage, mob.getUsernameHash()));
 		}
+	}
+
+	public void awardMeleeHitExperience(final Player player, final int damage) {
+		if (!getConfig().MELEE_GIVES_XP_HIT || damage <= 0 || getDef().hits <= 0) {
+			return;
+		}
+
+		int damageForXp = Math.min(damage, getDef().hits - meleeXpDamagePaid);
+		if (damageForXp <= 0) {
+			return;
+		}
+
+		int totalCombatXP = Formulae.combatExperience(this);
+		int previousBaseXp = meleeBaseXpForDamage(totalCombatXP, meleeXpDamagePaid);
+		meleeXpDamagePaid += damageForXp;
+		int baseXp = meleeBaseXpForDamage(totalCombatXP, meleeXpDamagePaid) - previousBaseXp;
+		if (baseXp > 0) {
+			player.incExp(combatSkillDistribution(player), baseXp, true);
+		}
+	}
+
+	private int meleeBaseXpForDamage(final int totalCombatXP, final int damage) {
+		return (int) (((double) totalCombatXP / (double) getDef().hits) * (double) damage);
 	}
 
 	/**
@@ -703,26 +727,9 @@ public class Npc extends Mob {
 			Player lastAttacker = (Player)attacker;
 
 			if (type == KillType.COMBAT) {
-				int[] skillsDist = new int[Skill.maxId(Skill.ATTACK.name(), Skill.DEFENSE.name(),
-					Skill.STRENGTH.name(), Skill.HITS.name()) + 1];
-				switch (lastAttacker.getCombatStyle()) {
-					case Skills.CONTROLLED_MODE: // CONTROLLED
-						for (int skillId : new int[]{Skill.ATTACK.id(), Skill.DEFENSE.id(), Skill.STRENGTH.id()}) {
-							skillsDist[skillId] = 1;
-						}
-						break;
-					case Skills.AGGRESSIVE_MODE: // AGGRESSIVE
-						skillsDist[Skill.STRENGTH.id()] = 3;
-						break;
-					case Skills.ACCURATE_MODE: // ACCURATE
-						skillsDist[Skill.ATTACK.id()] = 3;
-						break;
-					case Skills.DEFENSIVE_MODE: // DEFENSIVE
-						skillsDist[Skill.DEFENSE.id()] = 3;
-						break;
+				if (!getConfig().MELEE_GIVES_XP_HIT) {
+					lastAttacker.incExp(combatSkillDistribution(lastAttacker), totalCombatXP, true);
 				}
-				skillsDist[Skill.HITS.id()] = 1;
-				lastAttacker.incExp(skillsDist, totalCombatXP, true);
 			} else if (type == KillType.RANGED) {
 				int maxTotalXP = totalCombatXP * 4;
 				Pair<Integer, Long> damageInfoByPlayer = getRangeDamageInfoBy(lastAttacker.getUUID());
@@ -751,28 +758,11 @@ public class Npc extends Mob {
 
 			Player player = getWorld().getPlayerByUUID(ID);
 			if (player != null) {
-				int[] skillsDist = new int[Skill.maxId(Skill.ATTACK.name(), Skill.DEFENSE.name(),
-					Skill.STRENGTH.name(), Skill.HITS.name()) + 1];
 				// Give the player their share of the experience.
 				int totalXP = (int) (((double) (totalCombatXP) / (double) (getDef().hits)) * (double) (damageDoneByPlayer));
-				switch (player.getCombatStyle()) {
-					case Skills.CONTROLLED_MODE: // CONTROLLED
-						for (int skillId : new int[]{Skill.ATTACK.id(), Skill.DEFENSE.id(), Skill.STRENGTH.id()}) {
-							skillsDist[skillId] = 1;
-						}
-						break;
-					case Skills.AGGRESSIVE_MODE: // AGGRESSIVE
-						skillsDist[Skill.STRENGTH.id()] = 3;
-						break;
-					case Skills.ACCURATE_MODE: // ACCURATE
-						skillsDist[Skill.ATTACK.id()] = 3;
-						break;
-					case Skills.DEFENSIVE_MODE: // DEFENSIVE
-						skillsDist[Skill.DEFENSE.id()] = 3;
-						break;
+				if (!getConfig().MELEE_GIVES_XP_HIT) {
+					player.incExp(combatSkillDistribution(player), totalXP, true);
 				}
-				skillsDist[Skill.HITS.id()] = 1;
-				player.incExp(skillsDist, totalXP, true);
 
 				player.resetTrackedDamageAndBlockedDamage(this);
 			}
@@ -812,6 +802,29 @@ public class Npc extends Mob {
 			}
 		}
 		return Pair.of(UUIDWithMostDamage, hashWithMostDamage);
+	}
+
+	private int[] combatSkillDistribution(final Player player) {
+		int[] skillsDist = new int[Skill.maxId(Skill.ATTACK.name(), Skill.DEFENSE.name(),
+			Skill.STRENGTH.name(), Skill.HITS.name()) + 1];
+		switch (player.getCombatStyle()) {
+			case Skills.CONTROLLED_MODE: // CONTROLLED
+				for (int skillId : new int[]{Skill.ATTACK.id(), Skill.DEFENSE.id(), Skill.STRENGTH.id()}) {
+					skillsDist[skillId] = 1;
+				}
+				break;
+			case Skills.AGGRESSIVE_MODE: // AGGRESSIVE
+				skillsDist[Skill.STRENGTH.id()] = 3;
+				break;
+			case Skills.ACCURATE_MODE: // ACCURATE
+				skillsDist[Skill.ATTACK.id()] = 3;
+				break;
+			case Skills.DEFENSIVE_MODE: // DEFENSIVE
+				skillsDist[Skill.DEFENSE.id()] = 3;
+				break;
+		}
+		skillsDist[Skill.HITS.id()] = 1;
+		return skillsDist;
 	}
 
 	public void initializeTalkScript(final Player player) {
@@ -879,6 +892,7 @@ public class Npc extends Mob {
 					tryResyncHitEvent();
 
 					running = false;
+					meleeXpDamagePaid = 0;
 					mageDamagers.clear();
 					rangeDamagers.clear();
 					combatDamagers.clear();

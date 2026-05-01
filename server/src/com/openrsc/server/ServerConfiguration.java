@@ -327,6 +327,7 @@ public class ServerConfiguration {
 	public boolean OLD_SKILL_DEFS;
 	public boolean WANTS_KILL_STEALING;
 	public boolean RANGED_GIVES_XP_HIT;
+	public boolean MELEE_GIVES_XP_HIT;
 	public boolean ONLY_BASIC_RUNES;
 	public boolean CAN_OFFER_UNTRADEABLES;
 	public boolean CAN_PROSPECT_FAIL;
@@ -569,6 +570,7 @@ public class ServerConfiguration {
 		OLD_SKILL_DEFS = tryReadBool("old_skill_defs").orElse(false);
 		WANTS_KILL_STEALING = tryReadBool("wants_kill_stealing").orElse(false);
 		RANGED_GIVES_XP_HIT = tryReadBool("ranged_gives_xp_hit").orElse(false);
+		MELEE_GIVES_XP_HIT = tryReadBool("melee_gives_xp_hit").orElse(false);
 		ONLY_BASIC_RUNES = tryReadBool("only_basic_runes").orElse(false);
 		CAN_OFFER_UNTRADEABLES = tryReadBool("can_offer_untradeables").orElse(false);
 		CAN_PROSPECT_FAIL = tryReadBool("can_prospect_fail").orElse(false);
