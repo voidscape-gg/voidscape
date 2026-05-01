@@ -75,6 +75,18 @@ public final class mudclient implements Runnable {
 	private static final int VOID_RUSH_ARENA_MAX_X = 522;
 	private static final int VOID_RUSH_ARENA_MAX_Y = 86;
 	private static final int VOID_RUSH_WAVE_VISUAL_MILLIS = 640;
+	private static final int CINEMATIC_CAMERA_CLASSIC = 0;
+	private static final int CINEMATIC_CAMERA_FIRST_PERSON = 1;
+	private static final int CINEMATIC_CAMERA_CLOSE = 2;
+	private static final int CINEMATIC_CAMERA_LOW = 3;
+	private static final int CINEMATIC_CAMERA_ORBIT = 4;
+	private static final int CINEMATIC_CAMERA_MODE_COUNT = 5;
+	private static final String[] CINEMATIC_CAMERA_NAMES = {
+		"Classic", "First person", "Close", "Low angle", "Orbit"
+	};
+	private static final int CINEMATIC_CAMERA_OFFSET_MIN = -360;
+	private static final int CINEMATIC_CAMERA_OFFSET_MAX = 640;
+	private static final int CINEMATIC_CAMERA_PATH_FRAMES = 220;
 	private static final int MAX_TELEPORT_BUBBLES = 50;
 	public static KillAnnouncerQueue killQueue = new KillAnnouncerQueue();
 	public static int skillCount;
@@ -348,6 +360,15 @@ public final class mudclient implements Runnable {
 	public int lastSavedCameraZoom = 0;
 	public int minCameraZoom = 600;
 	public boolean doCameraZoom = false;
+	private int cinematicCameraMode = CINEMATIC_CAMERA_CLASSIC;
+	private int cinematicCameraOffsetDelta = 0;
+	private boolean cinematicHudHidden = false;
+	private final CinematicCameraPoint cinematicCameraPointA = new CinematicCameraPoint();
+	private final CinematicCameraPoint cinematicCameraPointB = new CinematicCameraPoint();
+	private boolean cinematicCameraPathPlaying = false;
+	private int cinematicCameraPathFrame = 0;
+	private boolean cinematicSlowOrbit = false;
+	private int cinematicSlowOrbitFrame = 0;
 	public ORSCharacter localPlayer = new ORSCharacter();
 	public MessageTab messageTabSelected = MessageTab.ALL;
 	public OnlineListInterface onlineList;
@@ -5550,7 +5571,7 @@ public final class mudclient implements Runnable {
 					this.characterHealthCount = 0;
 					this.characterDialogCount = 0;
 					if (this.cameraAutoAngleDebug) {
-						if (this.optionCameraModeAuto && !this.isInFirstPersonView() && !this.doCameraZoom) {
+						if (this.optionCameraModeAuto && !this.isInCinematicCameraMode() && !this.doCameraZoom) {
 							centerX = this.cameraAngle;
 							this.autoRotateCamera((byte) 22);
 							if (centerX != this.cameraAngle) {
@@ -5567,18 +5588,16 @@ public final class mudclient implements Runnable {
 
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
 						centerZ = this.cameraPositionZ + this.cameraAutoMoveZ;
-						this.scene.setCamera(centerX, -this.world.getElevation(centerX, centerZ) + 180, centerZ, this.getCameraPitch(),
-							this.cameraRotation * 4, 0, this.isInFirstPersonView() ? 0 : 2000);
+						this.setGameCamera(centerX, centerZ, 180, 2000);
 
 						int zoomMultiplier = 0;
 						if (Config.S_ZOOM_VIEW_TOGGLE)
 							zoomMultiplier = Config.C_ZOOM == 0 ? 0 : Config.C_ZOOM == 1 ? +200 : Config.C_ZOOM == 2 ? +400 : -200;
 
-						this.scene.setCamera(centerX, -this.world.getElevation(centerX, centerZ) + 180, centerZ, this.getCameraPitch(),
-							this.cameraRotation * 4, 0, this.isInFirstPersonView() ? 0 : (this.cameraZoom + zoomMultiplier) * 2);
+						this.setGameCamera(centerX, centerZ, 180, (this.cameraZoom + zoomMultiplier) * 2);
 
 					} else {
-						if (this.optionCameraModeAuto && !this.isInFirstPersonView() && !this.doCameraZoom) {
+						if (this.optionCameraModeAuto && !this.isInCinematicCameraMode() && !this.doCameraZoom) {
 							this.autoRotateCamera((byte) 94);
 						}
 						if (C_HIDE_FOG) {
@@ -5603,15 +5622,25 @@ public final class mudclient implements Runnable {
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
 						centerZ = this.cameraPositionZ + this.cameraAutoMoveZ;
 
-						this.scene.setCamera(centerX, -this.world.getElevation(centerX, centerZ) - 180, centerZ, this.getCameraPitch(),
-							this.cameraRotation * 4, 0, this.isInFirstPersonView() ? 0 : this.cameraZoom * 2);
+						this.setGameCamera(centerX, centerZ, -180, this.cameraZoom * 2);
 					}
 
 					this.scene.endScene(-113);
 					drawGameLookSceneOverlay();
 					drawVoidRushWaveProjectile();
-					drawWorldWalkSceneRoute();
+					if (!this.isCinematicHudHidden()) {
+						drawWorldWalkSceneRoute();
+					}
 					drawRareDropBeams();
+					this.advanceCinematicCameraPath();
+
+					if (this.isCinematicHudHidden()) {
+						this.processCinematicHudlessInput();
+						groundItems.clear();
+						this.getSurface().loggedIn = false;
+						clientPort.draw();
+						return;
+					}
 
 					// Only draw ground item names if the feature is enabled
 					// and a panel/the keyboard isn't open.
@@ -13733,7 +13762,7 @@ public final class mudclient implements Runnable {
 						this.cameraPositionZ = this.localPlayer.currentZ;
 					}
 
-					if (this.optionCameraModeAuto && !this.isInFirstPersonView()) {
+					if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
 						updateIndex = this.cameraAngle * 32;
 						var10 = updateIndex - this.cameraRotation;
 						byte var12 = 1;
@@ -13950,7 +13979,7 @@ public final class mudclient implements Runnable {
 					}
 					this.scene.setMouseLoc(0, this.mouseX, this.mouseY);
 					this.lastMouseButtonDown = 0;
-					if (this.optionCameraModeAuto && !this.isInFirstPersonView()) {
+					if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
 						if (this.m_Wc == 0 || this.cameraAutoAngleDebug) {
 							if (this.keyLeft) {
 								this.keyLeft = false;
@@ -13985,27 +14014,20 @@ public final class mudclient implements Runnable {
 					} else if (this.keyRight) {
 						this.cameraRotation = 255 & this.cameraRotation - 2;
 					} else if (this.keyDown) {
-						if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
+						if (this.isInCinematicCameraMode()) {
+							this.adjustCinematicCameraPitch(4);
+						} else if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
 							osConfig.C_LAST_ZOOM = Math.min(255, osConfig.C_LAST_ZOOM + 8);
 						} else {
-							if (this.cameraAllowPitchModification) {
-								this.cameraPitch = (this.cameraPitch + 4) & 1023;
-
-								// Limit on the half circled where everything is right side up
-								if (this.cameraPitch > 256 && this.cameraPitch <= 512)
-									this.cameraPitch = 256;
-
-								if (this.cameraPitch < 768 && this.cameraPitch > 512)
-									this.cameraPitch = 768;
-							}
+							this.adjustCinematicCameraPitch(4);
 						}
 					} else if (this.keyUp) {
-						if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
+						if (this.isInCinematicCameraMode()) {
+							this.adjustCinematicCameraPitch(-4);
+						} else if (S_ZOOM_VIEW_TOGGLE || getLocalPlayer().isStaff()) {
 							osConfig.C_LAST_ZOOM = Math.max(0, osConfig.C_LAST_ZOOM - 8);
 						} else {
-							if (this.cameraAllowPitchModification) {
-								this.cameraPitch = (this.cameraPitch + 1024 - 4) & 1023;
-							}
+							this.adjustCinematicCameraPitch(-4);
 						}
 					} else if (this.pageDown) {
 						currentChat++;
@@ -20259,18 +20281,344 @@ public final class mudclient implements Runnable {
 	}
 
 	public boolean isInFirstPersonView() {
-		return this.isFirstPersonView && this.localPlayer.direction != ORSCharacterDirection.COMBAT_B && this.localPlayer.direction != ORSCharacterDirection.COMBAT_B;
+		boolean firstPerson = this.cinematicCameraPathPlaying
+			? this.getCinematicCameraPathOffset() <= 80
+			: this.cinematicCameraMode == CINEMATIC_CAMERA_FIRST_PERSON;
+		return firstPerson
+			&& this.localPlayer.direction != ORSCharacterDirection.COMBAT_B;
 	}
 
 	public void toggleFirstPersonView() {
-		osConfig.C_LAST_ZOOM = 75;
-		this.isFirstPersonView = !this.isFirstPersonView;
-		this.cameraPitch = this.isInFirstPersonView() ? 0 : DEFAULT_CAMERA_PITCH;
-		this.cameraRotation = this.localPlayer.direction.rotation;
+		this.cycleCinematicCameraMode();
+	}
+
+	public boolean isInCinematicCameraMode() {
+		return this.cinematicCameraMode != CINEMATIC_CAMERA_CLASSIC || this.cinematicCameraPathPlaying;
+	}
+
+	public boolean isCinematicHudHidden() {
+		return this.cinematicHudHidden && this.currentViewMode == GameMode.GAME;
+	}
+
+	public void cycleCinematicCameraMode() {
+		this.setCinematicCameraMode((this.cinematicCameraMode + 1) % CINEMATIC_CAMERA_MODE_COUNT, true);
+	}
+
+	public void toggleCinematicHud() {
+		this.cinematicHudHidden = !this.cinematicHudHidden;
+		this.showCinematicMessage("Cinematic HUD " + (this.cinematicHudHidden ? "hidden" : "shown"));
+	}
+
+	public void saveCinematicCameraPointA() {
+		this.saveCinematicCameraPoint(this.cinematicCameraPointA, "A");
+	}
+
+	public void saveCinematicCameraPointB() {
+		this.saveCinematicCameraPoint(this.cinematicCameraPointB, "B");
+	}
+
+	public void toggleCinematicCameraPath() {
+		if (this.cinematicCameraPathPlaying) {
+			this.cinematicCameraPathPlaying = false;
+			this.showCinematicMessage("Camera path stopped");
+			return;
+		}
+		if (!this.cinematicCameraPointA.valid || !this.cinematicCameraPointB.valid) {
+			this.showCinematicMessage("Save camera points A and B first");
+			return;
+		}
+		this.cinematicCameraPathFrame = 0;
+		this.cinematicCameraPathPlaying = true;
+		this.cinematicSlowOrbit = false;
+		this.showCinematicMessage("Camera path playing");
+	}
+
+	public void toggleCinematicSlowOrbit() {
+		this.cinematicCameraPathPlaying = false;
+		if (this.cinematicCameraMode == CINEMATIC_CAMERA_CLASSIC) {
+			this.setCinematicCameraMode(CINEMATIC_CAMERA_ORBIT, false);
+		}
+		this.cinematicSlowOrbit = !this.cinematicSlowOrbit;
+		this.showCinematicMessage("Slow orbit " + (this.cinematicSlowOrbit ? "on" : "off"));
+	}
+
+	public boolean adjustCinematicCameraOffset(int amount) {
+		if (this.cinematicCameraMode == CINEMATIC_CAMERA_CLASSIC) {
+			return false;
+		}
+		if (this.cinematicCameraMode == CINEMATIC_CAMERA_FIRST_PERSON) {
+			return true;
+		}
+		this.cinematicCameraOffsetDelta = clampInt(
+			this.cinematicCameraOffsetDelta + amount,
+			CINEMATIC_CAMERA_OFFSET_MIN,
+			CINEMATIC_CAMERA_OFFSET_MAX
+		);
+		return true;
+	}
+
+	public void adjustCinematicCameraPitch(int amount) {
+		if (!this.cameraAllowPitchModification) {
+			return;
+		}
+		this.cameraPitch = (this.cameraPitch + amount) & 1023;
+		this.clampCinematicCameraPitch();
 	}
 
 	public int getCameraPitch() {
-		return this.isInFirstPersonView() ? this.cameraPitch : DEFAULT_CAMERA_PITCH;
+		return this.isInCinematicCameraMode() ? this.cameraPitch : DEFAULT_CAMERA_PITCH;
+	}
+
+	private void setCinematicCameraMode(int mode, boolean notify) {
+		this.cinematicCameraMode = clampInt(mode, CINEMATIC_CAMERA_CLASSIC, CINEMATIC_CAMERA_MODE_COUNT - 1);
+		this.isFirstPersonView = this.cinematicCameraMode == CINEMATIC_CAMERA_FIRST_PERSON;
+		this.cinematicCameraOffsetDelta = 0;
+		this.cinematicCameraPathPlaying = false;
+		if (this.cinematicCameraMode == CINEMATIC_CAMERA_CLASSIC) {
+			this.cinematicSlowOrbit = false;
+		}
+		if (this.cinematicCameraMode == CINEMATIC_CAMERA_CLASSIC) {
+			this.cameraPitch = DEFAULT_CAMERA_PITCH;
+		} else {
+			this.cameraPitch = this.getDefaultCinematicCameraPitch(this.cinematicCameraMode);
+			if (this.cinematicCameraMode == CINEMATIC_CAMERA_FIRST_PERSON) {
+				this.cameraRotation = this.localPlayer.direction.rotation;
+			}
+		}
+		if (notify) {
+			this.showCinematicMessage("Camera: " + CINEMATIC_CAMERA_NAMES[this.cinematicCameraMode]);
+		}
+	}
+
+	private void showCinematicMessage(String message) {
+		if (!this.cinematicHudHidden) {
+			this.showMessage(false, null, message, MessageType.GAME, 0, null);
+		}
+	}
+
+	private void setGameCamera(int centerX, int centerZ, int defaultTargetYOffset, int defaultOffset) {
+		if (this.cinematicCameraPathPlaying) {
+			int cameraTargetY = -this.world.getElevation(centerX, centerZ) + this.getCinematicCameraPathTargetYOffset();
+			this.scene.setCamera(centerX, cameraTargetY, centerZ, this.getCinematicCameraPathPitch(),
+				this.getCinematicCameraPathRotation() * 4, 0, this.getCinematicCameraPathOffset());
+			return;
+		}
+		int cameraTargetY = -this.world.getElevation(centerX, centerZ) + this.getCameraTargetYOffset(defaultTargetYOffset);
+		this.scene.setCamera(centerX, cameraTargetY, centerZ, this.getCameraPitch(),
+			this.cameraRotation * 4, 0, this.getCameraOffset(defaultOffset));
+	}
+
+	private void saveCinematicCameraPoint(CinematicCameraPoint point, String label) {
+		point.valid = true;
+		point.mode = this.cinematicCameraPathPlaying ? this.cinematicCameraPointB.mode : this.cinematicCameraMode;
+		point.pitch = this.cinematicCameraPathPlaying ? this.getCinematicCameraPathPitch() : this.getCameraPitch();
+		point.rotation = this.cinematicCameraPathPlaying ? this.getCinematicCameraPathRotation() : this.cameraRotation;
+		point.offset = this.cinematicCameraPathPlaying ? this.getCinematicCameraPathOffset() : this.getCurrentCameraOffset();
+		point.targetYOffset = this.cinematicCameraPathPlaying ? this.getCinematicCameraPathTargetYOffset() : this.getCurrentCameraTargetYOffset();
+		this.showCinematicMessage("Camera point " + label + " saved");
+	}
+
+	private void advanceCinematicCameraPath() {
+		if (!this.cinematicCameraPathPlaying) {
+			this.advanceCinematicSlowOrbit();
+			return;
+		}
+		this.cinematicCameraPathFrame++;
+		if (this.cinematicCameraPathFrame > CINEMATIC_CAMERA_PATH_FRAMES) {
+			this.cinematicCameraPathPlaying = false;
+			this.applyCinematicCameraPoint(this.cinematicCameraPointB);
+			this.showCinematicMessage("Camera path complete");
+		}
+	}
+
+	private void advanceCinematicSlowOrbit() {
+		if (!this.cinematicSlowOrbit || this.cinematicCameraMode == CINEMATIC_CAMERA_CLASSIC) {
+			return;
+		}
+		this.cinematicSlowOrbitFrame++;
+		if (this.cinematicSlowOrbitFrame >= 2) {
+			this.cinematicSlowOrbitFrame = 0;
+			this.cameraRotation = (this.cameraRotation + 1) & 255;
+		}
+	}
+
+	private int getCinematicCameraPathPitch() {
+		return this.lerpAngle1024(this.cinematicCameraPointA.pitch, this.cinematicCameraPointB.pitch,
+			this.getCinematicCameraPathProgress());
+	}
+
+	private int getCinematicCameraPathRotation() {
+		return this.lerpAngle256(this.cinematicCameraPointA.rotation, this.cinematicCameraPointB.rotation,
+			this.getCinematicCameraPathProgress());
+	}
+
+	private int getCinematicCameraPathOffset() {
+		return this.lerpInt(this.cinematicCameraPointA.offset, this.cinematicCameraPointB.offset,
+			this.getCinematicCameraPathProgress());
+	}
+
+	private int getCinematicCameraPathTargetYOffset() {
+		return this.lerpInt(this.cinematicCameraPointA.targetYOffset, this.cinematicCameraPointB.targetYOffset,
+			this.getCinematicCameraPathProgress());
+	}
+
+	private double getCinematicCameraPathProgress() {
+		double t = Math.max(0.0D, Math.min(1.0D, this.cinematicCameraPathFrame / (double) CINEMATIC_CAMERA_PATH_FRAMES));
+		return t * t * (3.0D - 2.0D * t);
+	}
+
+	private void applyCinematicCameraPoint(CinematicCameraPoint point) {
+		this.cinematicCameraMode = point.mode;
+		this.isFirstPersonView = this.cinematicCameraMode == CINEMATIC_CAMERA_FIRST_PERSON;
+		this.cameraPitch = point.pitch;
+		this.cameraRotation = point.rotation;
+		this.cinematicCameraOffsetDelta = point.offset - this.getCameraBaseOffset(this.cinematicCameraMode);
+		this.cinematicCameraOffsetDelta = clampInt(this.cinematicCameraOffsetDelta,
+			CINEMATIC_CAMERA_OFFSET_MIN, CINEMATIC_CAMERA_OFFSET_MAX);
+	}
+
+	private void processCinematicHudlessInput() {
+		this.showUiTab = 0;
+		this.topMouseMenuVisible = false;
+		if (this.mouseButtonClick == 1) {
+			int tileIndex = this.getHoveredLandscapeTileIndex();
+			if (tileIndex >= 0) {
+				this.walkToActionSource(this.playerLocalX, this.playerLocalZ,
+					this.world.faceTileX[tileIndex], this.world.faceTileZ[tileIndex], false);
+			}
+		}
+		this.mouseButtonClick = 0;
+		this.lastMouseButtonDown = 0;
+	}
+
+	private int getHoveredLandscapeTileIndex() {
+		int tileIndex = -1;
+		int pickCount = this.scene.b(0);
+		RSModel[] models = this.scene.b((byte) 124);
+		int[] faceIndices = this.scene.getQB((byte) 104);
+		for (int i = 0; i < pickCount; i++) {
+			RSModel model = models[i];
+			if (model == null) {
+				continue;
+			}
+			int faceIndex = faceIndices[i];
+			if (faceIndex < 0 || faceIndex >= model.facePickIndex.length) {
+				continue;
+			}
+			int pickIndex = model.facePickIndex[faceIndex];
+			if (this.scene.m_T == model || model.key >= 0 || pickIndex < 200000 || pickIndex > 300000) {
+				continue;
+			}
+			int candidate = pickIndex - 200000;
+			if (candidate >= 0 && candidate < this.world.faceTileX.length
+				&& candidate < this.world.faceTileZ.length) {
+				tileIndex = candidate;
+			}
+		}
+		return tileIndex;
+	}
+
+	private int getCameraTargetYOffset(int defaultTargetYOffset) {
+		switch (this.cinematicCameraMode) {
+			case CINEMATIC_CAMERA_FIRST_PERSON:
+				return -180;
+			case CINEMATIC_CAMERA_CLOSE:
+				return -135;
+			case CINEMATIC_CAMERA_LOW:
+				return -70;
+			case CINEMATIC_CAMERA_ORBIT:
+				return -190;
+			default:
+				return defaultTargetYOffset;
+		}
+	}
+
+	private int getCurrentCameraTargetYOffset() {
+		return this.getCameraTargetYOffset(-180);
+	}
+
+	private int getCameraOffset(int defaultOffset) {
+		switch (this.cinematicCameraMode) {
+			case CINEMATIC_CAMERA_FIRST_PERSON:
+				return 0;
+			case CINEMATIC_CAMERA_CLOSE:
+				return clampInt(this.getCameraBaseOffset(this.cinematicCameraMode) + this.cinematicCameraOffsetDelta, 420, 1400);
+			case CINEMATIC_CAMERA_LOW:
+				return clampInt(this.getCameraBaseOffset(this.cinematicCameraMode) + this.cinematicCameraOffsetDelta, 320, 1200);
+			case CINEMATIC_CAMERA_ORBIT:
+				return clampInt(this.getCameraBaseOffset(this.cinematicCameraMode) + this.cinematicCameraOffsetDelta, 640, 1700);
+			default:
+				return defaultOffset;
+		}
+	}
+
+	private int getCurrentCameraOffset() {
+		return this.getCameraOffset(this.cameraZoom * 2);
+	}
+
+	private int getCameraBaseOffset(int mode) {
+		switch (mode) {
+			case CINEMATIC_CAMERA_CLOSE:
+				return 760;
+			case CINEMATIC_CAMERA_LOW:
+				return 560;
+			case CINEMATIC_CAMERA_ORBIT:
+				return 1040;
+			default:
+				return 0;
+		}
+	}
+
+	private int getDefaultCinematicCameraPitch(int mode) {
+		switch (mode) {
+			case CINEMATIC_CAMERA_FIRST_PERSON:
+				return 0;
+			case CINEMATIC_CAMERA_CLOSE:
+				return 944;
+			case CINEMATIC_CAMERA_LOW:
+				return 1000;
+			case CINEMATIC_CAMERA_ORBIT:
+				return 888;
+			default:
+				return DEFAULT_CAMERA_PITCH;
+		}
+	}
+
+	private void clampCinematicCameraPitch() {
+		// Keep the camera on the upright half of the pitch circle.
+		if (this.cameraPitch > 256 && this.cameraPitch <= 512) {
+			this.cameraPitch = 256;
+		}
+		if (this.cameraPitch < 768 && this.cameraPitch > 512) {
+			this.cameraPitch = 768;
+		}
+	}
+
+	private int clampInt(int value, int min, int max) {
+		return Math.max(min, Math.min(max, value));
+	}
+
+	private int lerpInt(int from, int to, double progress) {
+		return (int) Math.round(from + (to - from) * progress);
+	}
+
+	private int lerpAngle256(int from, int to, double progress) {
+		int delta = ((to - from + 128) & 255) - 128;
+		return (from + (int) Math.round(delta * progress)) & 255;
+	}
+
+	private int lerpAngle1024(int from, int to, double progress) {
+		int delta = ((to - from + 512) & 1023) - 512;
+		return (from + (int) Math.round(delta * progress)) & 1023;
+	}
+
+	private static final class CinematicCameraPoint {
+		private boolean valid = false;
+		private int mode = CINEMATIC_CAMERA_CLASSIC;
+		private int pitch = DEFAULT_CAMERA_PITCH;
+		private int rotation = 128;
+		private int offset = 0;
+		private int targetYOffset = -180;
 	}
 
 	class XPNotification {

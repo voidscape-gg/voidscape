@@ -660,7 +660,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 					boolean mayBeScrollable = mudclient.showUiTab != 0;
 					boolean zoomable = (!scrollableMessagePanel && !mayBeScrollable) || osConfig.C_SWIPE_TO_SCROLL_MODE == 0;
 
-					if (!mudclient.isInFirstPersonView() && zoomable && (S_ZOOM_VIEW_TOGGLE || mudclient.getLocalPlayer().isStaff()) && !var1.isControlDown()) {
+					if (!mudclient.isInCinematicCameraMode() && zoomable && (S_ZOOM_VIEW_TOGGLE || mudclient.getLocalPlayer().isStaff()) && !var1.isControlDown()) {
 						if (osConfig.C_SWIPE_TO_ZOOM_MODE != 0) {
 							int dir = osConfig.C_SWIPE_TO_ZOOM_MODE == 2 ? -1 : 1;
 							int newZoom = C_LAST_ZOOM + dir * distanceY;
@@ -669,15 +669,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 								C_LAST_ZOOM = newZoom;
 							}
 						}
-					} else if (mudclient.isInFirstPersonView() && mudclient.cameraAllowPitchModification) {
-						mudclient.cameraPitch = (mudclient.cameraPitch + (-distanceY * 2)) & 1023;
-
-						// Limit on the half circled where everything is right side up
-						if (mudclient.cameraPitch > 256 && mudclient.cameraPitch <= 512)
-							mudclient.cameraPitch = 256;
-
-						if (mudclient.cameraPitch < 768 && mudclient.cameraPitch > 512)
-							mudclient.cameraPitch = 768;
+					} else if (mudclient.isInCinematicCameraMode() && mudclient.cameraAllowPitchModification) {
+						mudclient.adjustCinematicCameraPitch(-distanceY * 2);
 					}
 					if (osConfig.C_SWIPE_TO_ROTATE_MODE != 0) {
 						// camera set to auto does not like manual like rotation
@@ -757,6 +750,9 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				e.consume();
 				final int zoomIncrement = 40;
 				int zoomAmount = e.getWheelRotation() * zoomIncrement;
+				if (mudclient.adjustCinematicCameraOffset(zoomAmount)) {
+					return;
+				}
 				int newZoom = C_LAST_ZOOM + zoomAmount;
 				// Keep C_LAST_ZOOM aka the zoom increments on the range of [0, 255]
 				if (newZoom >= 0 && newZoom <= 255) {
@@ -816,6 +812,11 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				if (keyCode == 113) Config.C_SIDE_MENU_OVERLAY = !Config.C_SIDE_MENU_OVERLAY;
 				if (keyCode == KeyEvent.VK_F3) C_LAST_ZOOM = 75;
 				if (keyCode == KeyEvent.VK_F4) mudclient.toggleFirstPersonView();
+				if (keyCode == KeyEvent.VK_F5) mudclient.toggleCinematicHud();
+				if (keyCode == KeyEvent.VK_F6) mudclient.saveCinematicCameraPointA();
+				if (keyCode == KeyEvent.VK_F7) mudclient.saveCinematicCameraPointB();
+				if (keyCode == KeyEvent.VK_F8) mudclient.toggleCinematicCameraPath();
+				if (keyCode == KeyEvent.VK_F9) mudclient.toggleCinematicSlowOrbit();
 				if (keyCode == KeyEvent.VK_F10) mudclient.cycleScalingType(); // type
 				if (keyCode == KeyEvent.VK_F11) mudclient.scaleDown(); // scale down
 				if (keyCode == KeyEvent.VK_F12) mudclient.scaleUp(); // scale up

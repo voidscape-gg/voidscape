@@ -112,6 +112,8 @@ public final class Admins implements CommandTrigger {
 			saveAll(player);
 		} else if (command.equalsIgnoreCase("loadbots") || command.equalsIgnoreCase("loadtest")) {
 			loadBots(player, args);
+		} else if (command.equalsIgnoreCase("cinematic") || command.equalsIgnoreCase("cine")) {
+			cinematic(player, args);
 		} else if (command.equalsIgnoreCase("voidrushbots") || command.equalsIgnoreCase("vrbots")) {
 			voidRushBots(player, args);
 		} else if (command.equalsIgnoreCase("pf")) {
@@ -482,6 +484,36 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().start(count, radius, intervalTicks));
 		} catch (NumberFormatException ex) {
 			player.message(messagePrefix + "count, radius, and intervalTicks must be integers");
+		}
+	}
+
+	private void cinematic(Player player, String[] args) {
+		if (args.length < 1) {
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			return;
+		}
+		final String action = args[0].toLowerCase();
+		if (action.equals("stop")) {
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().stop());
+			return;
+		}
+		if (action.equals("status")) {
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().status());
+			return;
+		}
+		if (!action.equals("bossfight") && !action.equals("boss")) {
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			return;
+		}
+		try {
+			final int actors = args.length >= 2 ? Integer.parseInt(args[1]) : 18;
+			final int bossNpcId = args.length >= 3 ? Integer.parseInt(args[2]) : NpcId.KING_BLACK_DRAGON.id();
+			final int sceneRadius = args.length >= 4 ? Integer.parseInt(args[3]) : 5;
+			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService()
+				.startCinematicBossFight(player, actors, bossNpcId, sceneRadius));
+			player.message(messagePrefix + "Use ::cinematic stop when you are done filming.");
+		} catch (NumberFormatException ex) {
+			player.message(messagePrefix + "actors, bossNpcId, and radius must be integers");
 		}
 	}
 

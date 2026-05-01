@@ -1649,3 +1649,37 @@ Files touched:
 - `server/openpk.conf`
 - `server/2001scape.conf`
 - `docs/subsystems/combat-system.md`
+
+### 2026-05-01 - Client cinematic camera modes
+
+Added desktop-client camera presets for first-person and close promotional capture angles.
+
+Details:
+- `F4` now cycles camera modes: Classic, First person, Close, Low angle, and Orbit.
+- Cinematic modes stay anchored to the local player instead of using detached freecam, avoiding normal-player off-screen scouting issues.
+- Mouse drag and arrow keys adjust cinematic pitch/rotation. Mouse wheel adjusts distance for Close, Low angle, and Orbit; First person keeps a zero camera offset.
+- `F5` toggles a HUDless capture view that hides chat/UI/health/name overlays while keeping the rendered scene, rare-drop beams, and scene click-to-walk active.
+- `F6` saves camera point A, `F7` saves camera point B, and `F8` plays/stops a smooth player-anchored camera path between the two points.
+- `F9` toggles a slow orbit for simple showcase shots; if used from Classic mode it switches into Orbit mode first.
+- The existing first-person path still hides the local player sprite so the view is not blocked by the player billboard.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java`
+- `PC_Client/src/orsc/ORSCApplet.java`
+
+### 2026-05-01 - Cinematic scene staging and recording helper
+
+Added local promo-footage tooling around the existing synthetic player system.
+
+Details:
+- `::cinematic bossfight [actors] [bossNpcId] [radius]` spawns an admin-only staged boss-fight scene around the command user. Default scene is 18 rune-armored dummy player actors fighting King Black Dragon NPC `477`.
+- The staged actors are real in-process dummy `Player` instances, marked with `dummyplayer` and `cinematicbot`, so they render through the normal player update path but still avoid DB save/auth/socket lifecycle paths.
+- Actors wear rune armor, team-colored capes, and a visible Dragon sword weapon sprite. The scene driver keeps them facing the boss, cycles combat sprites, and emits staged damage/chat updates without running real loot/XP/death gameplay.
+- `::cinematic stop` cleans up the staged actors and boss NPCs. `::cinematic status` reports the active scene.
+- `scripts/record-cinematic.sh [durationSeconds] [actors] [bossNpcId] [radius]` starts the scene through the focused Java client, records the main display to `output/cinematics/*.mov` via macOS `screencapture`, and stops the scene afterward.
+- Local `ffmpeg` is not required for the helper; the Homebrew `ffmpeg` install on this machine currently fails to launch because its x265 dylib dependency is missing.
+
+Files touched:
+- `server/src/com/openrsc/server/util/SyntheticLoadService.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
+- `scripts/record-cinematic.sh`
