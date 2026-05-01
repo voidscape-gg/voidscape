@@ -679,7 +679,8 @@ public class Npc extends Mob {
 	}
 
 	private void markRareDropBeam(GroundItem groundItem, Item item) {
-		if (item.getAttribute(DropTable.RARE_DROP_ATTRIBUTE, false)) {
+		if (item.getAttribute(DropTable.RARE_DROP_ATTRIBUTE, false)
+			|| getWorld().getNpcDrops().isRareDropItem(item.getCatalogId())) {
 			groundItem.setAttribute(GroundItem.RARE_DROP_BEAM_ATTRIBUTE, true);
 		}
 	}

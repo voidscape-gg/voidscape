@@ -25,7 +25,8 @@ public final class VarrockSwordsOpenPk extends AbstractShop {
 		new Item(ItemId.BLACK_BATTLE_AXE.id(), 100),
 		new Item(ItemId.MITHRIL_BATTLE_AXE.id(), 100),
 		new Item(ItemId.ADAMANTITE_BATTLE_AXE.id(), 100),
-		new Item(ItemId.RUBY_AMULET_OF_STRENGTH.id(), 100));
+		new Item(ItemId.RUBY_AMULET_OF_STRENGTH.id(), 100),
+		new Item(ItemId.DRAGON_SWORD_HILT.id(), 1));
 
 	@Override
 	public boolean blockTalkNpc(final Player player, final Npc n) {

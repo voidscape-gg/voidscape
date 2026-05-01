@@ -102,8 +102,11 @@ public class Smithing implements UseLocTrigger {
 
 		int minSmithingLevel = minSmithingLevel(item.getCatalogId());
 
-		// Special Dragon Square Shield Case
-		if (minSmithingLevel < 0 && item.getCatalogId() != ItemId.RIGHT_HALF_DRAGON_SQUARE_SHIELD.id() && item.getCatalogId() != ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id()) {
+		// Special non-bar smithing cases.
+		if (minSmithingLevel < 0
+			&& item.getCatalogId() != ItemId.RIGHT_HALF_DRAGON_SQUARE_SHIELD.id()
+			&& item.getCatalogId() != ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id()
+			&& !isDragonSwordComponent(item.getCatalogId())) {
 			player.message("Nothing interesting happens");
 			return false;
 		}
@@ -142,6 +145,11 @@ public class Smithing implements UseLocTrigger {
 		// Combining Dragon Square Shield Halves
 		if (item.getCatalogId() == ItemId.RIGHT_HALF_DRAGON_SQUARE_SHIELD.id() || item.getCatalogId() == ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id()) {
 			attemptDragonSquareCombine(item, player);
+			return;
+		}
+
+		if (isDragonSwordComponent(item.getCatalogId())) {
+			attemptDragonSwordCombine(player);
 			return;
 		}
 
@@ -191,6 +199,35 @@ public class Smithing implements UseLocTrigger {
 				new Item(ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id()))) {
 				player.getCarriedItems().getInventory().add(new Item(ItemId.DRAGON_SQUARE_SHIELD.id()));
 				player.incExp(Skill.SMITHING.id(), 300, true);
+			}
+		}
+	}
+
+	private boolean isDragonSwordComponent(int itemId) {
+		return itemId == ItemId.DRAGON_SWORD_HILT.id()
+			|| itemId == ItemId.DRAGON_SWORD_BLADE.id()
+			|| itemId == ItemId.DRAGON_SWORD_TIP.id();
+	}
+
+	private void attemptDragonSwordCombine(Player player) {
+		if (player.getSkills().getLevel(Skill.SMITHING.id()) < 70) {
+			player.message("You need a smithing ability of at least 70 to complete this task.");
+		} else if (player.getCarriedItems().getInventory().countId(ItemId.DRAGON_SWORD_HILT.id(), Optional.of(false)) < 1
+				|| player.getCarriedItems().getInventory().countId(ItemId.DRAGON_SWORD_BLADE.id(), Optional.of(false)) < 1
+				|| player.getCarriedItems().getInventory().countId(ItemId.DRAGON_SWORD_TIP.id(), Optional.of(false)) < 1) {
+			player.message("You need all three dragon sword pieces to repair the sword.");
+		} else {
+			mes("You set the dragon sword pieces on the anvil.");
+			delay(2);
+			mes("You hammer the fragments back into shape.");
+			delay(2);
+			mes("The dragon metal fuses into a razor sharp sword.");
+			delay(2);
+			if (player.getCarriedItems().remove(new Item(ItemId.DRAGON_SWORD_HILT.id()),
+				new Item(ItemId.DRAGON_SWORD_BLADE.id()),
+				new Item(ItemId.DRAGON_SWORD_TIP.id()))) {
+				player.getCarriedItems().getInventory().add(new Item(ItemId.DRAGON_SWORD.id()));
+				player.incExp(Skill.SMITHING.id(), 500, true);
 			}
 		}
 	}

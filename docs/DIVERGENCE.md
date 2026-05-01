@@ -1589,3 +1589,38 @@ Files touched:
 - `server/src/com/openrsc/server/net/rsc/struct/outgoing/VoidRushWaveStruct.java`
 - `Client_Base/src/orsc/PacketHandler.java`
 - `Client_Base/src/orsc/mudclient.java`
+
+### 2026-05-01 - Dragon sword split into three components
+
+Split the completed Dragon sword acquisition path into three component items plus a Smithing assembly step.
+
+Details:
+- Added custom items `1598` Dragon sword hilt, `1599` Dragon sword blade, and `1600` Dragon sword tip. All three are F2P, tradeable, non-stackable, and noteable.
+- Sliced three Dragon sword component inventory sprites directly from the vanilla Dragon sword sprite. They are packed into `Client_Base/Cache/video/Authentic_Sprites.orsc` at archive slots `2763`, `2764`, and `2765`, exposed as client sprite IDs `613`, `614`, and `615`.
+- Jakut no longer sells completed Dragon swords. Varrock Swords stocks one hilt as the F2P-area shop source.
+- Dragon-type NPC tables now drop the blade component. The OpenPK dragon drop table also replaces the old completed Dragon sword drop with the blade.
+- Main demon-type NPC tables now drop the tip component.
+- The three component IDs are treated as rare-drop items for purple rare-drop beams when they appear on the ground.
+- Using any component on an anvil now requires a hammer, all three unnoted components, and 70 Smithing. Success consumes the pieces, creates `ItemId.DRAGON_SWORD`, and awards 500 Smithing XP.
+- Present and Halloween cracker prize paths no longer award completed Dragon swords, so assembly is the controlled completion path.
+- Bumped the custom client version to `10031` for the new visible item definitions and sprite cache, to `10032` when replacing the first-pass generated component art with source-sliced Dragon sword pieces, and to `10033` when making the pieces F2P.
+
+Shop and rate notes:
+- Varrock Swords is the hilt source: shopkeeper NPC `56` and assistant NPC `130`, around `137,526`, with one `Dragon sword hilt` in stock.
+- With `want_openpk_points` disabled, blade drop rates are `1/128` from Dragon `196`, Red Dragon `201`, Blue Dragon `202`, and Black Dragon `291`; King Black Dragon `477` is `2/130`.
+- With `want_openpk_points` disabled, tip drop rates are `1/128` from Lesser Demon `22`, Lesser Demon maze clone `181`, and Black Demon `290`; Greater Demon `184` is `2/128`.
+
+Files touched:
+- `Client_Base/Cache/video/Authentic_Sprites.orsc`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `server/conf/server/defs/ItemDefsCustom.json`
+- `server/plugins/com/openrsc/server/plugins/authentic/misc/HalloweenCracker.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/npcs/lostcity/Jakut.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/npcs/varrock/VarrockSwords.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/skills/smithing/Smithing.java`
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VarrockSwordsOpenPk.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/Present.java`
+- `server/src/com/openrsc/server/constants/ItemId.java`
+- `server/src/com/openrsc/server/constants/NpcDrops.java`
+- `server/src/com/openrsc/server/model/entity/npc/Npc.java`

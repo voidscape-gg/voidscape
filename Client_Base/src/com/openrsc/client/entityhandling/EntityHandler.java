@@ -4218,6 +4218,15 @@ public class EntityHandler {
 
 		// voidscape: Cursed Greatsword (id 1597). spriteID 612 = AI-generated icon at archive index 2762. Inherits wieldability from id 81 ('rune 2-handed Sword').
 		items.add(new ItemDef("Cursed Greatsword", "A greatsword wreathed in dark, vengeful energy.", "", 100, 612, "items:612", false, true, 8216, 0, false, false, true, 1597));
+
+		// voidscape: Dragon sword hilt (id 1598). spriteID 613 = source-sliced Dragon sword hilt at archive index 2763.
+		items.add(new ItemDef("Dragon sword hilt", "The hilt of a broken dragon sword.", "", 30000, 613, "items:613", false, false, 0, 0, false, false, true, 1598));
+
+		// voidscape: Dragon sword blade (id 1599). spriteID 614 = source-sliced Dragon sword blade shard at archive index 2764.
+		items.add(new ItemDef("Dragon sword blade", "A curved blade shard from a dragon sword.", "", 35000, 614, "items:614", false, false, 0, 0, false, false, true, 1599));
+
+		// voidscape: Dragon sword tip (id 1600). spriteID 615 = source-sliced Dragon sword tip at archive index 2765.
+		items.add(new ItemDef("Dragon sword tip", "The razor tip of a dragon sword.", "", 35000, 615, "items:615", false, false, 0, 0, false, false, true, 1600));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
