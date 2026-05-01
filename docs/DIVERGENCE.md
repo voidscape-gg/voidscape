@@ -1522,3 +1522,26 @@ Files touched:
 - `server/src/com/openrsc/server/net/rsc/generators/impl/PayloadCustomGenerator.java`
 - `server/src/com/openrsc/server/net/rsc/handlers/GameSettingHandler.java`
 - `server/src/com/openrsc/server/net/rsc/struct/outgoing/GameSettingsStruct.java`
+
+### 2026-04-30 - Prelaunch microsite prototype
+
+Added a static `web/prelaunch/` one-page prelaunch gate.
+
+Details:
+- Generated a project-local premium old-school isometric courtyard background and a new original stone Voidscape wordmark asset.
+- Built a compact single-screen page around the client login UI language: dark framed panel, gold text, purple accent, a name-reservation/subscription offer, and an expandable username/email founder-pass form with referral progress.
+- Added three RSC-style character composites above the reward steps so the prototype reads as Classic-era instead of generic fantasy.
+- The referral system is currently a front-end prototype backed by `localStorage`; production registration should replace the storage helpers in `script.js` with API-backed persistence before accepting real prelaunch signups.
+- Documented the production founder-pass architecture, anti-abuse model, and go-live checklist in `docs/PRELAUNCH-FOUNDER-PASS.md`.
+
+Files added:
+- `docs/PRELAUNCH-FOUNDER-PASS.md`
+- `web/prelaunch/index.html`
+- `web/prelaunch/styles.css`
+- `web/prelaunch/script.js`
+- `web/prelaunch/README.md`
+- `web/prelaunch/assets/voidscape-prelaunch-bg.png`
+- `web/prelaunch/assets/voidscape-wordmark.png`
+- `web/prelaunch/assets/rsc-ranger.png`
+- `web/prelaunch/assets/rsc-knight.png`
+- `web/prelaunch/assets/rsc-mage.png`

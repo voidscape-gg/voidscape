@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape Founder Pass</title>
+	<meta name="description" content="Reserve your Voidscape username and invite two friends to unlock a free launch subscription.">
+	<link rel="preload" as="image" href="assets/voidscape-prelaunch-bg.png">
+	<link rel="preload" as="image" href="assets/voidscape-wordmark.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<main id="waitlist" class="waitlist-section">
+		<img class="waitlist-logo" src="assets/voidscape-wordmark.png" alt="Voidscape">
+
+		<section class="launch-panel" aria-labelledby="launch-title">
+			<h1 id="launch-title" class="sr-only">Voidscape prelaunch founder pass</h1>
+
+			<div class="reward-steps" aria-label="Prelaunch founder rewards">
+				<div class="reward-step">
+					<img class="step-character" src="assets/rsc-ranger.png" alt="" aria-hidden="true">
+					<span class="step-icon" aria-hidden="true">
+						<svg viewBox="0 0 48 48" focusable="false">
+							<circle cx="24" cy="17" r="8"></circle>
+							<path d="M11 39c2.6-8.4 7-12.6 13-12.6S34.4 30.6 37 39"></path>
+						</svg>
+					</span>
+					<span class="reward-label">Reserve<br>Your Name</span>
+				</div>
+
+				<span class="step-divider" aria-hidden="true"></span>
+
+				<div class="reward-step">
+					<img class="step-character step-character-large" src="assets/rsc-knight.png" alt="" aria-hidden="true">
+					<span class="step-icon" aria-hidden="true">
+						<svg viewBox="0 0 48 48" focusable="false">
+							<circle cx="17" cy="18" r="7"></circle>
+							<circle cx="31" cy="18" r="7"></circle>
+							<path d="M7 39c2-7.2 5.4-10.8 10-10.8S25 31.8 27 39"></path>
+							<path d="M21 39c2-7.2 5.4-10.8 10-10.8S39 31.8 41 39"></path>
+						</svg>
+					</span>
+					<span class="reward-label">Invite 2<br>Friends</span>
+				</div>
+
+				<span class="step-divider" aria-hidden="true"></span>
+
+				<div class="reward-step">
+					<img class="step-character" src="assets/rsc-mage.png" alt="" aria-hidden="true">
+					<span class="step-icon" aria-hidden="true">
+						<svg viewBox="0 0 48 48" focusable="false">
+							<path d="M10 38h28l3-22-10 8-7-13-7 13-10-8 3 22Z"></path>
+							<path d="M11 38h26"></path>
+						</svg>
+					</span>
+					<span class="reward-label">Free Launch<br>Subscription</span>
+				</div>
+			</div>
+
+			<button id="open-reserve" class="hero-button" type="button">
+				<span>Begin Reservation</span>
+			</button>
+
+			<div id="reserve-details" class="reserve-details" hidden>
+				<button id="close-reserve" class="close-panel" type="button" aria-label="Close reservation">
+					<span aria-hidden="true">&times;</span>
+				</button>
+
+				<form id="reserve-form" class="reserve-form" novalidate>
+					<div class="field">
+						<label for="username">Username to reserve</label>
+						<input id="username" name="username" maxlength="12" autocomplete="username" placeholder="2-12 letters or numbers">
+					</div>
+
+					<div class="field">
+						<label for="email">Launch email</label>
+						<input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com">
+					</div>
+
+					<button type="submit">Create founder pass</button>
+					<p id="form-message" class="message" role="status" aria-live="polite"></p>
+				</form>
+
+				<div id="founder-state" class="founder-state" hidden>
+					<p class="pass-title">Founder pass</p>
+					<div class="progress-head">
+						<span>Name: <b id="reserved-name">-</b></span>
+						<strong id="unlock-badge">0 / 2 invites</strong>
+					</div>
+					<div class="progress-track" aria-label="Referral progress">
+						<span id="progress-fill"></span>
+					</div>
+					<p id="subscription-state" class="subscription-state">Free subscription unlocks at 2 confirmed invites.</p>
+					<label for="invite-link">Founder invite link</label>
+					<div class="copy-row">
+						<input id="invite-link" readonly>
+						<button id="copy-link" type="button">Copy</button>
+					</div>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<script src="script.js"></script>
+</body>
+</html>
