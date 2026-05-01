@@ -2,6 +2,7 @@ package com.openrsc.server.model.container;
 
 import com.openrsc.server.constants.*;
 import com.openrsc.server.external.ItemDefinition;
+import com.openrsc.server.model.QuestEquipmentUnlocks;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.struct.EquipRequest;
 import com.openrsc.server.model.struct.UnequipRequest;
@@ -682,32 +683,11 @@ public class Equipment {
 			ableToWield = false;
 		}
 
-		// Rune plate mail body and top
-		if (!player.getConfig().EQUIP_QUEST_ITEMS_WITHOUT_QUESTS && (item.getCatalogId() == ItemId.RUNE_PLATE_MAIL_BODY.id() || item.getCatalogId() == ItemId.RUNE_PLATE_MAIL_TOP.id())
-			&& (player.getQuestStage(Quests.DRAGON_SLAYER) != -1)) {
+		QuestEquipmentUnlocks.Unlock missingQuestEquipmentRight = QuestEquipmentUnlocks.missingForItem(player, item.getCatalogId());
+		if (missingQuestEquipmentRight != null) {
 			player.message("you have not earned the right to wear this yet");
-			player.message("you need to complete the dragon slayer quest");
-			return false;
-		}
-
-		// Dragon sword
-		else if (!player.getConfig().EQUIP_QUEST_ITEMS_WITHOUT_QUESTS && item.getCatalogId() == ItemId.DRAGON_SWORD.id() && player.getQuestStage(Quests.LOST_CITY) != -1) {
-			player.message("you have not earned the right to wear this yet");
-			player.message("you need to complete the Lost city of zanaris quest");
-			return false;
-		}
-
-		// Dragon battle axe
-		else if (!player.getConfig().EQUIP_QUEST_ITEMS_WITHOUT_QUESTS && item.getCatalogId() == ItemId.DRAGON_AXE.id() && player.getQuestStage(Quests.HEROS_QUEST) != -1) {
-			player.message("you have not earned the right to wear this yet");
-			player.message("you need to complete the Hero's guild entry quest");
-			return false;
-		}
-
-		// Dragon square shield
-		else if (!player.getConfig().EQUIP_QUEST_ITEMS_WITHOUT_QUESTS && item.getCatalogId() == ItemId.DRAGON_SQUARE_SHIELD.id() && player.getQuestStage(Quests.LEGENDS_QUEST) != -1) {
-			player.message("you have not earned the right to wear this yet");
-			player.message("you need to complete the legend's guild quest");
+			player.message("you need to complete " + missingQuestEquipmentRight.questName());
+			player.message("or buy the right from the " + QuestEquipmentUnlocks.SELLER_NAME + " in " + QuestEquipmentUnlocks.SELLER_LOCATION);
 			return false;
 		}
 
@@ -766,10 +746,6 @@ public class Equipment {
 		} else if ((item.getCatalogId() == ItemId.HARDCORE_IRONMAN_HELM.id() || item.getCatalogId() == ItemId.HARDCORE_IRONMAN_PLATEBODY.id() || item.getCatalogId() == ItemId.HARDCORE_IRONMAN_PLATE_TOP.id()
 			|| item.getCatalogId() == ItemId.HARDCORE_IRONMAN_PLATELEGS.id() || item.getCatalogId() == ItemId.HARDCORE_IRONMAN_PLATED_SKIRT.id()) && !player.isIronMan(IronmanMode.Hardcore.id())) {
 			player.message("You need to be a Hardcore Ironman to wear this");
-			return false;
-		} else if (item.getCatalogId() == 2254 && player.getQuestStage(Quests.LEGENDS_QUEST) != -1) {
-			player.message("you have not earned the right to wear this yet");
-			player.message("you need to complete the Legends Quest");
 			return false;
 		}
 

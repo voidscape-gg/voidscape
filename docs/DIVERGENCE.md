@@ -1683,3 +1683,28 @@ Files touched:
 - `server/src/com/openrsc/server/util/SyntheticLoadService.java`
 - `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
 - `scripts/record-cinematic.sh`
+
+### 2026-05-01 - Paid equipment quest-right unlocks
+
+Added per-player paid alternatives for the legacy equipment quest gates without marking the quests complete.
+
+Details:
+- Rune plate body/top, Dragon sword, Dragon battle axe, and Dragon square shield still accept the authentic quest completions.
+- Players who have not completed the matching quest can buy the equipment right for 500,000 coins from the `Void Requisitioner` in Varrock.
+- The `Void Requisitioner` is custom NPC `844`, spawned at `129,511` where the live `void` character was standing when requested, with a tight wander box of `128,510` to `130,512`.
+- Client-side NPC definition `844` is appended after `Void Quartermaster` in `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`; missing this step renders the server NPC as the "Ana (not in a barrel)" sentinel.
+- The visible NPC was changed from the first robed/scythe placeholder to a dark-clothed requisitions clerk so he does not read as a wizard.
+- Bumped the custom client version to `10035` for the client-visible NPC definition and appearance refresh.
+- The purchase stores player-cache keys such as `quest_equipment_right_lost_city`; it only unlocks wearing the equipment and does not grant quest points, quest rewards, travel access, or any other quest state.
+- Equip failure messages now tell players to either complete the named quest or buy the right from the `Void Requisitioner` in Varrock.
+
+Files touched:
+- `server/src/com/openrsc/server/model/QuestEquipmentUnlocks.java`
+- `server/src/com/openrsc/server/model/container/Equipment.java`
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidRequisitioner.java`
+- `server/conf/server/defs/NpcDefsCustom.json`
+- `server/conf/server/defs/locs/NpcLocs.json`
+- `server/src/com/openrsc/server/constants/NpcId.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `docs/recipes/add-npc.md`

@@ -2412,6 +2412,10 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, 81, 46, 11, -1, -1};
 		npcs.add(new NPCDef("Void Quartermaster", "A trader carrying supplies for those who pass the web.", "Trade", 0, 0, 5, 0, false, sprites, 0, 2106401, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Varrock equipment-right seller (server id 844)
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, 11, -1, -1};
+		npcs.add(new NPCDef("Void Requisitioner", "A void clerk selling equipment rights.", "Unlock", 0, 0, 5, 0, false, sprites, 6307872, 5263440, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};
