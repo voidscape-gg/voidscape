@@ -1872,3 +1872,28 @@ Files touched:
 - `PC_Launcher/src/main/resources/images/icon.png`
 - `PC_Launcher/vet.rsc.OpenRSC.Launcher.svg`
 - `Client_Base/src/res/icon.png`
+
+### 2026-05-01 - Standalone Discord community setup package
+
+Created a standalone Discord community setup package for Voidscape. This is intentionally not connected to the legacy OpenRSC Discord service, game server config, webhooks, account linking, cross-chat, or in-game systems.
+
+Details:
+- Added a server setup guide covering roles, categories, channels, forum usage, permissions, AutoMod, raid protection, onboarding, pinned starter messages, moderation workflow, and launch checklist.
+- Generated Discord-ready community assets: server icon, server banner, high-resolution banner source, and invite splash/background.
+- Added a local one-shot setup bot script that uses Discord's official API through Node's built-in `fetch`, reads its token only from `DISCORD_BOT_TOKEN`, and dry-runs by default unless `--apply` is passed.
+- The setup bot creates or updates the baseline roles, categories, text channels, voice channels, forum channels, permission overwrites, pinned starter messages, forum starter posts, server branding, and Discord-native AutoMod rules.
+- The setup bot is idempotent by Discord object name where practical, so reruns update existing roles/channels instead of duplicating the server layout.
+- Onboarding remains a manual Discord UI review step because parts of that flow are gated by Community/server feature state and are easier to verify visually.
+- The live Voidscape Discord server was initialized through the setup bot, then a polished development/vision announcement was posted manually through VoidBot using current in-game screenshots.
+
+Files touched:
+- `docs/community/discord-server-setup.md`
+- `docs/community/discord-setup-bot.md`
+- `assets/discord/README.md`
+- `assets/discord/server-icon-512.png`
+- `assets/discord/server-banner-1920x1080.png`
+- `assets/discord/server-banner-960x540.png`
+- `assets/discord/invite-splash-1920x1080.png`
+- `scripts/setup-discord.js`
+
+Safety note: bot tokens must never be committed. The setup flow documents token use through environment variables only, and operators should regenerate/remove the bot token after a setup session.
