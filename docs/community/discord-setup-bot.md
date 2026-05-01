@@ -136,3 +136,46 @@ The bot makes `#suggestions`, `#bug-reports`, `#guides`, and `#help-desk` forum 
 - Existing roles and channels are matched by name to avoid duplicates.
 - The script does not delete channels, roles, or messages.
 - The script does not touch any game code or config.
+
+## Optional Announcement Gate
+
+`scripts/discord-access-gate.js` can make `#announcements` the only visible channel for new members. It posts an `Enter Voidscape` button; clicking the button grants the `Member` role and unlocks the rest of the Discord.
+
+Setup or update the gate:
+
+```sh
+DISCORD_BOT_TOKEN='paste-token-here' \
+DISCORD_GUILD_ID='paste-server-id-here' \
+node scripts/discord-access-gate.js --setup
+```
+
+Run the persistent button listener:
+
+```sh
+DISCORD_BOT_TOKEN='paste-token-here' \
+DISCORD_GUILD_ID='paste-server-id-here' \
+node scripts/discord-access-gate.js --serve
+```
+
+Run both:
+
+```sh
+DISCORD_BOT_TOKEN='paste-token-here' \
+DISCORD_GUILD_ID='paste-server-id-here' \
+node scripts/discord-access-gate.js --setup --serve
+```
+
+The listener must stay running for button clicks to work. On this development machine, the live server was launched in a detached `screen` session named `voidscape-discord-gate`, with the token read from the macOS keychain instead of being saved in the repo.
+
+Useful local checks:
+
+```sh
+screen -ls
+tail -f output/discord-bot/access-gate.log
+```
+
+Stop the local listener:
+
+```sh
+screen -S voidscape-discord-gate -X quit
+```

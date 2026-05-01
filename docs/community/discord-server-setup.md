@@ -32,6 +32,19 @@ Manual order:
 
 Even if you use the bot, review Community, Onboarding, Safety Setup, Raid Protection, banner availability, and role order manually in Discord after it runs.
 
+## Announcement Gate
+
+Voidscape currently uses an optional access gate to put `#announcements` in front of new members before the rest of the server unlocks.
+
+Flow:
+
+1. New members can only see `#announcements`.
+2. `#announcements` has a pinned `Enter Voidscape` button message.
+3. Clicking the button grants the `Member` role.
+4. `Member` unlocks the normal public server channels.
+
+The gate is implemented by `scripts/discord-access-gate.js`. Run `--setup` to configure channel permissions and post/update the pinned gate message. Run `--serve` as a persistent process so button clicks can grant roles. If the persistent bot is not running, the button remains visible but cannot unlock users.
+
 ## Server Settings
 
 Recommended baseline:

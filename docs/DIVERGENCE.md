@@ -1897,3 +1897,22 @@ Files touched:
 - `scripts/setup-discord.js`
 
 Safety note: bot tokens must never be committed. The setup flow documents token use through environment variables only, and operators should regenerate/remove the bot token after a setup session.
+
+### 2026-05-01 - Discord announcement access gate
+
+Added a standalone persistent Discord access-gate bot for the live Voidscape community server.
+
+Details:
+- `#announcements` can now act as the only public channel for users without the `Member` role.
+- The gate posts a pinned `Enter Voidscape` button in `#announcements`; clicking it grants the configured member role and unlocks the rest of the public server.
+- The setup path (`--setup`) rewrites Discord channel permission overwrites so `@everyone` can only view/read the gate channel, while non-staff public channels allow the `Member` role.
+- The serve path (`--serve`) connects to Discord Gateway using Node's built-in WebSocket support, listens for message-component interactions, and grants the `Member` role through Discord's REST API.
+- Staff channels remain staff-scoped; the gate script does not alter game code, game config, OpenRSC Discord services, webhooks, cross-chat, or account linking.
+- The live local listener is running in a detached `screen` session named `voidscape-discord-gate`; the token is read from the macOS keychain and is not committed.
+
+Files touched:
+- `scripts/discord-access-gate.js`
+- `docs/community/discord-server-setup.md`
+- `docs/community/discord-setup-bot.md`
+
+Operational note: the button requires the persistent listener to be online. Check it with `screen -ls` and `tail -f output/discord-bot/access-gate.log`.
