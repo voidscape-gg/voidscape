@@ -1659,12 +1659,13 @@ public enum ItemId {
 	VOID_MACE(1596),
 	DRAGON_SWORD_HILT(1598),
 	DRAGON_SWORD_BLADE(1599),
-	DRAGON_SWORD_TIP(1600);
+	DRAGON_SWORD_TIP(1600),
+	VOID_KEY(1601);
 
 	private int itemId;
 
 	public static final int maxAuthentic = 1289;
-	public static final int maxCustom = 1600;
+	public static final int maxCustom = 1601;
 
 	private static final Map<Integer, ItemId> byId = new HashMap<Integer, ItemId>();
 	private static final Map<String, ItemId> byName = new HashMap<String, ItemId>();

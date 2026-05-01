@@ -14342,4 +14342,26 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>obelisk</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void chest</name>
+    <description>A void-bound chest humming with stolen wilderness power</description>
+    <command1>Open</command1>
+    <command2>Examine</command2>
+    <type>1</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>VoidChestClosed</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void chest</name>
+    <description>The void chest hangs open</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>1</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>VoidChestOpen</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

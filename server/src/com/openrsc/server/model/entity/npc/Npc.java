@@ -440,7 +440,10 @@ public class Npc extends Mob {
 			}
 		}
 
-		/* 3. Get the rest of the mob's drops. */
+		/* 3. Roll wilderness-only Void Key bonus drop. */
+		rollVoidKeyDrop(owner);
+
+		/* 4. Get the rest of the mob's drops. */
 		DropTable drops = getWorld().npcDrops.getDropTable(this.getID());
 		if (drops == null) {
 			// Some enemies have no drops
@@ -450,7 +453,7 @@ public class Npc extends Mob {
 		}
 		drops = drops.clone(drops.getDescription());
 
-		/* 4. Drop items that should always drop, that are not bones. */
+		/* 5. Drop items that should always drop, that are not bones. */
 		ArrayList<Item> invariableItems = drops.invariableItems(owner);
 		for (Item item : invariableItems) {
 			if (!worldAllowsDrop(item)) {
@@ -469,7 +472,7 @@ public class Npc extends Mob {
 			owner.getWorld().registerItem(groundItem);
 		}
 
-		/* 5. Roll for drops. */
+		/* 6. Roll for drops. */
 		boolean ringOfWealth = false;
 		if (getConfig().WANT_NEW_RARE_DROP_TABLES) {
 			ringOfWealth = owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_WEALTH.id());
@@ -491,6 +494,40 @@ public class Npc extends Mob {
 				}
 			}
 		}
+	}
+
+	private void rollVoidKeyDrop(Player owner) {
+		if (owner == null
+			|| getDef() == null
+			|| getDef().combatLevel <= 0
+			|| !getLocation().inWilderness()
+			|| getLocation().isInSafeZone()) {
+			return;
+		}
+
+		int denominator = getVoidKeyDropDenominator();
+		if (DataConversions.random(1, denominator) != 1) {
+			return;
+		}
+
+		Item item = new Item(ItemId.VOID_KEY.id(), 1);
+		item.setAttribute(DropTable.RARE_DROP_ATTRIBUTE, true);
+		GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), 1, owner);
+		groundItem.setAttribute("npcdrop", true);
+		markRareDropBeam(groundItem, item);
+		getWorld().registerItem(groundItem);
+		getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				getWorld().getServer().getDatabase().addDropLog(owner, this, item.getCatalogId(), item.getAmount());
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+		owner.message("@mag@A Void Key drops from the creature.");
+	}
+
+	private int getVoidKeyDropDenominator() {
+		return Math.max(128, 1200 - getDef().combatLevel * 6);
 	}
 
 	private boolean worldAllowsDrop(Item item) {

@@ -2387,9 +2387,9 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Auctioneer", "A figure cloaked in shadow. The void hums where their gaze should be.", "Auction", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
-		// voidscape: Voidling at wilderness lvl 11 (server NpcId.VOIDLING = 838); references AnimationDef "voidling" at runtime idx 233. Camera1=145, camera2=220 = humanoid shape (1:1.52 aspect) — NOT rat 346x136 (squat 4-legged); the voidling is taller-than-wide, so a rat-shaped camera box squashes it.
-		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-		npcs.add(new NPCDef("Voidling", "A skittering fragment of the void.", "", 16, 15, 10, 12, true, sprites, 0, 0, 0, 0, 145, 220, 7, 7, 30, i++));
+		// voidscape: reserved id 838. Keep this slot so later custom NPC ids remain stable.
+		sprites = new int[]{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Reserved custom NPC", "Reserved placeholder for retired custom NPC id 838.", "", 0, 0, 5, 0, false, sprites, 0, 0, 0, 0, 1, 1, 6, 6, 5, i++));
 
 		// voidscape: Void Herald at Void Island (server NpcId.VOID_HERALD = 839)
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
@@ -4231,6 +4231,9 @@ public class EntityHandler {
 
 		// voidscape: Dragon sword tip (id 1600). spriteID 615 = source-sliced Dragon sword tip at archive index 2765.
 		items.add(new ItemDef("Dragon sword tip", "The razor tip of a dragon sword.", "", 35000, 615, "items:615", false, false, 0, 0, false, false, true, 1600));
+
+		// voidscape: Void Key (id 1601). spriteID 616 = AI-generated void key icon at archive index 2766.
+		items.add(new ItemDef("Void Key", "A key humming with wilderness void energy.", "", 5000, 616, "items:616", false, false, 0, 0, false, false, true, 1601));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
@@ -4980,7 +4983,7 @@ public class EntityHandler {
 		animations.add(new AnimationDef("voidbow", "equipment", 0, 0, false, false, 0)); // voidscape: void bow (runtime idx 230, JSON appearanceID 231). References a custom 'voidbow' sprite block in Custom_Sprites.osar — clone of 'longbow' with the 4-color palette swapped to void purples (charColour-based tinting doesn't work on bow sprites since 'longbow' has no reserved-tint palette index).
 		animations.add(new AnimationDef("voidneck", "equipment", 0, 0, true, false, 0)); // voidscape: void amulet wielded (runtime idx 231, JSON appearanceID 232). Custom name "voidneck" gets a unique animationNumber slot at startup; we pack pre-recolored necklace frames (purple chain + purple gem, no yellow leak) at sprites[number..number+17].
 		animations.add(new AnimationDef("voidmace", "equipment", 0, 0, true, false, 0)); // voidscape: void mace wielded (runtime idx 232, JSON appearanceID 233). Custom name "voidmace" → unique animationNumber slot at startup; we pack pre-recolored mace frames at sprites[number..number+17].
-		animations.add(new AnimationDef("voidling", "npc", 0, 0, true, false, 0)); // voidscape: voidling NPC sprite. Unique name → unique animationNumber slot at startup; we pack the AI-generated voidling sprite at sprites[number..number+17] (same sprite at all 18 slots — no rotation/walk animation, just static void wisp).
+		animations.add(new AnimationDef("reserved_custom_npc_838", "npc", 0, 0, true, false, 0)); // voidscape: reserved slot. Keep the animation index stable for later custom animations.
 			animations.add(new AnimationDef("cursed_greatsword", "equipment", 0, 0, true, false, 0));
 	}
 
@@ -7097,6 +7100,8 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void supply crate", "Supplies lashed shut with dark cord", "WalkTo", "Examine", 0, 1, 1, 0, "crate", ++i)); //1301
 		objects.add(new GameObjectDef("Void dead tree", "A tree drained into brittle purple shadow", "WalkTo", "Examine", 0, 1, 1, 0, "deadtree1", ++i)); //1302
 		objects.add(new GameObjectDef("Void waystone", "A humming marker pointed toward Edgeville", "Return", "Examine", 0, 1, 1, 0, "obelisk", ++i)); //1303
+		objects.add(new GameObjectDef("Void chest", "A void-bound chest humming with stolen wilderness power", "Open", "Examine", 1, 1, 1, 0, "VoidChestClosed", ++i)); //1304
+		objects.add(new GameObjectDef("Void chest", "The void chest hangs open", "WalkTo", "Examine", 1, 1, 1, 0, "VoidChestOpen", ++i)); //1305
 	}
 
 	public static void load(boolean loadMembers) {

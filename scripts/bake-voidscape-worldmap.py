@@ -219,7 +219,6 @@ def bake_tsv() -> None:
         label_row("PK Catching\\nSimulator", 409, 72, 10, 1),
         label_row("Void\\nAuctioneer", 217, 460, 8, 0),
         label_row("Edgar", 124, 640, 8, 0),
-        label_row("Voidling", 63, 363, 8, 0),
     ]
     labels = strip_custom_block(LABELS)
     LABELS.write_text(labels + CUSTOM_BEGIN + "\n" + "\n".join(custom_labels) + "\n" + CUSTOM_END + "\n")

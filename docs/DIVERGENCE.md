@@ -1557,6 +1557,7 @@ Gameplay / server changes:
 - Elimination handles standing on dangerous swept tiles, logout/disconnect, leaving the arena, and zero-player no-winner endings.
 - Winner reward is guarded by a single `rewardAwarded` flag and uses existing `ItemId.CHRISTMAS_CRACKER` (`575`).
 - Admin test helper `::voidrushbots [count]` / `::vrbots [count]` queues the caller plus synthetic load bots. Dummy load bots bypass the one-account-per-IP minigame restriction; real players still do not.
+- For local bot-backed tests, `::loadbots stop` removes the synthetic players; Void Rush then ends naturally on the next tick if only the real tester remains. There is not yet a dedicated `::voidrush stop` / force-end command for active real-player matches.
 
 Client / visual changes:
 - Added custom outgoing packet `SEND_VOID_RUSH_WAVE` (wire id `102`) carrying wave direction, swept line range, gap bounds, and warning/lethal state.
@@ -1708,3 +1709,55 @@ Files touched:
 - `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
 - `Client_Base/src/orsc/Config.java`
 - `docs/recipes/add-npc.md`
+
+### 2026-05-01 - Retired Voidling wilderness NPC
+
+Removed the standalone Voidling NPC from active gameplay.
+
+Details:
+- Removed the four static Voidling wilderness spawns from `NpcLocs.json`.
+- Removed the Voidling enum constant and NPC drop table, so no gameplay path references it for spawning or loot.
+- Replaced custom NPC id `838` with an inert reserved placeholder on both server and client. This preserves the positional custom NPC list so later ids such as `Void Herald` and `Void Requisitioner` do not shift.
+- Removed the Voidling world-map label and bake-script marker.
+- Kept an unused reserved animation slot in the client for the same positional reason; the Voidling NPC art is no longer referenced by any active NPC definition.
+- Bumped the custom client version to `10036` for the client-side definition change.
+
+Files touched:
+- `server/conf/server/defs/NpcDefsCustom.json`
+- `server/conf/server/defs/locs/NpcLocs.json`
+- `server/src/com/openrsc/server/constants/NpcDrops.java`
+- `server/src/com/openrsc/server/constants/NpcId.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/Cache/worldmap/labels.tsv`
+- `scripts/bake-voidscape-worldmap.py`
+
+### 2026-05-01 - Void Key and Void Chest
+
+Added wilderness-keyed loot chest content for Void Enclave.
+
+Details:
+- Added item `1601` `Void Key`, client sprite id `616`, packed at `Authentic_Sprites.orsc` archive entry `2766`.
+- Local/admin testing can spawn the key with the normal item command, e.g. `::item 1601 1`.
+- The Void Key icon was generated through the local `tools/voidscim-art` GPT image pipeline from the prompt `a dark obsidian void key with violet glowing runes and a cyan crystal eye`.
+- Added custom scenery ids `1304` `Void chest` closed and `1305` `Void chest` open, using recolored `VoidChestClosed.ob3` and `VoidChestOpen.ob3` model entries packed into `models.orsc`.
+- The Void chest model faces south, is scaled 1.5x visually, and keeps a 1-tile interaction footprint at the requested coordinate.
+- Placed the closed Void chest at Void Enclave coordinate `113,315`.
+- Opening the chest consumes one Void Key, briefly swaps the object to the open model, and rolls one reward from a weighted table of PK-useful supplies: gems, runes, food certificates, ore/coal certificates, big bones, coins, and adamant arrows.
+- Void Keys are an extra rare wilderness-only NPC bonus drop. Safe zones are excluded.
+- Void Key drop chance uses `1 / max(128, 1200 - npcCombatLevel * 6)`, so higher-level wilderness NPCs have better odds. Examples: level 10 is 1/1140, level 50 is 1/900, level 100 is 1/600, level 150 is 1/300, and level 179+ caps at 1/128.
+- Void Keys are included in the rare-drop item list so ground drops receive the purple rare-drop beam.
+- Bumped the custom client version to `10037` for the new item sprite, item definition, object definitions, and model archive entries.
+
+Files touched:
+- `server/conf/server/defs/ItemDefsCustom.json`
+- `server/conf/server/defs/GameObjectDef.xml`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `server/src/com/openrsc/server/constants/ItemId.java`
+- `server/src/com/openrsc/server/constants/NpcDrops.java`
+- `server/src/com/openrsc/server/model/entity/npc/Npc.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidChest.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/Cache/video/Authentic_Sprites.orsc`
+- `Client_Base/Cache/video/models.orsc`
