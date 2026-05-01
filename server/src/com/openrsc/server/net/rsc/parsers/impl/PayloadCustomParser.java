@@ -886,6 +886,10 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				OptionsStruct os = new OptionsStruct();
 				os.index = packet.readByte();
 				final InterfaceOptions option = InterfaceOptions.getById(os.index);
+				if (option == null) {
+					result = os;
+					break;
+				}
 				switch (option) {
 					case SWAP_CERT:
 					case SWAP_NOTE:
@@ -897,6 +901,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					case INVENTORY_SWAP:
 						os.slot = packet.readInt();
 						os.to = packet.readInt();
+						break;
+					case BANK_CLEAR_PRESET:
+						os.value = packet.readByte();
 						break;
 					case CANCEL_BATCH:
 						//nothing
@@ -919,6 +926,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					case AUCTION:
 						os.value = packet.readByte();
 						final AuctionOptions auctionOption = AuctionOptions.getById((int)os.value);
+						if (auctionOption == null) {
+							break;
+						}
 						switch (auctionOption) {
 							case BUY:
 								os.id = packet.readInt();
@@ -942,6 +952,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					case CLAN:
 						os.value = packet.readByte();
 						final ClanOptions clanOption = ClanOptions.getById((int)os.value);
+						if (clanOption == null) {
+							break;
+						}
 						switch (clanOption) {
 							case CREATE:
 								os.name = packet.readString();
@@ -972,6 +985,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					case PARTY:
 						os.value = packet.readByte();
 						final PartyOptions partyOption = PartyOptions.getById((int)os.value);
+						if (partyOption == null) {
+							break;
+						}
 						switch (partyOption) {
 							case CREATE_OR_INVITE:
 								os.id = packet.readShort();
@@ -1008,6 +1024,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 					case POINTS:
 						os.value = packet.readByte();
 						final PointsOptions pointsOption = PointsOptions.getById((int)os.value);
+						if (pointsOption == null) {
+							break;
+						}
 						switch (pointsOption) {
 							case REDUCE_DEFENSE:
 							case INCREASE_DEFENSE:

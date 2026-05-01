@@ -1761,3 +1761,57 @@ Files touched:
 - `Client_Base/src/orsc/Config.java`
 - `Client_Base/Cache/video/Authentic_Sprites.orsc`
 - `Client_Base/Cache/video/models.orsc`
+
+### 2026-05-01 - Auction House hardening and UI refresh
+
+Hardened Voidscape's fixed-price Auction House and refreshed the PC client interaction flow.
+
+Details:
+- Fixed expiry refunds to return only `amount_left`; partially sold listings no longer refund their original full stack.
+- Wrapped expiry refund + sold-out marking, seller collection, moderator removal, cancel, and buy persistence in DB transactions that also save the affected player inventory/bank containers.
+- Listing creation now rejects invalid items, zero/negative values, total prices below 1gp per item, and totals that do not divide evenly by quantity.
+- Buy/cancel delivery now prefers inventory when it can hold the item, including stackables and noted multi-quantity non-stackables, then falls back to bank.
+- Removed the stale packet-level 100-total-level auction gate so the single Void Auctioneer is the real access gate.
+- Invalid auction option packets are rejected instead of null-switching.
+- Auction list hours-left changed from byte to short, allowing full 7-day listings to display correctly.
+- PC client Auction House now has corrected sort labels (`Price Low`, `Price High`, `Each Low`, `Each High`), visible expiry hours, quick quantity buttons, safer amount/price parsing, and a two-click purchase confirmation.
+- Bumped the custom client version to `10038` for the auction packet/UI change.
+
+Files touched:
+- `server/src/com/openrsc/server/content/market/Market.java`
+- `server/src/com/openrsc/server/content/market/task/*MarketItemTask.java`
+- `server/src/com/openrsc/server/content/market/task/OpenMarketTask.java`
+- `server/src/com/openrsc/server/content/market/task/PlayerCollectItemsTask.java`
+- `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/net/rsc/handlers/InterfaceOptionHandler.java`
+- `server/src/com/openrsc/server/net/rsc/parsers/impl/PayloadCustomParser.java`
+- `Client_Base/src/com/openrsc/interfaces/misc/AuctionHouse.java`
+- `Client_Base/src/orsc/PacketHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `docs/subsystems/auction-house.md`
+
+### 2026-05-01 - Custom bank V2 UI and inventory-only loadouts
+
+Reworked the custom bank into a cleaner single-screen V2 while keeping the existing bank container and core bank packets intact.
+
+Details:
+- Bank tabs are now explicit `All` / `Tab N` buttons with adaptive compact labels when space is tight.
+- Search moved into a top control row with `Loadouts` beside it; shared button text baseline was fixed so compact labels no longer hit their borders.
+- Loadouts moved out of anonymous number buttons into a panel with visible `Load`, `Save`, and `Clear` actions per slot.
+- `Clear` persists through a new `InterfaceOptions.BANK_CLEAR_PRESET` action (`199`, sub-op `14`) and refreshes the preset packet back to the client.
+- Loadouts are inventory-only on both client and server. Saving clears equipment preset data, loading no longer deposits/equips worn gear, and the custom bank no longer exposes equipment-tab or worn-gear UI.
+- `Rearrange` is now a compact dropdown (`Off`, `Swap`, `Insert`) instead of three always-visible buttons.
+- Deposit/withdraw paths now guard stale slots and non-positive amounts more defensively.
+- `BankUtil` cert helpers now use static primitive lookup/switch logic instead of rebuilding lists per call.
+
+Files touched:
+- `Client_Base/src/com/openrsc/interfaces/misc/CustomBankInterface.java`
+- `Client_Base/src/orsc/util/BankUtil.java`
+- `server/src/com/openrsc/server/model/container/Bank.java`
+- `server/src/com/openrsc/server/model/container/BankPreset.java`
+- `server/src/com/openrsc/server/constants/custom/InterfaceOptions.java`
+- `server/src/com/openrsc/server/net/rsc/handlers/BankHandler.java`
+- `server/src/com/openrsc/server/net/rsc/handlers/InterfaceOptionHandler.java`
+- `server/src/com/openrsc/server/net/rsc/parsers/impl/PayloadCustomParser.java`
+
+Reversibility: flip `want_custom_banks` off to return to the authentic bank UI. Reverting only the V2 UI requires also removing interface sub-op `14`; otherwise it is harmless but unused.

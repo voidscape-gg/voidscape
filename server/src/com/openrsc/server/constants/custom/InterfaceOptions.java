@@ -9,8 +9,8 @@ public enum InterfaceOptions {
 	SWAP_NOTE(1), // bank cert
 	BANK_SWAP(2),
 	BANK_INSERT(3),
-	INVENTORY_INSERT(4),
-	INVENTORY_SWAP(5),
+	INVENTORY_SWAP(4),
+	INVENTORY_INSERT(5),
 	CANCEL_BATCH(6),
 	IRONMAN_MODE(7),
 	BANK_PIN(8),
@@ -18,7 +18,8 @@ public enum InterfaceOptions {
 	AUCTION(10),
 	CLAN(11),
 	PARTY(12),
-	POINTS(13);
+	POINTS(13),
+	BANK_CLEAR_PRESET(14);
 
 	private int option;
 

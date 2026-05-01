@@ -10,6 +10,7 @@ import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
+import com.openrsc.server.model.container.BankPreset;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.npc.Npc;
@@ -40,6 +41,10 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 		}
 
 		final InterfaceOptions option = InterfaceOptions.getById(payload.index);
+		if (option == null) {
+			player.setSuspiciousPlayer(true, "invalid interface option id " + payload.index);
+			return;
+		}
 
 		switch (option) {
 			case SWAP_CERT:
@@ -58,13 +63,13 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
 				handleBankInsert(player, payload);
 				break;
-			case INVENTORY_INSERT:
-				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
-				handleInventoryInsert(player, payload);
-				break;
 			case INVENTORY_SWAP:
 				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
 				handleInventorySwap(player, payload);
+				break;
+			case INVENTORY_INSERT:
+				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
+				handleInventoryInsert(player, payload);
 				break;
 			case CANCEL_BATCH:
 				if (!player.getConfig().BATCH_PROGRESSION) return;
@@ -94,6 +99,10 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				if (!player.getConfig().WANT_OPENPK_POINTS) return;
 				handlePoints(player, payload);
 				break;
+			case BANK_CLEAR_PRESET:
+				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) return;
+				handleBankClearPreset(player, payload);
+				break;
 		}
 	}
 
@@ -121,15 +130,38 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 		int slot = payload.slot;
 		int to = payload.to;
 
-		player.getCarriedItems().getInventory().swap(slot, to);
+		player.getCarriedItems().getInventory().insert(slot, to);
+		ActionSender.sendInventory(player);
 	}
 
 	private void handleInventorySwap(Player player, OptionsStruct payload) {
 		int slot = payload.slot;
 		int to = payload.to;
 
-		player.getCarriedItems().getInventory().insert(slot, to);
-		ActionSender.sendInventory(player);
+		player.getCarriedItems().getInventory().swap(slot, to);
+	}
+
+	private void handleBankClearPreset(Player player, OptionsStruct payload) {
+		if (!player.accessingBank()) {
+			player.setSuspiciousPlayer(true, "bank preset clear while not accessing bank");
+			return;
+		}
+
+		int slot = payload.value;
+		if (slot < 0 || slot >= BankPreset.PRESET_COUNT) {
+			player.setSuspiciousPlayer(true, "bank preset clear invalid slot " + slot);
+			return;
+		}
+
+		BankPreset preset = player.getBank().getBankPreset(slot);
+		for (int i = 0; i < preset.getInventory().length; i++) {
+			preset.getInventory()[i] = new Item(ItemId.NOTHING.id(), 0);
+		}
+		for (int i = 0; i < preset.getEquipment().length; i++) {
+			preset.getEquipment()[i] = new Item(ItemId.NOTHING.id(), 0);
+		}
+		ActionSender.sendBankPreset(player, slot);
+		player.message("Cleared loadout " + (slot + 1) + ".");
 	}
 
 	private void handleIronmanMode(final Player player, final OptionsStruct payload) {
@@ -272,13 +304,12 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 			return;
 		}
 
-		if (player.getTotalLevel() < 100) {
-			ActionSender.sendBox(player,"You must have 100 total skill before using the auction house.", false);
-			return;
-		}
-
 		int type = payload.value;
 		final AuctionOptions auctionOption = AuctionOptions.getById(type);
+		if (auctionOption == null) {
+			player.setSuspiciousPlayer(true, "sent invalid auction option " + type);
+			return;
+		}
 		switch (auctionOption) {
 			case BUY:
 				auctionBuyItem(player, payload);

@@ -79,8 +79,6 @@ public class Market implements Runnable {
 			for (final MarketItem auction : auctionItems) {
 				if (auction.hasExpired()) {
 					expiredItems.add(auction);
-					getWorld().getServer().getDatabase().addExpiredAuction("Expired",
-						auction.getCatalogID(), auction.getAmount(), auction.getSeller());
 				}
 			}
 
@@ -88,9 +86,20 @@ public class Market implements Runnable {
 				for (final MarketItem expiredItem : expiredItems) {
 					final int itemIndex = expiredItem.getCatalogID();
 					final int amount = expiredItem.getAmountLeft();
+					if (amount <= 0) {
+						getWorld().getServer().getDatabase().setSoldOut(expiredItem);
+						continue;
+					}
 
 					final Player sellerPlayer = getWorld().getPlayerID(expiredItem.getSeller());
-					getWorld().getServer().getDatabase().setSoldOut(expiredItem);
+					final boolean dbOk = getWorld().getServer().getDatabase().atomically(() -> {
+						getWorld().getServer().getDatabase().addExpiredAuction("Expired",
+							expiredItem.getCatalogID(), amount, expiredItem.getSeller());
+						getWorld().getServer().getDatabase().setSoldOut(expiredItem);
+					});
+					if (!dbOk) {
+						continue;
+					}
 
 					if (sellerPlayer != null) {
 						ItemDefinition def = sellerPlayer.getWorld().getServer().getEntityHandler().getItemDef(itemIndex);

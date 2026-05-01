@@ -559,7 +559,11 @@ public class Bank {
 					itemToAddCatalogId = uncertedID(itemToAddCatalogId);
 
 					if (itemToAddCatalogId != depositItem.getCatalogId()) {
-						itemToAddAmount *= 5;
+						if (requestedAmount > Integer.MAX_VALUE / 5) {
+							requestedAmount = Integer.MAX_VALUE / 5;
+							player.message("You can only deposit that many certificates at once.");
+						}
+						itemToAddAmount = requestedAmount * 5;
 					}
 				}
 

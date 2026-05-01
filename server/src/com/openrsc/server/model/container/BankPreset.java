@@ -3,16 +3,10 @@ package com.openrsc.server.model.container;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.entity.player.Player;
-import com.openrsc.server.model.states.Action;
-import com.openrsc.server.model.struct.EquipRequest;
-import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.net.rsc.ActionSender;
-import org.apache.commons.collections4.IterableMap;
 
 import java.nio.ByteBuffer;
 import java.util.*;
-
-import static com.openrsc.server.model.struct.EquipRequest.RequestType.FROM_BANK;
 
 public class BankPreset {
 	public static final int PRESET_COUNT = 3;
@@ -97,23 +91,6 @@ public class BankPreset {
 	public void attemptPresetLoadout() {
 		int slotsNeeded = 0;
 
-		// Subtract those in the preset that we already have held.
-		for (int slotID = 0; slotID < equipment.length; slotID++) {
-			Item itemNeeded = equipment[slotID];
-			Item itemHeld = player.getCarriedItems().getEquipment().get(slotID);
-			if (itemHeld == null || itemHeld.getCatalogId() == ItemId.NOTHING.id()) continue;
-			// If we don't have the preset item equipped
-			if (!player.getCarriedItems().getEquipment().hasEquipped(itemNeeded.getCatalogId())) {
-				// And we do have another item equipped in that slot
-				if (itemHeld != null) {
-					// And we don't have that catalogId in the bank... we need a slot.
-					if (player.getBank().countId(itemHeld.getCatalogId()) == 0) {
-						slotsNeeded++;
-					}
-				}
-			}
-		}
-
 		ArrayList<Integer> items = new ArrayList<>();
 		for (int slotID = 0; slotID < inventory.length; slotID++) {
 			Item itemHeld = player.getCarriedItems().getInventory().get(slotID);
@@ -141,46 +118,6 @@ public class BankPreset {
 			player.getBank().depositItemFromInventory(item.getCatalogId(), item.getAmount(), false);
 		}
 
-		// Withdraw and equip equipment items if not already equipped.
-		for (int slotID = 0; slotID < equipment.length; slotID++) {
-			Item itemNeeded = equipment[slotID];
-			Item itemHeld = player.getCarriedItems().getEquipment().get(slotID);
-			int neededCatalogId = -1;
-			int heldCatalogId = -1;
-			if (itemNeeded != null) {
-				neededCatalogId = itemNeeded.getCatalogId();
-			}
-			if (itemHeld != null) {
-				heldCatalogId = itemHeld.getCatalogId();
-			}
-
-			if (heldCatalogId == neededCatalogId) continue;
-
-			// We are not holding the item we need, so deposit it.
-			if (heldCatalogId != ItemId.NOTHING.id()) {
-				UnequipRequest uer = new UnequipRequest(player, itemHeld, UnequipRequest.RequestType.FROM_BANK, false);
-				uer.equipmentSlot = Equipment.EquipmentSlot.get(slotID);
-				if (!player.getCarriedItems().getEquipment().unequipItem(uer, false)) {
-					player.message("Could not deposit item: " + itemHeld.getDef(player.getWorld()).getName());
-					return;
-				}
-			}
-
-			if (neededCatalogId == ItemId.NOTHING.id()) continue;
-
-			// Pass this item if we don't have the item we need.
-			if (player.getBank().countId(neededCatalogId) == 0) {
-				player.message("Could not withdraw item: " + itemNeeded.getDef(player.getWorld()).getName());
-				continue;
-			}
-
-			// Add item to equipment if it's not "nothing".
-			if (itemNeeded.getCatalogId() != ItemId.NOTHING.id()) {
-				EquipRequest er = new EquipRequest(player, itemNeeded, FROM_BANK, false);
-				player.getCarriedItems().getEquipment().equipItem(er, false);
-			}
-		}
-
 		// Withdraw inventory items
 		for (int slotID = 0; slotID < inventory.length; slotID++) {
 			Item itemNeeded = inventory[slotID];
@@ -202,8 +139,6 @@ public class BankPreset {
 		}
 
 		ActionSender.sendInventory(player);
-		ActionSender.sendEquipment(player);
-		ActionSender.sendEquipmentStats(player);
 		// voidscape: was player.resetBank() (which calls hideBank → closes the bank UI).
 		// We want the bank to stay open after a loadout load; re-send the bank contents so
 		// the client UI reflects the new state without closing the dialog.

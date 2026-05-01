@@ -2357,6 +2357,7 @@ public class ActionSender {
 	}
 
 	public static void sendOpenAuctionHouse(final Player player) {
+		if (player.getWorld().getMarket() == null) return;
 		player.getWorld().getMarket().addRequestOpenAuctionHouseTask(player);
 	}
 

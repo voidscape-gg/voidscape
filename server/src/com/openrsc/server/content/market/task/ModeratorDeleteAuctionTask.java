@@ -34,18 +34,22 @@ public class ModeratorDeleteAuctionTask extends MarketTask {
 				if (item != null) {
 					int itemIndex = item.getCatalogID();
 					int amount = item.getAmountLeft();
-					try {
+					boolean dbOk = player.getWorld().getServer().getDatabase().atomically(() -> {
 						player.getWorld().getServer().getDatabase().setSoldOut(item);
 						player.getWorld().getServer().getDatabase().addExpiredAuction("Removed by " + player.getStaffName(), itemIndex, amount, item.getSeller());
+					});
+					if (dbOk) {
 						ActionSender.sendBox(player, "@gre@[Auction House - Success] % @whi@ Item has been removed from Auctions. % % Returned to collections for:  " + item.getSellerName(), false);
 						updateDiscord = true;
-					} catch (GameDatabaseException e) {
+					} else {
 						ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ Unable to remove auction", false);
 					}
 				}
 				player.getWorld().getMarket().addRequestOpenAuctionHouseTask(player);
 				if (updateDiscord) {
-					player.getWorld().getServer().getDiscordService().auctionModDelete(item);
+					if (player.getWorld().getServer().getDiscordService() != null) {
+						player.getWorld().getServer().getDiscordService().auctionModDelete(item);
+					}
 				}
 			} catch (GameDatabaseException e) {
 				ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ There was a problem accessing the database % Please try again.", false);

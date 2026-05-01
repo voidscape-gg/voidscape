@@ -78,7 +78,7 @@ public class OpenMarketTask extends MarketTask {
 				builder.writeInt(item.getPrice());
 				builder.writeByte(item.getSeller() == owner.getDatabaseID() ? 1 : 0);
 				if (item.getSeller() != owner.getDatabaseID()) builder.writeString(item.getSellerName());
-				builder.writeByte(item.getHoursLeft());
+				builder.writeShort(item.getHoursLeft());
 			}
 			setFinished(true);
 			return builder.toPacket();

@@ -33,6 +33,9 @@ public final class AuctionHouse {
 	private AuctionItem newAuctionItem = null;
 	private int selectedAuction = -1;
 	private int selectedCancelAuction = -1;
+	private int confirmAuctionID = -1;
+	private int confirmAmount = -1;
+	private long confirmExpiresAt = 0L;
 
 	private int selectItemAdd = 0;
 
@@ -40,30 +43,30 @@ public final class AuctionHouse {
 	private int selectedFilter;
 	private int orderingBy = 0;
 	private Comparator<AuctionItem> auctionComparator = (o1, o2) -> {
-		if (orderingBy == 0) { /* price down */
-			return o1.getPrice() - o2.getPrice();
-		} else if (orderingBy == 1) { /* price up */
-			return o2.getPrice() - o1.getPrice();
+		if (orderingBy == 0) { /* price low */
+			return Integer.compare(o1.getPrice(), o2.getPrice());
+		} else if (orderingBy == 1) { /* price high */
+			return Integer.compare(o2.getPrice(), o1.getPrice());
 		} else if (orderingBy == 2) { /* name */
 			ItemDef d1 = EntityHandler.getItemDef(o1.getItemID());
 			ItemDef d2 = EntityHandler.getItemDef(o2.getItemID());
 
 			return d1.getName().compareToIgnoreCase(d2.getName());
-		} else if (orderingBy == 3) { /* price each down */
-			int priceEach1 = o1.getPrice() / o1.getAmount();
-			int priceEach2 = o2.getPrice() / o2.getAmount();
-			return priceEach1 - priceEach2;
-		} else if (orderingBy == 4) { /* price each up */
-			int priceEach1 = o1.getPrice() / o1.getAmount();
-			int priceEach2 = o2.getPrice() / o2.getAmount();
-			return priceEach2 - priceEach1;
+		} else if (orderingBy == 3) { /* price each low */
+			int priceEach1 = o1.getAmount() > 0 ? o1.getPrice() / o1.getAmount() : Integer.MAX_VALUE;
+			int priceEach2 = o2.getAmount() > 0 ? o2.getPrice() / o2.getAmount() : Integer.MAX_VALUE;
+			return Integer.compare(priceEach1, priceEach2);
+		} else if (orderingBy == 4) { /* price each high */
+			int priceEach1 = o1.getAmount() > 0 ? o1.getPrice() / o1.getAmount() : 0;
+			int priceEach2 = o2.getAmount() > 0 ? o2.getPrice() / o2.getAmount() : 0;
+			return Integer.compare(priceEach2, priceEach1);
 		}
 		ItemDef d1 = EntityHandler.getItemDef(o1.getAuctionID());
 		ItemDef d2 = EntityHandler.getItemDef(o2.getAuctionID());
 
 		return d1.getName().compareToIgnoreCase(d2.getName());
 	};
-	private String sortBy = "Price Down";
+	private String sortBy = "Price Low";
 	private double fee;
 	private mudclient mc;
 
@@ -175,7 +178,47 @@ public final class AuctionHouse {
 		setVisible(false);
 	}
 
+	private void resetPurchaseConfirm() {
+		confirmAuctionID = -1;
+		confirmAmount = -1;
+		confirmExpiresAt = 0L;
+	}
+
+	private boolean hasPurchaseConfirm(AuctionItem item, int amount) {
+		return item != null
+			&& confirmAuctionID == item.getAuctionID()
+			&& confirmAmount == amount
+			&& System.currentTimeMillis() <= confirmExpiresAt;
+	}
+
+	private int parseAmount(String text, int max) {
+		if (max <= 0) return 0;
+		try {
+			int value = Integer.parseInt(text);
+			if (value < 1) return 1;
+			return Math.min(value, max);
+		} catch (NumberFormatException ex) {
+			return 1;
+		}
+	}
+
+	private void setBuyAmount(int amount, int max) {
+		int safeAmount = parseAmount(String.valueOf(amount), max);
+		auctionMenu.setText(textField_buyAmount, String.valueOf(safeAmount));
+		resetPurchaseConfirm();
+	}
+
+	private int safePrice(int amount, int priceEach) {
+		long value = (long) amount * (long) priceEach;
+		if (value > Integer.MAX_VALUE) {
+			return Integer.MAX_VALUE;
+		}
+		return (int) Math.max(1L, value);
+	}
+
 	private void sendRefreshList() {
+		selectedAuction = -1;
+		resetPurchaseConfirm();
 		mc.packetHandler.getClientStream().newPacket(199);
 		mc.packetHandler.getClientStream().bufferBits.putByte(10);
 		mc.packetHandler.getClientStream().bufferBits.putByte(3);
@@ -317,13 +360,13 @@ public final class AuctionHouse {
 							if (amount > 0) {
 								int price = EntityHandler.getItemDef(itemID).getBasePrice();
 								newAuctionInventoryIndex = inventorySlot;
-								newAuctionItem = new AuctionItem(-2, itemID, amount, price * amount, "", 0);
+								newAuctionItem = new AuctionItem(-2, itemID, amount, safePrice(amount, price), "", 0);
 
 								myAuctions.show(textField_priceEach);
 								myAuctions.show(textField_price);
 								myAuctions.show(textField_amount);
 								myAuctions.setText(textField_amount, amount + "");
-								myAuctions.setText(textField_price, price * amount + "");
+								myAuctions.setText(textField_price, safePrice(amount, price) + "");
 								myAuctions.setText(textField_priceEach, price + "");
 								/*if(price * amount * 0.025 < 5) {
 									setFee(5);
@@ -364,8 +407,7 @@ public final class AuctionHouse {
 
 			graphics.drawString("Item", listX - 68, listY - 14, 0xffffff, 1);
 			graphics.drawString("Name / Sale Prices", listX - 18, listY - 14, 0xffffff, 1);
-			// #TIMELIMIT
-			// graphics.drawString("Time Left", listX + 208, listY - 14, 0xffffff, 1);
+			graphics.drawString("Left", listX + 238, listY - 14, 0xffffff, 1);
 
 			int listStartPoint = myAuctions.getScrollPosition(myAuctionScrollHandle);
 			int listEndPoint = listStartPoint + 4;
@@ -394,7 +436,7 @@ public final class AuctionHouse {
 				}
 				int price = ahItem.getPrice();
 				int priceEach = 0;
-				if (price > 0) {
+				if (price > 0 && ahItem.getAmount() > 0) {
 					priceEach = price / ahItem.getAmount();
 				}
 
@@ -405,8 +447,7 @@ public final class AuctionHouse {
 				graphics.drawString(basicNumber(price) + " gp", listX + 21, listY + boxHeight / 2 + 10 - 8, 0xffffff, 0);
 
 				graphics.drawString(basicNumber(priceEach) + " gp ea", listX + 118, listY + boxHeight / 2 + 10 - 8, 0xffffff, 0);
-				// #TIMELIMIT
-				// graphics.drawString(getTime(ahItem) + "h", listX + 240, listY + boxHeight / 2 - 14, 0xffffff, 2);
+				graphics.drawString(getTime(ahItem) + "h", listX + 240, listY + boxHeight / 2 - 14, 0xffffff, 2);
 
 				graphics.drawBoxAlpha(listX - 72, listY - 10, boxWidth + 1, boxHeight - 1, 0xfffffff, 128);
 
@@ -539,6 +580,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 0;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -548,6 +590,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 1;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -557,6 +600,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 2;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -566,6 +610,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 3;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -575,6 +620,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 4;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -584,6 +630,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 5;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -592,6 +639,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 6;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -600,6 +648,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 7;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -608,6 +657,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 8;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -616,6 +666,7 @@ public final class AuctionHouse {
 			void handle() {
 				selectedFilter = 9;
 				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.resetScrollIndex(auctionScrollHandle);
 			}
 		});
@@ -637,16 +688,18 @@ public final class AuctionHouse {
 					orderingBy = 0;
 
 				if (orderingBy == 0) {
-					sortBy = "Price Down";
+					sortBy = "Price Low";
 				} else if (orderingBy == 1) {
-					sortBy = "Price Up";
+					sortBy = "Price High";
 				} else if (orderingBy == 2) {
 					sortBy = "Name";
 				} else if (orderingBy == 3) {
-					sortBy = "Price Each (down)";
+					sortBy = "Each Low";
 				} else if (orderingBy == 4) {
-					sortBy = "Price Each (up)";
+					sortBy = "Each High";
 				}
+				selectedAuction = -1;
+				resetPurchaseConfirm();
 				Collections.sort(auctionItems, auctionComparator);
 			}
 		});
@@ -793,6 +846,7 @@ public final class AuctionHouse {
 					graphics.drawBoxAlpha(listX - 3, listY - 5, 400, boxHeight, 0x980000, 128);
 					if (mc.getMouseClick() == 1) {
 						selectedAuction = i;
+						resetPurchaseConfirm();
 						auctionMenu.setText(textField_buyAmount, "1");
 						auctionMenu.setFocus(textField_buyAmount);
 						mc.setMouseClick(0);
@@ -808,13 +862,12 @@ public final class AuctionHouse {
 				ItemDef def = EntityHandler.getItemDef(ahItem.getItemID());
 				int price = ahItem.getPrice();
 				int priceEach = 0;
-				if (price > 0) {
+				if (price > 0 && ahItem.getAmount() > 0) {
 					priceEach = price / ahItem.getAmount();
 				}
 
 				graphics.drawString(mc.ellipsize(def.getName(), 22), listX + 50, listY + boxHeight / 2, 0xffffff, 2);
-				// #TIMELIMIT
-				// graphics.drawString(getTime(ahItem) + " hours", listX + 200, listY + boxHeight / 2, 0xffffff, 2);
+				graphics.drawString(getTime(ahItem) + "h", listX + 220, listY + boxHeight / 2, 0xffffff, 2);
 				graphics.drawString(basicNumber(priceEach) + " gp (ea)", listX + 295, listY + boxHeight / 2 - 8, 0xffffff, 0);
 				graphics.drawString(basicNumber(price) + " gp (all)", listX + 295, listY + boxHeight / 2 + 10 - 4, 0xffffff, 0);
 				graphics.drawBoxAlpha(listX - 3, listY - 4, boxWidth + 1, boxHeight - 1, 0xfffffff, 128);
@@ -827,8 +880,7 @@ public final class AuctionHouse {
 			}
 			graphics.drawString("Showing: " + (showing) + "/" + (filteredList.size()) + " items", listX + 49, y + 75,
 				0xffffff, 1);
-			// #TIMELIMIT
-			// graphics.drawString("Expires in", listX + 201, y + 75, 0xffffff, 1);
+			graphics.drawString("Expires", listX + 218, y + 75, 0xffffff, 1);
 		}
 
 		if (selectedAuction != -1 && selectedAuction < filteredList.size()) {
@@ -846,13 +898,14 @@ public final class AuctionHouse {
 				void handle() {
 					activeInterface = 0;
 					selectedAuction = -1;
+					resetPurchaseConfirm();
 				}
 			});
 
 			ItemDef def = EntityHandler.getItemDef(ahItem.getItemID());
 			int price = ahItem.getPrice();
 			int priceEach = 0;
-			if (price > 0) {
+			if (price > 0 && ahItem.getAmount() > 0) {
 				priceEach = price / ahItem.getAmount();
 			}
 
@@ -872,8 +925,7 @@ public final class AuctionHouse {
 				def.getPictureMask(), 0, def.getBlueMask(),false, 0, 1);
 			graphics.drawString(String.valueOf(ahItem.getAmount()), selectX + 10, selectY + 22 + 11, 65280, 1);
 
-			// #TIMELIMIT
-			// graphics.drawString(getTime(ahItem) + "h left", selectX + 60, selectY + 32, 0xffffff, 2);
+			graphics.drawString(getTime(ahItem) + "h left", selectX + 60, selectY + 32, 0xffffff, 2);
 
 			graphics.drawString("Quantity: " + method74(ahItem.getAmount()), selectX + 200, selectY + 32, 0xffffff, 2);
 			graphics.drawString("Total: " + method74(price) + "gp", selectX + 200, selectY + 32 + 14, 0xffffff, 2);
@@ -904,21 +956,49 @@ public final class AuctionHouse {
 			String amountText = auctionMenu.getControlText(textField_buyAmount);
 
 			if (amountText.length() > 0 && amountText.length() < 10) {
-				int checkoutPrice = Integer.parseInt(amountText);
+				int checkoutAmount = parseAmount(amountText, ahItem.getAmount());
+				final int finalCheckoutAmount = checkoutAmount;
+				final int checkoutTotal = priceEach * checkoutAmount;
 
-				if (checkoutPrice > ahItem.getAmount()) {
-					checkoutPrice = ahItem.getAmount();
-				}
-				if (checkoutPrice <= 0) {
-					checkoutPrice = 1;
-				}
+				drawButton(graphics, selectX + 116, selectY + 125, 38, 18, "1", checkoutAmount == 1, new ButtonHandler() {
+					@Override
+					void handle() {
+						setBuyAmount(1, ahItem.getAmount());
+					}
+				});
+				drawButton(graphics, selectX + 158, selectY + 125, 38, 18, "+5", false, new ButtonHandler() {
+					@Override
+					void handle() {
+						setBuyAmount(finalCheckoutAmount + 5, ahItem.getAmount());
+					}
+				});
+				drawButton(graphics, selectX + 200, selectY + 125, 42, 18, "+10", false, new ButtonHandler() {
+					@Override
+					void handle() {
+						setBuyAmount(finalCheckoutAmount + 10, ahItem.getAmount());
+					}
+				});
+				drawButton(graphics, selectX + 246, selectY + 125, 48, 18, "All", checkoutAmount == ahItem.getAmount(), new ButtonHandler() {
+					@Override
+					void handle() {
+						setBuyAmount(ahItem.getAmount(), ahItem.getAmount());
+					}
+				});
 
-				if (checkoutPrice <= ahItem.getAmount()) {
-					graphics.drawString("Checkout Price: " + method74(priceEach * checkoutPrice) + "gp", selectX + 8, selectY + 156, 0xffffff, 2);
-					drawButtonFancy(graphics, selectX + 8, selectY + 125 + 29 + 11, 378, 22, "Purchase Now", false, new ButtonHandler() {
+				if (checkoutAmount > 0 && checkoutAmount <= ahItem.getAmount()) {
+					final boolean confirming = hasPurchaseConfirm(ahItem, checkoutAmount);
+					graphics.drawString("Checkout Price: " + method74(checkoutTotal) + "gp", selectX + 8, selectY + 156, 0xffffff, 2);
+					graphics.drawString(confirming ? "@yel@Click again to confirm this purchase." : "Review, then confirm to buy.", selectX + 8, selectY + 172, 0xffffff, 1);
+					drawButtonFancy(graphics, selectX + 8, selectY + 125 + 29 + 31, 378, 22, confirming ? "Confirm Purchase" : "Purchase Review", confirming, new ButtonHandler() {
 						@Override
 						void handle() {
-							sendAuctionBuy(ahItem);
+							if (hasPurchaseConfirm(ahItem, finalCheckoutAmount)) {
+								sendAuctionBuy(ahItem);
+							} else {
+								confirmAuctionID = ahItem.getAuctionID();
+								confirmAmount = finalCheckoutAmount;
+								confirmExpiresAt = System.currentTimeMillis() + 7000L;
+							}
 						}
 					});
 				}
@@ -992,7 +1072,7 @@ public final class AuctionHouse {
 	}
 
 	private void sendAuctionBuy(AuctionItem ahItem) {
-		int t = Integer.parseInt(auctionMenu.getControlText(textField_buyAmount));
+		int t = parseAmount(auctionMenu.getControlText(textField_buyAmount), ahItem.getAmount());
 		mc.packetHandler.getClientStream().newPacket(199);
 		mc.packetHandler.getClientStream().bufferBits.putByte(10);
 		mc.packetHandler.getClientStream().bufferBits.putByte(0);
@@ -1002,6 +1082,7 @@ public final class AuctionHouse {
 		if (t >= ahItem.getAmount() || ahItem.getAmount() <= 1 || ahItem.getSeller().equals(mc.getLocalPlayer().displayName)) {
 			selectedAuction = -1;
 		}
+		resetPurchaseConfirm();
 	}
 
 	public boolean keyDown(int key) {
@@ -1016,6 +1097,7 @@ public final class AuctionHouse {
 					}
 					if (key >= 48 && key <= 57 || key == 8) {
 						auctionMenu.keyPress(key);
+						resetPurchaseConfirm();
 					}
 				} else
 					auctionMenu.keyPress(key);
@@ -1050,15 +1132,25 @@ public final class AuctionHouse {
 						amount = mc.getInventoryCount(newAuctionItem.getItemID());
 					}
 					if (amount <= 0) {
-						amount = 0;
+						amount = 1;
+					}
+					if (price <= 0) {
+						price = 1;
+					}
+					if (priceEach <= 0) {
+						priceEach = 1;
 					}
 
 					if (myAuctions.focusOn(textField_amount)) {
-						price = amount * priceEach;
+						price = safePrice(amount, priceEach);
 					} else if (myAuctions.focusOn(textField_price)) {
 						priceEach = price / amount;
+						if (priceEach <= 0) {
+							priceEach = 1;
+						}
+						price = safePrice(amount, priceEach);
 					} else if (myAuctions.focusOn(textField_priceEach)) {
-						price = amount * priceEach;
+						price = safePrice(amount, priceEach);
 					}
 
 					newAuctionItem.setAmount(amount);
@@ -1106,7 +1198,8 @@ public final class AuctionHouse {
 		activeInterface = 0;
 		selectedFilter = 0;
 		orderingBy = 0;
-		sortBy = "Price Down";
+		sortBy = "Price Low";
+		resetPurchaseConfirm();
 		auctionMenu.setFocus(-1);
 		myAuctions.setFocus(-1);
 	}

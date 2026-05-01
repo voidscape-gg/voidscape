@@ -36,6 +36,7 @@ public class PlayerCollectItemsTask extends MarketTask {
 
 			StringBuilder items = new StringBuilder("The following items have been sent to your bank: % ");
 			ArrayList<ExpiredAuction> dbCollectibleItems = new ArrayList<>();
+			ArrayList<Item> addedItems = new ArrayList<>();
 			for (CollectibleItem i : list) {
 				ExpiredAuction dbItem = new ExpiredAuction();
 				Item item = new Item(i.item_id, i.item_amount);
@@ -43,14 +44,30 @@ public class PlayerCollectItemsTask extends MarketTask {
 					items.append("@gre@Some items are still being held by the auctioneer.% Make more space in your bank to claim them.");
 					break;
 				}
-				player.getBank().add(item, false);
+				if (!player.getBank().add(item, false)) {
+					items.append("@gre@Some items are still being held by the auctioneer.% Make more space in your bank to claim them.");
+					break;
+				}
+				addedItems.add(item);
 				items.append(" @lre@").append(item.getDef(player.getWorld()).getName()).append(" @whi@x @cya@").append(item.getAmount()).append("@whi@ ").append(i.explanation).append(" %");
 				dbItem.claim_id = i.claim_id;
 				dbItem.claim_time = System.currentTimeMillis();
 				dbCollectibleItems.add(dbItem);
 			}
-			player.getWorld().getServer().getDatabase()
-				.collectItems(dbCollectibleItems.toArray(new ExpiredAuction[dbCollectibleItems.size()]));
+			if (!dbCollectibleItems.isEmpty()) {
+				boolean dbOk = player.getWorld().getServer().getDatabase().atomically(() -> {
+					player.getWorld().getServer().getDatabase()
+						.collectItems(dbCollectibleItems.toArray(new ExpiredAuction[dbCollectibleItems.size()]));
+					player.getWorld().getServer().getDatabase().savePlayerBank(player);
+				});
+				if (!dbOk) {
+					for (Item item : addedItems) {
+						player.getBank().remove(item, false);
+					}
+					ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ Unable to collect your items. Please try again.", false);
+					return;
+				}
+			}
 
 			ActionSender.sendBox(player, items.toString(), true);
 		} catch (GameDatabaseException e) {

@@ -83,7 +83,9 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				// authentic client also sends magic constant 4 byte number that never changes & is not very useful.
 				// possibly a relic if WITHDRAW & DEPOSIT didn't have their own opcodes in the past.
 
-				if (catalogID < 0 || catalogID >= player.getWorld().getServer().getEntityHandler().getItemCount()) {
+				if (catalogID < 0 ||
+					catalogID >= player.getWorld().getServer().getEntityHandler().getItemCount() ||
+					amount <= 0) {
 					return;
 				}
 
@@ -155,14 +157,7 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 						player.getBank().getBankPreset(presetSlot).getInventory()[k] = new Item(ItemId.NOTHING.id(),0);
 				}
 				for (int k = 0; k < Equipment.SLOT_COUNT; k++) {
-					Item equipmentItem = player.getCarriedItems().getEquipment().get(k);
-					if (equipmentItem != null) {
-						player.getBank().getBankPreset(presetSlot).getEquipment()[k] = new Item(
-							equipmentItem.getCatalogId(), equipmentItem.getAmount()
-						);
-					}
-					else
-						player.getBank().getBankPreset(presetSlot).getEquipment()[k] = new Item(ItemId.NOTHING.id(),0);
+					player.getBank().getBankPreset(presetSlot).getEquipment()[k] = new Item(ItemId.NOTHING.id(),0);
 				}
 				player.message("Saved current loadout to slot " + (presetSlot + 1) + ".");
 				break;

@@ -630,7 +630,7 @@ public class PacketHandler {
 				} else {
 					seller = packetsIncoming.readString();
 				}
-				int hoursLeft = packetsIncoming.getByte();
+				int hoursLeft = packetsIncoming.getShort();
 				mc.getAuctionHouse().addAuction(auctionID, itemID, amount, price, seller, hoursLeft);
 			}
 			mc.getAuctionHouse().setVisible(true);

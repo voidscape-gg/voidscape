@@ -39,6 +39,10 @@ public class NewMarketItemTask extends MarketTask {
 
 		boolean updateDiscord = false;
 
+		if (def == null) {
+			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Unknown item.", false);
+			return;
+		}
 		if (newItem.getCatalogID() == ItemId.COINS.id() || def.isUntradable()) {
 			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ You cannot sell that item on auction house!", false);
 			return;
@@ -49,6 +53,14 @@ public class NewMarketItemTask extends MarketTask {
 		}
 		if (newItem.getAmount() < 1) {
 			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Amount must be greater than zero", false);
+			return;
+		}
+		if (newItem.getPrice() < newItem.getAmount()) {
+			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Total price must be at least 1gp per item.", false);
+			return;
+		}
+		if (newItem.getPrice() % newItem.getAmount() != 0) {
+			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Total price must divide evenly by quantity.", false);
 			return;
 		}
 
@@ -120,34 +132,41 @@ public class NewMarketItemTask extends MarketTask {
 		if (this.itemsToAuction.size() == 0) return;
 
 		// Remove applicable items.
+		ArrayList<Item> removedItems = new ArrayList<>();
 		for (Item x : this.itemsToAuction) {
-			owner.getCarriedItems().remove(x);
+			if (owner.getCarriedItems().remove(x) == -1) {
+				rollbackRemovedItems(removedItems);
+				ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Failed to remove item from your inventory.", false);
+				return;
+			}
+			removedItems.add(x);
 		}
 
-		try {
-		owner.getWorld().getServer().getDatabase().newAuction(newItem);
-		//ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp % @whi@Completed auction fee: @gre@" + feeCost + "gp", false);
-		ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp", false);
-		updateDiscord = true;
-		} catch (GameDatabaseException e) {
-			Item item = new Item(newItem.getCatalogID(), newItem.getAmount());
-			if (item.getDef(owner.getWorld()).isStackable()) {
-				for (int i = 0; i < newItem.getAmount(); i++) {
-					owner.getCarriedItems().getInventory().add(new Item(newItem.getCatalogID(), 1));
-				}
-			} else {
-				owner.getCarriedItems().getInventory().add(new Item(newItem.getCatalogID(), newItem.getAmount()));
-			}
+		boolean dbOk = owner.getWorld().getServer().getDatabase().atomically(() -> {
+			owner.getWorld().getServer().getDatabase().newAuction(newItem);
+			owner.getWorld().getServer().getDatabase().savePlayerInventory(owner);
+		});
+		if (dbOk) {
+			//ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp % @whi@Completed auction fee: @gre@" + feeCost + "gp", false);
+			ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp", false);
+			updateDiscord = true;
+		} else {
+			rollbackRemovedItems(removedItems);
 			ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Failed to add item to Auction. % Item(s) have been returned to your inventory.", false);
-			LOGGER.catching(e);
 		}
-		owner.save();
 		owner.getWorld().getMarket().addRequestOpenAuctionHouseTask(owner);
 		if (updateDiscord) {
 			DiscordService ds = owner.getWorld().getServer().getDiscordService();
 			if (ds != null) {
 				ds.auctionAdd(newItem);
 			}
+		}
+	}
+
+	private void rollbackRemovedItems(ArrayList<Item> removedItems) {
+		if (removedItems == null) return;
+		for (Item item : removedItems) {
+			owner.getCarriedItems().getInventory().add(new Item(item.getCatalogId(), item.getAmount(), item.getNoted()));
 		}
 	}
 }

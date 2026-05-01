@@ -48,8 +48,16 @@ public class BuyMarketItemTask extends MarketTask {
 			if (amount > item.getAmountLeft()) {
 				amount = item.getAmountLeft();
 			}
+			if (item.getAmountLeft() <= 0 || item.getPrice() <= 0) {
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ This listing is no longer valid. % Click 'Refresh' to update the Auction.", false);
+				return;
+			}
 
 			int priceForEach = item.getPrice() / item.getAmountLeft();
+			if (priceForEach <= 0) {
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ This listing has an invalid price. % Ask staff to remove it.", false);
+				return;
+			}
 			int auctionPrice = amount * priceForEach;
 
 			if (playerBuyer.getCarriedItems().getInventory().countId(ItemId.COINS.id()) < auctionPrice) {
@@ -62,9 +70,13 @@ public class BuyMarketItemTask extends MarketTask {
 			}
 
 			ItemDefinition def = playerBuyer.getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogID());
-			boolean toInventory = !playerBuyer.getCarriedItems().getInventory().full()
-				&& (!def.isStackable() && playerBuyer.getCarriedItems().getInventory().size() + amount <= 30);
-			boolean toBank = !toInventory && !playerBuyer.getBank().full();
+			if (def == null) {
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ This listing has an invalid item.", false);
+				return;
+			}
+			Item deliveryItem = createInventoryDeliveryItem(def, item.getCatalogID(), amount);
+			boolean toInventory = playerBuyer.getCarriedItems().getInventory().canHold(deliveryItem);
+			boolean toBank = !toInventory && playerBuyer.getBank().canHold(new Item(item.getCatalogID(), amount));
 			if (!toInventory && !toBank) {
 				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ Unable to buy auction, no space left in your inventory or bank.", false);
 				return;
@@ -85,36 +97,46 @@ public class BuyMarketItemTask extends MarketTask {
 			final int finalSellerProceeds = sellerProceeds;
 			final int finalSeller = sellerUsernameID;
 			final String soldExplanation = "Sold " + def.getName() + "(" + item.getCatalogID() + ") x" + amount + " for " + sellerProceeds + "gp (after 5% tax of " + (auctionPrice - sellerProceeds) + "gp)";
+			boolean itemAdded = toInventory ? addInventoryItem(deliveryItem) : playerBuyer.getBank().add(new Item(item.getCatalogID(), amount), false);
+			if (!itemAdded) {
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ Unable to add the purchased item.", false);
+				return;
+			}
+			long coinsRemoved = playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
+			if (coinsRemoved == -1) {
+				rollbackDelivery(deliveryItem, toInventory, amount);
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ Unable to remove coins from your inventory.", false);
+				return;
+			}
+
+			final boolean finalToBank = toBank;
 			boolean dbOk = playerBuyer.getWorld().getServer().getDatabase().atomically(() -> {
 				playerBuyer.getWorld().getServer().getDatabase().addExpiredAuction(soldExplanation, ItemId.COINS.id(), finalSellerProceeds, finalSeller);
 				if (finalItem.getAmountLeft() == 0) playerBuyer.getWorld().getServer().getDatabase().setSoldOut(finalItem);
 				else playerBuyer.getWorld().getServer().getDatabase().updateAuction(finalItem);
+				playerBuyer.getWorld().getServer().getDatabase().savePlayerInventory(playerBuyer);
+				if (finalToBank) {
+					playerBuyer.getWorld().getServer().getDatabase().savePlayerBank(playerBuyer);
+				}
 			});
 			if (!dbOk) {
+				rollbackDelivery(deliveryItem, toInventory, amount);
+				playerBuyer.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), auctionPrice));
 				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
 				return;
 			}
 
 			if (toInventory) {
-				if (!def.isStackable() && amount == 1)
-					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), 1));
-				else
-					playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogID(), amount, !def.isStackable()));
-				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
 				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
 			} else {
-				playerBuyer.getBank().add(new Item(item.getCatalogID(), amount), false);
-				playerBuyer.getCarriedItems().remove(new Item(ItemId.COINS.id(), auctionPrice));
 				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your bank.", false);
 			}
 			updateDiscord = true;
-			playerBuyer.save();
 
 			Player sellerPlayer = playerBuyer.getWorld().getPlayerID(sellerUsernameID);
 			if (sellerPlayer != null) {
 				sellerPlayer.message("@gre@[Auction House]@lre@ " + amount + "x " + def.getName() + "@whi@ has been sold!");
 				sellerPlayer.message("@gre@[Auction House]@whi@ You can collect your earnings from a bank.");
-				sellerPlayer.save();
 			}
 
 			for (MarketItem marketItem : playerBuyer.getWorld().getMarket().getAuctionItems()) {
@@ -137,6 +159,50 @@ public class BuyMarketItemTask extends MarketTask {
 			LOGGER.catching(e);
 			return;
 		}
+	}
+
+	private Item createInventoryDeliveryItem(ItemDefinition def, int catalogID, int amount) {
+		if (def.isStackable() || amount == 1) {
+			return new Item(catalogID, amount);
+		}
+		if (def.isNoteable()) {
+			return new Item(catalogID, amount, true);
+		}
+		return new Item(catalogID, amount);
+	}
+
+	private boolean addInventoryItem(Item item) {
+		ItemDefinition def = item.getDef(playerBuyer.getWorld());
+		if (def == null) return false;
+		if (!def.isStackable() && !item.getNoted() && item.getAmount() > 1) {
+			int added = 0;
+			for (int i = 0; i < item.getAmount(); i++) {
+				if (!playerBuyer.getCarriedItems().getInventory().add(new Item(item.getCatalogId(), 1))) {
+					for (int rollback = 0; rollback < added; rollback++) {
+						playerBuyer.getCarriedItems().remove(new Item(item.getCatalogId(), 1, false));
+					}
+					return false;
+				}
+				added++;
+			}
+			return true;
+		}
+		return playerBuyer.getCarriedItems().getInventory().add(item);
+	}
+
+	private void rollbackDelivery(Item deliveryItem, boolean toInventory, int amount) {
+		if (toInventory) {
+			ItemDefinition def = deliveryItem.getDef(playerBuyer.getWorld());
+			if (def != null && !def.isStackable() && !deliveryItem.getNoted() && amount > 1) {
+				for (int i = 0; i < amount; i++) {
+					playerBuyer.getCarriedItems().remove(new Item(deliveryItem.getCatalogId(), 1, false));
+				}
+				return;
+			}
+			playerBuyer.getCarriedItems().remove(deliveryItem);
+			return;
+		}
+		playerBuyer.getBank().remove(deliveryItem.getCatalogId(), amount, false);
 	}
 
 }
