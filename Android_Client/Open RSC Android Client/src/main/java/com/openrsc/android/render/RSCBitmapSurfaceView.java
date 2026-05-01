@@ -29,7 +29,6 @@ import com.openrsc.client.model.Sprite;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -167,11 +166,11 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 			canvas.drawText(state, x + 138, y + 10, paint);
 
 			if (!this.m_hb) {
-				canvas.drawText("Powered by OpenRSC", x + 138, y + 30, paint);
-				canvas.drawText("We support open source", x + 138, y + 44, paint);
+				canvas.drawText("Voidscape", x + 138, y + 30, paint);
+				canvas.drawText("Classic adventure, rebuilt", x + 138, y + 44, paint);
 			} else {
 				paint.setColor(Color.rgb(132, 132, 152));
-				canvas.drawText("We support open source", x + 138, client_height - 20, paint);
+				canvas.drawText("Voidscape", x + 138, client_height - 20, paint);
 			}
 		} catch (Exception var6) {
 			var6.printStackTrace();
@@ -281,8 +280,13 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		c.drawRGB(0, 0, 0);
 		int resizedWidth = c.getWidth();
 		int resizedHeight = c.getHeight();
-		c.scale(((float) resizedWidth / (float) gameActivity.getMudclient().getGameWidth()),
-			((float) resizedHeight / (float) (gameActivity.getMudclient().getGameHeight() + 12)));
+		float gameWidth = gameActivity.getMudclient().getGameWidth();
+		float gameHeight = gameActivity.getMudclient().getGameHeight() + 12;
+		float scale = Math.min(resizedWidth / gameWidth, resizedHeight / gameHeight);
+		float left = (resizedWidth - gameWidth * scale) / 2.0f;
+		float top = (resizedHeight - gameHeight * scale) / 2.0f;
+		c.translate(left, top);
+		c.scale(scale, scale);
 		c.drawBitmap(currentFrame, 0, 0, bitmapPaint);
 	}
 

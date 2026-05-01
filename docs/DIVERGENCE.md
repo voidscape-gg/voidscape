@@ -1815,3 +1815,60 @@ Files touched:
 - `server/src/com/openrsc/server/net/rsc/parsers/impl/PayloadCustomParser.java`
 
 Reversibility: flip `want_custom_banks` off to return to the authentic bank UI. Reverting only the V2 UI requires also removing interface sub-op `14`; otherwise it is harmless but unused.
+
+### 2026-05-01 - Voidscape Android client bootstrap
+
+Moved the legacy Android wrapper from an OpenRSC-branded best-effort app toward a Voidscape dev APK.
+
+Details:
+- Android app id is now `com.voidscape.client`, the app label is `Voidscape`, and the Gradle output is `voidscape.apk`.
+- Removed the old APK self-update path that pointed at OpenRSC/rsc.vet. `ApplicationUpdater` now acts as a short Voidscape bootstrap screen before cache/server setup.
+- The Android build now packages a clean generated asset copy of `Client_Base/Cache` under APK assets, excluding mutable local files (`config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`).
+- `CacheUpdater` seeds bundled cache assets into app-private storage first, then optionally checks `osConfig.CACHE_URL` if a future Voidscape cache endpoint is configured.
+- Replaced the OpenRSC world selector with Voidscape server choices: emulator host `10.0.2.2:43596`, LAN default `192.168.1.100:43596`, and a manual host/port dialog.
+- Raised Android `minSdkVersion` to `23` to match APIs the wrapper already uses.
+- Removed obsolete/protected Android permissions and stopped relying on hardcoded external storage paths.
+- Android rendering now preserves the game framebuffer aspect ratio with letterboxing instead of stretching to every screen; touch input maps through the same transform.
+- Desktop-only PNG loading for the Voidscape login and world-map assets now goes through a reflection-based `PngSpriteLoader`, avoiding compile-time AWT/ImageIO imports in Android builds while preserving PC behavior.
+- Added `scripts/build-android.sh` to select JDK 17 and fail clearly when Android SDK configuration is missing.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/build.gradle`
+- `Android_Client/Open RSC Android Client/src/main/AndroidManifest.xml`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/ApplicationUpdater.java`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/CacheUpdater.java`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/md5.java`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/RSCBitmapSurfaceView.java`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java`
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/client/android/GameActivity.java`
+- `Android_Client/Open RSC Android Client/src/main/java/orsc/osConfig.java`
+- `Android_Client/Open RSC Android Client/src/main/res/layout/applicationupdater.xml`
+- `Android_Client/Open RSC Android Client/src/main/res/layout/updater.xml`
+- `Android_Client/Open RSC Android Client/src/main/res/values/strings.xml`
+- `Android_Client/Open RSC Android Client/src/main/res/xml/network_security_config.xml`
+- `Client_Base/src/orsc/mudclient.java`
+- `Client_Base/src/orsc/graphics/gui/WorldMapPanel.java`
+- `Client_Base/src/orsc/util/PngSpriteLoader.java`
+- `scripts/build-android.sh`
+
+Build note: Android verification requires a local Android SDK (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, or `Android_Client/local.properties`). Verified locally with Homebrew Android command-line tools at `/opt/homebrew/share/android-commandlinetools`; debug build emits `Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk`.
+
+### 2026-05-01 - Voidscape cracked V brand icon
+
+Selected the cracked stone `V` icon direction from the 4x4 Voidscape concept sheet and wired it into the app-facing launcher icons.
+
+Details:
+- Added master branding assets under `assets/branding/`.
+- Android launcher density icons now use the Voidscape cracked `V`.
+- PC launcher and PC client window icons now use the same `V` mark.
+- The Linux desktop SVG fallback now uses a compact vector approximation of the same cracked `V` concept.
+- `assets/branding/voidscape-icon-v-discord-512.png` is the Discord-ready square export.
+
+Files touched:
+- `assets/branding/voidscape-icon-v-master.png`
+- `assets/branding/voidscape-icon-v-discord-512.png`
+- `assets/branding/voidscape-icon-v-desktop-256.png`
+- `Android_Client/Open RSC Android Client/src/main/res/drawable-*/ic_launcher.png`
+- `PC_Launcher/src/main/resources/images/icon.png`
+- `PC_Launcher/vet.rsc.OpenRSC.Launcher.svg`
+- `Client_Base/src/res/icon.png`

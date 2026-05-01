@@ -1,16 +1,10 @@
 package com.openrsc.client.android;
 
-import static android.graphics.Bitmap.Config.ARGB_8888;
-
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -26,9 +20,6 @@ import com.openrsc.client.R;
 import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Objects;
 
@@ -152,6 +143,9 @@ public class GameActivity extends Activity implements ClientPort {
 		this.cellularNetworks.clear();
 		this.wifiNetworks.clear();
 		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+		if (connectivityManager == null) {
+			return;
+		}
 		Network activeNetwork = connectivityManager.getActiveNetwork();
 		NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
 		if (networkCapabilities != null && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
@@ -164,15 +158,30 @@ public class GameActivity extends Activity implements ClientPort {
 		if (!this.loadedReceivers) {
 			this.loadedReceivers = true;
 			checkNetwork();
-			((ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), networkManager);
+			ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+			if (connectivityManager != null) {
+				connectivityManager.registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), networkManager);
+			}
 			registerReceiver(batteryReceiver, new IntentFilter("android.intent.action.BATTERY_CHANGED"));
 		}
 	}
 
 	private void unsetReceivers() {
+		if (!this.loadedReceivers) {
+			return;
+		}
 		this.loadedReceivers = false;
-		((ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(networkManager);
-		unregisterReceiver(batteryReceiver);
+		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+		if (connectivityManager != null) {
+			try {
+				connectivityManager.unregisterNetworkCallback(networkManager);
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+		try {
+			unregisterReceiver(batteryReceiver);
+		} catch (IllegalArgumentException ignored) {
+		}
 	}
 
     @Override
@@ -183,17 +192,18 @@ public class GameActivity extends Activity implements ClientPort {
 
 	private void updateHideUi() {
 		final View decorView = getWindow().getDecorView();
+		final int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+			| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+			| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+			| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+			| View.SYSTEM_UI_FLAG_FULLSCREEN
+			| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+		decorView.setSystemUiVisibility(flags);
 		decorView.setOnSystemUiVisibilityChangeListener (new View.OnSystemUiVisibilityChangeListener() {
 			@Override
 			public void onSystemUiVisibilityChange(int visibility) {
 				if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
-					decorView.setSystemUiVisibility(
-						View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-							| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-							| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-							| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-							| View.SYSTEM_UI_FLAG_FULLSCREEN
-							| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+					decorView.setSystemUiVisibility(flags);
 				}
 			}
 		});
@@ -304,8 +314,9 @@ public class GameActivity extends Activity implements ClientPort {
     public void drawKeyboard() {
         InputMethodManager imm = (InputMethodManager) this
                 .getSystemService(Context.INPUT_METHOD_SERVICE);
-        Objects.requireNonNull(imm).toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
-        if (imm.isAcceptingText()) osConfig.F_SHOWING_KEYBOARD = true;
+        gameView.requestFocus();
+        Objects.requireNonNull(imm).showSoftInput(gameView, InputMethodManager.SHOW_FORCED);
+        osConfig.F_SHOWING_KEYBOARD = true;
         if (Config.S_SIDE_MENU_TOGGLE) {
         	hadSideMenu = mudclient.getOptionSideMenu();
 			mudclient.setOptionSideMenu(false);
@@ -314,7 +325,7 @@ public class GameActivity extends Activity implements ClientPort {
 
     public void closeKeyboard() {
         ((InputMethodManager) Objects.requireNonNull(getSystemService(Activity.INPUT_METHOD_SERVICE)))
-                .toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+                .hideSoftInputFromWindow(gameView.getWindowToken(), 0);
         osConfig.F_SHOWING_KEYBOARD = false;
 		if (Config.S_SIDE_MENU_TOGGLE) {
 			mudclient.setOptionSideMenu(hadSideMenu);

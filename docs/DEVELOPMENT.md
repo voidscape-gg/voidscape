@@ -23,7 +23,8 @@ OpenRSC's build is **Ant-driven**, with Gradle as an IDE convenience layer. The 
 ## Java target and macOS Java 25 compatibility
 
 **Targets**:
-- Server, PC client, launcher, Android: all Java **1.8** (`source=1.8`, `target=1.8`).
+- Server, PC client, launcher: Java **1.8** (`source=1.8`, `target=1.8`).
+- Android sources still target Java **1.8**, but the Android Gradle plugin must run on **JDK 17** locally.
 
 **Local environment** (verified): `openjdk 25.0.2 2026-01-20` (Homebrew, arm64).
 
@@ -34,7 +35,7 @@ Cosmetic warnings to expect (all from upstream code, not voidscape):
 - `[options] bootstrap class path is not set in conjunction with -source 8` — Ant's classpath model predates the module system. Harmless.
 - Deprecated APIs in upstream code: `java.applet.Applet` (PC_Client), `URL(String)` constructor (PC_Launcher). Upstream issues, not blockers.
 
-Recommendation: **JDK 11 or 17** for a quieter build. Not strictly required — JDK 25 works.
+Recommendation: **JDK 11 or 17** for the Ant build. Android should use **JDK 17** through `scripts/build-android.sh`.
 
 ### Recommended: SDKMAN + Corretto 11
 
@@ -86,6 +87,7 @@ Voidscape's wrappers in `scripts/` are the canonical entry points. Direct Ant/Ma
 scripts/build.sh              # compile server core + plugins + client
 scripts/run-server.sh         # run server with the voidscape preset
 scripts/run-client.sh         # run PC client against local server
+scripts/build-android.sh      # build Android APK; requires Android SDK
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
 ```
@@ -115,6 +117,13 @@ Build PC client:
 ```bash
 cd Client_Base
 ant compile
+```
+
+Build Android client:
+```bash
+# Requires Android SDK via ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
+# or Homebrew android-commandlinetools at /opt/homebrew/share/android-commandlinetools.
+scripts/build-android.sh
 ```
 
 Run PC client:
@@ -256,7 +265,7 @@ make import-authentic-sqlite db=preservation
 | Server plugins | `plugins.jar` | `server/` |
 | PC client | `Open_RSC_Client.jar` | `Client_Base/` |
 | Launcher | `OpenRSC.jar` | `PC_Launcher/` |
-| Android | `openrsc.apk` | Gradle build dir |
+| Android | `voidscape.apk` | Gradle build dir |
 
 ## Run paths summary
 

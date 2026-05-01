@@ -37,11 +37,10 @@ import orsc.net.Network_Socket;
 import orsc.net.Opcodes;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
+import orsc.util.PngSpriteLoader;
 import orsc.util.StringUtil;
 import orsc.util.Utils;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.*;
 //import java.lang.management.ManagementFactory; //Commented out for Android
 import java.nio.charset.StandardCharsets;
@@ -7222,28 +7221,7 @@ public final class mudclient implements Runnable {
 			return;
 		}
 		this.voidscapeLoginAssetLoadAttempted = true;
-		this.voidscapeLoginBackground = readPngAsSprite(new File("Cache/login/voidscape-login-background.png"));
-	}
-
-	private static Sprite readPngAsSprite(File file) {
-		try {
-			BufferedImage image = ImageIO.read(file);
-			if (image == null) {
-				return null;
-			}
-			int width = image.getWidth();
-			int height = image.getHeight();
-			int[] pixels = new int[width * height];
-			image.getRGB(0, 0, width, height, pixels, 0, width);
-			for (int i = 0; i < pixels.length; i++) {
-				if ((pixels[i] >>> 24) < 128) {
-					pixels[i] = 0;
-				}
-			}
-			return new Sprite(pixels, width, height);
-		} catch (IOException ex) {
-			return null;
-		}
+		this.voidscapeLoginBackground = PngSpriteLoader.read(new File("Cache/login/voidscape-login-background.png"));
 	}
 
 	private void drawVoidscapeLogin() {

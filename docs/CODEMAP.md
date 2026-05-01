@@ -204,7 +204,7 @@ PC_Client/
 └── lib/discord-rpc.jar
 
 Android_Client/
-├── Open RSC Android Client/build.gradle  # AGP 7.3.0, minSDK 14, target/compile SDK 31
+├── Open RSC Android Client/build.gradle  # AGP 7.3.0, minSDK 23, target/compile SDK 31
 └── src/main/java/com/openrsc/client/android/
     ├── GameActivity.java           # ClientPort impl; main entry
     ├── render/RSCBitmapSurfaceView.java, InputImpl.java

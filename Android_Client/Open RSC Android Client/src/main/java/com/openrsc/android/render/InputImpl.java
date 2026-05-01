@@ -46,8 +46,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         if (osConfig.C_HOLD_AND_CHOOSE)
             return false;
 
-        mudclient.mouseX = (int) (e.getX() / (getWidth() / (float) mudclient.getGameWidth()));
-        mudclient.mouseY = (int) (e.getY() / (getHeight() / (float) (mudclient.getGameHeight() + 12)));
+        setMousePosition(e);
         return false;
     }
 
@@ -55,8 +54,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     public void onShowPress(MotionEvent e) {
         if (osConfig.C_HOLD_AND_CHOOSE)
             return;
-        mudclient.mouseX = (int) (e.getX() / (getWidth() / (float) mudclient.getGameWidth()));
-        mudclient.mouseY = (int) (e.getY() / (getHeight() / (float) (mudclient.getGameHeight() + 12)));
+        setMousePosition(e);
         mudclient.currentMouseButtonDown = 2;
         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown;
         mudclient.lastMouseAction = 0;
@@ -66,8 +64,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     public boolean onSingleTapUp(MotionEvent e) {
         if (osConfig.C_HOLD_AND_CHOOSE)
             return false;
-        mudclient.mouseX = (int) (e.getX() / (getWidth() / (float) mudclient.getGameWidth()));
-        mudclient.mouseY = (int) (e.getY() / (getHeight() / (float) (mudclient.getGameHeight() + 12)));
+        setMousePosition(e);
         mudclient.currentMouseButtonDown = 1;
         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown;
         mudclient.lastMouseAction = 0;
@@ -87,7 +84,9 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
         lastScrollOrRotate = System.currentTimeMillis();
 
-		boolean touchedMessagePanelArea = getHeight() - Math.max(e2.getY(), e1.getY()) <= 130;
+		int firstY = screenToClientY(e1.getY());
+		int secondY = screenToClientY(e2.getY());
+		boolean touchedMessagePanelArea = mudclient.getGameHeight() + 12 - Math.max(secondY, firstY) <= 130;
 
 		boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 		boolean mayBeScrollable = mudclient.showUiTab != 0;
@@ -119,8 +118,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 			// camera set to auto does not like manual like rotation
 			if (!mudclient.getOptionCameraModeAuto()) {
 				int dir = osConfig.C_SWIPE_TO_ROTATE_MODE == 2 ? -1 : 1;
-				float clientDist = distanceX / (getWidth() / (float) mudclient.getGameWidth())
-					* 0.5F;
+				float clientDist = distanceX / getClientScale() * 0.5F;
 				mudclient.cameraRotation = (255 & mudclient.cameraRotation + (int) (dir * clientDist));
 			} else {
 				// swipe to right gives negative distanceX, to left positive
@@ -315,8 +313,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 	}
 
     public boolean onTouch(View v, MotionEvent e) {
-        mudclient.mouseX = (int) (e.getX() / (getWidth() / (float) mudclient.getGameWidth()));
-        mudclient.mouseY = (int) (e.getY() / (getHeight() / (float) (mudclient.getGameHeight() + 12)));
+        setMousePosition(e);
         mudclient.lastMouseAction = 0;
 
         if (!gestureDetector.onTouchEvent(e)) {
@@ -376,4 +373,37 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     private float getWidth() {
         return view.getWidth();
     }
+
+	private void setMousePosition(MotionEvent e) {
+		mudclient.mouseX = screenToClientX(e.getX());
+		mudclient.mouseY = screenToClientY(e.getY());
+	}
+
+	private int screenToClientX(float screenX) {
+		float clientX = (screenX - getClientOffsetX()) / getClientScale();
+		return clamp(Math.round(clientX), 0, mudclient.getGameWidth() - 1);
+	}
+
+	private int screenToClientY(float screenY) {
+		float clientY = (screenY - getClientOffsetY()) / getClientScale();
+		return clamp(Math.round(clientY), 0, mudclient.getGameHeight() + 11);
+	}
+
+	private float getClientScale() {
+		float gameWidth = Math.max(1, mudclient.getGameWidth());
+		float gameHeight = Math.max(1, mudclient.getGameHeight() + 12);
+		return Math.max(0.01f, Math.min(getWidth() / gameWidth, getHeight() / gameHeight));
+	}
+
+	private float getClientOffsetX() {
+		return (getWidth() - mudclient.getGameWidth() * getClientScale()) / 2.0f;
+	}
+
+	private float getClientOffsetY() {
+		return (getHeight() - (mudclient.getGameHeight() + 12) * getClientScale()) / 2.0f;
+	}
+
+	private int clamp(int value, int min, int max) {
+		return Math.max(min, Math.min(max, value));
+	}
 }

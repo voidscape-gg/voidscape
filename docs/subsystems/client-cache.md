@@ -39,22 +39,25 @@ Package structure:
 - `src/com/openrsc/` — entity defs: `ItemDef.java`, `NPCDef.java`, `SpellDef.java`, `AnimationDef.java`, …
 - `src/res/` — icon resources.
 
-Java target: 1.8 (compatible with Android minSDK 14).
+Java target: 1.8. Android source uses the same target but requires the Android Gradle plugin to run on JDK 17; Android minSDK is 23.
 
 ## Android_Client
 
 Path: `Android_Client/`.
 
 - Build: Gradle 7.3.0 (Android Gradle Plugin). Project file: `Open RSC Android Client/build.gradle`.
-- SDK: `minSdkVersion 14`, `targetSdkVersion 31`, `compileSdkVersion 31`.
+- SDK: `minSdkVersion 23`, `targetSdkVersion 31`, `compileSdkVersion 31`.
 - Entry: `src/main/java/com/openrsc/client/android/GameActivity.java` — Android `Activity`, implements `ClientPort`.
 - Android-specific packages:
   - `com.openrsc.android.render.RSCBitmapSurfaceView` — Canvas/bitmap rendering.
   - `com.openrsc.android.render.InputImpl` — touch input mapping.
-  - `com.openrsc.android.updater.CacheUpdater` — downloads cache to Android filesystem.
+  - `com.openrsc.android.updater.CacheUpdater` — seeds bundled cache to Android filesystem and optionally applies remote cache updates.
 - Source linkage: includes `Client_Base/src/` via Gradle `sourceSets`.
-- Build output: `openrsc.apk` via product flavors.
-- Note: shares all `mudclient` logic with PC; differs only in input, rendering surface, and cache-download strategy.
+- Build output: `voidscape.apk`.
+- Build helper: `scripts/build-android.sh` selects JDK 17 and runs Gradle; a local Android SDK is still required through `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `Android_Client/local.properties`, or Homebrew `android-commandlinetools` at `/opt/homebrew/share/android-commandlinetools`.
+- Cache seed: Gradle packages a generated asset copy of `Client_Base/Cache`, excluding mutable local files (`config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` copies that bundled cache into app-private storage before trying any optional remote cache URL.
+- Server choices: emulator default `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
+- Note: shares all `mudclient` logic with PC; differs only in input, rendering surface, server selection, and cache bootstrap strategy.
 
 ## PC_Launcher
 
@@ -129,7 +132,7 @@ There is no codegen and no shared schema. Devs must keep both files aligned manu
 |---|---|---|---|
 | PC_Launcher | `OpenRSC.jar` | `PC_Launcher/` | Launcher UI + auto-updater entry point |
 | Client_Base + PC_Client | `Open_RSC_Client.jar` | `Client_Base/` | Standalone client (Main-Class: `orsc.OpenRSC`) |
-| Android_Client | `openrsc.apk` | Gradle build dir | Android app |
+| Android_Client | `voidscape.apk` | Gradle build dir | Android app |
 
 ## Run from source — connecting to local server
 
@@ -165,10 +168,10 @@ Recompile Client_Base.
 2. **Silent version mismatch.** `CLIENT_VERSION = 10010` is not auto-bumped. If you change protocol but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
 3. **Cache directory is CWD-relative.** `./Cache` relative to the working directory at launch — not the JAR location. Running from different dirs picks up different caches. Use absolute path or `--dir`.
 4. **Android inherits Client_Base wholesale.** No separate Android opcode tracking. Bumping Client_Base requires APK rebuild.
-5. **`ip.txt`, `port.txt`, `credentials.txt` are plaintext.** No encryption. Sensitive in shared environments.
-6. **Build system mismatch across the tree.** PC_Launcher, PC_Client, Client_Base use Ant; Android uses Gradle. Cross-tree automation must handle both.
-7. **Discord RPC is hard-coupled.** `discord-rpc.jar` is always loaded. If Discord IPC unavailable, client load may stall (depends on `Discord.java`'s exception handling).
-8. **No embedded assets.** Game data fetched at runtime — offline play impossible without pre-cached server config.
+5. **Android packages cache from the repo at build time.** Keep `Client_Base/Cache` populated before building the APK; local runtime files are excluded from packaging by Gradle.
+6. **`ip.txt`, `port.txt`, `credentials.txt` are plaintext.** No encryption. Sensitive in shared environments.
+7. **Build system mismatch across the tree.** PC_Launcher, PC_Client, Client_Base use Ant; Android uses Gradle. Cross-tree automation must handle both.
+8. **Discord RPC is hard-coupled on PC.** `discord-rpc.jar` is always loaded there. Android stubs Discord.
 
 ## Glossary candidates
 

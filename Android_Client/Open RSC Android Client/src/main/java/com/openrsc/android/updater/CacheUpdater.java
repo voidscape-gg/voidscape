@@ -4,15 +4,16 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.AssetManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.StrictMode;
+import android.text.InputType;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.openrsc.client.R;
 import com.openrsc.client.android.GameActivity;
@@ -22,353 +23,347 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.UnknownHostException;
-import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import orsc.osConfig;
-import orsc.util.GenUtil;
 
 public class CacheUpdater extends Activity {
 
-    private TextProgressBar progressBar;
+	private static final String BUNDLED_CACHE_ROOT = "cache";
+	private static final int NETWORK_TIMEOUT_MS = 5000;
 
-    private TextView tv1;
-    private boolean completed = false;
+	private TextProgressBar progressBar;
+	private TextView statusText;
+	private Button launchButton;
+	private boolean completed = false;
 
-    List<String> excludedFiles = new ArrayList<>();
-    List<String> refuseUpdate = new ArrayList<>();
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.updater);
 
-	final AtomicReference<String> realPath = new AtomicReference<String>();
+		progressBar = findViewById(R.id.progressBar);
+		progressBar.setTextSize(18);
+		progressBar.setIndeterminate(false);
+		progressBar.setMax(100);
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-    	// This is so we can do network stuff on the main thread
-		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+		launchButton = findViewById(R.id.launch_client);
+		launchButton.setVisibility(View.GONE);
+		launchButton.setOnClickListener(v -> {
+			if (completed) {
+				showGameSelectionDialog();
+			}
+		});
 
-		StrictMode.setThreadPolicy(policy);
+		statusText = findViewById(R.id.textView1);
+		setStatus("Checking game data");
+		new UpdateTask().execute();
+	}
 
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.updater);
-        progressBar = findViewById(R.id.progressBar);
-        progressBar.setTextSize(18);
-        progressBar.setIndeterminate(false);
-        progressBar.setMax(100);
+	private void setStatus(String status) {
+		statusText.setText(status);
+	}
 
-        Button launchButton = findViewById(R.id.launch_client);
-        launchButton.setVisibility(View.GONE);
-        launchButton.setOnClickListener(v -> {
-            if (completed) {
-                Intent mainIntent = new Intent(CacheUpdater.this, GameActivity.class);
-                mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(mainIntent);
-                finish();
-            }
-        });
-        //Start Game
-        tv1 = findViewById(R.id.textView1);
-        setStatus("Checking for game-cache updates...");
-        Handler handler = new Handler();
-        handler.post(() -> new UpdateTask().execute());
-    }
+	@SuppressLint("StaticFieldLeak")
+	private class UpdateTask extends AsyncTask<Void, String, Boolean> {
 
-    public void setStatus(String s) {
-        tv1.setText(s);
-    }
+		@Override
+		protected Boolean doInBackground(Void... ignored) {
+			File cacheHome = getFilesDir();
+			if (!cacheHome.exists() && !cacheHome.mkdirs()) {
+				publishProgress("Unable to create cache directory", "0");
+				return false;
+			}
 
-    @SuppressLint("StaticFieldLeak")
-    class UpdateTask extends AsyncTask<String, String, String> {
+			publishProgress("Installing bundled game data", "5");
+			boolean seeded = seedBundledCache(cacheHome);
 
-        @Override
-        protected String doInBackground(String... aurl) {
-            excludedFiles.add(osConfig.MD5_TABLENAME);
-            refuseUpdate.add("config.txt");
+			if (hasRemoteCacheEndpoint()) {
+				publishProgress("Checking remote game data", "35");
+				updateRemoteCache(cacheHome);
+			}
 
-            File cacheHome = getFilesDir();
-            if (!cacheHome.exists())
-                cacheHome.mkdirs();
-
-            File md5Table = new File(cacheHome, osConfig.MD5_TABLENAME);
-
-            if (md5Table.exists()) {
-                md5Table.delete();
-            }
-
-            downloadFile(md5Table, getFilesDir().toString() + File.separator);
-
-            md5 localCache = new md5(md5Table.getParentFile(), "");
-            md5 remoteCache = new md5(md5Table, "");
-
-            for (md5.Entry entry : remoteCache.entries) {
-                if (excludedFiles.contains(entry.getRef().getName()))
-                    continue;
-
-                File entryFile = new File(cacheHome, entry.getRef().toString());
-                entryFile.getParentFile().mkdirs();
-
-                String localSum = localCache.getRefSum(entryFile);
-                if (localSum != null) {
-                    if (refuseUpdate.contains(entry.getRef().getName()) ||
-                            localSum.equalsIgnoreCase(entry.getSum())) {
-                        continue;
-                    }
-                }
-
-                downloadFile(entryFile, getFilesDir().toString() + File.separator);
-            }
-
-            publishProgress("Updating completed...");
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            completed = true;
-            showGameSelectionDialog();
-        }
-
-        private boolean isIp(final String address) {
-			Pattern pattern = Pattern.compile("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$");
-			Matcher matcher = pattern.matcher(address);
-			return matcher.matches();
+			boolean ready = seeded || hasRequiredCacheFiles(cacheHome);
+			publishProgress(ready ? "Game data ready" : "Game data unavailable", ready ? "100" : "0");
+			return ready;
 		}
 
-        private void selectServer(final String serverUrl, final String serverPort) {
-			String ip;
-			if (isIp(serverUrl)) {
-				ip = serverUrl;
-			} else { // Attempt to get the IP address of the hostname.
+		@Override
+		protected void onProgressUpdate(String... values) {
+			if (values.length > 0) {
+				statusText.setText(values[0]);
+			}
+			if (values.length > 1) {
 				try {
-					InetAddress address = InetAddress.getByName(new URL(serverUrl).getHost());
-					ip = address.getHostAddress();
-					System.out.println(ip);
+					progressBar.setProgress(Integer.parseInt(values[1]));
+				} catch (NumberFormatException ignored) {
+				}
+				progressBar.setText(values[0]);
+			}
+		}
 
-				} catch (MalformedURLException | UnknownHostException ex) {
-					System.out.println("Error getting IP address from URL");
-					ex.printStackTrace();
-					return;
+		@Override
+		protected void onPostExecute(Boolean ready) {
+			completed = ready;
+			if (ready) {
+				showGameSelectionDialog();
+			} else {
+				showCacheFailureDialog();
+			}
+		}
+	}
+
+	private boolean hasRemoteCacheEndpoint() {
+		return osConfig.CACHE_URL != null && osConfig.CACHE_URL.trim().length() > 0;
+	}
+
+	private boolean seedBundledCache(File cacheHome) {
+		try {
+			copyAssetPath(getAssets(), BUNDLED_CACHE_ROOT, cacheHome);
+			return true;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return hasRequiredCacheFiles(cacheHome);
+		}
+	}
+
+	private void copyAssetPath(AssetManager assetManager, String assetPath, File destination) throws IOException {
+		String[] children = assetManager.list(assetPath);
+		if (children != null && children.length > 0) {
+			if (!destination.exists() && !destination.mkdirs()) {
+				throw new IOException("Unable to create " + destination.getAbsolutePath());
+			}
+			for (String child : children) {
+				copyAssetPath(assetManager, assetPath + "/" + child, new File(destination, child));
+			}
+			return;
+		}
+
+		File parent = destination.getParentFile();
+		if (parent != null && !parent.exists() && !parent.mkdirs()) {
+			throw new IOException("Unable to create " + parent.getAbsolutePath());
+		}
+
+		try (InputStream in = assetManager.open(assetPath);
+			 OutputStream out = new FileOutputStream(destination)) {
+			byte[] buffer = new byte[8192];
+			int read;
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
+			}
+		}
+	}
+
+	private boolean updateRemoteCache(File cacheHome) {
+		File remoteMd5 = new File(cacheHome, osConfig.MD5_TABLENAME + ".remote");
+		String remoteMd5Url = normalizedCacheUrl() + osConfig.MD5_TABLENAME;
+		if (!downloadUrlToFile(remoteMd5Url, remoteMd5, "Checksum")) {
+			return false;
+		}
+
+		md5 localCache = new md5(cacheHome, "");
+		md5 remoteCache = new md5(remoteMd5, "");
+		for (md5.Entry entry : remoteCache.entries) {
+			if (osConfig.MD5_TABLENAME.equals(entry.getRef().getName())) {
+				continue;
+			}
+
+			File entryFile = new File(cacheHome, entry.getRef().toString());
+			File parent = entryFile.getParentFile();
+			if (parent != null && !parent.exists()) {
+				parent.mkdirs();
+			}
+
+			String localSum = localCache.getRefSum(entryFile);
+			if (entry.getSum().equalsIgnoreCase(localSum)) {
+				continue;
+			}
+
+			String remoteFileUrl = normalizedCacheUrl() + entry.getRef().toString().replace(File.separator, "/");
+			if (!downloadUrlToFile(remoteFileUrl, entryFile, getDescription(entryFile))) {
+				return false;
+			}
+		}
+
+		File md5Table = new File(cacheHome, osConfig.MD5_TABLENAME);
+		if (md5Table.exists() && !md5Table.delete()) {
+			return false;
+		}
+		return remoteMd5.renameTo(md5Table);
+	}
+
+	private String normalizedCacheUrl() {
+		String cacheUrl = osConfig.CACHE_URL.trim();
+		return cacheUrl.endsWith("/") ? cacheUrl : cacheUrl + "/";
+	}
+
+	private boolean downloadUrlToFile(String url, File file, String description) {
+		HttpURLConnection connection = null;
+		try {
+			publishDownloadStatus("Downloading " + description, 0);
+			connection = (HttpURLConnection) new URL(url).openConnection();
+			connection.setConnectTimeout(NETWORK_TIMEOUT_MS);
+			connection.setReadTimeout(NETWORK_TIMEOUT_MS);
+			connection.connect();
+			if (connection.getResponseCode() >= 400) {
+				return false;
+			}
+
+			int fileSize = connection.getContentLength();
+			try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
+				 FileOutputStream out = new FileOutputStream(file)) {
+				byte[] buffer = new byte[8192];
+				int bytesRead;
+				int totalRead = 0;
+				while ((bytesRead = in.read(buffer)) != -1) {
+					totalRead += bytesRead;
+					out.write(buffer, 0, bytesRead);
+					if (fileSize > 0) {
+						publishDownloadStatus("Downloading " + description, 35 + (60 * totalRead / fileSize));
+					}
 				}
 			}
+			return true;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			if (connection != null) {
+				connection.disconnect();
+			}
+		}
+	}
 
-			FileOutputStream outputStream;
-			try {
-				outputStream = new FileOutputStream(realPath.get() + "ip.txt");
-				OutputStreamWriter outputWriter = new OutputStreamWriter(outputStream);
-				outputWriter.write(ip);
-				outputWriter.close();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			try {
-				outputStream = new FileOutputStream(realPath.get() + "port.txt");
-				OutputStreamWriter outputWriter = new OutputStreamWriter(outputStream);
-				outputWriter.write(serverPort);
-				outputWriter.close();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			Intent mainIntent = new Intent(CacheUpdater.this, GameActivity.class);
-			mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
-			startActivity(mainIntent);
-			finish();
+	private void publishDownloadStatus(String status, int percent) {
+		runOnUiThread(() -> {
+			statusText.setText(status);
+			progressBar.setText(status);
+			progressBar.setProgress(Math.max(0, Math.min(100, percent)));
+		});
+	}
+
+	private boolean hasRequiredCacheFiles(File cacheHome) {
+		return new File(cacheHome, "video/Authentic_Sprites.orsc").exists()
+			&& new File(cacheHome, "video/models.orsc").exists()
+			&& new File(cacheHome, "video/Authentic_Landscape.orsc").exists();
+	}
+
+	private void showCacheFailureDialog() {
+		new AlertDialog.Builder(CacheUpdater.this)
+			.setTitle("Game data unavailable")
+			.setMessage("The bundled cache could not be installed. Rebuild the APK from a repository with Client_Base/Cache populated.")
+			.setPositiveButton("Retry", (dialog, which) -> new UpdateTask().execute())
+			.setNegativeButton("Close", (dialog, which) -> finish())
+			.show();
+	}
+
+	private void showGameSelectionDialog() {
+		launchButton.setVisibility(View.VISIBLE);
+
+		String emulator = "Voidscape Emulator (" + osConfig.VOIDSCAPE_EMULATOR_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
+		String lan = "Voidscape LAN (" + osConfig.VOIDSCAPE_LAN_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
+		String manual = "Manual Server";
+		String[] choices = {emulator, lan, manual};
+
+		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this)
+			.setTitle("Choose Server")
+			.setItems(choices, (d, which) -> {
+				if (which == 0) {
+					selectServer(osConfig.VOIDSCAPE_EMULATOR_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+				} else if (which == 1) {
+					selectServer(osConfig.VOIDSCAPE_LAN_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+				} else {
+					showManualServerDialog();
+				}
+			})
+			.create();
+		dialog.setOnCancelListener(d -> launchButton.setVisibility(View.VISIBLE));
+		dialog.show();
+	}
+
+	private void showManualServerDialog() {
+		LinearLayout layout = new LinearLayout(CacheUpdater.this);
+		layout.setOrientation(LinearLayout.VERTICAL);
+		layout.setPadding(32, 8, 32, 0);
+
+		final EditText hostBox = new EditText(CacheUpdater.this);
+		hostBox.setHint(osConfig.VOIDSCAPE_LAN_HOST);
+		hostBox.setSingleLine(true);
+		hostBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+		layout.addView(hostBox);
+
+		final EditText portBox = new EditText(CacheUpdater.this);
+		portBox.setHint(osConfig.VOIDSCAPE_DEFAULT_PORT);
+		portBox.setSingleLine(true);
+		portBox.setInputType(InputType.TYPE_CLASS_NUMBER);
+		layout.addView(portBox);
+
+		new AlertDialog.Builder(CacheUpdater.this)
+			.setTitle("Manual Server")
+			.setMessage("Enter the Voidscape host and port.")
+			.setView(layout)
+			.setPositiveButton("Play", (dialog, whichButton) -> {
+				String host = hostBox.getText().toString().trim();
+				String port = portBox.getText().toString().trim();
+				if (host.length() == 0) {
+					host = osConfig.VOIDSCAPE_LAN_HOST;
+				}
+				if (port.length() == 0) {
+					port = osConfig.VOIDSCAPE_DEFAULT_PORT;
+				}
+				selectServer(host, port);
+			})
+			.setNegativeButton("Back", (dialog, whichButton) -> showGameSelectionDialog())
+			.show();
+	}
+
+	private void selectServer(String host, String port) {
+		if (host == null || host.trim().length() == 0 || port == null || port.trim().length() == 0) {
+			Toast.makeText(this, "Server host and port are required", Toast.LENGTH_LONG).show();
+			return;
 		}
 
-        void showGameSelectionDialog() {
-            String desiredPath = "/storage/emulated/0/Android/data/user/0/com.openrsc.client/files" + File.separator;
+		try {
+			Integer.parseInt(port.trim());
+			writeTextFile(new File(getFilesDir(), "ip.txt"), host.trim());
+			writeTextFile(new File(getFilesDir(), "port.txt"), port.trim());
+		} catch (Exception e) {
+			e.printStackTrace();
+			Toast.makeText(this, "Unable to save server selection", Toast.LENGTH_LONG).show();
+			return;
+		}
 
-            FileOutputStream fos = null;
+		Intent mainIntent = new Intent(CacheUpdater.this, GameActivity.class);
+		mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+		startActivity(mainIntent);
+		finish();
+	}
 
-            try {
-                fos = new FileOutputStream(desiredPath + "test.txt");
-                realPath.set(desiredPath);
-            } catch (Exception e) {
-                try {
-                    fos = new FileOutputStream(getFilesDir().getPath() + File.separator + "test.txt");
-                    realPath.set(getFilesDir().getPath() + File.separator);
-                } catch (Exception e2) {
-                    try {
-                        fos = new FileOutputStream(Objects.requireNonNull(getExternalFilesDir(null)).getPath() + File.separator + "test.txt");
-                        realPath.set(Objects.requireNonNull(getExternalFilesDir(null)).getPath() + File.separator);
-                    } catch (Exception ignored) {
-                    }
-                }
-            } finally {
-                GenUtil.close(fos);
-            }
+	private void writeTextFile(File file, String value) throws IOException {
+		try (FileOutputStream outputStream = new FileOutputStream(file);
+			 OutputStreamWriter outputWriter = new OutputStreamWriter(outputStream)) {
+			outputWriter.write(value);
+		}
+	}
 
-            System.out.println(" ");
-            System.out.println(" ");
-            System.out.println("Please select which game you wish to play.");
-            System.out.println(" ");
-            System.out.println("43594 openrsc / 43595 cabbage / 43235 uranium / 43599 coleslaw");
-            System.out.println(" ");
-
-            // setup the alert builder
-            AlertDialog.Builder builder = new AlertDialog.Builder(CacheUpdater.this);
-            builder.setTitle("Game Selection");
-
-            // add a list
-            //String[] games = {"RSC Preservation", "RSC Cabbage", "Open PK (beta)", "Dev Testing", "Local Instance"};
-            String[] games = {"RSC Preservation", "RSC Cabbage", "RSC Uranium", "RSC Coleslaw", "Local Instance"};
-            builder.setItems(games, (dialog, which) -> {
-                switch (which) {
-					case 0: // RSC Preservation
-						selectServer("https://game.openrsc.com", "43602");
-						break;
-                    case 1: // RSC Cabbage
-						selectServer("https://game.openrsc.com", "43595");
-						break;
-					case 2: // RSC Uranium
-						selectServer("https://game.openrsc.com", "43601");
-						break;
-					case 3: // RSC Coleslaw
-						selectServer("https://game.openrsc.com", "43599");
-						break;
-                    case 4: // Manual
-                        LinearLayout layout = new LinearLayout(CacheUpdater.this);
-
-                        // TextView to enter ip
-                        final EditText ipBox = new EditText(CacheUpdater.this);
-                        ipBox.setHint("192.168.1.100");
-                        layout.addView(ipBox);
-
-                        // TextView to enter port
-                        final EditText portBox = new EditText(CacheUpdater.this);
-                        portBox.setHint("43594");
-                        layout.addView(portBox);
-
-                        new AlertDialog.Builder(CacheUpdater.this)
-                                .setTitle("Local Instance")
-                                .setMessage("Enter details for local instance")
-                                .setView(layout)
-                                .setPositiveButton("Enter", (dialog1, whichButton) -> {
-                                    String ip_local = "192.168.1.100";
-                                    String port_local = "43594";
-
-                                    if (!ipBox.getText().toString().trim().equals("")) {
-                                        ip_local = ipBox.getText().toString().trim();
-                                    }
-                                    if (!portBox.getText().toString().trim().equals("")) {
-                                        port_local = portBox.getText().toString().trim();
-                                    }
-
-                                    selectServer(ip_local, port_local);
-                                })
-                                .show();
-                }
-            });
-
-            AlertDialog dialog = builder.create();
-
-            dialog.show();
-        }
-
-        @Override
-        protected void onProgressUpdate(String... values) {
-            if (values.length == 1) {
-                tv1.setText(values[0]);
-            } else if (values.length == 2) {
-                progressBar.setText(values[0] + " - " + Integer.parseInt(values[1]) + "%");
-                progressBar.setProgress(Integer.parseInt(values[1]));
-            }
-        }
-
-        private void downloadFile(File file, String prefix) {
-            try {
-                String fileURL = file.toString().replace(prefix, osConfig.CACHE_URL).replace(File.separator, "/");
-                String description = getDescription(file);
-                publishProgress("Downloading " + description, String.valueOf(0));
-                HttpURLConnection connection = (HttpURLConnection) new URL(fileURL).openConnection();
-                try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
-                     FileOutputStream fileOutputStream = new FileOutputStream(file)) {
-                    int filesize = connection.getContentLength();
-                    byte[] dataBuffer = new byte[1024];
-                    int bytesRead;
-                    int totalRead = 0;
-                    while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
-                        totalRead += bytesRead;
-                        fileOutputStream.write(dataBuffer, 0, bytesRead);
-                        publishProgress("Downloading " + description, "" + (100 * totalRead / filesize));
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                connection.disconnect();
-            } catch (Exception a) {
-                a.printStackTrace();
-            }
-        }
-
-        public String getMD5Checksum(String filename) throws Exception {
-            InputStream fis = openFileInput(filename);
-
-            byte[] buffer = new byte[1024];
-            MessageDigest complete = MessageDigest.getInstance("MD5");
-            int numRead;
-
-            do {
-                numRead = fis.read(buffer);
-                if (numRead > 0) {
-                    complete.update(buffer, 0, numRead);
-                }
-            } while (numRead != -1);
-
-            fis.close();
-
-            byte[] b = complete.digest();
-            StringBuilder result = new StringBuilder();
-
-            for (byte aB : b) {
-                result.append(Integer.toString((aB & 0xff) + 0x100, 16).substring(1));
-            }
-            return result.toString();
-        }
-
-        boolean verifyFile(String filename, String checksum) {
-            return true;
-
-        }
-    }
-
-    private final String[] nicename = {"Checksum", "3D models", "Application Icon", "Graphics", "Landscape", "library"};
-    private final String[] normalName = {"MD5CHECKSUM", "models.orsc", "RuneScape.png", "Sprites.orsc", "Landscape.orsc", "library.orsc"};
-
-    public String getNiceName(String s) {
-        for (int i = 0; i < normalName.length; i++) {
-            if (normalName[i].equalsIgnoreCase(s)) {
-                return nicename[i];
-            }
-        }
-        return "File";
-    }
-
-    private String getDescription(File ref) {
-        int index = ref.getName().lastIndexOf('.');
-        if (index == -1)
-            return "General";
-        else {
-            String extension = ref.getName().substring(index + 1);
-            if (extension.equalsIgnoreCase("ospr"))
-                return "Graphics";
-            else if (extension.equalsIgnoreCase("wav"))
-                return "Audio";
-            else if (extension.equalsIgnoreCase("orsc"))
-                return "Graphics";
-            else if (extension.equalsIgnoreCase("jar"))
-                return "Executable";
-            else
-                return "General";
-        }
-    }
+	private String getDescription(File ref) {
+		int index = ref.getName().lastIndexOf('.');
+		if (index == -1) {
+			return "General";
+		}
+		String extension = ref.getName().substring(index + 1);
+		if (extension.equalsIgnoreCase("ospr")) {
+			return "Graphics";
+		}
+		if (extension.equalsIgnoreCase("wav")) {
+			return "Audio";
+		}
+		if (extension.equalsIgnoreCase("orsc")) {
+			return "Graphics";
+		}
+		return "General";
+	}
 }

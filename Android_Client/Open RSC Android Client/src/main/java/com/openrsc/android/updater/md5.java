@@ -6,7 +6,6 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import java.util.regex.Pattern;
 
 import orsc.osConfig;
 
@@ -36,7 +35,9 @@ public class md5 {
 	private void loadFromDirectory(File directory) {
 		File[] files = directory.listFiles();
 
-		assert files != null;
+		if (files == null) {
+			return;
+		}
 		for (File file : files) {
 			if (file.isDirectory()) {
 				loadFromDirectory(file);
@@ -61,8 +62,7 @@ public class md5 {
 
 		public Entry(String mixedline) {
 			sum = mixedline.substring(0, 32);
-			String path = mixedline.substring(35);
-			path.replace(Pattern.quote("/"), File.separator);
+			String path = mixedline.substring(35).replace("/", File.separator);
 			ref = new File(path);
 		}
 

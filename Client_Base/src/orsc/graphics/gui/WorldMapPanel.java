@@ -2,9 +2,8 @@ package orsc.graphics.gui;
 
 import com.openrsc.client.model.Sprite;
 import orsc.graphics.two.GraphicsController;
+import orsc.util.PngSpriteLoader;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -683,23 +682,7 @@ public final class WorldMapPanel {
 	}
 
 	private static Sprite readPngAsSprite(File f) {
-		try {
-			BufferedImage img = ImageIO.read(f);
-			if (img == null) return null;
-			int w = img.getWidth();
-			int h = img.getHeight();
-			int[] pixels = new int[w * h];
-			img.getRGB(0, 0, w, h, pixels, 0, w);
-			// Engine treats pixel == 0 as transparent; PNGs with palette
-			// transparency come back ARGB with alpha=0 but RGB ≠ 0, so we
-			// normalize transparent pixels to 0 here.
-			for (int i = 0; i < pixels.length; i++) {
-				if ((pixels[i] >>> 24) < 128) pixels[i] = 0;
-			}
-			return new Sprite(pixels, w, h);
-		} catch (IOException ex) {
-			return null;
-		}
+		return PngSpriteLoader.read(f);
 	}
 
 	private static synchronized void ensureAssetsLoaded() {

@@ -3,11 +3,14 @@ package orsc;
 public class osConfig {
 	/* Android: */
 	public static boolean F_ANDROID_BUILD = true; // This MUST be true if Android client or it will crash on launch, needs to be set as public for the Android client to use
-	public static final String DL_URL = "rsc.vet"; // needs to be set as public for the Android client to use
-	public static final String ANDROID_DOWNLOAD_PATH = "https://" + DL_URL + "/downloads/";
-	public static final String CACHE_URL = "https://" + DL_URL + "/downloads/";
+	public static final String DL_URL = "voidscape"; // needs to be set as public for the Android client to use
+	public static final String ANDROID_DOWNLOAD_PATH = ""; // Optional future APK update endpoint.
+	public static final String CACHE_URL = ""; // Optional future cache endpoint; bundled cache is used first.
 	public static final String MD5_TABLENAME = "MD5.SUM";
-	public static final int ANDROID_CLIENT_VERSION = 146; // Important! Depends on web server android_version.txt to check for an updated version
+	public static final int ANDROID_CLIENT_VERSION = 1; // Important! Depends on web server android_version.txt to check for an updated version
+	public static final String VOIDSCAPE_EMULATOR_HOST = "10.0.2.2";
+	public static final String VOIDSCAPE_LAN_HOST = "192.168.1.100";
+	public static final String VOIDSCAPE_DEFAULT_PORT = "43596";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;
