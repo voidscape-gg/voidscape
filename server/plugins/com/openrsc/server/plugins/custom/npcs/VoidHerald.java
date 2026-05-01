@@ -4,6 +4,7 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushNpcDialogue;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 
 import static com.openrsc.server.plugins.Functions.multi;
@@ -22,12 +23,12 @@ public final class VoidHerald implements TalkNpcTrigger {
 			return;
 		}
 
-		npcsay(player, npc, "choose your path");
-
 		if (VoidPath.hasChosen(player)) {
-			player.message("You have already chosen " + VoidPath.name(VoidPath.get(player)) + ".");
+			VoidRushNpcDialogue.handle(player, npc);
 			return;
 		}
+
+		npcsay(player, npc, "choose your path");
 
 		int choice = multi(player, npc, false,
 			"Warrior's Path - 2x XP: Attack, Defense, Strength",

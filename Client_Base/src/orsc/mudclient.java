@@ -66,6 +66,16 @@ public final class mudclient implements Runnable {
 	public static final int spriteProjectile = 3160;
 	public static final int spriteTexture = 3225;
 	static final int spriteLogo = 3150;
+	private static final int VOID_RUSH_UI_MIN_X = 486;
+	private static final int VOID_RUSH_UI_MIN_Y = 54;
+	private static final int VOID_RUSH_UI_MAX_X = 524;
+	private static final int VOID_RUSH_UI_MAX_Y = 90;
+	private static final int VOID_RUSH_ARENA_MIN_X = 488;
+	private static final int VOID_RUSH_ARENA_MIN_Y = 56;
+	private static final int VOID_RUSH_ARENA_MAX_X = 522;
+	private static final int VOID_RUSH_ARENA_MAX_Y = 86;
+	private static final int VOID_RUSH_WAVE_VISUAL_MILLIS = 640;
+	private static final int MAX_TELEPORT_BUBBLES = 50;
 	public static KillAnnouncerQueue killQueue = new KillAnnouncerQueue();
 	public static int skillCount;
 	public static HashMap<String, File> soundCache = new HashMap<String, File>();
@@ -154,6 +164,10 @@ public final class mudclient implements Runnable {
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
+	private final int[][] voidRushWaveProjection = new int[][]{
+		new int[3], new int[3], new int[3], new int[3]
+	};
+	private final int[] voidRushWaveMarkerProjection = new int[3];
 	private final int[] rareDropBeamBaseProjection = new int[3];
 	private final int[] rareDropBeamTopProjection = new int[3];
 
@@ -224,9 +238,9 @@ public final class mudclient implements Runnable {
 	private final int[] shopCategoryID = new int[256];
 	private final int[] shopItemPrice = new int[256];
 	private final boolean[] shopItemNoted = new boolean[256];
-	private final int[] teleportBubbleTime = new int[50];
-	private final int[] teleportBubbleX = new int[50];
-	private final int[] teleportBubbleZ = new int[50];
+	private final int[] teleportBubbleTime = new int[MAX_TELEPORT_BUBBLES];
+	private final int[] teleportBubbleX = new int[MAX_TELEPORT_BUBBLES];
+	private final int[] teleportBubbleZ = new int[MAX_TELEPORT_BUBBLES];
 	private final int tileSize = 128;
 	private final Item[] tradeConfirm = new Item[14];
 	//private final int[] tradeConfirmItems = new int[14];
@@ -693,7 +707,15 @@ public final class mudclient implements Runnable {
 	private int elixirTimer = 0;
 	private boolean inWild = false;
 	private int teleportBubbleCount = 0;
-	private int[] teleportBubbleType = new int[50];
+	private int[] teleportBubbleType = new int[MAX_TELEPORT_BUBBLES];
+	private boolean voidRushWaveVisible = false;
+	private int voidRushWaveDirection = 0;
+	private int voidRushWaveFromLine = 0;
+	private int voidRushWaveToLine = 0;
+	private int voidRushWaveGapStart = 0;
+	private int voidRushWaveGapEnd = 0;
+	private boolean voidRushWaveLethal = false;
+	private long voidRushWaveStartMillis = 0;
 	private boolean tradeAccepted = false;
 	private boolean tradeConfirmAccepted = false;
 	private int tradeConfirmItemsCount = 0;
@@ -5587,6 +5609,7 @@ public final class mudclient implements Runnable {
 
 					this.scene.endScene(-113);
 					drawGameLookSceneOverlay();
+					drawVoidRushWaveProjectile();
 					drawWorldWalkSceneRoute();
 					drawRareDropBeams();
 
@@ -5963,8 +5986,13 @@ public final class mudclient implements Runnable {
 					this.panelMessageTabs.drawPanel();
 					MiscFunctions.textListEntryHeightMod = 0;
 
+					boolean voidRushUiLocked = isVoidRushUiLocked();
+					if (voidRushUiLocked) {
+						lockVoidRushUi();
+					}
+
 					//redstones below (temporary, can be done better with proper tab sprites for ui)
-					if (C_CUSTOM_UI) {
+					if (C_CUSTOM_UI && !voidRushUiLocked) {
 						int maxY = getUITabsY();
 						int x = this.getSurface().width2 - 199 - 1;
 						if (this.showUiTab == Config.OPTIONS_TAB) {
@@ -5990,7 +6018,9 @@ public final class mudclient implements Runnable {
 					}
 					//redstones above
 
-					this.getSurface().a(spriteSelect(GUIPARTS.MENUBAR.getDef()), 0, this.getSurface().width2 - 200, 128, getUITabsY());
+					if (!voidRushUiLocked) {
+						this.getSurface().a(spriteSelect(GUIPARTS.MENUBAR.getDef()), 0, this.getSurface().width2 - 200, 128, getUITabsY());
+					}
 					this.drawUi(0);
 					this.getSurface().loggedIn = false;
 					this.drawChatMessageTabs(var1 - 8);
@@ -6005,7 +6035,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawWorldWalkSceneRoute() {
-		if (!this.worldWalkRouteOk || !this.worldMapPanel.isSceneRouteVisible()) return;
+		if (isVoidRushUiLocked() || !this.worldWalkRouteOk || !this.worldMapPanel.isSceneRouteVisible()) return;
 		if (this.worldWalkRouteX == null || this.worldWalkRouteY == null) return;
 		final int count = Math.min(this.worldWalkRouteX.length, this.worldWalkRouteY.length);
 		if (count == 0) return;
@@ -6046,6 +6076,102 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	private void drawVoidRushWaveProjectile() {
+		if (!this.voidRushWaveVisible) return;
+
+		long age = System.currentTimeMillis() - this.voidRushWaveStartMillis;
+		if (age > VOID_RUSH_WAVE_VISUAL_MILLIS * 2L) {
+			this.voidRushWaveVisible = false;
+			return;
+		}
+
+		double progress = Math.max(0.0D, Math.min(1.0D, age / (double) VOID_RUSH_WAVE_VISUAL_MILLIS));
+		double line = this.voidRushWaveFromLine + (this.voidRushWaveToLine - this.voidRushWaveFromLine) * progress;
+		boolean horizontal = this.voidRushWaveDirection == 0 || this.voidRushWaveDirection == 1;
+		int perpendicularMin = horizontal ? VOID_RUSH_ARENA_MIN_X + 1 : VOID_RUSH_ARENA_MIN_Y + 1;
+		int perpendicularMax = horizontal ? VOID_RUSH_ARENA_MAX_X - 1 : VOID_RUSH_ARENA_MAX_Y - 1;
+		int color = this.voidRushWaveLethal ? 0x7A20FF : 0x4A2A80;
+		int fillAlpha = this.voidRushWaveLethal ? 90 : 45;
+		int lineAlpha = this.voidRushWaveLethal ? 210 : 120;
+
+		drawVoidRushWaveSegment(perpendicularMin, Math.min(perpendicularMax, this.voidRushWaveGapStart - 1),
+			line, horizontal, color, fillAlpha, lineAlpha);
+		drawVoidRushWaveSegment(Math.max(perpendicularMin, this.voidRushWaveGapEnd + 1), perpendicularMax,
+			line, horizontal, color, fillAlpha, lineAlpha);
+	}
+
+	private void drawVoidRushWaveSegment(int segmentStart, int segmentEnd, double line, boolean horizontal,
+										 int color, int fillAlpha, int lineAlpha) {
+		if (segmentStart > segmentEnd) return;
+
+		for (int coordinate = segmentStart; coordinate <= segmentEnd; coordinate++) {
+			drawVoidRushWaveTile(coordinate, line, horizontal, color, fillAlpha, lineAlpha);
+		}
+	}
+
+	private void drawVoidRushWaveTile(int coordinate, double line, boolean horizontal,
+									  int color, int fillAlpha, int lineAlpha) {
+		int x0;
+		int z0;
+		int x1;
+		int z1;
+		if (horizontal) {
+			x0 = (coordinate - this.midRegionBaseX) * this.tileSize;
+			x1 = (coordinate + 1 - this.midRegionBaseX) * this.tileSize;
+			z0 = (int) Math.round((line - this.midRegionBaseZ) * this.tileSize);
+			z1 = z0 + this.tileSize;
+		} else {
+			x0 = (int) Math.round((line - this.midRegionBaseX) * this.tileSize);
+			x1 = x0 + this.tileSize;
+			z0 = (coordinate - this.midRegionBaseZ) * this.tileSize;
+			z1 = (coordinate + 1 - this.midRegionBaseZ) * this.tileSize;
+		}
+
+		boolean tileProjected = projectVoidRushWaveCorner(0, x0, z0)
+			&& projectVoidRushWaveCorner(1, x1, z0)
+			&& projectVoidRushWaveCorner(2, x1, z1)
+			&& projectVoidRushWaveCorner(3, x0, z1);
+
+		if (tileProjected) {
+			final int[] p0 = this.voidRushWaveProjection[0];
+			final int[] p1 = this.voidRushWaveProjection[1];
+			final int[] p2 = this.voidRushWaveProjection[2];
+			final int[] p3 = this.voidRushWaveProjection[3];
+			this.getSurface().drawQuadrilateralAlpha(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1],
+				p3[0], p3[1], color, fillAlpha);
+			this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], color, lineAlpha);
+			this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], color, lineAlpha);
+			this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], color, lineAlpha);
+			this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], color, lineAlpha);
+		}
+
+		drawVoidRushWaveMarker((x0 + x1) / 2, (z0 + z1) / 2, color, lineAlpha);
+	}
+
+	private boolean projectVoidRushWaveCorner(final int index, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 4;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.voidRushWaveProjection[index]);
+	}
+
+	private void drawVoidRushWaveMarker(final int sceneX, final int sceneZ, final int color, final int alpha) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 18;
+		if (!this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.voidRushWaveMarkerProjection)) {
+			return;
+		}
+
+		final int x = this.voidRushWaveMarkerProjection[0];
+		final int y = this.voidRushWaveMarkerProjection[1];
+		final int pulse = 2 + ((this.getFrameCounter() / 2) & 3);
+		final int outer = 7 + pulse;
+		final int inner = 3 + (pulse / 2);
+		this.getSurface().drawLineAlpha(x, y - outer, x + outer, y, color, alpha);
+		this.getSurface().drawLineAlpha(x + outer, y, x, y + outer, color, alpha);
+		this.getSurface().drawLineAlpha(x, y + outer, x - outer, y, color, alpha);
+		this.getSurface().drawLineAlpha(x - outer, y, x, y - outer, color, alpha);
+		this.getSurface().drawLineAlpha(x - inner, y, x + inner, y, 0x0B0014, Math.min(220, alpha + 24));
+		this.getSurface().drawLineAlpha(x, y - inner, x, y + inner, 0x0B0014, Math.min(220, alpha + 24));
 	}
 
 	private boolean shouldRenderGroundItem(final int index) {
@@ -8448,13 +8574,17 @@ public final class mudclient implements Runnable {
 		try {
 
 			boolean var2 = false;
+			boolean voidRushUiLocked = isVoidRushUiLocked();
+			if (voidRushUiLocked) {
+				lockVoidRushUi();
+			}
 
 			// World-map auto-walker (slice 5). pollMouse runs every frame so
 			// it can manage drag-pan transitions (press → hold → release)
 			// internally; click-to-walk only fires on a non-drag release.
 			// Render happens at the *bottom* of drawUi so the dialog draws
 			// on top of side panels and chat tabs.
-			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+			if (!voidRushUiLocked && this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 				int[] outWorld = new int[2];
 				orsc.graphics.gui.WorldMapPanel.ClickResult result =
 					this.worldMapPanel.pollMouse(this.mouseX, this.mouseY,
@@ -8564,6 +8694,16 @@ public final class mudclient implements Runnable {
 						var3 += 20;
 						this.getSurface().drawColoredStringCentered(256, var11 + "*", 0xFFFFFF, 0, 4, var3);
 					}*/
+				if (voidRushUiLocked) {
+					boolean mustDrawMenu = !this.showAdvancedSettingsWindow && !this.optionsMenuShow && !this.topMouseMenuVisible;
+					if (mustDrawMenu) {
+						this.menuCommon.recalculateSize(0);
+						this.drawUiTab0(var1 ^ 2);
+					}
+					if (!this.showAdvancedSettingsWindow && !this.topMouseMenuVisible && !this.optionsMenuShow) {
+						this.createTopMouseMenu(-128);
+					}
+				} else {
 				if (this.optionsMenuShow) {
 					this.drawDialogOptionsMenu(-312);
 				}
@@ -8673,10 +8813,11 @@ public final class mudclient implements Runnable {
 				if (!this.showAdvancedSettingsWindow && this.topMouseMenuVisible && !this.optionsMenuShow) {
 					this.drawMenu();
 				}
+				}
 			}
 			// World-map auto-walker (slice 5). Render at the very end so the
 			// dialog sits on top of side-panel tabs, minimap, and chat tabs.
-			if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+			if (!voidRushUiLocked && this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 				this.worldMapPanel.render(this.getSurface(),
 					this.getGameWidth(), this.getGameHeight(),
 					this.playerLocalX + this.midRegionBaseX,
@@ -15478,6 +15619,26 @@ public final class mudclient implements Runnable {
 			return 3;
 	}
 
+	private boolean isVoidRushUiLocked() {
+		if (this.localPlayer == null || this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+		int worldX = this.playerLocalX + this.midRegionBaseX;
+		int worldY = this.playerLocalZ + this.midRegionBaseZ;
+		return worldX >= VOID_RUSH_UI_MIN_X && worldX <= VOID_RUSH_UI_MAX_X
+			&& worldY >= VOID_RUSH_UI_MIN_Y && worldY <= VOID_RUSH_UI_MAX_Y;
+	}
+
+	private void lockVoidRushUi() {
+		this.showUiTab = 0;
+		this.optionsMenuShow = false;
+		this.topMouseMenuVisible = false;
+		this.showAdvancedSettingsWindow = false;
+		if (this.worldMapPanel.isVisible()) {
+			this.worldMapPanel.setVisible(false);
+		}
+	}
+
 	private void openBasicSettingsTab() {
 		this.settingTab = SETTINGS_PROFILE_TAB;
 		this.settingsAdvancedMode = false;
@@ -18452,6 +18613,10 @@ public final class mudclient implements Runnable {
 		return this.teleportBubbleCount;
 	}
 
+	public int getTeleportBubbleLimit() {
+		return this.teleportBubbleType.length;
+	}
+
 	public void setTeleportBubbleCount(int count) {
 		this.teleportBubbleCount = count;
 	}
@@ -19252,6 +19417,18 @@ public final class mudclient implements Runnable {
 			}
 		}
 		this.showMessage(false, null, msg, MessageType.GAME, 0, null);
+	}
+
+	/** Receiver for SEND_VOID_RUSH_WAVE; called from PacketHandler. */
+	public void showVoidRushWaveProjectile(int direction, int fromLine, int toLine, int gapStart, int gapEnd, boolean lethal) {
+		this.voidRushWaveDirection = direction;
+		this.voidRushWaveFromLine = fromLine;
+		this.voidRushWaveToLine = toLine;
+		this.voidRushWaveGapStart = gapStart;
+		this.voidRushWaveGapEnd = gapEnd;
+		this.voidRushWaveLethal = lethal;
+		this.voidRushWaveStartMillis = System.currentTimeMillis();
+		this.voidRushWaveVisible = true;
 	}
 
 	private void walkToGroundItem(int startX, int startZ, int destX, int destZ, boolean var5) {

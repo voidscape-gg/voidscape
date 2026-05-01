@@ -189,6 +189,17 @@ public class ActionSender {
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_WORLD_WALK_ROUTE, struct, player);
 	}
 
+	public static void sendVoidRushWave(Player player, int direction, int fromLine, int toLine, int gapStart, int gapEnd, boolean lethal) {
+		VoidRushWaveStruct struct = new VoidRushWaveStruct();
+		struct.direction = direction;
+		struct.fromLine = fromLine;
+		struct.toLine = toLine;
+		struct.gapStart = gapStart;
+		struct.gapEnd = gapEnd;
+		struct.lethal = lethal;
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_VOID_RUSH_WAVE, struct, player);
+	}
+
 	/**
 	 * Inform client to start displaying the appearance changing screen.
 	 *

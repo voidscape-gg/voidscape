@@ -117,6 +117,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 		put(OpcodeOut.SEND_EQUIPMENT, 254); // custom
 		put(OpcodeOut.SEND_EQUIPMENT_UPDATE, 255); // custom
 		put(OpcodeOut.SEND_WORLD_WALK_ROUTE, 100); // voidscape — world-map auto-walker
+		put(OpcodeOut.SEND_VOID_RUSH_WAVE, 102); // voidscape — Void Rush low-cost wave visual
 	}};
 
 	@Override
@@ -1030,6 +1031,16 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 							builder.writeShort(p.getY());
 						}
 					}
+					break;
+
+				case SEND_VOID_RUSH_WAVE:
+					VoidRushWaveStruct vrw = (VoidRushWaveStruct) payload;
+					builder.writeByte((byte) vrw.direction);
+					builder.writeShort(vrw.fromLine);
+					builder.writeShort(vrw.toLine);
+					builder.writeShort(vrw.gapStart);
+					builder.writeShort(vrw.gapEnd);
+					builder.writeByte((byte) (vrw.lethal ? 1 : 0));
 					break;
 			}
 		}

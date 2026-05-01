@@ -105,4 +105,5 @@ public enum OpcodeOut {
     SEND_UNLOCKED_APPEARANCES, // custom
 
 	SEND_WORLD_WALK_ROUTE, // voidscape — world-map auto-walker
+	SEND_VOID_RUSH_WAVE, // voidscape — Void Rush low-cost wave visual
 }

@@ -64,6 +64,16 @@ CATCHSIM_ISLAND_CENTER_Y = 71
 CATCHSIM_ISLAND_RADIUS_X = 21.0
 CATCHSIM_ISLAND_RADIUS_Y = 19.0
 
+VOIDRUSH_SECTOR = "h0x58y38"
+VOIDRUSH_SECTOR_BASE_X = 480
+VOIDRUSH_SECTOR_BASE_Y = 48
+VOIDRUSH_PAD_MIN_X, VOIDRUSH_PAD_MAX_X = 486, 524
+VOIDRUSH_PAD_MIN_Y, VOIDRUSH_PAD_MAX_Y = 54, 90
+VOIDRUSH_ARENA_MIN_X, VOIDRUSH_ARENA_MAX_X = 488, 522
+VOIDRUSH_ARENA_MIN_Y, VOIDRUSH_ARENA_MAX_Y = 56, 86
+VOIDRUSH_CENTER_X = 505
+VOIDRUSH_CENTER_Y = 71
+
 # DoorDef IDs
 HIGHWALL = 7
 HIGH_DOOR = 8
@@ -350,24 +360,75 @@ def patch_catchsim_island_sector(sector_bytes: bytes, sector_name: str, sector_b
     return bytes(buf)
 
 
+def patch_voidrush_sector(sector_bytes: bytes) -> bytes:
+    """Bake the Void Rush waiting room and arena floor into the ocean sector."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - VOIDRUSH_SECTOR_BASE_X
+        ty = worldY - VOIDRUSH_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {VOIDRUSH_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    land = set()
+    for x in range(VOIDRUSH_PAD_MIN_X, VOIDRUSH_PAD_MAX_X + 1):
+        for y in range(VOIDRUSH_PAD_MIN_Y, VOIDRUSH_PAD_MAX_Y + 1):
+            in_arena = VOIDRUSH_ARENA_MIN_X <= x <= VOIDRUSH_ARENA_MAX_X and VOIDRUSH_ARENA_MIN_Y <= y <= VOIDRUSH_ARENA_MAX_Y
+            in_waiting_room = 499 <= x <= 511 and 87 <= y <= 90
+            edge_shape = (
+                (x in (VOIDRUSH_PAD_MIN_X, VOIDRUSH_PAD_MAX_X) and 58 <= y <= 86)
+                or (y in (VOIDRUSH_PAD_MIN_Y, VOIDRUSH_PAD_MAX_Y) and 492 <= x <= 518)
+            )
+            if in_arena or in_waiting_room or edge_shape:
+                land.add((x, y))
+
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        center_lane = x == VOIDRUSH_CENTER_X or y == VOIDRUSH_CENTER_Y
+        waiting_room = y >= 87
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (108 + ((x * 3 + y * 13) % 24)) & 0xFF
+        if waiting_room:
+            buf[off + 2] = FLOOR_V3_STONE
+        elif center_lane:
+            buf[off + 2] = FLOOR_RITUAL
+        elif (x + y) % 5 == 0:
+            buf[off + 2] = FLOOR_MID
+        else:
+            buf[off + 2] = FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
 def main():
     # 1. Read clean source sectors from Authentic
     with zipfile.ZipFile(AUTHENTIC) as z:
         enclave_source = z.read(ENCLAVE_SECTOR)
         island_source = z.read(VOID_ISLAND_SECTOR)
         catchsim_sources = {sector: z.read(sector) for sector, _, _, _, _ in CATCHSIM_SECTORS}
+        voidrush_source = z.read(VOIDRUSH_SECTOR)
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
         legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
     print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
     print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
     for sector, source in catchsim_sources.items():
         print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
+    print(f"Read {len(voidrush_source)} bytes from {AUTHENTIC.name}!{VOIDRUSH_SECTOR}")
 
     # 2. Apply patches
     walls = enclave_walls()
     patched_sectors = {
         ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
         VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
+        VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
     }
     for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
         patched_sectors[sector] = patch_catchsim_island_sector(
@@ -379,6 +440,7 @@ def main():
     print(f"Restored {len(LEGACY_ENCLAVE_SECTORS)} legacy enclave sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
+    print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
     # server copy and the client cache copy (client reads its own when

@@ -61,6 +61,7 @@ public class PacketHandler {
 		put(97, "UPDATE_ITEMS_TRADED_TO_YOU");
 		put(99, "GROUNDITEM_HANDLER");
 		put(101, "SHOW_SHOP");
+		put(102, "VOID_RUSH_WAVE");
 		put(104, "UPDATE_NPC");
 		put(109, "SET_IGNORE");
 		put(111, "COMPLETED_TUTORIAL");
@@ -270,6 +271,9 @@ public class PacketHandler {
 
 				// voidscape — world-map auto-walker route
 			else if (opcode == 100) handleWorldWalkRoute(length);
+
+				// voidscape — Void Rush low-cost wave visual
+			else if (opcode == 102) handleVoidRushWave();
 
 			else this.handlePacket2(opcode, length);
 
@@ -947,6 +951,16 @@ public class PacketHandler {
 			ys[i] = packetsIncoming.getShort();
 		}
 		mc.setWorldWalkRoute(ok != 0, reason, xs, ys);
+	}
+
+	private void handleVoidRushWave() {
+		int direction = packetsIncoming.getUnsignedByte();
+		int fromLine = packetsIncoming.getShort();
+		int toLine = packetsIncoming.getShort();
+		int gapStart = packetsIncoming.getShort();
+		int gapEnd = packetsIncoming.getShort();
+		boolean lethal = packetsIncoming.getUnsignedByte() != 0;
+		mc.showVoidRushWaveProjectile(direction, fromLine, toLine, gapStart, gapEnd, lethal);
 	}
 
 	private void setServerConfiguration() {
@@ -2505,10 +2519,10 @@ public class PacketHandler {
 	}
 
 	private void drawTeleportBubbles() {
-		if (mc.getTeleportBubbleCount() < 50) {
-			int type = packetsIncoming.getUnsignedByte();
-			int x = packetsIncoming.getByte() + mc.getLocalPlayerX();
-			int z = packetsIncoming.getByte() + mc.getLocalPlayerZ();
+		int type = packetsIncoming.getUnsignedByte();
+		int x = packetsIncoming.getByte() + mc.getLocalPlayerX();
+		int z = packetsIncoming.getByte() + mc.getLocalPlayerZ();
+		if (mc.getTeleportBubbleCount() < mc.getTeleportBubbleLimit()) {
 			mc.setTeleportBubbleType(mc.getTeleportBubbleCount(), type);
 			mc.setTeleportBubbleTime(mc.getTeleportBubbleCount(), 0);
 			mc.setTeleportBubbleX(mc.getTeleportBubbleCount(), x);

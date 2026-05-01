@@ -34,6 +34,8 @@ import com.openrsc.server.model.struct.EquipRequest.RequestType;
 import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushConfig;
+import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushMinigame;
 import com.openrsc.server.plugins.triggers.CommandTrigger;
 import com.openrsc.server.util.MessageFilter;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -110,6 +112,8 @@ public final class Admins implements CommandTrigger {
 			saveAll(player);
 		} else if (command.equalsIgnoreCase("loadbots") || command.equalsIgnoreCase("loadtest")) {
 			loadBots(player, args);
+		} else if (command.equalsIgnoreCase("voidrushbots") || command.equalsIgnoreCase("vrbots")) {
+			voidRushBots(player, args);
 		} else if (command.equalsIgnoreCase("pf")) {
 			pathfindDebug(player, args);
 		} else if (command.equalsIgnoreCase("holidaydrop")) {
@@ -479,6 +483,50 @@ public final class Admins implements CommandTrigger {
 		} catch (NumberFormatException ex) {
 			player.message(messagePrefix + "count, radius, and intervalTicks must be integers");
 		}
+	}
+
+	private void voidRushBots(Player player, String[] args) {
+		int botCount = Math.min(10, VoidRushConfig.MAX_PLAYERS - 1);
+		if (args.length >= 1) {
+			try {
+				botCount = Integer.parseInt(args[0]);
+			} catch (NumberFormatException ex) {
+				player.message(messagePrefix + "Usage: ::voidrushbots [count]");
+				return;
+			}
+		}
+
+		botCount = Math.max(1, Math.min(VoidRushConfig.MAX_PLAYERS - 1, botCount));
+		if (VoidRushMinigame.isActive(player)) {
+			player.message(messagePrefix + "Void Rush is already underway for you.");
+			return;
+		}
+		if (!VoidRushMinigame.isQueued(player) && !VoidRushMinigame.joinQueue(player)) {
+			return;
+		}
+
+		player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().start(botCount, 1, 50));
+
+		int queued = 0;
+		for (Player bot : player.getWorld().getPlayers()) {
+			if (queued >= botCount) {
+				break;
+			}
+			if (bot == null
+				|| !bot.getAttribute("dummyplayer", false)
+				|| !bot.getAttribute("loadtest", false)) {
+				continue;
+			}
+			bot.setBusy(false);
+			bot.cancelAutoWalk();
+			bot.resetPath();
+			if (VoidRushMinigame.joinQueue(bot)) {
+				queued++;
+			}
+		}
+
+		player.message(messagePrefix + "Queued you and " + queued + " load bots for Void Rush.");
+		player.message(messagePrefix + "Use ::loadbots stop after testing to remove any survivors.");
 	}
 
 	/** Voidscape debug: ::pf <x> <y>  — runs the world-walk pathfinder against

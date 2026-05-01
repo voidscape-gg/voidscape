@@ -1545,3 +1545,47 @@ Files added:
 - `web/prelaunch/assets/rsc-ranger.png`
 - `web/prelaunch/assets/rsc-knight.png`
 - `web/prelaunch/assets/rsc-mage.png`
+
+### 2026-04-30 - Void Rush survival minigame
+
+Added `Void Rush`, a Classic-era void survival minigame. Players queue through the `Void Herald`, enter a rectangular void arena, dodge tick-based rows/columns of corrupted void energy with safe gaps, and the last surviving player receives one Christmas cracker.
+
+Gameplay / server changes:
+- New `server/plugins/.../custom/minigames/voidrush/` package with config, queue, instance, wave, and NPC-dialogue classes.
+- Default queue requires 2 players, caps at 20, and teleports entrants to a waiting room before countdown.
+- Waves can travel north/south/east/west, increase stride/gap difficulty by round, and support later double-wave rounds.
+- Elimination handles standing on dangerous swept tiles, logout/disconnect, leaving the arena, and zero-player no-winner endings.
+- Winner reward is guarded by a single `rewardAwarded` flag and uses existing `ItemId.CHRISTMAS_CRACKER` (`575`).
+- Admin test helper `::voidrushbots [count]` / `::vrbots [count]` queues the caller plus synthetic load bots. Dummy load bots bypass the one-account-per-IP minigame restriction; real players still do not.
+
+Client / visual changes:
+- Added custom outgoing packet `SEND_VOID_RUSH_WAVE` (wire id `102`) carrying wave direction, swept line range, gap bounds, and warning/lethal state.
+- Java client renders wave visuals locally from that single packet as independent projected tile quads plus fallback center markers. This replaced object spam / teleport-bubble spam and avoids minimap leakage.
+- Void Rush bounds disable side menu/minimap/world-map UI while preserving normal world walking and top mouse menu behavior.
+- Teleport-bubble packet parsing now always consumes the payload even when the local display cap is full.
+
+Landscape / content changes:
+- Baked floor tiles for the ocean-isolated arena/lobby into `Custom_Landscape.orsc` on both server and client cache copies.
+- Added `Void Herald` NPC spawn/dialogue hookup in the Void Enclave NPC locs/plugin.
+
+Verification:
+- `./scripts/build.sh` passes.
+- Local live test with `::voidrushbots 10` starts a full Void Rush instance with 11 players.
+- Forced-prize test by stopping bots confirmed winner message, broadcast, and exactly one persisted Christmas cracker (`catalogID=575`) for player `void`.
+- Manual full-flow test was confirmed by user after running the command themselves.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/custom/minigames/voidrush/*`
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java`
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java`
+- `server/conf/server/defs/locs/NpcLocsVoidEnclave.json`
+- `server/conf/server/data/Custom_Landscape.orsc`
+- `Client_Base/Cache/video/Custom_Landscape.orsc`
+- `scripts/patch-void-enclave-landscape.py`
+- `server/src/com/openrsc/server/net/rsc/ActionSender.java`
+- `server/src/com/openrsc/server/net/rsc/PayloadValidator.java`
+- `server/src/com/openrsc/server/net/rsc/enums/OpcodeOut.java`
+- `server/src/com/openrsc/server/net/rsc/generators/impl/PayloadCustomGenerator.java`
+- `server/src/com/openrsc/server/net/rsc/struct/outgoing/VoidRushWaveStruct.java`
+- `Client_Base/src/orsc/PacketHandler.java`
+- `Client_Base/src/orsc/mudclient.java`
