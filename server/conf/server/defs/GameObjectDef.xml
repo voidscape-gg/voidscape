@@ -14364,4 +14364,15 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>VoidChestOpen</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void Rift</name>
+    <description>A cosmic portal</description>
+    <command1>Enter</command1>
+    <command2>Examine</command2>
+    <type>1</type>
+    <width>2</width>
+    <height>2</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>rockpool</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

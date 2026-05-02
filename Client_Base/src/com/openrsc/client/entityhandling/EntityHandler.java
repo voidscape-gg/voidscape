@@ -7111,6 +7111,7 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void waystone", "A humming marker pointed toward Edgeville", "Return", "Examine", 0, 1, 1, 0, "obelisk", ++i)); //1303
 		objects.add(new GameObjectDef("Void chest", "A void-bound chest humming with stolen wilderness power", "Open", "Examine", 1, 1, 1, 0, "VoidChestClosed", ++i)); //1304
 		objects.add(new GameObjectDef("Void chest", "The void chest hangs open", "WalkTo", "Examine", 1, 1, 1, 0, "VoidChestOpen", ++i)); //1305
+		objects.add(new GameObjectDef("Void Rift", "A cosmic portal", "Enter", "Examine", 1, 2, 2, 0, "rockpool", ++i)); //1306
 	}
 
 	public static void load(boolean loadMembers) {

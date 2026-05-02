@@ -1924,7 +1924,7 @@ Added a Voidscape-owned Death Match Arena gated by the new **Void Knight** NPC.
 Details:
 - Added NPC id `845` (`VOID_KNIGHT`) as the static basement challenger and NPC id `846` (`VOID_KNIGHT_ARENA`) as the spawned fight actor, both with no helmet/gloves/boots, white beard, classic void skin, rune platebody, rune platelegs, rune weapon, and amulet.
 - Expanded the Void Enclave from the tight `102..123,305..325` footprint to `98..128,300..330`, widened the safe-zone/client overlay/cleanup bounds with it, spread out the altar/shop/healing/bank amenities, and added a ladder down at `(122,313)`.
-- Removed the old two-step arena lobby flow. There is now one static Void Knight downstairs at `(984,664)`; attacking him starts the fight immediately. His right-click menu is intentionally attack-only, with no Challenge/Return dialogue actions.
+- Removed the old two-step arena lobby flow. There is now one static Void Knight downstairs at `(984,664)`; attacking him starts the fight immediately. His right-click menu is intentionally attack-only, with no Challenge/Return dialogue actions. The desktop client also suppresses the default `Talk-to` row and ignores blank NPC `command2` labels so this menu cannot render a stray standalone `Void Knight` row.
 - Added an enclave ladder warning/confirmation before entering the downstairs challenge chamber.
 - Added `DeathMatchArena`, a custom minigame plugin that owns enclave/basement ladders, basement return, the private boss spawn, fight cleanup, one-at-a-time arena occupancy, and the victory announcement. The spawned Void Knight uses normal NPC combat for melee, death, XP, drops, and pathing instead of the earlier synthetic duel loop.
 - Added `VoidKnightBoss`, a core combat script/boss pulse that gives the spawned Void Knight 99 combat stats, a strength-potion boost to 118 strength, 22 swordfish at low HP, defensive prayer switching against ranged/magic only, delayed boss/player re-engagement, Fire Blast pressure when the player runs or kites, and session-owned movement tactics where the boss can break melee, step/kite inside the arena, force a quick cast, then re-engage.
@@ -1960,3 +1960,25 @@ Files touched:
 - `server/local.conf` local override `client_version: 10045` (gitignored)
 
 Reversibility: remove the plugin, NPC id/defs/locs/client definition, world-populator loc load, and deathmatch sector logic from the patcher, then rerun the patcher. No schema migration or opcode change.
+
+### 2026-05-02 - Edgeville Void Rift
+
+Added a clickable **Void Rift** at `(192,443)` in the grassy/muddy Edgeville clearing.
+
+Details:
+- Added custom scenery id `1306` `Void Rift`, reusing the existing Mage Bank `rockpool` model instead of custom-generated rift art.
+- The earlier generated `VoidRift1.ob3` through `VoidRift4.ob3` model entries and client animation hook were removed after playtesting because they read as scenery sitting on top of the grass instead of a portal embedded in the landscape.
+- `models.orsc` was repacked to remove the generated rift model entries and return to the stock `rockpool.ob3` asset.
+- Placed the rift exactly at `(192,443)` via `SceneryLocsVoidRift.json`, loaded under the existing `WANT_VOID_ENCLAVE` custom-content gate.
+- Added `VoidRift` `OpLocTrigger`: clicking `Enter` prompts for confirmation and then teleports the player to the Void Enclave at `(113,314)`.
+- Bumped the custom client version to `10049` for the stock-pool object definition update and model cache checksum.
+
+Files touched:
+- `server/conf/server/defs/GameObjectDef.xml`
+- `server/conf/server/defs/locs/SceneryLocsVoidRift.json`
+- `server/src/com/openrsc/server/database/WorldPopulator.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidRift.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java`
+- `Client_Base/Cache/video/models.orsc`
+- `Client_Base/Cache/MD5.SUM`

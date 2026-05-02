@@ -9101,6 +9101,7 @@ public final class mudclient implements Runnable {
 								String var11 = "";
 								int levelDifference = 0;
 								int var13 = this.npcs[var9].npcId;
+								boolean attackOnlyVoidKnight = isVoidKnightAttackOnlyNpc(var13);
 								if (EntityHandler.getNpcDef(var13).isAttackable()) {
 									int npcLevel = (EntityHandler.getNpcDef(var13).getStr()
 										+ EntityHandler.getNpcDef(var13).getAtt()
@@ -9189,16 +9190,20 @@ public final class mudclient implements Runnable {
 											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
 									}
 
-									this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
-										MenuItemAction.NPC_TALK_TO, "Talk-to",
-										"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+									if (!attackOnlyVoidKnight) {
+										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
+											MenuItemAction.NPC_TALK_TO, "Talk-to",
+											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+									}
 
-									if (!EntityHandler.getNpcDef(var13).getCommand1().equals("")) {
+									if (!attackOnlyVoidKnight && !EntityHandler.getNpcDef(var13).getCommand1().equals("")) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_COMMAND1, EntityHandler.getNpcDef(var13).getCommand1(),
 											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
 									}
-									if (EntityHandler.getNpcDef(var13).getCommand2() != null) {
+									if (!attackOnlyVoidKnight
+										&& EntityHandler.getNpcDef(var13).getCommand2() != null
+										&& !EntityHandler.getNpcDef(var13).getCommand2().equals("")) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_COMMAND2, EntityHandler.getNpcDef(var13).getCommand2(),
 											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
@@ -9262,6 +9267,10 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var16) {
 			throw GenUtil.makeThrowable(var16, "client.TA(" + var1 + ')');
 		}
+	}
+
+	private boolean isVoidKnightAttackOnlyNpc(int npcId) {
+		return npcId == 845 || npcId == 846;
 	}
 
 	// inventory right click menu definitions
