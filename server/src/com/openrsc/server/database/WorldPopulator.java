@@ -37,10 +37,10 @@ public final class WorldPopulator {
 
 	private final ArrayList<ItemLoc> itemlocs = new ArrayList<>();
 
-	private static final int VOID_ENCLAVE_CLEAR_MIN_X = 100;
-	private static final int VOID_ENCLAVE_CLEAR_MAX_X = 126;
-	private static final int VOID_ENCLAVE_CLEAR_MIN_Y = 303;
-	private static final int VOID_ENCLAVE_CLEAR_MAX_Y = 328;
+	private static final int VOID_ENCLAVE_CLEAR_MIN_X = 96;
+	private static final int VOID_ENCLAVE_CLEAR_MAX_X = 130;
+	private static final int VOID_ENCLAVE_CLEAR_MIN_Y = 298;
+	private static final int VOID_ENCLAVE_CLEAR_MAX_Y = 332;
 
 	public WorldPopulator(final World world) {
 		this.world = world;
@@ -264,6 +264,7 @@ public final class WorldPopulator {
 				}
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidEnclave.json", type);
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsDeathMatchArena.json", type);
 				}
 				return;
 			}
@@ -286,6 +287,7 @@ public final class WorldPopulator {
 				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsDeathMatchArena.json");
 				}
 				if (getWorld().getServer().getConfig().LOCATION_DATA == 2) {
 					if (getWorld().getServer().getConfig().WANT_DECORATED_MOD_ROOM) {

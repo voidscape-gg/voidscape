@@ -11,8 +11,8 @@ import static com.openrsc.server.plugins.Functions.*;
 public class VoidEnclaveHealingPool implements OpLocTrigger {
 
 	private static final int HEALING_POOL_ID = 1296;
-	private static final int MIN_X = 102, MAX_X = 123;
-	private static final int MIN_Y = 305, MAX_Y = 325;
+	private static final int MIN_X = 98, MAX_X = 128;
+	private static final int MIN_Y = 300, MAX_Y = 330;
 
 	private static boolean isEnclaveHealingPool(GameObject obj) {
 		if (obj.getID() != HEALING_POOL_ID) return false;

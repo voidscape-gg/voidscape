@@ -2416,6 +2416,14 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, 11, -1, -1};
 		npcs.add(new NPCDef("Void Requisitioner", "A void clerk selling equipment rights.", "Unlock", 0, 0, 5, 0, false, sprites, 6307872, 5263440, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Death Match Arena gatekeeper (server id 845)
+		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
+		npcs.add(new NPCDef("Void Knight", "A void-skinned knight guarding the Death Match Arena.", "", "", 99, 99, 99, 99, true, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: Death Match Arena fight actor (server id 846)
+		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
+		npcs.add(new NPCDef("Void Knight", "A void-skinned knight guarding the Death Match Arena.", "", 99, 99, 99, 99, true, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};
@@ -4984,7 +4992,8 @@ public class EntityHandler {
 		animations.add(new AnimationDef("voidneck", "equipment", 0, 0, true, false, 0)); // voidscape: void amulet wielded (runtime idx 231, JSON appearanceID 232). Custom name "voidneck" gets a unique animationNumber slot at startup; we pack pre-recolored necklace frames (purple chain + purple gem, no yellow leak) at sprites[number..number+17].
 		animations.add(new AnimationDef("voidmace", "equipment", 0, 0, true, false, 0)); // voidscape: void mace wielded (runtime idx 232, JSON appearanceID 233). Custom name "voidmace" → unique animationNumber slot at startup; we pack pre-recolored mace frames at sprites[number..number+17].
 		animations.add(new AnimationDef("reserved_custom_npc_838", "npc", 0, 0, true, false, 0)); // voidscape: reserved slot. Keep the animation index stable for later custom animations.
-			animations.add(new AnimationDef("cursed_greatsword", "equipment", 0, 0, true, false, 0));
+		animations.add(new AnimationDef("cursed_greatsword", "equipment", 0, 0, true, false, 0));
+		animations.add(new AnimationDef("fullhelm", "equipment", 65535, 0x6a0dad, 0, true, false, 0)); // voidscape: reserved rune full helm variant with void-purple secondary tint.
 	}
 
 	@SuppressWarnings("unchecked")

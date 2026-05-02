@@ -1318,7 +1318,7 @@ Moved the whole enclave to a new west-Wilderness position centered on `(113,315)
 
 Details:
 - `patch-void-enclave-landscape.py` now bakes the enclave into sector `h0x50y43` and restores the old sector `h0x52y44` from authentic landscape data so the previous location is removed.
-- Runtime boundary, scenery, safe-zone, healing-pool, F2P bank-chest, and client wilderness-overlay checks now use the moved footprint (`X=102..123`, `Y=305..325`; gate webs at `(113,305)`, `(113,326)`, `(102,315)`, `(124,315)`).
+- Runtime boundary, scenery, safe-zone, healing-pool, F2P bank-chest, and client wilderness-overlay checks now use the moved footprint (`X=98..128`, `Y=300..330`; gate webs at `(113,300)`, `(113,331)`, `(98,315)`, `(129,315)`).
 - `WorldPopulator` clears authentic scenery/boundaries and base NPC spawns from a buffered rectangle around the new footprint (`X=100..126`, `Y=303..328`) before custom enclave content loads, removing the local trees, stumps, and wilderness clutter.
 - The two enclave NPCs now have small roaming boxes, and the Edgeville Void Auctioneer plus PK catching trainer also roam instead of standing on a single tile.
 - World-map overlay label/POIs were moved to the new enclave coordinates. Client version bumped `10027` -> `10028`.
@@ -1916,3 +1916,47 @@ Files touched:
 - `docs/community/discord-setup-bot.md`
 
 Operational note: the button requires the persistent listener to be online. Check it with `screen -ls` and `tail -f output/discord-bot/access-gate.log`.
+
+### 2026-05-02 - Death Match Arena and Void Knight
+
+Added a Voidscape-owned Death Match Arena gated by the new **Void Knight** NPC.
+
+Details:
+- Added NPC id `845` (`VOID_KNIGHT`) as the static basement challenger and NPC id `846` (`VOID_KNIGHT_ARENA`) as the spawned fight actor, both with no helmet/gloves/boots, white beard, classic void skin, rune platebody, rune platelegs, rune weapon, and amulet.
+- Expanded the Void Enclave from the tight `102..123,305..325` footprint to `98..128,300..330`, widened the safe-zone/client overlay/cleanup bounds with it, spread out the altar/shop/healing/bank amenities, and added a ladder down at `(122,313)`.
+- Removed the old two-step arena lobby flow. There is now one static Void Knight downstairs at `(984,664)`; attacking him starts the fight immediately. His right-click menu is intentionally attack-only, with no Challenge/Return dialogue actions.
+- Added an enclave ladder warning/confirmation before entering the downstairs challenge chamber.
+- Added `DeathMatchArena`, a custom minigame plugin that owns enclave/basement ladders, basement return, the private boss spawn, fight cleanup, one-at-a-time arena occupancy, and the victory announcement. The spawned Void Knight uses normal NPC combat for melee, death, XP, drops, and pathing instead of the earlier synthetic duel loop.
+- Added `VoidKnightBoss`, a core combat script/boss pulse that gives the spawned Void Knight 99 combat stats, a strength-potion boost to 118 strength, 22 swordfish at low HP, defensive prayer switching against ranged/magic only, delayed boss/player re-engagement, Fire Blast pressure when the player runs or kites, and session-owned movement tactics where the boss can break melee, step/kite inside the arena, force a quick cast, then re-engage.
+- Added Void Knight completion rewards: coins, one noted supply/material roll, one random standard rune item, and a rare 1-in-32 dragon component roll. No Void equipment is on the boss reward table.
+- Converted the Void Chest's old certificate-style rewards into noted base items, preserving the certificate-equivalent bulk amounts for ore and food and making other bulk non-stackable chest rewards noted too.
+- The deathmatch sector moved from the original wilderness-ocean sector `h0x54y38` to a far floor-0 ocean sector `h0x68y50`; the broken underground test sector `h0x54y57` and original sector are restored to authentic terrain by the patcher. The new basement chamber and compact altar arena sit at `X=976..992`, `Y=635..670`; the boss spawns around `(984,643)`, the player starts at `(984,651)`, and the arena altar sits at `(984,647)` for normal `Recharge at` prayer flow during the match.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/custom/minigames/DeathMatchArena.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidChest.java`
+- `server/src/com/openrsc/server/event/rsc/impl/combat/scripts/all/VoidKnightBoss.java`
+- `server/src/com/openrsc/server/constants/NpcId.java`
+- `server/src/com/openrsc/server/database/WorldPopulator.java`
+- `server/src/com/openrsc/server/model/Point.java`
+- `server/conf/server/defs/NpcDefsCustom.json`
+- `server/conf/server/defs/locs/BoundaryLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/NpcLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`
+- `server/conf/server/defs/locs/NpcLocsDeathMatchArena.json`
+- `server/conf/server/defs/locs/SceneryLocsDeathMatchArena.json`
+- `server/plugins/com/openrsc/server/plugins/authentic/npcs/alkharid/ShantayPassNpcs.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidEnclaveHealingPool.java`
+- `server/plugins/com/openrsc/server/plugins/custom/misc/VoidEnclaveWaystone.java`
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
+- `Client_Base/src/orsc/Config.java` (`CLIENT_VERSION` 10038 -> 10045)
+- `Client_Base/src/orsc/mudclient.java`
+- `scripts/patch-void-enclave-landscape.py`
+- `scripts/bake-voidscape-worldmap.py`
+- `server/conf/server/data/Custom_Landscape.orsc`
+- `Client_Base/Cache/video/Custom_Landscape.orsc`
+- `Client_Base/Cache/worldmap/plane-0.png`
+- `Client_Base/Cache/worldmap/points.tsv`
+- `server/local.conf` local override `client_version: 10045` (gitignored)
+
+Reversibility: remove the plugin, NPC id/defs/locs/client definition, world-populator loc load, and deathmatch sector logic from the patcher, then rerun the patcher. No schema migration or opcode change.

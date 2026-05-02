@@ -9,8 +9,8 @@ import static com.openrsc.server.plugins.Functions.*;
 public class VoidEnclaveWaystone implements OpLocTrigger {
 
 	private static final int WAYSTONE_ID = 1303;
-	private static final int MIN_X = 102, MAX_X = 123;
-	private static final int MIN_Y = 305, MAX_Y = 325;
+	private static final int MIN_X = 98, MAX_X = 128;
+	private static final int MIN_Y = 300, MAX_Y = 330;
 	private static final int EDGEVILLE_X = 217;
 	private static final int EDGEVILLE_Y = 449;
 

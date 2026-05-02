@@ -456,8 +456,8 @@ public class ShantayPassNpcs extends AbstractShop implements OpLocTrigger, TakeO
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		// Voidscape: custom bank chests F2P-accessible by design.
 		boolean isVoidscapeF2pChest = obj.getID() == BANK_CHEST
-			&& ((obj.getX() >= 102 && obj.getX() <= 123
-					&& obj.getY() >= 305 && obj.getY() <= 325) // Void Enclave compound
+			&& ((obj.getX() >= 98 && obj.getX() <= 128
+					&& obj.getY() >= 300 && obj.getY() <= 330) // Void Enclave compound
 				|| (obj.getX() == 210 && obj.getY() == 439));
 		// F2P cannot use bank or interact with Stone Gate (except voidscape custom chests).
 		if (!player.getWorld().getServer().getConfig().MEMBER_WORLD && !isVoidscapeF2pChest) {

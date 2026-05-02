@@ -16,21 +16,21 @@ public class VoidChest implements OpLocTrigger, UseLocTrigger {
 	private static final int OPEN_RESPAWN_MS = 3000;
 
 	private static final Reward[] REWARDS = {
-		new Reward(ItemId.IRON_ORE_CERTIFICATE.id(), 20, 20, 12),
-		new Reward(ItemId.COAL_CERTIFICATE.id(), 8, 15, 10),
-		new Reward(ItemId.SWORDFISH_CERTIFICATE.id(), 2, 5, 10),
-		new Reward(ItemId.LOBSTER_CERTIFICATE.id(), 4, 8, 10),
+		new Reward(ItemId.IRON_ORE.id(), 100, 100, 12, true),
+		new Reward(ItemId.COAL.id(), 40, 75, 10, true),
+		new Reward(ItemId.SWORDFISH.id(), 10, 25, 10, true),
+		new Reward(ItemId.LOBSTER.id(), 20, 40, 10, true),
 		new Reward(ItemId.CHAOS_RUNE.id(), 20, 45, 10),
 		new Reward(ItemId.DEATH_RUNE.id(), 8, 20, 8),
 		new Reward(ItemId.LAW_RUNE.id(), 8, 18, 8),
 		new Reward(ItemId.NATURE_RUNE.id(), 10, 25, 8),
-		new Reward(ItemId.BIG_BONES.id(), 4, 8, 8),
+		new Reward(ItemId.BIG_BONES.id(), 4, 8, 8, true),
 		new Reward(ItemId.COINS.id(), 1000, 5000, 8),
 		new Reward(ItemId.ADAMANTITE_ARROWS.id(), 30, 80, 6),
-		new Reward(ItemId.UNCUT_SAPPHIRE.id(), 2, 5, 6),
-		new Reward(ItemId.UNCUT_EMERALD.id(), 2, 4, 5),
-		new Reward(ItemId.UNCUT_RUBY.id(), 1, 3, 4),
-		new Reward(ItemId.UNCUT_DIAMOND.id(), 1, 2, 2)
+		new Reward(ItemId.UNCUT_SAPPHIRE.id(), 2, 5, 6, true),
+		new Reward(ItemId.UNCUT_EMERALD.id(), 2, 4, 5, true),
+		new Reward(ItemId.UNCUT_RUBY.id(), 1, 3, 4, true),
+		new Reward(ItemId.UNCUT_DIAMOND.id(), 1, 2, 2, true)
 	};
 
 	@Override
@@ -66,7 +66,7 @@ public class VoidChest implements OpLocTrigger, UseLocTrigger {
 
 		Reward reward = rollReward();
 		int amount = reward.rollAmount();
-		Item rewardItem = new Item(reward.itemId, amount);
+		Item rewardItem = new Item(reward.itemId, amount, reward.noted);
 		if (!player.getCarriedItems().getInventory().canHold(rewardItem, 1)) {
 			player.message("You need more inventory space to open the void chest.");
 			return;
@@ -110,10 +110,11 @@ public class VoidChest implements OpLocTrigger, UseLocTrigger {
 
 	private String describeReward(Player player, Item item) {
 		String name = item.getDef(player.getWorld()).getName();
+		String notePrefix = item.getNoted() ? "noted " : "";
 		if (item.getAmount() == 1) {
-			return "a " + name;
+			return "a " + notePrefix + name;
 		}
-		return item.getAmount() + " " + name;
+		return item.getAmount() + " " + notePrefix + name;
 	}
 
 	private static class Reward {
@@ -121,12 +122,18 @@ public class VoidChest implements OpLocTrigger, UseLocTrigger {
 		private final int minAmount;
 		private final int maxAmount;
 		private final int weight;
+		private final boolean noted;
 
 		private Reward(int itemId, int minAmount, int maxAmount, int weight) {
+			this(itemId, minAmount, maxAmount, weight, false);
+		}
+
+		private Reward(int itemId, int minAmount, int maxAmount, int weight, boolean noted) {
 			this.itemId = itemId;
 			this.minAmount = minAmount;
 			this.maxAmount = maxAmount;
 			this.weight = weight;
+			this.noted = noted;
 		}
 
 		private int rollAmount() {

@@ -22,8 +22,8 @@ public class Point {
 		wildernessLocations.add(new WildernessLocation(WildState.MEMBERS_WILD, 243, 2988, 283, 3020));
 		/* Void Enclave — safe-zone hub in the west Wilderness.
 		 * Bounds use strict inequality in getWildernessLocation(), so the
-		 * playable interior is X=102..123, Y=305..325. */
-		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 101, 304, 124, 326));
+		 * playable interior is X=98..128, Y=300..330. */
+		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 97, 299, 129, 331));
 	}
 
 	protected short x, y;

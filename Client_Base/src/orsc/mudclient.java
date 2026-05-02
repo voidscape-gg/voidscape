@@ -5775,7 +5775,7 @@ public final class mudclient implements Runnable {
 						// inside it so players see they're in a safe area.
 						int serverX = this.worldOffsetX + this.playerLocalX + this.midRegionBaseX - 2304;
 						int serverY = this.playerLocalZ + this.worldOffsetZ + this.midRegionBaseZ - 1776;
-						boolean inVoidEnclave = serverX >= 102 && serverX <= 123 && serverY >= 305 && serverY <= 325;
+						boolean inVoidEnclave = serverX >= 98 && serverX <= 128 && serverY >= 300 && serverY <= 330;
 
 						if (centerX > 0 && !inVoidEnclave) {
 							inWild = true;
@@ -9173,8 +9173,11 @@ public final class mudclient implements Runnable {
 														+ var11);
 											}
 										} else {
+											MenuItemAction npcAttackAction = this.npcs[var9].npcId == 846
+												? MenuItemAction.NPC_ATTACK1
+												: (levelDifference >= 0 ? MenuItemAction.NPC_ATTACK1 : MenuItemAction.NPC_ATTACK2);
 											this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
-												levelDifference >= 0 ? MenuItemAction.NPC_ATTACK1 : MenuItemAction.NPC_ATTACK2,
+												npcAttackAction,
 												"Attack",
 												"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName()
 													+ var11);

@@ -64,6 +64,19 @@ CATCHSIM_ISLAND_CENTER_Y = 71
 CATCHSIM_ISLAND_RADIUS_X = 21.0
 CATCHSIM_ISLAND_RADIUS_Y = 19.0
 
+DEATHMATCH_SECTOR = "h0x68y50"
+DEATHMATCH_SECTOR_BASE_X = 960
+DEATHMATCH_SECTOR_BASE_Y = 624
+DEATHMATCH_ARENA_MIN_X, DEATHMATCH_ARENA_MAX_X = 976, 992
+DEATHMATCH_ARENA_MIN_Y, DEATHMATCH_ARENA_MAX_Y = 635, 655
+DEATHMATCH_CENTER_X = 984
+DEATHMATCH_CENTER_Y = 645
+DEATHMATCH_BASEMENT_MIN_X, DEATHMATCH_BASEMENT_MAX_X = 976, 992
+DEATHMATCH_BASEMENT_MIN_Y, DEATHMATCH_BASEMENT_MAX_Y = 662, 670
+DEATHMATCH_BASEMENT_CENTER_X = 984
+DEATHMATCH_BASEMENT_CENTER_Y = 666
+LEGACY_DEATHMATCH_SECTORS = ("h0x54y38", "h0x54y57")
+
 VOIDRUSH_SECTOR = "h0x58y38"
 VOIDRUSH_SECTOR_BASE_X = 480
 VOIDRUSH_SECTOR_BASE_Y = 48
@@ -101,22 +114,22 @@ FLOOR_MID    = 28     # Void Floor Mid (TileDef 27): mid-purple — ring around 
 FLOOR_V3_STONE = 29   # Void V3 generated cracked-stone floor (TileDef 28 -> TextureDef 64)
 
 # === Enclave footprint ===
-ENCLAVE_MIN_X, ENCLAVE_MAX_X = 102, 123
-ENCLAVE_MIN_Y, ENCLAVE_MAX_Y = 305, 325
+ENCLAVE_MIN_X, ENCLAVE_MAX_X = 98, 128
+ENCLAVE_MIN_Y, ENCLAVE_MAX_Y = 300, 330
 
 # === Layout (mirrors what we generate into BoundaryLocsVoidEnclave.json today) ===
 
 def is_enclave_floor(x: int, y: int) -> bool:
-    """Stepped octagonal floor mask for the Void Enclave citadel."""
+    """Stepped octagonal floor mask for the expanded Void Enclave citadel."""
     if not (ENCLAVE_MIN_X <= x <= ENCLAVE_MAX_X and ENCLAVE_MIN_Y <= y <= ENCLAVE_MAX_Y):
         return False
-    if x < 105 and y < 308 and (105 - x) + (308 - y) > 3:
+    if x < 103 and y < 305 and (103 - x) + (305 - y) > 6:
         return False
-    if x < 105 and y > 322 and (105 - x) + (y - 322) > 3:
+    if x < 103 and y > 325 and (103 - x) + (y - 325) > 6:
         return False
-    if x > 120 and y < 308 and (x - 120) + (308 - y) > 3:
+    if x > 123 and y < 305 and (x - 123) + (305 - y) > 6:
         return False
-    if x > 120 and y > 322 and (x - 120) + (y - 322) > 3:
+    if x > 123 and y > 325 and (x - 123) + (y - 325) > 6:
         return False
     return True
 
@@ -144,7 +157,11 @@ def enclave_floor_overlay(x: int, y: int) -> int:
         return FLOOR_MID
     if x == center_x or y == center_y:
         return FLOOR_MID
-    if (x, y) in ((110, 312), (116, 312), (110, 318), (116, 318)):
+    if (x, y) in (
+        (106, 306), (120, 306),
+        (105, 315), (121, 315),
+        (110, 326), (116, 326),
+    ):
         return FLOOR_RITUAL
     return FLOOR_V3_STONE
 
@@ -153,16 +170,20 @@ def enclave_roof_tiles():
     """Return tiles covered by V3 generated roofs when the client shows roofs."""
     roof = set()
     # North sanctum.
-    for x in range(109, 118):
-        for y in range(309, 313):
+    for x in range(106, 121):
+        for y in range(304, 310):
             roof.add((x, y))
     # West bank/shop hut.
-    for x in range(105, 110):
-        for y in range(313, 318):
+    for x in range(102, 109):
+        for y in range(312, 320):
             roof.add((x, y))
     # East healing-pool hut.
-    for x in range(117, 122):
-        for y in range(313, 318):
+    for x in range(118, 125):
+        for y in range(312, 320):
+            roof.add((x, y))
+    # South ritual hall.
+    for x in range(108, 119):
+        for y in range(324, 329):
             roof.add((x, y))
     return roof
 
@@ -185,16 +206,16 @@ def enclave_walls():
     # Breach boundaries live in BoundaryLocsVoidEnclave.json instead.
     floor = enclave_floor_tiles()
     gates = {
-        (113, 305, 0),
-        (113, 326, 0),
-        (102, 315, 1),
-        (124, 315, 1),
+        (113, 300, 0),
+        (113, 331, 0),
+        (98, 315, 1),
+        (129, 315, 1),
     }
     gate_flanks = {
-        (112, 305, 0), (114, 305, 0),
-        (112, 326, 0), (114, 326, 0),
-        (102, 314, 1), (102, 316, 1),
-        (124, 314, 1), (124, 316, 1),
+        (112, 300, 0), (114, 300, 0),
+        (112, 331, 0), (114, 331, 0),
+        (98, 314, 1), (98, 316, 1),
+        (129, 314, 1), (129, 316, 1),
     }
     for x, y in sorted(floor):
         for nx, ny, wx, wy, direction in (
@@ -207,34 +228,41 @@ def enclave_walls():
                 wall_id = VOID_V3_SIGIL if (wx, wy, direction) in gate_flanks else VOID_V3_BASTION
                 b(wx, wy, direction, wall_id)
 
-    # North sanctum. A proper enclosed shrine with a three-tile south entrance.
-    for x in range(108, 119):
-        b(x, 308, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
-        if x < 112 or x > 114:
-            b(x, 313, 0, VOID_V3_WALL)
-    for y in range(308, 313):
-        b(108, y, 1, VOID_V3_WINDOW if y == 310 else VOID_V3_WALL)
-        b(119, y, 1, VOID_V3_WINDOW if y == 310 else VOID_V3_WALL)
+    # North sanctum. Larger shrine with a five-tile south entrance.
+    for x in range(105, 122):
+        b(x, 303, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
+        if x < 111 or x > 115:
+            b(x, 310, 0, VOID_V3_WALL)
+    for y in range(303, 310):
+        b(105, y, 1, VOID_V3_WINDOW if y in (305, 307) else VOID_V3_WALL)
+        b(122, y, 1, VOID_V3_WINDOW if y in (305, 307) else VOID_V3_WALL)
 
-    # West bank/shop hut. Open east into the courtyard with a two-tile mouth so
-    # the shop does not feel pinched or blocked by NPC/object placement.
-    for x in range(104, 110):
-        b(x, 312, 0, VOID_V3_SIGIL if x in (106, 107) else VOID_V3_WALL)
-        b(x, 318, 0, VOID_V3_WALL)
-    for y in range(312, 318):
-        b(104, y, 1, VOID_V3_WINDOW if y == 314 else VOID_V3_WALL)
-        if y not in (314, 315):
-            b(110, y, 1, VOID_V3_WALL)
+    # West bank/shop hut. Open east into the courtyard with a broad mouth.
+    for x in range(101, 109):
+        b(x, 311, 0, VOID_V3_SIGIL if x in (104, 105) else VOID_V3_WALL)
+        b(x, 320, 0, VOID_V3_WALL)
+    for y in range(311, 320):
+        b(101, y, 1, VOID_V3_WINDOW if y in (314, 317) else VOID_V3_WALL)
+        if y not in (315, 316):
+            b(109, y, 1, VOID_V3_WALL)
 
-    # East healing-pool hut. Open west into the courtyard with the same clear
-    # two-tile mouth.
-    for x in range(116, 122):
-        b(x, 312, 0, VOID_V3_SIGIL if x in (118, 119) else VOID_V3_WALL)
-        b(x, 318, 0, VOID_V3_WALL)
-    for y in range(312, 318):
-        if y not in (314, 315):
-            b(116, y, 1, VOID_V3_WALL)
-        b(122, y, 1, VOID_V3_WINDOW if y == 314 else VOID_V3_WALL)
+    # East healing-pool hut. Open west into the courtyard.
+    for x in range(117, 125):
+        b(x, 311, 0, VOID_V3_SIGIL if x in (121, 122) else VOID_V3_WALL)
+        b(x, 320, 0, VOID_V3_WALL)
+    for y in range(311, 320):
+        if y not in (315, 316):
+            b(117, y, 1, VOID_V3_WALL)
+        b(125, y, 1, VOID_V3_WINDOW if y in (314, 317) else VOID_V3_WALL)
+
+    # South ritual hall.
+    for x in range(107, 120):
+        if x < 111 or x > 115:
+            b(x, 323, 0, VOID_V3_WALL)
+        b(x, 329, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
+    for y in range(323, 329):
+        b(107, y, 1, VOID_V3_WINDOW if y == 326 else VOID_V3_WALL)
+        b(120, y, 1, VOID_V3_WINDOW if y == 326 else VOID_V3_WALL)
 
     return walls
 
@@ -360,6 +388,75 @@ def patch_catchsim_island_sector(sector_bytes: bytes, sector_name: str, sector_b
     return bytes(buf)
 
 
+def patch_deathmatch_sector(sector_bytes: bytes) -> bytes:
+    """Bake the Death Match basement and compact altar arena into an underground sector."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - DEATHMATCH_SECTOR_BASE_X
+        ty = worldY - DEATHMATCH_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {DEATHMATCH_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    def set_wall(worldX, worldY, direction, doorDefId):
+        off = tile_offset(worldX, worldY)
+        buf[off + (5 if direction == 0 else 4)] = (doorDefId + 1) & 0xFF
+
+    land = set()
+    rooms = (
+        (DEATHMATCH_ARENA_MIN_X, DEATHMATCH_ARENA_MAX_X, DEATHMATCH_ARENA_MIN_Y, DEATHMATCH_ARENA_MAX_Y),
+        (DEATHMATCH_BASEMENT_MIN_X, DEATHMATCH_BASEMENT_MAX_X, DEATHMATCH_BASEMENT_MIN_Y, DEATHMATCH_BASEMENT_MAX_Y),
+    )
+    for min_x, max_x, min_y, max_y in rooms:
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                land.add((x, y))
+
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        center_lane = x == DEATHMATCH_CENTER_X or y == DEATHMATCH_CENTER_Y
+        duel_core = abs(x - DEATHMATCH_CENTER_X) <= 2 and abs(y - DEATHMATCH_CENTER_Y) <= 2
+        basement = y >= DEATHMATCH_BASEMENT_MIN_Y
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (106 + ((x * 9 + y * 7) % 26)) & 0xFF
+        if basement:
+            buf[off + 2] = FLOOR_V3_STONE
+        elif duel_core:
+            buf[off + 2] = FLOOR_RITUAL
+        elif center_lane or (x + y) % 4 == 0:
+            buf[off + 2] = FLOOR_MID
+        else:
+            buf[off + 2] = FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    for min_x, max_x, min_y, max_y in rooms:
+        for x in range(min_x, max_x + 1):
+            set_wall(x, min_y, 0, VOID_V3_WALL)
+            set_wall(x, max_y + 1, 0, VOID_V3_WALL)
+        for y in range(min_y, max_y + 1):
+            set_wall(min_x, y, 1, VOID_V3_WALL)
+            set_wall(max_x + 1, y, 1, VOID_V3_WALL)
+
+    for x, y, direction in (
+        (DEATHMATCH_ARENA_MIN_X + 2, DEATHMATCH_ARENA_MIN_Y, 0),
+        (DEATHMATCH_ARENA_MAX_X - 2, DEATHMATCH_ARENA_MIN_Y, 0),
+        (DEATHMATCH_ARENA_MIN_X + 2, DEATHMATCH_ARENA_MAX_Y + 1, 0),
+        (DEATHMATCH_ARENA_MAX_X - 2, DEATHMATCH_ARENA_MAX_Y + 1, 0),
+        (DEATHMATCH_BASEMENT_CENTER_X, DEATHMATCH_BASEMENT_MIN_Y, 0),
+        (DEATHMATCH_BASEMENT_CENTER_X, DEATHMATCH_BASEMENT_MAX_Y + 1, 0),
+    ):
+        set_wall(x, y, direction, VOID_V3_SIGIL)
+
+    return bytes(buf)
+
+
 def patch_voidrush_sector(sector_bytes: bytes) -> bytes:
     """Bake the Void Rush waiting room and arena floor into the ocean sector."""
     assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
@@ -414,13 +511,16 @@ def main():
         enclave_source = z.read(ENCLAVE_SECTOR)
         island_source = z.read(VOID_ISLAND_SECTOR)
         catchsim_sources = {sector: z.read(sector) for sector, _, _, _, _ in CATCHSIM_SECTORS}
+        deathmatch_source = z.read(DEATHMATCH_SECTOR)
         voidrush_source = z.read(VOIDRUSH_SECTOR)
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
         legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
+        legacy_deathmatch_sources = {sector: z.read(sector) for sector in LEGACY_DEATHMATCH_SECTORS}
     print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
     print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
     for sector, source in catchsim_sources.items():
         print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
+    print(f"Read {len(deathmatch_source)} bytes from {AUTHENTIC.name}!{DEATHMATCH_SECTOR}")
     print(f"Read {len(voidrush_source)} bytes from {AUTHENTIC.name}!{VOIDRUSH_SECTOR}")
 
     # 2. Apply patches
@@ -428,6 +528,7 @@ def main():
     patched_sectors = {
         ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
         VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
+        DEATHMATCH_SECTOR: patch_deathmatch_sector(deathmatch_source),
         VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
     }
     for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
@@ -436,10 +537,13 @@ def main():
         )
     patched_sectors.update(legacy_sources)
     patched_sectors.update(legacy_enclave_sources)
+    patched_sectors.update(legacy_deathmatch_sources)
     print(f"Patched {len(walls)} enclave walls into sector {ENCLAVE_SECTOR}")
     print(f"Restored {len(LEGACY_ENCLAVE_SECTORS)} legacy enclave sector(s) to authentic terrain")
+    print(f"Restored {len(LEGACY_DEATHMATCH_SECTORS)} legacy deathmatch sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
+    print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
