@@ -68,11 +68,19 @@ public final class InterfaceShopHandler implements PayloadProcessor<ShopStruct, 
 
 		// Buy item
 		if (packetID == buyItem) {
+			if (shop.hasBuyHandler()) {
+				shop.handleBuy(player, catalogID, amount);
+				return;
+			}
 			buyShopItem(player, shop, def, catalogID, amount);
 		}
 
 		// Sell item
 		else if (packetID == sellItem) {
+			if (!shop.acceptsPlayerSales()) {
+				player.message("This object can't be sold in shops");
+				return;
+			}
 			sellShopItem(player, shop, def, catalogID, amount);
 		}
 	}

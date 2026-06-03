@@ -18,7 +18,10 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10049;
+	public static final int CLIENT_VERSION = 10055;
+	public static final int PLAYER_TITLE_CLIENT_VERSION = 10052;
+	public static final int SHOP_PRICE_OVERRIDE_CLIENT_VERSION = 10054;
+	public static final int SUBSCRIPTION_PROFILE_CLIENT_VERSION = 10055;
 	private static final int CACHE_VERSION = 4;
 	public static boolean MEMBER_WORLD = false;
 	public static boolean DISPLAY_LOGO_SPRITE = false;

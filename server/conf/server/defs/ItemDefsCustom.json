@@ -7179,6 +7179,29 @@
             "prayerBonus": 0,
             "basePrice": 5000,
             "isNoteable": 1
+        },
+        {
+            "id": 1602,
+            "name": "Subscription card",
+            "description": "A void-marked card that adds one week of account subscription.",
+            "command": "Redeem",
+            "isFemaleOnly": 0,
+            "isMembersOnly": 0,
+            "isStackable": 0,
+            "isUntradable": 0,
+            "isWearable": 0,
+            "appearanceID": 0,
+            "wearableID": 0,
+            "wearSlot": -1,
+            "requiredLevel": 0,
+            "requiredSkillID": -1,
+            "armourBonus": 0,
+            "weaponAimBonus": 0,
+            "weaponPowerBonus": 0,
+            "magicBonus": 0,
+            "prayerBonus": 0,
+            "basePrice": 10000,
+            "isNoteable": 0
         }
     ]
 }

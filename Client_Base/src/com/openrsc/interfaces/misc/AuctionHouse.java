@@ -12,9 +12,26 @@ import orsc.mudclient;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 
 public final class AuctionHouse {
+	private static final String[] CATEGORY_LABELS = {
+		"All", "Weapon", "Armour", "Food", "Ammo", "Jewels", "Ore & Bar", "Herblaw", "Rares", "Misc"
+	};
+	private static final String[] CATEGORY_SHORT_LABELS = {
+		"All", "Wep", "Arm", "Food", "Ammo", "Gem", "Ore", "Herb", "Rare", "Misc"
+	};
+	private static final int[] CATEGORY_ICON_IDS = {
+		10, 75, 404, 373, 646, 305, 172, 464, 576, 14
+	};
+	private static final int COLOR_FRAME = 0x24313b;
+	private static final int COLOR_PANEL = 0x111820;
+	private static final int COLOR_PANEL_SOFT = 0x1d2731;
+	private static final int COLOR_HOVER = 0x304458;
+	private static final int COLOR_SELECTED = 0x6b8e23;
+	private static final int COLOR_GOLD = 0xc1b575;
+
 	public int auctionScrollHandle;
 	public int auctionSearchHandle;
 	public Panel auctionMenu;
@@ -29,6 +46,9 @@ public final class AuctionHouse {
 	private int x, y;
 	private int width, height;
 	private ArrayList<AuctionItem> auctionItems;
+	private ArrayList<MarketHotItem> hotMarketItems;
+	private ArrayList<MarketRecentSale> recentMarketSales;
+	private HashMap<Integer, AuctionItemIntel> marketIntelByItemID;
 	private int newAuctionInventoryIndex = -1;
 	private AuctionItem newAuctionItem = null;
 	private int selectedAuction = -1;
@@ -80,13 +100,16 @@ public final class AuctionHouse {
 		y = (mc.getGameHeight() / 2) - height;
 
 		auctionItems = new ArrayList<>();
+		hotMarketItems = new ArrayList<>();
+		recentMarketSales = new ArrayList<>();
+		marketIntelByItemID = new HashMap<>();
 
 		auctionMenu = new Panel(mc.getSurface(), 5);
 		myAuctions = new Panel(mc.getSurface(), 15);
 
-		auctionScrollHandle = auctionMenu.addScrollingList2(x + 97, y + 80, 390, 208, 1000, 7, true);
-		auctionSearchHandle = auctionMenu.addLeftTextEntry(x + 315, y + 48, 174, 18, 1, 36, false, true);
-		textField_buyAmount = auctionMenu.addLeftTextEntry(x + 100, y + 219, 101, 18, 1, 10, false, true);
+		auctionScrollHandle = auctionMenu.addScrollingList2(x + 94, y + 100, 394, 184, 1000, 7, true);
+		auctionSearchHandle = auctionMenu.addLeftTextEntry(x + 314, y + 48, 172, 18, 1, 36, false, true);
+		textField_buyAmount = auctionMenu.addLeftTextEntry(x + 105, y + 240, 84, 18, 1, 10, false, true);
 
 		textField_price = myAuctions.addLeftTextEntry(x + 60, y + 130, 70, 18, 1, 8, false, true);
 		textField_amount = myAuctions.addLeftTextEntry(x + 60, y + 209, 70, 18, 1, 8, false, true);
@@ -99,9 +122,9 @@ public final class AuctionHouse {
 		x = (mc.getGameWidth() - width) / 2;
 		y = (mc.getGameHeight() - height) / 2;
 
-		auctionMenu.reposition(auctionScrollHandle, x + 97, y + 80, 390, 208);
-		auctionMenu.reposition(auctionSearchHandle, x + 315, y + 48, 174, 18);
-		auctionMenu.reposition(textField_buyAmount, x + 100, y + 219, 101, 18);
+		auctionMenu.reposition(auctionScrollHandle, x + 94, y + 100, 394, 184);
+		auctionMenu.reposition(auctionSearchHandle, x + 314, y + 48, 172, 18);
+		auctionMenu.reposition(textField_buyAmount, x + 105, y + 240, 84, 18);
 
 		myAuctions.reposition(myAuctionScrollHandle, x + 216, y + 74, 270, 179);
 		myAuctions.reposition(textField_amount, x + 60, y + 209, 70, 18);
@@ -123,10 +146,11 @@ public final class AuctionHouse {
 			}
 		}
 
-		graphics.drawBox(x, y, width, 12, 192);
-		int colour = 10000536;
-		graphics.drawBoxAlpha(x, y + 12, width, height, colour, 160);
-		graphics.drawString("Auction House", x + 1, y + 10, 0xffffff, 1);
+		graphics.drawBoxAlpha(x, y, width, 12, COLOR_FRAME, 230);
+		graphics.drawBoxAlpha(x, y + 12, width, height, COLOR_PANEL, 214);
+		graphics.drawBoxBorder(x, width, y, height + 12, 0x0b0d10);
+		drawItemSprite(10, x + 4, y - 1, 18, 14);
+		graphics.drawString("Auction House", x + 24, y + 10, 0xffffff, 1);
 
 		drawButton(graphics, x + 2, y + 14, 80, 21, "Browse", activeInterface == 0, new ButtonHandler() {
 			@Override
@@ -140,6 +164,16 @@ public final class AuctionHouse {
 			@Override
 			void handle() {
 				activeInterface = 1;
+				auctionMenu.setFocus(-1);
+				myAuctions.setFocus(-1);
+			}
+		});
+		drawButton(graphics, x + 166, y + 14, 80, 21, "Intel", activeInterface == 2, new ButtonHandler() {
+			@Override
+			void handle() {
+				activeInterface = 2;
+				selectedAuction = -1;
+				resetPurchaseConfirm();
 				auctionMenu.setFocus(-1);
 				myAuctions.setFocus(-1);
 			}
@@ -165,6 +199,8 @@ public final class AuctionHouse {
 			drawAuctionMenu(graphics);
 		} else if (activeInterface == 1) {
 			drawMyAuctions(graphics);
+		} else if (activeInterface == 2) {
+			drawMarketIntel(graphics);
 		}
 		return true;
 	}
@@ -515,39 +551,39 @@ public final class AuctionHouse {
 
 	private void drawButton(GraphicsController graphics, int x, int y, int width, int height, String text,
 							boolean checked, ButtonHandler handler) {
-		int allColor = 0x333333;
+		int allColor = COLOR_PANEL_SOFT;
 		if (checked) {
-			allColor = 0x659CDE;
+			allColor = COLOR_SELECTED;
 		}
 		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
 			if (!checked)
-				allColor = 0x263751;
+				allColor = COLOR_HOVER;
 			if (mc.getMouseClick() == 1) {
 				handler.handle();
 				mc.setMouseClick(0);
 			}
 		}
 		graphics.drawBoxAlpha(x, y, width, height, allColor, 192);
-		graphics.drawBoxBorder(x, width, y, height, 0x242424);
+		graphics.drawBoxBorder(x, width, y, height, checked ? 0xd6c47f : 0x303840);
 		graphics.drawString(text, x + (width / 2 - graphics.stringWidth(1, text) / 2), y + height / 2 + 5, 0xffffff, 1);
 	}
 
 	private void drawButtonFancy(GraphicsController graphics, int x, int y, int width, int height, String text,
 								 boolean checked, ButtonHandler handler) {
-		int allColor = 0x0A2B56;
+		int allColor = 0x173047;
 		if (checked) {
-			allColor = 0x659CDE;
+			allColor = COLOR_SELECTED;
 		}
 		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
 			if (!checked)
-				allColor = 0x263751;
+				allColor = COLOR_HOVER;
 			if (mc.getMouseClick() == 1) {
 				handler.handle();
 				mc.setMouseClick(0);
 			}
 		}
 		graphics.drawBoxAlpha(x, y, width, height, allColor, 192);
-		graphics.drawBoxBorder(x, width, y, height, 0xBFA086);
+		graphics.drawBoxBorder(x, width, y, height, checked ? 0xd6c47f : 0xBFA086);
 		graphics.drawString(text, x + (width / 2 - graphics.stringWidth(1, text) / 2), y + height / 2 + 5, 0xffffff, 1);
 	}
 
@@ -567,120 +603,165 @@ public final class AuctionHouse {
 		graphics.drawString(text, x + (width / 2 - graphics.stringWidth(1, text) / 2), y + height / 2 + 5, allColor, 1);
 	}
 
+	private void drawItemSprite(int itemID, int drawX, int drawY, int drawWidth, int drawHeight) {
+		ItemDef def = EntityHandler.getItemDef(itemID);
+		if (def == null) {
+			return;
+		}
+		mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, drawWidth, drawHeight,
+			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+	}
+
+	private void setBrowseFilter(int filter) {
+		selectedFilter = filter;
+		selectedAuction = -1;
+		resetPurchaseConfirm();
+		auctionMenu.resetScrollIndex(auctionScrollHandle);
+	}
+
+	private void drawCategoryRail(GraphicsController graphics) {
+		int railX = x + 3;
+		int railY = y + 62;
+		int railWidth = 86;
+		int railHeight = 226;
+		graphics.drawBoxAlpha(railX, railY, railWidth, railHeight, 0, 72);
+		graphics.drawBoxBorder(railX, railWidth, railY, railHeight, 0x343434);
+		graphics.drawBoxAlpha(railX + 1, railY + 1, railWidth - 2, 18, COLOR_SELECTED, 204);
+		graphics.drawString("Browse", railX + 23, railY + 14, 0xffffff, 1);
+
+		for (int i = 0; i < CATEGORY_LABELS.length; i++) {
+			int tileX = railX + 5 + (i % 2) * 38;
+			int tileY = railY + 23 + (i / 2) * 39;
+			drawCategoryTile(graphics, i, tileX, tileY);
+		}
+	}
+
+	private void drawCategoryTile(GraphicsController graphics, final int filter, int tileX, int tileY) {
+		boolean selected = selectedFilter == filter;
+		boolean hover = inBounds(mc.getMouseX(), mc.getMouseY(), tileX, tileY, 35, 36);
+		int fill = selected ? COLOR_SELECTED : (hover ? COLOR_HOVER : COLOR_PANEL_SOFT);
+		graphics.drawBoxAlpha(tileX, tileY, 35, 36, fill, selected ? 218 : 176);
+		graphics.drawBoxBorder(tileX, 35, tileY, 36, selected ? 0xd6c47f : 0x303840);
+		drawItemSprite(CATEGORY_ICON_IDS[filter], tileX + 3, tileY + 2, 29, 20);
+		String label = CATEGORY_SHORT_LABELS[filter];
+		graphics.drawString(label, tileX + (35 / 2 - graphics.stringWidth(0, label) / 2), tileY + 32,
+			selected ? 0xffff99 : 0xffffff, 0);
+		if (hover && mc.getMouseClick() == 1) {
+			setBrowseFilter(filter);
+			mc.setMouseClick(0);
+		}
+	}
+
+	private void drawEmptyState(GraphicsController graphics, int boxX, int boxY, int boxWidth, int boxHeight,
+								String title, String detail) {
+		graphics.drawBoxAlpha(boxX, boxY, boxWidth, boxHeight, COLOR_PANEL_SOFT, 160);
+		graphics.drawBoxBorder(boxX, boxWidth, boxY, boxHeight, 0x303840);
+		drawItemSprite(10, boxX + boxWidth / 2 - 20, boxY + 26, 40, 28);
+		graphics.drawString(title, boxX + (boxWidth / 2 - graphics.stringWidth(1, title) / 2), boxY + 78,
+			0xffffff, 1);
+		graphics.drawString(detail, boxX + (boxWidth / 2 - graphics.stringWidth(0, detail) / 2), boxY + 96,
+			0xc1c8cf, 0);
+	}
+
+	private void drawStatChip(GraphicsController graphics, int chipX, int chipY, int chipWidth, String label,
+							  String value) {
+		graphics.drawBoxAlpha(chipX, chipY, chipWidth, 32, 0x0b1117, 188);
+		graphics.drawBoxBorder(chipX, chipWidth, chipY, 32, 0x303840);
+		graphics.drawString(label, chipX + 6, chipY + 12, COLOR_GOLD, 0);
+		graphics.drawString(value, chipX + 6, chipY + 26, 0xffffff, 1);
+	}
+
+	private void drawMarketIntel(GraphicsController graphics) {
+		auctionMenu.hide(auctionScrollHandle);
+		auctionMenu.hide(textField_buyAmount);
+
+		int paneY = y + 39;
+		int paneHeight = 249;
+		int hotX = x + 5;
+		int recentX = x + 250;
+		int paneWidth = 236;
+
+		graphics.drawBoxAlpha(hotX, paneY, paneWidth, paneHeight, 0, 60);
+		graphics.drawBoxBorder(hotX, paneWidth, paneY, paneHeight, 0x343434);
+		graphics.drawBoxAlpha(hotX + 1, paneY + 1, paneWidth - 2, 18, 0x6b8e23, 192);
+		graphics.drawString("Hot this week", hotX + 8, paneY + 14, 0xffffff, 1);
+
+		graphics.drawBoxAlpha(recentX, paneY, paneWidth, paneHeight, 0, 60);
+		graphics.drawBoxBorder(recentX, paneWidth, paneY, paneHeight, 0x343434);
+		graphics.drawBoxAlpha(recentX + 1, paneY + 1, paneWidth - 2, 18, 0x6b8e23, 192);
+		graphics.drawString("Recent sales", recentX + 8, paneY + 14, 0xffffff, 1);
+
+		int hotLimit = Math.min(7, hotMarketItems.size());
+		if (hotLimit == 0) {
+			graphics.drawString("No sales yet.", hotX + 8, paneY + 45, 0xffffff, 1);
+		}
+		for (int i = 0; i < hotLimit; i++) {
+			MarketHotItem hot = hotMarketItems.get(i);
+			ItemDef def = EntityHandler.getItemDef(hot.getItemID());
+			int rowY = paneY + 24 + (i * 31);
+			boolean hover = inBounds(mc.getMouseX(), mc.getMouseY(), hotX + 4, rowY, paneWidth - 8, 29);
+			graphics.drawBoxAlpha(hotX + 4, rowY, paneWidth - 8, 29, hover ? 0x263751 : 0x454545, 144);
+			graphics.drawBoxBorder(hotX + 4, paneWidth - 8, rowY, 29, 0x343434);
+			if (hover && mc.getMouseClick() == 1 && def != null) {
+				activeInterface = 0;
+				selectedAuction = -1;
+				selectedFilter = 0;
+				auctionMenu.setText(auctionSearchHandle, def.getName());
+				auctionMenu.resetScrollIndex(auctionScrollHandle);
+				resetPurchaseConfirm();
+				mc.setMouseClick(0);
+			}
+			if (def != null) {
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), hotX + 6, rowY + 1, 32, 24,
+					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+				graphics.drawString(mc.ellipsize(def.getName(), 18), hotX + 42, rowY + 11, 0xffffff, 1);
+			} else {
+				graphics.drawString("Item " + hot.getItemID(), hotX + 42, rowY + 11, 0xffffff, 1);
+			}
+			graphics.drawString("Sold " + shortNumber(hot.getVolumeSold()) + " | avg " + priceText(hot.getAverageUnitPrice()),
+				hotX + 42, rowY + 24, 0xffffff, 0);
+			graphics.drawString(shortAge(hot.getLastSoldAt()), hotX + 178, rowY + 11, 0xffffff, 1);
+		}
+
+		int recentLimit = Math.min(7, recentMarketSales.size());
+		if (recentLimit == 0) {
+			graphics.drawString("No sales yet.", recentX + 8, paneY + 45, 0xffffff, 1);
+		}
+		for (int i = 0; i < recentLimit; i++) {
+			MarketRecentSale sale = recentMarketSales.get(i);
+			ItemDef def = EntityHandler.getItemDef(sale.getItemID());
+			int rowY = paneY + 24 + (i * 31);
+			graphics.drawBoxAlpha(recentX + 4, rowY, paneWidth - 8, 29, 0x454545, 144);
+			graphics.drawBoxBorder(recentX + 4, paneWidth - 8, rowY, 29, 0x343434);
+			if (def != null) {
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), recentX + 6, rowY + 1, 32, 24,
+					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+				graphics.drawString(mc.ellipsize(def.getName(), 18), recentX + 42, rowY + 11, 0xffffff, 1);
+			} else {
+				graphics.drawString("Item " + sale.getItemID(), recentX + 42, rowY + 11, 0xffffff, 1);
+			}
+			graphics.drawString("x" + shortNumber(sale.getAmount()) + " | " + priceText(sale.getUnitPrice()) + " ea",
+				recentX + 42, rowY + 24, 0xffffff, 0);
+			graphics.drawString(shortAge(sale.getSoldAt()), recentX + 178, rowY + 11, 0xffffff, 1);
+		}
+	}
+
 	private void drawAuctionMenu(GraphicsController graphics) {
 		Collections.sort(auctionItems, auctionComparator);
 		auctionMenu.clearList(auctionScrollHandle);
 
-		graphics.drawBoxAlpha(x + 2, y + 61, 81, 223 + 4, 0, 60);
-		graphics.drawBoxBorder(x + 2, 82, y + 61, 224 + 4, 0x343434);
-		graphics.drawBoxAlpha(x + 3, y + 62, 80, 18, 0x6b8e23, 192);
-		graphics.drawString("Categories", x + 12, y + 75, 0xffffff, 1);
-		drawButton(graphics, x + 5, y + 85, 76, 18, "All", selectedFilter == 0, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 0;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
+		drawCategoryRail(graphics);
 
-		drawButton(graphics, x + 5, y + 105, 76, 18, "Weapon", selectedFilter == 1, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 1;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
+		graphics.drawBoxAlpha(x + 93, y + 37, width - 96, 58, COLOR_PANEL_SOFT, 174);
+		graphics.drawBoxBorder(x + 93, width - 96, y + 37, 58, 0x303840);
+		drawItemSprite(10, x + 101, y + 43, 28, 20);
+		graphics.drawString(method74(mc.getInventoryCount(10)), x + 132, y + 56, 0xffffff, 1);
 
-		drawButton(graphics, x + 5, y + 125, 76, 18, "Armour", selectedFilter == 2, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 2;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-
-		drawButton(graphics, x + 5, y + 145, 76, 18, "Consumable", selectedFilter == 3, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 3;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-
-		drawButton(graphics, x + 5, y + 165, 76, 18, "Projectile", selectedFilter == 4, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 4;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-
-		drawButton(graphics, x + 5, y + 185, 76, 18, "Jewelry", selectedFilter == 5, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 5;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-		drawButton(graphics, x + 5, y + 205, 76, 18, "Ore & Bar", selectedFilter == 6, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 6;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-		drawButton(graphics, x + 5, y + 225, 76, 18, "Herblaw", selectedFilter == 7, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 7;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-		drawButton(graphics, x + 5, y + 245, 76, 18, "Rare", selectedFilter == 8, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 8;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-		drawButton(graphics, x + 5, y + 265, 76, 18, "Misc", selectedFilter == 9, new ButtonHandler() {
-			@Override
-			void handle() {
-				selectedFilter = 9;
-				selectedAuction = -1;
-				resetPurchaseConfirm();
-				auctionMenu.resetScrollIndex(auctionScrollHandle);
-			}
-		});
-
-		graphics.drawBoxAlpha(x + 2, y + 37, width - 4, 22, 0, 128);
-
-		graphics.drawString("Your money:", x + 4, y + 52, 0xffffff, 1);
-		graphics.drawString(method74(mc.getInventoryCount(10)), x + 76, y + 52, 0xffffff, 2);
-
-		graphics.drawString("Search:", x + 265, y + 52, 0xffffff, 1);
-		graphics.drawBoxAlpha(x + 312, y + 39, 174, 18, 0x222222, 255);
-		graphics.drawBoxBorder(x + 312, 174, y + 39, 18, 0x474843);
 		String searchTerm = auctionMenu.getControlText(auctionSearchHandle);
-		drawButton(graphics, x + 265, y + 14, 141, 21, "Sort: " + sortBy, false, new ButtonHandler() {
+		if (searchTerm.equalsIgnoreCase("Search")) {
+			searchTerm = "";
+		}
+		drawButton(graphics, x + 188, y + 43, 106, 22, sortBy, false, new ButtonHandler() {
 			@Override
 			void handle() {
 				orderingBy++;
@@ -703,6 +784,11 @@ public final class AuctionHouse {
 				Collections.sort(auctionItems, auctionComparator);
 			}
 		});
+		graphics.drawBoxAlpha(x + 312, y + 39, 174, 18, 0x0b1117, 235);
+		graphics.drawBoxBorder(x + 312, 174, y + 39, 18, 0x474843);
+		if (searchTerm.length() == 0) {
+			graphics.drawString("Search", x + 318, y + 52, 0x7f8a91, 0);
+		}
 
 		LinkedList<AuctionItem> filteredList = new LinkedList<>();
 		for (AuctionItem item : auctionItems) {
@@ -815,24 +901,26 @@ public final class AuctionHouse {
 			auctionMenu.clearList(auctionScrollHandle);
 			auctionMenu.hide(textField_buyAmount);
 			auctionMenu.show(auctionScrollHandle);
-			int boxWidth = (48);
-			int boxHeight = (33);
+			int rowHeight = 36;
+			int listX = x + 94;
+			int listY = y + 102;
+			int listWidth = 392;
+			int listHeight = 186;
+			graphics.drawBoxAlpha(listX, listY - 22, listWidth, 18, COLOR_SELECTED, 196);
+			graphics.drawString(CATEGORY_LABELS[selectedFilter], listX + 8, listY - 8, 0xffffff, 1);
+			graphics.drawString(filteredList.size() + " matches", listX + 88, listY - 8, COLOR_GOLD, 0);
+			graphics.drawString("Each", listX + 252, listY - 8, 0xffffff, 0);
+			graphics.drawString("Time", listX + 344, listY - 8, 0xffffff, 0);
+			graphics.drawBoxAlpha(listX, listY - 4, listWidth, listHeight + 4, 0, 62);
+			graphics.drawBoxBorder(listX, listWidth, listY - 4, listHeight + 4, 0x343434);
 
-			int listX = x + 90;
-			int listY = y + 85;
-			graphics.drawBoxAlpha(listX - 4, listY - 23, 401, 18, 0x6b8e23, 192);
-			graphics.drawBoxAlpha(listX - 4, listY - 5, 401, 208, 0, 60);
-			graphics.drawBoxBorder(listX - 4, 402, listY - 4 - 20, 208 + 20, 0x343434);
-
-			graphics.drawString("Item", listX + 1, listY - 10, 0xffffff, 1);
-
-			graphics.drawString("Sale Price", listX + 295, listY - 10, 0xffffff, 1);
-
+			if (filteredList.isEmpty()) {
+				String detail = searchTerm.length() > 0 ? "Try a shorter search or another category." : "Check back soon or list one from My Auctions.";
+				drawEmptyState(graphics, listX + 8, listY + 15, listWidth - 16, 132, "No listings found", detail);
+			}
 			int listStartPoint = auctionMenu.getScrollPosition(auctionScrollHandle);
-			int listEndPoint = listStartPoint + 5;
-			int showing = 0;
+			int listEndPoint = listStartPoint + 4;
 			for (int i = -1; i < filteredList.size(); i++) {
-				showing = i + 1;
 				if (i >= 500) {
 					break;
 				}
@@ -841,9 +929,10 @@ public final class AuctionHouse {
 				if (i < listStartPoint || i > listEndPoint)
 					continue;
 				AuctionItem ahItem = filteredList.get(i);
-				if (mc.getMouseX() >= (listX - 3) && mc.getMouseY() >= (listY - 5) && mc.getMouseX() <= listX + 384
-					&& mc.getMouseY() <= (listY - 5) + boxHeight) {
-					graphics.drawBoxAlpha(listX - 3, listY - 5, 400, boxHeight, 0x980000, 128);
+				boolean hover = mc.getMouseX() >= listX + 3 && mc.getMouseY() >= listY
+					&& mc.getMouseX() <= listX + listWidth - 8 && mc.getMouseY() <= listY + rowHeight - 2;
+				if (hover) {
+					graphics.drawBoxAlpha(listX + 3, listY, listWidth - 8, rowHeight - 2, COLOR_HOVER, 176);
 					if (mc.getMouseClick() == 1) {
 						selectedAuction = i;
 						resetPurchaseConfirm();
@@ -853,47 +942,50 @@ public final class AuctionHouse {
 					}
 				} else {
 					if (selectedAuction == i) {
-						graphics.drawBoxAlpha(listX - 3, listY - 5, 400, boxHeight, 0xff0000, 128);
+						graphics.drawBoxAlpha(listX + 3, listY, listWidth - 8, rowHeight - 2, COLOR_SELECTED, 176);
 					} else {
-						graphics.drawBoxAlpha(listX - 3, listY - 5, 400, boxHeight, 0x45454545, 128);
+						graphics.drawBoxAlpha(listX + 3, listY, listWidth - 8, rowHeight - 2, COLOR_PANEL_SOFT, 144);
 					}
 				}
-				graphics.drawBoxBorder(listX - 4, 402, listY - 5, boxHeight + 1, 0x343434);
+				graphics.drawBoxBorder(listX + 3, listWidth - 8, listY, rowHeight - 2, 0x303840);
 				ItemDef def = EntityHandler.getItemDef(ahItem.getItemID());
 				int price = ahItem.getPrice();
 				int priceEach = 0;
 				if (price > 0 && ahItem.getAmount() > 0) {
 					priceEach = price / ahItem.getAmount();
 				}
+				AuctionItemIntel intel = marketIntelByItemID.get(ahItem.getItemID());
+				String secondary = "x" + shortNumber(ahItem.getAmount());
+				if (intel != null && intel.getAverageUnitPrice() > 0) {
+					secondary += " | avg " + priceText(intel.getAverageUnitPrice());
+				}
 
-				graphics.drawString(mc.ellipsize(def.getName(), 22), listX + 50, listY + boxHeight / 2, 0xffffff, 2);
-				graphics.drawString(getTime(ahItem) + "h", listX + 220, listY + boxHeight / 2, 0xffffff, 2);
-				graphics.drawString(basicNumber(priceEach) + " gp (ea)", listX + 295, listY + boxHeight / 2 - 8, 0xffffff, 0);
-				graphics.drawString(basicNumber(price) + " gp (all)", listX + 295, listY + boxHeight / 2 + 10 - 4, 0xffffff, 0);
-				graphics.drawBoxAlpha(listX - 3, listY - 4, boxWidth + 1, boxHeight - 1, 0xfffffff, 128);
+					graphics.drawBoxAlpha(listX + 7, listY + 3, 38, 28, 0xffffff, 120);
+				graphics.drawBoxBorder(listX + 7, 38, listY + 3, 28, 0);
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), listX + 8, listY + 3, 36,
+					25, def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+				graphics.drawString(String.valueOf(ahItem.getAmount()), listX + 9, listY + 15, 65280, 1);
 
-				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), listX - 3, listY - 5, 48,
-					32, def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
-
-				graphics.drawString(String.valueOf(ahItem.getAmount()), listX + 1 - 3, listY + 10 - 4, 65280, 1);
-				listY += boxHeight + 2;
+				graphics.drawString(mc.ellipsize(def.getName(), 22), listX + 52, listY + 14, 0xffffff, 1);
+				graphics.drawString(secondary, listX + 52, listY + 28, 0xc1c8cf, 0);
+				graphics.drawString(priceText(priceEach), listX + 252, listY + 15, 0xffffff, 1);
+				graphics.drawString(basicNumber(price) + " all", listX + 252, listY + 29, COLOR_GOLD, 0);
+				graphics.drawString(getTime(ahItem) + "h", listX + 344, listY + 21, 0xffffff, 1);
+				listY += rowHeight + 1;
 			}
-			graphics.drawString("Showing: " + (showing) + "/" + (filteredList.size()) + " items", listX + 49, y + 75,
-				0xffffff, 1);
-			graphics.drawString("Expires", listX + 218, y + 75, 0xffffff, 1);
 		}
 
 		if (selectedAuction != -1 && selectedAuction < filteredList.size()) {
-			int selectX = x + 90;
-			int selectY = y + 85;
+			int selectX = x + 94;
+			int selectY = y + 82;
 			auctionMenu.hide(auctionScrollHandle);
 			auctionMenu.show(textField_buyAmount);
 			final AuctionItem ahItem = filteredList.get(selectedAuction);
-			graphics.drawBoxAlpha(selectX - 4, selectY - 23, 401, 18, 0xff0000, 192);
-			graphics.drawBoxAlpha(selectX - 4, selectY - 5, 401, 208, 0, 60);
-			graphics.drawBoxBorder(selectX - 4, 402, selectY - 4 - 20, 208 + 20, 0x343434);
+			graphics.drawBoxAlpha(selectX, selectY - 20, 392, 18, COLOR_SELECTED, 196);
+			graphics.drawBoxAlpha(selectX, selectY - 2, 392, 210, 0, 72);
+			graphics.drawBoxBorder(selectX, 392, selectY - 20, 228, 0x343434);
 
-			drawButton(graphics, selectX + 376, selectY - 24, 22, 19, "X", false, new ButtonHandler() {
+			drawButton(graphics, selectX + 366, selectY - 21, 24, 18, "X", false, new ButtonHandler() {
 				@Override
 				void handle() {
 					activeInterface = 0;
@@ -909,39 +1001,26 @@ public final class AuctionHouse {
 				priceEach = price / ahItem.getAmount();
 			}
 
-			graphics.drawBoxAlpha(selectX + 3, selectY, 389, 197, 0x454545, 192);
-			graphics.drawBoxBorder(selectX + 2, 390, selectY, 197 + 1, 0x343434);
-			graphics.drawLineHoriz(selectX + 6, selectY + 100, 382, 0x222222);
+			graphics.drawString(mc.ellipsize(def.getName(), 26), selectX + 8, selectY - 6, 0xffffff, 1);
+				graphics.drawBoxAlpha(selectX + 8, selectY + 10, 74, 54, 0xffffff, 120);
+			graphics.drawBoxBorder(selectX + 8, 74, selectY + 10, 54, 0);
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), selectX + 15, selectY + 17, 60, 40,
+				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+			graphics.drawString(String.valueOf(ahItem.getAmount()), selectX + 12, selectY + 35, 65280, 1);
 
-			graphics.drawString("Selected item: " + def.getName(), selectX + 2, selectY - 10, 0xffffff, 1);
-
-			graphics.drawString("Description: " + def.getDescription(), selectX + 8, selectY + 15, 0xffffff, 1);
-
-
-			graphics.drawBoxAlpha(selectX + 8, selectY + 22, 49, 33, 0xfffffff, 128);
-			graphics.drawBoxBorder(selectX + 8, 50, selectY + 22, 34, 0);
-
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), selectX + 8, selectY + 22, 48, 32,
-				def.getPictureMask(), 0, def.getBlueMask(),false, 0, 1);
-			graphics.drawString(String.valueOf(ahItem.getAmount()), selectX + 10, selectY + 22 + 11, 65280, 1);
-
-			graphics.drawString(getTime(ahItem) + "h left", selectX + 60, selectY + 32, 0xffffff, 2);
-
-			graphics.drawString("Quantity: " + method74(ahItem.getAmount()), selectX + 200, selectY + 32, 0xffffff, 2);
-			graphics.drawString("Total: " + method74(price) + "gp", selectX + 200, selectY + 32 + 14, 0xffffff, 2);
-			graphics.drawString("Each: " + method74(priceEach) + "gp", selectX + 200, selectY + 32 + 28, 0xffffff, 2);
-
-			graphics.drawString("Seller: " + ahItem.getSeller(), selectX + 8, selectY + 83, 0xffffff, 2);
+			graphics.drawString(mc.ellipsize(def.getDescription(), 40), selectX + 94, selectY + 20, 0xc1c8cf, 0);
+			graphics.drawString("Seller: " + ahItem.getSeller(), selectX + 94, selectY + 38, 0xffffff, 1);
+			graphics.drawString(getTime(ahItem) + "h left", selectX + 94, selectY + 54, 0xffffff, 1);
 
 			if (mc.getLocalPlayer().isMod()) {
-				drawButton(graphics, selectX + 186, selectY + 68, 200, 22, "@red@[Staff] Delete Item", false, new ButtonHandler() {
+				drawButton(graphics, selectX + 246, selectY + 42, 134, 22, "@red@[Staff] Delete", false, new ButtonHandler() {
 					@Override
 					void handle() {
 						sendModCancelAuction(ahItem.getAuctionID());
 					}
 				});
 			} else {
-				drawButton(graphics, selectX + 186, selectY + 68, 200, 22, "@gre@Add Seller to Friendlist", false, new ButtonHandler() {
+				drawButton(graphics, selectX + 246, selectY + 42, 134, 22, "@gre@Add Friend", false, new ButtonHandler() {
 					@Override
 					void handle() {
 						mc.addFriend(ahItem.getSeller());
@@ -949,9 +1028,15 @@ public final class AuctionHouse {
 				});
 			}
 
-			graphics.drawString("Enter amount:", selectX + 8, selectY + 120, 0xffffff, 1);
-			graphics.drawBoxAlpha(selectX + 7, selectY + 125, 100, 18, 0x222222, 255);
-			graphics.drawBoxBorder(selectX + 7, 101, selectY + 125, 18, 0x555555);
+			drawStatChip(graphics, selectX + 8, selectY + 76, 118, "Quantity", shortNumber(ahItem.getAmount()));
+			drawStatChip(graphics, selectX + 136, selectY + 76, 118, "Each", priceText(priceEach));
+			drawStatChip(graphics, selectX + 264, selectY + 76, 118, "Total", priceText(price));
+			graphics.drawLineHoriz(selectX + 8, selectY + 119, 374, 0x303840);
+			drawMarketSnapshot(graphics, ahItem, selectX + 8, selectY + 132);
+
+			graphics.drawString("Amount", selectX + 8, selectY + 146, COLOR_GOLD, 0);
+			graphics.drawBoxAlpha(selectX + 7, selectY + 149, 92, 18, 0x0b1117, 235);
+			graphics.drawBoxBorder(selectX + 7, 92, selectY + 149, 18, 0x555555);
 
 			String amountText = auctionMenu.getControlText(textField_buyAmount);
 
@@ -960,25 +1045,25 @@ public final class AuctionHouse {
 				final int finalCheckoutAmount = checkoutAmount;
 				final int checkoutTotal = priceEach * checkoutAmount;
 
-				drawButton(graphics, selectX + 116, selectY + 125, 38, 18, "1", checkoutAmount == 1, new ButtonHandler() {
+				drawButton(graphics, selectX + 108, selectY + 149, 38, 18, "1", checkoutAmount == 1, new ButtonHandler() {
 					@Override
 					void handle() {
 						setBuyAmount(1, ahItem.getAmount());
 					}
 				});
-				drawButton(graphics, selectX + 158, selectY + 125, 38, 18, "+5", false, new ButtonHandler() {
+				drawButton(graphics, selectX + 150, selectY + 149, 38, 18, "+5", false, new ButtonHandler() {
 					@Override
 					void handle() {
 						setBuyAmount(finalCheckoutAmount + 5, ahItem.getAmount());
 					}
 				});
-				drawButton(graphics, selectX + 200, selectY + 125, 42, 18, "+10", false, new ButtonHandler() {
+				drawButton(graphics, selectX + 192, selectY + 149, 42, 18, "+10", false, new ButtonHandler() {
 					@Override
 					void handle() {
 						setBuyAmount(finalCheckoutAmount + 10, ahItem.getAmount());
 					}
 				});
-				drawButton(graphics, selectX + 246, selectY + 125, 48, 18, "All", checkoutAmount == ahItem.getAmount(), new ButtonHandler() {
+				drawButton(graphics, selectX + 238, selectY + 149, 48, 18, "All", checkoutAmount == ahItem.getAmount(), new ButtonHandler() {
 					@Override
 					void handle() {
 						setBuyAmount(ahItem.getAmount(), ahItem.getAmount());
@@ -987,9 +1072,9 @@ public final class AuctionHouse {
 
 				if (checkoutAmount > 0 && checkoutAmount <= ahItem.getAmount()) {
 					final boolean confirming = hasPurchaseConfirm(ahItem, checkoutAmount);
-					graphics.drawString("Checkout Price: " + method74(checkoutTotal) + "gp", selectX + 8, selectY + 156, 0xffffff, 2);
-					graphics.drawString(confirming ? "@yel@Click again to confirm this purchase." : "Review, then confirm to buy.", selectX + 8, selectY + 172, 0xffffff, 1);
-					drawButtonFancy(graphics, selectX + 8, selectY + 125 + 29 + 31, 378, 22, confirming ? "Confirm Purchase" : "Purchase Review", confirming, new ButtonHandler() {
+					graphics.drawString("Checkout: " + method74(checkoutTotal) + "gp", selectX + 8, selectY + 180, 0xffffff, 1);
+					graphics.drawString(confirming ? "@yel@Click again to confirm." : "Review, then confirm.", selectX + 176, selectY + 180, 0xffffff, 0);
+					drawButtonFancy(graphics, selectX + 8, selectY + 186, 374, 22, confirming ? "Confirm Purchase" : "Purchase Review", confirming, new ButtonHandler() {
 						@Override
 						void handle() {
 							if (hasPurchaseConfirm(ahItem, finalCheckoutAmount)) {
@@ -1009,6 +1094,19 @@ public final class AuctionHouse {
 		auctionMenu.drawPanel();
 	}
 
+	private void drawMarketSnapshot(GraphicsController graphics, AuctionItem ahItem, int drawX, int drawY) {
+		AuctionItemIntel intel = marketIntelByItemID.get(ahItem.getItemID());
+		if (intel == null || !intel.hasData()) {
+			graphics.drawString("Mkt: no 7d sales", drawX, drawY, 0xffffff, 1);
+			return;
+		}
+		graphics.drawString("Mkt: avg " + priceText(intel.getAverageUnitPrice())
+				+ " | last " + priceText(intel.getLastUnitPrice())
+				+ " | sold " + shortNumber(intel.getVolumeSold())
+				+ " | low " + priceText(intel.getActiveLowestEach()),
+			drawX, drawY, 0xffffff, 1);
+	}
+
 	private String method74(int i) {
 		String s = String.valueOf(i);
 		for (int j = s.length() - 3; j > 0; j -= 3)
@@ -1020,6 +1118,40 @@ public final class AuctionHouse {
 			s = "@cya@" + s.substring(0, s.length() - 4) + "K @whi@(" + s + ")";
 		}
 		return s;
+	}
+
+	private String priceText(int price) {
+		if (price <= 0) {
+			return "--";
+		}
+		return basicNumber(price) + "gp";
+	}
+
+	private String shortNumber(int value) {
+		if (value >= 1000000) {
+			return String.format("%.1fM", value / 1000000D);
+		}
+		if (value >= 1000) {
+			return String.format("%.1fK", value / 1000D);
+		}
+		return String.valueOf(value);
+	}
+
+	private String shortAge(int epochSeconds) {
+		if (epochSeconds <= 0) {
+			return "--";
+		}
+		long age = (System.currentTimeMillis() / 1000) - epochSeconds;
+		if (age < 60) {
+			return "now";
+		}
+		if (age < 3600) {
+			return (age / 60) + "m";
+		}
+		if (age < 86400) {
+			return (age / 3600) + "h";
+		}
+		return (age / 86400) + "d";
 	}
 
 	private String basicNumber(int priceEach) {
@@ -1178,8 +1310,29 @@ public final class AuctionHouse {
 		auctionItems.clear();
 	}
 
+	public void resetMarketIntel() {
+		marketIntelByItemID.clear();
+		hotMarketItems.clear();
+		recentMarketSales.clear();
+	}
+
 	public void addAuction(int auctionID, int itemID, int amount, int price, String seller, int hoursLeft) {
 		auctionItems.add(new AuctionItem(auctionID, itemID, amount, price, seller, hoursLeft));
+	}
+
+	public void addMarketSummary(int itemID, int activeLowestEach, int activeHighestEach, int activeAmount,
+								 int lastUnitPrice, int averageUnitPrice, int volumeSold, int totalValue,
+								 int lastSoldAt) {
+		marketIntelByItemID.put(itemID, new AuctionItemIntel(itemID, activeLowestEach, activeHighestEach,
+			activeAmount, lastUnitPrice, averageUnitPrice, volumeSold, totalValue, lastSoldAt));
+	}
+
+	public void addHotMarketItem(int itemID, int volumeSold, int totalValue, int averageUnitPrice, int lastSoldAt) {
+		hotMarketItems.add(new MarketHotItem(itemID, volumeSold, totalValue, averageUnitPrice, lastSoldAt));
+	}
+
+	public void addRecentMarketSale(int itemID, int amount, int unitPrice, int totalPrice, int soldAt) {
+		recentMarketSales.add(new MarketRecentSale(itemID, amount, unitPrice, totalPrice, soldAt));
 	}
 
 	private void resetAllVariables() {
@@ -1199,6 +1352,7 @@ public final class AuctionHouse {
 		selectedFilter = 0;
 		orderingBy = 0;
 		sortBy = "Price Low";
+		resetMarketIntel();
 		resetPurchaseConfirm();
 		auctionMenu.setFocus(-1);
 		myAuctions.setFocus(-1);
@@ -1289,5 +1443,143 @@ class AuctionItem {
 
 	public void setNoted(boolean noted) {
 		this.item.setNoted(noted);
+	}
+}
+
+class AuctionItemIntel {
+	private final int itemID;
+	private final int activeLowestEach;
+	private final int activeHighestEach;
+	private final int activeAmount;
+	private final int lastUnitPrice;
+	private final int averageUnitPrice;
+	private final int volumeSold;
+	private final int totalValue;
+	private final int lastSoldAt;
+
+	AuctionItemIntel(int itemID, int activeLowestEach, int activeHighestEach, int activeAmount, int lastUnitPrice,
+					 int averageUnitPrice, int volumeSold, int totalValue, int lastSoldAt) {
+		this.itemID = itemID;
+		this.activeLowestEach = activeLowestEach;
+		this.activeHighestEach = activeHighestEach;
+		this.activeAmount = activeAmount;
+		this.lastUnitPrice = lastUnitPrice;
+		this.averageUnitPrice = averageUnitPrice;
+		this.volumeSold = volumeSold;
+		this.totalValue = totalValue;
+		this.lastSoldAt = lastSoldAt;
+	}
+
+	boolean hasData() {
+		return activeLowestEach > 0 || activeHighestEach > 0 || activeAmount > 0
+			|| lastUnitPrice > 0 || averageUnitPrice > 0 || volumeSold > 0 || totalValue > 0 || lastSoldAt > 0;
+	}
+
+	int getItemID() {
+		return itemID;
+	}
+
+	int getActiveLowestEach() {
+		return activeLowestEach;
+	}
+
+	int getActiveHighestEach() {
+		return activeHighestEach;
+	}
+
+	int getActiveAmount() {
+		return activeAmount;
+	}
+
+	int getLastUnitPrice() {
+		return lastUnitPrice;
+	}
+
+	int getAverageUnitPrice() {
+		return averageUnitPrice;
+	}
+
+	int getVolumeSold() {
+		return volumeSold;
+	}
+
+	int getTotalValue() {
+		return totalValue;
+	}
+
+	int getLastSoldAt() {
+		return lastSoldAt;
+	}
+}
+
+class MarketHotItem {
+	private final int itemID;
+	private final int volumeSold;
+	private final int totalValue;
+	private final int averageUnitPrice;
+	private final int lastSoldAt;
+
+	MarketHotItem(int itemID, int volumeSold, int totalValue, int averageUnitPrice, int lastSoldAt) {
+		this.itemID = itemID;
+		this.volumeSold = volumeSold;
+		this.totalValue = totalValue;
+		this.averageUnitPrice = averageUnitPrice;
+		this.lastSoldAt = lastSoldAt;
+	}
+
+	int getItemID() {
+		return itemID;
+	}
+
+	int getVolumeSold() {
+		return volumeSold;
+	}
+
+	int getTotalValue() {
+		return totalValue;
+	}
+
+	int getAverageUnitPrice() {
+		return averageUnitPrice;
+	}
+
+	int getLastSoldAt() {
+		return lastSoldAt;
+	}
+}
+
+class MarketRecentSale {
+	private final int itemID;
+	private final int amount;
+	private final int unitPrice;
+	private final int totalPrice;
+	private final int soldAt;
+
+	MarketRecentSale(int itemID, int amount, int unitPrice, int totalPrice, int soldAt) {
+		this.itemID = itemID;
+		this.amount = amount;
+		this.unitPrice = unitPrice;
+		this.totalPrice = totalPrice;
+		this.soldAt = soldAt;
+	}
+
+	int getItemID() {
+		return itemID;
+	}
+
+	int getAmount() {
+		return amount;
+	}
+
+	int getUnitPrice() {
+		return unitPrice;
+	}
+
+	int getTotalPrice() {
+		return totalPrice;
+	}
+
+	int getSoldAt() {
+		return soldAt;
 	}
 }

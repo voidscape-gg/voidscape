@@ -32,6 +32,7 @@ public final class ORSCharacter {
 	public int level = -1;
 	public String message;
 	public int messageTimeout = 0;
+	public String title;
 	public int waypointIndexNext;
 	public int npcId;
 	public int projectileRange = 0;

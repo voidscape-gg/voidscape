@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.custom.minigames;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.impl.combat.scripts.all.VoidKnightBoss;
@@ -746,6 +747,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			finished = true;
 			sessions.remove(player.getUsernameHash());
 			event.stop();
+			PlayerTitle.unlock(player, PlayerTitle.VOIDBANE);
 			broadcastWin(player);
 			if (player.loggedIn()) {
 				player.message("You defeat the Void Knight.");

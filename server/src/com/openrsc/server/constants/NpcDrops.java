@@ -3,6 +3,7 @@ package com.openrsc.server.constants;
 import com.openrsc.server.ServerConfiguration;
 import com.openrsc.server.content.BadLuckMitigation;
 import com.openrsc.server.content.DropTable;
+import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.model.world.World;
 
 import java.util.HashMap;
@@ -119,29 +120,7 @@ public class NpcDrops {
 	}
 
 	public boolean isRareDropItem(int itemId) {
-		if (isVoidscapeRareDropItem(itemId)) {
-			return true;
-		}
-		for (DropTable dropTable : npcDrops.values()) {
-			if (dropTable.containsRareItemDrop(itemId)) {
-				return true;
-			}
-		}
-		return containsRareItemDrop(rareDropTable, itemId)
-			|| containsRareItemDrop(megaRareDropTable, itemId)
-			|| containsRareItemDrop(ultraRareDropTable, itemId)
-			|| containsRareItemDrop(kbdTableCustom, itemId);
-	}
-
-	private boolean isVoidscapeRareDropItem(int itemId) {
-		return itemId == ItemId.DRAGON_SWORD_HILT.id()
-			|| itemId == ItemId.DRAGON_SWORD_BLADE.id()
-			|| itemId == ItemId.DRAGON_SWORD_TIP.id()
-			|| itemId == ItemId.VOID_KEY.id();
-	}
-
-	private boolean containsRareItemDrop(DropTable dropTable, int itemId) {
-		return dropTable != null && dropTable.containsRareItemDrop(itemId);
+		return LootBeamSettings.isDefaultBeamItem(itemId);
 	}
 
 	public World getWorld() {

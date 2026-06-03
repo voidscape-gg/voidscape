@@ -864,6 +864,52 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public Integer queryLoadGlobalCacheInt(final String cacheKey) throws GameDatabaseException {
+		final String query = "SELECT `value` FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` WHERE `playerID`=0 AND `key`=? ORDER BY `dbid` DESC LIMIT 1";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, cacheKey);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return Integer.parseInt(result.getString("value"));
+				}
+			}
+		} catch (final SQLException | NumberFormatException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	@Override
+	public String queryPlayerCacheOwner(final String cacheKey) throws GameDatabaseException {
+		try (final PreparedStatement statement = statementFromString(getMySqlQueries().playerCacheOwner, cacheKey);
+			 final ResultSet result = statement.executeQuery()) {
+			if (result.next()) {
+				return result.getString("username");
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	@Override
+	public String queryPlayerCacheOwner(final String cacheKey, final String cacheValue) throws GameDatabaseException {
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().playerCacheOwnerByValue)) {
+			statement.setString(1, cacheKey);
+			statement.setString(2, cacheValue);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return result.getString("username");
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	@Override
 	public PlayerNpcKills[] queryLoadPlayerNpcKills(final Player player) throws GameDatabaseException {
 		final ArrayList<PlayerNpcKills> list = new ArrayList<>();
 		try (final PreparedStatement statement = statementFromInteger(getMySqlQueries().npcKillSelectAll, player.getDatabaseID());
@@ -1511,6 +1557,126 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public void queryInsertAuctionSale(final AuctionSale auctionSale) throws GameDatabaseException {
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().insertAuctionSale)) {
+			statement.setInt(1, auctionSale.auctionID);
+			statement.setInt(2, auctionSale.itemID);
+			statement.setInt(3, auctionSale.amount);
+			statement.setInt(4, auctionSale.unitPrice);
+			statement.setInt(5, auctionSale.totalPrice);
+			statement.setInt(6, auctionSale.tax);
+			statement.setInt(7, auctionSale.seller);
+			statement.setString(8, auctionSale.sellerUsername);
+			statement.setInt(9, auctionSale.buyer);
+			statement.setString(10, auctionSale.buyerUsername);
+			statement.setLong(11, auctionSale.soldAt);
+
+			statement.executeUpdate();
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+	}
+
+	@Override
+	public AuctionItemSummary[] queryAuctionItemSummaries(final long since) throws GameDatabaseException {
+		final ArrayList<AuctionItemSummary> summaries = new ArrayList<>();
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().auctionItemSummaries)) {
+			statement.setLong(1, since);
+			statement.setLong(2, since);
+
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					summaries.add(readAuctionItemSummary(result));
+				}
+			}
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+		return summaries.toArray(new AuctionItemSummary[0]);
+	}
+
+	@Override
+	public AuctionItemSummary[] queryHotAuctionItems(final long since, final int limit) throws GameDatabaseException {
+		final ArrayList<AuctionItemSummary> summaries = new ArrayList<>();
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().hotAuctionItems)) {
+			statement.setLong(1, since);
+			statement.setInt(2, limit);
+
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					summaries.add(readAuctionItemSummary(result));
+				}
+			}
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+		return summaries.toArray(new AuctionItemSummary[0]);
+	}
+
+	@Override
+	public AuctionSale[] queryRecentAuctionSales(final int limit) throws GameDatabaseException {
+		final ArrayList<AuctionSale> sales = new ArrayList<>();
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().recentAuctionSales)) {
+			statement.setInt(1, limit);
+
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					final AuctionSale sale = new AuctionSale();
+					sale.saleID = result.getInt("sale_id");
+					sale.auctionID = result.getInt("auction_id");
+					sale.itemID = result.getInt("item_id");
+					sale.amount = result.getInt("amount");
+					sale.unitPrice = result.getInt("unit_price");
+					sale.totalPrice = result.getInt("total_price");
+					sale.tax = result.getInt("tax");
+					sale.seller = result.getInt("seller");
+					sale.sellerUsername = result.getString("seller_username");
+					sale.buyer = result.getInt("buyer");
+					sale.buyerUsername = result.getString("buyer_username");
+					sale.soldAt = result.getLong("sold_at");
+					sales.add(sale);
+				}
+			}
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+		return sales.toArray(new AuctionSale[0]);
+	}
+
+	@Override
+	public void queryClearAuctionWorkbenchFixture(final String marker, final String sellerUsername, final String buyerUsername) throws GameDatabaseException {
+		final String prefix = getMySqlQueries().PREFIX;
+		final String deleteAuctions = "DELETE FROM `" + prefix + "auctions` WHERE `seller_username`=? AND `buyer_info`=?";
+		final String deleteSales = "DELETE FROM `" + prefix + "auction_sales` WHERE `seller_username`=? AND `buyer_username`=?";
+		try (final PreparedStatement auctionStatement = getConnection().prepareStatement(deleteAuctions);
+			 final PreparedStatement saleStatement = getConnection().prepareStatement(deleteSales)) {
+			auctionStatement.setString(1, sellerUsername);
+			auctionStatement.setString(2, marker);
+			auctionStatement.executeUpdate();
+
+			saleStatement.setString(1, sellerUsername);
+			saleStatement.setString(2, buyerUsername);
+			saleStatement.executeUpdate();
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+	}
+
+	private AuctionItemSummary readAuctionItemSummary(final ResultSet result) throws SQLException {
+		final AuctionItemSummary summary = new AuctionItemSummary();
+		summary.itemID = result.getInt("item_id");
+		summary.activeLowestEach = result.getInt("active_lowest_each");
+		summary.activeHighestEach = result.getInt("active_highest_each");
+		summary.activeAmount = result.getInt("active_amount");
+		summary.lastUnitPrice = result.getInt("last_unit_price");
+		summary.averageUnitPrice = result.getInt("average_unit_price");
+		summary.volumeSold = result.getInt("volume_sold");
+		summary.totalValue = result.getInt("total_value");
+		summary.lastSoldAt = result.getLong("last_sold_at");
+		return summary;
+	}
+
+	@Override
 	public void querySavePlayerData(final int playerId, final PlayerData playerData) throws GameDatabaseException {
 		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().save_UpdateBasicInfo)) {
 			int counter = 1;
@@ -1881,6 +2047,25 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.executeBatch();
 		} catch (final SQLException ex) {
 			// Convert SQLException to a general usage exception
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public void querySaveGlobalCacheInt(final String cacheKey, final int value) throws GameDatabaseException {
+		final String deleteQuery = "DELETE FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` WHERE `playerID`=0 AND `key`=?";
+		final String insertQuery = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` (`playerID`, `type`, `key`, `value`) VALUES(0, 0, ?, ?)";
+		try (final PreparedStatement deleteStatement = getConnection().prepareStatement(deleteQuery);
+			 final PreparedStatement insertStatement = getConnection().prepareStatement(insertQuery)) {
+			deleteStatement.setString(1, cacheKey);
+			deleteStatement.executeUpdate();
+
+			insertStatement.setString(1, cacheKey);
+			insertStatement.setString(2, Integer.toString(value));
+			insertStatement.executeUpdate();
+		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
 	}
@@ -2803,4 +2988,3 @@ public class MySqlGameDatabase extends JDBCDatabase {
 
 	}
 }
-

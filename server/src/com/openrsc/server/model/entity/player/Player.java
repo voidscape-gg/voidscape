@@ -3,7 +3,9 @@ package com.openrsc.server.model.entity.player;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidPath;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanInvite;
@@ -1762,6 +1764,8 @@ public final class Player extends Mob {
 			multiplier = getConfig().COMBAT_EXP_RATE;
 		}
 
+		multiplier = VoidSubscription.applyRate(this, skill, multiplier);
+
 		// Apply the Wilderness and Skull multipliers (technically, they are additive multipliers, not multiplicative, intentionally to prevent zeroing out XP in the wilderness because multiplier *= 0 is 0).
 		// You won't get the Wilderness multiplier if you're standing in the mage bank entrance.
 		if (getLocation().inWilderness() && !getLocation().inBounds(220, 108, 225, 111)) {
@@ -1988,6 +1992,7 @@ public final class Player extends Mob {
 
 	public void incQuestPoints(final int amount) {
 		setQuestPoints(getQuestPoints() + amount);
+		PlayerTitle.refreshAutomaticUnlocks(this);
 	}
 
 	public void incrementSleepTries() {
@@ -2303,6 +2308,7 @@ public final class Player extends Mob {
 
 				getWorld().sendKilledUpdate(getUsernameHash(), player.getUsernameHash(), killTypeId);
 				player.incKills();
+				PlayerTitle.refreshAutomaticUnlocks(player);
 				incDeaths();
 				getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has PKed %s", getUsername())));
 			}
@@ -3802,6 +3808,7 @@ public final class Player extends Mob {
 		int kills = getKillCache().containsKey(n.getID()) ? getKillCache().get(n.getID()) + 1 : 1;
 		getKillCache().put(n.getID(), kills);
 		setKillCacheUpdated(true);
+		PlayerTitle.refreshAutomaticUnlocks(this);
 		if (sendUpdate) message("Your " + n.getDef().getName() + " kill count is: @red@" + kills + "@whi@.");
 	}
 

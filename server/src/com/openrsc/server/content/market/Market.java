@@ -33,6 +33,7 @@ public class Market implements Runnable {
 	private LinkedBlockingQueue<MarketTask> auctionTaskQueue;
 	private long lastCleanUp = 0;
 	private LinkedBlockingQueue<OpenMarketTask> refreshRequestTasks;
+	private volatile boolean auctionItemCacheRefreshRequested;
 	private ScheduledExecutorService scheduledExecutor;
 
 	public Market(final World world) {
@@ -119,6 +120,10 @@ public class Market implements Runnable {
 		return auctionItems;
 	}
 
+	public void requestAuctionItemCacheRefresh() {
+		auctionItemCacheRefreshRequested = true;
+	}
+
 	private void processAuctionTasks() {
 		MarketTask nextTask;
 		while ((nextTask = auctionTaskQueue.poll()) != null) try {
@@ -140,9 +145,10 @@ public class Market implements Runnable {
 	private void processUpdateAuctionItemCache() {
 		try {
 			final int activeAuctionCount = getWorld().getServer().getDatabase().auctionCount();
-			if (activeAuctionCount == auctionItems.size()) return;
+			if (!auctionItemCacheRefreshRequested && activeAuctionCount == auctionItems.size()) return;
 			auctionItems.clear();
 			auctionItems = getWorld().getServer().getDatabase().getAuctionItems();
+			auctionItemCacheRefreshRequested = false;
 		} catch (GameDatabaseException e) {
 			LOGGER.catching(e);
 		}

@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.generators.impl;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
 import com.openrsc.server.model.Point;
@@ -395,6 +396,11 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					builder.writeByte((byte) gs.combatExpRateTenths);
 					builder.writeByte((byte) gs.skillingExpRateTenths);
 					builder.writeInt(gs.totalPlayedSeconds);
+					if (player.getClientVersion() >= VoidSubscription.PROFILE_CLIENT_VERSION) {
+						builder.writeByte((byte) gs.subscriptionActive);
+						builder.writeByte((byte) gs.effectiveCombatExpRateTenths);
+						builder.writeByte((byte) gs.effectiveSkillingExpRateTenths);
+					}
 					builder.writeByte((byte) gs.hdIntensity);
 					builder.writeByte((byte) gs.hdSaturation);
 					builder.writeByte((byte) gs.hdBloom);
@@ -687,6 +693,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 				case SEND_SHOP_OPEN:
 					ShopStruct s = (ShopStruct) payload;
 					int shopSize = s.itemsStockSize;
+					boolean sendShopPriceOverrides = player.getClientVersion() >= 10054;
 					builder.writeByte((byte) shopSize);
 					builder.writeByte((byte) s.isGeneralStore);
 					builder.writeByte((byte) s.sellModifier);
@@ -696,6 +703,9 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						builder.writeShort(s.catalogIDs[i]);
 						builder.writeShort(s.amount[i]);
 						builder.writeShort(s.baseAmount[i]);
+						if (sendShopPriceOverrides) {
+							builder.writeInt(s.price[i]);
+						}
 					}
 					break;
 

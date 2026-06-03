@@ -285,6 +285,8 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().SPAWN_AUCTION_NPCS) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 				}
+				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsKaramjaFishmonger.json");
+				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidSubscriptions.json");
 				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");

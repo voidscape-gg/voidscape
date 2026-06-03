@@ -248,6 +248,7 @@ public final class mudclient implements Runnable {
 	private final int[] shopItemCount = new int[256];
 	private final int[] shopCategoryID = new int[256];
 	private final int[] shopItemPrice = new int[256];
+	private final int[] shopItemPriceOverride = new int[256];
 	private final boolean[] shopItemNoted = new boolean[256];
 	private final int[] teleportBubbleTime = new int[MAX_TELEPORT_BUBBLES];
 	private final int[] teleportBubbleX = new int[MAX_TELEPORT_BUBBLES];
@@ -573,6 +574,9 @@ public final class mudclient implements Runnable {
 	private int profilePath = 0;
 	private int profileCombatRateTenths = 10;
 	private int profileSkillingRateTenths = 10;
+	private boolean profileSubscribed = false;
+	private int profileEffectiveCombatRateTenths = 10;
+	private int profileEffectiveSkillingRateTenths = 10;
 	private long profileTotalPlayedSeconds = 0;
 	private long profileStatsReceivedAt = 0;
 	private int loginButtonExistingUser;
@@ -3899,6 +3903,10 @@ public final class mudclient implements Runnable {
 				drawVoidscapePathMenu();
 				return;
 			}
+			if (isVoidscapeTitleMenu()) {
+				drawVoidscapeTitleMenu();
+				return;
+			}
 
 			if (isAndroid()) {
 				int startY = 25;
@@ -4008,6 +4016,313 @@ public final class mudclient implements Runnable {
 			&& this.optionsMenuText[2].startsWith("Arcanist's Path - 2x XP:");
 	}
 
+	private boolean isVoidscapeTitleMenu() {
+		return isVoidscapeTitleHubMenu() || isVoidscapeTitleCatalogMenu() || isVoidscapeTitleDetailMenu();
+	}
+
+	private boolean isVoidscapeTitleHubMenu() {
+		if (this.optionsMenuCount < 6 || this.optionsMenuText[0] == null) {
+			return false;
+		}
+		if (!this.optionsMenuText[0].startsWith("Active title:") && !this.optionsMenuText[0].startsWith("Active:")) {
+			return false;
+		}
+		return titleMenuOptionIndexStartsWith("Unlocked titles") >= 0
+			&& titleMenuOptionIndexStartsWith("All titles") >= 0
+			&& titleMenuOptionIndexStartsWith("Unique titles") >= 0
+			&& titleMenuOptionIndexStartsWith("Common titles") >= 0
+			&& titleMenuOptionIndexStartsWith("Rarest titles") >= 0;
+	}
+
+	private boolean isVoidscapeTitleCatalogMenu() {
+		return this.optionsMenuCount >= 4
+			&& this.optionsMenuText[0] != null
+			&& isVoidscapeTitleCatalogHeader(this.optionsMenuText[0]);
+	}
+
+	private boolean isVoidscapeTitleDetailMenu() {
+		return this.optionsMenuCount >= 6
+			&& this.optionsMenuText[0] != null
+			&& this.optionsMenuText[0].startsWith("Title details: ");
+	}
+
+	private boolean isVoidscapeTitleCatalogHeader(String text) {
+		return text.startsWith("All titles - page ")
+			|| text.startsWith("Unlocked titles - page ")
+			|| text.startsWith("Unique titles - page ")
+			|| text.startsWith("Common titles - page ")
+			|| text.startsWith("Rarest titles - page ");
+	}
+
+	private void drawVoidscapeTitleMenu() {
+		this.showUiTab = 0;
+		if (isVoidscapeTitleDetailMenu()) {
+			drawVoidscapeTitleDetailMenu();
+		} else if (isVoidscapeTitleCatalogMenu()) {
+			drawVoidscapeTitleCatalogMenu();
+		} else {
+			drawVoidscapeTitleHubMenu();
+		}
+	}
+
+	private void drawVoidscapeTitleHubMenu() {
+		int panelWidth = Math.min(420, this.getGameWidth() - 20);
+		int panelHeight = Math.min(244, this.getGameHeight() - 24);
+		int panelX = (this.getGameWidth() - panelWidth) / 2;
+		int panelY = (this.getGameHeight() - panelHeight) / 2;
+		int cx = panelX + panelWidth / 2;
+
+		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "Voidscape Titles", 0xffff00, 4, panelY + 24);
+		drawVoidscapeCenteredText(cx, titleHubActiveText(), 0xffffff, 1, panelY + 45);
+
+		int buttonW = (panelWidth - 48) / 2;
+		int buttonH = 25;
+		int firstX = panelX + 18;
+		int secondX = firstX + buttonW + 12;
+		int rowY = panelY + 64;
+		for (int i = 1; i < this.optionsMenuCount; i++) {
+			int column = (i - 1) % 2;
+			int row = (i - 1) / 2;
+			int x = column == 0 ? firstX : secondX;
+			int y = rowY + row * 31;
+			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
+			if (drawVoidscapeTitleButton(x, y, buttonW, buttonH, option, i, option.startsWith("Close"))) {
+				return;
+			}
+		}
+
+		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private void drawVoidscapeTitleCatalogMenu() {
+		int panelWidth = Math.min(468, this.getGameWidth() - 16);
+		int panelHeight = Math.min(318, this.getGameHeight() - 24);
+		int panelX = (this.getGameWidth() - panelWidth) / 2;
+		int panelY = (this.getGameHeight() - panelHeight) / 2;
+		int cx = panelX + panelWidth / 2;
+		String header = this.optionsMenuText[0];
+		String currentCategory = titleCatalogCommandFromHeader(header);
+
+		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "Voidscape Titles", 0xffff00, 4, panelY + 22);
+		drawVoidscapeCenteredText(cx, header, 0xffffff, 1, panelY + 39);
+
+		int tabY = panelY + 50;
+		int tabX = panelX + 10;
+		int tabW = (panelWidth - 20) / 5;
+		if (drawVoidscapeTitleTab(tabX, tabY, tabW - 3, "All", titleMenuOptionIndexStartsWith("View all titles"), "all".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW, tabY, tabW - 3, "Unlocked", titleMenuOptionIndexStartsWith("View unlocked titles"), "unlocked".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 2, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 3, tabY, tabW - 3, "Common", titleMenuOptionIndexStartsWith("View common titles"), "common".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Rarest", titleMenuOptionIndexStartsWith("View rarest titles"), "rarest".equals(currentCategory))) return;
+
+		int rowY = panelY + 78;
+		int rowH = 17;
+		for (int i = 1; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
+			if (isVoidscapeTitleNavigationOption(option)) {
+				continue;
+			}
+			if (drawVoidscapeTitleRow(panelX + 16, rowY, panelWidth - 32, rowH, option, i)) {
+				return;
+			}
+			rowY += rowH;
+		}
+
+		int navY = panelY + panelHeight - 32;
+		int prev = titleMenuOptionIndexStartsWith("< Previous page");
+		int next = titleMenuOptionIndexStartsWith("Next page");
+		int change = titleMenuOptionIndexStartsWith("Change category");
+		int close = titleMenuOptionIndexStartsWith("Close");
+		int buttonW = 94;
+		int x = panelX + 14;
+		if (prev >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Previous", prev, false)) return;
+		x += buttonW + 7;
+		if (next >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Next", next, false)) return;
+		x += buttonW + 7;
+		if (change >= 0 && drawVoidscapeTitleButton(x, navY, buttonW + 24, 22, "Categories", change, false)) return;
+		if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, navY, 72, 22, "Close", close, true)) return;
+
+		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private void drawVoidscapeTitleDetailMenu() {
+		int panelWidth = Math.min(438, this.getGameWidth() - 16);
+		int panelHeight = Math.min(246, this.getGameHeight() - 24);
+		int panelX = (this.getGameWidth() - panelWidth) / 2;
+		int panelY = (this.getGameHeight() - panelHeight) / 2;
+		int cx = panelX + panelWidth / 2;
+		String title = this.optionsMenuText[0].substring("Title details: ".length());
+
+		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "Title Details", 0xffff00, 4, panelY + 24);
+		drawVoidscapeCenteredText(cx, title, 0xff3030, 1, panelY + 44);
+
+		int lineY = panelY + 68;
+		for (int i = 1; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
+			if (isVoidscapeTitleDetailActionOption(option)) {
+				continue;
+			}
+			this.getSurface().drawString(option, panelX + 18, lineY, titleDetailLineColor(option), 1);
+			lineY += 18;
+		}
+
+		int equip = titleMenuOptionIndexStartsWith("Equip title");
+		int back = titleMenuOptionIndexStartsWith("Back to ");
+		int close = titleMenuOptionIndexStartsWith("Close");
+		int buttonY = panelY + panelHeight - 34;
+		if (equip >= 0) {
+			int equipX = panelX + 18;
+			if (drawVoidscapeTitleButton(equipX, buttonY, 112, 22, "Equip", equip, false)) return;
+			if (back >= 0 && drawVoidscapeTitleButton(equipX + 124, buttonY, 112, 22, "Back", back, false)) return;
+			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, buttonY, 70, 22, "Close", close, true)) return;
+		} else {
+			if (back >= 0 && drawVoidscapeTitleButton(panelX + 18, buttonY, 112, 22, "Back", back, false)) return;
+			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, buttonY, 70, 22, "Close", close, true)) return;
+		}
+
+		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private void drawVoidscapeTitleFrame(int x, int y, int width, int height) {
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 118);
+		this.getSurface().drawBox(x, y, width, height, 0);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0xffffff);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x333333);
+		this.getSurface().drawLineHoriz(x + 8, y + 7, width - 16, 0x777777);
+		this.getSurface().drawLineHoriz(x + 8, y + height - 8, width - 16, 0x222222);
+	}
+
+	private boolean drawVoidscapeTitleButton(int x, int y, int width, int height, String label, int option, boolean close) {
+		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+		int fill = hover ? 0x262626 : 0x101010;
+		int border = hover ? 0xffff00 : 0x777777;
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 235);
+		this.getSurface().drawBoxBorder(x, width, y, height, border);
+		this.getSurface().drawColoredStringCentered(x + width / 2, label, close ? 0xff8080 : 0xffffff, 0, 1, y + height / 2 + 4);
+		if (hover && this.mouseButtonClick == 1) {
+			sendOptionsMenuChoice(option);
+			return true;
+		}
+		return false;
+	}
+
+	private boolean drawVoidscapeTitleTab(int x, int y, int width, String label, int option, boolean selected) {
+		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + 22;
+		int fill = selected ? 0x2b1b36 : hover ? 0x222222 : 0x090909;
+		int border = selected ? 0xd9b6ff : hover ? 0xffff00 : 0x555555;
+		this.getSurface().drawBoxAlpha(x, y, width, 22, fill, 238);
+		this.getSurface().drawBoxBorder(x, width, y, 22, border);
+		this.getSurface().drawColoredStringCentered(x + width / 2, label, selected ? 0xd9b6ff : 0xffffff, 0, 1, y + 15);
+		if (hover && !selected && option >= 0 && this.mouseButtonClick == 1) {
+			sendOptionsMenuChoice(option);
+			return true;
+		}
+		return false;
+	}
+
+	private boolean drawVoidscapeTitleRow(int x, int y, int width, int height, String label, int option) {
+		boolean disabled = label.startsWith("No titles in this category");
+		boolean active = label.startsWith("* ");
+		boolean hover = !disabled && this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+		int fill = active ? 0x241c0b : hover ? 0x202020 : 0x070707;
+		int border = active ? 0xd0a030 : hover ? 0xffff00 : 0x2f2f2f;
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 218);
+		this.getSurface().drawBoxBorder(x, width, y, height, border);
+		this.getSurface().drawString(label, x + 6, y + 13, disabled ? 0x777777 : 0xffffff, 1);
+		if (hover && this.mouseButtonClick == 1) {
+			sendOptionsMenuChoice(option);
+			return true;
+		}
+		return false;
+	}
+
+	private void handleVoidscapeTitlePanelMiss(int panelX, int panelY, int panelWidth, int panelHeight) {
+		if (this.mouseButtonClick != 1) {
+			return;
+		}
+		boolean inside = this.mouseX >= panelX && this.mouseX <= panelX + panelWidth
+			&& this.mouseY >= panelY && this.mouseY <= panelY + panelHeight;
+		if (!inside) {
+			sendOptionsMenuChoice(-1);
+		} else {
+			this.mouseButtonClick = 0;
+		}
+	}
+
+	private boolean isVoidscapeTitleNavigationOption(String option) {
+		return option.startsWith("< Previous page")
+			|| option.startsWith("Next page")
+			|| option.startsWith("View all titles")
+			|| option.startsWith("View unlocked titles")
+			|| option.startsWith("View unique titles")
+			|| option.startsWith("View common titles")
+			|| option.startsWith("View rarest titles")
+			|| option.startsWith("Change category")
+			|| option.startsWith("Close");
+	}
+
+	private boolean isVoidscapeTitleDetailActionOption(String option) {
+		return option.startsWith("Equip title")
+			|| option.startsWith("Back to ")
+			|| option.startsWith("Close");
+	}
+
+	private int titleDetailLineColor(String option) {
+		if (option.startsWith("Progress:")) {
+			return 0xd9b6ff;
+		}
+		if (option.startsWith("Scope: unique")) {
+			return 0xff8080;
+		}
+		if (option.startsWith("Scope: reusable")) {
+			return 0x80d8ff;
+		}
+		if (option.startsWith("Rarity: rare")) {
+			return 0xd9b6ff;
+		}
+		if (option.startsWith("Rarity: uncommon")) {
+			return 0xffe080;
+		}
+		if (option.startsWith("Rarity: common")) {
+			return 0x80d8ff;
+		}
+		if (option.endsWith("active") || option.endsWith("unlocked")) {
+			return 0x80ff80;
+		}
+		if (option.indexOf("locked") >= 0) {
+			return 0xff8080;
+		}
+		return 0xffffff;
+	}
+
+	private String titleHubActiveText() {
+		String text = this.optionsMenuText[0] == null ? "Active title: none" : this.optionsMenuText[0];
+		if (text.startsWith("Active:")) {
+			return "Active title: " + text.substring("Active:".length()).trim();
+		}
+		return text;
+	}
+
+	private String titleCatalogCommandFromHeader(String header) {
+		if (header.startsWith("Unlocked titles")) return "unlocked";
+		if (header.startsWith("Unique titles")) return "unique";
+		if (header.startsWith("Common titles")) return "common";
+		if (header.startsWith("Rarest titles")) return "rarest";
+		return "all";
+	}
+
+	private int titleMenuOptionIndexStartsWith(String prefix) {
+		for (int i = 0; i < this.optionsMenuCount; i++) {
+			if (this.optionsMenuText[i] != null && this.optionsMenuText[i].startsWith(prefix)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	private void drawVoidscapePathMenu() {
 		ensureVoidscapeLoginAssetsLoaded();
 		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 138);
@@ -4020,7 +4335,7 @@ public final class mudclient implements Runnable {
 
 		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
 		drawVoidscapeCenteredText(cx, "CHOOSE YOUR PATH", 0xf3d46b, 1, panelY + 24);
-		drawVoidscapeCenteredText(cx, "One choice per account. Each path grants 2x XP in its listed skills.", 0xe6e3d8, 0, panelY + 42);
+		drawVoidscapeCenteredText(cx, "One choice per account. Each path grants 2x XP and a starter kit.", 0xe6e3d8, 0, panelY + 42);
 
 		int cardGap = 8;
 		int cardWidth = (panelWidth - 36 - cardGap * 2) / 3;
@@ -4028,9 +4343,9 @@ public final class mudclient implements Runnable {
 		int cardY = panelY + 56;
 		int firstCardX = panelX + 18;
 
-		drawVoidscapePathCard(0, firstCardX, cardY, cardWidth, cardHeight, "Warrior's Path", "2x XP", "Attack / Defense", "Strength", 81, 0xb85a3c);
-		drawVoidscapePathCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Forager's Path", "2x XP", "Fishing / Cooking", "Mining", 1262, 0x4ba074);
-		drawVoidscapePathCard(2, firstCardX + (cardWidth + cardGap) * 2, cardY, cardWidth, cardHeight, "Arcanist's Path", "2x XP", "Ranged / Magic", "", 657, 0x8e64d7);
+		drawVoidscapePathCard(0, firstCardX, cardY, cardWidth, cardHeight, "Warrior's Path", "2x XP", "Attack / Defense", "Strength", "Melee starter kit", 81, 0xb85a3c);
+		drawVoidscapePathCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Forager's Path", "2x XP", "Fishing / Cooking", "Mining", "Tool starter kit", 1262, 0x4ba074);
+		drawVoidscapePathCard(2, firstCardX + (cardWidth + cardGap) * 2, cardY, cardWidth, cardHeight, "Arcanist's Path", "2x XP", "Ranged / Magic", "", "Arcane starter kit", 657, 0x8e64d7);
 
 		if (this.mouseButtonClick != 0) {
 			int choice = -1;
@@ -4045,7 +4360,7 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private void drawVoidscapePathCard(int index, int x, int y, int width, int height, String title, String multiplier, String skillsTop, String skillsBottom, int itemId, int accent) {
+	private void drawVoidscapePathCard(int index, int x, int y, int width, int height, String title, String multiplier, String skillsTop, String skillsBottom, String kitLine, int itemId, int accent) {
 		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
 		int fill = hover ? 0x252d35 : 0x14181e;
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 242);
@@ -4068,6 +4383,7 @@ public final class mudclient implements Runnable {
 		if (skillsBottom.length() > 0) {
 			drawVoidscapeCenteredText(x + width / 2, skillsBottom, 0xd9d5cb, 0, artY + artH + 68);
 		}
+		drawVoidscapeCenteredText(x + width / 2, kitLine, 0x9fd7ff, 0, y + height - 30);
 		drawVoidscapeCenteredText(x + width / 2, "(" + (index + 1) + ")", hover ? 0xf3d46b : 0x9aa2a9, 0, y + height - 12);
 	}
 
@@ -4319,9 +4635,11 @@ public final class mudclient implements Runnable {
 						this.getSurface().drawColoredStringCentered(204 + xr,
 							"This item is not currently available to buy", 0xFFFF00, 0, 3, 214 + yr);
 					} else {
-						int cost = GenUtil.computeItemCost(EntityHandler.getItemDef(id).getBasePrice(),
-							this.shopItemPrice[this.shopSelectedItemIndex], this.shopBuyPriceMod, -30910, true, 1,
-							count, this.shopPriceMultiplier);
+						int cost = this.shopItemPriceOverride[this.shopSelectedItemIndex] >= 0
+							? this.shopItemPriceOverride[this.shopSelectedItemIndex]
+							: GenUtil.computeItemCost(EntityHandler.getItemDef(id).getBasePrice(),
+								this.shopItemPrice[this.shopSelectedItemIndex], this.shopBuyPriceMod, -30910, true, 1,
+								count, this.shopPriceMultiplier);
 						this.getSurface().drawString(
 							EntityHandler.getItemDef(id).getName() + ": buy for " + cost + "gp each", 2 + xr,
 							yr + 214, 0xFFFF00, 1);
@@ -6271,31 +6589,50 @@ public final class mudclient implements Runnable {
 		final int baseY = base[1] - 4;
 		final int topX = top[0];
 		final int topY = top[1];
-		final int slowFrame = this.getFrameCounter() / 2;
-		final int phase = (slowFrame * 3 + index * 19) & 63;
+		final int slowFrame = this.getFrameCounter();
+		final int phase = (slowFrame * 2 + index * 19) & 63;
 		final int pulse = phase < 32 ? phase : 63 - phase;
-		final int centerAlpha = 166 + pulse;
+		final int coreAlpha = 138 + pulse;
 
-		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x7A35D8, 6, 92 + (pulse / 2), 24, slowFrame, index, 3);
-		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x8F45EA, 4, 112, 28, slowFrame, index + 7, 2);
-		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 0, 188, 0x6B22D8, centerAlpha, slowFrame, index + 3, 2);
-		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 188, 256, 0x6B22D8, 58 + (pulse / 3), slowFrame, index + 3, 1);
+		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x160523, 10, 28 + (pulse / 4), 3, slowFrame, index, 2);
+		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x4A0E7D, 6, 58 + (pulse / 2), 10, slowFrame, index + 5, 5);
+		drawRareDropBeamTaperedFade(baseX, baseY, topX, topY, 0x9B4CFF, 3, 84 + (pulse / 3), 24, slowFrame, index + 11, 7);
+		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 18, 238, 0xB45CFF, coreAlpha, slowFrame, index + 3, 7);
+		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 22, 256, 0x7D30DE, 80 + (pulse / 3), slowFrame, index + 15, 9);
+		drawRareDropBeamLineSwirl(baseX, baseY, topX, topY, 44, 246, 0xC78BFF, 58 + (pulse / 4), slowFrame, index + 27, 12);
 
-		final int ring = 7 + (phase / 10);
-		surface.drawCircle(baseX, baseY + 2, ring + 10, 0x5D23B8, 24, 0);
-		surface.drawCircle(baseX, baseY + 2, ring + 4, 0x9D5CFF, 46, 0);
-		surface.drawCircle(baseX, baseY + 2, 3, 0x7A35D8, 54, 0);
+		for (int band = 0; band < 4; band++) {
+			final int bandProgress = 42 + (((slowFrame * (band + 2)) + index * 23 + band * 47) & 127);
+			final int bandX = interpolateBeamPoint(baseX, topX, bandProgress)
+				+ getRareDropBeamSwirl(bandProgress, slowFrame, index + band * 11, 8);
+			final int bandY = interpolateBeamPoint(baseY, topY, bandProgress);
+			final int bandPhase = slowFrame * (9 + band) + index * 29 + band * 64;
+			final int bandAlpha = 46 + (pulse / 2) - band * 4;
+			drawRareDropBeamBaseArc(surface, bandX, bandY, Math.max(4, 10 - band), Math.max(2, 4 - band / 2),
+				bandPhase, band == 0 ? 0xC05AFF : 0xB56CFF, bandAlpha);
+			drawRareDropBeamBaseArc(surface, bandX, bandY + 1, Math.max(3, 8 - band), Math.max(2, 3 - band / 2),
+				128 - bandPhase, 0x5F1FA8, Math.max(24, bandAlpha - 18));
+		}
 
-		for (int sparkle = 0; sparkle < 5; sparkle++) {
-			final int progress = 34 + ((slowFrame * (sparkle + 1) + index * 29 + sparkle * 43) & 159);
+		final int ringPulse = 8 + (phase / 10);
+		drawRareDropBeamBaseArc(surface, baseX, baseY + 1, ringPulse + 8, 4, slowFrame * 6 + index * 31,
+			0xB669FF, 78 + pulse);
+		drawRareDropBeamBaseArc(surface, baseX, baseY + 1, ringPulse + 12, 5, 128 - slowFrame * 5 - index * 17,
+			0x561694, 44 + (pulse / 2));
+		drawRareDropBeamBaseArc(surface, baseX, baseY, ringPulse + 4, 3, slowFrame * 8 + index * 47,
+			0xC05AFF, 54 + pulse);
+		drawRareDropSparkle(surface, topX, topY + 4, 3, 0xB86AFF, 58 + pulse);
+
+		for (int sparkle = 0; sparkle < 4; sparkle++) {
+			final int progress = 42 + ((slowFrame * (sparkle + 1) + index * 29 + sparkle * 43) & 143);
 			final int offsetPhase = (slowFrame + index * 11 + sparkle * 17) & 63;
 			final int offsetPulse = offsetPhase < 32 ? offsetPhase : 63 - offsetPhase;
-			final int offset = ((sparkle & 1) == 0 ? -1 : 1) * (2 + sparkle) + (offsetPulse / 12);
+			final int offset = ((sparkle & 1) == 0 ? -1 : 1) * (3 + sparkle) + (offsetPulse / 14);
 			final int x = interpolateBeamPoint(baseX, topX, progress) + offset;
 			final int y = interpolateBeamPoint(baseY, topY, progress);
-				final int twinkle = ((slowFrame * 2 + sparkle * 23) & 63);
-				final int alpha = 56 + (twinkle < 32 ? twinkle : 63 - twinkle) - sparkle * 5;
-				drawRareDropSparkle(surface, x, y, sparkle == 0 ? 4 : 3, 0x8F45EA, alpha);
+			final int twinkle = ((slowFrame * 2 + sparkle * 23) & 63);
+			final int alpha = 48 + (twinkle < 32 ? twinkle : 63 - twinkle) - sparkle * 4;
+			drawRareDropSparkle(surface, x, y, sparkle == 0 ? 4 : 3, sparkle == 0 ? 0xB86AFF : 0x9D5CFF, alpha);
 		}
 	}
 
@@ -6382,8 +6719,8 @@ public final class mudclient implements Runnable {
 										   final int slowFrame, final int seed, final int swirlAmount) {
 		final int range = end - start;
 		int segmentStart = start;
-		for (int i = 1; i <= 4; i++) {
-			final int segmentEnd = start + range * i / 4;
+		for (int i = 1; i <= 8; i++) {
+			final int segmentEnd = start + range * i / 8;
 			drawRareDropBeamLine(baseX, baseY, topX, topY, segmentStart, segmentEnd, color, alpha,
 				getRareDropBeamSwirl(segmentStart, slowFrame, seed, swirlAmount),
 				getRareDropBeamSwirl(segmentEnd, slowFrame, seed, swirlAmount));
@@ -6400,11 +6737,31 @@ public final class mudclient implements Runnable {
 		return start + ((end - start) * progress / 256);
 	}
 
+	private void drawRareDropBeamBaseArc(final MudClientGraphics surface, final int centerX, final int centerY,
+										 final int radiusX, final int radiusY, final int phase,
+										 final int color, final int alpha) {
+		final int start = phase & 255;
+		final int arcLength = 104;
+		int previousX = centerX + (int)(Math.cos(start * Math.PI / 128.0D) * radiusX);
+		int previousY = centerY + (int)(Math.sin(start * Math.PI / 128.0D) * radiusY);
+		for (int step = 1; step <= 7; step++) {
+			final int current = start + arcLength * step / 7;
+			final int x = centerX + (int)(Math.cos(current * Math.PI / 128.0D) * radiusX);
+			final int y = centerY + (int)(Math.sin(current * Math.PI / 128.0D) * radiusY);
+			final int fade = alpha * (8 - step) / 8;
+			surface.drawLineAlpha(previousX, previousY, x, y, color, Math.max(18, fade));
+			previousX = x;
+			previousY = y;
+		}
+	}
+
 	private void drawRareDropSparkle(final MudClientGraphics surface, final int x, final int y,
 									 final int size, final int color, final int alpha) {
 		surface.drawLineAlpha(x - size, y, x + size, y, color, alpha);
 		surface.drawLineAlpha(x, y - size, x, y + size, color, alpha);
-		surface.drawCircle(x, y, 1, 0x9D5CFF, Math.min(78, alpha + 8), 0);
+		int diagonal = Math.max(1, size / 2);
+		surface.drawLineAlpha(x - diagonal, y - diagonal, x + diagonal, y + diagonal, color, Math.max(18, alpha / 2));
+		surface.drawLineAlpha(x - diagonal, y + diagonal, x + diagonal, y - diagonal, color, Math.max(18, alpha / 2));
 	}
 
 	private void drawGameLookSceneOverlay() {
@@ -7978,15 +8335,24 @@ public final class mudclient implements Runnable {
 					this.characterDialogString[this.characterDialogCount++] = player.message;
 				}
 
-				if (S_SHOW_FLOATING_NAMETAGS) {
-					if ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI) || (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY)) {
-						if (player.displayName != null)
-							this.getSurface().drawShadowText(player.getStaffName(), (width - this.getSurface().stringWidth(0, player.getStaffName())) / 2 + x + 1, y - 14, 0xffff00, 0, false);
+				boolean labelOverlayEnabled = S_SHOW_FLOATING_NAMETAGS
+					&& ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI) || (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY));
+				boolean hasPlayerTitle = player.title != null && player.title.length() > 0;
+				if (player.displayName != null && (labelOverlayEnabled || hasPlayerTitle)) {
+					String staffName = player.getStaffName();
+					int nameLineY = hasPlayerTitle ? y - 8 : y - 14;
+					if (hasPlayerTitle) {
+						int nameWidth = this.getSurface().stringWidth(0, staffName);
+						int gapWidth = this.getSurface().stringWidth(0, " ");
+						int titleWidth = this.getSurface().stringWidth(0, player.title);
+						int lineX = (width - nameWidth - gapWidth - titleWidth) / 2 + x + 1;
+						this.getSurface().drawShadowText(staffName, lineX, nameLineY, 0xffff00, 0, false);
+						this.getSurface().drawShadowText(player.title, lineX + nameWidth + gapWidth, nameLineY, 0xff3030, 0, false);
+					} else {
+						this.getSurface().drawShadowText(staffName, (width - this.getSurface().stringWidth(0, staffName)) / 2 + x + 1, nameLineY, 0xffff00, 0, false);
 					}
-					if ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI) || (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY)) {
-						if (player.clanTag != null)
-							this.getSurface().drawColoredString((width - this.getSurface().stringWidth(0, "< " + player.clanTag + " >")) / 2 + x + 1, y - 5, "< " + player.clanTag + " >", 0, 0x7CADDA, 0);
-					}
+					if (labelOverlayEnabled && player.clanTag != null)
+						this.getSurface().drawColoredString((width - this.getSurface().stringWidth(0, "< " + player.clanTag + " >")) / 2 + x + 1, hasPlayerTitle ? y + 1 : y - 5, "< " + player.clanTag + " >", 0, 0x7CADDA, 0);
 				}
 
 				if (player.bubbleTimeout > 0) {
@@ -10688,7 +11054,7 @@ public final class mudclient implements Runnable {
 			case ADVANCED_CATEGORY_LOOT:
 				this.getSurface().drawString("Loot", x, rowY, 0xd9b6ff, 1);
 				rowY += 22;
-				rowY = drawAdvancedToggle(x, rowY, width, "Rare loot beams", "Void-purple pillar on valuable drops", C_RARE_DROP_BEAMS, 48);
+				rowY = drawAdvancedToggle(x, rowY, width, "Loot beams", "Void-purple marker on chosen drops", C_RARE_DROP_BEAMS, 48);
 				rowY = drawAdvancedToggle(x, rowY, width, "Ground item names", "Show labels over floor loot", C_GROUND_ITEM_NAMES, 45);
 				rowY = drawAdvancedToggle(x, rowY, width, "Hide bones", "Quickly suppress bone piles", C_SHOW_GROUND_ITEMS == 3, ADVANCED_ACTION_HIDE_BONES);
 				rowY = drawAdvancedCycle(x, rowY, width, "Ground items", getGroundItemsModeName(), ADVANCED_ACTION_GROUND_ITEMS);
@@ -11033,8 +11399,11 @@ public final class mudclient implements Runnable {
 		y += 5;
 		this.getSurface().drawString("Profile", 3 + baseX, y, 0x6F43BE, 1);
 		y += 15;
-		this.getSurface().drawString("XP: @mag@" + formatXpRate(this.profileCombatRateTenths)
-			+ " combat @whi@/ @mag@" + formatXpRate(this.profileSkillingRateTenths) + " skill", 3 + baseX, y, 0xFFFFFF, 1);
+		this.getSurface().drawString("Subscription: " + (this.profileSubscribed ? "@gre@Subscribed" : "@red@Unsubscribed"), 3 + baseX, y, 0xFFFFFF, 1);
+		y += 15;
+		this.getSurface().drawString("Combat XP: @mag@" + formatXpRate(this.profileEffectiveCombatRateTenths), 3 + baseX, y, 0xFFFFFF, 1);
+		y += 15;
+		this.getSurface().drawString("Skill XP: @mag@" + formatXpRate(this.profileEffectiveSkillingRateTenths), 3 + baseX, y, 0xFFFFFF, 1);
 		y += 15;
 		this.getSurface().drawString("Path: @mag@" + getProfilePathName(), 3 + baseX, y, 0xFFFFFF, 1);
 		y += 15;
@@ -18677,6 +19046,10 @@ public final class mudclient implements Runnable {
 		this.shopItemPrice[i] = n;
 	}
 
+	public void setShopItemPriceOverride(int i, int n) {
+		this.shopItemPriceOverride[i] = n;
+	}
+
 	public void setShopItemNoted(int i, boolean n) {
 		this.shopItemNoted[i] = n;
 	}
@@ -19957,7 +20330,7 @@ public final class mudclient implements Runnable {
 		else if (auctionHouse.isVisible()) {
 			if (auctionHouse.activeInterface == 0) {
 				auctionHouse.auctionMenu.scrollMethodList(auctionHouse.auctionScrollHandle, x);
-			} else {
+			} else if (auctionHouse.activeInterface == 1) {
 				auctionHouse.myAuctions.scrollMethodList(auctionHouse.myAuctionScrollHandle, x);
 			}
 		} else if (clan.getClanInterface().isVisible()) {
@@ -20078,10 +20451,14 @@ public final class mudclient implements Runnable {
 		C_HD_SUNLIGHT = sunlight;
 	}
 
-	public void setProfileStats(int path, int combatRateTenths, int skillingRateTenths, long totalPlayedSeconds) {
+	public void setProfileStats(int path, int combatRateTenths, int skillingRateTenths, long totalPlayedSeconds,
+								boolean subscribed, int effectiveCombatRateTenths, int effectiveSkillingRateTenths) {
 		this.profilePath = path;
 		this.profileCombatRateTenths = combatRateTenths;
 		this.profileSkillingRateTenths = skillingRateTenths;
+		this.profileSubscribed = subscribed;
+		this.profileEffectiveCombatRateTenths = effectiveCombatRateTenths;
+		this.profileEffectiveSkillingRateTenths = effectiveSkillingRateTenths;
 		this.profileTotalPlayedSeconds = Math.max(0L, totalPlayedSeconds);
 		this.profileStatsReceivedAt = System.currentTimeMillis();
 	}

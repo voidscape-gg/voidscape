@@ -616,6 +616,7 @@ public class PacketHandler {
 		int packetType = packetsIncoming.getByte() & 0xff;
 		if (packetType == 0) { // start receiving items
 			mc.getAuctionHouse().resetAuctionItems();
+			mc.getAuctionHouse().resetMarketIntel();
 		} else if (packetType == 1) { // read items
 			int auctionItemCount = packetsIncoming.getShort();
 			for (int i = 0; i < auctionItemCount; i++) {
@@ -632,6 +633,42 @@ public class PacketHandler {
 				}
 				int hoursLeft = packetsIncoming.getShort();
 				mc.getAuctionHouse().addAuction(auctionID, itemID, amount, price, seller, hoursLeft);
+			}
+			mc.getAuctionHouse().setVisible(true);
+		} else if (packetType == 2) { // read market intel
+			int summaryCount = packetsIncoming.getShort();
+			for (int i = 0; i < summaryCount; i++) {
+				int itemID = packetsIncoming.get32();
+				int activeLowestEach = packetsIncoming.get32();
+				int activeHighestEach = packetsIncoming.get32();
+				int activeAmount = packetsIncoming.get32();
+				int lastUnitPrice = packetsIncoming.get32();
+				int averageUnitPrice = packetsIncoming.get32();
+				int volumeSold = packetsIncoming.get32();
+				int totalValue = packetsIncoming.get32();
+				int lastSoldAt = packetsIncoming.get32();
+				mc.getAuctionHouse().addMarketSummary(itemID, activeLowestEach, activeHighestEach, activeAmount,
+					lastUnitPrice, averageUnitPrice, volumeSold, totalValue, lastSoldAt);
+			}
+
+			int hotItemCount = packetsIncoming.getShort();
+			for (int i = 0; i < hotItemCount; i++) {
+				int itemID = packetsIncoming.get32();
+				int volumeSold = packetsIncoming.get32();
+				int totalValue = packetsIncoming.get32();
+				int averageUnitPrice = packetsIncoming.get32();
+				int lastSoldAt = packetsIncoming.get32();
+				mc.getAuctionHouse().addHotMarketItem(itemID, volumeSold, totalValue, averageUnitPrice, lastSoldAt);
+			}
+
+			int recentSaleCount = packetsIncoming.getShort();
+			for (int i = 0; i < recentSaleCount; i++) {
+				int itemID = packetsIncoming.get32();
+				int amount = packetsIncoming.get32();
+				int unitPrice = packetsIncoming.get32();
+				int totalPrice = packetsIncoming.get32();
+				int soldAt = packetsIncoming.get32();
+				mc.getAuctionHouse().addRecentMarketSale(itemID, amount, unitPrice, totalPrice, soldAt);
 			}
 			mc.getAuctionHouse().setVisible(true);
 		}
@@ -2199,7 +2236,17 @@ public class PacketHandler {
 			int combatRateTenths = packetsIncoming.getUnsignedByte();
 			int skillingRateTenths = packetsIncoming.getUnsignedByte();
 			long totalPlayedSeconds = packetsIncoming.get32() & 0xffffffffL;
-			mc.setProfileStats(path, combatRateTenths, skillingRateTenths, totalPlayedSeconds);
+			boolean subscribed = false;
+			int effectiveCombatRateTenths = combatRateTenths;
+			int effectiveSkillingRateTenths = skillingRateTenths;
+			if (Config.CLIENT_VERSION >= Config.SUBSCRIPTION_PROFILE_CLIENT_VERSION
+				&& length - packetsIncoming.packetEnd >= 9) {
+				subscribed = packetsIncoming.getUnsignedByte() == 1;
+				effectiveCombatRateTenths = packetsIncoming.getUnsignedByte();
+				effectiveSkillingRateTenths = packetsIncoming.getUnsignedByte();
+			}
+			mc.setProfileStats(path, combatRateTenths, skillingRateTenths, totalPlayedSeconds,
+				subscribed, effectiveCombatRateTenths, effectiveSkillingRateTenths);
 		}
 		if (length - packetsIncoming.packetEnd >= 6) {
 			mc.setHdVisualSettings(
@@ -2567,12 +2614,16 @@ public class PacketHandler {
 
 		for (int i = 0; i < 40; ++i) {
 			mc.setShopCategoryID(i, -1);
+			mc.setShopItemPriceOverride(i, -1);
 		}
 
 		for (int i = 0; shopItemCount > i; ++i) {
 			mc.setShopCategoryID(i, packetsIncoming.getShort());
 			mc.setShopItemCount(i, packetsIncoming.getShort());
 			mc.setShopItemPrice(i, packetsIncoming.getShort());
+			if (Config.CLIENT_VERSION >= Config.SHOP_PRICE_OVERRIDE_CLIENT_VERSION) {
+				mc.setShopItemPriceOverride(i, packetsIncoming.get32());
+			}
 		}
 
 		// Check through player's inventory items if this is a general store.
@@ -2786,6 +2837,8 @@ public class PacketHandler {
 					packetsIncoming.getUnsignedByte();
 					packetsIncoming.getUnsignedByte();
 					packetsIncoming.get32();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_CLIENT_VERSION)
+						packetsIncoming.readString();
 				} else {
 					//packetsIncoming.getShort();
 
@@ -2822,6 +2875,14 @@ public class PacketHandler {
 					player.isInvulnerable = packetsIncoming.getByte() > 0;
 					player.groupID = packetsIncoming.getByte();
 					player.icon = packetsIncoming.get32();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_CLIENT_VERSION) {
+						player.title = packetsIncoming.readString();
+						if (player.title != null && player.title.length() == 0) {
+							player.title = null;
+						}
+					} else {
+						player.title = null;
+					}
 				}
 			} else if (updateType == 8) {
 				int heal = packetsIncoming.getUnsignedByte();

@@ -97,6 +97,9 @@ public class ServerConfiguration {
 	public boolean SHOW_FLOATING_NAMETAGS;
 	public boolean WANT_CLANS;
 	public boolean WANT_KILL_FEED;
+	public boolean WANT_WORLD_ANNOUNCEMENTS;
+	public boolean WANT_WORLD_MILESTONE_ANNOUNCEMENTS;
+	public boolean WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS;
 	public boolean FOG_TOGGLE;
 	public boolean GROUND_ITEM_TOGGLE;
 	public boolean GROUND_ITEM_NAMES;
@@ -588,6 +591,9 @@ public class ServerConfiguration {
 		SHOW_FLOATING_NAMETAGS = tryReadBool("show_floating_nametags").orElse(false);
 		WANT_CLANS = tryReadBool("want_clans").orElse(false);
 		WANT_KILL_FEED = tryReadBool("want_kill_feed").orElse(false);
+		WANT_WORLD_ANNOUNCEMENTS = tryReadBool("want_world_announcements").orElse(false);
+		WANT_WORLD_MILESTONE_ANNOUNCEMENTS = tryReadBool("want_world_milestone_announcements").orElse(false);
+		WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS = tryReadBool("want_world_skulled_pk_announcements").orElse(false);
 		SIDE_MENU_TOGGLE = tryReadBool("side_menu_toggle").orElse(false);
 		INVENTORY_COUNT_TOGGLE = tryReadBool("inventory_count_toggle").orElse(false);
 		AUTO_MESSAGE_SWITCH_TOGGLE = tryReadBool("auto_message_switch_toggle").orElse(false);

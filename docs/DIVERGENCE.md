@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-03 — Player title catalog dialogue hub
+
+Reworked `::titles` from a dense title list into a dialogue-style hub with category pages. The command now offers unlocked, all, unique, common, and rarest title views; catalog pages show 10 compact rows with previous/next navigation, and selecting a locked title reports the relevant requirement or unique-title owner. The custom PC client recognizes these title menu payloads and renders them as a centered black modal with category tabs, replacing the stock cyan top-left options menu while still sending ordinary menu replies. Added a server-side rarity score/label on `PlayerTitle` so the rarest view is intentionally ordered without adding client protocol or schema changes.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — title hub, category aliases, 10-row paged catalog, compact row labels.
+- `server/src/com/openrsc/server/content/PlayerTitle.java` — rarity score/label helpers.
+- `Client_Base/src/orsc/mudclient.java` — custom black-box title modal, category tabs, page buttons, and side-panel click shielding.
+- `docs/subsystems/player-titles.md` — command behavior update.
+
+Reversibility: revert the command helpers and rarity helpers. No data migration and no opcode/client-version change.
+
 ### 2026-04-24 — bootstrap of `server/local.conf` (voidscape preset)
 
 Created `server/local.conf` from `preservation.conf` as voidscape's working preset. **Not tracked in git** (gitignored per upstream + voidscape rules) — bootstrap on a fresh checkout via:
@@ -1982,3 +1994,144 @@ Files touched:
 - `Client_Base/src/orsc/Config.java`
 - `Client_Base/Cache/video/models.orsc`
 - `Client_Base/Cache/MD5.SUM`
+
+### 2026-05-02 - Karamja Fishmonger
+
+Added a custom **Karamja Fishmonger** NPC at `(363,713)`.
+
+Details:
+- New NPC id `847` with right-click `Cook fish` and `Note fish` commands, plus dialogue for both actions.
+- `Cook fish` converts unnoted raw fish into cooked fish at a 50% return rate. The fishmonger only processes raw fish stacks of at least two, so a single raw fish is left alone instead of being consumed for no output.
+- `Note fish` converts unnoted raw and cooked fish into banknotes using the existing noted-item system, not certificates.
+- Supported fish: shrimp, anchovies, sardine, herring, trout, pike, salmon, tuna, lobster, swordfish, shark, cod, mackerel, bass, manta ray, and sea turtle.
+
+### 2026-05-02 - Player Titles
+
+Added the first cosmetic player-title slice.
+
+Details:
+- New `PlayerTitle` registry in core with cache-backed unlocks and active-title selection.
+- New player command `::titles` / `::title` opens a menu of unlocked titles and allows clearing the active title.
+- Public overhead chat is prefixed with the active title, for example `[Voidbane] Hello`.
+- Defeating the Void Knight unlocks the `Voidbane` title. Titles are cosmetic only and grant no stat, XP, drop-rate, or combat benefit.
+
+### 2026-06-03 - Auction House Market Intel
+
+Added a market-intel slice to the custom Auction House.
+
+Details:
+- Added `auction_sales` schema patches for MySQL and SQLite, plus database structs/query methods for sale history, 7-day item summaries, hot items, and recent sales.
+- `BuyMarketItemTask` now writes a sale-history row inside the same purchase transaction that creates seller proceeds, updates/sells out the listing, and saves the buyer inventory/bank.
+- `OpenMarketTask` keeps raw packet `132` but adds subtype `2` after the existing reset/listing chunk payloads. The new payload includes per-item active/last/average/volume stats, hot 7-day items, and recent completed sales. This is a packet-shape change, so the custom client version moved to `10051`.
+- `AuctionHouse.java` now has an **Intel** tab and a selected-listing market snapshot. Public completed-sale intel is anonymous; buyer/seller names stay in the DB row for auditability but are not displayed in the UI.
+
+### 2026-06-03 - Auction House browse UI refresh
+
+Refreshed the PC client Auction House browse experience to make it less text-heavy and easier to scan.
+
+Details:
+- Replaced the vertical text-only category list with compact item-icon category tiles while keeping the same filter behavior.
+- Reworked the Browse tab top row, listing rows, and empty state with denser visual hierarchy, item sprites, match counts, per-unit pricing, total pricing, and expiry at a glance.
+- Reworked the selected-listing purchase panel into a detail card with a larger item sprite, seller/time details, quantity/each/total chips, the existing 7-day market snapshot, quick amount buttons, and the two-click purchase confirmation flow.
+
+### 2026-06-03 - AI workbench capture/state MVP
+
+Added a dev-only PC client workbench for faster visual iteration.
+
+Details:
+- Added a loopback-only HTTP server, enabled through `scripts/run-workbench-client.sh`, with `/health`, `/state`, and `/screenshot` endpoints.
+- Screenshots now copy the exact rendered game frame from `ORSCApplet` and save a PNG plus JSON sidecar under `tmp/workbench/screenshots/`.
+- The backtick screenshot hotkey uses the same exact-frame capture path instead of the previous macOS full-screen `screencapture` process.
+- Documented the subsystem in `docs/subsystems/ai-workbench.md`. No packet, opcode, DB schema, cache version, or gameplay behavior changed.
+
+### 2026-06-03 - AI workbench control bridge and Auction House smoke
+
+Extended the dev-only PC client workbench from capture-only into a first automation loop.
+
+Details:
+- Added loopback-only input endpoints for click, key, type, and existing client command dispatch.
+- Added `/captures/latest` for retrieving the most recent saved PNG/sidecar metadata.
+- Added `/dev/ready`, which uses the saved Existing User login flow, waits for the local player, clears welcome/server-message dialogs, and hides iteration-blocking client panels for faster visual testing.
+- Added `/scenario/auction-house-open`, which opens the Auction House through `::quickauction`, drives tabs/categories through synthetic client input, and saves a small screenshot report for Browse, selection, My Auctions, Intel, and Food category states.
+- Synthetic mouse/key actions go through the same applet handlers as user input. No packet, opcode, DB schema, cache version, or gameplay behavior changed; command dispatch uses the existing client command packet.
+
+### 2026-06-03 - AI workbench Auction House fixtures
+
+Added deterministic Auction House fixture seeding for local visual automation.
+
+Details:
+- Added admin command `::workbenchauctionfixture` / `::workbenchahfixture`, which clears only `wb-fixture`/`wb-buyer` rows and reseeds 6 active listings plus 7 recent sale-history rows through the existing server database layer.
+- Added `POST /fixture/auction-house` to the PC workbench and made `/scenario/auction-house-open` seed the fixture before capturing the UI, so Browse, My Auctions, Intel, and Food-category screenshots have stable content.
+- Added an explicit `Market` auction-cache refresh request so fixture reseeds show up even when the active auction count is unchanged. No packet, opcode, DB schema, cache version, or gameplay behavior changed outside the admin-only local testing path.
+
+### 2026-06-03 - Adaptive wilderness hobgoblin spawns
+
+Added crowd-responsive behavior for the level-32 hobgoblin starter zone in the surface wilderness.
+
+Details:
+- The zone around `(217,255)` counts distinct logged-in player IPs every 30 seconds.
+- At three unique IPs, the existing static hobgoblins respawn twice as fast (`84s -> 42s`); at five unique IPs, they respawn three times as fast (`84s -> 28s`).
+- At four or more unique IPs, runtime-only extra hobgoblins spawn in the same zone, capped at five extras. Extras do not persist to spawn JSON and do not respawn after death.
+- Players in the zone receive a small server message when extra hobgoblins are spawned.
+- Added admin-only `::wildhobdebug [status|off|0-20]` to simulate crowd pressure during local testing. No packet, opcode, DB schema, cache version, or client behavior changed.
+
+### 2026-06-03 - Void Herald world announcements
+
+Added a server-side world-announcement layer for high-signal social events.
+
+Details:
+- New `WorldAnnouncementService` sends purple Void Herald messages through existing quest/server chat, with config gates for the master feature, milestones, and skulled Wilderness PKs.
+- Skill broadcasts fire for selected high-level milestones and configured max level; total-level broadcasts fire at sparse total-level thresholds. Player-cache keys prevent repeat broadcasts for the same milestone.
+- A passive `PlayerKilledPlayerTrigger` announces Wilderness PKs only when the defeated player is currently skulled, without changing normal death, loot, skull, kill-count, or client kill-feed behavior.
+- Added admin-only `::announcepreview [skill|total|pk]` for local styling checks. No packet, opcode, DB schema, cache version, or client behavior changed.
+
+### 2026-06-03 - Rare drop beam policy and customization
+
+Refined the purple rare-drop beam from a broad rare-table marker into a curated, player-customizable loot alert.
+
+Details:
+- Added `LootBeamSettings`, which owns the default beam item list, per-player cache keys, and default/custom mode evaluation.
+- `NpcDrops.isRareDropItem` now returns the curated default beam list instead of scanning every item in every rare table. This keeps common rare-table filler from glowing while preserving beam-worthy chase items.
+- Ground-item updates now apply `LootBeamSettings.shouldShowBeam(player, groundItem)` per viewer before writing the existing rare-beam byte, so players can have different beam preferences without a packet or client version change.
+- Added regular-player `::lootbeam` / `::lootbeams` commands for list/defaults/add/remove/mode/reset. Item lookup accepts IDs or item names.
+- Retuned the custom client's procedural beam art with a darker outer veil, purple-only highlights, no filled center dot, rotating crescent bands, and lighter sparkles. The Advanced Settings row is now labeled `Loot beams`.
+- Documented the subsystem in `docs/subsystems/rare-drop-beams.md`. No opcode, DB schema, cache version, or protocol shape changed.
+
+### 2026-06-03 - Player title catalog and overhead display
+
+Added Voidscape player titles as a cosmetic progression layer.
+
+Details:
+- Added `PlayerTitle`, a 100-title registry with automatic requirements for total level, combat level, quest points, Wilderness player kills, NPC kills, single-NPC kill counts, and real RSC skill levels, plus manual slots for event, auction-house, rare-drop, and Voidscape-specific rewards.
+- Title unlocks persist through existing player-cache keys, and the active title persists through `player_title_active`. New unlock keys use the short `pt_u_` prefix so all title ids fit under the current cache-key schema limit; legacy `player_title_unlocked_` keys remain readable.
+- Titles are scoped as reusable or unique. Reusable titles, such as `Voidbane`, can be earned by every qualifying player; unique titles are first-claim exclusives and each account can hold only one unique title total through the `pt_unique_claim` cache key.
+- `::titles` refreshes retroactive automatic unlocks, opens the title catalog hub, and supports `::titles list [page]`, `::title <name>`, `::title clear`, and `::titles count`. The catalog now uses paged menu controls with selectable Next/Previous buttons, category tabs, and row-click detail pop-ups that show requirements, progress, scope, rarity, and lock/owner state before equipping.
+- Custom-client appearance updates now send the active title as an extra string for client version `10052+`; the client renders the username and red active title as one overhead line while leaving `displayName` and `accountName` unchanged. Authentic/retro clients are not sent the new field.
+- Documented the subsystem in `docs/subsystems/player-titles.md`. No DB schema changed; this is a custom-client packet-shape change gated by the client version bump to `10052`.
+
+### 2026-06-03 - Void Island starter kits and onboarding polish
+
+Smoothed the one-time Void Island starter choice so each path now grants practical starting items in addition to its permanent XP boost.
+
+Details:
+- `VoidPath` now owns path starter-kit definitions and a `void_path_starter_kit` player-cache key so starter items are granted once per account without a schema migration.
+- Warrior receives an iron 2-handed sword, bronze armour, and cooked meat; Forager receives gathering tools, bait, 100 coins, and food; Arcanist receives bow, reduced arrows, runes, wizard gear, and food.
+- `VoidHerald` now explains that paths include permanent 2x XP plus starter gear, includes kit hints in the options menu for non-custom clients, grants the kit after choice, and sends a post-choice welcome box after teleporting to spawn.
+- The custom PC client's three path cards now mention the included starter kits while keeping the same normal menu reply flow. No opcode, DB schema, cache version, or client-version change.
+- Documented the subsystem in `docs/subsystems/void-island-starter.md`.
+
+### 2026-06-03 - Subscription cards and Lumbridge Void vendor
+
+Added a Void-styled subscription vendor near Lumbridge spawn and a redeemable subscription card as a progression-support feature.
+
+Details:
+- Added item `1602` (`Subscription card`) with a `Redeem` inventory action and NPC `848` (`Void Subscription Vendor`) with a `Subscribe` interaction.
+- The card uses a dedicated AI-generated inventory icon at client sprite id `617` / archive entry `2767`, and the vendor shares the Void Auctioneer's shadow-broker appearance instead of the robe-based acolyte silhouette.
+- The vendor opens the native shop window directly and uses a custom buy handler for persisted stock/tier purchases instead of dialogue-based confirmation.
+- Subscriptions are one-week account unlocks. Redeeming a card stores or extends the existing player-cache expiry timestamp under `void_sub_expires`; legacy boolean `void_subscription` flags are removed instead of granting permanent access.
+- Subscribed accounts use at least `10x` global combat XP and `6x` global skilling XP; the base Voidscape development rates are now documented as `7x` combat and `4x` skilling. Higher special-mode rates are not reduced.
+- The vendor starts each tier with 20 cards. Tier 0 costs 10,000 coins per card, and each time a tier sells out the next restock doubles the price.
+- Vendor stock and tier persist in existing `player_cache` global rows using `playerID = 0`, keys `sub_vendor_stock` and `sub_vendor_tier`; no DB schema migration was added.
+- Bumped the custom client/server version to `10054` and raised active custom item caps so the new card is accepted by the client and presets. Version `10054` extends custom `SEND_SHOP_OPEN` with a 32-bit per-item display-price override for exact dynamic shop prices; no opcode changed.
+- Bumped the custom client/server version to `10055` for a settings-profile payload extension. The wrench Profile panel now shows whether the account is subscribed and displays the effective global combat/skilling XP rates from the server.
+- Documented the subsystem in `docs/subsystems/subscription-cards.md`.

@@ -1,6 +1,7 @@
 package com.openrsc.server.model;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerExperience;
@@ -208,6 +209,7 @@ public class Skills {
 
 	public void addExperience(int skill, int exp) {
 		int oldLevel = getMaxStat(skill);
+		int oldTotalLevel = getMob().isPlayer() ? ((Player) getMob()).getTotalLevel() : 0;
 		int oldExp = exps[skill];
 		exps[skill] += exp;
 		boolean completedCycle = oldExp < 0 && exps[skill] >= 0;
@@ -248,6 +250,7 @@ public class Skills {
 			// TODO: Maybe a level up listener?
 			if (getMob().isPlayer()) {
 				Player player = (Player) getMob();
+				int newTotalLevel = player.getTotalLevel();
 				try {
 					getWorld().getServer().getPlayerService().savePlayerMaxSkill(player.getDatabaseID(), skill, maxStats[skill]);
 				} catch (GameDatabaseException e) {
@@ -262,7 +265,9 @@ public class Skills {
 				} else {
 					skillName = getWorld().getServer().getConstants().getSkills().getSkill(skill).getLongName().toLowerCase();
 				}
-				if (!((Player) getMob()).getConfig().WANT_OPENPK_POINTS) {
+				if (!player.getConfig().WANT_OPENPK_POINTS) {
+					getWorld().getWorldAnnouncementService().announceSkillMilestone(player, skill, oldLevel, newLevel);
+					getWorld().getWorldAnnouncementService().announceTotalLevelMilestone(player, oldTotalLevel, newTotalLevel);
 					if (newLevel >= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - (getWorld().getServer().getConfig().SKILLING_EXP_RATE > 1.0 && !player.isOneXp() ? 9 : 19)
 						&& newLevel <= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - 1) {
 
@@ -285,6 +290,7 @@ public class Skills {
 					}
 				}
 				sendUpdate(skill);
+				PlayerTitle.refreshAutomaticUnlocks(player);
 			}
 
 			getMob().getUpdateFlags().setAppearanceChanged(true);

@@ -4,6 +4,7 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushNpcDialogue;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 
@@ -28,20 +29,31 @@ public final class VoidHerald implements TalkNpcTrigger {
 			return;
 		}
 
-		npcsay(player, npc, "choose your path");
+		npcsay(player, npc,
+			"choose your path",
+			"each path gives permanent 2x experience in its listed skills",
+			"I will also give you a starter kit suited to that path");
 
 		int choice = multi(player, npc, false,
-			"Warrior's Path - 2x XP: Attack, Defense, Strength",
-			"Forager's Path - 2x XP: Fishing, Cooking, Mining",
-			"Arcanist's Path - 2x XP: Ranged, Magic");
+			"Warrior's Path - 2x XP: Attack, Defense, Strength + melee kit",
+			"Forager's Path - 2x XP: Fishing, Cooking, Mining + gathering kit",
+			"Arcanist's Path - 2x XP: Ranged, Magic + arcane kit");
 		if (choice < 0) {
 			return;
 		}
 
 		int path = choice == 0 ? VoidPath.WARRIOR : choice == 1 ? VoidPath.FORAGER : VoidPath.ARCANIST;
 		VoidPath.choose(player, path);
-		player.message(VoidPath.name(path) + " chosen. Listed skills now earn 2x XP.");
+		boolean kitGranted = VoidPath.grantStarterKit(player, path);
+		player.message(VoidPath.name(path) + " chosen. " + VoidPath.boostedSkillSummary(path) + " now earn 2x XP.");
+		if (kitGranted) {
+			player.message("Your starter kit has been placed in your backpack.");
+		}
 		player.teleport(player.getConfig().RESPAWN_LOCATION_X, player.getConfig().RESPAWN_LOCATION_Y, true);
+		ActionSender.sendBox(player, "@yel@" + VoidPath.name(path) + " chosen.% %"
+			+ "@whi@2x XP: @gre@" + VoidPath.boostedSkillSummary(path) + "@whi@.%"
+			+ "@whi@Starter kit: @cya@" + VoidPath.starterKitSummary(path) + "@whi@.% %"
+			+ "@whi@You have arrived in Lumbridge. Open your backpack, equip anything useful, and start exploring.", true);
 	}
 
 }

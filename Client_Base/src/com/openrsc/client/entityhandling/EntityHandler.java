@@ -2424,6 +2424,14 @@ public class EntityHandler {
 		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
 		npcs.add(new NPCDef("Void Knight", "A void-skinned knight guarding the Death Match Arena.", "", 99, 99, 99, 99, true, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Karamja fish cook and note packer (server id 847)
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Karamja Fishmonger", "A dockside cook who can pack fish for travel.", "Cook fish", "Note fish", 0, 0, 5, 0, false, sprites, 6307872, 8409120, 2105376, 13415270, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: Lumbridge subscription card vendor (server id 848)
+		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Subscription Vendor", "A void clerk selling subscription cards.", "Subscribe", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};
@@ -4242,6 +4250,9 @@ public class EntityHandler {
 
 		// voidscape: Void Key (id 1601). spriteID 616 = AI-generated void key icon at archive index 2766.
 		items.add(new ItemDef("Void Key", "A key humming with wilderness void energy.", "", 5000, 616, "items:616", false, false, 0, 0, false, false, true, 1601));
+
+		// voidscape: Subscription card (id 1602). spriteID 617 = AI-generated icon at archive index 2767.
+		items.add(new ItemDef("Subscription card", "A void-marked card that adds one week of account subscription.", "Redeem", 10000, 617, "items:617", false, false, 0, 0, false, false, true, 1602));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {

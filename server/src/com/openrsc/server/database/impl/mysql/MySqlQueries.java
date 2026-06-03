@@ -11,7 +11,7 @@ public class MySqlQueries {
 	public final String copyPassword, createPlayer, recentlyRegistered, initMaxStats, initStats, initExp, initExpCapped;
 	public final String save_AddFriends, save_AddIgnored, save_DeleteIgnored;
 	public final String playerExists, playerInvItems, playerEquipped, playerBankItems, playerBankPresets;
-	public final String playerFriends, playerIgnored, playerQuests, playerAchievements, playerCache;
+	public final String playerFriends, playerIgnored, playerQuests, playerAchievements, playerCache, playerCacheOwner, playerCacheOwnerByValue;
 	public final String max_itemStatus, save_ItemCreate, save_ItemUpdate, save_ItemPurge; //itemstatuses, must be inserted before adding entry on bank, equipment, inventory
 	public final String save_DeleteBank, save_DeleteBankPresets, save_BankAdd, save_BankRemove, save_BankRemovePartialStack, save_BankPresetAdd, save_BankPresetRemove;
 	public final String save_DeleteInv, save_InventoryAdd, save_InventoryRemove, save_DeleteEquip, save_EquipmentAdd, save_EquipmentRemove, save_UpdateBasicInfo;
@@ -26,6 +26,7 @@ public class MySqlQueries {
 	public final String objects, npcLocs, groundItems, inUseItemIds;
 	public final String clans, clanMembers, newClan, saveClanMember, deleteClan, deleteClanMembers, updateClan, updateClanMember;
 	public final String expiredAuction, collectibleItems, collectItem, newAuction, cancelAuction, auctionCount, playerAuctionCount, auctionItem, auctionItems, auctionSellOut, updateAuction;
+	public final String insertAuctionSale, auctionItemSummaries, hotAuctionItems, recentAuctionSales;
 	public final String discordIdToPlayerId, playerIdFromPairToken, pairDiscord, deleteTokenFromCache, watchlist, watchlists, updateWatchlist, deleteWatchlist;
 	public final String save_IronMan, checkMute, updateMute, updatePlayerLocation;
 	public final String selectFriendNameUsername, fixFriendNameCapitalization, insertFormerName, insertLoginAttempt, playerGetFormerNameInvoluntaryChange;
@@ -102,6 +103,10 @@ public class MySqlQueries {
 		playerQuests = "SELECT `id`, `stage` FROM `" + PREFIX + "quests` WHERE `playerID`=?";
 		playerAchievements = "SELECT `id`, `status` FROM `" + PREFIX + "achievement_status` WHERE `playerID`=?";
 		playerCache = "SELECT `type`, `key`, `value` FROM `" + PREFIX + "player_cache` WHERE `playerID`=?";
+		playerCacheOwner = "SELECT p.`username` FROM `" + PREFIX + "player_cache` pc JOIN `" + PREFIX
+			+ "players` p ON p.`id` = pc.`playerID` WHERE pc.`key`=? ORDER BY pc.`dbid` ASC LIMIT 1";
+		playerCacheOwnerByValue = "SELECT p.`username` FROM `" + PREFIX + "player_cache` pc JOIN `" + PREFIX
+			+ "players` p ON p.`id` = pc.`playerID` WHERE pc.`key`=? AND pc.`value`=? ORDER BY pc.`dbid` ASC LIMIT 1";
 		save_DeleteBank = "DELETE i.*, i2.* FROM `" + PREFIX + "bank` i JOIN `" + PREFIX + "itemstatuses` i2 ON i.`itemID`=i2.`itemID` WHERE `playerID`=?";
 		save_DeleteBankPresets = "DELETE FROM `" + PREFIX + "bankpresets` WHERE `playerID`=? AND `slot`=?";
 		max_itemStatus = "SELECT `itemID` FROM `" + PREFIX + "itemstatuses` ORDER BY `itemID` DESC LIMIT 1";
@@ -207,6 +212,40 @@ public class MySqlQueries {
 			+ "auctions` WHERE `sold-out`='0'";
 		auctionSellOut = "UPDATE `" + PREFIX + "auctions` SET `amount_left`=?, `sold-out`=?, `buyer_info`=? WHERE `auctionID`=?";
 		updateAuction = "UPDATE `" + PREFIX + "auctions` SET `amount_left`=?, `price` = ?, `buyer_info`=? WHERE `auctionID`= ?";
+		insertAuctionSale = "INSERT INTO `" + PREFIX
+			+ "auction_sales`(`auction_id`, `item_id`, `amount`, `unit_price`, `total_price`, `tax`, `seller`, `seller_username`, `buyer`, `buyer_username`, `sold_at`) "
+			+ "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+		auctionItemSummaries = "SELECT items.`itemID` AS `item_id`, "
+			+ "COALESCE(active.`lowest_each`, 0) AS `active_lowest_each`, "
+			+ "COALESCE(active.`highest_each`, 0) AS `active_highest_each`, "
+			+ "COALESCE(active.`active_amount`, 0) AS `active_amount`, "
+			+ "COALESCE(sales.`last_unit_price`, 0) AS `last_unit_price`, "
+			+ "COALESCE(sales.`average_unit_price`, 0) AS `average_unit_price`, "
+			+ "COALESCE(sales.`volume_sold`, 0) AS `volume_sold`, "
+			+ "COALESCE(sales.`total_value`, 0) AS `total_value`, "
+			+ "COALESCE(sales.`last_sold_at`, 0) AS `last_sold_at` "
+			+ "FROM ("
+			+ "SELECT DISTINCT `itemID` FROM `" + PREFIX + "auctions` WHERE `sold-out`='0' "
+			+ "UNION SELECT DISTINCT `item_id` AS `itemID` FROM `" + PREFIX + "auction_sales` WHERE `sold_at` >= ?"
+			+ ") items "
+			+ "LEFT JOIN ("
+			+ "SELECT `itemID`, MIN(`price` / `amount_left`) AS `lowest_each`, MAX(`price` / `amount_left`) AS `highest_each`, SUM(`amount_left`) AS `active_amount` "
+			+ "FROM `" + PREFIX + "auctions` WHERE `sold-out`='0' AND `amount_left` > 0 GROUP BY `itemID`"
+			+ ") active ON active.`itemID` = items.`itemID` "
+			+ "LEFT JOIN ("
+			+ "SELECT s.`item_id`, "
+			+ "(SELECT s2.`unit_price` FROM `" + PREFIX + "auction_sales` s2 WHERE s2.`item_id` = s.`item_id` ORDER BY s2.`sold_at` DESC, s2.`sale_id` DESC LIMIT 1) AS `last_unit_price`, "
+			+ "ROUND(AVG(s.`unit_price`)) AS `average_unit_price`, SUM(s.`amount`) AS `volume_sold`, SUM(s.`total_price`) AS `total_value`, MAX(s.`sold_at`) AS `last_sold_at` "
+			+ "FROM `" + PREFIX + "auction_sales` s WHERE s.`sold_at` >= ? GROUP BY s.`item_id`"
+			+ ") sales ON sales.`item_id` = items.`itemID`";
+		hotAuctionItems = "SELECT `item_id`, 0 AS `active_lowest_each`, 0 AS `active_highest_each`, 0 AS `active_amount`, "
+			+ "0 AS `last_unit_price`, ROUND(AVG(`unit_price`)) AS `average_unit_price`, SUM(`amount`) AS `volume_sold`, "
+			+ "SUM(`total_price`) AS `total_value`, MAX(`sold_at`) AS `last_sold_at` "
+			+ "FROM `" + PREFIX + "auction_sales` WHERE `sold_at` >= ? GROUP BY `item_id` "
+			+ "ORDER BY `volume_sold` DESC, `total_value` DESC, `last_sold_at` DESC LIMIT ?";
+		recentAuctionSales = "SELECT `sale_id`, `auction_id`, `item_id`, `amount`, `unit_price`, `total_price`, `tax`, "
+			+ "`seller`, `seller_username`, `buyer`, `buyer_username`, `sold_at` FROM `" + PREFIX
+			+ "auction_sales` ORDER BY `sold_at` DESC, `sale_id` DESC LIMIT ?";
 		checkMute = "SELECT `value` FROM `" + PREFIX + "player_cache` WHERE `key` = ? AND `playerID` = ?";
 		updateMute = "UPDATE `" + PREFIX + "player_cache` SET `value` = ? WHERE `key` = ? AND `playerID` = ?";
 		updatePlayerLocation = "UPDATE `" + PREFIX + "players` SET `x` = ?, `y` = ? WHERE `id` = ?";

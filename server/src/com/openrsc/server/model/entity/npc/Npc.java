@@ -38,6 +38,7 @@ public class Npc extends Mob {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final String RESPAWN_MULTIPLIER_ATTRIBUTE = "voidscape_respawn_multiplier";
 
 	private long healTimer = 0;
 	private boolean shouldRespawn = true;
@@ -892,7 +893,7 @@ public class Npc extends Mob {
 
 	public void remove() {
 		this.killed = true;
-		double respawnMult = getConfig().NPC_RESPAWN_MULTIPLIER;
+		double respawnMult = getRespawnMultiplier();
 		Npc n = this;
 		//In RSC, the player only gets updated about combat ending the tick after the kill.
 		//Causes issues with retro clients.
@@ -980,6 +981,22 @@ public class Npc extends Mob {
 
 	public boolean shouldRespawn() {
 		return shouldRespawn;
+	}
+
+	public void setRespawnMultiplierOverride(final double multiplier) {
+		setAttribute(RESPAWN_MULTIPLIER_ATTRIBUTE, Math.max(0.05D, multiplier));
+	}
+
+	public void clearRespawnMultiplierOverride() {
+		removeAttribute(RESPAWN_MULTIPLIER_ATTRIBUTE);
+	}
+
+	private double getRespawnMultiplier() {
+		final Object override = getAttribute(RESPAWN_MULTIPLIER_ATTRIBUTE, null);
+		if (override instanceof Number) {
+			return Math.max(0.05D, ((Number) override).doubleValue());
+		}
+		return getConfig().NPC_RESPAWN_MULTIPLIER;
 	}
 
 	public void teleport(final int x, final int y) {

@@ -1,6 +1,8 @@
 package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.LootBeamSettings;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.clan.ClanInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
@@ -8,6 +10,7 @@ import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.ChatLog;
 import com.openrsc.server.event.custom.HolidayDropEvent;
 import com.openrsc.server.event.rsc.GameTickEvent;
+import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.external.NPCDef;
 import com.openrsc.server.model.GlobalMessage;
 import com.openrsc.server.model.container.Item;
@@ -28,10 +31,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import static com.openrsc.server.plugins.Functions.*;
 import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isBlackArmGang;
@@ -39,6 +45,25 @@ import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isP
 
 public final class RegularPlayer implements CommandTrigger {
 	private static final Logger LOGGER = LogManager.getLogger(RegularPlayer.class);
+	private static final int TITLE_CATALOG_PAGE_SIZE = 10;
+
+	private enum TitleCatalogView {
+		ALL("All titles"),
+		UNLOCKED("Unlocked titles"),
+		UNIQUE("Unique titles"),
+		COMMON("Common titles"),
+		RAREST("Rarest titles");
+
+		private final String label;
+
+		TitleCatalogView(String label) {
+			this.label = label;
+		}
+
+		private String label() {
+			return label;
+		}
+	}
 
 	public static String messagePrefix = null;
 	public static String badSyntaxPrefix = null;
@@ -103,6 +128,10 @@ public final class RegularPlayer implements CommandTrigger {
 			sendMessageDiscord(player, args);
 		} else if (command.equalsIgnoreCase("commands")) {
 			queryCommands(player, 0);
+		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
+			handleLootBeamCommand(player, args);
+		} else if (command.equalsIgnoreCase("titles") || command.equalsIgnoreCase("title")) {
+			handleTitleCommand(player, args);
 		} else if (command.equalsIgnoreCase("b") && config().RIGHT_CLICK_BANK) {
 			if (!player.getQolOptOut()) {
 				if (player.getLocation().isInBank(config().BASED_MAP_DATA)) {
@@ -182,6 +211,414 @@ public final class RegularPlayer implements CommandTrigger {
 			renameSelf(player, args);
 		} else if (command.equalsIgnoreCase("globalchat") || command.equalsIgnoreCase("gc")) {
 			globalChatInfo(player);
+		}
+	}
+
+	private void handleTitleCommand(Player player, String[] args) {
+		PlayerTitle.refreshAutomaticUnlocks(player);
+		if (args.length == 0) {
+			openTitleMenu(player);
+			return;
+		}
+
+		String action = args[0].toLowerCase();
+		if (action.equals("list") || action.equals("all") || action.equals("catalog")) {
+			showTitleCatalogFromArgs(player, TitleCatalogView.ALL, args, 1);
+			return;
+		}
+		TitleCatalogView view = parseTitleCatalogView(action);
+		if (view != null) {
+			showTitleCatalogFromArgs(player, view, args, 1);
+			return;
+		}
+		if (action.equals("clear") || action.equals("off") || action.equals("none")) {
+			PlayerTitle.setActive(player, null);
+			player.message("Your active title has been cleared.");
+			return;
+		}
+		if (action.equals("count")) {
+			player.message("You have unlocked @gre@" + PlayerTitle.unlockedCount(player) + "@whi@/" + PlayerTitle.values().length + " titles.");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinArgs(args, 0));
+		if (title == null) {
+			player.message("Unknown title. Use ::titles to browse the title menu.");
+			return;
+		}
+		if (!title.isUnlocked(player)) {
+			player.message("You have not unlocked @red@" + title.displayName() + "@whi@ yet.");
+			if (title.unique()) {
+				PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
+				if (uniqueClaim != null && uniqueClaim != title) {
+					player.message("You already hold the unique title @red@" + uniqueClaim.displayName() + "@whi@.");
+					player.message("Each account can hold only one unique title.");
+					return;
+				}
+				String owner = PlayerTitle.ownerName(player, title);
+				if (owner != null) {
+					player.message("That unique title is already held by @yel@" + owner + "@whi@.");
+				} else {
+					player.message("@red@Unique title@whi@ - first player to meet this requirement claims it.");
+					player.message(title.unlockHint());
+				}
+			} else {
+				player.message("@cya@Reusable title@whi@ - anyone who meets this requirement can unlock it.");
+				player.message(title.unlockHint());
+			}
+			return;
+		}
+
+		PlayerTitle.setActive(player, title);
+		player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+	}
+
+	private void openTitleMenu(Player player) {
+		PlayerTitle activeTitle = PlayerTitle.active(player);
+		List<String> options = new ArrayList<>();
+		options.add(activeTitle == null ? "Active title: none" : "Active: " + activeTitle.displayName());
+
+		int unlockedOption = options.size();
+		options.add("Unlocked titles (" + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length + ")");
+		int allOption = options.size();
+		options.add("All titles");
+		int uniqueOption = options.size();
+		options.add("Unique titles");
+		int commonOption = options.size();
+		options.add("Common titles");
+		int rarestOption = options.size();
+		options.add("Rarest titles");
+
+		int clearOption = -1;
+		if (activeTitle != null) {
+			clearOption = options.size();
+			options.add("Clear active title");
+		}
+		int closeOption = options.size();
+		options.add("Close");
+
+		int option = multi(player, null, false, options.toArray(new String[0]));
+		if (option < 0 || option == closeOption) {
+			return;
+		}
+		if (option == 0) {
+			openTitleMenu(player);
+			return;
+		}
+		if (option == clearOption) {
+			PlayerTitle.setActive(player, null);
+			player.message("Your active title has been cleared.");
+			return;
+		}
+		if (option == unlockedOption) {
+			showTitleCatalog(player, TitleCatalogView.UNLOCKED, 0);
+			return;
+		}
+		if (option == allOption) {
+			showTitleCatalog(player, TitleCatalogView.ALL, 0);
+			return;
+		}
+		if (option == uniqueOption) {
+			showTitleCatalog(player, TitleCatalogView.UNIQUE, 0);
+			return;
+		}
+		if (option == commonOption) {
+			showTitleCatalog(player, TitleCatalogView.COMMON, 0);
+			return;
+		}
+		if (option == rarestOption) {
+			showTitleCatalog(player, TitleCatalogView.RAREST, 0);
+		}
+	}
+
+	private void showTitleCatalog(Player player, TitleCatalogView view, int page) {
+		List<PlayerTitle> titles = titleCatalogTitles(player, view);
+		int totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+		page = Math.max(0, Math.min(page, totalPages - 1));
+
+		while (true) {
+			PlayerTitle activeTitle = PlayerTitle.active(player);
+			List<String> options = new ArrayList<>();
+			options.add(view.label() + " - page " + (page + 1) + "/" + totalPages
+				+ " - unlocked " + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length);
+
+			int allViewOption = -1;
+			int unlockedViewOption = -1;
+			int uniqueViewOption = -1;
+			int commonViewOption = -1;
+			int rarestViewOption = -1;
+			if (player.isUsingCustomClient()) {
+				allViewOption = options.size();
+				options.add("View all titles");
+				unlockedViewOption = options.size();
+				options.add("View unlocked titles");
+				uniqueViewOption = options.size();
+				options.add("View unique titles");
+				commonViewOption = options.size();
+				options.add("View common titles");
+				rarestViewOption = options.size();
+				options.add("View rarest titles");
+			}
+
+			int start = page * TITLE_CATALOG_PAGE_SIZE;
+			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
+			int firstTitleOption = options.size();
+			for (int i = start; i < end; i++) {
+				options.add(titleCatalogOption(player, titles.get(i), activeTitle));
+			}
+			if (titles.isEmpty()) {
+				options.add("No titles in this category yet");
+			}
+
+			int previousOption = -1;
+			int nextOption = -1;
+			if (page > 0) {
+				previousOption = options.size();
+				options.add("< Previous page");
+			}
+			if (page + 1 < totalPages) {
+				nextOption = options.size();
+				options.add("Next page >");
+			}
+			int categoriesOption = options.size();
+			options.add("Change category");
+			int closeOption = options.size();
+			options.add("Close");
+
+			int option = multi(player, null, false, options.toArray(new String[0]));
+			if (option < 0 || option == closeOption) {
+				return;
+			}
+			if (option == 0) {
+				continue;
+			}
+			if (option == allViewOption) {
+				view = TitleCatalogView.ALL;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == unlockedViewOption) {
+				view = TitleCatalogView.UNLOCKED;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == uniqueViewOption) {
+				view = TitleCatalogView.UNIQUE;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == commonViewOption) {
+				view = TitleCatalogView.COMMON;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == rarestViewOption) {
+				view = TitleCatalogView.RAREST;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == previousOption) {
+				page = Math.max(0, page - 1);
+				continue;
+			}
+			if (option == nextOption) {
+				page = Math.min(totalPages - 1, page + 1);
+				continue;
+			}
+			if (option == categoriesOption) {
+				openTitleMenu(player);
+				return;
+			}
+
+			int titleIndex = start + option - firstTitleOption;
+			if (titleIndex >= start && titleIndex < end) {
+				if (!showTitleDetail(player, titles.get(titleIndex), view, page)) {
+					return;
+				}
+			}
+		}
+	}
+
+	private String titleCatalogOption(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		String prefix = title == activeTitle ? "* " : "";
+		return prefix + title.displayName() + " - " + titleCatalogStatus(player, title) + " - " + titleCatalogState(player, title, activeTitle);
+	}
+
+	private String titleCatalogStatus(Player player, PlayerTitle title) {
+		if (title.unique()) {
+			String owner = PlayerTitle.ownerName(player, title);
+			if (owner == null) {
+				return "@red@unique@whi@ open";
+			}
+			return "@red@unique@whi@ " + owner;
+		}
+
+		String rarity = title.rarityLabel();
+		if (rarity.equals("rare")) {
+			return "@mag@rare@whi@";
+		}
+		if (rarity.equals("uncommon")) {
+			return "@yel@uncommon@whi@";
+		}
+		return "@cya@common@whi@";
+	}
+
+	private String titleCatalogState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "@gre@active@whi@";
+		}
+		return title.isUnlocked(player) ? "@gre@unlocked@whi@" : "locked";
+	}
+
+	private boolean showTitleDetail(Player player, PlayerTitle title, TitleCatalogView returnView, int returnPage) {
+		while (true) {
+			PlayerTitle activeTitle = PlayerTitle.active(player);
+			List<String> options = new ArrayList<>();
+			options.add("Title details: " + title.displayName());
+			options.add("Requirement - " + title.unlockHint());
+			options.add(title.requirementProgress(player));
+			options.add(titleDetailScope(player, title));
+			options.add("Rarity: " + title.rarityLabel());
+			options.add("Status: " + titleDetailState(player, title, activeTitle));
+
+			int equipOption = -1;
+			if (title.isUnlocked(player) && title != activeTitle) {
+				equipOption = options.size();
+				options.add("Equip title");
+			}
+			int backOption = options.size();
+			options.add("Back to " + returnView.label() + " page " + (returnPage + 1));
+			int closeOption = options.size();
+			options.add("Close");
+
+			int option = multi(player, null, false, options.toArray(new String[0]));
+			if (option < 0 || option == closeOption) {
+				return false;
+			}
+			if (option == backOption) {
+				return true;
+			}
+			if (option == equipOption) {
+				PlayerTitle.setActive(player, title);
+				player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+				return true;
+			}
+		}
+	}
+
+	private String titleDetailScope(Player player, PlayerTitle title) {
+		if (!title.unique()) {
+			return "Scope: reusable - anyone can earn it.";
+		}
+
+		String owner = PlayerTitle.ownerName(player, title);
+		if (owner == null) {
+			return "Scope: unique - open first claim.";
+		}
+		if (owner.equalsIgnoreCase(player.getUsername())) {
+			return "Scope: unique - held by you.";
+		}
+		return "Scope: unique - held by " + owner + ".";
+	}
+
+	private String titleDetailState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "active";
+		}
+		if (title.isUnlocked(player)) {
+			return "unlocked";
+		}
+		if (title.unique()) {
+			PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
+			if (uniqueClaim != null && uniqueClaim != title) {
+				return "locked - you already hold " + uniqueClaim.displayName() + ".";
+			}
+			String owner = PlayerTitle.ownerName(player, title);
+			if (owner != null) {
+				return "locked - held by " + owner + ".";
+			}
+		}
+		return "locked";
+	}
+
+	private List<PlayerTitle> titleCatalogTitles(Player player, TitleCatalogView view) {
+		List<PlayerTitle> titles = new ArrayList<>();
+		for (PlayerTitle title : PlayerTitle.values()) {
+			if (view == TitleCatalogView.UNLOCKED && !title.isUnlocked(player)) {
+				continue;
+			}
+			if (view == TitleCatalogView.UNIQUE && !title.unique()) {
+				continue;
+			}
+			if (view == TitleCatalogView.COMMON && title.unique()) {
+				continue;
+			}
+			titles.add(title);
+		}
+		if (view == TitleCatalogView.RAREST) {
+			Collections.sort(titles, new Comparator<PlayerTitle>() {
+				public int compare(PlayerTitle left, PlayerTitle right) {
+					int rarity = Integer.compare(right.rarityScore(), left.rarityScore());
+					if (rarity != 0) {
+						return rarity;
+					}
+					return left.displayName().compareTo(right.displayName());
+				}
+			});
+		}
+		return titles;
+	}
+
+	private void showTitleCatalogFromArgs(Player player, TitleCatalogView defaultView, String[] args, int startArg) {
+		TitleCatalogView view = defaultView;
+		int pageArg = startArg;
+		if (args.length > startArg) {
+			TitleCatalogView parsedView = parseTitleCatalogView(args[startArg].toLowerCase());
+			if (parsedView != null) {
+				view = parsedView;
+				pageArg = startArg + 1;
+			}
+		}
+		showTitleCatalog(player, view, parseTitleCatalogPage(args, pageArg));
+	}
+
+	private TitleCatalogView parseTitleCatalogView(String action) {
+		if (action.equals("all") || action.equals("catalog") || action.equals("list")) {
+			return TitleCatalogView.ALL;
+		}
+		if (action.equals("unlocked") || action.equals("owned") || action.equals("mine")) {
+			return TitleCatalogView.UNLOCKED;
+		}
+		if (action.equals("unique") || action.equals("uniques")) {
+			return TitleCatalogView.UNIQUE;
+		}
+		if (action.equals("common") || action.equals("commons") || action.equals("reusable") || action.equals("reusables")) {
+			return TitleCatalogView.COMMON;
+		}
+		if (action.equals("rarest") || action.equals("rare")) {
+			return TitleCatalogView.RAREST;
+		}
+		return null;
+	}
+
+	private int parseTitleCatalogPage(String[] args, int pageArg) {
+		if (args.length <= pageArg) {
+			return 0;
+		}
+		try {
+			return Math.max(0, Integer.parseInt(args[pageArg]) - 1);
+		} catch (NumberFormatException ignored) {
+			return 0;
 		}
 	}
 
@@ -1246,6 +1683,220 @@ public final class RegularPlayer implements CommandTrigger {
 		}
 	}
 
+	private void handleLootBeamCommand(Player player, String[] args) {
+		if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+			showLootBeamHelp(player);
+			return;
+		}
+
+		String action = args[0].toLowerCase();
+		if (action.equals("list")) {
+			showLootBeamList(player);
+			return;
+		}
+		if (action.equals("defaults")) {
+			showLootBeamDefaults(player);
+			return;
+		}
+		if (action.equals("reset")) {
+			LootBeamSettings.reset(player);
+			player.playerServerMessage(MessageType.QUEST, "@mag@Loot beams restored to the default rare-item list.");
+			return;
+		}
+		if (action.equals("mode")) {
+			handleLootBeamMode(player, args);
+			return;
+		}
+		if (action.equals("add") || action.equals("remove")) {
+			Integer itemId = resolveLootBeamItemId(player, args, 1);
+			if (itemId == null) {
+				return;
+			}
+			if (action.equals("add")) {
+				LootBeamSettings.addItem(player, itemId);
+				player.playerServerMessage(MessageType.QUEST,
+					"@mag@Loot beam added for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
+			} else {
+				LootBeamSettings.removeItem(player, itemId);
+				player.playerServerMessage(MessageType.QUEST,
+					"@mag@Loot beam removed for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
+			}
+			return;
+		}
+
+		showLootBeamHelp(player);
+	}
+
+	private void handleLootBeamMode(Player player, String[] args) {
+		if (args.length < 2
+			|| (!args[1].equalsIgnoreCase(LootBeamSettings.MODE_DEFAULT)
+			&& !args[1].equalsIgnoreCase(LootBeamSettings.MODE_CUSTOM))) {
+			player.message(badSyntaxPrefix + "lootbeam mode default|custom");
+			return;
+		}
+		String mode = args[1].equalsIgnoreCase(LootBeamSettings.MODE_CUSTOM)
+			? LootBeamSettings.MODE_CUSTOM
+			: LootBeamSettings.MODE_DEFAULT;
+		LootBeamSettings.setMode(player, mode);
+		if (LootBeamSettings.MODE_CUSTOM.equals(mode)) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Loot beams now use only the items you add with ::lootbeam add.");
+		} else {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Loot beams now use the default rare-item list plus your added items.");
+		}
+	}
+
+	private void showLootBeamHelp(Player player) {
+		player.playerServerMessage(MessageType.QUEST, "@mag@Loot beam commands:");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam list@mag@ - show your beam settings");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam add <item>@mag@ - make an item glow");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam remove <item>@mag@ - stop an item glowing");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam mode default|custom@mag@ - choose default or custom-only");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam reset@mag@ - restore defaults");
+	}
+
+	private void showLootBeamList(Player player) {
+		StringBuilder box = new StringBuilder();
+		box.append("@yel@Loot beam settings:%");
+		box.append("@whi@Mode: @mag@").append(LootBeamSettings.getMode(player)).append("%");
+		box.append("@whi@Added: @mag@")
+			.append(formatLootBeamItemSet(player, LootBeamSettings.getAddedItemIds(player))).append("%");
+		if (LootBeamSettings.MODE_DEFAULT.equals(LootBeamSettings.getMode(player))) {
+			box.append("@whi@Removed defaults: @mag@")
+				.append(formatLootBeamItemSet(player, LootBeamSettings.getHiddenItemIds(player))).append("%");
+		}
+		box.append("@whi@Use ::lootbeam defaults to see the default rare-item list.%");
+		sendLootBeamBox(player, box.toString());
+	}
+
+	private void showLootBeamDefaults(Player player) {
+		StringBuilder box = new StringBuilder();
+		box.append("@yel@Default loot beam items:%");
+		box.append(formatLootBeamItemSet(player, LootBeamSettings.getDefaultBeamItems())).append("%");
+		sendLootBeamBox(player, box.toString());
+	}
+
+	private void sendLootBeamBox(Player player, String text) {
+		if (player.getClientLimitations().supportsMessageBox) {
+			ActionSender.sendBox(player, text, true);
+			return;
+		}
+		for (String line : text.split("%")) {
+			if (!line.trim().isEmpty()) {
+				player.playerServerMessage(MessageType.QUEST, line);
+			}
+		}
+	}
+
+	private String formatLootBeamItemSet(Player player, Set<Integer> itemIds) {
+		if (itemIds.isEmpty()) {
+			return "none";
+		}
+		List<Integer> sortedItemIds = new ArrayList<>(itemIds);
+		Collections.sort(sortedItemIds);
+		StringBuilder itemList = new StringBuilder();
+		for (int i = 0; i < sortedItemIds.size(); i++) {
+			if (i > 0) {
+				itemList.append(", ");
+			}
+			itemList.append(getLootBeamItemLabel(player, sortedItemIds.get(i)));
+		}
+		return itemList.toString();
+	}
+
+	private String getLootBeamItemLabel(Player player, int itemId) {
+		ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
+		if (itemDef == null) {
+			return "item " + itemId;
+		}
+		return itemDef.getName() + " (" + itemId + ")";
+	}
+
+	private Integer resolveLootBeamItemId(Player player, String[] args, int startIndex) {
+		if (args.length <= startIndex) {
+			player.message(badSyntaxPrefix + "lootbeam add|remove <item id/name>");
+			return null;
+		}
+
+		String query = joinArgs(args, startIndex);
+		Integer numericItemId = parseLootBeamItemId(player, query);
+		if (numericItemId != null) {
+			return numericItemId;
+		}
+
+		String normalizedQuery = normalizeLootBeamItemName(query);
+		List<Integer> partialMatches = new ArrayList<>();
+		for (int itemId = 0; itemId < player.getWorld().getServer().getEntityHandler().items.size(); itemId++) {
+			ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
+			if (itemDef == null || itemDef.getName() == null) {
+				continue;
+			}
+			String normalizedName = normalizeLootBeamItemName(itemDef.getName());
+			if (normalizedName.equals(normalizedQuery)) {
+				return itemId;
+			}
+			if (normalizedName.contains(normalizedQuery)) {
+				partialMatches.add(itemId);
+			}
+		}
+
+		if (partialMatches.size() == 1) {
+			return partialMatches.get(0);
+		}
+		if (partialMatches.size() > 1) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Multiple items matched. Try: @whi@" + formatLootBeamSuggestions(player, partialMatches));
+			return null;
+		}
+
+		player.message(badSyntaxPrefix + "Unknown item: " + query);
+		return null;
+	}
+
+	private Integer parseLootBeamItemId(Player player, String query) {
+		try {
+			int itemId = Integer.parseInt(query);
+			if (player.getWorld().getServer().getEntityHandler().getItemDef(itemId) == null) {
+				player.message(badSyntaxPrefix + "Unknown item ID: " + itemId);
+				return null;
+			}
+			return itemId;
+		} catch (NumberFormatException ignored) {
+			return null;
+		}
+	}
+
+	private String formatLootBeamSuggestions(Player player, List<Integer> itemIds) {
+		int limit = Math.min(5, itemIds.size());
+		StringBuilder suggestions = new StringBuilder();
+		for (int i = 0; i < limit; i++) {
+			if (i > 0) {
+				suggestions.append(", ");
+			}
+			suggestions.append(getLootBeamItemLabel(player, itemIds.get(i)));
+		}
+		if (itemIds.size() > limit) {
+			suggestions.append(", ...");
+		}
+		return suggestions.toString();
+	}
+
+	private String joinArgs(String[] args, int startIndex) {
+		StringBuilder joined = new StringBuilder();
+		for (int i = startIndex; i < args.length; i++) {
+			if (joined.length() > 0) {
+				joined.append(' ');
+			}
+			joined.append(args[i]);
+		}
+		return joined.toString().trim();
+	}
+
+	private String normalizeLootBeamItemName(String name) {
+		return name.toLowerCase().replaceAll("[^a-z0-9]+", "");
+	}
+
 	private void queryCommands(Player player, int page) {
 		if (page == 0) {
 			if (player.getClientLimitations().supportsMessageBox) {
@@ -1364,6 +2015,8 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::toggleblockprivate - toggle block all private messages %",
 		"@whi@::toggleblocktrade - toggle blocking all trade requests %",
 		"@whi@::toggleblockduel - toggle blocking all duel requests %",
+		"@whi@::titles - view and equip unlocked titles %",
+		"@whi@::lootbeam - customize rare drop loot beams %",
 		"@whi@::groups - shows available ranks on the server %",
 		"@whi@::togglereceipts - toggle showing shop receipts %"
 	};

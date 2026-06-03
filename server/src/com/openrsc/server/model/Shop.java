@@ -19,8 +19,15 @@ public final class Shop {
 	private final Item[] items;
 	private final ArrayList<Item> shopItems = new ArrayList<Item>();
 	private final ArrayList<Player> players = new ArrayList<Player>();
+	private int displayBuyPrice = -1;
+	private boolean acceptsPlayerSales = true;
+	private BuyHandler buyHandler = null;
 	public String area = "-null-";
 	public int[] ownerIDs = null;
+
+	public interface BuyHandler {
+		void buy(Player player, Shop shop, int catalogID, int amount);
+	}
 
 	public Shop(boolean general, int respawnRate, int buyModifier, int sellModifier, int priceModifier, Item... items) {
 		this.general = general;
@@ -41,11 +48,47 @@ public final class Shop {
 		this.sellModifier = oldShop.sellModifier;
 		this.priceModifier = oldShop.priceModifier;
 		this.items = oldShop.items;
+		this.displayBuyPrice = oldShop.displayBuyPrice;
+		this.acceptsPlayerSales = oldShop.acceptsPlayerSales;
+		this.buyHandler = oldShop.buyHandler;
 		this.area = name;
 		this.ownerIDs = ids;
 
 		for (Item item : items) {
 			shopItems.add(new Item(item.getCatalogId(), item.getAmount())); // comparing the two later, CAN NOT use the same reference
+		}
+	}
+
+	public Shop withDisplayBuyPrice(int displayBuyPrice) {
+		this.displayBuyPrice = displayBuyPrice;
+		return this;
+	}
+
+	public int getDisplayBuyPrice(int itemID) {
+		return displayBuyPrice;
+	}
+
+	public Shop withoutPlayerSales() {
+		this.acceptsPlayerSales = false;
+		return this;
+	}
+
+	public boolean acceptsPlayerSales() {
+		return acceptsPlayerSales;
+	}
+
+	public Shop withBuyHandler(BuyHandler buyHandler) {
+		this.buyHandler = buyHandler;
+		return this;
+	}
+
+	public boolean hasBuyHandler() {
+		return buyHandler != null;
+	}
+
+	public void handleBuy(Player player, int catalogID, int amount) {
+		if (buyHandler != null) {
+			buyHandler.buy(player, this, catalogID, amount);
 		}
 	}
 

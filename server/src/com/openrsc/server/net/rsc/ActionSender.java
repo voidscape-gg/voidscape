@@ -9,6 +9,7 @@ import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.VoidPath;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.struct.UsernameChangeType;
 import com.openrsc.server.event.custom.HolidayDropEvent;
 import com.openrsc.server.model.Point;
@@ -729,6 +730,14 @@ public class ActionSender {
 		struct.combatExpRateTenths = clampRateTenths(player.getConfig().COMBAT_EXP_RATE);
 		struct.skillingExpRateTenths = clampRateTenths(player.getConfig().SKILLING_EXP_RATE);
 		struct.totalPlayedSeconds = getTotalPlayedSeconds(player);
+		boolean subscriptionActive = VoidSubscription.isActive(player);
+		struct.subscriptionActive = subscriptionActive ? 1 : 0;
+		struct.effectiveCombatExpRateTenths = clampRateTenths(subscriptionActive
+			? Math.max(player.getConfig().COMBAT_EXP_RATE, VoidSubscription.COMBAT_EXP_RATE)
+			: player.getConfig().COMBAT_EXP_RATE);
+		struct.effectiveSkillingExpRateTenths = clampRateTenths(subscriptionActive
+			? Math.max(player.getConfig().SKILLING_EXP_RATE, VoidSubscription.SKILLING_EXP_RATE)
+			: player.getConfig().SKILLING_EXP_RATE);
 		struct.hdIntensity = player.getHdIntensity();
 		struct.hdSaturation = player.getHdSaturation();
 		struct.hdBloom = player.getHdBloom() ? 1 : 0;
@@ -2028,7 +2037,7 @@ public class ActionSender {
 			struct.catalogIDs[idx] = item.getSafeItemId(player);
 			struct.amount[idx] = item.getAmount();
 			struct.baseAmount[idx] = shop.getStock(item.getCatalogId());
-			struct.price[idx] = 0; // TODO: get from shop list for early protocols??
+			struct.price[idx] = shop.getDisplayBuyPrice(item.getCatalogId());
 			idx++;
 		}
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_SHOP_OPEN, struct, player);

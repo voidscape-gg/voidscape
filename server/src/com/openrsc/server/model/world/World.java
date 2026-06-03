@@ -6,12 +6,14 @@ import com.openrsc.server.avatargenerator.AvatarGenerator;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
+import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
 import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler.TrawlerBoat;
 import com.openrsc.server.content.party.PartyManager;
+import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
 import com.openrsc.server.database.impl.mysql.queries.player.login.PlayerOnlineFlagQuery;
 import com.openrsc.server.event.DelayedEvent;
@@ -109,6 +111,8 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	private final PartyManager partyManager;
 	private final ClanManager clanManager;
 	private final Market market;
+	private final WorldAnnouncementService worldAnnouncementService;
+	private final WildernessHobgoblinSpawnController wildernessHobgoblinSpawnController;
 	private final WorldLoader worldLoader;
 	private final CombatOdysseyData combatOdysseyData;
 	private final HashMap<Point, Integer> sceneryLocs;
@@ -142,6 +146,8 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		this.clanManager = new ClanManager(this);
 		this.partyManager = new PartyManager(this);
 		this.combatOdysseyData = new CombatOdysseyData(this);
+		this.worldAnnouncementService = new WorldAnnouncementService(this);
+		this.wildernessHobgoblinSpawnController = new WildernessHobgoblinSpawnController(this);
 
 		final ServerConfiguration config = server.getConfig();
 		this.avatarGenerator = config.AVATAR_GENERATOR ? new AvatarGenerator(this) : null;
@@ -175,6 +181,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public int countPlayers() {
 		return getPlayers().size();
+	}
+
+	public WorldAnnouncementService getWorldAnnouncementService() {
+		return worldAnnouncementService;
 	}
 
 	public void delayedRemoveObject(final GameObject object, final int delay) {
@@ -391,6 +401,11 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	public boolean hasNpc(final Npc n) {
 		return getNpcs().contains(n);
 	}
+
+	public synchronized WildernessHobgoblinSpawnController getWildernessHobgoblinSpawnController() {
+		return wildernessHobgoblinSpawnController;
+	}
+
 	/*
 	 * Note to self - Remove CollidingWallObject, Remove getWallGameObject, And others if this doesn't work in long run.
 	 * Classes - viewArea, world, region, gameObjectAction, GameObjectWallAction, ItemUseOnObject
@@ -1098,6 +1113,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	@Override
 	public void run() {
+		wildernessHobgoblinSpawnController.tick();
 	}
 
 	public int getMaxBankSize() {

@@ -17,6 +17,9 @@ public class GameSettingsStruct extends AbstractStruct<OpcodeOut> {
 	public int combatExpRateTenths;
 	public int skillingExpRateTenths;
 	public int totalPlayedSeconds;
+	public int subscriptionActive;
+	public int effectiveCombatExpRateTenths;
+	public int effectiveSkillingExpRateTenths;
 	public int hdIntensity;
 	public int hdSaturation;
 	public int hdBloom;

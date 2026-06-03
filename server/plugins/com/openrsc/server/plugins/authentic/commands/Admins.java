@@ -1,6 +1,8 @@
 package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.*;
+import com.openrsc.server.content.announcements.WorldAnnouncementService;
+import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.ChatLog;
 import com.openrsc.server.database.impl.mysql.queries.logging.StaffLog;
@@ -162,6 +164,12 @@ public final class Admins implements CommandTrigger {
 			removeItemBankAll(player, player.getUsername());
 		} else if (command.equalsIgnoreCase("quickauction")) {
 			openAuctionHouse(player, args);
+		} else if (command.equalsIgnoreCase("workbenchauctionfixture") || command.equalsIgnoreCase("workbenchahfixture")) {
+			seedWorkbenchAuctionHouseFixture(player);
+		} else if (command.equalsIgnoreCase("wildhobdebug") || command.equalsIgnoreCase("wildhobgoblin")) {
+			wildernessHobgoblinDebug(player, command, args);
+		} else if (command.equalsIgnoreCase("announcepreview") || command.equalsIgnoreCase("worldannouncepreview")) {
+			worldAnnouncementPreview(player, command, args);
 		} else if (command.equalsIgnoreCase("quickbank")) {
 			// Show the bank screen to yourself
 			// warning: does not check UIM or bank PIN!
@@ -905,15 +913,19 @@ public final class Admins implements CommandTrigger {
 			return;
 		}
 
-		try {
-			player.getWorld().getServer().getDatabase().removeItemSpawn(itemr.getLoc());
-		} catch (final GameDatabaseException ex) {
-			LOGGER.catching(ex);
-			player.message("Database Error! " + ex.getMessage());
-			return;
-		}
+		if (itemr.getLoc() != null) {
+			try {
+				player.getWorld().getServer().getDatabase().removeItemSpawn(itemr.getLoc());
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+				player.message("Database Error! " + ex.getMessage());
+				return;
+			}
 
-		player.message(messagePrefix + "Removed ground item from database: " + itemr.getDef().getName() + " with item ID " + itemr.getID());
+			player.message(messagePrefix + "Removed ground item from database: " + itemr.getDef().getName() + " with item ID " + itemr.getID());
+		} else {
+			player.message(messagePrefix + "Removed temporary ground item: " + itemr.getDef().getName() + " with item ID " + itemr.getID());
+		}
 		player.getWorld().unregisterItem(itemr);
 	}
 
@@ -1311,6 +1323,52 @@ public final class Admins implements CommandTrigger {
 			return;
 		}
 		ActionSender.sendOpenAuctionHouse(targetPlayer);
+	}
+
+	private void seedWorkbenchAuctionHouseFixture(Player player) {
+		try {
+			final int rows = player.getWorld().getServer().getDatabase().seedAuctionWorkbenchFixture(player.getDatabaseID());
+			if (player.getWorld().getMarket() != null) {
+				player.getWorld().getMarket().requestAuctionItemCacheRefresh();
+			}
+			player.message(messagePrefix + "Seeded Auction House workbench fixture (" + rows + " rows).");
+		} catch (GameDatabaseException e) {
+			player.message(messagePrefix + "Database Error! (Could not seed Auction House workbench fixture). Check the logs.");
+			LOGGER.error(e);
+		}
+	}
+
+	private void wildernessHobgoblinDebug(Player player, String command, String[] args) {
+		final WildernessHobgoblinSpawnController controller = player.getWorld().getWildernessHobgoblinSpawnController();
+		if (args.length < 1 || args[0].equalsIgnoreCase("status")) {
+			controller.evaluateNow();
+			player.message(messagePrefix + controller.statusSummary());
+			return;
+		}
+
+		if (args[0].equalsIgnoreCase("off") || args[0].equalsIgnoreCase("clear")) {
+			controller.clearDebugUniqueIpCount();
+			player.message(messagePrefix + controller.statusSummary());
+			player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21, messagePrefix + "Cleared wilderness hobgoblin debug override"));
+			return;
+		}
+
+		final int uniqueIpCount;
+		try {
+			uniqueIpCount = Integer.parseInt(args[0]);
+		} catch (NumberFormatException ex) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [status|off|0-20]");
+			return;
+		}
+
+		if (uniqueIpCount < 0 || uniqueIpCount > 20) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [status|off|0-20]");
+			return;
+		}
+
+		controller.setDebugUniqueIpCount(uniqueIpCount);
+		player.message(messagePrefix + controller.statusSummary());
+		player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21, messagePrefix + "Set wilderness hobgoblin debug unique IPs to " + uniqueIpCount));
 	}
 
 	private void spawnItemBestInSlot(Player player) {
@@ -2927,6 +2985,24 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + "PK skull was already inactive: " + targetPlayer.getUsername());
 		} else {
 			player.message(messagePrefix + "PK skull has been " + skullMessage + ": " + targetPlayer.getUsername());
+		}
+	}
+
+	private void worldAnnouncementPreview(Player player, String command, String[] args) {
+		if (args.length < 1) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk]");
+			return;
+		}
+
+		WorldAnnouncementService announcer = player.getWorld().getWorldAnnouncementService();
+		if (args[0].equalsIgnoreCase("skill") || args[0].equalsIgnoreCase("milestone")) {
+			announcer.previewSkillMilestone(player);
+		} else if (args[0].equalsIgnoreCase("total")) {
+			announcer.previewTotalLevelMilestone(player);
+		} else if (args[0].equalsIgnoreCase("pk") || args[0].equalsIgnoreCase("skulledpk")) {
+			announcer.previewSkulledWildernessKill(player);
+		} else {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk]");
 		}
 	}
 

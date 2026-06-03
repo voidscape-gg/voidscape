@@ -3,6 +3,8 @@ package com.openrsc.server;
 import com.openrsc.server.constants.AppearanceId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.SceneryId;
+import com.openrsc.server.content.LootBeamSettings;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
@@ -1023,6 +1025,9 @@ public final class GameStateUpdater {
 						updatesMain.add((byte) (playerNeedingAppearanceUpdate.stateIsInvulnerable() ? 1 : 0));
 						updatesMain.add((byte) playerNeedingAppearanceUpdate.getGroupID());
 						updatesMain.add((int) playerNeedingAppearanceUpdate.getIcon());
+						if (player.getClientVersion() >= PlayerTitle.OVERHEAD_TITLE_CLIENT_VERSION) {
+							updatesMain.add(PlayerTitle.activeOverhead(playerNeedingAppearanceUpdate));
+						}
 					}
 				}
 
@@ -1165,7 +1170,7 @@ public final class GameStateUpdater {
 			final int offsetY = groundItem.getY() - playerToUpdate.getY();
 			itemLocs.add(new ItemLoc(groundItem.getID(), offsetX, offsetY, groundItem.getAmount(), 0,
 				groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0,
-				groundItem.getAttribute(GroundItem.RARE_DROP_BEAM_ATTRIBUTE, false)));
+				LootBeamSettings.shouldShowBeam(playerToUpdate, groundItem)));
 			playerToUpdate.getLocalGroundItems().add(groundItem);
 			changed = true;
 		}

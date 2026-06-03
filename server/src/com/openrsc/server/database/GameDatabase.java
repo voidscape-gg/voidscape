@@ -1,6 +1,7 @@
 package com.openrsc.server.database;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.achievement.AchievementReward;
@@ -39,6 +40,9 @@ public abstract class GameDatabase {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final String AUCTION_WORKBENCH_SELLER = "wb-fixture";
+	private static final String AUCTION_WORKBENCH_BUYER = "wb-buyer";
+	private static final String AUCTION_WORKBENCH_MARKER = "workbench-fixture";
 
 	public final Server server;
 	private volatile AtomicBoolean open = new AtomicBoolean(false);
@@ -147,6 +151,12 @@ public abstract class GameDatabase {
 
 	public abstract PlayerCache[] queryLoadPlayerCache(Player player) throws GameDatabaseException;
 
+	public abstract Integer queryLoadGlobalCacheInt(String cacheKey) throws GameDatabaseException;
+
+	public abstract String queryPlayerCacheOwner(String cacheKey) throws GameDatabaseException;
+
+	public abstract String queryPlayerCacheOwner(String cacheKey, String cacheValue) throws GameDatabaseException;
+
 	public abstract PlayerNpcKills[] queryLoadPlayerNpcKills(Player player) throws GameDatabaseException;
 
 	public abstract PlayerSkills[] queryLoadPlayerSkills(Player player, boolean isMax) throws GameDatabaseException, NoSuchElementException;
@@ -204,6 +214,11 @@ public abstract class GameDatabase {
 	public abstract AuctionItem[] queryAuctionItems() throws GameDatabaseException;
 	public abstract void querySetSoldOut(final AuctionItem auctionItem) throws GameDatabaseException;
 	public abstract void queryUpdateAuction(final AuctionItem auctionItem) throws GameDatabaseException;
+	public abstract void queryInsertAuctionSale(final AuctionSale auctionSale) throws GameDatabaseException;
+	public abstract AuctionItemSummary[] queryAuctionItemSummaries(final long since) throws GameDatabaseException;
+	public abstract AuctionItemSummary[] queryHotAuctionItems(final long since, final int limit) throws GameDatabaseException;
+	public abstract AuctionSale[] queryRecentAuctionSales(final int limit) throws GameDatabaseException;
+	public abstract void queryClearAuctionWorkbenchFixture(final String marker, final String sellerUsername, final String buyerUsername) throws GameDatabaseException;
 
 	public abstract void querySavePlayerData(int playerId, PlayerData playerData) throws GameDatabaseException;
 
@@ -224,6 +239,8 @@ public abstract class GameDatabase {
 	public abstract void querySavePlayerAchievements(int playerId, PlayerAchievement[] achievements) throws GameDatabaseException;
 
 	public abstract void querySavePlayerCache(int playerId, PlayerCache[] cache) throws GameDatabaseException;
+
+	public abstract void querySaveGlobalCacheInt(String cacheKey, int value) throws GameDatabaseException;
 
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
 
@@ -709,6 +726,93 @@ public abstract class GameDatabase {
 		queryUpdateAuction(auctionItem);
 	}
 
+	public void addAuctionSale(final MarketItem item, final int amount, final int unitPrice, final int totalPrice,
+							   final int tax, final Player buyer) throws GameDatabaseException {
+		final AuctionSale sale = new AuctionSale();
+		sale.auctionID = item.getAuctionID();
+		sale.itemID = item.getCatalogID();
+		sale.amount = amount;
+		sale.unitPrice = unitPrice;
+		sale.totalPrice = totalPrice;
+		sale.tax = tax;
+		sale.seller = item.getSeller();
+		sale.sellerUsername = item.getSellerName();
+		sale.buyer = buyer.getDatabaseID();
+		sale.buyerUsername = buyer.getUsername();
+		sale.soldAt = System.currentTimeMillis() / 1000;
+		queryInsertAuctionSale(sale);
+	}
+
+	public AuctionItemSummary[] getAuctionItemSummaries(final long since) throws GameDatabaseException {
+		return queryAuctionItemSummaries(since);
+	}
+
+	public AuctionItemSummary[] getHotAuctionItems(final long since, final int limit) throws GameDatabaseException {
+		return queryHotAuctionItems(since, limit);
+	}
+
+	public AuctionSale[] getRecentAuctionSales(final int limit) throws GameDatabaseException {
+		return queryRecentAuctionSales(limit);
+	}
+
+	public int seedAuctionWorkbenchFixture(final int playerId) throws GameDatabaseException {
+		final int[][] listings = {
+			{ItemId.RUNE_LONG_SWORD.id(), 1, 1800, 120},
+			{ItemId.RUNE_KITE_SHIELD.id(), 1, 4200, 360},
+			{ItemId.LOBSTER.id(), 12, 2400, 720},
+			{ItemId.DIAMOND_AMULET.id(), 2, 5200, 1080},
+			{ItemId.GOLD_BAR.id(), 20, 2000, 1440},
+			{ItemId.GUAM_LEAF.id(), 8, 640, 1800}
+		};
+		final int[][] sales = {
+			{ItemId.LOBSTER.id(), 10, 205, 900},
+			{ItemId.LOBSTER.id(), 5, 210, 5400},
+			{ItemId.RUNE_LONG_SWORD.id(), 1, 1750, 12600},
+			{ItemId.DIAMOND_AMULET.id(), 1, 2550, 21600},
+			{ItemId.GOLD_BAR.id(), 30, 115, 32400},
+			{ItemId.GUAM_LEAF.id(), 12, 90, 43200},
+			{ItemId.RED_PARTY_HAT.id(), 1, 25000, 86400}
+		};
+		final int[] rowsSeeded = new int[1];
+		final boolean ok = atomically(() -> {
+			final long now = System.currentTimeMillis() / 1000;
+			queryClearAuctionWorkbenchFixture(AUCTION_WORKBENCH_MARKER, AUCTION_WORKBENCH_SELLER, AUCTION_WORKBENCH_BUYER);
+			for (final int[] listing : listings) {
+				final AuctionItem auctionItem = new AuctionItem();
+				auctionItem.itemID = listing[0];
+				auctionItem.amount = listing[1];
+				auctionItem.amount_left = listing[1];
+				auctionItem.price = listing[2];
+				auctionItem.seller = playerId;
+				auctionItem.seller_username = AUCTION_WORKBENCH_SELLER;
+				auctionItem.buyer_info = AUCTION_WORKBENCH_MARKER;
+				auctionItem.time = now - listing[3];
+				queryNewAuction(auctionItem);
+				rowsSeeded[0]++;
+			}
+			for (final int[] saleFixture : sales) {
+				final AuctionSale sale = new AuctionSale();
+				sale.auctionID = 0;
+				sale.itemID = saleFixture[0];
+				sale.amount = saleFixture[1];
+				sale.unitPrice = saleFixture[2];
+				sale.totalPrice = sale.amount * sale.unitPrice;
+				sale.tax = sale.totalPrice / 20;
+				sale.seller = playerId;
+				sale.sellerUsername = AUCTION_WORKBENCH_SELLER;
+				sale.buyer = playerId;
+				sale.buyerUsername = AUCTION_WORKBENCH_BUYER;
+				sale.soldAt = now - saleFixture[3];
+				queryInsertAuctionSale(sale);
+				rowsSeeded[0]++;
+			}
+		});
+		if (!ok) {
+			throw new GameDatabaseException(GameDatabase.class, "Unable to seed Auction House workbench fixture");
+		}
+		return rowsSeeded[0];
+	}
+
 	public int playerIdFromDiscordPairToken(final String token) throws GameDatabaseException {
 		return queryPlayerIdFromToken(token);
 	}
@@ -1127,4 +1231,3 @@ public abstract class GameDatabase {
 	}
 
 }
-

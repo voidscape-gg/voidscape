@@ -94,6 +94,10 @@ public class BuyMarketItemTask extends MarketTask {
 			// voidscape: 5% on-sale tax — destroyed at point of sale (gp sink)
 			final int sellerProceeds = auctionPrice - (auctionPrice / 20);
 			final MarketItem finalItem = item;
+			final int finalAmount = amount;
+			final int finalPriceForEach = priceForEach;
+			final int finalAuctionPrice = auctionPrice;
+			final int finalTax = auctionPrice - sellerProceeds;
 			final int finalSellerProceeds = sellerProceeds;
 			final int finalSeller = sellerUsernameID;
 			final String soldExplanation = "Sold " + def.getName() + "(" + item.getCatalogID() + ") x" + amount + " for " + sellerProceeds + "gp (after 5% tax of " + (auctionPrice - sellerProceeds) + "gp)";
@@ -112,6 +116,7 @@ public class BuyMarketItemTask extends MarketTask {
 			final boolean finalToBank = toBank;
 			boolean dbOk = playerBuyer.getWorld().getServer().getDatabase().atomically(() -> {
 				playerBuyer.getWorld().getServer().getDatabase().addExpiredAuction(soldExplanation, ItemId.COINS.id(), finalSellerProceeds, finalSeller);
+				playerBuyer.getWorld().getServer().getDatabase().addAuctionSale(finalItem, finalAmount, finalPriceForEach, finalAuctionPrice, finalTax, playerBuyer);
 				if (finalItem.getAmountLeft() == 0) playerBuyer.getWorld().getServer().getDatabase().setSoldOut(finalItem);
 				else playerBuyer.getWorld().getServer().getDatabase().updateAuction(finalItem);
 				playerBuyer.getWorld().getServer().getDatabase().savePlayerInventory(playerBuyer);
