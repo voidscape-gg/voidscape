@@ -12,6 +12,7 @@ Voidscape preserves OpenRSC's tree structure (`server/`, `PC_Client/`, `Client_B
   - `docs/recipes/` — step-by-step "how to add X" playbooks.
 - `scripts/` — `build.sh`, `run-server.sh`, `run-client.sh`, `reset-db.sh`, `fetch-upstream-snapshot.sh`. Canonical entry points. **Use these, not raw `gradlew`.**
 - `.claude/` — Claude Code config (`settings.json` tracked, `settings.local.json` gitignored), custom subagents in `.claude/agents/`.
+- `.agents/` — Codex skills/workflow scaffolding, including the discovery-first `feature` skill.
 - `memory/` — persistent project memory (this directory).
 - `upstream/openrsc-snapshot/` — frozen vendor reference (gitignored, recreate via script).
 

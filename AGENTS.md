@@ -2,7 +2,7 @@
 
 Voidscape is a private **RuneScape Classic** server, hard-forked from [OpenRSC Core-Framework](https://github.com/Open-RSC/Core-Framework). Goal: **mostly authentic RSC** with quality-of-life additions and small custom touches. License: **AGPLv3** (inherited).
 
-This file is loaded into every Claude Code session. Keep it terse — it's a map, not a manual. Detail lives in `docs/`.
+This file is loaded into every Codex session. Keep it terse — it's a map, not a manual. Detail lives in `docs/`.
 
 ---
 
@@ -17,7 +17,7 @@ OpenRSC's tree structure is preserved at the repo root (`server/`, `PC_Client/`,
 - `.claude/` — Claude Code config + custom subagents.
 - `upstream/openrsc-snapshot/` — frozen reference copy of OpenRSC at the vendor SHA. **gitignored** (recreate via `scripts/fetch-upstream-snapshot.sh`). **Never edit this directory.**
 
-Subsystem-specific guidance lives in `<subsystem>/CLAUDE.md` (e.g. `server/CLAUDE.md`, `PC_Client/CLAUDE.md`). Those auto-load when editing inside that tree, so we don't bloat this root file.
+Subsystem-specific guidance lives in `<subsystem>/AGENTS.md` (e.g. `server/AGENTS.md`, `PC_Client/AGENTS.md`). Those auto-load when editing inside that tree, so we don't bloat this root file.
 
 ---
 

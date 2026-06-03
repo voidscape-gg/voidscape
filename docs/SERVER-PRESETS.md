@@ -68,8 +68,10 @@ Suggested overrides to apply in `local.conf`:
 # QoL — remove the most universally disliked authentic mechanic
 want_fatigue: false
 
-# Keep authentic combat speed and progression
-# (preservation defaults are good — don't override game_tick or exp_rate)
+# Keep authentic combat timing, with Voidscape's current progression rates
+game_tick: 640
+combat_exp_rate: 7
+skilling_exp_rate: 4
 
 # Optional: enable some custom-but-authentic-feeling content
 # location_data: 1   # already preservation default; bump to 2 if you want OpenRSC additions
@@ -79,9 +81,10 @@ server_name: Voidscape
 server_name_welcome: Voidscape
 ```
 
-If you find authentic-rate progression too slow during early development, consider:
-- `exp_rate: 2.0` — modest 2× boost (still feels authentic-ish)
-- Keep `game_tick: 640` — never lower this; it changes combat feel fundamentally
+If these rates feel too fast for a particular test, lower `combat_exp_rate` and
+`skilling_exp_rate` in that preset rather than changing `game_tick`. Keep
+`game_tick: 640` unless you deliberately want to change the feel of combat and
+movement.
 
 If `rsccabbage` ends up feeling closer to the actual goal after testing, we can pivot — but document the rationale in `docs/DIVERGENCE.md`.
 

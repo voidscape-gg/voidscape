@@ -182,6 +182,18 @@ Admin Commands
 - quickauction
   - Usage: `::quickauction`
   - Displays the auction house window.
+- workbenchauctionfixture
+  - Usage: `::workbenchauctionfixture`
+  - Alias: `::workbenchahfixture`
+  - Reseeds deterministic Auction House listings and market-intel sales for local AI workbench testing.
+- wildhobdebug
+  - Usage: `::wildhobdebug [status|off|0-20]`
+  - Alias: `::wildhobgoblin`
+  - Shows or overrides the unique-IP crowd count used by adaptive wilderness hobgoblin spawns for local testing.
+- announcepreview
+  - Usage: `::announcepreview [skill|total|pk]`
+  - Alias: `::worldannouncepreview`
+  - Sends sample Void Herald world-announcement messages for local styling checks.
 - quickbank
   - Usage: `::quickbank`
   - Displays the logged in player's bank window.
@@ -795,6 +807,14 @@ Regular Player Commands
   - Usage: `::leave`
   - Leaves the PK Catching Simulator early.
   - Start the simulator by talking to the PK catching trainer at 214,437.
+- titles
+  - Usage: `::titles`
+  - Usage: `::titles list [page]`
+  - Usage: `::title <title id or name>`
+  - Usage: `::title clear`
+  - Usage: `::titles count`
+  - Alias: `::title`
+  - Opens the unlocked player-title menu, browses the 100-title catalog with Next/Previous page buttons, equips an unlocked title, clears the active title, or shows unlock count. Unique titles show their holder and are limited to one unique title per account; reusable titles can be earned by anyone.
 - event
   - Usage: `::event`
   - Join the currently running server PK Event.
@@ -830,6 +850,15 @@ Regular Player Commands
 - commands
   - Usage: `::commands`
   - Shows a list of the Regular Player commands.
+- lootbeam
+  - Usage: `::lootbeam [list|defaults|reset]`
+  - Usage: `::lootbeam add <item id/name>`
+  - Usage: `::lootbeam remove <item id/name>`
+  - Usage: `::lootbeam mode default|custom`
+  - Alias: `::lootbeams`
+  - Customizes which ground items show the purple loot beam.
+  - `default` mode uses Voidscape's curated rare-item list plus your added items, minus removed defaults.
+  - `custom` mode only beams items you add yourself.
 - oldtrade
   - Usage: `::oldtrade`
   - Sets the client temporarily to no confirm trade mode. Lasts for 5 minutes.

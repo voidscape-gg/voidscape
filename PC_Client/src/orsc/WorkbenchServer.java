@@ -1,0 +1,1015 @@
+package orsc;
+
+import com.openrsc.interfaces.misc.AuctionHouse;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import orsc.enumerations.MessageType;
+
+import javax.imageio.ImageIO;
+import javax.swing.SwingUtilities;
+import java.awt.Component;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+final class WorkbenchServer {
+	private static final String ENABLED_PROPERTY = "voidscape.workbench";
+	private static final String PORT_PROPERTY = "voidscape.workbench.port";
+	private static final String DIR_PROPERTY = "voidscape.workbench.dir";
+	private static final int DEFAULT_PORT = 18787;
+	private static final String DEFAULT_DIR = "../tmp/workbench";
+
+	private static HttpServer server;
+	private static ExecutorService executor;
+	private static int port = DEFAULT_PORT;
+	private static CaptureResult lastCapture;
+
+	private WorkbenchServer() {
+	}
+
+	static boolean isEnabled() {
+		return Boolean.getBoolean(ENABLED_PROPERTY);
+	}
+
+	static synchronized void start() {
+		if (!isEnabled() || server != null) return;
+
+		port = Integer.getInteger(PORT_PROPERTY, DEFAULT_PORT);
+		try {
+			HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+			httpServer.createContext("/health", WorkbenchServer::handleHealth);
+			httpServer.createContext("/state", WorkbenchServer::handleState);
+			httpServer.createContext("/screenshot", WorkbenchServer::handleScreenshot);
+			httpServer.createContext("/captures/latest", WorkbenchServer::handleLatestCapture);
+			httpServer.createContext("/input/click", WorkbenchServer::handleClick);
+			httpServer.createContext("/input/key", WorkbenchServer::handleKey);
+			httpServer.createContext("/input/type", WorkbenchServer::handleType);
+			httpServer.createContext("/input/command", WorkbenchServer::handleCommand);
+			httpServer.createContext("/dev/ready", WorkbenchServer::handleDevReady);
+			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
+			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
+			executor = Executors.newSingleThreadExecutor(runnable -> {
+				Thread thread = new Thread(runnable, "voidscape-workbench");
+				thread.setDaemon(true);
+				return thread;
+			});
+			httpServer.setExecutor(executor);
+			httpServer.start();
+			server = httpServer;
+			System.out.println("Voidscape workbench listening on http://127.0.0.1:" + port);
+		} catch (IOException e) {
+			System.out.println("Unable to start Voidscape workbench: " + e.getMessage());
+		}
+	}
+
+	static synchronized void stop() {
+		if (server != null) {
+			server.stop(0);
+			server = null;
+		}
+		if (executor != null) {
+			executor.shutdownNow();
+			executor = null;
+		}
+	}
+
+	static CaptureResult captureOnce(String reason) throws IOException {
+		BufferedImage image = ORSCApplet.copyGameImageForWorkbench();
+		if (image == null) throw new IOException("No rendered game frame is available yet");
+
+		File screenshotsDir = new File(workbenchDir(), "screenshots");
+		Files.createDirectories(screenshotsDir.toPath());
+
+		String timestamp = fileTimestamp();
+		String safeReason = sanitizeReason(reason);
+		String stem = timestamp + "-" + safeReason;
+		File pngFile = new File(screenshotsDir, stem + ".png").getAbsoluteFile();
+		File jsonFile = new File(screenshotsDir, stem + ".json").getAbsoluteFile();
+
+		ImageIO.write(image, "png", pngFile);
+		String stateJson = stateJson(pngFile, image.getWidth(), image.getHeight());
+		Files.write(jsonFile.toPath(), stateJson.getBytes(StandardCharsets.UTF_8));
+
+		CaptureResult result = new CaptureResult(reason, pngFile, jsonFile, image.getWidth(), image.getHeight());
+		lastCapture = result;
+		return result;
+	}
+
+	static void captureFromHotkey(mudclient client) {
+		try {
+			CaptureResult result = captureOnce("hotkey");
+			if (client != null) {
+				client.showMessage(false, null, "Screenshot saved: " + result.pngFile.getPath(),
+					MessageType.GAME, 0, null);
+			}
+		} catch (IOException e) {
+			if (client != null) {
+				client.showMessage(false, null, "Screenshot failed: " + e.getMessage(),
+					MessageType.GAME, 0, null);
+			}
+		}
+	}
+
+	private static void handleHealth(HttpExchange exchange) throws IOException {
+		if (!requireGet(exchange)) return;
+		String json = "{"
+			+ "\"ok\":true,"
+			+ "\"clientVersion\":" + Config.CLIENT_VERSION + ","
+			+ "\"port\":" + port + ","
+			+ "\"generatedAt\":\"" + jsonEscape(isoTimestamp()) + "\""
+			+ "}";
+		sendJson(exchange, 200, json);
+	}
+
+	private static void handleState(HttpExchange exchange) throws IOException {
+		if (!requireGet(exchange)) return;
+		sendJson(exchange, 200, stateJson(null, -1, -1));
+	}
+
+	private static void handleScreenshot(HttpExchange exchange) throws IOException {
+		if (!requireGet(exchange)) return;
+		try {
+			CaptureResult result = captureOnce("http");
+			sendJson(exchange, 200, captureJson(result));
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleLatestCapture(HttpExchange exchange) throws IOException {
+		if (!requireGet(exchange)) return;
+		if (lastCapture == null) {
+			sendJson(exchange, 404, "{\"ok\":false,\"error\":\"No capture has been saved yet\"}");
+			return;
+		}
+		sendJson(exchange, 200, captureJson(lastCapture));
+	}
+
+	private static void handleClick(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		int x = requiredInt(fields, "x");
+		int y = requiredInt(fields, "y");
+		String button = fields.containsKey("button") ? fields.get("button") : "left";
+		clickGame(x, y, button);
+		sendJson(exchange, 200, controlJson("click", "\"x\":" + x + ",\"y\":" + y + ",\"button\":\"" + jsonEscape(button) + "\""));
+	}
+
+	private static void handleKey(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String key = fields.get("key");
+		String character = fields.get("char");
+		if ((key == null || key.isEmpty()) && character != null && !character.isEmpty()) {
+			typeText(character);
+		} else {
+			pressKeyName(requiredString(fields, "key"));
+		}
+		sendJson(exchange, 200, controlJson("key", null));
+	}
+
+	private static void handleType(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String text = requiredString(fields, "text");
+		typeText(text);
+		sendJson(exchange, 200, controlJson("type", "\"length\":" + text.length()));
+	}
+
+	private static void handleCommand(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String command = normalizeCommand(requiredString(fields, "command"));
+		sendCommand(command);
+		sendJson(exchange, 200, controlJson("command", "\"command\":\"" + jsonEscape(command) + "\""));
+	}
+
+	private static void handleDevReady(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			sendJson(exchange, 200, devReadyJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleAuctionHouseFixture(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			sendJson(exchange, 200, auctionHouseFixtureJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleAuctionHouseScenario(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			sendJson(exchange, 200, auctionHouseScenarioJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static boolean requireGet(HttpExchange exchange) throws IOException {
+		if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) return true;
+		sendJson(exchange, 405, "{\"ok\":false,\"error\":\"GET required\"}");
+		return false;
+	}
+
+	private static boolean requirePost(HttpExchange exchange) throws IOException {
+		if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) return true;
+		sendJson(exchange, 405, "{\"ok\":false,\"error\":\"POST required\"}");
+		return false;
+	}
+
+	private static String captureJson(CaptureResult result) {
+		return "{"
+			+ "\"ok\":true,"
+			+ "\"reason\":\"" + jsonEscape(result.reason) + "\","
+			+ "\"pngPath\":\"" + jsonEscape(result.pngFile.getPath()) + "\","
+			+ "\"statePath\":\"" + jsonEscape(result.jsonFile.getPath()) + "\","
+			+ "\"width\":" + result.width + ","
+			+ "\"height\":" + result.height + ","
+			+ "\"generatedAt\":\"" + jsonEscape(isoTimestamp()) + "\""
+			+ "}";
+	}
+
+	private static String controlJson(String action, String extraFields) {
+		StringBuilder json = new StringBuilder();
+		json.append("{\"ok\":true,");
+		json.append("\"action\":\"").append(jsonEscape(action)).append("\",");
+		json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\"");
+		if (extraFields != null && !extraFields.isEmpty()) {
+			json.append(",").append(extraFields);
+		}
+		json.append("}");
+		return json.toString();
+	}
+
+	private static String stateJson(File screenshotFile, int screenshotWidth, int screenshotHeight) {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		StringBuilder json = new StringBuilder();
+		json.append("{");
+		appendString(json, "generatedAt", isoTimestamp()).append(",");
+		json.append("\"clientVersion\":").append(Config.CLIENT_VERSION).append(",");
+		appendString(json, "serverIp", Config.SERVER_IP).append(",");
+		json.append("\"serverPort\":").append(Config.SERVER_PORT).append(",");
+		appendScreenshot(json, screenshotFile, screenshotWidth, screenshotHeight);
+		json.append(",");
+		appendGame(json, client);
+		json.append(",");
+		appendMouse(json, client);
+		json.append(",");
+		appendPlayer(json, client);
+		json.append(",");
+		appendInterfaces(json, client);
+		json.append("}");
+		return json.toString();
+	}
+
+	private static void appendScreenshot(StringBuilder json, File screenshotFile, int width, int height) {
+		json.append("\"screenshot\":");
+		if (screenshotFile == null) {
+			json.append("null");
+			return;
+		}
+		json.append("{");
+		appendString(json, "pngPath", screenshotFile.getPath()).append(",");
+		json.append("\"width\":").append(width).append(",");
+		json.append("\"height\":").append(height);
+		json.append("}");
+	}
+
+	private static void appendGame(StringBuilder json, mudclient client) {
+		json.append("\"game\":{");
+		if (client == null) {
+			json.append("\"available\":false");
+		} else {
+			json.append("\"available\":true,");
+			json.append("\"state\":").append(client.getGameState()).append(",");
+			json.append("\"width\":").append(client.getGameWidth()).append(",");
+			json.append("\"height\":").append(client.getGameHeight());
+		}
+		json.append("}");
+	}
+
+	private static void appendMouse(StringBuilder json, mudclient client) {
+		json.append("\"mouse\":{");
+		if (client == null) {
+			json.append("\"available\":false");
+		} else {
+			json.append("\"available\":true,");
+			json.append("\"x\":").append(client.getMouseX()).append(",");
+			json.append("\"y\":").append(client.getMouseY()).append(",");
+			json.append("\"click\":").append(client.getMouseClick()).append(",");
+			json.append("\"down\":").append(client.getMouseButtonDown());
+		}
+		json.append("}");
+	}
+
+	private static void appendPlayer(StringBuilder json, mudclient client) {
+		json.append("\"player\":");
+		ORSCharacter player = client == null ? null : client.getLocalPlayer();
+		if (player == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		appendString(json, "displayName", player.displayName).append(",");
+		appendString(json, "accountName", player.accountName).append(",");
+		json.append("\"x\":").append(player.currentX).append(",");
+		json.append("\"z\":").append(player.currentZ).append(",");
+		json.append("\"level\":").append(player.level).append(",");
+		json.append("\"healthCurrent\":").append(player.healthCurrent).append(",");
+		json.append("\"healthMax\":").append(player.healthMax).append(",");
+		json.append("\"groupId\":").append(player.groupID).append(",");
+		json.append("\"admin\":").append(player.isAdmin()).append(",");
+		json.append("\"dev\":").append(player.isDev()).append(",");
+		json.append("\"mod\":").append(player.isMod());
+		json.append("}");
+	}
+
+	private static void appendInterfaces(StringBuilder json, mudclient client) {
+		json.append("\"interfaces\":{");
+		appendAuctionHouse(json, client);
+		json.append(",");
+		appendWorldMap(json, client);
+		json.append("}");
+	}
+
+	private static void appendAuctionHouse(StringBuilder json, mudclient client) {
+		json.append("\"auctionHouse\":");
+		AuctionHouse auctionHouse = client == null ? null : client.getAuctionHouse();
+		if (auctionHouse == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		json.append("\"visible\":").append(auctionHouse.isVisible()).append(",");
+		json.append("\"activeInterface\":").append(auctionHouse.activeInterface).append(",");
+		appendString(json, "activeInterfaceName", auctionHouseTabName(auctionHouse.activeInterface));
+		json.append("}");
+	}
+
+	private static void appendWorldMap(StringBuilder json, mudclient client) {
+		json.append("\"worldMap\":");
+		if (client == null || client.worldMapPanel == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		json.append("\"visible\":").append(client.worldMapPanel.isVisible()).append(",");
+		json.append("\"floor\":").append(client.worldMapPanel.getCurrentFloor());
+		json.append("}");
+	}
+
+	private static String auctionHouseScenarioJson() throws IOException {
+		ArrayList<CaptureResult> captures = new ArrayList<>();
+		clearWorkbenchBlockingUi();
+		seedAuctionHouseFixture();
+		sendCommand("quickauction");
+		waitForAuctionHouseVisible();
+		sleep(500);
+		clearWorkbenchBlockingUi();
+		sleep(300);
+
+		captures.add(captureOnce("scenario-auction-browse"));
+		clickAuctionTab(0);
+		sleep(200);
+		clickFirstAuctionRow();
+		sleep(350);
+		captures.add(captureOnce("scenario-auction-selection"));
+
+		clickAuctionTab(1);
+		waitForAuctionTab(1);
+		sleep(250);
+		captures.add(captureOnce("scenario-auction-my-auctions"));
+
+		clickAuctionTab(2);
+		waitForAuctionTab(2);
+		sleep(250);
+		captures.add(captureOnce("scenario-auction-intel"));
+
+		clickAuctionTab(0);
+		waitForAuctionTab(0);
+		sleep(200);
+		clickAuctionCategory(3);
+		sleep(250);
+		captures.add(captureOnce("scenario-auction-category-food"));
+
+		StringBuilder json = new StringBuilder();
+		json.append("{\"ok\":true,");
+		json.append("\"scenario\":\"auction-house-open\",");
+		json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\",");
+		json.append("\"state\":").append(stateJson(null, -1, -1)).append(",");
+		json.append("\"captures\":[");
+		for (int i = 0; i < captures.size(); i++) {
+			if (i > 0) json.append(",");
+			CaptureResult capture = captures.get(i);
+			json.append("{");
+			json.append("\"reason\":\"").append(jsonEscape(capture.reason)).append("\",");
+			json.append("\"pngPath\":\"").append(jsonEscape(capture.pngFile.getPath())).append("\",");
+			json.append("\"statePath\":\"").append(jsonEscape(capture.jsonFile.getPath())).append("\",");
+			json.append("\"width\":").append(capture.width).append(",");
+			json.append("\"height\":").append(capture.height);
+			json.append("}");
+		}
+		json.append("]}");
+		return json.toString();
+	}
+
+	private static String devReadyJson() throws IOException {
+		boolean loginRequested = false;
+		requireClient();
+		if (!isLoggedIn()) {
+			loginRequested = true;
+			clickSavedUserLogin();
+			waitUntil(WorkbenchServer::isLoggedIn, 10000, "Saved-user login did not complete");
+			sleep(500);
+		}
+		clearWorkbenchBlockingUi();
+		sleep(250);
+		return "{"
+			+ "\"ok\":true,"
+			+ "\"action\":\"dev-ready\","
+			+ "\"loginRequested\":" + loginRequested + ","
+			+ "\"generatedAt\":\"" + jsonEscape(isoTimestamp()) + "\","
+			+ "\"state\":" + stateJson(null, -1, -1)
+			+ "}";
+	}
+
+	private static String auctionHouseFixtureJson() throws IOException {
+		seedAuctionHouseFixture();
+		return "{"
+			+ "\"ok\":true,"
+			+ "\"fixture\":\"auction-house\","
+			+ "\"command\":\"workbenchauctionfixture\","
+			+ "\"generatedAt\":\"" + jsonEscape(isoTimestamp()) + "\","
+			+ "\"state\":" + stateJson(null, -1, -1)
+			+ "}";
+	}
+
+	private static void seedAuctionHouseFixture() throws IOException {
+		requireLoggedInAdmin();
+		sendCommand("workbenchauctionfixture");
+		sleep(900);
+	}
+
+	private static void waitForAuctionHouseVisible() throws IOException {
+		waitUntil(() -> {
+			AuctionHouse auctionHouse = getAuctionHouse();
+			return auctionHouse != null && auctionHouse.isVisible();
+		}, 5000, "Auction House did not open");
+	}
+
+	private static void waitForAuctionTab(final int tab) throws IOException {
+		waitUntil(() -> {
+			AuctionHouse auctionHouse = getAuctionHouse();
+			return auctionHouse != null && auctionHouse.isVisible() && auctionHouse.activeInterface == tab;
+		}, 2500, "Auction House tab " + tab + " did not activate");
+	}
+
+	private static void waitUntil(Condition condition, long timeoutMs, String error) throws IOException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		while (System.currentTimeMillis() < deadline) {
+			if (condition.isTrue()) return;
+			sleep(100);
+		}
+		throw new IOException(error);
+	}
+
+	private static void clickAuctionTab(int tab) throws IOException {
+		int[] origin = auctionHouseOrigin();
+		int x = origin[0] + 42 + (tab * 82);
+		int y = origin[1] + 24;
+		clickGame(x, y, "left");
+	}
+
+	private static void clearWorkbenchBlockingUi() throws IOException {
+		final mudclient client = requireClient();
+		runOnEdt(() -> {
+			client.setShowDialogServerMessage(false);
+			client.setShowDialogMessage(false);
+			client.setWelcomeScreenShown(false);
+			client.setShowDialogBank(false);
+			AuctionHouse auctionHouse = client.getAuctionHouse();
+			if (auctionHouse != null) {
+				auctionHouse.setVisible(false);
+			}
+			if (client.worldMapPanel != null) {
+				client.worldMapPanel.setVisible(false);
+			}
+		});
+	}
+
+	private static boolean isLoggedIn() {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		ORSCharacter player = client == null ? null : client.getLocalPlayer();
+		return player != null && player.accountName != null && !player.accountName.trim().isEmpty();
+	}
+
+	private static void clickSavedUserLogin() throws IOException {
+		mudclient client = requireClient();
+		int centerX = client.getGameWidth() / 2;
+		clickGame(centerX, 224, "left");
+		sleep(350);
+		clickGame(centerX - 46, 273, "left");
+	}
+
+	private static void clickAuctionCategory(int filter) throws IOException {
+		int[] origin = auctionHouseOrigin();
+		int railX = origin[0] + 3;
+		int railY = origin[1] + 62;
+		int tileX = railX + 5 + (filter % 2) * 38;
+		int tileY = railY + 23 + (filter / 2) * 39;
+		clickGame(tileX + 17, tileY + 18, "left");
+	}
+
+	private static void clickFirstAuctionRow() throws IOException {
+		int[] origin = auctionHouseOrigin();
+		clickGame(origin[0] + 290, origin[1] + 120, "left");
+	}
+
+	private static int[] auctionHouseOrigin() throws IOException {
+		mudclient client = requireClient();
+		int width = 490;
+		int height = 326 - 47;
+		return new int[]{(client.getGameWidth() - width) / 2, (client.getGameHeight() - height) / 2};
+	}
+
+	private static AuctionHouse getAuctionHouse() {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		return client == null ? null : client.getAuctionHouse();
+	}
+
+	private static void requireLoggedInAdmin() throws IOException {
+		mudclient client = requireClient();
+		ORSCharacter player = client.getLocalPlayer();
+		if (player == null) throw new IOException("Login required for Auction House fixture seeding");
+		if (!player.isAdmin()) throw new IOException("Admin account required for Auction House fixture seeding");
+	}
+
+	private static void clickGame(final int x, final int y, final String buttonName) throws IOException {
+		final mudclient client = requireClient();
+		final ORSCApplet applet = requireApplet();
+		final int button = "right".equalsIgnoreCase(buttonName) ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
+		final int modifiers = button == MouseEvent.BUTTON3 ? InputEvent.BUTTON3_DOWN_MASK : InputEvent.BUTTON1_DOWN_MASK;
+
+		runOnEdt(() -> {
+			int eventX = x + client.screenOffsetX;
+			int eventY = y + client.screenOffsetY;
+			long now = System.currentTimeMillis();
+			Component source = applet;
+			ORSCApplet.MouseHandler mouseHandler = applet.getMouseHandler();
+			mouseHandler.mouseMoved(new MouseEvent(source, MouseEvent.MOUSE_MOVED, now, 0, eventX, eventY, 0, false, MouseEvent.NOBUTTON));
+			mouseHandler.mousePressed(new MouseEvent(source, MouseEvent.MOUSE_PRESSED, now, modifiers, eventX, eventY, 1, false, button));
+			mouseHandler.mouseReleased(new MouseEvent(source, MouseEvent.MOUSE_RELEASED, now + 1, 0, eventX, eventY, 1, false, button));
+			mouseHandler.mouseClicked(new MouseEvent(source, MouseEvent.MOUSE_CLICKED, now + 2, 0, eventX, eventY, 1, false, button));
+		});
+	}
+
+	private static void typeText(String text) throws IOException {
+		for (int i = 0; i < text.length(); i++) {
+			char character = text.charAt(i);
+			if (character == '\n') {
+				pressKey(KeyEvent.VK_ENTER, '\n');
+			} else if (character == '\r') {
+				pressKey(KeyEvent.VK_ENTER, '\r');
+			} else {
+				pressKey(KeyEvent.getExtendedKeyCodeForChar(character), character);
+			}
+			sleep(15);
+		}
+	}
+
+	private static void pressKeyName(String keyName) throws IOException {
+		String key = keyName.trim();
+		if (key.length() == 1) {
+			char character = key.charAt(0);
+			pressKey(KeyEvent.getExtendedKeyCodeForChar(character), character);
+			return;
+		}
+
+		String normalized = key.toUpperCase().replace('-', '_').replace(' ', '_');
+		if ("ENTER".equals(normalized) || "RETURN".equals(normalized)) {
+			pressKey(KeyEvent.VK_ENTER, '\n');
+		} else if ("BACKSPACE".equals(normalized) || "BKSP".equals(normalized)) {
+			pressKey(KeyEvent.VK_BACK_SPACE, '\b');
+		} else if ("TAB".equals(normalized)) {
+			pressKey(KeyEvent.VK_TAB, '\t');
+		} else if ("ESC".equals(normalized) || "ESCAPE".equals(normalized)) {
+			pressKey(KeyEvent.VK_ESCAPE, KeyEvent.CHAR_UNDEFINED);
+		} else if ("LEFT".equals(normalized)) {
+			pressKey(KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED);
+		} else if ("RIGHT".equals(normalized)) {
+			pressKey(KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED);
+		} else if ("UP".equals(normalized)) {
+			pressKey(KeyEvent.VK_UP, KeyEvent.CHAR_UNDEFINED);
+		} else if ("DOWN".equals(normalized)) {
+			pressKey(KeyEvent.VK_DOWN, KeyEvent.CHAR_UNDEFINED);
+		} else {
+			pressKey(vkCode(normalized), KeyEvent.CHAR_UNDEFINED);
+		}
+	}
+
+	private static int vkCode(String normalized) throws IOException {
+		String fieldName = normalized.startsWith("VK_") ? normalized : "VK_" + normalized;
+		try {
+			Field field = KeyEvent.class.getField(fieldName);
+			return field.getInt(null);
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			throw new IOException("Unknown key: " + normalized);
+		}
+	}
+
+	private static void pressKey(final int keyCode, final char character) throws IOException {
+		final ORSCApplet applet = requireApplet();
+		runOnEdt(() -> {
+			long now = System.currentTimeMillis();
+			Component source = applet;
+			ORSCApplet.KeyHandler keyHandler = applet.getKeyHandler();
+			keyHandler.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, now, 0, keyCode, character));
+			keyHandler.keyReleased(new KeyEvent(source, KeyEvent.KEY_RELEASED, now + 1, 0, keyCode, character));
+		});
+	}
+
+	private static void sendCommand(String command) throws IOException {
+		final mudclient client = requireClient();
+		final String normalized = normalizeCommand(command);
+		if (normalized.isEmpty()) throw new IOException("Command is empty");
+		runOnEdt(() -> client.sendCommandString(normalized));
+	}
+
+	private static String normalizeCommand(String command) {
+		if (command == null) return "";
+		String normalized = command.trim();
+		while (normalized.startsWith(":")) normalized = normalized.substring(1);
+		return normalized.trim();
+	}
+
+	private static mudclient requireClient() throws IOException {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		if (client == null) throw new IOException("Client is not initialized");
+		return client;
+	}
+
+	private static ORSCApplet requireApplet() throws IOException {
+		ORSCApplet applet = ORSCApplet.getAppletForWorkbench();
+		if (applet == null) throw new IOException("Applet is not initialized");
+		if (applet.getMouseHandler() == null || applet.getKeyHandler() == null) {
+			throw new IOException("Client input handlers are not initialized");
+		}
+		return applet;
+	}
+
+	private static void runOnEdt(EdtAction action) throws IOException {
+		if (SwingUtilities.isEventDispatchThread()) {
+			action.run();
+			return;
+		}
+
+		final IOException[] ioError = new IOException[1];
+		final RuntimeException[] runtimeError = new RuntimeException[1];
+		try {
+			SwingUtilities.invokeAndWait(() -> {
+				try {
+					action.run();
+				} catch (IOException e) {
+					ioError[0] = e;
+				} catch (RuntimeException e) {
+					runtimeError[0] = e;
+				}
+			});
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Interrupted while waiting for client input", e);
+		} catch (InvocationTargetException e) {
+			throw new IOException("Client input failed", e.getCause());
+		}
+
+		if (ioError[0] != null) throw ioError[0];
+		if (runtimeError[0] != null) throw runtimeError[0];
+	}
+
+	private static Map<String, String> requestFields(HttpExchange exchange) throws IOException {
+		LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+		parseQuery(exchange.getRequestURI().getRawQuery(), fields);
+		String body = readBody(exchange);
+		if (!body.trim().isEmpty()) {
+			if (body.trim().startsWith("{")) {
+				fields.putAll(parseFlatJsonObject(body));
+			} else {
+				parseQuery(body, fields);
+			}
+		}
+		return fields;
+	}
+
+	private static String readBody(HttpExchange exchange) throws IOException {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		byte[] buffer = new byte[1024];
+		int read;
+		while ((read = exchange.getRequestBody().read(buffer)) != -1) {
+			bytes.write(buffer, 0, read);
+		}
+		return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+	}
+
+	private static void parseQuery(String query, Map<String, String> fields) throws IOException {
+		if (query == null || query.isEmpty()) return;
+		String[] pairs = query.split("&");
+		for (String pair : pairs) {
+			if (pair.isEmpty()) continue;
+			int equals = pair.indexOf('=');
+			String key = equals >= 0 ? pair.substring(0, equals) : pair;
+			String value = equals >= 0 ? pair.substring(equals + 1) : "";
+			fields.put(urlDecode(key), urlDecode(value));
+		}
+	}
+
+	private static Map<String, String> parseFlatJsonObject(String json) throws IOException {
+		LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+		String trimmed = json.trim();
+		if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+			throw new IOException("Expected a flat JSON object");
+		}
+
+		int index = 1;
+		while (index < trimmed.length() - 1) {
+			index = skipWhitespaceAndCommas(trimmed, index);
+			if (index >= trimmed.length() - 1) break;
+			ParseString key = parseJsonString(trimmed, index);
+			index = skipWhitespace(trimmed, key.nextIndex);
+			if (index >= trimmed.length() || trimmed.charAt(index) != ':') throw new IOException("Expected ':' after JSON key");
+			index = skipWhitespace(trimmed, index + 1);
+			ParseValue value = parseJsonValue(trimmed, index);
+			fields.put(key.value, value.value);
+			index = value.nextIndex;
+		}
+		return fields;
+	}
+
+	private static ParseValue parseJsonValue(String json, int index) throws IOException {
+		if (index < json.length() && json.charAt(index) == '"') {
+			ParseString string = parseJsonString(json, index);
+			return new ParseValue(string.value, string.nextIndex);
+		}
+
+		int start = index;
+		while (index < json.length()) {
+			char c = json.charAt(index);
+			if (c == ',' || c == '}') break;
+			index++;
+		}
+		return new ParseValue(json.substring(start, index).trim(), index);
+	}
+
+	private static ParseString parseJsonString(String json, int index) throws IOException {
+		if (index >= json.length() || json.charAt(index) != '"') throw new IOException("Expected JSON string");
+		StringBuilder value = new StringBuilder();
+		index++;
+		while (index < json.length()) {
+			char c = json.charAt(index++);
+			if (c == '"') return new ParseString(value.toString(), index);
+			if (c == '\\') {
+				if (index >= json.length()) throw new IOException("Invalid JSON escape");
+				char escaped = json.charAt(index++);
+				switch (escaped) {
+					case '"':
+					case '\\':
+					case '/':
+						value.append(escaped);
+						break;
+					case 'b':
+						value.append('\b');
+						break;
+					case 'f':
+						value.append('\f');
+						break;
+					case 'n':
+						value.append('\n');
+						break;
+					case 'r':
+						value.append('\r');
+						break;
+					case 't':
+						value.append('\t');
+						break;
+					case 'u':
+						if (index + 4 > json.length()) throw new IOException("Invalid unicode escape");
+						value.append((char) Integer.parseInt(json.substring(index, index + 4), 16));
+						index += 4;
+						break;
+					default:
+						throw new IOException("Unsupported JSON escape: " + escaped);
+				}
+			} else {
+				value.append(c);
+			}
+		}
+		throw new IOException("Unterminated JSON string");
+	}
+
+	private static int skipWhitespaceAndCommas(String value, int index) {
+		while (index < value.length()) {
+			char c = value.charAt(index);
+			if (c != ',' && !Character.isWhitespace(c)) break;
+			index++;
+		}
+		return index;
+	}
+
+	private static int skipWhitespace(String value, int index) {
+		while (index < value.length() && Character.isWhitespace(value.charAt(index))) index++;
+		return index;
+	}
+
+	private static String urlDecode(String value) throws IOException {
+		return URLDecoder.decode(value, "UTF-8");
+	}
+
+	private static String requiredString(Map<String, String> fields, String key) throws IOException {
+		String value = fields.get(key);
+		if (value == null) throw new IOException("Missing required field: " + key);
+		return value;
+	}
+
+	private static int requiredInt(Map<String, String> fields, String key) throws IOException {
+		try {
+			return Integer.parseInt(requiredString(fields, key));
+		} catch (NumberFormatException e) {
+			throw new IOException("Expected integer field: " + key);
+		}
+	}
+
+	private static void sleep(long millis) throws IOException {
+		try {
+			Thread.sleep(millis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Interrupted", e);
+		}
+	}
+
+	private static String auctionHouseTabName(int activeInterface) {
+		switch (activeInterface) {
+			case 0:
+				return "browse";
+			case 1:
+				return "myAuctions";
+			case 2:
+				return "intel";
+			default:
+				return "unknown";
+		}
+	}
+
+	private static String sanitizeReason(String reason) {
+		if (reason == null || reason.trim().isEmpty()) return "capture";
+		String sanitized = reason.replaceAll("[^A-Za-z0-9_-]+", "-").replaceAll("^-+|-+$", "");
+		return sanitized.isEmpty() ? "capture" : sanitized;
+	}
+
+	private static File workbenchDir() {
+		return new File(System.getProperty(DIR_PROPERTY, DEFAULT_DIR));
+	}
+
+	private static String fileTimestamp() {
+		SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd-HHmmss-SSS");
+		format.setTimeZone(TimeZone.getDefault());
+		return format.format(new Date());
+	}
+
+	private static String isoTimestamp() {
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+		format.setTimeZone(TimeZone.getDefault());
+		return format.format(new Date());
+	}
+
+	private static StringBuilder appendString(StringBuilder json, String key, String value) {
+		json.append("\"").append(key).append("\":");
+		if (value == null) {
+			json.append("null");
+		} else {
+			json.append("\"").append(jsonEscape(value)).append("\"");
+		}
+		return json;
+	}
+
+	private static String jsonEscape(String value) {
+		if (value == null) return "";
+
+		StringBuilder escaped = new StringBuilder(value.length() + 8);
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			switch (c) {
+				case '"':
+					escaped.append("\\\"");
+					break;
+				case '\\':
+					escaped.append("\\\\");
+					break;
+				case '\b':
+					escaped.append("\\b");
+					break;
+				case '\f':
+					escaped.append("\\f");
+					break;
+				case '\n':
+					escaped.append("\\n");
+					break;
+				case '\r':
+					escaped.append("\\r");
+					break;
+				case '\t':
+					escaped.append("\\t");
+					break;
+				default:
+					if (c < 0x20) {
+						escaped.append(String.format("\\u%04x", (int) c));
+					} else {
+						escaped.append(c);
+					}
+			}
+		}
+		return escaped.toString();
+	}
+
+	private static void sendJson(HttpExchange exchange, int status, String json) throws IOException {
+		byte[] body = json.getBytes(StandardCharsets.UTF_8);
+		exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+		exchange.sendResponseHeaders(status, body.length);
+		try (OutputStream stream = exchange.getResponseBody()) {
+			stream.write(body);
+		}
+	}
+
+	static final class CaptureResult {
+		final String reason;
+		final File pngFile;
+		final File jsonFile;
+		final int width;
+		final int height;
+
+		private CaptureResult(String reason, File pngFile, File jsonFile, int width, int height) {
+			this.reason = reason;
+			this.pngFile = pngFile;
+			this.jsonFile = jsonFile;
+			this.width = width;
+			this.height = height;
+		}
+	}
+
+	private interface Condition {
+		boolean isTrue();
+	}
+
+	private interface EdtAction {
+		void run() throws IOException;
+	}
+
+	private static final class ParseString {
+		final String value;
+		final int nextIndex;
+
+		ParseString(String value, int nextIndex) {
+			this.value = value;
+			this.nextIndex = nextIndex;
+		}
+	}
+
+	private static final class ParseValue {
+		final String value;
+		final int nextIndex;
+
+		ParseValue(String value, int nextIndex) {
+			this.value = value;
+			this.nextIndex = nextIndex;
+		}
+	}
+}

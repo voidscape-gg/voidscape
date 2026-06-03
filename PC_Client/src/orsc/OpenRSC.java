@@ -88,6 +88,7 @@ public class OpenRSC extends ORSCApplet {
 			scaledWindow.launchScaledWindow();
 
 			applet.resizeMudclient(512, 346);
+			WorkbenchServer.start();
 		} catch (HeadlessException e) {
 			e.printStackTrace();
 		}

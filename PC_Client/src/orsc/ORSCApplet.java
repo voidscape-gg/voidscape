@@ -21,6 +21,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	public static int globalLoadingPercent = 0;
 	public static String globalLoadingState = "";
 	private static mudclient mudclient;
+	private static ORSCApplet workbenchApplet;
 	static PacketHandler packetHandler;
 	private final boolean m_hb = false;
 	protected int resizeWidth;
@@ -44,6 +45,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	protected static ScaledWindow scaledWindow;
 	private static BufferedImage game_image;
 	private static Graphics2D g2dForGameImage;
+	private static final Object gameImageLock = new Object();
 	public static float oldRenderingScalar = 1.0f;
 
 	public MouseHandler getMouseHandler() {
@@ -52,6 +54,40 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 	public KeyHandler getKeyHandler() {
 		return keyHandler;
+	}
+
+	static mudclient getMudclientForWorkbench() {
+		return mudclient;
+	}
+
+	static ORSCApplet getAppletForWorkbench() {
+		return workbenchApplet;
+	}
+
+	static BufferedImage copyGameImageForWorkbench() {
+		synchronized (gameImageLock) {
+			if (game_image == null) return null;
+
+			int imageType = game_image.getType();
+			if (imageType == BufferedImage.TYPE_CUSTOM) imageType = BufferedImage.TYPE_INT_ARGB;
+
+			BufferedImage copy = new BufferedImage(game_image.getWidth(), game_image.getHeight(), imageType);
+			Graphics2D copyGraphics = copy.createGraphics();
+			try {
+				copyGraphics.drawImage(game_image, 0, 0, null);
+			} finally {
+				copyGraphics.dispose();
+			}
+			return copy;
+		}
+	}
+
+	private static void resetGameImage(int width, int height, int imageType) {
+		synchronized (gameImageLock) {
+			if (g2dForGameImage != null) g2dForGameImage.dispose();
+			game_image = new BufferedImage(width, height, imageType);
+			g2dForGameImage = game_image.createGraphics();
+		}
 	}
 
 	void addMouseClick(int button, int x, int y) {
@@ -188,6 +224,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	public final void init() {
 		try {
 			mudclient = new mudclient(this);
+			workbenchApplet = this;
 			mudclient.packetHandler = new PacketHandler(mudclient);
 			loadLogo();
 
@@ -234,6 +271,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			} finally {
+				WorkbenchServer.stop();
 				System.exit(0);
 			}
 		} catch (RuntimeException var2) {
@@ -448,10 +486,12 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 			oldRenderingScalar = orsc.mudclient.newRenderingScalar;
 		}
 
-		g2dForGameImage.drawImage(this.backingImage, 0, 0, null);
+		synchronized (gameImageLock) {
+			g2dForGameImage.drawImage(this.backingImage, 0, 0, null);
 
-		// Forward the image to be drawn by ScaledWindow.java
-		scaledWindow.setGameImage(game_image);
+			// Forward the image to be drawn by ScaledWindow.java
+			scaledWindow.setGameImage(game_image);
+		}
 	}
 
 	/** Updates the rendering scalar and resizes the window accordingly */
@@ -460,7 +500,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 		// Reset the game image with the current type to ensure that affineOp
 		// scaling will always have matching source and destination types
-		game_image = new BufferedImage(newWidth, newHeight, imageType);
+		resetGameImage(newWidth, newHeight, imageType);
 
 		// Handle rendering scalar value changes
 		orsc.mudclient.renderingScalar = scalar;
@@ -520,8 +560,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		imageProducer.setDimensions(newWidth, newHeight);
 		initGraphics();
 
-		game_image = new BufferedImage(newWidth, newHeight, ScaledWindow.getBufferedImageType());
-		g2dForGameImage = game_image.createGraphics();
+		resetGameImage(newWidth, newHeight, ScaledWindow.getBufferedImageType());
 	}
 
 	@Override
@@ -785,15 +824,9 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				char keyChar = var1.getKeyChar();
 				int keyCode = var1.getKeyCode();
 
-				// voidscape: backtick → macOS screencapture (silent, full screen)
+				// voidscape: backtick saves an exact game-frame capture.
 				if (keyChar == '`') {
-					try {
-						new ProcessBuilder("screencapture", "-x", "/tmp/voidscape-screenshot.png").start();
-						mudclient.showMessage(false, null, "Screenshot saved: /tmp/voidscape-screenshot.png",
-							orsc.enumerations.MessageType.GAME, 0, null);
-					} catch (java.io.IOException ex) {
-						// ignore — screencapture missing or path unwritable
-					}
+					WorkbenchServer.captureFromHotkey(mudclient);
 					return;
 				}
 

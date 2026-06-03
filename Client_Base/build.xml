@@ -6,6 +6,7 @@
     <property name="jar" location="Open_RSC_Client.jar"/>
     <property name="javac.source" value="1.8"/>
     <property name="javac.target" value="1.8"/>
+    <property name="workbench.jvmargs" value=""/>
 
     <target name="clean">
         <delete dir="${build}" />
@@ -38,7 +39,7 @@
 
     <target name="runclient">
         <java classname="orsc.OpenRSC" fork="true">
-            <jvmarg line="-Xms312m -Dsun.java2d.opengl=true"/>
+            <jvmarg line="-Xms312m -Dsun.java2d.opengl=true ${workbench.jvmargs}"/>
             <classpath>
                 <pathelement path="${jar}:${lib}/discord-rpc.jar"/>
             </classpath>

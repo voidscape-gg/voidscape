@@ -191,6 +191,11 @@ server/conf/server/data/pk_catching_sim_highscores.properties
 # Per-developer client cache config (ip + port are written by scripts/run-client.sh)
 Client_Base/Cache/ip.txt
 Client_Base/Cache/port.txt
+Client_Base/Cache/hideIp.txt
+
+# Local scratch/output from captures, generated concepts, temporary extraction work, and bots
+output/
+tmp/
 
 # Claude Code per-session skills (workflow scaffolding, not project content)
 .claude/skills/

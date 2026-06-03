@@ -11,11 +11,12 @@ voidscape/
 ├── LICENSE                         # AGPLv3 (inherited from OpenRSC)
 ├── CONTRIBUTING.md                 # Upstream contributor notes (still applies for plugin patterns)
 ├── SECURITY.md                     # Security disclosure guidance from upstream
-├── Commands.md                     # Reference for in-game admin commands
+├── Commands.md                     # Reference for in-game admin/player commands
 │
 ├── docs/                           # Voidscape architecture / recipes / glossary
 ├── scripts/                        # Voidscape canonical entry points (build, run, reset)
 ├── memory/                         # Voidscape persistent memory (loaded each session)
+├── .agents/                        # Codex skills / workflow scaffolding
 ├── .claude/                        # Claude Code config + custom subagents
 ├── upstream/                       # Frozen reference copy of OpenRSC at vendor SHA
 │   └── openrsc-snapshot/           #   gitignored — recreate via scripts/fetch-upstream-snapshot.sh
@@ -113,7 +114,8 @@ server/
 │   │
 │   ├── external/EntityHandler.java # singleton catalog of all defs (items, NPCs, skills, …)
 │   │
-│   ├── content/                    # built-in mini-games etc.
+│   ├── content/                    # shared content systems such as LootBeamSettings
+│   │   ├── PlayerTitle.java        # Voidscape player-title catalog, unlock checks, active title cache
 │   │
 │   └── …                           # (login, util, services, …)
 │
@@ -200,6 +202,7 @@ PC_Client/
 ├── build.xml                       # Ant; Java 1.8 target
 ├── src/orsc/
 │   ├── OpenRSC.java                # main()
+│   ├── WorkbenchServer.java        # Dev-only loopback screenshot/state API
 │   └── ScaledWindow.java, Discord.java   # PC-specific UI
 └── lib/discord-rpc.jar
 
@@ -231,7 +234,7 @@ Backups/                            # Empty placeholder; manual SQL dumps go her
 Portable_Windows/                   # Windows portable bundle (HeidiSQL, scripts)
 ```
 
-## `docs/`, `scripts/`, `memory/`, `.claude/` — voidscape additions
+## `docs/`, `scripts/`, `memory/`, `.agents/`, `.claude/` — voidscape additions
 
 ```
 docs/
@@ -239,7 +242,10 @@ docs/
 ├── CODEMAP.md                      # This file
 ├── DEVELOPMENT.md                  # Build / run / reset on macOS
 ├── DIVERGENCE.md                   # Vendor SHA + voidscape change log
+├── CONFIG-MATRIX.md                # Intended dev/staging/prod config values
 ├── GLOSSARY.md                     # RSC + OpenRSC terminology
+├── OPERATIONS.md                   # Runbook: deploy, backups, logs, rollback
+├── RELEASE-CHECKLIST.md            # Pre-release verification checklist
 ├── SERVER-PRESETS.md               # Each .conf's role + voidscape recommendation
 ├── recipes/                        # Step-by-step playbooks
 │   ├── add-item.md
@@ -249,17 +255,23 @@ docs/
 │   ├── tweak-combat-formula.md
 │   └── add-admin-command.md
 └── subsystems/                     # Deep dives, one per major subsystem
+    ├── ai-workbench.md
     ├── client-cache.md
     ├── combat-system.md
+    ├── dynamic-wilderness-spawns.md
     ├── networking-protocol.md
     ├── persistence-db.md
+    ├── player-titles.md
+    ├── rare-drop-beams.md
     ├── scripting-plugins.md
+    ├── world-announcements.md
     └── world-tick-loop.md
 
 scripts/
 ├── build.sh                        # Compile server + plugins + client
 ├── run-server.sh                   # Run server with voidscape's local.conf
 ├── run-client.sh                   # Run PC client
+├── run-workbench-client.sh         # Run PC client with local AI workbench endpoints
 ├── reset-db.sh                     # Wipe + reseed dev DB
 └── fetch-upstream-snapshot.sh      # Recreate upstream/openrsc-snapshot/
 
@@ -269,6 +281,10 @@ memory/
 ├── reference_openrsc_upstream.md
 ├── reference_layout.md
 └── feedback_preferences.md
+
+.agents/
+└── skills/
+    └── feature/SKILL.md            # Discovery-first feature workflow
 
 .claude/
 ├── settings.json                   # Project-level Claude Code config (tracked)

@@ -87,6 +87,7 @@ Voidscape's wrappers in `scripts/` are the canonical entry points. Direct Ant/Ma
 scripts/build.sh              # compile server core + plugins + client
 scripts/run-server.sh         # run server with the voidscape preset
 scripts/run-client.sh         # run PC client against local server
+scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
 scripts/build-android.sh      # build Android APK; requires Android SDK
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
