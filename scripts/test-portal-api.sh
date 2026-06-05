@@ -22,6 +22,9 @@ CREATE TABLE players (
 	id INTEGER PRIMARY KEY,
 	username varchar(12) NOT NULL DEFAULT '',
 	group_id int(10) DEFAULT 10,
+	email varchar(255) DEFAULT NULL,
+	pass varchar(512) NOT NULL DEFAULT '',
+	salt varchar(250) NOT NULL DEFAULT '',
 	combat int(10) DEFAULT 3,
 	skill_total int(10) DEFAULT 27,
 	x int(5) DEFAULT 216,
@@ -38,7 +41,101 @@ CREATE TABLE players (
 	trousercolour int(5) DEFAULT 14,
 	skincolour int(5) DEFAULT 0,
 	headsprite int(5) DEFAULT 1,
-	bodysprite int(5) DEFAULT 2
+	bodysprite int(5) DEFAULT 2,
+	creation_date int(10) NOT NULL DEFAULT 0,
+	creation_ip varchar(255) NOT NULL DEFAULT '0.0.0.0'
+);
+CREATE TABLE curstats (
+	playerID int(10) NOT NULL PRIMARY KEY,
+	attack tinyint(3) NOT NULL DEFAULT 1,
+	defense tinyint(3) NOT NULL DEFAULT 1,
+	strength tinyint(3) NOT NULL DEFAULT 1,
+	hits tinyint(3) NOT NULL DEFAULT 10,
+	ranged tinyint(3) NOT NULL DEFAULT 1,
+	prayer tinyint(3) NOT NULL DEFAULT 1,
+	magic tinyint(3) NOT NULL DEFAULT 1,
+	cooking tinyint(3) NOT NULL DEFAULT 1,
+	woodcut tinyint(3) NOT NULL DEFAULT 1,
+	fletching tinyint(3) NOT NULL DEFAULT 1,
+	fishing tinyint(3) NOT NULL DEFAULT 1,
+	firemaking tinyint(3) NOT NULL DEFAULT 1,
+	crafting tinyint(3) NOT NULL DEFAULT 1,
+	smithing tinyint(3) NOT NULL DEFAULT 1,
+	mining tinyint(3) NOT NULL DEFAULT 1,
+	herblaw tinyint(3) NOT NULL DEFAULT 1,
+	agility tinyint(3) NOT NULL DEFAULT 1,
+	thieving tinyint(3) NOT NULL DEFAULT 1,
+	harvesting tinyint(3) NOT NULL DEFAULT 1,
+	runecraft tinyint(3) NOT NULL DEFAULT 1
+);
+CREATE TABLE maxstats (
+	playerID int(10) NOT NULL PRIMARY KEY,
+	attack tinyint(3) NOT NULL DEFAULT 1,
+	defense tinyint(3) NOT NULL DEFAULT 1,
+	strength tinyint(3) NOT NULL DEFAULT 1,
+	hits tinyint(3) NOT NULL DEFAULT 10,
+	ranged tinyint(3) NOT NULL DEFAULT 1,
+	prayer tinyint(3) NOT NULL DEFAULT 1,
+	magic tinyint(3) NOT NULL DEFAULT 1,
+	cooking tinyint(3) NOT NULL DEFAULT 1,
+	woodcut tinyint(3) NOT NULL DEFAULT 1,
+	fletching tinyint(3) NOT NULL DEFAULT 1,
+	fishing tinyint(3) NOT NULL DEFAULT 1,
+	firemaking tinyint(3) NOT NULL DEFAULT 1,
+	crafting tinyint(3) NOT NULL DEFAULT 1,
+	smithing tinyint(3) NOT NULL DEFAULT 1,
+	mining tinyint(3) NOT NULL DEFAULT 1,
+	herblaw tinyint(3) NOT NULL DEFAULT 1,
+	agility tinyint(3) NOT NULL DEFAULT 1,
+	thieving tinyint(3) NOT NULL DEFAULT 1,
+	harvesting tinyint(3) NOT NULL DEFAULT 1,
+	runecraft tinyint(3) NOT NULL DEFAULT 1
+);
+CREATE TABLE experience (
+	playerID int(10) NOT NULL PRIMARY KEY,
+	attack int(9) NOT NULL DEFAULT 0,
+	defense int(9) NOT NULL DEFAULT 0,
+	strength int(9) NOT NULL DEFAULT 0,
+	hits int(9) NOT NULL DEFAULT 4616,
+	ranged int(9) NOT NULL DEFAULT 0,
+	prayer int(9) NOT NULL DEFAULT 0,
+	magic int(9) NOT NULL DEFAULT 0,
+	cooking int(9) NOT NULL DEFAULT 0,
+	woodcut int(9) NOT NULL DEFAULT 0,
+	fletching int(9) NOT NULL DEFAULT 0,
+	fishing int(9) NOT NULL DEFAULT 0,
+	firemaking int(9) NOT NULL DEFAULT 0,
+	crafting int(9) NOT NULL DEFAULT 0,
+	smithing int(9) NOT NULL DEFAULT 0,
+	mining int(9) NOT NULL DEFAULT 0,
+	herblaw int(9) NOT NULL DEFAULT 0,
+	agility int(9) NOT NULL DEFAULT 0,
+	thieving int(9) NOT NULL DEFAULT 0,
+	harvesting int(9) NOT NULL DEFAULT 0,
+	runecraft int(9) NOT NULL DEFAULT 0
+);
+CREATE TABLE capped_experience (
+	playerID int(10) NOT NULL PRIMARY KEY,
+	attack int(10),
+	defense int(10),
+	strength int(10),
+	hits int(10),
+	ranged int(10),
+	prayer int(10),
+	magic int(10),
+	cooking int(10),
+	woodcut int(10),
+	fletching int(10),
+	fishing int(10),
+	firemaking int(10),
+	crafting int(10),
+	smithing int(10),
+	mining int(10),
+	herblaw int(10),
+	agility int(10),
+	thieving int(10),
+	harvesting int(10),
+	runecraft int(10)
 );
 CREATE TABLE player_cache (
 	playerID int(10) NOT NULL,
@@ -63,11 +160,11 @@ CREATE TABLE itemstatuses (
 	kill_log TEXT DEFAULT NULL
 );
 INSERT INTO players (
-	id, username, group_id, combat, skill_total, x, y, kills, npc_kills, deaths,
+	id, username, group_id, email, pass, salt, combat, skill_total, x, y, kills, npc_kills, deaths,
 	quest_points, login_date, online, male, haircolour, topcolour, trousercolour,
 	skincolour, headsprite, bodysprite
 ) VALUES (
-	77, 'SmokeHero', 10, 87, 1194, 122, 509, 28, 319, 4,
+	77, 'SmokeHero', 10, 'smoke@example.com', 'fixture-pass', '', 87, 1194, 122, 509, 28, 319, 4,
 	47, 1780539120, 0, 1, 2, 8, 14, 0, 1, 2
 );
 INSERT INTO player_cache (playerID, type, key, value) VALUES
@@ -94,3 +191,31 @@ done
 
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 PORT="$PORT" node web/portal/api-smoke.mjs
+
+created_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username LIKE 'Smoke%' AND id <> 77;")"
+if [[ "$created_count" != "9" ]]; then
+	echo "expected 9 portal-created OpenRSC players, got $created_count"
+	exit 1
+fi
+
+missing_stat_rows="$(sqlite3 "$fixture_db" <<'SQL'
+SELECT COUNT(*)
+FROM players p
+LEFT JOIN curstats c ON c.playerID = p.id
+LEFT JOIN maxstats m ON m.playerID = p.id
+LEFT JOIN experience e ON e.playerID = p.id
+LEFT JOIN capped_experience ce ON ce.playerID = p.id
+WHERE p.username LIKE 'Smoke%' AND p.id <> 77
+  AND (c.playerID IS NULL OR m.playerID IS NULL OR e.playerID IS NULL OR ce.playerID IS NULL);
+SQL
+)"
+if [[ "$missing_stat_rows" != "0" ]]; then
+	echo "portal-created players are missing initialized stat rows"
+	exit 1
+fi
+
+bad_hits_xp="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM experience e JOIN players p ON p.id = e.playerID WHERE p.username LIKE 'Smoke%' AND p.id <> 77 AND e.hits <> 4000;")"
+if [[ "$bad_hits_xp" != "0" ]]; then
+	echo "portal-created players should initialize hits xp to the Java createPlayer baseline"
+	exit 1
+fi

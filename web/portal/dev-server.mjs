@@ -266,13 +266,13 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/characters") {
 		const payload = await readJson(request);
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
 			const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
 			if (currentCount >= maxCharacters) {
 				throw new HttpError(409, "character_limit_reached");
 			}
-			createCharacter(store, account.id, payload.name, payload.path || "warrior");
+			await createAccountCharacter(store, account, payload, request);
 			account.updatedAt = now();
 			audit(store, "character_created", { accountId: account.id });
 			return accountState(store, account);
@@ -623,6 +623,61 @@ function createCharacter(store, accountId, name, path) {
 	return character;
 }
 
+async function createAccountCharacter(store, account, payload, request) {
+	const username = cleanUsername(payload.name || payload.username || "");
+	const normalizedName = normalizeUsername(username);
+	if (!normalizedName) throw new HttpError(400, "invalid_character_name");
+	if (store.characters.some((character) => character.normalizedName === normalizedName)) {
+		throw new HttpError(409, "character_name_taken");
+	}
+
+	if (!openRscDbPath) {
+		return createCharacter(store, account.id, username, payload.path || "warrior");
+	}
+
+	const password = requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+	if (await openRscPlayerExists(normalizedName)) {
+		throw new HttpError(409, "character_name_taken");
+	}
+
+	const playerId = await createOpenRscPlayer({
+		username,
+		email: account.emailDisplay || account.emailCanonical || "",
+		password,
+		ip: clientIp(request)
+	});
+	const snapshot = await openRscCharacterSnapshot(username);
+	const kit = kits[payload.path] || kits.warrior;
+	const character = {
+		id: nextId(store, "character"),
+		accountId: account.id,
+		playerId,
+		name: snapshot.name,
+		normalizedName,
+		path: kit.path,
+		image: kit.image,
+		combat: snapshot.combat,
+		total: snapshot.total,
+		quest: snapshot.quest,
+		kills: snapshot.kills,
+		status: snapshot.status,
+		title: snapshot.title,
+		subscription: snapshot.subscription,
+		lastLogin: snapshot.lastLogin,
+		appearance: snapshot.appearance,
+		gear: snapshot.gear,
+		appearanceData: snapshot.appearanceData || null,
+		equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
+		linkStatus: "linked",
+		source: "openrsc-sqlite-created",
+		createdAt: now(),
+		linkedAt: now(),
+		updatedAt: now()
+	};
+	store.characters.push(character);
+	return character;
+}
+
 function accountState(store, account, currentSession) {
 	const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null;
 	return {
@@ -949,6 +1004,49 @@ function linkChallengeState(challenge, code) {
 	};
 }
 
+async function openRscPlayerExists(normalizedName) {
+	if (!openRscDbPath) return false;
+	const rows = await sqliteJson(`
+		SELECT id
+		FROM players
+		WHERE lower(username) = ${sqlString(normalizedName)}
+		LIMIT 1
+	`);
+	return rows.length > 0;
+}
+
+async function createOpenRscPlayer({ username, email, password, ip }) {
+	const passwordState = legacyGamePasswordHash(password);
+	const createdAt = Math.floor(Date.now() / 1000);
+	const rows = await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		INSERT INTO players (
+			username, email, pass, salt, creation_date, creation_ip, group_id
+		) VALUES (
+			${sqlString(username)},
+			${sqlString(email || "")},
+			${sqlString(passwordState.hash)},
+			${sqlString(passwordState.salt)},
+			${createdAt},
+			${sqlString(ip || "127.0.0.1")},
+			1
+		);
+		INSERT INTO maxstats (playerID)
+			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		INSERT INTO curstats (playerID)
+			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		INSERT INTO experience (playerID, hits)
+			SELECT id, 4000 FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		INSERT INTO capped_experience (playerID)
+			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		COMMIT;
+		SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+	`);
+	const playerId = Number(rows[0] && rows[0].id);
+	if (!playerId) throw new HttpError(500, "openrsc_character_create_failed");
+	return playerId;
+}
+
 async function openRscCharacterSnapshot(username) {
 	if (!openRscDbPath) {
 		throw new HttpError(503, "openrsc_db_not_configured");
@@ -1073,6 +1171,26 @@ async function sqliteJson(query) {
 		}
 		if (error.stderr && error.stderr.includes("no such table")) {
 			throw new HttpError(500, "openrsc_schema_missing");
+		}
+		throw error;
+	}
+}
+
+async function sqliteWriteJson(query) {
+	try {
+		const { stdout } = await execFile("sqlite3", ["-json", openRscDbPath, query], {
+			maxBuffer: 1024 * 1024
+		});
+		return stdout.trim() ? JSON.parse(stdout) : [];
+	} catch (error) {
+		if (error.code === "ENOENT") {
+			throw new HttpError(503, "sqlite3_not_available");
+		}
+		if (error.stderr && error.stderr.includes("no such table")) {
+			throw new HttpError(500, "openrsc_schema_missing");
+		}
+		if (error.stderr && error.stderr.includes("constraint")) {
+			throw new HttpError(409, "openrsc_character_constraint_failed");
 		}
 		throw error;
 	}
@@ -1465,6 +1583,29 @@ function requirePassword(password) {
 		throw new HttpError(400, "invalid_password");
 	}
 	return text;
+}
+
+function requireGamePassword(password) {
+	const text = String(password || "");
+	if (text.length < 4 || text.length > 20) {
+		throw new HttpError(400, "invalid_game_password");
+	}
+	return text;
+}
+
+function legacyGamePasswordHash(password) {
+	const salt = randomBytes(15).toString("base64url").slice(0, 20);
+	const md5 = createHash("md5").update(password).digest("hex");
+	return {
+		salt,
+		hash: createHash("sha512").update(salt + md5).digest("hex")
+	};
+}
+
+function clientIp(request) {
+	const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
+	const raw = forwarded || request.socket.remoteAddress || "127.0.0.1";
+	return raw === "::1" || raw === "::ffff:127.0.0.1" ? "127.0.0.1" : raw;
 }
 
 function subscriptionState(account) {

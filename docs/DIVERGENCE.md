@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-05 — Portal-backed local game character creation
+
+Added the first real character-creation bridge from the account portal into a configured local OpenRSC SQLite game database. When `PORTAL_OPENRSC_DB` is set, `POST /api/characters` now requires a 4-20 character game password, creates a normal `players` row plus initialized `curstats`, `maxstats`, `experience`, and `capped_experience` rows, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in the account roster. Without a configured game DB, the portal keeps the previous preview-only behavior.
+
+Files touched:
+- `web/portal/dev-server.mjs` — real SQLite-backed character creation path with preview fallback and current-client-compatible game password hashing.
+- `web/portal/index.html`, `web/portal/script.js`, `web/portal/styles.css` — game-password field, request wiring, and cleaner character creation messaging/layout.
+- `scripts/test-portal-api.sh`, `web/portal/api-smoke.mjs` — fixture DB coverage that verifies created player/stat rows and linked roster state.
+- `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md`, `web/portal/README.md` — documented the local bridge and remaining production limits.
+
+Reversibility: remove the SQLite write helpers and restore `/api/characters` to always call the preview creator. This does not change packets, opcodes, the PC client login flow, or production schema application. The bridge remains local/dev-only unless `PORTAL_OPENRSC_DB` is explicitly configured.
+
 ### 2026-06-05 — Simplified portal to account management
 
 Narrowed the web portal prototype from a public content hub back to a simple account-management surface. The visible portal now starts on an Account tab with local email/password or dev Google sign-in, and the sidebar only exposes Account, Characters, Subscription, and Security. Highscores, market, activity, staff, news, referral gateway, and launch-board surfaces are retained only as hidden prototype compatibility markup/API paths for now.

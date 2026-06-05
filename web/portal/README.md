@@ -36,7 +36,8 @@ python3 -m http.server 8788 --directory web/portal
 - account security controls for password rotation, recovery-code generation, and ending other sessions
 - account roster reads
 - API-enforced 10-character cap
-- character creation previews with title/location/gear/appearance state, including default appearance data
+- character creation previews with title/location/gear/appearance state when no game DB is configured
+- OpenRSC SQLite-backed character creation when `PORTAL_OPENRSC_DB` is configured, including `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows
 - character link challenges for proving ownership of existing OpenRSC saves
 - subscription-card redemption previews
 - founder reward wallet state and one-click local redemption of the free weekly subscription-card prize
@@ -71,7 +72,7 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 ## Scope
 
 - Simple Account tab for creating or signing into a local portal account with email/password or dev Google sign-in
-- Character roster and create-character flow mockup with a 10-character web-account cap
+- Character roster and create-character flow with a 10-character web-account cap
 - Character roster cards with linked/preview state badges, gear-token loadouts, and a 10-slot roster rail
 - Subscription status and redeem-card mockup
 - API-backed Security tab for password rotation, one-time recovery-code generation, and session review
@@ -87,7 +88,6 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 
 - Production Google OAuth redirect/callback handling and ID-token verification
 - Game-database-backed account creation
-- Game-database-backed character creation
 - Real in-game `::link` command or signed game-server verification callback
 - Real founder-pass email verification, Turnstile, or production referral risk scoring
 - Production password reset, recovery-code consumption, or email recovery flow

@@ -28,6 +28,7 @@
 	var queueCharacter = document.getElementById("queue-character");
 	var newCharacterButton = document.getElementById("new-character-button");
 	var characterName = document.getElementById("character-name");
+	var characterPassword = document.getElementById("character-password");
 	var snapshotName = document.getElementById("snapshot-name");
 	var loadSnapshot = document.getElementById("load-snapshot");
 	var linkCharacterName = document.getElementById("link-character-name");
@@ -221,20 +222,31 @@
 				characterName.focus();
 				return;
 			}
+			var gamePassword = characterPassword ? characterPassword.value : "";
 			if (sessionToken) {
+				if (gamePassword && (gamePassword.length < 4 || gamePassword.length > 20)) {
+					characterMessage.textContent = "Game password must be 4-20 characters.";
+					characterPassword.focus();
+					return;
+				}
 				try {
 					var state = await apiRequest("/api/characters", {
 						method: "POST",
 						body: {
 							name: name,
-							path: selectedClass
+							path: selectedClass,
+							gamePassword: gamePassword
 						}
 					});
 					applyAccountState(state);
 					selectedCharacter = name;
 					renderCharacters();
 					renderSelectedCharacter();
-					characterMessage.textContent = name + " created through the local portal API.";
+					if (characterPassword) characterPassword.value = "";
+					var created = characters.find(function (entry) { return entry.name === name; });
+					characterMessage.textContent = name + (created && created.source === "openrsc-sqlite-created"
+						? " created in the configured OpenRSC SQLite database."
+						: " added as a local portal preview.");
 					return;
 				} catch (error) {
 					if (error.status === 401) {
@@ -243,6 +255,10 @@
 						characterMessage.textContent = error.code === "character_limit_reached"
 							? "Roster is full. Web accounts are capped at 10 characters."
 							: "That character name is already taken.";
+						return;
+					} else if (error.status === 400 && error.code === "invalid_game_password") {
+						characterMessage.textContent = "Enter a 4-20 character game password for this character.";
+						if (characterPassword) characterPassword.focus();
 						return;
 					}
 				}
@@ -254,7 +270,7 @@
 	if (newCharacterButton) {
 		newCharacterButton.addEventListener("click", function () {
 			characterName.focus();
-			characterMessage.textContent = "Choose a path and preview a character. Current cap: 10 per web account.";
+			characterMessage.textContent = "Choose a name, starter preview, and game password. Current cap: 10 per web account.";
 		});
 	}
 

@@ -203,10 +203,15 @@ for (let i = 2; i <= 10; i += 1) {
 		method: "POST",
 		body: {
 			name: `Smoke${i}`,
-			path: i % 3 === 0 ? "forager" : i % 2 === 0 ? "arcanist" : "warrior"
+			path: i % 3 === 0 ? "forager" : i % 2 === 0 ? "arcanist" : "warrior",
+			gamePassword: `SmokePass${i}`
 		}
 	});
 	assert(roster.characters.length === i, `roster should contain ${i} characters`);
+	const created = roster.characters.find((character) => character.name === `Smoke${i}`);
+	assert(created && created.linkStatus === "linked", `Smoke${i} should be linked to a real game row`);
+	assert(created.source === "openrsc-sqlite-created", `Smoke${i} should report the OpenRSC creation source`);
+	assert(created.playerId > 77, `Smoke${i} should expose the OpenRSC player id`);
 }
 
 const overflow = await api("/api/characters", {

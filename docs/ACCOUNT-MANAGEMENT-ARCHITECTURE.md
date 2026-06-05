@@ -181,6 +181,7 @@ It currently proves:
 - local account security controls for password rotation, hashed recovery-code generation, and ending other active sessions
 - server-side 10-character roster cap
 - character-state API responses shaped for the portal
+- OpenRSC SQLite-backed character creation through `POST /api/characters` when `PORTAL_OPENRSC_DB` is configured; the endpoint creates the normal `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows, then stores the created player id in the local portal roster state
 - local character link challenges with hashed one-time codes and a dev simulation path
 - subscription-card redemption state
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
@@ -191,7 +192,7 @@ It does not yet prove:
 - production email verification
 - Cloudflare Turnstile or rate limits
 - production-safe OpenRSC character ownership/linking
-- OpenRSC database writes
+- production OpenRSC database writes outside the local SQLite dev bridge
 - real in-game `::link` command handling or signed game-server verification callback
 - production Google OAuth redirect/callback handling and ID-token verification
 - production password reset, recovery-code consumption, or email recovery
@@ -211,6 +212,12 @@ The endpoint uses `sqlite3 -readonly -json` and returns portal-ready character s
 - `server/src/com/openrsc/server/content/PlayerTitle.java` for active title display names
 
 It does not authenticate ownership or mutate game data. Production account linking should require proof of character control before exposing private saved-state data outside local development.
+
+### Local OpenRSC character creation
+
+When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 character `gamePassword`. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
+
+This is deliberately still a local bridge. It does not apply the portal schema to the game DB, does not bypass Void Island starter-path onboarding, does not implement a web-account character picker in the client, and does not create production Google/OAuth account records in OpenRSC.
 
 ### Local link challenge flow
 
