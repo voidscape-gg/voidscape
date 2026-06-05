@@ -1028,6 +1028,9 @@ public final class GameStateUpdater {
 						if (player.getClientVersion() >= PlayerTitle.OVERHEAD_TITLE_CLIENT_VERSION) {
 							updatesMain.add(PlayerTitle.activeOverhead(playerNeedingAppearanceUpdate));
 						}
+						if (player.getClientVersion() >= PlayerAppearance.MODERN_HAIR_CLIENT_VERSION) {
+							updatesMain.add((byte) appearance.getHairStyle());
+						}
 					}
 				}
 

@@ -54,6 +54,7 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 		int topColour = payload.topColour;
 		int trouserColour = payload.trouserColour;
 		int skinColour = payload.skinColour;
+		int hairStyle = payload.hairStyle;
 		int ironmanMode = payload.ironmanMode; // custom protocol
 		int isOneXp = payload.isOneXp; // custom protocol
 
@@ -61,7 +62,7 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 		int bodySprite = bodyType + 1;
 
 		PlayerAppearance appearance = new PlayerAppearance(hairColour,
-			topColour, trouserColour, skinColour, headSprite, bodySprite);
+			topColour, trouserColour, skinColour, headSprite, bodySprite, hairStyle);
 		if (!appearance.isValid(player)) {
 			player.setSuspiciousPlayer(true, "player invalid appearance");
 			return;

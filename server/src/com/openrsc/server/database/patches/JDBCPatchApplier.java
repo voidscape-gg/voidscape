@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 public class JDBCPatchApplier extends PatchApplier {
@@ -98,10 +99,30 @@ public class JDBCPatchApplier extends PatchApplier {
             content = content.replaceAll("_PREFIX_", tablePrefix);
             scriptRunner.runScript(new StringReader(content));
         } catch (Exception ex) {
+            if (isAlreadyAppliedKillLogPatch(file, ex)) {
+                LOGGER.warn("Treating {} as already applied because the kill_log column already exists", file.getName());
+                return true;
+            }
             LOGGER.error("Failed to apply patch " + file.getName(), ex);
             return false;
         }
         return true;
+    }
+
+    private boolean isAlreadyAppliedKillLogPatch(File file, Exception ex) {
+        if (!file.getName().equals("2026_04_26_item_kill_log.sql")) {
+            return false;
+        }
+
+        Throwable current = ex;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains("duplicate column")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @Override

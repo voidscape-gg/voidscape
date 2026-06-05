@@ -2257,6 +2257,10 @@ public class PacketHandler {
 				packetsIncoming.getUnsignedByte() == 1,
 				packetsIncoming.getUnsignedByte() == 1);
 		}
+		if (Config.CLIENT_VERSION >= Config.GLOBAL_CHAT_COUNTRY_FLAGS_CLIENT_VERSION
+			&& length - packetsIncoming.packetEnd >= 1) {
+			mc.setGlobalChatCountryFlags(packetsIncoming.getUnsignedByte() == 1);
+		}
 	}
 
 	private void togglePrayer(int length) {
@@ -2839,6 +2843,8 @@ public class PacketHandler {
 					packetsIncoming.get32();
 					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_CLIENT_VERSION)
 						packetsIncoming.readString();
+					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION)
+						packetsIncoming.getUnsignedByte();
 				} else {
 					//packetsIncoming.getShort();
 
@@ -2882,6 +2888,11 @@ public class PacketHandler {
 						}
 					} else {
 						player.title = null;
+					}
+					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION) {
+						player.hairStyle = packetsIncoming.getUnsignedByte();
+					} else {
+						player.hairStyle = 0;
 					}
 				}
 			} else if (updateType == 8) {

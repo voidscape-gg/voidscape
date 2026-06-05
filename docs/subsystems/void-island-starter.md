@@ -1,6 +1,6 @@
 # Void Island Starter Flow
 
-Voidscape routes new accounts to a small Void Island after appearance creation. The island is a one-time onboarding step: players talk to the Void Herald, choose one of three paths, receive a permanent XP boost for that path's skills, get a matching starter kit, then teleport to the configured respawn location.
+Voidscape routes new accounts to a small Void Island after appearance creation. The island is a one-time onboarding step: players talk to the Void Herald, choose one of three paths, receive an early-game XP boost for that path's skills, get a matching starter kit, then teleport to the configured respawn location.
 
 ## Path State
 
@@ -12,15 +12,17 @@ Voidscape routes new accounts to a small Void Island after appearance creation. 
 
 ## Paths
 
-- Warrior's Path grants 2x XP in Attack, Defense, and Strength. Starter kit: iron 2-handed sword, 10 cooked meat, bronze plate body, bronze medium helmet, and bronze legs.
-- Forager's Path grants 2x XP in Fishing, Cooking, and Mining. Starter kit: net, fishing rod, 50 fishing bait, bronze pickaxe, tinderbox, 100 coins, 2 cooked meat, and 2 bread.
-- Arcanist's Path grants 2x XP in Ranged and Magic. Starter kit: shortbow, 50 bronze arrows, blue wizard hat, wizard robe, 100 air runes, 50 mind runes, 25 fire runes, and 2 bread.
+- Warrior's Path grants 2x XP in Attack, Defense, and Strength until each boosted skill reaches level 50. Starter kit: iron 2-handed sword, 10 cooked meat, bronze plate body, bronze medium helmet, and bronze legs.
+- Forager's Path grants 2x XP in Fishing, Cooking, and Mining until each boosted skill reaches level 50. Starter kit: net, fishing rod, 50 fishing bait, bronze pickaxe, tinderbox, 100 coins, 2 cooked meat, and 2 bread.
+- Arcanist's Path grants 2x XP in Ranged and Magic until each boosted skill reaches level 50. Starter kit: shortbow, 50 bronze arrows, blue wizard hat, wizard robe, 100 air runes, 50 mind runes, 25 fire runes, and 2 bread.
 
 ## Herald Flow
 
-`server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` is the interaction point. For unchosen players it explains that each path grants permanent 2x XP plus a starter kit, opens the three-option menu, stores the path, grants the starter kit, teleports the player to spawn, and sends a short welcome box with the selected boost and kit summary.
+`server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` is the interaction point. For unchosen players it explains that each path grants 2x XP until level 50 plus a starter kit, opens the three-option menu, stores the path, grants the starter kit, teleports the player to spawn, and sends a short welcome box with the selected boost and kit summary.
 
 If a player has already chosen a path, the Void Herald delegates to the existing Void Rush dialogue instead of showing the starter choices again.
+
+`VoidPath.boostsSkill(...)` enforces the level cap per boosted skill, so old characters with an existing path keep their path identity but stop receiving the starter multiplier on any boosted skill that has reached level 50.
 
 ## Client UI
 

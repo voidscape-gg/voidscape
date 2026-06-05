@@ -15,6 +15,8 @@ public class OpenRSC extends ORSCApplet {
 	private static final long serialVersionUID = 1L;
 
 	public static void main(String[] args) {
+		boolean loadedScalingScalar = false;
+
 		// MUST do this before anything else runs in order to override OS-level dpi settings
 		// (not applicable to macOS, which implements OS-scaling in a different fashion)
 		if (!Utils.isMacOS()) {
@@ -53,6 +55,7 @@ public class OpenRSC extends ORSCApplet {
 				if (scalarString != null && !scalarString.isEmpty()) {
 					ORSCApplet.oldRenderingScalar = mudclient.renderingScalar;
 					mudclient.newRenderingScalar = Float.parseFloat(scalarString);
+					loadedScalingScalar = true;
 				}
 			} catch (Exception e) {
 				System.out.println("Something went wrong loading scaling settings");
@@ -61,6 +64,7 @@ public class OpenRSC extends ORSCApplet {
 		}
 
 		scaledWindow = ScaledWindow.getInstance();
+		scaledWindow.applyStartupScalingDefaults(loadedScalingScalar);
 		SwingUtilities.invokeLater(OpenRSC::createAndShowGUI);
 	}
 

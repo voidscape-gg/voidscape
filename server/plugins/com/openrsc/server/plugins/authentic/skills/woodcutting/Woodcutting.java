@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.authentic.skills.woodcutting;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.GuaranteedResources;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.external.ObjectWoodcuttingDef;
 import com.openrsc.server.model.container.Item;
@@ -99,11 +100,19 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 
 		// New trees update; map32 introduced new trees & made woodcut xp no longer be scaled
 		boolean isOldWoodcut = (player.getConfig().SCALED_WOODCUT_XP || player.getConfig().BASED_MAP_DATA < 32) && def.getLogId() == ItemId.LOGS.id();
-		if ((!isOldWoodcut && getLog(def, player.getSkills().getLevel(Skill.WOODCUTTING.id()), axeId))
+		boolean guaranteed = !isOldWoodcut
+			&& GuaranteedResources.shouldGuarantee(player, GuaranteedResources.WOODCUTTING, def.getLogId());
+		if ((!isOldWoodcut && (guaranteed || getLog(def, player.getSkills().getLevel(Skill.WOODCUTTING.id()), axeId)))
 			|| (isOldWoodcut && Formulae.chopLogs(player.getSkills().getLevel(Skill.WOODCUTTING.id())))) {
 			//check if the tree is still up
 			GameObject obj = player.getViewArea().getGameObject(object.getID(), object.getX(), object.getY());
+			boolean obtainedLog = false;
 			if (!player.getConfig().SHARED_GATHERING_RESOURCES || obj != null) {
+				obtainedLog = true;
+				if (!isOldWoodcut) {
+					GuaranteedResources.recordAttempt(player, GuaranteedResources.WOODCUTTING, def.getLogId(), true);
+					GuaranteedResources.notifyIfGuaranteed(player, guaranteed);
+				}
 				player.getCarriedItems().getInventory().add(log);
 				player.playerServerMessage(MessageType.QUEST, "You get some wood");
 				if (isOldWoodcut) {
@@ -121,7 +130,18 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 			} else {
 				player.playerServerMessage(MessageType.QUEST, "You slip and fail to hit the tree");
 			}
-			if (DataConversions.random(1, 100) <= def.getFell() && !woodcuttingSkillcape(player)) {
+			if (obtainedLog) {
+				GuaranteedResources.recordNodeYield(object, GuaranteedResources.WOODCUTTING);
+			}
+			if (obtainedLog && DataConversions.random(1, 100) <= def.getFell() && !woodcuttingSkillcape(player)) {
+				if (GuaranteedResources.shouldProtectNode(object, GuaranteedResources.WOODCUTTING)) {
+					updatebatch();
+					if (!ifinterrupted() && !isbatchcomplete()) {
+						delay();
+						batchWoodcutting(player, object, def, axeId);
+					}
+					return;
+				}
 				int stumpId;
 				if (def.getLogId() == ItemId.LOGS.id() || def.getLogId() == ItemId.MAGIC_LOGS.id()) {
 					stumpId = 4; //narrow tree stump
@@ -132,10 +152,14 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 					GameObject newObject = new GameObject(player.getWorld(), object.getLocation(), stumpId, object.getDirection(), object.getType());
 					player.getWorld().replaceGameObject(object, newObject);
 					player.getWorld().delayedSpawnObject(obj.getLoc(), def.getRespawnTime() * 1000);
+					GuaranteedResources.clearNode(object, GuaranteedResources.WOODCUTTING);
 				}
 				return;
 			}
 		} else {
+			if (!isOldWoodcut) {
+				GuaranteedResources.recordAttempt(player, GuaranteedResources.WOODCUTTING, def.getLogId(), false);
+			}
 			player.playerServerMessage(MessageType.QUEST, "You slip and fail to hit the tree");
 			if (!isbatchcomplete()) {
 				GameObject checkObj = player.getViewArea().getGameObject(object.getID(), object.getX(), object.getY());

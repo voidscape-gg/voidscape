@@ -887,6 +887,7 @@ public abstract class GameDatabase {
 		}
 		playerData.questPoints = player.calculateQuestPoints();
 		playerData.hairColour = player.getSettings().getAppearance().getHairColourSave();
+		playerData.hairStyle = player.getSettings().getAppearance().getHairStyle();
 		playerData.topColour = player.getSettings().getAppearance().getTopColourSave();
 		playerData.trouserColour = player.getSettings().getAppearance().getTrouserColourSave();
 		playerData.skinColour = player.getSettings().getAppearance().getSkinColourSave();

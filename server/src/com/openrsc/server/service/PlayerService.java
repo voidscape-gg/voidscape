@@ -208,11 +208,17 @@ public class PlayerService implements IPlayerService {
                 playerData.trouserColour,
                 playerData.skinColour,
                 playerData.headSprite,
-                playerData.bodySprite
+                playerData.bodySprite,
+                playerData.hairStyle
         );
         if (!pa.isValid(player)) {
             pa = new PlayerAppearance(
-                    0, 0, 0, 0, 1, 2
+                    PlayerAppearance.DEFAULT_HAIR_COLOUR,
+                    PlayerAppearance.DEFAULT_TOP_COLOUR,
+                    PlayerAppearance.DEFAULT_TROUSER_COLOUR,
+                    PlayerAppearance.DEFAULT_SKIN_COLOUR,
+                    1,
+                    2
             );
         }
 
@@ -505,6 +511,12 @@ public class PlayerService implements IPlayerService {
 			false, // 0xB5FF1D, // easter ogre 40
 			false, // 0xA0C0C0, // silver man 41
 			false, // 0x608080, // coal woman 42
+
+			true, // 0xF2C8BA, // dawn 43
+			true, // 0xD99A8F, // rose 44
+			true, // 0xA76A45, // bronze 45
+			true, // 0x6D3F2C, // umber 46
+			true, // 0x9B9290, // ash 47
 		};
 		if (player.getQuestStage(Quests.PEELING_THE_ONION) == -1) {
 			unlockedPlayerSkinColours[35] = true; // Yellow

@@ -486,7 +486,7 @@ public class LoginPacketHandler {
 
 					final String username = getString(packet.getBuffer()).trim();
 					String password = "";
-					if (clientVersion < 10010 || clientVersion == 10069) {
+						if (clientVersion < 10010) {
 						password = getString(packet.getBuffer()).trim();
 					} else {
 						byte loginEncryptionVersion = packet.readByte(); //0 = none, 1 = RSA, 2 = SSL/TLS

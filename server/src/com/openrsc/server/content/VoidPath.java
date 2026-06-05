@@ -21,6 +21,7 @@ public final class VoidPath {
 	public static final int WARRIOR = 1;
 	public static final int FORAGER = 2;
 	public static final int ARCANIST = 3;
+	public static final int BOOST_LEVEL_CAP = 50;
 
 	private VoidPath() {
 	}
@@ -75,6 +76,10 @@ public final class VoidPath {
 	}
 
 	public static boolean boostsSkill(Player player, int skill) {
+		if (player == null || player.getSkills().getMaxStat(skill) >= BOOST_LEVEL_CAP) {
+			return false;
+		}
+
 		switch (get(player)) {
 			case WARRIOR:
 				return matches(skill, Skill.ATTACK, Skill.DEFENSE, Skill.STRENGTH);
@@ -111,6 +116,10 @@ public final class VoidPath {
 			default:
 				return "no skills";
 		}
+	}
+
+	public static String boostLimitSummary() {
+		return "2x XP until level " + BOOST_LEVEL_CAP;
 	}
 
 	public static String starterKitSummary(int path) {

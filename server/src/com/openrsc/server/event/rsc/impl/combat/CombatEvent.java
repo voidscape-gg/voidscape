@@ -100,7 +100,7 @@ public class CombatEvent extends GameTickEvent {
 		killed.setLastCombatState(CombatState.LOST);
 		killer.setLastCombatState(CombatState.WON);
 
-		if (killed.isPlayer() && killer.isPlayer()) {
+			if (killed.isPlayer() && killer.isPlayer()) {
 			int[] skillsDist = new int[Skill.maxId(Skill.ATTACK.name(), Skill.DEFENSE.name(),
 				Skill.STRENGTH.name(), Skill.HITS.name()) + 1];
 

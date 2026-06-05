@@ -13,6 +13,19 @@ Path: `PC_Client/`.
 - **Libraries**: only `discord-rpc.jar` in `PC_Client/lib/`.
 - **Build output**: `Open_RSC_Client.jar` (lands in `Client_Base/`, manifest main-class `orsc.OpenRSC`).
 
+### Desktop UI Scaling
+
+The PC client renders the game into an off-screen `BufferedImage`, then `PC_Client/src/orsc/ScaledWindow.java` presents that image in a Swing `JFrame`.
+
+- Fresh installs open at the original RSC `512x346` size.
+- In the default `Window` UI scale mode, dragging the desktop window larger scales and centers the whole rendered game/UI while preserving the classic logical canvas and aspect ratio.
+- Existing saved fixed scale choices are respected and clamped down only if they no longer fit the current monitor.
+- Integer scaling uses nearest-neighbor rendering hints so RSC pixel art and text stay sharp.
+- F11 / F12 opt into fixed scale down/up. The settings wrench labels this as `UI scale`, and the filter row cycles `Crisp`, `Soft`, and `Smooth`.
+- Saved fixed desktop scaling lives in `clientSettings.conf` as `scaling_type` and `scaling_scalar`; default window-follow mode has no saved scalar.
+
+This is PC-client presentation only. It does not change packets, opcodes, server configs, cache format, client version, or Android rendering.
+
 ## Client_Base — shared core
 
 Path: `Client_Base/`. ~116 Java files.
@@ -22,7 +35,7 @@ Single source of truth for all client platforms. Both PC_Client and Android_Clie
 Package structure:
 - `src/orsc/mudclient.java` — main game loop (80+ fields). Rendering, networking, entity updates, UI panels.
 - `src/orsc/Config.java` — static constants:
-  - `CLIENT_VERSION = 10010`
+  - `CLIENT_VERSION = 10069`
   - `SERVER_IP`, `SERVER_PORT`
   - Feature flags (`C_EXPERIENCE_DROPS`, `C_CUSTOM_UI`, …)
   - Server-defined config (`S_PLAYER_LEVEL_LIMIT`, `S_WANT_SKILL_MENUS`, …)
@@ -63,14 +76,15 @@ Path: `Android_Client/`.
 
 Path: `PC_Launcher/`.
 
-- Purpose: splash, launcher UI, client auto-updater, multi-world support.
+- Purpose: Voidscape desktop launcher, cache bootstrap, local client launch, and client auto-updater foundation.
 - Main: `src/main/java/launcher/Main.java`.
 - Build: Ant. Java 1.8. Output: `OpenRSC.jar`.
 - Features:
-  - Configurable cache directory via CLI args (`--dir`, `-d`); defaults to `./Cache`.
-  - UI: `launcher/Fancy/MainWindow.java` — themed launcher with server cards, settings, update checks.
-  - Auto-update: `launcher/Gameupdater/ClientUpdater.java`, `ClientDownloader.java` (MD5 verification).
-  - Multi-world: `launcher/Utils/WorldPopulations.java` tracks server populations.
+  - Configurable cache directory via CLI args (`--dir`, `-d`); defaults to `~/.voidscape/client`. Use `--portable` to force legacy `./Cache`.
+  - UI: `launcher/Voidscape/VoidscapeLauncherWindow.java` — Voidscape-branded launcher shell with Play, Update, Repair, Settings, account/website links, status, and news cards.
+  - Cache bootstrap: `launcher/Voidscape/VoidscapeUpdater.java` seeds local dev builds from `Client_Base/Open_RSC_Client.jar` plus cache assets from `Client_Base/Cache`, while preserving runtime files like credentials, uid, endpoint files, and client settings.
+  - Auto-update foundation: `VoidscapeUpdater` supports SHA-256 manifest properties through `VOIDSCAPE_MANIFEST_URL` / `-Dvoidscape.manifestUrl=...`. It uses normal Java TLS verification and atomic temp-file replacement.
+  - Legacy OpenRSC launcher classes remain compiled for compatibility, but `launcher.Launcher` routes startup to the Voidscape shell.
   - Version stamping: `launcher/Utils/Defaults.java` — `_CURRENT_VERSION` set via build-time Ant target.
 
 ## Cache: asset loading strategy
@@ -79,7 +93,7 @@ Runtime location: `Config.F_CACHE_DIR` — typically `./Cache/` relative to the 
 
 Expected contents:
 - `ip.txt` — server IP (single line, e.g. `127.0.0.1`).
-- `port.txt` — server port (single line, e.g. `43594`).
+- `port.txt` — server port (single line, e.g. `43596` for the current local Voidscape preset).
 - `credentials.txt` — optional saved login.
 - `hideIp.txt` — privacy setting.
 - `video/spritepacks/` — custom sprite packs (symlinked from `PC_Launcher/SPRITEPACK_DIR`).
@@ -102,11 +116,11 @@ Resolution priority in `mudclient.java`:
 
 For dev (local server):
 ```bash
-mkdir -p Cache
-echo "127.0.0.1" > Cache/ip.txt
-echo "43594"     > Cache/port.txt
+mkdir -p Client_Base/Cache
+echo "127.0.0.1" > Client_Base/Cache/ip.txt
+echo "43596"     > Client_Base/Cache/port.txt
 ```
-Then run `PC_Client` or the launcher; it'll connect to localhost.
+Then run the direct client or launcher; it'll connect to localhost. Prefer `scripts/run-client.sh` for normal dev because it reads `server/local.conf` and writes the matching cache port automatically.
 
 For prod: the launcher distributes a pre-configured `Cache/`, or the user enters details via launcher UI.
 
@@ -124,7 +138,7 @@ Sync mechanism: **manual, ordinal-dependent**.
 
 There is no codegen and no shared schema. Devs must keep both files aligned manually.
 
-`CLIENT_VERSION = 10010` in `Config.java` is checked by the server at login. Bump manually when protocol changes; mismatch → rejection.
+`CLIENT_VERSION = 10069` in `Config.java` is checked by the server at login. Bump manually when protocol changes; mismatch → rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
 
 ## Build outputs
 
@@ -138,17 +152,16 @@ There is no codegen and no shared schema. Devs must keep both files aligned manu
 
 **Option 1 — via launcher**
 ```bash
-cd PC_Launcher
-ant compile
-java -jar OpenRSC.jar
-# Reads Cache/ip.txt + Cache/port.txt
+scripts/run-launcher.sh
+# Reads/writes ~/.voidscape/client/ip.txt + port.txt by default.
+# For portable local testing: scripts/run-launcher.sh --portable
 ```
 
 **Option 2 — direct client (Cache configured)**
 ```bash
-mkdir -p Cache
-echo "127.0.0.1" > Cache/ip.txt
-echo "43594"     > Cache/port.txt
+mkdir -p Client_Base/Cache
+echo "127.0.0.1" > Client_Base/Cache/ip.txt
+echo "43596"     > Client_Base/Cache/port.txt
 cd Client_Base
 ant compile-and-run
 # Or: java -jar Open_RSC_Client.jar
@@ -158,14 +171,14 @@ ant compile-and-run
 ```java
 // Client_Base/src/orsc/Config.java
 public static String SERVER_IP = "127.0.0.1";
-public static int    SERVER_PORT = 43594;
+public static int    SERVER_PORT = 43596;
 ```
 Recompile Client_Base.
 
 ## Pitfalls / non-obvious
 
 1. **Opcode ordinal desync.** Server OpcodeOut transmitted by ordinal; client must use identical ordering. Always append, never insert mid-list. Same applies to OpcodeIn.
-2. **Silent version mismatch.** `CLIENT_VERSION = 10010` is not auto-bumped. If you change protocol but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
+2. **Silent version mismatch.** `CLIENT_VERSION = 10069` is not auto-bumped. If you change protocol but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
 3. **Cache directory is CWD-relative.** `./Cache` relative to the working directory at launch — not the JAR location. Running from different dirs picks up different caches. Use absolute path or `--dir`.
 4. **Android inherits Client_Base wholesale.** No separate Android opcode tracking. Bumping Client_Base requires APK rebuild.
 5. **Android packages cache from the repo at build time.** Keep `Client_Base/Cache` populated before building the APK; local runtime files are excluded from packaging by Gradle.

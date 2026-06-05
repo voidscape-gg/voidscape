@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.authentic.skills.fishing;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.GuaranteedResources;
 import com.openrsc.server.external.EntityHandler;
 import com.openrsc.server.external.GameObjectDef;
 import com.openrsc.server.external.ObjectFishDef;
@@ -289,10 +290,16 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 			}
 		} else { // NOT big net fishing & NOT tutorial island shrimp; normal fishing
 			// Roll for fish to be given to user
+			String guaranteeKey = fishingGuaranteeKey(def);
+			boolean guaranteed = GuaranteedResources.shouldGuarantee(player, GuaranteedResources.FISHING, guaranteeKey);
 			aFishDef = getFish(def, player.getSkills().getLevel(Skill.FISHING.id()));
+			if (aFishDef == null && guaranteed) {
+				aFishDef = firstEligibleFish(def, player.getSkills().getLevel(Skill.FISHING.id()));
+			}
 			if (aFishDef != null) fishLst.add(aFishDef);
 
 			if (fishLst.size() == 0) {
+				GuaranteedResources.recordAttempt(player, GuaranteedResources.FISHING, guaranteeKey, false);
 				player.playerServerMessage(MessageType.QUEST, "You fail to catch anything");
 				if (!isbatchcomplete()) {
 					GameObject checkObj = player.getViewArea().getGameObject(object.getID(), object.getX(), object.getY());
@@ -306,6 +313,8 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 					player.playerServerMessage(MessageType.QUEST, "You fail to catch anything");
 					return;
 				}
+				GuaranteedResources.recordAttempt(player, GuaranteedResources.FISHING, guaranteeKey, true);
+				GuaranteedResources.notifyIfGuaranteed(player, guaranteed);
 
 				// Award the fish
 				Item fish = new Item(fishLst.get(0).getId());
@@ -371,6 +380,21 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 			delay();
 			batchFishing(entityHandler, player, def, object);
 		}
+	}
+
+	private ObjectFishDef firstEligibleFish(ObjectFishingDef def, int playerLevel) {
+		for (ObjectFishDef fish : def.getFishDefs()) {
+			if (playerLevel >= fish.getReqLevel()) {
+				return fish;
+			}
+		}
+		return null;
+	}
+
+	private String fishingGuaranteeKey(ObjectFishingDef def) {
+		ObjectFishDef[] fishDefs = def.getFishDefs();
+		int firstFishId = fishDefs.length > 0 ? fishDefs[0].getId() : -1;
+		return def.getNetId() + "_" + def.getBaitId() + "_" + firstFishId;
 	}
 
 	private void handleDepletableFishing(Player player, ObjectFishingDef def, GameObject object) {

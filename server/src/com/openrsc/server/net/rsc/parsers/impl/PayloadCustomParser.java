@@ -355,7 +355,7 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case COMBAT_STYLE_CHANGED:
 				return packet.getLength() == 1;
 			case PLAYER_APPEARANCE_CHANGE:
-				return packet.getLength() == 10;
+				return packet.getLength() == 10 || packet.getLength() == 11;
 			case QUESTION_DIALOG_ANSWER:
 				return packet.getLength() == 1;
 			case BANK_SAVE_PRESET:
@@ -506,6 +506,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				pl.skinColour = packet.readByte();
 				pl.ironmanMode = packet.readByte();
 				pl.isOneXp = packet.readByte();
+				if (packet.getLength() >= 11) {
+					pl.hairStyle = packet.readUnsignedByte();
+				}
 				result = pl;
 				break;
 

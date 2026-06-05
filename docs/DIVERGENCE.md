@@ -27,6 +27,272 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-05 — Beta command and playtest documentation hardening
+
+Aligned the current beta-facing docs with the live Voidscape build after removing abandoned prototypes and adding several tuning/test helpers. The player/admin command reference, friend beta playtest guide, and client cache docs now describe the simplified global chat flow, rested XP status command, balance telemetry commands, local client version `10069`, and current local port handling instead of stale prototype references.
+
+Files touched:
+- `Commands.md`, `docs/BETA-PLAYTEST-GUIDE.md` — added missing player/admin command entries and removed stale guidance around scrapped systems.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — aligned in-game command help text with the live commands.
+- `docs/subsystems/client-cache.md`, `docs/DEVELOPMENT.md`, `docs/SERVER-PRESETS.md` — updated client version, local connection examples, and current split combat/skilling XP config keys.
+
+Reversibility: documentation/help-text only; no schema, packet, cache, gameplay, launcher, or database behavior changed.
+
+### 2026-06-05 — Removed experimental ranked arena
+
+Scrapped the safe ranked arena prototype before release after local two-client testing showed the command-driven duel wrapper was brittle and did not feel worth keeping. Removed the arena command surface, Elo/cache helper, duel/death hooks, command help entry, and active-system docs so PvP and normal duels return to the existing OpenRSC behavior.
+
+Files touched:
+- `server/src/com/openrsc/server/content/VoidArenaRankings.java` — removed the ranked-arena helper and match state.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — removed `::arena`/alias command handling and command-list help text.
+- `server/src/com/openrsc/server/event/rsc/impl/combat/CombatEvent.java`, `server/src/com/openrsc/server/model/entity/player/Player.java` — removed ranked-arena exceptions from PvP XP and duel-death cleanup.
+- `docs/subsystems/progression-balance.md`, `docs/CODEMAP.md` — removed active ranked-arena documentation.
+
+Reversibility: restore the removed helper and references from git history if a better arena design returns. Existing local player-cache keys such as `void_arena_rating` are harmless if left behind. No DB schema, packet, opcode, client cache, or launcher behavior changed.
+
+### 2026-06-05 — Removed experimental expeditions, recycler, and bounty board
+
+Scrapped three gameplay-system prototypes before release: Void Expeditions, Void Recycler/Void Surge, and Void Bounty Board. Their commands, server hooks, client/server scenery definitions, Void Enclave hopper placement, and helper classes were removed so the current balance baseline stays focused on rested XP, milestone rewards, guaranteed resources, subscriptions, and core Wilderness behavior.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — removed `::expedition`, `::recycle`, and `::bounty` command branches/list entries.
+- `server/src/com/openrsc/server/login/LoginRequest.java`, `server/src/com/openrsc/server/model/entity/player/Player.java`, `server/src/com/openrsc/server/model/entity/npc/Npc.java` — removed login, XP/drop, and kill/death hooks.
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/GameObjectDef.xml`, `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json` — removed the Void Recycler object definition and placement.
+- `docs/subsystems/progression-balance.md`, `docs/CODEMAP.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/networking-protocol.md` — removed active-system documentation for the scrapped features.
+
+Reversibility: restore the deleted helpers and hooks from git history if one of these ideas returns. Existing player-cache keys from local testing are harmless if left behind. No database schema, packet, opcode, launcher, or beta-server operation changed.
+
+### 2026-06-05 — Simplified global chat with IP country flags
+
+Simplified global chat output to `username: message` styling and added an optional country-flag icon beside the sender name. The server resolves the sender's current public IP to a two-letter country code, caches it per IP/player, and sends a compact `@flg@CC` text token before the green username. The updated custom client renders that token as a small country flag icon and exposes a Chat settings toggle for players who want to hide their own flag; the toggle is on by default.
+Local development can set `global_chat_local_country_code` to force a localhost flag for rendering tests without changing production IP behavior.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java`, `server/src/com/openrsc/server/model/world/World.java` — simplified global-chat formatting and reused the same flag prefix for direct and queued global messages.
+- `server/src/com/openrsc/server/content/GlobalChatIpFlags.java`, `ServerConfiguration.java`, `ActionSender.java`, `GameSettingHandler.java`, `Player.java`, `GameSettingsStruct.java`, `PayloadCustomGenerator.java` — IP lookup, cache persistence, config keys, settings packet byte, and player toggle handling.
+- `Client_Base/src/orsc/graphics/two/GraphicsController.java`, `Client_Base/src/orsc/mudclient.java`, `PacketHandler.java`, `Config.java` — flag token rendering, Advanced Settings toggle, settings readback, and client/server version `10069`.
+- `Client_Base/Cache/voidscape/flags/` — tiny country-flag PNG assets sourced from the MIT-licensed `lipis/flag-icons` GitHub project, with source SVG and license text included.
+- `server/*.conf`, `docs/subsystems/networking-protocol.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — version/config documentation.
+
+Reversibility: disable `want_global_chat_country_flags` to suppress all flag prefixes, or revert the listed files and downgrade the client/server version after removing the appended settings byte.
+
+### 2026-06-05 — Trial Voidscape skin and clothing palettes
+
+Added a first visual trial for Voidscape-only top, bottom, and skin colours in the character designer. The client appends eight custom clothing colours (`Void`, `Frost`, `Blood`, `Ember`, `Gold`, `Toxic`, `Moon`, `Coal`) and five trial skin tones (`Dawn`, `Rose`, `Bronze`, `Umber`, `Ash`). Hair keeps the bright prototype palette, skin remains custom-only, and clothing now cycles through both the classic colours and the muted Voidscape colour families. The custom clothing ramp uses softer five-step shading so full shirts and pants are less bright/high-contrast. Trial skin tones use a skin-specific three-shade ramp, so the preview and live paperdoll avoid flat colour fills.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — appended palettes, named selector values, restored classic top/bottom selector cycling, and restricted skin selector cycling to the grounded trial range.
+- `Client_Base/src/orsc/graphics/two/GraphicsController.java` — generalized the custom luster mapping, added a custom skin-tone ramp, and gave clothing its own softer five-step shade ramp.
+- `server/src/com/openrsc/server/model/PlayerAppearance.java`, `server/src/com/openrsc/server/service/PlayerService.java`, `server/src/com/openrsc/server/constants/Constants.java` — expanded accepted clothing/skin bounds, unlocked trial skin tones, fixed invalid-load fallback defaults, and aligned avatar colour arrays.
+- `server/database/{mysql,sqlite}/{core,retro}.*` — updated fresh-database appearance defaults to valid Voidscape palette indexes.
+- `Client_Base/src/orsc/Config.java`, `server/*.conf` — client/server version `10068`.
+- `docs/subsystems/networking-protocol.md`, `docs/subsystems/player-appearance-rendering.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — documented the versioned visual trial.
+
+Reversibility: restore skin selector cycling across the full skin array, remove the appended custom palette entries and renderer ramps, lower the server validation caps, and downgrade the client/server version after deciding not to ship the trial palette.
+
+### 2026-06-05 — Custom-only hair selector
+
+Restricted the character designer's hair selector to Voidscape's custom palette only. The client now cycles hair colours `10..17` (`Void`, `Frost`, `Blood`, `Ember`, `Gold`, `Toxic`, `Moon`, `Coal`) and normalizes any old/default value to `Void` when the appearance screen opens. The server validates appearance updates against the same range, and a database patch migrates saved authentic hair colours to nearby Voidscape families.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — hair selector wrap logic now uses only `10..17`; default appearance hair colour is `Void`.
+- `server/src/com/openrsc/server/model/PlayerAppearance.java` — appearance validation now requires hair colour `10..17`.
+- `server/database/{mysql,sqlite}/patches/2026_06_05_voidscape_hair_colours_only.sql` — migrates saved old hair colours to custom colour indexes.
+- `Client_Base/src/orsc/Config.java`, `server/*.conf` — client/server version `10064`.
+- `docs/subsystems/networking-protocol.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — documented the versioned selector/validation change.
+
+Reversibility: restore selector cycling across `playerHairColors.length`, loosen server validation back to `0..17`, remove or avoid the migration patch on fresh databases, and downgrade the client/server version after deciding old colours are selectable again.
+
+### 2026-06-05 — Voidscape hair luster ramps
+
+Restored the richer look of the custom hair colours on every default head/beard shape by changing the client renderer's grayscale hair-mask tinting for Voidscape colours. Instead of flat-multiplying each classic sprite shade directly, the eight custom colours now normalize each default head's grayscale hair-mask clusters to the same three neutral shades used by the side-swept PNG overlay (`#5c5c5c`, `#8a8a8a`, `#ffffff`) and then apply the exact same colour transform. This preserves authentic head silhouettes while making Void, Frost, Blood, Ember, Gold, Toxic, Moon, and Coal match the earlier swept-hair prototype across short, long, alternate-short, and bearded heads.
+
+Files touched:
+- `Client_Base/src/orsc/graphics/two/GraphicsController.java` — added swept-overlay shade mapping for the eight custom hair colours in both one-mask and two-mask sprite paths.
+- `Client_Base/src/orsc/Config.java`, `server/*.conf` — client/server version `10063`.
+- `docs/subsystems/networking-protocol.md`, `docs/subsystems/player-appearance-rendering.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — documented the renderer-only visual upgrade.
+
+Reversibility: remove the swept-overlay shade helper and fall back to the original grayscale multiply path, then downgrade the client/server version once no players depend on the richer custom palette rendering.
+
+### 2026-06-05 — Palette-first classic head colours
+
+Disabled the experimental modern PNG hair style selector in the Voidscape character designer so the shipped flow is now unambiguous: `Head Type` chooses the default OpenRSC head/beard shape, and `Hair` chooses the colour, including Void, Frost, Blood, Ember, Gold, Toxic, Moon, and Coal. The default head sprites already use RSC's grayscale hair mask, so no live sprite archive rewrite was needed; clamping `hairStyle` back to Classic prevents the fixed swept overlay from making colours look tied to one head shape.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — removed the visible Style row and disabled its hidden click targets on the Voidscape appearance panel.
+- `Client_Base/src/orsc/Config.java`, `server/src/com/openrsc/server/model/PlayerAppearance.java`, `server/*.conf` — client/server version `10062` and modern hair style cap set to `0`.
+- `server/database/{mysql,sqlite}/patches/2026_06_05_palette_first_hair_styles.sql` — normalizes previously saved overlay selections back to Classic after the older style-colour migration.
+- `docs/subsystems/networking-protocol.md`, `docs/subsystems/player-appearance-rendering.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — documented the palette-first shipped state.
+
+Reversibility: restore a positive `MAX_MODERN_HAIR_STYLE`, re-enable the Style selector/click targets, and bump the client/server version after deciding which overlay shapes should support every default head type.
+
+### 2026-06-05 — Modern hair style and colour split
+
+Reworked the first PNG-backed modern hair set so shape and colour are separate. The character designer now treats the bottom selector as `Style` (`Classic`, `Swept`) and the top-right selector as the named hair colour (`Void`, `Frost`, `Blood`, `Ember`, `Gold`, `Toxic`, `Moon`, `Coal`, plus the authentic colours). The swept PNG hair frames were converted from baked purple art into neutral shaded masks, and the renderer tints those masks with the existing `hairColour` palette at draw time. This means every future modern PNG hairstyle automatically supports every hair colour without generating one asset folder per colour.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — hair-colour labels, style label, and runtime tinting for modern PNG hair overlays.
+- `Client_Base/Cache/voidscape/hair/style_01/` — converted the swept style to neutral shaded PNG frames; removed duplicate colour-as-style folders `style_02..08`.
+- `Client_Base/src/orsc/Config.java`, `server/src/com/openrsc/server/model/PlayerAppearance.java`, `server/*.conf` — client/server version `10061` and modern style cap reduced to the one real shape currently shipped.
+- `server/database/{mysql,sqlite}/patches/2026_06_05_modern_hair_styles_use_palette_colours.sql` — migrates legacy saved colour-style rows to `hairstyle = 1` plus the matching `haircolour`.
+- `docs/subsystems/networking-protocol.md`, `docs/subsystems/player-appearance-rendering.md`, `docs/recipes/add-custom-hairstyle.md`, `tools/hairstyle-art/README.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — documented the shape/colour split.
+
+Reversibility: restore colour-specific style folders, set `MAX_MODERN_HAIR_STYLE` back to `8`, remove runtime tinting, and downgrade the client/server version after converting any saved `haircolour`/`hairstyle` combinations back to the older colour-as-style representation.
+
+### 2026-06-05 — Voidscape default hair and beard colours
+
+Added the eight Voidscape recolour themes to the classic player hair palette so every default OpenRSC hairstyle and beard-capable head sprite can use Void, Frost, Blood, Ember, Gold, Toxic, Moon, and Coal without relying on the newer PNG overlay shapes. The server appearance validator now accepts the expanded hair colour index range, and the client/server version moved to `10059` so stale clients do not save or receive palette indexes they cannot display.
+
+Follow-up: constrained the PNG-backed modern hair overlays to the single compatible swept-hair base head and moved the client/server version to `10060`. Changing a default head/beard or gender in the character designer now resets the overlay selector to Classic, which keeps the new palette colours from being masked by a fixed overlay shape.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — appended the eight custom colours to `playerHairColors` and guarded modern overlay drawing to the compatible base head.
+- `server/src/com/openrsc/server/model/PlayerAppearance.java` — raised the accepted hair colour cap to `0..17` and clamps incompatible saved overlay/head combinations back to Classic.
+- `Client_Base/src/orsc/Config.java`, `server/*.conf`, `docs/subsystems/networking-protocol.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — client/server version sync and docs.
+
+Reversibility: change any saved player hair colour values above `9` back to an authentic palette value, remove the eight appended client colours, restore the server validation cap to `9`, and downgrade the client/server version once no clients can select the removed colours.
+
+### 2026-06-05 — Starter modern hair recolor set
+
+Expanded the new PNG-backed hair overlay system from one proof style to eight selectable recolor styles: Void, Frost, Blood, Ember, Gold, Toxic, Moon, and Coal. After testing larger custom spiky shapes, the recolor-only direction proved much stronger: every style keeps the readable swept silhouette and uses ARGB palette/halo differences for identity instead of changing the frame shape. The character-design panel now shows named hair styles and client/server style caps accept values `0..8`.
+
+Files touched:
+- `Client_Base/Cache/voidscape/hair/style_{02..08}/` — new 18-frame ARGB overlay PNGs plus placement sidecars.
+- `Client_Base/src/orsc/Config.java`, `Client_Base/src/orsc/mudclient.java` — client version/style cap and named selector labels.
+- `server/src/com/openrsc/server/model/PlayerAppearance.java`, `server/*.conf` — server style clamp and `client_version` sync.
+- `docs/subsystems/networking-protocol.md`, `docs/CONFIG-MATRIX.md`, `docs/subsystems/subscription-cards.md` — version notes.
+
+Reversibility: set saved `hairstyle` values above `1` back to `0` or `1`, remove the extra style cache folders, restore max style to `1`, and downgrade the client/server version once no clients can select the removed styles.
+
+### 2026-06-05 — Modern PNG hair overlay foundation
+
+Added a latest-client-only character hair overlay path so Voidscape can ship full ARGB PNG hairstyles without forcing every new concept through the old indexed RSC head-sprite palette. Player appearance now persists a clamped `hairStyle`, custom appearance packet `235` sends it as an 11th byte, and custom `SEND_UPDATE_PLAYERS` type `5` appends it for clients `10057+`. The PC client exposes a `Classic` / starter style selector on the Voidscape character-design panel, previews the overlay on the locked head frames, and draws style PNG frames from `Client_Base/Cache/voidscape/hair/style_XX/` over the real head animation during player rendering.
+
+Files touched:
+- `server/src/com/openrsc/server/model/PlayerAppearance.java`, `PlayerData.java`, `PlayerService.java`, `GameDatabase.java`, MySQL load/save paths, `PayloadCustomParser.java`, `PlayerAppearanceUpdater.java`, `GameStateUpdater.java` — persisted and transmitted `hairStyle`.
+- `server/database/{mysql,sqlite}/patches/2026_06_05_add_player_hairstyle.sql` — additive `hairstyle` column migration.
+- `Client_Base/src/orsc/Config.java`, `ORSCharacter.java`, `PacketHandler.java`, `mudclient.java`, `VoidscapeHairOverlay.java`, `graphics/two/GraphicsController.java`, `util/PngSpriteLoader.java` — client version bump, style decode, PNG loading, and ARGB overlay drawing.
+- `Client_Base/Cache/voidscape/hair/style_01/` — starter modern hair overlay frames and placement sidecars.
+- `server/*.conf`, `docs/subsystems/networking-protocol.md`, `docs/CONFIG-MATRIX.md`, `docs/CODEMAP.md` — version and protocol documentation.
+
+Reversibility: set all saved `hairstyle` values to `0`, stop sending/reading the extra style byte, remove `VoidscapeHairOverlay` and the cache directory, then downgrade `CLIENT_VERSION`/server `client_version` back to the previous compatible value. The DB column is additive and harmless if left behind.
+
+### 2026-06-05 — Manual wig editor import placement
+
+Updated the hairstyle manual wig editor so imported PNG hair art is not immediately squeezed into the current tiny RSC frame. Import now trims faint transparent padding with an alpha threshold, opens a placement overlay, and lets the artist fit, scale, nudge, apply, or cancel before the result is committed and normalized to legal RSC hair-mask pixels. This keeps RSC's original head frame sizes and recolour constraints intact while making generated or external hair concepts usable as hand-placed reference stamps.
+
+Files touched:
+- `tools/hairstyle-art/hairstyle_tool.py` — import placement UI and thresholded alpha trim in the web editor.
+- `tools/hairstyle-art/README.md`, `docs/recipes/add-custom-hairstyle.md` — usage notes.
+
+Reversibility: remove the placement controls and restore the old direct `drawImage(..., frame.width, frame.height)` import path. No game server, client cache, packet, opcode, or launcher behavior changed.
+
+### 2026-06-05 — Guaranteed resource nodes
+
+Added transient minimum-yield protection for normal rocks and trees, plus a session-local dry-streak breaker for normal gathering actions. Mining rocks and woodcutting trees now stay available until that node instance has produced at least three successful harvests, then return to the normal depletion/respawn rules. After four consecutive eligible failures on the same mining ore, modern woodcutting log, or normal fishing spot/action, the next attempt succeeds and resets that player's streak. The mechanic keeps all existing tool, level, fatigue, batch timing, XP, post-minimum depletion, and shared-resource checks, and deliberately leaves tutorial gathering and big-net fishing on their original special-case logic. Admins can seed a current-player test streak with `::gatherstreak`.
+
+Files touched:
+- `server/src/com/openrsc/server/content/GuaranteedResources.java` — transient per-player failure counters, node yield counters, and guarantee notification.
+- `server/plugins/com/openrsc/server/plugins/authentic/skills/mining/Mining.java`, `woodcutting/Woodcutting.java`, `fishing/Fishing.java` — success/failure hooks for normal gathering attempts plus minimum-yield depletion protection for rocks/trees.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java` — admin-only diagnostic seeding command.
+- `docs/subsystems/progression-balance.md`, `docs/CODEMAP.md` — subsystem documentation.
+
+Reversibility: remove the `GuaranteedResources` calls from the three skill scripts and delete the helper. No DB schema, packet, opcode, client cache, client-version, launcher, or beta-server operation changed.
+
+### 2026-06-05 — Rested XP session window
+
+Added a player-cache-backed Rested XP window for beta pacing. On login, eligible offline time accrues rested time after 30 minutes away at one rested second per offline second, capped at 45 minutes. Normal non-quest training awards 1.5x XP while rested time remains, and the rested timer drains by real logged-in session time so the first 45 minutes of the next session are boosted until the pool is empty. This helps returning players catch up without changing the base global combat/skilling rates, subscription rates, drop tables, or per-skill multipliers. `::rested` / `::restedxp` reports the current timer and tuning numbers.
+
+Files touched:
+- `server/src/com/openrsc/server/content/RestedExperience.java` — timer accrual, session-time drain, 1.5x XP bonus, display, and cache-key handling.
+- `server/src/com/openrsc/server/login/LoginRequest.java`, `server/src/com/openrsc/server/login/PlayerSaveRequest.java` — accrue on login and record last-seen time on logout saves.
+- `server/src/com/openrsc/server/model/entity/player/Player.java` — spend rested pool after normal XP multipliers and before skill XP is applied.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — `::rested` status command.
+- `docs/subsystems/progression-balance.md`, `docs/CODEMAP.md` — subsystem documentation.
+
+Reversibility: remove the `RestedExperience` calls from login/logout/XP award paths and the `::rested` branch. Existing `rested_xp_pool` / `rested_xp_last_seen` cache rows are harmless if left behind. `rested_xp_pool` stores seconds in this version and is clamped to the 45-minute cap on read. No DB schema, packet, opcode, client cache, client-version, or Android-specific change.
+
+### 2026-06-05 — Make-All cooking and smelting menus
+
+Added explicit Make-All style menu choices for two high-click production flows. With `batch_progression` enabled, using cookable food on a range/fire now asks `Cook 1`, `Cook All`, or `Cancel`; using ore on a furnace now asks `Smelt 1`, `Smelt 5`, `Smelt 10`, `Smelt All`, or `Cancel`. Each selected repeat still runs through the existing per-item script delays, fatigue checks, success/burn/failure rolls, XP grants, and progress-bar updates, so this removes repeated clicks without turning production into instant bulk conversion.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/authentic/skills/cooking/ObjectCooking.java` — explicit cooking repeat menu for normal cookable items.
+- `server/plugins/com/openrsc/server/plugins/authentic/skills/smithing/Smelting.java` — explicit furnace smelting repeat menu and corrected maximum repeat calculation for multi-ore bars.
+
+Reversibility: restore the previous auto-repeat count calculation in `ObjectCooking` and `Smelting`. No DB schema, packet, opcode, client cache, client-version, or Android-specific change.
+
+### 2026-06-05 — Resizable desktop UI scaling
+
+Improved the PC client's existing Swing scaling shell so fresh desktop installs still open at the original RSC size, but players can drag the window larger and have the whole rendered game/UI scale with it. The applet's logical canvas remains `512x346` in the default window-follow mode, preserving classic layout and click coordinates while presenting a larger, crisp viewport on modern monitors. Existing saved fixed scaling choices in `clientSettings.conf` are preserved and only clamped if they no longer fit the active monitor.
+
+Details:
+- `ScaledWindow` now builds only scale factors that fit the monitor, keeps default startup at classic size, scales/centers the rendered image when the desktop window is stretched, and explicitly uses nearest-neighbor rendering hints for integer scaling.
+- `OpenRSC` detects whether a saved scaling scalar exists before choosing default window-follow mode.
+- The settings wrench now labels the controls as `UI scale` and `Scale filter` with `Window`, `Crisp`, `Soft`, and `Smooth` names.
+- Scaling saves now preserve other keys in `clientSettings.conf` instead of replacing the file with only scaling keys.
+
+Files touched:
+- `PC_Client/src/orsc/OpenRSC.java`, `PC_Client/src/orsc/ScaledWindow.java` — PC startup/default scaling and crisp render hints.
+- `Client_Base/src/orsc/mudclient.java` — settings labels and safer scaling-setting persistence.
+- `docs/subsystems/client-cache.md`, `docs/CODEMAP.md` — documentation.
+
+Reversibility: restore the old viewport-resizing behavior in `ScaledWindow`, remove the window-follow mode in `mudclient`, and restore the old settings labels. No DB schema, packet, opcode, cache format, server behavior, Android renderer, or client-version change.
+
+### 2026-06-05 — Progression balance rewards and telemetry
+
+Added a first balance-tuning slice for beta progression. Void Island path boosts are now early-game accelerators instead of permanent account-wide advantages: each selected path still grants 2x XP in its listed skills, but only until the boosted skill reaches level 50. Level-up handling now pays modest coin milestone rewards for configured skill-level and total-level thresholds using existing `player_cache` keys to prevent repeats.
+
+Added `BalanceTelemetry`, an in-memory admin report surface for beta tuning. It records effective XP awarded by skill/player, NPC kills, NPC item quantities, and rare-drop events during the current telemetry window. Admins can inspect it with `::balancereport [xp|players|npcs|drops]` and reset the window with `::balancereport reset`.
+
+Files touched:
+- `server/src/com/openrsc/server/content/VoidPath.java`, `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` — starter boost cap and onboarding copy.
+- `server/src/com/openrsc/server/content/ProgressionMilestones.java`, `server/src/com/openrsc/server/model/Skills.java` — milestone reward hooks.
+- `server/src/com/openrsc/server/content/BalanceTelemetry.java`, `server/src/com/openrsc/server/model/entity/npc/Npc.java`, `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java` — beta telemetry counters and admin reports.
+- `docs/subsystems/void-island-starter.md`, `docs/subsystems/progression-balance.md`, `docs/CODEMAP.md` — subsystem documentation.
+
+Reversibility: restore `VoidPath.boostsSkill(...)` to ignore the level cap, remove the `ProgressionMilestones` call from `Skills.addExperience(...)`, and remove the telemetry hooks/admin command. No DB schema, packet, opcode, client cache, or client-version change.
+
+### 2026-06-04 — Temporary beta auto-admin accounts
+
+Newly created characters are temporarily inserted with `Group.ADMIN` during the friend beta so trusted testers can immediately use teleport, item, stat, and scenario commands without manual promotion. This only affects new account creation after deployment; existing characters keep their saved `group_id`.
+
+Files touched:
+- `server/src/com/openrsc/server/database/impl/mysql/MySqlQueries.java`, `server/src/com/openrsc/server/database/impl/mysql/MySqlGameDatabase.java` — explicit `group_id` write during player creation.
+- `docs/BETA-PLAYTEST-GUIDE.md`, `docs/OPERATIONS.md` — beta-only auto-admin warning and updated tester flow.
+
+Reversibility: remove `group_id` from the create-player insert and the extra `Group.ADMIN` bind parameter, or replace it with `Group.USER`. No DB schema, packet, opcode, or client cache change.
+
+### 2026-06-04 — Friend beta launcher packaging
+
+Added a hosted-server packaging path for private friend betas. `scripts/package-friend-beta.sh` builds the PC client/cache update payload, writes a SHA-256 manifest, embeds the target server host/port plus manifest URL into the launcher jar, and emits `dist/friend-beta/VoidscapeLauncher.jar` for testers. The launcher now reads bundled or sidecar `voidscape-launcher.properties` after system/env overrides and runs the update manifest automatically when Play is clicked, so a fresh tester install can download the client/cache before launching.
+
+The packaged client now resolves the Voidscape login background and world-map files from `Config.F_CACHE_DIR` instead of hard-coded `Cache/...` paths. The launcher runs the client with the downloaded cache directory as its working directory, where `Config.F_CACHE_DIR` falls back to `.`, so hard-coded nested cache paths produced blank login/world-map assets in the beta package.
+
+Files touched:
+- `PC_Launcher/src/main/java/launcher/Voidscape/VoidscapeLauncherConfig.java` — bundled/sidecar launcher settings and blank release-safe website/account URL defaults.
+- `PC_Launcher/src/main/java/launcher/Voidscape/VoidscapeUpdater.java` — Play runs manifest verification/download before launching when configured.
+- `Client_Base/src/orsc/mudclient.java`, `Client_Base/src/orsc/graphics/gui/WorldMapPanel.java` — packaged-cache asset path fixes.
+- `scripts/package-friend-beta.sh` — hosted beta package builder.
+- `docs/BETA-PLAYTEST-GUIDE.md`, `docs/OPERATIONS.md`, `PC_Launcher/README.md` — hosted friend beta workflow docs.
+
+Reversibility: remove the package script and restore launcher config to env/system-only endpoint lookup. No game server behavior, DB schema, opcode, packet shape, or client cache format changed.
+
+### 2026-06-04 — Voidscape desktop launcher/updater shell
+
+Replaced the visible PC launcher flow with a Voidscape-specific Swing launcher instead of the old OpenRSC multi-server picker. The new shell uses Voidscape artwork, a large Play action, Update/Repair/Settings controls, account/website links, status/progress, and compact news/subscription cards. Runtime files now default to `~/.voidscape/client` so double-clicked launchers do not scatter cache files into arbitrary working directories; `--portable` preserves the legacy `./Cache` behavior for local testing.
+
+The launcher seeds local dev builds from `Client_Base/Open_RSC_Client.jar` and copies local cache assets from `Client_Base/Cache` while preserving player-specific files. A safer updater foundation was added around SHA-256 manifest properties, temp downloads, and atomic replacement; unlike the competitor launcher inspected during design, it does not weaken TLS/certificate validation.
+
+Files touched:
+- `PC_Launcher/src/main/java/launcher/Main.java`, `Launcher.java` — route startup to the Voidscape shell and change the default cache path.
+- `PC_Launcher/src/main/java/launcher/Voidscape/` — new launcher config, cache/updater, and Swing UI.
+- `PC_Launcher/src/main/resources/images/voidscape/` — launcher artwork and icon assets.
+- `scripts/run-launcher.sh` — canonical build/run wrapper.
+- `docs/subsystems/client-cache.md`, `docs/DEVELOPMENT.md` — launcher/cache docs.
+
+Reversibility: route `Launcher.initializeLauncher()` back to `launcher.Fancy.MainWindow` and restore `Main.configFileLocation = "Cache"`. No database or protocol migration.
+
 ### 2026-06-03 — Player title catalog dialogue hub
 
 Reworked `::titles` from a dense title list into a dialogue-style hub with category pages. The command now offers unlocked, all, unique, common, and rarest title views; catalog pages show 10 compact rows with previous/next navigation, and selecting a locked title reports the relevant requirement or unique-title owner. The custom PC client recognizes these title menu payloads and renders them as a centered black modal with category tabs, replacing the stock cyan top-left options menu while still sending ordinary menu replies. Added a server-side rarity score/label on `PlayerTitle` so the rarest view is intentionally ordered without adding client protocol or schema changes.
@@ -791,6 +1057,9 @@ Examine had to change protocol: the PC client renders inventory examine entirely
 - Drop/trade preservation (option A1): would need extending `GroundItem` to carry `itemID` + `ItemStatus`, plus the trade flow at `PlayerTradeHandler:450`. Big lift, deliberately out.
 - Other 2H weapons (Adamant, Mithril, Dragon, etc.) — currently scoped strictly to catalog id 81.
 - Pre-existing bug noted: `MySqlGameDatabase.queryItemCreate:2018` only sets 5 of the 6+ placeholders in `save_ItemCreate` (never binds `itemId`). Extended to bind `kill_log` for consistency, but the underlying broken-binding pre-dates voidscape and is left for a separate fix.
+
+**2026-06-04 deployment note**:
+- Fresh `custom` SQLite imports already include `itemstatuses.kill_log` because `core.sqlite` grew the column at the same time the boot patch was added. `JDBCPatchApplier` now treats the specific `2026_04_26_item_kill_log.sql` duplicate-column error as already applied, so existing older databases still get the migration while fresh beta databases boot cleanly and mark the patch executed.
 
 
 ### 2026-04-26 — Auction House (Void Auctioneer at Edgeville)
@@ -2135,3 +2404,198 @@ Details:
 - Bumped the custom client/server version to `10054` and raised active custom item caps so the new card is accepted by the client and presets. Version `10054` extends custom `SEND_SHOP_OPEN` with a 32-bit per-item display-price override for exact dynamic shop prices; no opcode changed.
 - Bumped the custom client/server version to `10055` for a settings-profile payload extension. The wrench Profile panel now shows whether the account is subscribed and displays the effective global combat/skilling XP rates from the server.
 - Documented the subsystem in `docs/subsystems/subscription-cards.md`.
+
+### 2026-06-03 - Void Enclave solo boss upgrade
+
+Upgraded the existing solo-instanced Void Knight beneath the Void Enclave into a more complete boss encounter.
+
+Details:
+- `VoidKnightBoss` now has HP-based phases, stronger late-fight melee/magic pressure, visible phase callouts, adaptive void-guard protection in the final phase, phase-scaled Fire Blast pressure, and a Void Siphon special that drains prayer, heals the knight, and can chip the player.
+- `DeathMatchArena` keeps the solo-instance shell but adds dodgeable Void Rupture mechanics under the player's feet and distance pressure that discourages edge-stalling without changing packets, DB schema, client version, or arena map data.
+- Victory now records normal NPC progression manually for the plugin-owned kill path: total NPC kills, recent NPC kill packet state, per-NPC Void Knight kill cache, `Voidbane`, and kill-count messaging.
+- Boss rewards still guarantee coins, supplies, and one rune item, and now add global announcements for rare dragon-component rolls plus a rarer existing Void gear chase roll. `Void-Touched` unlocks on rare Void gear.
+- Added missing `ItemId.VOID_SCIMITAR` and included Void Scimitar in the curated default loot-beam list so all Void boss chase gear is beam-worthy.
+
+### 2026-06-03 - Static account portal prototype
+
+Added `web/portal/`, a standalone static click-through prototype for the future Voidscape website/account-management portal.
+
+Details:
+- The prototype opens on an operational account dashboard rather than a marketing landing page and includes tabs for character management, subscription status/redeem flow, security, highscores/titles, market intel, activity feed, staff tools, and public news/downloads.
+- It uses copied Voidscape visual assets plus downscaled AI-generated transparent UI/art sheets in `web/portal/assets/` to establish the portal art direction without wiring a backend.
+- Current behavior is sample-data-only JavaScript for tab switching, character/class selection, segmented-control state, and redeem-card preview feedback.
+- No game server behavior, login packet, opcode, database schema, client cache, or account persistence changed.
+
+### 2026-06-03 - Portal landing and account architecture slice
+
+Extended the static portal prototype toward the release website/account-management goal.
+
+Details:
+- `web/portal/index.html` now opens on a public Voidscape landing page with early-access founder-pass fields, local referral progress for the free weekly subscription card reward, downloads/news/status surfaces, and a direct path into character and subscription management.
+- `web/portal/script.js` now keeps local prototype state for founder passes and character rosters, enforces the planned 10-character web-account cap in the browser prototype, updates selected-character title/location/level/gear/appearance state, and keeps subscription preview state consistent between the sidebar and subscription tab.
+- Added `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md`, which records the current OpenRSC one-player-row login model, the safe web-account ownership bridge, suggested web account/session/character/entitlement tables, the character-state API contract, and why client-login/protocol changes are deferred.
+- Updated `web/portal/README.md` to reflect the landing/founder-pass scope and production architecture doc.
+- No game server behavior, login packet, opcode, database schema, client cache, or account persistence changed.
+
+### 2026-06-03 - Portal local API scaffold
+
+Added a zero-dependency local API/server scaffold for the website/account portal so the prototype can exercise real request/response flows before touching OpenRSC login or the game database.
+
+Details:
+- `web/portal/dev-server.mjs` serves the portal and exposes local JSON-backed API endpoints for founder reservations, referral reward simulation, web account register/login, bearer-session account reads, character creation previews with a server-enforced 10-character cap, and subscription-card redemption previews.
+- The same local API now serves public website payloads for world status, XP rates, founder counts, news, downloads, highscores, market intel, and activity feed. The portal hydrates those surfaces from `/api/public` when available, with static fallback data for direct-file review.
+- Portal account passwords are hashed with Node's `crypto.scrypt` and per-password salts; sessions are stored server-side as SHA-256 token hashes. The store defaults to `/tmp/voidscape-portal-api/dev-store.json` unless `PORTAL_DATA_DIR` is set.
+- `web/portal/script.js` now prefers the local API when available and keeps the existing `localStorage` fallback for static-file review.
+- When `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` points at a local OpenRSC SQLite database, the portal can load read-only saved-character snapshots for title, levels, subscription state, last login, location, appearance fields, and wielded gear without mutating game data or changing login behavior.
+- Added local character link challenges: authenticated portal accounts can start a hashed one-time `::link <code>` proof flow for an existing OpenRSC save, then use a dev-only simulate endpoint to verify it and merge the saved character into the web-account roster with `linkStatus: linked`.
+- Added portal-owned SQLite and MySQL/MariaDB schema drafts under `web/portal/schema/` for web accounts, hashed sessions, up-to-10 character links, link challenges, founder reservations/referrals, entitlements, audit events, and abuse-signal buckets. These are reference web schema files, not auto-applied OpenRSC migrations.
+- Added `scripts/run-portal.sh` and `scripts/test-portal-api.sh`; the smoke test covers founder reservation, referral unlock, account registration, saved-character link challenge verification, roster cap enforcement, subscription redemption, account reads, and the read-only saved-character snapshot endpoint.
+- Added `scripts/test-portal-schema.sh` to apply the SQLite portal schema draft and verify slot limits, unique character ownership, active founder-name uniqueness, and foreign-key integrity.
+- Updated `web/portal/README.md`, `docs/DEVELOPMENT.md`, and `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md` with the local API usage and remaining production gaps.
+- No game server behavior, login packet, opcode, database schema, client cache, or OpenRSC account persistence changed.
+
+### 2026-06-04 - Portal account security controls
+
+Extended the local website/account portal with API-backed account security controls.
+
+Details:
+- `web/portal/dev-server.mjs` now exposes local-only endpoints for password rotation, recovery-code generation, and ending other active portal sessions. Recovery codes are shown to the user once, stored only as hashes, and older active codes are revoked when a new set is generated.
+- The Security tab now hydrates from API state, shows score/checklist/session rows, lets a signed-in account rotate its portal password after confirming the current password, generates one-time recovery codes, and can revoke other bearer sessions while preserving the current one.
+- Added `web_recovery_codes` to both portal-owned SQLite and MySQL/MariaDB schema drafts, plus schema smoke-test coverage.
+- `scripts/test-portal-api.sh` now covers recovery-code generation, invalid current-password rejection, password rotation, and session revocation.
+- This remains a local website prototype: no game server behavior, login packet, opcode, client cache, OpenRSC account persistence, email recovery, or production password-reset flow changed.
+
+### 2026-06-04 - Portal character roster state cards
+
+Polished the account portal's character-management view so character state is easier to scan visually.
+
+Details:
+- The Characters tab now renders a 10-slot roster rail, state badges for preview/saved/linked characters, compact loadout tokens for equipped gear, and clearer level/total/title/status hierarchy on each roster card.
+- The selected-character dashboard reuses the same gear-token system while keeping full gear names visible there and full item names available as card-token tooltips.
+- Desktop and mobile browser checks now verify the character view renders 3 default cards, 10 slot markers, 16 gear tokens, and no horizontal overflow or clipped gear-token labels.
+- No game server behavior, login packet, opcode, client cache, OpenRSC account persistence, or portal API contract changed.
+
+### 2026-06-04 - Portal explicit account sign-in mode
+
+Made returning-account access visible on the landing founder card instead of relying on the hidden "account exists, then try login" fallback.
+
+Details:
+- The founder card now has a compact Reserve/Sign in segmented control. Sign-in mode hides the reserved-username field, changes the heading and submit text, switches password autocomplete to `current-password`, and calls the existing `/api/accounts/login` endpoint directly.
+- Added an explicit `[hidden]` CSS rule so grid-styled labels respect hidden state across the portal.
+- Desktop and mobile browser checks verify a throwaway local account can sign in through the visible UI, store a session token, hide the username row, and render with no horizontal overflow.
+- No game server behavior, login packet, opcode, client cache, OpenRSC account persistence, or portal API contract changed.
+
+### 2026-06-04 - Portal concept batch and landing gateway
+
+Generated a fresh website concept batch through the user's Chrome/ChatGPT session and folded one concrete direction into the real portal.
+
+Details:
+- ChatGPT produced eight text-prompt concept images for Voidscape landing, account dashboard, roster, market, highscores, subscription, and security surfaces. They were saved under `.codex-artifacts/chatgpt-concepts/` for review; local reference-file upload failed because Chrome extension file access is disabled, so these concepts did not receive the actual local assets.
+- The landing page now includes a six-card portal gateway row for roster, subscription, security, market, titles, and wilderness feed, plus a dedicated referral reward band for the free one-week subscription-card prize.
+- Desktop and mobile browser checks verify the landing view renders six gateway cards, the reward band, no horizontal overflow, and no clipped gateway text.
+- No generated concept image was shipped into `web/portal/assets/`; the implementation is real HTML/CSS using existing Voidscape assets.
+- No game server behavior, login packet, opcode, client cache, OpenRSC account persistence, or portal API contract changed.
+
+### 2026-06-04 - Portal invite-code referral flow
+
+Replaced the founder card's referral prototype with a real local invite-code path while preserving the dev-only simulate shortcut for quick testing.
+
+Details:
+- Landing links with `?ref=<code>` are now captured into local portal state, shown as an active invite code on the founder card, and sent as `referrerCode` when reserving early access or creating a local portal account.
+- `web/portal/dev-server.mjs` now records credited referral pairs in the JSON store, rejects unknown/self-referral codes, prevents duplicate referral-pair credits, exposes the referred-by state in founder responses, and grants the free weekly subscription-card entitlement when a founder reaches two real local referrals.
+- `scripts/test-portal-api.sh` now verifies invalid-code rejection, self-referral rejection, two real referred reservations, founder reward unlock, and the existing account/character/security/subscription flows. `scripts/test-portal-schema.sh` also checks duplicate referral-pair and self-referral constraints in the SQLite schema draft.
+- This remains a local website/account-management prototype: no game server behavior, login packet, opcode, client cache, OpenRSC account persistence, email verification, or production abuse/risk scoring changed.
+
+### 2026-06-04 - Portal character paper-doll preview
+
+Added a lightweight character-state renderer to the account portal dashboard so selected characters read as more than generic class art.
+
+Details:
+- The selected-character panel now renders a compact CSS paper-doll with stable dimensions, appearance colors, cape/weapon silhouettes, and a source badge layered over the existing RSC class sprite as a faint reference.
+- Starter characters created locally or through the local portal API now carry default appearance data; linked OpenRSC snapshots preserve `appearanceData` and wielded `equipment` in account responses and browser local state.
+- Gear categorization now treats arrows/bows as ranged and weapon names before generic rune/magic matching, so items like `Rune 2h sword` drive the correct melee silhouette while rune stacks still categorize as magic.
+- `scripts/test-portal-api.sh` now asserts starter appearance data plus linked saved appearance/equipment state. Browser QA captured desktop and 390px mobile dashboard screenshots with no horizontal overflow and no console errors.
+- This remains a visual website/account-management prototype: no game server behavior, login packet, opcode, client cache, OpenRSC account persistence, or true RSC sprite-composition renderer changed.
+
+### 2026-06-04 - Portal founder reward wallet
+
+Made the early-access referral prize visible and consumable inside the local account portal.
+
+Details:
+- Account API responses now include a `rewards` summary for granted founder free weekly subscription-card entitlements, and the Subscription tab shows a founder reward wallet with ready/empty states.
+- Added `POST /api/subscriptions/redeem-founder`, which consumes a granted founder reward entitlement once, extends the account subscription by seven days, records consumption timing on the entitlement, and returns the refreshed account state.
+- The Subscription tab now updates its title and meter from actual account subscription state, so unsubscribed accounts show an empty meter and active subscriptions show a full local-prototype meter.
+- `scripts/test-portal-api.sh` now verifies founder reward wallet state, one-time founder reward redemption, no double-spend, and normal redeem-code stacking after the founder reward.
+- Browser QA covered the ready and consumed reward states on desktop plus the consumed state at 390px mobile width with no horizontal overflow and no console errors.
+- This remains a local website/account-management prototype: no game server behavior, login packet, opcode, client cache, OpenRSC account persistence, production payment flow, or real subscription-card item redemption changed.
+
+### 2026-06-04 - Portal local download links
+
+Connected the public website's download cards to the local build artifacts produced by Voidscape's wrapper scripts.
+
+Details:
+- `/api/public` now reports dynamic download metadata for `Client_Base/Open_RSC_Client.jar` and `PC_Launcher/OpenRSC.jar`, including availability, size, timestamp, and local download URLs when the jars exist.
+- Added local `GET /downloads/pc-client` and `GET /downloads/launcher` endpoints that serve the built jars with attachment headers. Missing artifacts return a local `download_not_built` error instead of a dead link.
+- The public download cards render as real links when artifacts are available and disabled status cards when they are not, while Android notes and server status remain informational placeholders.
+- `scripts/test-portal-api.sh` now checks download availability metadata and verifies the PC client artifact endpoint when a jar is present. Browser QA covered the download cards on desktop and 390px mobile widths with no horizontal overflow and no console errors.
+- This remains a local website/account-management prototype: no launcher updater, production CDN, release signing, game server behavior, login packet, opcode, or client cache behavior changed.
+
+### 2026-06-04 - Launcher layered asset skin polish
+
+Reworked the PC launcher around separately generated Voidscape art layers instead of a static mockup or generic Swing controls.
+
+Details:
+- `VoidscapeLauncherWindow` now draws the background GIF, logo, generated Play button states, top action icons, and window controls as individual layered assets, with transparent hit zones mapped over the generated art.
+- The generated news and updater-panel assets were removed; the launcher now draws a simpler coded updater panel so status text and progress do not collide with baked artwork.
+- Only the top utility icons keep the yellow hover/click outline. The Play button now swaps generated normal/hover/pressed/release images instead, and the coded updater area plus close/minimize controls no longer draw the yellow highlight.
+- Dynamic updater text now uses the fantasy display font stack with a small shadow and lower placement inside the coded status panel.
+- Animated launcher backgrounds can be tested with `VOIDSCAPE_BACKGROUND_ANIMATION=/path/to/background.gif`, loaded from `~/.voidscape/client/launcher/background.gif`, or bundled as `images/voidscape/layered/background.gif`. The static PNG remains the fallback.
+- No game server behavior, login packet, opcode, or client cache protocol changed.
+
+### 2026-06-05 - Hairstyle sprite art tooling
+
+Added a local tooling pipeline for AI-assisted player hairstyle sprites without changing live game content.
+
+Details:
+- `tools/hairstyle-art/hairstyle_tool.py` can extract an existing 18-frame head animation into AI and labeled grids, write a ChatGPT prompt, import a returned grid, normalize pixels into RSC hair/skin masks, validate frame dimensions and mask counts, render recolor previews, and dry-run pack frames into an `.orsc` archive.
+- `tools/hairstyle-art/README.md` documents the workflow and the legacy mask rules: grayscale pixels recolor as hair/clothing, `R=255 && G=B` pixels recolor as skin, and zero pixels remain transparent.
+- `docs/recipes/add-custom-hairstyle.md` records the integration checklist for turning a finished art sheet into an actual character-creation option.
+- A first `head1` reference/prompt bundle was generated under ignored `tools/hairstyle-art/out/` for local experimentation.
+- No client/server code, DB schema, packet, opcode, client cache, client-version, or live sprite archive change was added.
+
+### 2026-06-05 - Hairstyle player-scale preview gate
+
+Extended the local hairstyle art tool with an in-game-scale player preview before live cache packing.
+
+Details:
+- Added `hairstyle_tool.py player-preview`, which composes candidate head frames onto the real base player body and legs using the client sprite shift metadata, 64x102 player draw size, layer order, and mask recolouring rules.
+- The preview sheet renders all 18 poses across default blonde, black, and purple hair colours, with zoomed poses plus actual-size strips so silhouette and head attachment issues are visible before touching `Authentic_Sprites.orsc`.
+- Updated the custom hairstyle recipe to make player-scale previewing the gate before any pack/commit step.
+- Restored the live server and local client sprite archives back to the original `head1` frames after the rejected whacky merge test.
+- No DB schema, packet, opcode, client-version, or shipped gameplay behavior changed.
+
+### 2026-06-05 - Hairstyle wig compositor workflow
+
+Reworked the hairstyle art pipeline around a locked bald base plus transparent hair-only frames so generated art cannot deform the face, neck, or head attachment point.
+
+Details:
+- Added `wig-bootstrap`, `import-wig-grid`, `wig-validate`, `wig-preview`, `wig-live`, and `wig-bake` commands to `tools/hairstyle-art/hairstyle_tool.py`.
+- `wig-bootstrap` extracts immutable bald-base frames and a hair-only canvas from an existing authentic head style, then writes a hair-only ChatGPT prompt and grid.
+- `wig-preview` and `wig-live` composite the hair onto the locked base and render it through the same client-scale paperdoll preview used by `player-preview`; `wig-live` serves an auto-refreshing local browser page for save-and-check pixel iteration.
+- `wig-bake` outputs normal full-head frames only after the transparent hair canvas passes validation and preview.
+- Added `docs/subsystems/player-appearance-rendering.md` to document the server appearance array, client paperdoll renderer, mask-colour rules, and why whole-head AI redraws are unsafe.
+- Updated `tools/hairstyle-art/README.md`, `docs/recipes/add-custom-hairstyle.md`, and `docs/CODEMAP.md` so the wig compositor is the default custom hairstyle workflow.
+- Generated a local ignored proof bundle under `tools/hairstyle-art/out/wig_head1_locked_test/`, including a preview that reconstructs authentic `head1` hair over the locked bald base.
+- No live sprite archive, DB schema, packet, opcode, client-version, or shipped gameplay behavior changed.
+
+### 2026-06-05 - Manual wig frame editor
+
+Added a local browser-based pixel editor for hand-authoring Voidscape hairstyle hair layers when image generation cannot preserve the RSC frame constraints.
+
+Details:
+- Added `hairstyle_tool.py wig-editor`, which serves a local HTML canvas editor backed by the existing wig manifest and `hair-dir` frame format.
+- The editor shows every locked bald head frame, edits a transparent hair layer, provides legal hair-mask swatches, paint/erase/pick tools, per-frame nudge/copy/clear controls, PNG import for the current frame, save-to-disk, validation, and player-scale preview refresh.
+- Missing hair frames are created as transparent PNGs with sidecar metadata copied from the locked base, so a clean manual project can start from only a `wig_manifest.json`.
+- Server-side saves sanitize the canvas into RSC-safe grayscale hair-mask pixels before writing frame PNGs, keeping the existing `wig-validate`, `wig-preview`, and `wig-bake` flow intact.
+- Updated `tools/hairstyle-art/README.md` and `docs/recipes/add-custom-hairstyle.md` to document the manual workflow.
+- No live sprite archive, DB schema, packet, opcode, client-version, or shipped gameplay behavior changed.

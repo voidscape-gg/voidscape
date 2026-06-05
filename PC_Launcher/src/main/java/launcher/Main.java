@@ -7,7 +7,9 @@ import java.io.File;
 public class Main {
 
   // DEFAULT FOLDERS
-  public static String configFileLocation = "Cache";
+  private static final String DEFAULT_CACHE_DIR = System.getProperty("user.home")
+      + File.separator + ".voidscape" + File.separator + "client";
+  public static String configFileLocation = DEFAULT_CACHE_DIR;
   public static String SPRITEPACK_DIR = configFileLocation + File.separator + "video" + File.separator + "spritepacks";
   public static boolean disabledUpdate = false;
 
@@ -24,6 +26,7 @@ public class Main {
     String helpMessage = "Help for the RSC launcher:\n" +
         "	--help, -h displays this help message\n" +
         "	--dir [loc], -d [loc] changes the cache directory location\n" +
+        "	--portable uses ./Cache next to the current working directory\n" +
         "	--no-update, -n Disables Launcher autoupdate feature and prompt\n" +
         "Example:\n" +
         "java -jar OpenRSC.jar -d /home/foo/.local/openrsc";
@@ -53,6 +56,10 @@ public class Main {
         }
       } else if (arg.equals("--no-update") || arg.equals("-n")) {
         disabledUpdate = true;
+        argIndex++;
+      } else if (arg.equals("--portable")) {
+        configFileLocation = "Cache";
+        SPRITEPACK_DIR = configFileLocation + File.separator + "video" + File.separator + "spritepacks";
         argIndex++;
       } else {
         System.out.println("Unrecognized modifier.\n" +

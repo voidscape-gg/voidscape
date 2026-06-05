@@ -1,6 +1,7 @@
 package orsc.graphics.gui;
 
 import com.openrsc.client.model.Sprite;
+import orsc.Config;
 import orsc.graphics.two.GraphicsController;
 import orsc.util.PngSpriteLoader;
 
@@ -241,7 +242,7 @@ public final class WorldMapPanel {
 			drawScaledClippedMap(surface, map, scl);
 		} else {
 			surface.drawColoredStringCentered(contentX + contentW / 2,
-				"Plane " + currentFloor + " image missing — see Cache/worldmap/UPSTREAM.md",
+				"Plane " + currentFloor + " image missing - see worldmap/UPSTREAM.md",
 				COLOR_HELP_TEXT, 0, 1, contentY + contentH / 2);
 		}
 
@@ -648,7 +649,7 @@ public final class WorldMapPanel {
 		if (floorLoadAttempted[floor]) return null;
 		floorLoadAttempted[floor] = true;
 
-		File f = new File("Cache/worldmap/plane-" + floor + ".png");
+		File f = worldMapAsset("plane-" + floor + ".png");
 		if (!f.exists()) return null;
 		Sprite s = readPngAsSprite(f);
 		floorSprites[floor] = s;
@@ -685,15 +686,19 @@ public final class WorldMapPanel {
 		return PngSpriteLoader.read(f);
 	}
 
+	private static File worldMapAsset(String path) {
+		return new File(new File(Config.F_CACHE_DIR, "worldmap"), path);
+	}
+
 	private static synchronized void ensureAssetsLoaded() {
 		if (assetsLoadAttempted) return;
 		assetsLoadAttempted = true;
-		labels = loadLabels(new File("Cache/worldmap/labels.tsv"));
-		points = loadPoints(new File("Cache/worldmap/points.tsv"));
-		File stone = new File("Cache/worldmap/stone-background.png");
+		labels = loadLabels(worldMapAsset("labels.tsv"));
+		points = loadPoints(worldMapAsset("points.tsv"));
+		File stone = worldMapAsset("stone-background.png");
 		if (stone.exists()) stoneBg = readPngAsSprite(stone);
 		poiCircleSprite = makePoiCircle();
-		File iconsDir = new File("Cache/worldmap/icons");
+		File iconsDir = worldMapAsset("icons");
 		if (iconsDir.isDirectory()) {
 			File[] files = iconsDir.listFiles();
 			if (files != null) {

@@ -186,14 +186,41 @@ Admin Commands
   - Usage: `::workbenchauctionfixture`
   - Alias: `::workbenchahfixture`
   - Reseeds deterministic Auction House listings and market-intel sales for local AI workbench testing.
+- loadbots
+  - Usage: `::loadbots start <count> [radius] [intervalTicks]`
+  - Usage: `::loadbots status`
+  - Usage: `::loadbots stop`
+  - Alias: `::loadtest`
+  - Spawns/removes synthetic in-world players for local performance and crowd-path testing.
+- voidrushbots
+  - Usage: `::voidrushbots [count]`
+  - Alias: `::vrbots`
+  - Queues the caller plus synthetic load bots into Void Rush for local beta testing.
+- cinematic
+  - Usage: `::cinematic bossfight [actors] [bossNpcId] [radius]`
+  - Usage: `::cinematic stop`
+  - Alias: `::cine`
+  - Spawns or clears an admin-only staged combat scene for local visual/cinematic testing.
 - wildhobdebug
   - Usage: `::wildhobdebug [status|off|0-20]`
   - Alias: `::wildhobgoblin`
   - Shows or overrides the unique-IP crowd count used by adaptive wilderness hobgoblin spawns for local testing.
+- balancereport
+  - Usage: `::balancereport [summary|xp|players|npcs|drops|reset]`
+  - Alias: `::balancestats`
+  - Shows or clears in-memory beta telemetry for XP, player XP, NPC kills, and NPC drop quantities.
+- gatherstreak
+  - Usage: `::gatherstreak <mining|woodcutting|fishing> <resource-key> [failures]`
+  - Alias: `::resourcestreak`
+  - Seeds the current player's transient gathering dry-streak counter for local resource-protection tests.
 - announcepreview
   - Usage: `::announcepreview [skill|total|pk]`
   - Alias: `::worldannouncepreview`
   - Sends sample Void Herald world-announcement messages for local styling checks.
+- dropwave
+  - Usage: `::dropwave <npc_id> [count] [radius]`
+  - Alias: `::farmdrops` or `::spawndrops`
+  - Spawns and immediately player-credit-kills a capped group of NPCs using their normal drop tables.
 - quickbank
   - Usage: `::quickbank`
   - Displays the logged in player's bank window.
@@ -824,8 +851,8 @@ Regular Player Commands
 - g
   - Usage: `::g [message]`
   - Alias: `::pk`
-  - Send a message to global or PK chat.
-  - `::g` is for global and `::pk` is for PK chat.
+  - Send a simplified global-chat message. The custom client can show the sender's IP country flag beside the username.
+  - `::pk` still routes to the legacy PK global channel when enabled.
   - You can only send one global chat message per 15 seconds.
 - p
   - Usage: `::p [message]`
@@ -850,6 +877,10 @@ Regular Player Commands
 - commands
   - Usage: `::commands`
   - Shows a list of the Regular Player commands.
+- rested
+  - Usage: `::rested`
+  - Alias: `::restedxp`
+  - Shows the current rested-XP pool, cap, and offline earn rate.
 - lootbeam
   - Usage: `::lootbeam [list|defaults|reset]`
   - Usage: `::lootbeam add <item id/name>`

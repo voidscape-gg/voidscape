@@ -1,6 +1,8 @@
 package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.*;
+import com.openrsc.server.content.BalanceTelemetry;
+import com.openrsc.server.content.GuaranteedResources;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.GameDatabaseException;
@@ -168,6 +170,10 @@ public final class Admins implements CommandTrigger {
 			seedWorkbenchAuctionHouseFixture(player);
 		} else if (command.equalsIgnoreCase("wildhobdebug") || command.equalsIgnoreCase("wildhobgoblin")) {
 			wildernessHobgoblinDebug(player, command, args);
+		} else if (command.equalsIgnoreCase("balancereport") || command.equalsIgnoreCase("balancestats")) {
+			balanceReport(player, command, args);
+		} else if (command.equalsIgnoreCase("gatherstreak") || command.equalsIgnoreCase("resourcestreak")) {
+			seedGatheringStreak(player, command, args);
 		} else if (command.equalsIgnoreCase("announcepreview") || command.equalsIgnoreCase("worldannouncepreview")) {
 			worldAnnouncementPreview(player, command, args);
 		} else if (command.equalsIgnoreCase("quickbank")) {
@@ -1369,6 +1375,52 @@ public final class Admins implements CommandTrigger {
 		controller.setDebugUniqueIpCount(uniqueIpCount);
 		player.message(messagePrefix + controller.statusSummary());
 		player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21, messagePrefix + "Set wilderness hobgoblin debug unique IPs to " + uniqueIpCount));
+	}
+
+	private void balanceReport(Player player, String command, String[] args) {
+		if (args.length > 0 && args[0].equalsIgnoreCase("reset")) {
+			BalanceTelemetry.reset();
+			player.playerServerMessage(MessageType.QUEST, messagePrefix + "Balance telemetry reset.");
+			player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21, messagePrefix + "Reset balance telemetry"));
+			return;
+		}
+
+		String mode = args.length > 0 ? args[0] : "summary";
+		for (String line : BalanceTelemetry.report(player, mode)) {
+			player.playerServerMessage(MessageType.QUEST, line);
+		}
+	}
+
+	private void seedGatheringStreak(Player player, String command, String[] args) {
+		if (args.length < 2 || args.length > 3) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [mining|woodcutting|fishing] [resource-key] (failures)");
+			return;
+		}
+
+		String action = args[0].toLowerCase();
+		if (!action.equals(GuaranteedResources.MINING)
+			&& !action.equals(GuaranteedResources.WOODCUTTING)
+			&& !action.equals(GuaranteedResources.FISHING)) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [mining|woodcutting|fishing] [resource-key] (failures)");
+			return;
+		}
+
+		int failures = GuaranteedResources.failuresBeforeGuarantee();
+		if (args.length == 3) {
+			try {
+				failures = Integer.parseInt(args[2]);
+			} catch (NumberFormatException ex) {
+				player.message(badSyntaxPrefix + command.toUpperCase() + " [mining|woodcutting|fishing] [resource-key] (failures)");
+				return;
+			}
+		}
+
+		GuaranteedResources.setFailureCount(player, action, args[1], failures);
+		int current = GuaranteedResources.getFailureCount(player, action, args[1]);
+		player.message(messagePrefix + "Gathering streak set: " + action + " " + args[1] + " = "
+			+ current + "/" + GuaranteedResources.failuresBeforeGuarantee());
+		player.getWorld().getServer().getGameLogger().addQuery(
+			new StaffLog(player, 21, messagePrefix + "Set gathering streak " + action + " " + args[1] + " to " + current));
 	}
 
 	private void spawnItemBestInSlot(Player player) {

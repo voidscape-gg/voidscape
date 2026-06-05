@@ -26,4 +26,5 @@ public class GameSettingsStruct extends AbstractStruct<OpcodeOut> {
 	public int hdVignette;
 	public int hdWaterShimmer;
 	public int hdSunlight;
+	public int globalChatCountryFlags;
 }

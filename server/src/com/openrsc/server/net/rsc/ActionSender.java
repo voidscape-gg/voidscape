@@ -8,6 +8,7 @@ import com.openrsc.server.content.clan.ClanPlayer;
 import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.struct.UsernameChangeType;
@@ -744,6 +745,7 @@ public class ActionSender {
 		struct.hdVignette = player.getHdVignette() ? 1 : 0;
 		struct.hdWaterShimmer = player.getHdWaterShimmer() ? 1 : 0;
 		struct.hdSunlight = player.getHdSunlight() ? 1 : 0;
+		struct.globalChatCountryFlags = player.getGlobalChatCountryFlags() ? 1 : 0;
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_GAME_SETTINGS, struct, player);
 	}
 
@@ -2147,6 +2149,7 @@ public class ActionSender {
                 }
 
                 sendGameSettings(player);
+				GlobalChatIpFlags.resolvePlayerAsync(player);
 				sendWorldInfo(player);
                 sendQuestInfo(player);
                 sendPlayerOnTutorial(player);

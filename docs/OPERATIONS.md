@@ -33,6 +33,38 @@ SERVER_PID=$(lsof -tiTCP:43596 -sTCP:LISTEN || true)
 
 Avoid broad `pkill -f openrsc` patterns for the server. The running command line is usually generic Java/Ant text and may not contain `openrsc`.
 
+## Friends-only hosted beta
+
+For a private beta, the intended player flow is one hosted game server plus a preconfigured launcher. Friends should not need the website or any manual client configuration.
+
+Server host:
+
+- Run `scripts/build.sh`, then `scripts/run-server.sh` on the VPS or dedicated host.
+- Open the configured TCP `server_port` in the host firewall and provider firewall. Voidscape local config currently uses `43596`.
+- Keep `ws_server_port` closed unless a browser/web client is intentionally being tested.
+- Back up the database before inviting testers and before every update.
+
+Launcher/update packaging from a build machine:
+
+```bash
+scripts/package-friend-beta.sh \
+  --host <server-host-or-ip> \
+  --port 43596 \
+  --base-url https://<server-host-or-ip>/voidscape/update \
+  --discord-url <optional-discord-invite>
+```
+
+Upload or sync `dist/friend-beta/update/` to the URL used as `--base-url`, then share only `dist/friend-beta/VoidscapeLauncher.jar` with testers. The launcher embeds the game endpoint and manifest URL, downloads the PC client/cache on first Play, writes `ip.txt`/`port.txt` into its runtime cache, and launches the client.
+
+External smoke checks:
+
+```bash
+curl -I https://<server-host-or-ip>/voidscape/update/manifest.properties
+nc -vz <server-host-or-ip> 43596
+```
+
+During the friend beta, newly created characters are temporarily created as Admins automatically so testers can use the command checklist immediately. Existing characters can still be changed with `make rank-sqlite` / `make rank-mysql` or in-game `::setrank` from an owner/admin account. Revert the auto-admin default before any public release.
+
 ## Config files
 
 | File | Purpose | Git status |

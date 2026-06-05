@@ -3,6 +3,8 @@ package com.openrsc.server.plugins.authentic.commands;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.RestedExperience;
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.content.clan.ClanInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
@@ -130,6 +132,8 @@ public final class RegularPlayer implements CommandTrigger {
 			queryCommands(player, 0);
 		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
 			handleLootBeamCommand(player, args);
+		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {
+			player.message(RestedExperience.status(player));
 		} else if (command.equalsIgnoreCase("titles") || command.equalsIgnoreCase("title")) {
 			handleTitleCommand(player, args);
 		} else if (command.equalsIgnoreCase("b") && config().RIGHT_CLICK_BANK) {
@@ -1061,18 +1065,19 @@ public final class RegularPlayer implements CommandTrigger {
 	private void sendMessageGlobal(Player player, String command, String[] args) {
 		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
 
-		if (!player.isElligibleToGlobalChat()) return;
-
-		StringBuilder newStr = new StringBuilder();
-		for (String arg : args) {
-			newStr.append(arg).append(" ");
+		String rawMessage = String.join(" ", args).trim();
+		if (rawMessage.isEmpty()) {
+			player.message(badSyntaxPrefix + command + " <message>");
+			return;
 		}
 
-		if (config().WANT_GLOBAL_CHAT) {
-			String message = MessageFilter.filter(player, newStr.toString(), "global chat");
+		if (!player.isElligibleToGlobalChat()) return;
 
-			String channelPrefix = command.equals("g") ? "@gr2@[General] " : "@or1@[PKing] ";
+		if (config().WANT_GLOBAL_CHAT) {
+			String message = MessageFilter.filter(player, rawMessage, "global chat").trim();
+
 			int channel = command.equalsIgnoreCase("g") ? 1 : 2;
+			String chatLine = formatGlobalChatLine(player, message);
 			for (Player p : player.getWorld().getPlayers()) {
 				if (p.getSocial().isIgnoring(player.getUsernameHash()))
 					continue;
@@ -1083,15 +1088,7 @@ public final class RegularPlayer implements CommandTrigger {
 					continue;
 				}
 				if (p.getGlobalBlock() != 2) {
-					String header = "";
-					if (!p.isUsingCustomClient()) {
-						ActionSender.sendMessage(p, player, MessageType.PRIVATE_RECIEVE, channelPrefix + "@whi@" + (player.getClan() != null ? "@cla@<" + player.getClan().getClanTag() + "> @whi@" : "") + header + player.getStaffName() + ": "
-							+ (channel == 1 ? "@gr2@" : "@or1@") + message, player.getIconAuthentic(), null);
-
-					} else {
-						ActionSender.sendMessage(p, player, MessageType.GLOBAL_CHAT, channelPrefix + "@whi@" + (player.getClan() != null ? "@cla@<" + player.getClan().getClanTag() + "> @whi@" : "") + header + player.getStaffName() + ": "
-							+ (channel == 1 ? "@gr2@" : "@or1@") + message, player.getIcon(), null);
-					}
+					ActionSender.sendMessage(p, null, MessageType.GLOBAL_CHAT, chatLine, 0, null);
 				}
 			}
 
@@ -1103,12 +1100,16 @@ public final class RegularPlayer implements CommandTrigger {
 				player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(PKing) " + message));
 			}
 		} else if (config().WANT_GLOBAL_FRIEND && command.equalsIgnoreCase("g")) {
-			String message = DataConversions.upperCaseAllFirst(DataConversions.stripBadCharacters(newStr.toString()));
+			String message = DataConversions.upperCaseAllFirst(DataConversions.stripBadCharacters(rawMessage));
 			message = MessageFilter.filter(player, message, "global chat");
 
 			player.getWorld().addGlobalMessage(new GlobalMessage(player, message));
-			player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + newStr));
+			player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + rawMessage));
 		}
+	}
+
+	private String formatGlobalChatLine(Player player, String message) {
+		return GlobalChatIpFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
 	}
 
 	private void sendMessageParty(Player player, String command, String[] args) {
@@ -1993,7 +1994,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::online - shows players currently online %",
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",
-		"@whi@::g <message> - to talk in @gr1@general @whi@global chat channel %",
+		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",
 		"@whi@::p <message> - talk in party chat %",
@@ -2010,11 +2011,12 @@ public final class RegularPlayer implements CommandTrigger {
 		"@lre@Type :: before you enter your command, see the list below. %",
 		" %", // this adds a line of whitespace for readability
 		"@whi@::time - shows the current server time %",
-		"@whi@::toggleglobalchat - toggle blocking Global$ messages %",
+		"@whi@::toggleglobalchat - toggle receiving global chat %",
 		"@whi@::toggleblockchat - toggle blocking all chat messages %",
 		"@whi@::toggleblockprivate - toggle block all private messages %",
 		"@whi@::toggleblocktrade - toggle blocking all trade requests %",
 		"@whi@::toggleblockduel - toggle blocking all duel requests %",
+		"@whi@::rested - show rested XP status %",
 		"@whi@::titles - view and equip unlocked titles %",
 		"@whi@::lootbeam - customize rare drop loot beams %",
 		"@whi@::groups - shows available ranks on the server %",

@@ -225,24 +225,48 @@ public class Smelting implements UseLocTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			// repeat = Formulae.getRepeatTimes(player, Skill.SMITHING.id();
-			int carriedOre = player.getCarriedItems().getInventory().countId(
-				smelt.getID(), Optional.of(false));
-			if (smelt.getReqOreId() == -1) {
-				repeat = carriedOre;
-			} else {
-				repeat = Math.min(
-					carriedOre,
-					player.getCarriedItems().getInventory().countId(
-						smelt.getReqOreId(), Optional.of(false)) / smelt.requestedOreAmount
-				);
-			}
+		int repeat = chooseSmeltCount(player, smelt);
+		if (repeat < 1) {
+			return;
 		}
 
 		startbatch(repeat);
 		batchSmelt(player, item, smelt);
+	}
+
+	private int chooseSmeltCount(Player player, Smelt smelt) {
+		if (!config().BATCH_PROGRESSION) {
+			return 1;
+		}
+
+		int maximumSmeltCount = getMaximumSmeltCount(player, smelt);
+		if (maximumSmeltCount <= 1) {
+			return 1;
+		}
+
+		player.message("How many would you like to smelt?");
+		int option = multi(player, "Smelt 1", "Smelt 5", "Smelt 10", "Smelt All", "Cancel");
+		switch (option) {
+			case 0:
+				return 1;
+			case 1:
+				return Math.min(5, maximumSmeltCount);
+			case 2:
+				return Math.min(10, maximumSmeltCount);
+			case 3:
+				return maximumSmeltCount;
+			default:
+				return -1;
+		}
+	}
+
+	private int getMaximumSmeltCount(Player player, Smelt smelt) {
+		int primaryCount = player.getCarriedItems().getInventory().countId(smelt.getID(), Optional.of(false)) / smelt.getOreAmount();
+		if (smelt.getReqOreId() == -1) {
+			return primaryCount;
+		}
+		int secondaryCount = player.getCarriedItems().getInventory().countId(smelt.getReqOreId(), Optional.of(false)) / smelt.getReqOreAmount();
+		return Math.min(primaryCount, secondaryCount);
 	}
 
 	private void batchSmelt(Player player, Item item, Smelt smelt) {

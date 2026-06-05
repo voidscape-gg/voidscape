@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10055` | `10055` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10069` | `10069` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Decide before beta | Local comment says this keeps completed Dragon sword wieldable. Earlier project docs described F2P-by-default. Pick one and update docs/presets. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
@@ -23,7 +23,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10055` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10069` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 
 ## World rules
@@ -48,6 +48,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_world_announcements` | `true` if Void Herald social broadcasts are live | Master switch for milestone and skulled-Wilderness PK world messages. |
 | `want_world_milestone_announcements` | `true` if milestones should be public | Announces selected skill and total-level milestones. |
 | `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
+| `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
+| `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
 | Subscription cards | Always available in Voidscape | Each card adds 7 days; Lumbridge vendor sells 20-card tiers and each sold-out tier doubles the price. |
 | `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
 | `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
@@ -78,8 +80,8 @@ These are positional in many loaders. Keep server and client append order aligne
 |---|---:|---|
 | Custom item ids | `1602` | Subscription card is currently the latest documented item. |
 | Custom NPC ids | `848` | Void Subscription Vendor is current high-water mark. |
-| Custom scenery ids | `1306` | Void Rift is latest documented scenery id. |
-| Custom client version | `10055` | Current working tree value. |
+| Custom scenery ids | `1306` | Void Rift is current high-water mark. |
+| Custom client version | `10069` | Current working tree value. |
 
 ## Pre-release config sign-off
 

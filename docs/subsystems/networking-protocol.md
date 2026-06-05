@@ -157,7 +157,7 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10055`. Server's `client_version` config key (e.g. `10055`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10069`. Server's `client_version` config key (e.g. `10069`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
 
 Voidscape custom-client packet notes:
 - `10051`: Auction House market-intel payload was added to the existing custom Auction House packet.
@@ -165,6 +165,19 @@ Voidscape custom-client packet notes:
 - `10053`: client-visible definition bump for the Subscription card and Lumbridge Void Subscription Vendor. No packet shape changed.
 - `10054`: custom `SEND_SHOP_OPEN` appends a 32-bit per-item display-price override after each shop row. This keeps the Subscription Vendor's doubled tier prices exact in the native shop UI.
 - `10055`: custom `SEND_GAME_SETTINGS` appends subscription-active state plus effective combat/skilling XP-rate tenths after the existing profile stats block. Older custom clients do not receive these extra bytes.
+- `10057`: custom `SEND_UPDATE_PLAYERS` appearance type `5` appends a one-byte modern hair style after the player-title string, and custom appearance packet `235` sends that same byte after the XP-mode choice. The current client draws styles greater than zero as ARGB PNG overlays from `Client_Base/Cache/voidscape/hair/style_XX/`.
+- `10058`: expanded the modern hair cache/style set to recolor styles `01..08` and raised the accepted style cap. No packet shape changed from `10057`.
+- `10059`: expanded the classic hair/beard colour palette with Void, Frost, Blood, Ember, Gold, Toxic, Moon, and Coal. No packet shape changed; the server now accepts hair colour indexes `0..17`.
+- `10060`: constrained PNG modern hair overlays to the compatible base head (`head1`) so default head/beard styles remain pure classic recolours. Changing the default head or gender in the character designer resets the overlay selector to Classic.
+- `10061`: split modern hair shape from hair colour. `hairStyle` now selects a neutral PNG shape (`0 = Classic`, `1 = Swept`) and the existing `hairColour` byte tints both classic head/beard sprites and modern PNG overlays. The duplicate colour-as-style cache folders were removed; legacy saved `hairstyle` values `2..8` are migrated to `hairstyle = 1` plus the matching palette colour.
+- `10062`: disabled selectable modern PNG hair styles for the shipped character designer. `hairStyle` remains in the packet/save format for compatibility but is clamped to `0`, so every default head/beard shape uses only the shared classic hair palette.
+- `10063`: custom Voidscape hair colours render through the side-swept overlay's three-shade colour mapping on grayscale hair-mask pixels. No packet shape changed; this is a renderer-only visual upgrade for hair colour indexes `10..17`.
+- `10064`: character creation/change only exposes and accepts Voidscape hair colour indexes `10..17`; saved old hair colours are migrated to nearest custom-family colours.
+- `10065`: character creation/change exposes trial Voidscape top/bottom colour indexes `15..22` and skin tone indexes `43..50`; the renderer applies the richer three-shade mapping to custom clothing and trial skin tones. No packet shape changed.
+- `10066`: muted the trial Voidscape clothing RGB values and moved custom clothing to a softer five-step shade ramp. No packet shape changed.
+- `10067`: removed the fantasy `Moon`, `Void`, and `Frost` trial skin tones from the selector and server acceptance, leaving grounded skin tone indexes `43..47`. No packet shape changed.
+- `10068`: restored classic clothing colours to the Top/Bottom selectors while keeping the muted Voidscape clothing colours appended at indexes `15..22`. No packet shape changed.
+- `10069`: custom `SEND_GAME_SETTINGS` appends one byte for the Global Chat country-flag visibility toggle after the HD visual settings block. The custom client also renders server-sent `@flg@CC` chat tokens as country-flag icons, used by simplified global chat formatting.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

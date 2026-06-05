@@ -5,6 +5,7 @@ import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.GuaranteedResources;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.external.GameObjectDef;
 import com.openrsc.server.external.ObjectMiningDef;
@@ -236,20 +237,29 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 				return;
 			}
 		}
-		if (getOre(def, player.getSkills().getLevel(Skill.MINING.id()), axeId) && mineLvl >= def.getReqLevel()) {
+		boolean canUseGuarantee = rock.getID() != 496 && mineLvl >= def.getReqLevel();
+		boolean guaranteed = canUseGuarantee
+			&& GuaranteedResources.shouldGuarantee(player, GuaranteedResources.MINING, def.getOreId());
+		if ((guaranteed || getOre(def, player.getSkills().getLevel(Skill.MINING.id()), axeId)) && mineLvl >= def.getReqLevel()) {
 			if (DataConversions.random(1, 200) <= (player.getCarriedItems().getEquipment().hasEquipped(ItemId.CHARGED_DRAGONSTONE_AMULET.id()) ? 2 : 1)) {
 				player.playSound("foundgem");
 				Item gem = new Item(getGem(), 1);
 				player.getCarriedItems().getInventory().add(gem);
+				GuaranteedResources.recordAttempt(player, GuaranteedResources.MINING, def.getOreId(), true);
+				GuaranteedResources.notifyIfGuaranteed(player, guaranteed);
 				player.playerServerMessage(MessageType.QUEST, "You just found a" + gem.getDef(player.getWorld()).getName().toLowerCase().replaceAll("uncut", "") + "!");
 				return;
 			} else {
 				GameObject obj = player.getViewArea().getGameObject(rock.getID(), rock.getX(), rock.getY());
+				boolean obtainedOre = false;
 				if (!player.getConfig().SHARED_GATHERING_RESOURCES || obj != null) {
 					// Successful mining attempt
 					// It is authentic to allow multiple players to get the rock if they have already started mining it.
 					// In retro mechanic, if other player had depleted it you would not get it
 					// In both cases if there is no ore in the rock, there will be no retry
+					obtainedOre = true;
+					GuaranteedResources.recordAttempt(player, GuaranteedResources.MINING, def.getOreId(), true);
+					GuaranteedResources.notifyIfGuaranteed(player, guaranteed);
 					if (SkillCapes.shouldActivate(player, ItemId.MINING_CAPE)) {
 						thinkbubble(new Item(ItemId.MINING_CAPE.id(), 1));
 						player.playerServerMessage(MessageType.QUEST, "You manage to obtain two " + ore.getDef(player.getWorld()).getName().toLowerCase());
@@ -288,8 +298,22 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 				if (rock.getID() == 496 && player.getCache().hasKey("tutorial") && player.getCache().getInt("tutorial") == 51) {
 					player.getCache().set("tutorial", 52);
 				}
-				if (!config().MINING_ROCKS_EXTENDED || DataConversions.random(1, 100) <= def.getDepletion()) {
+				if (obtainedOre && rock.getID() != 496) {
+					GuaranteedResources.recordNodeYield(rock, GuaranteedResources.MINING);
+				}
+				if (obtainedOre && (!config().MINING_ROCKS_EXTENDED || DataConversions.random(1, 100) <= def.getDepletion())) {
+					if (rock.getID() != 496 && GuaranteedResources.shouldProtectNode(rock, GuaranteedResources.MINING)) {
+						updatebatch();
+						if (!isbatchcomplete()) {
+							boolean customBatch = config().BATCH_PROGRESSION;
+							if (!customBatch || !ifinterrupted()) {
+								batchMining(player, rock, def, axeId, mineLvl);
+							}
+						}
+						return;
+					}
 					if (def.getRespawnTime() > 0) {
+						GuaranteedResources.clearNode(rock, GuaranteedResources.MINING);
 						changeloc(rock, def.getRespawnTime() * 1000, SceneryId.ROCK_GENERIC.id());
 					}
 					return;
@@ -299,6 +323,7 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 			if (rock.getID() == 496) {
 				player.playerServerMessage(MessageType.QUEST, "You fail to make any real impact on the rock");
 			} else {
+				GuaranteedResources.recordAttempt(player, GuaranteedResources.MINING, def.getOreId(), false);
 				player.playerServerMessage(MessageType.QUEST, "You only succeed in scratching the rock");
 				if (!isbatchcomplete()) {
 					GameObject checkObj = player.getViewArea().getGameObject(rock.getID(), rock.getX(), rock.getY());

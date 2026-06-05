@@ -5,8 +5,8 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 ## Preset inventory
 
 ### `preservation.conf` — authentic RSC with minimal QoL
-- DB: `preservation`. Port: 43594. Era: ~RSC c.2010.
-- `member_world: true`, `want_fatigue: true`, `game_tick: 640`, `exp_rate: 1.0`, `auto_save: 120s`
+- DB: `preservation`. Port: 43596. Era: ~RSC c.2010.
+- `member_world: true`, `want_fatigue: true`, `game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `auto_save: 120s`
 - `location_data: 1` (some custom content), `want_fixed_broken_mechanics: true`
 - Style: faithful to original. Fatigue is real. Slow grind.
 
@@ -17,7 +17,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `2001scape.conf` — early-2001 retro
 - DB: `2001scape`. Port: 43593.
-- `member_world: false`, `want_fatigue: false`, `game_tick: 640`, `exp_rate: 1.0`
+- `member_world: false`, `want_fatigue: false`, `game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`
 - `client_version: 20010000` (custom retro version, enforced)
 - `rapid_cast_spells: true`
 - `based_map_data: 14`, `based_config_data: 18`, `restrict_item_id: 306`, `restrict_scenery_id: 179`
@@ -25,7 +25,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `rsccabbage.conf` — fast hybrid with addons
 - DB: `cabbage`. Port: 43595.
-- `member_world: true`, `want_fatigue: false`, `game_tick: 430` (faster), `exp_rate: 5.0`
+- `member_world: true`, `want_fatigue: false`, `game_tick: 430` (faster), `combat_exp_rate: 5`, `skilling_exp_rate: 5`
 - `auto_save: 30s`, `want_experience_cap: true`
 - `location_data: 2` (custom content)
 - `character_creation_mode: 1` (ironman + 1x modes)
@@ -34,7 +34,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `openpk.conf` — open-world PK
 - DB: `openpk`. Port: 43597.
-- `exp_rate: 15.0`, `wilderness_boost: 40`, `skull_boost: 50`
+- `combat_exp_rate: 15`, `skilling_exp_rate: 15`, `wilderness_boost: 40`, `skull_boost: 50`
 - `npc_respawn_multiplier: 0.5` (NPCs respawn 2× faster)
 - `player_level_limit: 120`, `location_data: 4`
 - `max_connections_per_ip: 500` (allows multi-logging)
@@ -42,14 +42,14 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `uranium.conf` — bot-friendly authentic
 - DB: `uranium`. Port: 43235.
-- `exp_rate: 1.0`, `want_fatigue: false`, `auto_save: 300s`
+- `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `want_fatigue: false`, `auto_save: 300s`
 - `max_connections_per_ip: 100`, `max_logins_per_second: 40`
 - `want_pcap_logging: false`
 - Style: anything goes. Pure grind for automation.
 
 ### `rsccoleslaw.conf` — fast bot-friendly
 - DB: `coleslaw`. Port: 43599.
-- Like `rsccabbage` but `exp_rate: 2.0`, `max_connections_per_ip: 45`, `max_logins_per_second: 40`.
+- Like `rsccabbage` but `combat_exp_rate: 2`, `skilling_exp_rate: 2`, `max_connections_per_ip: 45`, `max_logins_per_second: 40`.
 - Style: bot-tolerant variant of cabbage.
 
 ## Voidscape recommendation
@@ -110,20 +110,21 @@ The ~20 most important — see comments in each `.conf` for the full set.
 |---|---|---|
 | `db_name` | `preservation` | SQLite/MySQL database name |
 | `db_type` | `sqlite` or `mysql` | DB backend (in `connections.conf`) |
-| `server_port` | `43594` | TCP port for game clients |
-| `ws_server_port` | `43494` | WebSocket port (web client) |
+| `server_port` | `43596` | TCP port for the local Voidscape game client preset |
+| `ws_server_port` | `43496` | WebSocket port (web client) |
 | `max_players` | `2000` | Concurrent player cap |
 | `server_name` | `Voidscape` | Shown in login screen + friends list |
 | `server_name_welcome` | `Voidscape` | Welcome screen header |
 | `member_world` | `true` | P2P content enabled |
 | `want_fatigue` | `false` | Stamina drain during skilling |
 | `game_tick` | `640` | Tick speed in ms (authentic = 640) |
-| `exp_rate` | `1.0` | Multiplier for all exp gains |
+| `combat_exp_rate` | `7` | Combat XP multiplier |
+| `skilling_exp_rate` | `4` | Non-combat skill XP multiplier |
 | `wilderness_boost` | `0` | Additive exp bonus in wilderness |
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |
-| `client_version` | `10010` | Protocol version (must match client) |
+| `client_version` | `10069` | Protocol version (must match client) |
 | `enforce_custom_client_version` | `true` | Reject mismatched clients |
 | `location_data` | `1` | Item/NPC data set (0=strict authentic, 1=preservation, 2=custom, 4=openpk) |
 | `character_creation_mode` | `0` | 0=standard, 1=ironman+1x, 2=classes+globalPK |

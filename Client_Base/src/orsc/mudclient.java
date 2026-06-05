@@ -185,10 +185,17 @@ public final class mudclient implements Runnable {
 	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
 	// appears below the minimap on hover.
 	public final orsc.graphics.gui.WorldMapPanel worldMapPanel = new orsc.graphics.gui.WorldMapPanel();
-	private final int[] playerClothingColors = new int[]{0xFF0000, 16744448, 16769024, 10543104, '\ue000', '\u8000',
-		'\ua080', '\ub0ff', '\u80ff', 12528, 14680288, 3158064, 6307840, 8409088, 0xFFFFFF};
-	private final int[] playerHairColors = new int[]{16760880, 16752704, 8409136, 6307872, 3158064, 16736288,
-		16728064, 0xFFFFFF, '\uff00', '\uffff'};
+	private final int[] playerClothingColors = new int[]{
+		0xFF0000, 16744448, 16769024, 10543104, '\ue000', '\u8000',
+		'\ua080', '\ub0ff', '\u80ff', 12528, 14680288, 3158064, 6307840, 8409088, 0xFFFFFF,
+		// Voidscape custom palette, used by the character designer for top and bottom colours.
+		0x4A2C6F, 0x5F8D94, 0x7E2B31, 0x92512E, 0xA07F3A, 0x4E7F3F, 0x7B869D, 0x34343B
+	};
+	private final int[] playerHairColors = new int[]{
+		16760880, 16752704, 8409136, 6307872, 3158064, 16736288, 16728064, 0xFFFFFF, '\uff00', '\uffff',
+		// Voidscape custom palette, available to every classic hair and beard sprite.
+		0x6A0DAD, 0x7EDAE6, 0xB2181E, 0xE66917, 0xDAAD36, 0x5BCC3D, 0xABBEDB, 0x3D3D48
+	};
 	private final ORSCharacter[] players = new ORSCharacter[500];
 	private final ORSCharacter[] playerServer = new ORSCharacter[4000];
 	private final int[] playerSkinColors = new int[]{
@@ -212,6 +219,13 @@ public final class mudclient implements Runnable {
 		0xB5FF1D, // easter ogre
 		0xA0C0C0, // silver man
 		0x608080, // coal woman
+
+		// Voidscape trial skin palette.
+		0xF2C8BA, // dawn
+		0xD99A8F, // rose
+		0xA76A45, // bronze
+		0x6D3F2C, // umber
+		0x9B9290, // ash
 	};
 	public boolean[] unlockedSkinColours = new boolean[] {
 		// original player skin colours
@@ -241,6 +255,13 @@ public final class mudclient implements Runnable {
 		false, // 0xB5FF1D, // easter ogre 40
 		false, // 0xA0C0C0, // silver man 41
 		false, // 0x608080, // coal woman 42
+
+		// Voidscape trial skin palette.
+		true, // dawn 43
+		true, // rose 44
+		true, // bronze 45
+		true, // umber 46
+		true, // ash 47
 	};
 
 	private final boolean[] prayerOn = new boolean[50];
@@ -340,6 +361,7 @@ public final class mudclient implements Runnable {
 	public static ScalingAlgorithm scalingType = ScalingAlgorithm.INTEGER_SCALING;
 	public static float renderingScalar = 1.0f;
 	public static float newRenderingScalar = 1.0f;
+	public static boolean windowScaleMode = true;
 	public static boolean scalarChangedSinceLogin = false;
 	public static List<Float> integerScalars = null;
 	public static List<Float> interpolationScalars = null;
@@ -469,6 +491,8 @@ public final class mudclient implements Runnable {
 	private int combatTimeout = 0;
 	private int controlButtonAppearanceHeadMinus;
 	private int controlButtonAppearanceHeadPlus;
+	private int controlButtonAppearanceHairStyle1 = -1;
+	private int controlButtonAppearanceHairStyle2 = -1;
 	private int controlLoginPass;
 	private int controlLoginStatus1;
 	private int controlLoginStatus2;
@@ -548,7 +572,6 @@ public final class mudclient implements Runnable {
 	private int playerMode2;
 	private int controlButtonAppearanceTop2;
 	private int controlButtonAppearanceGender1;
-	private int appearanceSkinColour = 0;
 	private final boolean runningAsApplet = true;
 	private final boolean allowDebugCommands = !runningAsApplet || true;
 	private int optionsMenuCount = 0;
@@ -559,6 +582,7 @@ public final class mudclient implements Runnable {
 	private static final int SETTINGS_PROFILE_TAB = 0;
 	private static final int SETTINGS_ADVANCED_BUTTON = -100;
 	private static final int SETTINGS_BASIC_BUTTON = -101;
+	private static final int DESKTOP_UI_SCALE_BUTTON = -102;
 	private static final int ADVANCED_CATEGORY_GAMEPLAY = 0;
 	private static final int ADVANCED_CATEGORY_LOOT = 1;
 	private static final int ADVANCED_CATEGORY_VISUALS = 2;
@@ -581,8 +605,17 @@ public final class mudclient implements Runnable {
 	private long profileStatsReceivedAt = 0;
 	private int loginButtonExistingUser;
 	private int controlButtonAppearanceHair1;
-	private int appearanceHairColour = 2;
-	private int characterBottomColour = 14;
+	private static final int VOIDSCAPE_CLOTHING_COLOUR_MIN = 0;
+	private static final int VOIDSCAPE_CLOTHING_COLOUR_MAX = 22;
+	private static final int VOIDSCAPE_HAIR_COLOUR_MIN = 10;
+	private static final int VOIDSCAPE_HAIR_COLOUR_MAX = 17;
+	private static final int VOIDSCAPE_SKIN_COLOUR_MIN = 43;
+	private static final int VOIDSCAPE_SKIN_COLOUR_MAX = 47;
+	private int appearanceSkinColour = VOIDSCAPE_SKIN_COLOUR_MIN;
+	private int appearanceHairColour = VOIDSCAPE_HAIR_COLOUR_MIN;
+	private static final int MODERN_HAIR_BASE_HEAD_TYPE = 0;
+	private int appearanceHairStyle = 0;
+	private int characterBottomColour = VOIDSCAPE_CLOTHING_COLOUR_MAX;
 	private int controlButtonAppearanceSkin2;
 	private int m_nj = -1;
 	private int controlButtonAppearanceGender2;
@@ -595,7 +628,7 @@ public final class mudclient implements Runnable {
 	private int m_rf;
 	private boolean reportAbuse_isMute = false;
 	private int m_Wc = 0;
-	private int characterTopColour = 8;
+	private int characterTopColour = VOIDSCAPE_CLOTHING_COLOUR_MIN;
 	private long lastWrite;
 	private int m_wk = -1;
 	private int controlButtonAppearanceTop1;
@@ -850,16 +883,11 @@ public final class mudclient implements Runnable {
 	}
 
 	private static void saveScalingSettings(ScalingAlgorithm type, float scalar) {
-		Properties props = new Properties();
+		Properties props = loadClientSettings();
 		props.setProperty("scaling_type", String.valueOf(type.ordinal()));
 		props.setProperty("scaling_scalar", String.valueOf(scalar));
 
-		try (FileOutputStream out = new FileOutputStream("./clientSettings.conf")) {
-			props.store(out, "Client settings");
-		} catch (Exception e) {
-			System.out.println("Something went wrong saving scaling settings");
-			e.printStackTrace();
-		}
+		saveClientSettings(props);
 	}
 
 	private static void saveClientSetting(String key, String value) {
@@ -869,8 +897,19 @@ public final class mudclient implements Runnable {
 		saveClientSettings(props);
 	}
 
+	private static void removeClientSetting(String key) {
+		Properties props = loadClientSettings();
+		props.remove(key);
+
+		saveClientSettings(props);
+	}
+
 	private static Properties loadClientSettings() {
 		Properties props = new Properties();
+		File settings = new File("./clientSettings.conf");
+		if (!settings.exists()) {
+			return props;
+		}
 		try (FileInputStream in = new FileInputStream("./clientSettings.conf")) {
 			props.load(in);
 		} catch (IOException e) {
@@ -2110,6 +2149,10 @@ public final class mudclient implements Runnable {
 			}
 
 			this.panelAppearance = new Panel(this.getSurface(), 100);
+			this.controlButtonAppearanceHairStyle1 = -1;
+			this.controlButtonAppearanceHairStyle2 = -1;
+			this.syncAppearanceHairStyleFromLocalPlayer();
+			this.ensureVoidscapeAppearanceColoursSelected();
 
 			this.panelAppearance.addCenteredText(256, 10, "Please design Your Character", 4, true);
 			short var2 = 140;
@@ -2213,6 +2256,10 @@ public final class mudclient implements Runnable {
 
 	private void createVoidscapeAppearancePanel(int var1) {
 		this.panelAppearance = new Panel(this.getSurface(), 100);
+		this.controlButtonAppearanceHairStyle1 = -1;
+		this.controlButtonAppearanceHairStyle2 = -1;
+		this.syncAppearanceHairStyleFromLocalPlayer();
+		this.ensureVoidscapeAppearanceColoursSelected();
 		if (var1 != -24595) {
 			this.renderLoginScreenViewports(-127);
 		}
@@ -2242,7 +2289,10 @@ public final class mudclient implements Runnable {
 		this.controlButtonAppearanceBottom1 = this.panelAppearance.addButton(rightX - arrowOffset, rowY, 20, 20);
 		this.controlButtonAppearanceBottom2 = this.panelAppearance.addButton(rightX + arrowOffset, rowY, 20, 20);
 
-		this.controlButtonAppearanceAccept = this.panelAppearance.addButton(panelX + 382, Math.min(this.getGameHeight() - 21, 296), 220, 30);
+		this.controlButtonAppearanceHairStyle1 = -1;
+		this.controlButtonAppearanceHairStyle2 = -1;
+
+		this.controlButtonAppearanceAccept = this.panelAppearance.addButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30);
 	}
 
 	private void createLoginPanels(int var1) {
@@ -2928,6 +2978,7 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getAnimationDef(appearanceHeadType), 0),
 				var5 - 32 - 55, y, 64, 102, this.getPlayerHairColors()[this.appearanceHairColour],
 				this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, var1 + 13760);
+			this.drawAppearanceHairOverlay(var5 - 32 - 55, y, 64, 102, 0, false);
 
 			this.getSurface().spriteClip3(var5 - 32, this.getPlayerClothingColors()[this.characterBottomColour],
 				spriteSelect(EntityHandler.getAnimationDef(character2Colour), 6), y, 102, (byte) 105, 64);
@@ -2939,6 +2990,7 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getAnimationDef(this.appearanceHeadType), 6),
 				var5 - 32, y, 64, 102, this.getPlayerHairColors()[this.appearanceHairColour], this.getPlayerSkinColors()[this.appearanceSkinColour],
 				0, false, 0, 1);
+			this.drawAppearanceHairOverlay(var5 - 32, y, 64, 102, 6, false);
 
 			this.getSurface().spriteClip3(var5 + 55 - 32, this.getPlayerClothingColors()[this.characterBottomColour],
 				spriteSelect(EntityHandler.getAnimationDef(this.character2Colour), 12), y, 102, (byte) 110, 64);
@@ -2950,6 +3002,7 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawSpriteClipping(
 				spriteSelect(EntityHandler.getAnimationDef(this.appearanceHeadType), 12), var5 + 55 - 32, y, 64, 102,
 				this.getPlayerHairColors()[this.appearanceHairColour], this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, 1);
+			this.drawAppearanceHairOverlay(var5 + 55 - 32, y, 64, 102, 12, false);
 			this.getSurface().drawSprite(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, this.getGameHeight());
 			// this.getSurface().draw(this.graphics, this.screenOffsetX, 256,
 			// this.screenOffsetY);
@@ -2961,6 +3014,32 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.GD(" + var1 + ',' + type + ')');
 		}
+	}
+
+	private void drawAppearanceHairOverlay(int x, int y, int width, int height, int frameOffset, boolean mirrorX) {
+		if (!isModernHairCompatibleHeadAnimation(this.appearanceHeadType)) {
+			return;
+		}
+		Sprite hair = VoidscapeHairOverlay.getFrame(this.appearanceHairStyle, frameOffset);
+		if (hair != null) {
+			this.getSurface().drawArgbSpriteClipping(hair, x, y, width, height, mirrorX, 0,
+				hairOverlayColourTransform(this.appearanceHairColour, 0xFFFFFFFF));
+		}
+	}
+
+	private boolean isModernHairCompatibleHeadAnimation(int animationId) {
+		return animationId == MODERN_HAIR_BASE_HEAD_TYPE;
+	}
+
+	private int hairOverlayColourTransform(int hairColour, int actorColourTransform) {
+		int[] hairColours = this.getPlayerHairColors();
+		int safeHairColour = Math.max(0, Math.min(hairColours.length - 1, hairColour));
+		int colour = hairColours[safeHairColour];
+		int alpha = actorColourTransform >>> 24 & 0xFF;
+		int red = ((colour >> 16 & 0xFF) * (actorColourTransform >> 16 & 0xFF)) / 255;
+		int green = ((colour >> 8 & 0xFF) * (actorColourTransform >> 8 & 0xFF)) / 255;
+		int blue = ((colour & 0xFF) * (actorColourTransform & 0xFF)) / 255;
+		return (alpha << 24) | (red << 16) | (green << 8) | blue;
 	}
 
 	private void drawVoidscapeAppearancePanel() {
@@ -2987,15 +3066,204 @@ public final class mudclient implements Runnable {
 		int rightX = panelX + 423;
 		int rowY = 88;
 		drawVoidscapeAppearanceSelector(leftX, rowY, "Head", "Type");
-		drawVoidscapeAppearanceSelector(rightX, rowY, "Hair", "Color");
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Hair", this.hairColorLabel(this.appearanceHairColour));
 		rowY += 62;
 		drawVoidscapeAppearanceSelector(leftX, rowY, "Body", "Type");
-		drawVoidscapeAppearanceSelector(rightX, rowY, "Top", "Color");
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Top", this.clothingColorLabel(this.characterTopColour));
 		rowY += 62;
-		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", "Color");
-		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", "Color");
+		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", this.skinColorLabel(this.appearanceSkinColour));
+		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
+		drawVoidscapeButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30, "Accept", true);
+	}
 
-		drawVoidscapeButton(panelX + 382, Math.min(this.getGameHeight() - 21, 296), 220, 30, "Accept", true);
+	private String modernHairStyleLabel() {
+		switch (this.appearanceHairStyle) {
+			case 1:
+				return "Swept";
+			default:
+				return "Classic";
+		}
+	}
+
+	private String hairColorLabel(int colour) {
+		switch (colour) {
+			case 0:
+				return "Blond";
+			case 1:
+				return "Auburn";
+			case 2:
+				return "Brown";
+			case 3:
+				return "Dark";
+			case 4:
+				return "Black";
+			case 5:
+				return "Ginger";
+			case 6:
+				return "Red";
+			case 7:
+				return "White";
+			case 8:
+				return "Green";
+			case 9:
+				return "Cyan";
+			case 10:
+				return "Void";
+			case 11:
+				return "Frost";
+			case 12:
+				return "Blood";
+			case 13:
+				return "Ember";
+			case 14:
+				return "Gold";
+			case 15:
+				return "Toxic";
+			case 16:
+				return "Moon";
+			case 17:
+				return "Coal";
+			default:
+				return "Color";
+		}
+	}
+
+	private String clothingColorLabel(int colour) {
+		switch (colour) {
+			case 0:
+				return "Red";
+			case 1:
+				return "Orange";
+			case 2:
+				return "Yellow";
+			case 3:
+				return "Lime";
+			case 4:
+				return "Green";
+			case 5:
+				return "Forest";
+			case 6:
+				return "Teal";
+			case 7:
+				return "Sky";
+			case 8:
+				return "Blue";
+			case 9:
+				return "Royal";
+			case 10:
+				return "Magenta";
+			case 11:
+				return "Charcoal";
+			case 12:
+				return "Brown";
+			case 13:
+				return "Bronze";
+			case 14:
+				return "White";
+			case 15:
+				return "Void";
+			case 16:
+				return "Frost";
+			case 17:
+				return "Blood";
+			case 18:
+				return "Ember";
+			case 19:
+				return "Gold";
+			case 20:
+				return "Toxic";
+			case 21:
+				return "Moon";
+			case 22:
+				return "Coal";
+			default:
+				return "Color";
+		}
+	}
+
+	private String skinColorLabel(int colour) {
+		switch (colour) {
+			case 43:
+				return "Dawn";
+			case 44:
+				return "Rose";
+			case 45:
+				return "Bronze";
+			case 46:
+				return "Umber";
+			case 47:
+				return "Ash";
+			default:
+				return "Tone";
+		}
+	}
+
+	private void syncAppearanceHairStyleFromLocalPlayer() {
+		if (this.currentViewMode == GameMode.GAME && this.localPlayer != null) {
+			this.appearanceHairStyle = Math.max(0, Math.min(Config.MAX_MODERN_HAIR_STYLE, this.localPlayer.hairStyle));
+		}
+	}
+
+	private void ensureVoidscapeAppearanceColoursSelected() {
+		ensureVoidscapeHairColourSelected();
+		this.characterTopColour = normalizeVoidscapeClothingColour(this.characterTopColour);
+		this.characterBottomColour = normalizeVoidscapeClothingColour(this.characterBottomColour);
+		this.appearanceSkinColour = normalizeVoidscapeSkinColour(this.appearanceSkinColour);
+	}
+
+	private void ensureVoidscapeHairColourSelected() {
+		this.appearanceHairColour = normalizeVoidscapeHairColour(this.appearanceHairColour);
+	}
+
+	private int normalizeVoidscapeHairColour(int colour) {
+		if (colour < VOIDSCAPE_HAIR_COLOUR_MIN || colour > VOIDSCAPE_HAIR_COLOUR_MAX) {
+			return VOIDSCAPE_HAIR_COLOUR_MIN;
+		}
+		return colour;
+	}
+
+	private int previousVoidscapeHairColour(int colour) {
+		colour = normalizeVoidscapeHairColour(colour);
+		return colour <= VOIDSCAPE_HAIR_COLOUR_MIN ? VOIDSCAPE_HAIR_COLOUR_MAX : colour - 1;
+	}
+
+	private int nextVoidscapeHairColour(int colour) {
+		colour = normalizeVoidscapeHairColour(colour);
+		return colour >= VOIDSCAPE_HAIR_COLOUR_MAX ? VOIDSCAPE_HAIR_COLOUR_MIN : colour + 1;
+	}
+
+	private int normalizeVoidscapeClothingColour(int colour) {
+		if (colour < VOIDSCAPE_CLOTHING_COLOUR_MIN || colour > VOIDSCAPE_CLOTHING_COLOUR_MAX) {
+			return VOIDSCAPE_CLOTHING_COLOUR_MIN;
+		}
+		return colour;
+	}
+
+	private int previousVoidscapeClothingColour(int colour) {
+		colour = normalizeVoidscapeClothingColour(colour);
+		return colour <= VOIDSCAPE_CLOTHING_COLOUR_MIN ? VOIDSCAPE_CLOTHING_COLOUR_MAX : colour - 1;
+	}
+
+	private int nextVoidscapeClothingColour(int colour) {
+		colour = normalizeVoidscapeClothingColour(colour);
+		return colour >= VOIDSCAPE_CLOTHING_COLOUR_MAX ? VOIDSCAPE_CLOTHING_COLOUR_MIN : colour + 1;
+	}
+
+	private int normalizeVoidscapeSkinColour(int colour) {
+		if (colour < VOIDSCAPE_SKIN_COLOUR_MIN || colour > VOIDSCAPE_SKIN_COLOUR_MAX) {
+			return VOIDSCAPE_SKIN_COLOUR_MIN;
+		}
+		return colour;
+	}
+
+	private int previousVoidscapeSkinColour(int colour) {
+		colour = normalizeVoidscapeSkinColour(colour);
+		return colour <= VOIDSCAPE_SKIN_COLOUR_MIN ? VOIDSCAPE_SKIN_COLOUR_MAX : colour - 1;
+	}
+
+	private int nextVoidscapeSkinColour(int colour) {
+		colour = normalizeVoidscapeSkinColour(colour);
+		return colour >= VOIDSCAPE_SKIN_COLOUR_MAX ? VOIDSCAPE_SKIN_COLOUR_MIN : colour + 1;
 	}
 
 	private void drawVoidscapeAppearanceSelector(int cx, int cy, String topLabel, String bottomLabel) {
@@ -7578,7 +7846,9 @@ public final class mudclient implements Runnable {
 			return;
 		}
 		this.voidscapeLoginAssetLoadAttempted = true;
-		this.voidscapeLoginBackground = PngSpriteLoader.read(new File("Cache/login/voidscape-login-background.png"));
+		this.voidscapeLoginBackground = PngSpriteLoader.read(
+			new File(Config.F_CACHE_DIR, "login" + File.separator + "voidscape-login-background.png")
+		);
 	}
 
 	private void drawVoidscapeLogin() {
@@ -8284,7 +8554,8 @@ public final class mudclient implements Runnable {
 								int yOffset = (spriteOffsetY * height) / something2;
 								int spriteWidth = (something1 * width) / something3;
 								xOffset -= (spriteWidth - width) / 2;
-								int colorMask1 = EntityHandler.getAnimationDef(animID).getCharColour();
+								int animationColour = EntityHandler.getAnimationDef(animID).getCharColour();
+								int colorMask1 = animationColour;
 								int blueScaleColor = EntityHandler.getAnimationDef(animID).getBlueMask();
 								if (colorMask1 == 1) {
 									colorMask1 = this.getPlayerHairColors()[player.colourHair];
@@ -8305,6 +8576,15 @@ public final class mudclient implements Runnable {
 
 								this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth,
 									height, colorMask1, colorMask2, blueScaleColor, mirrorX, topPixelSkew, 1, colourTransform);
+								if (mappedLayer == 0 && animationColour == 1 && player.hairStyle > 0
+									&& isModernHairCompatibleHeadAnimation(animID)) {
+									Sprite hair = VoidscapeHairOverlay.getFrame(player.hairStyle, mySpriteOffset);
+									if (hair != null) {
+										this.getSurface().drawArgbSpriteClipping(hair, xOffset + x, y + yOffset,
+											spriteWidth, height, mirrorX, topPixelSkew,
+											hairOverlayColourTransform(player.colourHair, colourTransform));
+									}
+								}
 
 									/*if(sprite != 1948 && sprite != 1947 && sprite != 1949) {
 										this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth,
@@ -11084,6 +11364,7 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Kill feed", "Show world kill messages", C_KILL_FEED, 31);
 				rowY = drawAdvancedToggle(x, rowY, width, "Name and clan tags", "Show extra overhead labels", C_NAME_CLAN_TAG_OVERLAY, 35);
 				rowY = drawAdvancedToggle(x, rowY, width, "Global friend block", "Hide global friend messages", C_BLOCK_GLOBAL_FRIEND, 41);
+				rowY = drawAdvancedToggle(x, rowY, width, "Country flag", "Show your IP country in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
 				drawAdvancedToggle(x, rowY, width, "Party invites", "Receive party invitations", !C_PARTY_INV, 36);
 				break;
 			case ADVANCED_CATEGORY_INTERFACE:
@@ -11262,6 +11543,10 @@ public final class mudclient implements Runnable {
 				C_HD_SUNLIGHT = !C_HD_SUNLIGHT;
 				sendGameSetting(55, C_HD_SUNLIGHT ? 1 : 0);
 				break;
+			case 56:
+				C_GLOBAL_CHAT_COUNTRY_FLAGS = !C_GLOBAL_CHAT_COUNTRY_FLAGS;
+				sendGameSetting(56, C_GLOBAL_CHAT_COUNTRY_FLAGS ? 1 : 0);
+				break;
 			case ADVANCED_ACTION_GROUND_ITEMS:
 				C_SHOW_GROUND_ITEMS = (C_SHOW_GROUND_ITEMS + 1) % 5;
 				sendGameSetting(28, C_SHOW_GROUND_ITEMS);
@@ -11411,7 +11696,7 @@ public final class mudclient implements Runnable {
 		y += 15;
 		this.getSurface().drawString("Total time: @gre@" + formatPlayedTime(getLiveProfilePlayedSeconds()), 3 + baseX, y, 0xFFFFFF, 1);
 
-		y += 14;
+		y = getSettingsSocialHeadingY(panelTop);
 		this.getSurface().drawString("Social", 3 + baseX, y, 0x6F43BE, 1);
 
 		// block chat
@@ -11530,6 +11815,10 @@ public final class mudclient implements Runnable {
 
 	private int getSettingsLogoutY(int panelTop) {
 		return panelTop + 232;
+	}
+
+	private int getSettingsSocialHeadingY(int panelTop) {
+		return panelTop + 124;
 	}
 
 	private String formatXpRate(int tenths) {
@@ -11702,29 +11991,15 @@ public final class mudclient implements Runnable {
 			if (isScalarOptionShowing) {
 				int yPos = y + ((scalarOptionIdx - panelSettings.controlScrollAmount[0] + 1) * 15);
 
-				// Scale down button
-				boolean scaleMinusHover = (this.gameWidth - this.mouseX) >= 125 && (this.gameWidth - this.mouseX) <= 143 &&
-					this.mouseY >= (yPos - 7) && this.mouseY <= (yPos + 4);
-
-				final String minusButtonLabel;
-				final int minusButtonColor;
-				if (renderingScalar <= 1) {
-					minusButtonLabel = " ";
-					minusButtonColor = 16777215;
-				} else {
-					minusButtonLabel = "-";
-					minusButtonColor = scaleMinusHover ? 65280 : 16616744;
-				}
-
-				this.getSurface().drawString("[ " + minusButtonLabel + " ]", this.gameWidth - 143, yPos, minusButtonColor, 1);
-
 				// Scalar label
-				final String scalarLabel = scalingType == ScalingAlgorithm.INTEGER_SCALING ?
+				final String scalarLabel = windowScaleMode ? "Window" : scalingType == ScalingAlgorithm.INTEGER_SCALING ?
 					(int) renderingScalar + "x" : renderingScalar + "x";
-				int scalarLabelOffset = scalingType == ScalingAlgorithm.INTEGER_SCALING ? 116 : 121;
+				int scalarLabelOffset = windowScaleMode ? 126 : scalingType == ScalingAlgorithm.INTEGER_SCALING ? 116 : 121;
 
 				final int scalarLabelColor;
-				if (renderingScalar > 1) {
+				if (windowScaleMode) {
+					scalarLabelColor = 65280;
+				} else if (renderingScalar > 1) {
 					// Anything above 1x, draw green
 					scalarLabelColor = 65280;
 				} else {
@@ -11734,46 +12009,64 @@ public final class mudclient implements Runnable {
 
 				this.getSurface().drawString(scalarLabel, this.gameWidth - scalarLabelOffset, yPos + 1, scalarLabelColor, 1);
 
-				// Scale up button
-				boolean scalePlusHover = (this.gameWidth - this.mouseX) >= 72 && (this.gameWidth - this.mouseX) <= 92 &&
-					this.mouseY >= (yPos - 7) && this.mouseY <= (yPos + 4);
+				if (!windowScaleMode) {
+					// Scale down button
+					boolean scaleMinusHover = (this.gameWidth - this.mouseX) >= 125 && (this.gameWidth - this.mouseX) <= 143 &&
+						this.mouseY >= (yPos - 7) && this.mouseY <= (yPos + 4);
 
-				final List<Float> scalars = scalingType == ScalingAlgorithm.INTEGER_SCALING ? integerScalars : interpolationScalars;
-				boolean maxScalar = scalars.indexOf(renderingScalar) == scalars.size() - 1;
+					final String minusButtonLabel;
+					final int minusButtonColor;
+					if (renderingScalar <= 1) {
+						minusButtonLabel = " ";
+						minusButtonColor = 16777215;
+					} else {
+						minusButtonLabel = "-";
+						minusButtonColor = scaleMinusHover ? 65280 : 16616744;
+					}
 
-				final String plusButtonLabel;
-				final int plusButtonColor;
+					this.getSurface().drawString("[ " + minusButtonLabel + " ]", this.gameWidth - 143, yPos, minusButtonColor, 1);
 
-				if (maxScalar) {
-					plusButtonLabel = "  ";
-					plusButtonColor = 16777215;
-				} else {
-					plusButtonLabel = "+";
-					plusButtonColor = scalePlusHover ? 65280 : 16616744;
+					// Scale up button
+					boolean scalePlusHover = (this.gameWidth - this.mouseX) >= 72 && (this.gameWidth - this.mouseX) <= 92 &&
+						this.mouseY >= (yPos - 7) && this.mouseY <= (yPos + 4);
+
+					final List<Float> scalars = scalingType == ScalingAlgorithm.INTEGER_SCALING ? integerScalars : interpolationScalars;
+					boolean maxScalar = scalars.indexOf(renderingScalar) == scalars.size() - 1;
+
+					final String plusButtonLabel;
+					final int plusButtonColor;
+
+					if (maxScalar) {
+						plusButtonLabel = "  ";
+						plusButtonColor = 16777215;
+					} else {
+						plusButtonLabel = "+";
+						plusButtonColor = scalePlusHover ? 65280 : 16616744;
+					}
+
+					this.getSurface().drawString("[ " + plusButtonLabel + " ]", this.gameWidth - 93, yPos, plusButtonColor, 1);
 				}
-
-				this.getSurface().drawString("[ " + plusButtonLabel + " ]", this.gameWidth - 93, yPos, plusButtonColor, 1);
 			}
 
-			this.panelSettings.setListEntry(this.controlSettingPanel, index++, "@whi@Scaling - ", 45, null, null);
+			this.panelSettings.setListEntry(this.controlSettingPanel, index++, "@whi@UI scale - ", DESKTOP_UI_SCALE_BUTTON, null, null);
 
 			// scaling type - byte index 46
 			String scalingTypeDescription;
 			switch (scalingType) {
 				default:
 				case INTEGER_SCALING:
-					scalingTypeDescription = "@gre@Integer";
+					scalingTypeDescription = "@gre@Crisp";
 					break;
 				case BILINEAR_INTERPOLATION:
-					scalingTypeDescription = "@yel@Bilinear";
+					scalingTypeDescription = "@yel@Soft";
 					break;
 				case BICUBIC_INTERPOLATION:
-					scalingTypeDescription = "@ora@Bicubic";
+					scalingTypeDescription = "@ora@Smooth";
 					break;
 			}
 
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-				"@whi@Scaling type - @gre@" + scalingTypeDescription, 46, null, null);
+				"@whi@Scale filter - @gre@" + scalingTypeDescription, 46, null, null);
 		}
 
 		// mouse button(s) - byte index 1
@@ -12211,6 +12504,7 @@ public final class mudclient implements Runnable {
 		boolean isScalarOptionShowing = this.settingsAdvancedMode && !isAndroid()
 			&& panelSettings.controlScrollAmount[0] <= scalarOptionIdx;
 
+		boolean handledScaleButton = false;
 		if (isScalarOptionShowing) {
 			int yPos = yFromTopDistance + ((scalarOptionIdx - panelSettings.controlScrollAmount[0] + 1) * 15);
 
@@ -12218,17 +12512,27 @@ public final class mudclient implements Runnable {
 			boolean scaleMinusHover = (this.gameWidth - this.mouseX) >= 125 && (this.gameWidth - this.mouseX) <= 143 &&
 				this.mouseY >= (yPos + 3) && this.mouseY <= (yPos + 14);
 
-			if (scaleMinusHover && this.mouseButtonClick == 1) {
+			if (!windowScaleMode && scaleMinusHover && this.mouseButtonClick == 1) {
 				scaleDown();
+				handledScaleButton = true;
 			}
 
 			// Scale up button
 			boolean scalePlusHover = (this.gameWidth - this.mouseX) >= 72 && (this.gameWidth - this.mouseX) <= 92 &&
 				this.mouseY >= (yPos + 3) && this.mouseY <= (yPos + 14);
 
-			if (scalePlusHover && this.mouseButtonClick == 1) {
+			if (!windowScaleMode && scalePlusHover && this.mouseButtonClick == 1) {
 				scaleUp();
+				handledScaleButton = true;
 			}
+		}
+
+		if (handledScaleButton) {
+			return;
+		}
+
+		if (settingIndex == DESKTOP_UI_SCALE_BUTTON && this.mouseButtonClick == 1 && !windowScaleMode) {
+			enableWindowScaleMode();
 		}
 
 		// scaling type - byte index 46
@@ -12507,7 +12811,7 @@ public final class mudclient implements Runnable {
 		int panelTop = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
 
 		// profile lines and social heading
-		yFromTopDistance = panelTop + 94;
+		yFromTopDistance = getSettingsSocialHeadingY(panelTop);
 
 		// block chat toggle
 		yFromTopDistance += 15;
@@ -13512,25 +13816,41 @@ public final class mudclient implements Runnable {
 	}
 
 	private void changeRenderingScalar(Boolean scaleUp) {
+		windowScaleMode = false;
 		scalarChangedSinceLogin = true;
 
 		final List<Float> scalars = scalingType == ScalingAlgorithm.INTEGER_SCALING ? integerScalars : interpolationScalars;
-
-		int idx = scalars.indexOf(renderingScalar);
-
-		if (scaleUp) {
-			if (idx + 1 < scalars.size()) {
-				idx += 1;
-			}
-		} else {
-			if (idx - 1 >= 0) {
-				idx -= 1;
-			}
+		if (scalars == null || scalars.isEmpty()) {
+			return;
 		}
 
+		int idx = scalarIndexForStep(renderingScalar, scalars, scaleUp);
 		newRenderingScalar = scalars.get(idx);
 
 		saveScalingSettings(scalingType, newRenderingScalar);
+	}
+
+	private int scalarIndexForStep(float scalar, List<Float> scalars, boolean scaleUp) {
+		if (scaleUp) {
+			for (int i = 0; i < scalars.size(); i++) {
+				if (scalars.get(i) > scalar + 0.001f) {
+					return i;
+				}
+			}
+			return scalars.size() - 1;
+		}
+
+		for (int i = scalars.size() - 1; i >= 0; i--) {
+			if (scalars.get(i) < scalar - 0.001f) {
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	private void enableWindowScaleMode() {
+		windowScaleMode = true;
+		removeClientSetting("scaling_scalar");
 	}
 
 	void cycleScalingType() {
@@ -13547,7 +13867,11 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		saveScalingSettings(scalingType, newRenderingScalar);
+		if (windowScaleMode) {
+			saveClientSetting("scaling_type", String.valueOf(scalingType.ordinal()));
+		} else {
+			saveScalingSettings(scalingType, newRenderingScalar);
+		}
 	}
 
 	private void fetchContainerSize() {
@@ -13714,6 +14038,7 @@ public final class mudclient implements Runnable {
 					while ((3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1);
 				} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
 					& this.appearanceHeadGender * 4) == 0);
+				this.appearanceHairStyle = 0;
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHeadPlus)) {
@@ -13724,14 +14049,15 @@ public final class mudclient implements Runnable {
 					while (1 != (3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()));
 				} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
 					& this.appearanceHeadGender * 4) == 0);
+				this.appearanceHairStyle = 0;
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHair1)) {
-				this.appearanceHairColour = (this.getPlayerHairColors().length + (this.appearanceHairColour - 1)) % this.getPlayerHairColors().length;
+				this.appearanceHairColour = previousVoidscapeHairColour(this.appearanceHairColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHair2)) {
-				this.appearanceHairColour = (1 + this.appearanceHairColour) % this.getPlayerHairColors().length;
+				this.appearanceHairColour = nextVoidscapeHairColour(this.appearanceHairColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceGender1) || this.panelAppearance.isClicked(this.controlButtonAppearanceGender2)) {
@@ -13747,6 +14073,7 @@ public final class mudclient implements Runnable {
 					& EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) == 0) {
 					this.appearanceBodyGender = (this.appearanceBodyGender + 1) % EntityHandler.animationCount();
 				}
+				this.appearanceHairStyle = 0;
 			}
 
 			// if (var1 < 68) {
@@ -13754,33 +14081,42 @@ public final class mudclient implements Runnable {
 			// }
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceTop1)) {
-				this.characterTopColour = (this.characterTopColour - 1 + this.getPlayerClothingColors().length)
-					% this.getPlayerClothingColors().length;
+				this.characterTopColour = previousVoidscapeClothingColour(this.characterTopColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceTop2)) {
-				this.characterTopColour = (this.characterTopColour + 1) % this.getPlayerClothingColors().length;
+				this.characterTopColour = nextVoidscapeClothingColour(this.characterTopColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceSkin1)) {
-				do {
-					this.appearanceSkinColour = (this.getPlayerSkinColors().length + (this.appearanceSkinColour - 1)) % this.getPlayerSkinColors().length;
-				} while (!unlockedSkinColours[this.appearanceSkinColour]);
+				this.appearanceSkinColour = previousVoidscapeSkinColour(this.appearanceSkinColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceSkin2)) {
-				do {
-					this.appearanceSkinColour = (1 + this.appearanceSkinColour) % this.getPlayerSkinColors().length;
-				} while (!unlockedSkinColours[this.appearanceSkinColour]);
+				this.appearanceSkinColour = nextVoidscapeSkinColour(this.appearanceSkinColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceBottom1)) {
-				this.characterBottomColour = (this.getPlayerClothingColors().length + this.characterBottomColour - 1)
-					% this.getPlayerClothingColors().length;
+				this.characterBottomColour = previousVoidscapeClothingColour(this.characterBottomColour);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceBottom2)) {
-				this.characterBottomColour = (1 + this.characterBottomColour) % this.getPlayerClothingColors().length;
+				this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
+			}
+
+			if (this.controlButtonAppearanceHairStyle1 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle1)) {
+				this.appearanceHairStyle = (Config.MAX_MODERN_HAIR_STYLE + 1 + this.appearanceHairStyle - 1)
+					% (Config.MAX_MODERN_HAIR_STYLE + 1);
+				if (this.appearanceHairStyle > 0) {
+					this.appearanceHeadType = MODERN_HAIR_BASE_HEAD_TYPE;
+				}
+			}
+
+			if (this.controlButtonAppearanceHairStyle2 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle2)) {
+				this.appearanceHairStyle = (this.appearanceHairStyle + 1) % (Config.MAX_MODERN_HAIR_STYLE + 1);
+				if (this.appearanceHairStyle > 0) {
+					this.appearanceHeadType = MODERN_HAIR_BASE_HEAD_TYPE;
+				}
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceAccept)) {
@@ -13795,6 +14131,7 @@ public final class mudclient implements Runnable {
 				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceSkinColour);
 				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode1));
 				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
+				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
 				this.packetHandler.getClientStream().finishPacket();
 				this.getSurface().blackScreen(true);
 				this.showAppearanceChange = false;
@@ -20531,6 +20868,10 @@ public final class mudclient implements Runnable {
 
 	public void setBlockGlobalFriend(boolean b) {
 		C_BLOCK_GLOBAL_FRIEND = b;
+	}
+
+	public void setGlobalChatCountryFlags(boolean b) {
+		C_GLOBAL_CHAT_COUNTRY_FLAGS = b;
 	}
 
 	public void setBlockPartyInv(boolean b) {

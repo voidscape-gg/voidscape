@@ -87,7 +87,11 @@ Voidscape's wrappers in `scripts/` are the canonical entry points. Direct Ant/Ma
 scripts/build.sh              # compile server core + plugins + client
 scripts/run-server.sh         # run server with the voidscape preset
 scripts/run-client.sh         # run PC client against local server
+scripts/run-launcher.sh       # build + run the Voidscape desktop launcher
 scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
+scripts/run-portal.sh         # run website/account portal with local prototype API
+scripts/test-portal-api.sh    # smoke-test portal API flows
+scripts/test-portal-schema.sh # validate portal account-management schema contract
 scripts/build-android.sh      # build Android APK; requires Android SDK
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
@@ -234,14 +238,14 @@ Stop with `docker-compose down` (preserves data in `server/inc/databases/`).
 
 ## Connecting client to server
 
-Default port: 43594 (preservation/default presets). Cabbage uses 43595, 2001scape 43593, openpk 43597, etc.
+The Voidscape local preset currently uses port 43596. `scripts/run-client.sh` reads `server/local.conf` and writes the matching `Client_Base/Cache/port.txt` automatically. Cabbage uses 43595, 2001scape 43593, openpk 43597, and other presets may differ.
 
 If client and server use different ports, edit `Client_Base/Cache/port.txt`.
 
 ```bash
 mkdir -p Client_Base/Cache
 echo "127.0.0.1" > Client_Base/Cache/ip.txt
-echo "43594"     > Client_Base/Cache/port.txt
+echo "43596"     > Client_Base/Cache/port.txt
 cd Client_Base && ant runclient
 ```
 
@@ -279,6 +283,9 @@ scripts/run-server.sh
 
 # In another terminal, run client against local server
 scripts/run-client.sh
+
+# Or test the production-style launcher shell
+scripts/run-launcher.sh
 
 # Reset DB to authentic preservation baseline
 scripts/reset-db.sh

@@ -35,6 +35,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static int numCores;
 	private static boolean isMacOS = false;
 	private static boolean shouldRealign = false;
+	private static final int BASE_VIEWPORT_WIDTH = 512;
+	private static final int BASE_VIEWPORT_HEIGHT = 346;
+	private static final float MAX_INTEGER_SCALE = 6.0f;
+	private static final float MAX_INTERPOLATION_SCALE = 4.0f;
 	private int frameWidth = 0;
 	private int frameHeight = 0;
 	private ScaledViewport scaledViewport;
@@ -43,9 +47,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private BufferedImage unscaledBackground = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
 	private int previousUnscaledWidth;
 	private int previousUnscaledHeight;
-
-	private static final float MAX_INTEGER_SCALE = 6.0f;
-	private static final float MAX_INTERPOLATION_SCALE = 4.0f;
+	private int scaledDrawX = 0;
+	private int scaledDrawY = 0;
+	private int scaledDrawWidth = BASE_VIEWPORT_WIDTH;
+	private int scaledDrawHeight = BASE_VIEWPORT_HEIGHT;
 
 	/** Private constructor to ensure singleton nature */
 	private ScaledWindow() {
@@ -108,7 +113,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		}
 
 		// Set minimum size to applet size
-		setMinimumSize(new Dimension(512, 346));
+		setMinimumSize(new Dimension(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT));
 
 		// Default icon, will be overridden later
 		setIconImage(Utils.getImage("icon.png").getImage());
@@ -132,32 +137,70 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		revalidate();
 		repaint();
 
-		// Determine maximum scalar that will fit the screen, plus one
+		// Determine maximum scalar that will fit the screen.
 		Dimension maxEffectiveWindowSize = getMaximumEffectiveWindowSize();
-		int maxRenderingScalar = 1;
-		for (int i = 6; i >= 1; i--) {
-			float width = 512 * i;
-			float height = 346 * i;
-
-			if (width <= maxEffectiveWindowSize.width && height <= maxEffectiveWindowSize.height) {
-				maxRenderingScalar = i + 1;
-				break;
-			}
-		}
+		int maxIntegerScalar = largestIntegerScalarThatFits(maxEffectiveWindowSize);
 
 		List<Float> integerScalars = new ArrayList<>();
-		for (float i = 1.0f; i <= maxRenderingScalar && i <= MAX_INTEGER_SCALE; i++) {
+		for (float i = 1.0f; i <= maxIntegerScalar && i <= MAX_INTEGER_SCALE; i++) {
 			integerScalars.add(i);
 		}
 
 		mudclient.integerScalars = integerScalars;
 
 		List<Float> interpolationScalars = new ArrayList<>();
-		for (float i = 1.0f; i <= maxRenderingScalar && i <= MAX_INTERPOLATION_SCALE; i += 0.5f) {
+		for (float i = 1.0f; i <= maxIntegerScalar && i <= MAX_INTERPOLATION_SCALE; i += 0.5f) {
 			interpolationScalars.add(i);
 		}
 
 		mudclient.interpolationScalars = interpolationScalars;
+	}
+
+	public void applyStartupScalingDefaults(boolean hasSavedScalingScalar) {
+		if (hasSavedScalingScalar) {
+			mudclient.windowScaleMode = false;
+			mudclient.newRenderingScalar = clampScalarToAvailableScalars(mudclient.scalingType, mudclient.newRenderingScalar);
+			return;
+		}
+
+		mudclient.windowScaleMode = true;
+		mudclient.renderingScalar = 1.0f;
+		mudclient.newRenderingScalar = 1.0f;
+		ORSCApplet.oldRenderingScalar = 1.0f;
+		System.out.println("Voidscape UI scale: default window size; drag the window to scale the UI");
+	}
+
+	private int largestIntegerScalarThatFits(Dimension maxEffectiveWindowSize) {
+		int maxScalar = Math.max(1, (int) MAX_INTEGER_SCALE);
+		for (int i = maxScalar; i >= 1; i--) {
+			int width = BASE_VIEWPORT_WIDTH * i;
+			int height = BASE_VIEWPORT_HEIGHT * i;
+
+			if (width <= maxEffectiveWindowSize.width && height <= maxEffectiveWindowSize.height) {
+				return i;
+			}
+		}
+		return 1;
+	}
+
+	private float clampScalarToAvailableScalars(ScalingAlgorithm scalingAlgorithm, float requestedScalar) {
+		List<Float> scalars = scalingAlgorithm == ScalingAlgorithm.INTEGER_SCALING
+			? mudclient.integerScalars
+			: mudclient.interpolationScalars;
+		if (scalars == null || scalars.isEmpty()) {
+			return 1.0f;
+		}
+
+		float fallback = scalars.get(0);
+		for (Float scalar : scalars) {
+			if (Math.abs(scalar - requestedScalar) < 0.001f) {
+				return scalar;
+			}
+			if (scalar <= requestedScalar) {
+				fallback = scalar;
+			}
+		}
+		return fallback;
 	}
 
 	/**
@@ -240,15 +283,25 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			return;
 		}
 
+		viewportWidth = gameImage.getWidth();
+		viewportHeight = gameImage.getHeight();
+
 		if (scaledViewport.isViewportImageLoaded()) {
 			if (initialRender) {
 				// Set the window size for the scalar (will be realigned in the method)
-				resizeWindowToScalar();
+				if (mudclient.windowScaleMode) {
+					resizeWindowToDefaultSize();
+				} else {
+					resizeWindowToScalar();
+				}
 				initialRender = false;
 			}
+		}
 
-			viewportWidth = gameImage.getWidth();
-			viewportHeight = gameImage.getHeight();
+		if (mudclient.windowScaleMode) {
+			updateWindowScaleFromViewport();
+		} else {
+			updateFixedScaleDrawBounds();
 		}
 
 		if (mudclient.renderingScalar == 1.0f) {
@@ -274,11 +327,9 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			// Scaled client behavior
 			scaledViewport.setViewportImage(gameImage);
 
-			int scaledWidth = Math.round(viewportWidth * mudclient.renderingScalar);
-			int scaledHeight = Math.round(viewportHeight * mudclient.renderingScalar);
-
 			try {
-				SwingUtilities.invokeAndWait(() -> scaledViewport.paintImmediately(0, 0, scaledWidth, scaledHeight));
+				SwingUtilities.invokeAndWait(() -> scaledViewport.paintImmediately(0, 0,
+					scaledViewport.getWidth(), scaledViewport.getHeight()));
 			} catch (InterruptedException | InvocationTargetException ignored) {
 				// no-op
 			}
@@ -317,6 +368,22 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		}
 	}
 
+	/** Resizes the window to the classic applet size for window-follow scaling mode. */
+	private void resizeWindowToDefaultSize() {
+		Dimension minimumWindowSize = new Dimension(
+			BASE_VIEWPORT_WIDTH + getWindowWidthInsets(),
+			BASE_VIEWPORT_HEIGHT + getWindowHeightInsets());
+
+		setMinimumSize(minimumWindowSize);
+
+		if (!getSize().equals(minimumWindowSize)) {
+			setWindowRealignmentIntent(true);
+			setSize(minimumWindowSize);
+		} else {
+			resizeApplet();
+		}
+	}
+
 	/** Determines the smallest window size for the scalar, including insets */
 	private Dimension getMinimumWindowSizeForScalar() {
 		Dimension minimumViewPortSizeForScalar = getMinimumViewportSizeForScalar();
@@ -329,11 +396,23 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 
 	/** Determines the minimum window size for the applet based on the scalar */
 	public Dimension getMinimumViewportSizeForScalar() {
-		return new Dimension(Math.round(512 * mudclient.renderingScalar), Math.round(346 * mudclient.renderingScalar));
+		if (mudclient.windowScaleMode) {
+			return new Dimension(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT);
+		}
+
+		return new Dimension(
+			Math.round(BASE_VIEWPORT_WIDTH * mudclient.renderingScalar),
+			Math.round(BASE_VIEWPORT_HEIGHT * mudclient.renderingScalar));
 	}
 
 	/** Resizes the applet contained within {@link OpenRSC} */
 	private void resizeApplet() {
+		if (mudclient.windowScaleMode) {
+			updateWindowScaleFromViewport();
+			realignIfNeeded();
+			return;
+		}
+
 		if (mudclient.renderingScalar == 0.0f || !isViewportLoaded()) {
 			return;
 		}
@@ -346,15 +425,17 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			applet.resizeMudclient(newWidth, newHeight);
 		}
 
-		if (shouldRealign) {
-			setWindowRealignmentIntent(false);
-			alignWindow();
-		}
+		realignIfNeeded();
 	}
 
 	/** Resizes the mudclient if its dimensions don't match the current frame size */
 	public void validateAppletSize() {
 		if (applet == null) return;
+
+		if (mudclient.windowScaleMode) {
+			resizeAppletToBase();
+			return;
+		}
 
 		int newWidth = Math.round(scaledViewport.getWidth() / mudclient.renderingScalar);
 		int newHeight = Math.round(scaledViewport.getHeight() / mudclient.renderingScalar);
@@ -362,6 +443,57 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		if (applet.getWidth() != newWidth || applet.getHeight() != newHeight) {
 			applet.setSize(newWidth, newHeight);
 			applet.resizeMudclient(newWidth, newHeight);
+		}
+	}
+
+	private void updateWindowScaleFromViewport() {
+		if (!mudclient.windowScaleMode || scaledViewport == null) {
+			return;
+		}
+
+		int availableWidth = Math.max(BASE_VIEWPORT_WIDTH, scaledViewport.getWidth());
+		int availableHeight = Math.max(BASE_VIEWPORT_HEIGHT, scaledViewport.getHeight());
+		float scalar = Math.max(1.0f, Math.min(
+			availableWidth / (float) BASE_VIEWPORT_WIDTH,
+			availableHeight / (float) BASE_VIEWPORT_HEIGHT));
+
+		mudclient.renderingScalar = scalar;
+		mudclient.newRenderingScalar = scalar;
+		ORSCApplet.oldRenderingScalar = scalar;
+
+		scaledDrawWidth = Math.max(BASE_VIEWPORT_WIDTH, Math.round(BASE_VIEWPORT_WIDTH * scalar));
+		scaledDrawHeight = Math.max(BASE_VIEWPORT_HEIGHT, Math.round(BASE_VIEWPORT_HEIGHT * scalar));
+		scaledDrawX = Math.max(0, (scaledViewport.getWidth() - scaledDrawWidth) / 2);
+		scaledDrawY = Math.max(0, (scaledViewport.getHeight() - scaledDrawHeight) / 2);
+
+		resizeAppletToBase();
+	}
+
+	private void updateFixedScaleDrawBounds() {
+		int width = viewportWidth > 0 ? viewportWidth : BASE_VIEWPORT_WIDTH;
+		int height = viewportHeight > 0 ? viewportHeight : BASE_VIEWPORT_HEIGHT;
+
+		scaledDrawX = 0;
+		scaledDrawY = 0;
+		scaledDrawWidth = Math.max(1, Math.round(width * mudclient.renderingScalar));
+		scaledDrawHeight = Math.max(1, Math.round(height * mudclient.renderingScalar));
+	}
+
+	private void resizeAppletToBase() {
+		if (applet == null) {
+			return;
+		}
+
+		if (applet.getWidth() != BASE_VIEWPORT_WIDTH || applet.getHeight() != BASE_VIEWPORT_HEIGHT) {
+			applet.setSize(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT);
+			applet.resizeMudclient(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT);
+		}
+	}
+
+	private void realignIfNeeded() {
+		if (shouldRealign) {
+			setWindowRealignmentIntent(false);
+			alignWindow();
 		}
 	}
 
@@ -414,10 +546,15 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 
 	@Override
 	public void componentResized(ComponentEvent e) {
-		resizeApplet();
-
 		frameWidth = e.getComponent().getWidth();
 		frameHeight = e.getComponent().getHeight();
+
+		if (scaledViewport == null) {
+			return;
+		}
+
+		resizeApplet();
+		scaledViewport.repaint();
 	}
 
 	@Override
@@ -488,8 +625,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		int mouseEventId = e.getID();
 		long mouseEventWhen = e.getWhen();
 		int mouseEventModifiers = e.getModifiers();
-		int mappedMouseEventX = Math.round(e.getX() / mudclient.renderingScalar);
-		int mappedMouseEventY = Math.round(e.getY() / mudclient.renderingScalar);
+		int mappedMouseEventX = mapScaledX(e.getX());
+		int mappedMouseEventY = mapScaledY(e.getY());
 		int mouseEventXOnScreen = e.getXOnScreen();
 		int mouseEventYOnScreen = e.getYOnScreen();
 		int mouseEventClickCount = e.getClickCount();
@@ -522,8 +659,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		int mouseWheelEventId = e.getID();
 		long mouseWheelEventWhen = e.getWhen();
 		int mouseWheelEventModifiers = e.getModifiers();
-		int mappedMouseWheelEventX = Math.round(e.getX() / mudclient.renderingScalar);
-		int mappedMouseWheelEventY = Math.round(e.getY() / mudclient.renderingScalar);
+		int mappedMouseWheelEventX = mapScaledX(e.getX());
+		int mappedMouseWheelEventY = mapScaledY(e.getY());
 		int mouseWheelEventXOnScreen = e.getXOnScreen();
 		int mouseWheelEventYOnScreen = e.getYOnScreen();
 		int mouseWheelEventClickCount = e.getClickCount();
@@ -548,6 +685,16 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			mouseWheelEventScrollAmount,
 			mouseWheelEventWheelRotation,
 			mouseWheelEventPreciseWheelRotation);
+	}
+
+	private static int mapScaledX(int x) {
+		ScaledWindow scaledWindow = getInstance();
+		return Math.round((x - scaledWindow.scaledDrawX) / mudclient.renderingScalar);
+	}
+
+	private static int mapScaledY(int y) {
+		ScaledWindow scaledWindow = getInstance();
+		return Math.round((y - scaledWindow.scaledDrawY) / mudclient.renderingScalar);
 	}
 
 	/*
@@ -661,30 +808,39 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 
 		@Override
 		protected void paintComponent(Graphics g) {
+			super.paintComponent(g);
+
 			if (viewportImage == null
 				|| getInstance().viewportWidth == 0
 				|| getInstance().viewportHeight == 0) {
 				return;
 			}
 
-			// Do not perform any scaling operations at a 1.0x scalar
-			if (mudclient.renderingScalar == 1.0f) {
-				g.drawImage(viewportImage, 0, 0, null);
+			ScaledWindow scaledWindow = getInstance();
+			newWidth = scaledWindow.scaledDrawWidth;
+			newHeight = scaledWindow.scaledDrawHeight;
+			int drawX = scaledWindow.scaledDrawX;
+			int drawY = scaledWindow.scaledDrawY;
+
+			if (newWidth == viewportImage.getWidth() && newHeight == viewportImage.getHeight()) {
+				g.drawImage(viewportImage, drawX, drawY, null);
 				return;
 			}
-
-			newWidth = Math.round(viewportImage.getWidth() * mudclient.renderingScalar);
-			newHeight = Math.round(viewportImage.getHeight() * mudclient.renderingScalar);
 
 			// Nearest-neighbor scaling performs roughly 3x better when resized via drawImage(),
 			// whereas interpolation scaling performs better using AffineTransformOp.
 			if (mudclient.scalingType == ScalingAlgorithm.INTEGER_SCALING) {
+				Graphics2D g2d = (Graphics2D) g;
+				g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+				g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+				g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+
 				// Workaround for direct drawImage warping which seems to only affect macOS on JDK 19
 				if (isMacOS && javaVersion >= 19) {
-					g.setClip(0, 0, newWidth, newHeight);
+					g2d.setClip(drawX, drawY, newWidth, newHeight);
 				}
 
-				g.drawImage(viewportImage, 0, 0, newWidth, newHeight, null);
+				g2d.drawImage(viewportImage, drawX, drawY, newWidth, newHeight, null);
 			} else {
 				if (interpolationBackground == null) {
 					return;
@@ -711,7 +867,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 				g2d.dispose();
 
 				// Draw the interpolation-scaled image
-				g.drawImage(interpolationBackground, 0, 0, null);
+				g.drawImage(interpolationBackground, drawX, drawY, null);
 			}
 		}
 

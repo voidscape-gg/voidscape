@@ -178,6 +178,8 @@ upstream/openrsc-snapshot/
 # Voidscape build/run artifacts
 /tmp-build/
 /run-state/
+dist/
+PC_Launcher/src/main/resources/voidscape-launcher.properties
 
 # Runtime SQLite databases (schema source lives in server/database/sqlite/)
 server/inc/sqlite/*.db

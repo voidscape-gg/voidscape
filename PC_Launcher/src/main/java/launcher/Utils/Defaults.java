@@ -15,7 +15,7 @@ public class Defaults {
   public final static String _FLEACIRCUS_REPOSITORY_DL = "https://github.com/Hubcapp/fleacircus2000-deob/releases/download/Latest/fleacircus.zip";
 
   // STRINGS
-  public final static String _TITLE = "Open RuneScape Classic Game Launcher";
+  public final static String _TITLE = "Voidscape Launcher";
 
   // FILES
   public final static String _CLIENT_FILENAME = "Open_RSC_Client";

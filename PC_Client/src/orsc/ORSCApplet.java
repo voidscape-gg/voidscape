@@ -481,7 +481,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		this.commitToImage(true);
 
 		// Re-scale when needed
-		if (orsc.mudclient.newRenderingScalar != oldRenderingScalar) {
+		if (!orsc.mudclient.windowScaleMode && orsc.mudclient.newRenderingScalar != oldRenderingScalar) {
 			updateRenderingScalarAndResize(orsc.mudclient.newRenderingScalar, mudclient.getGameWidth(), mudclient.getGameHeight());
 			oldRenderingScalar = orsc.mudclient.newRenderingScalar;
 		}

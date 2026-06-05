@@ -1,6 +1,7 @@
 package com.openrsc.server.login;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.entity.player.Player;
@@ -50,6 +51,9 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 			return;
 		}
 		try {
+			if (this.logout) {
+				RestedExperience.recordLogout(player);
+			}
 			boolean success = getServer().getPlayerService().savePlayer(player);
 			if (success && this.logout) {
 				logoutSaveSuccess();

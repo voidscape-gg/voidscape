@@ -43,8 +43,8 @@ This avoids a schema migration. The code deletes and reinserts each global cache
 
 The card and vendor are client-visible definitions, and the shop uses a custom-client exact price override so tier prices can display correctly after they exceed normal shop modifier limits.
 
-- `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10055`
-- Server presets with the custom client use `client_version: 10055`
+- `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10069`
+- Server presets with the custom client use `client_version: 10069`
 - Client item and NPC rows are appended in `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
 - Custom clients `10054+` read a 32-bit per-item shop price override after each shop item row in `SEND_SHOP_OPEN`; older clients keep the old shop packet shape.
 - Custom clients `10055+` read subscription status and effective combat/skilling XP rates from `SEND_GAME_SETTINGS` for the wrench Profile panel.

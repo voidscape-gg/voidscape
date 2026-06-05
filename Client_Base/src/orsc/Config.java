@@ -18,10 +18,13 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10055;
+	public static final int CLIENT_VERSION = 10069;
 	public static final int PLAYER_TITLE_CLIENT_VERSION = 10052;
 	public static final int SHOP_PRICE_OVERRIDE_CLIENT_VERSION = 10054;
 	public static final int SUBSCRIPTION_PROFILE_CLIENT_VERSION = 10055;
+	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
+	public static final int GLOBAL_CHAT_COUNTRY_FLAGS_CLIENT_VERSION = 10069;
+	public static final int MAX_MODERN_HAIR_STYLE = 0;
 	private static final int CACHE_VERSION = 4;
 	public static boolean MEMBER_WORLD = false;
 	public static boolean DISPLAY_LOGO_SPRITE = false;
@@ -73,6 +76,7 @@ public class Config {
 	public static boolean C_HD_SUNLIGHT = true;
 	public static boolean C_RARE_DROP_BEAMS = true;
 	public static boolean C_HIDE_COMBAT_XP_DROPS = false;
+	public static boolean C_GLOBAL_CHAT_COUNTRY_FLAGS = true;
 
 	/* Experience Config Menu */
 	public static int C_EXPERIENCE_COUNTER = 1;

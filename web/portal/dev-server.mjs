@@ -1,0 +1,1428 @@
+import { createServer } from "node:http";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+
+const scrypt = promisify(scryptCallback);
+const execFile = promisify(execFileCallback);
+const rootDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(rootDir, "../..");
+const port = Number(process.env.PORT || 8788);
+const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
+const storePath = join(dataDir, "dev-store.json");
+const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
+const maxCharacters = 10;
+const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
+const linkChallengeTtlMs = 1000 * 60 * 15;
+const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const downloadArtifacts = [
+	{
+		slug: "pc-client",
+		label: "PC client",
+		filename: "Open_RSC_Client.jar",
+		path: join(repoRoot, "Client_Base/Open_RSC_Client.jar")
+	},
+	{
+		slug: "launcher",
+		label: "Launcher",
+		filename: "OpenRSC.jar",
+		path: join(repoRoot, "PC_Launcher/OpenRSC.jar")
+	}
+];
+
+const kits = {
+	warrior: {
+		path: "Warrior",
+		image: "assets/rsc-knight.png",
+		gear: ["Iron 2h sword", "Bronze plate body", "Bronze medium helm", "Bronze legs"],
+		appearance: "Male, bronze plate set, iron two-hander",
+		appearanceData: { hairColour: 2, topColour: 4, trouserColour: 8, skinColour: 1 },
+		combat: 8
+	},
+	arcanist: {
+		path: "Arcanist",
+		image: "assets/rsc-mage.png",
+		gear: ["Shortbow", "Blue wizard robe", "50 bronze arrows", "Air runes"],
+		appearance: "Bright robe top, light gear, bow and arrows",
+		appearanceData: { hairColour: 5, topColour: 10, trouserColour: 6, skinColour: 0 },
+		combat: 5
+	},
+	forager: {
+		path: "Forager",
+		image: "assets/rsc-ranger.png",
+		gear: ["Bronze axe", "Tinderbox", "Small fishing net", "100 gp"],
+		appearance: "Field kit, tools, light travelling clothes",
+		appearanceData: { hairColour: 3, topColour: 7, trouserColour: 3, skinColour: 2 },
+		combat: 5
+	}
+};
+
+const publicContent = {
+	news: [
+		{ type: "rare", text: "Void Enclave boss tuning moved into live difficulty controls.", time: "Today" },
+		{ type: "market", text: "Weekly subscription cards and portal redeem flow are now represented.", time: "Today" },
+		{ type: "title", text: "Character title state is part of the account portal contract.", time: "Jun 3" }
+	],
+	downloads: [
+		{ label: "Android notes", state: "Requires Android SDK", url: "#" },
+		{ label: "Server status", state: "Local world heartbeat", url: "#" }
+	],
+	highscores: [
+		{ rank: "#1", player: "Maeve", combat: 99, xp: "13.1m" },
+		{ rank: "#2", player: "Zamak42", combat: 87, xp: "8.7m" },
+		{ rank: "#3", player: "WildRanger", combat: 61, xp: "3.2m" },
+		{ rank: "#4", player: "VoidMage", combat: 54, xp: "2.4m" },
+		{ rank: "#5", player: "DarkWarden", combat: 51, xp: "2.1m" },
+		{ rank: "#6", player: "CoinMule17", combat: 43, xp: "1.2m" }
+	],
+	market: [
+		{ item: "Rune 2h sword", average: "48,220 gp", movement: "+8.1%", depth: "High" },
+		{ item: "Dragonstone amulet", average: "138,000 gp", movement: "+3.6%", depth: "Thin" },
+		{ item: "Subscription card", average: "10,000 gp", movement: "0.0%", depth: "Vendor" },
+		{ item: "Law rune", average: "312 gp", movement: "-2.4%", depth: "Active" },
+		{ item: "Raw lobster", average: "88 gp", movement: "+1.2%", depth: "Stable" },
+		{ item: "Void scimitar", average: "Rare", movement: "No sales", depth: "Watch" }
+	],
+	activity: [
+		{ type: "rare", text: "Maeve received Dragonstone amulet from the rare table.", time: "2m" },
+		{ type: "kill", text: "VoidSeeker defeated DarkWarden in level 32 Wilderness.", time: "8m" },
+		{ type: "title", text: "Zamak42 equipped The Conqueror.", time: "14m" },
+		{ type: "market", text: "Rune 2h sword buy orders rose above 48,000 gp.", time: "26m" },
+		{ type: "rare", text: "WildRanger found Void scimitar at the Void Knight.", time: "41m" },
+		{ type: "kill", text: "GraveTax escaped with 19 lobsters and a skull.", time: "1h" }
+	]
+};
+
+let writeQueue = Promise.resolve();
+let itemDefinitionsPromise = null;
+let titleDefinitionsPromise = null;
+
+class HttpError extends Error {
+	constructor(status, message) {
+		super(message);
+		this.status = status;
+	}
+}
+
+const server = createServer((request, response) => {
+	handleRequest(request, response).catch((error) => {
+		const status = error.status || 500;
+		json(response, status, {
+			error: status === 500 ? "internal_error" : error.message
+		});
+		if (status === 500) {
+			console.error(error);
+		}
+	});
+});
+
+server.listen(port, "127.0.0.1", () => {
+	console.log(`Voidscape portal dev server: http://127.0.0.1:${port}/`);
+	console.log(`Portal API data: ${storePath}`);
+});
+
+async function handleRequest(request, response) {
+	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+	if (url.pathname.startsWith("/api/")) {
+		await handleApi(request, response, url);
+		return;
+	}
+	if (url.pathname.startsWith("/downloads/")) {
+		await serveDownload(response, url.pathname);
+		return;
+	}
+	await serveStatic(response, url.pathname);
+}
+
+async function handleApi(request, response, url) {
+	const method = request.method || "GET";
+
+	if (method === "GET" && url.pathname === "/api/health") {
+		json(response, 200, { ok: true, service: "voidscape-portal-dev" });
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/public") {
+		const store = await loadStore();
+		json(response, 200, await publicState(store));
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/account") {
+		const store = await loadStore();
+		const { account, session } = requireSession(request, store);
+		json(response, 200, accountState(store, account, session));
+		return;
+	}
+
+	if (method === "GET" && url.pathname.startsWith("/api/openrsc/characters/")) {
+		const username = decodeURIComponent(url.pathname.slice("/api/openrsc/characters/".length));
+		const snapshot = await openRscCharacterSnapshot(username);
+		json(response, 200, { character: snapshot });
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/founder/reservations") {
+		const payload = await readJson(request);
+		const result = await updateStore((store) => {
+			const founder = reserveFounder(store, payload);
+			return { founder: founderState(founder) };
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/founder/simulate-referral") {
+		const payload = await readJson(request);
+		const result = await updateStore((store) => {
+			const code = normalizeCode(payload.code || "");
+			const founder = store.founders.find((entry) => entry.code === code);
+			if (!founder) throw new HttpError(404, "founder_not_found");
+			founder.creditedReferrals = Math.min(2, (founder.creditedReferrals || 0) + 1);
+			founder.updatedAt = now();
+			grantFounderEntitlement(store, founder);
+			audit(store, "founder_referral_simulated", { founderId: founder.id });
+			return { founder: founderState(founder) };
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/register") {
+		const payload = await readJson(request);
+		const passwordHash = await hashPassword(requirePassword(payload.password));
+		const result = await updateStore((store) => {
+			const emailCanonical = canonicalEmail(payload.email || "");
+			if (!emailCanonical) throw new HttpError(400, "invalid_email");
+			if (store.accounts.some((account) => account.emailCanonical === emailCanonical)) {
+				throw new HttpError(409, "account_exists");
+			}
+
+			const founder = reserveFounder(store, payload);
+			const account = {
+				id: nextId(store, "account"),
+				emailCanonical,
+				emailDisplay: String(payload.email || "").trim(),
+				passwordHash,
+				status: "active",
+				subscriptionExpiresAt: 0,
+				createdAt: now(),
+				updatedAt: now()
+			};
+			store.accounts.push(account);
+			createCharacter(store, account.id, founder.username, payload.path || "warrior");
+			grantFounderEntitlement(store, founder);
+			const token = createSession(store, account.id);
+			audit(store, "account_registered", { accountId: account.id });
+			return { token, ...accountState(store, account) };
+		});
+		json(response, 201, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/login") {
+		const payload = await readJson(request);
+		const result = await updateStore(async (store) => {
+			const emailCanonical = canonicalEmail(payload.email || "");
+			const account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical);
+			if (!account || !(await verifyPassword(String(payload.password || ""), account.passwordHash))) {
+				throw new HttpError(401, "invalid_credentials");
+			}
+			const token = createSession(store, account.id);
+			audit(store, "account_login", { accountId: account.id });
+			return { token, ...accountState(store, account) };
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/characters") {
+		const payload = await readJson(request);
+		const result = await updateStore((store) => {
+			const account = requireAccount(request, store);
+			const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
+			if (currentCount >= maxCharacters) {
+				throw new HttpError(409, "character_limit_reached");
+			}
+			createCharacter(store, account.id, payload.name, payload.path || "warrior");
+			account.updatedAt = now();
+			audit(store, "character_created", { accountId: account.id });
+			return accountState(store, account);
+		});
+		json(response, 201, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/character-links/start") {
+		const payload = await readJson(request);
+		const result = await updateStore(async (store) => {
+			const account = requireAccount(request, store);
+			const snapshot = await openRscCharacterSnapshot(payload.username || "");
+			const challenge = startLinkChallenge(store, account, snapshot);
+			audit(store, "character_link_started", {
+				accountId: account.id,
+				playerId: snapshot.id,
+				username: snapshot.name
+			});
+			return {
+				challenge: linkChallengeState(challenge.challenge, challenge.code),
+				character: snapshot
+			};
+		});
+		json(response, 201, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/character-links/simulate-verify") {
+		const payload = await readJson(request);
+		const result = await updateStore(async (store) => {
+			const account = requireAccount(request, store);
+			const challenge = requireLinkChallenge(store, account, payload);
+			const snapshot = await openRscCharacterSnapshot(challenge.username);
+			linkSnapshotCharacter(store, account, challenge, snapshot);
+			challenge.status = "verified";
+			challenge.verifiedAt = now();
+			challenge.updatedAt = now();
+			account.updatedAt = now();
+			audit(store, "character_link_verified_dev", {
+				accountId: account.id,
+				playerId: snapshot.id,
+				username: snapshot.name
+			});
+			return accountState(store, account);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/subscriptions/redeem") {
+		const payload = await readJson(request);
+		const result = await updateStore((store) => {
+			const account = requireAccount(request, store);
+			const code = String(payload.code || "").trim();
+			if (code.length < 4) throw new HttpError(400, "invalid_redeem_code");
+			const base = Math.max(Date.now(), account.subscriptionExpiresAt || 0);
+			account.subscriptionExpiresAt = base + 1000 * 60 * 60 * 24 * 7;
+			account.updatedAt = now();
+			store.entitlements.push({
+				id: nextId(store, "entitlement"),
+				accountId: account.id,
+				type: "weekly_subscription_card",
+				status: "consumed",
+				source: "redeem_code",
+				codeHint: code.slice(0, 8),
+				createdAt: now(),
+				consumedAt: now()
+			});
+			audit(store, "subscription_redeemed", { accountId: account.id });
+			return accountState(store, account);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/subscriptions/redeem-founder") {
+		const result = await updateStore((store) => {
+			const account = requireAccount(request, store);
+			const entitlement = store.entitlements.find((entry) =>
+				entry.accountId === account.id &&
+				entry.type === "founder_free_subscription" &&
+				entry.status === "granted"
+			);
+			if (!entitlement) throw new HttpError(404, "founder_reward_not_available");
+			const base = Math.max(Date.now(), account.subscriptionExpiresAt || 0);
+			account.subscriptionExpiresAt = base + 1000 * 60 * 60 * 24 * 7;
+			account.updatedAt = now();
+			entitlement.status = "consumed";
+			entitlement.consumedAt = now();
+			entitlement.startsAt = base;
+			entitlement.expiresAt = account.subscriptionExpiresAt;
+			audit(store, "subscription_redeemed_founder_reward", {
+				accountId: account.id,
+				entitlementId: entitlement.id
+			});
+			return accountState(store, account);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/security/password") {
+		const payload = await readJson(request);
+		const result = await updateStore(async (store) => {
+			const { account, session } = requireSession(request, store);
+			if (!(await verifyPassword(String(payload.currentPassword || ""), account.passwordHash))) {
+				throw new HttpError(401, "invalid_current_password");
+			}
+			const passwordHash = await hashPassword(requirePassword(payload.newPassword));
+			account.passwordHash = passwordHash;
+			account.passwordChangedAt = now();
+			account.updatedAt = now();
+			audit(store, "account_password_changed", { accountId: account.id });
+			return accountState(store, account, session);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/security/recovery-codes") {
+		const result = await updateStore((store) => {
+			const { account, session } = requireSession(request, store);
+			store.recoveryCodes
+				.filter((entry) => entry.accountId === account.id && entry.status === "active")
+				.forEach((entry) => {
+					entry.status = "revoked";
+					entry.revokedAt = now();
+				});
+			const codes = Array.from({ length: 8 }, () => makeRecoveryCode());
+			codes.forEach((code) => {
+				store.recoveryCodes.push({
+					id: nextId(store, "recoveryCode"),
+					accountId: account.id,
+					codeHash: hashToken(code),
+					codeHint: code.slice(-4),
+					status: "active",
+					createdAt: now(),
+					usedAt: null,
+					revokedAt: null
+				});
+			});
+			account.recoveryCodesGeneratedAt = now();
+			account.updatedAt = now();
+			audit(store, "account_recovery_codes_generated", { accountId: account.id, count: codes.length });
+			return { codes, ...accountState(store, account, session) };
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/security/sessions/revoke-others") {
+		const result = await updateStore((store) => {
+			const { account, session } = requireSession(request, store);
+			let revoked = 0;
+			store.sessions.forEach((entry) => {
+				if (entry.accountId === account.id && entry.id !== session.id && entry.expiresAt > Date.now() && !entry.revokedAt) {
+					entry.expiresAt = Date.now();
+					entry.revokedAt = now();
+					revoked += 1;
+				}
+			});
+			audit(store, "account_sessions_revoked", { accountId: account.id, revoked });
+			return accountState(store, account, session);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	throw new HttpError(404, "not_found");
+}
+
+async function serveStatic(response, pathname) {
+	const targetPath = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+	const resolved = resolve(rootDir, `.${targetPath}`);
+	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
+	if (!isInsideRoot) throw new HttpError(403, "forbidden");
+
+	let filePath = normalize(resolved);
+	let fileStat;
+	try {
+		fileStat = await stat(filePath);
+		if (fileStat.isDirectory()) {
+			filePath = join(filePath, "index.html");
+		}
+	} catch (error) {
+		throw new HttpError(404, "not_found");
+	}
+
+	const body = await readFile(filePath);
+	response.writeHead(200, {
+		"content-type": contentType(filePath),
+		"cache-control": "no-store"
+	});
+	response.end(body);
+}
+
+async function serveDownload(response, pathname) {
+	const slug = decodeURIComponent(pathname.slice("/downloads/".length));
+	const artifact = downloadArtifacts.find((entry) => entry.slug === slug);
+	if (!artifact) throw new HttpError(404, "download_not_found");
+	let fileStat;
+	try {
+		fileStat = await stat(artifact.path);
+	} catch (error) {
+		throw new HttpError(404, "download_not_built");
+	}
+	const body = await readFile(artifact.path);
+	response.writeHead(200, {
+		"content-type": "application/java-archive",
+		"content-length": String(fileStat.size),
+		"content-disposition": `attachment; filename="${artifact.filename}"`,
+		"cache-control": "no-store"
+	});
+	response.end(body);
+}
+
+function reserveFounder(store, payload) {
+	const username = cleanUsername(payload.username || payload.name || "");
+	const normalizedName = normalizeUsername(username);
+	const emailCanonical = canonicalEmail(payload.email || "");
+	if (!normalizedName) throw new HttpError(400, "invalid_username");
+	if (!emailCanonical) throw new HttpError(400, "invalid_email");
+
+	const nameOwner = store.founders.find((entry) => entry.normalizedName === normalizedName && entry.emailCanonical !== emailCanonical);
+	if (nameOwner) throw new HttpError(409, "username_reserved");
+
+	let founder = store.founders.find((entry) => entry.emailCanonical === emailCanonical);
+	if (!founder) {
+		founder = {
+			id: nextId(store, "founder"),
+			username,
+			normalizedName,
+			emailCanonical,
+			emailDisplay: String(payload.email || "").trim(),
+			code: makeCode(username),
+			creditedReferrals: 0,
+			status: "dev_verified",
+			createdAt: now(),
+			updatedAt: now()
+		};
+		store.founders.push(founder);
+		audit(store, "founder_reserved", { founderId: founder.id });
+	} else {
+		founder.username = username;
+		founder.normalizedName = normalizedName;
+		founder.emailDisplay = String(payload.email || "").trim();
+		founder.updatedAt = now();
+		audit(store, "founder_updated", { founderId: founder.id });
+	}
+
+	creditFounderReferral(store, founder, payload.referrerCode || payload.referralCode || payload.ref || "");
+	return founder;
+}
+
+function creditFounderReferral(store, founder, codeInput) {
+	const referrerCode = normalizeCode(codeInput || "");
+	if (!referrerCode) return null;
+	if (referrerCode === founder.code) {
+		throw new HttpError(400, "self_referral_not_allowed");
+	}
+
+	const referrer = store.founders.find((entry) => entry.code === referrerCode && entry.status !== "released");
+	if (!referrer) throw new HttpError(404, "referrer_not_found");
+	if (referrer.id === founder.id || referrer.emailCanonical === founder.emailCanonical) {
+		throw new HttpError(400, "self_referral_not_allowed");
+	}
+
+	const existing = store.referrals.find((entry) =>
+		entry.referrerFounderId === referrer.id &&
+		entry.referredFounderId === founder.id &&
+		entry.status === "credited"
+	);
+	if (existing) return existing;
+
+	const alreadyReferred = store.referrals.find((entry) =>
+		entry.referredFounderId === founder.id &&
+		entry.status === "credited"
+	);
+	if (alreadyReferred) return alreadyReferred;
+
+	const referral = {
+		id: nextId(store, "referral"),
+		referrerFounderId: referrer.id,
+		referredFounderId: founder.id,
+		referrerCode,
+		status: "credited",
+		riskScore: 0,
+		createdAt: now(),
+		creditedAt: now()
+	};
+	store.referrals.push(referral);
+	founder.referredByCode = referrer.code;
+	founder.referredByUsername = referrer.username;
+	founder.referredAt = now();
+	founder.updatedAt = now();
+	referrer.creditedReferrals = Math.max(referrer.creditedReferrals || 0, countCreditedReferrals(store, referrer.id));
+	referrer.updatedAt = now();
+	grantFounderEntitlement(store, referrer);
+	audit(store, "founder_referral_credited", {
+		referrerFounderId: referrer.id,
+		referredFounderId: founder.id
+	});
+	return referral;
+}
+
+function countCreditedReferrals(store, founderId) {
+	return store.referrals.filter((entry) =>
+		entry.referrerFounderId === founderId &&
+		entry.status === "credited"
+	).length;
+}
+
+function createCharacter(store, accountId, name, path) {
+	const username = cleanUsername(name || "");
+	const normalizedName = normalizeUsername(username);
+	if (!normalizedName) throw new HttpError(400, "invalid_character_name");
+	if (store.characters.some((character) => character.normalizedName === normalizedName)) {
+		throw new HttpError(409, "character_name_taken");
+	}
+
+	const kit = kits[path] || kits.warrior;
+	const character = {
+		id: nextId(store, "character"),
+		accountId,
+		name: username,
+		normalizedName,
+		path: kit.path,
+		image: kit.image,
+		combat: kit.combat,
+		total: "34",
+		quest: 0,
+		kills: 0,
+		status: "Void Island",
+		title: "No title equipped",
+		lastLogin: "New",
+		appearance: kit.appearance,
+		gear: kit.gear.slice(),
+		appearanceData: kit.appearanceData || null,
+		equipment: [],
+		playerId: null,
+		linkStatus: "preview",
+		source: "portal-preview",
+		createdAt: now(),
+		updatedAt: now()
+	};
+	store.characters.push(character);
+	return character;
+}
+
+function accountState(store, account, currentSession) {
+	const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null;
+	return {
+		account: {
+			id: account.id,
+			email: account.emailDisplay,
+			displayName: founder ? founder.username : account.emailDisplay,
+			status: account.status,
+			subscription: subscriptionState(account)
+		},
+		founder: founder ? founderState(founder) : null,
+		characters: store.characters
+			.filter((character) => character.accountId === account.id)
+			.map((character) => ({
+				id: character.id,
+				name: character.name,
+				path: character.path,
+				image: character.image,
+				combat: character.combat,
+				total: character.total,
+				quest: character.quest,
+				kills: character.kills,
+				status: character.status,
+				title: character.title,
+				subscription: character.subscription || subscriptionState(account).label,
+				lastLogin: character.lastLogin,
+				appearance: character.appearance,
+				gear: character.gear,
+				appearanceData: character.appearanceData || null,
+				equipment: Array.isArray(character.equipment) ? character.equipment : [],
+				playerId: character.playerId || null,
+				linkStatus: character.linkStatus || "preview",
+				source: character.source || "portal-preview"
+			})),
+		linkChallenges: store.linkChallenges
+			.filter((challenge) => challenge.accountId === account.id && challenge.status === "pending" && challenge.expiresAt > Date.now())
+			.map((challenge) => linkChallengeState(challenge)),
+		rewards: rewardState(store, account),
+		security: securityState(store, account, currentSession, founder)
+	};
+}
+
+function rewardState(store, account) {
+	const founderCards = store.entitlements.filter((entry) =>
+		entry.accountId === account.id &&
+		entry.type === "founder_free_subscription" &&
+		entry.status === "granted"
+	);
+	return {
+		founderFreeSubscriptions: founderCards.length,
+		cards: founderCards.map((entry) => ({
+			id: entry.id,
+			type: entry.type,
+			status: entry.status,
+			source: entry.source,
+			label: "Free weekly subscription card",
+			createdAt: entry.createdAt
+		}))
+	};
+}
+
+function securityState(store, account, currentSession, founder) {
+	const activeRecoveryCodes = store.recoveryCodes.filter((entry) => entry.accountId === account.id && entry.status === "active");
+	const activeSessions = store.sessions
+		.filter((session) => session.accountId === account.id && session.expiresAt > Date.now() && !session.revokedAt)
+		.sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)));
+	const emailVerified = Boolean(founder && (founder.status === "verified" || founder.status === "dev_verified"));
+	const hasRecoveryCodes = activeRecoveryCodes.length > 0;
+	const passwordChanged = Boolean(account.passwordChangedAt);
+	const score = Math.min(100,
+		40 +
+		(emailVerified ? 20 : 0) +
+		(hasRecoveryCodes ? 20 : 0) +
+		(passwordChanged ? 10 : 0) +
+		(activeSessions.length <= 2 ? 10 : 5)
+	);
+
+	return {
+		score,
+		emailVerified,
+		recoveryCodes: {
+			activeCount: activeRecoveryCodes.length,
+			lastGeneratedAt: account.recoveryCodesGeneratedAt || null
+		},
+		passwordChangedAt: account.passwordChangedAt || null,
+		sessions: activeSessions.map((session) => ({
+			id: session.id,
+			current: Boolean(currentSession && session.id === currentSession.id),
+			createdAt: session.createdAt,
+			lastSeenAt: session.lastSeenAt,
+			expiresAt: session.expiresAt,
+			client: "Portal API",
+			location: "Local dev"
+		}))
+	};
+}
+
+async function publicState(store) {
+	const founderUnlocks = store.founders.filter((founder) => founder.creditedReferrals >= 2).length;
+	return {
+		status: {
+			world: "World 1",
+			online: true,
+			playersOnline: 247,
+			patch: "0.8.7",
+			lastSave: "2 min ago"
+		},
+		rates: {
+			baseCombat: 7,
+			baseSkill: 4,
+			subscribedCombat: 10,
+			subscribedSkill: 6
+		},
+		founderStats: {
+			reservations: store.founders.length,
+			freeSubCardsUnlocked: founderUnlocks
+		},
+		downloads: (await downloadState()).concat(publicContent.downloads),
+		news: publicContent.news,
+		highscores: publicContent.highscores,
+		market: publicContent.market,
+		activity: dynamicActivity(store).concat(publicContent.activity).slice(0, 8)
+	};
+}
+
+async function downloadState() {
+	const rows = [];
+	for (const artifact of downloadArtifacts) {
+		try {
+			const fileStat = await stat(artifact.path);
+			rows.push({
+				label: artifact.label,
+				state: `Built ${formatBytes(fileStat.size)}`,
+				url: `/downloads/${artifact.slug}`,
+				available: true,
+				sizeBytes: fileStat.size,
+				updatedAt: fileStat.mtime.toISOString()
+			});
+		} catch (error) {
+			rows.push({
+				label: artifact.label,
+				state: "Run scripts/build.sh",
+				url: "#",
+				available: false
+			});
+		}
+	}
+	return rows;
+}
+
+function dynamicActivity(store) {
+	const rows = [];
+	const latestFounder = store.founders[store.founders.length - 1];
+	const latestCharacter = store.characters[store.characters.length - 1];
+	if (latestFounder) {
+		rows.push({
+			type: latestFounder.creditedReferrals >= 2 ? "rare" : "title",
+			text: `${latestFounder.username} reserved a founder pass${latestFounder.creditedReferrals >= 2 ? " and unlocked a weekly subscription card" : ""}.`,
+			time: "Now"
+		});
+	}
+	if (latestCharacter) {
+		rows.push({
+			type: "title",
+			text: `${latestCharacter.name} joined the roster as a ${latestCharacter.path}.`,
+			time: "Now"
+		});
+	}
+	return rows;
+}
+
+function startLinkChallenge(store, account, snapshot) {
+	const normalizedName = normalizeUsername(snapshot.name);
+	if (!normalizedName) throw new HttpError(400, "invalid_username");
+
+	const existingForAccount = store.characters.find((character) =>
+		character.accountId === account.id &&
+		(character.playerId === snapshot.id || character.normalizedName === normalizedName)
+	);
+	const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
+	if (!existingForAccount && currentCount >= maxCharacters) {
+		throw new HttpError(409, "character_limit_reached");
+	}
+
+	const alreadyLinked = store.characters.find((character) =>
+		character.accountId !== account.id &&
+		character.playerId === snapshot.id &&
+		character.linkStatus === "linked"
+	);
+	if (alreadyLinked) {
+		throw new HttpError(409, "character_already_linked");
+	}
+
+	store.linkChallenges
+		.filter((challenge) => challenge.accountId === account.id && challenge.normalizedName === normalizedName && challenge.status === "pending")
+		.forEach((challenge) => {
+			challenge.status = "revoked";
+			challenge.updatedAt = now();
+		});
+
+	const code = makeLinkCode();
+	const challenge = {
+		id: nextId(store, "linkChallenge"),
+		accountId: account.id,
+		playerId: snapshot.id,
+		username: snapshot.name,
+		normalizedName,
+		codeHash: hashToken(code),
+		codeHint: code.slice(-6),
+		status: "pending",
+		expiresAt: Date.now() + linkChallengeTtlMs,
+		createdAt: now(),
+		updatedAt: now(),
+		verifiedAt: null
+	};
+	store.linkChallenges.push(challenge);
+	return { challenge, code };
+}
+
+function requireLinkChallenge(store, account, payload) {
+	const id = Number(payload.challengeId || payload.id || 0);
+	const code = normalizeCode(payload.code || "");
+	const challenge = store.linkChallenges.find((entry) => entry.id === id && entry.accountId === account.id);
+	if (!challenge) throw new HttpError(404, "link_challenge_not_found");
+	if (challenge.status !== "pending") throw new HttpError(409, "link_challenge_not_pending");
+	if (challenge.expiresAt <= Date.now()) {
+		challenge.status = "expired";
+		challenge.updatedAt = now();
+		throw new HttpError(410, "link_challenge_expired");
+	}
+	if (!code || challenge.codeHash !== hashToken(code)) {
+		throw new HttpError(400, "invalid_link_code");
+	}
+	return challenge;
+}
+
+function linkSnapshotCharacter(store, account, challenge, snapshot) {
+	const normalizedName = normalizeUsername(snapshot.name);
+	const linkedByOther = store.characters.find((character) =>
+		character.accountId !== account.id &&
+		character.playerId === snapshot.id &&
+		character.linkStatus === "linked"
+	);
+	if (linkedByOther) throw new HttpError(409, "character_already_linked");
+
+	const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
+	const existingIndex = store.characters.findIndex((character) =>
+		character.accountId === account.id &&
+		(character.playerId === snapshot.id || character.normalizedName === normalizedName)
+	);
+	if (existingIndex === -1 && currentCount >= maxCharacters) {
+		throw new HttpError(409, "character_limit_reached");
+	}
+
+	const existing = existingIndex >= 0 ? store.characters[existingIndex] : null;
+	const linkedCharacter = {
+		id: existing ? existing.id : nextId(store, "character"),
+		accountId: account.id,
+		playerId: snapshot.id,
+		name: snapshot.name,
+		normalizedName,
+		path: snapshot.path,
+		image: snapshot.image,
+		combat: snapshot.combat,
+		total: snapshot.total,
+		quest: snapshot.quest,
+		kills: snapshot.kills,
+		status: snapshot.status,
+		title: snapshot.title,
+		subscription: snapshot.subscription,
+		lastLogin: snapshot.lastLogin,
+		appearance: snapshot.appearance,
+		gear: snapshot.gear,
+		appearanceData: snapshot.appearanceData || null,
+		equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
+		linkStatus: "linked",
+		source: snapshot.source,
+		linkedAt: now(),
+		createdAt: existing ? existing.createdAt : now(),
+		updatedAt: now()
+	};
+
+	if (existingIndex >= 0) {
+		store.characters.splice(existingIndex, 1, linkedCharacter);
+	} else {
+		store.characters.push(linkedCharacter);
+	}
+	return linkedCharacter;
+}
+
+function linkChallengeState(challenge, code) {
+	const visibleCode = code || "";
+	return {
+		id: challenge.id,
+		username: challenge.username,
+		playerId: challenge.playerId,
+		status: challenge.status,
+		expiresAt: challenge.expiresAt,
+		minutesRemaining: Math.max(0, Math.ceil((challenge.expiresAt - Date.now()) / (1000 * 60))),
+		code: visibleCode,
+		codeHint: challenge.codeHint,
+		command: visibleCode ? `::link ${visibleCode}` : ""
+	};
+}
+
+async function openRscCharacterSnapshot(username) {
+	if (!openRscDbPath) {
+		throw new HttpError(503, "openrsc_db_not_configured");
+	}
+	const normalized = normalizeUsername(username);
+	if (!normalized) {
+		throw new HttpError(400, "invalid_username");
+	}
+
+	const playerRows = await sqliteJson(`
+		SELECT id, username, group_id, combat, skill_total, x, y, kills, npc_kills, deaths,
+		       quest_points, login_date, online, male, haircolour, topcolour, trousercolour,
+		       skincolour, headsprite, bodysprite
+		FROM players
+		WHERE lower(username) = ${sqlString(normalized)}
+		LIMIT 1
+	`);
+	const player = playerRows[0];
+	if (!player) {
+		throw new HttpError(404, "character_not_found");
+	}
+
+	const cacheRows = await sqliteJson(`
+		SELECT key, value, type
+		FROM player_cache
+		WHERE playerID = ${Number(player.id)}
+		  AND key IN ('player_title_active', 'void_sub_expires', 'void_subscription', 'void_path')
+	`);
+	const cache = Object.fromEntries(cacheRows.map((row) => [row.key, row.value]));
+	const equipmentRows = await loadOpenRscEquipment(Number(player.id));
+	const itemDefs = await loadItemDefinitions();
+	const titleDefs = await loadTitleDefinitions();
+	const equipment = equipmentRows.map((row) => {
+		const catalogId = Number(row.catalogID);
+		const def = itemDefs.get(catalogId) || {};
+		return {
+			slot: wearSlotLabel(def.wearSlot),
+			itemId: Number(row.itemID),
+			catalogId,
+			name: def.name || `Item ${catalogId}`,
+			amount: Number(row.amount || 1),
+			wearSlot: Number(def.wearSlot),
+			appearanceId: Number(def.appearanceID || 0),
+			wearableId: Number(def.wearableID || 0)
+		};
+	});
+	const titleId = cache.player_title_active || "";
+	const title = titleId && titleDefs.get(titleId) ? titleDefs.get(titleId) : "";
+	const subscription = openRscSubscriptionState(cache);
+	const location = locationState(Number(player.x), Number(player.y));
+	const lastLogin = Number(player.login_date || 0);
+
+	return {
+		id: Number(player.id),
+		name: player.username,
+		path: pathLabel(cache.void_path),
+		image: pathImage(cache.void_path, player),
+		combat: Number(player.combat || 3),
+		total: String(player.skill_total || 27),
+		quest: Number(player.quest_points || 0),
+		kills: Number(player.kills || 0),
+		npcKills: Number(player.npc_kills || 0),
+		deaths: Number(player.deaths || 0),
+		status: location.label,
+		location,
+		title: title || "No title equipped",
+		subscription: subscription.label,
+		subscriptionState: subscription,
+		lastLogin: lastLogin ? formatUnixTime(lastLogin) : "Never",
+		appearance: appearanceSummary(player),
+		appearanceData: {
+			male: Number(player.male) === 1,
+			hairColour: Number(player.haircolour),
+			topColour: Number(player.topcolour),
+			trouserColour: Number(player.trousercolour),
+			skinColour: Number(player.skincolour),
+			headSprite: Number(player.headsprite),
+			bodySprite: Number(player.bodysprite)
+		},
+		gear: equipment.length ? equipment.map((item) => item.name) : ["No wielded equipment saved"],
+		equipment,
+		source: "openrsc-sqlite",
+		sourceLabel: "OpenRSC SQLite"
+	};
+}
+
+async function loadOpenRscEquipment(playerId) {
+	const inventoryRows = await sqliteJson(`
+		SELECT s.itemID, s.catalogID, s.amount, i.slot
+		FROM invitems i
+		JOIN itemstatuses s ON i.itemID = s.itemID
+		WHERE i.playerID = ${playerId}
+		  AND s.wielded = 1
+		ORDER BY i.slot ASC
+	`);
+	const hasEquippedTable = (await sqliteJson("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'equipped'")).length > 0;
+	if (!hasEquippedTable) {
+		return inventoryRows;
+	}
+	const equippedRows = await sqliteJson(`
+		SELECT s.itemID, s.catalogID, s.amount, NULL AS slot
+		FROM equipped e
+		JOIN itemstatuses s ON e.itemID = s.itemID
+		WHERE e.playerID = ${playerId}
+	`);
+	const byItemId = new Map();
+	inventoryRows.concat(equippedRows).forEach((row) => {
+		byItemId.set(Number(row.itemID), row);
+	});
+	return Array.from(byItemId.values());
+}
+
+async function sqliteJson(query) {
+	try {
+		const { stdout } = await execFile("sqlite3", ["-readonly", "-json", openRscDbPath, query], {
+			maxBuffer: 1024 * 1024
+		});
+		return stdout.trim() ? JSON.parse(stdout) : [];
+	} catch (error) {
+		if (error.code === "ENOENT") {
+			throw new HttpError(503, "sqlite3_not_available");
+		}
+		if (error.stderr && error.stderr.includes("no such table")) {
+			throw new HttpError(500, "openrsc_schema_missing");
+		}
+		throw error;
+	}
+}
+
+async function loadItemDefinitions() {
+	if (!itemDefinitionsPromise) {
+		itemDefinitionsPromise = (async () => {
+			const files = ["ItemDefs.json", "ItemDefsCustom.json", "ItemDefsPatch18.json"];
+			const map = new Map();
+			for (const file of files) {
+				const raw = await readFile(join(repoRoot, "server/conf/server/defs", file), "utf8");
+				const parsed = JSON.parse(raw);
+				const rows = parsed.item || parsed.items || [];
+				rows.forEach((row) => map.set(Number(row.id), row));
+			}
+			return map;
+		})();
+	}
+	return itemDefinitionsPromise;
+}
+
+async function loadTitleDefinitions() {
+	if (!titleDefinitionsPromise) {
+		titleDefinitionsPromise = (async () => {
+			const raw = await readFile(join(repoRoot, "server/src/com/openrsc/server/content/PlayerTitle.java"), "utf8");
+			const map = new Map();
+			const pattern = /^\s*[A-Z0-9_]+\("([^"]+)",\s*"([^"]+)"/gm;
+			let match;
+			while ((match = pattern.exec(raw)) !== null) {
+				map.set(match[1], match[2]);
+			}
+			return map;
+		})();
+	}
+	return titleDefinitionsPromise;
+}
+
+function openRscSubscriptionState(cache) {
+	const expiresAt = Number(cache.void_sub_expires || 0);
+	const active = expiresAt > Date.now() || cache.void_subscription === "1" || cache.void_subscription === "true";
+	return {
+		active,
+		expiresAt,
+		label: active && expiresAt > Date.now() ? formatRemaining(expiresAt) : active ? "Subscribed" : "Unsubscribed",
+		combatXpRate: active ? 10 : 7,
+		skillXpRate: active ? 6 : 4
+	};
+}
+
+function sqlString(value) {
+	return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function wearSlotLabel(slot) {
+	return {
+		0: "Head",
+		1: "Body",
+		2: "Legs",
+		3: "Shield",
+		4: "Weapon",
+		5: "Hands",
+		6: "Feet",
+		7: "Cape",
+		8: "Neck",
+		9: "Ring",
+		10: "Ammo",
+		11: "Two-handed",
+		12: "Hair",
+		13: "Aura"
+	}[Number(slot)] || "Wielded";
+}
+
+function pathLabel(value) {
+	return {
+		1: "Warrior",
+		2: "Forager",
+		3: "Arcanist"
+	}[Number(value)] || "OpenRSC save";
+}
+
+function pathImage(value, player) {
+	const explicit = {
+		1: "assets/rsc-knight.png",
+		2: "assets/rsc-ranger.png",
+		3: "assets/rsc-mage.png"
+	}[Number(value)];
+	if (explicit) return explicit;
+	if (Number(player.combat || 0) >= 40) return "assets/rsc-knight.png";
+	return "assets/rsc-ranger.png";
+}
+
+function locationState(x, y) {
+	const floor = y >= 944 ? Math.floor(y / 944) : 0;
+	const localY = floor ? y - floor * 944 : y;
+	const label = locationLabel(x, localY, floor);
+	return { x, y, floor, localY, label };
+}
+
+function locationLabel(x, y, floor) {
+	if (x >= 115 && x <= 145 && y >= 495 && y <= 535) return "Lumbridge";
+	if (x >= 190 && x <= 235 && y >= 430 && y <= 470) return "Void Island";
+	if (x >= 85 && x <= 115 && y >= 505 && y <= 535) return "Draynor";
+	if (x >= 115 && x <= 155 && y >= 465 && y <= 495) return "Al Kharid";
+	if (x >= 120 && x <= 170 && y >= 330 && y <= 390) return "Varrock";
+	if (x >= 185 && x <= 230 && y >= 300 && y <= 350) return "Edgeville";
+	if (x >= 180 && y <= 300) return "Wilderness";
+	return floor ? `Floor ${floor} at ${x}, ${y}` : `${x}, ${y}`;
+}
+
+function formatUnixTime(seconds) {
+	return new Date(seconds * 1000).toLocaleString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		hour: "numeric",
+		minute: "2-digit"
+	});
+}
+
+function appearanceSummary(player) {
+	const body = Number(player.male) === 1 ? "Male" : "Female";
+	return [
+		body,
+		`hair ${Number(player.haircolour)}`,
+		`top ${Number(player.topcolour)}`,
+		`trousers ${Number(player.trousercolour)}`,
+		`skin ${Number(player.skincolour)}`,
+		`head sprite ${Number(player.headsprite)}`,
+		`body sprite ${Number(player.bodysprite)}`
+	].join(", ");
+}
+
+function founderState(founder) {
+	const creditedReferrals = founder.creditedReferrals || 0;
+	return {
+		username: founder.username,
+		email: founder.emailDisplay,
+		code: founder.code,
+		creditedReferrals,
+		requiredReferrals: 2,
+		freeSubscriptionUnlocked: creditedReferrals >= 2,
+		referredBy: founder.referredByCode ? {
+			code: founder.referredByCode,
+			username: founder.referredByUsername || ""
+		} : null,
+		status: founder.status
+	};
+}
+
+function grantFounderEntitlement(store, founder) {
+	if ((founder.creditedReferrals || 0) < 2) return;
+	const account = store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical);
+	if (!account) return;
+	const exists = store.entitlements.some((entry) => entry.accountId === account.id && entry.type === "founder_free_subscription" && entry.status !== "revoked");
+	if (exists) return;
+	store.entitlements.push({
+		id: nextId(store, "entitlement"),
+		accountId: account.id,
+		type: "founder_free_subscription",
+		status: "granted",
+		source: "referral_2_verified_dev",
+		createdAt: now(),
+		consumedAt: null
+	});
+}
+
+function createSession(store, accountId) {
+	const token = randomBytes(32).toString("base64url");
+	store.sessions.push({
+		id: nextId(store, "session"),
+		accountId,
+		tokenHash: hashToken(token),
+		createdAt: now(),
+		expiresAt: Date.now() + sessionTtlMs,
+		lastSeenAt: now()
+	});
+	return token;
+}
+
+function requireSession(request, store) {
+	const auth = request.headers.authorization || "";
+	const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+	if (!token) throw new HttpError(401, "missing_session");
+	const tokenHash = hashToken(token);
+	const session = store.sessions.find((entry) => entry.tokenHash === tokenHash && entry.expiresAt > Date.now() && !entry.revokedAt);
+	if (!session) throw new HttpError(401, "invalid_session");
+	session.lastSeenAt = now();
+	const account = store.accounts.find((entry) => entry.id === session.accountId);
+	if (!account || account.status !== "active") throw new HttpError(401, "invalid_account");
+	return { account, session };
+}
+
+function requireAccount(request, store) {
+	const { account } = requireSession(request, store);
+	return account;
+}
+
+async function updateStore(mutator) {
+	const next = writeQueue.then(async () => {
+		const store = await loadStore();
+		const result = await mutator(store);
+		await saveStore(store);
+		return result;
+	});
+	writeQueue = next.catch(() => undefined);
+	return next;
+}
+
+async function loadStore() {
+	try {
+		const raw = await readFile(storePath, "utf8");
+		return normalizeStore(JSON.parse(raw));
+	} catch (error) {
+		return normalizeStore({});
+	}
+}
+
+async function saveStore(store) {
+	await mkdir(dataDir, { recursive: true });
+	const tmpPath = `${storePath}.${process.pid}.tmp`;
+	await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`);
+	await rename(tmpPath, storePath);
+}
+
+function normalizeStore(store) {
+	return {
+		nextIds: {
+			account: Number(store.nextIds && store.nextIds.account) || 1,
+			character: Number(store.nextIds && store.nextIds.character) || 1,
+			founder: Number(store.nextIds && store.nextIds.founder) || 1,
+			referral: Number(store.nextIds && store.nextIds.referral) || 1,
+			session: Number(store.nextIds && store.nextIds.session) || 1,
+			entitlement: Number(store.nextIds && store.nextIds.entitlement) || 1,
+			linkChallenge: Number(store.nextIds && store.nextIds.linkChallenge) || 1,
+			recoveryCode: Number(store.nextIds && store.nextIds.recoveryCode) || 1,
+			audit: Number(store.nextIds && store.nextIds.audit) || 1
+		},
+		accounts: Array.isArray(store.accounts) ? store.accounts : [],
+		sessions: Array.isArray(store.sessions) ? store.sessions : [],
+		founders: Array.isArray(store.founders) ? store.founders : [],
+		referrals: Array.isArray(store.referrals) ? store.referrals : [],
+		characters: Array.isArray(store.characters) ? store.characters : [],
+		entitlements: Array.isArray(store.entitlements) ? store.entitlements : [],
+		linkChallenges: Array.isArray(store.linkChallenges) ? store.linkChallenges : [],
+		recoveryCodes: Array.isArray(store.recoveryCodes) ? store.recoveryCodes : [],
+		audit: Array.isArray(store.audit) ? store.audit : []
+	};
+}
+
+function nextId(store, key) {
+	const id = store.nextIds[key] || 1;
+	store.nextIds[key] = id + 1;
+	return id;
+}
+
+function audit(store, type, metadata) {
+	store.audit.push({
+		id: nextId(store, "audit"),
+		type,
+		metadata,
+		createdAt: now()
+	});
+}
+
+async function hashPassword(password) {
+	const salt = randomBytes(16).toString("base64url");
+	const derived = await scrypt(password, salt, 64, scryptParams);
+	return `scrypt$${scryptParams.N}$${scryptParams.r}$${scryptParams.p}$${salt}$${derived.toString("base64url")}`;
+}
+
+async function verifyPassword(password, encoded) {
+	const parts = String(encoded || "").split("$");
+	if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+	const options = {
+		N: Number(parts[1]),
+		r: Number(parts[2]),
+		p: Number(parts[3]),
+		maxmem: 64 * 1024 * 1024
+	};
+	const expected = Buffer.from(parts[5], "base64url");
+	const actual = await scrypt(password, parts[4], expected.length, options);
+	return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function requirePassword(password) {
+	const text = String(password || "");
+	if (text.length < 8 || text.length > 128) {
+		throw new HttpError(400, "invalid_password");
+	}
+	return text;
+}
+
+function subscriptionState(account) {
+	const expiresAt = account.subscriptionExpiresAt || 0;
+	const active = expiresAt > Date.now();
+	return {
+		active,
+		expiresAt,
+		label: active ? formatRemaining(expiresAt) : "Unsubscribed",
+		combatXpRate: active ? 10 : 7,
+		skillXpRate: active ? 6 : 4
+	};
+}
+
+function formatRemaining(expiresAt) {
+	const remaining = Math.max(0, expiresAt - Date.now());
+	const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+	const hours = Math.floor(remaining / (1000 * 60 * 60)) % 24;
+	return `${days} days ${hours} hours`;
+}
+
+function formatBytes(size) {
+	const value = Number(size || 0);
+	if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+	if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+	return `${value} B`;
+}
+
+function cleanUsername(value) {
+	return String(value).trim().replace(/\s+/g, " ");
+}
+
+function normalizeUsername(value) {
+	const clean = cleanUsername(value);
+	if (!/^[a-zA-Z0-9 ]{2,12}$/.test(clean)) return "";
+	return clean.toLowerCase();
+}
+
+function canonicalEmail(value) {
+	const email = String(value).trim().toLowerCase();
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function makeCode(username) {
+	const stem = username.toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 7) || "VOID";
+	return `${stem}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function makeLinkCode() {
+	return `VLINK-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+function makeRecoveryCode() {
+	return `VOID-${randomBytes(3).toString("hex").toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function normalizeCode(code) {
+	return String(code).toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 18);
+}
+
+function hashToken(token) {
+	return createHash("sha256").update(token).digest("base64url");
+}
+
+async function readJson(request) {
+	const chunks = [];
+	let size = 0;
+	for await (const chunk of request) {
+		size += chunk.length;
+		if (size > 1024 * 1024) throw new HttpError(413, "payload_too_large");
+		chunks.push(chunk);
+	}
+	if (!chunks.length) return {};
+	try {
+		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+	} catch (error) {
+		throw new HttpError(400, "invalid_json");
+	}
+}
+
+function json(response, status, body) {
+	response.writeHead(status, {
+		"content-type": "application/json; charset=utf-8",
+		"cache-control": "no-store"
+	});
+	response.end(`${JSON.stringify(body, null, 2)}\n`);
+}
+
+function contentType(filePath) {
+	const ext = extname(filePath).toLowerCase();
+	return {
+		".html": "text/html; charset=utf-8",
+		".css": "text/css; charset=utf-8",
+		".js": "application/javascript; charset=utf-8",
+		".mjs": "application/javascript; charset=utf-8",
+		".json": "application/json; charset=utf-8",
+		".png": "image/png",
+		".jpg": "image/jpeg",
+		".jpeg": "image/jpeg",
+		".webp": "image/webp",
+		".svg": "image/svg+xml"
+	}[ext] || "application/octet-stream";
+}
+
+function now() {
+	return new Date().toISOString();
+}

@@ -115,7 +115,12 @@ server/
 │   ├── external/EntityHandler.java # singleton catalog of all defs (items, NPCs, skills, …)
 │   │
 │   ├── content/                    # shared content systems such as LootBeamSettings
+│   │   ├── BalanceTelemetry.java   # in-memory beta tuning counters and admin reports
+│   │   ├── GuaranteedResources.java # minimum node yields and dry-streak protection for gathering skills
 │   │   ├── PlayerTitle.java        # Voidscape player-title catalog, unlock checks, active title cache
+│   │   ├── ProgressionMilestones.java # level/total milestone rewards
+│   │   ├── RestedExperience.java   # offline rested-XP pool accrual and spending
+│   │   ├── VoidPath.java           # Void Island starter path state, kits, and early XP boosts
 │   │
 │   └── …                           # (login, util, services, …)
 │
@@ -181,6 +186,7 @@ Client_Base/
     ├── orsc/
     │   ├── Config.java             # CLIENT_VERSION, SERVER_IP/PORT, feature flags
     │   ├── mudclient.java          # main game loop (rendering, networking, entities)
+    │   ├── VoidscapeHairOverlay.java # PNG-backed modern hair overlay loader
     │   ├── net/
     │   │   ├── Network_Base.java, Network_Socket.java
     │   │   └── Opcodes.java        # CLIENT-SIDE opcode enum — must stay in sync with server
@@ -203,7 +209,8 @@ PC_Client/
 ├── src/orsc/
 │   ├── OpenRSC.java                # main()
 │   ├── WorkbenchServer.java        # Dev-only loopback screenshot/state API
-│   └── ScaledWindow.java, Discord.java   # PC-specific UI
+│   ├── ScaledWindow.java           # PC-specific crisp/filtered UI scaling
+│   └── Discord.java                # Discord RPC
 └── lib/discord-rpc.jar
 
 Android_Client/
@@ -261,6 +268,7 @@ docs/
     ├── dynamic-wilderness-spawns.md
     ├── networking-protocol.md
     ├── persistence-db.md
+    ├── player-appearance-rendering.md
     ├── player-titles.md
     ├── rare-drop-beams.md
     ├── scripting-plugins.md

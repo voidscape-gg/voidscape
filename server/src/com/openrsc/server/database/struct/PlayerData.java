@@ -27,6 +27,7 @@ public class PlayerData {
 	public boolean oneMouse;
 	public boolean soundOff;
 	public int hairColour;
+	public int hairStyle;
 	public int topColour;
 	public int trouserColour;
 	public int skinColour;

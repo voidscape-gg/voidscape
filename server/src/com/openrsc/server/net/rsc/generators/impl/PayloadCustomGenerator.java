@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.generators.impl;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
@@ -407,6 +408,9 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					builder.writeByte((byte) gs.hdVignette);
 					builder.writeByte((byte) gs.hdWaterShimmer);
 					builder.writeByte((byte) gs.hdSunlight);
+					if (player.getClientVersion() >= GlobalChatIpFlags.CLIENT_VERSION) {
+						builder.writeByte((byte) gs.globalChatCountryFlags);
+					}
 					break;
 
 				case SEND_PRIVACY_SETTINGS:

@@ -70,14 +70,27 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	private static final int LEGACY_UNDERGROUND_MIN_Y = 971;
 	private static final int LEGACY_UNDERGROUND_MAX_Y = 1006;
 	private static final int REENGAGE_DELAY_TICKS = 2;
-	private static final int KITE_DURATION_TICKS = 6;
+	private static final int KITE_DURATION_TICKS = 4;
 	private static final int KITE_STEP_TICKS = 2;
 	private static final int KITE_MIN_DISTANCE = 4;
 	private static final int KITE_MAX_DISTANCE = 8;
-	private static final int TACTIC_BASE_DELAY_TICKS = 9;
-	private static final int TACTIC_RANDOM_DELAY_TICKS = 7;
-	private static final int LOW_HITS_KITE_THRESHOLD = 58;
+	private static final int TACTIC_BASE_DELAY_TICKS = 13;
+	private static final int TACTIC_RANDOM_DELAY_TICKS = 8;
+	private static final int LOW_HITS_KITE_THRESHOLD = 50;
+	private static final int RANDOM_KITE_CHANCE = 25;
 	private static final int DRAGON_PIECE_CHANCE = 32;
+	private static final int VOID_GEAR_CHANCE = 64;
+	private static final int RUPTURE_WARNING_TICKS = 2;
+	private static final int RUPTURE_ACTIVE_TICKS = 1;
+	private static final int RUPTURE_RADIUS = 1;
+	private static final int RUPTURE_PHASE_TWO_MIN_DELAY = 12;
+	private static final int RUPTURE_PHASE_TWO_MAX_DELAY = 17;
+	private static final int RUPTURE_PHASE_THREE_MIN_DELAY = 8;
+	private static final int RUPTURE_PHASE_THREE_MAX_DELAY = 12;
+	private static final int DISTANCE_PRESSURE_DISTANCE = 8;
+	private static final int DISTANCE_PRESSURE_WARNING_TICKS = 4;
+	private static final int DISTANCE_PRESSURE_DAMAGE_TICKS = 8;
+	private static final int DISTANCE_PRESSURE_MESSAGE_DELAY = 10;
 
 	private static final WeightedItem[] VOID_KNIGHT_RUNE_REWARDS = {
 		new WeightedItem(ItemId.RUNE_DAGGER.id(), 5),
@@ -109,6 +122,13 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 		new WeightedItem(ItemId.DRAGON_BAR.id(), 4),
 		new WeightedItem(ItemId.CHIPPED_DRAGON_SCALE.id(), 4),
 		new WeightedItem(ItemId.DRAGON_METAL_CHAIN.id(), 4)
+	};
+
+	private static final WeightedItem[] VOID_KNIGHT_VOID_REWARDS = {
+		new WeightedItem(ItemId.VOID_SCIMITAR.id(), 3),
+		new WeightedItem(ItemId.VOID_BOW.id(), 4),
+		new WeightedItem(ItemId.VOID_AMULET.id(), 5),
+		new WeightedItem(ItemId.VOID_MACE.id(), 4)
 	};
 
 	private static final Reward[] VOID_KNIGHT_SUPPLY_REWARDS = {
@@ -409,7 +429,17 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	}
 
 	private void broadcastWin(Player winner) {
-		String message = "@mag@" + winner.getUsername() + " has defeated the Void Knight in the Death Match Arena!";
+		String message = "@mag@" + winner.getUsername() + " has defeated the Void Knight beneath the Void Enclave!";
+		for (Player player : winner.getWorld().getPlayers()) {
+			if (player != null && player.loggedIn()) {
+				player.message(message);
+			}
+		}
+	}
+
+	private void broadcastRareReward(Player winner, Item item) {
+		String itemName = item.getDef(winner.getWorld()).getName();
+		String message = "@mag@" + winner.getUsername() + " received " + itemName + " from the Void Knight!";
 		for (Player player : winner.getWorld().getPlayers()) {
 			if (player != null && player.loggedIn()) {
 				player.message(message);
@@ -427,7 +457,23 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			Item dragonPiece = new Item(rollWeightedItem(VOID_KNIGHT_DRAGON_REWARDS), 1);
 			giveReward(player, dragonPiece);
 			player.message("@red@The Void Knight yields a rare dragon component.");
+			broadcastRareReward(player, dragonPiece);
 		}
+
+		if (DataConversions.random(1, VOID_GEAR_CHANCE) == 1) {
+			Item voidGear = new Item(rollWeightedItem(VOID_KNIGHT_VOID_REWARDS), 1);
+			giveReward(player, voidGear);
+			PlayerTitle.unlock(player, PlayerTitle.VOID_TOUCHED);
+			player.message("@mag@The Void Knight's core collapses into void gear.");
+			broadcastRareReward(player, voidGear);
+		}
+	}
+
+	private void recordVoidKnightKill(Player player, Npc knight) {
+		player.setLastNpcKilledId(knight.getID());
+		player.incNpcKills();
+		player.addNpcKill(knight, true);
+		ActionSender.sendNpcKills(player);
 	}
 
 	private void giveReward(Player player, Item item) {
@@ -524,6 +570,11 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 		private long kiteUntilTick;
 		private long nextKiteStepTick;
 		private long nextBossLineTick;
+		private long nextRuptureTick;
+		private long nextDistancePressureMessageTick;
+		private long nextForcedReengageTick;
+		private int distancePressureTicks;
+		private VoidRupture rupture;
 		private boolean hasEnteredCombat;
 		private boolean finished;
 
@@ -536,10 +587,11 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 		private void start() {
 			long tick = player.getWorld().getServer().getCurrentTick();
 			VoidKnightBoss.begin(knight, player);
-			player.message("@mag@The death match begins.");
+			player.message("@mag@The Void Knight locks the chamber.");
 			player.message("The altar in the arena can recharge your prayer.");
 			player.getWorld().getServer().getGameEventHandler().add(event);
 			nextTacticTick = tick + 5;
+			nextRuptureTick = tick + 10;
 			knight.setChasing(player);
 		}
 
@@ -576,8 +628,115 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 				finishLoss("", false);
 				return;
 			}
-			runBossMovement(player.getWorld().getServer().getCurrentTick());
+			long tick = player.getWorld().getServer().getCurrentTick();
+			tickVoidRupture(tick);
+			applyDistancePressure(tick);
+			if (player.getSkills().getLevel(Skill.HITS.id()) <= 0 || finished) {
+				return;
+			}
+			runBossMovement(tick);
 			enforceReengageDelay();
+		}
+
+		private void tickVoidRupture(long tick) {
+			int phase = VoidKnightBoss.currentPhase(knight);
+			if (rupture != null) {
+				rupture.tick();
+				return;
+			}
+			if (phase < 2 || tick < nextRuptureTick) {
+				return;
+			}
+
+			rupture = new VoidRupture(player.getLocation(), phase);
+			nextRuptureTick = tick + ruptureDelay(phase);
+			knight.face(player);
+			knight.getUpdateFlags().setChatMessage(new com.openrsc.server.model.entity.update.ChatMessage(
+				knight, "The floor remembers your feet.", player));
+			player.message("@mag@Void energy gathers beneath you. Move!");
+		}
+
+		private int ruptureDelay(int phase) {
+			if (phase >= 3) {
+				return DataConversions.random(RUPTURE_PHASE_THREE_MIN_DELAY, RUPTURE_PHASE_THREE_MAX_DELAY);
+			}
+			return DataConversions.random(RUPTURE_PHASE_TWO_MIN_DELAY, RUPTURE_PHASE_TWO_MAX_DELAY);
+		}
+
+		private void applyDistancePressure(long tick) {
+			int distance = distance(knight.getLocation(), player.getLocation());
+			if (distance <= DISTANCE_PRESSURE_DISTANCE) {
+				distancePressureTicks = 0;
+				return;
+			}
+
+			distancePressureTicks++;
+			if (distancePressureTicks == DISTANCE_PRESSURE_WARNING_TICKS && tick >= nextDistancePressureMessageTick) {
+				player.message("@mag@Void pressure builds at the edge of the arena.");
+				nextDistancePressureMessageTick = tick + DISTANCE_PRESSURE_MESSAGE_DELAY;
+			}
+			if (distancePressureTicks < DISTANCE_PRESSURE_DAMAGE_TICKS) {
+				return;
+			}
+
+			int phase = VoidKnightBoss.currentPhase(knight);
+			int damage = phase >= 3 ? DataConversions.random(5, 11) : DataConversions.random(3, 8);
+			knight.face(player);
+			knight.getUpdateFlags().setChatMessage(new com.openrsc.server.model.entity.update.ChatMessage(
+				knight, "No hiding.", player));
+			player.message("@mag@The void punishes your distance.");
+			VoidKnightBoss.applyVoidDamage(knight, player, damage);
+			VoidKnightBoss.queueCastSoon(knight, 0);
+			distancePressureTicks = 0;
+		}
+
+		private final class VoidRupture {
+			private final Point center;
+			private final int phase;
+			private int warningTicks = RUPTURE_WARNING_TICKS;
+			private int activeTicks = RUPTURE_ACTIVE_TICKS;
+			private boolean hit;
+
+			private VoidRupture(Point center, int phase) {
+				this.center = Point.location(center.getX(), center.getY());
+				this.phase = phase;
+			}
+
+			private void tick() {
+				if (warningTicks > 0) {
+					warningTicks--;
+					if (warningTicks == 0) {
+						player.message("@mag@The void rupture opens.");
+					}
+					return;
+				}
+
+				if (activeTicks <= 0) {
+					rupture = null;
+					return;
+				}
+
+				if (!hit && distance(center, player.getLocation()) <= RUPTURE_RADIUS) {
+					hit = true;
+					int damage = phase >= 3 ? DataConversions.random(8, 15) : DataConversions.random(5, 11);
+					VoidKnightBoss.applyVoidDamage(knight, player, damage);
+					drainPrayer(phase >= 3 ? 4 : 2);
+					player.message("@mag@The rupture tears through you.");
+				}
+
+				activeTicks--;
+				if (activeTicks <= 0) {
+					rupture = null;
+				}
+			}
+
+			private void drainPrayer(int amount) {
+				int prayer = player.getSkills().getLevel(Skill.PRAYER.id());
+				if (prayer <= 0) {
+					return;
+				}
+				player.getSkills().setLevel(Skill.PRAYER.id(), Math.max(0, prayer - amount), true);
+			}
 		}
 
 		private void runBossMovement(long tick) {
@@ -616,7 +775,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			int knightHits = knight.getSkills().getLevel(Skill.HITS.id());
 			boolean underPressure = knightHits <= LOW_HITS_KITE_THRESHOLD
 				|| player.getHitsMade() > knight.getHitsMade() + 1;
-			return underPressure || DataConversions.random(0, 99) < 42;
+			return underPressure || DataConversions.random(0, 99) < RANDOM_KITE_CHANCE;
 		}
 
 		private void startKite(long tick, Point kiteTile) {
@@ -657,6 +816,9 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 					if (!PathValidation.checkPath(player.getWorld(), current, candidate)) {
 						continue;
 					}
+					if (!PathValidation.checkPath(player.getWorld(), candidate, playerLocation)) {
+						continue;
+					}
 
 					int edgeDistance = Math.min(
 						Math.min(x - FIGHT_MIN_X, FIGHT_MAX_X - x),
@@ -665,9 +827,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 						+ edgeDistance * 5
 						- distance(candidate, center) * 2
 						+ DataConversions.random(0, 4);
-					if (PathValidation.checkPath(player.getWorld(), candidate, playerLocation)) {
-						score += 20;
-					}
+					score += 20;
 					if (distanceFromPlayer <= distance(current, playerLocation)) {
 						score -= 18;
 					}
@@ -728,7 +888,15 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			if (tick < kiteUntilTick) {
 				return;
 			}
-			if (tick >= nextReengageTick && !knight.isChasing()) {
+			if (tick < nextReengageTick) {
+				return;
+			}
+			if (distance(knight.getLocation(), player.getLocation()) > 1 && tick >= nextForcedReengageTick) {
+				knight.resetPath();
+				knight.resetFollowing();
+				knight.setChasing(player);
+				nextForcedReengageTick = tick + REENGAGE_DELAY_TICKS;
+			} else if (!knight.isChasing()) {
 				knight.setChasing(player);
 			}
 		}
@@ -747,9 +915,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			finished = true;
 			sessions.remove(player.getUsernameHash());
 			event.stop();
-			PlayerTitle.unlock(player, PlayerTitle.VOIDBANE);
-			broadcastWin(player);
 			if (player.loggedIn()) {
+				recordVoidKnightKill(player, knight);
+				PlayerTitle.unlock(player, PlayerTitle.VOIDBANE);
+				broadcastWin(player);
 				player.message("You defeat the Void Knight.");
 				ActionSender.sendSound(player, "victory");
 				if (isInsideArena(player)) {

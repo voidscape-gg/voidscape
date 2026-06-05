@@ -11,6 +11,7 @@ public class PlayerAppearanceStruct extends AbstractStruct<OpcodeIn> {
 	public byte bodyType;
 	public byte mustEqual2;
 	public int hairColour;
+	public int hairStyle;
 	public int topColour;
 	public int trouserColour;
 	public int skinColour;

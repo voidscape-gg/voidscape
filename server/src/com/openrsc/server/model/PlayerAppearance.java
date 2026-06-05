@@ -7,10 +7,22 @@ import com.openrsc.server.net.rsc.ClientLimitations;
 import com.openrsc.server.util.rsc.DataConversions;
 
 public class PlayerAppearance {
+	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
+	public static final int MAX_HAIR_STYLE = 0;
+	public static final int DEFAULT_HAIR_COLOUR = 10;
+	public static final int DEFAULT_TOP_COLOUR = 15;
+	public static final int DEFAULT_TROUSER_COLOUR = 22;
+	public static final int DEFAULT_SKIN_COLOUR = 43;
+	public static final int MIN_HAIR_COLOUR = 10;
+	public static final int MAX_HAIR_COLOUR = 17;
+	public static final int MAX_CLOTHING_COLOUR = 22;
+	public static final int MAX_SKIN_COLOUR = 47;
+	public static final int MODERN_HAIR_BASE_HEAD = 1;
 
 	private boolean hideTrousers;
 	private int body;
 	private byte hairColour;
+	private int hairStyle;
 	private int head;
 	private byte skinColour;
 	private byte topColour;
@@ -43,16 +55,28 @@ public class PlayerAppearance {
 		0xB5FF1D, // easter ogre
 		0xA0C0C0, // silver man
 		0x608080, // coal woman
+
+		0xF2C8BA, // dawn
+		0xD99A8F, // rose
+		0xA76A45, // bronze
+		0x6D3F2C, // umber
+		0x9B9290, // ash
 	};
 
 	public PlayerAppearance(int hairColour, int topColour, int trouserColour,
 							int skinColour, int head, int body) {
+		this(hairColour, topColour, trouserColour, skinColour, head, body, 0);
+	}
+
+	public PlayerAppearance(int hairColour, int topColour, int trouserColour,
+							int skinColour, int head, int body, int hairStyle) {
 		this.hairColour = (byte) hairColour;
 		this.topColour = (byte) topColour;
 		this.trouserColour = (byte) trouserColour;
 		this.skinColour = (byte) skinColour;
 		this.setHead(head);
 		this.setBody(body);
+		this.setHairStyle(hairStyle);
 	}
 
 	public byte getHairColour() {
@@ -63,6 +87,22 @@ public class PlayerAppearance {
 
 	public byte getHairColourSave() {
 		return hairColour;
+	}
+
+	public int getHairStyle() {
+		return hairStyle;
+	}
+
+	public void setHairStyle(int hairStyle) {
+		if (!supportsModernHairStyleHead()) {
+			this.hairStyle = 0;
+			return;
+		}
+		this.hairStyle = Math.max(0, Math.min(MAX_HAIR_STYLE, hairStyle));
+	}
+
+	private boolean supportsModernHairStyleHead() {
+		return head == MODERN_HAIR_BASE_HEAD;
 	}
 
 	private byte getNearestHairColour(int hairColour) {
@@ -147,6 +187,11 @@ public class PlayerAppearance {
 			|| skinColour < 0) {
 			return false;
 		}
+		if (hairColour < MIN_HAIR_COLOUR || hairColour > MAX_HAIR_COLOUR
+			|| topColour > MAX_CLOTHING_COLOUR || trouserColour > MAX_CLOTHING_COLOUR
+			|| skinColour > MAX_SKIN_COLOUR) {
+			return false;
+		}
 		if (skinColour > 4) {
 			if (skinColour >= playerSkinColors.length) {
 				return false;
@@ -155,10 +200,13 @@ public class PlayerAppearance {
 			if (!player.isLoggedIn()) {
 				return player.supportsPlayerUnlockedAppearancesPacket();
 			}
+			if (player.getUnlockedSkinColours() == null || skinColour >= player.getUnlockedSkinColours().length) {
+				return false;
+			}
 
 			return player.getUnlockedSkinColours()[skinColour];
 		}
-		return hairColour <= 9 && topColour <= 14 && trouserColour <= 14;
+		return true;
 	}
 
 	public int getHead() {
@@ -167,6 +215,9 @@ public class PlayerAppearance {
 
 	public void setHead(int head) {
 		this.head = head;
+		if (!supportsModernHairStyleHead()) {
+			this.hairStyle = 0;
+		}
 	}
 
 	public int getBody() {

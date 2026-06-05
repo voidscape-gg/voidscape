@@ -31,7 +31,7 @@ public final class VoidRushConfig {
 	/*
 	 * Christmas cracker already exists as item 575 in this codebase. The wave
 	 * object uses the classic "shock" cosmic-energy object as a placeholder
-	 * until a dedicated Void Rift/Void Surge object is added.
+	 * until a dedicated Void Rush wave object is added.
 	 */
 	public static final int CHRISTMAS_CRACKER_ID = ItemId.CHRISTMAS_CRACKER.id();
 	public static final int VOID_WAVE_OBJECT_ID = 1022;

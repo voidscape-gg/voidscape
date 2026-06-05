@@ -7,6 +7,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
 import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
@@ -31,7 +32,6 @@ import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.UnregisterForcefulness;
 import com.openrsc.server.model.entity.npc.Npc;
-import com.openrsc.server.model.entity.player.Group;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.PlayerSettings;
 import com.openrsc.server.model.snapshot.Snapshot;
@@ -1125,65 +1125,32 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			GlobalMessage gm;
 			while ((gm = getServer().getWorld().getNextGlobalMessage()) != null) {
 				for (final Player player : getPlayers()) {
-					if (player == gm.getPlayer()) {
-						player.getWorld().getServer().getGameLogger().addQuery(new PMLog(player.getWorld(), player.getUsername(), gm.getMessage(),
-							"Global$"));
-						if (player.getCache().hasKey("private_message_global")) {
-							ActionSender.sendPrivateMessageSent(gm.getPlayer(), -1L, gm.getMessage(), true);
+						if (player == gm.getPlayer()) {
+							player.getWorld().getServer().getGameLogger().addQuery(new PMLog(player.getWorld(), player.getUsername(), gm.getMessage(),
+								"Global$"));
+							ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
 						} else {
-							ActionSender.sendMessage(player, null, MessageType.QUEST, formatGlobalQuestMessage(gm, player), 0, "");
-						}
-					} else {
-						if (!player.getBlockGlobalFriend()) {
-							boolean blockNone = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
-								== PlayerSettings.BlockingMode.None.id();
-							boolean blockNonFriend = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
-								== PlayerSettings.BlockingMode.NonFriends.id();
-							if ((blockNone || blockNonFriend) && !player.getSocial().isIgnoring(gm.getPlayer().getUsernameHash()) || gm.getPlayer().isMod()) {
-								if (player.getCache().hasKey("private_message_global")) {
-									ActionSender.sendPrivateMessageReceived(player, gm.getPlayer(), gm.getMessage(), true);
-								} else {
-									ActionSender.sendMessage(player, null, MessageType.QUEST, formatGlobalQuestMessage(gm, player), 0, "");
+							if (!player.getBlockGlobalFriend()) {
+								boolean blockNone = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
+									== PlayerSettings.BlockingMode.None.id();
+								boolean blockNonFriend = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
+									== PlayerSettings.BlockingMode.NonFriends.id();
+								if ((blockNone || blockNonFriend) && !player.getSocial().isIgnoring(gm.getPlayer().getUsernameHash()) || gm.getPlayer().isMod()) {
+									ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
 								}
 							}
 						}
-					}
 				}
 			}
 		});
 	}
 
-	private String formatGlobalQuestMessage(GlobalMessage gm, Player playerSentTo) {
+	private String formatGlobalQuestMessage(GlobalMessage gm) {
 		StringBuilder returnMessage = new StringBuilder();
-
-		String globalMessageColor = "@cya@";
-		if (playerSentTo.getCache().hasKey("global_message_color")) {
-			globalMessageColor = playerSentTo.getCache().getString("global_message_color");
-		}
-
-		returnMessage.append(globalMessageColor);
-		returnMessage.append("Global$");
-
-		// moderators get a prefix
-		String groupPrefix = Group.getGlobalMessageName(gm.getPlayer().getGroupID());
-		if (!groupPrefix.equals("")) {
-			returnMessage.append("@ora@[");
-			if (gm.getPlayer().getGroupID() == Group.PLAYER_MOD) {
-				returnMessage.append("@whi@");
-			} else {
-				returnMessage.append("@yel@");
-			}
-			returnMessage.append(groupPrefix);
-			returnMessage.append("@ora@]");
-		} else {
-			returnMessage.append("@ora@");
-		}
-
-		// username is added
-		returnMessage.append("[@gre@");
+		returnMessage.append(GlobalChatIpFlags.flagTokenFor(gm.getPlayer()));
+		returnMessage.append("@gre@");
 		returnMessage.append(gm.getPlayer().getUsername());
-		returnMessage.append("@ora@]: ");
-		returnMessage.append(globalMessageColor);
+		returnMessage.append(": @whi@");
 
 		// actual message appended, with stripped positional codes
 		returnMessage.append(gm.getMessage().replaceAll("~...~", ""));

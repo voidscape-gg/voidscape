@@ -18,15 +18,26 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 	private static final int KNIGHT_ID = NpcId.VOID_KNIGHT_ARENA.id();
 	private static final int KNIGHT_HITS = 99;
 	private static final int KNIGHT_STRENGTH_BOOSTED = 118;
+	private static final int KNIGHT_STRENGTH_PHASE_TWO = 124;
+	private static final int KNIGHT_STRENGTH_PHASE_THREE = 132;
 	private static final int KNIGHT_SWORDFISH = 22;
 	private static final int SWORDFISH_HEAL = 14;
 	private static final int EAT_AT_HITS = 42;
 	private static final int FIRE_BLAST_MAX = 12;
-	private static final int FIRE_BLAST_DELAY = 4;
+	private static final int FIRE_BLAST_DELAY = 6;
+	private static final int FIRE_BLAST_PHASE_TWO_MAX = 14;
+	private static final int FIRE_BLAST_PHASE_THREE_MAX = 16;
 	private static final int PRAYER_SWITCH_DELAY = 3;
 	private static final int MAGIC_DISTANCE = 8;
+	private static final int FINAL_PHASE_MAGIC_DISTANCE = 10;
 	private static final int KNIGHT_MAGIC = 99;
 	private static final int KNIGHT_MAGIC_BONUS = 6;
+	private static final int PHASE_TWO_HITS = 66;
+	private static final int PHASE_THREE_HITS = 33;
+	private static final int VOID_SIPHON_PHASE_TWO_MIN_DELAY = 14;
+	private static final int VOID_SIPHON_PHASE_TWO_MAX_DELAY = 18;
+	private static final int VOID_SIPHON_PHASE_THREE_MIN_DELAY = 10;
+	private static final int VOID_SIPHON_PHASE_THREE_MAX_DELAY = 14;
 
 	private static final int STYLE_NONE = -1;
 	private static final int STYLE_MELEE = 0;
@@ -37,8 +48,10 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 	private static final String SWORDFISH_ATTRIBUTE = "void_knight_boss_swordfish";
 	private static final String OBSERVED_HITS_ATTRIBUTE = "void_knight_boss_observed_hits";
 	private static final String PRAYER_ATTRIBUTE = "void_knight_boss_prayer";
+	private static final String PHASE_ATTRIBUTE = "void_knight_boss_phase";
 	private static final String NEXT_PRAYER_TICK_ATTRIBUTE = "void_knight_boss_next_prayer_tick";
 	private static final String NEXT_CAST_TICK_ATTRIBUTE = "void_knight_boss_next_cast_tick";
+	private static final String NEXT_SIPHON_TICK_ATTRIBUTE = "void_knight_boss_next_siphon_tick";
 
 	@Override
 	public void executeScript(Mob attacker, Mob victim) {
@@ -69,8 +82,10 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		knight.setAttribute(SWORDFISH_ATTRIBUTE, KNIGHT_SWORDFISH);
 		knight.setAttribute(OBSERVED_HITS_ATTRIBUTE, knight.getSkills().getLevel(Skill.HITS.id()));
 		knight.setAttribute(PRAYER_ATTRIBUTE, STYLE_NONE);
+		knight.setAttribute(PHASE_ATTRIBUTE, 1);
 		knight.setAttribute(NEXT_PRAYER_TICK_ATTRIBUTE, tick + PRAYER_SWITCH_DELAY);
 		knight.setAttribute(NEXT_CAST_TICK_ATTRIBUTE, tick + FIRE_BLAST_DELAY);
+		knight.setAttribute(NEXT_SIPHON_TICK_ATTRIBUTE, tick + VOID_SIPHON_PHASE_TWO_MAX_DELAY);
 		knight.getSkills().setLevel(Skill.STRENGTH.id(), KNIGHT_STRENGTH_BOOSTED, false);
 		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight,
 			"I drink the strength potion. Ultimate strength.", player));
@@ -93,16 +108,59 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		}
 
 		begin(knight, player);
-		handleIncomingDamage(knight, player);
+		int phase = updatePhase(knight, player);
+		handleIncomingDamage(knight, player, phase);
 		eatIfNeeded(knight, player);
-		updatePrayer(knight, player);
+		updatePrayer(knight, player, phase);
+		handleVoidSiphonIfReady(knight, player, phase);
 		if (allowCast) {
-			castIfReady(knight, player);
+			castIfReady(knight, player, phase);
 		}
 		knight.setAttribute(OBSERVED_HITS_ATTRIBUTE, knight.getSkills().getLevel(Skill.HITS.id()));
 	}
 
-	private static void handleIncomingDamage(Npc knight, Player player) {
+	public static int currentPhase(Npc knight) {
+		if (!isBossKnight(knight)) {
+			return 1;
+		}
+		int hits = knight.getSkills().getLevel(Skill.HITS.id());
+		int phase;
+		if (hits <= PHASE_THREE_HITS) {
+			phase = 3;
+		} else if (hits <= PHASE_TWO_HITS) {
+			phase = 2;
+		} else {
+			phase = 1;
+		}
+		return Math.max(phase, knight.getAttribute(PHASE_ATTRIBUTE, phase));
+	}
+
+	private static int updatePhase(Npc knight, Player player) {
+		int computedPhase = currentPhase(knight);
+		int previousPhase = knight.getAttribute(PHASE_ATTRIBUTE, 1);
+		int phase = Math.max(previousPhase, computedPhase);
+		if (phase == previousPhase) {
+			return phase;
+		}
+
+		long tick = knight.getWorld().getServer().getCurrentTick();
+		knight.setAttribute(PHASE_ATTRIBUTE, phase);
+		knight.setAttribute(NEXT_PRAYER_TICK_ATTRIBUTE, tick + 1);
+		knight.setAttribute(NEXT_CAST_TICK_ATTRIBUTE, tick + 1);
+		knight.setAttribute(NEXT_SIPHON_TICK_ATTRIBUTE, tick + 3);
+		if (phase == 2) {
+			knight.getSkills().setLevel(Skill.STRENGTH.id(), KNIGHT_STRENGTH_PHASE_TWO, false);
+			knight.getUpdateFlags().setChatMessage(new ChatMessage(knight,
+				"The void starts answering me.", player));
+		} else {
+			knight.getSkills().setLevel(Skill.STRENGTH.id(), KNIGHT_STRENGTH_PHASE_THREE, false);
+			knight.getUpdateFlags().setChatMessage(new ChatMessage(knight,
+				"No more measured blows.", player));
+		}
+		return phase;
+	}
+
+	private static void handleIncomingDamage(Npc knight, Player player, int phase) {
 		int currentHits = knight.getSkills().getLevel(Skill.HITS.id());
 		int observedHits = knight.getAttribute(OBSERVED_HITS_ATTRIBUTE, currentHits);
 		int lost = observedHits - currentHits;
@@ -110,14 +168,19 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 			return;
 		}
 		int style = inferPlayerStyle(player);
-		if (style == STYLE_MELEE || knight.getAttribute(PRAYER_ATTRIBUTE, STYLE_NONE) != style) {
+		if (knight.getAttribute(PRAYER_ATTRIBUTE, STYLE_NONE) != style) {
 			return;
 		}
 
-		int restored = Math.max(1, (lost * 2) / 5);
+		int restored = style == STYLE_MELEE
+			? Math.max(1, lost / 4)
+			: Math.max(1, (lost * 2) / 5);
+		if (phase >= 3 && style != STYLE_MELEE) {
+			restored = Math.max(restored, lost / 2);
+		}
 		int newHits = Math.min(KNIGHT_HITS, currentHits + restored);
 		knight.getSkills().setLevel(Skill.HITS.id(), newHits, false);
-		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, "Protection prayer absorbs some of it.", player));
+		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, "The void eats part of the strike.", player));
 	}
 
 	private static void eatIfNeeded(Npc knight, Player player) {
@@ -131,7 +194,7 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, "I eat a swordfish.", player));
 	}
 
-	private static void updatePrayer(Npc knight, Player player) {
+	private static void updatePrayer(Npc knight, Player player, int phase) {
 		long tick = knight.getWorld().getServer().getCurrentTick();
 		long nextPrayerTick = knight.getAttribute(NEXT_PRAYER_TICK_ATTRIBUTE, 0L);
 		if (tick < nextPrayerTick) {
@@ -139,7 +202,7 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		}
 
 		int style = inferPlayerStyle(player);
-		if (style == STYLE_MELEE) {
+		if (style == STYLE_MELEE && phase < 3) {
 			if (knight.getAttribute(PRAYER_ATTRIBUTE, STYLE_NONE) != STYLE_NONE) {
 				knight.setAttribute(PRAYER_ATTRIBUTE, STYLE_NONE);
 				knight.setAttribute(NEXT_PRAYER_TICK_ATTRIBUTE, tick + PRAYER_SWITCH_DELAY);
@@ -159,24 +222,69 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		} else if (style == STYLE_MAGIC) {
 			prayer = "Protect from magic.";
 		} else {
-			prayer = "Paralyze monster.";
+			prayer = "Void guard.";
 		}
 		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, prayer, player));
 	}
 
-	private static void castIfReady(Npc knight, Player player) {
-		long tick = knight.getWorld().getServer().getCurrentTick();
-		long nextCastTick = knight.getAttribute(NEXT_CAST_TICK_ATTRIBUTE, 0L);
-		if (tick < nextCastTick || !canCastFromHere(knight, player)) {
+	private static void handleVoidSiphonIfReady(Npc knight, Player player, int phase) {
+		if (phase < 2) {
 			return;
 		}
 
-		knight.setAttribute(NEXT_CAST_TICK_ATTRIBUTE, tick + FIRE_BLAST_DELAY);
+		long tick = knight.getWorld().getServer().getCurrentTick();
+		long nextSiphonTick = knight.getAttribute(NEXT_SIPHON_TICK_ATTRIBUTE, 0L);
+		if (tick < nextSiphonTick || !canCastFromHere(knight, player, phase)) {
+			return;
+		}
+
+		int delay = phase >= 3
+			? DataConversions.random(VOID_SIPHON_PHASE_THREE_MIN_DELAY, VOID_SIPHON_PHASE_THREE_MAX_DELAY)
+			: DataConversions.random(VOID_SIPHON_PHASE_TWO_MIN_DELAY, VOID_SIPHON_PHASE_TWO_MAX_DELAY);
+		knight.setAttribute(NEXT_SIPHON_TICK_ATTRIBUTE, tick + delay);
 		knight.face(player);
-		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, "Fire blast!", player));
+		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, "Void siphon.", player));
 		knight.getUpdateFlags().setProjectile(new Projectile(knight, player, 1));
 		ActionSender.sendSound(player, "spellok");
-		int damage = magicHits(player) ? DataConversions.random(0, FIRE_BLAST_MAX) : 0;
+
+		int prayer = player.getSkills().getLevel(Skill.PRAYER.id());
+		int drain = Math.min(prayer, DataConversions.random(phase >= 3 ? 4 : 2, phase >= 3 ? 7 : 5));
+		if (drain > 0) {
+			player.getSkills().setLevel(Skill.PRAYER.id(), prayer - drain, true);
+			int currentHits = knight.getSkills().getLevel(Skill.HITS.id());
+			int healed = Math.min(KNIGHT_HITS, currentHits + Math.max(2, drain / 2 + 1));
+			knight.getSkills().setLevel(Skill.HITS.id(), healed, false);
+			player.message("@mag@The Void Knight siphons your prayer.");
+		} else {
+			player.message("@mag@The Void Knight searches for prayer to siphon.");
+		}
+
+		int damage = DataConversions.random(0, phase >= 3 ? 6 : 4);
+		if (damage > 0) {
+			applyPlayerDamage(knight, player, damage);
+		}
+	}
+
+	private static void castIfReady(Npc knight, Player player, int phase) {
+		long tick = knight.getWorld().getServer().getCurrentTick();
+		long nextCastTick = knight.getAttribute(NEXT_CAST_TICK_ATTRIBUTE, 0L);
+		if (tick < nextCastTick || !canCastFromHere(knight, player, phase)) {
+			return;
+		}
+
+		knight.setAttribute(NEXT_CAST_TICK_ATTRIBUTE, tick + fireBlastDelay(phase));
+		knight.face(player);
+		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, phase >= 3 ? "Void flame!" : "Fire blast!", player));
+		knight.getUpdateFlags().setProjectile(new Projectile(knight, player, 1));
+		ActionSender.sendSound(player, "spellok");
+		int damage = magicHits(player) ? DataConversions.random(0, fireBlastMax(phase)) : 0;
+		applyPlayerDamage(knight, player, damage);
+	}
+
+	public static void applyVoidDamage(Npc knight, Player player, int damage) {
+		if (!isBossKnight(knight) || player == null) {
+			return;
+		}
 		applyPlayerDamage(knight, player, damage);
 	}
 
@@ -191,8 +299,29 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		}
 	}
 
-	private static boolean canCastFromHere(Npc knight, Player player) {
-		return distanceToPlayer(knight, player) <= MAGIC_DISTANCE
+	private static int fireBlastDelay(int phase) {
+		if (phase >= 3) {
+			return 4;
+		}
+		if (phase == 2) {
+			return 5;
+		}
+		return FIRE_BLAST_DELAY;
+	}
+
+	private static int fireBlastMax(int phase) {
+		if (phase >= 3) {
+			return FIRE_BLAST_PHASE_THREE_MAX;
+		}
+		if (phase == 2) {
+			return FIRE_BLAST_PHASE_TWO_MAX;
+		}
+		return FIRE_BLAST_MAX;
+	}
+
+	private static boolean canCastFromHere(Npc knight, Player player, int phase) {
+		int maxDistance = phase >= 3 ? FINAL_PHASE_MAGIC_DISTANCE : MAGIC_DISTANCE;
+		return distanceToPlayer(knight, player) <= maxDistance
 			&& PathValidation.checkPath(player.getWorld(), knight.getLocation(), player.getLocation());
 	}
 

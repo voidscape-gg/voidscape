@@ -126,6 +126,10 @@ public class ServerConfiguration {
 	public boolean WANT_GLOBAL_FRIEND;
 	public boolean WANT_GLOBAL_RULES_AGREEMENT;
 	public String[] GLOBAL_RULES;
+	public boolean WANT_GLOBAL_CHAT_COUNTRY_FLAGS;
+	public String GLOBAL_CHAT_COUNTRY_LOOKUP_URL;
+	public int GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS;
+	public String GLOBAL_CHAT_LOCAL_COUNTRY_CODE;
 	public int GLOBAL_MESSAGE_COOLDOWN;
 	public int GLOBAL_MESSAGE_TOTAL_LEVEL_REQ;
 	public int GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ;
@@ -605,6 +609,10 @@ public class ServerConfiguration {
 		WANT_GLOBAL_CHAT = tryReadBool("want_global_chat").orElse(false);
 		WANT_GLOBAL_FRIEND = tryReadBool("want_global_friend").orElse(false);
 		WANT_GLOBAL_RULES_AGREEMENT = tryReadBool("want_global_rules_agreement").orElse(false);
+		WANT_GLOBAL_CHAT_COUNTRY_FLAGS = tryReadBool("want_global_chat_country_flags").orElse(true);
+		GLOBAL_CHAT_COUNTRY_LOOKUP_URL = tryReadString("global_chat_country_lookup_url").orElse("https://api.country.is/%s");
+		GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS = tryReadInt("global_chat_country_lookup_timeout_ms").orElse(1500);
+		GLOBAL_CHAT_LOCAL_COUNTRY_CODE = tryReadString("global_chat_local_country_code").orElse("");
 		if (WANT_GLOBAL_RULES_AGREEMENT) {
 			readGlobalRules("globalrules.txt");
 		}

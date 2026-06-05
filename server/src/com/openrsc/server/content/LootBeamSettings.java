@@ -181,6 +181,7 @@ public final class LootBeamSettings {
 			ItemId.DRAGON_METAL_CHAIN,
 			ItemId.DRAGON_SCALE_MAIL,
 			ItemId.DRAGON_SCALE_MAIL_TOP,
+			ItemId.VOID_SCIMITAR,
 			ItemId.VOID_BOW,
 			ItemId.VOID_AMULET,
 			ItemId.VOID_MACE,

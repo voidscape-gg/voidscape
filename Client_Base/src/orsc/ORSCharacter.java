@@ -13,6 +13,7 @@ public final class ORSCharacter {
 	public int bubbleTimeout = 0;
 	public int colourBottom;
 	public int colourHair;
+	public int hairStyle = 0;
 	public int colourSkin;
 	public int colourTop;
 	public int combatTimeout = 0;

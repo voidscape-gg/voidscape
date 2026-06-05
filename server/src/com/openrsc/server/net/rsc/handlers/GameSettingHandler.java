@@ -1,5 +1,6 @@
 package com.openrsc.server.net.rsc.handlers;
 
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.PlayerSettings;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -114,6 +115,8 @@ public final class GameSettingHandler implements PayloadProcessor<GameSettingStr
 				player.getCache().store("setting_hd_water_shimmer", value == 1);
 			} else if (idx == 55) {
 				player.getCache().store("setting_hd_sunlight", value == 1);
+			} else if (idx == GlobalChatIpFlags.SETTING_SHOW_COUNTRY_FLAG) {
+				GlobalChatIpFlags.setShow(player, value == 1);
 			}
 			return;
 		}

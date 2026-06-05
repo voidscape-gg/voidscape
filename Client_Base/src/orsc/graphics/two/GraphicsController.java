@@ -13,6 +13,12 @@ import orsc.mudclient;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -20,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import javax.imageio.ImageIO;
 
 public class GraphicsController {
 
@@ -57,9 +64,13 @@ public class GraphicsController {
 	private int[] m_Tb;
 	private int[] m_Wb;
 	public Map<String, Map<String, Entry>> spriteTree = new HashMap<>();
+	private final Map<String, int[]> countryFlagIcons = new HashMap<>();
 	// public int[][] image2D_pixels;
 	private int[] m_Xb;
 	private ZipFile spriteArchive;
+	private static final int COUNTRY_FLAG_WIDTH = 13;
+	private static final int COUNTRY_FLAG_HEIGHT = 10;
+	private static final int COUNTRY_FLAG_ADVANCE = 15;
 
 	GraphicsController(int var1, int var2, int var3) {
 		try {
@@ -601,8 +612,13 @@ public class GraphicsController {
 							int var24 = ('\uff60' & var9) >> 8;
 							int var25 = 255 & var9;
 							if (var23 == var24 && var25 == var24) {
-								letterPlotTable[var7++] = (var23 * var16 >> 8 << 16) + (var17 * var24 >> 8 << 8)
-									+ (var25 * var18 >> 8);
+								int lusterColour = voidscapeMaskLusterColour(var23, var14);
+								if (lusterColour >= 0) {
+									letterPlotTable[var7++] = lusterColour;
+								} else {
+									letterPlotTable[var7++] = (var23 * var16 >> 8 << 16) + (var17 * var24 >> 8 << 8)
+										+ (var25 * var18 >> 8);
+								}
 							} else {
 								letterPlotTable[var7++] = var9;
 							}
@@ -825,7 +841,10 @@ public class GraphicsController {
 				int lastBreak = 0;
 
 				for (int i = 0; str.length() > i; ++i) {
-					if (str.charAt(i) == '@' && 4 + i < str.length() && str.charAt(i + 4) == '@') {
+					if (isCountryFlagToken(str, i)) {
+						width += COUNTRY_FLAG_ADVANCE;
+						i += 6;
+					} else if (str.charAt(i) == '@' && 4 + i < str.length() && str.charAt(i + 4) == '@') {
 						i += 4;
 					} else if (str.charAt(i) == '~' && str.length() > 4 + i && str.charAt(4 + i) == '~') {
 						i += 4;
@@ -991,6 +1010,115 @@ public class GraphicsController {
 		plot_trans_scale_with_2_masks(dest, src, destColumnCount, destColumnSkewPerRow, destFirstColumn, dummy1, dummy2, mask2, scaleY, scaleX, srcStartX, skipEveryOther, srcStartY, srcWidth, mask1, destHeight, destRowHead, 0xFFFFFFFF, 0);
 	}
 
+	private static int voidscapeMaskLusterColour(int shade, int mask) {
+		switch (mask & 0xFFFFFF) {
+			case 0x6A0DAD:
+			case 0x7EDAE6:
+			case 0xB2181E:
+			case 0xE66917:
+			case 0xDAAD36:
+			case 0x5BCC3D:
+			case 0xABBEDB:
+			case 0x3D3D48:
+				return threeShadeColour(mask, sweptHairShade(shade));
+			case 0x4A2C6F:
+			case 0x5F8D94:
+			case 0x7E2B31:
+			case 0x92512E:
+			case 0xA07F3A:
+			case 0x4E7F3F:
+			case 0x7B869D:
+			case 0x34343B:
+				return threeShadeColour(mask, clothingShade(shade));
+			default:
+				return -1;
+		}
+	}
+
+	private static int voidscapeSkinLusterColour(int shade, int mask) {
+		switch (mask & 0xFFFFFF) {
+			case 0xF2C8BA:
+			case 0xD99A8F:
+			case 0xA76A45:
+			case 0x6D3F2C:
+			case 0x9B9290:
+				return threeShadeColour(mask, skinShade(shade));
+			default:
+				return -1;
+		}
+	}
+
+	private static int sweptHairShade(int shade) {
+		switch (shade) {
+			case 16:
+			case 27:
+			case 76:
+			case 90:
+			case 103:
+			case 109:
+			case 156:
+			case 201:
+				return 0x5C;
+			case 121:
+			case 130:
+			case 132:
+			case 135:
+			case 173:
+			case 232:
+				return 0x8A;
+			case 159:
+			case 160:
+			case 163:
+			case 166:
+			case 191:
+			case 205:
+			case 244:
+			case 255:
+				return 0xFF;
+			default:
+				if (shade < 120) {
+					return 0x5C;
+				}
+				if (shade < 150) {
+					return 0x8A;
+				}
+				return 0xFF;
+		}
+	}
+
+	private static int skinShade(int shade) {
+		if (shade < 100) {
+			return 0x76;
+		}
+		if (shade < 180) {
+			return 0xB0;
+		}
+		return 0xFF;
+	}
+
+	private static int clothingShade(int shade) {
+		if (shade < 80) {
+			return 0x58;
+		}
+		if (shade < 120) {
+			return 0x72;
+		}
+		if (shade < 155) {
+			return 0x8C;
+		}
+		if (shade < 205) {
+			return 0xA6;
+		}
+		return 0xBE;
+	}
+
+	private static int threeShadeColour(int mask, int shade) {
+		int red = ((mask >> 16 & 0xFF) * shade) / 255;
+		int green = ((mask >> 8 & 0xFF) * shade) / 255;
+		int blue = ((mask & 0xFF) * shade) / 255;
+		return (red << 16) | (green << 8) | blue;
+	}
+
 	/**
 	 * @param src                  source pixel data
 	 * @param mask1                background color to show through when the source data is [x,
@@ -1065,13 +1193,27 @@ public class GraphicsController {
 
 								// Is the colour from the sprite gray?
 								if (spritePixelR == spritePixelG && spritePixelG == spritePixelB) {
-									spritePixelR = (spritePixelR * mask1R) >> 8;
-									spritePixelG = (spritePixelG * mask1G) >> 8;
-									spritePixelB = (spritePixelB * mask1B) >> 8;
+									int lusterColour = voidscapeMaskLusterColour(spritePixelR, mask1);
+									if (lusterColour >= 0) {
+										spritePixelR = lusterColour >> 16 & 0xFF;
+										spritePixelG = lusterColour >> 8 & 0xFF;
+										spritePixelB = lusterColour & 0xFF;
+									} else {
+										spritePixelR = (spritePixelR * mask1R) >> 8;
+										spritePixelG = (spritePixelG * mask1G) >> 8;
+										spritePixelB = (spritePixelB * mask1B) >> 8;
+									}
 								} else if (spritePixelR == 255 && spritePixelG == spritePixelB) { // Is sprite colour full white?
-									spritePixelR = (spritePixelR * mask2R) >> 8;
-									spritePixelG = (spritePixelG * mask2G) >> 8;
-									spritePixelB = (spritePixelB * mask2B) >> 8;
+									int lusterColour = voidscapeSkinLusterColour(spritePixelG, mask2);
+									if (lusterColour >= 0) {
+										spritePixelR = lusterColour >> 16 & 0xFF;
+										spritePixelG = lusterColour >> 8 & 0xFF;
+										spritePixelB = lusterColour & 0xFF;
+									} else {
+										spritePixelR = (spritePixelR * mask2R) >> 8;
+										spritePixelG = (spritePixelG * mask2G) >> 8;
+										spritePixelB = (spritePixelB * mask2B) >> 8;
+									}
 								} else if (blueMask != 0xFFFFFF && spritePixelR == spritePixelG && spritePixelB != spritePixelG) {
 									int blueMaskR = blueMask >> 16 & 0xFF;
 									int blueMaskG = blueMask >> 8 & 0xFF;
@@ -1528,6 +1670,96 @@ public class GraphicsController {
 		return (r << 16) + (g << 8) + b;
 	}
 
+	public final void drawArgbSpriteClipping(Sprite sprite, int x, int y, int width, int height,
+											 boolean mirrorX, int topPixelSkew, int colourTransform) {
+		if (sprite == null || sprite.getPixels() == null || width <= 0 || height <= 0) return;
+
+		int spriteWidth = sprite.getWidth();
+		int spriteHeight = sprite.getHeight();
+		if (spriteWidth <= 0 || spriteHeight <= 0) return;
+
+		int srcStartX = 0;
+		int srcStartY = 0;
+		int destFirstColumn = topPixelSkew << 16;
+		int scaleX = (spriteWidth << 16) / width;
+		int scaleY = (spriteHeight << 16) / height;
+		int destColumnSkewPerRow = -(topPixelSkew << 16) / height;
+
+		if (sprite.requiresShift()) {
+			int logicalWidth = sprite.getSomething1();
+			int logicalHeight = sprite.getSomething2();
+			if (logicalWidth == 0 || logicalHeight == 0) return;
+
+			scaleX = (logicalWidth << 16) / width;
+			scaleY = (logicalHeight << 16) / height;
+			int xShift = sprite.getXShift();
+			if (mirrorX) {
+				xShift = logicalWidth - spriteWidth - xShift;
+			}
+			int yShift = sprite.getYShift();
+
+			x += (logicalWidth + xShift * width - 1) / logicalWidth;
+			int yDelta = (yShift * height + logicalHeight - 1) / logicalHeight;
+			y += yDelta;
+			destFirstColumn += yDelta * destColumnSkewPerRow;
+
+			if (xShift * width % logicalWidth != 0) {
+				srcStartX = ((logicalWidth - width * xShift % logicalWidth) << 16) / width;
+			}
+			if (yShift * height % logicalHeight != 0) {
+				srcStartY = ((logicalHeight - height * yShift % logicalHeight) << 16) / height;
+			}
+
+			width = (scaleX + ((spriteWidth << 16) - (srcStartX + 1))) / scaleX;
+			height = ((spriteHeight << 16) - srcStartY - (1 - scaleY)) / scaleY;
+		}
+
+		if (width <= 0 || height <= 0) return;
+
+		final int opacity = colourTransform >>> 24 & 0xFF;
+		final int transformR = colourTransform >>> 16 & 0xFF;
+		final int transformG = colourTransform >>> 8 & 0xFF;
+		final int transformB = colourTransform & 0xFF;
+		final int[] src = sprite.getPixels();
+		destFirstColumn += x << 16;
+
+		for (int row = 0; row < height; row++) {
+			int destY = y + row;
+			if (destY < this.clipTop || destY >= this.clipBottom) continue;
+			int srcY = (srcStartY + row * scaleY) >> 16;
+			if (srcY < 0 || srcY >= spriteHeight) continue;
+
+			int destXFixed = destFirstColumn + row * destColumnSkewPerRow;
+			int srcXFixed = mirrorX ? ((spriteWidth << 16) - srcStartX - 1) : srcStartX;
+			int srcXStep = mirrorX ? -scaleX : scaleX;
+
+			for (int col = 0; col < width; col++) {
+				int destX = (destXFixed >> 16) + col;
+				int srcX = srcXFixed >> 16;
+				srcXFixed += srcXStep;
+				if (destX < this.clipLeft || destX >= this.clipRight || srcX < 0 || srcX >= spriteWidth) continue;
+
+				int argb = src[srcY * spriteWidth + srcX];
+				int alpha = argb >>> 24 & 0xFF;
+				if (alpha == 0) continue;
+
+				int color = argb & 0xFFFFFF;
+				if (opacity < 255 || colourTransform != 0xFFFFFFFF) {
+					alpha = alpha * opacity / 255;
+					color = (((color >> 16 & 0xFF) * transformR / 255) << 16)
+						| (((color >> 8 & 0xFF) * transformG / 255) << 8)
+						| ((color & 0xFF) * transformB / 255);
+				}
+				if (alpha <= 0) continue;
+
+				int destIndex = destX + this.width2 * destY;
+				this.pixelData[destIndex] = alpha >= 250
+					? color
+					: mixAlpha(this.pixelData[destIndex], color, alpha + 1);
+			}
+		}
+	}
+
 	public final void drawBoxBorder(int x, int width, int y, int height, int color) {
 		try {
 			this.drawLineHoriz(x, y, width, color);
@@ -1627,7 +1859,11 @@ public class GraphicsController {
 				byte[] fontData = Fonts.fontData[font];
 
 				for (int i = 0; str.length() > i; ++i) {
-					if (str.charAt(i) == '@' && i + 4 < str.length() && str.charAt(i + 4) == '@') {
+					if (isCountryFlagToken(str, i)) {
+						drawCountryFlagToken(countryFlagCode(str, i), x, y);
+						x += COUNTRY_FLAG_ADVANCE;
+						i += 6;
+					} else if (str.charAt(i) == '@' && i + 4 < str.length() && str.charAt(i + 4) == '@') {
 						final String key = str.substring(i + 1, i + 4);
 						if (key.equalsIgnoreCase("red")) {
 							color = 0xFF0000;
@@ -2338,6 +2574,158 @@ public class GraphicsController {
 		this.drawColoredString(x, y, str, font, color, 0);
 	}
 
+	private static boolean isCountryFlagToken(String str, int index) {
+		return index + 6 < str.length()
+			&& str.charAt(index) == '@'
+			&& str.charAt(index + 4) == '@'
+			&& str.substring(index + 1, index + 4).equalsIgnoreCase("flg")
+			&& isAsciiLetter(str.charAt(index + 5))
+			&& isAsciiLetter(str.charAt(index + 6));
+	}
+
+	private static boolean isAsciiLetter(char c) {
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+	}
+
+	private static String countryFlagCode(String str, int index) {
+		return str.substring(index + 5, index + 7).toUpperCase(Locale.ENGLISH);
+	}
+
+	private void drawCountryFlagToken(String countryCode, int x, int baselineY) {
+		int[] icon = countryFlagIcons.computeIfAbsent(countryCode, this::buildCountryFlagIcon);
+		int top = baselineY - COUNTRY_FLAG_HEIGHT + 2;
+		for (int row = 0; row < COUNTRY_FLAG_HEIGHT; row++) {
+			int destY = top + row;
+			if (destY < this.clipTop || destY >= this.clipBottom) {
+				continue;
+			}
+			for (int col = 0; col < COUNTRY_FLAG_WIDTH; col++) {
+				int destX = x + col;
+				if (destX < this.clipLeft || destX >= this.clipRight) {
+					continue;
+				}
+				int pixel = icon[row * COUNTRY_FLAG_WIDTH + col];
+				int alpha = pixel >>> 24;
+				if (alpha == 0) {
+					continue;
+				}
+				int destIndex = destX + this.width2 * destY;
+				int rgb = pixel & 0xFFFFFF;
+				this.pixelData[destIndex] = alpha >= 255 ? rgb : mixAlpha(this.pixelData[destIndex], rgb, alpha);
+			}
+		}
+	}
+
+	private int[] buildCountryFlagIcon(String countryCode) {
+		int[] asset = loadCountryFlagAsset(countryCode);
+		if (asset != null) {
+			return asset;
+		}
+
+		BufferedImage image = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = image.createGraphics();
+		try {
+			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			graphics.setFont(new Font(findEmojiFont(), Font.PLAIN, 13));
+			FontMetrics metrics = graphics.getFontMetrics();
+			String emoji = countryCodeToEmoji(countryCode);
+			int textWidth = metrics.stringWidth(emoji);
+			int x = Math.max(-3, (COUNTRY_FLAG_WIDTH - textWidth) / 2);
+			int y = Math.min(COUNTRY_FLAG_HEIGHT, metrics.getAscent());
+			graphics.drawString(emoji, x, y);
+		} finally {
+			graphics.dispose();
+		}
+
+		int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
+		image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
+		if (visiblePixelCount(pixels) > 8) {
+			return pixels;
+		}
+		return buildCountryFlagFallback(countryCode);
+	}
+
+	private int[] loadCountryFlagAsset(String countryCode) {
+		File flagFile = new File(Config.F_CACHE_DIR,
+			"voidscape" + File.separator + "flags" + File.separator + countryCode.toLowerCase(Locale.ENGLISH) + ".png");
+		if (!flagFile.isFile()) {
+			return null;
+		}
+		try {
+			BufferedImage image = ImageIO.read(flagFile);
+			if (image == null) {
+				return null;
+			}
+			if (image.getWidth() != COUNTRY_FLAG_WIDTH || image.getHeight() != COUNTRY_FLAG_HEIGHT) {
+				BufferedImage scaled = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+				Graphics2D graphics = scaled.createGraphics();
+				try {
+					graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+					graphics.drawImage(image, 0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, null);
+				} finally {
+					graphics.dispose();
+				}
+				image = scaled;
+			}
+			int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
+			image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
+			return pixels;
+		} catch (Exception ex) {
+			return null;
+		}
+	}
+
+	private static String findEmojiFont() {
+		Set<String> availableFonts = new HashSet<>(Arrays.asList(
+			GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames(Locale.ENGLISH)
+		));
+		String[] candidates = {"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla"};
+		for (String candidate : candidates) {
+			if (availableFonts.contains(candidate)) {
+				return candidate;
+			}
+		}
+		return Font.SANS_SERIF;
+	}
+
+	private static String countryCodeToEmoji(String countryCode) {
+		int first = Character.codePointAt(countryCode, 0) - 'A' + 0x1F1E6;
+		int second = Character.codePointAt(countryCode, 1) - 'A' + 0x1F1E6;
+		return new String(Character.toChars(first)) + new String(Character.toChars(second));
+	}
+
+	private static int visiblePixelCount(int[] pixels) {
+		int count = 0;
+		for (int pixel : pixels) {
+			if ((pixel >>> 24) > 0) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private int[] buildCountryFlagFallback(String countryCode) {
+		BufferedImage image = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = image.createGraphics();
+		try {
+			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			graphics.setColor(new java.awt.Color(0x172033));
+			graphics.fillRoundRect(0, 1, COUNTRY_FLAG_WIDTH - 1, COUNTRY_FLAG_HEIGHT - 2, 2, 2);
+			graphics.setColor(new java.awt.Color(0xC7D2FE));
+			graphics.drawRoundRect(0, 1, COUNTRY_FLAG_WIDTH - 1, COUNTRY_FLAG_HEIGHT - 2, 2, 2);
+			graphics.setFont(new Font(Font.DIALOG, Font.BOLD, 7));
+			FontMetrics metrics = graphics.getFontMetrics();
+			graphics.setColor(java.awt.Color.WHITE);
+			graphics.drawString(countryCode, Math.max(1, (COUNTRY_FLAG_WIDTH - metrics.stringWidth(countryCode)) / 2), 9);
+		} finally {
+			graphics.dispose();
+		}
+		int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
+		image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
+		return pixels;
+	}
+
 	public final void drawSprite(Sprite sprite, int x, int y, int destWidth, int destHeight, int var5) {
 		try {
 			try {
@@ -2730,7 +3118,10 @@ public class GraphicsController {
 			byte[] fontData = Fonts.fontData[font];
 
 			for (int i = 0; i < str.length(); ++i) {
-				if (str.charAt(i) == '@' && 4 + i < str.length() && str.charAt(i + 4) == '@') {
+				if (isCountryFlagToken(str, i)) {
+					width += COUNTRY_FLAG_ADVANCE;
+					i += 6;
+				} else if (str.charAt(i) == '@' && 4 + i < str.length() && str.charAt(i + 4) == '@') {
 					i += 4;
 				} else if (str.charAt(i) == '~' && i + 4 < str.length() && str.charAt(i + 4) == '~') {
 					i += 4;
@@ -2897,9 +3288,16 @@ public class GraphicsController {
 
 								// Is the colour from the sprite gray?
 								if (newR == newG && newG == newB) {
-									newR = (spritePixelR * newR) >> 8;
-									newG = (spritePixelG * newG) >> 8;
-									newB = (spritePixelB * newB) >> 8;
+									int lusterColour = voidscapeMaskLusterColour(newR, spritePixel);
+									if (lusterColour >= 0) {
+										newR = lusterColour >> 16 & 0xFF;
+										newG = lusterColour >> 8 & 0xFF;
+										newB = lusterColour & 0xFF;
+									} else {
+										newR = (spritePixelR * newR) >> 8;
+										newG = (spritePixelG * newG) >> 8;
+										newB = (spritePixelB * newB) >> 8;
+									}
 								} else if (blueMask != 0xFFFFFF && newR == newG && newB != newR) {//blue mask?
 									int blueMaskR = blueMask >> 16 & 0xFF;
 									int blueMaskG = blueMask >> 8 & 0xFF;

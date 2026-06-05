@@ -150,19 +150,36 @@ public class ObjectCooking implements UseLocTrigger {
 				return;
 			}
 
+			int repeat = chooseCookCount(player, item);
+			if (repeat < 1) {
+				return;
+			}
+
 			if (item.getCatalogId() == ItemId.RAW_OOMLIE_MEAT_PARCEL.id())
 				player.message("You prepare to cook the Oomlie meat parcel.");
 			else
 				player.message(cookingOnMessage(player, item, object, needOven));
 
-			int repeat = 1;
-			if (config().BATCH_PROGRESSION) {
-				repeat = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
-			}
-
 			startbatch(repeat);
 			batchCooking(player, item, timeToCook, cookingDef, object);
 		}
+	}
+
+	private int chooseCookCount(Player player, Item item) {
+		int cookableCount = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
+		if (!config().BATCH_PROGRESSION || cookableCount <= 1) {
+			return 1;
+		}
+
+		player.message("How many would you like to cook?");
+		int option = multi(player, "Cook 1", "Cook All", "Cancel");
+		if (option == 0) {
+			return 1;
+		}
+		if (option == 1) {
+			return cookableCount;
+		}
+		return -1;
 	}
 
 	private void batchCooking(Player player, Item item, int timeToCook, ItemCookingDef cookingDef, GameObject gameObject) {

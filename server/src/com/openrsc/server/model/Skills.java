@@ -1,7 +1,9 @@
 package com.openrsc.server.model;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.ProgressionMilestones;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerExperience;
@@ -229,6 +231,9 @@ public class Skills {
 				}
 			}
 		}
+		if (getMob().isPlayer()) {
+			BalanceTelemetry.recordExperience((Player) getMob(), skill, Math.max(0, exps[skill] - oldExp));
+		}
 		int newLevel = oldLevel;
 		if (oldLevel < getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT) {
 			newLevel = getLevelForExperience(exps[skill], oldLevel);
@@ -290,6 +295,7 @@ public class Skills {
 					}
 				}
 				sendUpdate(skill);
+				ProgressionMilestones.handleLevelUp(player, skill, oldLevel, newLevel, oldTotalLevel, newTotalLevel);
 				PlayerTitle.refreshAutomaticUnlocks(player);
 			}
 

@@ -3,7 +3,9 @@ package com.openrsc.server.model.entity.player;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.GlobalChatIpFlags;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.content.achievement.Achievement;
@@ -1961,11 +1963,13 @@ public final class Player extends Mob {
 					// Award XP to the party member
 					int playerXp = (int) (maxXpPerSharedPlayer * xpDropoffPercent);
 					xpLeftToReward -= playerXp;
-					playerXp *= partyMemberPlayer.getExperienceMultiplier(skill);
 					if (getConfig().WANT_OPENPK_POINTS) {
+						playerXp *= partyMemberPlayer.getExperienceMultiplier(skill);
 						partyMemberPlayer.addOpenPkPoints(playerXp);
 					} else {
-						partyMemberPlayer.getSkills().addExperience(skill, playerXp);
+						playerXp *= partyMemberPlayer.getExperienceMultiplier(skill);
+						partyMemberPlayer.getSkills().addExperience(skill,
+							RestedExperience.applyBonus(partyMemberPlayer, skill, playerXp, false));
 					}
 				}
 				thisXp = xpLeftToReward;
@@ -1978,7 +1982,8 @@ public final class Player extends Mob {
 		if (getConfig().WANT_OPENPK_POINTS) {
 			addOpenPkPoints(thisXp);
 		} else {
-			getSkills().addExperience(skill, thisXp);
+			getSkills().addExperience(skill,
+				RestedExperience.applyBonus(this, skill, thisXp, fromQuest));
 		}
 
 		// packet order; fatigue update comes after XP update authentically.
@@ -2331,10 +2336,10 @@ public final class Player extends Mob {
 		// Drops to world if player is null
 		getWorld().registerItem(new GroundItem(getWorld(), ItemId.BONES.id(), getX(), getY(), 1, player));
 
-		if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
-			getDuel().dropOnDeath();
-			 // disables duel spam in activity feed
-			 // if (player != null) getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has just won a stake against <strong>%s</strong>", username)));
+			if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
+				getDuel().dropOnDeath();
+				 // disables duel spam in activity feed
+				 // if (player != null) getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has just won a stake against <strong>%s</strong>", username)));
 		} else if (!hasElevatedPriveledges()) {
 			getCarriedItems().getInventory().dropOnDeath(mob);
 		}
@@ -2366,11 +2371,11 @@ public final class Player extends Mob {
 
 		cure();
 
-		// OG RSC did not reset active prayers after death
-		// prayers.resetPrayers();
-		getSkills().normalize();
+			// OG RSC did not reset active prayers after death
+			// prayers.resetPrayers();
+			getSkills().normalize();
 
-		if (party) getParty().sendParty();
+			if (party) getParty().sendParty();
 
 		getUpdateFlags().reset();
 		removeSkull();
@@ -3332,6 +3337,10 @@ public final class Player extends Mob {
 			return getCache().getBoolean("setting_hide_combat_xp_drops");
 		}
 		return false;
+	}
+
+	public boolean getGlobalChatCountryFlags() {
+		return GlobalChatIpFlags.shouldShow(this);
 	}
 
 	public Boolean getHideFog() {

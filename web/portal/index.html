@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape Website and Account Portal Prototype</title>
+	<meta name="description" content="Static Voidscape landing page, founder pass, and account management portal prototype.">
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preload" as="image" href="assets/voidscape-wordmark.png">
+	<link rel="preload" as="image" href="assets/voidscape-prelaunch-bg.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="portal-shell">
+		<aside class="sidebar" aria-label="Portal navigation">
+			<a class="brand-lockup" href="#dashboard" data-view-link="dashboard" aria-label="Voidscape portal home">
+				<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+			</a>
+
+			<div class="server-pill">
+				<span class="status-dot"></span>
+				<span id="server-world-label">World 1</span>
+				<strong id="server-online-count">247 online</strong>
+			</div>
+
+			<nav class="nav-list">
+				<button class="nav-item is-active" type="button" data-view-link="landing">
+					<span class="nav-mark public"></span>
+					<span>Landing</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="dashboard">
+					<span class="nav-mark account"></span>
+					<span>Overview</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="characters">
+					<span class="nav-mark characters"></span>
+					<span>Characters</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="subscription">
+					<span class="nav-mark subscription"></span>
+					<span>Subscription</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="security">
+					<span class="nav-mark security"></span>
+					<span>Security</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="highscores">
+					<span class="nav-mark highscores"></span>
+					<span>Highscores</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="market">
+					<span class="nav-mark market"></span>
+					<span>Market Intel</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="activity">
+					<span class="nav-mark activity"></span>
+					<span>Activity Feed</span>
+				</button>
+				<button class="nav-item staff-link" type="button" data-view-link="admin">
+					<span class="nav-mark staff"></span>
+					<span>Staff Panel</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="public">
+					<span class="nav-mark public"></span>
+					<span>News</span>
+				</button>
+			</nav>
+
+			<div class="sidebar-card">
+				<img src="assets/subscription-card.png" alt="" aria-hidden="true">
+				<p>Member status</p>
+				<strong id="sidebar-sub-time">6 days 21 hours</strong>
+				<button class="mini-button" type="button" data-view-link="subscription">Manage</button>
+			</div>
+		</aside>
+
+		<header class="topbar">
+			<div class="topbar-cluster">
+				<button id="menu-toggle" class="icon-button mobile-only" type="button" aria-label="Toggle navigation"></button>
+				<div>
+					<p class="eyebrow">Website and account portal</p>
+					<h1 id="view-title">Voidscape</h1>
+				</div>
+			</div>
+			<div class="account-strip">
+				<span class="patch-chip" id="patch-chip">Patch 0.8.7</span>
+				<span class="rank-chip">Admin preview</span>
+				<div class="account-avatar" aria-hidden="true">Z</div>
+				<div class="account-copy">
+					<strong id="account-name">Zamak42</strong>
+					<span id="account-email">void@example.com</span>
+				</div>
+			</div>
+		</header>
+
+		<main class="workspace">
+			<section id="landing" class="view is-active landing-view" data-title="Voidscape">
+				<section class="landing-hero" aria-labelledby="landing-title">
+					<div class="landing-copy">
+						<p class="eyebrow">Early access</p>
+						<img class="landing-wordmark" src="assets/voidscape-wordmark.png" alt="Voidscape">
+						<h2 id="landing-title">Classic RSC with sharper account tools, weekly subscriptions, and live world signals.</h2>
+						<p>Reserve your launch name, earn a free one-week subscription card through referrals, and manage every character from the same portal foundation.</p>
+						<div class="button-row">
+							<button class="primary-button" type="button" data-view-link="characters">Create character</button>
+							<button class="ghost-button" type="button" data-view-link="subscription">Redeem sub card</button>
+						</div>
+					</div>
+
+					<form class="founder-card" id="founder-form" aria-labelledby="founder-title" novalidate>
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Founder pass</p>
+								<h2 id="founder-title">Reserve early access</h2>
+							</div>
+							<img class="item-icon" src="assets/subscription-card.png" alt="">
+						</div>
+						<div class="account-mode" role="tablist" aria-label="Portal account mode">
+							<button class="is-active" type="button" data-account-mode="reserve">Reserve</button>
+							<button type="button" data-account-mode="signin">Sign in</button>
+						</div>
+						<div class="referral-notice" id="referral-notice" hidden>
+							<span>Invite code active</span>
+							<strong id="referral-code"></strong>
+							<button class="ghost-button" type="button" id="clear-referral">Clear</button>
+						</div>
+						<label id="founder-name-row">
+							<span>Reserved username</span>
+							<input id="founder-name" maxlength="12" autocomplete="username" placeholder="2-12 letters or numbers">
+						</label>
+						<label>
+							<span>Email</span>
+							<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
+						</label>
+						<label>
+							<span>Portal password</span>
+							<input id="founder-password" type="password" autocomplete="new-password" placeholder="8+ characters">
+						</label>
+						<button class="primary-button" type="submit" id="founder-submit">Save founder pass</button>
+						<p class="inline-state" id="founder-message">2 verified invites unlock a free weekly subscription card.</p>
+						<div class="founder-progress">
+							<div>
+								<span id="founder-progress-label">0 / 2 invites</span>
+								<strong id="founder-reward-label">Reward locked</strong>
+							</div>
+							<div class="meter-track"><span id="founder-progress-fill"></span></div>
+						</div>
+						<label>
+							<span>Invite link</span>
+							<div class="copy-row">
+								<input id="founder-link" readonly>
+								<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
+							</div>
+						</label>
+						<button class="mini-button" type="button" id="simulate-referral">Simulate invite</button>
+					</form>
+				</section>
+
+				<div class="launch-metrics">
+					<article class="stat-tile">
+						<span class="tile-icon online"></span>
+						<p>World status</p>
+						<strong id="landing-world-state">Online</strong>
+						<small id="landing-world-detail">247 players in sample state</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon xp"></span>
+						<p>XP rates</p>
+						<strong id="landing-xp-rates">7x / 4x</strong>
+						<small id="landing-sub-rates">10x / 6x subscribed</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon title"></span>
+						<p>Launch prize</p>
+						<strong id="landing-prize-state">Free sub card</strong>
+						<small id="landing-prize-detail">Unlocked at 2 invites</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon market"></span>
+						<p>Roster limit</p>
+						<strong>10 characters</strong>
+						<small>Per web account target</small>
+					</article>
+				</div>
+
+				<div class="gateway-grid" aria-label="Portal gateway">
+					<button class="gateway-card" type="button" data-view-link="characters">
+						<span class="gateway-mark">10</span>
+						<strong>Roster</strong>
+						<small>Manage up to 10 characters</small>
+					</button>
+					<button class="gateway-card" type="button" data-view-link="subscription">
+						<span class="gateway-mark sub">XP</span>
+						<strong>Subscription</strong>
+						<small>Redeem weekly cards</small>
+					</button>
+					<button class="gateway-card" type="button" data-view-link="security">
+						<span class="gateway-mark sec">+</span>
+						<strong>Security</strong>
+						<small>Recovery and sessions</small>
+					</button>
+					<button class="gateway-card" type="button" data-view-link="market">
+						<span class="gateway-mark market">%</span>
+						<strong>Market</strong>
+						<small>Watch prices and trends</small>
+					</button>
+					<button class="gateway-card" type="button" data-view-link="highscores">
+						<span class="gateway-mark ranks">#</span>
+						<strong>Titles</strong>
+						<small>Ranks, titles, milestones</small>
+					</button>
+					<button class="gateway-card" type="button" data-view-link="activity">
+						<span class="gateway-mark wild">PK</span>
+						<strong>Wild feed</strong>
+						<small>Kills, drops, boss wins</small>
+					</button>
+				</div>
+
+				<section class="reward-band" aria-label="Referral reward">
+					<img src="assets/subscription-card.png" alt="">
+					<div>
+						<p class="eyebrow">Refer a friend</p>
+						<h2>Earn a free one-week subscription card</h2>
+						<span>Two verified invites unlock the launch reward on your portal account.</span>
+					</div>
+					<button class="ghost-button" type="button" data-view-link="subscription">Preview benefits</button>
+				</section>
+
+				<div class="public-layout">
+					<section class="panel news-panel" aria-labelledby="landing-news-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Launch board</p>
+								<h2 id="landing-news-title">Latest updates</h2>
+							</div>
+						</div>
+						<div class="event-list" id="landing-news-list">
+							<div class="event-row rare"><span></span><p>Void Enclave boss tuning moved into live difficulty controls.</p><time>Today</time></div>
+							<div class="event-row market"><span></span><p>Weekly subscription cards and portal redeem flow are now represented.</p><time>Today</time></div>
+							<div class="event-row title"><span></span><p>Character title state is part of the account portal contract.</p><time>Jun 3</time></div>
+						</div>
+					</section>
+					<section class="panel download-panel" aria-labelledby="download-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Play path</p>
+								<h2 id="download-title">Client downloads</h2>
+							</div>
+						</div>
+						<div class="action-stack" id="download-actions">
+							<button class="ghost-button" type="button">PC client</button>
+							<button class="ghost-button" type="button">Launcher</button>
+							<button class="ghost-button" type="button">Android notes</button>
+							<button class="ghost-button" type="button">Server status</button>
+						</div>
+					</section>
+				</div>
+			</section>
+
+			<section id="dashboard" class="view" data-title="Overview">
+				<div class="summary-grid">
+					<article class="stat-tile">
+						<span class="tile-icon online"></span>
+						<p>World status</p>
+						<strong id="dashboard-world-state">Online</strong>
+						<small id="dashboard-world-save">Last save 2 min ago</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon xp"></span>
+						<p>XP rate</p>
+						<strong id="dashboard-xp-rate">10x / 6x</strong>
+						<small>Combat / skilling</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon title"></span>
+						<p>Active title</p>
+						<strong id="dashboard-active-title">The Conqueror</strong>
+						<small>1 unique claimed</small>
+					</article>
+					<article class="stat-tile">
+						<span class="tile-icon market"></span>
+						<p>Market watch</p>
+						<strong>Rune 2h +8%</strong>
+						<small>24h movement</small>
+					</article>
+				</div>
+
+				<div class="dashboard-layout">
+					<section class="panel character-panel" aria-labelledby="active-character-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Selected character</p>
+								<h2 id="active-character-title">Zamak42</h2>
+							</div>
+							<button class="ghost-button" type="button" data-view-link="characters">Manage roster</button>
+						</div>
+						<div class="hero-character">
+							<div class="character-visual">
+								<img id="active-character-image" src="assets/rsc-knight.png" alt="Zamak42 character render">
+								<div class="paper-doll weapon-weapon has-cape" id="active-character-doll" aria-hidden="true"></div>
+								<span id="active-character-source">Starter preview</span>
+							</div>
+							<div class="character-readout">
+								<div class="combat-ring">
+									<span id="active-character-combat">87</span>
+									<small>combat</small>
+								</div>
+								<ul class="stat-list">
+									<li><span>Total level</span><strong id="active-character-total">1,194</strong></li>
+									<li><span>Quest points</span><strong id="active-character-quest">47</strong></li>
+									<li><span>Wilderness kills</span><strong id="active-character-kills">28</strong></li>
+									<li><span>Last location</span><strong id="active-character-location">Lumbridge</strong></li>
+									<li><span>Subscription</span><strong id="active-character-subscription">6 days 21 hours</strong></li>
+									<li><span>Last login</span><strong id="active-character-last-login">2 min ago</strong></li>
+								</ul>
+								<div class="gear-list" id="active-character-gear" aria-label="Equipped gear"></div>
+							</div>
+						</div>
+					</section>
+
+					<section class="panel feed-panel" aria-labelledby="recent-feed-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Recent signals</p>
+								<h2 id="recent-feed-title">Account feed</h2>
+							</div>
+							<button class="ghost-button" type="button" data-view-link="activity">Open feed</button>
+						</div>
+						<div class="event-list compact">
+							<div class="event-row rare">
+								<span></span>
+								<p><strong>VoidScim</strong> dropped from Void Knight</p>
+								<time>14m</time>
+							</div>
+							<div class="event-row market">
+								<span></span>
+								<p><strong>Rune 2h</strong> crossed 48,000 gp average</p>
+								<time>32m</time>
+							</div>
+							<div class="event-row kill">
+								<span></span>
+								<p><strong>VoidSeeker</strong> defeated DarkWarden</p>
+								<time>51m</time>
+							</div>
+							<div class="event-row title">
+								<span></span>
+								<p><strong>WildRanger</strong> unlocked Red Revenant</p>
+								<time>1h</time>
+							</div>
+						</div>
+					</section>
+
+					<section class="panel quick-panel" aria-labelledby="quick-actions-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Shortcuts</p>
+								<h2 id="quick-actions-title">Quick actions</h2>
+							</div>
+						</div>
+						<div class="quick-grid">
+							<button class="quick-action" type="button" data-view-link="characters">Create character</button>
+							<button class="quick-action" type="button" data-view-link="subscription">Redeem card</button>
+							<button class="quick-action" type="button" data-view-link="security">Recovery settings</button>
+							<button class="quick-action" type="button" data-view-link="market">Auction watch</button>
+						</div>
+					</section>
+
+					<section class="panel art-panel dashboard-art" aria-label="Void portal artwork">
+						<img src="assets/generated/void-ambience.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="characters" class="view" data-title="Characters">
+				<div class="two-column">
+					<section class="panel roster-panel" aria-labelledby="roster-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Character roster</p>
+								<h2 id="roster-title">3 / 10 characters</h2>
+							</div>
+							<button class="primary-button" type="button" id="new-character-button">New character</button>
+						</div>
+						<div class="character-cards" id="character-cards"></div>
+						<div class="slot-track" id="slot-track" aria-label="Roster slots"></div>
+					</section>
+
+					<section class="panel create-panel" aria-labelledby="create-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Character creation</p>
+								<h2 id="create-title">Choose a path</h2>
+							</div>
+							<span class="limit-badge" id="slot-badge">7 slots open</span>
+						</div>
+						<div class="class-grid" id="class-grid">
+							<button class="class-card is-selected" type="button" data-class="warrior">
+								<img src="assets/rsc-knight.png" alt="">
+								<strong>Warrior</strong>
+								<span>Iron 2h, bronze armour, meat</span>
+							</button>
+							<button class="class-card" type="button" data-class="arcanist">
+								<img src="assets/rsc-mage.png" alt="">
+								<strong>Arcanist</strong>
+								<span>Runes, bow, 50 arrows, robes</span>
+							</button>
+							<button class="class-card" type="button" data-class="forager">
+								<img src="assets/rsc-ranger.png" alt="">
+								<strong>Forager</strong>
+								<span>Tools, bait, food, 100 gp</span>
+							</button>
+						</div>
+						<div class="creation-controls">
+							<label>
+								<span>Name</span>
+								<input id="character-name" maxlength="12" value="Voidborn">
+							</label>
+							<label>
+								<span>Start world</span>
+								<select id="start-world">
+									<option>Void Island</option>
+									<option>Lumbridge</option>
+								</select>
+							</label>
+							<button class="primary-button" type="button" id="queue-character">Create preview</button>
+						</div>
+						<div class="snapshot-controls">
+							<label>
+								<span>Saved character</span>
+								<input id="snapshot-name" maxlength="12" placeholder="Existing OpenRSC name">
+							</label>
+							<button class="ghost-button" type="button" id="load-snapshot">Load saved state</button>
+						</div>
+						<div class="link-controls">
+							<label>
+								<span>Account link</span>
+								<input id="link-character-name" maxlength="12" placeholder="Existing character name">
+							</label>
+							<button class="ghost-button" type="button" id="start-link">Start link</button>
+						</div>
+						<div class="link-proof" id="link-proof" hidden>
+							<label>
+								<span>Proof command</span>
+								<div class="copy-row">
+									<input id="link-command" readonly>
+									<button class="ghost-button" type="button" id="copy-link-command">Copy</button>
+								</div>
+							</label>
+							<div class="link-proof-actions">
+								<span id="link-expiry">15 min</span>
+								<button class="mini-button" type="button" id="simulate-link">Simulate verified</button>
+							</div>
+						</div>
+						<p class="inline-state" id="character-message">Warrior selected.</p>
+					</section>
+				</div>
+				<section class="panel art-wide" aria-label="Character kit artwork">
+					<img src="assets/generated/buttons-tabs.png" alt="">
+					<img src="assets/generated/ui-frame-kit.png" alt="">
+				</section>
+			</section>
+
+			<section id="subscription" class="view" data-title="Subscription">
+				<div class="two-column subscription-layout">
+					<section class="panel subscription-status" aria-labelledby="sub-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Weekly membership</p>
+								<h2 id="sub-title">Subscribed</h2>
+							</div>
+							<img class="item-icon" src="assets/subscription-card.png" alt="">
+						</div>
+						<div class="sub-meter">
+							<div>
+								<strong id="sub-days">6 days 21 hours</strong>
+								<span>remaining</span>
+							</div>
+							<div class="meter-track"><span id="sub-meter-fill"></span></div>
+						</div>
+						<div class="benefit-grid">
+							<div><span>Combat XP</span><strong>10x</strong></div>
+							<div><span>Skill XP</span><strong>6x</strong></div>
+							<div><span>Card price</span><strong>10,000 gp</strong></div>
+							<div><span>Vendor stock</span><strong>17 / 20</strong></div>
+						</div>
+						<div class="reward-wallet" id="founder-reward-card">
+							<div>
+								<span>Founder reward</span>
+								<strong id="founder-reward-count">No free cards</strong>
+							</div>
+							<button class="ghost-button" type="button" id="use-founder-reward" disabled>Use free card</button>
+						</div>
+						<form class="redeem-form" id="redeem-form">
+							<label for="redeem-code">Redeem code</label>
+							<div>
+								<input id="redeem-code" value="VOID-WEEK-TEST">
+								<button class="primary-button" type="submit">Redeem</button>
+							</div>
+						</form>
+						<p class="inline-state" id="redeem-state">No pending cards.</p>
+					</section>
+
+					<section class="panel art-card" aria-label="Subscription art">
+						<img src="assets/generated/subscription-pack.png" alt="">
+					</section>
+				</div>
+				<section class="panel">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Vendor economy</p>
+							<h2>Lumbridge stock tiers</h2>
+						</div>
+					</div>
+					<div class="data-table">
+						<div class="table-row table-head"><span>Tier</span><span>Cards sold</span><span>Unit price</span><span>State</span></div>
+						<div class="table-row"><span>0</span><span>3 / 20</span><span>10,000 gp</span><span class="good">Active</span></div>
+						<div class="table-row"><span>1</span><span>0 / 20</span><span>20,000 gp</span><span>Next restock</span></div>
+						<div class="table-row"><span>2</span><span>0 / 20</span><span>40,000 gp</span><span>Locked</span></div>
+					</div>
+				</section>
+			</section>
+
+			<section id="security" class="view" data-title="Security">
+				<div class="security-grid">
+					<section class="panel score-panel" aria-labelledby="security-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Security center</p>
+								<h2 id="security-title">Account score</h2>
+							</div>
+							<strong class="score-badge" id="security-score">92</strong>
+						</div>
+						<div class="security-steps">
+							<label><input id="security-email-check" type="checkbox" checked disabled> Email verified</label>
+							<label><input id="security-recovery-check" type="checkbox" checked disabled> Recovery codes set</label>
+							<label><input id="security-password-check" type="checkbox" disabled> Password rotated</label>
+							<label><input id="security-session-check" type="checkbox" checked disabled> Sessions reviewed</label>
+						</div>
+					</section>
+					<section class="panel security-actions" aria-labelledby="security-actions-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Recovery</p>
+								<h2 id="security-actions-title">Account controls</h2>
+							</div>
+							<button class="ghost-button" type="button" id="generate-recovery">New codes</button>
+						</div>
+						<form class="password-form" id="password-form">
+							<label>
+								<span>Current password</span>
+								<input id="current-password" type="password" autocomplete="current-password">
+							</label>
+							<label>
+								<span>New password</span>
+								<input id="new-password" type="password" autocomplete="new-password" placeholder="8+ characters">
+							</label>
+							<button class="primary-button" type="submit">Update password</button>
+						</form>
+						<div class="recovery-code-list" id="recovery-codes" hidden></div>
+						<p class="inline-state" id="security-message">Local API security state appears after sign in.</p>
+					</section>
+				</div>
+				<section class="panel">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Access log</p>
+							<h2>Recent sessions</h2>
+						</div>
+						<button class="danger-button" type="button" id="end-other-sessions">End other sessions</button>
+					</div>
+					<div class="data-table session-table" id="session-table">
+						<div class="table-row table-head"><span>Date</span><span>IP</span><span>Client</span><span>Result</span></div>
+						<div class="table-row"><span>Jun 3, 2026 4:31 PM</span><span>127.0.0.1</span><span>Workbench</span><span class="good">Active</span></div>
+						<div class="table-row"><span>Jun 2, 2026 9:18 PM</span><span>Local dev</span><span>PC client</span><span>Signed out</span></div>
+						<div class="table-row"><span>Jun 1, 2026 7:04 PM</span><span>Local dev</span><span>Web portal</span><span>Signed out</span></div>
+					</div>
+				</section>
+			</section>
+
+			<section id="highscores" class="view" data-title="Highscores">
+				<div class="two-column">
+					<section class="panel" aria-labelledby="highscores-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Rankings</p>
+								<h2 id="highscores-title">Combat highscores</h2>
+							</div>
+							<div class="segmented">
+								<button class="is-active" type="button">Combat</button>
+								<button type="button">Skills</button>
+								<button type="button">Boss</button>
+							</div>
+						</div>
+						<div class="data-table rank-table" id="rank-table"></div>
+					</section>
+					<section class="panel title-panel" aria-labelledby="titles-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Titles</p>
+								<h2 id="titles-title">Collection</h2>
+							</div>
+							<span class="limit-badge">18 / 100</span>
+						</div>
+						<div class="title-list">
+							<button type="button"><strong>The Conqueror</strong><span>Equipped</span></button>
+							<button type="button"><strong>Voidbane</strong><span>Reusable</span></button>
+							<button type="button"><strong>Red Revenant</strong><span>Rare</span></button>
+							<button type="button"><strong>Gatebreaker</strong><span>Unique held by Maeve</span></button>
+						</div>
+						<img class="panel-art-strip" src="assets/generated/highscores-titles.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="market" class="view" data-title="Market Intel">
+				<div class="market-layout">
+					<section class="panel market-table" aria-labelledby="market-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Auction House</p>
+								<h2 id="market-title">Market intel</h2>
+							</div>
+							<input class="search-input" value="Rune">
+						</div>
+						<div class="data-table" id="market-table"></div>
+					</section>
+					<section class="panel market-watch" aria-labelledby="watch-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Watch item</p>
+								<h2 id="watch-title">Rune 2h sword</h2>
+							</div>
+							<button class="ghost-button" type="button">Pin</button>
+						</div>
+						<div class="trend-chart" aria-hidden="true">
+							<span style="height: 32%"></span>
+							<span style="height: 48%"></span>
+							<span style="height: 42%"></span>
+							<span style="height: 60%"></span>
+							<span style="height: 76%"></span>
+							<span style="height: 68%"></span>
+							<span style="height: 84%"></span>
+						</div>
+						<img class="panel-art-strip" src="assets/generated/auction-market.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="activity" class="view" data-title="Activity Feed">
+				<div class="activity-layout">
+					<section class="panel" aria-labelledby="activity-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">World events</p>
+								<h2 id="activity-title">Live feed</h2>
+							</div>
+							<div class="segmented">
+								<button class="is-active" type="button">All</button>
+								<button type="button">Drops</button>
+								<button type="button">PKs</button>
+							</div>
+						</div>
+						<div class="event-list large" id="world-feed"></div>
+					</section>
+					<section class="panel art-card" aria-label="Wilderness art">
+						<img src="assets/generated/wilderness-activity.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="admin" class="view" data-title="Staff Panel">
+				<div class="summary-grid">
+					<article class="stat-tile warn"><p>Open reports</p><strong>14</strong><small>3 high priority</small></article>
+					<article class="stat-tile"><p>Muted today</p><strong>2</strong><small>1 appeal pending</small></article>
+					<article class="stat-tile"><p>Suspicious trades</p><strong>7</strong><small>RWT watch rules</small></article>
+					<article class="stat-tile"><p>Server health</p><strong>Stable</strong><small>p95 tick 18.2 ms</small></article>
+				</div>
+				<div class="two-column">
+					<section class="panel">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Moderator control panel</p>
+								<h2>Player lookup</h2>
+							</div>
+							<input class="search-input" value="DarkWarden">
+						</div>
+						<div class="data-table">
+							<div class="table-row table-head"><span>Player</span><span>Flag</span><span>Last seen</span><span>Action</span></div>
+							<div class="table-row"><span>DarkWarden</span><span class="bad">Skull baiting</span><span>18m</span><span>Review</span></div>
+							<div class="table-row"><span>CoinMule17</span><span>Trade spike</span><span>42m</span><span>Watch</span></div>
+							<div class="table-row"><span>QuietMage</span><span>Clean</span><span>1h</span><span>Open</span></div>
+						</div>
+					</section>
+					<section class="panel">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Actions</p>
+								<h2>Queue</h2>
+							</div>
+						</div>
+						<div class="action-stack">
+							<button class="ghost-button" type="button">Send warning</button>
+							<button class="ghost-button" type="button">Freeze trade</button>
+							<button class="ghost-button" type="button">Open chat log</button>
+							<button class="danger-button" type="button">Temporary ban</button>
+						</div>
+					</section>
+				</div>
+			</section>
+
+			<section id="public" class="view" data-title="News">
+				<div class="public-layout">
+					<section class="panel public-hero" aria-labelledby="public-title">
+						<div>
+							<p class="eyebrow">Voidscape</p>
+							<h2 id="public-title">Classic RSC, modern account tools</h2>
+							<p>Patch notes, downloads, character access, and account status live in one place.</p>
+							<div class="button-row">
+								<button class="primary-button" type="button">Register</button>
+								<button class="ghost-button" type="button">Download client</button>
+							</div>
+						</div>
+					</section>
+					<section class="panel news-panel" aria-labelledby="news-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Updates</p>
+								<h2 id="news-title">Latest news</h2>
+							</div>
+						</div>
+						<div class="event-list" id="public-news-list">
+							<div class="event-row rare"><span></span><p>Void Enclave boss tuning is live.</p><time>Today</time></div>
+							<div class="event-row market"><span></span><p>Subscription cards added near Lumbridge.</p><time>Today</time></div>
+							<div class="event-row title"><span></span><p>Player titles now display overhead.</p><time>Jun 3</time></div>
+						</div>
+					</section>
+				</div>
+			</section>
+		</main>
+	</div>
+
+	<script src="script.js"></script>
+</body>
+</html>

@@ -11,6 +11,14 @@ public final class PngSpriteLoader {
 	}
 
 	public static Sprite read(File file) {
+		return read(file, false);
+	}
+
+	public static Sprite readArgb(File file) {
+		return read(file, true);
+	}
+
+	private static Sprite read(File file, boolean preserveAlpha) {
 		try {
 			Class<?> imageIoClass = Class.forName("javax.imageio.ImageIO");
 			Method read = imageIoClass.getMethod("read", File.class);
@@ -26,9 +34,11 @@ public final class PngSpriteLoader {
 			Method getRgb = imageClass.getMethod("getRGB",
 				int.class, int.class, int.class, int.class, int[].class, int.class, int.class);
 			getRgb.invoke(image, 0, 0, width, height, pixels, 0, width);
-			for (int i = 0; i < pixels.length; i++) {
-				if ((pixels[i] >>> 24) < 128) {
-					pixels[i] = 0;
+			if (!preserveAlpha) {
+				for (int i = 0; i < pixels.length; i++) {
+					if ((pixels[i] >>> 24) < 128) {
+						pixels[i] = 0;
+					}
 				}
 			}
 			return new Sprite(pixels, width, height);

@@ -1,6 +1,7 @@
 package com.openrsc.server.login;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LoginLog;
 import com.openrsc.server.database.struct.InvoluntaryChangeDetails;
@@ -145,6 +146,7 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 				@Override
 				public void action() {
 					loadingComplete(loadedPlayer);
+					RestedExperience.applyOfflineGain(loadedPlayer);
 					loadedPlayer.desertHeatInit();
 					ActionSender.sendReleasedNameExplanation(loadedPlayer, usernameChangeType);
 				}

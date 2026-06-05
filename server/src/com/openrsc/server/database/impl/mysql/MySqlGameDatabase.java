@@ -21,6 +21,7 @@ import com.openrsc.server.model.Point;
 import com.openrsc.server.model.container.BankPreset;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.container.ItemStatus;
+import com.openrsc.server.model.entity.player.Group;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.util.checked.CheckedRunnable;
 import com.openrsc.server.util.checked.CheckedSupplier;
@@ -440,6 +441,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.setString(3, password);
 			statement.setLong(4, System.currentTimeMillis() / 1000);
 			statement.setString(5, ip);
+			statement.setInt(6, Group.ADMIN);
 
 			statement.executeUpdate();
 		} catch (final SQLException ex) {
@@ -558,6 +560,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 						playerData.skinColour = result.getInt("skincolour");
 						playerData.headSprite = result.getInt("headsprite");
 						playerData.bodySprite = result.getInt("bodysprite");
+						playerData.hairStyle = result.getInt("hairstyle");
 
 						playerData.male = result.getInt("male") == 1;
 
@@ -619,6 +622,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 					playerData.skinColour = result.getInt("skincolour");
 					playerData.headSprite = result.getInt("headsprite");
 					playerData.bodySprite = result.getInt("bodysprite");
+					playerData.hairStyle = result.getInt("hairstyle");
 
 					playerData.male = result.getInt("male") == 1;
 
@@ -1695,6 +1699,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.setInt(counter++, playerData.skinColour);
 			statement.setInt(counter++, playerData.headSprite);
 			statement.setInt(counter++, playerData.bodySprite);
+			statement.setInt(counter++, playerData.hairStyle);
 			statement.setInt(counter++, playerData.male ? 1 : 0);
 			statement.setInt(counter++, playerData.combatStyle);
 			statement.setLong(counter++, playerData.muteExpires);
