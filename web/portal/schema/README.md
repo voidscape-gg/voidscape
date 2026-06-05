@@ -11,6 +11,7 @@ scripts/test-portal-schema.sh
 ## Tables
 
 - `web_accounts` - email/password identity for the website.
+- `web_account_identities` - external login identities such as Google OpenID Connect subjects.
 - `web_account_sessions` - hashed bearer/session tokens.
 - `web_recovery_codes` - hashed one-time account recovery codes.
 - `web_account_characters` - links one web account to up to 10 existing `players.id` values.

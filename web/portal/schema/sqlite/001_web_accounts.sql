@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email_canonical TEXT NOT NULL,
     email_display TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -17,6 +17,33 @@ CREATE TABLE IF NOT EXISTS web_accounts (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_web_accounts_email
     ON web_accounts (email_canonical);
+
+CREATE TABLE IF NOT EXISTS web_account_identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    provider_subject TEXT NOT NULL,
+    email_canonical TEXT NOT NULL,
+    email_display TEXT NOT NULL,
+    display_name TEXT,
+    avatar_url TEXT,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_login_at TEXT,
+    FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CHECK (provider IN ('google')),
+    CHECK (email_verified IN (0, 1))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_account_identities_provider_subject
+    ON web_account_identities (provider, provider_subject);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_account_identities_account_provider
+    ON web_account_identities (account_id, provider);
+
+CREATE INDEX IF NOT EXISTS idx_web_account_identities_email
+    ON web_account_identities (email_canonical);
 
 CREATE TABLE IF NOT EXISTS web_account_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -3,34 +3,29 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Voidscape Website and Account Portal Prototype</title>
-	<meta name="description" content="Static Voidscape landing page, founder pass, and account management portal prototype.">
+	<title>Voidscape Account Portal Prototype</title>
+	<meta name="description" content="Voidscape account management and subscription portal prototype.">
 	<link rel="icon" href="assets/favicon.png">
 	<link rel="preload" as="image" href="assets/voidscape-wordmark.png">
-	<link rel="preload" as="image" href="assets/voidscape-prelaunch-bg.png">
 	<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 	<div class="portal-shell">
 		<aside class="sidebar" aria-label="Portal navigation">
-			<a class="brand-lockup" href="#dashboard" data-view-link="dashboard" aria-label="Voidscape portal home">
+			<a class="brand-lockup" href="#account" data-view-link="account" aria-label="Voidscape account portal home">
 				<img src="assets/voidscape-wordmark.png" alt="Voidscape">
 			</a>
 
-			<div class="server-pill">
+			<div class="server-pill" hidden>
 				<span class="status-dot"></span>
 				<span id="server-world-label">World 1</span>
 				<strong id="server-online-count">247 online</strong>
 			</div>
 
 			<nav class="nav-list">
-				<button class="nav-item is-active" type="button" data-view-link="landing">
-					<span class="nav-mark public"></span>
-					<span>Landing</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="dashboard">
+				<button class="nav-item is-active" type="button" data-view-link="account">
 					<span class="nav-mark account"></span>
-					<span>Overview</span>
+					<span>Account</span>
 				</button>
 				<button class="nav-item" type="button" data-view-link="characters">
 					<span class="nav-mark characters"></span>
@@ -43,26 +38,6 @@
 				<button class="nav-item" type="button" data-view-link="security">
 					<span class="nav-mark security"></span>
 					<span>Security</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="highscores">
-					<span class="nav-mark highscores"></span>
-					<span>Highscores</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="market">
-					<span class="nav-mark market"></span>
-					<span>Market Intel</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="activity">
-					<span class="nav-mark activity"></span>
-					<span>Activity Feed</span>
-				</button>
-				<button class="nav-item staff-link" type="button" data-view-link="admin">
-					<span class="nav-mark staff"></span>
-					<span>Staff Panel</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="public">
-					<span class="nav-mark public"></span>
-					<span>News</span>
 				</button>
 			</nav>
 
@@ -78,13 +53,13 @@
 			<div class="topbar-cluster">
 				<button id="menu-toggle" class="icon-button mobile-only" type="button" aria-label="Toggle navigation"></button>
 				<div>
-					<p class="eyebrow">Website and account portal</p>
-					<h1 id="view-title">Voidscape</h1>
+					<p class="eyebrow">Account portal</p>
+					<h1 id="view-title">Account</h1>
 				</div>
 			</div>
 			<div class="account-strip">
-				<span class="patch-chip" id="patch-chip">Patch 0.8.7</span>
-				<span class="rank-chip">Admin preview</span>
+				<span class="patch-chip" id="patch-chip" hidden>Patch 0.8.7</span>
+				<span class="rank-chip" hidden>Admin preview</span>
 				<div class="account-avatar" aria-hidden="true">Z</div>
 				<div class="account-copy">
 					<strong id="account-name">Zamak42</strong>
@@ -94,38 +69,42 @@
 		</header>
 
 		<main class="workspace">
-			<section id="landing" class="view is-active landing-view" data-title="Voidscape">
+			<section id="account" class="view is-active landing-view account-view" data-title="Account">
 				<section class="landing-hero" aria-labelledby="landing-title">
 					<div class="landing-copy">
-						<p class="eyebrow">Early access</p>
-						<img class="landing-wordmark" src="assets/voidscape-wordmark.png" alt="Voidscape">
-						<h2 id="landing-title">Classic RSC with sharper account tools, weekly subscriptions, and live world signals.</h2>
-						<p>Reserve your launch name, earn a free one-week subscription card through referrals, and manage every character from the same portal foundation.</p>
+						<p class="eyebrow">Voidscape account</p>
+						<img class="landing-wordmark" src="assets/voidscape-wordmark.png" alt="Voidscape" hidden>
+						<h2 id="landing-title">Sign in, manage characters, and handle subscriptions.</h2>
+						<p>A simple portal for Google or email login, up to 10 game characters, weekly subscription cards, and account security.</p>
 						<div class="button-row">
-							<button class="primary-button" type="button" data-view-link="characters">Create character</button>
-							<button class="ghost-button" type="button" data-view-link="subscription">Redeem sub card</button>
+							<button class="primary-button" type="button" data-view-link="characters">Characters</button>
+							<button class="ghost-button" type="button" data-view-link="subscription">Subscriptions</button>
 						</div>
 					</div>
 
 					<form class="founder-card" id="founder-form" aria-labelledby="founder-title" novalidate>
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Founder pass</p>
-								<h2 id="founder-title">Reserve early access</h2>
+								<p class="eyebrow">Account</p>
+								<h2 id="founder-title">Create or sign in</h2>
 							</div>
 							<img class="item-icon" src="assets/subscription-card.png" alt="">
 						</div>
 						<div class="account-mode" role="tablist" aria-label="Portal account mode">
-							<button class="is-active" type="button" data-account-mode="reserve">Reserve</button>
+							<button class="is-active" type="button" data-account-mode="reserve">Create</button>
 							<button type="button" data-account-mode="signin">Sign in</button>
 						</div>
+						<button class="google-button" type="button" id="google-auth-button">
+							<span class="google-mark" aria-hidden="true">G</span>
+							<strong id="google-auth-label">Continue with Google</strong>
+						</button>
 						<div class="referral-notice" id="referral-notice" hidden>
 							<span>Invite code active</span>
 							<strong id="referral-code"></strong>
 							<button class="ghost-button" type="button" id="clear-referral">Clear</button>
 						</div>
 						<label id="founder-name-row">
-							<span>Reserved username</span>
+							<span>Account username</span>
 							<input id="founder-name" maxlength="12" autocomplete="username" placeholder="2-12 letters or numbers">
 						</label>
 						<label>
@@ -136,27 +115,27 @@
 							<span>Portal password</span>
 							<input id="founder-password" type="password" autocomplete="new-password" placeholder="8+ characters">
 						</label>
-						<button class="primary-button" type="submit" id="founder-submit">Save founder pass</button>
-						<p class="inline-state" id="founder-message">2 verified invites unlock a free weekly subscription card.</p>
-						<div class="founder-progress">
+						<button class="primary-button" type="submit" id="founder-submit">Save account</button>
+						<p class="inline-state" id="founder-message">Use Google for the fastest local account flow.</p>
+						<div class="founder-progress" hidden>
 							<div>
 								<span id="founder-progress-label">0 / 2 invites</span>
 								<strong id="founder-reward-label">Reward locked</strong>
 							</div>
 							<div class="meter-track"><span id="founder-progress-fill"></span></div>
 						</div>
-						<label>
+						<label hidden>
 							<span>Invite link</span>
 							<div class="copy-row">
 								<input id="founder-link" readonly>
 								<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
 							</div>
 						</label>
-						<button class="mini-button" type="button" id="simulate-referral">Simulate invite</button>
+						<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
 					</form>
 				</section>
 
-				<div class="launch-metrics">
+				<div class="launch-metrics" hidden>
 					<article class="stat-tile">
 						<span class="tile-icon online"></span>
 						<p>World status</p>
@@ -183,7 +162,7 @@
 					</article>
 				</div>
 
-				<div class="gateway-grid" aria-label="Portal gateway">
+				<div class="gateway-grid" aria-label="Portal gateway" hidden>
 					<button class="gateway-card" type="button" data-view-link="characters">
 						<span class="gateway-mark">10</span>
 						<strong>Roster</strong>
@@ -216,7 +195,7 @@
 					</button>
 				</div>
 
-				<section class="reward-band" aria-label="Referral reward">
+				<section class="reward-band" aria-label="Referral reward" hidden>
 					<img src="assets/subscription-card.png" alt="">
 					<div>
 						<p class="eyebrow">Refer a friend</p>
@@ -226,7 +205,7 @@
 					<button class="ghost-button" type="button" data-view-link="subscription">Preview benefits</button>
 				</section>
 
-				<div class="public-layout">
+				<div class="public-layout" hidden>
 					<section class="panel news-panel" aria-labelledby="landing-news-title">
 						<div class="panel-head">
 							<div>
@@ -257,7 +236,7 @@
 				</div>
 			</section>
 
-			<section id="dashboard" class="view" data-title="Overview">
+			<section id="dashboard" class="view retired-view" data-title="Overview" hidden>
 				<div class="summary-grid">
 					<article class="stat-tile">
 						<span class="tile-icon online"></span>
@@ -483,7 +462,7 @@
 							<div><span>Card price</span><strong>10,000 gp</strong></div>
 							<div><span>Vendor stock</span><strong>17 / 20</strong></div>
 						</div>
-						<div class="reward-wallet" id="founder-reward-card">
+						<div class="reward-wallet" id="founder-reward-card" hidden>
 							<div>
 								<span>Founder reward</span>
 								<strong id="founder-reward-count">No free cards</strong>
@@ -531,9 +510,9 @@
 							<strong class="score-badge" id="security-score">92</strong>
 						</div>
 						<div class="security-steps">
-							<label><input id="security-email-check" type="checkbox" checked disabled> Email verified</label>
+							<label><input id="security-email-check" type="checkbox" checked disabled> Email or Google verified</label>
 							<label><input id="security-recovery-check" type="checkbox" checked disabled> Recovery codes set</label>
-							<label><input id="security-password-check" type="checkbox" disabled> Password rotated</label>
+							<label><input id="security-password-check" type="checkbox" disabled> Password or Google login set</label>
 							<label><input id="security-session-check" type="checkbox" checked disabled> Sessions reviewed</label>
 						</div>
 					</section>
@@ -577,7 +556,7 @@
 				</section>
 			</section>
 
-			<section id="highscores" class="view" data-title="Highscores">
+			<section id="highscores" class="view retired-view" data-title="Highscores" hidden>
 				<div class="two-column">
 					<section class="panel" aria-labelledby="highscores-title">
 						<div class="panel-head">
@@ -612,7 +591,7 @@
 				</div>
 			</section>
 
-			<section id="market" class="view" data-title="Market Intel">
+			<section id="market" class="view retired-view" data-title="Market Intel" hidden>
 				<div class="market-layout">
 					<section class="panel market-table" aria-labelledby="market-title">
 						<div class="panel-head">
@@ -646,7 +625,7 @@
 				</div>
 			</section>
 
-			<section id="activity" class="view" data-title="Activity Feed">
+			<section id="activity" class="view retired-view" data-title="Activity Feed" hidden>
 				<div class="activity-layout">
 					<section class="panel" aria-labelledby="activity-title">
 						<div class="panel-head">
@@ -668,7 +647,7 @@
 				</div>
 			</section>
 
-			<section id="admin" class="view" data-title="Staff Panel">
+			<section id="admin" class="view retired-view" data-title="Staff Panel" hidden>
 				<div class="summary-grid">
 					<article class="stat-tile warn"><p>Open reports</p><strong>14</strong><small>3 high priority</small></article>
 					<article class="stat-tile"><p>Muted today</p><strong>2</strong><small>1 appeal pending</small></article>
@@ -708,7 +687,7 @@
 				</div>
 			</section>
 
-			<section id="public" class="view" data-title="News">
+			<section id="public" class="view retired-view" data-title="News" hidden>
 				<div class="public-layout">
 					<section class="panel public-hero" aria-labelledby="public-title">
 						<div>

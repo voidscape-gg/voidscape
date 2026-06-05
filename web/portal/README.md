@@ -1,6 +1,6 @@
 # Voidscape Portal Prototype
 
-Static click-through prototype for the Voidscape website, founder-pass flow, and account-management portal.
+Static click-through prototype for the Voidscape account-management and subscription portal.
 
 Open directly in a browser:
 
@@ -28,9 +28,10 @@ python3 -m http.server 8788 --directory web/portal
 
 - founder username/email reservation
 - invite-code referrals and free weekly subscription-card unlock, plus a dev-only referral simulation shortcut
-- public status, rates, news, built-artifact download metadata, highscores, market intel, and activity feed payloads
+- legacy public status, rates, news, built-artifact download metadata, highscores, market intel, and activity feed payloads for API compatibility; the current UI keeps those surfaces hidden
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
 - web account registration/login with `scrypt` password hashing
+- local dev Google sign-in through `POST /api/accounts/google/dev`, backed by `web_account_identities` in the schema
 - bearer sessions stored as token hashes
 - account security controls for password rotation, recovery-code generation, and ending other sessions
 - account roster reads
@@ -69,27 +70,22 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 
 ## Scope
 
-- Public landing page with early-access founder pass, real local invite-code capture, referral progress, downloads/news/status surfaces
-- Public download cards that become real local links when the PC client and launcher jars are built
-- Explicit landing-card modes for reserving early access or signing into an existing local portal account
-- Concept-inspired landing gateway cards and referral reward band linking into portal sections
-- Account dashboard shell
+- Simple Account tab for creating or signing into a local portal account with email/password or dev Google sign-in
 - Character roster and create-character flow mockup with a 10-character web-account cap
 - Character roster cards with linked/preview state badges, gear-token loadouts, and a 10-slot roster rail
 - Subscription status and redeem-card mockup
-- Founder reward wallet that shows unlocked free weekly cards and consumes them into subscription time
 - API-backed Security tab for password rotation, one-time recovery-code generation, and session review
-- Highscores/titles, market intel, activity feed, staff panel, and public news/downloads tabs
 - Local prototype persistence through `localStorage`, with API-backed state when served through `scripts/run-portal.sh`
 - Character state readout for title, level, location, appearance summary, and equipped gear
 - Paper-doll character preview that reflects starter-path appearance defaults and saved OpenRSC appearance/equipment state when available
 - Optional saved-character snapshot loading when `PORTAL_OPENRSC_DB` points to a local SQLite database
 - Dev-safe saved-character link challenges that merge a verified OpenRSC save into the web-account roster
 - Portal account schema contract for web accounts, up to 10 linked game characters, founder rewards, and audit/abuse tracking
+- Retired public/content views remain hidden while account management is the active portal scope
 
 ## Not wired yet
 
-- Production authentication
+- Production Google OAuth redirect/callback handling and ID-token verification
 - Game-database-backed account creation
 - Game-database-backed character creation
 - Real in-game `::link` command or signed game-server verification callback

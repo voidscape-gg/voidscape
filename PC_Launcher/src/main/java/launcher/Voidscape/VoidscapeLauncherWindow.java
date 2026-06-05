@@ -157,7 +157,7 @@ public class VoidscapeLauncherWindow extends JFrame {
 
     JButton account = makeHitButton("Account", HIT_ICON);
     account.setBounds(ICONS_X + (ICONS_W / 5) * 4, ICONS_Y, ICONS_W / 5, ICONS_H);
-    account.addActionListener(e -> openUrl(VoidscapeLauncherConfig.portalUrl(), "Account portal"));
+    account.addActionListener(e -> openUrl(VoidscapeLauncherConfig.portalAccountUrl(), "Account portal"));
     root.add(account);
   }
 
@@ -187,7 +187,7 @@ public class VoidscapeLauncherWindow extends JFrame {
 
     JButton account = makeRailButton("Account");
     account.setBounds(14, 16, 90, 38);
-    account.addActionListener(e -> openUrl(VoidscapeLauncherConfig.portalUrl(), "Account portal"));
+    account.addActionListener(e -> openUrl(VoidscapeLauncherConfig.portalAccountUrl(), "Account portal"));
     rail.add(account);
 
     JButton website = makeRailButton("Website");

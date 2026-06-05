@@ -27,6 +27,29 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-05 — Simplified portal to account management
+
+Narrowed the web portal prototype from a public content hub back to a simple account-management surface. The visible portal now starts on an Account tab with local email/password or dev Google sign-in, and the sidebar only exposes Account, Characters, Subscription, and Security. Highscores, market, activity, staff, news, referral gateway, and launch-board surfaces are retained only as hidden prototype compatibility markup/API paths for now.
+
+Files touched:
+- `web/portal/index.html`, `web/portal/styles.css` — simplified visible navigation and first screen, removed marketing/news-style clutter from the active portal experience.
+- `web/portal/script.js` — routes retired hashes back to Account and guards retired render targets.
+- `web/portal/README.md` — updated portal scope to reflect account/subscription focus.
+
+Reversibility: re-enable the hidden views or restore the earlier portal navigation if public website content returns. No game packet, launcher binary, database migration, or OpenRSC login behavior changed.
+
+### 2026-06-05 — Portal Google sign-in scaffold
+
+Added the first Google-ready account-management slice to the web portal while keeping the classic game login untouched. The portal schema now supports external account identities, the local dev API can create or link a simulated Google identity to a normal portal account/session, the portal UI exposes a Google sign-in button on the founder/account card, and the launcher Account icon opens the portal dashboard route in the browser.
+
+Files touched:
+- `web/portal/schema/*/001_web_accounts.sql`, `scripts/test-portal-schema.sh` — nullable password hashes for OAuth-only accounts plus `web_account_identities` constraints.
+- `web/portal/dev-server.mjs`, `web/portal/api-smoke.mjs` — local Google identity/session flow and smoke coverage.
+- `web/portal/index.html`, `web/portal/script.js`, `web/portal/styles.css` — Google sign-in UI and security-state handling.
+- `PC_Launcher/src/main/java/launcher/Voidscape/*`, `PC_Launcher/README.md`, `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md`, `web/portal/README.md` — portal route handoff and architecture docs.
+
+Reversibility: remove the dev endpoint/UI, drop `web_account_identities`, restore `password_hash NOT NULL`, and point launcher Account back to the base portal URL. No packet, opcode, game-login, client-cache, or OpenRSC player-schema behavior changed.
+
 ### 2026-06-05 — Beta command and playtest documentation hardening
 
 Aligned the current beta-facing docs with the live Voidscape build after removing abandoned prototypes and adding several tuning/test helpers. The player/admin command reference, friend beta playtest guide, and client cache docs now describe the simplified global chat flow, rested XP status command, balance telemetry commands, local client version `10069`, and current local port handling instead of stale prototype references.

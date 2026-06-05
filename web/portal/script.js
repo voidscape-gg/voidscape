@@ -57,6 +57,8 @@
 	var founderSubmit = document.getElementById("founder-submit");
 	var founderMessage = document.getElementById("founder-message");
 	var accountModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-account-mode]"));
+	var googleAuthButton = document.getElementById("google-auth-button");
+	var googleAuthLabel = document.getElementById("google-auth-label");
 	var founderProgressLabel = document.getElementById("founder-progress-label");
 	var founderRewardLabel = document.getElementById("founder-reward-label");
 	var founderProgressFill = document.getElementById("founder-progress-fill");
@@ -109,6 +111,15 @@
 	var accountMode = "reserve";
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
+	var retiredViews = {
+		landing: "account",
+		dashboard: "account",
+		highscores: "account",
+		market: "account",
+		activity: "account",
+		admin: "account",
+		public: "account"
+	};
 
 	var classKits = {
 		warrior: {
@@ -168,7 +179,10 @@
 	];
 
 	renderAll();
-	activateView((window.location.hash || "#landing").replace("#", "") || "landing");
+	activateView((window.location.hash || "#account").replace("#", "") || "account");
+	window.setTimeout(function () {
+		activateView((window.location.hash || "#account").replace("#", "") || "account");
+	}, 0);
 	hydrateFromApi();
 
 	viewLinks.forEach(function (link) {
@@ -177,6 +191,10 @@
 			activateView(link.getAttribute("data-view-link"));
 			if (shell) shell.classList.remove("nav-open");
 		});
+	});
+
+	window.addEventListener("hashchange", function () {
+		activateView((window.location.hash || "#account").replace("#", "") || "account");
 	});
 
 	if (menuToggle) {
@@ -481,6 +499,10 @@
 		});
 	}
 
+	if (googleAuthButton) {
+		googleAuthButton.addEventListener("click", handleGoogleAuth);
+	}
+
 	if (founderForm) {
 		accountModeButtons.forEach(function (button) {
 			button.addEventListener("click", function () {
@@ -595,7 +617,7 @@
 					}
 				});
 				applyFounderState(reservation.founder);
-				founderMessage.textContent = referralCreditMessage(reservation.founder, "Founder pass saved through the local API.");
+					founderMessage.textContent = referralCreditMessage(reservation.founder, "Account saved through the local API.");
 				return;
 			} catch (error) {
 				if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
@@ -613,7 +635,7 @@
 				referredBy: currentReferralCode() ? { code: currentReferralCode(), username: "" } : null
 			};
 			saveFounder(founder);
-			founderMessage.textContent = "Founder pass saved locally. Production signup still needs API and email verification.";
+			founderMessage.textContent = "Account saved locally. Production signup still needs API and email verification.";
 			renderFounder();
 		});
 	}
@@ -624,13 +646,53 @@
 			button.classList.toggle("is-active", button.getAttribute("data-account-mode") === accountMode);
 		});
 		if (founderNameRow) founderNameRow.hidden = accountMode === "signin";
-		if (founderTitle) founderTitle.textContent = accountMode === "signin" ? "Sign in to portal" : "Reserve early access";
-		if (founderSubmit) founderSubmit.textContent = accountMode === "signin" ? "Sign in" : "Save founder pass";
+		if (founderTitle) founderTitle.textContent = accountMode === "signin" ? "Sign in" : "Create account";
+		if (founderSubmit) founderSubmit.textContent = accountMode === "signin" ? "Sign in" : "Save account";
+		if (googleAuthLabel) googleAuthLabel.textContent = accountMode === "signin" ? "Sign in with Google" : "Continue with Google";
 		if (founderPassword) founderPassword.setAttribute("autocomplete", accountMode === "signin" ? "current-password" : "new-password");
 		if (founderMessage) {
 			founderMessage.textContent = accountMode === "signin"
-				? "Returning players can load their local portal account."
-				: "2 verified invites unlock a free weekly subscription card.";
+				? "Returning players can load their portal account."
+				: "Create a portal account, then add characters and subscriptions.";
+		}
+	}
+
+	async function handleGoogleAuth() {
+		var email = (founderEmail.value || "").trim();
+		var name = normalizeName(founderName.value || "");
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			founderMessage.textContent = "Enter the email you want to use with Google.";
+			founderEmail.focus();
+			return;
+		}
+		googleAuthButton.disabled = true;
+		try {
+			var state = await apiRequest("/api/accounts/google/dev", {
+				method: "POST",
+				body: {
+					email: email,
+					displayName: name || email.split("@")[0],
+					username: name || undefined,
+					path: selectedClass,
+					referrerCode: currentReferralCode() || undefined
+				}
+			});
+			applyAccountState(state);
+			setAccountMode("signin");
+			founderPassword.value = "";
+			founderMessage.textContent = "Google sign-in simulated through the local API. Production will use Google's browser OAuth flow.";
+		} catch (error) {
+			if (error.status === 409 && error.code === "google_identity_conflict") {
+				founderMessage.textContent = "This portal account is already linked to another Google identity.";
+			} else if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
+				founderMessage.textContent = referralErrorMessage(error);
+			} else if (error.status && error.status !== 404) {
+				founderMessage.textContent = "Google sign-in failed: " + error.code + ".";
+			} else {
+				founderMessage.textContent = "Start the local portal API to test Google sign-in.";
+			}
+		} finally {
+			googleAuthButton.disabled = false;
 		}
 	}
 
@@ -658,7 +720,7 @@
 		simulateReferral.addEventListener("click", async function () {
 			var founder = loadFounder();
 			if (!founder) {
-				founderMessage.textContent = "Save a founder pass first.";
+				founderMessage.textContent = "Save an account first.";
 				return;
 			}
 			try {
@@ -708,7 +770,7 @@
 			var publicState = await apiRequest("/api/public");
 			applyPublicState(publicState);
 			if (!sessionToken) {
-				founderMessage.textContent = "Local API online. Add a portal password to create an account session.";
+				founderMessage.textContent = "Local API online. Add a portal password or use Google to create an account session.";
 				return;
 			}
 			var state = await apiRequest("/api/account");
@@ -722,22 +784,22 @@
 	function applyPublicState(state) {
 		if (!state) return;
 		if (state.status) {
-			serverWorldLabel.textContent = state.status.world || "World 1";
-			serverOnlineCount.textContent = (state.status.playersOnline || 0) + " online";
-			patchChip.textContent = "Patch " + (state.status.patch || "0.8.7");
-			landingWorldState.textContent = state.status.online ? "Online" : "Offline";
-			landingWorldDetail.textContent = (state.status.playersOnline || 0) + " players online";
-			dashboardWorldState.textContent = state.status.online ? "Online" : "Offline";
-			dashboardWorldSave.textContent = "Last save " + (state.status.lastSave || "recently");
+			if (serverWorldLabel) serverWorldLabel.textContent = state.status.world || "World 1";
+			if (serverOnlineCount) serverOnlineCount.textContent = (state.status.playersOnline || 0) + " online";
+			if (patchChip) patchChip.textContent = "Patch " + (state.status.patch || "0.8.7");
+			if (landingWorldState) landingWorldState.textContent = state.status.online ? "Online" : "Offline";
+			if (landingWorldDetail) landingWorldDetail.textContent = (state.status.playersOnline || 0) + " players online";
+			if (dashboardWorldState) dashboardWorldState.textContent = state.status.online ? "Online" : "Offline";
+			if (dashboardWorldSave) dashboardWorldSave.textContent = "Last save " + (state.status.lastSave || "recently");
 		}
 		if (state.rates) {
-			landingXpRates.textContent = state.rates.baseCombat + "x / " + state.rates.baseSkill + "x";
-			landingSubRates.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x subscribed";
-			dashboardXpRate.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x";
+			if (landingXpRates) landingXpRates.textContent = state.rates.baseCombat + "x / " + state.rates.baseSkill + "x";
+			if (landingSubRates) landingSubRates.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x subscribed";
+			if (dashboardXpRate) dashboardXpRate.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x";
 		}
 		if (state.founderStats) {
-			landingPrizeState.textContent = (state.founderStats.freeSubCardsUnlocked || 0) + " unlocked";
-			landingPrizeDetail.textContent = (state.founderStats.reservations || 0) + " founder reservations";
+			if (landingPrizeState) landingPrizeState.textContent = (state.founderStats.freeSubCardsUnlocked || 0) + " unlocked";
+			if (landingPrizeDetail) landingPrizeDetail.textContent = (state.founderStats.reservations || 0) + " founder reservations";
 		}
 		if (Array.isArray(state.highscores)) {
 			ranks = state.highscores.map(function (row) {
@@ -938,9 +1000,10 @@
 	}
 
 	function activateView(id) {
+		id = retiredViews[id] || id;
 		var next = views.find(function (view) {
 			return view.id === id;
-		}) || document.getElementById("landing");
+		}) || document.getElementById("account");
 
 		views.forEach(function (view) {
 			view.classList.toggle("is-active", view === next);
@@ -1048,7 +1111,7 @@
 		activeCharacterLocation.textContent = character.status;
 		activeCharacterSubscription.textContent = character.subscription || "Unsubscribed";
 		activeCharacterLastLogin.textContent = character.lastLogin || "Never";
-		dashboardActiveTitle.textContent = character.title || "No title equipped";
+		if (dashboardActiveTitle) dashboardActiveTitle.textContent = character.title || "No title equipped";
 		activeCharacterGear.innerHTML = [
 			'<strong>Equipped / appearance</strong>',
 			'<span>' + escapeHtml(character.appearance) + '</span>',
@@ -1241,7 +1304,7 @@
 		securityScore.textContent = security.score;
 		securityEmailCheck.checked = Boolean(security.emailVerified);
 		securityRecoveryCheck.checked = Boolean(security.recoveryCodes && security.recoveryCodes.activeCount > 0);
-		securityPasswordCheck.checked = Boolean(security.passwordChangedAt);
+		securityPasswordCheck.checked = Boolean(security.passwordChangedAt || (security.auth && security.auth.googleConnected));
 		securitySessionCheck.checked = Array.isArray(security.sessions) && security.sessions.length <= 2;
 		generateRecovery.textContent = security.recoveryCodes && security.recoveryCodes.activeCount
 			? "Rotate codes"
@@ -1278,6 +1341,7 @@
 	}
 
 	function renderRankTable() {
+		if (!rankTable) return;
 		rankTable.innerHTML = '<div class="table-row table-head"><span>Rank</span><span>Player</span><span>Combat</span><span>XP</span></div>' +
 			ranks.map(function (row) {
 				return '<div class="table-row"><span>' + escapeHtml(row[0]) + '</span><span>' + escapeHtml(row[1]) + '</span><span>' + escapeHtml(row[2]) + '</span><span>' + escapeHtml(row[3]) + '</span></div>';
@@ -1285,6 +1349,7 @@
 	}
 
 	function renderMarketTable() {
+		if (!marketTable) return;
 		marketTable.innerHTML = '<div class="table-row table-head"><span>Item</span><span>Average</span><span>24h</span><span>Depth</span></div>' +
 			marketRows.map(function (row) {
 				var movement = row[2].charAt(0) === "+" ? "good" : row[2].charAt(0) === "-" ? "bad" : "";
@@ -1293,6 +1358,7 @@
 	}
 
 	function renderWorldFeed() {
+		if (!worldFeed) return;
 		worldFeed.innerHTML = feedRows.map(function (row) {
 			return '<div class="event-row ' + escapeAttr(row[0]) + '"><span></span><p>' + escapeHtml(row[1]) + '</p><time>' + escapeHtml(row[2]) + '</time></div>';
 		}).join("");
@@ -1440,7 +1506,7 @@
 
 	function makeInviteLink(code) {
 		var url = new URL(window.location.href);
-		url.hash = "landing";
+		url.hash = "account";
 		url.search = "";
 		url.searchParams.set("ref", code);
 		return url.toString();
@@ -1448,7 +1514,7 @@
 
 	function referralCreditMessage(founder, fallback) {
 		if (founder && founder.referredBy && founder.referredBy.code) {
-			return "Founder pass saved. Invite credited to " + (founder.referredBy.username || founder.referredBy.code) + ".";
+			return "Account saved. Invite credited to " + (founder.referredBy.username || founder.referredBy.code) + ".";
 		}
 		return fallback;
 	}

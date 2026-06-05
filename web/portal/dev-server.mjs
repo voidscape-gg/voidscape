@@ -224,6 +224,30 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "POST" && url.pathname === "/api/accounts/google/dev") {
+		const payload = await readJson(request);
+		const result = await updateStore((store) => {
+			const profile = googleDevProfile(payload);
+			const account = upsertGoogleAccount(store, profile, payload);
+			const token = createSession(store, account.id);
+			audit(store, "account_google_login_dev", {
+				accountId: account.id,
+				email: profile.emailCanonical
+			});
+			return {
+				token,
+				auth: {
+					provider: "google",
+					devMode: true,
+					emailVerified: profile.emailVerified
+				},
+				...accountState(store, account)
+			};
+		});
+		json(response, 200, result);
+		return;
+	}
+
 	if (method === "POST" && url.pathname === "/api/accounts/login") {
 		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
@@ -609,6 +633,7 @@ function accountState(store, account, currentSession) {
 			status: account.status,
 			subscription: subscriptionState(account)
 		},
+		auth: authState(store, account),
 		founder: founder ? founderState(founder) : null,
 		characters: store.characters
 			.filter((character) => character.accountId === account.id)
@@ -641,6 +666,24 @@ function accountState(store, account, currentSession) {
 	};
 }
 
+function authState(store, account) {
+	const identities = store.identities
+		.filter((identity) => identity.accountId === account.id)
+		.map((identity) => ({
+			provider: identity.provider,
+			email: identity.emailDisplay,
+			displayName: identity.displayName || "",
+			avatarUrl: identity.avatarUrl || "",
+			emailVerified: Boolean(identity.emailVerified),
+			lastLoginAt: identity.lastLoginAt || null
+		}));
+	return {
+		passwordEnabled: Boolean(account.passwordHash),
+		googleConnected: identities.some((identity) => identity.provider === "google"),
+		providers: identities
+	};
+}
+
 function rewardState(store, account) {
 	const founderCards = store.entitlements.filter((entry) =>
 		entry.accountId === account.id &&
@@ -665,20 +708,22 @@ function securityState(store, account, currentSession, founder) {
 	const activeSessions = store.sessions
 		.filter((session) => session.accountId === account.id && session.expiresAt > Date.now() && !session.revokedAt)
 		.sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)));
+	const auth = authState(store, account);
 	const emailVerified = Boolean(founder && (founder.status === "verified" || founder.status === "dev_verified"));
 	const hasRecoveryCodes = activeRecoveryCodes.length > 0;
 	const passwordChanged = Boolean(account.passwordChangedAt);
 	const score = Math.min(100,
 		40 +
-		(emailVerified ? 20 : 0) +
+		(emailVerified || auth.googleConnected ? 20 : 0) +
 		(hasRecoveryCodes ? 20 : 0) +
-		(passwordChanged ? 10 : 0) +
+		(passwordChanged || auth.googleConnected ? 10 : 0) +
 		(activeSessions.length <= 2 ? 10 : 5)
 	);
 
 	return {
 		score,
-		emailVerified,
+		emailVerified: emailVerified || auth.googleConnected,
+		auth,
 		recoveryCodes: {
 			activeCount: activeRecoveryCodes.length,
 			lastGeneratedAt: account.recoveryCodesGeneratedAt || null
@@ -1195,6 +1240,105 @@ function grantFounderEntitlement(store, founder) {
 	});
 }
 
+function googleDevProfile(payload) {
+	const emailDisplay = String(payload.email || payload.googleEmail || "").trim();
+	const emailCanonical = canonicalEmail(emailDisplay);
+	if (!emailCanonical) throw new HttpError(400, "invalid_google_email");
+	const displayName = cleanUsername(payload.displayName || payload.name || emailDisplay.split("@")[0] || "Voidscape player");
+	const subjectInput = String(payload.sub || payload.subject || payload.googleSub || `dev:${emailCanonical}`).trim();
+	if (subjectInput.length < 3) throw new HttpError(400, "invalid_google_subject");
+	const username = suggestedPortalUsername(payload.username || displayName || emailDisplay.split("@")[0]);
+	return {
+		provider: "google",
+		providerSubject: subjectInput,
+		emailCanonical,
+		emailDisplay,
+		displayName,
+		avatarUrl: String(payload.avatarUrl || payload.picture || "").trim(),
+		emailVerified: payload.emailVerified === false ? false : true,
+		username
+	};
+}
+
+function suggestedPortalUsername(value) {
+	let username = cleanUsername(value).replace(/[^a-zA-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 12).trim();
+	if (username.length >= 2 && /^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
+		return username;
+	}
+	return `Void${randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
+function upsertGoogleAccount(store, profile, payload) {
+	let identity = store.identities.find((entry) =>
+		entry.provider === profile.provider &&
+		entry.providerSubject === profile.providerSubject
+	);
+	let account = identity ? store.accounts.find((entry) => entry.id === identity.accountId) : null;
+	if (!account) {
+		account = store.accounts.find((entry) => entry.emailCanonical === profile.emailCanonical) || null;
+	}
+
+	if (!account) {
+		const founder = reserveFounder(store, {
+			username: profile.username,
+			email: profile.emailDisplay,
+			referrerCode: payload.referrerCode || payload.referralCode || payload.ref || ""
+		});
+		account = {
+			id: nextId(store, "account"),
+			emailCanonical: profile.emailCanonical,
+			emailDisplay: profile.emailDisplay,
+			passwordHash: null,
+			status: "active",
+			createdAt: now(),
+			updatedAt: now()
+		};
+		store.accounts.push(account);
+		createCharacter(store, account.id, founder.username, payload.path || "warrior");
+		grantFounderEntitlement(store, founder);
+		audit(store, "account_google_registered_dev", { accountId: account.id });
+	}
+
+	const accountGoogleIdentity = store.identities.find((entry) =>
+		entry.accountId === account.id &&
+		entry.provider === profile.provider
+	);
+	if (accountGoogleIdentity && accountGoogleIdentity.providerSubject !== profile.providerSubject) {
+		throw new HttpError(409, "google_identity_conflict");
+	}
+
+	if (!identity) {
+		identity = {
+			id: nextId(store, "identity"),
+			accountId: account.id,
+			provider: profile.provider,
+			providerSubject: profile.providerSubject,
+			emailCanonical: profile.emailCanonical,
+			emailDisplay: profile.emailDisplay,
+			displayName: profile.displayName,
+			avatarUrl: profile.avatarUrl,
+			emailVerified: profile.emailVerified,
+			createdAt: now(),
+			updatedAt: now(),
+			lastLoginAt: now()
+		};
+		store.identities.push(identity);
+		audit(store, "account_google_identity_linked_dev", { accountId: account.id });
+	} else {
+		identity.emailCanonical = profile.emailCanonical;
+		identity.emailDisplay = profile.emailDisplay;
+		identity.displayName = profile.displayName;
+		identity.avatarUrl = profile.avatarUrl;
+		identity.emailVerified = profile.emailVerified;
+		identity.updatedAt = now();
+		identity.lastLoginAt = now();
+	}
+
+	account.emailDisplay = profile.emailDisplay;
+	account.updatedAt = now();
+	return account;
+}
+
 function createSession(store, accountId) {
 	const token = randomBytes(32).toString("base64url");
 	store.sessions.push({
@@ -1264,9 +1408,11 @@ function normalizeStore(store) {
 			entitlement: Number(store.nextIds && store.nextIds.entitlement) || 1,
 			linkChallenge: Number(store.nextIds && store.nextIds.linkChallenge) || 1,
 			recoveryCode: Number(store.nextIds && store.nextIds.recoveryCode) || 1,
+			identity: Number(store.nextIds && store.nextIds.identity) || 1,
 			audit: Number(store.nextIds && store.nextIds.audit) || 1
 		},
 		accounts: Array.isArray(store.accounts) ? store.accounts : [],
+		identities: Array.isArray(store.identities) ? store.identities : [],
 		sessions: Array.isArray(store.sessions) ? store.sessions : [],
 		founders: Array.isArray(store.founders) ? store.founders : [],
 		referrals: Array.isArray(store.referrals) ? store.referrals : [],

@@ -36,3 +36,5 @@ voidscape.websiteUrl=
 voidscape.portalUrl=
 voidscape.discordUrl=https://discord.gg/example
 ```
+
+The Account launcher icon opens the configured portal at `#dashboard`, leaving Google sign-in, account recovery, and the 10-character manager in the browser. The Play button still launches the classic client directly; browser-session-to-game-login handoff is intentionally deferred until the portal account model is production-ready.

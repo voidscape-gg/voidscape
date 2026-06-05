@@ -27,7 +27,7 @@ Suggested tables:
 - `id`
 - `email_canonical`
 - `email_display`
-- `password_hash`
+- `password_hash` (nullable for Google-only accounts)
 - `status`: `active`, `locked`, `review`
 - `created_at`
 - `updated_at`
@@ -35,6 +35,23 @@ Suggested tables:
 Constraints:
 
 - unique `email_canonical`
+
+### `web_account_identities`
+
+- `account_id`
+- `provider`: currently `google`
+- `provider_subject`: Google OpenID Connect `sub`
+- `email_canonical`
+- `email_display`
+- `display_name`
+- `avatar_url`
+- `email_verified`
+- `last_login_at`
+
+Constraints:
+
+- unique `(provider, provider_subject)`
+- unique `(account_id, provider)`
 
 ### `web_account_sessions`
 
@@ -78,14 +95,14 @@ The current schema draft lives in `web/portal/schema/`:
 - `sqlite/001_web_accounts.sql`
 - `mysql/001_web_accounts.sql`
 
-It is intentionally portal-owned reference SQL and is not auto-applied by the OpenRSC server. The schema adds `web_character_link_challenges`, `web_founder_reservations`, `web_founder_referrals`, `web_audit_events`, and `web_abuse_signals` alongside the core account/session/character/entitlement tables. `scripts/test-portal-schema.sh` applies the SQLite variant and verifies the important constraints, including roster slots `0-9`, unique linked `player_id`, and unique active founder names.
+It is intentionally portal-owned reference SQL and is not auto-applied by the OpenRSC server. The schema adds `web_account_identities`, `web_character_link_challenges`, `web_founder_reservations`, `web_founder_referrals`, `web_audit_events`, and `web_abuse_signals` alongside the core account/session/character/entitlement tables. `scripts/test-portal-schema.sh` applies the SQLite variant and verifies the important constraints, including roster slots `0-9`, unique linked `player_id`, unique Google identity links, and unique active founder names.
 
 ## Compatibility Strategy
 
 Phase 1 keeps game login untouched:
 
 1. A player can still log into the PC client with the character username and existing password.
-2. The website authenticates by web account email/password.
+2. The website authenticates by web account email/password or Google OpenID Connect.
 3. Characters are linked to a web account after proof of control, initially by matching existing credentials or by an in-game verification code.
 4. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
 5. Subscription state should eventually live at the web-account level, then mirror to character `player_cache` on login until the game server reads account entitlements directly.
@@ -158,6 +175,7 @@ It currently proves:
 - referral reward state for the free weekly subscription card
 - public site payloads for status, XP rates, news, downloads, highscores, market intel, and activity feed
 - web account registration/login flow
+- local dev Google sign-in flow that stores a `google` provider identity and returns a normal portal bearer session
 - `scrypt` password hashing with per-password salts
 - bearer sessions stored server-side as token hashes
 - local account security controls for password rotation, hashed recovery-code generation, and ending other active sessions
@@ -175,6 +193,7 @@ It does not yet prove:
 - production-safe OpenRSC character ownership/linking
 - OpenRSC database writes
 - real in-game `::link` command handling or signed game-server verification callback
+- production Google OAuth redirect/callback handling and ID-token verification
 - production password reset, recovery-code consumption, or email recovery
 - staff/admin authorization
 

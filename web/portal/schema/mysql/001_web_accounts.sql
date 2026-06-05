@@ -5,13 +5,36 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     email_canonical VARCHAR(255) NOT NULL,
     email_display VARCHAR(255) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255),
     status VARCHAR(24) NOT NULL DEFAULT 'active',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id),
     UNIQUE KEY uq_web_accounts_email (email_canonical),
     KEY idx_web_accounts_status (status)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS web_account_identities (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id BIGINT UNSIGNED NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    provider_subject VARCHAR(191) NOT NULL,
+    email_canonical VARCHAR(255) NOT NULL,
+    email_display VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
+    avatar_url VARCHAR(512),
+    email_verified TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    last_login_at DATETIME(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_web_account_identities_provider_subject (provider, provider_subject),
+    UNIQUE KEY uq_web_account_identities_account_provider (account_id, provider),
+    KEY idx_web_account_identities_email (email_canonical),
+    CONSTRAINT fk_web_account_identities_account
+        FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CONSTRAINT chk_web_account_identities_provider CHECK (provider IN ('google')),
+    CONSTRAINT chk_web_account_identities_verified CHECK (email_verified IN (0, 1))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS web_account_sessions (

@@ -111,6 +111,26 @@ const secondToken = secondLogin.token;
 assert(secondToken && secondToken !== originalToken, "login should create a second session token");
 token = originalToken;
 
+const googleLinked = await api("/api/accounts/google/dev", {
+	method: "POST",
+	body: {
+		email: "smoke@example.com",
+		displayName: "Smoke Hero",
+		subject: "google-smoke-subject",
+		username: "SmokeHero"
+	}
+});
+const googleToken = googleLinked.token;
+assert(googleToken && googleToken !== originalToken, "Google dev sign-in should return a separate session token");
+assert(googleLinked.auth.googleConnected === true, "Google dev sign-in should link a Google identity");
+assert(googleLinked.auth.passwordEnabled === true, "linking Google should preserve existing password login");
+assert(googleLinked.auth.providers.some((provider) => provider.provider === "google"), "account state should list Google provider");
+token = googleToken;
+const googleSessionAccount = await api("/api/account");
+assert(googleSessionAccount.account.email === "smoke@example.com", "Google session should authenticate the same portal account");
+assert(googleSessionAccount.characters.length === 1, "Google sign-in should not duplicate the existing character roster");
+token = originalToken;
+
 const recovery = await api("/api/security/recovery-codes", { method: "POST" });
 assert(Array.isArray(recovery.codes) && recovery.codes.length === 8, "security endpoint should return one-time recovery codes");
 assert(recovery.security.recoveryCodes.activeCount === 8, "security state should count active recovery codes");

@@ -54,6 +54,14 @@ public final class VoidscapeLauncherConfig {
     return setting("voidscape.portalUrl", "VOIDSCAPE_PORTAL_URL", DEFAULT_PORTAL_URL);
   }
 
+  public static String portalAccountUrl() {
+    return portalRoute("dashboard");
+  }
+
+  public static String portalCharactersUrl() {
+    return portalRoute("characters");
+  }
+
   public static String websiteUrl() {
     return setting("voidscape.websiteUrl", "VOIDSCAPE_WEBSITE_URL", DEFAULT_WEBSITE_URL);
   }
@@ -64,6 +72,19 @@ public final class VoidscapeLauncherConfig {
 
   public static String endpointLabel() {
     return serverHost() + ":" + serverPort();
+  }
+
+  private static String portalRoute(String route) {
+    String url = portalUrl();
+    if (url == null || url.trim().length() == 0) {
+      return "";
+    }
+    String trimmed = url.trim();
+    int hash = trimmed.indexOf('#');
+    if (hash >= 0) {
+      trimmed = trimmed.substring(0, hash);
+    }
+    return trimmed + "#" + route;
   }
 
   private static String setting(String property, String env, String fallback) {

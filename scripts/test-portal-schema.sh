@@ -22,6 +22,10 @@ VALUES (1, 'schema@example.com', 'schema@example.com', 'scrypt$fixture');
 INSERT INTO web_account_sessions (account_id, session_token_hash, expires_at, ip_hash, user_agent_hash)
 VALUES (1, 'session-hash-fixture', 9999999999999, 'ip-hash', 'ua-hash');
 
+INSERT INTO web_account_identities (
+	account_id, provider, provider_subject, email_canonical, email_display, display_name, email_verified
+) VALUES (1, 'google', 'google-subject-fixture', 'schema@example.com', 'schema@example.com', 'Schema Hero', 1);
+
 INSERT INTO web_recovery_codes (account_id, code_hash, code_hint, status)
 VALUES (1, 'recovery-hash-fixture', '1234', 'active');
 
@@ -86,11 +90,22 @@ if sqlite3 "$db_path" "INSERT INTO web_founder_referrals (referrer_reservation_i
 	exit 1
 fi
 
+if sqlite3 "$db_path" "INSERT INTO web_account_identities (account_id, provider, provider_subject, email_canonical, email_display) VALUES (1, 'google', 'another-google-subject', 'schema@example.com', 'schema@example.com');" >/dev/null 2>&1; then
+	echo "expected duplicate provider per account to violate identity uniqueness"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_account_identities (account_id, provider, provider_subject, email_canonical, email_display) VALUES (1, 'google', 'google-subject-fixture', 'schema@example.com', 'schema@example.com');" >/dev/null 2>&1; then
+	echo "expected duplicate google subject to violate identity uniqueness"
+	exit 1
+fi
+
 sqlite3 "$db_path" "INSERT INTO web_founder_reservations (username, normalized_name, email_canonical, email_display, founder_code, status) VALUES ('SchemaHero2', 'schemahero', 'other@example.com', 'other@example.com', 'OTHER-A2', 'released');"
 
 sqlite3 -json "$db_path" <<'SQL'
 SELECT
 	(SELECT COUNT(*) FROM web_accounts) AS accounts,
+	(SELECT COUNT(*) FROM web_account_identities) AS identities,
 	(SELECT COUNT(*) FROM web_recovery_codes) AS recovery_codes,
 	(SELECT COUNT(*) FROM web_account_characters) AS character_links,
 	(SELECT COUNT(*) FROM web_founder_reservations) AS founder_reservations,
