@@ -65,6 +65,30 @@ nc -vz <server-host-or-ip> 43596
 
 During the friend beta, newly created characters are temporarily created as Admins automatically so testers can use the command checklist immediately. Existing characters can still be changed with `make rank-sqlite` / `make rank-mysql` or in-game `::setrank` from an owner/admin account. Revert the auto-admin default before any public release.
 
+## Launcher updates
+
+Players should receive normal client/cache updates through the launcher, not by manually replacing the PC client jar.
+
+Portal-hosted deployment:
+
+- Run `scripts/build.sh` on the machine that serves the portal, or sync `Client_Base/Open_RSC_Client.jar`, `Client_Base/Cache/`, and `PC_Launcher/OpenRSC.jar` there after building.
+- Serve the portal over HTTPS behind the final public hostname.
+- Configure the launcher with `voidscape.portalUrl=https://<portal-host>`; it will derive `https://<portal-host>/api/launcher/manifest.properties` automatically. Set `voidscape.manifestUrl` only when the manifest lives somewhere else.
+- Before announcing an update, verify:
+
+```bash
+curl -I https://<portal-host>/api/launcher/manifest.properties
+curl -I https://<portal-host>/downloads/pc-client
+```
+
+Static beta deployment:
+
+- Use `scripts/package-friend-beta.sh --base-url https://<host>/voidscape/update ...`.
+- Upload/sync the generated `dist/friend-beta/update/` folder.
+- Verify `curl -I https://<host>/voidscape/update/manifest.properties`.
+
+In both modes, the launcher checks the manifest on Play, verifies SHA-256 hashes, downloads only changed files, preserves runtime files like credentials and endpoint settings, and then launches the cached `Open_RSC_Client.jar`.
+
 ## Config files
 
 | File | Purpose | Git status |

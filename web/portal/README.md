@@ -30,6 +30,7 @@ python3 -m http.server 8788 --directory web/portal
 - invite-code referrals and one free starter subscription-card unlock, plus a dev-only referral simulation shortcut
 - legacy public status, rates, news, built-artifact download metadata, highscores, market intel, and activity feed payloads for API compatibility; the current UI keeps those surfaces hidden
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
+- launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `Open_RSC_Client.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/pc-client` and `/downloads/cache/...`
 - web account registration/login with `scrypt` password hashing
 - local dev Google sign-in through `POST /api/accounts/google/dev`, backed by `web_account_identities` in the schema
 - bearer sessions stored as token hashes

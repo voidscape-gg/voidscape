@@ -20,6 +20,7 @@ public final class VoidscapeLauncherConfig {
 
   private static final String DEFAULT_PORTAL_URL = "";
   private static final String DEFAULT_WEBSITE_URL = "";
+  private static final String PORTAL_MANIFEST_PATH = "api/launcher/manifest.properties";
   private static final String LAUNCHER_PROPERTIES = "voidscape-launcher.properties";
   private static final Properties PACKAGED_SETTINGS = loadPackagedSettings();
 
@@ -47,7 +48,11 @@ public final class VoidscapeLauncherConfig {
   }
 
   public static String manifestUrl() {
-    return setting("voidscape.manifestUrl", "VOIDSCAPE_MANIFEST_URL", "");
+    String configured = setting("voidscape.manifestUrl", "VOIDSCAPE_MANIFEST_URL", null);
+    if (configured != null && configured.trim().length() > 0) {
+      return configured.trim();
+    }
+    return portalPath(PORTAL_MANIFEST_PATH);
   }
 
   public static String portalUrl() {
@@ -75,6 +80,26 @@ public final class VoidscapeLauncherConfig {
   }
 
   private static String portalRoute(String route) {
+    String url = portalBaseUrl();
+    if (url == null || url.trim().length() == 0) {
+      return "";
+    }
+    return url + "#" + route;
+  }
+
+  private static String portalPath(String path) {
+    String url = portalBaseUrl();
+    if (url == null || url.trim().length() == 0) {
+      return "";
+    }
+    String cleanedPath = path == null ? "" : path.trim();
+    while (cleanedPath.startsWith("/")) {
+      cleanedPath = cleanedPath.substring(1);
+    }
+    return url + "/" + cleanedPath;
+  }
+
+  private static String portalBaseUrl() {
     String url = portalUrl();
     if (url == null || url.trim().length() == 0) {
       return "";
@@ -84,7 +109,14 @@ public final class VoidscapeLauncherConfig {
     if (hash >= 0) {
       trimmed = trimmed.substring(0, hash);
     }
-    return trimmed + "#" + route;
+    int query = trimmed.indexOf('?');
+    if (query >= 0) {
+      trimmed = trimmed.substring(0, query);
+    }
+    while (trimmed.endsWith("/")) {
+      trimmed = trimmed.substring(0, trimmed.length() - 1);
+    }
+    return trimmed;
   }
 
   private static String setting(String property, String env, String fallback) {

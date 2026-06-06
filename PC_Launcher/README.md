@@ -26,7 +26,7 @@ scripts/package-friend-beta.sh \
 
 The script emits `dist/friend-beta/VoidscapeLauncher.jar` for testers and `dist/friend-beta/update/` for static hosting. On first Play, the launcher downloads `Open_RSC_Client.jar` plus cache files from the manifest and writes the configured host/port into the runtime cache.
 
-Configuration precedence is system properties, environment variables, sidecar `voidscape-launcher.properties`, then the bundled properties generated during packaging. Useful keys:
+Configuration precedence is system properties, environment variables, sidecar `voidscape-launcher.properties`, then the bundled properties generated during packaging. If `voidscape.manifestUrl` is omitted but `voidscape.portalUrl` is set, the launcher uses `<portalUrl>/api/launcher/manifest.properties`. Useful keys:
 
 ```properties
 voidscape.serverHost=play.example.com
@@ -36,5 +36,7 @@ voidscape.websiteUrl=
 voidscape.portalUrl=
 voidscape.discordUrl=https://discord.gg/example
 ```
+
+The portal API can also host a live manifest at `/api/launcher/manifest.properties`. That manifest points at `/downloads/pc-client` and `/downloads/cache/...`, hashes every file with SHA-256, and is checked automatically when the player clicks Play. Static beta packaging still works for a tiny no-portal deployment; portal-hosted updates are the normal path once the account site is deployed.
 
 The Account launcher icon opens the configured portal at `#dashboard`, leaving Google sign-in, account recovery, and the 10-character manager in the browser. The Play button still launches the classic client directly; browser-session-to-game-login handoff is intentionally deferred until the portal account model is production-ready.

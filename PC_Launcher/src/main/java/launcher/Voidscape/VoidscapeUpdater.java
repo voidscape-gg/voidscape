@@ -34,6 +34,7 @@ public class VoidscapeUpdater {
       "uid.dat",
       "ip.txt",
       "port.txt",
+      "hideIp.txt",
       "config.txt",
       "client.properties",
       "discord_inuse.txt",

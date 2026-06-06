@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -44,6 +44,19 @@ const downloadArtifacts = [
 		path: join(repoRoot, "PC_Launcher/OpenRSC.jar")
 	}
 ];
+const clientCacheDir = join(repoRoot, "Client_Base/Cache");
+const launcherRuntimeFiles = new Set([
+	"credentials.txt",
+	"uid.dat",
+	"ip.txt",
+	"port.txt",
+	"hideip.txt",
+	"config.txt",
+	"client.properties",
+	"discord_inuse.txt",
+	"launchersettings.conf",
+	"voidscapelauncher.properties"
+]);
 
 const kits = {
 	warrior: {
@@ -138,12 +151,19 @@ server.listen(port, "127.0.0.1", () => {
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+	if (url.pathname === "/api/launcher/manifest.properties") {
+		if (!["GET", "HEAD"].includes(request.method || "GET")) {
+			throw new HttpError(405, "method_not_allowed");
+		}
+		await serveLauncherManifest(request, response);
+		return;
+	}
 	if (url.pathname.startsWith("/api/")) {
 		await handleApi(request, response, url);
 		return;
 	}
 	if (url.pathname.startsWith("/downloads/")) {
-		await serveDownload(response, url.pathname);
+		await serveDownload(request, response, url.pathname);
 		return;
 	}
 	if (url.pathname.startsWith("/openrsc/avatar/")) {
@@ -692,24 +712,193 @@ async function serveStatic(request, response, pathname) {
 	response.end(body);
 }
 
-async function serveDownload(response, pathname) {
+async function serveDownload(request, response, pathname) {
+	if (pathname.startsWith("/downloads/cache/")) {
+		await serveCacheDownload(request, response, pathname);
+		return;
+	}
+
 	const slug = decodeURIComponent(pathname.slice("/downloads/".length));
 	const artifact = downloadArtifacts.find((entry) => entry.slug === slug);
 	if (!artifact) throw new HttpError(404, "download_not_found");
-	let fileStat;
+	await sendFile(request, response, artifact.path, {
+		contentType: "application/java-archive",
+		contentDisposition: `attachment; filename="${artifact.filename}"`,
+		notFound: "download_not_built"
+	});
+}
+
+async function serveCacheDownload(request, response, pathname) {
+	let requestedPath = "";
 	try {
-		fileStat = await stat(artifact.path);
+		requestedPath = decodeURIComponent(pathname.slice("/downloads/cache/".length));
 	} catch (error) {
-		throw new HttpError(404, "download_not_built");
+		throw new HttpError(400, "invalid_download_path");
 	}
-	const body = await readFile(artifact.path);
+
+	const resolved = resolve(clientCacheDir, requestedPath);
+	const isInsideCache = relative(clientCacheDir, resolved).split(/[\\/]/)[0] !== "..";
+	if (!isInsideCache || isRuntimeCachePath(requestedPath)) {
+		throw new HttpError(403, "forbidden");
+	}
+
+	await sendFile(request, response, resolved, {
+		contentType: contentType(resolved),
+		contentDisposition: `attachment; filename="${basename(resolved)}"`,
+		notFound: "download_not_built"
+	});
+}
+
+async function serveLauncherManifest(request, response) {
+	const body = await launcherManifest(request);
 	response.writeHead(200, {
-		"content-type": "application/java-archive",
-		"content-length": String(fileStat.size),
-		"content-disposition": `attachment; filename="${artifact.filename}"`,
+		"content-type": "text/plain; charset=utf-8",
+		"content-length": Buffer.byteLength(body),
 		"cache-control": "no-store"
 	});
+	if (request.method === "HEAD") {
+		response.end();
+		return;
+	}
 	response.end(body);
+}
+
+async function launcherManifest(request) {
+	const origin = publicOrigin(request);
+	const clientArtifact = downloadArtifacts.find((entry) => entry.slug === "pc-client");
+	let clientStat;
+	try {
+		clientStat = await stat(clientArtifact.path);
+		if (!clientStat.isFile()) throw new Error("not_file");
+	} catch (error) {
+		throw new HttpError(404, "launcher_manifest_not_built");
+	}
+
+	const entries = [{
+		path: clientArtifact.filename,
+		url: `${origin}/downloads/${clientArtifact.slug}`,
+		sha256: await sha256File(clientArtifact.path),
+		mtimeMs: clientStat.mtimeMs
+	}];
+	entries.push(...await clientCacheManifestEntries(origin));
+
+	const latestMtime = Math.max(...entries.map((entry) => entry.mtimeMs));
+	const version = new Date(latestMtime).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+	const lines = [
+		propertyLine("version", version),
+		propertyLine("baseUrl", `${origin}/downloads/cache/`)
+	];
+	entries.forEach((entry, index) => {
+		const prefix = `file.${index + 1}`;
+		lines.push(propertyLine(`${prefix}.path`, entry.path));
+		lines.push(propertyLine(`${prefix}.sha256`, entry.sha256));
+		lines.push(propertyLine(`${prefix}.url`, entry.url));
+	});
+	return `${lines.join("")}`;
+}
+
+async function clientCacheManifestEntries(origin) {
+	let cacheStat;
+	try {
+		cacheStat = await stat(clientCacheDir);
+		if (!cacheStat.isDirectory()) return [];
+	} catch (error) {
+		return [];
+	}
+
+	const files = await listClientCacheFiles(clientCacheDir);
+	const entries = [];
+	for (const filePath of files) {
+		const relativePath = relative(clientCacheDir, filePath).replace(/\\/g, "/");
+		if (isRuntimeCachePath(relativePath)) {
+			continue;
+		}
+		const fileStat = await stat(filePath);
+		if (!fileStat.isFile()) {
+			continue;
+		}
+		entries.push({
+			path: relativePath,
+			url: `${origin}/downloads/cache/${encodeRelativeUrlPath(relativePath)}`,
+			sha256: await sha256File(filePath),
+			mtimeMs: fileStat.mtimeMs
+		});
+	}
+	return entries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function listClientCacheFiles(directory) {
+	const rows = [];
+	const entries = await readdir(directory, { withFileTypes: true });
+	for (const entry of entries) {
+		const fullPath = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			rows.push(...await listClientCacheFiles(fullPath));
+		} else if (entry.isFile()) {
+			rows.push(fullPath);
+		}
+	}
+	return rows;
+}
+
+async function sendFile(request, response, filePath, options = {}) {
+	let fileStat;
+	try {
+		fileStat = await stat(filePath);
+		if (!fileStat.isFile()) throw new Error("not_file");
+	} catch (error) {
+		throw new HttpError(404, options.notFound || "file_not_found");
+	}
+	response.writeHead(200, {
+		"content-type": options.contentType || contentType(filePath),
+		"content-length": String(fileStat.size),
+		"content-disposition": options.contentDisposition || `attachment; filename="${basename(filePath)}"`,
+		"cache-control": "no-store"
+	});
+	if (request.method === "HEAD") {
+		response.end();
+		return;
+	}
+	createReadStream(filePath).pipe(response);
+}
+
+async function sha256File(filePath) {
+	const body = await readFile(filePath);
+	return createHash("sha256").update(body).digest("hex");
+}
+
+function publicOrigin(request) {
+	const forwardedProto = firstHeaderValue(request.headers["x-forwarded-proto"]);
+	const forwardedHost = firstHeaderValue(request.headers["x-forwarded-host"]);
+	const proto = forwardedProto || (request.socket && request.socket.encrypted ? "https" : "http");
+	const host = forwardedHost || request.headers.host || `127.0.0.1:${port}`;
+	return `${proto}://${host}`;
+}
+
+function firstHeaderValue(value) {
+	if (Array.isArray(value)) {
+		return value[0] || "";
+	}
+	return String(value || "").split(",")[0].trim();
+}
+
+function encodeRelativeUrlPath(relativePath) {
+	return relativePath.split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
+function isRuntimeCachePath(relativePath) {
+	return launcherRuntimeFiles.has(basename(relativePath).toLowerCase());
+}
+
+function propertyLine(key, value) {
+	return `${key}=${escapePropertyValue(value)}\n`;
+}
+
+function escapePropertyValue(value) {
+	return String(value)
+		.replace(/\\/g, "\\\\")
+		.replace(/\r/g, "\\r")
+		.replace(/\n/g, "\\n");
 }
 
 async function serveOpenRscAvatar(response, pathname) {
@@ -2413,6 +2602,7 @@ function contentType(filePath) {
 		".js": "application/javascript; charset=utf-8",
 		".mjs": "application/javascript; charset=utf-8",
 		".json": "application/json; charset=utf-8",
+		".properties": "text/plain; charset=utf-8",
 		".png": "image/png",
 		".jpg": "image/jpeg",
 		".jpeg": "image/jpeg",

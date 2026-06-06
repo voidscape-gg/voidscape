@@ -19,6 +19,16 @@ if (pcDownload.available) {
 	assert(downloadResponse.ok, "available PC client download should be served");
 	assert((downloadResponse.headers.get("content-disposition") || "").includes(".jar"), "download should include jar attachment disposition");
 	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "download should include a non-empty artifact");
+
+	const manifestHead = await fetch(`${baseUrl}/api/launcher/manifest.properties`, { method: "HEAD" });
+	assert(manifestHead.ok, "available PC client should expose launcher manifest HEAD");
+	const manifestResponse = await fetch(`${baseUrl}/api/launcher/manifest.properties`);
+	assert(manifestResponse.ok, "available PC client should expose launcher manifest");
+	const manifest = await manifestResponse.text();
+	assert(/^version=.+$/m.test(manifest), "launcher manifest should include a version");
+	assert(/^file\.\d+\.path=Open_RSC_Client\.jar$/m.test(manifest), "launcher manifest should include the PC client jar path");
+	assert(/^file\.\d+\.sha256=[0-9a-f]{64}$/m.test(manifest), "launcher manifest should include SHA-256 hashes");
+	assert(manifest.includes(`${baseUrl}/downloads/pc-client`), "launcher manifest should point at the PC client download");
 }
 
 const googleOauthStub = await api("/api/oauth/google/start", { expectStatus: 501 });

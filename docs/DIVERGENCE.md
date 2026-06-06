@@ -2814,3 +2814,14 @@ Details:
 - The combat simulator mirrors the rule in the `voidscape` ruleset while `--rules openrsc` remains a no-momentum baseline.
 - Updated the combat subsystem docs, simulator README, and combat tuning report with the rule and simulator results.
 - No server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, or launcher binary changed.
+
+### 2026-06-06 - Portal-hosted launcher update manifest
+
+Promoted launcher auto-updates from a static beta packaging trick into a portal-hosted release path. When the launcher has a portal URL but no explicit manifest URL, it now derives `<portalUrl>/api/launcher/manifest.properties`; the portal dev API serves that manifest with SHA-256 entries for the built PC client jar and non-runtime `Client_Base/Cache` files.
+
+Details:
+- `VoidscapeUpdater` continues to verify each manifest entry by SHA-256 and atomically replace changed files before launching the cached client.
+- The portal serves `/downloads/pc-client` plus safe `/downloads/cache/...` paths used by the manifest, while refusing traversal and runtime cache files such as credentials, endpoint files, `hideIp.txt`, and launcher settings.
+- `HEAD` smoke checks work for the manifest and jar download endpoints, making deploy verification simple behind HTTPS/proxies.
+- Updated launcher, portal, cache, and operations docs with the portal-hosted and static-beta update flows.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client-version, or live combat behavior changed.
