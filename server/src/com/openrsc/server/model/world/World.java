@@ -14,6 +14,7 @@ import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler.TrawlerBoat;
 import com.openrsc.server.content.party.PartyManager;
+import com.openrsc.server.content.wilderness.BountyHunter;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
 import com.openrsc.server.database.impl.mysql.queries.player.login.PlayerOnlineFlagQuery;
@@ -112,6 +113,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	private final ClanManager clanManager;
 	private final Market market;
 	private final WorldAnnouncementService worldAnnouncementService;
+	private final BountyHunter bountyHunter;
 	private final WildernessHobgoblinSpawnController wildernessHobgoblinSpawnController;
 	private final WorldLoader worldLoader;
 	private final CombatOdysseyData combatOdysseyData;
@@ -147,6 +149,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		this.partyManager = new PartyManager(this);
 		this.combatOdysseyData = new CombatOdysseyData(this);
 		this.worldAnnouncementService = new WorldAnnouncementService(this);
+		this.bountyHunter = new BountyHunter(this);
 		this.wildernessHobgoblinSpawnController = new WildernessHobgoblinSpawnController(this);
 
 		final ServerConfiguration config = server.getConfig();
@@ -185,6 +188,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public WorldAnnouncementService getWorldAnnouncementService() {
 		return worldAnnouncementService;
+	}
+
+	public BountyHunter getBountyHunter() {
+		return bountyHunter;
 	}
 
 	public void delayedRemoveObject(final GameObject object, final int delay) {
@@ -287,6 +294,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 * Removes a player by their username hash
 	 */
 	public Player removePlayer(final long usernameHash) {
+		Player player = players.getPlayerByHash(usernameHash);
+		if (player != null) {
+			bountyHunter.onPlayerLogout(player);
+		}
 		return players.removePlayerByHash(usernameHash);
 	}
 
@@ -894,6 +905,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				}
 			}
 			player.resetSceneryMorph();
+			bountyHunter.onPlayerLogout(player);
 			player.logout();
 			LOGGER.info("Unregistered " + player.getUsername() + " from player list.");
 

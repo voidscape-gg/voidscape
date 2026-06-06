@@ -762,7 +762,9 @@ public abstract class Mob extends Entity {
 			if (victim.isPlayer()) {
 				Player playerVictim = (Player) victim;
 				if (this.isPlayer()) {
-					((Player) this).setSkulledOn(playerVictim);
+					Player playerAttacker = (Player) this;
+					playerAttacker.setSkulledOn(playerVictim);
+					getWorld().getBountyHunter().onPvPAttack(playerAttacker, playerVictim);
 				}
 				playerVictim.resetAll();
 				gotUnderAttack = true;

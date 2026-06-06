@@ -121,6 +121,7 @@ public class RangeEvent extends GameTickEvent {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);
 				return;
 			}
+			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
 		} else {
 			if (pluginHandler.handlePlugin(PlayerRangeNpcTrigger.class, getPlayerOwner(), new Object[]{getOwner(), target})) {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);

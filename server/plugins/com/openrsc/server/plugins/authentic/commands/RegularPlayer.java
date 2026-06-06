@@ -96,6 +96,8 @@ public final class RegularPlayer implements CommandTrigger {
 			removePlayerFromClan(player, command, args);
 		} else if (command.equalsIgnoreCase("gameinfo")) {
 			queryPlayerInfo(player);
+		} else if (command.equalsIgnoreCase("bounty")) {
+			player.getWorld().getBountyHunter().sendStatus(player);
 		} else if (command.equalsIgnoreCase("event")) {
 			queryEvents(player);
 		} else if (command.equalsIgnoreCase("g") || command.equalsIgnoreCase("pk")) {

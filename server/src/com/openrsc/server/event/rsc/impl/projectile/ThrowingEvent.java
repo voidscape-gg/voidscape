@@ -127,6 +127,7 @@ public class ThrowingEvent extends GameTickEvent {
 				player.resetRange();
 				return;
 			}
+			player.getWorld().getBountyHunter().onPvPAttack(player, (Player) target);
 		}
 
 		if (throwingID == -1) {

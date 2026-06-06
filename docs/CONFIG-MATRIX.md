@@ -9,6 +9,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Client version | `10069` | `10069` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Decide before beta | Local comment says this keeps completed Dragon sword wieldable. Earlier project docs described F2P-by-default. Pick one and update docs/presets. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
+| Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
 | DB backend | Usually SQLite locally | MariaDB recommended for public | See `docs/OPERATIONS.md`. |
 | Custom content gate | `want_void_enclave: true` | likely `true` | Many Voidscape systems are loaded under this gate. |

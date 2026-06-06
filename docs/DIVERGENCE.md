@@ -27,6 +27,28 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-06 — Android beta launch hardening
+
+Made the Android client buildable again after shared chat flag rendering picked up desktop-only AWT/ImageIO imports, and changed the Android cache launcher from developer-first server selection to a one-tap public Voidscape play path. Shared flag rendering now decodes PNG flag assets through the existing platform `ClientPort` hook and falls back to a tiny raw-pixel country-code badge when an asset is missing, keeping `Client_Base` Android-safe. Once cache setup completes, Android shows `Ready to play` and a single `Play` button targeting `5.161.114.251:43596`; long-pressing Play keeps public/emulator/LAN/manual server options available for testers.
+
+Files touched:
+- `Client_Base/src/orsc/graphics/two/GraphicsController.java` — removed direct desktop image/font dependencies from shared flag rendering and added platform decode plus raw-pixel fallback.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/CacheUpdater.java`, `orsc/osConfig.java`, `res/layout/updater.xml` — one-tap public Play target with advanced long-press server picker.
+- `Android_Client/CLAUDE.md`, `docs/subsystems/client-cache.md`, `docs/subsystems/android-client.md`, `docs/CONFIG-MATRIX.md`, `docs/RELEASE-CHECKLIST.md` — documented the Android launch flow, build/test bar, and release checks.
+
+Reversibility: restore the old server-selection dialog on cache completion and remove the public Android host constant. The renderer change should remain unless shared client code is split by platform, because Android cannot compile direct AWT/ImageIO imports.
+
+### 2026-06-06 — Wilderness bounty mark
+
+Added a low-friction Wilderness bounty mark system for PvP activity. The world now periodically marks one eligible Wilderness player with the existing red skull appearance byte, lets the first valid PvP attacker claim the hunt, and scores claimant kills, target counter-kills, and real escapes without changing multi-combat or forcing 1v1. Bounty payouts are blocked only for same non-local IP pairs and repeated account-pair rewards inside a 30-minute cooldown; normal combat outcomes still proceed.
+
+Files touched:
+- `server/src/com/openrsc/server/content/wilderness/BountyHunter.java`, `World.java`, `Player.java`, `Mob.java`, `RangeEvent.java`, `ThrowingEvent.java`, `SpellHandler.java` — mark lifecycle, red skull rendering, claim hooks, scoring, Void key payout, and cleanup.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/RegularPlayer.java` — `::bounty` status command.
+- `docs/subsystems/bounty-hunter.md` — subsystem behavior, hooks, scoring, and abuse controls.
+
+Reversibility: remove the controller and combat/status hooks. No packet opcode or client change was introduced because skull type `2` already renders red in existing clients.
+
 ### 2026-06-06 — Local staff account console
 
 Turned the retired portal staff placeholder into an active local staff console. The sidebar now exposes a Staff tab where a support/admin token can search accounts by email, inspect account/subscription/recovery/session state, review linked characters, scan recent audit and abuse-signal rows, change account status, grant or clear subscription time, grant or revoke the starter subscription card, and revoke sessions. This is still a local prototype surface over the token-gated admin API, not production RBAC.

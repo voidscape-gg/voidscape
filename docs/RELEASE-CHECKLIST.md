@@ -73,6 +73,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] World map opens, pans/zooms, and autowalk route returns.
 - [ ] Rare-drop beams and ground-item labels respect settings.
 - [ ] Custom bank opens, searches, deposits, withdraws, and loadouts save/load.
+- [ ] Android, if shipping APK: fresh emulator install reaches `Ready to play`, `Play` connects to the intended public endpoint, and the advanced long-press server picker still supports emulator/manual testing.
+- [ ] Android, if shipping APK: touch movement, long-press menu, login/chat keyboard, inventory, bank scrolling, camera rotate, zoom, background/resume, and logout are smoke-tested.
 
 ## Content smoke test
 

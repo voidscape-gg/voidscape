@@ -1568,7 +1568,7 @@ public final class Player extends Mob {
 	}
 
 	public long getSkullTime() {
-		if (isSkulled() && getSkullType() == 1) {
+		if (isSkulled()) {
 			return skullEvent.timeTillNextRun();
 		}
 		return 0;
@@ -2223,6 +2223,9 @@ public final class Player extends Mob {
 	}
 
 	public int getSkullType() {
+		if (getWorld() != null && getWorld().getBountyHunter().isMarked(this)) {
+			return 2;
+		}
 		if (isSkulled()) {
 			return 1;
 		}
@@ -2279,6 +2282,7 @@ public final class Player extends Mob {
 		getCache().store("last_death", System.currentTimeMillis());
 
 		final Player player = mob instanceof Player ? (Player) mob : null;
+		getWorld().getBountyHunter().onPlayerDeath(this, player);
 
 		if (player != null) {
 			player.message(String.format("You have defeated %s!", getUsername()));
@@ -2475,6 +2479,7 @@ public final class Player extends Mob {
 	}
 
 	public void processTick() {
+		getWorld().getBountyHunter().onPlayerTick(this);
 		getWorld().getServer().incrementLastIncomingPacketsDuration(processIncomingPackets());
 		getWorld().getServer().incrementLastExecuteWalkToActionsDuration(
 			getWorld().getServer().getGameUpdater().executeWalkToActions(this));

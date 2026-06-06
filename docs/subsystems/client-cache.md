@@ -69,7 +69,7 @@ Path: `Android_Client/`.
 - Build output: `voidscape.apk`.
 - Build helper: `scripts/build-android.sh` selects JDK 17 and runs Gradle; a local Android SDK is still required through `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `Android_Client/local.properties`, or Homebrew `android-commandlinetools` at `/opt/homebrew/share/android-commandlinetools`.
 - Cache seed: Gradle packages a generated asset copy of `Client_Base/Cache`, excluding mutable local files (`config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` copies that bundled cache into app-private storage before trying any optional remote cache URL.
-- Server choices: emulator default `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
+- Server selection: normal players get a one-tap `Play` path to `5.161.114.251:43596`. Long-pressing Play opens advanced choices for public, emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
 - Note: shares all `mudclient` logic with PC; differs only in input, rendering surface, server selection, and cache bootstrap strategy.
 
 ## PC_Launcher

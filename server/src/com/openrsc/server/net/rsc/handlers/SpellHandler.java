@@ -570,8 +570,13 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			player.resetPath();
 		}
 
-		return player.getWorld().getServer().getPluginHandler()
-				.handlePlugin(SpellPlayerTrigger.class, player, new Object[]{player, affectedPlayer, spellEnum});
+		if (player.getWorld().getServer().getPluginHandler()
+			.handlePlugin(SpellPlayerTrigger.class, player, new Object[]{player, affectedPlayer, spellEnum})) {
+			return true;
+		}
+
+		player.getWorld().getBountyHunter().onPvPAttack(player, affectedPlayer);
+		return false;
 	}
 
 	private boolean checkCastOnNpc(Player player, Npc affectedNpc, SpellDef spell) {

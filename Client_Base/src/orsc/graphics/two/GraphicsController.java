@@ -13,12 +13,6 @@ import orsc.mudclient;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.GraphicsEnvironment;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -26,7 +20,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import javax.imageio.ImageIO;
 
 public class GraphicsController {
 
@@ -71,6 +64,34 @@ public class GraphicsController {
 	private static final int COUNTRY_FLAG_WIDTH = 13;
 	private static final int COUNTRY_FLAG_HEIGHT = 10;
 	private static final int COUNTRY_FLAG_ADVANCE = 15;
+	private static final int[][] COUNTRY_FLAG_GLYPHS = {
+		{0b010, 0b101, 0b111, 0b101, 0b101}, // A
+		{0b110, 0b101, 0b110, 0b101, 0b110}, // B
+		{0b111, 0b100, 0b100, 0b100, 0b111}, // C
+		{0b110, 0b101, 0b101, 0b101, 0b110}, // D
+		{0b111, 0b100, 0b110, 0b100, 0b111}, // E
+		{0b111, 0b100, 0b110, 0b100, 0b100}, // F
+		{0b111, 0b100, 0b101, 0b101, 0b111}, // G
+		{0b101, 0b101, 0b111, 0b101, 0b101}, // H
+		{0b111, 0b010, 0b010, 0b010, 0b111}, // I
+		{0b001, 0b001, 0b001, 0b101, 0b111}, // J
+		{0b101, 0b101, 0b110, 0b101, 0b101}, // K
+		{0b100, 0b100, 0b100, 0b100, 0b111}, // L
+		{0b101, 0b111, 0b111, 0b101, 0b101}, // M
+		{0b101, 0b111, 0b111, 0b111, 0b101}, // N
+		{0b111, 0b101, 0b101, 0b101, 0b111}, // O
+		{0b111, 0b101, 0b111, 0b100, 0b100}, // P
+		{0b111, 0b101, 0b101, 0b111, 0b001}, // Q
+		{0b110, 0b101, 0b110, 0b101, 0b101}, // R
+		{0b111, 0b100, 0b111, 0b001, 0b111}, // S
+		{0b111, 0b010, 0b010, 0b010, 0b010}, // T
+		{0b101, 0b101, 0b101, 0b101, 0b111}, // U
+		{0b101, 0b101, 0b101, 0b101, 0b010}, // V
+		{0b101, 0b101, 0b111, 0b111, 0b101}, // W
+		{0b101, 0b101, 0b010, 0b101, 0b101}, // X
+		{0b101, 0b101, 0b010, 0b010, 0b010}, // Y
+		{0b111, 0b001, 0b010, 0b100, 0b111}  // Z
+	};
 
 	GraphicsController(int var1, int var2, int var3) {
 		try {
@@ -2621,109 +2642,91 @@ public class GraphicsController {
 		if (asset != null) {
 			return asset;
 		}
-
-		BufferedImage image = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D graphics = image.createGraphics();
-		try {
-			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			graphics.setFont(new Font(findEmojiFont(), Font.PLAIN, 13));
-			FontMetrics metrics = graphics.getFontMetrics();
-			String emoji = countryCodeToEmoji(countryCode);
-			int textWidth = metrics.stringWidth(emoji);
-			int x = Math.max(-3, (COUNTRY_FLAG_WIDTH - textWidth) / 2);
-			int y = Math.min(COUNTRY_FLAG_HEIGHT, metrics.getAscent());
-			graphics.drawString(emoji, x, y);
-		} finally {
-			graphics.dispose();
-		}
-
-		int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
-		image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
-		if (visiblePixelCount(pixels) > 8) {
-			return pixels;
-		}
 		return buildCountryFlagFallback(countryCode);
 	}
 
 	private int[] loadCountryFlagAsset(String countryCode) {
 		File flagFile = new File(Config.F_CACHE_DIR,
 			"voidscape" + File.separator + "flags" + File.separator + countryCode.toLowerCase(Locale.ENGLISH) + ".png");
-		if (!flagFile.isFile()) {
+		if (!flagFile.isFile() || mudclient.clientPort == null) {
 			return null;
 		}
 		try {
-			BufferedImage image = ImageIO.read(flagFile);
-			if (image == null) {
+			Sprite sprite = mudclient.clientPort.getSpriteFromByteArray(new ByteArrayInputStream(readFileBytes(flagFile)));
+			if (sprite == null || sprite.getPixels() == null || sprite.getWidth() <= 0 || sprite.getHeight() <= 0) {
 				return null;
 			}
-			if (image.getWidth() != COUNTRY_FLAG_WIDTH || image.getHeight() != COUNTRY_FLAG_HEIGHT) {
-				BufferedImage scaled = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
-				Graphics2D graphics = scaled.createGraphics();
-				try {
-					graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-					graphics.drawImage(image, 0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, null);
-				} finally {
-					graphics.dispose();
-				}
-				image = scaled;
-			}
-			int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
-			image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
-			return pixels;
-		} catch (Exception ex) {
+			return scaleCountryFlagSprite(sprite);
+		} catch (Throwable ex) {
 			return null;
 		}
 	}
 
-	private static String findEmojiFont() {
-		Set<String> availableFonts = new HashSet<>(Arrays.asList(
-			GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames(Locale.ENGLISH)
-		));
-		String[] candidates = {"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla"};
-		for (String candidate : candidates) {
-			if (availableFonts.contains(candidate)) {
-				return candidate;
+	private static byte[] readFileBytes(File file) throws IOException {
+		try (InputStream in = new FileInputStream(file);
+			 ByteArrayOutputStream out = new ByteArrayOutputStream((int) Math.min(file.length(), 16384))) {
+			byte[] buffer = new byte[4096];
+			int read;
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
 			}
+			return out.toByteArray();
 		}
-		return Font.SANS_SERIF;
 	}
 
-	private static String countryCodeToEmoji(String countryCode) {
-		int first = Character.codePointAt(countryCode, 0) - 'A' + 0x1F1E6;
-		int second = Character.codePointAt(countryCode, 1) - 'A' + 0x1F1E6;
-		return new String(Character.toChars(first)) + new String(Character.toChars(second));
-	}
-
-	private static int visiblePixelCount(int[] pixels) {
-		int count = 0;
-		for (int pixel : pixels) {
-			if ((pixel >>> 24) > 0) {
-				count++;
+	private static int[] scaleCountryFlagSprite(Sprite sprite) {
+		int[] src = sprite.getPixels();
+		int srcWidth = sprite.getWidth();
+		int srcHeight = sprite.getHeight();
+		int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
+		for (int y = 0; y < COUNTRY_FLAG_HEIGHT; y++) {
+			int srcY = y * srcHeight / COUNTRY_FLAG_HEIGHT;
+			for (int x = 0; x < COUNTRY_FLAG_WIDTH; x++) {
+				int srcX = x * srcWidth / COUNTRY_FLAG_WIDTH;
+				pixels[y * COUNTRY_FLAG_WIDTH + x] = src[srcY * srcWidth + srcX];
 			}
 		}
-		return count;
+		return pixels;
 	}
 
 	private int[] buildCountryFlagFallback(String countryCode) {
-		BufferedImage image = new BufferedImage(COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D graphics = image.createGraphics();
-		try {
-			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-			graphics.setColor(new java.awt.Color(0x172033));
-			graphics.fillRoundRect(0, 1, COUNTRY_FLAG_WIDTH - 1, COUNTRY_FLAG_HEIGHT - 2, 2, 2);
-			graphics.setColor(new java.awt.Color(0xC7D2FE));
-			graphics.drawRoundRect(0, 1, COUNTRY_FLAG_WIDTH - 1, COUNTRY_FLAG_HEIGHT - 2, 2, 2);
-			graphics.setFont(new Font(Font.DIALOG, Font.BOLD, 7));
-			FontMetrics metrics = graphics.getFontMetrics();
-			graphics.setColor(java.awt.Color.WHITE);
-			graphics.drawString(countryCode, Math.max(1, (COUNTRY_FLAG_WIDTH - metrics.stringWidth(countryCode)) / 2), 9);
-		} finally {
-			graphics.dispose();
-		}
 		int[] pixels = new int[COUNTRY_FLAG_WIDTH * COUNTRY_FLAG_HEIGHT];
-		image.getRGB(0, 0, COUNTRY_FLAG_WIDTH, COUNTRY_FLAG_HEIGHT, pixels, 0, COUNTRY_FLAG_WIDTH);
+		for (int y = 1; y < COUNTRY_FLAG_HEIGHT - 1; y++) {
+			for (int x = 0; x < COUNTRY_FLAG_WIDTH; x++) {
+				putCountryFlagPixel(pixels, x, y, 0xFF172033);
+			}
+		}
+		for (int x = 0; x < COUNTRY_FLAG_WIDTH; x++) {
+			putCountryFlagPixel(pixels, x, 1, 0xFFC7D2FE);
+			putCountryFlagPixel(pixels, x, COUNTRY_FLAG_HEIGHT - 2, 0xFFC7D2FE);
+		}
+		for (int y = 1; y < COUNTRY_FLAG_HEIGHT - 1; y++) {
+			putCountryFlagPixel(pixels, 0, y, 0xFFC7D2FE);
+			putCountryFlagPixel(pixels, COUNTRY_FLAG_WIDTH - 1, y, 0xFFC7D2FE);
+		}
+		drawCountryFlagGlyph(pixels, countryCode.charAt(0), 3, 3, 0xFFFFFFFF);
+		drawCountryFlagGlyph(pixels, countryCode.charAt(1), 7, 3, 0xFFFFFFFF);
 		return pixels;
+	}
+
+	private static void drawCountryFlagGlyph(int[] pixels, char letter, int x, int y, int color) {
+		if (letter < 'A' || letter > 'Z') {
+			return;
+		}
+		int[] rows = COUNTRY_FLAG_GLYPHS[letter - 'A'];
+		for (int row = 0; row < rows.length; row++) {
+			for (int col = 0; col < 3; col++) {
+				if ((rows[row] & (1 << (2 - col))) != 0) {
+					putCountryFlagPixel(pixels, x + col, y + row, color);
+				}
+			}
+		}
+	}
+
+	private static void putCountryFlagPixel(int[] pixels, int x, int y, int color) {
+		if (x >= 0 && x < COUNTRY_FLAG_WIDTH && y >= 0 && y < COUNTRY_FLAG_HEIGHT) {
+			pixels[y * COUNTRY_FLAG_WIDTH + x] = color;
+		}
 	}
 
 	public final void drawSprite(Sprite sprite, int x, int y, int destWidth, int destHeight, int var5) {

@@ -54,8 +54,15 @@ public class CacheUpdater extends Activity {
 		launchButton.setVisibility(View.GONE);
 		launchButton.setOnClickListener(v -> {
 			if (completed) {
-				showGameSelectionDialog();
+				selectServer(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
 			}
+		});
+		launchButton.setOnLongClickListener(v -> {
+			if (completed) {
+				showGameSelectionDialog();
+				return true;
+			}
+			return false;
 		});
 
 		statusText = findViewById(R.id.textView1);
@@ -109,7 +116,8 @@ public class CacheUpdater extends Activity {
 		protected void onPostExecute(Boolean ready) {
 			completed = ready;
 			if (ready) {
-				showGameSelectionDialog();
+				setStatus("Ready to play");
+				launchButton.setVisibility(View.VISIBLE);
 			} else {
 				showCacheFailureDialog();
 			}
@@ -263,17 +271,20 @@ public class CacheUpdater extends Activity {
 	private void showGameSelectionDialog() {
 		launchButton.setVisibility(View.VISIBLE);
 
+		String publicServer = "Voidscape (" + osConfig.VOIDSCAPE_PUBLIC_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
 		String emulator = "Voidscape Emulator (" + osConfig.VOIDSCAPE_EMULATOR_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
 		String lan = "Voidscape LAN (" + osConfig.VOIDSCAPE_LAN_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
 		String manual = "Manual Server";
-		String[] choices = {emulator, lan, manual};
+		String[] choices = {publicServer, emulator, lan, manual};
 
 		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this)
-			.setTitle("Choose Server")
+			.setTitle("Server Options")
 			.setItems(choices, (d, which) -> {
 				if (which == 0) {
-					selectServer(osConfig.VOIDSCAPE_EMULATOR_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+					selectServer(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
 				} else if (which == 1) {
+					selectServer(osConfig.VOIDSCAPE_EMULATOR_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+				} else if (which == 2) {
 					selectServer(osConfig.VOIDSCAPE_LAN_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
 				} else {
 					showManualServerDialog();
@@ -290,7 +301,7 @@ public class CacheUpdater extends Activity {
 		layout.setPadding(32, 8, 32, 0);
 
 		final EditText hostBox = new EditText(CacheUpdater.this);
-		hostBox.setHint(osConfig.VOIDSCAPE_LAN_HOST);
+		hostBox.setHint(osConfig.VOIDSCAPE_PUBLIC_HOST);
 		hostBox.setSingleLine(true);
 		hostBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
 		layout.addView(hostBox);
@@ -309,7 +320,7 @@ public class CacheUpdater extends Activity {
 				String host = hostBox.getText().toString().trim();
 				String port = portBox.getText().toString().trim();
 				if (host.length() == 0) {
-					host = osConfig.VOIDSCAPE_LAN_HOST;
+					host = osConfig.VOIDSCAPE_PUBLIC_HOST;
 				}
 				if (port.length() == 0) {
 					port = osConfig.VOIDSCAPE_DEFAULT_PORT;
