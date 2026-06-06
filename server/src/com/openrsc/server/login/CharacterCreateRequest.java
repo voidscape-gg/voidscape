@@ -132,7 +132,8 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 
 	protected void processInternal() {
 		if (!getServer().getConfig().WANT_PACKET_REGISTER) {
-			getChannel().writeAndFlush(new PacketBuilder().writeByte((byte) RegisterLoginResponse.UNSUCCESSFUL).toPacket());
+			int response = getAuthenticClient() ? RegisterLoginResponse.UNSUCCESSFUL : 4;
+			getChannel().writeAndFlush(new PacketBuilder().writeByte((byte) response).toPacket());
 			getChannel().close();
 			return;
 		}

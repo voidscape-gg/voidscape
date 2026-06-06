@@ -1,6 +1,6 @@
 # Website Account Management Architecture
 
-Voidscape's game server currently treats one `players` row as both the login identity and the playable character. The website target is different: one web account should own up to 10 game characters, while the existing PC/Android client login keeps working during the transition.
+Voidscape's game server currently treats one `players` row as both the login identity and the playable character. The website target is different: one web account should own up to 10 game characters, and public signup should be portal-first because the server is not released yet.
 
 This document records the safe path from the current OpenRSC model to the future account portal.
 
@@ -11,10 +11,10 @@ Authoritative schema lives in `server/database/sqlite/core.sqlite` and `server/d
 - `players` stores identity, password hash, salt, email, rank, position, appearance, combat, totals, privacy settings, and login metadata.
 - `curstats`, `maxstats`, `experience`, and `capped_experience` store skill state by `playerID`.
 - `invitems`, `bank`, `itemstatuses`, and optional `equipped` store item state. Without the equipment-tab addon, wielded items are inferred through inventory item status.
-- `player_cache` stores custom Voidscape state such as titles, subscription expiry, and Void Island path state.
+- `player_cache` stores custom Voidscape state such as titles, web-account links, account subscription mirrors, and Void Island path state.
 - Login flow in `LoginRequest` and `CharacterCreateRequest` looks up or creates by username directly.
 
-Implication: adding web accounts must not rename or split `players` until the client login contract is deliberately changed.
+Implication: adding web accounts must not rename or split `players` yet, but client packet registration can be disabled so new players enter through the portal.
 
 ## Target Model
 
@@ -29,6 +29,7 @@ Suggested tables:
 - `email_display`
 - `password_hash` (nullable for Google-only accounts)
 - `status`: `active`, `locked`, `review`
+- `subscription_expires_at`
 - `created_at`
 - `updated_at`
 
@@ -82,7 +83,7 @@ Constraints:
 
 - `id`
 - `account_id`
-- `type`: `weekly_subscription_card`, `founder_free_subscription`
+- `type`: `weekly_subscription_card`, `starter_free_subscription`
 - `status`: `granted`, `consumed`, `revoked`
 - `source`
 - `created_at`
@@ -99,13 +100,13 @@ It is intentionally portal-owned reference SQL and is not auto-applied by the Op
 
 ## Compatibility Strategy
 
-Phase 1 keeps game login untouched:
+Phase 1 keeps game login untouched but makes signup portal-first:
 
-1. A player can still log into the PC client with the character username and existing password.
+1. A player logs into the PC client with the character username and game password created by the portal.
 2. The website authenticates by web account email/password or Google OpenID Connect.
-3. Characters are linked to a web account after proof of control, initially by matching existing credentials or by an in-game verification code.
-4. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
-5. Subscription state should eventually live at the web-account level, then mirror to character `player_cache` on login until the game server reads account entitlements directly.
+3. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
+4. Public client packet registration is disabled; the client should direct new users to the portal.
+5. Subscription state lives at the web-account level. The game bridge stores `web_account_id` on each character and `acct_sub:<webAccountId>` as the account-wide expiry in global `player_cache`.
 
 Phase 2 can optionally introduce a character-picker login, but that is a protocol/client feature and must follow `docs/subsystems/networking-protocol.md`.
 
@@ -148,7 +149,7 @@ The portal character card should be backed by one API response shaped roughly li
 Data sources:
 
 - `players`: username, rank, combat, skill_total, x/y, login_date, appearance columns, kills, quest_points.
-- `player_cache`: active title and subscription expiry.
+- `player_cache`: active title, `web_account_id`, account subscription expiry bridge, and legacy per-character subscription fields for local snapshot compatibility.
 - `invitems` joined to `itemstatuses`: currently wielded items when the equipment tab is disabled.
 - `equipped` joined to `itemstatuses`: equipment-tab path when enabled.
 - item definitions: item display names and wear slots.
@@ -162,7 +163,7 @@ If avatar rendering is not ready, the API should still return exact appearance/e
 3. `web_accounts` and session authentication with secure password hashing.
 4. Character linking and roster read APIs.
 5. Web character creation endpoint that creates a normal `players` row and links it transactionally.
-6. Founder entitlement to weekly subscription card conversion.
+6. Starter entitlement to weekly subscription card conversion.
 7. Optional client login changes only after the web account model is stable.
 
 ## Local Prototype API
@@ -171,8 +172,8 @@ If avatar rendering is not ready, the API should still return exact appearance/e
 
 It currently proves:
 
-- founder reservation shape
-- referral reward state for the free weekly subscription card
+- founder/reserved-name shape
+- starter-card reward state for the free weekly subscription card
 - public site payloads for status, XP rates, news, downloads, highscores, market intel, and activity feed
 - web account registration/login flow
 - local dev Google sign-in flow that stores a `google` provider identity and returns a normal portal bearer session
@@ -183,7 +184,7 @@ It currently proves:
 - character-state API responses shaped for the portal
 - OpenRSC SQLite-backed character creation through `POST /api/characters` when `PORTAL_OPENRSC_DB` is configured; the endpoint creates the normal `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows, then stores the created player id in the local portal roster state
 - local character link challenges with hashed one-time codes and a dev simulation path
-- subscription-card redemption state
+- account-wide subscription-card redemption state
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
 - portal account-management schema constraints through `scripts/test-portal-schema.sh`
 
@@ -205,7 +206,7 @@ It does not yet prove:
 The endpoint uses `sqlite3 -readonly -json` and returns portal-ready character state:
 
 - `players`: id, username, combat, skill total, x/y, kills, NPC kills, deaths, quest points, last login, online flag, and appearance columns
-- `player_cache`: `player_title_active`, `void_sub_expires`, legacy `void_subscription`, and `void_path`
+- `player_cache`: `player_title_active`, `web_account_id`, global `acct_sub:<webAccountId>`, and `void_path`
 - `invitems` joined to `itemstatuses` for wielded equipment
 - optional `equipped` joined to `itemstatuses` when that table exists
 - `server/conf/server/defs/ItemDefs*.json` for item names, wear slots, and appearance IDs
@@ -215,9 +216,9 @@ It does not authenticate ownership or mutate game data. Production account linki
 
 ### Local OpenRSC character creation
 
-When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 character `gamePassword`. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
+When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 character `gamePassword`. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, stamps the created player cache with `web_account_id`, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
 
-This is deliberately still a local bridge. It does not apply the portal schema to the game DB, does not bypass Void Island starter-path onboarding, does not implement a web-account character picker in the client, and does not create production Google/OAuth account records in OpenRSC.
+This is deliberately still a local bridge. It does not bypass Void Island starter-path onboarding, does not implement a web-account character picker in the client, and does not create production Google/OAuth account records in OpenRSC.
 
 ### Local link challenge flow
 
@@ -235,5 +236,5 @@ The simulate endpoint is deliberately local-only. It checks the submitted code a
 - Password handling must be modern. Do not reuse the legacy RSC password hash for website authentication.
 - `players.username` uniqueness remains the game identity constraint.
 - A roster cap must be enforced in a database transaction, not only in JavaScript.
-- Account-level subscription changes need careful migration from the current per-character `player_cache` expiry.
+- Account-level subscription changes now use the portal account as source of truth; legacy per-character subscription fields should not be used for new players.
 - Character-picker login would be a protocol/client change and is intentionally deferred.

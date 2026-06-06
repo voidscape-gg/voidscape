@@ -24,7 +24,7 @@ Default base URL: `http://127.0.0.1:18787`.
 - `POST /dev/ready` uses the saved Existing User credentials to reach an in-game state, waits for the local player to appear, then clears blocking welcome/server-message dialogs and hides dev-iteration panels such as the Auction House and world map.
 - `POST /fixture/auction-house` requires the logged-in player to be an admin, dispatches `::workbenchauctionfixture`, and reseeds deterministic Auction House listings plus recent sales through the server DB layer.
 - `POST /scenario/auction-house-open` opens the Auction House, captures Browse, first-listing selection, My Auctions, Intel, and Food category states, then returns a report with all saved image paths.
-- `POST /scenario/subscription-vendor-claim` requires a logged-in account, teleports to the Lumbridge Void Subscription Vendor, sends the real client NPC command packet for `Subscribe`, verifies no vendor shop opens, and captures before/after screenshots.
+- `POST /scenario/subscription-vendor-claim` requires a logged-in account whose save has `web_account_id` plus a matching `starter_card:<webAccountId> = 1` global marker, teleports to the Lumbridge Void Subscription Vendor, sends the real client NPC command packet for `Subscribe`, verifies no vendor shop opens, and captures before/after screenshots.
 
 The server binds to loopback only. It does not touch server packets, opcodes, player saves, DB schema, cache versioning, or gameplay behavior. Fixture seeding uses an admin-only server command and marks rows as `wb-fixture`/`wb-buyer` so they can be cleared and reseeded safely.
 

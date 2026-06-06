@@ -25,6 +25,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
 | `client_version` | `10069` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
+| `want_packet_register` | `false` | `false` | `false` | Portal-first account/character creation. |
 
 ## World rules
 
@@ -50,7 +51,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
 | `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
 | `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
-| Subscription cards | Always available in Voidscape | Each card adds 7 days; Lumbridge vendor only grants cards reserved by the website flow. |
+| Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days; Lumbridge vendor grants one starter card reserved by the portal account flow. |
 | `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
 | `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
 | `want_bank_notes` / `want_cert_as_notes` | `true` if shipping notes | Controls note-style item handling and visuals. |

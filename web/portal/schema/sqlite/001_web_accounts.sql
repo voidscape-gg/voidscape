@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     email_display TEXT NOT NULL,
     password_hash TEXT,
     status TEXT NOT NULL DEFAULT 'active',
+    subscription_expires_at INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (length(email_canonical) > 3),
@@ -151,9 +152,9 @@ CREATE TABLE IF NOT EXISTS web_entitlements (
 CREATE INDEX IF NOT EXISTS idx_web_entitlements_account
     ON web_entitlements (account_id, status, type);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_web_founder_free_subscription
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_starter_free_subscription
     ON web_entitlements (account_id, type)
-    WHERE type = 'founder_free_subscription'
+    WHERE type = 'starter_free_subscription'
       AND status IN ('granted', 'consumed');
 
 CREATE TABLE IF NOT EXISTS web_founder_reservations (

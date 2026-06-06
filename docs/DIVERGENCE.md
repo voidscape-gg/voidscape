@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-06 — Portal-first account subscriptions
+
+Made the unreleased beta path portal-first and moved subscription time to the web-account boundary. Client packet registration is disabled in shipped configs, portal-created OpenRSC saves now receive a `web_account_id` player-cache link, subscription-card redemption extends the global `acct_sub:<webAccountId>` expiry instead of per-character cache state, and the Lumbridge vendor checks an account-level `starter_card:<webAccountId>` marker before granting the normal tradable Subscription card. The local portal bridge mirrors these markers when `PORTAL_OPENRSC_DB` is configured and reads account expiry back so the dashboard reflects in-game card redemption.
+
+Files touched:
+- `server/src/com/openrsc/server/content/VoidSubscription.java`, `server/plugins/.../SubscriptionCard.java`, `VoidSubscriptionVendor.java`, `PlayerLogin.java` — account-linked subscription expiry, linked-account redemption guard, and starter-card claim flow.
+- `server/src/com/openrsc/server/database/*`, `server/*.conf`, `CharacterCreateRequest.java` — global long cache helper and portal-first registration settings/response.
+- `web/portal/dev-server.mjs`, `web/portal/schema/*`, `scripts/test-portal-api.sh`, `web/portal/api-smoke.mjs` — local account marker/subscription bridge and schema/test coverage.
+- `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md`, `docs/subsystems/subscription-cards.md`, `docs/BETA-PLAYTEST-GUIDE.md`, `docs/CONFIG-MATRIX.md`, `docs/RELEASE-CHECKLIST.md`, `web/portal/README.md` — documented portal-first signup and account-wide subscriptions.
+
+Reversibility: re-enable `want_packet_register`, restore per-character `void_sub_expires` reads/writes, and change the vendor marker back to a per-character key if Voidscape later chooses client-first registration or character-scoped subscriptions. No opcode or packet payload shape changed.
+
 ### 2026-06-05 — Portal-backed local game character creation
 
 Added the first real character-creation bridge from the account portal into a configured local OpenRSC SQLite game database. When `PORTAL_OPENRSC_DB` is set, `POST /api/characters` now requires a 4-20 character game password, creates a normal `players` row plus initialized `curstats`, `maxstats`, `experience`, and `capped_experience` rows, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in the account roster. Without a configured game DB, the portal keeps the previous preview-only behavior.

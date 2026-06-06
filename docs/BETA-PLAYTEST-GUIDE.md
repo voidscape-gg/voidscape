@@ -1,6 +1,6 @@
 # Voidscape Friend Beta Playtest Guide
 
-This beta flow is client-first against one hosted Voidscape server: friends download the launcher, click Play, create a character from the client, choose a starter path, and log in. No website account manager, email verification, Discord verification, or portal character creation is required for this pass.
+This beta flow is portal-first against one hosted Voidscape server: friends reserve/create their account and first character in the portal, claim the starter subscription card in-game, download the launcher, click Play, choose a starter path, and log in. Client packet registration is disabled for the public flow.
 
 ## Host Setup
 
@@ -83,14 +83,16 @@ Use admin rank only for trusted testers. The commands below can spawn items, alt
 
 ## Tester Flow
 
-1. Open `VoidscapeLauncher.jar`.
-2. Click Play. First launch may download the client/cache.
-3. In the client, click `New User`.
-4. Pick a username and password.
-5. Customize appearance.
-6. On Void Island, talk to the Void Herald at `(24,24)`.
-7. Choose one starter path.
-8. After the welcome box, play normally or use the test commands below.
+1. Open the portal.
+2. Reserve a username and create the first game login.
+3. Download/open `VoidscapeLauncher.jar`.
+4. Click Play. First launch may download the client/cache.
+5. Log in with the character username and game password from the portal.
+6. Customize appearance.
+7. On Void Island, talk to the Void Herald at `(24,24)`.
+8. Choose one starter path.
+9. Claim the starter subscription card from the Lumbridge Subscription Vendor, then redeem it when ready.
+10. After the welcome box, play normally or use the test commands below.
 
 Starter paths:
 

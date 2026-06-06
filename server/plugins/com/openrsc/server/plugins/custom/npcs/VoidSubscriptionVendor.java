@@ -41,22 +41,28 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 
 	private void checkReservedCard(Player player) {
 		synchronized (CLAIM_LOCK) {
-			if (!claimFounderCard(player)) {
+			if (!claimStarterCard(player)) {
 				player.message("@mag@The vendor checks the void ledger.");
 				player.message("@whi@No subscription card is ready for this character.");
 			}
 		}
 	}
 
-	private boolean claimFounderCard(Player player) {
-		String cacheKey = VoidSubscription.founderCardCacheKey(player.getUsername());
+	private boolean claimStarterCard(Player player) {
+		if (!VoidSubscription.hasLinkedAccount(player)) {
+			player.message("@mag@The vendor checks the void ledger.");
+			player.message("@whi@Create your character through the portal before claiming a starter subscription card.");
+			return true;
+		}
+
+		String cacheKey = VoidSubscription.starterCardCacheKey(player);
 		if (cacheKey.isEmpty()) {
 			return false;
 		}
 
 		Integer claimState = player.getWorld().getServer().getDatabase()
 			.queryLoadGlobalCacheInt(cacheKey);
-		if (claimState == null || claimState != VoidSubscription.FOUNDER_CARD_AVAILABLE) {
+		if (claimState == null || claimState != VoidSubscription.STARTER_CARD_AVAILABLE) {
 			return false;
 		}
 
@@ -67,13 +73,13 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 
 		player.getCarriedItems().getInventory().add(new Item(VoidSubscription.CARD_ITEM_ID));
 		player.getWorld().getServer().getDatabase()
-			.querySaveGlobalCacheInt(cacheKey, VoidSubscription.FOUNDER_CARD_CLAIMED);
+			.querySaveGlobalCacheInt(cacheKey, VoidSubscription.STARTER_CARD_CLAIMED);
 		ActionSender.sendInventory(player);
-		player.message("@mag@The vendor hands you your reserved founder subscription card.");
+		player.message("@mag@The vendor hands you your starter subscription card.");
 		player.message("@whi@Redeem it when you're ready to start your 7 days of subscription time.");
 		player.getWorld().getServer().getGameLogger().addQuery(
 			new GenericLog(player.getWorld(), player.getUsername()
-				+ " claimed a founder subscription card from the Lumbridge vendor."));
+				+ " claimed a starter subscription card from the Lumbridge vendor."));
 		player.save(false, true);
 		return true;
 	}

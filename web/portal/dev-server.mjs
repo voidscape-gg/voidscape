@@ -20,9 +20,12 @@ const maxCharacters = 10;
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-const founderCardCachePrefix = "founder_sub_card:";
-const founderCardAvailable = 1;
-const founderCardClaimed = 2;
+const openRscAccountIdCacheKey = "web_account_id";
+const starterCardCachePrefix = "starter_card:";
+const starterCardAvailable = 1;
+const starterCardClaimed = 2;
+const accountSubscriptionCachePrefix = "acct_sub:";
+const starterFreeSubscriptionType = "starter_free_subscription";
 const downloadArtifacts = [
 	{
 		slug: "pc-client",
@@ -193,7 +196,7 @@ async function handleApi(request, response, url) {
 			founder.creditedReferrals = Math.min(2, (founder.creditedReferrals || 0) + 1);
 			founder.updatedAt = now();
 			if (founder.creditedReferrals >= 2) {
-				grantFounderEntitlement(store, founder, "referral_simulated_dev");
+				grantStarterCardEntitlement(store, founder, "referral_simulated_dev");
 			}
 			audit(store, "founder_referral_simulated", { founderId: founder.id });
 			return { founder: founderState(founder) };
@@ -225,8 +228,8 @@ async function handleApi(request, response, url) {
 			};
 			store.accounts.push(account);
 			createCharacter(store, account.id, founder.username, "warrior");
-			grantFounderEntitlement(store, founder, "prelaunch_signup");
-			await syncFounderCardToOpenRsc(founder);
+			grantStarterCardEntitlement(store, founder, "prelaunch_signup");
+			await syncStarterCardToOpenRsc(account);
 			const token = createSession(store, account.id);
 			audit(store, "account_registered", { accountId: account.id });
 			return { token, ...(await accountState(store, account)) };
@@ -314,6 +317,7 @@ async function handleApi(request, response, url) {
 			const account = requireAccount(request, store);
 			const challenge = requireLinkChallenge(store, account, payload);
 			const snapshot = await openRscCharacterSnapshot(challenge.username);
+			await linkOpenRscPlayerToAccount(snapshot.id, account.id);
 			linkSnapshotCharacter(store, account, challenge, snapshot);
 			challenge.status = "verified";
 			challenge.verifiedAt = now();
@@ -332,12 +336,13 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/subscriptions/redeem") {
 		const payload = await readJson(request);
-	const result = await updateStore(async (store) => {
+		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
 			const code = String(payload.code || "").trim();
 			if (code.length < 4) throw new HttpError(400, "invalid_redeem_code");
 			const base = Math.max(Date.now(), account.subscriptionExpiresAt || 0);
 			account.subscriptionExpiresAt = base + 1000 * 60 * 60 * 24 * 7;
+			await syncAccountSubscriptionToOpenRsc(account);
 			account.updatedAt = now();
 			store.entitlements.push({
 				id: nextId(store, "entitlement"),
@@ -356,8 +361,8 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
-	if (method === "POST" && url.pathname === "/api/subscriptions/redeem-founder") {
-		throw new HttpError(409, "claim_founder_card_in_game");
+	if (method === "POST" && url.pathname === "/api/subscriptions/redeem-starter") {
+		throw new HttpError(409, "claim_subscription_card_in_game");
 		return;
 	}
 
@@ -619,7 +624,7 @@ function creditFounderReferral(store, founder, codeInput) {
 	referrer.creditedReferrals = Math.max(referrer.creditedReferrals || 0, countCreditedReferrals(store, referrer.id));
 	referrer.updatedAt = now();
 	if (referrer.creditedReferrals >= 2) {
-		grantFounderEntitlement(store, referrer, "referral_2_verified_dev");
+		grantStarterCardEntitlement(store, referrer, "referral_2_verified_dev");
 	}
 	audit(store, "founder_referral_credited", {
 		referrerFounderId: referrer.id,
@@ -720,11 +725,12 @@ async function createAccountCharacter(store, account, payload, request) {
 		throw new HttpError(409, "character_name_taken");
 	}
 
-	const playerId = await createOpenRscPlayer({
-		username,
-		email: account.emailDisplay || account.emailCanonical || "",
-		password,
-		ip: clientIp(request)
+		const playerId = await createOpenRscPlayer({
+			accountId: account.id,
+			username,
+			email: account.emailDisplay || account.emailCanonical || "",
+			password,
+			ip: clientIp(request)
 	});
 	const snapshot = await openRscCharacterSnapshot(username);
 	const character = {
@@ -763,6 +769,7 @@ async function createAccountCharacter(store, account, payload, request) {
 }
 
 async function accountState(store, account, currentSession) {
+	await syncAccountSubscriptionFromOpenRsc(account);
 	await refreshAccountCharactersFromOpenRsc(store, account);
 	const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null;
 	return {
@@ -866,19 +873,19 @@ function authState(store, account) {
 }
 
 function rewardState(store, account) {
-	const founderCards = store.entitlements.filter((entry) =>
+	const starterCards = store.entitlements.filter((entry) =>
 		entry.accountId === account.id &&
-		entry.type === "founder_free_subscription" &&
+		entry.type === starterFreeSubscriptionType &&
 		entry.status === "granted"
 	);
 	return {
-		founderFreeSubscriptions: founderCards.length,
-		cards: founderCards.map((entry) => ({
+		starterSubscriptionCards: starterCards.length,
+		cards: starterCards.map((entry) => ({
 			id: entry.id,
 			type: entry.type,
 			status: entry.status,
 			source: entry.source,
-			label: "Free weekly subscription card reserved in Lumbridge",
+			label: "Starter subscription card reserved in Lumbridge",
 			createdAt: entry.createdAt
 		}))
 	};
@@ -924,7 +931,7 @@ function securityState(store, account, currentSession, founder) {
 
 async function publicState(store) {
 	const founderUnlocks = store.founders.filter((founder) =>
-		Boolean(founder.freeSubscriptionUnlocked) || founder.creditedReferrals >= 2
+		Boolean(founder.starterCardUnlocked) || founder.creditedReferrals >= 2
 	).length;
 	return {
 		status: {
@@ -942,7 +949,7 @@ async function publicState(store) {
 		},
 		founderStats: {
 			reservations: store.founders.length,
-			freeSubCardsUnlocked: founderUnlocks
+			starterCardsUnlocked: founderUnlocks
 		},
 		downloads: (await downloadState()).concat(publicContent.downloads),
 		news: publicContent.news,
@@ -982,7 +989,7 @@ function dynamicActivity(store) {
 	const latestFounder = store.founders[store.founders.length - 1];
 	const latestCharacter = store.characters[store.characters.length - 1];
 	if (latestFounder) {
-		const cardReserved = Boolean(latestFounder.freeSubscriptionUnlocked) || latestFounder.creditedReferrals >= 2;
+		const cardReserved = Boolean(latestFounder.starterCardUnlocked) || latestFounder.creditedReferrals >= 2;
 		rows.push({
 			type: cardReserved ? "rare" : "title",
 			text: `${latestFounder.username} reserved a founder pass${cardReserved ? " and a Lumbridge subscription card" : ""}.`,
@@ -1144,9 +1151,9 @@ async function openRscPlayerExists(normalizedName) {
 	return rows.length > 0;
 }
 
-async function syncFounderCardToOpenRsc(founder) {
-	if (!openRscDbPath || !founder) return;
-	const key = founderCardCacheKey(founder.username);
+async function syncStarterCardToOpenRsc(account) {
+	if (!openRscDbPath || !account) return;
+	const key = starterCardCacheKey(account.id);
 	if (!key) return;
 
 	const current = await sqliteJson(`
@@ -1156,7 +1163,7 @@ async function syncFounderCardToOpenRsc(founder) {
 		ORDER BY dbid DESC
 		LIMIT 1
 	`);
-	if (current.length && Number(current[0].value) === founderCardClaimed) {
+	if (current.length && Number(current[0].value) === starterCardClaimed) {
 		return;
 	}
 
@@ -1164,18 +1171,74 @@ async function syncFounderCardToOpenRsc(founder) {
 		BEGIN IMMEDIATE;
 		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
 		INSERT INTO player_cache (playerID, type, key, value)
-			VALUES (0, 0, ${sqlString(key)}, ${sqlString(founderCardAvailable)});
+			VALUES (0, 0, ${sqlString(key)}, ${sqlString(starterCardAvailable)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
 	`);
 }
 
-function founderCardCacheKey(username) {
-	const normalized = normalizeUsername(username);
-	return normalized ? `${founderCardCachePrefix}${normalized}` : "";
+function starterCardCacheKey(accountId) {
+	const id = Number(accountId);
+	return Number.isInteger(id) && id > 0 ? `${starterCardCachePrefix}${id}` : "";
 }
 
-async function createOpenRscPlayer({ username, email, password, ip }) {
+function accountSubscriptionCacheKey(accountId) {
+	const id = Number(accountId);
+	return Number.isInteger(id) && id > 0 ? `${accountSubscriptionCachePrefix}${id}` : "";
+}
+
+async function syncAccountSubscriptionToOpenRsc(account) {
+	if (!openRscDbPath || !account) return;
+	const key = accountSubscriptionCacheKey(account.id);
+	if (!key) return;
+	const expiresAt = Number(account.subscriptionExpiresAt || 0);
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
+		INSERT INTO player_cache (playerID, type, key, value)
+			VALUES (0, 3, ${sqlString(key)}, ${sqlString(expiresAt)});
+		COMMIT;
+		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
+	`);
+}
+
+async function syncAccountSubscriptionFromOpenRsc(account) {
+	if (!openRscDbPath || !account) return;
+	const key = accountSubscriptionCacheKey(account.id);
+	if (!key) return;
+	const rows = await sqliteJson(`
+		SELECT value
+		FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		ORDER BY dbid DESC
+		LIMIT 1
+	`);
+	if (!rows.length) return;
+	const expiresAt = Number(rows[0].value || 0);
+	if (Number.isFinite(expiresAt) && expiresAt !== Number(account.subscriptionExpiresAt || 0)) {
+		account.subscriptionExpiresAt = expiresAt;
+		account.updatedAt = now();
+	}
+}
+
+async function linkOpenRscPlayerToAccount(playerId, accountId) {
+	if (!openRscDbPath || !playerId || !accountId) return;
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache
+			WHERE playerID = ${Number(playerId)}
+			  AND key = ${sqlString(openRscAccountIdCacheKey)};
+		INSERT INTO player_cache (playerID, type, key, value)
+			VALUES (${Number(playerId)}, 0, ${sqlString(openRscAccountIdCacheKey)}, ${sqlString(accountId)});
+		COMMIT;
+		SELECT value FROM player_cache
+			WHERE playerID = ${Number(playerId)}
+			  AND key = ${sqlString(openRscAccountIdCacheKey)}
+			LIMIT 1;
+	`);
+}
+
+async function createOpenRscPlayer({ accountId, username, email, password, ip }) {
 	const passwordState = legacyGamePasswordHash(password);
 	const createdAt = Math.floor(Date.now() / 1000);
 	const rows = await sqliteWriteJson(`
@@ -1199,6 +1262,11 @@ async function createOpenRscPlayer({ username, email, password, ip }) {
 			SELECT id, 4000 FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
 		INSERT INTO capped_experience (playerID)
 			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		INSERT INTO player_cache (playerID, type, key, value)
+			SELECT id, 0, ${sqlString(openRscAccountIdCacheKey)}, ${sqlString(accountId)}
+			FROM players
+			WHERE lower(username) = ${sqlString(normalizeUsername(username))}
+			LIMIT 1;
 		COMMIT;
 		SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
 	`);
@@ -1233,7 +1301,7 @@ async function openRscCharacterSnapshot(username) {
 		SELECT key, value, type
 		FROM player_cache
 		WHERE playerID = ${Number(player.id)}
-		  AND key IN ('player_title_active', 'void_sub_expires', 'void_subscription', 'void_path')
+		  AND key IN ('player_title_active', 'void_path', ${sqlString(openRscAccountIdCacheKey)})
 	`);
 	const cache = Object.fromEntries(cacheRows.map((row) => [row.key, row.value]));
 	const equipmentRows = await loadOpenRscEquipment(Number(player.id));
@@ -1255,7 +1323,7 @@ async function openRscCharacterSnapshot(username) {
 	});
 	const titleId = cache.player_title_active || "";
 	const title = titleId && titleDefs.get(titleId) ? titleDefs.get(titleId) : "";
-	const subscription = openRscSubscriptionState(cache);
+	const subscription = await openRscSubscriptionState(cache);
 	const location = locationState(Number(player.x), Number(player.y));
 	const lastLogin = Number(player.login_date || 0);
 	const avatar = await openRscAvatarUrl(Number(player.id));
@@ -1390,9 +1458,21 @@ async function loadTitleDefinitions() {
 	return titleDefinitionsPromise;
 }
 
-function openRscSubscriptionState(cache) {
-	const expiresAt = Number(cache.void_sub_expires || 0);
-	const active = expiresAt > Date.now() || cache.void_subscription === "1" || cache.void_subscription === "true";
+async function openRscSubscriptionState(cache) {
+	const accountId = Number(cache[openRscAccountIdCacheKey] || 0);
+	let expiresAt = 0;
+	if (accountId > 0) {
+		const key = accountSubscriptionCacheKey(accountId);
+		const rows = await sqliteJson(`
+			SELECT value
+			FROM player_cache
+			WHERE playerID = 0 AND key = ${sqlString(key)}
+			ORDER BY dbid DESC
+			LIMIT 1
+		`);
+		expiresAt = Number(rows[0] && rows[0].value || 0);
+	}
+	const active = expiresAt > Date.now();
 	return {
 		active,
 		expiresAt,
@@ -1513,7 +1593,7 @@ function founderState(founder) {
 		code: founder.code,
 		creditedReferrals,
 		requiredReferrals: 2,
-		freeSubscriptionUnlocked: Boolean(founder.freeSubscriptionUnlocked) || creditedReferrals >= 2,
+		starterCardUnlocked: Boolean(founder.starterCardUnlocked) || creditedReferrals >= 2,
 		referredBy: founder.referredByCode ? {
 			code: founder.referredByCode,
 			username: founder.referredByUsername || ""
@@ -1522,18 +1602,18 @@ function founderState(founder) {
 	};
 }
 
-function grantFounderEntitlement(store, founder, source = "prelaunch_signup") {
+function grantStarterCardEntitlement(store, founder, source = "prelaunch_signup") {
 	if (!founder) return null;
-	founder.freeSubscriptionUnlocked = true;
+	founder.starterCardUnlocked = true;
 	founder.updatedAt = now();
 	const account = store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical);
 	if (!account) return null;
-	const exists = store.entitlements.find((entry) => entry.accountId === account.id && entry.type === "founder_free_subscription" && entry.status !== "revoked");
+	const exists = store.entitlements.find((entry) => entry.accountId === account.id && entry.type === starterFreeSubscriptionType && entry.status !== "revoked");
 	if (exists) return exists;
 	const entitlement = {
 		id: nextId(store, "entitlement"),
 		accountId: account.id,
-		type: "founder_free_subscription",
+		type: starterFreeSubscriptionType,
 		status: "granted",
 		source,
 		createdAt: now(),
@@ -1590,22 +1670,23 @@ async function upsertGoogleAccount(store, profile, payload) {
 			email: profile.emailDisplay,
 			referrerCode: payload.referrerCode || payload.referralCode || payload.ref || ""
 		});
-		account = {
-			id: nextId(store, "account"),
-			emailCanonical: profile.emailCanonical,
-			emailDisplay: profile.emailDisplay,
-			passwordHash: null,
-			status: "active",
-			createdAt: now(),
-			updatedAt: now()
-		};
+			account = {
+				id: nextId(store, "account"),
+				emailCanonical: profile.emailCanonical,
+				emailDisplay: profile.emailDisplay,
+				passwordHash: null,
+				status: "active",
+				subscriptionExpiresAt: 0,
+				createdAt: now(),
+				updatedAt: now()
+			};
 		store.accounts.push(account);
-		const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
-		reservedCharacter.source = "founder-reserved";
-		reservedCharacter.status = "Reserved username";
-		grantFounderEntitlement(store, founder, "prelaunch_google_signup_dev");
-		await syncFounderCardToOpenRsc(founder);
-		audit(store, "account_google_registered_dev", { accountId: account.id });
+			const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
+			reservedCharacter.source = "founder-reserved";
+			reservedCharacter.status = "Reserved username";
+			grantStarterCardEntitlement(store, founder, "prelaunch_google_signup_dev");
+			await syncStarterCardToOpenRsc(account);
+			audit(store, "account_google_registered_dev", { accountId: account.id });
 	}
 
 	const accountGoogleIdentity = store.identities.find((entry) =>

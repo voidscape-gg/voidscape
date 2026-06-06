@@ -169,7 +169,6 @@ INSERT INTO players (
 );
 INSERT INTO player_cache (playerID, type, key, value) VALUES
 	(77, 1, 'player_title_active', 'conqueror'),
-	(77, 2, 'void_sub_expires', '9999999999999'),
 	(77, 0, 'void_path', '1');
 INSERT INTO itemstatuses (itemID, catalogID, amount, noted, wielded, durability, kill_log) VALUES
 	(9001, 77, 1, 0, 1, 100, NULL),
@@ -192,15 +191,37 @@ done
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 PORT="$PORT" node web/portal/api-smoke.mjs
 
-founder_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='founder_sub_card:smokehero' ORDER BY dbid DESC LIMIT 1;")"
-if [[ "$founder_card_state" != "1" ]]; then
-	echo "expected SmokeHero founder subscription card to be reserved in OpenRSC cache, got ${founder_card_state:-empty}"
+starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$starter_card_state" != "1" ]]; then
+	echo "expected SmokeHero starter subscription card to be reserved in OpenRSC account cache, got ${starter_card_state:-empty}"
+	exit 1
+fi
+
+account_subscription_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='acct_sub:1' ORDER BY dbid DESC LIMIT 1;")"
+if [[ -z "$account_subscription_state" || "$account_subscription_state" -le "$(node -e 'console.log(Date.now())')" ]]; then
+	echo "expected SmokeHero account subscription expiry to be stored in OpenRSC account cache"
 	exit 1
 fi
 
 created_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username LIKE 'Smoke%' AND id <> 77;")"
 if [[ "$created_count" != "9" ]]; then
 	echo "expected 9 portal-created OpenRSC players, got $created_count"
+	exit 1
+fi
+
+missing_account_links="$(sqlite3 "$fixture_db" <<'SQL'
+SELECT COUNT(*)
+FROM players p
+LEFT JOIN player_cache pc
+  ON pc.playerID = p.id
+ AND pc.key = 'web_account_id'
+ AND pc.value = '1'
+WHERE p.username LIKE 'Smoke%'
+  AND pc.playerID IS NULL;
+SQL
+)"
+if [[ "$missing_account_links" != "0" ]]; then
+	echo "expected all Smoke roster players to be linked to web account 1"
 	exit 1
 fi
 

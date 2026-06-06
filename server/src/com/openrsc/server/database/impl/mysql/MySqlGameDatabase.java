@@ -885,6 +885,23 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public Long queryLoadGlobalCacheLong(final String cacheKey) throws GameDatabaseException {
+		final String query = "SELECT `value` FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` WHERE `playerID`=0 AND `key`=? ORDER BY `dbid` DESC LIMIT 1";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, cacheKey);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return Long.parseLong(result.getString("value"));
+				}
+			}
+		} catch (final SQLException | NumberFormatException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	@Override
 	public String queryPlayerCacheOwner(final String cacheKey) throws GameDatabaseException {
 		try (final PreparedStatement statement = statementFromString(getMySqlQueries().playerCacheOwner, cacheKey);
 			 final ResultSet result = statement.executeQuery()) {
@@ -2069,6 +2086,25 @@ public class MySqlGameDatabase extends JDBCDatabase {
 
 			insertStatement.setString(1, cacheKey);
 			insertStatement.setString(2, Integer.toString(value));
+			insertStatement.executeUpdate();
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public void querySaveGlobalCacheLong(final String cacheKey, final long value) throws GameDatabaseException {
+		final String deleteQuery = "DELETE FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` WHERE `playerID`=0 AND `key`=?";
+		final String insertQuery = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` (`playerID`, `type`, `key`, `value`) VALUES(0, 3, ?, ?)";
+		try (final PreparedStatement deleteStatement = getConnection().prepareStatement(deleteQuery);
+			 final PreparedStatement insertStatement = getConnection().prepareStatement(insertQuery)) {
+			deleteStatement.setString(1, cacheKey);
+			deleteStatement.executeUpdate();
+
+			insertStatement.setString(1, cacheKey);
+			insertStatement.setString(2, Long.toString(value));
 			insertStatement.executeUpdate();
 		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());

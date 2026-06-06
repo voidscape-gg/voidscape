@@ -27,8 +27,8 @@ assert(snapshot.character.combat === 87, "snapshot endpoint should return combat
 assert(snapshot.character.total === "1194", "snapshot endpoint should return total level");
 assert(snapshot.character.status === "Lumbridge", "snapshot endpoint should summarize location");
 assert(snapshot.character.title === "Crownless Conqueror", "snapshot endpoint should resolve the active title");
-assert(snapshot.character.subscriptionState.active === true, "snapshot endpoint should resolve subscription state");
-assert(snapshot.character.subscriptionState.combatXpRate === 10, "snapshot endpoint should include subscribed combat XP rate");
+assert(snapshot.character.subscriptionState.active === false, "unlinked snapshot should not inherit subscription state");
+assert(snapshot.character.subscriptionState.combatXpRate === 7, "unlinked snapshot should use base combat XP rate");
 assert(Array.isArray(snapshot.character.equipment) && snapshot.character.equipment.length === 2, "snapshot endpoint should return wielded gear");
 assert(snapshot.character.gear.includes("Iron 2-handed Sword"), "snapshot endpoint should resolve item definition names");
 
@@ -95,8 +95,8 @@ const registered = await api("/api/accounts/register", {
 token = registered.token;
 assert(token, "registration should return a session token");
 assert(registered.characters.length === 1, "registration should create the first character");
-assert(registered.founder.freeSubscriptionUnlocked === true, "prelaunch signup should reserve the founder subscription card");
-assert(registered.rewards.founderFreeSubscriptions === 1, "reserved founder card should appear in account reward state");
+assert(registered.founder.starterCardUnlocked === true, "prelaunch signup should reserve the starter subscription card");
+assert(registered.rewards.starterSubscriptionCards === 1, "reserved starter card should appear in account reward state");
 assert(registered.characters[0].appearanceData.topColour === 4, "starter characters should expose default appearance data");
 
 const originalToken = token;
@@ -154,7 +154,7 @@ const googleReserved = await api("/api/accounts/google/dev", {
 const reservedToken = googleReserved.token;
 const reservedCard = googleReserved.characters.find((character) => character.name === "GoogHero");
 assert(reservedToken, "new Google reservation should return a session token");
-assert(googleReserved.rewards.founderFreeSubscriptions === 1, "new Google reservation should reserve the in-game founder card");
+assert(googleReserved.rewards.starterSubscriptionCards === 1, "new Google reservation should reserve the in-game starter card");
 assert(reservedCard && reservedCard.source === "founder-reserved", "new Google reservation should create a reserved-name roster card");
 
 const duplicateGoogleReservation = await api("/api/accounts/google/dev", {
@@ -278,11 +278,11 @@ const overflow = await api("/api/characters", {
 });
 assert(overflow.error === "character_limit_reached", "API should enforce the 10-character cap");
 
-const founderRewardWebRedeem = await api("/api/subscriptions/redeem-founder", {
+const starterRewardWebRedeem = await api("/api/subscriptions/redeem-starter", {
 	method: "POST",
 	expectStatus: 409
 });
-assert(founderRewardWebRedeem.error === "claim_founder_card_in_game", "founder card should be claimed in-game instead of redeemed on the portal");
+assert(starterRewardWebRedeem.error === "claim_subscription_card_in_game", "starter card should be claimed in-game instead of redeemed on the portal");
 
 const redeemed = await api("/api/subscriptions/redeem", {
 	method: "POST",
@@ -297,14 +297,14 @@ assert(account.characters.length === 10, "account endpoint should return the ful
 
 const updatedPublic = await api("/api/public");
 assert(updatedPublic.founderStats.reservations >= 1, "public endpoint should include reservation count");
-assert(updatedPublic.founderStats.freeSubCardsUnlocked >= 1, "public endpoint should include founder reward unlock count");
+assert(updatedPublic.founderStats.starterCardsUnlocked >= 1, "public endpoint should include starter-card unlock count");
 assert(updatedPublic.activity[0].time === "Now", "public endpoint should include dynamic activity");
 
 console.log(JSON.stringify({
 	ok: true,
 	account: account.account.email,
 	characters: account.characters.length,
-	founderReward: account.founder.freeSubscriptionUnlocked,
+	starterReward: account.founder.starterCardUnlocked,
 	snapshot: snapshot.character.name,
 	linked: linkedCharacter.name,
 	subscription: account.account.subscription.label,

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     email_display VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255),
     status VARCHAR(24) NOT NULL DEFAULT 'active',
+    subscription_expires_at BIGINT NOT NULL DEFAULT 0,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id),
@@ -121,16 +122,16 @@ CREATE TABLE IF NOT EXISTS web_entitlements (
     code_hint VARCHAR(32),
     starts_at BIGINT UNSIGNED,
     expires_at BIGINT UNSIGNED,
-    active_founder_free_subscription_account BIGINT UNSIGNED AS (
+    active_starter_free_subscription_account BIGINT UNSIGNED AS (
         CASE
-            WHEN type = 'founder_free_subscription' AND status IN ('granted', 'consumed') THEN account_id
+            WHEN type = 'starter_free_subscription' AND status IN ('granted', 'consumed') THEN account_id
             ELSE NULL
         END
     ) STORED,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     consumed_at DATETIME(3),
     PRIMARY KEY (id),
-    UNIQUE KEY uq_web_founder_free_subscription (active_founder_free_subscription_account),
+    UNIQUE KEY uq_web_starter_free_subscription (active_starter_free_subscription_account),
     KEY idx_web_entitlements_account (account_id, status, type),
     CONSTRAINT fk_web_entitlements_account
         FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE

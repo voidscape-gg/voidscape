@@ -40,7 +40,7 @@ INSERT INTO web_founder_referrals (referrer_reservation_id, referred_reservation
 VALUES (1, 2, 'SCHEMA-A1', 'credited', 3);
 
 INSERT INTO web_entitlements (account_id, type, status, source, code_hint, starts_at, expires_at)
-VALUES (1, 'founder_free_subscription', 'granted', 'referral_2_verified', 'SCHEMA', 1780539000000, 1781143800000);
+VALUES (1, 'starter_free_subscription', 'granted', 'referral_2_verified', 'SCHEMA', 1780539000000, 1781143800000);
 
 INSERT INTO web_account_characters (
 	account_id, player_id, display_username, normalized_username, slot, is_primary

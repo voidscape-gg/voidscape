@@ -21,6 +21,13 @@ public final class SubscriptionCard implements OpInvTrigger {
 	public void onOpInv(Player player, Integer invIndex, Item item, String command) {
 		if (!blockOpInv(player, invIndex, item, command)) return;
 
+		if (!VoidSubscription.hasLinkedAccount(player)) {
+			ActionSender.sendBox(player, "@mag@Portal account required% %"
+				+ "@whi@Subscription time is shared by every character on your Voidscape account.%"
+				+ "@whi@Create your character through the portal, then redeem this card.", true);
+			return;
+		}
+
 		boolean wasActive = VoidSubscription.isActive(player);
 
 		if (player.getCarriedItems().remove(item) == -1) {
@@ -28,10 +35,17 @@ public final class SubscriptionCard implements OpInvTrigger {
 		}
 
 		long expiresAt = VoidSubscription.activate(player);
+		if (expiresAt <= 0L) {
+			player.getCarriedItems().getInventory().add(item);
+			ActionSender.sendInventory(player);
+			ActionSender.sendBox(player, "@mag@Subscription not redeemed% %"
+				+ "@whi@The account ledger could not be updated. Try again in a moment.", true);
+			return;
+		}
 		long remaining = expiresAt - System.currentTimeMillis();
 		ActionSender.sendInventory(player);
 		ActionSender.sendBox(player, "@mag@Subscription " + (wasActive ? "extended" : "activated") + "% %"
-			+ "@whi@This card adds @gre@7 days@whi@ of subscription time.%"
+			+ "@whi@This card adds @gre@7 days@whi@ of account subscription time.%"
 			+ "@whi@Combat XP uses @gre@10x@whi@ global rate while active.%"
 			+ "@whi@Skill XP uses @gre@6x@whi@ global rate while active.% %"
 			+ "@lre@Time remaining: " + VoidSubscription.formatRemaining(remaining) + ".", true);

@@ -414,7 +414,7 @@
 
 	if (useFounderReward) {
 		useFounderReward.addEventListener("click", function () {
-			redeemState.textContent = "Founder cards are claimed from the Subscription Vendor in Lumbridge.";
+			redeemState.textContent = "Starter subscription cards are claimed from the Subscription Vendor in Lumbridge.";
 		});
 	}
 
@@ -532,8 +532,8 @@
 	function showPrelaunchClaimSuccess(state) {
 		if (!founderForm || !prelaunchSuccess) return;
 		var rewards = state && state.rewards ? state.rewards : null;
-		var hasCard = rewards && rewards.founderFreeSubscriptions > 0;
-		if (!hasCard && !(state && state.founder && state.founder.freeSubscriptionUnlocked)) return;
+		var hasCard = rewards && rewards.starterSubscriptionCards > 0;
+		if (!hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
 		var founderUsername = state && state.founder ? state.founder.username : founderName.value;
 		var character = prelaunchReservedCharacter(state, founderUsername);
 		var needsGameLogin = Boolean(character && character.source === "founder-reserved");
@@ -712,8 +712,8 @@
 					}
 				});
 				applyFounderState(state.founder);
-				founderMessage.textContent = state.founder.freeSubscriptionUnlocked
-					? "Free weekly subscription card unlocked through the local API."
+				founderMessage.textContent = state.founder.starterCardUnlocked
+					? "Starter subscription card unlocked through the local API."
 					: "Invite credited through the local API.";
 				return;
 			} catch (error) {
@@ -722,7 +722,7 @@
 			founder.invites = Math.min(2, (founder.invites || 0) + 1);
 			saveFounder(founder);
 			founderMessage.textContent = founder.invites >= 2
-				? "Free weekly subscription card unlocked in this local prototype."
+				? "Starter subscription card unlocked in this local prototype."
 				: "Invite credited locally. One more verified invite unlocks the card.";
 			renderFounder();
 		});
@@ -780,7 +780,7 @@
 			if (dashboardXpRate) dashboardXpRate.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x";
 		}
 		if (state.founderStats) {
-			if (landingPrizeState) landingPrizeState.textContent = (state.founderStats.freeSubCardsUnlocked || 0) + " unlocked";
+			if (landingPrizeState) landingPrizeState.textContent = (state.founderStats.starterCardsUnlocked || 0) + " unlocked";
 			if (landingPrizeDetail) landingPrizeDetail.textContent = (state.founderStats.reservations || 0) + " founder reservations";
 		}
 		if (Array.isArray(state.highscores)) {
@@ -891,7 +891,7 @@
 
 	function renderRewards(rewards) {
 		if (!founderRewardCard || !founderRewardCount || !useFounderReward) return;
-		var count = rewards && rewards.founderFreeSubscriptions ? rewards.founderFreeSubscriptions : 0;
+		var count = rewards && rewards.starterSubscriptionCards ? rewards.starterSubscriptionCards : 0;
 		founderRewardCard.hidden = count <= 0;
 		founderRewardCard.classList.toggle("is-ready", count > 0);
 		founderRewardCount.textContent = count > 0
@@ -1097,7 +1097,7 @@
 		accountEmail.textContent = founder.email || "void@example.com";
 		var invites = Math.min(2, founder.invites || 0);
 		founderProgressLabel.textContent = invites >= 2 ? "Unlocked" : invites + " / 2 invites";
-		founderRewardLabel.textContent = invites >= 2 ? "Free weekly sub card" : "Reward locked";
+		founderRewardLabel.textContent = invites >= 2 ? "Starter sub card" : "Reward locked";
 		founderProgressFill.style.width = (invites / 2 * 100) + "%";
 		founderLink.value = makeInviteLink(founder.code);
 	}

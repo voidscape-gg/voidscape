@@ -85,7 +85,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.
 - [ ] Player titles command opens and active title appears in chat.
 - [ ] Karamja Fishmonger cooks and notes supported fish.
-- [ ] Lumbridge Subscription Vendor grants reserved founder cards, does not open a shop, and redeemed cards apply the intended XP rates.
+- [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, and redeemed cards apply the intended account-wide XP rates.
 - [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
 - [ ] Dragon sword components drop/source/assemble as intended.
@@ -102,7 +102,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] Discord access gate listener is running if using the announcement gate.
 - [ ] `docs/community/discord-server-setup.md` permissions still match the live server.
-- [ ] Prelaunch/founder-pass page is either clearly marked prototype or backed by production persistence.
+- [ ] Prelaunch portal signup is backed by production persistence, creates linked game characters, and disables/redirects client packet registration.
 - [ ] Public links, invite URLs, support instructions, and rules are current.
 - [ ] AGPL source-disclosure plan is ready before any public distribution.
 

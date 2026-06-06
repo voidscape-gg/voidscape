@@ -3,20 +3,22 @@ package com.openrsc.server.content;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.model.entity.player.Player;
-import java.util.Locale;
 
 public final class VoidSubscription {
-	public static final String LEGACY_ACTIVE_CACHE_KEY = "void_subscription";
-	public static final String EXPIRES_CACHE_KEY = "void_sub_expires";
-	public static final String FOUNDER_CARD_CACHE_PREFIX = "founder_sub_card:";
-	public static final int FOUNDER_CARD_AVAILABLE = 1;
-	public static final int FOUNDER_CARD_CLAIMED = 2;
+	public static final String ACCOUNT_ID_CACHE_KEY = "web_account_id";
+	public static final String ACCOUNT_SUBSCRIPTION_CACHE_PREFIX = "acct_sub:";
+	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
+	public static final int STARTER_CARD_AVAILABLE = 1;
+	public static final int STARTER_CARD_CLAIMED = 2;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
 	public static final int PROFILE_CLIENT_VERSION = 10055;
 	public static final double COMBAT_EXP_RATE = 10.0;
 	public static final double SKILLING_EXP_RATE = 6.0;
 	public static final long DURATION_MILLIS = 7L * 24L * 60L * 60L * 1000L;
 	private static final long HOUR_MILLIS = 60L * 60L * 1000L;
+	private static final long ACCOUNT_SUBSCRIPTION_REFRESH_MILLIS = 30L * 1000L;
+	private static final String ACCOUNT_SUBSCRIPTION_ATTRIBUTE = "voidscape_account_subscription_expires";
+	private static final String ACCOUNT_SUBSCRIPTION_REFRESH_ATTRIBUTE = "voidscape_account_subscription_refreshed";
 
 	private VoidSubscription() {
 	}
@@ -26,35 +28,35 @@ public final class VoidSubscription {
 			return false;
 		}
 		long expiresAt = getExpiresAt(player);
-		if (expiresAt > System.currentTimeMillis()) {
-			return true;
-		}
-		clearExpiredOrLegacy(player);
-		return false;
+		return expiresAt > System.currentTimeMillis();
 	}
 
 	public static long activate(Player player) {
 		if (player == null) {
 			return 0L;
 		}
-		clearLegacy(player);
+		int accountId = getAccountId(player);
+		if (accountId <= 0) {
+			return 0L;
+		}
 		long now = System.currentTimeMillis();
-		long base = Math.max(now, getExpiresAt(player));
+		long base = Math.max(now, getAccountExpiresAt(player, true));
 		long expiresAt = Long.MAX_VALUE - base < DURATION_MILLIS ? Long.MAX_VALUE : base + DURATION_MILLIS;
-		player.getCache().store(EXPIRES_CACHE_KEY, expiresAt);
+		try {
+			player.getWorld().getServer().getDatabase()
+				.querySaveGlobalCacheLong(accountSubscriptionCacheKey(accountId), expiresAt);
+			cacheAccountExpiresAt(player, expiresAt);
+		} catch (Exception ex) {
+			return 0L;
+		}
 		return expiresAt;
 	}
 
 	public static long getExpiresAt(Player player) {
-		if (player == null || !player.getCache().hasKey(EXPIRES_CACHE_KEY)) {
+		if (player == null) {
 			return 0L;
 		}
-		try {
-			return player.getCache().getLong(EXPIRES_CACHE_KEY);
-		} catch (RuntimeException ex) {
-			player.getCache().remove(EXPIRES_CACHE_KEY);
-			return 0L;
-		}
+		return getAccountExpiresAt(player, false);
 	}
 
 	public static String formatRemaining(long remainingMillis) {
@@ -95,28 +97,70 @@ public final class VoidSubscription {
 		return Math.max(currentRate, subscriptionRate);
 	}
 
-	public static String founderCardCacheKey(String username) {
-		if (username == null) {
-			return "";
-		}
-		String normalized = username.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
-		if (normalized.length() < 2 || normalized.length() > 12 || !normalized.matches("[a-z0-9 ]+")) {
-			return "";
-		}
-		return FOUNDER_CARD_CACHE_PREFIX + normalized;
+	public static boolean hasLinkedAccount(Player player) {
+		return getAccountId(player) > 0;
 	}
 
-	private static void clearExpiredOrLegacy(Player player) {
-		clearLegacy(player);
-		long expiresAt = getExpiresAt(player);
-		if (expiresAt > 0L && expiresAt <= System.currentTimeMillis()) {
-			player.getCache().remove(EXPIRES_CACHE_KEY);
+	public static int getAccountId(Player player) {
+		if (player == null || !player.getCache().hasKey(ACCOUNT_ID_CACHE_KEY)) {
+			return 0;
+		}
+		try {
+			int accountId = player.getCache().getInt(ACCOUNT_ID_CACHE_KEY);
+			return accountId > 0 ? accountId : 0;
+		} catch (RuntimeException ex) {
+			player.getCache().remove(ACCOUNT_ID_CACHE_KEY);
+			return 0;
 		}
 	}
 
-	private static void clearLegacy(Player player) {
-		if (player.getCache().hasKey(LEGACY_ACTIVE_CACHE_KEY)) {
-			player.getCache().remove(LEGACY_ACTIVE_CACHE_KEY);
+	public static String starterCardCacheKey(Player player) {
+		return starterCardCacheKey(getAccountId(player));
+	}
+
+	public static String starterCardCacheKey(int accountId) {
+		if (accountId <= 0) {
+			return "";
 		}
+		return STARTER_CARD_CACHE_PREFIX + accountId;
+	}
+
+	public static void refreshAccountSubscription(Player player) {
+		getAccountExpiresAt(player, true);
+	}
+
+	private static String accountSubscriptionCacheKey(int accountId) {
+		if (accountId <= 0) {
+			return "";
+		}
+		return ACCOUNT_SUBSCRIPTION_CACHE_PREFIX + accountId;
+	}
+
+	private static long getAccountExpiresAt(Player player, boolean force) {
+		int accountId = getAccountId(player);
+		if (accountId <= 0) {
+			return 0L;
+		}
+		long now = System.currentTimeMillis();
+		Long cached = player.getAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, null);
+		Long refreshedAt = player.getAttribute(ACCOUNT_SUBSCRIPTION_REFRESH_ATTRIBUTE, 0L);
+		if (!force && cached != null && now - refreshedAt < ACCOUNT_SUBSCRIPTION_REFRESH_MILLIS) {
+			return cached;
+		}
+
+		try {
+			Long expiresAt = player.getWorld().getServer().getDatabase()
+				.queryLoadGlobalCacheLong(accountSubscriptionCacheKey(accountId));
+			long value = expiresAt == null ? 0L : expiresAt;
+			cacheAccountExpiresAt(player, value);
+			return value;
+		} catch (Exception ex) {
+			return cached == null ? 0L : cached;
+		}
+	}
+
+	private static void cacheAccountExpiresAt(Player player, long expiresAt) {
+		player.setAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, expiresAt);
+		player.setAttribute(ACCOUNT_SUBSCRIPTION_REFRESH_ATTRIBUTE, System.currentTimeMillis());
 	}
 }

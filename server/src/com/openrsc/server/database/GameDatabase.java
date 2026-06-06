@@ -153,6 +153,8 @@ public abstract class GameDatabase {
 
 	public abstract Integer queryLoadGlobalCacheInt(String cacheKey) throws GameDatabaseException;
 
+	public abstract Long queryLoadGlobalCacheLong(String cacheKey) throws GameDatabaseException;
+
 	public abstract String queryPlayerCacheOwner(String cacheKey) throws GameDatabaseException;
 
 	public abstract String queryPlayerCacheOwner(String cacheKey, String cacheValue) throws GameDatabaseException;
@@ -241,6 +243,8 @@ public abstract class GameDatabase {
 	public abstract void querySavePlayerCache(int playerId, PlayerCache[] cache) throws GameDatabaseException;
 
 	public abstract void querySaveGlobalCacheInt(String cacheKey, int value) throws GameDatabaseException;
+
+	public abstract void querySaveGlobalCacheLong(String cacheKey, long value) throws GameDatabaseException;
 
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
 
