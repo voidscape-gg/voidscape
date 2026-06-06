@@ -68,6 +68,7 @@ damage = floor(damage * (1 - reduction))
 - **Defence cape**: blocks 50% of melee damage to player.
 - **Attack cape**: prevents zero hits (re-rolls misses).
 - **Strength cape**: +20% damage on hits ≥ 50% of max hit.
+- **PvP melee momentum**: player-vs-player melee hits at or above 75% of the target-adjusted max hit grant one momentum stack against that same target. The next successful melee hit rolls damage twice and keeps the higher roll, then consumes the stack; a miss or target swap clears it.
 - **Poison**: 10 levels; each tick reduces power by 2, deals `floor(power/10)` damage.
 - **Ring of Recoil**: reflects 10% of damage taken; breaks at 40 reflected total.
 

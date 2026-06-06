@@ -119,6 +119,8 @@ class Ruleset:
     physical_mitigation_divisor: Optional[float] = None
     physical_mitigation_cap: float = 0.0
     magic_player_damage_scale: float = 1.0
+    pvp_melee_momentum: bool = False
+    pvp_melee_momentum_big_hit_ratio: float = 0.75
 
 
 RULESETS: Dict[str, Ruleset] = {
@@ -129,6 +131,7 @@ RULESETS: Dict[str, Ruleset] = {
         physical_mitigation_divisor=1200.0,
         physical_mitigation_cap=0.24,
         magic_player_damage_scale=0.92,
+        pvp_melee_momentum=True,
     ),
 }
 
@@ -317,16 +320,39 @@ def roll_bucket_damage(max_roll: int, rng: random.Random) -> int:
     return (rng.randrange(max_roll) + 320) // 640
 
 
-def roll_melee_damage(attacker: Combatant, defender: Combatant, rng: random.Random, rules: Ruleset) -> int:
+def melee_max_hit_against(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
+    max_roll = melee_max_roll(attacker)
+    if max_roll <= 0:
+        return 0
+    return mitigate_physical_damage(((max_roll - 1) + 320) // 640, defender, rules)
+
+
+def is_big_pvp_melee_hit(attacker: Combatant, defender: Combatant, damage: int, rules: Ruleset) -> bool:
+    max_hit = melee_max_hit_against(attacker, defender, rules)
+    threshold = max(1, math.ceil(max_hit * rules.pvp_melee_momentum_big_hit_ratio))
+    return max_hit > 0 and damage >= threshold
+
+
+def roll_melee_damage(
+    attacker: Combatant,
+    defender: Combatant,
+    rng: random.Random,
+    rules: Ruleset,
+    has_momentum: bool = False,
+) -> Tuple[int, bool]:
     chance = hit_chance(melee_accuracy(attacker), melee_defence(defender, rules))
     is_hit = rng.random() <= chance
 
     while attacker.attack_cape and not is_hit and rng.randint(1, 99) <= 35:
         is_hit = rng.random() <= chance
 
-    damage = mitigate_physical_damage(roll_bucket_damage(melee_max_roll(attacker), rng), defender, rules)
     if not is_hit:
-        return 0
+        return 0, False
+
+    damage = roll_bucket_damage(melee_max_roll(attacker), rng)
+    if has_momentum:
+        damage = max(damage, roll_bucket_damage(melee_max_roll(attacker), rng))
+    damage = mitigate_physical_damage(damage, defender, rules)
 
     if defender.is_player and defender.defense_cape and damage > 0 and rng.randint(1, 99) <= 35:
         damage //= 2
@@ -335,7 +361,7 @@ def roll_melee_damage(attacker: Combatant, defender: Combatant, rng: random.Rand
     if attacker.strength_cape and damage >= maximum * 0.5 and rng.randint(1, 99) <= 35:
         damage = int(damage + maximum * 0.2)
 
-    return damage
+    return damage, True
 
 
 def roll_ranged_damage(
@@ -384,8 +410,10 @@ def simulate_melee_fight(
         hp = [scenario.attacker.hits, scenario.defender.hits]
         total_damage = [0, 0]
         swings = [0, 0]
+        momentum = [False, False]
         tick = 0
         round_number = 0
+        is_pvp_melee = scenario.attacker.is_player and scenario.defender.is_player
 
         while tick <= max_ticks:
             source_index = 0 if round_number % 2 == 0 else 1
@@ -393,7 +421,10 @@ def simulate_melee_fight(
             source = scenario.attacker if source_index == 0 else scenario.defender
             target = scenario.defender if target_index == 1 else scenario.attacker
 
-            damage = roll_melee_damage(source, target, rng, rules)
+            has_momentum = rules.pvp_melee_momentum and is_pvp_melee and momentum[source_index]
+            damage, did_hit = roll_melee_damage(source, target, rng, rules, has_momentum=has_momentum)
+            if rules.pvp_melee_momentum and is_pvp_melee:
+                momentum[source_index] = did_hit and is_big_pvp_melee_hit(source, target, damage, rules)
             damage = min(damage, hp[target_index])
             hp[target_index] -= damage
             total_damage[source_index] += damage
@@ -814,6 +845,11 @@ def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int, 
         "defender": asdict(scenario.defender),
     }
     if scenario.mode == "melee":
+        result["pvp_melee_momentum"] = (
+            rules.pvp_melee_momentum
+            and scenario.attacker.is_player
+            and scenario.defender.is_player
+        )
         result["cadence"] = scenario.cadence
         result["attacker_roll"] = asdict(summarize_melee(scenario.attacker, scenario.defender, rules))
         result["defender_roll"] = asdict(summarize_melee(scenario.defender, scenario.attacker, rules))
@@ -897,6 +933,8 @@ def print_text_result(result: Dict) -> None:
 
     if result["mode"] == "melee":
         print(f"cadence: {result['cadence']}")
+        if result["pvp_melee_momentum"]:
+            print("pvp melee momentum: 75%+ hit rolls next successful hit twice")
         print_roll("attacker melee", result["attacker_roll"])
         print_roll("defender melee", result["defender_roll"])
         sim = result["simulation"]

@@ -2804,3 +2804,13 @@ Details:
 - The combat simulator now supports both `openrsc` and `voidscape` rulesets and expands the built-in matrix across early PvM, mid PvM, dragons, PvP archetypes, ranged pressure, and magic pressure.
 - Added `docs/COMBAT-TUNING-REPORT.md` with rationale and before/after simulator metrics.
 - No server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, or launcher binary changed.
+
+### 2026-06-06 - PvP melee big-hit momentum
+
+Added a PvP-only melee momentum rule to preserve RSC's satisfying chained-big-hit moments after the armour/burst tuning pass. A player-vs-player melee hit at or above 75% of the target-adjusted max hit grants one momentum stack against that same target; the attacker's next successful melee hit against that target rolls damage twice and keeps the higher roll, then consumes the stack. A miss or target swap clears it.
+
+Details:
+- The rule lives in `CombatFormula` and only applies when both melee combatants are players. PvM, ranged, magic, and multi-player pile behavior are unchanged.
+- The combat simulator mirrors the rule in the `voidscape` ruleset while `--rules openrsc` remains a no-momentum baseline.
+- Updated the combat subsystem docs, simulator README, and combat tuning report with the rule and simulator results.
+- No server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, or launcher binary changed.

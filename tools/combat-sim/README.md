@@ -15,7 +15,7 @@ scripts/combat-sim.sh --scenario pvp-max-rune-2h-3-1 --format json
 The built-in scenarios cover:
 
 - melee PvM from brand-new training through dragons
-- melee PvP `3-1` and `2-2` cadence comparison
+- melee PvP `3-1` and `2-2` cadence comparison, including Voidscape PvP melee momentum
 - ranged pressure against NPCs and armoured players
 - magic spell success and player-target damage scaling
 
@@ -23,6 +23,8 @@ Rulesets:
 
 - `voidscape` is the default and should match live server behavior.
 - `openrsc` preserves the pre-tuning formula for before/after comparisons.
+
+Voidscape PvP melee momentum is active only when both combatants are players. A melee hit at or above 75% of the target-adjusted max hit makes that attacker's next successful melee hit against the same target roll damage twice and keep the higher result.
 
 Important limits:
 

@@ -60,6 +60,7 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
 - **PvP vs PvE differ.** Damage formula is shared, but tick cycling differs. Test both.
 - **Strength cape +20%** only on hits ≥ 50% of max. Affects edge cases.
 - **Armour is split in Voidscape.** It still helps avoidance, but only contributes 60% of its value to defence rolls and also reduces physical hit damage by `min(24%, armour / 1200)`.
+- **PvP melee has momentum.** A 75%+ target-adjusted melee hit grants one next-hit roll-twice stack against the same player target. Simulator fight timing reflects this, but single-roll summaries do not.
 - **Magic PvP has a small target scale.** Player targets take 92% of rolled magic damage; NPC targets keep the full OpenRSC damage roll.
 - **`shouldExecute()` of combat scripts** can fire bonus damage on top of formula. Check if any combat scripts shadow your tweak.
 - **Don't change `CombatEvent` tick cadence** without deep understanding — that breaks PvP/PvE assumptions globally.

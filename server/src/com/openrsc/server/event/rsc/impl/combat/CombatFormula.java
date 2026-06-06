@@ -11,6 +11,8 @@ import com.openrsc.server.util.rsc.DataConversions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.UUID;
+
 import static com.openrsc.server.constants.ItemId.*;
 
 public class CombatFormula {
@@ -22,6 +24,10 @@ public class CombatFormula {
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR = 1200.0D;
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_CAP = 0.24D;
 	private static final double VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE = 0.92D;
+	private static final String PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE = "pvpMeleeMomentumTarget";
+	private static final String PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE = "pvpMeleeMomentumStacks";
+	private static final double PVP_MELEE_MOMENTUM_BIG_HIT_RATIO = 0.75D;
+	private static final int PVP_MELEE_MOMENTUM_MAX_STACKS = 1;
 
 	/**
 	 * Gets a dice roll for melee damage for a single attack
@@ -167,9 +173,24 @@ public class CombatFormula {
 	 * @return The amount to hit.
 	 */
 	public static int doMeleeDamage(final Mob source, final Mob victim) {
+		final boolean isPvpMelee = source instanceof Player && victim instanceof Player;
 		boolean isHit = calculateMeleeAccuracy(source, victim);
 		boolean wasHit = isHit;
-		int damage = applyPhysicalDamageReduction(calculateMeleeDamage(source), victim);
+		if (source instanceof Player) {
+			while(SkillCapes.shouldActivate((Player)source, ATTACK_CAPE, isHit)){
+				isHit = calculateMeleeAccuracy(source, victim);
+			}
+			if (!wasHit && isHit)
+				((Player) source).message("@red@Your Attack cape has prevented a zero hit");
+		}
+
+		int damage = 0;
+		if (isHit) {
+			damage = rollMeleeDamage(source, victim, isPvpMelee && consumePvpMeleeMomentum(source, victim));
+		} else if (isPvpMelee) {
+			clearPvpMeleeMomentum(source);
+		}
+
 		if (victim instanceof Player) {
 			// Track the damage dealt to the player
 			Player playerVictim = (Player)victim;
@@ -187,11 +208,6 @@ public class CombatFormula {
 			}
 		}
 		if (source instanceof Player) {
-			while(SkillCapes.shouldActivate((Player)source, ATTACK_CAPE, isHit)){
-				isHit = calculateMeleeAccuracy(source, victim);
-			}
-			if (!wasHit && isHit)
-				((Player) source).message("@red@Your Attack cape has prevented a zero hit");
 
 			final double maximum = (double) (getMeleeDamage(source) + 320) / 640;
 			if (damage >= (maximum * 0.5) && SkillCapes.shouldActivate((Player) source, STRENGTH_CAPE, isHit)) {
@@ -199,10 +215,21 @@ public class CombatFormula {
 				((Player) source).message("@ora@Your Strength cape has granted you a critical hit");
 			}
 		}
+		if (isPvpMelee && isHit) {
+			updatePvpMeleeMomentum(source, victim, damage);
+		}
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
 		return isHit ? damage : 0;
+	}
+
+	private static int rollMeleeDamage(final Mob source, final Mob victim, final boolean hasMomentum) {
+		int damage = calculateMeleeDamage(source);
+		if (hasMomentum) {
+			damage = Math.max(damage, calculateMeleeDamage(source));
+		}
+		return applyPhysicalDamageReduction(damage, victim);
 	}
 
 	/**
@@ -304,6 +331,49 @@ public class CombatFormula {
 			return damage;
 		}
 		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
+	}
+
+	private static boolean consumePvpMeleeMomentum(final Mob source, final Mob victim) {
+		final UUID momentumTarget = source.getAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE, null);
+		final int stacks = source.getAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE, 0);
+		if (stacks <= 0 || momentumTarget == null) {
+			clearPvpMeleeMomentum(source);
+			return false;
+		}
+		if (!momentumTarget.equals(victim.getUUID())) {
+			clearPvpMeleeMomentum(source);
+			return false;
+		}
+		clearPvpMeleeMomentum(source);
+		return true;
+	}
+
+	private static void updatePvpMeleeMomentum(final Mob source, final Mob victim, final int damage) {
+		if (damage <= 0) {
+			clearPvpMeleeMomentum(source);
+			return;
+		}
+		final int maxHit = getTargetAdjustedMeleeMaxHit(source, victim);
+		final int bigHitThreshold = Math.max(1, (int)Math.ceil(maxHit * PVP_MELEE_MOMENTUM_BIG_HIT_RATIO));
+		if (maxHit > 0 && damage >= bigHitThreshold) {
+			source.setAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE, victim.getUUID());
+			source.setAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE, PVP_MELEE_MOMENTUM_MAX_STACKS);
+		} else {
+			clearPvpMeleeMomentum(source);
+		}
+	}
+
+	private static int getTargetAdjustedMeleeMaxHit(final Mob source, final Mob victim) {
+		final int maxRoll = getMeleeDamage(source);
+		if (maxRoll <= 0) {
+			return 0;
+		}
+		return applyPhysicalDamageReduction((maxRoll - 1 + 320) / 640, victim);
+	}
+
+	private static void clearPvpMeleeMomentum(final Mob source) {
+		source.removeAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE);
+		source.removeAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE);
 	}
 
 
