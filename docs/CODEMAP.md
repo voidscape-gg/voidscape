@@ -250,6 +250,7 @@ docs/
 ├── DEVELOPMENT.md                  # Build / run / reset on macOS
 ├── DIVERGENCE.md                   # Vendor SHA + voidscape change log
 ├── CONFIG-MATRIX.md                # Intended dev/staging/prod config values
+├── COMBAT-TUNING-REPORT.md         # Current Voidscape combat formula rationale + metrics
 ├── GLOSSARY.md                     # RSC + OpenRSC terminology
 ├── OPERATIONS.md                   # Runbook: deploy, backups, logs, rollback
 ├── RELEASE-CHECKLIST.md            # Pre-release verification checklist

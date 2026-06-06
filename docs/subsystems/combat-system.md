@@ -41,7 +41,9 @@ maxRoll = (RangedLevel + 8) * (arrowPower + 1 + 64)
 - Arrow powers: bronze darts 15, rune darts 50, dragon arrows 50, spears 29–69.
 - Bow aim bonus: shortbow 10, longbow 15, magic longbow 40.
 
-**Magic damage**: uniform roll from 0 to floor(spellPower); no accuracy check. God spells up to 18, charged +7.
+**Magic damage**: uniform roll from 0 to floor(spellPower); damage does not roll against target defence. God spells up to 18, charged +7.
+- Spell success itself is checked earlier by `Formulae.castSpell()` using caster magic level, spell requirement, and magic equipment.
+- Player targets take 92% of rolled magic damage, floored with successful non-zero hits preserved at 1.
 
 **Accuracy / hit chance**:
 ```
@@ -51,7 +53,16 @@ else:
     hitChance = accuracy / (2 * (defence + 1))
 ```
 - Melee accuracy: `(AttackLevel + bonusConstant + styleBonus) * (weaponAim + 64)`
-- Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (armourPoints + 64)`
+- Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (64 + armourPoints * 0.60)`
+
+**Physical armour mitigation**:
+```
+reduction = min(0.24, armourPoints / 1200)
+damage = floor(damage * (1 - reduction))
+```
+- Applies to melee and ranged damage after the hit roll.
+- Successful non-zero hits are preserved at a minimum of 1 damage.
+- Intent: armour should reduce burst and still help avoidance, without making armoured combat mostly misses.
 
 **Special mechanics**:
 - **Defence cape**: blocks 50% of melee damage to player.
@@ -68,6 +79,7 @@ else:
 scripts/combat-sim.sh --list
 scripts/combat-sim.sh --scenario pvm-rune-lesser
 scripts/combat-sim.sh --scenario all --trials 50000
+scripts/combat-sim.sh --rules openrsc --scenario all --trials 50000
 ```
 
 It is not a full game engine: it does not model eating, plugins, NPC combat scripts, pathing, dragonfire, player decisions, or live server state. Treat it as a formula/cadence harness, then verify meaningful changes in-game.
@@ -199,7 +211,7 @@ Retaliation: implicit via `setOpponent()` in `AttackHandler`; combat event loop 
 6. **NPC aggro radius is partly hardcoded.** `BLACK_KNIGHT` and `BANDIT_AGGRESSIVE` ranges baked into `NpcBehavior` constructor, not data-driven.
 7. **Defence cape 50% block is unconditional.** Players wearing it dramatically reduce melee damage; balance accordingly when tuning content.
 8. **Strength cape +20%** only fires on hits ≥50% of max hit — easy to forget when computing expected DPS.
-9. **No cross-formula tests.** If you change `CombatFormula`, run combat scenarios manually; there's no automated harness.
+9. **Use the simulator before manual checks.** `scripts/combat-sim.sh --rules openrsc` gives the inherited baseline; default `voidscape` should match live formula behavior.
 10. **On-hit melee XP is a deliberate Voidscape divergence.** Keep PvP death-based unless specifically rebalanced; PvP on-hit XP is much easier to farm between cooperating players.
 
 ## Glossary candidates

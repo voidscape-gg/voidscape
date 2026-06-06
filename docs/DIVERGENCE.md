@@ -2793,3 +2793,14 @@ Details:
 - The simulator supports custom JSON scenarios and text or JSON output, so formula changes can be compared before and after without starting a server.
 - Updated the combat subsystem docs, combat-tuning recipe, and code map to make the simulator part of the standard combat-change workflow.
 - No OpenRSC packet, opcode, DB schema, client cache, client-version, item definition, NPC definition, launcher binary, or live in-game behavior changed.
+
+### 2026-06-06 - Voidscape combat formula tuning
+
+Replaced the inherited OpenRSC physical armour model with a Voidscape armour split: armour now contributes 60% of its value to avoidance and also mitigates physical hit damage by `min(24%, armourPoints / 1200)`. Player-target magic damage is scaled to 92% after the spell roll, while NPC-target magic remains unchanged.
+
+Details:
+- `CombatFormula` now applies the armour split to melee and ranged accuracy/damage, preserving non-zero successful physical hits at a minimum of 1 damage.
+- `SpellHandler` now passes the target into combat spell damage helpers so Fire Wave, Iban Blast, god spells, and other combat spells receive player-target tuning consistently.
+- The combat simulator now supports both `openrsc` and `voidscape` rulesets and expands the built-in matrix across early PvM, mid PvM, dragons, PvP archetypes, ranged pressure, and magic pressure.
+- Added `docs/COMBAT-TUNING-REPORT.md` with rationale and before/after simulator metrics.
+- No server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, or launcher binary changed.

@@ -11,8 +11,6 @@ import com.openrsc.server.util.rsc.DataConversions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Random;
-
 import static com.openrsc.server.constants.ItemId.*;
 
 public class CombatFormula {
@@ -20,6 +18,10 @@ public class CombatFormula {
 	 * Logger instance
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final double VOIDSCAPE_ARMOUR_ACCURACY_SCALE = 0.60D;
+	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR = 1200.0D;
+	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_CAP = 0.24D;
+	private static final double VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE = 0.92D;
 
 	/**
 	 * Gets a dice roll for melee damage for a single attack
@@ -56,9 +58,14 @@ public class CombatFormula {
 	 * @return The randomized value.
 	 */
 	public static int calculateMagicDamage(final double spellPower) {
+		return calculateMagicDamage(spellPower, null);
+	}
+
+	public static int calculateMagicDamage(final double spellPower, final Mob victim) {
 		//Given that melee max hit is fractional, it was likely that spell power values ending in "5" were supposed to hit their max hit more often.
 		//TODO: More research to see if that was the case. For now, we can just make it uniform after flooring.
-		return DataConversions.getRandom().nextInt((int)Math.floor(spellPower) + 1);
+		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(spellPower) + 1);
+		return applyMagicDamageReduction(damage, victim);
 	}
 
 	/**
@@ -68,6 +75,10 @@ public class CombatFormula {
 	 * @return The randomized value.
 	 */
 	public static int calculateGodSpellDamage(final Player source) {
+		return calculateGodSpellDamage(source, null);
+	}
+
+	public static int calculateGodSpellDamage(final Player source, final Mob victim) {
 		int[] godCapes = new int[] {
 			ZAMORAK_CAPE.id(),
 			SARADOMIN_CAPE.id(),
@@ -85,7 +96,7 @@ public class CombatFormula {
 		boolean hasChargeBenefit = source.isCharged() && hasCapeEquipped;
 		int godSpellMax = hasChargeBenefit ? 25 : 18;
 
-		return calculateMagicDamage(godSpellMax);
+		return calculateMagicDamage(godSpellMax, victim);
 	}
 
 	/**
@@ -94,9 +105,13 @@ public class CombatFormula {
 	 * @return The randomized value.
 	 */
 	public static int calculateIbanSpellDamage() {
+		return calculateIbanSpellDamage(null);
+	}
+
+	public static int calculateIbanSpellDamage(final Mob victim) {
 		// TODO: Remove this code and roll it into calculateMagicDamage
 		// Source for max damage: http://web.archive.org/web/20041226185618/http://www.rsinn.com/forum/showthread.php?t=2469
-		return calculateMagicDamage(15);
+		return calculateMagicDamage(15, victim);
 	}
 
 	/**
@@ -154,7 +169,7 @@ public class CombatFormula {
 	public static int doMeleeDamage(final Mob source, final Mob victim) {
 		boolean isHit = calculateMeleeAccuracy(source, victim);
 		boolean wasHit = isHit;
-		int damage = calculateMeleeDamage(source);
+		int damage = applyPhysicalDamageReduction(calculateMeleeDamage(source), victim);
 		if (victim instanceof Player) {
 			// Track the damage dealt to the player
 			Player playerVictim = (Player)victim;
@@ -204,14 +219,17 @@ public class CombatFormula {
 
 		if (!isHit) return 0;
 
+		final int damage;
 		if (skillCape) {
 			int maxHit = (getRangedDamage(source, bowId, arrowId) + 320) / 640;
-			return DataConversions.getRandom().nextInt(maxHit * 2);
+			damage = DataConversions.getRandom().nextInt(maxHit * 2);
+		} else {
+			damage = calculateRangedDamage(source, bowId, arrowId);
 		}
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return calculateRangedDamage(source, bowId, arrowId);
+		return applyPhysicalDamageReduction(damage, victim);
 	}
 
 	/**
@@ -255,8 +273,37 @@ public class CombatFormula {
 			Prayers.ROCK_SKIN,
 			Prayers.STEEL_SKIN);
 		final int bonusConstant = defender.isPlayer() ? 8 : 0;
-		final double defense = (Math.floor(defender.getSkills().getLevel(Skill.DEFENSE.id()) * prayerBonus) + bonusConstant + styleBonus) * (defender.getArmourPoints() + 64);
+		final double defense = (Math.floor(defender.getSkills().getLevel(Skill.DEFENSE.id()) * prayerBonus) + bonusConstant + styleBonus) * getArmourAccuracyPoints(defender);
 		return defense;
+	}
+
+	private static double getArmourAccuracyPoints(final Mob defender) {
+		return 64 + (defender.getArmourPoints() * VOIDSCAPE_ARMOUR_ACCURACY_SCALE);
+	}
+
+	private static double getPhysicalDamageReduction(final Mob victim) {
+		if (victim == null || victim.getArmourPoints() <= 1) {
+			return 0.0D;
+		}
+		return Math.min(VOIDSCAPE_PHYSICAL_MITIGATION_CAP, victim.getArmourPoints() / VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR);
+	}
+
+	private static int applyPhysicalDamageReduction(final int damage, final Mob victim) {
+		if (damage <= 0) {
+			return 0;
+		}
+		final double reduction = getPhysicalDamageReduction(victim);
+		if (reduction <= 0) {
+			return damage;
+		}
+		return Math.max(1, (int)Math.floor(damage * (1.0D - reduction)));
+	}
+
+	private static int applyMagicDamageReduction(final int damage, final Mob victim) {
+		if (damage <= 0 || !(victim instanceof Player)) {
+			return damage;
+		}
+		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
 	}
 
 

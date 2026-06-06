@@ -1,6 +1,6 @@
 # Combat simulator
 
-Local measurement harness for Voidscape's active classic OpenRSC combat formulas. It mirrors the formula path in `CombatFormula.java` without changing live game behavior.
+Local measurement harness for Voidscape's active combat formulas. It mirrors the formula path in `CombatFormula.java` without changing live game behavior, and can still replay the inherited OpenRSC baseline for comparison.
 
 Run:
 
@@ -8,15 +8,21 @@ Run:
 scripts/combat-sim.sh --list
 scripts/combat-sim.sh --scenario pvm-rune-lesser
 scripts/combat-sim.sh --scenario all --trials 50000
+scripts/combat-sim.sh --rules openrsc --scenario all --trials 50000
 scripts/combat-sim.sh --scenario pvp-max-rune-2h-3-1 --format json
 ```
 
 The built-in scenarios cover:
 
-- melee PvM sanity checks
+- melee PvM from brand-new training through dragons
 - melee PvP `3-1` and `2-2` cadence comparison
-- ranged accuracy/damage against melee defence
-- magic spell success and flat spell-power damage
+- ranged pressure against NPCs and armoured players
+- magic spell success and player-target damage scaling
+
+Rulesets:
+
+- `voidscape` is the default and should match live server behavior.
+- `openrsc` preserves the pre-tuning formula for before/after comparisons.
 
 Important limits:
 

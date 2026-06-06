@@ -16,7 +16,7 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
 ## Steps
 
 1. **Define the goal precisely**. "Make max hit higher" is not enough. Specify: which combat type (melee/ranged/magic), which level range, which player vs NPC matchup.
-2. **Read `CombatFormula.java` end-to-end before editing.** The functions are short but interlinked. The relevant entry points are usually `getRandomMeleeMaxHit`, `getRandomRangeMaxHit`, `getRandomMagicMaxHit`, `getCombatChance` (accuracy).
+2. **Read `CombatFormula.java` end-to-end before editing.** The functions are short but interlinked. The relevant entry points are usually `doMeleeDamage`, `doRangedDamage`, `calculateMagicDamage`, `getMeleeDamage`, `getRangedDamage`, and `calculateAccuracy`.
 3. **Identify the constant or expression to change.** Common knobs:
    - `bonusConstant` (8 for player, 0 for NPC) — has outsized effect via `(power + 64)` multiplier.
    - `styleBonus` (+3 for matched style, +1 for controlled).
@@ -25,8 +25,9 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
 4. **Capture a simulator baseline** for the target scenario before editing:
    ```bash
    scripts/combat-sim.sh --scenario all --trials 50000
+   scripts/combat-sim.sh --rules openrsc --scenario all --trials 50000
    ```
-   For custom matchups, add a JSON scenario and run it with `--json`.
+   The default `voidscape` ruleset should match live behavior; `openrsc` is the inherited formula baseline. For custom matchups, add a JSON scenario and run it with `--json`.
 5. **Make the smallest change that achieves the goal.** Resist refactoring on the side.
 6. **Re-run the simulator** and compare hit chance, max hit, expected damage, and simple timing before doing manual testing.
 7. **Build through the canonical script**:
@@ -58,6 +59,8 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
 - **Prayer multipliers compound with style bonus.** Ultimate Strength + Aggressive style + max-level player can be far above a naive estimate.
 - **PvP vs PvE differ.** Damage formula is shared, but tick cycling differs. Test both.
 - **Strength cape +20%** only on hits ≥ 50% of max. Affects edge cases.
+- **Armour is split in Voidscape.** It still helps avoidance, but only contributes 60% of its value to defence rolls and also reduces physical hit damage by `min(24%, armour / 1200)`.
+- **Magic PvP has a small target scale.** Player targets take 92% of rolled magic damage; NPC targets keep the full OpenRSC damage roll.
 - **`shouldExecute()` of combat scripts** can fire bonus damage on top of formula. Check if any combat scripts shadow your tweak.
 - **Don't change `CombatEvent` tick cadence** without deep understanding — that breaks PvP/PvE assumptions globally.
 

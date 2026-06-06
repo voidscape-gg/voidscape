@@ -112,6 +112,27 @@ class Scenario:
         return Scenario(**clone)
 
 
+@dataclass(frozen=True)
+class Ruleset:
+    name: str
+    armour_accuracy_scale: float = 1.0
+    physical_mitigation_divisor: Optional[float] = None
+    physical_mitigation_cap: float = 0.0
+    magic_player_damage_scale: float = 1.0
+
+
+RULESETS: Dict[str, Ruleset] = {
+    "openrsc": Ruleset(name="openrsc"),
+    "voidscape": Ruleset(
+        name="voidscape",
+        armour_accuracy_scale=0.60,
+        physical_mitigation_divisor=1200.0,
+        physical_mitigation_cap=0.24,
+        magic_player_damage_scale=0.92,
+    ),
+}
+
+
 @dataclass
 class RollSummary:
     attack_roll: float
@@ -145,13 +166,38 @@ def melee_accuracy(attacker: Combatant) -> float:
     return effective * (attacker.weapon_aim + 64)
 
 
-def melee_defence(defender: Combatant) -> float:
+def armour_for_accuracy(defender: Combatant, rules: Ruleset) -> float:
+    return 64.0 + (defender.armour * rules.armour_accuracy_scale)
+
+
+def physical_damage_reduction(defender: Combatant, rules: Ruleset) -> float:
+    if rules.physical_mitigation_divisor is None or defender.armour <= 1:
+        return 0.0
+    return min(rules.physical_mitigation_cap, defender.armour / rules.physical_mitigation_divisor)
+
+
+def mitigate_physical_damage(damage: int, defender: Combatant, rules: Ruleset) -> int:
+    if damage <= 0:
+        return 0
+    reduction = physical_damage_reduction(defender, rules)
+    if reduction <= 0:
+        return damage
+    return max(1, math.floor(damage * (1.0 - reduction)))
+
+
+def mitigate_magic_damage(damage: int, defender: Combatant, rules: Ruleset) -> int:
+    if damage <= 0 or not defender.is_player or rules.magic_player_damage_scale >= 1.0:
+        return damage
+    return max(1, math.floor(damage * rules.magic_player_damage_scale))
+
+
+def melee_defence(defender: Combatant, rules: Ruleset) -> float:
     effective = (
         math.floor(defender.defense * defender.defense_prayer)
         + defender.player_bonus
         + style_bonus(defender, SKILL_DEFENSE)
     )
-    return effective * (defender.armour + 64)
+    return effective * armour_for_accuracy(defender, rules)
 
 
 def hit_chance(accuracy: float, defence: float) -> float:
@@ -187,6 +233,14 @@ def damage_distribution(max_roll: int) -> Dict[int, int]:
     return distribution
 
 
+def reduced_distribution(max_roll: int, defender: Combatant, rules: Ruleset) -> Dict[int, int]:
+    distribution: Dict[int, int] = {}
+    for damage, count in damage_distribution(max_roll).items():
+        reduced_damage = mitigate_physical_damage(damage, defender, rules)
+        distribution[reduced_damage] = distribution.get(reduced_damage, 0) + count
+    return distribution
+
+
 def expected_damage(max_roll: int) -> Tuple[int, float]:
     distribution = damage_distribution(max_roll)
     total = sum(distribution.values())
@@ -194,11 +248,17 @@ def expected_damage(max_roll: int) -> Tuple[int, float]:
     return max(distribution.keys()), avg
 
 
-def summarize_melee(attacker: Combatant, defender: Combatant) -> RollSummary:
+def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) -> RollSummary:
     attack_roll = melee_accuracy(attacker)
-    defence_roll = melee_defence(defender)
+    defence_roll = melee_defence(defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
     max_hit, avg_on_hit = expected_damage(melee_max_roll(attacker))
+    reduction = physical_damage_reduction(defender, rules)
+    if reduction > 0:
+        distribution = reduced_distribution(melee_max_roll(attacker), defender, rules)
+        total = sum(distribution.values())
+        max_hit = max(distribution.keys())
+        avg_on_hit = sum(damage * count for damage, count in distribution.items()) / total
     return RollSummary(
         attack_roll=attack_roll,
         defence_roll=defence_roll,
@@ -209,11 +269,17 @@ def summarize_melee(attacker: Combatant, defender: Combatant) -> RollSummary:
     )
 
 
-def summarize_ranged(attacker: Combatant, defender: Combatant, setup: RangedSetup) -> RollSummary:
+def summarize_ranged(attacker: Combatant, defender: Combatant, setup: RangedSetup, rules: Ruleset) -> RollSummary:
     attack_roll = ranged_accuracy(attacker, setup)
-    defence_roll = melee_defence(defender)
+    defence_roll = melee_defence(defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
     max_hit, avg_on_hit = expected_damage(ranged_max_roll(attacker, setup))
+    reduction = physical_damage_reduction(defender, rules)
+    if reduction > 0:
+        distribution = reduced_distribution(ranged_max_roll(attacker, setup), defender, rules)
+        total = sum(distribution.values())
+        max_hit = max(distribution.keys())
+        avg_on_hit = sum(damage * count for damage, count in distribution.items()) / total
     return RollSummary(
         attack_roll=attack_roll,
         defence_roll=defence_roll,
@@ -251,14 +317,14 @@ def roll_bucket_damage(max_roll: int, rng: random.Random) -> int:
     return (rng.randrange(max_roll) + 320) // 640
 
 
-def roll_melee_damage(attacker: Combatant, defender: Combatant, rng: random.Random) -> int:
-    chance = hit_chance(melee_accuracy(attacker), melee_defence(defender))
+def roll_melee_damage(attacker: Combatant, defender: Combatant, rng: random.Random, rules: Ruleset) -> int:
+    chance = hit_chance(melee_accuracy(attacker), melee_defence(defender, rules))
     is_hit = rng.random() <= chance
 
     while attacker.attack_cape and not is_hit and rng.randint(1, 99) <= 35:
         is_hit = rng.random() <= chance
 
-    damage = roll_bucket_damage(melee_max_roll(attacker), rng)
+    damage = mitigate_physical_damage(roll_bucket_damage(melee_max_roll(attacker), rng), defender, rules)
     if not is_hit:
         return 0
 
@@ -277,17 +343,18 @@ def roll_ranged_damage(
     defender: Combatant,
     setup: RangedSetup,
     rng: random.Random,
+    rules: Ruleset,
 ) -> int:
-    chance = hit_chance(ranged_accuracy(attacker, setup), melee_defence(defender))
+    chance = hit_chance(ranged_accuracy(attacker, setup), melee_defence(defender, rules))
     if rng.random() > chance:
         return 0
-    return roll_bucket_damage(ranged_max_roll(attacker, setup), rng)
+    return mitigate_physical_damage(roll_bucket_damage(ranged_max_roll(attacker, setup), rng), defender, rules)
 
 
-def roll_magic_damage(caster: Combatant, spell: MagicSetup, rng: random.Random) -> int:
+def roll_magic_damage(caster: Combatant, defender: Combatant, spell: MagicSetup, rng: random.Random, rules: Ruleset) -> int:
     if rng.random() > spell_success_chance(caster, spell):
         return 0
-    return rng.randrange(math.floor(spell.spell_power) + 1)
+    return mitigate_magic_damage(rng.randrange(math.floor(spell.spell_power) + 1), defender, rules)
 
 
 def cadence_delay(cadence: str, round_number: int) -> int:
@@ -303,6 +370,7 @@ def simulate_melee_fight(
     trials: int,
     seed: int,
     max_ticks: int,
+    rules: Ruleset,
 ) -> Dict:
     rng = random.Random(seed)
     wins = {scenario.attacker.name: 0, scenario.defender.name: 0, "timeout": 0}
@@ -325,7 +393,7 @@ def simulate_melee_fight(
             source = scenario.attacker if source_index == 0 else scenario.defender
             target = scenario.defender if target_index == 1 else scenario.attacker
 
-            damage = roll_melee_damage(source, target, rng)
+            damage = roll_melee_damage(source, target, rng, rules)
             damage = min(damage, hp[target_index])
             hp[target_index] -= damage
             total_damage[source_index] += damage
@@ -364,6 +432,7 @@ def simulate_projectile_to_kill(
     trials: int,
     seed: int,
     max_attempts: int,
+    rules: Ruleset,
 ) -> Dict:
     rng = random.Random(seed)
     attempts: List[int] = []
@@ -376,10 +445,10 @@ def simulate_projectile_to_kill(
         for attempt in range(1, max_attempts + 1):
             if scenario.mode == "ranged":
                 assert scenario.ranged is not None
-                damage = roll_ranged_damage(scenario.attacker, scenario.defender, scenario.ranged, rng)
+                damage = roll_ranged_damage(scenario.attacker, scenario.defender, scenario.ranged, rng, rules)
             elif scenario.mode == "magic":
                 assert scenario.magic is not None
-                damage = roll_magic_damage(scenario.attacker, scenario.magic, rng)
+                damage = roll_magic_damage(scenario.attacker, scenario.defender, scenario.magic, rng, rules)
             else:
                 raise ValueError(f"Unsupported projectile mode: {scenario.mode}")
             damage = min(damage, hp)
@@ -428,129 +497,230 @@ def percentile(ordered: List[int], p: float) -> float:
 
 
 def built_in_scenarios() -> Dict[str, Scenario]:
-    newbie = Combatant(
-        name="newbie",
+    armour = {
+        "none": 1,
+        "bronze": 32,
+        "iron": 46,
+        "steel": 71,
+        "black": 91,
+        "mithril": 100,
+        "adamantite": 143,
+        "rune": 206,
+        "rune_no_shield": 160,
+    }
+
+    weapons = {
+        "none": (1, 1),
+        "bronze_short": (7, 7),
+        "iron_scimitar": (10, 10),
+        "steel_scimitar": (15, 15),
+        "mithril_scimitar": (21, 21),
+        "adamantite_scimitar": (29, 29),
+        "rune_scimitar": (45, 45),
+        "rune_scimitar_strength": (45, 55),
+        "rune_2h_strength": (71, 81),
+        "rune_battleaxe_strength": (48, 75),
+    }
+
+    npcs = {
+        "rat": Combatant("rat", False, attack=3, strength=2, defense=4, hits=2, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "goblin": Combatant("goblin", False, attack=8, strength=9, defense=9, hits=5, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "cow": Combatant("cow", False, attack=9, strength=9, defense=8, hits=8, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "skeleton": Combatant("skeleton", False, attack=24, strength=23, defense=20, hits=17, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "zombie": Combatant("zombie", False, attack=23, strength=23, defense=28, hits=24, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "giant": Combatant("giant", False, attack=37, strength=40, defense=36, hits=35, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "moss_giant": Combatant("moss giant", False, attack=62, strength=65, defense=61, hits=60, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "lesser": Combatant("lesser demon", False, attack=78, strength=80, defense=79, hits=79, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "greater": Combatant("greater demon", False, attack=86, strength=88, defense=87, hits=87, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "blue_dragon": Combatant("blue dragon", False, attack=105, strength=105, defense=105, hits=105, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "red_dragon": Combatant("red dragon", False, attack=140, strength=140, defense=140, hits=140, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+        "black_dragon": Combatant("black dragon", False, attack=210, strength=210, defense=190, hits=190, weapon_aim=0, weapon_power=0, armour=0, combat_style=STYLE_NONE),
+    }
+
+    def melee_player(
+        name: str,
+        level: int,
+        weapon: str,
+        armour_tier: str,
+        style: str = STYLE_AGGRESSIVE,
+        attack_prayer: float = 1.0,
+        strength_prayer: float = 1.0,
+        defense_prayer: float = 1.0,
+    ) -> Combatant:
+        weapon_aim, weapon_power = weapons[weapon]
+        return Combatant(
+            name=name,
+            is_player=True,
+            attack=level,
+            defense=level,
+            strength=level,
+            hits=level,
+            weapon_aim=weapon_aim,
+            weapon_power=weapon_power,
+            armour=armour[armour_tier],
+            combat_style=style,
+            attack_prayer=attack_prayer,
+            strength_prayer=strength_prayer,
+            defense_prayer=defense_prayer,
+        )
+
+    def ranged_player(name: str, level: int, armour_tier: str = "none") -> Combatant:
+        return Combatant(
+            name=name,
+            is_player=True,
+            defense=level,
+            hits=level,
+            ranged=level,
+            armour=armour[armour_tier],
+            combat_style=STYLE_ACCURATE,
+        )
+
+    def mage_player(name: str, magic: int, hits: int, defense: int, armour_tier: str = "none", magic_bonus: int = 1) -> Combatant:
+        return Combatant(
+            name=name,
+            is_player=True,
+            defense=defense,
+            hits=hits,
+            magic=magic,
+            magic_bonus=magic_bonus,
+            armour=armour[armour_tier],
+        )
+
+    newbie = melee_player("newbie bronze short", 1, "bronze_short", "none", STYLE_ACCURATE)
+    early = melee_player("10 melee iron scim", 10, "iron_scimitar", "iron")
+    steel = melee_player("25 melee steel scim", 25, "steel_scimitar", "steel")
+    mid_mith = melee_player("40 melee mithril scim", 40, "mithril_scimitar", "mithril")
+    mid_rune = melee_player("60 melee rune scim", 60, "rune_scimitar_strength", "rune")
+    end_rune = melee_player("80 melee rune scim", 80, "rune_scimitar_strength", "rune")
+    max_rune = melee_player("99 melee rune scim", 99, "rune_scimitar_strength", "rune", attack_prayer=1.15, strength_prayer=1.15, defense_prayer=1.15)
+    max_2h = melee_player("max rune 2h", 99, "rune_2h_strength", "rune_no_shield", attack_prayer=1.15, strength_prayer=1.15, defense_prayer=1.15)
+    max_2h_def = melee_player("max rune 2h defender", 99, "rune_2h_strength", "rune_no_shield", STYLE_DEFENSIVE, attack_prayer=1.15, strength_prayer=1.15, defense_prayer=1.15)
+    low_pure = Combatant(
+        name="40 attack 70 strength pure rune 2h",
         is_player=True,
-        attack=1,
+        attack=40,
         defense=1,
-        strength=1,
-        hits=10,
-        weapon_aim=1,
-        weapon_power=1,
-        armour=1,
-        combat_style=STYLE_ACCURATE,
-    )
-    rat = Combatant(
-        name="rat",
-        is_player=False,
-        attack=3,
-        defense=4,
-        strength=2,
-        hits=2,
-        weapon_aim=0,
-        weapon_power=0,
-        armour=0,
-        combat_style=STYLE_NONE,
-    )
-    mid_rune = Combatant(
-        name="60 melee rune scim",
-        is_player=True,
-        attack=60,
-        defense=60,
-        strength=60,
-        hits=60,
-        weapon_aim=45,
-        weapon_power=55,
-        armour=207,
-        combat_style=STYLE_AGGRESSIVE,
-    )
-    lesser = Combatant(
-        name="lesser demon",
-        is_player=False,
-        attack=78,
-        defense=79,
-        strength=80,
-        hits=79,
-        weapon_aim=0,
-        weapon_power=0,
-        armour=0,
-        combat_style=STYLE_NONE,
-    )
-    max_2h = Combatant(
-        name="max rune 2h",
-        is_player=True,
-        attack=99,
-        defense=99,
-        strength=99,
-        hits=99,
-        weapon_aim=71,
-        weapon_power=81,
-        armour=160,
+        strength=70,
+        hits=70,
+        weapon_aim=weapons["rune_2h_strength"][0],
+        weapon_power=weapons["rune_2h_strength"][1],
+        armour=armour["none"],
         combat_style=STYLE_AGGRESSIVE,
         attack_prayer=1.15,
         strength_prayer=1.15,
-        defense_prayer=1.15,
     )
-    max_2h_def = Combatant(
-        name="max rune 2h defender",
-        is_player=True,
-        attack=99,
-        defense=99,
-        strength=99,
-        hits=99,
-        weapon_aim=71,
-        weapon_power=81,
-        armour=160,
-        combat_style=STYLE_DEFENSIVE,
-        attack_prayer=1.15,
-        strength_prayer=1.15,
-        defense_prayer=1.15,
-    )
-    ranger = Combatant(
-        name="60 ranged magic shortbow",
-        is_player=True,
-        defense=60,
-        hits=60,
-        ranged=60,
-        armour=80,
-        combat_style=STYLE_ACCURATE,
-    )
-    mage = Combatant(
-        name="75 magic fire wave",
-        is_player=True,
-        defense=75,
-        hits=75,
-        magic=75,
-        magic_bonus=1,
-        armour=1,
-    )
-    pvp_target = Combatant(
-        name="60 defense rune target",
-        is_player=True,
-        attack=60,
-        defense=60,
-        strength=60,
-        hits=60,
-        armour=207,
-        combat_style=STYLE_DEFENSIVE,
-    )
+    mid_main = melee_player("70 melee rune battleaxe", 70, "rune_battleaxe_strength", "rune", attack_prayer=1.15, strength_prayer=1.15, defense_prayer=1.15)
+    ranger = ranged_player("60 ranged magic shortbow", 60, "steel")
+    max_ranger = ranged_player("99 ranged magic shortbow", 99, "rune")
+    mage = mage_player("75 magic fire wave", 75, 75, 75, magic_bonus=1)
+    max_mage = mage_player("99 magic god spell", 99, 99, 70, magic_bonus=16)
+    pvp_rune_60 = melee_player("60 defense rune target", 60, "rune_scimitar_strength", "rune", STYLE_DEFENSIVE)
+    pvp_rune_99 = melee_player("99 defense rune target", 99, "rune_scimitar_strength", "rune", STYLE_DEFENSIVE, defense_prayer=1.15)
 
     scenarios = [
         Scenario(
             name="pvm-newbie-rat",
             mode="melee",
             attacker=newbie,
-            defender=rat,
+            defender=npcs["rat"],
             cadence="pve-player-started",
             notes=["Melee PvE sanity check against low-level NPC stats from NpcDefs.json."],
+        ),
+        Scenario(
+            name="pvm-newbie-goblin",
+            mode="melee",
+            attacker=newbie,
+            defender=npcs["goblin"],
+            cadence="pve-player-started",
+            notes=["Brand-new account with a bronze short sword against the weaker Goblin definition."],
+        ),
+        Scenario(
+            name="pvm-early-cow",
+            mode="melee",
+            attacker=early,
+            defender=npcs["cow"],
+            cadence="pve-player-started",
+            notes=["Early training check: level 10 iron player against a cow."],
+        ),
+        Scenario(
+            name="pvm-early-skeleton",
+            mode="melee",
+            attacker=steel,
+            defender=npcs["skeleton"],
+            cadence="pve-player-started",
+            notes=["Early dungeon pressure with steel gear against a skeleton."],
+        ),
+        Scenario(
+            name="pvm-mid-giant",
+            mode="melee",
+            attacker=mid_mith,
+            defender=npcs["giant"],
+            cadence="pve-player-started",
+            notes=["Mid training check against the Hill Giant-style Giant definition."],
+        ),
+        Scenario(
+            name="pvm-mid-moss-giant",
+            mode="melee",
+            attacker=mid_rune,
+            defender=npcs["moss_giant"],
+            cadence="pve-player-started",
+            notes=["Rune midgame check against Moss Giant stats."],
         ),
         Scenario(
             name="pvm-rune-lesser",
             mode="melee",
             attacker=mid_rune,
-            defender=lesser,
+            defender=npcs["lesser"],
             cadence="pve-player-started",
             notes=["Rune scim + strength amulet + full rune style stats, no cape procs."],
+        ),
+        Scenario(
+            name="pvm-rune-greater",
+            mode="melee",
+            attacker=end_rune,
+            defender=npcs["greater"],
+            cadence="pve-player-started",
+            notes=["Late rune melee check against Greater Demon stats."],
+        ),
+        Scenario(
+            name="pvm-rune-blue-dragon",
+            mode="melee",
+            attacker=end_rune,
+            defender=npcs["blue_dragon"],
+            cadence="pve-player-started",
+            notes=["Dragon baseline without dragonfire scripting; formula-only melee exchange."],
+        ),
+        Scenario(
+            name="pvm-max-red-dragon",
+            mode="melee",
+            attacker=max_rune,
+            defender=npcs["red_dragon"],
+            cadence="pve-player-started",
+            notes=["Endgame formula pressure against Red Dragon stats, dragonfire excluded."],
+        ),
+        Scenario(
+            name="pvm-max-black-dragon",
+            mode="melee",
+            attacker=max_rune,
+            defender=npcs["black_dragon"],
+            cadence="pve-player-started",
+            notes=["Endgame formula pressure against Black Dragon stats, dragonfire excluded."],
+        ),
+        Scenario(
+            name="pvp-low-pure-vs-main",
+            mode="melee",
+            attacker=low_pure,
+            defender=pvp_rune_60,
+            cadence="pvp-2-2",
+            notes=["Low-defence rune 2h pure pressuring a rune-armoured mid main."],
+        ),
+        Scenario(
+            name="pvp-mid-main-mirror",
+            mode="melee",
+            attacker=mid_main,
+            defender=melee_player("70 melee rune defender", 70, "rune_battleaxe_strength", "rune", STYLE_DEFENSIVE, attack_prayer=1.15, strength_prayer=1.15, defense_prayer=1.15),
+            cadence="pvp-2-2",
+            notes=["Mid-level rune main mirror with battleaxes and prayers."],
         ),
         Scenario(
             name="pvp-max-rune-2h-3-1",
@@ -572,7 +742,7 @@ def built_in_scenarios() -> Dict[str, Scenario]:
             name="ranged-rune-arrow-lesser",
             mode="ranged",
             attacker=ranger,
-            defender=lesser,
+            defender=npcs["lesser"],
             ranged=RangedSetup(
                 bow_name="magic shortbow",
                 ammo_name="rune arrows",
@@ -582,16 +752,41 @@ def built_in_scenarios() -> Dict[str, Scenario]:
             notes=["Classic ranged formula: magic shortbow aim 35, rune-arrow power 40."],
         ),
         Scenario(
+            name="ranged-max-vs-rune-player",
+            mode="ranged",
+            attacker=max_ranger,
+            defender=pvp_rune_99,
+            ranged=RangedSetup(
+                bow_name="magic shortbow",
+                ammo_name="rune arrows",
+                bow_aim=35,
+                ammo_power=40,
+            ),
+            notes=["Max ranged pressure into a high-defence rune-armoured player."],
+        ),
+        Scenario(
             name="magic-fire-wave-pvp",
             mode="magic",
             attacker=mage,
-            defender=pvp_target,
+            defender=pvp_rune_60,
             magic=MagicSetup(
                 spell_name="Fire Wave",
                 required_level=75,
                 spell_power=10.0,
             ),
             notes=["Modern magic table maxes Fire Wave at 10 against players and NPCs."],
+        ),
+        Scenario(
+            name="magic-charged-godspell-pvp",
+            mode="magic",
+            attacker=max_mage,
+            defender=pvp_rune_99,
+            magic=MagicSetup(
+                spell_name="Charged god spell",
+                required_level=60,
+                spell_power=25.0,
+            ),
+            notes=["Charged god spell pressure against a high-defence rune-armoured player."],
         ),
     ]
     return {scenario.name: scenario for scenario in scenarios}
@@ -609,32 +804,38 @@ def load_scenarios(path: Path) -> Dict[str, Scenario]:
     return {scenario.name: scenario for scenario in scenarios}
 
 
-def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int) -> Dict:
+def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int, rules: Ruleset) -> Dict:
     result = {
         "name": scenario.name,
         "mode": scenario.mode,
+        "ruleset": rules.name,
         "notes": scenario.notes,
         "attacker": asdict(scenario.attacker),
         "defender": asdict(scenario.defender),
     }
     if scenario.mode == "melee":
         result["cadence"] = scenario.cadence
-        result["attacker_roll"] = asdict(summarize_melee(scenario.attacker, scenario.defender))
-        result["defender_roll"] = asdict(summarize_melee(scenario.defender, scenario.attacker))
-        result["simulation"] = simulate_melee_fight(scenario, trials, seed, max_ticks)
+        result["attacker_roll"] = asdict(summarize_melee(scenario.attacker, scenario.defender, rules))
+        result["defender_roll"] = asdict(summarize_melee(scenario.defender, scenario.attacker, rules))
+        result["simulation"] = simulate_melee_fight(scenario, trials, seed, max_ticks, rules)
     elif scenario.mode == "ranged":
         if scenario.ranged is None:
             raise ValueError(f"Scenario {scenario.name} needs a ranged setup")
-        summary = summarize_ranged(scenario.attacker, scenario.defender, scenario.ranged)
+        summary = summarize_ranged(scenario.attacker, scenario.defender, scenario.ranged, rules)
         result["ranged"] = asdict(scenario.ranged)
         result["attacker_roll"] = asdict(summary)
-        result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000)
+        result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000, rules)
     elif scenario.mode == "magic":
         if scenario.magic is None:
             raise ValueError(f"Scenario {scenario.name} needs a magic setup")
         success = spell_success_chance(scenario.attacker, scenario.magic)
         max_hit = math.floor(scenario.magic.spell_power)
-        avg_on_success = max_hit / 2.0
+        damage_values = [
+            mitigate_magic_damage(damage, scenario.defender, rules)
+            for damage in range(max_hit + 1)
+        ]
+        max_hit = max(damage_values)
+        avg_on_success = statistics.fmean(damage_values)
         result["magic"] = asdict(scenario.magic)
         result["attacker_roll"] = {
             "spell_success_chance": success,
@@ -642,7 +843,7 @@ def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int) 
             "average_on_success": avg_on_success,
             "average_per_attempt": success * avg_on_success,
         }
-        result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000)
+        result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000, rules)
     else:
         raise ValueError(f"Unknown scenario mode: {scenario.mode}")
     return result
@@ -690,6 +891,7 @@ def print_text_result(result: Dict) -> None:
         for note in result["notes"]:
             print(f"note: {note}")
     print(f"mode: {result['mode']}")
+    print(f"ruleset: {result['ruleset']}")
     print(f"attacker: {result['attacker']['name']}")
     print(f"defender: {result['defender']['name']}")
 
@@ -738,6 +940,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario", action="append", help="Scenario name to run. Repeatable. Use 'all' for every scenario.")
     parser.add_argument("--list", action="store_true", help="List available scenarios and exit.")
     parser.add_argument("--json", type=Path, help="Load one or more custom scenarios from JSON.")
+    parser.add_argument("--rules", choices=sorted(RULESETS), default="voidscape", help="Formula ruleset to simulate.")
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     parser.add_argument("--trials", type=int, default=20000, help="Monte Carlo trial count.")
     parser.add_argument("--seed", type=int, default=1337, help="Base random seed.")
@@ -747,6 +950,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    rules = RULESETS[args.rules]
     scenarios = built_in_scenarios()
     if args.json:
         scenarios.update(load_scenarios(args.json))
@@ -776,6 +980,7 @@ def main() -> int:
                 trials=args.trials,
                 seed=args.seed + index,
                 max_ticks=args.max_ticks,
+                rules=rules,
             )
         )
 
@@ -784,6 +989,7 @@ def main() -> int:
     else:
         print(f"trials: {args.trials}")
         print(f"seed: {args.seed}")
+        print(f"ruleset: {rules.name}")
         for result in results:
             print_text_result(result)
     return 0
