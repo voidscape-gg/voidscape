@@ -72,6 +72,7 @@ final class WorkbenchServer {
 			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
 			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
 			httpServer.createContext("/scenario/subscription-vendor-claim", WorkbenchServer::handleSubscriptionVendorScenario);
+			httpServer.createContext("/scenario/subscription-card-redeem", WorkbenchServer::handleSubscriptionCardRedeemScenario);
 			executor = Executors.newSingleThreadExecutor(runnable -> {
 				Thread thread = new Thread(runnable, "voidscape-workbench");
 				thread.setDaemon(true);
@@ -239,6 +240,15 @@ final class WorkbenchServer {
 		if (!requirePost(exchange)) return;
 		try {
 			sendJson(exchange, 200, subscriptionVendorScenarioJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleSubscriptionCardRedeemScenario(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			sendJson(exchange, 200, subscriptionCardRedeemScenarioJson());
 		} catch (IOException e) {
 			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
 		}
@@ -535,6 +545,34 @@ final class WorkbenchServer {
 		return json.toString();
 	}
 
+	private static String subscriptionCardRedeemScenarioJson() throws IOException {
+		ArrayList<CaptureResult> captures = new ArrayList<>();
+		requireLoggedIn();
+		clearWorkbenchBlockingUi();
+		int slot = findInventorySlot(SUBSCRIPTION_CARD_ITEM_ID);
+		if (slot < 0) {
+			throw new IOException("No Subscription card is present in inventory");
+		}
+
+		captures.add(captureOnce("scenario-subscription-card-before"));
+		sendInventoryCommand(slot, 0);
+		waitUntil(() -> findInventorySlot(SUBSCRIPTION_CARD_ITEM_ID) < 0, 5000,
+			"Subscription card was not consumed");
+		sleep(450);
+		captures.add(captureOnce("scenario-subscription-card-after"));
+
+		StringBuilder json = new StringBuilder();
+		json.append("{\"ok\":true,");
+		json.append("\"scenario\":\"subscription-card-redeem\",");
+		json.append("\"itemId\":").append(SUBSCRIPTION_CARD_ITEM_ID).append(",");
+		json.append("\"slot\":").append(slot).append(",");
+		json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\",");
+		json.append("\"state\":").append(stateJson(null, -1, -1)).append(",");
+		appendCaptures(json, captures);
+		json.append("}");
+		return json.toString();
+	}
+
 	private static void appendCaptures(StringBuilder json, ArrayList<CaptureResult> captures) {
 		json.append("\"captures\":[");
 		for (int i = 0; i < captures.size(); i++) {
@@ -771,6 +809,31 @@ final class WorkbenchServer {
 			client.packetHandler.getClientStream().bufferBits.putShort(serverIndex);
 			client.packetHandler.getClientStream().finishPacket();
 		});
+	}
+
+	private static void sendInventoryCommand(final int slot, final int commandIndex) throws IOException {
+		final mudclient client = requireClient();
+		if (client.packetHandler == null || client.packetHandler.getClientStream() == null) {
+			throw new IOException("Client packet stream is not ready");
+		}
+		runOnEdt(() -> {
+			client.packetHandler.getClientStream().newPacket(90);
+			client.packetHandler.getClientStream().bufferBits.putShort(slot);
+			client.packetHandler.getClientStream().bufferBits.putInt(1);
+			client.packetHandler.getClientStream().bufferBits.putByte(commandIndex);
+			client.packetHandler.getClientStream().finishPacket();
+		});
+	}
+
+	private static int findInventorySlot(final int itemId) {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		if (client == null) return -1;
+		for (int slot = 0; slot < client.getInventoryItemCount(); slot++) {
+			if (client.getInventoryItemID(slot) == itemId) {
+				return slot;
+			}
+		}
+		return -1;
 	}
 
 	private static ORSCharacter findVisibleNpcById(int npcId) {

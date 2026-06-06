@@ -27,6 +27,16 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-06 — Subscription-card redeem workbench scenario
+
+Extended the dev-only PC workbench with `POST /scenario/subscription-card-redeem`, which finds item `1602` in the logged-in client's inventory, sends the same inventory command packet used by the real `Redeem` menu action, waits for the card to be consumed, and captures before/after screenshots. This closes the local validation loop for portal signup → game login → starter-card claim → card redemption → account-wide subscription readback without adding gameplay packets or production behavior.
+
+Files touched:
+- `PC_Client/src/orsc/WorkbenchServer.java` — redeem scenario endpoint and packet helper.
+- `docs/subsystems/ai-workbench.md`, `docs/subsystems/subscription-cards.md` — documented the claim/redeem verification sequence.
+
+Reversibility: remove the workbench endpoint and docs; no server, protocol, DB schema, or player-facing behavior depends on it.
+
 ### 2026-06-06 — Portal-first account subscriptions
 
 Made the unreleased beta path portal-first and moved subscription time to the web-account boundary. Client packet registration is disabled in shipped configs, portal-created OpenRSC saves now receive a `web_account_id` player-cache link, subscription-card redemption extends the global `acct_sub:<webAccountId>` expiry instead of per-character cache state, and the Lumbridge vendor checks an account-level `starter_card:<webAccountId>` marker before granting the normal tradable Subscription card. The local portal bridge mirrors these markers when `PORTAL_OPENRSC_DB` is configured and reads account expiry back so the dashboard reflects in-game card redemption.

@@ -46,9 +46,10 @@ For a live-client starter-card claim check, launch the local server and the work
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-vendor-claim
+curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-card-redeem
 ```
 
-The scenario uses the real client NPC command packet against NPC `848`, verifies the vendor does not open a shop, and saves before/after screenshots under `tmp/workbench/screenshots/`. A successful starter-card claim should change `starter_card:<webAccountId>` from `1` to `2` and add exactly one `1602` inventory item. Running the scenario again without resetting the marker should not add a second free card. If the inventory is full, the marker should remain `1`, no extra `1602` should be saved, and the chat warning should tell the player to free one inventory slot.
+The claim scenario uses the real client NPC command packet against NPC `848`, verifies the vendor does not open a shop, and saves before/after screenshots under `tmp/workbench/screenshots/`. A successful starter-card claim should change `starter_card:<webAccountId>` from `1` to `2` and add exactly one `1602` inventory item. The redeem scenario then sends the real inventory item command packet, consumes item `1602`, and writes `acct_sub:<webAccountId>` with a future expiry. Logging another character linked to the same `web_account_id` should show the same active subscription in the portal. Running the claim scenario again without resetting the marker should not add a second free card. If the inventory is full, the marker should remain `1`, no extra `1602` should be saved, and the chat warning should tell the player to free one inventory slot.
 
 ## Client Definitions
 

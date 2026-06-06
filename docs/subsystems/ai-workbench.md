@@ -25,6 +25,7 @@ Default base URL: `http://127.0.0.1:18787`.
 - `POST /fixture/auction-house` requires the logged-in player to be an admin, dispatches `::workbenchauctionfixture`, and reseeds deterministic Auction House listings plus recent sales through the server DB layer.
 - `POST /scenario/auction-house-open` opens the Auction House, captures Browse, first-listing selection, My Auctions, Intel, and Food category states, then returns a report with all saved image paths.
 - `POST /scenario/subscription-vendor-claim` requires a logged-in account whose save has `web_account_id` plus a matching `starter_card:<webAccountId> = 1` global marker, teleports to the Lumbridge Void Subscription Vendor, sends the real client NPC command packet for `Subscribe`, verifies no vendor shop opens, and captures before/after screenshots.
+- `POST /scenario/subscription-card-redeem` requires a logged-in account with item `1602` in inventory, sends the real inventory item command packet for `Redeem`, waits for the card to be consumed, and captures before/after screenshots.
 
 The server binds to loopback only. It does not touch server packets, opcodes, player saves, DB schema, cache versioning, or gameplay behavior. Fixture seeding uses an admin-only server command and marks rows as `wb-fixture`/`wb-buyer` so they can be cleared and reseeded safely.
 
@@ -41,4 +42,4 @@ When the workbench is disabled, pressing backtick still saves an exact client-fr
 
 ## Current Boundaries
 
-The workbench currently supports capture, state, synthetic local input, command dispatch, dev-ready session setup, Auction House fixture seeding, an Auction House smoke scenario, and a Lumbridge Subscription Vendor smoke scenario. It deliberately has no reusable scenario DSL, image diffing, browser UI, or server packet changes yet. Those should be added as separately testable slices so each step can be verified in-game.
+The workbench currently supports capture, state, synthetic local input, command dispatch, dev-ready session setup, Auction House fixture seeding, an Auction House smoke scenario, Lumbridge Subscription Vendor claim/redeem scenarios, and screenshots around those flows. It deliberately has no reusable scenario DSL, image diffing, browser UI, or server packet changes yet. Those should be added as separately testable slices so each step can be verified in-game.
