@@ -97,6 +97,7 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 - Optional starter-card bridge into `PORTAL_OPENRSC_DB` through account-level OpenRSC `player_cache` markers for the Lumbridge Subscription Vendor
 - Dev-safe saved-character link challenges that merge a verified OpenRSC save into the web-account roster
 - Local staff API for account review, support grants, starter-card correction, and session revocation
+- Staff tab for local token-gated account lookup, status/subscription/starter-card/session actions, roster review, audit events, and abuse-signal context
 - Portal account schema contract for web accounts, up to 10 linked game characters, starter-card rewards, account-wide subscription expiry, and audit/abuse tracking
 - Retired public/content views remain hidden while the pre-release account landing and account-management surfaces are the active portal scope
 

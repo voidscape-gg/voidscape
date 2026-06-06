@@ -542,6 +542,74 @@ h2 {
 	grid-template-columns: 1fr;
 }
 
+.staff-console {
+	max-width: 1120px;
+}
+
+.staff-search {
+	display: grid;
+	grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1fr) auto;
+	gap: 10px;
+	align-items: end;
+}
+
+.staff-summary .stat-tile strong {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.admin-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(340px, 0.86fr);
+	gap: 18px;
+}
+
+.admin-actions {
+	display: grid;
+	gap: 12px;
+}
+
+.admin-action-row {
+	display: grid;
+	grid-template-columns: minmax(130px, 0.75fr) minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: end;
+}
+
+.admin-action-row.compact {
+	grid-template-columns: minmax(130px, 1fr) auto auto;
+}
+
+.staff-action-stack {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-account-table .table-row {
+	grid-template-columns: minmax(110px, 0.42fr) minmax(0, 1fr);
+}
+
+.admin-character-table .table-row,
+.admin-signal-table .table-row {
+	grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr);
+}
+
+.admin-audit-table .table-row {
+	grid-template-columns: minmax(170px, 0.7fr) minmax(0, 1fr) minmax(120px, 0.5fr);
+}
+
+.admin-account-table .table-row span,
+.admin-character-table .table-row span,
+.admin-signal-table .table-row span,
+.admin-audit-table .table-row span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .panel {
 	min-width: 0;
 	padding: 15px;
@@ -1683,6 +1751,7 @@ select {
 	.dashboard-layout,
 	.dashboard-layout,
 	.dashboard-home,
+	.admin-layout,
 	.two-column,
 	.security-grid,
 	.subscription-layout,
@@ -1702,6 +1771,13 @@ select {
 }
 
 @media (max-width: 720px) {
+	.staff-search,
+	.admin-action-row,
+	.admin-action-row.compact,
+	.staff-action-stack {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
 	.account-home-grid {
 		grid-template-columns: 1fr;
 	}

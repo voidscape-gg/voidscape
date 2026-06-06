@@ -39,6 +39,10 @@
 					<span class="nav-mark security"></span>
 					<span>Security</span>
 				</button>
+				<button class="nav-item" type="button" data-view-link="admin">
+					<span class="nav-mark staff"></span>
+					<span>Staff</span>
+				</button>
 			</nav>
 
 			<div class="sidebar-card">
@@ -434,44 +438,132 @@
 				</div>
 			</section>
 
-			<section id="admin" class="view retired-view" data-title="Staff Panel" hidden>
-				<div class="summary-grid">
-					<article class="stat-tile warn"><p>Open reports</p><strong>14</strong><small>3 high priority</small></article>
-					<article class="stat-tile"><p>Muted today</p><strong>2</strong><small>1 appeal pending</small></article>
-					<article class="stat-tile"><p>Suspicious trades</p><strong>7</strong><small>RWT watch rules</small></article>
-					<article class="stat-tile"><p>Server health</p><strong>Stable</strong><small>p95 tick 18.2 ms</small></article>
+			<section id="admin" class="view" data-title="Staff">
+				<section class="panel staff-console" aria-labelledby="staff-title">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Staff</p>
+							<h2 id="staff-title">Account lookup</h2>
+						</div>
+					</div>
+					<form class="staff-search" id="admin-search-form">
+						<label>
+							<span>Admin token</span>
+							<input id="admin-token" type="password" autocomplete="off" placeholder="Local staff token">
+						</label>
+						<label>
+							<span>Account email</span>
+							<input id="admin-search-email" type="email" autocomplete="off" placeholder="player@example.com">
+						</label>
+						<button class="primary-button" type="submit" id="admin-search-button">Search</button>
+					</form>
+					<p class="inline-state" id="admin-message">Enter the local staff token and account email.</p>
+				</section>
+
+				<div class="summary-grid staff-summary">
+					<article class="stat-tile"><p>Status</p><strong id="admin-status-tile">-</strong><small id="admin-status-note">No account loaded</small></article>
+					<article class="stat-tile"><p>Subscription</p><strong id="admin-subscription-tile">-</strong><small id="admin-subscription-note">Account-wide</small></article>
+					<article class="stat-tile"><p>Characters</p><strong id="admin-character-tile">0</strong><small>Linked roster</small></article>
+					<article class="stat-tile warn"><p>Starter card</p><strong id="admin-starter-tile">-</strong><small id="admin-starter-note">Review state</small></article>
 				</div>
-				<div class="two-column">
-					<section class="panel">
+
+				<div class="admin-layout">
+					<section class="panel" aria-labelledby="admin-account-title">
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Moderator control panel</p>
-								<h2>Player lookup</h2>
+								<p class="eyebrow">Account</p>
+								<h2 id="admin-account-title">No account loaded</h2>
 							</div>
-							<input class="search-input" value="DarkWarden">
+							<span class="limit-badge" id="admin-account-id">ID -</span>
 						</div>
-						<div class="data-table">
-							<div class="table-row table-head"><span>Player</span><span>Flag</span><span>Last seen</span><span>Action</span></div>
-							<div class="table-row"><span>DarkWarden</span><span class="bad">Skull baiting</span><span>18m</span><span>Review</span></div>
-							<div class="table-row"><span>CoinMule17</span><span>Trade spike</span><span>42m</span><span>Watch</span></div>
-							<div class="table-row"><span>QuietMage</span><span>Clean</span><span>1h</span><span>Open</span></div>
+						<div class="data-table admin-account-table" id="admin-account-table">
+							<div class="table-row table-head"><span>Field</span><span>Value</span></div>
+							<div class="table-row"><span>Email</span><span>-</span></div>
+							<div class="table-row"><span>Google</span><span>-</span></div>
+							<div class="table-row"><span>Recovery</span><span>-</span></div>
 						</div>
 					</section>
-					<section class="panel">
+
+					<section class="panel" aria-labelledby="admin-actions-title">
 						<div class="panel-head">
 							<div>
 								<p class="eyebrow">Actions</p>
-								<h2>Queue</h2>
+								<h2 id="admin-actions-title">Account controls</h2>
 							</div>
 						</div>
-						<div class="action-stack">
-							<button class="ghost-button" type="button">Send warning</button>
-							<button class="ghost-button" type="button">Freeze trade</button>
-							<button class="ghost-button" type="button">Open chat log</button>
-							<button class="danger-button" type="button">Temporary ban</button>
+						<div class="admin-actions">
+							<div class="admin-action-row">
+								<label>
+									<span>Status</span>
+									<select id="admin-status-select">
+										<option value="active">Active</option>
+										<option value="review">Review</option>
+										<option value="locked">Locked</option>
+									</select>
+								</label>
+								<label>
+									<span>Note</span>
+									<input id="admin-status-note-input" maxlength="240" placeholder="Optional">
+								</label>
+								<button class="ghost-button" type="button" id="admin-apply-status">Apply</button>
+							</div>
+							<div class="admin-action-row compact">
+								<label>
+									<span>Sub days</span>
+									<input id="admin-sub-days" type="number" min="1" max="366" value="7">
+								</label>
+								<button class="ghost-button" type="button" id="admin-grant-sub">Grant</button>
+								<button class="danger-button" type="button" id="admin-clear-sub">Clear</button>
+							</div>
+							<div class="action-stack staff-action-stack">
+								<button class="ghost-button" type="button" id="admin-grant-starter">Grant starter card</button>
+								<button class="danger-button" type="button" id="admin-revoke-starter">Revoke starter card</button>
+								<button class="danger-button" type="button" id="admin-revoke-sessions">Revoke sessions</button>
+							</div>
 						</div>
 					</section>
 				</div>
+
+				<div class="admin-layout">
+					<section class="panel" aria-labelledby="admin-characters-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Roster</p>
+								<h2 id="admin-characters-title">Characters</h2>
+							</div>
+						</div>
+						<div class="data-table admin-character-table" id="admin-character-table">
+							<div class="table-row table-head"><span>Name</span><span>State</span><span>Sub</span></div>
+							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+						</div>
+					</section>
+
+					<section class="panel" aria-labelledby="admin-signals-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Risk</p>
+								<h2 id="admin-signals-title">Abuse signals</h2>
+							</div>
+						</div>
+						<div class="data-table admin-signal-table" id="admin-signal-table">
+							<div class="table-row table-head"><span>Type</span><span>Bucket</span><span>When</span></div>
+							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+						</div>
+					</section>
+				</div>
+
+				<section class="panel" aria-labelledby="admin-audit-title">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Audit</p>
+							<h2 id="admin-audit-title">Recent account events</h2>
+						</div>
+					</div>
+					<div class="data-table admin-audit-table" id="admin-audit-table">
+						<div class="table-row table-head"><span>Event</span><span>Metadata</span><span>When</span></div>
+						<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+					</div>
+				</section>
 			</section>
 
 			<section id="public" class="view retired-view" data-title="News" hidden>

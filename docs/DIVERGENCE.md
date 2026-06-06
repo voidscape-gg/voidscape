@@ -27,6 +27,16 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-06 — Local staff account console
+
+Turned the retired portal staff placeholder into an active local staff console. The sidebar now exposes a Staff tab where a support/admin token can search accounts by email, inspect account/subscription/recovery/session state, review linked characters, scan recent audit and abuse-signal rows, change account status, grant or clear subscription time, grant or revoke the starter subscription card, and revoke sessions. This is still a local prototype surface over the token-gated admin API, not production RBAC.
+
+Files touched:
+- `web/portal/index.html`, `web/portal/script.js`, `web/portal/styles.css` — active Staff navigation, account lookup UI, admin action wiring, and responsive staff table/control styling.
+- `web/portal/README.md` — documented the visible Staff tab scope.
+
+Reversibility: hide the Staff nav item and section, restore the retired placeholder, and remove the script/style helpers. No game packets, server behavior, or schema application changed.
+
 ### 2026-06-06 — Portal recovery and starter-card abuse controls
 
 Added the next account-management hardening slice to the local portal scaffold. Recovery codes can now be consumed to reset a portal password, revoke old sessions, and issue a fresh session. Starter-card anti-abuse now records salted IP/email/identity signal hashes and keeps suspicious signup clusters active while withholding only the free starter subscription card for staff review. A token-gated local admin API can inspect account state, review/lock accounts, grant/clear subscriptions, grant/revoke starter cards, and revoke sessions. Production Google OAuth and payment checkout paths are explicit `501` stubs until real providers are wired.

@@ -115,6 +115,33 @@
 	var securityMessage = document.getElementById("security-message");
 	var sessionTable = document.getElementById("session-table");
 	var endOtherSessions = document.getElementById("end-other-sessions");
+	var adminSearchForm = document.getElementById("admin-search-form");
+	var adminTokenInput = document.getElementById("admin-token");
+	var adminSearchEmail = document.getElementById("admin-search-email");
+	var adminSearchButton = document.getElementById("admin-search-button");
+	var adminMessage = document.getElementById("admin-message");
+	var adminStatusTile = document.getElementById("admin-status-tile");
+	var adminStatusNote = document.getElementById("admin-status-note");
+	var adminSubscriptionTile = document.getElementById("admin-subscription-tile");
+	var adminSubscriptionNote = document.getElementById("admin-subscription-note");
+	var adminCharacterTile = document.getElementById("admin-character-tile");
+	var adminStarterTile = document.getElementById("admin-starter-tile");
+	var adminStarterNote = document.getElementById("admin-starter-note");
+	var adminAccountTitle = document.getElementById("admin-account-title");
+	var adminAccountId = document.getElementById("admin-account-id");
+	var adminAccountTable = document.getElementById("admin-account-table");
+	var adminStatusSelect = document.getElementById("admin-status-select");
+	var adminStatusNoteInput = document.getElementById("admin-status-note-input");
+	var adminApplyStatus = document.getElementById("admin-apply-status");
+	var adminSubDays = document.getElementById("admin-sub-days");
+	var adminGrantSub = document.getElementById("admin-grant-sub");
+	var adminClearSub = document.getElementById("admin-clear-sub");
+	var adminGrantStarter = document.getElementById("admin-grant-starter");
+	var adminRevokeStarter = document.getElementById("admin-revoke-starter");
+	var adminRevokeSessions = document.getElementById("admin-revoke-sessions");
+	var adminCharacterTable = document.getElementById("admin-character-table");
+	var adminSignalTable = document.getElementById("admin-signal-table");
+	var adminAuditTable = document.getElementById("admin-audit-table");
 
 	var maxCharacters = 10;
 	var rosterKey = "voidscape.portal.roster";
@@ -122,17 +149,19 @@
 	var founderKey = "voidscape.portal.founder";
 	var referralKey = "voidscape.portal.referralCode";
 	var sessionKey = "voidscape.portal.sessionToken";
+	var adminTokenKey = "voidscape.portal.adminToken";
 	var sessionToken = localStorage.getItem(sessionKey) || "";
+	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
 	var lastCharacterRefreshAt = 0;
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
+	var adminAccount = null;
 	var retiredViews = {
 		landing: "account",
 		highscores: "account",
 		market: "account",
 		activity: "account",
-		admin: "account",
 		public: "account"
 	};
 
@@ -146,6 +175,7 @@
 
 	var characters = loadRoster();
 	var selectedCharacter = localStorage.getItem(selectedKey) || characters[0].name;
+	if (adminTokenInput) adminTokenInput.value = adminToken;
 
 	var ranks = [
 		["#1", "Maeve", "99", "13.1m"],
@@ -493,6 +523,68 @@
 		});
 	}
 
+	if (adminSearchForm) {
+		adminSearchForm.addEventListener("submit", async function (event) {
+			event.preventDefault();
+			await searchAdminAccount();
+		});
+	}
+
+	if (adminTokenInput) {
+		adminTokenInput.addEventListener("change", saveAdminTokenFromInput);
+	}
+
+	if (adminApplyStatus) {
+		adminApplyStatus.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/status", {
+				status: adminStatusSelect ? adminStatusSelect.value : "active",
+				note: adminStatusNoteInput ? adminStatusNoteInput.value : ""
+			}, "Account status updated.");
+		});
+	}
+
+	if (adminGrantSub) {
+		adminGrantSub.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			var days = Number(adminSubDays && adminSubDays.value || 0);
+			if (!Number.isFinite(days) || days <= 0 || days > 366) {
+				setAdminMessage("Choose 1-366 subscription days.");
+				if (adminSubDays) adminSubDays.focus();
+				return;
+			}
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/subscription", { days: days }, "Subscription updated.");
+		});
+	}
+
+	if (adminClearSub) {
+		adminClearSub.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/subscription", { action: "clear" }, "Subscription cleared.");
+		});
+	}
+
+	if (adminGrantStarter) {
+		adminGrantStarter.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/starter-card", { action: "grant" }, "Starter card granted.");
+		});
+	}
+
+	if (adminRevokeStarter) {
+		adminRevokeStarter.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/starter-card", { action: "revoke" }, "Starter card revoked.");
+		});
+	}
+
+	if (adminRevokeSessions) {
+		adminRevokeSessions.addEventListener("click", async function () {
+			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/sessions", {}, "Sessions revoked.");
+		});
+	}
+
 	if (googleAuthButton) {
 		googleAuthButton.addEventListener("click", handleGoogleAuth);
 	}
@@ -819,7 +911,8 @@
 			method: options.method || "GET",
 			headers: {
 				"content-type": "application/json",
-				...(sessionToken ? { "authorization": "Bearer " + sessionToken } : {})
+				...(sessionToken ? { "authorization": "Bearer " + sessionToken } : {}),
+				...(options.headers || {})
 			},
 			body: options.body ? JSON.stringify(options.body) : undefined
 		});
@@ -840,6 +933,86 @@
 		error.status = status;
 		error.code = code;
 		return error;
+	}
+
+	function saveAdminTokenFromInput() {
+		adminToken = adminTokenInput ? adminTokenInput.value.trim() : adminToken;
+		if (adminToken) {
+			localStorage.setItem(adminTokenKey, adminToken);
+		} else {
+			localStorage.removeItem(adminTokenKey);
+		}
+	}
+
+	function adminHeaders() {
+		saveAdminTokenFromInput();
+		return adminToken ? { "x-portal-admin-token": adminToken } : {};
+	}
+
+	async function adminRequest(path, options) {
+		options = options || {};
+		options.headers = Object.assign({}, options.headers || {}, adminHeaders());
+		return apiRequest(path, options);
+	}
+
+	async function searchAdminAccount() {
+		var email = adminSearchEmail ? adminSearchEmail.value.trim() : "";
+		if (!adminTokenInput || !adminTokenInput.value.trim()) {
+			setAdminMessage("Enter the local staff token.");
+			if (adminTokenInput) adminTokenInput.focus();
+			return;
+		}
+		if (!email) {
+			setAdminMessage("Enter an account email.");
+			if (adminSearchEmail) adminSearchEmail.focus();
+			return;
+		}
+		if (adminSearchButton) adminSearchButton.disabled = true;
+		setAdminMessage("Searching account...");
+		try {
+			var result = await adminRequest("/api/admin/accounts?email=" + encodeURIComponent(email));
+			var account = result.accounts && result.accounts[0];
+			if (!account) {
+				adminAccount = null;
+				renderAdminAccount(null);
+				setAdminMessage("No account found for that email.");
+				return;
+			}
+			adminAccount = account;
+			renderAdminAccount(account);
+			setAdminMessage("Account loaded.");
+		} catch (error) {
+			adminAccount = null;
+			renderAdminAccount(null);
+			setAdminMessage(adminErrorMessage(error));
+		} finally {
+			if (adminSearchButton) adminSearchButton.disabled = false;
+		}
+	}
+
+	async function runAdminAction(path, body, successMessage) {
+		setAdminMessage("Applying staff action...");
+		try {
+			adminAccount = await adminRequest(path, {
+				method: "POST",
+				body: body || {}
+			});
+			renderAdminAccount(adminAccount);
+			setAdminMessage(successMessage);
+		} catch (error) {
+			setAdminMessage(adminErrorMessage(error));
+		}
+	}
+
+	function adminErrorMessage(error) {
+		if (error.status === 403) return "Admin token was rejected.";
+		if (error.status === 503 && error.code === "admin_not_configured") return "Admin API is not configured on this portal server.";
+		if (error.status === 404) return "Account was not found.";
+		return "Staff request failed: " + (error.code || "api_error") + ".";
+	}
+
+	function setAdminMessage(message) {
+		if (adminMessage) adminMessage.textContent = message;
 	}
 
 	function applyAccountState(state) {
@@ -1386,6 +1559,111 @@
 		linkProof.hidden = false;
 		linkCommand.value = pendingLinkChallenge.command;
 		linkExpiry.textContent = (pendingLinkChallenge.minutesRemaining || 15) + " min";
+	}
+
+	function renderAdminAccount(state) {
+		var account = state && state.account ? state.account : null;
+		var admin = state && state.admin ? state.admin : {};
+		var security = state && state.security ? state.security : {};
+		var auth = state && state.auth ? state.auth : security.auth || {};
+		var abuse = state && state.abuse ? state.abuse : {};
+		var starterCard = abuse.starterCard || {};
+		var rewards = state && state.rewards ? state.rewards : {};
+		var characters = state && Array.isArray(state.characters) ? state.characters : [];
+		var subscription = account && account.subscription ? account.subscription : {};
+
+		if (adminStatusTile) adminStatusTile.textContent = account ? titleCase(account.status || admin.status || "active") : "-";
+		if (adminStatusNote) adminStatusNote.textContent = account ? (admin.note || "No staff note") : "No account loaded";
+		if (adminSubscriptionTile) adminSubscriptionTile.textContent = account ? (subscription.active ? subscription.label : "Unsubscribed") : "-";
+		if (adminSubscriptionNote) adminSubscriptionNote.textContent = account ? (subscription.active ? "Active account sub" : "No active sub") : "Account-wide";
+		if (adminCharacterTile) adminCharacterTile.textContent = String(characters.length || 0);
+		if (adminStarterTile) adminStarterTile.textContent = account ? titleCase(starterCard.status || (rewards.starterSubscriptionCards ? "clear" : "none")) : "-";
+		if (adminStarterNote) {
+			adminStarterNote.textContent = account
+				? rewards.starterSubscriptionCards ? rewards.starterSubscriptionCards + " card waiting" : adminStarterReasons(starterCard)
+				: "Review state";
+		}
+		if (adminAccountTitle) adminAccountTitle.textContent = account ? (account.displayName || account.email || "Account") : "No account loaded";
+		if (adminAccountId) adminAccountId.textContent = account ? "ID " + account.id : "ID -";
+		if (adminStatusSelect && account) adminStatusSelect.value = account.status || admin.status || "active";
+		if (adminStatusNoteInput && account) adminStatusNoteInput.value = admin.note || "";
+
+		if (adminAccountTable) {
+			adminAccountTable.innerHTML = [
+				'<div class="table-row table-head"><span>Field</span><span>Value</span></div>',
+				accountTableRow("Email", account ? account.email : "-"),
+				accountTableRow("Status", account ? titleCase(account.status || admin.status || "active") : "-"),
+				accountTableRow("Google", auth.googleConnected ? "Connected" : "Not connected"),
+				accountTableRow("Password", auth.passwordEnabled ? "Enabled" : "Google only"),
+				accountTableRow("Recovery codes", security.recoveryCodes ? String(security.recoveryCodes.activeCount || 0) : "0"),
+				accountTableRow("Sessions", Array.isArray(security.sessions) ? String(security.sessions.length) : "0")
+			].join("");
+		}
+
+		if (adminCharacterTable) {
+			adminCharacterTable.innerHTML = '<div class="table-row table-head"><span>Name</span><span>State</span><span>Sub</span></div>' +
+				(characters.length ? characters.map(function (character) {
+					return [
+						'<div class="table-row">',
+						"<span>" + escapeHtml(character.name || "") + "</span>",
+						"<span>" + escapeHtml(characterStateLabel(character)) + "</span>",
+						"<span>" + escapeHtml(character.subscription || subscription.label || "Unsubscribed") + "</span>",
+						"</div>"
+					].join("");
+				}).join("") : '<div class="table-row"><span>No characters</span><span></span><span></span></div>');
+		}
+
+		renderAdminSignals(admin.abuseSignals || []);
+		renderAdminAudit(admin.recentAudit || []);
+	}
+
+	function accountTableRow(label, value) {
+		return '<div class="table-row"><span>' + escapeHtml(label) + '</span><span>' + escapeHtml(value || "-") + '</span></div>';
+	}
+
+	function renderAdminSignals(signals) {
+		if (!adminSignalTable) return;
+		adminSignalTable.innerHTML = '<div class="table-row table-head"><span>Type</span><span>Bucket</span><span>When</span></div>' +
+			(signals.length ? signals.map(function (signal) {
+				return [
+					'<div class="table-row">',
+					"<span>" + escapeHtml(signal.signalType || "") + "</span>",
+					"<span>" + escapeHtml(signal.bucket || "") + "</span>",
+					"<span>" + escapeHtml(formatSessionDate(signal.createdAt)) + "</span>",
+					"</div>"
+				].join("");
+			}).join("") : '<div class="table-row"><span>No recent signals</span><span></span><span></span></div>');
+	}
+
+	function renderAdminAudit(events) {
+		if (!adminAuditTable) return;
+		adminAuditTable.innerHTML = '<div class="table-row table-head"><span>Event</span><span>Metadata</span><span>When</span></div>' +
+			(events.length ? events.map(function (event) {
+				return [
+					'<div class="table-row">',
+					"<span>" + escapeHtml(event.type || "") + "</span>",
+					"<span>" + escapeHtml(adminMetadataSummary(event.metadata || {})) + "</span>",
+					"<span>" + escapeHtml(formatSessionDate(event.createdAt)) + "</span>",
+					"</div>"
+				].join("");
+			}).join("") : '<div class="table-row"><span>No recent events</span><span></span><span></span></div>');
+	}
+
+	function adminMetadataSummary(metadata) {
+		return Object.keys(metadata).slice(0, 4).map(function (key) {
+			return key + "=" + metadata[key];
+		}).join(", ") || "-";
+	}
+
+	function adminStarterReasons(starterCard) {
+		var reasons = starterCard && Array.isArray(starterCard.reasons) ? starterCard.reasons : [];
+		return reasons.length ? reasons.join(", ") : "No card waiting";
+	}
+
+	function titleCase(value) {
+		return String(value || "").replace(/[_-]+/g, " ").replace(/\b\w/g, function (letter) {
+			return letter.toUpperCase();
+		});
 	}
 
 	function renderSecurity(security) {
