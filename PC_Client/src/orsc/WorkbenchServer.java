@@ -39,6 +39,8 @@ final class WorkbenchServer {
 	private static final String DIR_PROPERTY = "voidscape.workbench.dir";
 	private static final int DEFAULT_PORT = 18787;
 	private static final String DEFAULT_DIR = "../tmp/workbench";
+	private static final int SUBSCRIPTION_CARD_ITEM_ID = 1602;
+	private static final int VOID_SUBSCRIPTION_VENDOR_NPC_ID = 848;
 
 	private static HttpServer server;
 	private static ExecutorService executor;
@@ -69,6 +71,7 @@ final class WorkbenchServer {
 			httpServer.createContext("/dev/ready", WorkbenchServer::handleDevReady);
 			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
 			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
+			httpServer.createContext("/scenario/subscription-vendor-claim", WorkbenchServer::handleSubscriptionVendorScenario);
 			executor = Executors.newSingleThreadExecutor(runnable -> {
 				Thread thread = new Thread(runnable, "voidscape-workbench");
 				thread.setDaemon(true);
@@ -232,6 +235,15 @@ final class WorkbenchServer {
 		}
 	}
 
+	private static void handleSubscriptionVendorScenario(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			sendJson(exchange, 200, subscriptionVendorScenarioJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
 	private static boolean requireGet(HttpExchange exchange) throws IOException {
 		if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) return true;
 		sendJson(exchange, 405, "{\"ok\":false,\"error\":\"GET required\"}");
@@ -357,6 +369,8 @@ final class WorkbenchServer {
 		appendAuctionHouse(json, client);
 		json.append(",");
 		appendWorldMap(json, client);
+		json.append(",");
+		appendShop(json, client);
 		json.append("}");
 	}
 
@@ -385,6 +399,21 @@ final class WorkbenchServer {
 		json.append("{");
 		json.append("\"visible\":").append(client.worldMapPanel.isVisible()).append(",");
 		json.append("\"floor\":").append(client.worldMapPanel.getCurrentFloor());
+		json.append("}");
+	}
+
+	private static void appendShop(StringBuilder json, mudclient client) {
+		json.append("\"shop\":");
+		if (client == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		json.append("\"visible\":").append(client.getShowDialogShop()).append(",");
+		json.append("\"containsSubscriptionCard\":").append(client.shopContains(SUBSCRIPTION_CARD_ITEM_ID)).append(",");
+		json.append("\"selectedItemIndex\":").append(client.getShopSelectedItemIndex()).append(",");
+		json.append("\"selectedItemType\":").append(client.getShopSelectedItemType());
 		json.append("}");
 	}
 
@@ -474,6 +503,54 @@ final class WorkbenchServer {
 			+ "}";
 	}
 
+	private static String subscriptionVendorScenarioJson() throws IOException {
+		ArrayList<CaptureResult> captures = new ArrayList<>();
+		requireLoggedIn();
+		clearWorkbenchBlockingUi();
+		sendCommand("tele 126 649");
+		sleep(1100);
+		clearWorkbenchBlockingUi();
+		waitForVisibleNpc(VOID_SUBSCRIPTION_VENDOR_NPC_ID);
+		ORSCharacter vendor = findVisibleNpcById(VOID_SUBSCRIPTION_VENDOR_NPC_ID);
+		if (vendor == null) {
+			throw new IOException("Void Subscription Vendor is not visible after teleport");
+		}
+
+		captures.add(captureOnce("scenario-subscription-vendor-before"));
+		int serverIndex = vendor.serverIndex;
+		sendNpcCommand1(serverIndex);
+		waitForSubscriptionVendorCheck();
+		sleep(450);
+		captures.add(captureOnce("scenario-subscription-vendor-after"));
+
+		StringBuilder json = new StringBuilder();
+		json.append("{\"ok\":true,");
+		json.append("\"scenario\":\"subscription-vendor-claim\",");
+		json.append("\"npcId\":").append(VOID_SUBSCRIPTION_VENDOR_NPC_ID).append(",");
+		json.append("\"npcServerIndex\":").append(serverIndex).append(",");
+		json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\",");
+		json.append("\"state\":").append(stateJson(null, -1, -1)).append(",");
+		appendCaptures(json, captures);
+		json.append("}");
+		return json.toString();
+	}
+
+	private static void appendCaptures(StringBuilder json, ArrayList<CaptureResult> captures) {
+		json.append("\"captures\":[");
+		for (int i = 0; i < captures.size(); i++) {
+			if (i > 0) json.append(",");
+			CaptureResult capture = captures.get(i);
+			json.append("{");
+			json.append("\"reason\":\"").append(jsonEscape(capture.reason)).append("\",");
+			json.append("\"pngPath\":\"").append(jsonEscape(capture.pngFile.getPath())).append("\",");
+			json.append("\"statePath\":\"").append(jsonEscape(capture.jsonFile.getPath())).append("\",");
+			json.append("\"width\":").append(capture.width).append(",");
+			json.append("\"height\":").append(capture.height);
+			json.append("}");
+		}
+		json.append("]");
+	}
+
 	private static void seedAuctionHouseFixture() throws IOException {
 		requireLoggedInAdmin();
 		sendCommand("workbenchauctionfixture");
@@ -485,6 +562,18 @@ final class WorkbenchServer {
 			AuctionHouse auctionHouse = getAuctionHouse();
 			return auctionHouse != null && auctionHouse.isVisible();
 		}, 5000, "Auction House did not open");
+	}
+
+	private static void waitForVisibleNpc(final int npcId) throws IOException {
+		waitUntil(() -> findVisibleNpcById(npcId) != null, 5000, "NPC " + npcId + " is not visible");
+	}
+
+	private static void waitForSubscriptionVendorCheck() throws IOException {
+		sleep(1200);
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		if (client != null && client.getShowDialogShop()) {
+			throw new IOException("Subscription Vendor opened a shop unexpectedly");
+		}
 	}
 
 	private static void waitForAuctionTab(final int tab) throws IOException {
@@ -517,6 +606,7 @@ final class WorkbenchServer {
 			client.setShowDialogMessage(false);
 			client.setWelcomeScreenShown(false);
 			client.setShowDialogBank(false);
+			client.setShowDialogShop(false);
 			AuctionHouse auctionHouse = client.getAuctionHouse();
 			if (auctionHouse != null) {
 				auctionHouse.setVisible(false);
@@ -568,10 +658,16 @@ final class WorkbenchServer {
 	}
 
 	private static void requireLoggedInAdmin() throws IOException {
+		requireLoggedIn();
 		mudclient client = requireClient();
 		ORSCharacter player = client.getLocalPlayer();
-		if (player == null) throw new IOException("Login required for Auction House fixture seeding");
 		if (!player.isAdmin()) throw new IOException("Admin account required for Auction House fixture seeding");
+	}
+
+	private static void requireLoggedIn() throws IOException {
+		mudclient client = requireClient();
+		ORSCharacter player = client.getLocalPlayer();
+		if (player == null) throw new IOException("Login required");
 	}
 
 	private static void clickGame(final int x, final int y, final String buttonName) throws IOException {
@@ -663,6 +759,30 @@ final class WorkbenchServer {
 		final String normalized = normalizeCommand(command);
 		if (normalized.isEmpty()) throw new IOException("Command is empty");
 		runOnEdt(() -> client.sendCommandString(normalized));
+	}
+
+	private static void sendNpcCommand1(final int serverIndex) throws IOException {
+		final mudclient client = requireClient();
+		if (client.packetHandler == null || client.packetHandler.getClientStream() == null) {
+			throw new IOException("Client packet stream is not ready");
+		}
+		runOnEdt(() -> {
+			client.packetHandler.getClientStream().newPacket(202);
+			client.packetHandler.getClientStream().bufferBits.putShort(serverIndex);
+			client.packetHandler.getClientStream().finishPacket();
+		});
+	}
+
+	private static ORSCharacter findVisibleNpcById(int npcId) {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		if (client == null) return null;
+		for (int i = 0; i < client.getNpcCount(); i++) {
+			ORSCharacter npc = client.getNpc(i);
+			if (npc != null && npc.npcId == npcId) {
+				return npc;
+			}
+		}
+		return null;
 	}
 
 	private static String normalizeCommand(String command) {

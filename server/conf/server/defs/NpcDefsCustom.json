@@ -2162,7 +2162,7 @@
   {
     "id": 848,
     "name": "Void Subscription Vendor",
-    "description": "A void clerk selling subscription cards.",
+    "description": "A void clerk guarding reserved subscription cards.",
     "command": "Subscribe",
     "command2": "",
     "attack": 0,

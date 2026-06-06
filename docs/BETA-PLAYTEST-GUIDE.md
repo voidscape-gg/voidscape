@@ -191,7 +191,7 @@ Use exact coordinates with `::goto <x> <y>`.
 |---|---:|---|
 | Void Island Herald | `24 24` | New-character starter choice. |
 | Lumbridge home | `120 648` | Spawn, home flow, nearby vendor. |
-| Subscription Vendor | `126 649` | Native shop with weekly subscription cards. |
+| Subscription Vendor | `126 649` | Claim a reserved free subscription card; no shop opens. |
 | Edgeville bank | `217 449` | Banking, nearby Auction House, PvP access. |
 | Void Auctioneer | `217 460` | Auction House UI, listing, buying, intel. |
 | Void Rift | `192 443` | Enter prompt to Void Enclave. |

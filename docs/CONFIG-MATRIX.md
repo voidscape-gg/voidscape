@@ -50,7 +50,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
 | `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
 | `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
-| Subscription cards | Always available in Voidscape | Each card adds 7 days; Lumbridge vendor sells 20-card tiers and each sold-out tier doubles the price. |
+| Subscription cards | Always available in Voidscape | Each card adds 7 days; Lumbridge vendor only grants cards reserved by the website flow. |
 | `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
 | `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
 | `want_bank_notes` / `want_cert_as_notes` | `true` if shipping notes | Controls note-style item handling and visuals. |

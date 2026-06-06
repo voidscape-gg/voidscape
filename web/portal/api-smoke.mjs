@@ -95,8 +95,8 @@ const registered = await api("/api/accounts/register", {
 token = registered.token;
 assert(token, "registration should return a session token");
 assert(registered.characters.length === 1, "registration should create the first character");
-assert(registered.founder.freeSubscriptionUnlocked === true, "two real referrals should unlock the founder reward");
-assert(registered.rewards.founderFreeSubscriptions === 1, "founder reward should appear in account reward state");
+assert(registered.founder.freeSubscriptionUnlocked === true, "prelaunch signup should reserve the founder subscription card");
+assert(registered.rewards.founderFreeSubscriptions === 1, "reserved founder card should appear in account reward state");
 assert(registered.characters[0].appearanceData.topColour === 4, "starter characters should expose default appearance data");
 
 const originalToken = token;
@@ -129,6 +129,60 @@ token = googleToken;
 const googleSessionAccount = await api("/api/account");
 assert(googleSessionAccount.account.email === "smoke@example.com", "Google session should authenticate the same portal account");
 assert(googleSessionAccount.characters.length === 1, "Google sign-in should not duplicate the existing character roster");
+token = originalToken;
+
+const invalidGoogleUsername = await api("/api/accounts/google/dev", {
+	method: "POST",
+	body: {
+		username: "!",
+		displayName: "Bad Google Name",
+		subject: "google-invalid-name"
+	},
+	expectStatus: 400
+});
+assert(invalidGoogleUsername.error === "invalid_username", "Google reservation should reject invalid usernames");
+
+const googleReserved = await api("/api/accounts/google/dev", {
+	method: "POST",
+	body: {
+		username: "GoogHero",
+		displayName: "Goog Hero",
+		subject: "google-reserved-hero",
+		path: "arcanist"
+	}
+});
+const reservedToken = googleReserved.token;
+const reservedCard = googleReserved.characters.find((character) => character.name === "GoogHero");
+assert(reservedToken, "new Google reservation should return a session token");
+assert(googleReserved.rewards.founderFreeSubscriptions === 1, "new Google reservation should reserve the in-game founder card");
+assert(reservedCard && reservedCard.source === "founder-reserved", "new Google reservation should create a reserved-name roster card");
+
+const duplicateGoogleReservation = await api("/api/accounts/google/dev", {
+	method: "POST",
+	body: {
+		username: "GoogHero",
+		email: "other-googhero@example.com",
+		displayName: "Other Goog Hero",
+		subject: "google-other-googhero"
+	},
+	expectStatus: 409
+});
+assert(duplicateGoogleReservation.error === "username_reserved", "Google reservation should protect reserved names across accounts");
+
+token = reservedToken;
+const createdReserved = await api("/api/characters", {
+	method: "POST",
+	body: {
+		name: "GoogHero",
+		path: "arcanist",
+		gamePassword: "GoogPass1"
+	}
+});
+const createdReservedCard = createdReserved.characters.find((character) => character.name === "GoogHero");
+assert(createdReserved.characters.length === 1, "creating a reserved Google name should replace the preview instead of adding a duplicate");
+assert(createdReservedCard && createdReservedCard.id === reservedCard.id, "reserved Google character should keep the same portal roster id");
+assert(createdReservedCard.source === "openrsc-sqlite-created", "reserved Google character should become a real OpenRSC-created save");
+assert(createdReservedCard.linkStatus === "linked", "reserved Google character should link to the created game save");
 token = originalToken;
 
 const recovery = await api("/api/security/recovery-codes", { method: "POST" });
@@ -224,17 +278,11 @@ const overflow = await api("/api/characters", {
 });
 assert(overflow.error === "character_limit_reached", "API should enforce the 10-character cap");
 
-const founderRewardRedeemed = await api("/api/subscriptions/redeem-founder", {
-	method: "POST"
-});
-assert(founderRewardRedeemed.account.subscription.active === true, "founder reward should activate subscription state");
-assert(founderRewardRedeemed.rewards.founderFreeSubscriptions === 0, "redeeming founder reward should consume the free card");
-
-const founderRewardAgain = await api("/api/subscriptions/redeem-founder", {
+const founderRewardWebRedeem = await api("/api/subscriptions/redeem-founder", {
 	method: "POST",
-	expectStatus: 404
+	expectStatus: 409
 });
-assert(founderRewardAgain.error === "founder_reward_not_available", "founder reward should only be consumed once");
+assert(founderRewardWebRedeem.error === "claim_founder_card_in_game", "founder card should be claimed in-game instead of redeemed on the portal");
 
 const redeemed = await api("/api/subscriptions/redeem", {
 	method: "POST",

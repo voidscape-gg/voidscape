@@ -2429,13 +2429,14 @@ Details:
 Added a Void-styled subscription vendor near Lumbridge spawn and a redeemable subscription card as a progression-support feature.
 
 Details:
+- Superseded on 2026-06-05 by the claim-only vendor flow below; the vendor no longer sells cards or opens a shop.
 - Added item `1602` (`Subscription card`) with a `Redeem` inventory action and NPC `848` (`Void Subscription Vendor`) with a `Subscribe` interaction.
 - The card uses a dedicated AI-generated inventory icon at client sprite id `617` / archive entry `2767`, and the vendor shares the Void Auctioneer's shadow-broker appearance instead of the robe-based acolyte silhouette.
-- The vendor opens the native shop window directly and uses a custom buy handler for persisted stock/tier purchases instead of dialogue-based confirmation.
+- At introduction time, the vendor opened the native shop window directly and used a custom buy handler for persisted stock/tier purchases instead of dialogue-based confirmation.
 - Subscriptions are one-week account unlocks. Redeeming a card stores or extends the existing player-cache expiry timestamp under `void_sub_expires`; legacy boolean `void_subscription` flags are removed instead of granting permanent access.
 - Subscribed accounts use at least `10x` global combat XP and `6x` global skilling XP; the base Voidscape development rates are now documented as `7x` combat and `4x` skilling. Higher special-mode rates are not reduced.
-- The vendor starts each tier with 20 cards. Tier 0 costs 10,000 coins per card, and each time a tier sells out the next restock doubles the price.
-- Vendor stock and tier persist in existing `player_cache` global rows using `playerID = 0`, keys `sub_vendor_stock` and `sub_vendor_tier`; no DB schema migration was added.
+- At introduction time, the vendor started each tier with 20 cards, tier 0 cost 10,000 coins per card, and each sold-out tier doubled the next restock price.
+- At introduction time, vendor stock and tier persisted in existing `player_cache` global rows using `playerID = 0`; no DB schema migration was added.
 - Bumped the custom client/server version to `10054` and raised active custom item caps so the new card is accepted by the client and presets. Version `10054` extends custom `SEND_SHOP_OPEN` with a 32-bit per-item display-price override for exact dynamic shop prices; no opcode changed.
 - Bumped the custom client/server version to `10055` for a settings-profile payload extension. The wrench Profile panel now shows whether the account is subscribed and displays the effective global combat/skilling XP rates from the server.
 - Documented the subsystem in `docs/subsystems/subscription-cards.md`.
@@ -2634,3 +2635,107 @@ Details:
 - Server-side saves sanitize the canvas into RSC-safe grayscale hair-mask pixels before writing frame PNGs, keeping the existing `wig-validate`, `wig-preview`, and `wig-bake` flow intact.
 - Updated `tools/hairstyle-art/README.md` and `docs/recipes/add-custom-hairstyle.md` to document the manual workflow.
 - No live sprite archive, DB schema, packet, opcode, client-version, or shipped gameplay behavior changed.
+
+### 2026-06-05 - Pre-release portal landing rebuild
+
+Rebuilt the portal's first Account view into a layered pre-release landing page based on the generated Voidscape launch mockup.
+
+Details:
+- Added a shipped `web/portal/assets/prelaunch/` asset set with chroma-keyed foreground PNG layers, generated claim-button normal/hover/pressed states, an optimized audio-free H.264 MP4 background, and a poster fallback.
+- Reused the launcher stone-and-void `Voidscape` logo on the landing page so the website matches the downloadable client launcher branding.
+- Replaced the plain Account hero with a full-screen pre-release scene that keeps the real `founder-form` account fields wired to the local account API while hiding the portal sidebar/topbar only on the landing view.
+- Added responsive fallback layout rules so the ornate generated form frame is used on desktop and a stacked coded form panel is used on narrow screens.
+- The existing Characters, Subscription, and Security account-management views remain available internally, but the focused landing page no longer shows shortcut links to them.
+- No OpenRSC game server behavior, DB schema, packet, opcode, client cache, launcher behavior, or gameplay system changed.
+
+### 2026-06-05 - Founder card vendor claim flow
+
+Changed the pre-release claim flow so a website signup reserves a physical subscription card that is collected in-game from the Lumbridge Subscription Vendor instead of starting subscription time on the website.
+
+Details:
+- The pre-release form now requires a portal password for claim, then swaps the ornate signup panel into a confirmation state telling the player to claim the card from the Subscription Vendor in Lumbridge.
+- The local portal API grants one `founder_free_subscription` entitlement on pre-release account creation and rejects the old web-side founder redemption endpoint with `claim_founder_card_in_game`.
+- When `PORTAL_OPENRSC_DB` points at a local game SQLite database, the portal writes a global `player_cache` marker named `founder_sub_card:<normalized username>` with value `1`.
+- The Lumbridge Void Subscription Vendor checks that marker when spoken to, gives the matching character one physical Subscription card if they have a free inventory slot, then marks the marker value `2` so it cannot be claimed again.
+- Redeeming the physical card remains unchanged: only using the item starts or extends the 7-day subscription timer.
+- No packet, opcode, client cache, client-version, item definition, or NPC definition changed.
+
+### 2026-06-05 - Google-first pre-release reservation flow
+
+Simplified the website pre-release claim UX so players reserve a desired username with Google instead of creating an email/password portal account.
+
+Details:
+- The landing form now shows only one text field, `Username to reserve`, plus a `Login with Google` button.
+- The desktop landing form now uses the same coded panel as the responsive layout instead of the generated form-frame asset, avoiding baked-in email/password art after the Google-only pivot.
+- Added subtle CSS motion to the pre-release scene: background/video breathing, logo/card idle movement, side-character drift, panel glow, and a Google button sheen with a reduced-motion fallback.
+- Restored the real animated desktop background by serving MP4 files as `video/mp4` with byte-range support and by layering the video above the static fallback instead of behind negative z-index background layers.
+- The reservation success state now offers both `Download launcher` and `Manage characters`, so the pre-release flow has an explicit route into the character manager after Google reservation.
+- Removed the unrelated generated art strip from the character manager and clarified newly-created game-save badges as `Created save` / `created game save`.
+- The Subscription view now shows account-specific effective XP rates and reveals the founder reward wallet when a free Lumbridge card is reserved.
+- The local dev Google endpoint can synthesize a `@google.voidscape.local` identity from the requested username, so local testing no longer needs a visible email field.
+- Google reservation requests now reject missing or invalid reserved usernames instead of silently generating a random fallback name.
+- Successful Google reservations still create/load the portal account, reserve the founder username, create the starter portal character preview, grant the founder subscription-card entitlement, and write the `founder_sub_card:<normalized username>` marker when `PORTAL_OPENRSC_DB` is configured.
+- A reserved-name preview card can now be converted into the real OpenRSC character with the same username, preserving the portal roster slot instead of blocking creation or duplicating the character count.
+- The character manager pre-fills the creation name from the selected reserved-name card, making the post-reservation `Manage characters` handoff direct.
+- Added portal smoke coverage for invalid Google usernames, cross-account reserved-name collisions, and reserved Google name conversion into a real OpenRSC-created save.
+- The desktop pre-release MP4 background is fixed to the viewport and explicitly resumed when the landing view is active, so desktop refreshes/navigation do not fall back to a static-looking scene.
+- The success panel now confirms the reserved username and directs the player to claim the free card from the Lumbridge Subscription Vendor.
+- No OpenRSC packet, opcode, client cache, client-version, item definition, NPC definition, or in-game command changed.
+
+### 2026-06-05 - Founder card live-client claim verification
+
+Added a repeatable AI workbench scenario for testing the in-game founder subscription-card handoff end to end.
+
+Details:
+- `GET /state` now reports native shop visibility and whether the open shop contains subscription card item `1602`, giving automated checks a real client-side assertion beyond screenshots.
+- Added `POST /scenario/subscription-vendor-claim`, which teleports the logged-in workbench account to the Lumbridge Void Subscription Vendor, sends the same client NPC command packet used by the real `Subscribe` menu action, waits for the native shop to open with item `1602`, and saves before/after screenshots.
+- Live local verification seeded `founder_sub_card:void = 1`, ran the scenario as the saved admin account, confirmed the marker changed to `2`, confirmed exactly one item `1602` was saved in inventory, then reran the scenario and confirmed the shop still opened without granting a second free card.
+- The full-inventory branch was also verified by filling `void`'s inventory, resetting the marker to `1`, rerunning the scenario, and confirming the marker remained available, the saved subscription-card count stayed at one, and the in-client warning told the player to free an inventory slot.
+- Updated the AI workbench and subscription-card subsystem docs with the local regression recipe.
+- No server packet, opcode, DB schema, item definition, NPC definition, client cache, or client-version changed.
+
+### 2026-06-05 - Pre-release game-login onboarding
+
+Completed the website handoff from Google username reservation into a playable local game login. After `Login with Google` reserves the requested username, the landing panel now asks for a 4-20 character game password, calls the existing `/api/characters` bridge with the reserved name, converts the reserved roster card into the real OpenRSC SQLite save when `PORTAL_OPENRSC_DB` is configured, then reveals the launcher download once the game login exists.
+
+Details:
+- The pre-release success panel now has two states: `Password needed` while the reserved roster card is still preview-only, and `Ready in-game` after the OpenRSC player row has been created.
+- The launcher download and character-manager action are hidden until the reserved username has a real game password, so the player flow is Google reserve -> set game password -> download launcher -> log in with the same username/password.
+- Desktop and mobile browser QA verified the onboarding state, invalid-password validation, final launcher handoff, active animated MP4 background, and zero horizontal overflow.
+- Local SQLite verification confirmed the created test players have current-client-compatible password hashes/salts, initialized stat rows, and the reserved founder subscription-card marker.
+- No OpenRSC packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or in-game behavior changed.
+
+### 2026-06-05 - Claim-only subscription vendor
+
+Changed the Lumbridge Void Subscription Vendor from a paid card shop into a pure reserved-card pickup NPC. Talking to the vendor or right-clicking `Subscribe` now checks the `founder_sub_card:<normalized username>` global cache marker, grants one physical Subscription card only when the marker is available, and otherwise tells the player that no subscription card is ready for that character.
+
+Details:
+- Removed the vendor's shop-opening path, stock state, price tiers, coin purchase handler, and sell-back behavior.
+- Full-inventory claims still leave the marker available and tell the player to free an inventory slot.
+- Updated the AI workbench vendor scenario so opening a shop is treated as a failure for this NPC.
+- Updated subscription-card, workbench, beta guide, and release checklist docs to match the claim-only flow.
+- No OpenRSC packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or subscription-card redemption behavior changed.
+
+### 2026-06-05 - Minimal portal character dashboard
+
+Simplified the web character manager so it only creates and displays game logins. The Characters page now shows each character as a real saved avatar render plus name and level, and the create form only asks for username and game password; starter path, spawn choice, appearance setup, and onboarding are handled inside the game client.
+
+Details:
+- Removed the visible starter-path cards, spawn selector, roster rail, linked-state badges, gear-token loadouts, and detailed character readout from the active Characters view.
+- The Google pre-release handoff and manual character creation now send only username/password to the API; local preview fallback uses an RSC sprite image instead of exposing web-side class choice.
+- When `PORTAL_OPENRSC_DB` is configured, account reads refresh linked or portal-created characters from the OpenRSC SQLite save before returning `/api/account`, so a logout-saved appearance, equipment, combat level, total level, and avatar image update the dashboard.
+- The portal now serves existing game-server avatar PNGs from `server/avatars/<db>+<playerId>.png` through a numeric-ID-only `/openrsc/avatar/<playerId>.png` route and falls back to the existing RSC class sprites until the first generated avatar exists.
+- Local Voidscape config enables OpenRSC's avatar generator so logging out writes the real character PNG used by the account dashboard.
+- Updated portal docs to describe the intentionally minimal character manager and the live-save refresh behavior.
+- No OpenRSC packet, opcode, DB schema, client cache, client-version, launcher binary, or in-game onboarding behavior changed.
+
+### 2026-06-05 - Minimal account portal flow
+
+Reworked the signed-in account-management shell so the Account navigation item opens a dashboard home instead of returning to the pre-release landing page.
+
+Details:
+- The authenticated Account dashboard now shows only account identity, subscription state, character count, reserved-card state, security state, and direct links to Characters, Subscription, and Security.
+- Character roster cards include the saved character render, name, level, and subscription state, keeping the account list scannable without reopening a detailed character panel.
+- The Subscription view was reduced to account status plus whether a reserved founder subscription card is waiting at the Lumbridge Subscription Vendor.
+- The Security view keeps live recovery-code generation and session cleanup, but hides password controls for Google-only accounts so it no longer advertises controls that cannot apply.
+- No OpenRSC packet, opcode, DB schema, client cache, client-version, launcher binary, or in-game behavior changed.

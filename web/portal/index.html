@@ -12,7 +12,7 @@
 <body>
 	<div class="portal-shell">
 		<aside class="sidebar" aria-label="Portal navigation">
-			<a class="brand-lockup" href="#account" data-view-link="account" aria-label="Voidscape account portal home">
+			<a class="brand-lockup" href="#dashboard" data-view-link="dashboard" aria-label="Voidscape account portal home">
 				<img src="assets/voidscape-wordmark.png" alt="Voidscape">
 			</a>
 
@@ -23,7 +23,7 @@
 			</div>
 
 			<nav class="nav-list">
-				<button class="nav-item is-active" type="button" data-view-link="account">
+				<button class="nav-item is-active" type="button" data-view-link="dashboard">
 					<span class="nav-mark account"></span>
 					<span>Account</span>
 				</button>
@@ -69,283 +69,153 @@
 		</header>
 
 		<main class="workspace">
-			<section id="account" class="view is-active landing-view account-view" data-title="Account">
-				<section class="landing-hero" aria-labelledby="landing-title">
-					<div class="landing-copy">
-						<p class="eyebrow">Voidscape account</p>
-						<img class="landing-wordmark" src="assets/voidscape-wordmark.png" alt="Voidscape" hidden>
-						<h2 id="landing-title">Sign in, manage characters, and handle subscriptions.</h2>
-						<p>A simple portal for Google or email login, up to 10 game characters, weekly subscription cards, and account security.</p>
-						<div class="button-row">
-							<button class="primary-button" type="button" data-view-link="characters">Characters</button>
-							<button class="ghost-button" type="button" data-view-link="subscription">Subscriptions</button>
+			<section id="account" class="view is-active prelaunch-view" data-title="Pre-release Access">
+				<div class="prelaunch-page" aria-label="Voidscape pre-release access">
+					<video class="prelaunch-bg-video" autoplay muted loop playsinline poster="assets/prelaunch/voidscape-prelaunch-poster.jpg" aria-hidden="true">
+						<source src="assets/prelaunch/voidscape-prelaunch-bg.mp4" type="video/mp4">
+					</video>
+					<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
+					<div class="prelaunch-vignette" aria-hidden="true"></div>
+
+					<img class="prelaunch-character prelaunch-knight" src="assets/prelaunch/knight.png" alt="" aria-hidden="true">
+					<img class="prelaunch-character prelaunch-mage" src="assets/prelaunch/mage.png" alt="" aria-hidden="true">
+					<img class="prelaunch-character prelaunch-ranger" src="assets/prelaunch/ranger.png" alt="" aria-hidden="true">
+
+					<div class="prelaunch-content">
+						<img class="prelaunch-logo" src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+						<p class="prelaunch-prize">Claim Your Free 1-Week Subscription Card</p>
+
+						<img class="prelaunch-card" src="assets/prelaunch/subscription-card-large.png" alt="Voidscape 1-week subscription card">
+
+						<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
+							<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
+							<div class="prelaunch-signup-content">
+								<h2 id="founder-title">Reserve your username</h2>
+								<div class="account-mode sr-only" role="tablist" aria-label="Portal account mode">
+									<button class="is-active" type="button" data-account-mode="reserve">Create</button>
+									<button type="button" data-account-mode="signin">Sign in</button>
+								</div>
+								<div class="prelaunch-fields">
+									<label class="prelaunch-field" id="founder-name-row">
+										<span>Username to reserve</span>
+										<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
+									</label>
+									<input id="founder-email" type="hidden" autocomplete="email">
+									<input id="founder-password" type="hidden" autocomplete="new-password">
+									<button class="google-button prelaunch-google" type="button" id="google-auth-button">
+										<span class="google-mark" aria-hidden="true">G</span>
+										<strong id="google-auth-label">Login with Google</strong>
+									</button>
+								</div>
+								<p class="prelaunch-state" id="founder-message">Reserve your username with Google. Claim your card in Lumbridge.</p>
+								<div class="prelaunch-success" id="prelaunch-success" hidden>
+									<h2>Your username is reserved</h2>
+									<p>Log in and speak to the Subscription Vendor in Lumbridge to claim your free 1-week subscription card.</p>
+									<div class="prelaunch-success-meta" aria-label="Reserved card details">
+										<span>Google <strong id="prelaunch-success-account">-</strong></span>
+										<span>Reserved <strong id="prelaunch-success-name">-</strong></span>
+										<span>Status <strong id="prelaunch-success-status">Password needed</strong></span>
+									</div>
+									<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
+										<label class="prelaunch-field">
+											<span>Game password</span>
+											<input id="prelaunch-game-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
+										</label>
+										<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
+									</div>
+									<div class="prelaunch-success-actions">
+										<a class="prelaunch-download" id="prelaunch-download" href="/downloads/launcher" download>Download launcher</a>
+										<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
+									</div>
+								</div>
+								<div class="referral-notice prelaunch-referral" id="referral-notice" hidden>
+									<span>Invite code active</span>
+									<strong id="referral-code"></strong>
+									<button class="ghost-button" type="button" id="clear-referral">Clear</button>
+								</div>
+								<div class="founder-progress prelaunch-progress" hidden>
+									<div>
+										<span id="founder-progress-label">0 / 2 invites</span>
+										<strong id="founder-reward-label">Reward locked</strong>
+									</div>
+									<div class="meter-track"><span id="founder-progress-fill"></span></div>
+								</div>
+								<label class="prelaunch-invite-link" hidden>
+									<span>Invite link</span>
+									<div class="copy-row">
+										<input id="founder-link" readonly>
+										<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
+									</div>
+								</label>
+								<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
+							</div>
+						</form>
+
+						<div class="prelaunch-benefits" aria-label="Why join Voidscape" hidden>
+							<img src="assets/prelaunch/benefit-subscription.png" alt="Claim a free 1-week subscription card. Play early with a free 1-week subscription when you sign up.">
+							<img src="assets/prelaunch/benefit-reserve.png" alt="Reserve your account early. Secure your username and be ready for launch day.">
+							<img src="assets/prelaunch/benefit-invite.png" alt="Invite a friend, earn more. You and your friend get extra rewards when they join.">
+						</div>
+
+						<div class="prelaunch-hidden-state" hidden>
+							<strong id="landing-world-state">Online</strong>
+							<small id="landing-world-detail">247 players online</small>
+							<strong id="landing-xp-rates">7x / 4x</strong>
+							<small id="landing-sub-rates">10x / 6x subscribed</small>
+							<strong id="landing-prize-state">Free sub card</strong>
+							<small id="landing-prize-detail">Unlocked at 2 invites</small>
+							<div id="landing-news-list"></div>
+							<div id="download-actions"></div>
 						</div>
 					</div>
-
-					<form class="founder-card" id="founder-form" aria-labelledby="founder-title" novalidate>
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Account</p>
-								<h2 id="founder-title">Create or sign in</h2>
-							</div>
-							<img class="item-icon" src="assets/subscription-card.png" alt="">
-						</div>
-						<div class="account-mode" role="tablist" aria-label="Portal account mode">
-							<button class="is-active" type="button" data-account-mode="reserve">Create</button>
-							<button type="button" data-account-mode="signin">Sign in</button>
-						</div>
-						<button class="google-button" type="button" id="google-auth-button">
-							<span class="google-mark" aria-hidden="true">G</span>
-							<strong id="google-auth-label">Continue with Google</strong>
-						</button>
-						<div class="referral-notice" id="referral-notice" hidden>
-							<span>Invite code active</span>
-							<strong id="referral-code"></strong>
-							<button class="ghost-button" type="button" id="clear-referral">Clear</button>
-						</div>
-						<label id="founder-name-row">
-							<span>Account username</span>
-							<input id="founder-name" maxlength="12" autocomplete="username" placeholder="2-12 letters or numbers">
-						</label>
-						<label>
-							<span>Email</span>
-							<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
-						</label>
-						<label>
-							<span>Portal password</span>
-							<input id="founder-password" type="password" autocomplete="new-password" placeholder="8+ characters">
-						</label>
-						<button class="primary-button" type="submit" id="founder-submit">Save account</button>
-						<p class="inline-state" id="founder-message">Use Google for the fastest local account flow.</p>
-						<div class="founder-progress" hidden>
-							<div>
-								<span id="founder-progress-label">0 / 2 invites</span>
-								<strong id="founder-reward-label">Reward locked</strong>
-							</div>
-							<div class="meter-track"><span id="founder-progress-fill"></span></div>
-						</div>
-						<label hidden>
-							<span>Invite link</span>
-							<div class="copy-row">
-								<input id="founder-link" readonly>
-								<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
-							</div>
-						</label>
-						<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
-					</form>
-				</section>
-
-				<div class="launch-metrics" hidden>
-					<article class="stat-tile">
-						<span class="tile-icon online"></span>
-						<p>World status</p>
-						<strong id="landing-world-state">Online</strong>
-						<small id="landing-world-detail">247 players in sample state</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon xp"></span>
-						<p>XP rates</p>
-						<strong id="landing-xp-rates">7x / 4x</strong>
-						<small id="landing-sub-rates">10x / 6x subscribed</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon title"></span>
-						<p>Launch prize</p>
-						<strong id="landing-prize-state">Free sub card</strong>
-						<small id="landing-prize-detail">Unlocked at 2 invites</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon market"></span>
-						<p>Roster limit</p>
-						<strong>10 characters</strong>
-						<small>Per web account target</small>
-					</article>
-				</div>
-
-				<div class="gateway-grid" aria-label="Portal gateway" hidden>
-					<button class="gateway-card" type="button" data-view-link="characters">
-						<span class="gateway-mark">10</span>
-						<strong>Roster</strong>
-						<small>Manage up to 10 characters</small>
-					</button>
-					<button class="gateway-card" type="button" data-view-link="subscription">
-						<span class="gateway-mark sub">XP</span>
-						<strong>Subscription</strong>
-						<small>Redeem weekly cards</small>
-					</button>
-					<button class="gateway-card" type="button" data-view-link="security">
-						<span class="gateway-mark sec">+</span>
-						<strong>Security</strong>
-						<small>Recovery and sessions</small>
-					</button>
-					<button class="gateway-card" type="button" data-view-link="market">
-						<span class="gateway-mark market">%</span>
-						<strong>Market</strong>
-						<small>Watch prices and trends</small>
-					</button>
-					<button class="gateway-card" type="button" data-view-link="highscores">
-						<span class="gateway-mark ranks">#</span>
-						<strong>Titles</strong>
-						<small>Ranks, titles, milestones</small>
-					</button>
-					<button class="gateway-card" type="button" data-view-link="activity">
-						<span class="gateway-mark wild">PK</span>
-						<strong>Wild feed</strong>
-						<small>Kills, drops, boss wins</small>
-					</button>
-				</div>
-
-				<section class="reward-band" aria-label="Referral reward" hidden>
-					<img src="assets/subscription-card.png" alt="">
-					<div>
-						<p class="eyebrow">Refer a friend</p>
-						<h2>Earn a free one-week subscription card</h2>
-						<span>Two verified invites unlock the launch reward on your portal account.</span>
-					</div>
-					<button class="ghost-button" type="button" data-view-link="subscription">Preview benefits</button>
-				</section>
-
-				<div class="public-layout" hidden>
-					<section class="panel news-panel" aria-labelledby="landing-news-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Launch board</p>
-								<h2 id="landing-news-title">Latest updates</h2>
-							</div>
-						</div>
-						<div class="event-list" id="landing-news-list">
-							<div class="event-row rare"><span></span><p>Void Enclave boss tuning moved into live difficulty controls.</p><time>Today</time></div>
-							<div class="event-row market"><span></span><p>Weekly subscription cards and portal redeem flow are now represented.</p><time>Today</time></div>
-							<div class="event-row title"><span></span><p>Character title state is part of the account portal contract.</p><time>Jun 3</time></div>
-						</div>
-					</section>
-					<section class="panel download-panel" aria-labelledby="download-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Play path</p>
-								<h2 id="download-title">Client downloads</h2>
-							</div>
-						</div>
-						<div class="action-stack" id="download-actions">
-							<button class="ghost-button" type="button">PC client</button>
-							<button class="ghost-button" type="button">Launcher</button>
-							<button class="ghost-button" type="button">Android notes</button>
-							<button class="ghost-button" type="button">Server status</button>
-						</div>
-					</section>
 				</div>
 			</section>
 
-			<section id="dashboard" class="view retired-view" data-title="Overview" hidden>
-				<div class="summary-grid">
-					<article class="stat-tile">
-						<span class="tile-icon online"></span>
-						<p>World status</p>
-						<strong id="dashboard-world-state">Online</strong>
-						<small id="dashboard-world-save">Last save 2 min ago</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon xp"></span>
-						<p>XP rate</p>
-						<strong id="dashboard-xp-rate">10x / 6x</strong>
-						<small>Combat / skilling</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon title"></span>
-						<p>Active title</p>
-						<strong id="dashboard-active-title">The Conqueror</strong>
-						<small>1 unique claimed</small>
-					</article>
-					<article class="stat-tile">
-						<span class="tile-icon market"></span>
-						<p>Market watch</p>
-						<strong>Rune 2h +8%</strong>
-						<small>24h movement</small>
-					</article>
-				</div>
-
-				<div class="dashboard-layout">
-					<section class="panel character-panel" aria-labelledby="active-character-title">
+			<section id="dashboard" class="view" data-title="Account">
+				<div class="dashboard-home">
+					<section class="panel account-home-panel" aria-labelledby="dashboard-account-title">
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Selected character</p>
-								<h2 id="active-character-title">Zamak42</h2>
+								<p class="eyebrow">Account</p>
+								<h2 id="dashboard-account-title">Dashboard</h2>
 							</div>
-							<button class="ghost-button" type="button" data-view-link="characters">Manage roster</button>
 						</div>
-						<div class="hero-character">
-							<div class="character-visual">
-								<img id="active-character-image" src="assets/rsc-knight.png" alt="Zamak42 character render">
-								<div class="paper-doll weapon-weapon has-cape" id="active-character-doll" aria-hidden="true"></div>
-								<span id="active-character-source">Starter preview</span>
+						<div class="account-home-copy">
+							<strong id="dashboard-account-name">Voidscape account</strong>
+							<span id="dashboard-account-email">Sign in with Google to manage characters.</span>
+						</div>
+						<div class="account-home-grid">
+							<div>
+								<span>Subscription</span>
+								<strong id="dashboard-subscription-state">Unsubscribed</strong>
 							</div>
-							<div class="character-readout">
-								<div class="combat-ring">
-									<span id="active-character-combat">87</span>
-									<small>combat</small>
-								</div>
-								<ul class="stat-list">
-									<li><span>Total level</span><strong id="active-character-total">1,194</strong></li>
-									<li><span>Quest points</span><strong id="active-character-quest">47</strong></li>
-									<li><span>Wilderness kills</span><strong id="active-character-kills">28</strong></li>
-									<li><span>Last location</span><strong id="active-character-location">Lumbridge</strong></li>
-									<li><span>Subscription</span><strong id="active-character-subscription">6 days 21 hours</strong></li>
-									<li><span>Last login</span><strong id="active-character-last-login">2 min ago</strong></li>
-								</ul>
-								<div class="gear-list" id="active-character-gear" aria-label="Equipped gear"></div>
+							<div>
+								<span>Characters</span>
+								<strong id="dashboard-character-count">0</strong>
+							</div>
+							<div>
+								<span>Sub card</span>
+								<strong id="dashboard-card-state">No card waiting</strong>
+							</div>
+							<div>
+								<span>Security</span>
+								<strong id="dashboard-security-state">Google sign-in</strong>
 							</div>
 						</div>
 					</section>
 
-					<section class="panel feed-panel" aria-labelledby="recent-feed-title">
+					<section class="panel account-actions-panel" aria-labelledby="dashboard-actions-title">
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Recent signals</p>
-								<h2 id="recent-feed-title">Account feed</h2>
-							</div>
-							<button class="ghost-button" type="button" data-view-link="activity">Open feed</button>
-						</div>
-						<div class="event-list compact">
-							<div class="event-row rare">
-								<span></span>
-								<p><strong>VoidScim</strong> dropped from Void Knight</p>
-								<time>14m</time>
-							</div>
-							<div class="event-row market">
-								<span></span>
-								<p><strong>Rune 2h</strong> crossed 48,000 gp average</p>
-								<time>32m</time>
-							</div>
-							<div class="event-row kill">
-								<span></span>
-								<p><strong>VoidSeeker</strong> defeated DarkWarden</p>
-								<time>51m</time>
-							</div>
-							<div class="event-row title">
-								<span></span>
-								<p><strong>WildRanger</strong> unlocked Red Revenant</p>
-								<time>1h</time>
+								<p class="eyebrow">Manage</p>
+								<h2 id="dashboard-actions-title">Account tools</h2>
 							</div>
 						</div>
-					</section>
-
-					<section class="panel quick-panel" aria-labelledby="quick-actions-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Shortcuts</p>
-								<h2 id="quick-actions-title">Quick actions</h2>
-							</div>
+						<div class="quick-grid account-quick-grid">
+							<button class="quick-action" type="button" data-view-link="characters">Characters</button>
+							<button class="quick-action" type="button" data-view-link="subscription">Subscription</button>
+							<button class="quick-action" type="button" data-view-link="security">Security</button>
 						</div>
-						<div class="quick-grid">
-							<button class="quick-action" type="button" data-view-link="characters">Create character</button>
-							<button class="quick-action" type="button" data-view-link="subscription">Redeem card</button>
-							<button class="quick-action" type="button" data-view-link="security">Recovery settings</button>
-							<button class="quick-action" type="button" data-view-link="market">Auction watch</button>
-						</div>
-					</section>
-
-					<section class="panel art-panel dashboard-art" aria-label="Void portal artwork">
-						<img src="assets/generated/void-ambience.png" alt="">
 					</section>
 				</div>
 			</section>
@@ -355,150 +225,63 @@
 					<section class="panel roster-panel" aria-labelledby="roster-title">
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Character roster</p>
-								<h2 id="roster-title">3 / 10 characters</h2>
+								<p class="eyebrow">Characters</p>
+								<h2 id="roster-title">3 characters</h2>
 							</div>
-							<button class="primary-button" type="button" id="new-character-button">New character</button>
 						</div>
 						<div class="character-cards" id="character-cards"></div>
-						<div class="slot-track" id="slot-track" aria-label="Roster slots"></div>
 					</section>
 
 					<section class="panel create-panel" aria-labelledby="create-title">
 						<div class="panel-head">
 							<div>
-								<p class="eyebrow">Character creation</p>
-								<h2 id="create-title">Choose a path</h2>
+								<p class="eyebrow">New character</p>
+								<h2 id="create-title">Create game login</h2>
 							</div>
-							<span class="limit-badge" id="slot-badge">7 slots open</span>
-						</div>
-						<div class="class-grid" id="class-grid">
-							<button class="class-card is-selected" type="button" data-class="warrior">
-								<img src="assets/rsc-knight.png" alt="">
-								<strong>Warrior</strong>
-								<span>Iron 2h, bronze armour, meat</span>
-							</button>
-							<button class="class-card" type="button" data-class="arcanist">
-								<img src="assets/rsc-mage.png" alt="">
-								<strong>Arcanist</strong>
-								<span>Runes, bow, 50 arrows, robes</span>
-							</button>
-							<button class="class-card" type="button" data-class="forager">
-								<img src="assets/rsc-ranger.png" alt="">
-								<strong>Forager</strong>
-								<span>Tools, bait, food, 100 gp</span>
-							</button>
 						</div>
 						<div class="creation-controls">
 							<label>
-								<span>Name</span>
-								<input id="character-name" maxlength="12" value="Voidborn">
+								<span>Username</span>
+								<input id="character-name" maxlength="12" autocomplete="username" placeholder="Character name">
 							</label>
 							<label>
 								<span>Game password</span>
 								<input id="character-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
 							</label>
-							<label>
-								<span>Start world</span>
-								<select id="start-world">
-									<option>Void Island</option>
-									<option>Lumbridge</option>
-								</select>
-							</label>
 							<button class="primary-button" type="button" id="queue-character">Create character</button>
 						</div>
-						<div class="snapshot-controls">
-							<label>
-								<span>Saved character</span>
-								<input id="snapshot-name" maxlength="12" placeholder="Existing OpenRSC name">
-							</label>
-							<button class="ghost-button" type="button" id="load-snapshot">Load saved state</button>
-						</div>
-						<div class="link-controls">
-							<label>
-								<span>Account link</span>
-								<input id="link-character-name" maxlength="12" placeholder="Existing character name">
-							</label>
-							<button class="ghost-button" type="button" id="start-link">Start link</button>
-						</div>
-						<div class="link-proof" id="link-proof" hidden>
-							<label>
-								<span>Proof command</span>
-								<div class="copy-row">
-									<input id="link-command" readonly>
-									<button class="ghost-button" type="button" id="copy-link-command">Copy</button>
-								</div>
-							</label>
-							<div class="link-proof-actions">
-								<span id="link-expiry">15 min</span>
-								<button class="mini-button" type="button" id="simulate-link">Simulate verified</button>
-							</div>
-						</div>
-						<p class="inline-state" id="character-message">Warrior selected.</p>
+						<p class="inline-state" id="character-message">Create the login here. Appearance and starter path are chosen in-game.</p>
 					</section>
 				</div>
-				<section class="panel art-wide" aria-label="Character kit artwork">
-					<img src="assets/generated/buttons-tabs.png" alt="">
-					<img src="assets/generated/ui-frame-kit.png" alt="">
-				</section>
 			</section>
 
 			<section id="subscription" class="view" data-title="Subscription">
-				<div class="two-column subscription-layout">
-					<section class="panel subscription-status" aria-labelledby="sub-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Weekly membership</p>
-								<h2 id="sub-title">Subscribed</h2>
-							</div>
-							<img class="item-icon" src="assets/subscription-card.png" alt="">
-						</div>
-						<div class="sub-meter">
-							<div>
-								<strong id="sub-days">6 days 21 hours</strong>
-								<span>remaining</span>
-							</div>
-							<div class="meter-track"><span id="sub-meter-fill"></span></div>
-						</div>
-						<div class="benefit-grid">
-							<div><span>Combat XP</span><strong>10x</strong></div>
-							<div><span>Skill XP</span><strong>6x</strong></div>
-							<div><span>Card price</span><strong>10,000 gp</strong></div>
-							<div><span>Vendor stock</span><strong>17 / 20</strong></div>
-						</div>
-						<div class="reward-wallet" id="founder-reward-card" hidden>
-							<div>
-								<span>Founder reward</span>
-								<strong id="founder-reward-count">No free cards</strong>
-							</div>
-							<button class="ghost-button" type="button" id="use-founder-reward" disabled>Use free card</button>
-						</div>
-						<form class="redeem-form" id="redeem-form">
-							<label for="redeem-code">Redeem code</label>
-							<div>
-								<input id="redeem-code" value="VOID-WEEK-TEST">
-								<button class="primary-button" type="submit">Redeem</button>
-							</div>
-						</form>
-						<p class="inline-state" id="redeem-state">No pending cards.</p>
-					</section>
-
-					<section class="panel art-card" aria-label="Subscription art">
-						<img src="assets/generated/subscription-pack.png" alt="">
-					</section>
-				</div>
-				<section class="panel">
+				<section class="panel subscription-status subscription-simple" aria-labelledby="sub-title">
 					<div class="panel-head">
 						<div>
-							<p class="eyebrow">Vendor economy</p>
-							<h2>Lumbridge stock tiers</h2>
+							<p class="eyebrow">Subscription</p>
+							<h2 id="sub-title">Unsubscribed</h2>
 						</div>
+						<img class="item-icon" src="assets/subscription-card.png" alt="">
 					</div>
-					<div class="data-table">
-						<div class="table-row table-head"><span>Tier</span><span>Cards sold</span><span>Unit price</span><span>State</span></div>
-						<div class="table-row"><span>0</span><span>3 / 20</span><span>10,000 gp</span><span class="good">Active</span></div>
-						<div class="table-row"><span>1</span><span>0 / 20</span><span>20,000 gp</span><span>Next restock</span></div>
-						<div class="table-row"><span>2</span><span>0 / 20</span><span>40,000 gp</span><span>Locked</span></div>
+					<div class="sub-meter">
+						<div>
+							<strong id="sub-days">Unsubscribed</strong>
+							<span>account status</span>
+						</div>
+						<div class="meter-track"><span id="sub-meter-fill"></span></div>
+					</div>
+					<div class="reward-wallet" id="founder-reward-card" hidden>
+						<div>
+							<span>Sub card waiting</span>
+							<strong id="founder-reward-count">No reserved cards</strong>
+						</div>
+						<button class="ghost-button" type="button" id="use-founder-reward" disabled>Claim in Lumbridge</button>
+					</div>
+					<p class="inline-state" id="redeem-state">No subscription card is waiting right now.</p>
+					<div class="subscription-note">
+						<span>How it works</span>
+						<strong>Talk to the Subscription Vendor in Lumbridge to collect a reserved card.</strong>
 					</div>
 				</section>
 			</section>
@@ -528,7 +311,7 @@
 							</div>
 							<button class="ghost-button" type="button" id="generate-recovery">New codes</button>
 						</div>
-						<form class="password-form" id="password-form">
+						<form class="password-form" id="password-form" hidden>
 							<label>
 								<span>Current password</span>
 								<input id="current-password" type="password" autocomplete="current-password">

@@ -11,7 +11,6 @@
 	var rankTable = document.getElementById("rank-table");
 	var marketTable = document.getElementById("market-table");
 	var worldFeed = document.getElementById("world-feed");
-	var slotTrack = document.getElementById("slot-track");
 	var activeCharacterTitle = document.getElementById("active-character-title");
 	var activeCharacterImage = document.getElementById("active-character-image");
 	var activeCharacterDoll = document.getElementById("active-character-doll");
@@ -26,7 +25,6 @@
 	var activeCharacterGear = document.getElementById("active-character-gear");
 	var characterMessage = document.getElementById("character-message");
 	var queueCharacter = document.getElementById("queue-character");
-	var newCharacterButton = document.getElementById("new-character-button");
 	var characterName = document.getElementById("character-name");
 	var characterPassword = document.getElementById("character-password");
 	var snapshotName = document.getElementById("snapshot-name");
@@ -46,6 +44,8 @@
 	var subTitle = document.getElementById("sub-title");
 	var subDays = document.getElementById("sub-days");
 	var subMeterFill = document.getElementById("sub-meter-fill");
+	var subCombatRate = document.getElementById("sub-combat-rate");
+	var subSkillRate = document.getElementById("sub-skill-rate");
 	var sidebarSubTime = document.getElementById("sidebar-sub-time");
 	var rosterTitle = document.getElementById("roster-title");
 	var slotBadge = document.getElementById("slot-badge");
@@ -57,6 +57,14 @@
 	var founderPassword = document.getElementById("founder-password");
 	var founderSubmit = document.getElementById("founder-submit");
 	var founderMessage = document.getElementById("founder-message");
+	var prelaunchSuccess = document.getElementById("prelaunch-success");
+	var prelaunchSuccessAccount = document.getElementById("prelaunch-success-account");
+	var prelaunchSuccessName = document.getElementById("prelaunch-success-name");
+	var prelaunchSuccessStatus = document.getElementById("prelaunch-success-status");
+	var prelaunchGameOnboarding = document.getElementById("prelaunch-game-onboarding");
+	var prelaunchGamePassword = document.getElementById("prelaunch-game-password");
+	var prelaunchCreateGameLogin = document.getElementById("prelaunch-create-game-login");
+	var prelaunchDownload = document.getElementById("prelaunch-download");
 	var accountModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-account-mode]"));
 	var googleAuthButton = document.getElementById("google-auth-button");
 	var googleAuthLabel = document.getElementById("google-auth-label");
@@ -81,12 +89,19 @@
 	var landingPrizeState = document.getElementById("landing-prize-state");
 	var landingPrizeDetail = document.getElementById("landing-prize-detail");
 	var landingNewsList = document.getElementById("landing-news-list");
+	var prelaunchBgVideo = document.querySelector(".prelaunch-bg-video");
 	var publicNewsList = document.getElementById("public-news-list");
 	var downloadActions = document.getElementById("download-actions");
 	var dashboardActiveTitle = document.getElementById("dashboard-active-title");
 	var dashboardWorldState = document.getElementById("dashboard-world-state");
 	var dashboardWorldSave = document.getElementById("dashboard-world-save");
 	var dashboardXpRate = document.getElementById("dashboard-xp-rate");
+	var dashboardAccountName = document.getElementById("dashboard-account-name");
+	var dashboardAccountEmail = document.getElementById("dashboard-account-email");
+	var dashboardSubscriptionState = document.getElementById("dashboard-subscription-state");
+	var dashboardCharacterCount = document.getElementById("dashboard-character-count");
+	var dashboardCardState = document.getElementById("dashboard-card-state");
+	var dashboardSecurityState = document.getElementById("dashboard-security-state");
 	var securityScore = document.getElementById("security-score");
 	var securityEmailCheck = document.getElementById("security-email-check");
 	var securityRecoveryCheck = document.getElementById("security-recovery-check");
@@ -108,13 +123,12 @@
 	var referralKey = "voidscape.portal.referralCode";
 	var sessionKey = "voidscape.portal.sessionToken";
 	var sessionToken = localStorage.getItem(sessionKey) || "";
-	var selectedClass = "warrior";
 	var accountMode = "reserve";
+	var lastCharacterRefreshAt = 0;
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
 	var retiredViews = {
 		landing: "account",
-		dashboard: "account",
 		highscores: "account",
 		market: "account",
 		activity: "account",
@@ -122,31 +136,12 @@
 		public: "account"
 	};
 
-	var classKits = {
-		warrior: {
-			path: "Warrior",
-			image: "assets/rsc-knight.png",
-			gear: ["Iron 2h sword", "Bronze plate body", "Bronze medium helm", "Bronze legs"],
-			appearance: "Male, bronze plate set, iron two-hander",
-			appearanceData: { hairColour: 2, topColour: 4, trouserColour: 8, skinColour: 1 },
-			start: "Iron 2h, 10 cooked meat, bronze armour"
-		},
-		arcanist: {
-			path: "Arcanist",
-			image: "assets/rsc-mage.png",
-			gear: ["Shortbow", "Blue wizard robe", "50 bronze arrows", "Air runes"],
-			appearance: "Bright robe top, light gear, bow and arrows",
-			appearanceData: { hairColour: 5, topColour: 10, trouserColour: 6, skinColour: 0 },
-			start: "Runes, bow, 50 bronze arrows, robes"
-		},
-		forager: {
-			path: "Forager",
-			image: "assets/rsc-ranger.png",
-			gear: ["Bronze axe", "Tinderbox", "Small fishing net", "100 gp"],
-			appearance: "Field kit, tools, light travelling clothes",
-			appearanceData: { hairColour: 3, topColour: 7, trouserColour: 3, skinColour: 2 },
-			start: "Tools, bait, food, 100 gp"
-		}
+	var defaultCharacterKit = {
+		path: "Game login",
+		image: "assets/rsc-knight.png",
+		gear: [],
+		appearance: "Appearance chosen in-game",
+		appearanceData: { hairColour: 2, topColour: 4, trouserColour: 8, skinColour: 1 }
 	};
 
 	var characters = loadRoster();
@@ -164,7 +159,7 @@
 	var marketRows = [
 		["Rune 2h sword", "48,220 gp", "+8.1%", "High"],
 		["Dragonstone amulet", "138,000 gp", "+3.6%", "Thin"],
-		["Subscription card", "10,000 gp", "0.0%", "Vendor"],
+		["Subscription card", "Reserved", "0.0%", "Pickup"],
 		["Law rune", "312 gp", "-2.4%", "Active"],
 		["Raw lobster", "88 gp", "+1.2%", "Stable"],
 		["Void scimitar", "Rare", "No sales", "Watch"]
@@ -198,21 +193,25 @@
 		activateView((window.location.hash || "#account").replace("#", "") || "account");
 	});
 
+	window.addEventListener("focus", function () {
+		refreshCharactersFromApi(false);
+	});
+
+	document.addEventListener("visibilitychange", function () {
+		if (!document.hidden) refreshCharactersFromApi(false);
+	});
+
+	if (prelaunchBgVideo) {
+		prelaunchBgVideo.addEventListener("canplay", ensurePrelaunchVideoPlaying);
+		window.addEventListener("pageshow", ensurePrelaunchVideoPlaying);
+		document.addEventListener("visibilitychange", ensurePrelaunchVideoPlaying);
+	}
+
 	if (menuToggle) {
 		menuToggle.addEventListener("click", function () {
 			shell.classList.toggle("nav-open");
 		});
 	}
-
-	Array.prototype.slice.call(document.querySelectorAll(".class-card")).forEach(function (button) {
-		button.addEventListener("click", function () {
-			selectedClass = button.getAttribute("data-class");
-			Array.prototype.slice.call(document.querySelectorAll(".class-card")).forEach(function (other) {
-				other.classList.toggle("is-selected", other === button);
-			});
-			characterMessage.textContent = classKits[selectedClass].path + " selected. Starter kit: " + classKits[selectedClass].start + ".";
-		});
-	});
 
 	if (queueCharacter) {
 		queueCharacter.addEventListener("click", async function () {
@@ -223,18 +222,17 @@
 				return;
 			}
 			var gamePassword = characterPassword ? characterPassword.value : "";
+			if (gamePassword.length < 4 || gamePassword.length > 20) {
+				characterMessage.textContent = "Game password must be 4-20 characters.";
+				if (characterPassword) characterPassword.focus();
+				return;
+			}
 			if (sessionToken) {
-				if (gamePassword && (gamePassword.length < 4 || gamePassword.length > 20)) {
-					characterMessage.textContent = "Game password must be 4-20 characters.";
-					characterPassword.focus();
-					return;
-				}
 				try {
 					var state = await apiRequest("/api/characters", {
 						method: "POST",
 						body: {
 							name: name,
-							path: selectedClass,
 							gamePassword: gamePassword
 						}
 					});
@@ -245,8 +243,8 @@
 					if (characterPassword) characterPassword.value = "";
 					var created = characters.find(function (entry) { return entry.name === name; });
 					characterMessage.textContent = name + (created && created.source === "openrsc-sqlite-created"
-						? " created in the configured OpenRSC SQLite database."
-						: " added as a local portal preview.");
+						? " game login created."
+						: " added locally.");
 					return;
 				} catch (error) {
 					if (error.status === 401) {
@@ -264,13 +262,6 @@
 				}
 			}
 			createLocalCharacter(name);
-		});
-	}
-
-	if (newCharacterButton) {
-		newCharacterButton.addEventListener("click", function () {
-			characterName.focus();
-			characterMessage.textContent = "Choose a name, starter preview, and game password. Current cap: 10 per web account.";
 		});
 	}
 
@@ -416,27 +407,14 @@
 			sidebarSubTime.textContent = "13 days 21 hours";
 			if (subTitle) subTitle.textContent = "Subscribed";
 			if (subMeterFill) subMeterFill.style.width = "100%";
+			if (subCombatRate) subCombatRate.textContent = "10x";
+			if (subSkillRate) subSkillRate.textContent = "6x";
 		});
 	}
 
 	if (useFounderReward) {
-		useFounderReward.addEventListener("click", async function () {
-			if (!sessionToken) {
-				redeemState.textContent = "Create or sign into a portal account before using founder rewards.";
-				return;
-			}
-			useFounderReward.disabled = true;
-			try {
-				var state = await apiRequest("/api/subscriptions/redeem-founder", { method: "POST" });
-				applyAccountState(state);
-				redeemState.textContent = "Founder reward used. Subscription extended by 7 days.";
-			} catch (error) {
-				if (error.status === 401) clearSession();
-				redeemState.textContent = error.code === "founder_reward_not_available"
-					? "No founder reward card is available on this account."
-					: "Founder reward failed: " + error.code + ".";
-				renderRewards(null);
-			}
+		useFounderReward.addEventListener("click", function () {
+			redeemState.textContent = "Founder cards are claimed from the Subscription Vendor in Lumbridge.";
 		});
 	}
 
@@ -519,6 +497,10 @@
 		googleAuthButton.addEventListener("click", handleGoogleAuth);
 	}
 
+	if (prelaunchCreateGameLogin) {
+		prelaunchCreateGameLogin.addEventListener("click", createPrelaunchGameLogin);
+	}
+
 	if (founderForm) {
 		accountModeButtons.forEach(function (button) {
 			button.addEventListener("click", function () {
@@ -528,131 +510,7 @@
 
 		founderForm.addEventListener("submit", async function (event) {
 			event.preventDefault();
-			var name = normalizeName(founderName.value || "");
-			var email = (founderEmail.value || "").trim();
-			var password = founderPassword ? founderPassword.value : "";
-			if (accountMode === "signin") {
-				if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-					founderMessage.textContent = "Enter the email on your portal account.";
-					founderEmail.focus();
-					return;
-				}
-				if (!password || password.length < 8) {
-					founderMessage.textContent = "Enter your portal password.";
-					founderPassword.focus();
-					return;
-				}
-				try {
-					var loggedIn = await apiRequest("/api/accounts/login", {
-						method: "POST",
-						body: {
-							email: email,
-							password: password
-						}
-					});
-					applyAccountState(loggedIn);
-					founderMessage.textContent = "Portal account loaded through the local API.";
-					founderPassword.value = "";
-					return;
-				} catch (loginError) {
-					if (loginError.status === 401) {
-						founderMessage.textContent = "Email or password did not match.";
-						return;
-					}
-					founderMessage.textContent = "API login failed: " + loginError.code + ".";
-					return;
-				}
-			}
-			if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
-				founderMessage.textContent = "Choose a 2-12 character username.";
-				founderName.focus();
-				return;
-			}
-			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-				founderMessage.textContent = "Enter a valid email.";
-				founderEmail.focus();
-				return;
-			}
-			if (password && password.length < 8) {
-				founderMessage.textContent = "Portal password must be at least 8 characters.";
-				founderPassword.focus();
-				return;
-			}
-			if (password) {
-				try {
-					var registered = await apiRequest("/api/accounts/register", {
-						method: "POST",
-						body: {
-							username: name,
-							email: email,
-							password: password,
-							path: selectedClass,
-							referrerCode: currentReferralCode() || undefined
-						}
-					});
-					applyAccountState(registered);
-					founderMessage.textContent = referralCreditMessage(registered.founder, "Portal account created through the local API.");
-					founderPassword.value = "";
-					return;
-				} catch (error) {
-					if (error.status === 409 && error.code === "account_exists") {
-						try {
-							var loggedIn = await apiRequest("/api/accounts/login", {
-								method: "POST",
-								body: {
-									email: email,
-									password: password
-								}
-							});
-							applyAccountState(loggedIn);
-							founderMessage.textContent = "Portal account loaded through the local API.";
-							founderPassword.value = "";
-							return;
-						} catch (loginError) {
-							founderMessage.textContent = "That account exists, but the password did not match.";
-							return;
-						}
-					}
-					if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
-						founderMessage.textContent = referralErrorMessage(error);
-						return;
-					}
-					if (error.status && error.status !== 404) {
-						founderMessage.textContent = "API signup failed: " + error.code + ".";
-						return;
-					}
-				}
-			}
-			try {
-				var reservation = await apiRequest("/api/founder/reservations", {
-					method: "POST",
-					body: {
-						username: name,
-						email: email,
-						referrerCode: currentReferralCode() || undefined
-					}
-				});
-				applyFounderState(reservation.founder);
-					founderMessage.textContent = referralCreditMessage(reservation.founder, "Account saved through the local API.");
-				return;
-			} catch (error) {
-				if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
-					founderMessage.textContent = referralErrorMessage(error);
-					return;
-				}
-				// Static-file mode falls back to localStorage below.
-			}
-			var existing = loadFounder();
-			var founder = {
-				username: name,
-				email: email,
-				code: existing && existing.code ? existing.code : makeCode(name),
-				invites: existing && existing.invites ? existing.invites : 0,
-				referredBy: currentReferralCode() ? { code: currentReferralCode(), username: "" } : null
-			};
-			saveFounder(founder);
-			founderMessage.textContent = "Account saved locally. Production signup still needs API and email verification.";
-			renderFounder();
+			handleGoogleAuth();
 		});
 	}
 
@@ -661,47 +519,154 @@
 		accountModeButtons.forEach(function (button) {
 			button.classList.toggle("is-active", button.getAttribute("data-account-mode") === accountMode);
 		});
-		if (founderNameRow) founderNameRow.hidden = accountMode === "signin";
-		if (founderTitle) founderTitle.textContent = accountMode === "signin" ? "Sign in" : "Create account";
-		if (founderSubmit) founderSubmit.textContent = accountMode === "signin" ? "Sign in" : "Save account";
-		if (googleAuthLabel) googleAuthLabel.textContent = accountMode === "signin" ? "Sign in with Google" : "Continue with Google";
-		if (founderPassword) founderPassword.setAttribute("autocomplete", accountMode === "signin" ? "current-password" : "new-password");
+		if (founderNameRow) founderNameRow.hidden = false;
+		if (founderTitle) founderTitle.textContent = "Reserve your username";
+		if (founderSubmit) founderSubmit.textContent = "Reserve with Google";
+		if (googleAuthLabel) googleAuthLabel.textContent = "Login with Google";
+		if (founderPassword) founderPassword.setAttribute("autocomplete", "new-password");
 		if (founderMessage) {
-			founderMessage.textContent = accountMode === "signin"
-				? "Returning players can load their portal account."
-				: "Create a portal account, then add characters and subscriptions.";
+			founderMessage.textContent = "Reserve your username with Google. Claim your card in Lumbridge.";
+		}
+	}
+
+	function showPrelaunchClaimSuccess(state) {
+		if (!founderForm || !prelaunchSuccess) return;
+		var rewards = state && state.rewards ? state.rewards : null;
+		var hasCard = rewards && rewards.founderFreeSubscriptions > 0;
+		if (!hasCard && !(state && state.founder && state.founder.freeSubscriptionUnlocked)) return;
+		var founderUsername = state && state.founder ? state.founder.username : founderName.value;
+		var character = prelaunchReservedCharacter(state, founderUsername);
+		var needsGameLogin = Boolean(character && character.source === "founder-reserved");
+
+		founderForm.classList.add("is-claimed");
+		founderForm.classList.toggle("needs-game-login", needsGameLogin);
+		founderForm.classList.toggle("has-game-login", !needsGameLogin);
+		prelaunchSuccess.hidden = false;
+		if (prelaunchSuccessAccount) {
+			prelaunchSuccessAccount.textContent = (state.account && state.account.email) || (state.founder && state.founder.email) || founderEmail.value || "-";
+		}
+		if (prelaunchSuccessName) {
+			prelaunchSuccessName.textContent = founderUsername || "-";
+		}
+		if (prelaunchSuccessStatus) {
+			prelaunchSuccessStatus.textContent = needsGameLogin ? "Password needed" : "Ready in-game";
+		}
+		var successTitle = prelaunchSuccess.querySelector("h2");
+		var successCopy = prelaunchSuccess.querySelector("p");
+		if (successTitle) {
+			successTitle.textContent = needsGameLogin ? "Set your game password" : "Game login ready";
+		}
+		if (successCopy) {
+			successCopy.textContent = needsGameLogin
+				? "Create your playable character, then download the launcher and log in with this username and password."
+				: "Download the launcher, log in with your username and game password, then speak to the Subscription Vendor in Lumbridge.";
+		}
+		if (prelaunchGameOnboarding) {
+			prelaunchGameOnboarding.hidden = !needsGameLogin;
+		}
+		if (prelaunchDownload) {
+			prelaunchDownload.hidden = needsGameLogin;
+		}
+		if (prelaunchGamePassword && needsGameLogin) {
+			prelaunchGamePassword.value = "";
+			prelaunchGamePassword.focus();
+		}
+	}
+
+	function prelaunchReservedCharacter(state, username) {
+		var normalized = normalizeName(username || "").toLowerCase();
+		if (!normalized || !state || !Array.isArray(state.characters)) return null;
+		return state.characters.find(function (character) {
+			return normalizeName(character.name || "").toLowerCase() === normalized;
+		}) || null;
+	}
+
+	async function createPrelaunchGameLogin() {
+		if (!sessionToken) {
+			founderMessage.textContent = "Sign in with Google first.";
+			return;
+		}
+		var name = (prelaunchSuccessName && prelaunchSuccessName.textContent) || founderName.value || "";
+		name = normalizeName(name);
+		var gamePassword = prelaunchGamePassword ? prelaunchGamePassword.value : "";
+		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
+			founderMessage.textContent = "Reserve a username before creating the game login.";
+			return;
+		}
+		if (gamePassword.length < 4 || gamePassword.length > 20) {
+			founderMessage.textContent = "Game password must be 4-20 characters.";
+			if (prelaunchGamePassword) prelaunchGamePassword.focus();
+			return;
+		}
+
+		prelaunchCreateGameLogin.disabled = true;
+		founderMessage.textContent = "Creating your game login...";
+		try {
+			var state = await apiRequest("/api/characters", {
+				method: "POST",
+				body: {
+					name: name,
+					gamePassword: gamePassword
+				}
+			});
+			applyAccountState(state);
+			selectedCharacter = name;
+			localStorage.setItem(selectedKey, selectedCharacter);
+			renderCharacters();
+			renderSelectedCharacter();
+			if (prelaunchGamePassword) prelaunchGamePassword.value = "";
+			showPrelaunchClaimSuccess(state);
+			founderMessage.textContent = "Game login created. Download the launcher and log in as " + name + ".";
+		} catch (error) {
+			if (error.status === 401) {
+				clearSession();
+				founderMessage.textContent = "Sign in with Google again to continue.";
+			} else if (error.status === 400 && error.code === "invalid_game_password") {
+				founderMessage.textContent = "Game password must be 4-20 characters.";
+				if (prelaunchGamePassword) prelaunchGamePassword.focus();
+			} else if (error.status === 409) {
+				founderMessage.textContent = "That username is already taken. Open Manage characters to choose another.";
+			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
+				founderMessage.textContent = "Start the portal with PORTAL_OPENRSC_DB before creating game logins.";
+			} else {
+				founderMessage.textContent = "Game login creation failed: " + (error.code || "unknown_error") + ".";
+			}
+		} finally {
+			prelaunchCreateGameLogin.disabled = false;
 		}
 	}
 
 	async function handleGoogleAuth() {
-		var email = (founderEmail.value || "").trim();
 		var name = normalizeName(founderName.value || "");
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-			founderMessage.textContent = "Enter the email you want to use with Google.";
-			founderEmail.focus();
+		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
+			founderMessage.textContent = "Choose a 2-12 character username to reserve.";
+			founderName.focus();
 			return;
 		}
 		googleAuthButton.disabled = true;
+		founderMessage.textContent = "Signing in with Google and reserving " + name + "...";
 		try {
 			var state = await apiRequest("/api/accounts/google/dev", {
 				method: "POST",
 				body: {
-					email: email,
-					displayName: name || email.split("@")[0],
-					username: name || undefined,
-					path: selectedClass,
+					displayName: name,
+					username: name,
 					referrerCode: currentReferralCode() || undefined
 				}
 			});
 			applyAccountState(state);
-			setAccountMode("signin");
-			founderPassword.value = "";
-			founderMessage.textContent = "Google sign-in simulated through the local API. Production will use Google's browser OAuth flow.";
+			showPrelaunchClaimSuccess(state);
+			if (founderPassword) founderPassword.value = "";
+			founderMessage.textContent = "Your username is reserved. Set a game password to finish.";
 		} catch (error) {
 			if (error.status === 409 && error.code === "google_identity_conflict") {
 				founderMessage.textContent = "This portal account is already linked to another Google identity.";
 			} else if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
 				founderMessage.textContent = referralErrorMessage(error);
+			} else if (error.status === 400 && error.code === "invalid_username") {
+				founderMessage.textContent = "Choose a 2-12 character username to reserve.";
+			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
+				founderMessage.textContent = "That username is already reserved.";
 			} else if (error.status && error.status !== 404) {
 				founderMessage.textContent = "Google sign-in failed: " + error.code + ".";
 			} else {
@@ -775,6 +740,7 @@
 		renderFounder();
 		renderCharacters();
 		renderSelectedCharacter();
+		updateDashboardHome();
 		renderRankTable();
 		renderMarketTable();
 		renderWorldFeed();
@@ -786,7 +752,7 @@
 			var publicState = await apiRequest("/api/public");
 			applyPublicState(publicState);
 			if (!sessionToken) {
-				founderMessage.textContent = "Local API online. Add a portal password or use Google to create an account session.";
+				founderMessage.textContent = "Reserve your username with Google. Claim your card in Lumbridge.";
 				return;
 			}
 			var state = await apiRequest("/api/account");
@@ -884,11 +850,20 @@
 		if (state.account) {
 			accountName.textContent = state.account.displayName || "Voidscape";
 			accountEmail.textContent = state.account.email || "";
+			if (dashboardAccountName) dashboardAccountName.textContent = state.account.displayName || "Voidscape account";
+			if (dashboardAccountEmail) dashboardAccountEmail.textContent = state.account.email || "";
 			if (state.account.subscription) {
 				subDays.textContent = state.account.subscription.label;
 				sidebarSubTime.textContent = state.account.subscription.label;
 				if (subTitle) subTitle.textContent = state.account.subscription.active ? "Subscribed" : "Unsubscribed";
 				if (subMeterFill) subMeterFill.style.width = state.account.subscription.active ? "100%" : "0%";
+				if (subCombatRate) subCombatRate.textContent = state.account.subscription.combatXpRate + "x";
+				if (subSkillRate) subSkillRate.textContent = state.account.subscription.skillXpRate + "x";
+				if (dashboardSubscriptionState) {
+					dashboardSubscriptionState.textContent = state.account.subscription.active
+						? state.account.subscription.label
+						: "Unsubscribed";
+				}
 			}
 		}
 		if (state.founder) {
@@ -911,16 +886,51 @@
 			renderSecurity(state.security);
 		}
 		renderRewards(state.rewards || null);
+		updateDashboardHome(state);
 	}
 
 	function renderRewards(rewards) {
 		if (!founderRewardCard || !founderRewardCount || !useFounderReward) return;
 		var count = rewards && rewards.founderFreeSubscriptions ? rewards.founderFreeSubscriptions : 0;
+		founderRewardCard.hidden = count <= 0;
 		founderRewardCard.classList.toggle("is-ready", count > 0);
 		founderRewardCount.textContent = count > 0
-			? count + " free weekly card" + (count === 1 ? "" : "s")
-			: "No free cards";
-		useFounderReward.disabled = !sessionToken || count < 1;
+			? count + " card reserved in Lumbridge"
+			: "No reserved cards";
+		useFounderReward.textContent = count > 0 ? "Claim in Lumbridge" : "No card";
+		useFounderReward.disabled = true;
+		if (redeemState) {
+			redeemState.textContent = count > 0
+				? "You have a subscription card waiting at the Lumbridge Subscription Vendor."
+				: "No subscription card is waiting right now.";
+		}
+		if (dashboardCardState) {
+			dashboardCardState.textContent = count > 0
+				? count + " waiting"
+				: "No card waiting";
+		}
+	}
+
+	function updateDashboardHome(state) {
+		if (dashboardCharacterCount) {
+			dashboardCharacterCount.textContent = characters.length + " / " + maxCharacters;
+		}
+		if (dashboardAccountName && accountName) {
+			dashboardAccountName.textContent = accountName.textContent || "Voidscape account";
+		}
+		if (dashboardAccountEmail && accountEmail) {
+			dashboardAccountEmail.textContent = accountEmail.textContent || "Sign in with Google to manage characters.";
+		}
+		if (dashboardSubscriptionState && subDays) {
+			dashboardSubscriptionState.textContent = subDays.textContent || "Unsubscribed";
+		}
+		if (dashboardSecurityState && state && state.security) {
+			var auth = state.security.auth || {};
+			var recoveryCount = state.security.recoveryCodes ? state.security.recoveryCodes.activeCount : 0;
+			dashboardSecurityState.textContent = recoveryCount > 0
+				? "Recovery ready"
+				: auth.googleConnected ? "Google connected" : "Local account";
+		}
 	}
 
 	function applyFounderState(apiFounder) {
@@ -950,12 +960,12 @@
 			return;
 		}
 
-		var kit = classKits[selectedClass];
+		var kit = defaultCharacterKit;
 		var character = {
 			name: name,
 			path: kit.path,
 			image: kit.image,
-			combat: selectedClass === "warrior" ? 8 : 5,
+			combat: 3,
 			total: "34",
 			quest: 0,
 			kills: 0,
@@ -973,7 +983,7 @@
 		saveRoster();
 		renderCharacters();
 		renderSelectedCharacter();
-		characterMessage.textContent = name + " added locally as " + kit.path + ". Backend creation is not connected in static-file mode.";
+		characterMessage.textContent = name + " added locally. Start the portal API to create a real game login.";
 	}
 
 	function upsertSnapshotCharacter(character) {
@@ -1029,10 +1039,45 @@
 			link.classList.toggle("is-active", link.getAttribute("data-view-link") === next.id);
 		});
 
+		var isLanding = next.id === "account";
+		if (shell) shell.classList.toggle("landing-shell", isLanding);
+		document.body.classList.toggle("prelaunch-mode", isLanding);
+		ensurePrelaunchVideoPlaying();
 		title.textContent = next.getAttribute("data-title") || "Voidscape";
 		if (workspace) workspace.scrollTop = 0;
 		if (window.location.hash !== "#" + next.id) {
 			window.history.replaceState(null, "", "#" + next.id);
+		}
+		if (next.id === "characters") {
+			refreshCharactersFromApi(false);
+		}
+	}
+
+	async function refreshCharactersFromApi(force) {
+		if (!sessionToken || window.location.protocol === "file:") return;
+		if (!document.getElementById("characters").classList.contains("is-active")) return;
+		var nowMs = Date.now();
+		if (!force && nowMs - lastCharacterRefreshAt < 5000) return;
+		lastCharacterRefreshAt = nowMs;
+		try {
+			var state = await apiRequest("/api/account");
+			applyAccountState(state);
+		} catch (error) {
+			if (error.status === 401) clearSession();
+		}
+	}
+
+	function ensurePrelaunchVideoPlaying() {
+		if (!prelaunchBgVideo) return;
+		if (document.hidden || !document.body.classList.contains("prelaunch-mode")) {
+			prelaunchBgVideo.pause();
+			return;
+		}
+		prelaunchBgVideo.muted = true;
+		prelaunchBgVideo.playsInline = true;
+		var play = prelaunchBgVideo.play();
+		if (play && typeof play.catch === "function") {
+			play.catch(function () {});
 		}
 	}
 
@@ -1065,28 +1110,18 @@
 	}
 
 	function renderCharacters() {
-		rosterTitle.textContent = characters.length + " / " + maxCharacters + " characters";
-		slotBadge.textContent = Math.max(0, maxCharacters - characters.length) + " slots open";
+		rosterTitle.textContent = characters.length + " character" + (characters.length === 1 ? "" : "s");
+		if (slotBadge) slotBadge.textContent = Math.max(0, maxCharacters - characters.length) + " open";
 		queueCharacter.disabled = characters.length >= maxCharacters;
-		if (slotTrack) {
-			slotTrack.innerHTML = Array.from({ length: maxCharacters }, function (_, index) {
-				return '<span class="' + (index < characters.length ? "is-filled" : "") + '"></span>';
-			}).join("");
-		}
 		characterCards.innerHTML = characters.map(function (character) {
-			var stateLabel = characterStateLabel(character);
-			var stateClass = characterStateClass(character);
-			var gear = Array.isArray(character.gear) ? character.gear.slice(0, 4) : [];
 			return [
-				'<button class="character-card' + (character.name === selectedCharacter ? " is-selected" : "") + (character.linkStatus === "linked" ? " is-linked" : "") + '" type="button" data-character="' + escapeAttr(character.name) + '">',
-				'<span class="state-badge ' + stateClass + '">' + escapeHtml(stateLabel) + '</span>',
-				'<img src="' + escapeAttr(character.image) + '" alt="">',
+				'<button class="character-card character-card-simple' + (character.name === selectedCharacter ? " is-selected" : "") + '" type="button" data-character="' + escapeAttr(character.name) + '">',
+				renderCharacterAvatar(character),
+				'<span class="character-card-copy">',
 				'<strong>' + escapeHtml(character.name) + '</strong>',
-				'<span class="character-meta">' + escapeHtml(character.path) + '</span>',
-				'<span class="character-meta">Lvl ' + escapeHtml(String(character.combat)) + " - Total " + escapeHtml(String(character.total)) + '</span>',
-				'<span class="character-title">' + escapeHtml(character.title) + '</span>',
-				'<div class="mini-loadout">' + gear.map(function (item) { return renderGearToken(item, true); }).join("") + '</div>',
-				'<small>' + escapeHtml(character.status) + " - " + escapeHtml(characterSourceLabel(character)) + '</small>',
+				'<small>' + escapeHtml(characterLevelLabel(character)) + '</small>',
+				'<span class="' + characterSubscriptionClass(character) + '">' + escapeHtml(characterSubscriptionLabel(character)) + '</span>',
+				'</span>',
 				"</button>"
 			].join("");
 		}).join("");
@@ -1099,6 +1134,7 @@
 				renderSelectedCharacter();
 			});
 		});
+		updateDashboardHome();
 	}
 
 	function renderSelectedCharacter() {
@@ -1107,10 +1143,15 @@
 		}) || characters[0];
 		if (!character) return;
 		var gear = Array.isArray(character.gear) ? character.gear : [];
+		if (characterName && character.source === "founder-reserved" && (!characterName.value || characterName.value === "Voidborn")) {
+			characterName.value = character.name;
+		}
 
-		activeCharacterTitle.textContent = character.name;
-		activeCharacterImage.src = character.image;
-		activeCharacterImage.alt = character.name + " character render";
+		if (activeCharacterTitle) activeCharacterTitle.textContent = character.name;
+		if (activeCharacterImage) {
+			activeCharacterImage.src = character.image;
+			activeCharacterImage.alt = character.name + " character render";
+		}
 		if (activeCharacterSource) activeCharacterSource.textContent = characterSourceLabel(character);
 		if (activeCharacterDoll) {
 			var visual = characterVisualState(character);
@@ -1120,20 +1161,46 @@
 			});
 			activeCharacterDoll.innerHTML = paperDollMarkup();
 		}
-		activeCharacterCombat.textContent = character.combat;
-		activeCharacterTotal.textContent = character.total;
-		activeCharacterQuest.textContent = character.quest;
-		activeCharacterKills.textContent = character.kills;
-		activeCharacterLocation.textContent = character.status;
-		activeCharacterSubscription.textContent = character.subscription || "Unsubscribed";
-		activeCharacterLastLogin.textContent = character.lastLogin || "Never";
+		if (activeCharacterCombat) activeCharacterCombat.textContent = character.combat;
+		if (activeCharacterTotal) activeCharacterTotal.textContent = character.total;
+		if (activeCharacterQuest) activeCharacterQuest.textContent = character.quest;
+		if (activeCharacterKills) activeCharacterKills.textContent = character.kills;
+		if (activeCharacterLocation) activeCharacterLocation.textContent = character.status;
+		if (activeCharacterSubscription) activeCharacterSubscription.textContent = character.subscription || "Unsubscribed";
+		if (activeCharacterLastLogin) activeCharacterLastLogin.textContent = character.lastLogin || "Never";
 		if (dashboardActiveTitle) dashboardActiveTitle.textContent = character.title || "No title equipped";
-		activeCharacterGear.innerHTML = [
-			'<strong>Equipped / appearance</strong>',
-			'<span>' + escapeHtml(character.appearance) + '</span>',
-			'<div class="loadout-grid">' + gear.map(renderGearToken).join("") + '</div>'
-		].join("");
+		if (activeCharacterGear) {
+			activeCharacterGear.innerHTML = [
+				'<strong>Equipped / appearance</strong>',
+				'<span>' + escapeHtml(character.appearance) + '</span>',
+				'<div class="loadout-grid">' + gear.map(renderGearToken).join("") + '</div>'
+			].join("");
+		}
 		localStorage.setItem(selectedKey, character.name);
+	}
+
+	function renderCharacterAvatar(character) {
+		var image = character.image || "assets/rsc-ranger.png";
+		return [
+			'<span class="character-avatar-frame" aria-hidden="true">',
+			'<img src="' + escapeAttr(image) + '" alt="">',
+			'</span>'
+		].join("");
+	}
+
+	function characterLevelLabel(character) {
+		if (character.source === "founder-reserved") return "Reserved";
+		return "Level " + String(character.combat || 3);
+	}
+
+	function characterSubscriptionLabel(character) {
+		var label = String(character.subscription || "Unsubscribed").trim();
+		if (!label || label === "Account shared") return "Unsubscribed";
+		return label;
+	}
+
+	function characterSubscriptionClass(character) {
+		return "character-subscription-label" + (/^unsubscribed$/i.test(characterSubscriptionLabel(character)) ? "" : " is-subscribed");
 	}
 
 	function paperDollMarkup() {
@@ -1283,6 +1350,8 @@
 	}
 
 	function characterStateLabel(character) {
+		if (character.source === "founder-reserved") return "Reserved name";
+		if (character.source === "openrsc-sqlite-created") return "Created save";
 		if (character.linkStatus === "linked") return "Linked save";
 		if (character.source === "openrsc-sqlite") return "Saved state";
 		if (character.linkStatus === "pending") return "Pending link";
@@ -1290,6 +1359,8 @@
 	}
 
 	function characterStateClass(character) {
+		if (character.source === "founder-reserved") return "pending";
+		if (character.source === "openrsc-sqlite-created") return "linked";
 		if (character.linkStatus === "linked") return "linked";
 		if (character.source === "openrsc-sqlite") return "snapshot";
 		if (character.linkStatus === "pending") return "pending";
@@ -1297,6 +1368,8 @@
 	}
 
 	function characterSourceLabel(character) {
+		if (character.source === "founder-reserved") return "free card reserved";
+		if (character.source === "openrsc-sqlite-created") return "created game save";
 		if (character.linkStatus === "linked") return "linked to game save";
 		if (character.source === "openrsc-sqlite") return "saved snapshot";
 		if (character.linkStatus === "pending") return "proof pending";
@@ -1317,14 +1390,20 @@
 
 	function renderSecurity(security) {
 		if (!security || !securityScore) return;
+		var auth = security.auth || {};
+		var passwordEnabled = Boolean(auth.passwordEnabled);
 		securityScore.textContent = security.score;
 		securityEmailCheck.checked = Boolean(security.emailVerified);
 		securityRecoveryCheck.checked = Boolean(security.recoveryCodes && security.recoveryCodes.activeCount > 0);
-		securityPasswordCheck.checked = Boolean(security.passwordChangedAt || (security.auth && security.auth.googleConnected));
+		securityPasswordCheck.checked = Boolean(passwordEnabled || auth.googleConnected);
 		securitySessionCheck.checked = Array.isArray(security.sessions) && security.sessions.length <= 2;
 		generateRecovery.textContent = security.recoveryCodes && security.recoveryCodes.activeCount
 			? "Rotate codes"
 			: "New codes";
+		if (passwordForm) passwordForm.hidden = !passwordEnabled;
+		if (securityMessage && !passwordEnabled && auth.googleConnected) {
+			securityMessage.textContent = "Google sign-in is active. Password controls are hidden for this account.";
+		}
 		renderSessions(security.sessions || []);
 	}
 

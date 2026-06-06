@@ -1,9 +1,10 @@
 import { createServer } from "node:http";
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +20,9 @@ const maxCharacters = 10;
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const founderCardCachePrefix = "founder_sub_card:";
+const founderCardAvailable = 1;
+const founderCardClaimed = 2;
 const downloadArtifacts = [
 	{
 		slug: "pc-client",
@@ -135,7 +139,11 @@ async function handleRequest(request, response) {
 		await serveDownload(response, url.pathname);
 		return;
 	}
-	await serveStatic(response, url.pathname);
+	if (url.pathname.startsWith("/openrsc/avatar/")) {
+		await serveOpenRscAvatar(response, url.pathname);
+		return;
+	}
+	await serveStatic(request, response, url.pathname);
 }
 
 async function handleApi(request, response, url) {
@@ -155,7 +163,7 @@ async function handleApi(request, response, url) {
 	if (method === "GET" && url.pathname === "/api/account") {
 		const store = await loadStore();
 		const { account, session } = requireSession(request, store);
-		json(response, 200, accountState(store, account, session));
+		json(response, 200, await accountState(store, account, session));
 		return;
 	}
 
@@ -184,7 +192,9 @@ async function handleApi(request, response, url) {
 			if (!founder) throw new HttpError(404, "founder_not_found");
 			founder.creditedReferrals = Math.min(2, (founder.creditedReferrals || 0) + 1);
 			founder.updatedAt = now();
-			grantFounderEntitlement(store, founder);
+			if (founder.creditedReferrals >= 2) {
+				grantFounderEntitlement(store, founder, "referral_simulated_dev");
+			}
 			audit(store, "founder_referral_simulated", { founderId: founder.id });
 			return { founder: founderState(founder) };
 		});
@@ -195,7 +205,7 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/accounts/register") {
 		const payload = await readJson(request);
 		const passwordHash = await hashPassword(requirePassword(payload.password));
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const emailCanonical = canonicalEmail(payload.email || "");
 			if (!emailCanonical) throw new HttpError(400, "invalid_email");
 			if (store.accounts.some((account) => account.emailCanonical === emailCanonical)) {
@@ -214,11 +224,12 @@ async function handleApi(request, response, url) {
 				updatedAt: now()
 			};
 			store.accounts.push(account);
-			createCharacter(store, account.id, founder.username, payload.path || "warrior");
-			grantFounderEntitlement(store, founder);
+			createCharacter(store, account.id, founder.username, "warrior");
+			grantFounderEntitlement(store, founder, "prelaunch_signup");
+			await syncFounderCardToOpenRsc(founder);
 			const token = createSession(store, account.id);
 			audit(store, "account_registered", { accountId: account.id });
-			return { token, ...accountState(store, account) };
+			return { token, ...(await accountState(store, account)) };
 		});
 		json(response, 201, result);
 		return;
@@ -226,9 +237,9 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/google/dev") {
 		const payload = await readJson(request);
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const profile = googleDevProfile(payload);
-			const account = upsertGoogleAccount(store, profile, payload);
+			const account = await upsertGoogleAccount(store, profile, payload);
 			const token = createSession(store, account.id);
 			audit(store, "account_google_login_dev", {
 				accountId: account.id,
@@ -241,7 +252,7 @@ async function handleApi(request, response, url) {
 					devMode: true,
 					emailVerified: profile.emailVerified
 				},
-				...accountState(store, account)
+				...(await accountState(store, account))
 			};
 		});
 		json(response, 200, result);
@@ -258,7 +269,7 @@ async function handleApi(request, response, url) {
 			}
 			const token = createSession(store, account.id);
 			audit(store, "account_login", { accountId: account.id });
-			return { token, ...accountState(store, account) };
+			return { token, ...(await accountState(store, account)) };
 		});
 		json(response, 200, result);
 		return;
@@ -268,10 +279,6 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
-			const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
-			if (currentCount >= maxCharacters) {
-				throw new HttpError(409, "character_limit_reached");
-			}
 			await createAccountCharacter(store, account, payload, request);
 			account.updatedAt = now();
 			audit(store, "character_created", { accountId: account.id });
@@ -325,7 +332,7 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/subscriptions/redeem") {
 		const payload = await readJson(request);
-		const result = await updateStore((store) => {
+	const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
 			const code = String(payload.code || "").trim();
 			if (code.length < 4) throw new HttpError(400, "invalid_redeem_code");
@@ -350,28 +357,7 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/subscriptions/redeem-founder") {
-		const result = await updateStore((store) => {
-			const account = requireAccount(request, store);
-			const entitlement = store.entitlements.find((entry) =>
-				entry.accountId === account.id &&
-				entry.type === "founder_free_subscription" &&
-				entry.status === "granted"
-			);
-			if (!entitlement) throw new HttpError(404, "founder_reward_not_available");
-			const base = Math.max(Date.now(), account.subscriptionExpiresAt || 0);
-			account.subscriptionExpiresAt = base + 1000 * 60 * 60 * 24 * 7;
-			account.updatedAt = now();
-			entitlement.status = "consumed";
-			entitlement.consumedAt = now();
-			entitlement.startsAt = base;
-			entitlement.expiresAt = account.subscriptionExpiresAt;
-			audit(store, "subscription_redeemed_founder_reward", {
-				accountId: account.id,
-				entitlementId: entitlement.id
-			});
-			return accountState(store, account);
-		});
-		json(response, 200, result);
+		throw new HttpError(409, "claim_founder_card_in_game");
 		return;
 	}
 
@@ -394,7 +380,7 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/security/recovery-codes") {
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const { account, session } = requireSession(request, store);
 			store.recoveryCodes
 				.filter((entry) => entry.accountId === account.id && entry.status === "active")
@@ -418,14 +404,14 @@ async function handleApi(request, response, url) {
 			account.recoveryCodesGeneratedAt = now();
 			account.updatedAt = now();
 			audit(store, "account_recovery_codes_generated", { accountId: account.id, count: codes.length });
-			return { codes, ...accountState(store, account, session) };
+			return { codes, ...(await accountState(store, account, session)) };
 		});
 		json(response, 200, result);
 		return;
 	}
 
 	if (method === "POST" && url.pathname === "/api/security/sessions/revoke-others") {
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const { account, session } = requireSession(request, store);
 			let revoked = 0;
 			store.sessions.forEach((entry) => {
@@ -445,7 +431,7 @@ async function handleApi(request, response, url) {
 	throw new HttpError(404, "not_found");
 }
 
-async function serveStatic(response, pathname) {
+async function serveStatic(request, response, pathname) {
 	const targetPath = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
@@ -457,14 +443,56 @@ async function serveStatic(response, pathname) {
 		fileStat = await stat(filePath);
 		if (fileStat.isDirectory()) {
 			filePath = join(filePath, "index.html");
+			fileStat = await stat(filePath);
 		}
 	} catch (error) {
 		throw new HttpError(404, "not_found");
 	}
 
+	const type = contentType(filePath);
+	const range = request.headers.range;
+	if (range && fileStat.size > 0) {
+		const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+		if (!match) {
+			response.writeHead(416, {
+				"content-range": `bytes */${fileStat.size}`,
+				"cache-control": "no-store"
+			});
+			response.end();
+			return;
+		}
+		let start = match[1] ? Number(match[1]) : 0;
+		let end = match[2] ? Number(match[2]) : fileStat.size - 1;
+		if (!match[1] && match[2]) {
+			const suffixLength = Number(match[2]);
+			start = Math.max(0, fileStat.size - suffixLength);
+			end = fileStat.size - 1;
+		}
+		if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= fileStat.size) {
+			response.writeHead(416, {
+				"content-range": `bytes */${fileStat.size}`,
+				"cache-control": "no-store"
+			});
+			response.end();
+			return;
+		}
+		end = Math.min(end, fileStat.size - 1);
+		response.writeHead(206, {
+			"content-type": type,
+			"content-length": end - start + 1,
+			"content-range": `bytes ${start}-${end}/${fileStat.size}`,
+			"accept-ranges": "bytes",
+			"cache-control": "no-store"
+		});
+		createReadStream(filePath, { start, end }).pipe(response);
+		return;
+	}
+
 	const body = await readFile(filePath);
 	response.writeHead(200, {
-		"content-type": contentType(filePath),
+		"content-type": type,
+		"content-length": body.length,
+		"accept-ranges": "bytes",
 		"cache-control": "no-store"
 	});
 	response.end(body);
@@ -488,6 +516,25 @@ async function serveDownload(response, pathname) {
 		"cache-control": "no-store"
 	});
 	response.end(body);
+}
+
+async function serveOpenRscAvatar(response, pathname) {
+	const match = /^\/openrsc\/avatar\/(\d+)\.png$/.exec(pathname);
+	if (!match) throw new HttpError(404, "avatar_not_found");
+	const filePath = avatarFilePath(match[1]);
+	let fileStat;
+	try {
+		fileStat = await stat(filePath);
+		if (!fileStat.isFile()) throw new Error("not_file");
+	} catch (error) {
+		throw new HttpError(404, "avatar_not_found");
+	}
+	response.writeHead(200, {
+		"content-type": "image/png",
+		"content-length": fileStat.size,
+		"cache-control": "no-store"
+	});
+	createReadStream(filePath).pipe(response);
 }
 
 function reserveFounder(store, payload) {
@@ -571,7 +618,9 @@ function creditFounderReferral(store, founder, codeInput) {
 	founder.updatedAt = now();
 	referrer.creditedReferrals = Math.max(referrer.creditedReferrals || 0, countCreditedReferrals(store, referrer.id));
 	referrer.updatedAt = now();
-	grantFounderEntitlement(store, referrer);
+	if (referrer.creditedReferrals >= 2) {
+		grantFounderEntitlement(store, referrer, "referral_2_verified_dev");
+	}
 	audit(store, "founder_referral_credited", {
 		referrerFounderId: referrer.id,
 		referredFounderId: founder.id
@@ -627,12 +676,43 @@ async function createAccountCharacter(store, account, payload, request) {
 	const username = cleanUsername(payload.name || payload.username || "");
 	const normalizedName = normalizeUsername(username);
 	if (!normalizedName) throw new HttpError(400, "invalid_character_name");
-	if (store.characters.some((character) => character.normalizedName === normalizedName)) {
+	const existingCharacter = store.characters.find((character) => character.normalizedName === normalizedName);
+	const reservedForAccount = existingCharacter
+		&& existingCharacter.accountId === account.id
+		&& existingCharacter.source === "founder-reserved";
+	if (existingCharacter && !reservedForAccount) {
 		throw new HttpError(409, "character_name_taken");
+	}
+	const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
+	if (!reservedForAccount && currentCount >= maxCharacters) {
+		throw new HttpError(409, "character_limit_reached");
 	}
 
 	if (!openRscDbPath) {
-		return createCharacter(store, account.id, username, payload.path || "warrior");
+		if (reservedForAccount) {
+			const kit = kits.warrior;
+			Object.assign(existingCharacter, {
+				path: kit.path,
+				image: kit.image,
+				combat: kit.combat,
+				total: "34",
+				quest: 0,
+				kills: 0,
+				status: "Void Island",
+				title: "No title equipped",
+				lastLogin: "New",
+				appearance: kit.appearance,
+				gear: kit.gear.slice(),
+				appearanceData: kit.appearanceData || null,
+				equipment: [],
+				playerId: null,
+				linkStatus: "preview",
+				source: "portal-preview",
+				updatedAt: now()
+			});
+			return existingCharacter;
+		}
+		return createCharacter(store, account.id, username, "warrior");
 	}
 
 	const password = requireGamePassword(payload.gamePassword || payload.characterPassword || "");
@@ -647,15 +727,14 @@ async function createAccountCharacter(store, account, payload, request) {
 		ip: clientIp(request)
 	});
 	const snapshot = await openRscCharacterSnapshot(username);
-	const kit = kits[payload.path] || kits.warrior;
 	const character = {
-		id: nextId(store, "character"),
+		id: reservedForAccount ? existingCharacter.id : nextId(store, "character"),
 		accountId: account.id,
 		playerId,
 		name: snapshot.name,
 		normalizedName,
-		path: kit.path,
-		image: kit.image,
+		path: snapshot.path,
+		image: snapshot.image,
 		combat: snapshot.combat,
 		total: snapshot.total,
 		quest: snapshot.quest,
@@ -670,15 +749,21 @@ async function createAccountCharacter(store, account, payload, request) {
 		equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
 		linkStatus: "linked",
 		source: "openrsc-sqlite-created",
-		createdAt: now(),
+		createdAt: reservedForAccount ? existingCharacter.createdAt : now(),
 		linkedAt: now(),
 		updatedAt: now()
 	};
-	store.characters.push(character);
+	if (reservedForAccount) {
+		const index = store.characters.findIndex((entry) => entry.id === existingCharacter.id);
+		store.characters.splice(index, 1, character);
+	} else {
+		store.characters.push(character);
+	}
 	return character;
 }
 
-function accountState(store, account, currentSession) {
+async function accountState(store, account, currentSession) {
+	await refreshAccountCharactersFromOpenRsc(store, account);
 	const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null;
 	return {
 		account: {
@@ -721,6 +806,47 @@ function accountState(store, account, currentSession) {
 	};
 }
 
+async function refreshAccountCharactersFromOpenRsc(store, account) {
+	if (!openRscDbPath || !account) return;
+	const accountCharacters = store.characters.filter((character) =>
+		character.accountId === account.id &&
+		character.source !== "founder-reserved" &&
+		(character.playerId || character.source === "openrsc-sqlite-created" || character.source === "openrsc-sqlite" || character.linkStatus === "linked")
+	);
+	for (const character of accountCharacters) {
+		try {
+			const snapshot = await openRscCharacterSnapshot(character.name);
+			Object.assign(character, {
+				playerId: snapshot.id,
+				name: snapshot.name,
+				normalizedName: normalizeUsername(snapshot.name),
+				path: snapshot.path,
+				image: snapshot.image,
+				combat: snapshot.combat,
+				total: snapshot.total,
+				quest: snapshot.quest,
+				kills: snapshot.kills,
+				status: snapshot.status,
+				title: snapshot.title,
+				subscription: snapshot.subscription,
+				lastLogin: snapshot.lastLogin,
+				appearance: snapshot.appearance,
+				gear: snapshot.gear,
+				appearanceData: snapshot.appearanceData || null,
+				equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
+				linkStatus: "linked",
+				source: character.source === "openrsc-sqlite-created" ? character.source : snapshot.source,
+				updatedAt: now()
+			});
+		} catch (error) {
+			if (error instanceof HttpError && (error.status === 404 || error.status === 503)) {
+				continue;
+			}
+			throw error;
+		}
+	}
+}
+
 function authState(store, account) {
 	const identities = store.identities
 		.filter((identity) => identity.accountId === account.id)
@@ -752,7 +878,7 @@ function rewardState(store, account) {
 			type: entry.type,
 			status: entry.status,
 			source: entry.source,
-			label: "Free weekly subscription card",
+			label: "Free weekly subscription card reserved in Lumbridge",
 			createdAt: entry.createdAt
 		}))
 	};
@@ -797,7 +923,9 @@ function securityState(store, account, currentSession, founder) {
 }
 
 async function publicState(store) {
-	const founderUnlocks = store.founders.filter((founder) => founder.creditedReferrals >= 2).length;
+	const founderUnlocks = store.founders.filter((founder) =>
+		Boolean(founder.freeSubscriptionUnlocked) || founder.creditedReferrals >= 2
+	).length;
 	return {
 		status: {
 			world: "World 1",
@@ -854,9 +982,10 @@ function dynamicActivity(store) {
 	const latestFounder = store.founders[store.founders.length - 1];
 	const latestCharacter = store.characters[store.characters.length - 1];
 	if (latestFounder) {
+		const cardReserved = Boolean(latestFounder.freeSubscriptionUnlocked) || latestFounder.creditedReferrals >= 2;
 		rows.push({
-			type: latestFounder.creditedReferrals >= 2 ? "rare" : "title",
-			text: `${latestFounder.username} reserved a founder pass${latestFounder.creditedReferrals >= 2 ? " and unlocked a weekly subscription card" : ""}.`,
+			type: cardReserved ? "rare" : "title",
+			text: `${latestFounder.username} reserved a founder pass${cardReserved ? " and a Lumbridge subscription card" : ""}.`,
 			time: "Now"
 		});
 	}
@@ -1015,6 +1144,37 @@ async function openRscPlayerExists(normalizedName) {
 	return rows.length > 0;
 }
 
+async function syncFounderCardToOpenRsc(founder) {
+	if (!openRscDbPath || !founder) return;
+	const key = founderCardCacheKey(founder.username);
+	if (!key) return;
+
+	const current = await sqliteJson(`
+		SELECT value
+		FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		ORDER BY dbid DESC
+		LIMIT 1
+	`);
+	if (current.length && Number(current[0].value) === founderCardClaimed) {
+		return;
+	}
+
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
+		INSERT INTO player_cache (playerID, type, key, value)
+			VALUES (0, 0, ${sqlString(key)}, ${sqlString(founderCardAvailable)});
+		COMMIT;
+		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
+	`);
+}
+
+function founderCardCacheKey(username) {
+	const normalized = normalizeUsername(username);
+	return normalized ? `${founderCardCachePrefix}${normalized}` : "";
+}
+
 async function createOpenRscPlayer({ username, email, password, ip }) {
 	const passwordState = legacyGamePasswordHash(password);
 	const createdAt = Math.floor(Date.now() / 1000);
@@ -1098,12 +1258,13 @@ async function openRscCharacterSnapshot(username) {
 	const subscription = openRscSubscriptionState(cache);
 	const location = locationState(Number(player.x), Number(player.y));
 	const lastLogin = Number(player.login_date || 0);
+	const avatar = await openRscAvatarUrl(Number(player.id));
 
 	return {
 		id: Number(player.id),
 		name: player.username,
 		path: pathLabel(cache.void_path),
-		image: pathImage(cache.void_path, player),
+		image: avatar || pathImage(cache.void_path, player),
 		combat: Number(player.combat || 3),
 		total: String(player.skill_total || 27),
 		quest: Number(player.quest_points || 0),
@@ -1283,6 +1444,26 @@ function pathImage(value, player) {
 	return "assets/rsc-ranger.png";
 }
 
+async function openRscAvatarUrl(playerId) {
+	try {
+		const fileStat = await stat(avatarFilePath(playerId));
+		if (!fileStat.isFile()) return "";
+		return `/openrsc/avatar/${Number(playerId)}.png?v=${Math.floor(fileStat.mtimeMs)}`;
+	} catch (error) {
+		return "";
+	}
+}
+
+function avatarFilePath(playerId) {
+	return join(repoRoot, "server/avatars", `${openRscDbName()}+${Number(playerId)}.png`);
+}
+
+function openRscDbName() {
+	if (process.env.PORTAL_OPENRSC_DB_NAME) return process.env.PORTAL_OPENRSC_DB_NAME;
+	const source = openRscDbPath ? basename(openRscDbPath) : "voidscape.db";
+	return source.replace(/\.[^.]+$/, "") || "voidscape";
+}
+
 function locationState(x, y) {
 	const floor = y >= 944 ? Math.floor(y / 944) : 0;
 	const localY = floor ? y - floor * 944 : y;
@@ -1332,7 +1513,7 @@ function founderState(founder) {
 		code: founder.code,
 		creditedReferrals,
 		requiredReferrals: 2,
-		freeSubscriptionUnlocked: creditedReferrals >= 2,
+		freeSubscriptionUnlocked: Boolean(founder.freeSubscriptionUnlocked) || creditedReferrals >= 2,
 		referredBy: founder.referredByCode ? {
 			code: founder.referredByCode,
 			username: founder.referredByUsername || ""
@@ -1341,31 +1522,38 @@ function founderState(founder) {
 	};
 }
 
-function grantFounderEntitlement(store, founder) {
-	if ((founder.creditedReferrals || 0) < 2) return;
+function grantFounderEntitlement(store, founder, source = "prelaunch_signup") {
+	if (!founder) return null;
+	founder.freeSubscriptionUnlocked = true;
+	founder.updatedAt = now();
 	const account = store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical);
-	if (!account) return;
-	const exists = store.entitlements.some((entry) => entry.accountId === account.id && entry.type === "founder_free_subscription" && entry.status !== "revoked");
-	if (exists) return;
-	store.entitlements.push({
+	if (!account) return null;
+	const exists = store.entitlements.find((entry) => entry.accountId === account.id && entry.type === "founder_free_subscription" && entry.status !== "revoked");
+	if (exists) return exists;
+	const entitlement = {
 		id: nextId(store, "entitlement"),
 		accountId: account.id,
 		type: "founder_free_subscription",
 		status: "granted",
-		source: "referral_2_verified_dev",
+		source,
 		createdAt: now(),
+		claimedAt: null,
 		consumedAt: null
-	});
+	};
+	store.entitlements.push(entitlement);
+	return entitlement;
 }
 
 function googleDevProfile(payload) {
-	const emailDisplay = String(payload.email || payload.googleEmail || "").trim();
+	const requestedUsername = requireReservationUsername(payload.username || payload.reservedUsername || "");
+	const fallbackEmail = `${requestedUsername.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "player"}@google.voidscape.local`;
+	const emailDisplay = String(payload.email || payload.googleEmail || fallbackEmail).trim();
 	const emailCanonical = canonicalEmail(emailDisplay);
 	if (!emailCanonical) throw new HttpError(400, "invalid_google_email");
-	const displayName = cleanUsername(payload.displayName || payload.name || emailDisplay.split("@")[0] || "Voidscape player");
+	const displayName = cleanUsername(payload.displayName || payload.name || requestedUsername || emailDisplay.split("@")[0] || "Voidscape player");
 	const subjectInput = String(payload.sub || payload.subject || payload.googleSub || `dev:${emailCanonical}`).trim();
 	if (subjectInput.length < 3) throw new HttpError(400, "invalid_google_subject");
-	const username = suggestedPortalUsername(payload.username || displayName || emailDisplay.split("@")[0]);
+	const username = requestedUsername;
 	return {
 		provider: "google",
 		providerSubject: subjectInput,
@@ -1378,15 +1566,15 @@ function googleDevProfile(payload) {
 	};
 }
 
-function suggestedPortalUsername(value) {
-	let username = cleanUsername(value).replace(/[^a-zA-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 12).trim();
-	if (username.length >= 2 && /^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
-		return username;
+function requireReservationUsername(value) {
+	const username = cleanUsername(value || "");
+	if (!/^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
+		throw new HttpError(400, "invalid_username");
 	}
-	return `Void${randomBytes(2).toString("hex").toUpperCase()}`;
+	return username;
 }
 
-function upsertGoogleAccount(store, profile, payload) {
+async function upsertGoogleAccount(store, profile, payload) {
 	let identity = store.identities.find((entry) =>
 		entry.provider === profile.provider &&
 		entry.providerSubject === profile.providerSubject
@@ -1412,8 +1600,11 @@ function upsertGoogleAccount(store, profile, payload) {
 			updatedAt: now()
 		};
 		store.accounts.push(account);
-		createCharacter(store, account.id, founder.username, payload.path || "warrior");
-		grantFounderEntitlement(store, founder);
+		const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
+		reservedCharacter.source = "founder-reserved";
+		reservedCharacter.status = "Reserved username";
+		grantFounderEntitlement(store, founder, "prelaunch_google_signup_dev");
+		await syncFounderCardToOpenRsc(founder);
 		audit(store, "account_google_registered_dev", { accountId: account.id });
 	}
 
@@ -1706,7 +1897,9 @@ function contentType(filePath) {
 		".jpg": "image/jpeg",
 		".jpeg": "image/jpeg",
 		".webp": "image/webp",
-		".svg": "image/svg+xml"
+		".svg": "image/svg+xml",
+		".mp4": "video/mp4",
+		".webm": "video/webm"
 	}[ext] || "application/octet-stream";
 }
 

@@ -25,26 +25,33 @@ Voidscape subscription is an account-level timed XP boost unlocked by redeeming 
 - NPC id `848`, `Void Subscription Vendor`.
 - Spawned near Lumbridge respawn by `NpcLocsVoidSubscriptions.json`.
 - Right-click command: `Subscribe`.
-- Talking to the vendor or right-clicking `Subscribe` opens the native shop window directly.
+- Talking to the vendor or right-clicking `Subscribe` checks whether a subscription card is reserved for that character.
 - The vendor shares the Void Auctioneer's shadow-broker appearance rather than the robe pieces used by the Void acolyte/herald NPCs.
-- The vendor starts with 20 cards at 10,000 coins each.
-- When a stock tier sells out, the next tier restocks to 20 cards and doubles the price.
-- Purchases use a custom shop buy handler so stock and tier are read/saved under one lock instead of relying on runtime-only shop stock.
-- Selling subscription cards back into the vendor is blocked.
+- If the pre-release portal has reserved a founder card for the character name, the vendor grants one physical card and marks the reservation claimed.
+- If no card is reserved, the vendor only tells the player that no subscription card is ready for that character.
+- The vendor does not sell subscription cards, does not open a shop, and does not maintain stock or price tiers.
+- Founder cards use global `player_cache` keys named `founder_sub_card:<normalized username>` with value `1` for available and `2` for claimed.
 
-Vendor stock and tier are persisted through global rows in the existing `player_cache` table:
+Pre-release founder card reservations use the same global-cache pattern while the website/account system is still a local prototype. The website flow asks for a desired reserved username and uses Google login for the portal identity; the local dev Google endpoint can synthesize a `@google.voidscape.local` account for testing. The portal writes the available marker when `PORTAL_OPENRSC_DB` points at the game SQLite database; the game server marks it claimed after the vendor successfully puts the card in the player's inventory. Redeeming the physical item is still the only action that starts or extends subscription time.
 
-- `playerID = 0`, `key = sub_vendor_stock`
-- `playerID = 0`, `key = sub_vendor_tier`
+The portal's Subscription view should therefore show two separate states: the account's current effective XP rates/subscription status, and the founder reward wallet. A fresh pre-release signup remains `Unsubscribed` at 7x combat / 4x skilling, while the reward wallet shows `1 card reserved in Lumbridge` until the in-game vendor gives the physical card.
 
-This avoids a schema migration. The code deletes and reinserts each global cache key because `player_cache` has no uniqueness constraint on `(playerID, key)`.
+## Local Verification
+
+For a live-client founder-card claim check, launch the local server and the workbench client, seed a local global marker for the logged-in character, then run:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-vendor-claim
+```
+
+The scenario uses the real client NPC command packet against NPC `848`, verifies the vendor does not open a shop, and saves before/after screenshots under `tmp/workbench/screenshots/`. A successful founder claim should change `founder_sub_card:<normalized username>` from `1` to `2` and add exactly one `1602` inventory item. Running the scenario again without resetting the marker should not add a second free card. If the inventory is full, the marker should remain `1`, no extra `1602` should be saved, and the chat warning should tell the player to free one inventory slot.
 
 ## Client Definitions
 
-The card and vendor are client-visible definitions, and the shop uses a custom-client exact price override so tier prices can display correctly after they exceed normal shop modifier limits.
+The card and vendor are client-visible definitions.
 
 - `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10069`
 - Server presets with the custom client use `client_version: 10069`
 - Client item and NPC rows are appended in `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
-- Custom clients `10054+` read a 32-bit per-item shop price override after each shop item row in `SEND_SHOP_OPEN`; older clients keep the old shop packet shape.
+- Custom clients `10054+` still read a 32-bit per-item shop price override after each shop item row in `SEND_SHOP_OPEN`; the claim-only subscription vendor no longer uses that shop path.
 - Custom clients `10055+` read subscription status and effective combat/skilling XP rates from `SEND_GAME_SETTINGS` for the wrench Profile panel.

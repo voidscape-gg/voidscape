@@ -192,6 +192,12 @@ done
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
 PORT="$PORT" node web/portal/api-smoke.mjs
 
+founder_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='founder_sub_card:smokehero' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$founder_card_state" != "1" ]]; then
+	echo "expected SmokeHero founder subscription card to be reserved in OpenRSC cache, got ${founder_card_state:-empty}"
+	exit 1
+fi
+
 created_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username LIKE 'Smoke%' AND id <> 77;")"
 if [[ "$created_count" != "9" ]]; then
 	echo "expected 9 portal-created OpenRSC players, got $created_count"

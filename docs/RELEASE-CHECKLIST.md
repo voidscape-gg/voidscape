@@ -85,7 +85,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.
 - [ ] Player titles command opens and active title appears in chat.
 - [ ] Karamja Fishmonger cooks and notes supported fish.
-- [ ] Lumbridge Subscription Vendor sells cards, stock advances after 20 purchases, and redeemed subscriptions apply the intended XP rates.
+- [ ] Lumbridge Subscription Vendor grants reserved founder cards, does not open a shop, and redeemed cards apply the intended XP rates.
 - [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
 - [ ] Dragon sword components drop/source/assemble as intended.

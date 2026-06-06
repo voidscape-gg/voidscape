@@ -2430,7 +2430,7 @@ public class EntityHandler {
 
 		// voidscape: Lumbridge subscription card vendor (server id 848)
 		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
-		npcs.add(new NPCDef("Void Subscription Vendor", "A void clerk selling subscription cards.", "Subscribe", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+		npcs.add(new NPCDef("Void Subscription Vendor", "A void clerk guarding reserved subscription cards.", "Subscribe", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael

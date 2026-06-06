@@ -3,15 +3,15 @@ package com.openrsc.server.content;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.model.entity.player.Player;
+import java.util.Locale;
 
 public final class VoidSubscription {
 	public static final String LEGACY_ACTIVE_CACHE_KEY = "void_subscription";
 	public static final String EXPIRES_CACHE_KEY = "void_sub_expires";
-	public static final String VENDOR_STOCK_CACHE_KEY = "sub_vendor_stock";
-	public static final String VENDOR_TIER_CACHE_KEY = "sub_vendor_tier";
+	public static final String FOUNDER_CARD_CACHE_PREFIX = "founder_sub_card:";
+	public static final int FOUNDER_CARD_AVAILABLE = 1;
+	public static final int FOUNDER_CARD_CLAIMED = 2;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
-	public static final int VENDOR_BASE_PRICE = 10000;
-	public static final int VENDOR_STOCK_PER_TIER = 20;
 	public static final int PROFILE_CLIENT_VERSION = 10055;
 	public static final double COMBAT_EXP_RATE = 10.0;
 	public static final double SKILLING_EXP_RATE = 6.0;
@@ -95,15 +95,15 @@ public final class VoidSubscription {
 		return Math.max(currentRate, subscriptionRate);
 	}
 
-	public static int vendorPriceForTier(int tier) {
-		long price = VENDOR_BASE_PRICE;
-		for (int i = 0; i < tier; i++) {
-			price *= 2L;
-			if (price > Integer.MAX_VALUE) {
-				return Integer.MAX_VALUE;
-			}
+	public static String founderCardCacheKey(String username) {
+		if (username == null) {
+			return "";
 		}
-		return (int) price;
+		String normalized = username.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+		if (normalized.length() < 2 || normalized.length() > 12 || !normalized.matches("[a-z0-9 ]+")) {
+			return "";
+		}
+		return FOUNDER_CARD_CACHE_PREFIX + normalized;
 	}
 
 	private static void clearExpiredOrLegacy(Player player) {

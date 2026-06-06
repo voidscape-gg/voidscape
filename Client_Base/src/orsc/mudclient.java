@@ -18893,6 +18893,10 @@ public final class mudclient implements Runnable {
 		this.showDialogShop = show;
 	}
 
+	public boolean getShowDialogShop() {
+		return this.showDialogShop;
+	}
+
 	public void setShowPointsToGp(boolean show) {
 		pointsToGpInterface.setVisible(true);
 	}
