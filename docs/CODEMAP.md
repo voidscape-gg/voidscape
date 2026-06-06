@@ -277,6 +277,7 @@ docs/
 
 scripts/
 ├── build.sh                        # Compile server + plugins + client
+├── combat-sim.sh                   # Run local combat formula/cadence simulator
 ├── run-server.sh                   # Run server with voidscape's local.conf
 ├── run-client.sh                   # Run PC client
 ├── run-workbench-client.sh         # Run PC client with local AI workbench endpoints
@@ -318,3 +319,4 @@ memory/
 | Server boot order | `server/src/com/openrsc/server/Server.java` |
 | Add an admin command | (see `docs/recipes/add-admin-command.md`) |
 | Add an opcode | `server/src/com/openrsc/server/net/rsc/enums/Opcode{In,Out}.java` **and** `Client_Base/src/orsc/net/Opcodes.java` (append only — never insert mid-list) |
+| Measure combat formula impact | `scripts/combat-sim.sh` |

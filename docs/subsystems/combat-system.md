@@ -60,6 +60,18 @@ else:
 - **Poison**: 10 levels; each tick reduces power by 2, deals `floor(power/10)` damage.
 - **Ring of Recoil**: reflects 10% of damage taken; breaks at 40 reflected total.
 
+### Local measurement harness
+
+`scripts/combat-sim.sh` runs `tools/combat-sim/combat_sim.py`, a standalone simulator that mirrors the active classic formula path without changing server behavior. Use it before and after combat changes to capture baseline hit chance, max hit, average damage, simple melee fight timing, one-way ranged pressure, and one-way magic pressure:
+
+```bash
+scripts/combat-sim.sh --list
+scripts/combat-sim.sh --scenario pvm-rune-lesser
+scripts/combat-sim.sh --scenario all --trials 50000
+```
+
+It is not a full game engine: it does not model eating, plugins, NPC combat scripts, pathing, dragonfire, player decisions, or live server state. Treat it as a formula/cadence harness, then verify meaningful changes in-game.
+
 ## Prayer effects
 
 `server/src/com/openrsc/server/model/entity/player/Prayers.java`.

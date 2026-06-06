@@ -22,13 +22,19 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
    - `styleBonus` (+3 for matched style, +1 for controlled).
    - Prayer multipliers (1.05 / 1.10 / 1.15).
    - The `(weaponPower + 64)` and `(arrowPower + 1 + 64)` constants.
-4. **Make the smallest change that achieves the goal.** Resist refactoring on the side.
-5. **Recompile core**:
+4. **Capture a simulator baseline** for the target scenario before editing:
    ```bash
-   cd server && ant compile_core
+   scripts/combat-sim.sh --scenario all --trials 50000
+   ```
+   For custom matchups, add a JSON scenario and run it with `--json`.
+5. **Make the smallest change that achieves the goal.** Resist refactoring on the side.
+6. **Re-run the simulator** and compare hit chance, max hit, expected damage, and simple timing before doing manual testing.
+7. **Build through the canonical script**:
+   ```bash
+   scripts/build.sh
    scripts/run-server.sh
    ```
-6. **Test**:
+8. **Test**:
    - Baseline measurement before the change (kill X count of NPC Y, average hits).
    - Same scenario after — should match the predicted shift.
    - Don't forget the inverse: PvP, magic, ranged, prayer-on, prayer-off.
@@ -36,6 +42,7 @@ For a primer on the formula, see `docs/subsystems/combat-system.md`.
 ## Verification checklist
 
 - [ ] Predicted change matches measured change (not larger, not smaller).
+- [ ] `scripts/combat-sim.sh` baseline and after-change output are captured.
 - [ ] PvP not unintentionally affected.
 - [ ] Prayer-modified hits scale correctly.
 - [ ] NPC vs Player vs NPC vs NPC all behave consistently.

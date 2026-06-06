@@ -2782,3 +2782,14 @@ Details:
 - The Subscription view was reduced to account status plus whether a reserved founder subscription card is waiting at the Lumbridge Subscription Vendor.
 - The Security view keeps live recovery-code generation and session cleanup, but hides password controls for Google-only accounts so it no longer advertises controls that cannot apply.
 - No OpenRSC packet, opcode, DB schema, client cache, client-version, launcher binary, or in-game behavior changed.
+
+### 2026-06-06 - Combat formula simulator harness
+
+Added a local measurement harness for the active classic OpenRSC combat formula path before any balance edits.
+
+Details:
+- `scripts/combat-sim.sh` runs `tools/combat-sim/combat_sim.py`, a standalone Python simulator that mirrors the current melee accuracy/damage, ranged accuracy/damage, magic success/damage, melee capes, and the main melee cadence branches.
+- Built-in scenarios cover low-level PvM, rune PvM against a Lesser Demon, maxed rune 2h PvP under both `3-1` and `2-2`, ranged pressure against a Lesser Demon, and Fire Wave PvP pressure.
+- The simulator supports custom JSON scenarios and text or JSON output, so formula changes can be compared before and after without starting a server.
+- Updated the combat subsystem docs, combat-tuning recipe, and code map to make the simulator part of the standard combat-change workflow.
+- No OpenRSC packet, opcode, DB schema, client cache, client-version, item definition, NPC definition, launcher binary, or live in-game behavior changed.
