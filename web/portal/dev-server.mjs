@@ -26,6 +26,10 @@ const starterCardAvailable = 1;
 const starterCardClaimed = 2;
 const accountSubscriptionCachePrefix = "acct_sub:";
 const starterFreeSubscriptionType = "starter_free_subscription";
+const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || 5));
+const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
+const abuseHashSalt = process.env.PORTAL_ABUSE_HASH_SALT || "voidscape-portal-dev";
+const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
 const downloadArtifacts = [
 	{
 		slug: "pc-client",
@@ -163,6 +167,21 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "GET" && url.pathname === "/api/oauth/google/start") {
+		throw new HttpError(501, "google_oauth_not_configured");
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/oauth/google/callback") {
+		throw new HttpError(501, "google_oauth_not_configured");
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/payments/subscription-cards/checkout") {
+		throw new HttpError(501, "payments_not_configured");
+		return;
+	}
+
 	if (method === "GET" && url.pathname === "/api/account") {
 		const store = await loadStore();
 		const { account, session } = requireSession(request, store);
@@ -228,8 +247,10 @@ async function handleApi(request, response, url) {
 			};
 			store.accounts.push(account);
 			createCharacter(store, account.id, founder.username, "warrior");
-			grantStarterCardEntitlement(store, founder, "prelaunch_signup");
-			await syncStarterCardToOpenRsc(account);
+			await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
+				emailCanonical,
+				provider: "password"
+			});
 			const token = createSession(store, account.id);
 			audit(store, "account_registered", { accountId: account.id });
 			return { token, ...(await accountState(store, account)) };
@@ -242,7 +263,7 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
 			const profile = googleDevProfile(payload);
-			const account = await upsertGoogleAccount(store, profile, payload);
+			const account = await upsertGoogleAccount(store, profile, payload, request);
 			const token = createSession(store, account.id);
 			audit(store, "account_google_login_dev", {
 				accountId: account.id,
@@ -258,6 +279,61 @@ async function handleApi(request, response, url) {
 				...(await accountState(store, account))
 			};
 		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/recover-password") {
+		const payload = await readJson(request);
+		const passwordHash = await hashPassword(requirePassword(payload.newPassword));
+		const result = await updateStore(async (store) => {
+			const emailCanonical = canonicalEmail(payload.email || "");
+			const code = normalizeCode(payload.code || payload.recoveryCode || "");
+			if (!emailCanonical || !code) {
+				recordAbuseSignal(store, {
+					accountId: null,
+					signalType: "recovery_code_failed",
+					signalValue: emailCanonical || clientIp(request),
+					bucket: dailyBucket(),
+					metadata: { hasAccount: false }
+				});
+				return { error: "invalid_recovery_code" };
+			}
+			const account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical);
+			const recoveryCode = account ? store.recoveryCodes.find((entry) =>
+				entry.accountId === account.id &&
+				entry.status === "active" &&
+				entry.codeHash === hashToken(code)
+			) : null;
+			if (!account || account.status !== "active" || !recoveryCode) {
+				recordAbuseSignal(store, {
+					accountId: account ? account.id : null,
+					signalType: "recovery_code_failed",
+					signalValue: emailCanonical || clientIp(request),
+					bucket: dailyBucket(),
+					metadata: { hasAccount: Boolean(account) }
+				});
+				return { error: "invalid_recovery_code" };
+			}
+			recoveryCode.status = "used";
+			recoveryCode.usedAt = now();
+			recoveryCode.revokedAt = null;
+			account.passwordHash = passwordHash;
+			account.passwordChangedAt = now();
+			account.updatedAt = now();
+			let revoked = 0;
+			store.sessions.forEach((entry) => {
+				if (entry.accountId === account.id && entry.expiresAt > Date.now() && !entry.revokedAt) {
+					entry.expiresAt = Date.now();
+					entry.revokedAt = now();
+					revoked += 1;
+				}
+			});
+			const token = createSession(store, account.id);
+			audit(store, "account_recovered_with_code", { accountId: account.id, revoked });
+			return { token, ...(await accountState(store, account)) };
+		});
+		if (result.error) throw new HttpError(401, result.error);
 		json(response, 200, result);
 		return;
 	}
@@ -431,6 +507,119 @@ async function handleApi(request, response, url) {
 		});
 		json(response, 200, result);
 		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/admin/accounts") {
+		requireAdmin(request);
+		const store = await loadStore();
+		const email = canonicalEmail(url.searchParams.get("email") || "");
+		const accountId = Number(url.searchParams.get("accountId") || 0);
+		const status = String(url.searchParams.get("status") || "").trim();
+		const accounts = store.accounts
+			.filter((account) => !email || account.emailCanonical === email)
+			.filter((account) => !accountId || account.id === accountId)
+			.filter((account) => !status || account.status === status)
+			.slice(0, 25);
+		json(response, 200, {
+			accounts: await Promise.all(accounts.map((account) => adminAccountState(store, account)))
+		});
+		return;
+	}
+
+	const adminAccountMatch = /^\/api\/admin\/accounts\/(\d+)(?:\/([^/]+))?$/.exec(url.pathname);
+	if (adminAccountMatch) {
+		requireAdmin(request);
+		const accountId = Number(adminAccountMatch[1]);
+		const action = adminAccountMatch[2] || "";
+		if (method === "GET" && !action) {
+			const store = await loadStore();
+			const account = requireAdminAccount(store, accountId);
+			json(response, 200, await adminAccountState(store, account));
+			return;
+		}
+		if (method === "POST" && action === "status") {
+			const payload = await readJson(request);
+			const result = await updateStore(async (store) => {
+				const account = requireAdminAccount(store, accountId);
+				const status = String(payload.status || "").trim();
+				if (!["active", "locked", "review"].includes(status)) throw new HttpError(400, "invalid_account_status");
+				account.status = status;
+				account.adminNote = String(payload.note || payload.reason || "").trim().slice(0, 240);
+				account.updatedAt = now();
+				if (status !== "active") {
+					revokeAccountSessions(store, account.id);
+				}
+				audit(store, "admin_account_status_changed", { accountId: account.id, status });
+				return adminAccountState(store, account);
+			});
+			json(response, 200, result);
+			return;
+		}
+		if (method === "POST" && action === "subscription") {
+			const payload = await readJson(request);
+			const result = await updateStore(async (store) => {
+				const account = requireAdminAccount(store, accountId);
+				if (payload.action === "clear") {
+					account.subscriptionExpiresAt = 0;
+				} else if (payload.expiresAt) {
+					const expiresAt = Number(payload.expiresAt);
+					if (!Number.isFinite(expiresAt) || expiresAt < 0) throw new HttpError(400, "invalid_subscription_expiry");
+					account.subscriptionExpiresAt = expiresAt;
+				} else {
+					const days = Number(payload.days || 0);
+					if (!Number.isFinite(days) || days <= 0 || days > 366) throw new HttpError(400, "invalid_subscription_days");
+					const base = Math.max(Date.now(), Number(account.subscriptionExpiresAt || 0));
+					account.subscriptionExpiresAt = base + Math.round(days * 1000 * 60 * 60 * 24);
+				}
+				account.updatedAt = now();
+				await syncAccountSubscriptionToOpenRsc(account);
+				audit(store, "admin_subscription_changed", {
+					accountId: account.id,
+					expiresAt: account.subscriptionExpiresAt
+				});
+				return adminAccountState(store, account);
+			});
+			json(response, 200, result);
+			return;
+		}
+		if (method === "POST" && action === "starter-card") {
+			const payload = await readJson(request);
+			const result = await updateStore(async (store) => {
+				const account = requireAdminAccount(store, accountId);
+				const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical);
+				if (!founder) throw new HttpError(404, "founder_not_found");
+				const actionName = String(payload.action || "grant").trim();
+				if (actionName === "grant") {
+					grantStarterCardEntitlement(store, founder, "admin_grant");
+					await syncStarterCardToOpenRsc(account);
+					account.starterCardReview = null;
+				} else if (actionName === "revoke") {
+					store.entitlements
+						.filter((entry) => entry.accountId === account.id && entry.type === starterFreeSubscriptionType && entry.status === "granted")
+						.forEach((entry) => {
+							entry.status = "revoked";
+							entry.revokedAt = now();
+						});
+				} else {
+					throw new HttpError(400, "invalid_starter_card_action");
+				}
+				account.updatedAt = now();
+				audit(store, "admin_starter_card_changed", { accountId: account.id, action: actionName });
+				return adminAccountState(store, account);
+			});
+			json(response, 200, result);
+			return;
+		}
+		if (method === "POST" && action === "sessions") {
+			const result = await updateStore(async (store) => {
+				const account = requireAdminAccount(store, accountId);
+				const revoked = revokeAccountSessions(store, account.id);
+				audit(store, "admin_sessions_revoked", { accountId: account.id, revoked });
+				return adminAccountState(store, account);
+			});
+			json(response, 200, result);
+			return;
+		}
 	}
 
 	throw new HttpError(404, "not_found");
@@ -725,12 +914,12 @@ async function createAccountCharacter(store, account, payload, request) {
 		throw new HttpError(409, "character_name_taken");
 	}
 
-		const playerId = await createOpenRscPlayer({
-			accountId: account.id,
-			username,
-			email: account.emailDisplay || account.emailCanonical || "",
-			password,
-			ip: clientIp(request)
+	const playerId = await createOpenRscPlayer({
+		accountId: account.id,
+		username,
+		email: account.emailDisplay || account.emailCanonical || "",
+		password,
+		ip: clientIp(request)
 	});
 	const snapshot = await openRscCharacterSnapshot(username);
 	const character = {
@@ -809,7 +998,8 @@ async function accountState(store, account, currentSession) {
 			.filter((challenge) => challenge.accountId === account.id && challenge.status === "pending" && challenge.expiresAt > Date.now())
 			.map((challenge) => linkChallengeState(challenge)),
 		rewards: rewardState(store, account),
-		security: securityState(store, account, currentSession, founder)
+		security: securityState(store, account, currentSession, founder),
+		abuse: accountAbuseState(account)
 	};
 }
 
@@ -888,6 +1078,21 @@ function rewardState(store, account) {
 			label: "Starter subscription card reserved in Lumbridge",
 			createdAt: entry.createdAt
 		}))
+	};
+}
+
+function accountAbuseState(account) {
+	const starterCardReview = account.starterCardReview || null;
+	return {
+		starterCard: starterCardReview ? {
+			status: starterCardReview.status || "review",
+			reasons: Array.isArray(starterCardReview.reasons) ? starterCardReview.reasons : [],
+			createdAt: starterCardReview.createdAt || null
+		} : {
+			status: "clear",
+			reasons: [],
+			createdAt: null
+		}
 	};
 }
 
@@ -1624,6 +1829,154 @@ function grantStarterCardEntitlement(store, founder, source = "prelaunch_signup"
 	return entitlement;
 }
 
+async function grantStarterCardIfEligible(store, account, founder, source, request, context) {
+	recordSignupSignals(store, account, request, context);
+	const decision = starterCardDecision(store, account, request, context);
+	if (!decision.allowed) {
+		account.starterCardReview = {
+			status: "review",
+			reasons: decision.reasons,
+			createdAt: now()
+		};
+		audit(store, "starter_card_review_required", {
+			accountId: account.id,
+			reasons: decision.reasons
+		});
+		return null;
+	}
+
+	const entitlement = grantStarterCardEntitlement(store, founder, source);
+	recordStarterGrantSignals(store, account, request, context);
+	await syncStarterCardToOpenRsc(account);
+	return entitlement;
+}
+
+function starterCardDecision(store, account, request, context = {}) {
+	const reasons = [];
+	const ip = clientIp(request);
+	const since = Date.now() - 1000 * 60 * 60 * 24;
+	const ipGrantCount = countAbuseSignals(store, "starter_card_granted_ip", ip, since);
+	if (!isLocalIp(ip) && ipGrantCount >= starterIpDailyLimit) {
+		reasons.push("starter_card_ip_daily_limit");
+	}
+
+	const emailCanonical = context.emailCanonical || account.emailCanonical || "";
+	const existingEmailGrants = countAbuseSignals(store, "starter_card_granted_email", emailCanonical, 0);
+	if (existingEmailGrants > 0) {
+		reasons.push("starter_card_email_already_granted");
+	}
+
+	if (context.provider && context.providerSubject) {
+		const identityKey = `${context.provider}:${context.providerSubject}`;
+		const existingIdentityGrants = countAbuseSignals(store, "starter_card_granted_identity", identityKey, 0);
+		if (existingIdentityGrants > 0) {
+			reasons.push("starter_card_identity_already_granted");
+		}
+	}
+
+	return {
+		allowed: reasons.length === 0,
+		reasons
+	};
+}
+
+function recordSignupSignals(store, account, request, context = {}) {
+	const ip = clientIp(request);
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "account_signup_ip",
+		signalValue: ip,
+		bucket: dailyBucket(),
+		metadata: { provider: context.provider || "password", local: isLocalIp(ip) }
+	});
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "account_signup_email",
+		signalValue: context.emailCanonical || account.emailCanonical || "",
+		bucket: emailDomainBucket(context.emailCanonical || account.emailCanonical || ""),
+		metadata: { provider: context.provider || "password" }
+	});
+	if (context.provider && context.providerSubject) {
+		recordAbuseSignal(store, {
+			accountId: account.id,
+			signalType: "account_signup_identity",
+			signalValue: `${context.provider}:${context.providerSubject}`,
+			bucket: context.provider,
+			metadata: { provider: context.provider }
+		});
+	}
+}
+
+function recordStarterGrantSignals(store, account, request, context = {}) {
+	const ip = clientIp(request);
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "starter_card_granted_ip",
+		signalValue: ip,
+		bucket: dailyBucket(),
+		metadata: { provider: context.provider || "password", local: isLocalIp(ip) }
+	});
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "starter_card_granted_email",
+		signalValue: context.emailCanonical || account.emailCanonical || "",
+		bucket: emailDomainBucket(context.emailCanonical || account.emailCanonical || ""),
+		metadata: { provider: context.provider || "password" }
+	});
+	if (context.provider && context.providerSubject) {
+		recordAbuseSignal(store, {
+			accountId: account.id,
+			signalType: "starter_card_granted_identity",
+			signalValue: `${context.provider}:${context.providerSubject}`,
+			bucket: context.provider,
+			metadata: { provider: context.provider }
+		});
+	}
+}
+
+function recordAbuseSignal(store, { accountId = null, signalType, signalValue, bucket = "", metadata = {} }) {
+	if (!signalType || !signalValue) return null;
+	const signal = {
+		id: nextId(store, "abuseSignal"),
+		accountId,
+		signalType,
+		signalHash: abuseHash(signalValue),
+		bucket,
+		metadata,
+		createdAt: now(),
+		expiresAt: new Date(Date.now() + abuseSignalTtlMs).toISOString()
+	};
+	store.abuseSignals.push(signal);
+	return signal;
+}
+
+function countAbuseSignals(store, signalType, signalValue, sinceMs) {
+	const signalHash = abuseHash(signalValue);
+	const sinceTime = Number(sinceMs || 0);
+	return store.abuseSignals.filter((entry) =>
+		entry.signalType === signalType &&
+		entry.signalHash === signalHash &&
+		Date.parse(entry.createdAt || 0) >= sinceTime
+	).length;
+}
+
+function abuseHash(value) {
+	return hashToken(`${abuseHashSalt}:${String(value || "").trim().toLowerCase()}`);
+}
+
+function dailyBucket() {
+	return new Date().toISOString().slice(0, 10);
+}
+
+function emailDomainBucket(emailCanonical) {
+	const domain = String(emailCanonical || "").split("@")[1] || "";
+	return domain || "unknown";
+}
+
+function isLocalIp(ip) {
+	return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
 function googleDevProfile(payload) {
 	const requestedUsername = requireReservationUsername(payload.username || payload.reservedUsername || "");
 	const fallbackEmail = `${requestedUsername.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "player"}@google.voidscape.local`;
@@ -1654,7 +2007,7 @@ function requireReservationUsername(value) {
 	return username;
 }
 
-async function upsertGoogleAccount(store, profile, payload) {
+async function upsertGoogleAccount(store, profile, payload, request) {
 	let identity = store.identities.find((entry) =>
 		entry.provider === profile.provider &&
 		entry.providerSubject === profile.providerSubject
@@ -1670,23 +2023,26 @@ async function upsertGoogleAccount(store, profile, payload) {
 			email: profile.emailDisplay,
 			referrerCode: payload.referrerCode || payload.referralCode || payload.ref || ""
 		});
-			account = {
-				id: nextId(store, "account"),
-				emailCanonical: profile.emailCanonical,
-				emailDisplay: profile.emailDisplay,
-				passwordHash: null,
-				status: "active",
-				subscriptionExpiresAt: 0,
-				createdAt: now(),
-				updatedAt: now()
-			};
+		account = {
+			id: nextId(store, "account"),
+			emailCanonical: profile.emailCanonical,
+			emailDisplay: profile.emailDisplay,
+			passwordHash: null,
+			status: "active",
+			subscriptionExpiresAt: 0,
+			createdAt: now(),
+			updatedAt: now()
+		};
 		store.accounts.push(account);
-			const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
-			reservedCharacter.source = "founder-reserved";
-			reservedCharacter.status = "Reserved username";
-			grantStarterCardEntitlement(store, founder, "prelaunch_google_signup_dev");
-			await syncStarterCardToOpenRsc(account);
-			audit(store, "account_google_registered_dev", { accountId: account.id });
+		const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
+		reservedCharacter.source = "founder-reserved";
+		reservedCharacter.status = "Reserved username";
+		await grantStarterCardIfEligible(store, account, founder, "prelaunch_google_signup_dev", request, {
+			emailCanonical: profile.emailCanonical,
+			provider: profile.provider,
+			providerSubject: profile.providerSubject
+		});
+		audit(store, "account_google_registered_dev", { accountId: account.id });
 	}
 
 	const accountGoogleIdentity = store.identities.find((entry) =>
@@ -1760,6 +2116,73 @@ function requireAccount(request, store) {
 	return account;
 }
 
+function requireAdmin(request) {
+	if (!adminToken) throw new HttpError(503, "admin_not_configured");
+	const headerToken = String(request.headers["x-portal-admin-token"] || "").trim();
+	const auth = String(request.headers.authorization || "");
+	const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+	const provided = headerToken || bearerToken;
+	if (!provided || !constantTimeMatches(provided, adminToken)) {
+		throw new HttpError(403, "admin_forbidden");
+	}
+	return { actorType: "admin", actorId: "local-admin" };
+}
+
+function requireAdminAccount(store, accountId) {
+	const account = store.accounts.find((entry) => entry.id === accountId);
+	if (!account) throw new HttpError(404, "account_not_found");
+	return account;
+}
+
+async function adminAccountState(store, account) {
+	const base = await accountState(store, account);
+	const recentAudit = store.audit
+		.filter((entry) => entry.metadata && entry.metadata.accountId === account.id)
+		.slice(-20)
+		.reverse()
+		.map((entry) => ({
+			id: entry.id,
+			type: entry.type,
+			metadata: entry.metadata,
+			createdAt: entry.createdAt
+		}));
+	const abuseSignals = store.abuseSignals
+		.filter((entry) => entry.accountId === account.id)
+		.slice(-20)
+		.reverse()
+		.map((entry) => ({
+			id: entry.id,
+			signalType: entry.signalType,
+			signalHashPrefix: String(entry.signalHash || "").slice(0, 12),
+			bucket: entry.bucket,
+			metadata: entry.metadata || {},
+			createdAt: entry.createdAt,
+			expiresAt: entry.expiresAt
+		}));
+	return {
+		...base,
+		admin: {
+			accountId: account.id,
+			status: account.status,
+			note: account.adminNote || "",
+			recentAudit,
+			abuseSignals
+		}
+	};
+}
+
+function revokeAccountSessions(store, accountId) {
+	let revoked = 0;
+	store.sessions.forEach((entry) => {
+		if (entry.accountId === accountId && entry.expiresAt > Date.now() && !entry.revokedAt) {
+			entry.expiresAt = Date.now();
+			entry.revokedAt = now();
+			revoked += 1;
+		}
+	});
+	return revoked;
+}
+
 async function updateStore(mutator) {
 	const next = writeQueue.then(async () => {
 		const store = await loadStore();
@@ -1799,7 +2222,8 @@ function normalizeStore(store) {
 			linkChallenge: Number(store.nextIds && store.nextIds.linkChallenge) || 1,
 			recoveryCode: Number(store.nextIds && store.nextIds.recoveryCode) || 1,
 			identity: Number(store.nextIds && store.nextIds.identity) || 1,
-			audit: Number(store.nextIds && store.nextIds.audit) || 1
+			audit: Number(store.nextIds && store.nextIds.audit) || 1,
+			abuseSignal: Number(store.nextIds && store.nextIds.abuseSignal) || 1
 		},
 		accounts: Array.isArray(store.accounts) ? store.accounts : [],
 		identities: Array.isArray(store.identities) ? store.identities : [],
@@ -1810,7 +2234,8 @@ function normalizeStore(store) {
 		entitlements: Array.isArray(store.entitlements) ? store.entitlements : [],
 		linkChallenges: Array.isArray(store.linkChallenges) ? store.linkChallenges : [],
 		recoveryCodes: Array.isArray(store.recoveryCodes) ? store.recoveryCodes : [],
-		audit: Array.isArray(store.audit) ? store.audit : []
+		audit: Array.isArray(store.audit) ? store.audit : [],
+		abuseSignals: Array.isArray(store.abuseSignals) ? store.abuseSignals : []
 	};
 }
 
@@ -1918,7 +2343,15 @@ function normalizeUsername(value) {
 
 function canonicalEmail(value) {
 	const email = String(value).trim().toLowerCase();
-	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+	const match = /^([^\s@]+)@([^\s@]+\.[^\s@]+)$/.exec(email);
+	if (!match) return "";
+	let local = match[1].split("+")[0];
+	let domain = match[2];
+	if (domain === "googlemail.com") domain = "gmail.com";
+	if (domain === "gmail.com") {
+		local = local.replace(/\./g, "");
+	}
+	return local && domain ? `${local}@${domain}` : "";
 }
 
 function makeCode(username) {
@@ -1940,6 +2373,12 @@ function normalizeCode(code) {
 
 function hashToken(token) {
 	return createHash("sha256").update(token).digest("base64url");
+}
+
+function constantTimeMatches(actual, expected) {
+	const actualHash = Buffer.from(hashToken(actual));
+	const expectedHash = Buffer.from(hashToken(expected));
+	return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
 }
 
 async function readJson(request) {

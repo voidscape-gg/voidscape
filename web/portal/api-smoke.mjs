@@ -1,5 +1,6 @@
 const port = Number(process.env.PORT || 8788);
 const baseUrl = `http://127.0.0.1:${port}`;
+const adminToken = process.env.PORTAL_ADMIN_TOKEN || "dev-admin";
 
 let token = "";
 
@@ -19,6 +20,14 @@ if (pcDownload.available) {
 	assert((downloadResponse.headers.get("content-disposition") || "").includes(".jar"), "download should include jar attachment disposition");
 	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "download should include a non-empty artifact");
 }
+
+const googleOauthStub = await api("/api/oauth/google/start", { expectStatus: 501 });
+assert(googleOauthStub.error === "google_oauth_not_configured", "production Google OAuth stub should be explicit");
+const paymentStub = await api("/api/payments/subscription-cards/checkout", {
+	method: "POST",
+	expectStatus: 501
+});
+assert(paymentStub.error === "payments_not_configured", "production payment stub should be explicit");
 
 const snapshot = await api("/api/openrsc/characters/SmokeHero");
 assert(snapshot.character.source === "openrsc-sqlite", "snapshot endpoint should report the OpenRSC source");
@@ -217,6 +226,34 @@ const revokedTokenCheck = await api("/api/account", { expectStatus: 401 });
 assert(revokedTokenCheck.error === "invalid_session", "revoked session token should no longer authenticate");
 token = originalToken;
 
+const badRecovery = await api("/api/accounts/recover-password", {
+	method: "POST",
+	body: {
+		email: "smoke@example.com",
+		code: "VOID-BAD-BAD",
+		newPassword: "recover-horse-battery"
+	},
+	expectStatus: 401
+});
+assert(badRecovery.error === "invalid_recovery_code", "password recovery should reject invalid recovery codes");
+
+const recovered = await api("/api/accounts/recover-password", {
+	method: "POST",
+	body: {
+		email: "smoke@example.com",
+		code: recovery.codes[0],
+		newPassword: "recover-horse-battery"
+	}
+});
+const recoveredToken = recovered.token;
+assert(recoveredToken && recoveredToken !== originalToken, "password recovery should issue a new session");
+assert(recovered.security.recoveryCodes.activeCount === 7, "password recovery should consume exactly one recovery code");
+
+token = originalToken;
+const oldRecoverySession = await api("/api/account", { expectStatus: 401 });
+assert(oldRecoverySession.error === "invalid_session", "password recovery should revoke existing sessions");
+token = recoveredToken;
+
 const linkStart = await api("/api/character-links/start", {
 	method: "POST",
 	body: { username: "SmokeHero" },
@@ -295,6 +332,59 @@ assert(redeemed.account.subscription.skillXpRate === 6, "subscribed skill XP rat
 const account = await api("/api/account");
 assert(account.characters.length === 10, "account endpoint should return the full roster");
 
+const adminLookup = await api("/api/admin/accounts?email=smoke@example.com", {
+	headers: { "x-portal-admin-token": adminToken }
+});
+assert(adminLookup.accounts.length === 1, "admin account search should find SmokeHero by email");
+assert(adminLookup.accounts[0].admin.abuseSignals.length >= 1, "admin account search should include abuse-signal audit context");
+
+const adminGrant = await api("/api/admin/accounts/1/subscription", {
+	method: "POST",
+	headers: { "x-portal-admin-token": adminToken },
+	body: { days: 1 }
+});
+assert(adminGrant.account.subscription.active === true, "admin subscription grant should keep the account subscribed");
+
+const adminStarterGrant = await api("/api/admin/accounts/1/starter-card", {
+	method: "POST",
+	headers: { "x-portal-admin-token": adminToken },
+	body: { action: "grant" }
+});
+assert(adminStarterGrant.rewards.starterSubscriptionCards >= 1, "admin starter-card grant should preserve or restore the starter card");
+
+const abuseIp = "198.51.100.77";
+const abuseOne = await api("/api/accounts/register", {
+	method: "POST",
+	headers: { "x-forwarded-for": abuseIp },
+	body: {
+		username: "AbuseOne",
+		email: "abuse-one@example.com",
+		password: "abuse-horse-battery"
+	}
+});
+const abuseTwo = await api("/api/accounts/register", {
+	method: "POST",
+	headers: { "x-forwarded-for": abuseIp },
+	body: {
+		username: "AbuseTwo",
+		email: "abuse-two@example.com",
+		password: "abuse-horse-battery"
+	}
+});
+const abuseThree = await api("/api/accounts/register", {
+	method: "POST",
+	headers: { "x-forwarded-for": abuseIp },
+	body: {
+		username: "AbuseThree",
+		email: "abuse-three@example.com",
+		password: "abuse-horse-battery"
+	}
+});
+assert(abuseOne.rewards.starterSubscriptionCards === 1, "first account from an IP should keep the starter card");
+assert(abuseTwo.rewards.starterSubscriptionCards === 1, "second account within the configured IP limit should keep the starter card");
+assert(abuseThree.rewards.starterSubscriptionCards === 0, "account creation should continue but withhold the starter card after the IP limit");
+assert(abuseThree.abuse.starterCard.status === "review", "withheld starter cards should be visible as review state");
+
 const updatedPublic = await api("/api/public");
 assert(updatedPublic.founderStats.reservations >= 1, "public endpoint should include reservation count");
 assert(updatedPublic.founderStats.starterCardsUnlocked >= 1, "public endpoint should include starter-card unlock count");
@@ -316,7 +406,8 @@ async function api(path, options = {}) {
 		method: options.method || "GET",
 		headers: {
 			"content-type": "application/json",
-			...(token ? { authorization: `Bearer ${token}` } : {})
+			...(token ? { authorization: `Bearer ${token}` } : {}),
+			...(options.headers || {})
 		},
 		body: options.body ? JSON.stringify(options.body) : undefined
 	});

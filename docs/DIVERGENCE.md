@@ -27,6 +27,17 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-06 — Portal recovery and starter-card abuse controls
+
+Added the next account-management hardening slice to the local portal scaffold. Recovery codes can now be consumed to reset a portal password, revoke old sessions, and issue a fresh session. Starter-card anti-abuse now records salted IP/email/identity signal hashes and keeps suspicious signup clusters active while withholding only the free starter subscription card for staff review. A token-gated local admin API can inspect account state, review/lock accounts, grant/clear subscriptions, grant/revoke starter cards, and revoke sessions. Production Google OAuth and payment checkout paths are explicit `501` stubs until real providers are wired.
+
+Files touched:
+- `web/portal/dev-server.mjs` — recovery-code reset endpoint, starter-card grant decision/signals, local admin endpoints, OAuth/payment stubs, and email canonicalization.
+- `web/portal/api-smoke.mjs`, `scripts/test-portal-api.sh` — smoke coverage for recovery, admin actions, production stubs, and IP-bucket starter-card review.
+- `docs/ACCOUNT-MANAGEMENT-ARCHITECTURE.md`, `web/portal/README.md`, `web/portal/schema/README.md`, `docs/CONFIG-MATRIX.md`, `docs/RELEASE-CHECKLIST.md` — documented the recovery/support path, low-friction abuse policy, local admin guard, and production integration gaps.
+
+Reversibility: remove the local portal endpoints/signals and their tests/docs. No game packet, opcode, OpenRSC schema application, or client login behavior changed.
+
 ### 2026-06-06 — Subscription-card redeem workbench scenario
 
 Extended the dev-only PC workbench with `POST /scenario/subscription-card-redeem`, which finds item `1602` in the logged-in client's inventory, sends the same inventory command packet used by the real `Redeem` menu action, waits for the card to be consumed, and captures before/after screenshots. This closes the local validation loop for portal signup → game login → starter-card claim → card redemption → account-wide subscription readback without adding gameplay packets or production behavior.

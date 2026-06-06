@@ -103,6 +103,10 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Discord access gate listener is running if using the announcement gate.
 - [ ] `docs/community/discord-server-setup.md` permissions still match the live server.
 - [ ] Prelaunch portal signup is backed by production persistence, creates linked game characters, and disables/redirects client packet registration.
+- [ ] Recovery-code password reset is tested, old sessions are revoked, and support knows the fallback path for players without codes.
+- [ ] Starter-card abuse controls have a stable hash salt, tuned IP bucket limit, and staff review/grant process.
+- [ ] Staff account tools are protected by production identity/RBAC, not the local `PORTAL_ADMIN_TOKEN` prototype guard.
+- [ ] Google OAuth and subscription-card payment checkout/webhooks are wired or intentionally disabled with clear player-facing copy.
 - [ ] Public links, invite URLs, support instructions, and rules are current.
 - [ ] AGPL source-disclosure plan is ready before any public distribution.
 

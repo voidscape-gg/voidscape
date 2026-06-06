@@ -27,6 +27,17 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_packet_register` | `false` | `false` | `false` | Portal-first account/character creation. |
 
+## Portal account API
+
+| Key | Dev/local | Staging | Production | Notes |
+|---|---|---|---|---|
+| `PORTAL_OPENRSC_DB` | `server/inc/sqlite/voidscape.db` when testing | staging DB bridge path or service DSN | production account/game write path | Local scaffold uses a SQLite file path; production should use the real portal/game persistence boundary. |
+| `PORTAL_ADMIN_TOKEN` | explicit local secret | secret manager | replace with staff identity/RBAC | Enables `/api/admin/*`; unset means admin endpoints return `admin_not_configured`. |
+| `PORTAL_STARTER_IP_DAILY_LIMIT` | `5` default, tests use `2` | tune from beta traffic | tune with logs and support policy | Limits only free starter-card grants from the same non-local IP bucket; accounts still register. |
+| `PORTAL_ABUSE_HASH_SALT` | dev-only value | stable private secret | stable private secret | Rotating it loses the ability to compare old abuse-signal hashes. |
+| Google OAuth/provider config | dev endpoint only | configured provider | configured provider | Production `/api/oauth/google/*` currently returns `501` until real OAuth is wired. |
+| Payment provider config | none | sandbox checkout/webhooks | live checkout/webhooks | Production subscription-card checkout currently returns `501` until a provider is wired. |
+
 ## World rules
 
 | Key | Dev/local | Staging | Production | Release note |

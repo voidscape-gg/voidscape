@@ -36,6 +36,7 @@ Suggested tables:
 Constraints:
 
 - unique `email_canonical`
+- production canonicalization should collapse common alias forms before uniqueness checks; the local portal currently lowercases every address, strips `+tag` aliases, maps `googlemail.com` to `gmail.com`, and removes Gmail dots.
 
 ### `web_account_identities`
 
@@ -180,11 +181,15 @@ It currently proves:
 - `scrypt` password hashing with per-password salts
 - bearer sessions stored server-side as token hashes
 - local account security controls for password rotation, hashed recovery-code generation, and ending other active sessions
+- local recovery-code password reset through `POST /api/accounts/recover-password`; a valid code is consumed, all old sessions are revoked, the password hash is rotated, and a fresh bearer session is issued
 - server-side 10-character roster cap
 - character-state API responses shaped for the portal
 - OpenRSC SQLite-backed character creation through `POST /api/characters` when `PORTAL_OPENRSC_DB` is configured; the endpoint creates the normal `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows, then stores the created player id in the local portal roster state
 - local character link challenges with hashed one-time codes and a dev simulation path
 - account-wide subscription-card redemption state
+- starter-card abuse controls that store salted hashes for IP/email/identity signals, keep suspicious new accounts active, and withhold only the free starter card for staff review after repeated non-local IP grants
+- token-gated local staff endpoints for account lookup, status changes, subscription grants/clears, starter-card grants/revokes, and session revocation
+- explicit `501` stubs for production Google OAuth and subscription-card payment checkout
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
 - portal account-management schema constraints through `scripts/test-portal-schema.sh`
 
@@ -196,8 +201,33 @@ It does not yet prove:
 - production OpenRSC database writes outside the local SQLite dev bridge
 - real in-game `::link` command handling or signed game-server verification callback
 - production Google OAuth redirect/callback handling and ID-token verification
-- production password reset, recovery-code consumption, or email recovery
-- staff/admin authorization
+- production payment checkout/webhook handling
+- production email-delivered password reset or account-recovery support queue
+- production staff identity/RBAC beyond the local bearer-token guard
+
+### Starter-card abuse policy
+
+The free subscription card is protected at the reward boundary rather than by adding heavy signup hurdles. Every new account can still be created and can still enter the game through the portal-created character path. The one-time starter card is granted only when the account passes server-side checks:
+
+- one active starter-card entitlement per web account
+- one canonical email per web account, with common alias normalization
+- one Google provider subject per linked Google account
+- salted abuse-signal hashes for signup IP, email, and identity
+- a configurable daily limit for starter-card grants from the same non-local IP bucket
+
+When the IP bucket limit is exceeded, the account remains `active`; only the free starter card is marked as review-required and not mirrored into the OpenRSC `starter_card:<webAccountId>` cache. Staff can inspect the hashed signal history and grant the card manually if the cluster is legitimate.
+
+This keeps the normal launch path low friction while preventing throwaway accounts from reliably minting unlimited free subscription cards.
+
+### Recovery and support policy
+
+The low-friction recovery path is:
+
+1. The player signs in while they still have access and generates one-time recovery codes.
+2. If they later lose the password, `POST /api/accounts/recover-password` verifies a code hash plus canonical email, consumes that code, rotates the `scrypt` password hash, revokes old sessions, and returns a new session.
+3. If they lose both login and recovery codes, staff support must verify evidence out of band and then use the admin API to review/lock, revoke sessions, or restore access.
+
+Production still needs email delivery, provider-backed Google OAuth, and a staff identity/RBAC layer before this becomes an internet-facing recovery system.
 
 ### Read-only OpenRSC snapshot endpoint
 

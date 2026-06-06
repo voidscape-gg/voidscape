@@ -178,7 +178,12 @@ INSERT INTO invitems (playerID, itemID, slot) VALUES
 	(77, 9002, 1);
 SQL
 
-PORT="$PORT" PORTAL_DATA_DIR="$tmp_dir" PORTAL_OPENRSC_DB="$fixture_db" node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
+PORT="$PORT" \
+	PORTAL_DATA_DIR="$tmp_dir" \
+	PORTAL_OPENRSC_DB="$fixture_db" \
+	PORTAL_ADMIN_TOKEN="dev-admin" \
+	PORTAL_STARTER_IP_DAILY_LIMIT=2 \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
 server_pid="$!"
 
 for _ in {1..60}; do
@@ -189,7 +194,7 @@ for _ in {1..60}; do
 done
 
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
-PORT="$PORT" node web/portal/api-smoke.mjs
+PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" node web/portal/api-smoke.mjs
 
 starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
 if [[ "$starter_card_state" != "1" ]]; then
