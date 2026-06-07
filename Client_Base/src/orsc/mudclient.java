@@ -89,6 +89,8 @@ public final class mudclient implements Runnable {
 	private static final int CINEMATIC_CAMERA_PATH_FRAMES = 220;
 	private static final int MAX_TELEPORT_BUBBLES = 50;
 	private static final String ANDROID_SMOKE_NPC_TARGETS_FLAG = "android-smoke-npc-targets.flag";
+	private static final String ANDROID_SMOKE_PLAYER_TARGETS_FLAG = "android-smoke-player-targets.flag";
+	private static final String ANDROID_SMOKE_PLAYER_COMMAND_FILE = "android-smoke-player-command.txt";
 	private static final String ANDROID_SMOKE_OBJECT_TARGETS_FLAG = "android-smoke-object-targets.flag";
 	private static final String ANDROID_SMOKE_INVENTORY_TARGETS_FLAG = "android-smoke-inventory-targets.flag";
 	private static final String ANDROID_SMOKE_CAMERA_FLAG = "android-smoke-camera.flag";
@@ -195,6 +197,7 @@ public final class mudclient implements Runnable {
 		new int[3], new int[3], new int[3], new int[3]
 	};
 	private final int[] androidSmokeNpcProjection = new int[3];
+	private final int[] androidSmokePlayerProjection = new int[3];
 	private final int[] androidSmokeObjectProjection = new int[3];
 	private final int[] voidRushWaveMarkerProjection = new int[3];
 	private final int[] rareDropBeamBaseProjection = new int[3];
@@ -580,6 +583,7 @@ public final class mudclient implements Runnable {
 	private int lastObjectAnimationNumberTorch = -1;
 	private int lastObjectAnimatonNumberClaw = -1;
 	private long lastAndroidSmokeNpcTargetLogMillis = 0L;
+	private long lastAndroidSmokePlayerTargetLogMillis = 0L;
 	private long lastAndroidSmokeObjectTargetLogMillis = 0L;
 	private long lastAndroidSmokeInventoryTargetLogMillis = 0L;
 	private long lastAndroidSmokeContextMenuLogMillis = 0L;
@@ -6358,6 +6362,7 @@ public final class mudclient implements Runnable {
 						}
 
 						logAndroidSmokeNpcTargets();
+						logAndroidSmokePlayerTargets();
 						logAndroidSmokeObjectTargets();
 						this.scene.endScene(-113);
 						drawGameLookSceneOverlay();
@@ -6848,6 +6853,13 @@ public final class mudclient implements Runnable {
 			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_NPC_TARGETS_FLAG).isFile();
 	}
 
+	private boolean isAndroidSmokePlayerTargetLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_PLAYER_TARGETS_FLAG).isFile();
+	}
+
 	private boolean isAndroidSmokeObjectTargetLoggingEnabled() {
 		return isAndroid()
 			&& Config.F_CACHE_DIR != null
@@ -6934,6 +6946,7 @@ public final class mudclient implements Runnable {
 
 	private boolean isAndroidSmokeContextMenuLoggingEnabled() {
 		return isAndroidSmokeNpcTargetLoggingEnabled()
+			|| isAndroidSmokePlayerTargetLoggingEnabled()
 			|| isAndroidSmokeObjectTargetLoggingEnabled()
 			|| isAndroidSmokeInventoryTargetLoggingEnabled()
 			|| isAndroidSmokeEquipmentLoggingEnabled()
@@ -7475,6 +7488,56 @@ public final class mudclient implements Runnable {
 		System.out.println("ANDROID_SMOKE_NPC_ACTION action=" + action
 			+ " id=" + npc.npcId
 			+ " serverIndex=" + npc.serverIndex
+			+ " worldX=" + tileX
+			+ " worldY=" + tileZ);
+	}
+
+	private void logAndroidSmokePlayerTargets() {
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokePlayerTargetLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+
+		if (!isAndroidSmokePlayerTargetLoggingEnabled()) return;
+		this.lastAndroidSmokePlayerTargetLogMillis = now;
+
+		for (int i = 0; i < this.playerCount; i++) {
+			final ORSCharacter player = this.players[i];
+			if (player == null
+				|| player == this.localPlayer
+				|| player.serverIndex == this.localPlayerServerIndex) {
+				continue;
+			}
+
+			final int sceneX = player.currentX;
+			final int sceneZ = player.currentZ;
+			final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 110;
+			if (!this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.androidSmokePlayerProjection)) continue;
+
+			final int clientX = this.androidSmokePlayerProjection[0];
+			final int clientY = this.androidSmokePlayerProjection[1];
+			if (clientX < 0 || clientX >= this.getGameWidth() || clientY < 0 || clientY >= this.getGameHeight()) continue;
+
+			final int tileX = (player.currentX - 64) / this.tileSize + this.midRegionBaseX;
+			final int tileZ = (player.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+			System.out.println("ANDROID_SMOKE_PLAYER_TARGET name=" + androidSmokeLogToken(player.displayName != null
+					? player.displayName : player.accountName)
+				+ " serverIndex=" + player.serverIndex
+				+ " level=" + player.level
+				+ " clientX=" + clientX
+				+ " clientY=" + clientY
+				+ " worldX=" + tileX
+				+ " worldY=" + tileZ);
+		}
+	}
+
+	private void logAndroidSmokePlayerAction(final MenuItemAction action, final ORSCharacter player) {
+		if (!isAndroidSmokePlayerTargetLoggingEnabled() || action == null || player == null) return;
+
+		final int tileX = (player.currentX - 64) / this.tileSize + this.midRegionBaseX;
+		final int tileZ = (player.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+		System.out.println("ANDROID_SMOKE_PLAYER_ACTION action=" + action
+			+ " name=" + androidSmokeLogToken(player.displayName != null ? player.displayName : player.accountName)
+			+ " serverIndex=" + player.serverIndex
+			+ " level=" + player.level
 			+ " worldX=" + tileX
 			+ " worldY=" + tileZ);
 	}
@@ -16921,6 +16984,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokePlayerAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -16943,6 +17007,7 @@ public final class mudclient implements Runnable {
 							MessageType.GAME, 0, null);
 						return;
 					}
+					logAndroidSmokePlayerAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -16959,6 +17024,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokePlayerAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -21588,6 +21654,47 @@ public final class mudclient implements Runnable {
 		}
 		logAndroidSmokeSettingsState("TOGGLE_KEY_" + index);
 		return true;
+	}
+
+	public boolean startAndroidSmokeWildernessTargetFromInput() {
+		if (!isAndroidSmokePlayerTargetLoggingEnabled() || this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+
+		final String command = readAndroidSmokePlayerCommand("cinematic bossfight 1 1 3");
+		this.sendCommandString(command);
+		System.out.println("ANDROID_SMOKE_PLAYER_COMMAND action=START command=" + androidSmokeLogToken(command));
+		return true;
+	}
+
+	public boolean stopAndroidSmokeWildernessTargetFromInput() {
+		if (!isAndroidSmokePlayerTargetLoggingEnabled() || this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+
+		this.sendCommandString("cinematic stop");
+		System.out.println("ANDROID_SMOKE_PLAYER_COMMAND action=STOP command=cinematic_stop");
+		return true;
+	}
+
+	private String readAndroidSmokePlayerCommand(final String fallback) {
+		if (Config.F_CACHE_DIR == null || Config.F_CACHE_DIR.isEmpty()) {
+			return fallback;
+		}
+
+		final File commandFile = new File(Config.F_CACHE_DIR, ANDROID_SMOKE_PLAYER_COMMAND_FILE);
+		if (!commandFile.isFile()) {
+			return fallback;
+		}
+
+		try (BufferedReader reader = new BufferedReader(new FileReader(commandFile))) {
+			final String line = reader.readLine();
+			if (line != null && !line.trim().isEmpty()) {
+				return line.trim();
+			}
+		} catch (IOException ignored) {
+		}
+		return fallback;
 	}
 
 	public boolean dropAndroidSmokeGroundLootFromInput() {

@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Android wilderness player-target smoke
+
+Verified Android wilderness player target selection against the shared player menu/action path without changing PvP mechanics. The shared client now emits `ANDROID_SMOKE_PLAYER_TARGET` and `ANDROID_SMOKE_PLAYER_ACTION` markers behind an app-private Android flag, and the existing context-menu logger now wakes up for player-target smoke. The Android smoke helper gained a focused authenticated `--only-auth-wilderness-target` pass that snapshots/restores the auth fixture's position and `group_id`, temporarily promotes it only to spawn a cinematic player at a quiet wilderness tile with a non-combat anchor, long-presses the projected player target, selects the logged attack row, asserts a shared `PLAYER_ATTACK_*` action, stops the cinematic scene, and restores the account.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated player target projection logs and player action logs for attack/item/spell menu dispatch.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — smoke-gated keys for starting/stopping the cinematic player fixture through the shared client.
+- `scripts/android-smoke.sh` — focused `--only-auth-wilderness-target` mode, player target/action log assertions, fixture position/group restore, long-press attack-row selection, and screenshots `103`-`107`.
+- `docs/subsystems/android-client.md` / `memory/android_emulation.md` — documented proof and checklist status.
+
+Reversibility: remove the player-target smoke flag/logger hooks and focused smoke pass. No server behavior, packet opcode, DB schema, cache asset, combat formula, PvP rule, or normal player-menu behavior changed.
+
 ### 2026-06-07 — Android ground-loot readability smoke
 
 Verified Android ground-item labels and rare-drop beams against the shared client render path without changing loot mechanics. The shared client now emits `ANDROID_SMOKE_GROUND_LOOT` markers behind an app-private flag for rare-beam and ground-item-label geometry, clamps ground-item labels to the classic framebuffer, and exposes a smoke-only key path that drops inventory slot 0 through the existing packet path. The Android smoke helper gained a focused authenticated `--only-auth-ground-loot` pass that snapshots/restores the auth player's inventory/cache rows, seeds a rare item fixture, drops it, asserts the beam/label bounds, and captures `102-auth-ground-loot-readable`.

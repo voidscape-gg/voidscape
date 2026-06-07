@@ -272,6 +272,12 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
             if (keyCode == KeyEvent.KEYCODE_G && mudclient.dropAndroidSmokeGroundLootFromInput()) {
                 return true;
             }
+            if (keyCode == KeyEvent.KEYCODE_B && mudclient.startAndroidSmokeWildernessTargetFromInput()) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_C && mudclient.stopAndroidSmokeWildernessTargetFromInput()) {
+                return true;
+            }
 
             if (key == 0 && handleAndroidTextInput(chars)) {
                 return true;

@@ -13,6 +13,8 @@ APK="$REPO_ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/debug/v
 OUT_DIR="${ANDROID_SCREENSHOT_DIR:-$REPO_ROOT/tmp/android-smoke-$(date +%Y%m%d-%H%M%S)}"
 APP_FILES="/data/user/0/com.voidscape.client/files"
 SMOKE_NPC_TARGETS_FLAG="$APP_FILES/android-smoke-npc-targets.flag"
+SMOKE_PLAYER_TARGETS_FLAG="$APP_FILES/android-smoke-player-targets.flag"
+SMOKE_PLAYER_COMMAND_FILE="$APP_FILES/android-smoke-player-command.txt"
 SMOKE_OBJECT_TARGETS_FLAG="$APP_FILES/android-smoke-object-targets.flag"
 SMOKE_INVENTORY_TARGETS_FLAG="$APP_FILES/android-smoke-inventory-targets.flag"
 SMOKE_CAMERA_FLAG="$APP_FILES/android-smoke-camera.flag"
@@ -38,6 +40,7 @@ ONLY_AUTH_MAGIC_PRAYER=0
 ONLY_AUTH_WORLD_MAP=0
 ONLY_AUTH_SETTINGS=0
 ONLY_AUTH_GROUND_LOOT=0
+ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
@@ -124,11 +127,18 @@ AUTH_GROUND_LOOT_ITEM_ID="${ANDROID_SMOKE_GROUND_LOOT_ITEM_ID:-93}"
 AUTH_GROUND_LOOT_ITEM_AMOUNT="${ANDROID_SMOKE_GROUND_LOOT_ITEM_AMOUNT:-1}"
 AUTH_GROUND_LOOT_PLAYER_X="${ANDROID_SMOKE_GROUND_LOOT_PLAYER_X:-23}"
 AUTH_GROUND_LOOT_PLAYER_Y="${ANDROID_SMOKE_GROUND_LOOT_PLAYER_Y:-25}"
+AUTH_WILDERNESS_PLAYER_X="${ANDROID_SMOKE_WILDERNESS_PLAYER_X:-23}"
+AUTH_WILDERNESS_PLAYER_Y="${ANDROID_SMOKE_WILDERNESS_PLAYER_Y:-25}"
+AUTH_WILDERNESS_BOT_COUNT="${ANDROID_SMOKE_WILDERNESS_BOT_COUNT:-1}"
+AUTH_WILDERNESS_BOSS_ID="${ANDROID_SMOKE_WILDERNESS_BOSS_ID:-1}"
+AUTH_WILDERNESS_RADIUS="${ANDROID_SMOKE_WILDERNESS_RADIUS:-3}"
+AUTH_WILDERNESS_TARGET_NAME="${ANDROID_SMOKE_WILDERNESS_TARGET_NAME:-cinebot0001}"
+AUTH_WILDERNESS_PLAYER_ACTION="${ANDROID_SMOKE_WILDERNESS_PLAYER_ACTION:-PLAYER_ATTACK}"
 AUTH_FIXTURE_ITEM_ID_BASE="${ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE:-1000000}"
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -207,8 +217,14 @@ Environment:
   ANDROID_SMOKE_WORLD_MAP_SEARCH_TEXT Optional world-map search text, default: varrock
   --only-auth-settings requires ANDROID_SMOKE_AUTH_DB and verifies camera/mouse setting persistence
   --only-auth-ground-loot requires ANDROID_SMOKE_AUTH_DB and verifies labels/beams from a real dropped item
+  --only-auth-wilderness-target requires ANDROID_SMOKE_AUTH_DB and verifies player target selection in wilderness
   ANDROID_SMOKE_GROUND_LOOT_ITEM_ID Optional rare-beam fixture item id, default: 93 (Rune battle axe)
   ANDROID_SMOKE_GROUND_LOOT_PLAYER_X/Y Optional DB x/y for ground-loot fixture, default: 23,25
+  ANDROID_SMOKE_WILDERNESS_PLAYER_X/Y Optional DB x/y for player-target fixture, default: 23,25
+  ANDROID_SMOKE_WILDERNESS_BOT_COUNT Optional cinematic player count, default: 1
+  ANDROID_SMOKE_WILDERNESS_BOSS_ID   Optional cinematic anchor NPC id, default: 1 (Bob)
+  ANDROID_SMOKE_WILDERNESS_RADIUS    Optional cinematic radius, default: 3
+  ANDROID_SMOKE_WILDERNESS_TARGET_NAME Optional target player token, default: cinebot0001
   ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE Optional DB-only fixture itemID floor, default: 1000000
 EOF
 }
@@ -261,6 +277,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --only-auth-ground-loot)
             ONLY_AUTH_GROUND_LOOT=1
+            shift
+            ;;
+        --only-auth-wilderness-target)
+            ONLY_AUTH_WILDERNESS_TARGET=1
             shift
             ;;
         --only-auth-login)
@@ -322,6 +342,19 @@ enable_android_smoke_npc_targets() {
 
 disable_android_smoke_npc_targets() {
     "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_NPC_TARGETS_FLAG" 2>/dev/null || true
+}
+
+enable_android_smoke_player_targets() {
+    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_PLAYER_TARGETS_FLAG'"
+}
+
+disable_android_smoke_player_targets() {
+    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_PLAYER_TARGETS_FLAG $SMOKE_PLAYER_COMMAND_FILE" 2>/dev/null || true
+}
+
+write_android_smoke_player_command() {
+    local command="$1"
+    "$ADB" shell "run-as com.voidscape.client sh -c 'echo $command > $SMOKE_PLAYER_COMMAND_FILE'"
 }
 
 enable_android_smoke_object_targets() {
@@ -430,6 +463,7 @@ disable_android_smoke_ground_loot() {
 
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
+    disable_android_smoke_player_targets
     disable_android_smoke_object_targets
     disable_android_smoke_inventory_targets
     disable_android_smoke_camera
@@ -654,7 +688,7 @@ assert_game_activity_for_input() {
 	screenshot "$screenshot_name" || true
 	"$ADB" logcat -d -v raw 2>/dev/null \
 		| tr -d '\r' \
-		| grep -E "AndroidRuntime|ActivityTaskManager|ApplicationUpdater|CacheUpdater|GameActivity|ORSC|login response:|ANDROID_SMOKE_GROUND_LOOT" \
+		| grep -E "AndroidRuntime|ActivityTaskManager|ApplicationUpdater|CacheUpdater|GameActivity|ORSC|login response:|ANDROID_SMOKE_GROUND_LOOT|ANDROID_SMOKE_PLAYER_" \
 		| tail -120 >&2 || true
 	return 1
 }
@@ -1079,6 +1113,121 @@ wait_for_npc_action() {
 
     echo "ERROR: timed out waiting for Android NPC action $expected on id $npc_id" >&2
     "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_NPC_" | tail -20 >&2 || true
+    return 1
+}
+
+wait_for_player_target() {
+    local target_name="${1:-}"
+    local timeout="${2:-30}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        if [[ -n "$target_name" ]]; then
+            line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+                | grep "ANDROID_SMOKE_PLAYER_TARGET " | grep -i " name=$target_name " | tail -1 || true)"
+        else
+            line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+                | grep "ANDROID_SMOKE_PLAYER_TARGET " | tail -1 || true)"
+        fi
+        if [[ "$line" =~ clientX=([0-9]+).*clientY=([0-9]+) ]]; then
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android player target ${target_name:-any}" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_PLAYER_" | tail -30 >&2 || true
+    return 1
+}
+
+wait_for_player_action() {
+    local expected="${1:-PLAYER_ATTACK}"
+    local timeout="${2:-20}"
+    local deadline=$((SECONDS + timeout))
+    local line action
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_PLAYER_ACTION " | tail -1 || true)"
+        if [[ "$line" =~ action=([^[:space:]]+) ]]; then
+            action="${BASH_REMATCH[1]}"
+            if [[ "$action" == "$expected" || ( "$expected" == "PLAYER_ATTACK" && "$action" == PLAYER_ATTACK_* ) ]]; then
+                echo "Verified Android player action: $line"
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android player action $expected" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_PLAYER_" | tail -30 >&2 || true
+    return 1
+}
+
+wait_for_player_command() {
+    local expected="$1"
+    local timeout="${2:-10}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_PLAYER_COMMAND action=$expected " | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "Verified Android player smoke command: $line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android player smoke command $expected" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_PLAYER_" | tail -30 >&2 || true
+    return 1
+}
+
+tap_player_target() {
+    local target_name="${1:-}"
+    local coords client_x client_y
+    coords="$(wait_for_player_target "$target_name" 30)" || return 1
+    read -r client_x client_y <<< "$coords"
+    echo "Android player target ${target_name:-any} at client $client_x,$client_y"
+    tap_client_xy "$client_x" "$client_y"
+}
+
+long_press_player_target() {
+    local target_name="${1:-}"
+    local duration_ms="${2:-1200}"
+    local coords client_x client_y
+    coords="$(wait_for_player_target "$target_name" 30)" || return 1
+    read -r client_x client_y <<< "$coords"
+    echo "Android player long-press target ${target_name:-any} at client $client_x,$client_y"
+    long_press_client_xy "$client_x" "$client_y" "$duration_ms"
+}
+
+wait_for_player_attack_menu_index() {
+    local timeout="${1:-15}"
+    local deadline=$((SECONDS + timeout))
+    local line actions index action
+    local -a action_list
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CONTEXT_MENU " | tail -1 || true)"
+        actions="$(extract_log_value "$line" actions)"
+        if [[ -n "$actions" && "$actions" != "none" ]]; then
+            IFS=',' read -r -a action_list <<< "$actions"
+            for index in "${!action_list[@]}"; do
+                action="${action_list[$index]}"
+                if [[ "$action" == PLAYER_ATTACK_* ]]; then
+                    echo "$index"
+                    return 0
+                fi
+            done
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android player attack context menu row" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -E "ANDROID_SMOKE_CONTEXT_MENU|ANDROID_SMOKE_PLAYER_" | tail -40 >&2 || true
     return 1
 }
 
@@ -2417,6 +2566,50 @@ update_auth_position() {
     safe_user="$(sql_escape "$AUTH_USER")"
     sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
         "update players set x=$x, y=$y, online=0 where lower(username) = lower('$safe_user');"
+}
+
+read_auth_group() {
+    if [[ -z "$AUTH_DB" ]]; then
+        return 1
+    fi
+    if [[ ! -f "$AUTH_DB" ]]; then
+        echo "ERROR: Android auth DB not found at $AUTH_DB" >&2
+        return 1
+    fi
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo "ERROR: sqlite3 is required when ANDROID_SMOKE_AUTH_DB is set" >&2
+        return 1
+    fi
+
+    local safe_user group_id
+    safe_user="$(sql_escape "$AUTH_USER")"
+    group_id="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+        "select group_id from players where lower(username) = lower('$safe_user') limit 1;")"
+    if [[ -z "$group_id" ]]; then
+        echo "ERROR: no player group found for $AUTH_USER in $AUTH_DB" >&2
+        return 1
+    fi
+    echo "$group_id"
+}
+
+update_auth_group() {
+    local group_id="$1"
+    if [[ -z "$AUTH_DB" ]]; then
+        return 1
+    fi
+    if [[ ! -f "$AUTH_DB" ]]; then
+        echo "ERROR: Android auth DB not found at $AUTH_DB" >&2
+        return 1
+    fi
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo "ERROR: sqlite3 is required when ANDROID_SMOKE_AUTH_DB is set" >&2
+        return 1
+    fi
+
+    local safe_user
+    safe_user="$(sql_escape "$AUTH_USER")"
+    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
+        "update players set group_id=$group_id, online=0 where lower(username) = lower('$safe_user');"
 }
 
 read_auth_settings() {
@@ -4275,6 +4468,103 @@ run_authenticated_ground_loot_smoke() {
     return "$status"
 }
 
+run_authenticated_wilderness_target_smoke() {
+    if [[ "$ONLY_AUTH_WILDERNESS_TARGET" -eq 1 ]]; then
+        preflight_auth_login_fixture
+    fi
+    if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+        return
+    fi
+    if [[ -z "$AUTH_DB" ]]; then
+        if [[ "$ONLY_AUTH_WILDERNESS_TARGET" -eq 1 ]]; then
+            echo "ERROR: --only-auth-wilderness-target requires ANDROID_SMOKE_AUTH_DB" >&2
+            return 1
+        fi
+        return
+    fi
+    if [[ ! "$AUTH_WILDERNESS_PLAYER_X" =~ ^[0-9]+$ || ! "$AUTH_WILDERNESS_PLAYER_Y" =~ ^[0-9]+$ \
+        || ! "$AUTH_WILDERNESS_BOT_COUNT" =~ ^[0-9]+$ || ! "$AUTH_WILDERNESS_BOSS_ID" =~ ^[0-9]+$ \
+        || ! "$AUTH_WILDERNESS_RADIUS" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Android wilderness target fixture coordinates/count/boss/radius must be numeric" >&2
+        return 1
+    fi
+
+    local status original_position original_x original_y original_online original_group command
+    local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index
+    wait_auth_offline 45
+    clear_auth_tutorial_appearance
+    original_position="$(read_auth_position)" || return 1
+    read -r original_x original_y original_online <<< "$original_position"
+    original_group="$(read_auth_group)" || return 1
+    command="cinematic bossfight $AUTH_WILDERNESS_BOT_COUNT $AUTH_WILDERNESS_BOSS_ID $AUTH_WILDERNESS_RADIUS"
+
+    echo "Android wilderness target smoke moving $AUTH_USER from $original_x,$original_y to $AUTH_WILDERNESS_PLAYER_X,$AUTH_WILDERNESS_PLAYER_Y"
+    update_auth_position "$AUTH_WILDERNESS_PLAYER_X" "$AUTH_WILDERNESS_PLAYER_Y"
+    update_auth_group 1
+    rm -f "$OUT_DIR/auth-wilderness-command-sent.flag"
+
+    status=0
+    (
+        set -e
+        "$ADB" logcat -c || true
+        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        enable_android_smoke_player_targets
+        launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT" || exit 1
+        assert_game_activity_for_input "wilderness target login launch" "wilderness-target-lost-after-launch" || exit 1
+        screenshot 103-auth-wilderness-login-home
+        enable_android_smoke_player_targets
+        tap_pct 50 65
+        sleep 3
+        enter_auth_credentials
+        submit_login_and_wait || exit 1
+        sleep 8
+        tap_client_xy 256 246
+        sleep 2
+        screenshot 104-auth-wilderness-before-command
+
+        "$ADB" logcat -c || true
+        enable_android_smoke_player_targets
+        write_android_smoke_player_command "$command"
+        "$ADB" shell input keyevent 30
+        wait_for_player_command START 10 || exit 1
+        touch "$OUT_DIR/auth-wilderness-command-sent.flag"
+        sleep 1
+        wait_for_player_target "$AUTH_WILDERNESS_TARGET_NAME" 45 >/dev/null || exit 1
+        sleep 1
+        screenshot 105-auth-wilderness-target-visible
+
+        "$ADB" logcat -c || true
+        enable_android_smoke_player_targets
+        long_press_player_target "$AUTH_WILDERNESS_TARGET_NAME" 1200 || exit 1
+        menu_values="$(wait_for_context_menu 20)" || exit 1
+        read -r menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y <<< "$menu_values"
+        screenshot 106-auth-wilderness-player-menu
+        menu_index="$(wait_for_player_attack_menu_index 10)" || exit 1
+        tap_context_menu_item "$menu_x" "$menu_y" "$menu_width" "$menu_height" "$menu_items" "$menu_index" || exit 1
+        wait_for_player_action "$AUTH_WILDERNESS_PLAYER_ACTION" 20 || exit 1
+        sleep 2
+        screenshot 107-auth-wilderness-after-player-tap
+
+        "$ADB" shell input keyevent 31 || true
+        wait_for_player_command STOP 10 || true
+        sleep 2
+        "$ADB" shell am force-stop com.voidscape.client || true
+        wait_auth_offline 45 || true
+    ) || status=$?
+
+    if [[ "$status" -ne 0 && -f "$OUT_DIR/auth-wilderness-command-sent.flag" ]]; then
+        "$ADB" shell input keyevent 31 >/dev/null 2>&1 || true
+        sleep 2
+    fi
+    disable_android_smoke_player_targets
+    "$ADB" shell am force-stop com.voidscape.client || true
+    wait_auth_offline 45 || true
+    update_auth_position "$original_x" "$original_y" || true
+    update_auth_group "$original_group" || true
+    sleep 1
+    return "$status"
+}
+
 launch_wrapper() {
     "$ADB" shell am force-stop com.voidscape.client
     "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
@@ -4424,6 +4714,12 @@ if [[ "$ONLY_AUTH_GROUND_LOOT" -eq 1 ]]; then
     exit 0
 fi
 
+if [[ "$ONLY_AUTH_WILDERNESS_TARGET" -eq 1 ]]; then
+    run_authenticated_wilderness_target_smoke
+    echo "Android wilderness target smoke screenshots written to $OUT_DIR"
+    exit 0
+fi
+
 launch_wrapper
 screenshot 00-bootstrap
 wait_for_wrapper_ready
@@ -4528,6 +4824,7 @@ run_authenticated_magic_prayer_smoke
 run_authenticated_world_map_smoke
 run_authenticated_settings_smoke
 run_authenticated_ground_loot_smoke
+run_authenticated_wilderness_target_smoke
 
 launch_wrapper
 wait_for_wrapper_ready
