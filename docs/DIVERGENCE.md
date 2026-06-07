@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Starter path refresh and settings profile polish
+
+Tightened the first-session settings experience for new Voidscape players. The Void Herald now pushes fresh game settings and queues a save immediately after starter path selection, so the Profile panel shows the chosen path without waiting for a later settings refresh. New players default to manual camera, muted sound effects, hidden roofs, fog disabled, and kill feed enabled through client fallbacks plus server/database defaults. The desktop custom settings panel now keeps Profile as the primary tab, adds a gear-icon entry point that opens the existing custom Advanced settings modal, and moves camera angle / mouse button toggles to the top of Profile while removing total time from that panel.
+
+Files touched:
+- `server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` — immediate settings refresh and save after starter path choice.
+- `Client_Base/src/orsc/Config.java` / `Client_Base/src/orsc/mudclient.java` — new-player client defaults, Profile settings toggles, gear icon loading, and Advanced modal entry point.
+- `Client_Base/Cache/voidscape/ui/settings-gear.png` — shared launcher gear asset reused for the settings tab.
+- `server/src/com/openrsc/server/database/impl/mysql/MySqlQueries.java`, `server/src/com/openrsc/server/model/entity/player/Player.java`, and core SQL schemas — new account defaults aligned across persistence paths.
+
+Reversibility: revert the Herald refresh/save, client defaults/UI changes, gear cache asset, and DB default changes together. No packet opcode, item definition, NPC definition, combat formula, client-version, launcher binary, or Android-only behavior changed.
+
 ### 2026-06-07 — Deterministic DB patch ordering for beta deploys
 
 Hardened database patch application after the friend beta VPS was updated with current server jars but an older `server/database` patch directory. The stale directory left `players.hairstyle` unapplied, causing current login loads to roll back halfway and kick new beta accounts during first appearance updates. The patch applier now sorts same-date SQL patches by filename after sorting by date, so additive schema patches run before later same-day data migrations. Operations docs now call out that server jars, `server/conf/`, and `server/database/` must deploy together, while preserving the live DB/log/runtime files and matching `client_version`.

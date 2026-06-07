@@ -265,9 +265,9 @@ CREATE TABLE IF NOT EXISTS `players`
     `block_private`     tinyint(1) UNSIGNED          DEFAULT 0,
     `block_trade`       tinyint(1) UNSIGNED          DEFAULT 0,
     `block_duel`        tinyint(1) UNSIGNED          DEFAULT 0,
-    `cameraauto`        tinyint(1) UNSIGNED          DEFAULT 1,
+    `cameraauto`        tinyint(1) UNSIGNED          DEFAULT 0,
     `onemouse`          tinyint(1) UNSIGNED          DEFAULT 0,
-    `soundoff`          tinyint(1) UNSIGNED          DEFAULT 0,
+    `soundoff`          tinyint(1) UNSIGNED          DEFAULT 1,
     `haircolour`        int(5) UNSIGNED              DEFAULT 10,
     `topcolour`         int(5) UNSIGNED              DEFAULT 15,
     `trousercolour`     int(5) UNSIGNED              DEFAULT 22,
@@ -298,7 +298,10 @@ CREATE TABLE IF NOT EXISTS `players`
   DEFAULT CHARSET = utf8;
 
 ALTER TABLE `players`
-    ALTER `cameraauto` SET DEFAULT 1;
+    ALTER `cameraauto` SET DEFAULT 0;
+
+ALTER TABLE `players`
+    ALTER `soundoff` SET DEFAULT 1;
 
 DROP TABLE IF EXISTS `player_cache`;
 CREATE TABLE IF NOT EXISTS `player_cache`

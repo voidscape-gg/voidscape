@@ -45,6 +45,8 @@ public final class VoidHerald implements TalkNpcTrigger {
 		int path = choice == 0 ? VoidPath.WARRIOR : choice == 1 ? VoidPath.FORAGER : VoidPath.ARCANIST;
 		VoidPath.choose(player, path);
 		boolean kitGranted = VoidPath.grantStarterKit(player, path);
+		ActionSender.sendGameSettings(player);
+		player.save();
 		player.message(VoidPath.name(path) + " chosen. " + VoidPath.boostedSkillSummary(path) + " now earn " + VoidPath.boostLimitSummary() + ".");
 		if (kitGranted) {
 			player.message("Your starter kit has been placed in your backpack.");

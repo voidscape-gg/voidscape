@@ -3353,7 +3353,7 @@ public final class Player extends Mob {
 			if (getCache().hasKey("setting_showfog")) {
 				return getCache().getBoolean("setting_showfog");
 			}
-			return true;
+			return false;
 		} else {
 			return false;
 		}

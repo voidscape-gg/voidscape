@@ -709,7 +709,7 @@ public final class mudclient implements Runnable {
 	private int objectAnimationNumberClaw = 0;
 	private int objectAnimationNumberFireLightningSpell = 0;
 	private int objectAnimationNumberTorch = 0;
-	private boolean optionCameraModeAuto = true;
+	private boolean optionCameraModeAuto = false;
 	private boolean optionMouseButtonOne = false;
 	private boolean clanInviteBlockSetting = false;
 	private boolean partyInviteBlockSetting = false;
@@ -719,7 +719,9 @@ public final class mudclient implements Runnable {
 	private Panel panelLogin;
 	private Panel panelLoginWelcome;
 	private Sprite voidscapeLoginBackground;
+	private Sprite settingsGearIcon;
 	private boolean voidscapeLoginAssetLoadAttempted = false;
+	private boolean settingsGearIconLoadAttempted = false;
 	private String voidscapeLoginHomeStatus1 = "";
 	private String voidscapeLoginHomeStatus2 = "";
 	private Panel panelSetRecoveryQuestion;
@@ -12304,24 +12306,36 @@ public final class mudclient implements Runnable {
 					// tab switching
 					if (!this.authenticSettings) {
 						this.panelSettings.handleMouse(this.getMouseX(), this.getMouseY(), this.getMouseButtonDown(), this.getLastMouseDown());
-						if (isAndroid() && var13 <= 24 && this.mouseButtonClick == 1) {
-							if (var3 < 66 && (this.settingTab == 1 || this.settingTab == 2)) {
+						if (var13 <= 24 && this.mouseButtonClick == 1) {
+							if (isAndroid() && var3 < 66 && (this.settingTab == 1 || this.settingTab == 2)) {
 								this.settingTab = 0; // Social Settings Tab
+								this.settingsAdvancedMode = false;
 								this.panelSettings.resetList(this.controlSettingPanel);
-							} else if (var3 >= 66 && var3 <= 131
+							} else if (isAndroid() && var3 >= 66 && var3 <= 131
 								&& (this.settingTab == 0 || this.settingTab == 2)) {
 								this.settingTab = 1; // Game Settings Tab
+								this.settingsAdvancedMode = false;
 								this.panelSettings.resetList(this.controlSettingPanel);
-							} else if (var3 > 131 && (this.settingTab == 0 || this.settingTab == 1)) {
+							} else if (isAndroid() && var3 > 131 && (this.settingTab == 0 || this.settingTab == 1)) {
 								this.settingTab = 2; // Android Settings Tab
+								this.settingsAdvancedMode = false;
 								this.panelSettings.resetList(this.controlSettingPanel);
-							}
-							} else if (!isAndroid()) {
+							} else if (!isAndroid() && var3 < var5 - 40) {
 								this.settingTab = SETTINGS_PROFILE_TAB;
+								this.settingsAdvancedMode = false;
+								this.panelSettings.resetList(this.controlSettingPanel);
+							} else if (!isAndroid()) {
+								this.showAdvancedSettingsWindow = true;
+								this.showUiTab = 0;
+								this.settingTab = SETTINGS_PROFILE_TAB;
+								this.settingsAdvancedMode = false;
+								this.mouseButtonClick = 0;
+								return;
 							}
 						}
+						}
 
-					int var9 = this.getSurface().width2 - 199;
+						int var9 = this.getSurface().width2 - 199;
 					var6 = var9 + 3;
 					int var10 = 36;
 					if (C_CUSTOM_UI)
@@ -12453,7 +12467,7 @@ public final class mudclient implements Runnable {
 					drawAdvancedToggle(x, rowY, width, "Vignette", "Subtle depth at screen edges", C_HD_VIGNETTE, 53);
 				} else {
 					rowY = drawAdvancedToggle(x, rowY, width, "Hide roofs", "Keep interiors visible", C_HIDE_ROOFS, 26);
-					rowY = drawAdvancedToggle(x, rowY, width, "Hide fog", "Reduce distance haze", C_HIDE_FOG, 27);
+					rowY = drawAdvancedToggle(x, rowY, width, "Fog", "Distance haze", C_HIDE_FOG, 27);
 					drawAdvancedToggle(x, rowY, width, "Hide underground flicker", "Reduce low-light pulsing", C_HIDE_UNDERGROUND_FLICKER, 42);
 				}
 				break;
@@ -12770,12 +12784,47 @@ public final class mudclient implements Runnable {
 
 	// custom settings menu
 	private void drawCustomSettingsBox(int var3, int var4, short var5, int chosenColor, int unchosenColor) {
-		this.getSurface().drawBoxAlpha(var3, var4 - 25, var5, 24, chosenColor, 128);
+		int gearTabWidth = 40;
+		int profileTabWidth = var5 - gearTabWidth;
+		boolean gearHover = this.mouseX >= var3 + profileTabWidth && this.mouseX < var3 + var5
+			&& this.mouseY >= var4 - 25 && this.mouseY < var4 - 1;
+		this.getSurface().drawBoxAlpha(var3, var4 - 25, profileTabWidth, 24, chosenColor, 128);
+		this.getSurface().drawBoxAlpha(var3 + profileTabWidth, var4 - 25, gearTabWidth, 24,
+			gearHover ? chosenColor : unchosenColor, 128);
 		this.getSurface().drawLineHoriz(var3, 24 + var4 - 25, var5, 0);
-		this.getSurface().drawColoredStringCentered(var3 + var5 / 2, "Profile", 0, 0, 4, 16 + var4 - 25);
+		this.getSurface().drawLineVert(var3 + profileTabWidth, var4 - 25, 0, 24);
+		this.getSurface().drawColoredStringCentered(var3 + profileTabWidth / 2, "Profile", 0, 0, 4, 16 + var4 - 25);
+		drawSettingsGearIcon(var3 + profileTabWidth + gearTabWidth / 2, var4 - 13, gearHover);
 
 		this.getSurface().drawBoxAlpha(var3, var4, var5, 200, GenUtil.buildColor(181, 181, 181), 160);
 		this.getSurface().drawBoxAlpha(var3, var4 + 200, var5, 40, GenUtil.buildColor(201, 201, 201), 160);
+	}
+
+	private void drawSettingsGearIcon(int x, int y, boolean hover) {
+		ensureSettingsGearIconLoaded();
+		if (this.settingsGearIcon != null) {
+			int size = hover ? 20 : 18;
+			this.getSurface().drawSprite(this.settingsGearIcon, x - size / 2, y - size / 2, size, size, 5924);
+			return;
+		}
+
+		int color = hover ? 0x6F43BE : 0x222222;
+		this.getSurface().drawCircle(x, y, 8, color, 230, 0);
+		this.getSurface().drawCircle(x, y, 3, GenUtil.buildColor(220, 220, 220), 255, 0);
+		this.getSurface().drawLineHoriz(x - 9, y, 19, color);
+		this.getSurface().drawLineVert(x, y - 9, color, 19);
+	}
+
+	private void ensureSettingsGearIconLoaded() {
+		if (this.settingsGearIconLoadAttempted) {
+			return;
+		}
+		this.settingsGearIconLoadAttempted = true;
+		File iconFile = new File(Config.F_CACHE_DIR, "voidscape" + File.separator + "ui" + File.separator + "settings-gear.png");
+		this.settingsGearIcon = PngSpriteLoader.read(iconFile);
+		if (this.settingsGearIcon == null) {
+			this.settingsGearIcon = readPngSpriteWithClientPort(iconFile);
+		}
 	}
 
 	// custom social settings tab
@@ -12783,6 +12832,12 @@ public final class mudclient implements Runnable {
 		int panelTop = y - 15;
 		y += 5;
 		this.getSurface().drawString("Profile", 3 + baseX, y, 0x6F43BE, 1);
+		y += 15;
+		int profileColor = getSettingsRowColor(x, boxWidth, y);
+		this.getSurface().drawString("Camera angle: " + (this.optionCameraModeAuto ? "@yel@Auto" : "@gre@Manual"), 3 + baseX, y, profileColor, 1);
+		y += 15;
+		profileColor = getSettingsRowColor(x, boxWidth, y);
+		this.getSurface().drawString("Mouse buttons: " + (this.optionMouseButtonOne ? "@yel@One" : "@gre@Two"), 3 + baseX, y, profileColor, 1);
 		y += 15;
 		this.getSurface().drawString("Subscription: " + (this.profileSubscribed ? "@gre@Subscribed" : "@red@Unsubscribed"), 3 + baseX, y, 0xFFFFFF, 1);
 		y += 15;
@@ -12793,8 +12848,6 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawString("Path: @mag@" + getProfilePathName(), 3 + baseX, y, 0xFFFFFF, 1);
 		y += 15;
 		this.getSurface().drawString("Bonus: @gre@" + getProfilePathBonus(), 3 + baseX, y, 0xFFFFFF, 1);
-		y += 15;
-		this.getSurface().drawString("Total time: @gre@" + formatPlayedTime(getLiveProfilePlayedSeconds()), 3 + baseX, y, 0xFFFFFF, 1);
 
 		y = getSettingsSocialHeadingY(panelTop);
 		this.getSurface().drawString("Social", 3 + baseX, y, 0x6F43BE, 1);
@@ -12892,14 +12945,6 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawString("Exit the black hole", x, y, logoutColor, 1);
 		}
 
-		int advancedY = getSettingsAdvancedButtonY(panelTop);
-		int advancedColor = 0xFFFFFF;
-		if (x < this.mouseX && x + boxWidth > this.mouseX && advancedY - 12 < this.mouseY
-			&& this.mouseY < 4 + advancedY) {
-			advancedColor = 0xD9B6FF;
-		}
-		this.getSurface().drawString("Advanced settings", baseX + 3, advancedY, advancedColor, 1);
-
 		// logout menu option
 		y = getSettingsLogoutY(panelTop);
 		logoutColor = 0xFFFFFF;
@@ -12918,7 +12963,14 @@ public final class mudclient implements Runnable {
 	}
 
 	private int getSettingsSocialHeadingY(int panelTop) {
-		return panelTop + 124;
+		return panelTop + 139;
+	}
+
+	private int getSettingsRowColor(int x, int width, int y) {
+		if (this.mouseX > x && this.mouseX < x + width && this.mouseY > y - 12 && this.mouseY < y + 4) {
+			return 0xFFFF00;
+		}
+		return 0xFFFFFF;
 	}
 
 	private String formatXpRate(int tenths) {
@@ -12954,26 +13006,6 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private long getLiveProfilePlayedSeconds() {
-		if (this.profileStatsReceivedAt <= 0) {
-			return this.profileTotalPlayedSeconds;
-		}
-		return this.profileTotalPlayedSeconds + Math.max(0L, (System.currentTimeMillis() - this.profileStatsReceivedAt) / 1000L);
-	}
-
-	private String formatPlayedTime(long seconds) {
-		long days = seconds / 86400L;
-		long hours = (seconds % 86400L) / 3600L;
-		long minutes = (seconds % 3600L) / 60L;
-		if (days > 0) {
-			return days + "d " + hours + "h";
-		}
-		if (hours > 0) {
-			return hours + "h " + minutes + "m";
-		}
-		return minutes + "m";
-	}
-
 	private void sendGameSetting(int index, int value) {
 		this.packetHandler.getClientStream().newPacket(111);
 		this.packetHandler.getClientStream().bufferBits.putByte(index);
@@ -12986,9 +13018,10 @@ public final class mudclient implements Runnable {
 		int var4 = y - 15;
 		this.panelSettings.clearList(this.controlSettingPanel);
 		int index = 0;
-		this.getSurface().drawString(this.settingsAdvancedMode ? "Advanced options" : "Basic options", 3 + baseX, y, 0, 1);
+		boolean showingAdvanced = this.settingsAdvancedMode;
+		this.getSurface().drawString(showingAdvanced ? "Advanced options" : "Basic options", 3 + baseX, y, 0, 1);
 
-		if (!this.settingsAdvancedMode) {
+		if (!showingAdvanced) {
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 				"@whi@Camera angle - " + (this.optionCameraModeAuto ? "@gre@Auto" : "@red@Manual"),
 				0, null, null);
@@ -13239,6 +13272,16 @@ public final class mudclient implements Runnable {
 			}
 		}
 
+		// fog toggle - byte index 27
+		if (S_FOG_TOGGLE) {
+			if (!C_HIDE_FOG) {
+				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+					"@whi@Fog - @red@Off", 27, null, null);
+			} else {
+				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+					"@whi@Fog - @gre@On", 27, null, null);
+			}
+		}
 
 		// underground lighting flicker toggle
 		if (S_SHOW_UNDERGROUND_FLICKER_TOGGLE) {
@@ -13600,8 +13643,9 @@ public final class mudclient implements Runnable {
 
 		/* rendering scalar - (would be byte index 45) */
 
-		int scalarOptionIdx = (wantMembers() ? 2 : 1) + (this.settingsAdvancedMode ? 1 : 0);
-		boolean isScalarOptionShowing = this.settingsAdvancedMode && !isAndroid()
+		boolean showingAdvanced = this.settingsAdvancedMode;
+		int scalarOptionIdx = (wantMembers() ? 2 : 1) + (showingAdvanced ? 1 : 0);
+		boolean isScalarOptionShowing = showingAdvanced && !isAndroid()
 			&& panelSettings.controlScrollAmount[0] <= scalarOptionIdx;
 
 		boolean handledScaleButton = false;
@@ -13910,6 +13954,22 @@ public final class mudclient implements Runnable {
 		boolean settingsChanged = false;
 		int panelTop = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
 
+		yFromTopDistance = panelTop + 35;
+		if (this.mouseX > var6 && this.mouseX < var5 + var6 && this.mouseY > yFromTopDistance - 12
+			&& this.mouseY < yFromTopDistance + 4 && this.mouseButtonClick == 1) {
+			this.optionCameraModeAuto = !this.optionCameraModeAuto;
+			sendGameSetting(0, this.optionCameraModeAuto ? 1 : 0);
+			return;
+		}
+
+		yFromTopDistance += 15;
+		if (this.mouseX > var6 && this.mouseX < var5 + var6 && this.mouseY > yFromTopDistance - 12
+			&& this.mouseY < yFromTopDistance + 4 && this.mouseButtonClick == 1) {
+			this.optionMouseButtonOne = !this.optionMouseButtonOne;
+			sendGameSetting(1, this.optionMouseButtonOne ? 1 : 0);
+			return;
+		}
+
 		// profile lines and social heading
 		yFromTopDistance = getSettingsSocialHeadingY(panelTop);
 
@@ -14008,16 +14068,6 @@ public final class mudclient implements Runnable {
 				if (!C_CUSTOM_UI)
 					this.showUiTab = 0;
 			}
-		}
-
-		// advanced settings window
-		yFromTopDistance = getSettingsAdvancedButtonY(panelTop);
-		if (this.mouseX > var6 && var5 + var6 > this.mouseX && this.mouseY > yFromTopDistance - 12
-			&& this.mouseY < yFromTopDistance + 4 && this.mouseButtonClick == 1) {
-			this.showAdvancedSettingsWindow = true;
-			this.showUiTab = 0;
-			this.mouseButtonClick = 0;
-			return;
 		}
 
 		// logout menu option

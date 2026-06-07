@@ -54,7 +54,7 @@ public class Config {
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
 	public static boolean C_SHOW_COORDS = true;
-	public static boolean C_KILL_FEED = false;
+	public static boolean C_KILL_FEED = true;
 	public static int C_FIGHT_MENU = 1;
 	public static boolean C_INV_COUNT = true;
 	public static boolean C_PARTY_INV = false;
