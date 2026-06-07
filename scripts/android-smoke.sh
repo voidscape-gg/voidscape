@@ -606,9 +606,12 @@ clear_focused_text_field() {
 }
 
 enter_auth_credentials() {
+    tap_pct 50 22
+    sleep 1
     clear_focused_text_field
     input_text "$AUTH_USER"
-    "$ADB" shell input keyevent ENTER
+    sleep 1
+    tap_pct 50 32
     sleep 1
     clear_focused_text_field
     input_text "$AUTH_PASS"
@@ -723,7 +726,15 @@ launch_game_with_endpoint() {
     tap_text "Play" last || tap_pct 74 60
     ensure_game_activity_from_wrapper 120 || return 1
     sleep 5
+    dismiss_fullscreen_education
     return 0
+}
+
+dismiss_fullscreen_education() {
+    if wait_for_text "Got it" 2; then
+        tap_text "Got it" last || tap_pct 80 50
+        sleep 1
+    fi
 }
 
 wait_for_successful_login() {
@@ -865,8 +876,29 @@ assert_no_android_runtime_crash() {
 	local crash
 	crash="$("$ADB" logcat -d -v raw 2>/dev/null \
 		| tr -d '\r' \
-		| grep -E "FATAL EXCEPTION|AndroidRuntime|NullPointerException|ArrayIndexOutOfBoundsException" \
-		| tail -80 || true)"
+		| awk '
+			/FATAL EXCEPTION/ {
+				capture = 45;
+				block = $0 "\n";
+				next;
+			}
+			capture > 0 {
+				block = block $0 "\n";
+				capture--;
+				if (capture == 0) {
+					if (block ~ /Process: com\.voidscape\.client|com\.voidscape\.client|com\.openrsc|orsc\.|RSCBitmapSurfaceView|GameActivity|CacheUpdater/) {
+						printf "%s", block;
+					}
+					block = "";
+				}
+			}
+			END {
+				if (capture > 0 && block ~ /Process: com\.voidscape\.client|com\.voidscape\.client|com\.openrsc|orsc\.|RSCBitmapSurfaceView|GameActivity|CacheUpdater/) {
+					printf "%s", block;
+				}
+			}
+		' \
+		| tail -120 || true)"
 	if [[ -n "$crash" ]]; then
 		echo "ERROR: Android runtime crash observed $label" >&2
 		echo "$crash" >&2
@@ -979,11 +1011,13 @@ run_authenticated_lifecycle_smoke() {
 	}
 	screenshot 05-lifecycle-after-duplicate-relaunch
 
-	tap_pct 60 6
+	enable_android_smoke_settings
+	tap_client_xy 330 19
 	sleep 2
 	screenshot 06-lifecycle-settings-open
-	tap_pct 67 85
+	tap_client_xy 385 293
 	sleep 10
+	disable_android_smoke_settings
 	assert_no_android_runtime_crash "after lifecycle logout" || {
 		screenshot 07-lifecycle-logout-crash || true
 		exit 1
@@ -4251,6 +4285,7 @@ launch_to_login_home() {
 	wait_for_wrapper_ready
 	tap_pct 50 60
 	ensure_game_activity_from_wrapper
+	dismiss_fullscreen_education
 }
 
 if [[ "$ONLY_AUTH_LOGIN" -eq 1 ]]; then

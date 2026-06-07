@@ -151,6 +151,10 @@ Android lifecycle proof:
 # Logs in, closes the welcome panel, backgrounds/resumes through the launcher,
 # checks duplicate launcher starts, logs out, and fails on Android runtime crashes.
 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-lifecycle
+
+# Profile coverage:
+AVD_NAME=voidscape_small_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-small-lifecycle
+AVD_NAME=voidscape_tablet_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-tablet-lifecycle
 ```
 
 Run PC client:

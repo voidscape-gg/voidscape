@@ -3178,3 +3178,16 @@ Details:
 - `scripts/android-smoke.sh --only-auth-lifecycle` verifies login, welcome close, Home/background, launcher resume, duplicate launcher relaunch, logout, post-logout keyboard input, and crash-free logcat.
 - PC and Android login parity screenshots were captured through the PC workbench and Android lifecycle smoke; Android intentionally keeps `Create Account` and larger touch targets while preserving the branded Voidscape background/panel.
 - No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.
+
+### 2026-06-07 - Android screen-profile coverage
+
+Added small-phone and tablet-ish emulator coverage to catch layout and tap-scaling issues beyond the baseline medium phone.
+
+Details:
+- Created local AVD profiles `voidscape_small_api35` (`768x1280 @ 320dpi`) and `voidscape_tablet_api35` (`2560x1600 @ 320dpi`) using the installed Android 35 Google APIs ARM64 image.
+- `scripts/android-smoke.sh --only-auth-lifecycle` now dismisses Android's OS-owned fullscreen education card before tapping login controls.
+- Android smoke credential entry now taps the username/password fields explicitly instead of relying on Enter to move focus, which fixed small-profile login entry.
+- Android lifecycle logout now uses classic client coordinates for the wrench/settings tab and logout button, which fixed tablet-profile scaling where screen-percent taps missed the control.
+- The crash detector now fails only on app-relevant fatal exception blocks, avoiding false failures from emulator system-service noise such as NFC warnings.
+- Verified lifecycle smoke on `voidscape_small_api35` and `voidscape_tablet_api35`; both completed login, resume, duplicate launcher relaunch, logout, post-logout keyboard, and crash checks.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.

@@ -35,9 +35,22 @@ scripts/android-smoke.sh --no-build --only-auth-login --out /tmp/voidscape-andro
 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-lifecycle
 ```
 
+Profile coverage AVDs:
+
+- `voidscape_api35` - baseline medium phone, `1080x2400 @ 420dpi`, about 2 GB RAM.
+- `voidscape_small_api35` - older/smaller phone, `768x1280 @ 320dpi`, about 2 GB RAM.
+- `voidscape_tablet_api35` - tablet-ish wide profile, `2560x1600 @ 320dpi`, about 2 GB RAM.
+
+Run focused lifecycle coverage on a specific profile with:
+
+```bash
+AVD_NAME=voidscape_small_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-small-lifecycle
+AVD_NAME=voidscape_tablet_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-tablet-lifecycle
+```
+
 For authenticated in-game coverage, run a local server and set `ANDROID_SMOKE_AUTH_USER`, `ANDROID_SMOKE_AUTH_PASS`, `ANDROID_SMOKE_AUTH_HOST`, and `ANDROID_SMOKE_AUTH_PORT`. The default auth host/port are `10.0.2.2:43596`, which points the emulator at the host machine's local server. Set `ANDROID_SMOKE_AUTH_DB` to the local SQLite DB path to assert that a terrain tap changed the saved player `x,y` after logout, temporarily move the auth player near object/NPC fixtures, and seed/restore inventory fixtures. The NPC tap proof defaults to Void Herald (`ANDROID_SMOKE_NPC_ID=839`) and expects `ANDROID_SMOKE_NPC_ACTION=NPC_TALK_TO`; use those variables to point the same smoke hook at an attackable fixture when one is available. If the NPC projection log flakes while the fixed Herald fixture is visibly on screen, the smoke can fall back to `ANDROID_SMOKE_NPC_FALLBACK_CLIENT_X/Y` and still requires the shared NPC action assertion to pass. The scenery/object proof defaults to Void waystone (`ANDROID_SMOKE_OBJECT_ID=1303`) and expects `ANDROID_SMOKE_OBJECT_ACTION=OBJECT_COMMAND1`. The inventory tap proof temporarily seeds coins into slot `ANDROID_SMOKE_INVENTORY_SLOT=0` and expects `ANDROID_SMOKE_INVENTORY_ACTION=ITEM_USE`; the item-on-item proof reuses that selected source item, temporarily seeds a tinderbox into `ANDROID_SMOKE_ITEM_ON_ITEM_TARGET_SLOT=1`, taps the rendered target slot, and expects `ANDROID_SMOKE_ITEM_ON_ITEM_ACTION=ITEM_USE_ITEM`. The item-on-scenery/NPC proof temporarily seeds a source item into `ANDROID_SMOKE_ITEM_ON_TARGET_SLOT=0`, selects it, taps the projected object/NPC target, and expects `ANDROID_SMOKE_ITEM_ON_OBJECT_ACTION=OBJECT_USE_ITEM` and `ANDROID_SMOKE_ITEM_ON_NPC_ACTION=NPC_USE_ITEM`. The context-menu proof long-presses the projected NPC target, waits for the shared client to log menu geometry, screenshots the open `Choose option` menu, taps row `0`, and expects `ANDROID_SMOKE_CONTEXT_MENU_FIRST_ACTION=NPC_TALK_TO` by default. The edge context-menu proof long-presses client coordinate `ANDROID_SMOKE_EDGE_MENU_CLIENT_X/Y`, asserts the logged menu rectangle clamps inside the classic framebuffer, taps row `0`, and expects `ANDROID_SMOKE_EDGE_MENU_ACTION=LANDSCAPE_WALK_HERE`. The camera and zoom proofs use `ANDROID_SMOKE_CAMERA_SWIPE_*` and `ANDROID_SMOKE_ZOOM_SWIPE_*` client-coordinate swipes and assert shared client state logs changed. The chat-tab proof taps the configured `ANDROID_SMOKE_CHAT_TAB_SEQUENCE` centers at `ANDROID_SMOKE_CHAT_TAB_Y` and asserts the shared selected tab changed. The chat-send proof uses `ANDROID_SMOKE_CHAT_KEYBOARD_X/Y`, `ANDROID_SMOKE_CHAT_ENTRY_X/Y`, and `ANDROID_SMOKE_CHAT_MESSAGE` to open the in-game Android keyboard, type into the shared chat entry, press Enter, and assert the normal chat packet path logged `ANDROID_SMOKE_CHAT_SEND`. The bank proof temporarily moves the auth player to the bank chest fixture, seeds high-ID inventory/bank rows, opens object `ANDROID_SMOKE_BANK_OBJECT_ID`, searches, clears search, scrolls, withdraws, opens loadouts, saves a preset, deposits one item, deposit-alls the inventory, loads the saved preset, verifies preset persistence after logout, and restores the original DB rows and item ID sequence. The shop proof temporarily moves the auth player to the Edgeville general store fixture, seeds high-ID coins, long-presses shopkeeper `ANDROID_SMOKE_SHOP_NPC_ID`, selects the configured `NPC_COMMAND1` trade row, selects a shop slot, buys one item, sells one item, performs a swipe over the classic shop grid, asserts `scrollable=0`, and restores the original DB rows and item ID sequence. The equipment proof temporarily seeds a low-level wearable (`ANDROID_SMOKE_EQUIPMENT_ITEM_ID`, default Wooden Shield id `4`) into inventory slot `ANDROID_SMOKE_EQUIPMENT_INVENTORY_SLOT`, clears/restores worn rows, equips it through the real inventory tap path, and then either exercises the equipment-tab unequip path if `want_equipment_tab` is enabled or, for current Voidscape config, verifies the inventory slot toggles `equipped=true` and removes it through `ITEM_UNEQUIP_FROM_INVENTORY`. The magic/prayer proof temporarily snapshots/restores the auth player's stats, raises magic only for the fixture, opens the magic/prayer panel, selects Home teleport, verifies the self-cast context-menu action, switches to Prayers, toggles Thick Skin on/off, and restores the account. It intentionally treats the saved-position Home teleport result as a warning rather than a failure because Android UI selection/cast is the checklist target and the server-side self-cast/teleport effect needs separate protocol investigation. The world-map proof clears the first-login `tutorial_appearance` cache key when `ANDROID_SMOKE_AUTH_DB` is available, opens the shared map, proves zoom/pan/search/Back-close through `ANDROID_SMOKE_WORLD_MAP`, and verifies Android can decode the packaged world-map PNG through `voidscape_api35` screenshots. The settings proof snapshots the auth account's game settings, forces a known baseline, opens the wrench/Game tab, toggles camera auto and one-button mouse through the normal game-setting packet, verifies the DB row after logout, relogs, verifies the changed values reload into the visible panel, then restores the original settings. The ground-loot proof snapshots/restores inventory and loot-display cache keys, temporarily seeds a rare item (`ANDROID_SMOKE_GROUND_LOOT_ITEM_ID`, default Rune battle axe id `93`), drops it through a smoke-gated key path, asserts the rare-drop beam and ground-item label geometry fit inside the classic framebuffer, captures screenshot `102-auth-ground-loot-readable`, and restores the auth account.
 
-Current emulator quirk: `adb shell wm size` and `dumpsys window displays` can report stale orientation after switching between the portrait wrapper and landscape `GameActivity`. The smoke script sizes tap coordinates from a temporary `screencap` PNG first, then falls back to `dumpsys`/`wm size` only if image probing fails. The ATD automation image is reliable for log-driven assertions but can return black `screencap` frames in this environment; use it for repeatable input proof, then use `voidscape_api35` or a real device for visual QA screenshots. The Google APIs image can still ANR during credential entry under headless load, so real-device visual screenshots remain the release-grade check.
+Current emulator quirk: `adb shell wm size` and `dumpsys window displays` can report stale orientation after switching between the portrait wrapper and landscape `GameActivity`. The smoke script sizes tap coordinates from a temporary `screencap` PNG first, then falls back to `dumpsys`/`wm size` only if image probing fails. The ATD automation image is reliable for log-driven assertions but can return black `screencap` frames in this environment; use it for repeatable input proof, then use `voidscape_api35` or a real device for visual QA screenshots. The Google APIs image can still ANR during credential entry under headless load, so real-device visual screenshots remain the release-grade check. Fresh Google APIs profiles can show Android's OS-owned fullscreen education card (`Viewing full screen` / `Got it`) on first launch; the smoke script dismisses it before interacting with the login panel.
 
 Android account creation and recovery are portal handoffs, not legacy in-client packet flows. The shared login screen labels the welcome action `Create Account` on Android and opens `orsc.osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL` when configured; a blank pre-release URL leaves the player on the welcome panel with an explicit status. The existing-user `Recover account` action uses `VOIDSCAPE_PORTAL_RECOVERY_URL` the same way. Desktop client registration/recovery behavior is unchanged.
 
@@ -85,8 +98,8 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Extend the screenshot set after Android login: successful login, in-game HUD, terrain tap before/after, NPC tap before/after, scenery/object tap before/after, inventory tap before/after, item-on-item before/after, item-on-scenery before/after, item-on-NPC before/after, long-press context-menu before/open/after-selection, edge context-menu before/open/after-selection, camera rotate before/after, zoom before/after, chat-tab before/after, chat send before/keyboard/after, settings panel, logout return, and post-logout keyboard.
 - [x] Extend the screenshot set after Android login: bank. ATD covers repeatable input assertions; `voidscape_api35` produces readable bank visual screenshots.
 - [x] Add a small script for repeatable screenshots and APK reinstall so Android QA is one command instead of manual ADB commands.
-- [ ] Add a second AVD profile for a smaller/older-style phone after the main baseline is stable.
-- [ ] Add a large/tablet-ish AVD profile to catch scaling and touch-target issues.
+- [x] Add a second AVD profile for a smaller/older-style phone after the main baseline is stable. `voidscape_small_api35` covers `768x1280 @ 320dpi`.
+- [x] Add a large/tablet-ish AVD profile to catch scaling and touch-target issues. `voidscape_tablet_api35` covers `2560x1600 @ 320dpi`.
 - [x] Test with `-no-window` for automation and visible emulator mode for human visual review.
 - [x] Record any emulator quirks in this doc when they affect screenshots or input testing.
 
@@ -94,7 +107,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 
 - [x] Make Android login use the custom Voidscape renderer instead of the old blue/gray OpenRSC login panels.
 - [x] Make `voidscape-login-background.png` load on Android through `ClientPort`/`BitmapFactory`; desktop still tries the normal PNG loader first.
-- [ ] Screenshot the PC custom login and Android custom login side by side after parity is enabled.
+- [x] Screenshot the PC custom login and Android custom login side by side after parity is enabled.
 - [x] Make Android first bootstrap screen match the Voidscape launcher identity instead of plain black/TextView/progressbar.
 - [x] Make Android ready/play screen match the launcher: Voidscape logo/wordmark, restrained dark background, custom button styling, and no stock gray Android button.
 - [x] Restyle the advanced server picker so it does not use the default white AlertDialog on a black game screen.
@@ -102,7 +115,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Replace legacy Android launcher icon PNG densities with Voidscape artwork.
 - [ ] Add a true Android adaptive icon foreground/background pair.
 - [ ] Add a branded Android splash screen for cold app start.
-- [ ] Make fullscreen education overlay acceptable on first boot, or document that it is OS-owned and appears only once.
+- [x] Make fullscreen education overlay acceptable on first boot, or document that it is OS-owned and appears only once.
 - [ ] Verify portrait-to-landscape transition feels intentional and not like the app is rotating by accident.
 - [x] Make native Android text sizes and spacing look polished at 420 dpi and smaller densities.
 - [ ] Ensure all Android native screens look good with system dark mode and font scaling.
@@ -153,12 +166,12 @@ This is the working Android punch list. The standard loop for each visual/input 
 
 ### Layout, Scaling, and Readability
 
-- [ ] Verify the classic `512x346` framebuffer is aspect-ratio correct on the medium phone AVD.
-- [ ] Verify letterboxing is acceptable in landscape and does not waste too much usable area.
+- [x] Verify the classic `512x346` framebuffer is aspect-ratio correct on the medium phone AVD.
+- [x] Verify letterboxing is acceptable in landscape and does not waste too much usable area.
 - [ ] Check whether portrait bootstrap followed by landscape game is visually smooth.
 - [x] Check login button hitboxes against what the player sees after scaling.
-- [ ] Check small RSC fonts on a 1080x2400 phone screenshot.
-- [ ] Check UI at reduced emulator resolution/density for lower-end phones.
+- [x] Check small RSC fonts on a 1080x2400 phone screenshot.
+- [x] Check UI at reduced emulator resolution/density for lower-end phones.
 - [ ] Check display cutout/notch behavior.
 - [ ] Check gesture navigation bar overlap.
 - [ ] Check 3-button navigation mode if available.
