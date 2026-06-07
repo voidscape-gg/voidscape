@@ -27,6 +27,315 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Android ground-loot readability smoke
+
+Verified Android ground-item labels and rare-drop beams against the shared client render path without changing loot mechanics. The shared client now emits `ANDROID_SMOKE_GROUND_LOOT` markers behind an app-private flag for rare-beam and ground-item-label geometry, clamps ground-item labels to the classic framebuffer, and exposes a smoke-only key path that drops inventory slot 0 through the existing packet path. The Android smoke helper gained a focused authenticated `--only-auth-ground-loot` pass that snapshots/restores the auth player's inventory/cache rows, seeds a rare item fixture, drops it, asserts the beam/label bounds, and captures `102-auth-ground-loot-readable`.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated ground-loot label/beam logs, label clamping, and smoke-only drop helper using existing packet `246`.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — smoke-gated `G` key binding for the fixture drop.
+- `scripts/android-smoke.sh` — focused `--only-auth-ground-loot` mode, login/foreground hardening, inventory/cache fixture snapshot/restore, beam/label assertions, and screenshot `102`.
+- `docs/subsystems/android-client.md` / `memory/android_emulation.md` — documented proof and checklist status.
+
+Reversibility: remove the ground-loot smoke flag/logger/key hooks and focused smoke pass; keep or revert the label clamp independently. No server behavior, packet opcode, DB schema, item definition, NPC definition, cache asset, client-version, or normal loot-drop mechanics changed.
+
+### 2026-06-06 — Android settings persistence smoke
+
+Verified Android settings/wrench behavior against the shared settings packet and SQLite persistence path without changing player-facing settings mechanics. The shared client now emits `ANDROID_SMOKE_SETTINGS` markers behind an app-private flag and exposes smoke-only key actions that open the wrench/Game tab, keep the classic options panel open by parking the mouse inside it, and toggle camera auto / one-button mouse through the existing game-setting packet. The Android smoke helper gained a focused authenticated `--only-auth-settings` pass that snapshots/restores the auth player's settings, forces a known baseline, captures open/changed/reloaded screenshots, asserts `cameraauto/onemouse/soundoff` after logout, relogs, and verifies the changed values reload into the visible panel.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android settings state logs and smoke-only open/toggle helpers that exercise existing packet `111`.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — smoke-gated key handling for settings open/toggle actions.
+- `scripts/android-smoke.sh` — focused `--only-auth-settings` mode, settings DB snapshot/baseline/restore, rendered-frame waits, client-coordinate logout tap, screenshots `99`-`101`, and full-suite inclusion.
+- `docs/subsystems/android-client.md` / `memory/android_emulation.md` — documented the proof and checklist status.
+
+Reversibility: remove the settings smoke flag/logger/key hooks and focused smoke pass. No server behavior, packet opcode, DB schema, cache asset, or normal desktop/client settings UI behavior changed.
+
+### 2026-06-06 — Android world-map smoke and PNG decoding
+
+Fixed and verified Android world-map behavior without changing player-facing map mechanics. The shared world-map panel now falls back to Android's `ClientPort` PNG decoder when desktop `ImageIO` is unavailable, so packaged `worldmap/plane-0.png` and icon PNGs render on Android. The Android smoke helper gained a focused authenticated `--only-auth-world-map` pass that opens the map, proves zoom/pan/search/Back-close through app-private shared-client logs, clears the first-login `tutorial_appearance` cache key for DB-backed auth fixtures, and waits for rendered map frames before screenshots. Verified with `voidscape_atd35` for log assertions and `voidscape_api35` for readable visual screenshots, including Varrock search results.
+
+Files touched:
+- `Client_Base/src/orsc/graphics/gui/WorldMapPanel.java` — Android PNG decode fallback, layout/debug accessors, pan/search helpers, and reusable layout preparation for smoke assertions.
+- `Client_Base/src/orsc/mudclient.java` — flag-gated `ANDROID_SMOKE_WORLD_MAP` state logs, smoke-only key controls, keyboard focus handling, and Android Back-close support for the map.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — Android world-map touch capture plus smoke-gated key handling for open/zoom/pan/search.
+- `scripts/android-smoke.sh` — focused world-map mode, auth fixture cleanup, rendered-frame waits, screenshots `94`-`98`, and full-suite inclusion.
+- `docs/subsystems/android-client.md` / `memory/android_emulation.md` — documented the proof and checklist status.
+
+Reversibility: remove the world-map smoke flag/logger/key hooks, the Android touch capture, and the `ClientPort` PNG fallback. No server behavior, packet opcode, DB schema, cache asset, or normal desktop world-map behavior changed.
+
+### 2026-06-06 — Android magic/prayer panel tap smoke
+
+Fixed and verified Android touch behavior for the shared magic/prayer side panel. Android now records short tap releases before the shared component stack can consume `mouseButtonClick`, and the magic/prayer panel consumes that recorded tap only when it falls inside the panel bounds. The smoke helper gained a focused authenticated `--only-auth-magic-prayer` pass that snapshots/restores the auth player's stats, selects Home teleport, verifies the self-cast context-menu action, switches to Prayers, toggles Thick Skin on/off, and restores the account. The smoke warns, rather than fails, if Home teleport's saved position does not move because the Android checklist target is panel selection/cast UI; the server-side self-cast teleport effect remains a separate protocol/mechanics follow-up.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — records Android short-tap releases for shared-client panels that need post-component click handling.
+- `Client_Base/src/orsc/mudclient.java` — consumes recorded Android taps in the magic/prayer panel, emits flag-gated `ANDROID_SMOKE_MAGIC_PRAYER_*` logs, and logs self-cast/prayer actions for smoke assertions.
+- `scripts/android-smoke.sh` — focused `--only-auth-magic-prayer` mode, stat snapshot/restore, spell/prayer row retries, self-cast context-menu proof, prayer toggle assertions, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the proof, focused rerun mode, and checklist status.
+
+Reversibility: remove the Android tap recorder/consumer, magic-prayer smoke flag/logger, and focused smoke pass. No server behavior, spell/prayer definitions, packet opcode, DB schema, client cache, or player-facing panel art changed.
+
+### 2026-06-06 — Android worn-item interaction smoke
+
+Verified Android wearable item touch behavior without changing equipment gameplay. The shared client now includes flag-gated Android smoke markers for inventory target wield state and dormant equipment-tab geometry/action logging, while the Android smoke helper can run a focused authenticated pass that seeds a Wooden Shield, equips it through the real inventory tap path, verifies `equipped=true`, taps it again through Voidscape's current non-equipment-tab flow, verifies `ITEM_UNEQUIP_FROM_INVENTORY`, and restores the auth player's inventory/equipment DB rows.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android equipment smoke logging and `equipped=` detail on inventory target logs.
+- `scripts/android-smoke.sh` — focused `--only-auth-equipment` mode, wearable fixture seeding/restoration, current-config inventory wield/remove assertions, and dormant equipment-tab branch if `want_equipment_tab` is enabled later.
+- `docs/subsystems/android-client.md` — documented the equipment/worn-item proof, focused smoke command, and checklist status.
+
+Reversibility: remove the equipment smoke flag/logger, inventory `equipped=` log detail, and the equipment smoke pass. No server behavior, equipment packet opcode, DB schema, item definition, client cache, client-version, or player-facing equipment UI changed.
+
+### 2026-06-06 — Android shop interaction smoke
+
+Verified Android shop touch behavior against the shared classic shop interface without changing shop gameplay. The shared client now emits `ANDROID_SMOKE_SHOP_*` markers behind an app-private flag, and the Android smoke helper can run a focused authenticated shop pass that opens the Edgeville general store through the real NPC trade row, selects a shop slot, buys one item, sells it back, swipes over the classic non-scrollable shop grid, and restores the auth player's DB rows.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android shop smoke logging for shop geometry/state, slot selection, buy/sell packet sends, and context-menu action lists.
+- `scripts/android-smoke.sh` — focused `--only-auth-shop` mode, shop fixture seeding/restoration, trade-row selection by logged action name, buy/sell assertions, non-scroll assertion, and shop screenshot capture points.
+- `docs/subsystems/android-client.md` — documented the shop proof, focused smoke command, Google APIs visual-emulator ANR limitation, and checklist status.
+
+Reversibility: remove the shop smoke flag/logger, context-menu action-list log detail, and the shop smoke pass. No server behavior, shop packet opcode, DB schema, item definition, client cache, client-version, or player-facing shop UI changed.
+
+### 2026-06-06 — Android bank interaction smoke
+
+Verified Android bank touch behavior against the shared custom bank interface without changing bank gameplay. The shared bank interface now emits `ANDROID_SMOKE_BANK_*` markers behind an app-private flag, and the Android smoke helper can run a focused authenticated bank pass that opens the bank chest, searches and clears search, scrolls, withdraws, saves a loadout, deposits, deposit-alls, loads the saved loadout, verifies persistence after logout, and restores the auth player's DB rows.
+
+Files touched:
+- `Client_Base/src/com/openrsc/interfaces/misc/CustomBankInterface.java` — flag-gated Android bank smoke logging for open/search/scroll geometry, bank actions, loadout panel, and save confirmation modal.
+- `scripts/android-smoke.sh` — focused `--only-auth-bank` mode, bank fixture seeding/restoration, high-ID fixture rows to avoid live server item-ID cache collisions, log assertions, and bank screenshot capture points.
+- `docs/subsystems/android-client.md` — documented the bank proof, focused smoke command, ATD black-frame limitation, and checklist status.
+
+Reversibility: remove the bank smoke flag/logger and the bank smoke pass. No server behavior, bank packet opcode, DB schema, item definition, client cache, client-version, or player-facing bank UI changed.
+
+### 2026-06-06 — Android chat message send smoke
+
+Verified Android in-game chat entry and send against the shared client's normal chat packet path without changing gameplay chat behavior. The shared client now emits `ANDROID_SMOKE_CHAT_SEND` behind an app-private smoke flag after packet `216` is finished, and the Android smoke helper can run a focused authenticated pass that opens the in-game keyboard, taps the keyboard-open message entry, types a configurable message, presses Enter, and asserts the shared send log.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android chat-send smoke logging after the existing chat packet send.
+- `scripts/android-smoke.sh` — chat-send smoke flag cleanup, focused `--only-auth-chat-send` mode, keyboard/message-entry coordinate knobs, log assertion, screenshots, and bad-server screenshot numbering update.
+- `docs/subsystems/android-client.md` — documented the chat-send proof and marked the checklist items verified.
+
+Reversibility: remove the chat-send smoke flag/logger, the chat-send smoke pass, and the checklist entry. No server behavior, account schema, gameplay chat rule, or opcode contract changed.
+
+### 2026-06-06 — Android chat-tab selection smoke
+
+Verified Android taps on the classic chat tab strip against the shared client's selected message tab without changing player-facing chat UI. The shared client now emits `ANDROID_SMOKE_CHAT_TAB` behind an app-private smoke flag whenever a bottom-strip tab tap changes `messageTabSelected`, and the Android smoke helper performs an authenticated sequence through `CHAT`, `QUEST`, `PRIVATE`, and `ALL`, asserting each shared selection and capturing screenshots.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android chat-tab selection logging inside the existing bottom-tab hitbox branch.
+- `scripts/android-smoke.sh` — chat-tab smoke flag cleanup, authenticated chat-tab tap pass, focused `--only-auth-chat-tabs` rerun mode, screenshot numbering update, and environment knobs for tab coordinates/sequence.
+- `docs/subsystems/android-client.md` — documented the chat-tab proof and marked the checklist item verified.
+
+Reversibility: remove the chat-tab smoke flag/logger, the chat-tab smoke pass, and the checklist entry. No packet opcode, server behavior, account schema, or gameplay chat rule changed.
+
+### 2026-06-06 — Android zoom gesture smoke
+
+Verified Android vertical swipe-to-zoom against the shared client camera zoom state without changing player-facing zoom controls. The shared client now emits `ANDROID_SMOKE_ZOOM` behind an app-private smoke flag whenever Android-visible zoom state changes, and the Android smoke helper performs an authenticated vertical client-coordinate swipe after the in-game NPC projection is visible, asserts `C_LAST_ZOOM` or rendered camera zoom changed, and captures before/after screenshots.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android zoom state smoke logging in the existing camera/input update path.
+- `scripts/android-smoke.sh` — zoom smoke flag cleanup, authenticated zoom swipe pass, focused `--only-auth-zoom` rerun mode, screenshot numbering update, and environment knobs for swipe coordinates/duration.
+- `docs/subsystems/android-client.md` — documented the zoom proof and marked the checklist item verified.
+
+Reversibility: remove the zoom smoke flag/logger, the zoom smoke pass, and the checklist entry. No packet opcode, server behavior, account schema, or gameplay zoom rule changed.
+
+### 2026-06-06 — Android camera-rotate gesture smoke
+
+Verified Android horizontal swipe-to-rotate against the shared client camera state without changing player-facing camera controls. The shared client now emits `ANDROID_SMOKE_CAMERA_ROTATE` behind an app-private smoke flag whenever camera angle/rotation changes from Android input, and the Android smoke helper performs an authenticated horizontal client-coordinate swipe after the in-game NPC projection is visible, asserts the shared camera state changed, and captures before/after screenshots. The smoke runner also cold-boots emulators without snapshots, fails authenticated passes immediately on login failure, and supports the lighter `voidscape_atd35` AOSP ATD automation AVD after the Google APIs image proved prone to System UI/Google-service ANRs in long headless runs.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android camera rotate smoke logging around the existing camera update branch.
+- `scripts/android-smoke.sh` — camera smoke flag cleanup, client-coordinate swipe helper, authenticated camera rotate pass, login fail-fast handling, cold-boot emulator startup, screenshot numbering update, and environment knobs for swipe coordinates/duration.
+- `docs/subsystems/android-client.md` — documented the camera rotate proof, the ATD automation AVD, and marked the checklist item verified.
+
+Reversibility: remove the camera smoke flag/logger, the camera rotate smoke pass, and the checklist entry. No packet opcode, server behavior, account schema, or gameplay camera rule changed.
+
+### 2026-06-06 — Android edge context-menu selection smoke
+
+Verified Android context-menu row selection near clamped screen edges without changing gameplay behavior. The shared client now emits a generic `ANDROID_SMOKE_CONTEXT_MENU_ACTION` log for selected menu rows behind the existing app-private smoke flags, so smoke tests can assert non-NPC/object/inventory actions such as `LANDSCAPE_WALK_HERE`. The Android smoke helper now has an authenticated edge-menu pass that opens a context menu at a bottom-right client coordinate, checks the logged menu rectangle stays inside the classic framebuffer after clamping, taps the first row using the logged geometry, and asserts the expected shared action.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — flag-gated generic context-menu action logging.
+- `scripts/android-smoke.sh` — edge menu fixture variables, menu geometry parser, clamp assertion, fail-fast action assertion, and edge-menu screenshots.
+- `docs/subsystems/android-client.md` — documented the edge context-menu proof and marked the checklist item verified.
+
+Reversibility: remove the generic context-menu action smoke helper, edge-menu smoke pass, and checklist entry. No packet opcode, server behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android long-press context menu
+
+Made Android long-press reliably enter the shared client's right-click context-menu path. The touch layer now explicitly synthesizes one right-click event on long-press, de-duplicates the legacy timer and Android gesture callback, provides haptic feedback, and suppresses the release tap so players can review the `Choose option` menu before tapping a row. The shared client also logs context-menu geometry behind the existing Android smoke flags, and the smoke helper now long-presses the projected Void Herald target, screenshots the open menu, taps the first row, and asserts the selected shared action.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/InputImpl.java` — reliable long-press-to-right-click synthesis and release suppression.
+- `Client_Base/src/orsc/mudclient.java` — flag-gated Android context-menu geometry logging.
+- `scripts/android-smoke.sh` — client-coordinate long-press helper, authenticated context-menu smoke, DB timeout handling for fixture cleanup, NPC fixture positioning/fallback, fail-fast action assertions, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the context-menu smoke proof and marked the checklist item verified.
+
+Reversibility: remove the Android long-press state changes, context-menu smoke log helper, script pass, and checklist entry. No packet opcode, server behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android item-on-scenery and item-on-NPC smoke
+
+Verified Android item-on-target tapping against the shared object and NPC item-use paths without changing gameplay behavior. The smoke helper now has authenticated fixture passes that snapshot and restore the auth player's inventory, seed a harmless source item, select it from the Android inventory tab, tap the projected Void waystone and Void Herald targets, and assert the shared `OBJECT_USE_ITEM` and `NPC_USE_ITEM` actions in logcat. The passes also restore the auth player's position after temporarily placing them near the object/NPC fixtures.
+
+Files touched:
+- `scripts/android-smoke.sh` — item-on-target fixture variables, inventory selection helper, authenticated item-on-object and item-on-NPC passes, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the item-on-scenery/NPC smoke proof and marked the checklist item verified.
+
+Reversibility: remove the item-on-target variables/helper/passes and uncheck the Android checklist entry. No packet opcode, server behavior, client input behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android item-on-item smoke
+
+Verified Android item-on-item tapping against the shared client inventory selection path without changing gameplay behavior. The authenticated inventory smoke now snapshots the auth player's inventory rows, seeds a harmless two-slot fixture, taps the source item to select it, reopens the inventory tab, taps the rendered target slot, asserts the shared `ITEM_USE_ITEM` action, then waits for disconnect and restores the original inventory rows. The fixture defaults to coins plus tinderbox so it exercises the menu/packet path without triggering a crafting transformation.
+
+Files touched:
+- `scripts/android-smoke.sh` — item-on-item fixture variables, target slot seed/restore use, before/after screenshots, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the item-on-item smoke proof and marked item-on-item tapping verified.
+
+Reversibility: remove the target-slot fixture variables and item-on-item smoke steps/checklist entry. No packet opcode, server behavior, client input behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android inventory tap smoke
+
+Verified Android inventory item tapping against the shared client inventory menu/action path without changing gameplay behavior. The shared client now has a debug-only Android smoke hook, gated by an app-private `android-smoke-inventory-targets.flag`, that prints visible inventory slot centers and selected shared inventory actions to logcat. The smoke helper enables that flag only during an authenticated inventory pass, snapshots the auth player's inventory rows, temporarily seeds coins into slot 0, opens the inventory tab, taps the rendered slot center, asserts `ITEM_USE`, then waits for logout/disconnect and restores the original inventory rows.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android-only app-private inventory slot target logging and inventory action logging for shared item menu paths.
+- `scripts/android-smoke.sh` — optional inventory slot/item/action environment variables, DB-backed inventory fixture snapshot/seed/restore, authenticated inventory tap pass, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the inventory smoke proof and marked inventory tapping verified.
+
+Reversibility: remove the flag-gated inventory logging helpers and the inventory smoke pass/checklist entry. No packet opcode, server behavior, client input behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android scenery tap smoke
+
+Verified Android scenery/object tapping against the shared client object menu/action path without changing gameplay behavior. The shared client now has a debug-only Android smoke hook, gated by an app-private `android-smoke-object-targets.flag`, that prints visible object screen coordinates and selected shared object actions to logcat. The smoke helper enables that flag only during an authenticated object pass, temporarily positions the auth player near a Void waystone, taps the projected object coordinate, asserts `OBJECT_COMMAND1`, then restores the player position. The auth text-entry helper also clears focused fields and clears logcat before submit so earlier negative-login smoke responses cannot poison later authenticated checks.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android-only app-private object target projection logging and object action logging for command, item-on-object, and spell-on-object paths.
+- `scripts/android-smoke.sh` — optional object id/action/player-position environment variables, deterministic auth credential entry, object tap pass, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the object smoke proof and marked scenery/object tapping verified.
+
+Reversibility: remove the flag-gated object logging helpers and the object smoke pass/checklist entry. No packet opcode, server behavior, client input behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android NPC tap smoke
+
+Verified Android NPC tapping against the shared client NPC menu/action path without changing gameplay behavior. The shared client now has a debug-only Android smoke hook, gated by an app-private `android-smoke-npc-targets.flag`, that prints visible NPC screen coordinates and the selected shared NPC action to logcat. The smoke helper enables that flag only during an authenticated NPC pass, taps the projected Void Herald coordinate, and asserts the expected `NPC_TALK_TO` action. The logging hook also covers NPC attack, item-on-NPC, and spell-on-NPC actions when the smoke is pointed at a suitable fixture.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android-only app-private smoke flag checks, visible NPC target projection logging, and NPC action logging.
+- `scripts/android-smoke.sh` — optional NPC id/action environment variables, client-coordinate tap mapping, authenticated NPC tap pass, and shifted bad-server screenshots.
+- `docs/subsystems/android-client.md` — documented the NPC smoke proof and marked NPC tapping verified.
+
+Reversibility: remove the flag-gated logging helpers and the NPC smoke pass/checklist entry. No packet opcode, server behavior, client input behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android terrain tap smoke
+
+Verified Android terrain taps against the shared RSC walk path and made the auth smoke capable of proving it. No client input behavior needed to change: Android's screen-to-client coordinate conversion already matches the renderer's letterboxing, and single taps feed the shared `LANDSCAPE_WALK_HERE` flow. The smoke helper now captures before/after terrain-tap screenshots during an authenticated session and, when `ANDROID_SMOKE_AUTH_DB` is set, waits for logout/save and asserts the player's saved `x,y` changed.
+
+Files touched:
+- `scripts/android-smoke.sh` — optional SQLite position assertion and terrain-tap screenshots in the authenticated branch.
+- `docs/subsystems/android-client.md` — documented the DB-backed movement assertion and marked terrain tap verified.
+
+Reversibility: remove the terrain-tap screenshots/DB assertion and uncheck the checklist item. No packet opcode, server behavior, account schema, or client input behavior changed.
+
+### 2026-06-06 — Android authenticated logout smoke
+
+Made Android logout return to a clean, reusable login state and added authenticated emulator coverage for it. The shared client now clears Android keyboard state, pending logout state, open game tabs, menus, and advanced/settings overlays when jumping back to login. The smoke helper can optionally log into a local server with `ANDROID_SMOKE_AUTH_USER` / `ANDROID_SMOKE_AUTH_PASS`, close the welcome dialog, open the in-game settings panel, tap logout, verify the branded login home returns, and reopen Existing User with the soft keyboard. The helper also recovers from launcher-wrapper resume flakes and avoids `pipefail` false negatives when checking Android `dumpsys` output.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android logout-to-login cleanup in `jumpToLogin()`.
+- `scripts/android-smoke.sh` — optional authenticated login/logout branch, GameActivity/wrapper recovery helper, and robust Android keyboard assertion.
+- `docs/subsystems/android-client.md` — authenticated smoke instructions and checklist updates.
+
+Reversibility: remove the Android-specific cleanup from `jumpToLogin()` and delete the authenticated smoke branch/checklist entries. No packet opcode, server behavior, account schema, or gameplay rule changed.
+
+### 2026-06-06 — Android background/resume recovery
+
+Made Android app-icon relaunch preserve an already-running game task instead of clearing it back through the updater flow. The launcher activity now exits immediately when it is opened on top of an existing task, while the game activity refreshes fullscreen, connectivity state, input focus, and rendering when it resumes or regains window focus. The smoke helper backgrounds the app from the login screen, relaunches through the launcher activity, asserts that `GameActivity` is resumed, and captures resumed keyboard/input screenshots.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/ApplicationUpdater.java` — duplicate launcher-entry guard for backgrounded tasks.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/client/android/GameActivity.java` — resume/focus refresh for fullscreen, network state, focus, and redraw.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — background/resume screenshot coverage and checklist update.
+
+Reversibility: remove the `isTaskRoot()` guard, restore `onResume()` to only hide system UI, and delete the background/resume smoke checkpoints. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android bad-server endpoint clarity
+
+Made Android's manual server and connection-failure paths clearer for bad endpoints. The native wrapper now validates manual host/port input before launching the game, sockets use explicit connect/read timeouts instead of platform defaults, the startup server-config fetch now stops on a visible loading error instead of crashing/hanging before login, and the shared login retry loop still reports a final connection failure after failed socket attempts. Android-specific copy tells players the selected server cannot be reached and to reopen the app and choose Public. The smoke helper now drives a known-bad manual endpoint and captures the resulting startup error.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/updater/CacheUpdater.java` — manual host/port validation, visible wrapper status/toast errors, and keyboard dismissal before launch.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/RSCBitmapSurfaceView.java`, `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/client/android/GameActivity.java` — visible Android loading-error/out-of-memory messages and repainting.
+- `Client_Base/src/orsc/PacketHandler.java`, `Client_Base/src/orsc/mudclient.java` — explicit socket connect/read timeouts, startup config-fetch failure handling, Android-specific timeout/connection-failure login statuses, and retry exhaustion fix.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — bad-endpoint screenshot coverage and checklist update.
+
+Reversibility: remove the manual validation/helper messages, restore the previous config-fetch exception and retry decrement behavior, and delete the bad-server smoke checkpoints. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android login error readability
+
+Made Android login status messages dismiss the soft keyboard before drawing on login/recovery panels, and added an explicit missing-username/password validation path before network login. This prevents mobile players from seeing no response when submitting an incomplete login and keeps error text visible above the fields. On the compact Android existing-user panel, field labels hide while a status is present so two-line errors do not collide with labels. The Android smoke helper now clears saved credentials at the start of the run and captures a missing-password error screenshot.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android keyboard dismissal for login status and explicit missing login-field validation.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — deterministic missing-password screenshot coverage and checklist update.
+
+Reversibility: remove the Android keyboard close from `showLoginScreenStatus()`, restore the empty-password early return, and delete the missing-password smoke checkpoint. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android login privacy simplification
+
+Removed the desktop `Hide IP` toggle from Android's shared login panel and made Android hide last-login host/IP text by default. This keeps the cramped mobile login screen focused on account entry and credential saving while preserving the desktop privacy preference unchanged. The Android smoke helper now taps the centered Save button after the toggle is removed.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android-only `Hide IP` toggle suppression, default last-login host hiding, and centered Android Save button.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — smoke coordinate/checklist/documentation update.
+
+Reversibility: allow `shouldOfferHideIpToggle()` on Android again and restore the old Save coordinate. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android saved login consistency
+
+Made Android's saved-credentials path match the visible mobile login UI. Android now shows and wires the existing `Save` login button regardless of the desktop/server `S_WANT_REMEMBER` flag, loads app-private saved credentials back into the shared login fields on the next launch, rejects empty saves, and avoids accidental clicks when the remember control is absent. The smoke helper now saves credentials, relaunches the wrapper, and captures the prefilled existing-user form.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android-aware saved-credential load/draw/click gating and safer credential parsing.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — saved-credential persistence screenshot coverage and checklist update.
+
+Reversibility: restore credential save/load gating to `S_WANT_REMEMBER` only and remove the added smoke checkpoints. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android login Back-button hardening
+
+Made Android Back behavior predictable across the native wrapper and shared login screen. The soft-keyboard Back path now only dismisses the keyboard instead of sometimes reopening it, and hardware/system Back on a login sub-screen returns to the Voidscape welcome panel before Android exits the game activity. The smoke helper now captures server-picker Back, keyboard Back, login Back, recovery handoff, and create-account handoff screenshots so regressions are visible.
+
+Files touched:
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/RSCBitmapSurfaceView.java`, `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/client/android/GameActivity.java` — Android Back routing from the IME/view/activity into the shared client.
+- `Client_Base/src/orsc/mudclient.java` — login-screen Android Back handling.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — expanded back-button/account-flow screenshot coverage.
+
+Reversibility: remove the Android Back overrides and smoke checkpoints to return to the previous platform default. No packet opcode, server behavior, or account schema changed.
+
+### 2026-06-06 — Android portal account handoff
+
+Changed Android's public login-account path to match the beta portal-first policy. On Android, the Voidscape login home now labels the old `New User` action as `Create Account` and opens the configured account portal URL when available; the existing-user recovery action is labeled `Recover account` and opens the configured recovery URL. While the production portal URL is blank, both actions keep the player inside the login screen with a clear status instead of sending them into disabled legacy registration/recovery packet flows. Desktop client registration and recovery behavior is unchanged.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java`, `Client_Base/src/orsc/multiclient/ClientPort.java` — Android-only portal handoff decisions, home-screen status copy, and platform URL-opening hook.
+- `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/client/android/GameActivity.java`, `Android_Client/Open RSC Android Client/src/main/java/com/openrsc/android/render/RSCBitmapSurfaceView.java`, `Android_Client/Open RSC Android Client/src/main/java/orsc/osConfig.java`, `PC_Client/src/orsc/osConfig.java`, `PC_Client/src/orsc/ORSCApplet.java` — platform URL launching and pre-release blank portal URL constants.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md` — account-handoff screenshot checkpoint and Android account-flow documentation.
+
+Reversibility: restore Android's `New User` click path to `loginScreenNumber = 1`, remove the `ClientPort.openUrl` hook and portal URL constants if unused, and revert the smoke/docs wording. No packet opcode, server account schema, or registration policy changed.
+
+### 2026-06-06 — Android branded shell and login QA loop
+
+Made the Android player path visually match Voidscape before the game opens and enabled the shared custom login renderer on Android. The native Android updater now uses downscaled Voidscape launcher art, a dark panel, custom gold progress/play controls, dark themed server/manual dialogs, and Voidscape launcher icon densities instead of stock black screens, gray buttons, white AlertDialogs, and legacy OpenRSC icon art. The shared login background now falls back through `ClientPort` decoding on Android, and Android login/register panels use compact coordinates so the soft keyboard no longer covers the username/password fields. Added a repeatable `scripts/android-smoke.sh` helper to build/install the APK, launch `voidscape_api35` headlessly when needed, and capture wrapper/login screenshots.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — Android custom login enablement, platform PNG decode fallback, and compact Android login/register layout.
+- `Android_Client/Open RSC Android Client/src/main/res/*`, `ApplicationUpdater.java`, `CacheUpdater.java` — branded native wrapper layouts, assets, drawables, progress/button/dialog styling, and dark manual server fields.
+- `scripts/android-smoke.sh`, `docs/subsystems/android-client.md`, `docs/DEVELOPMENT.md` — repeatable Android emulator screenshot workflow and checklist updates.
+
+Reversibility: restore `useVoidscapeLogin()` to desktop-only, remove the Android-specific login coordinates and ClientPort PNG fallback, restore the old updater layouts/dialogs, and delete the smoke helper. No packet opcode, server behavior, account schema, or gameplay formula changed.
+
 ### 2026-06-06 — Android beta launch hardening
 
 Made the Android client buildable again after shared chat flag rendering picked up desktop-only AWT/ImageIO imports, and changed the Android cache launcher from developer-first server selection to a one-tap public Voidscape play path. Shared flag rendering now decodes PNG flag assets through the existing platform `ClientPort` hook and falls back to a tiny raw-pixel country-code badge when an asset is missing, keeping `Client_Base` Android-safe. Once cache setup completes, Android shows `Ready to play` and a single `Play` button targeting `5.161.114.251:43596`; long-pressing Play keeps public/emulator/LAN/manual server options available for testers.
@@ -2847,3 +3156,12 @@ Details:
 - `HEAD` smoke checks work for the manifest and jar download endpoints, making deploy verification simple behind HTTPS/proxies.
 - Updated launcher, portal, cache, and operations docs with the portal-hosted and static-beta update flows.
 - No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client-version, or live combat behavior changed.
+
+### 2026-06-07 - Focused Android auth smoke
+
+Added a narrow Android login verifier so emulator auth failures can be diagnosed before running the full authenticated UI suite.
+
+Details:
+- `scripts/android-smoke.sh --only-auth-login` defaults to the local `AndroidMap/androidmap1` fixture and `server/inc/sqlite/voidscape.db`, verifies the SQLite password hash, checks that the launcher selected `10.0.2.2:43596`, submits credentials through Android input, waits for the successful login response, checks immediate Android runtime crash logs, and force-stops cleanly.
+- The Android emulator docs now point auth debugging at this focused path before bank/shop/world-map or other deep in-game smoke modes.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay behavior changed.

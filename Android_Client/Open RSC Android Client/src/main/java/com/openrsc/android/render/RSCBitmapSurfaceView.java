@@ -100,17 +100,20 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public boolean onKeyPreIme(int keyCode, @NonNull KeyEvent event) { // @NonNull?
+		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && osConfig.F_SHOWING_KEYBOARD) {
+			if (event.getAction() == KeyEvent.ACTION_DOWN) {
+				gameActivity.closeKeyboard();
+			}
+			return true;
+		}
 		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) { // ACTION_DOWN
 			post(new Runnable() {
 				@Override
 				public void run() {
-					if (osConfig.F_SHOWING_KEYBOARD) {
-						gameActivity.closeKeyboard();
-					} else {
-						gameActivity.drawKeyboard();
-					}
+					gameActivity.onBackPressed();
 				}
 			});
+			return true;
 		}
 		return super.onKeyPreIme(keyCode, event);
 	}
@@ -221,12 +224,23 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public void drawLoadingError() {
+		drawLoadingScreen("Can't reach selected server", 0);
+		int x = (this.client_width - 281) / 2;
+		int y = (this.client_height - 148) / 2;
+		x += 2;
+		y += 90;
 
+		Canvas canvas = new Canvas(currentFrame);
+		Paint paint = new Paint();
+		paint.setColor(Color.rgb(198, 198, 198));
+		paint.setTextSize(15);
+		paint.setTextAlign(Align.CENTER);
+		canvas.drawText("Open app again and choose Public.", x + 138, y + 62, paint);
 	}
 
 	@Override
 	public void drawOutOfMemoryError() {
-
+		drawLoadingScreen("Out of memory", 0);
 	}
 
 	@Override
@@ -424,6 +438,11 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	}
 
 	public void closeKeyboard() {
+	}
+
+	@Override
+	public boolean openUrl(String url) {
+		return gameActivity.openUrl(url);
 	}
 
 	public boolean saveCredentials(String creds) {

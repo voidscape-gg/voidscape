@@ -9,6 +9,7 @@ import orsc.graphics.gui.InputXPrompt;
 import orsc.mudclient;
 import orsc.util.BankUtil;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -16,6 +17,8 @@ import static orsc.Config.*;
 import static orsc.osConfig.C_MENU_SIZE;
 
 public final class CustomBankInterface extends BankInterface {
+	private static final String ANDROID_SMOKE_BANK_FLAG = "android-smoke-bank.flag";
+	private static final long ANDROID_SMOKE_BANK_STATE_LOG_INTERVAL_MS = 1000L;
 	private static int fontSize = Config.isAndroid() ? C_MENU_SIZE : 1;
 	private static int fontSizeHeight;
 	private static final int BANK_COLUMNS = 10;
@@ -56,6 +59,9 @@ public final class CustomBankInterface extends BankInterface {
 	private int loadoutActionSlot = -1;
 	private int x, y;
 	private long totalWealth;
+	private long lastAndroidSmokeBankStateLogMillis = 0L;
+	private int lastAndroidSmokeBankScroll = Integer.MIN_VALUE;
+	private String lastAndroidSmokeBankSearch = null;
 
 	public CustomBankInterface(mudclient mc) {
 		super(mc);
@@ -67,6 +73,139 @@ public final class CustomBankInterface extends BankInterface {
 			bankScroll = bank.addScrollingList(x + 4, y + 21, width - 5, 172, 500, 7, true);
 			bankSearch = bank.addLeftTextEntry(x + 375 + 6, y + 44, 110, 18, 0, 15, false, true);
 		}
+	}
+
+	private boolean isAndroidSmokeBankLoggingEnabled() {
+		return Config.isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_BANK_FLAG).isFile();
+	}
+
+	private String androidSmokeLogToken(final String value) {
+		if (value == null) return "null";
+
+		final StringBuilder token = new StringBuilder(value.length());
+		for (int i = 0; i < value.length(); i++) {
+			final char ch = value.charAt(i);
+			if ((ch >= 'A' && ch <= 'Z')
+				|| (ch >= 'a' && ch <= 'z')
+				|| (ch >= '0' && ch <= '9')
+				|| ch == '_'
+				|| ch == '-'
+				|| ch == '.') {
+				token.append(ch);
+			} else {
+				token.append('_');
+			}
+		}
+		return token.toString();
+	}
+
+	private int countInventoryItems() {
+		int count = 0;
+		for (int slot = 0; slot < mc.getInventoryItemCount(); slot++) {
+			if (mc.getInventoryItemID(slot) != -1) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private void logAndroidSmokeBankState(final String rawSearchItem, final int matches, final int visibleBankSlotStart) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		final int scroll = bank.getScrollPosition(bankScroll);
+		if (scroll != lastAndroidSmokeBankScroll) {
+			System.out.println("ANDROID_SMOKE_BANK_SCROLL"
+				+ " before=" + lastAndroidSmokeBankScroll
+				+ " after=" + scroll
+				+ " bankPage=" + mc.bankPage
+				+ " visibleBankSlotStart=" + visibleBankSlotStart);
+			lastAndroidSmokeBankScroll = scroll;
+		}
+
+		final String search = rawSearchItem == null ? "" : rawSearchItem;
+		if (lastAndroidSmokeBankSearch == null || !lastAndroidSmokeBankSearch.equals(search)) {
+			System.out.println("ANDROID_SMOKE_BANK_SEARCH"
+				+ " query=" + androidSmokeLogToken(search)
+				+ " length=" + search.length()
+				+ " matches=" + matches
+				+ " bankPage=" + mc.bankPage);
+			lastAndroidSmokeBankSearch = search;
+		}
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeBankStateLogMillis < ANDROID_SMOKE_BANK_STATE_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeBankStateLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_BANK_OPEN"
+			+ " bankItems=" + bankItems.size()
+			+ " max=" + mc.bankItemsMax
+			+ " inventoryItems=" + countInventoryItems()
+			+ " bankPage=" + mc.bankPage
+			+ " scroll=" + scroll
+			+ " search=" + androidSmokeLogToken(search)
+			+ " matches=" + matches
+			+ " visibleBankSlotStart=" + visibleBankSlotStart
+			+ " bankSlotX=" + (x + 6 + BANK_SLOT_WIDTH / 2)
+			+ " bankSlotY=" + (y + 57 + BANK_SLOT_HEIGHT / 2)
+			+ " inventorySlotX=" + (x + 6 + BANK_SLOT_WIDTH / 2)
+			+ " inventorySlotY=" + (y + 224 + BANK_SLOT_HEIGHT / 2)
+			+ " searchX=" + (searchFieldX() + searchFieldWidth() / 2)
+			+ " searchY=" + (searchFieldY() + searchFieldHeight() / 2)
+			+ " searchClearX=" + (searchClearX() + 6)
+			+ " searchClearY=" + (searchFieldY() + searchFieldHeight() / 2)
+			+ " depositAllX=" + (x + 72 + 105 / 2)
+			+ " depositAllY=" + (y + 203 + 18 / 2)
+			+ " loadoutsX=" + (loadoutButtonX() + loadoutButtonWidth() / 2)
+			+ " loadoutsY=" + (loadoutButtonY() + loadoutButtonHeight() / 2)
+			+ " loadoutSave0X=" + (x + 337)
+			+ " loadoutSave0Y=" + (y + 99)
+			+ " loadoutLoad0X=" + (x + 289)
+			+ " loadoutLoad0Y=" + (y + 99)
+			+ " confirmSaveX=203"
+			+ " confirmSaveY=271"
+			+ " mouseX=" + mc.getMouseX()
+			+ " mouseY=" + mc.getMouseY());
+	}
+
+	private void logAndroidSmokeBankAction(final String action, final int catalogID, final int amount, final int slot) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_BANK_ACTION"
+			+ " action=" + action
+			+ " catalogID=" + catalogID
+			+ " amount=" + amount
+			+ " slot=" + slot
+			+ " bankItems=" + bankItems.size()
+			+ " inventoryItems=" + countInventoryItems()
+			+ " scroll=" + bank.getScrollPosition(bankScroll)
+			+ " bankPage=" + mc.bankPage
+			+ " mouseX=" + mc.getMouseX()
+			+ " mouseY=" + mc.getMouseY());
+	}
+
+	private void logAndroidSmokeBankLoadoutsPanel(final int panelX, final int panelY) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_BANK_LOADOUT_PANEL"
+			+ " panelX=" + panelX
+			+ " panelY=" + panelY
+			+ " save0X=" + (x + 337)
+			+ " save0Y=" + (y + 99)
+			+ " load0X=" + (x + 289)
+			+ " load0Y=" + (y + 99));
+	}
+
+	private void logAndroidSmokeBankSaveConfirm(final int slot, final int saveX, final int saveY) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_BANK_MODAL"
+			+ " type=SAVE_CONFIRM"
+			+ " slot=" + slot
+			+ " saveX=" + saveX
+			+ " saveY=" + saveY);
 	}
 
 	@Override
@@ -237,6 +376,8 @@ public final class CustomBankInterface extends BankInterface {
 		if (!searchItem.isEmpty()) {
 			bankHeaderText = searchList.size() + " found - slots " + bankItems.size() + "/" + mc.bankItemsMax;
 		}
+		int visibleBankSlotStart = bankSlotStart;
+		logAndroidSmokeBankState(rawSearchItem, searchList.size(), visibleBankSlotStart);
 
 		int boxColour = 0xd0d0d0;
 		int gridY = y + 57;
@@ -577,6 +718,7 @@ public final class CustomBankInterface extends BankInterface {
 		int panelH = 166;
 		int panelX = x + (width - panelW) / 2;
 		int panelY = y + 53;
+		logAndroidSmokeBankLoadoutsPanel(panelX, panelY);
 
 		mc.getSurface().drawBoxAlpha(panelX, panelY, panelW, panelH, 0x202020, 235);
 		mc.getSurface().drawBoxBorder(panelX, panelW, panelY, panelH, 0x000000);
@@ -835,6 +977,7 @@ public final class CustomBankInterface extends BankInterface {
 			if (selectedInventorySlot < 0 || selectedInventorySlot >= mc.getInventoryItemCount()) {
 				return;
 			}
+			int originalSlot = selectedInventorySlot;
 			int itemID = mc.getInventoryItemID(selectedInventorySlot);
 			if (itemID < 0) {
 				return;
@@ -851,6 +994,7 @@ public final class CustomBankInterface extends BankInterface {
 			mc.packetHandler.getClientStream().bufferBits.putShort(itemID);
 			mc.packetHandler.getClientStream().bufferBits.putInt(i);
 			mc.packetHandler.getClientStream().finishPacket();
+			logAndroidSmokeBankAction("DEPOSIT", itemID, i, originalSlot);
 			rightClickMenu = false;
 			mc.setMouseClick(0);
 			mc.setMouseButtonDown(0);
@@ -871,6 +1015,7 @@ public final class CustomBankInterface extends BankInterface {
 	private void sendDepositAllInventory() {
 		mc.packetHandler.getClientStream().newPacket(24);
 		mc.packetHandler.getClientStream().finishPacket();
+		logAndroidSmokeBankAction("DEPOSIT_ALL", -1, Integer.MAX_VALUE, -1);
 		rightClickMenu = false;
 		mc.setMouseClick(0);
 		mc.setMouseButtonDown(0);
@@ -882,10 +1027,12 @@ public final class CustomBankInterface extends BankInterface {
 			if (selectedBankSlot < 0 || selectedBankSlot >= bankItems.size()) {
 				return;
 			}
+			int originalSlot = selectedBankSlot;
 			BankItem selectedItem = bankItems.get(selectedBankSlot);
 			if (selectedItem == null || selectedItem.getItem() == null || selectedItem.getItem().getCatalogID() < 0) {
 				return;
 			}
+			int catalogID = selectedItem.getItem().getCatalogID();
 			if (i > selectedItem.getItem().getAmount()) {
 				i = selectedItem.getItem().getAmount();
 			}
@@ -893,13 +1040,14 @@ public final class CustomBankInterface extends BankInterface {
 				return;
 			}
 			mc.packetHandler.getClientStream().newPacket(22);
-			mc.packetHandler.getClientStream().bufferBits.putShort(selectedItem.getItem().getCatalogID());
+			mc.packetHandler.getClientStream().bufferBits.putShort(catalogID);
 			mc.packetHandler.getClientStream().bufferBits.putInt(i);
 
 			if (Config.S_WANT_BANK_NOTES)
 				mc.packetHandler.getClientStream().bufferBits.putByte(swapNoteMode ? 1 : 0);
 
 			mc.packetHandler.getClientStream().finishPacket();
+			logAndroidSmokeBankAction("WITHDRAW", catalogID, i, originalSlot);
 			rightClickMenu = false;
 			selectedBankSlot = -1;
 			mc.setMouseClick(0);
@@ -1009,6 +1157,7 @@ public final class CustomBankInterface extends BankInterface {
 		int btnY = gridY + 5 * 34 + 12;
 		int saveX = modalX + modalW / 2 - btnW - 8;
 		int cancelX = modalX + modalW / 2 + 8;
+		logAndroidSmokeBankSaveConfirm(slot, saveX + btnW / 2, btnY + btnH / 2);
 
 		if (buttonClicked(saveX, btnY, btnW, btnH)) {
 			saveSetup(slot);
@@ -1102,6 +1251,7 @@ public final class CustomBankInterface extends BankInterface {
 		mc.packetHandler.getClientStream().newPacket(27);
 		mc.packetHandler.getClientStream().bufferBits.putShort(slot);
 		mc.packetHandler.getClientStream().finishPacket();
+		logAndroidSmokeBankAction("SAVE_PRESET", -1, 0, slot);
 	}
 
 	private void clearPreset(int slot) {
@@ -1134,6 +1284,7 @@ public final class CustomBankInterface extends BankInterface {
 		mc.packetHandler.getClientStream().newPacket(28);
 		mc.packetHandler.getClientStream().bufferBits.putShort(slot);
 		mc.packetHandler.getClientStream().finishPacket();
+		logAndroidSmokeBankAction("LOAD_PRESET", -1, 0, slot);
 	}
 
 	/**

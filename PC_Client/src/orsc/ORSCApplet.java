@@ -4,6 +4,7 @@ import com.openrsc.client.model.Sprite;
 import orsc.graphics.two.Fonts;
 import orsc.multiclient.ClientPort;
 import orsc.util.GenUtil;
+import orsc.util.Utils;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -593,6 +594,15 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	}
 
 	public void closeKeyboard() {
+	}
+
+	@Override
+	public boolean openUrl(String url) {
+		if (url == null || url.trim().length() == 0) {
+			return false;
+		}
+		Utils.openWebpage(url.trim());
+		return true;
 	}
 
 	@Override

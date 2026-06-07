@@ -6,3 +6,4 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Reference: OpenRSC upstream](reference_openrsc_upstream.md) — fork source, SHA, license
 - [Reference: project layout](reference_layout.md) — where docs / scripts / memory live
 - [Feedback: working preferences](feedback_preferences.md) — confirmed conventions for this project
+- [Android: emulation QA](android_emulation.md) — AVD roles and current headless screenshot gotchas

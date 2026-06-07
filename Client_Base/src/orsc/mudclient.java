@@ -3,6 +3,7 @@ package orsc;
 import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.entityhandling.EntityHandler.GUIPARTS;
 import com.openrsc.client.entityhandling.EntityHandler.PROJECTILE_TYPES;
+import com.openrsc.client.entityhandling.defs.GameObjectDef;
 import com.openrsc.client.entityhandling.defs.ItemDef;
 import com.openrsc.client.entityhandling.defs.NPCDef;
 import com.openrsc.client.entityhandling.defs.SpellDef;
@@ -87,6 +88,21 @@ public final class mudclient implements Runnable {
 	private static final int CINEMATIC_CAMERA_OFFSET_MAX = 640;
 	private static final int CINEMATIC_CAMERA_PATH_FRAMES = 220;
 	private static final int MAX_TELEPORT_BUBBLES = 50;
+	private static final String ANDROID_SMOKE_NPC_TARGETS_FLAG = "android-smoke-npc-targets.flag";
+	private static final String ANDROID_SMOKE_OBJECT_TARGETS_FLAG = "android-smoke-object-targets.flag";
+	private static final String ANDROID_SMOKE_INVENTORY_TARGETS_FLAG = "android-smoke-inventory-targets.flag";
+	private static final String ANDROID_SMOKE_CAMERA_FLAG = "android-smoke-camera.flag";
+	private static final String ANDROID_SMOKE_ZOOM_FLAG = "android-smoke-zoom.flag";
+	private static final String ANDROID_SMOKE_CHAT_TABS_FLAG = "android-smoke-chat-tabs.flag";
+	private static final String ANDROID_SMOKE_CHAT_SEND_FLAG = "android-smoke-chat-send.flag";
+	private static final String ANDROID_SMOKE_SHOP_FLAG = "android-smoke-shop.flag";
+	private static final String ANDROID_SMOKE_EQUIPMENT_FLAG = "android-smoke-equipment.flag";
+	private static final String ANDROID_SMOKE_MAGIC_PRAYER_FLAG = "android-smoke-magic-prayer.flag";
+	private static final String ANDROID_SMOKE_WORLD_MAP_FLAG = "android-smoke-world-map.flag";
+	private static final String ANDROID_SMOKE_SETTINGS_FLAG = "android-smoke-settings.flag";
+	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
+	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
+	private static final long ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS = 1000L;
 	public static KillAnnouncerQueue killQueue = new KillAnnouncerQueue();
 	public static int skillCount;
 	public static HashMap<String, File> soundCache = new HashMap<String, File>();
@@ -178,6 +194,8 @@ public final class mudclient implements Runnable {
 	private final int[][] voidRushWaveProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
+	private final int[] androidSmokeNpcProjection = new int[3];
+	private final int[] androidSmokeObjectProjection = new int[3];
 	private final int[] voidRushWaveMarkerProjection = new int[3];
 	private final int[] rareDropBeamBaseProjection = new int[3];
 	private final int[] rareDropBeamTopProjection = new int[3];
@@ -324,6 +342,10 @@ public final class mudclient implements Runnable {
 	public int mouseY = 0;
 	public int mouseLastProcessedX = 0;
 	public int mouseLastProcessedY = 0;
+	private int androidLastTapX = -1;
+	private int androidLastTapY = -1;
+	private long androidLastTapMillis = 0L;
+	private boolean androidLastTapConsumed = true;
 	public int screenOffsetX;
 	public int screenOffsetY;
 	public boolean shiftPressed = false;
@@ -557,6 +579,21 @@ public final class mudclient implements Runnable {
 	private int lastObjectAnimationNumberFireLightningSpell = -1;
 	private int lastObjectAnimationNumberTorch = -1;
 	private int lastObjectAnimatonNumberClaw = -1;
+	private long lastAndroidSmokeNpcTargetLogMillis = 0L;
+	private long lastAndroidSmokeObjectTargetLogMillis = 0L;
+	private long lastAndroidSmokeInventoryTargetLogMillis = 0L;
+	private long lastAndroidSmokeContextMenuLogMillis = 0L;
+	private long lastAndroidSmokeCameraLogMillis = 0L;
+	private long lastAndroidSmokeZoomLogMillis = 0L;
+	private long lastAndroidSmokeEquipmentLogMillis = 0L;
+	private long lastAndroidSmokeMagicPrayerLogMillis = 0L;
+	private long lastAndroidSmokeWorldMapLogMillis = 0L;
+	private long lastAndroidSmokeWorldMapButtonLogMillis = 0L;
+	private long lastAndroidSmokeSettingsLogMillis = 0L;
+	private long lastAndroidSmokeGroundLootLabelLogMillis = 0L;
+	private long lastAndroidSmokeGroundLootBeamLogMillis = 0L;
+	private int lastAndroidSmokeZoomLastZoom = -1;
+	private int lastAndroidSmokeZoomCameraZoom = -1;
 	private boolean loadingArea = false;
 	private int logoutTimeout = 0;
 	private int controlButtonAppearanceBottom2;
@@ -635,8 +672,8 @@ public final class mudclient implements Runnable {
 	private int loginScreenNumber = 0;
 	private int m_Xi;
 	private int lostPasswordButtonIdx;
-	private int rememberButtonIdx;
-	private int hideIpButtonIdx;
+	private int rememberButtonIdx = -1;
+	private int hideIpButtonIdx = -1;
 	private int m_Zb = 0;
 	private int localPlayerServerIndex = -1;
 	private int controlButtonAppearanceSkin1;
@@ -679,6 +716,8 @@ public final class mudclient implements Runnable {
 	private Panel panelLoginWelcome;
 	private Sprite voidscapeLoginBackground;
 	private boolean voidscapeLoginAssetLoadAttempted = false;
+	private String voidscapeLoginHomeStatus1 = "";
+	private String voidscapeLoginHomeStatus2 = "";
 	private Panel panelSetRecoveryQuestion;
 	private Panel panelRecovery;
 	private Panel panelContact;
@@ -733,6 +772,9 @@ public final class mudclient implements Runnable {
 	private int shopSelectedItemIndex = -1;
 	private int shopSelectedItemType = -2;
 	private int shopSellPriceMod = 0;
+	private long lastAndroidSmokeShopStateLogMillis = 0L;
+	private int lastAndroidSmokeShopSelectedIndex = -2;
+	private int lastAndroidSmokeShopItemCount = -1;
 	private boolean showAppearanceChange = false;
 	private boolean showSetRecoveryQuestion = false;
 	private boolean showSetContactDetails = false;
@@ -1101,6 +1143,10 @@ public final class mudclient implements Runnable {
 					}
 
 					this.startGame((byte) -92);
+					if (this.errorLoadingData) {
+						this.clientBaseThread = null;
+						return;
+					}
 					this.gameState = 2;
 				}
 
@@ -2354,10 +2400,10 @@ public final class mudclient implements Runnable {
 			this.panelLogin.addCenteredText(halfGameWidth() - 46, halfGameHeight() + 128 + yOffsetLogin, "Password:", 4, false);
 			this.controlLoginPass = this.panelLogin.addCenteredTextEntry(halfGameWidth() - 46, halfGameHeight() + 146 + yOffsetLogin, 200, 20, 40, 4, true, false);
 
-			if (Remember()) {
+			if (shouldOfferCredentialSave()) {
 				String cred = ClientPort.loadCredentials();
 				if (cred.length() > 0) {
-					String[] split = cred.split(",");
+					String[] split = cred.split(",", 2);
 					if (split.length == 2) {
 						String user = split[0];
 						String pass = split[1];
@@ -2391,14 +2437,14 @@ public final class mudclient implements Runnable {
 				offRememb = 154;
 			}*/
 
-			if (S_WANT_HIDE_IP) {
+			if (shouldOfferHideIpToggle()) {
 				this.settingsHideIP = ClientPort.loadHideIp();
 				String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
 				this.panelLogin.addButtonBackground(halfGameWidth() + 24, halfGameHeight() + 91 + yOffsetLogin, 60, 40);
 				this.panelLogin.addCenteredText(halfGameWidth() + 24, halfGameHeight() + 91 + yOffsetLogin, text, 3, false);
 				this.hideIpButtonIdx = this.panelLogin.addButton(halfGameWidth() + 24, halfGameHeight() + 91 + yOffsetLogin, 60, 40);
 			}
-			if (Remember()) {
+			if (shouldOfferCredentialSave()) {
 				this.panelLogin.addButtonBackground(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, 60, 40);
 				this.panelLogin.addCenteredText(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, "Save", 3, false);
 				this.rememberButtonIdx = this.panelLogin.addButton(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, 60, 40);
@@ -2477,15 +2523,15 @@ public final class mudclient implements Runnable {
 		this.loginButtonExistingUser = this.panelLoginWelcome.addButton(cx, 223, 176, 34);
 
 		this.panelLogin = new Panel(this.getSurface(), 50);
-		this.controlLoginStatus1 = this.panelLogin.addCenteredText(cx, 125, "", 1, true);
-		this.controlLoginStatus2 = this.panelLogin.addCenteredText(cx, 139, "", 0, true);
-		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, 170, 210, 320, 22, 1, false, true);
-		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, 212, 210, 20, 22, 1, true, true);
+		this.controlLoginStatus1 = this.panelLogin.addCenteredText(cx, voidscapeExistingStatus1Y(), "", 1, true);
+		this.controlLoginStatus2 = this.panelLogin.addCenteredText(cx, voidscapeExistingStatus2Y(), "", 0, true);
+		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingUserY(), 210, 320, 22, 1, false, true);
+		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingPassY(), 210, 20, 22, 1, true, true);
 
-		if (Remember()) {
+		if (shouldOfferCredentialSave()) {
 			String cred = ClientPort.loadCredentials();
 			if (cred.length() > 0) {
-				String[] split = cred.split(",");
+				String[] split = cred.split(",", 2);
 				if (split.length == 2) {
 					this.panelLogin.setText(this.controlLoginUser, split[0]);
 					this.panelLogin.setText(this.controlLoginPass, split[1]);
@@ -2493,38 +2539,125 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		this.m_be = this.panelLogin.addButton(cx - 46, 272, 84, 28);
-		this.m_Xi = this.panelLogin.addButton(cx + 46, 272, 84, 28);
-		this.lostPasswordButtonIdx = this.panelLogin.addButton(cx, 305, 176, 25);
+		this.m_be = this.panelLogin.addButton(cx - 46, voidscapeExistingActionY(), 84, 28);
+		this.m_Xi = this.panelLogin.addButton(cx + 46, voidscapeExistingActionY(), 84, 28);
+		this.lostPasswordButtonIdx = this.panelLogin.addButton(cx, voidscapeExistingForgotY(), 176, 25);
 		this.panelLogin.setFocus(this.controlLoginUser);
 
-		if (S_WANT_HIDE_IP) {
+		if (shouldOfferHideIpToggle()) {
 			this.settingsHideIP = ClientPort.loadHideIp();
-			this.hideIpButtonIdx = this.panelLogin.addButton(cx + 54, 243, 96, 24);
+			this.hideIpButtonIdx = this.panelLogin.addButton(cx + 54, voidscapeExistingToggleY(), 96, 24);
 		}
-		if (Remember()) {
-			this.rememberButtonIdx = this.panelLogin.addButton(cx - 54, 243, 96, 24);
+		if (shouldOfferCredentialSave()) {
+			this.rememberButtonIdx = this.panelLogin.addButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24);
 		}
 
 		this.menuNewUser = new Panel(getSurface(), 50);
-		this.menuNewUserUsername = this.menuNewUser.addCenteredTextEntry(cx, 153, 214, 12, 22, 1, false, true);
+		this.menuNewUserUsername = this.menuNewUser.addCenteredTextEntry(cx, voidscapeNewUserY(), 214, 12, 22, 1, false, true);
 		if (!wantEmail()) {
-			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, 215, 120, 20, 22, 1, true, true);
-			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, 215, 120, 20, 22, 1, true, true);
+			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, voidscapeNewPasswordY(), 120, 20, 22, 1, true, true);
+			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, voidscapeNewPasswordY(), 120, 20, 22, 1, true, true);
 			this.menuNewUserEmail = this.menuNewUser.addButton(-1000, -1000, 1, 1);
-			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, 268, "To create an account please enter", 1, true);
-			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, 282, "all the requested details", 1, true);
-			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, 307, 86, 28);
-			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, 307, 86, 28);
+			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, voidscapeNewStatus1Y(), "To create an account please enter", 1, true);
+			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, voidscapeNewStatus2Y(), "all the requested details", 1, true);
+			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, voidscapeNewActionY(), 86, 28);
+			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, voidscapeNewActionY(), 86, 28);
 		} else {
-			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, 205, 120, 20, 22, 1, true, true);
-			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, 205, 120, 20, 22, 1, true, true);
-			this.menuNewUserEmail = this.menuNewUser.addCenteredTextEntry(cx, 251, 214, 40, 22, 1, false, true);
-			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, 281, "To create an account please enter", 1, true);
-			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, 294, "all the requested details", 1, true);
-			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, 316, 86, 28);
-			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, 316, 86, 28);
+			this.menuNewUserPassword = this.menuNewUser.addCenteredTextEntry(cx - 63, voidscapeNewPasswordY(), 120, 20, 22, 1, true, true);
+			this.menuNewUserConfirmPassword = this.menuNewUser.addCenteredTextEntry(cx + 63, voidscapeNewPasswordY(), 120, 20, 22, 1, true, true);
+			this.menuNewUserEmail = this.menuNewUser.addCenteredTextEntry(cx, voidscapeNewEmailY(), 214, 40, 22, 1, false, true);
+			this.menuNewUserStatus = this.menuNewUser.addCenteredText(cx - 40, voidscapeNewStatus1Y(), "To create an account please enter", 1, true);
+			this.menuNewUserStatus2 = this.menuNewUser.addCenteredText(cx - 40, voidscapeNewStatus2Y(), "all the requested details", 1, true);
+			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, voidscapeNewActionY(), 86, 28);
+			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, voidscapeNewActionY(), 86, 28);
 		}
+	}
+
+	private int voidscapeExistingFrameY() {
+		return isAndroid() ? 9 : 93;
+	}
+
+	private int voidscapeExistingFrameHeight() {
+		return isAndroid() ? 194 : 232;
+	}
+
+	private int voidscapeExistingTitleY() {
+		return isAndroid() ? 27 : 112;
+	}
+
+	private int voidscapeExistingStatus1Y() {
+		return isAndroid() ? 42 : 125;
+	}
+
+	private int voidscapeExistingStatus2Y() {
+		return isAndroid() ? 54 : 139;
+	}
+
+	private int voidscapeExistingUserY() {
+		return isAndroid() ? 75 : 170;
+	}
+
+	private int voidscapeExistingPassY() {
+		return isAndroid() ? 111 : 212;
+	}
+
+	private int voidscapeExistingToggleY() {
+		return isAndroid() ? 145 : 243;
+	}
+
+	private int voidscapeExistingActionY() {
+		return isAndroid() ? 173 : 272;
+	}
+
+	private int voidscapeExistingForgotY() {
+		return isAndroid() ? 203 : 305;
+	}
+
+	private int voidscapeNewFrameY() {
+		if (!isAndroid()) return wantEmail() ? 66 : 78;
+		return wantEmail() ? 2 : 12;
+	}
+
+	private int voidscapeNewFrameHeight() {
+		if (!isAndroid()) return wantEmail() ? 270 : 251;
+		return wantEmail() ? 210 : 194;
+	}
+
+	private int voidscapeNewTitleY() {
+		return voidscapeNewFrameY() + (isAndroid() ? 18 : 19);
+	}
+
+	private int voidscapeNewHintY() {
+		return voidscapeNewFrameY() + (isAndroid() ? 33 : 39);
+	}
+
+	private int voidscapeNewUserY() {
+		if (!isAndroid()) return 153;
+		return wantEmail() ? 52 : 61;
+	}
+
+	private int voidscapeNewPasswordY() {
+		if (!isAndroid()) return wantEmail() ? 205 : 215;
+		return wantEmail() ? 84 : 96;
+	}
+
+	private int voidscapeNewEmailY() {
+		return isAndroid() ? 116 : 251;
+	}
+
+	private int voidscapeNewStatus1Y() {
+		if (!isAndroid()) return wantEmail() ? 281 : 268;
+		return wantEmail() ? 145 : 131;
+	}
+
+	private int voidscapeNewStatus2Y() {
+		if (!isAndroid()) return wantEmail() ? 294 : 282;
+		return wantEmail() ? 157 : 143;
+	}
+
+	private int voidscapeNewActionY() {
+		if (!isAndroid()) return wantEmail() ? 316 : 307;
+		return wantEmail() ? 184 : 168;
 	}
 
 	private void createVoidscapePasswordRecoveryPanel() {
@@ -2836,6 +2969,7 @@ public final class mudclient implements Runnable {
 						if (menuWidth + this.menuX > getGameWidth() - 2) {
 							this.menuX = getGameWidth() - 2 - menuWidth;
 						}
+						logAndroidSmokeContextMenu(var3);
 					}
 				}
 
@@ -4748,6 +4882,7 @@ public final class mudclient implements Runnable {
 							if (mlx > sx && 49 + sx > mlx && mly > sy && sy + 34 > mly && this.shopCategoryID[slot] != -1) {
 								this.shopSelectedItemIndex = slot;
 								this.shopSelectedItemType = this.shopCategoryID[slot];
+								logAndroidSmokeShopSelect(slot);
 							}
 							++slot;
 						}
@@ -4787,6 +4922,8 @@ public final class mudclient implements Runnable {
 								this.packetHandler.getClientStream().bufferBits.putShort(count);
 								this.packetHandler.getClientStream().bufferBits.putShort(btnCount);
 								this.packetHandler.getClientStream().finishPacket();
+								logAndroidSmokeShopAction("BUY", this.shopCategoryID[this.shopSelectedItemIndex],
+									btnCount, count, this.shopSelectedItemIndex);
 							}
 						}
 
@@ -4820,6 +4957,8 @@ public final class mudclient implements Runnable {
 								this.packetHandler.getClientStream().bufferBits.putShort(count);
 								this.packetHandler.getClientStream().bufferBits.putShort(btnCount);
 								this.packetHandler.getClientStream().finishPacket();
+								logAndroidSmokeShopAction("SELL", this.shopCategoryID[this.shopSelectedItemIndex],
+									btnCount, count, this.shopSelectedItemIndex);
 							}
 						}
 					}
@@ -5007,6 +5146,7 @@ public final class mudclient implements Runnable {
 				this.getSurface().drawColoredStringCentered(204 + xr, "Select an object to buy or sell", 0xFFFF00, 0, 3,
 					214 + yr);
 			}
+			logAndroidSmokeShopState(xr, yr);
 
 		} catch (RuntimeException var14) {
 			throw GenUtil.makeThrowable(var14, "client.HA(" + "dummy" + ')');
@@ -5516,7 +5656,7 @@ public final class mudclient implements Runnable {
 					this.welcomeLastLoggedInHost = getHostnameFromIP();
 				}
 
-				if (this.settingsHideIP != null && this.settingsHideIP != 1) {
+				if (shouldShowLastLoginHost()) {
 					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "from: " + this.welcomeLastLoggedInHost, 0xFFFFFF,
 						var1 ^ -4853, 1, var3);
 				}
@@ -6207,11 +6347,13 @@ public final class mudclient implements Runnable {
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
 						centerZ = this.cameraPositionZ + this.cameraAutoMoveZ;
 
-						this.setGameCamera(centerX, centerZ, -180, this.cameraZoom * 2);
-					}
+							this.setGameCamera(centerX, centerZ, -180, this.cameraZoom * 2);
+						}
 
-					this.scene.endScene(-113);
-					drawGameLookSceneOverlay();
+						logAndroidSmokeNpcTargets();
+						logAndroidSmokeObjectTargets();
+						this.scene.endScene(-113);
+						drawGameLookSceneOverlay();
 					drawVoidRushWaveProjectile();
 					if (!this.isCinematicHudHidden()) {
 						drawWorldWalkSceneRoute();
@@ -6692,6 +6834,739 @@ public final class mudclient implements Runnable {
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
 	}
 
+	private boolean isAndroidSmokeNpcTargetLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_NPC_TARGETS_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeObjectTargetLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_OBJECT_TARGETS_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeInventoryTargetLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_INVENTORY_TARGETS_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeCameraLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CAMERA_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeZoomLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_ZOOM_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeChatTabLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CHAT_TABS_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeChatSendLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CHAT_SEND_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeShopLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_SHOP_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeEquipmentLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_EQUIPMENT_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeMagicPrayerLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_MAGIC_PRAYER_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeWorldMapLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_WORLD_MAP_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeSettingsLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_SETTINGS_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeGroundLootLoggingEnabled() {
+		return isAndroid()
+			&& Config.F_CACHE_DIR != null
+			&& !Config.F_CACHE_DIR.isEmpty()
+			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_GROUND_LOOT_FLAG).isFile();
+	}
+
+	private boolean isAndroidSmokeContextMenuLoggingEnabled() {
+		return isAndroidSmokeNpcTargetLoggingEnabled()
+			|| isAndroidSmokeObjectTargetLoggingEnabled()
+			|| isAndroidSmokeInventoryTargetLoggingEnabled()
+			|| isAndroidSmokeEquipmentLoggingEnabled()
+			|| isAndroidSmokeMagicPrayerLoggingEnabled();
+	}
+
+	private String getAndroidSmokeContextMenuActions(final int itemCount) {
+		if (itemCount <= 0) return "none";
+
+		final StringBuilder actions = new StringBuilder();
+		for (int i = 0; i < itemCount; i++) {
+			if (i > 0) actions.append(',');
+			final MenuItemAction action = this.menuCommon.getItemAction(i);
+			actions.append(action == null ? "null" : action.name());
+		}
+		return actions.toString();
+	}
+
+	private void logAndroidSmokeContextMenu(final int itemCount) {
+		if (!isAndroidSmokeContextMenuLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeContextMenuLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeContextMenuLogMillis = now;
+
+		final MenuItemAction firstAction = itemCount > 0 ? this.menuCommon.getItemAction(0) : null;
+		System.out.println("ANDROID_SMOKE_CONTEXT_MENU"
+			+ " x=" + this.menuX
+			+ " y=" + this.menuY
+			+ " width=" + this.menuCommon.getWidth()
+			+ " height=" + this.menuCommon.getHeight()
+			+ " items=" + itemCount
+			+ " firstAction=" + firstAction
+			+ " actions=" + getAndroidSmokeContextMenuActions(itemCount)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeContextMenuAction(final MenuItemAction action, final int item, final int indexOrX, final int idOrZ, final int dir, final int tileID) {
+		if (!isAndroidSmokeContextMenuLoggingEnabled() || action == null) return;
+
+		System.out.println("ANDROID_SMOKE_CONTEXT_MENU_ACTION"
+			+ " action=" + action
+			+ " item=" + item
+			+ " indexOrX=" + indexOrX
+			+ " idOrZ=" + idOrZ
+			+ " dir=" + dir
+			+ " tileID=" + tileID
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeCameraRotate(
+		final int beforeRotation,
+		final int beforeAngle,
+		final boolean beforeKeyLeft,
+		final boolean beforeKeyRight
+	) {
+		if (!isAndroidSmokeCameraLoggingEnabled()) return;
+		if (beforeRotation == this.cameraRotation && beforeAngle == this.cameraAngle && !beforeKeyLeft && !beforeKeyRight) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeCameraLogMillis < 150L) return;
+		this.lastAndroidSmokeCameraLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_CAMERA_ROTATE"
+			+ " beforeRotation=" + beforeRotation
+			+ " afterRotation=" + this.cameraRotation
+			+ " beforeAngle=" + beforeAngle
+			+ " afterAngle=" + this.cameraAngle
+			+ " auto=" + this.optionCameraModeAuto
+			+ " beforeKeyLeft=" + beforeKeyLeft
+			+ " beforeKeyRight=" + beforeKeyRight
+			+ " keyLeft=" + this.keyLeft
+			+ " keyRight=" + this.keyRight
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeZoomState() {
+		if (!isAndroidSmokeZoomLoggingEnabled()) return;
+		if (this.lastAndroidSmokeZoomLastZoom == osConfig.C_LAST_ZOOM
+			&& this.lastAndroidSmokeZoomCameraZoom == this.cameraZoom) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeZoomLogMillis < 150L) return;
+		this.lastAndroidSmokeZoomLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_ZOOM"
+			+ " beforeLastZoom=" + this.lastAndroidSmokeZoomLastZoom
+			+ " afterLastZoom=" + osConfig.C_LAST_ZOOM
+			+ " beforeCameraZoom=" + this.lastAndroidSmokeZoomCameraZoom
+			+ " afterCameraZoom=" + this.cameraZoom
+			+ " keyUp=" + this.keyUp
+			+ " keyDown=" + this.keyDown
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+
+		this.lastAndroidSmokeZoomLastZoom = osConfig.C_LAST_ZOOM;
+		this.lastAndroidSmokeZoomCameraZoom = this.cameraZoom;
+	}
+
+	private void logAndroidSmokeChatTabSelection(final MessageTab beforeTab) {
+		if (!isAndroidSmokeChatTabLoggingEnabled()) return;
+		if (beforeTab == this.messageTabSelected) return;
+
+		System.out.println("ANDROID_SMOKE_CHAT_TAB"
+			+ " before=" + beforeTab
+			+ " after=" + this.messageTabSelected
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
+	}
+
+	private void logAndroidSmokeChatSend(final String message) {
+		if (!isAndroidSmokeChatSendLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_CHAT_SEND"
+			+ " message=" + androidSmokeLogToken(message)
+			+ " length=" + (message == null ? -1 : message.length())
+			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
+	}
+
+	private int countAndroidSmokeShopItems() {
+		int count = 0;
+		for (int i = 0; i < 40; i++) {
+			if (this.shopCategoryID[i] != -1) count++;
+		}
+		return count;
+	}
+
+	private void logAndroidSmokeShopState(final int xr, final int yr) {
+		if (!isAndroidSmokeShopLoggingEnabled()) return;
+
+		final int itemCount = countAndroidSmokeShopItems();
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeShopStateLogMillis < ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS
+			&& this.lastAndroidSmokeShopSelectedIndex == this.shopSelectedItemIndex
+			&& this.lastAndroidSmokeShopItemCount == itemCount) {
+			return;
+		}
+
+		this.lastAndroidSmokeShopStateLogMillis = now;
+		this.lastAndroidSmokeShopSelectedIndex = this.shopSelectedItemIndex;
+		this.lastAndroidSmokeShopItemCount = itemCount;
+
+		final int selectedId = this.shopSelectedItemIndex >= 0 ? this.shopCategoryID[this.shopSelectedItemIndex] : -1;
+		final int selectedStock = this.shopSelectedItemIndex >= 0 ? this.shopItemCount[this.shopSelectedItemIndex] : -1;
+		final boolean selectedNoted = this.shopSelectedItemIndex >= 0 && this.shopItemNoted[this.shopSelectedItemIndex];
+		final int selectedOwned = selectedId >= 0 ? this.getInventoryCount(selectedId, selectedNoted) : -1;
+		final int selectedSlotX = this.shopSelectedItemIndex >= 0
+			? xr + 7 + (this.shopSelectedItemIndex % 8) * 49 + 24
+			: -1;
+		final int selectedSlotY = this.shopSelectedItemIndex >= 0
+			? yr + 28 + (this.shopSelectedItemIndex / 8) * 34 + 17
+			: -1;
+
+		System.out.println("ANDROID_SMOKE_SHOP_OPEN"
+			+ " items=" + itemCount
+			+ " selectedSlot=" + this.shopSelectedItemIndex
+			+ " selectedId=" + selectedId
+			+ " selectedStock=" + selectedStock
+			+ " selectedOwned=" + selectedOwned
+			+ " money=" + this.getInventoryCount(10)
+			+ " shopX=" + xr
+			+ " shopY=" + yr
+			+ " slot0X=" + (xr + 31)
+			+ " slot0Y=" + (yr + 45)
+			+ " selectedSlotX=" + selectedSlotX
+			+ " selectedSlotY=" + selectedSlotY
+			+ " buy1X=" + (xr + 324)
+			+ " buy1Y=" + (yr + 210)
+			+ " sell1X=" + (xr + 324)
+			+ " sell1Y=" + (yr + 235)
+			+ " closeX=" + (xr + 364)
+			+ " closeY=" + (yr + 6)
+			+ " scrollable=0"
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeShopSelect(final int slot) {
+		if (!isAndroidSmokeShopLoggingEnabled() || slot < 0) return;
+
+		final int id = this.shopCategoryID[slot];
+		System.out.println("ANDROID_SMOKE_SHOP_SELECT"
+			+ " slot=" + slot
+			+ " id=" + id
+			+ " stock=" + this.shopItemCount[slot]
+			+ " owned=" + (id >= 0 ? this.getInventoryCount(id, this.shopItemNoted[slot]) : -1)
+			+ " money=" + this.getInventoryCount(10)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeShopAction(final String action, final int id, final int amount, final int stock, final int slot) {
+		if (!isAndroidSmokeShopLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_SHOP_ACTION"
+			+ " action=" + action
+			+ " id=" + id
+			+ " amount=" + amount
+			+ " stock=" + stock
+			+ " slot=" + slot
+			+ " money=" + this.getInventoryCount(10)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private int countAndroidSmokeEquipmentItems() {
+		int count = 0;
+		for (int i = 0; i < S_PLAYER_SLOT_COUNT; i++) {
+			if (this.equippedItems[i] != null) count++;
+		}
+		return count;
+	}
+
+	private void logAndroidSmokeEquipmentState(final int xOffset, final int yOffset) {
+		if (!isAndroidSmokeEquipmentLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeEquipmentLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeEquipmentLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_EQUIPMENT_TAB"
+			+ " tab=" + this.tabEquipmentIndex
+			+ " equipped=" + countAndroidSmokeEquipmentItems()
+			+ " equipmentTabX=" + (xOffset + 61)
+			+ " equipmentTabY=" + (yOffset + 216)
+			+ " inventoryTabX=" + (xOffset + 183)
+			+ " inventoryTabY=" + (yOffset + 216)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+
+		for (int slot = 0; slot < S_PLAYER_SLOT_COUNT; slot++) {
+			final ItemDef item = this.equippedItems[slot];
+			if (item == null) continue;
+
+			System.out.println("ANDROID_SMOKE_EQUIPMENT_SLOT"
+				+ " slot=" + slot
+				+ " id=" + item.id
+				+ " amount=" + this.equippedItemAmount[slot]
+				+ " clientX=" + (xOffset + this.equipIconXLocations[slot] + 24)
+				+ " clientY=" + (yOffset + this.equipIconYLocations[slot] + 16)
+				+ " mouseX=" + this.mouseX
+				+ " mouseY=" + this.mouseY);
+		}
+	}
+
+	private void logAndroidSmokeEquipmentAction(final String action, final int slot) {
+		if (!isAndroidSmokeEquipmentLoggingEnabled()) return;
+
+		int id = -1;
+		int amount = 0;
+		if (slot >= 0 && slot < S_PLAYER_SLOT_COUNT && this.equippedItems[slot] != null) {
+			id = this.equippedItems[slot].id;
+			amount = this.equippedItemAmount[slot];
+		}
+
+		System.out.println("ANDROID_SMOKE_EQUIPMENT_ACTION"
+			+ " action=" + action
+			+ " slot=" + slot
+			+ " id=" + id
+			+ " amount=" + amount
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private int getAndroidSmokeMagicPrayerRowCenterY(final int listY, final int rowIndex) {
+		final int rowHeight = Math.max(1, this.getSurface().fontHeight(1));
+		final int maxLines = Math.max(1, 90 / rowHeight);
+		final int heightWhitespace = 90 - rowHeight * maxLines;
+		final int lineY = rowHeight * 5 / 6 + listY + heightWhitespace / 2 + rowIndex * rowHeight;
+		return lineY - rowHeight / 2 + 2;
+	}
+
+	private void logAndroidSmokeMagicPrayerState(final int panelX, final int panelY, final int panelWidth) {
+		if (!isAndroidSmokeMagicPrayerLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeMagicPrayerLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeMagicPrayerLogMillis = now;
+
+		final int listY = panelY + 24;
+		final int row0X = panelX + 70;
+		final int row0Y = getAndroidSmokeMagicPrayerRowCenterY(listY, 0);
+		final String listName = this.magicOrPrayerList == 1 ? "prayer" : "magic";
+		final int selectedRow = this.panelMagic == null ? -1 : this.panelMagic.getControlSelectedListIndex(this.controlMagicPanel);
+		final boolean prayer0On = this.prayerOn != null && this.prayerOn.length > 0 && this.prayerOn[0];
+
+		System.out.println("ANDROID_SMOKE_MAGIC_PRAYER_TAB"
+			+ " list=" + listName
+			+ " showUiTab=" + this.showUiTab
+			+ " selectedRow=" + selectedRow
+			+ " selectedSpell=" + this.selectedSpell
+			+ " lastSelectedSpell=" + lastSelectedSpell
+			+ " prayer0On=" + prayer0On
+			+ " magicTabX=" + (panelX + panelWidth / 4)
+			+ " magicTabY=" + (panelY + 12)
+			+ " prayerTabX=" + (panelX + panelWidth * 3 / 4)
+			+ " prayerTabY=" + (panelY + 12)
+			+ " row0X=" + row0X
+			+ " row0Y=" + row0Y
+			+ " selfCastX=256"
+			+ " selfCastY=170"
+			+ " magicCurrent=" + this.playerStatCurrent[6]
+			+ " prayerCurrent=" + this.playerStatCurrent[5]
+			+ " prayerBase=" + this.playerStatBase[5]
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeMagicPrayerAction(final String action, final int index) {
+		if (!isAndroidSmokeMagicPrayerLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_MAGIC_PRAYER_ACTION"
+			+ " action=" + action
+			+ " index=" + index
+			+ " list=" + (this.magicOrPrayerList == 1 ? "prayer" : "magic")
+			+ " selectedSpell=" + this.selectedSpell
+			+ " lastSelectedSpell=" + lastSelectedSpell
+			+ " prayerOn=" + (index >= 0 && this.prayerOn != null && index < this.prayerOn.length && this.prayerOn[index])
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeWorldMapState(final String event) {
+		if (!isAndroidSmokeWorldMapLoggingEnabled()) return;
+
+		final boolean isAction = !"STATE".equals(event);
+		final long now = System.currentTimeMillis();
+		if (!isAction && now - this.lastAndroidSmokeWorldMapLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeWorldMapLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_WORLD_MAP"
+			+ " event=" + event
+			+ " visible=" + this.worldMapPanel.isVisible()
+			+ " zoom=" + this.worldMapPanel.getZoomLevel()
+			+ " panX=" + this.worldMapPanel.getPanXRounded()
+			+ " panY=" + this.worldMapPanel.getPanYRounded()
+			+ " floor=" + this.worldMapPanel.getCurrentFloor()
+			+ " searchFocused=" + this.worldMapPanel.isSearchFocused()
+			+ " search=" + androidSmokeLogToken(this.worldMapPanel.getSearchQuery())
+			+ " winX=" + this.worldMapPanel.getWindowX()
+			+ " winY=" + this.worldMapPanel.getWindowY()
+			+ " winW=" + this.worldMapPanel.getWindowW()
+			+ " winH=" + this.worldMapPanel.getWindowH()
+			+ " contentX=" + this.worldMapPanel.getContentCenterX()
+			+ " contentY=" + this.worldMapPanel.getContentCenterY()
+			+ " zoomInX=" + this.worldMapPanel.getZoomInCenterX()
+			+ " zoomInY=" + this.worldMapPanel.getZoomInCenterY()
+			+ " zoomOutX=" + this.worldMapPanel.getZoomOutCenterX()
+			+ " zoomOutY=" + this.worldMapPanel.getZoomOutCenterY()
+			+ " resetX=" + this.worldMapPanel.getResetCenterX()
+			+ " resetY=" + this.worldMapPanel.getResetCenterY()
+			+ " searchX=" + this.worldMapPanel.getSearchCenterX()
+			+ " searchY=" + this.worldMapPanel.getSearchCenterY()
+			+ " closeX=" + this.worldMapPanel.getCloseCenterX()
+			+ " closeY=" + this.worldMapPanel.getCloseCenterY()
+			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeWorldMapButton(final int x, final int y, final int width, final int height, final boolean hover) {
+		if (!isAndroidSmokeWorldMapLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeWorldMapButtonLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeWorldMapButtonLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_WORLD_MAP_BUTTON"
+			+ " buttonX=" + (x + width / 2)
+			+ " buttonY=" + (y + height / 2)
+			+ " x=" + x
+			+ " y=" + y
+			+ " width=" + width
+			+ " height=" + height
+			+ " hover=" + hover
+			+ " showUiTab=" + this.showUiTab
+			+ " customUi=" + C_CUSTOM_UI
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeSettingsState(final String event) {
+		if (!isAndroidSmokeSettingsLoggingEnabled()) return;
+
+		final boolean isAction = !"STATE".equals(event);
+		final long now = System.currentTimeMillis();
+		if (!isAction && now - this.lastAndroidSmokeSettingsLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeSettingsLogMillis = now;
+
+		final int panelX = this.getSurface().width2 - 199;
+		final int panelY = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
+		final int tabY = panelY - 25;
+		final int panelWidth = 196;
+		System.out.println("ANDROID_SMOKE_SETTINGS"
+			+ " event=" + event
+			+ " visible=" + (this.showUiTab == Config.OPTIONS_TAB)
+			+ " showUiTab=" + this.showUiTab
+			+ " settingTab=" + this.settingTab
+			+ " advanced=" + this.settingsAdvancedMode
+			+ " cameraAuto=" + this.optionCameraModeAuto
+			+ " mouseOne=" + this.optionMouseButtonOne
+			+ " soundOff=" + optionSoundDisabled
+			+ " panelX=" + panelX
+			+ " panelY=" + panelY
+			+ " socialTabX=" + (panelX + panelWidth / 6)
+			+ " gameTabX=" + (panelX + panelWidth / 2)
+			+ " androidTabX=" + (panelX + panelWidth * 5 / 6)
+			+ " tabY=" + (tabY + 12)
+			+ " logoutX=" + (panelX + 72)
+			+ " logoutY=" + getSettingsLogoutY(panelY)
+			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private String androidSmokeLogToken(final String value) {
+		if (value == null) return "null";
+
+		final StringBuilder token = new StringBuilder(value.length());
+		for (int i = 0; i < value.length(); i++) {
+			final char ch = value.charAt(i);
+			if ((ch >= 'A' && ch <= 'Z')
+				|| (ch >= 'a' && ch <= 'z')
+				|| (ch >= '0' && ch <= '9')
+				|| ch == '_'
+				|| ch == '-'
+				|| ch == '.') {
+				token.append(ch);
+			} else {
+				token.append('_');
+			}
+		}
+		return token.toString();
+	}
+
+	private void logAndroidSmokeGroundLootLabel(final GroundItem groundItem, final String itemName,
+											   final int frequency, final int labelX, final int labelY,
+											   final int displayWidth) {
+		if (!isAndroidSmokeGroundLootLoggingEnabled() || groundItem == null) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeGroundLootLabelLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeGroundLootLabelLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_GROUND_LOOT"
+			+ " event=LABEL"
+			+ " id=" + groundItem.getId()
+			+ " name=" + androidSmokeLogToken(itemName)
+			+ " frequency=" + frequency
+			+ " labelX=" + labelX
+			+ " labelY=" + labelY
+			+ " displayWidth=" + displayWidth
+			+ " itemX=" + groundItem.getX()
+			+ " itemY=" + groundItem.getY()
+			+ " itemW=" + groundItem.getWidth()
+			+ " itemH=" + groundItem.getHeight()
+			+ " showUiTab=" + this.showUiTab
+			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight()
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeGroundLootBeam(final int index, final int baseX, final int baseY,
+											  final int topX, final int topY) {
+		if (!isAndroidSmokeGroundLootLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeGroundLootBeamLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeGroundLootBeamLogMillis = now;
+
+		final boolean inRange = index >= 0 && index < this.groundItemCount;
+		System.out.println("ANDROID_SMOKE_GROUND_LOOT"
+			+ " event=BEAM"
+			+ " index=" + index
+			+ " id=" + (inRange ? this.groundItemID[index] : -1)
+			+ " tileX=" + (inRange ? this.groundItemX[index] : -1)
+			+ " tileY=" + (inRange ? this.groundItemZ[index] : -1)
+			+ " baseX=" + baseX
+			+ " baseY=" + baseY
+			+ " topX=" + topX
+			+ " topY=" + topY
+			+ " rare=" + (inRange && this.groundItemRareDropBeam[index])
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight()
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeNpcTargets() {
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeNpcTargetLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+
+		if (!isAndroidSmokeNpcTargetLoggingEnabled()) return;
+		this.lastAndroidSmokeNpcTargetLogMillis = now;
+
+		for (int i = 0; i < this.npcCount; i++) {
+			final ORSCharacter npc = this.npcs[i];
+			if (npc == null) continue;
+
+			final NPCDef def = EntityHandler.getNpcDef(npc.npcId);
+			if (def == null) continue;
+
+			final int sceneX = npc.currentX;
+			final int sceneZ = npc.currentZ;
+			final int sceneY = -this.world.getElevation(sceneX, sceneZ) - Math.max(20, def.getCamera2() / 2);
+			if (!this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.androidSmokeNpcProjection)) continue;
+
+			final int clientX = this.androidSmokeNpcProjection[0];
+			final int clientY = this.androidSmokeNpcProjection[1];
+			if (clientX < 0 || clientX >= this.getGameWidth() || clientY < 0 || clientY >= this.getGameHeight()) continue;
+
+			final int tileX = (npc.currentX - 64) / this.tileSize + this.midRegionBaseX;
+			final int tileZ = (npc.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+			System.out.println("ANDROID_SMOKE_NPC_TARGET id=" + npc.npcId
+				+ " serverIndex=" + npc.serverIndex
+				+ " clientX=" + clientX
+				+ " clientY=" + clientY
+				+ " worldX=" + tileX
+				+ " worldY=" + tileZ);
+		}
+	}
+
+	private void logAndroidSmokeNpcAction(final MenuItemAction action, final ORSCharacter npc) {
+		if (!isAndroidSmokeNpcTargetLoggingEnabled() || action == null || npc == null) return;
+
+		final int tileX = (npc.currentX - 64) / this.tileSize + this.midRegionBaseX;
+		final int tileZ = (npc.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+		System.out.println("ANDROID_SMOKE_NPC_ACTION action=" + action
+			+ " id=" + npc.npcId
+			+ " serverIndex=" + npc.serverIndex
+			+ " worldX=" + tileX
+			+ " worldY=" + tileZ);
+	}
+
+	private void logAndroidSmokeObjectTargets() {
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeObjectTargetLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+
+		if (!isAndroidSmokeObjectTargetLoggingEnabled()) return;
+		this.lastAndroidSmokeObjectTargetLogMillis = now;
+
+		for (int i = 0; i < this.gameObjectInstanceCount; i++) {
+			final int objectId = this.gameObjectInstanceID[i];
+			final GameObjectDef def = EntityHandler.getObjectDef(objectId);
+			if (def == null) continue;
+
+			final int dir = this.gameObjectInstanceDir[i];
+			final int xSize = (dir == 0 || dir == 4) ? def.getWidth() : def.getHeight();
+			final int zSize = (dir == 0 || dir == 4) ? def.getHeight() : def.getWidth();
+			final int sceneX = (2 * this.gameObjectInstanceX[i] + xSize) * this.tileSize / 2;
+			final int sceneZ = (2 * this.gameObjectInstanceZ[i] + zSize) * this.tileSize / 2;
+			final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 48;
+			if (!this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.androidSmokeObjectProjection)) continue;
+
+			final int clientX = this.androidSmokeObjectProjection[0];
+			final int clientY = this.androidSmokeObjectProjection[1];
+			if (clientX < 0 || clientX >= this.getGameWidth() || clientY < 0 || clientY >= this.getGameHeight()) continue;
+
+			final int worldX = this.gameObjectInstanceX[i] + this.midRegionBaseX;
+			final int worldY = this.gameObjectInstanceZ[i] + this.midRegionBaseZ;
+			System.out.println("ANDROID_SMOKE_OBJECT_TARGET id=" + objectId
+				+ " instance=" + i
+				+ " clientX=" + clientX
+				+ " clientY=" + clientY
+				+ " worldX=" + worldX
+				+ " worldY=" + worldY
+				+ " dir=" + dir);
+		}
+	}
+
+	private void logAndroidSmokeObjectAction(final MenuItemAction action, final int objectId, final int localX, final int localZ, final int dir) {
+		if (!isAndroidSmokeObjectTargetLoggingEnabled() || action == null) return;
+
+		System.out.println("ANDROID_SMOKE_OBJECT_ACTION action=" + action
+			+ " id=" + objectId
+			+ " worldX=" + (localX + this.midRegionBaseX)
+			+ " worldY=" + (localZ + this.midRegionBaseZ)
+			+ " dir=" + dir);
+	}
+
+	private void logAndroidSmokeInventoryTargets(final int inventoryX, final int inventoryY) {
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeInventoryTargetLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+
+		if (!isAndroidSmokeInventoryTargetLoggingEnabled()) return;
+		this.lastAndroidSmokeInventoryTargetLogMillis = now;
+
+		for (int slot = 0; slot < this.inventoryItemCount; slot++) {
+			final Item item = getInventoryItem(slot);
+			if (item == null) continue;
+
+			final int clientX = inventoryX + slot % 5 * 49 + 24;
+			final int clientY = inventoryY + slot / 5 * 34 + 17;
+			if (clientX < 0 || clientX >= this.getGameWidth() || clientY < 0 || clientY >= this.getGameHeight()) continue;
+
+			System.out.println("ANDROID_SMOKE_INVENTORY_TARGET slot=" + slot
+				+ " id=" + getInventoryItemID(slot)
+				+ " amount=" + getInventoryItemSize(slot)
+				+ " noted=" + item.getNoted()
+				+ " equipped=" + (getInventoryItemEquippedID(slot) == 1)
+				+ " clientX=" + clientX
+				+ " clientY=" + clientY);
+		}
+	}
+
+	private void logAndroidSmokeInventoryAction(final MenuItemAction action, final int slot, final int secondary, final int command) {
+		if (!isAndroidSmokeInventoryTargetLoggingEnabled() || action == null) return;
+
+		int itemId = -1;
+		int amount = 0;
+		boolean noted = false;
+		if (slot >= 0 && slot < this.inventoryItemCount) {
+			final Item item = getInventoryItem(slot);
+			if (item != null) {
+				itemId = getInventoryItemID(slot);
+				amount = getInventoryItemSize(slot);
+				noted = item.getNoted();
+			}
+		}
+
+		System.out.println("ANDROID_SMOKE_INVENTORY_ACTION action=" + action
+			+ " slot=" + slot
+			+ " id=" + itemId
+			+ " amount=" + amount
+			+ " noted=" + noted
+			+ " secondary=" + secondary
+			+ " command=" + command);
+	}
+
 	private void drawVoidRushWaveProjectile() {
 		if (!this.voidRushWaveVisible) return;
 
@@ -6902,6 +7777,8 @@ public final class mudclient implements Runnable {
 			final int alpha = 48 + (twinkle < 32 ? twinkle : 63 - twinkle) - sparkle * 4;
 			drawRareDropSparkle(surface, x, y, sparkle == 0 ? 4 : 3, sparkle == 0 ? 0xB86AFF : 0x9D5CFF, alpha);
 		}
+
+		logAndroidSmokeGroundLootBeam(index, baseX, baseY, topX, topY);
 	}
 
 	private void drawRareDropBeamRibbon(final int baseX, final int baseY, final int topX, final int topY,
@@ -7469,6 +8346,8 @@ public final class mudclient implements Runnable {
 								.putShort(this.shopItemCount[this.shopSelectedItemIndex]);
 							this.packetHandler.getClientStream().bufferBits.putShort(var4);
 							this.packetHandler.getClientStream().finishPacket();
+							logAndroidSmokeShopAction("BUY", id, var4,
+								this.shopItemCount[this.shopSelectedItemIndex], this.shopSelectedItemIndex);
 						}
 					} catch (NumberFormatException var10) {
 						System.out.println("Shop buy X number format exception: " + var10);
@@ -7494,6 +8373,8 @@ public final class mudclient implements Runnable {
 								.putShort(this.shopItemCount[this.shopSelectedItemIndex]);
 							this.packetHandler.getClientStream().bufferBits.putShort(var4);
 							this.packetHandler.getClientStream().finishPacket();
+							logAndroidSmokeShopAction("SELL", this.shopCategoryID[this.shopSelectedItemIndex], var4,
+								this.shopItemCount[this.shopSelectedItemIndex], this.shopSelectedItemIndex);
 						}
 					} catch (NumberFormatException var13) {
 						System.out.println("Shop sell X number format exception: " + var13);
@@ -7827,18 +8708,21 @@ public final class mudclient implements Runnable {
 			}
 			namePoints.add(new ScreenPoint(x, y));
 
-			String itemName = groundItem.getName() + (frequency > 1 ? " (" + frequency + ")" : "");
-			int displayWidth = getSurface().stringWidth(0, itemName);
-			// Recalculate x for display
-			x = groundItem.getX() + groundItem.getWidth() / 2 - displayWidth / 2;
+				String itemName = groundItem.getName() + (frequency > 1 ? " (" + frequency + ")" : "");
+				int displayWidth = getSurface().stringWidth(0, itemName);
+				// Recalculate x for display
+				x = groundItem.getX() + groundItem.getWidth() / 2 - displayWidth / 2;
+				x = Math.max(0, Math.min(x, Math.max(0, this.getGameWidth() - displayWidth)));
+				y = Math.max(0, Math.min(y, Math.max(0, this.getGameHeight() - 1)));
 
-			getSurface().drawShadowText(itemName, x, y, 0xFFFFFF, 0, false);
-			yOffset += 10;
-		}
+				logAndroidSmokeGroundLootLabel(groundItem, itemName, frequency, x, y, displayWidth);
+				getSurface().drawShadowText(itemName, x, y, 0xFFFFFF, 0, false);
+				yOffset += 10;
+			}
 	}
 
 	private boolean useVoidscapeLogin() {
-		return !isAndroid();
+		return true;
 	}
 
 	private void ensureVoidscapeLoginAssetsLoaded() {
@@ -7846,9 +8730,34 @@ public final class mudclient implements Runnable {
 			return;
 		}
 		this.voidscapeLoginAssetLoadAttempted = true;
-		this.voidscapeLoginBackground = PngSpriteLoader.read(
-			new File(Config.F_CACHE_DIR, "login" + File.separator + "voidscape-login-background.png")
-		);
+		File backgroundFile = new File(Config.F_CACHE_DIR, "login" + File.separator + "voidscape-login-background.png");
+		this.voidscapeLoginBackground = PngSpriteLoader.read(backgroundFile);
+		if (this.voidscapeLoginBackground == null) {
+			this.voidscapeLoginBackground = readPngSpriteWithClientPort(backgroundFile);
+		}
+	}
+
+	private Sprite readPngSpriteWithClientPort(File file) {
+		if (!file.isFile() || clientPort == null) {
+			return null;
+		}
+		try {
+			return clientPort.getSpriteFromByteArray(new ByteArrayInputStream(readFileBytes(file)));
+		} catch (Exception ex) {
+			return null;
+		}
+	}
+
+	private static byte[] readFileBytes(File file) throws IOException {
+		try (InputStream in = new FileInputStream(file);
+			 ByteArrayOutputStream out = new ByteArrayOutputStream((int) Math.min(file.length(), 65536))) {
+			byte[] buffer = new byte[8192];
+			int read;
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
+			}
+			return out.toByteArray();
+		}
 	}
 
 	private void drawVoidscapeLogin() {
@@ -7894,49 +8803,132 @@ public final class mudclient implements Runnable {
 		drawVoidscapeFrame(cx - 97, 118, 194, 185);
 		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", 0xf3d46b, 1, 143);
 		drawVoidscapeCenteredText(cx, "Relive the classic.", 0xffffff, 1, 160);
-		drawVoidscapeButton(cx, 181, 176, 34, "New User", true);
+		drawVoidscapeButton(cx, 181, 176, 34, isAndroid() ? "Create Account" : "New User", true);
 		drawVoidscapeButton(cx, 223, 176, 34, "Existing User", false);
-		drawVoidscapeCenteredText(cx, "The void awaits.", 0xb66cff, 1, 271);
+		if (this.voidscapeLoginHomeStatus1.length() > 0) {
+			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus1, 0xffd98a, 0, 267);
+			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus2, 0xe6e3d8, 0, 281);
+		} else {
+			drawVoidscapeCenteredText(cx, "The void awaits.", 0xb66cff, 1, 271);
+		}
+	}
+
+	private void clearVoidscapeLoginHomeStatus() {
+		this.voidscapeLoginHomeStatus1 = "";
+		this.voidscapeLoginHomeStatus2 = "";
+	}
+
+	private void showVoidscapeLoginHomeStatus(String line1, String line2) {
+		this.voidscapeLoginHomeStatus1 = line1 == null ? "" : line1;
+		this.voidscapeLoginHomeStatus2 = line2 == null ? "" : line2;
+		this.drawLogin();
+		this.zeroMF();
+	}
+
+	private boolean openConfiguredUrl(String url) {
+		return url != null && url.trim().length() > 0 && clientPort.openUrl(url.trim());
+	}
+
+	private void openAndroidCreateAccount() {
+		clientPort.closeKeyboard();
+		if (openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
+			showVoidscapeLoginHomeStatus("Opening account portal", "Return here to log in.");
+		} else {
+			showVoidscapeLoginHomeStatus("Account portal not set", "Use website to create.");
+		}
+	}
+
+	private void openAndroidRecovery() {
+		clientPort.closeKeyboard();
+		if (openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_RECOVERY_URL)) {
+			showLoginScreenStatus("Opening account portal.", " ");
+		} else {
+			showLoginScreenStatus("Use website to recover.", " ");
+		}
+	}
+
+	private void showLoginTimedOutStatus() {
+		if (isAndroid()) {
+			showLoginScreenStatus("Server did not reply.", "Try again or choose Public.");
+		} else {
+			showLoginScreenStatus("Error unable to login.", "Server timed out");
+		}
+	}
+
+	private void showConnectionFailureStatus() {
+		if (isAndroid()) {
+			showLoginScreenStatus("Can't reach selected server.", "Open app again and choose Public.");
+		} else {
+			showLoginScreenStatus("Sorry! Unable to connect.",
+				"Check internet settings or try another world");
+		}
 	}
 
 	private void drawVoidscapeExistingUser() {
 		int cx = halfGameWidth();
-		drawVoidscapeFrame(cx - 128, 93, 256, 232);
-		drawVoidscapeCenteredText(cx, "EXISTING USER", 0xf3d46b, 1, 112);
-		drawVoidscapeField(cx, 170, 210, 23, "Username", this.panelLogin.focusOn(this.controlLoginUser));
-		drawVoidscapeField(cx, 212, 210, 23, "Password", this.panelLogin.focusOn(this.controlLoginPass));
-		if (S_WANT_HIDE_IP) {
+		boolean hideFieldLabels = shouldHideAndroidExistingFieldLabels();
+		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
+		drawVoidscapeCenteredText(cx, "EXISTING USER", 0xf3d46b, 1, voidscapeExistingTitleY());
+		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, 23, hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
+		drawVoidscapeField(cx, voidscapeExistingPassY(), 210, 23, hideFieldLabels ? "" : "Password", this.panelLogin.focusOn(this.controlLoginPass));
+		if (shouldOfferHideIpToggle()) {
 			String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
-			drawVoidscapeButton(cx + 54, 243, 96, 24, text, false);
+			drawVoidscapeButton(cx + 54, voidscapeExistingToggleY(), 96, 24, text, false);
 		}
-		if (Remember()) {
-			drawVoidscapeButton(cx - 54, 243, 96, 24, "Save", false);
+		if (shouldOfferCredentialSave()) {
+			drawVoidscapeButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24, "Save", false);
 		}
-		drawVoidscapeButton(cx - 46, 272, 84, 28, "Ok", true);
-		drawVoidscapeButton(cx + 46, 272, 84, 28, "Cancel", false);
-		drawVoidscapeButton(cx, 305, 176, 25, "Forgot password", false);
+		drawVoidscapeButton(cx - 46, voidscapeExistingActionY(), 84, 28, "Ok", true);
+		drawVoidscapeButton(cx + 46, voidscapeExistingActionY(), 84, 28, "Cancel", false);
+		drawVoidscapeButton(cx, voidscapeExistingForgotY(), 176, 25, isAndroid() ? "Recover account" : "Forgot password", false);
+	}
+
+	private boolean shouldOfferCredentialSave() {
+		return isAndroid() || Remember();
+	}
+
+	private boolean shouldOfferHideIpToggle() {
+		return S_WANT_HIDE_IP && !isAndroid();
+	}
+
+	private boolean shouldShowLastLoginHost() {
+		return !isAndroid() && this.settingsHideIP != null && this.settingsHideIP != 1;
+	}
+
+	private int voidscapeExistingSaveX() {
+		return isAndroid() ? halfGameWidth() : halfGameWidth() - 54;
+	}
+
+	private boolean shouldHideAndroidExistingFieldLabels() {
+		if (!isAndroid()) return false;
+		String status1 = this.panelLogin.getControlText(this.controlLoginStatus1);
+		String status2 = this.panelLogin.getControlText(this.controlLoginStatus2);
+		return (status1 != null && status1.trim().length() > 0)
+			|| (status2 != null && status2.trim().length() > 0);
 	}
 
 	private void drawVoidscapeNewUser() {
 		int cx = halfGameWidth();
-		int panelY = wantEmail() ? 66 : 78;
-		int panelH = wantEmail() ? 270 : 251;
+		int panelY = voidscapeNewFrameY();
+		int panelH = voidscapeNewFrameHeight();
 		drawVoidscapeFrame(cx - 203, panelY, 406, panelH);
-		drawVoidscapeCenteredText(cx, "START A NEW GAME", 0xf3d46b, 1, panelY + 19);
-		drawVoidscapeCenteredText(cx, "Username: 2-12 letters, numbers, or spaces", 0xffd98a, 0, panelY + 39);
-		drawVoidscapeField(cx, 153, 214, 23, "Username", this.menuNewUser.focusOn(this.menuNewUserUsername));
+		drawVoidscapeCenteredText(cx, "START A NEW GAME", 0xf3d46b, 1, voidscapeNewTitleY());
+		if (!isAndroid()) {
+			drawVoidscapeCenteredText(cx, "Username: 2-12 letters, numbers, or spaces", 0xffd98a, 0, voidscapeNewHintY());
+		}
+		drawVoidscapeField(cx, voidscapeNewUserY(), 214, 23, "Username", this.menuNewUser.focusOn(this.menuNewUserUsername));
 
 		if (!wantEmail()) {
-			drawVoidscapeField(cx - 63, 215, 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
-			drawVoidscapeField(cx + 63, 215, 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
-			drawVoidscapeButton(cx + 67, 307, 86, 28, "Submit", true);
-			drawVoidscapeButton(cx + 159, 307, 86, 28, "Cancel", false);
+			drawVoidscapeField(cx - 63, voidscapeNewPasswordY(), 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
+			drawVoidscapeField(cx + 63, voidscapeNewPasswordY(), 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
+			drawVoidscapeButton(cx + 67, voidscapeNewActionY(), 86, 28, "Submit", true);
+			drawVoidscapeButton(cx + 159, voidscapeNewActionY(), 86, 28, "Cancel", false);
 		} else {
-			drawVoidscapeField(cx - 63, 205, 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
-			drawVoidscapeField(cx + 63, 205, 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
-			drawVoidscapeField(cx, 251, 214, 23, "E-mail address", this.menuNewUser.focusOn(this.menuNewUserEmail));
-			drawVoidscapeButton(cx + 67, 316, 86, 28, "Submit", true);
-			drawVoidscapeButton(cx + 159, 316, 86, 28, "Cancel", false);
+			drawVoidscapeField(cx - 63, voidscapeNewPasswordY(), 120, 23, "Password", this.menuNewUser.focusOn(this.menuNewUserPassword));
+			drawVoidscapeField(cx + 63, voidscapeNewPasswordY(), 120, 23, "Confirm", this.menuNewUser.focusOn(this.menuNewUserConfirmPassword));
+			drawVoidscapeField(cx, voidscapeNewEmailY(), 214, 23, "E-mail address", this.menuNewUser.focusOn(this.menuNewUserEmail));
+			drawVoidscapeButton(cx + 67, voidscapeNewActionY(), 86, 28, "Submit", true);
+			drawVoidscapeButton(cx + 159, voidscapeNewActionY(), 86, 28, "Cancel", false);
 		}
 	}
 
@@ -7991,7 +8983,7 @@ public final class mudclient implements Runnable {
 		int x = cx - width / 2;
 		int y = cy - height / 2;
 		if (label != null) {
-			drawVoidscapeCenteredText(cx, label, 0xe6e3d8, 1, y - 7);
+			drawVoidscapeCenteredText(cx, label, 0xe6e3d8, isAndroid() ? 0 : 1, y + (isAndroid() ? -5 : -7));
 		}
 		this.getSurface().drawBoxAlpha(x, y, width, height, 0x07090c, 218);
 		this.getSurface().drawBoxBorder(x, width, y, height, focused ? 0xb68aff : 0x56606a);
@@ -9245,8 +10237,22 @@ public final class mudclient implements Runnable {
 						this.getGameWidth(), outWorld);
 				if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.MAP_TILE) {
 					this.sendWorldWalkRequest(outWorld[0], outWorld[1]);
+					logAndroidSmokeWorldMapState("MAP_TILE");
+				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.CLOSE) {
+					logAndroidSmokeWorldMapState("CLOSE");
+				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.ZOOM) {
+					logAndroidSmokeWorldMapState("ZOOM");
 				}
 				if (result != orsc.graphics.gui.WorldMapPanel.ClickResult.OUTSIDE) {
+					if (isAndroid()) {
+						if (this.worldMapPanel.isSearchFocused()) {
+							if (!osConfig.F_SHOWING_KEYBOARD) {
+								clientPort.drawKeyboard();
+							}
+						} else if (osConfig.F_SHOWING_KEYBOARD) {
+							clientPort.closeKeyboard();
+						}
+					}
 					this.mouseButtonClick = 0;
 				}
 			}
@@ -9471,11 +10477,13 @@ public final class mudclient implements Runnable {
 			// World-map auto-walker (slice 5). Render at the very end so the
 			// dialog sits on top of side-panel tabs, minimap, and chat tabs.
 			if (!voidRushUiLocked && this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+				logAndroidSmokeWorldMapState("BEFORE_RENDER");
 				this.worldMapPanel.render(this.getSurface(),
 					this.getGameWidth(), this.getGameHeight(),
 					this.playerLocalX + this.midRegionBaseX,
 					this.playerLocalZ + this.midRegionBaseZ,
 					this.worldWalkRouteX, this.worldWalkRouteY);
+				logAndroidSmokeWorldMapState("STATE");
 			}
 			if (this.showAdvancedSettingsWindow) {
 				this.drawAdvancedSettingsWindow();
@@ -9990,10 +10998,11 @@ public final class mudclient implements Runnable {
 					this.getSurface().drawLineVert(var3 + var4 * 49, yOffset, 0, this.m_cl / 5 * 34);
 				}
 
-				for (var4 = 1; this.m_cl / 5 - 1 >= var4; ++var4) {
-					this.getSurface().drawLineHoriz(var3, yOffset + var4 * 34, 245, 0);
-				}
-				if (var2) {
+					for (var4 = 1; this.m_cl / 5 - 1 >= var4; ++var4) {
+						this.getSurface().drawLineHoriz(var3, yOffset + var4 * 34, 245, 0);
+					}
+					logAndroidSmokeInventoryTargets(var3, yOffset);
+					if (var2) {
 					var3 = 248 + (this.mouseX - this.getSurface().width2);
 					var4 = this.mouseY - yOffset;
 					if (var3 >= 0 && var4 >= 0 && var3 < 248 && this.m_cl / 5 * 34 > var4) {
@@ -10144,6 +11153,7 @@ public final class mudclient implements Runnable {
 								//Send a packet to the server to unequip the item.
 								if (equippedItems[j] != null) {
 									if (this.mouseButtonClick == 1 && !this.topMouseMenuVisible) {//unequip from equip menu
+										logAndroidSmokeEquipmentAction("UNEQUIP_FROM_EQUIPMENT", j);
 										this.packetHandler.getClientStream().newPacket(Opcodes.Out.ITEM_UNEQUIP_FROM_EQUIPMENT.getOpcode());
 										this.packetHandler.getClientStream().bufferBits.putByte(j);
 										this.packetHandler.getClientStream().finishPacket();
@@ -10187,6 +11197,7 @@ public final class mudclient implements Runnable {
 
 			if (S_WANT_EQUIPMENT_TAB) {
 
+				logAndroidSmokeEquipmentState(xOffset, yOffset);
 				yOffset += 228;
 				this.getSurface().drawBoxAlpha(xOffset, yOffset - 24, 122, 24, this.tabEquipmentIndex == 1 ? selectedBox : clearBox, 128);
 				this.getSurface().drawBoxAlpha(xOffset + 122, yOffset - 24, 123, 24, this.tabEquipmentIndex == 0 ? selectedBox : clearBox, 128);
@@ -10692,6 +11703,8 @@ public final class mudclient implements Runnable {
 				int var18;
 
 				// Variables for last "cast last spell" box for Android
+				final int androidSmokeMagicPanelX = magicPanelX;
+				final int androidSmokeMagicPanelYStart = magicPanelYStart;
 				int lastSpellWidth = magicPanelWidth;
 				int lastSpellHeight = 50;
 				int lastSpellX = magicPanelX;
@@ -10845,19 +11858,23 @@ public final class mudclient implements Runnable {
 						else
 							this.panelMagic.handleMouse(magicPanelX + (this.getSurface().width2 - 199), relativeMouseY + 36,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
-						if (relativeMouseY <= 24 && this.mouseButtonClick == 1) {
+						boolean magicPrayerClick = this.mouseButtonClick == 1
+							|| consumeAndroidTapInRect(androidSmokeMagicPanelX, androidSmokeMagicPanelYStart, magicPanelWidth, maxClickableY);
+						if (relativeMouseY <= 24 && magicPrayerClick) {
 							if (magicPanelX < 98 && this.magicOrPrayerList == 1) {
 								this.magicOrPrayerList = 0;
+								logAndroidSmokeMagicPrayerAction("TAB_MAGIC", 0);
 								prayerMenuIndex = this.panelMagic.getScrollPosition(this.controlMagicPanel);
 								this.panelMagic.resetListToIndex(this.controlMagicPanel, magicMenuIndex);
 							} else if (magicPanelX > 98 && this.magicOrPrayerList == 0) {
 								this.magicOrPrayerList = 1;
+								logAndroidSmokeMagicPrayerAction("TAB_PRAYER", 1);
 								magicMenuIndex = this.panelMagic.getScrollPosition(this.controlMagicPanel);
 								this.panelMagic.resetListToIndex(this.controlMagicPanel, prayerMenuIndex);
 							}
 						}
 
-						if (this.mouseButtonClick == 1 && this.magicOrPrayerList == 0) {
+						if (magicPrayerClick && this.magicOrPrayerList == 0) {
 							spellIndex = this.panelMagic.getControlSelectedListIndex(this.controlMagicPanel);
 							if (spellIndex != -1) {
 								magicLevel = this.playerStatCurrent[6];
@@ -10882,6 +11899,7 @@ public final class mudclient implements Runnable {
 										this.selectedSpell = spellIndex;
 										lastSelectedSpell = spellIndex;
 										this.selectedItemInventoryIndex = -1;
+										logAndroidSmokeMagicPrayerAction("SPELL_SELECTED", spellIndex);
 										if (openInventorySpell(spellIndex))
 											this.showUiTab = Config.INVENTORY_TAB;
 										//if (EntityHandler.getSpellDef(var9).getSpellType() == 3 && var9 != 16) {
@@ -10892,10 +11910,11 @@ public final class mudclient implements Runnable {
 							}
 
 							if (mouseX > lastSpellX && mouseX < lastSpellX + lastSpellWidth && mouseY > lastSpellY && mouseY < lastSpellY + lastSpellHeight
-								&& mouseButtonClick > 0) {
+								&& magicPrayerClick) {
 								if (lastSpellNameColor.equals("@yel@") || S_WANT_CUSTOM_SPRITES) {
 									// due to magic cape can't determine client side if spell will not require runes
 									selectedSpell = lastSelectedSpell;
+									logAndroidSmokeMagicPrayerAction("LAST_SPELL_SELECTED", selectedSpell);
 								} else {
 									this.showMessage(false, null,
 										"You don't have all the reagents you need for this spell",
@@ -10906,14 +11925,14 @@ public final class mudclient implements Runnable {
 							}
 
 							if (mouseX > lastSpellX && mouseX < lastSpellX + lastSpellWidth && mouseY > lastSpellY + 49 && mouseY < lastSpellY + 69
-								&& mouseButtonClick > 0) {
+								&& magicPrayerClick) {
 								selectedSpell = -1;
 								lastSelectedSpell = -1;
 								mouseButtonClick = 0;
 							}
 						}
 
-						if (this.mouseButtonClick == 1 && this.magicOrPrayerList == 1) {
+						if (magicPrayerClick && this.magicOrPrayerList == 1) {
 							spellIndex = this.panelMagic.getControlSelectedListIndex(this.controlMagicPanel);
 							if (spellIndex != -1) {
 								magicLevel = this.playerStatBase[5];
@@ -10930,6 +11949,7 @@ public final class mudclient implements Runnable {
 									this.packetHandler.getClientStream().bufferBits.putByte(spellIndex);
 									this.packetHandler.getClientStream().finishPacket();
 									this.prayerOn[spellIndex] = true;
+									logAndroidSmokeMagicPrayerAction("PRAYER_ACTIVATED", spellIndex);
 
 									if (MEMBER_WORLD) {
 										soundPlayer.playSoundFile("prayeron");
@@ -10939,6 +11959,7 @@ public final class mudclient implements Runnable {
 									this.packetHandler.getClientStream().bufferBits.putByte(spellIndex);
 									this.packetHandler.getClientStream().finishPacket();
 									this.prayerOn[spellIndex] = false;
+									logAndroidSmokeMagicPrayerAction("PRAYER_DEACTIVATED", spellIndex);
 
 									if (MEMBER_WORLD) {
 										soundPlayer.playSoundFile("prayeroff");
@@ -10947,9 +11968,14 @@ public final class mudclient implements Runnable {
 							}
 						}
 
+						if (magicPrayerClick) {
+							this.currentMouseButtonDown = 0;
+							this.lastMouseButtonDown = 0;
+						}
 						this.mouseButtonClick = 0;
 					}
 				}
+				logAndroidSmokeMagicPrayerState(androidSmokeMagicPanelX, androidSmokeMagicPanelYStart, magicPanelWidth);
 			}
 		} catch (RuntimeException var16) {
 			throw GenUtil.makeThrowable(var16, "client.GA(" + var1 + ',' + var2 + ')');
@@ -11123,8 +12149,10 @@ public final class mudclient implements Runnable {
 				this.getSurface().drawBoxBorder(btnX, btnW, btnY, btnH, 0xC0C0C0);
 				this.getSurface().drawColoredStringCentered(btnX + btnW / 2,
 					"World Map", 0xFFFFFF, 0, 1, btnY + btnH / 2 + 4);
+				logAndroidSmokeWorldMapButton(btnX, btnY, btnW, btnH, overButton);
 				if (overButton && this.mouseButtonClick == 1) {
 					this.worldMapPanel.toggleVisible();
+					logAndroidSmokeWorldMapState(this.worldMapPanel.isVisible() ? "OPEN" : "CLOSE");
 					this.mouseButtonClick = 0;
 				}
 			}
@@ -11192,6 +12220,8 @@ public final class mudclient implements Runnable {
 						this.drawAndroidSettingsOptions(var3, var5, var6, var7);
 					}
 				}
+
+			logAndroidSmokeSettingsState("STATE");
 
 			// mouse tracking for option buttons
 			if (mustTrackMouse) {
@@ -14507,17 +15537,19 @@ public final class mudclient implements Runnable {
 					this.cameraPositionZ = this.localPlayer.currentZ;
 				}
 
-				if (!this.isSleeping) {
-					if (mouseY > (getGameHeight() - 4)) { // Chat Tab Selection
-						if (mouseX > 15 + (halfGameWidth() - 256) && mouseX < 96 + (halfGameWidth() - 256)
-							&& lastMouseButtonDown == 1)
-							this.messageTabSelected = MessageTab.ALL;
-						if (mouseX > 110 + (halfGameWidth() - 256) && mouseX < 194 + (halfGameWidth() - 256)
-							&& lastMouseButtonDown == 1) {
-							this.messageTabSelected = MessageTab.CHAT;
-							this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] = 999999;
-						}
-						if (mouseX > 215 + (halfGameWidth() - 256) && mouseX < 295 + (halfGameWidth() - 256)
+					if (!this.isSleeping) {
+						if (mouseY > (getGameHeight() - 4)) { // Chat Tab Selection
+							final MessageTab androidSmokeBeforeMessageTab = this.messageTabSelected;
+							if (mouseX > 15 + (halfGameWidth() - 256) && mouseX < 96 + (halfGameWidth() - 256)
+								&& lastMouseButtonDown == 1) {
+								this.messageTabSelected = MessageTab.ALL;
+							}
+							if (mouseX > 110 + (halfGameWidth() - 256) && mouseX < 194 + (halfGameWidth() - 256)
+								&& lastMouseButtonDown == 1) {
+								this.messageTabSelected = MessageTab.CHAT;
+								this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] = 999999;
+							}
+							if (mouseX > 215 + (halfGameWidth() - 256) && mouseX < 295 + (halfGameWidth() - 256)
 							&& lastMouseButtonDown == 1) {
 							this.messageTabSelected = MessageTab.QUEST;
 							this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] = 999999;
@@ -14538,6 +15570,7 @@ public final class mudclient implements Runnable {
 								this.reportAbuse_State = 1;
 							}
 						}
+						logAndroidSmokeChatTabSelection(androidSmokeBeforeMessageTab);
 
 						this.currentMouseButtonDown = 0;
 						this.lastMouseButtonDown = 0;
@@ -14675,6 +15708,10 @@ public final class mudclient implements Runnable {
 					}
 					this.scene.setMouseLoc(0, this.mouseX, this.mouseY);
 					this.lastMouseButtonDown = 0;
+					final int androidSmokeBeforeCameraRotation = this.cameraRotation;
+					final int androidSmokeBeforeCameraAngle = this.cameraAngle;
+					final boolean androidSmokeBeforeKeyLeft = this.keyLeft;
+					final boolean androidSmokeBeforeKeyRight = this.keyRight;
 					if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
 						if (this.m_Wc == 0 || this.cameraAutoAngleDebug) {
 							if (this.keyLeft) {
@@ -14744,8 +15781,15 @@ public final class mudclient implements Runnable {
 						panelMessageTabs.setText(panelMessageEntry, messages.get(currentChat));
 						this.pageUp = false;
 					}
+						logAndroidSmokeCameraRotate(
+							androidSmokeBeforeCameraRotation,
+							androidSmokeBeforeCameraAngle,
+							androidSmokeBeforeKeyLeft,
+							androidSmokeBeforeKeyRight
+						);
+						logAndroidSmokeZoomState();
 
-					if (this.mouseClickXStep > 0) {
+						if (this.mouseClickXStep > 0) {
 						--this.mouseClickXStep;
 					} else if (this.mouseClickXStep < 0) {
 						++this.mouseClickXStep;
@@ -14969,6 +16013,38 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	public boolean handleAndroidBackButton() {
+		try {
+			if (!isAndroid()) {
+				return false;
+			}
+			if (this.worldMapPanel.isVisible()) {
+				this.worldMapPanel.setVisible(false);
+				if (osConfig.F_SHOWING_KEYBOARD) {
+					clientPort.closeKeyboard();
+				}
+				logAndroidSmokeWorldMapState("BACK_CLOSE");
+				return true;
+			}
+			if (osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+				return true;
+			}
+			if (this.currentViewMode == GameMode.LOGIN
+				&& (this.loginScreenNumber == 1 || this.loginScreenNumber == 2 || this.loginScreenNumber == 4)) {
+				this.loginScreenNumber = 0;
+				clearVoidscapeLoginHomeStatus();
+				this.enterPressed = false;
+				this.drawLogin();
+				this.zeroMF();
+				return true;
+			}
+			return false;
+		} catch (RuntimeException ex) {
+			throw GenUtil.makeThrowable(ex, "client.androidBack()");
+		}
+	}
+
 	private void handleLoginScreenInput(int var1) {
 		try {
 			if (var1 != 2) {
@@ -15047,17 +16123,29 @@ public final class mudclient implements Runnable {
 					if (this.panelLogin.isClicked(this.m_Xi)) {
 						this.loginScreenNumber = 0;
 					}
-					if (isAndroid() || Remember()) {
+					if (shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
 						if (this.panelLogin.isClicked(this.rememberButtonIdx)) {
+							String savedUser = this.panelLogin.getControlText(this.controlLoginUser);
+							String savedPass = this.panelLogin.getControlText(this.controlLoginPass);
+							if (savedUser == null || savedUser.trim().length() == 0 || savedPass == null || savedPass.length() == 0) {
+								this.panelLogin.setText(this.controlLoginStatus1, "");
+								this.panelLogin.setText(this.controlLoginStatus2, "@yel@Enter login first");
+								return;
+							}
 
-							boolean temp = ClientPort.saveCredentials(this.panelLogin.getControlText(this.controlLoginUser) + "," + this.panelLogin.getControlText(this.controlLoginPass));
+							boolean temp = ClientPort.saveCredentials(savedUser + "," + savedPass);
 
-							if (temp)
+							if (temp) {
+								this.panelLogin.setText(this.controlLoginStatus1, "");
 								this.panelLogin.setText(this.controlLoginStatus2, "@gre@Credentials Saved");
+							} else {
+								this.panelLogin.setText(this.controlLoginStatus1, "");
+								this.panelLogin.setText(this.controlLoginStatus2, "@red@Unable to save");
+							}
 						}
 					}
 
-					if (S_WANT_HIDE_IP) {
+					if (shouldOfferHideIpToggle()) {
 						if (this.panelLogin.isClicked(this.hideIpButtonIdx)) {
 							this.settingsHideIP = 1 - this.settingsHideIP;
 							String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
@@ -15082,15 +16170,26 @@ public final class mudclient implements Runnable {
 
 						this.enterPressed = false;
 
-						this.setUsername(this.panelLogin.getControlText(this.controlLoginUser));
-						this.password = this.panelLogin.getControlText(this.controlLoginPass);
-						if (this.password.equals("")) return;
+						String loginUser = this.panelLogin.getControlText(this.controlLoginUser);
+						String loginPass = this.panelLogin.getControlText(this.controlLoginPass);
+						if (loginUser == null || loginUser.trim().length() == 0 || loginPass == null || loginPass.length() == 0) {
+							showLoginScreenStatus("You must enter both a username", "and a password - Please try again");
+							return;
+						}
+
+						this.setUsername(loginUser);
+						this.password = loginPass;
 
 						this.autoLoginTimeout = 2;
 						this.login(-12, this.password, this.getUsername(), false);
 					}
 
 					if (this.panelLogin.isClicked(this.lostPasswordButtonIdx)) {
+						if (isAndroid()) {
+							openAndroidRecovery();
+							return;
+						}
+
 						this.username = this.panelLogin.getControlText(this.controlLoginUser);
 						this.username = DataOperations.addCharacters(this.username, 20);
 						if (this.username.trim().length() == 0) {
@@ -15268,17 +16367,21 @@ public final class mudclient implements Runnable {
 				this.panelLoginWelcome.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
 					this.lastMouseButtonDown);
 				if (this.panelLoginWelcome.isClicked(loginButtonExistingUser)) {
+					clearVoidscapeLoginHomeStatus();
 					if (isAndroid()) clientPort.drawKeyboard(); // launches the Android soft keyboard
 					this.loginScreenNumber = 2;
 					this.panelLogin.setText(this.controlLoginStatus1, "");
 					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
-					if (isAndroid()) clientPort.drawKeyboard();
-					loginScreenNumber = 1;
-					this.menuNewUser.setText(this.menuNewUserStatus, "Please fill in all fields");
-					this.menuNewUser.setText(this.menuNewUserStatus2, "and click submit.");
-					menuNewUser.setFocus(menuNewUserUsername);
+					if (isAndroid()) {
+						openAndroidCreateAccount();
+					} else {
+						loginScreenNumber = 1;
+						this.menuNewUser.setText(this.menuNewUserStatus, "Please fill in all fields");
+						this.menuNewUser.setText(this.menuNewUserStatus2, "and click submit.");
+						menuNewUser.setFocus(menuNewUserUsername);
+					}
 				}
 			}
 
@@ -15404,6 +16507,7 @@ public final class mudclient implements Runnable {
 			int tileID = this.menuCommon.getItemTileID(item);
 			int var8 = this.menuCommon.getItemParam_l(item);
 			String var9 = this.menuCommon.getItemStringB(item);
+			logAndroidSmokeContextMenuAction(var3, item, indexOrX, idOrZ, dir, tileID);
 
 			ORSCharacter character = null;
 			int cTileX;
@@ -15454,6 +16558,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_EXAMINE: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					// voidscape — server renders dynamic per-instance examine text
 					// (Item Memory) and replies via SEND_MESSAGE. indexOrX is the
 					// inventory slot (changed from catalog id for this purpose).
@@ -15511,40 +16616,44 @@ public final class mudclient implements Runnable {
 					this.showMessage(false, null, EntityHandler.getDoorDef(indexOrX).getDescription(),
 						MessageType.GAME, 0, null);
 					break;
-				}
-				case OBJECT_CAST_SPELL: {
-					this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
-					this.packetHandler.getClientStream().newPacket(99);
-					this.packetHandler.getClientStream().bufferBits.putShort(var8);
+					}
+					case OBJECT_CAST_SPELL: {
+						logAndroidSmokeObjectAction(var3, tileID, indexOrX, idOrZ, dir);
+						this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
+						this.packetHandler.getClientStream().newPacket(99);
+						this.packetHandler.getClientStream().bufferBits.putShort(var8);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX + this.midRegionBaseX);
 					this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseZ + idOrZ);
 
 					this.packetHandler.getClientStream().finishPacket();
 					this.selectedSpell = -1;
 					break;
-				}
-				case OBJECT_USE_ITEM: {
-					this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
-					this.packetHandler.getClientStream().newPacket(115);
-					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX + this.midRegionBaseX);
+					}
+					case OBJECT_USE_ITEM: {
+						logAndroidSmokeObjectAction(var3, tileID, indexOrX, idOrZ, dir);
+						this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
+						this.packetHandler.getClientStream().newPacket(115);
+						this.packetHandler.getClientStream().bufferBits.putShort(indexOrX + this.midRegionBaseX);
 					this.packetHandler.getClientStream().bufferBits.putShort(idOrZ + this.midRegionBaseZ);
 					this.packetHandler.getClientStream().bufferBits.putShort(var8);
 					this.packetHandler.getClientStream().finishPacket();
 					this.selectedItemInventoryIndex = -1;
 					break;
-				}
-				case OBJECT_COMMAND1: {
-					this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
-					this.packetHandler.getClientStream().newPacket(136);
-					this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseX + indexOrX);
+					}
+					case OBJECT_COMMAND1: {
+						logAndroidSmokeObjectAction(var3, tileID, indexOrX, idOrZ, dir);
+						this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
+						this.packetHandler.getClientStream().newPacket(136);
+						this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseX + indexOrX);
 					this.packetHandler.getClientStream().bufferBits.putShort(idOrZ + this.midRegionBaseZ);
 					this.packetHandler.getClientStream().finishPacket();
 					break;
-				}
-				case OBJECT_COMMAND2: {
-					this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
-					this.packetHandler.getClientStream().newPacket(79);
-					this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseX + indexOrX);
+					}
+					case OBJECT_COMMAND2: {
+						logAndroidSmokeObjectAction(var3, tileID, indexOrX, idOrZ, dir);
+						this.walkToObject(indexOrX, idOrZ, dir, 5126, tileID);
+						this.packetHandler.getClientStream().newPacket(79);
+						this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseX + indexOrX);
 					this.packetHandler.getClientStream().bufferBits.putShort(this.midRegionBaseZ + idOrZ);
 					this.packetHandler.getClientStream().finishPacket();
 					break;
@@ -15555,6 +16664,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_CAST_SPELL: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					this.packetHandler.getClientStream().newPacket(4);
 					this.packetHandler.getClientStream().bufferBits.putShort(idOrZ);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
@@ -15566,6 +16676,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_USE_ITEM: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					if (S_WANT_EQUIPMENT_TAB && (indexOrX > S_PLAYER_INVENTORY_SLOTS || idOrZ > S_PLAYER_INVENTORY_SLOTS)) {
 						//they used an item from the equiptab on the item - we don't want to handle this yet.
 						this.showMessage(false, null, "Please unequip your item and try again.",
@@ -15581,24 +16692,28 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_UNEQUIP_FROM_EQUIPMENT: {
+					logAndroidSmokeEquipmentAction("UNEQUIP_FROM_EQUIPMENT", indexOrX);
 					this.packetHandler.getClientStream().newPacket(Opcodes.Out.ITEM_UNEQUIP_FROM_EQUIPMENT.getOpcode());
 					this.packetHandler.getClientStream().bufferBits.putByte(indexOrX);
 					this.packetHandler.getClientStream().finishPacket();
 					break;
 				}
 				case ITEM_UNEQUIP_FROM_INVENTORY: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					this.packetHandler.getClientStream().newPacket(Opcodes.Out.ITEM_UNEQUIP_FROM_INVENTORY.getOpcode());
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
 					this.packetHandler.getClientStream().finishPacket();
 					break;
 				}
 				case ITEM_EQUIP_FROM_INVENTORY: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					this.packetHandler.getClientStream().newPacket(Opcodes.Out.ITEM_EQUIP_FROM_INVENTORY.getOpcode());
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
 					this.packetHandler.getClientStream().finishPacket();
 					break;
 				}
 				case ITEM_COMMAND: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					int commandQuantity = 1;
 					this.packetHandler.getClientStream().newPacket(90);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
@@ -15608,6 +16723,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_COMMAND_ALL: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					int commandQuantity = getInventoryCount(getInventoryItemID(indexOrX));
 					this.packetHandler.getClientStream().newPacket(90);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
@@ -15627,6 +16743,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_USE: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					this.selectedItemInventoryIndex = indexOrX;
 					this.showUiTab = 0;
 					this.m_ig = EntityHandler.getItemDef(getInventoryItemID(this.selectedItemInventoryIndex)).getName();
@@ -15638,6 +16755,7 @@ public final class mudclient implements Runnable {
 					this.m_ig = equippedItems[indexOrX].getName();
 					break;
 				case ITEM_DROP: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					this.packetHandler.getClientStream().newPacket(246);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
 					int amount = getInventoryItemSize(indexOrX);
@@ -15651,11 +16769,13 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case ITEM_DROP_X: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					dropInventorySlot = indexOrX;
 					this.showItemModX(InputXPrompt.dropX, InputXAction.DROP_X, true);
 					break;
 				}
 				case ITEM_DROP_ALL: {
+					logAndroidSmokeInventoryAction(var3, indexOrX, idOrZ, dir);
 					dropInventorySlot = indexOrX;
 					Item dropping = getInventoryItem(dropInventorySlot);
 					int dropQuantity = getInventoryCount(dropping.getCatalogID(), dropping.getNoted());
@@ -15693,6 +16813,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -15709,6 +16830,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					if (S_WANT_EQUIPMENT_TAB && idOrZ > S_PLAYER_INVENTORY_SLOTS) {
 						//they used an item from the equiptab on the npc - we don't want to handle this yet.
 						this.showMessage(false, null, "Please unequip your item and try again.",
@@ -15730,6 +16852,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -15743,6 +16866,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -15756,6 +16880,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -15770,6 +16895,7 @@ public final class mudclient implements Runnable {
 					if (character == null) {
 						return;
 					}
+					logAndroidSmokeNpcAction(var3, character);
 					cTileX = (character.currentX - 64) / this.tileSize;
 					cTileZ = (character.currentZ - 64) / this.tileSize;
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, cTileX, cTileZ, true);
@@ -15903,6 +17029,7 @@ public final class mudclient implements Runnable {
 					break;
 				}
 				case SELF_CAST_SPELL: {
+					logAndroidSmokeMagicPrayerAction("SELF_CAST_SPELL", indexOrX);
 					this.packetHandler.getClientStream().newPacket(137);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
 					this.packetHandler.getClientStream().finishPacket();
@@ -16712,9 +17839,16 @@ public final class mudclient implements Runnable {
 
 	private void jumpToLogin() {
 		try {
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+			}
 			this.logoutTimeout = 0;
 			this.loginScreenNumber = 0;
 			this.currentViewMode = GameMode.LOGIN;
+			this.showUiTab = 0;
+			this.optionsMenuShow = false;
+			this.topMouseMenuVisible = false;
+			this.showAdvancedSettingsWindow = false;
 
 			this.systemUpdate = 0;
 			this.elixirTimer = 0;
@@ -17401,7 +18535,7 @@ public final class mudclient implements Runnable {
 							} else {
 								if (!reconnecting) {
 									if (loginResponse == -1) {
-										this.showLoginScreenStatus("Error unable to login.", "Server timed out");
+										showLoginTimedOutStatus();
 									} else if (loginResponse == 3) {
 										this.showLoginScreenStatus("Invalid username or password.",
 											"Try again, or create a new account");
@@ -17487,24 +18621,22 @@ public final class mudclient implements Runnable {
 						return;
 					} catch (Exception var15) {
 						var15.printStackTrace();
-						if (this.autoLoginTimeout <= 0) {
-							if (reconnecting) {
-								this.password = "";
-								this.setUsername("");
-								this.jumpToLogin();
-							} else {
-								// GenUtil.reportError(var15, "Error
-								// while connecting");
-								this.showLoginScreenStatus("Sorry! Unable to connect.",
-									"Check internet settings or try another world");
-							}
-						} else {
+						if (this.autoLoginTimeout > 1) {
+							--this.autoLoginTimeout;
 							try {
 								GenUtil.sleepShadow(5000L);
 							} catch (Exception var12) {
 							}
+							continue;
+						}
 
-							--this.autoLoginTimeout;
+						this.autoLoginTimeout = 0;
+						if (reconnecting) {
+							this.password = "";
+							this.setUsername("");
+							this.jumpToLogin();
+						} else {
+							showConnectionFailureStatus();
 						}
 					}
 				}
@@ -17883,6 +19015,7 @@ public final class mudclient implements Runnable {
 			this.packetHandler.getClientStream().newPacket(216);
 			RSBufferUtils.putEncryptedString(this.packetHandler.getClientStream().bufferBits, var1);
 			this.packetHandler.getClientStream().finishPacket();
+			this.logAndroidSmokeChatSend(var1);
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.AA(" + (var1 != null ? "{...}" : "null") + ')');
 		}
@@ -18003,6 +19136,9 @@ public final class mudclient implements Runnable {
 
 	private void showLoginScreenStatus(String a, String b) {
 		try {
+			if (isAndroid() && (this.loginScreenNumber == 1 || this.loginScreenNumber == 2 || this.loginScreenNumber == 4)) {
+				clientPort.closeKeyboard();
+			}
 
 			if (this.loginScreenNumber == 4) {
 				this.panelRecovery.setText(this.instructPassRecovery1, a);
@@ -18298,7 +19434,13 @@ public final class mudclient implements Runnable {
 					System.out.println(" ");
 					System.out.println(" ");
 				}
-				this.getServerConfig();
+				try {
+					this.getServerConfig();
+				} catch (RuntimeException configError) {
+					configError.printStackTrace();
+					this.errorLoadingData = true;
+					clientPort.drawLoadingError();
+				}
 			}
 		} catch (RuntimeException var9) {
 			throw GenUtil.makeThrowable(var9, "client.KC(" + var1 + ')');
@@ -20312,6 +21454,194 @@ public final class mudclient implements Runnable {
 
 	public int getMouseButtonDownTime() {
 		return mouseButtonDownTime;
+	}
+
+	public void recordAndroidTap(final int x, final int y) {
+		if (!isAndroid()) return;
+
+		this.androidLastTapX = x;
+		this.androidLastTapY = y;
+		this.androidLastTapMillis = System.currentTimeMillis();
+		this.androidLastTapConsumed = false;
+	}
+
+	private boolean consumeAndroidTapInRect(final int x, final int y, final int width, final int height) {
+		if (!isAndroid() || this.androidLastTapConsumed) return false;
+		if (System.currentTimeMillis() - this.androidLastTapMillis > 750L) return false;
+		if (this.androidLastTapX < x || this.androidLastTapX > x + width) return false;
+		if (this.androidLastTapY < y || this.androidLastTapY > y + height) return false;
+
+		this.androidLastTapConsumed = true;
+		return true;
+	}
+
+	public boolean openAndroidSmokeWorldMapFromInput() {
+		if (!isAndroidSmokeWorldMapLoggingEnabled() || this.currentViewMode != GameMode.GAME) return false;
+
+		this.worldMapPanel.setVisible(true);
+		prepareAndroidSmokeWorldMapLayout();
+		logAndroidSmokeWorldMapState("OPEN_KEY");
+		return true;
+	}
+
+	public boolean zoomAndroidSmokeWorldMapFromInput() {
+		if (!isAndroidSmokeWorldMapLoggingEnabled() || !this.worldMapPanel.isVisible()) return false;
+
+		prepareAndroidSmokeWorldMapLayout();
+		this.worldMapPanel.zoomIn();
+		logAndroidSmokeWorldMapState("ZOOM_KEY");
+		return true;
+	}
+
+	public boolean panAndroidSmokeWorldMapFromInput(final int dx, final int dy) {
+		if (!isAndroidSmokeWorldMapLoggingEnabled() || !this.worldMapPanel.isVisible()) return false;
+
+		prepareAndroidSmokeWorldMapLayout();
+		this.worldMapPanel.panBy(dx, dy);
+		logAndroidSmokeWorldMapState("PAN_KEY");
+		return true;
+	}
+
+	public boolean focusAndroidSmokeWorldMapSearchFromInput() {
+		if (!isAndroidSmokeWorldMapLoggingEnabled() || !this.worldMapPanel.isVisible()) return false;
+
+		prepareAndroidSmokeWorldMapLayout();
+		this.worldMapPanel.focusSearch();
+		if (isAndroid() && !osConfig.F_SHOWING_KEYBOARD) {
+			clientPort.drawKeyboard();
+		}
+		logAndroidSmokeWorldMapState("SEARCH_FOCUS_KEY");
+		return true;
+	}
+
+	public boolean handleAndroidSmokeWorldMapSearchKey(final char c, final int keyCode) {
+		if (!isAndroidSmokeWorldMapLoggingEnabled() || !this.worldMapPanel.isVisible()
+			|| !this.worldMapPanel.isSearchFocused()) {
+			return false;
+		}
+
+		prepareAndroidSmokeWorldMapLayout();
+		this.worldMapPanel.handleSearchKey(c, keyCode);
+		if (!this.worldMapPanel.isSearchFocused() && isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+			clientPort.closeKeyboard();
+		}
+		logAndroidSmokeWorldMapState("SEARCH_KEY");
+		return true;
+	}
+
+	public boolean openAndroidSmokeSettingsFromInput() {
+		if (!isAndroidSmokeSettingsLoggingEnabled() || this.currentViewMode != GameMode.GAME) return false;
+
+		this.topMouseMenuVisible = false;
+		this.optionsMenuShow = false;
+		this.showUiTab = Config.OPTIONS_TAB;
+		openBasicSettingsTab();
+		this.settingTab = 1;
+		positionAndroidSmokeSettingsMouse();
+		if (this.panelSettings != null) {
+			this.panelSettings.resetList(this.controlSettingPanel);
+		}
+		if (this.worldMapPanel != null && this.worldMapPanel.isVisible()) {
+			this.worldMapPanel.setVisible(false);
+		}
+		logAndroidSmokeSettingsState("OPEN_KEY");
+		return true;
+	}
+
+	public boolean toggleAndroidSmokeSettingsFromInput(final int index) {
+		if (!isAndroidSmokeSettingsLoggingEnabled() || this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+		if (this.showUiTab != Config.OPTIONS_TAB) {
+			this.showUiTab = Config.OPTIONS_TAB;
+			openBasicSettingsTab();
+		}
+
+		this.settingTab = 1;
+		this.settingsAdvancedMode = false;
+		positionAndroidSmokeSettingsMouse();
+		switch (index) {
+			case 0:
+				this.optionCameraModeAuto = !this.optionCameraModeAuto;
+				sendGameSetting(0, this.optionCameraModeAuto ? 1 : 0);
+				break;
+			case 1:
+				this.optionMouseButtonOne = !this.optionMouseButtonOne;
+				sendGameSetting(1, this.optionMouseButtonOne ? 1 : 0);
+				break;
+			case 2:
+				optionSoundDisabled = !optionSoundDisabled;
+				sendGameSetting(2, optionSoundDisabled ? 1 : 0);
+				break;
+			default:
+				return false;
+		}
+		if (this.panelSettings != null) {
+			this.panelSettings.resetList(this.controlSettingPanel);
+		}
+		logAndroidSmokeSettingsState("TOGGLE_KEY_" + index);
+		return true;
+	}
+
+	public boolean dropAndroidSmokeGroundLootFromInput() {
+		if (!isAndroidSmokeGroundLootLoggingEnabled() || this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+
+		this.topMouseMenuVisible = false;
+		this.optionsMenuShow = false;
+		this.showUiTab = 0;
+		this.selectedItemInventoryIndex = -1;
+		if (this.worldMapPanel != null && this.worldMapPanel.isVisible()) {
+			this.worldMapPanel.setVisible(false);
+		}
+
+		final int slot = 0;
+		if (slot >= this.inventoryItemCount || getInventoryItem(slot) == null) {
+			System.out.println("ANDROID_SMOKE_GROUND_LOOT"
+				+ " event=DROP_KEY_MISSING"
+				+ " slot=" + slot
+				+ " inventoryCount=" + this.inventoryItemCount
+				+ " showUiTab=" + this.showUiTab
+				+ " gameWidth=" + this.getGameWidth()
+				+ " gameHeight=" + this.getGameHeight());
+			return true;
+		}
+
+		final Item item = getInventoryItem(slot);
+		final int id = getInventoryItemID(slot);
+		final int amount = getInventoryItemSize(slot);
+		this.packetHandler.getClientStream().newPacket(246);
+		this.packetHandler.getClientStream().bufferBits.putShort(slot);
+		this.packetHandler.getClientStream().bufferBits.putInt(amount);
+		this.packetHandler.getClientStream().finishPacket();
+
+		System.out.println("ANDROID_SMOKE_GROUND_LOOT"
+			+ " event=DROP_KEY"
+			+ " slot=" + slot
+			+ " id=" + id
+			+ " amount=" + amount
+			+ " noted=" + item.getNoted()
+			+ " showUiTab=" + this.showUiTab
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
+		return true;
+	}
+
+	private void positionAndroidSmokeSettingsMouse() {
+		final int panelX = this.getSurface().width2 - 199;
+		final int panelY = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
+		this.mouseX = panelX + 98;
+		this.mouseY = panelY + 78;
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+	}
+
+	private void prepareAndroidSmokeWorldMapLayout() {
+		this.worldMapPanel.prepareLayout(this.getGameWidth(), this.getGameHeight(),
+			this.playerLocalX + this.midRegionBaseX,
+			this.playerLocalZ + this.midRegionBaseZ);
 	}
 
 	public int getBankItemCount() {

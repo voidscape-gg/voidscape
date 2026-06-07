@@ -9,6 +9,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.View;
@@ -119,6 +120,14 @@ public class GameActivity extends Activity implements ClientPort {
 		unsetReceivers();
 	}
 
+	@Override
+	public void onBackPressed() {
+		if (mudclient != null && mudclient.handleAndroidBackButton()) {
+			return;
+		}
+		super.onBackPressed();
+	}
+
 	public void networkChange(Network network, NetworkCapabilities networkCapabilities) {
 		boolean canDataConnect = false;
 		if (this.checkedNetworks) {
@@ -187,7 +196,24 @@ public class GameActivity extends Activity implements ClientPort {
     @Override
 	public void onResume() {
     	super.onResume();
-    	updateHideUi();
+		refreshInteractiveState();
+	}
+
+	@Override
+	public void onWindowFocusChanged(boolean hasFocus) {
+		super.onWindowFocusChanged(hasFocus);
+		if (hasFocus) {
+			refreshInteractiveState();
+		}
+	}
+
+	private void refreshInteractiveState() {
+		updateHideUi();
+		checkNetwork();
+		if (gameView != null) {
+			gameView.requestFocus();
+			gameView.postInvalidate();
+		}
 	}
 
 	private void updateHideUi() {
@@ -235,12 +261,18 @@ public class GameActivity extends Activity implements ClientPort {
 
     @Override
     public void drawLoadingError() {
-        if (gameView != null) gameView.drawLoadingError();
+        if (gameView != null) {
+            gameView.drawLoadingError();
+            gameView.postInvalidate();
+        }
     }
 
     @Override
     public void drawOutOfMemoryError() {
-        if (gameView != null) gameView.drawOutOfMemoryError();
+        if (gameView != null) {
+            gameView.drawOutOfMemoryError();
+            gameView.postInvalidate();
+        }
     }
 
     @Override
@@ -331,6 +363,29 @@ public class GameActivity extends Activity implements ClientPort {
 			mudclient.setOptionSideMenu(hadSideMenu);
 		}
     }
+
+	@Override
+	public boolean openUrl(String url) {
+		if (url == null || url.trim().length() == 0) {
+			return false;
+		}
+
+		Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()));
+		if (browserIntent.resolveActivity(getPackageManager()) == null) {
+			return false;
+		}
+
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					startActivity(browserIntent);
+				} catch (Exception ignored) {
+				}
+			}
+		});
+		return true;
+	}
 
 	private double getBatteryPercentage() {
 		if (batteryLevel == -1 || batteryScale == -1) {

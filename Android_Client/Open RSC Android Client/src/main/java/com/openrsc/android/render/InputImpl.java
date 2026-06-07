@@ -2,9 +2,9 @@ package com.openrsc.android.render;
 
 import android.content.Context;
 import android.media.AudioManager;
-import android.os.Handler;
 import android.view.GestureDetector;
 import android.view.GestureDetector.OnGestureListener;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -38,6 +38,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     }
 
     private boolean isLongPress = false;
+    private boolean longPressTriggered = false;
+    private boolean worldMapTouchActive = false;
+    private boolean worldMapTouchMoved = false;
+    private int worldMapTouchStartX = 0;
+    private int worldMapTouchStartY = 0;
     private final View view;
     private long lastScrollOrRotate;
 
@@ -67,6 +72,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         setMousePosition(e);
         mudclient.currentMouseButtonDown = 1;
         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown;
+        mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
         mudclient.lastMouseAction = 0;
         return true;
     }
@@ -74,6 +80,15 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
         if (mudclient.topMouseMenuVisible) {
+            return true;
+        }
+
+        if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) {
+            setMousePosition(e2);
+            mudclient.currentMouseButtonDown = 1;
+            mudclient.lastMouseButtonDown = 0;
+            mudclient.lastMouseAction = 0;
+            lastScrollOrRotate = System.currentTimeMillis();
             return true;
         }
 
@@ -143,7 +158,13 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
     @Override
     public void onLongPress(MotionEvent e) {
-
+        if (!osConfig.C_HOLD_AND_CHOOSE) {
+            return;
+        }
+        setMousePosition(e);
+        if (triggerRightClick()) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        }
     }
 
     @Override
@@ -191,53 +212,123 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 		int key = event.getUnicodeChar();
 		String chars = event.getCharacters();
-		checkSpecialKeys(key, chars);
+		checkSpecialKeys(keyCode, chars);
+
+        if (event.getAction() == KeyEvent.ACTION_MULTIPLE) {
+            return handleAndroidTextInput(chars);
+        }
 
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (keyCode == KeyEvent.KEYCODE_DEL) {
                 key = 8;
             }
+            if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                key = 10;
+            }
 
-            checkSpecialKeys(key, chars);
+            checkSpecialKeys(keyCode, chars);
 
-            boolean hitInputFilter = false;
-
-            for (int var5 = 0; var5 < Fonts.inputFilterChars.length(); ++var5) {
-                if (Fonts.inputFilterChars.charAt(var5) == key) {
-                    hitInputFilter = true;
-
-                    break;
+            if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isSearchFocused()) {
+                if (mudclient.handleAndroidSmokeWorldMapSearchKey((char) key, key)) {
+                    return true;
                 }
+                mudclient.worldMapPanel.handleSearchKey((char) key, key);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_M && mudclient.openAndroidSmokeWorldMapFromInput()) {
+                return true;
+            }
+            if ((keyCode == KeyEvent.KEYCODE_EQUALS || keyCode == KeyEvent.KEYCODE_PLUS)
+                    && mudclient.zoomAndroidSmokeWorldMapFromInput()) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && mudclient.panAndroidSmokeWorldMapFromInput(80, 0)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && mudclient.panAndroidSmokeWorldMapFromInput(-80, 0)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && mudclient.panAndroidSmokeWorldMapFromInput(0, 55)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && mudclient.panAndroidSmokeWorldMapFromInput(0, -55)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_S && mudclient.focusAndroidSmokeWorldMapSearchFromInput()) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_O && mudclient.openAndroidSmokeSettingsFromInput()) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_1 && mudclient.toggleAndroidSmokeSettingsFromInput(0)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_2 && mudclient.toggleAndroidSmokeSettingsFromInput(1)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_3 && mudclient.toggleAndroidSmokeSettingsFromInput(2)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_G && mudclient.dropAndroidSmokeGroundLootFromInput()) {
+                return true;
             }
 
-            mudclient.handleKeyPress((byte) 126, key);
-            if (hitInputFilter && mudclient.inputTextCurrent.length() < 20) {
-                mudclient.inputTextCurrent = mudclient.inputTextCurrent + (char) key;
+            if (key == 0 && handleAndroidTextInput(chars)) {
+                return true;
             }
-
-            if (hitInputFilter && mudclient.chatMessageInput.length() < 80) {
-                mudclient.chatMessageInput = mudclient.chatMessageInput + (char) key;
-            }
-
-            // Backspace
-            if (key == '\b' && mudclient.inputTextCurrent.length() > 0) {
-                mudclient.inputTextCurrent = mudclient.inputTextCurrent.substring(0,
-                        mudclient.inputTextCurrent.length() - 1);
-            }
-
-            // Backspace
-            if (key == '\b' && mudclient.chatMessageInput.length() > 0) {
-                mudclient.chatMessageInput = mudclient.chatMessageInput.substring(0,
-                        mudclient.chatMessageInput.length() - 1);
-            }
-
-            if (key == 10 || key == 13) {
-                mudclient.inputTextFinal = mudclient.inputTextCurrent;
-                mudclient.chatMessageInputCommit = mudclient.chatMessageInput;
-            }
+            handleAndroidKeyInput(key);
             return true;
         }
         return false;
+    }
+
+    private boolean handleAndroidTextInput(String chars) {
+        if (chars == null || chars.length() == 0) {
+            return false;
+        }
+        for (int i = 0; i < chars.length(); i++) {
+            handleAndroidKeyInput(chars.charAt(i));
+        }
+        return true;
+    }
+
+    private void handleAndroidKeyInput(int key) {
+        if (key == 0) {
+            return;
+        }
+
+        boolean hitInputFilter = false;
+
+        for (int var5 = 0; var5 < Fonts.inputFilterChars.length(); ++var5) {
+            if (Fonts.inputFilterChars.charAt(var5) == key) {
+                hitInputFilter = true;
+                break;
+            }
+        }
+
+        mudclient.handleKeyPress((byte) 126, key);
+        if (hitInputFilter && mudclient.inputTextCurrent.length() < 20) {
+            mudclient.inputTextCurrent = mudclient.inputTextCurrent + (char) key;
+        }
+
+        if (hitInputFilter && mudclient.chatMessageInput.length() < 80 && !mudclient.getIsSleeping()) {
+            mudclient.chatMessageInput = mudclient.chatMessageInput + (char) key;
+        }
+
+        if (key == '\b' && mudclient.inputTextCurrent.length() > 0) {
+            mudclient.inputTextCurrent = mudclient.inputTextCurrent.substring(0,
+                    mudclient.inputTextCurrent.length() - 1);
+        }
+
+        if (key == '\b' && mudclient.chatMessageInput.length() > 0) {
+            mudclient.chatMessageInput = mudclient.chatMessageInput.substring(0,
+                    mudclient.chatMessageInput.length() - 1);
+        }
+
+        if (key == 10 || key == 13) {
+            mudclient.inputTextFinal = mudclient.inputTextCurrent;
+            mudclient.chatMessageInputCommit = mudclient.chatMessageInput;
+        }
     }
 
     public void checkSpecialKeys(int keyCode, String chars) {
@@ -316,11 +407,21 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         setMousePosition(e);
         mudclient.lastMouseAction = 0;
 
+        if (handleWorldMapTouch(e)) {
+            return true;
+        }
+
         if (!gestureDetector.onTouchEvent(e)) {
             if (osConfig.C_HOLD_AND_CHOOSE) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_UP:
+                        boolean wasLongPress = longPressTriggered;
                         isLongPress = false;
+                        longPressTriggered = false;
+                        if (wasLongPress) {
+                            mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 0;
+                            return true;
+                        }
                         if (mudclient.topMouseMenuVisible) {
                             int width = mudclient.menuCommon.getWidth();
                             int height = mudclient.menuCommon.getHeight();
@@ -337,19 +438,20 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
                         if (System.currentTimeMillis() - lastScrollOrRotate < 100) {
                             return true;
                         }
+                        mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
                         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 1;
                         break;
                     case MotionEvent.ACTION_DOWN:
                         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 0;
+                        longPressTriggered = false;
                         if (!isLongPress) {
                             isLongPress = true;
-                            Handler handler = new Handler();
-                            handler.postDelayed(() -> {
+                            view.postDelayed(() -> {
                                 if (System.currentTimeMillis() - lastScrollOrRotate < 100) {
                                     return;
                                 }
                                 if (isLongPress) {
-                                    mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 2;
+                                    triggerRightClick();
                                 }
                             }, osConfig.C_LONG_PRESS_TIMER * 50L);
                         }
@@ -365,6 +467,61 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
         return false;
     }
+
+	private boolean handleWorldMapTouch(MotionEvent e) {
+		if (mudclient.worldMapPanel == null || !mudclient.worldMapPanel.isVisible()) {
+			worldMapTouchActive = false;
+			return false;
+		}
+
+		int action = e.getActionMasked();
+		if (action == MotionEvent.ACTION_DOWN) {
+			worldMapTouchActive = mudclient.worldMapPanel.containsWindow(mudclient.mouseX, mudclient.mouseY);
+			worldMapTouchMoved = false;
+			worldMapTouchStartX = mudclient.mouseX;
+			worldMapTouchStartY = mudclient.mouseY;
+		}
+		if (!worldMapTouchActive) {
+			return false;
+		}
+
+		if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+			if (worldMapTouchMoved || action == MotionEvent.ACTION_CANCEL) {
+				mudclient.currentMouseButtonDown = 0;
+			} else {
+				mudclient.currentMouseButtonDown = 1;
+				view.postDelayed(() -> {
+					if (mudclient.worldMapPanel == null || !mudclient.worldMapPanel.isVisible()) {
+						mudclient.currentMouseButtonDown = 0;
+						return;
+					}
+					mudclient.currentMouseButtonDown = 0;
+				}, 90L);
+			}
+			mudclient.lastMouseButtonDown = 0;
+			worldMapTouchActive = false;
+			return true;
+		}
+
+		if (Math.abs(mudclient.mouseX - worldMapTouchStartX) > 3
+			|| Math.abs(mudclient.mouseY - worldMapTouchStartY) > 3) {
+			worldMapTouchMoved = true;
+		}
+		mudclient.currentMouseButtonDown = 1;
+		mudclient.lastMouseButtonDown = 0;
+		lastScrollOrRotate = System.currentTimeMillis();
+		return true;
+	}
+
+	private boolean triggerRightClick() {
+		if (longPressTriggered || mudclient.topMouseMenuVisible) {
+			return false;
+		}
+		longPressTriggered = true;
+		mudclient.lastMouseAction = 0;
+		mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 2;
+		return true;
+	}
 
     private float getHeight() {
         return view.getHeight();

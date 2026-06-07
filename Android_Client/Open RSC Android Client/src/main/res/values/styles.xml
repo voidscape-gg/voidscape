@@ -17,4 +17,14 @@
         <!-- All customizations that are NOT specific to a particular API-level can go here. -->
     </style>
 
+    <style name="VoidscapeDialogTheme" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">@font/exoregular</item>
+        <item name="android:colorAccent">@color/voidscape_gold</item>
+        <item name="android:windowBackground">@drawable/voidscape_dialog_background</item>
+        <item name="android:textColorPrimary">@color/voidscape_text</item>
+        <item name="android:textColorSecondary">@color/voidscape_muted</item>
+        <item name="android:windowMinWidthMajor">72%</item>
+        <item name="android:windowMinWidthMinor">72%</item>
+    </style>
+
 </resources>

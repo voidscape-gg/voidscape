@@ -61,6 +61,8 @@ public interface ClientPort {
 
 	void closeKeyboard();
 
+	boolean openUrl(String url);
+
 	void setTitle(String title);
 
 	void setIconImage(String serverName);

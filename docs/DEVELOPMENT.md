@@ -93,6 +93,7 @@ scripts/run-portal.sh         # run website/account portal with local prototype 
 scripts/test-portal-api.sh    # smoke-test portal API flows
 scripts/test-portal-schema.sh # validate portal account-management schema contract
 scripts/build-android.sh      # build Android APK; requires Android SDK
+scripts/android-smoke.sh      # build/install Android APK and capture emulator QA screenshots
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
 ```
@@ -129,6 +130,20 @@ Build Android client:
 # Requires Android SDK via ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
 # or Homebrew android-commandlinetools at /opt/homebrew/share/android-commandlinetools.
 scripts/build-android.sh
+```
+
+Android emulator visual smoke:
+```bash
+# Starts voidscape_api35 headless when no device is connected, installs the debug APK,
+# and writes wrapper/login screenshots to the chosen directory.
+scripts/android-smoke.sh --out /tmp/voidscape-android-smoke
+```
+
+Android login-only proof:
+```bash
+# Fast path for debugging auth: verifies local SQLite credentials, launcher endpoint
+# selection, Android text entry, server login response, and post-login crash logs.
+scripts/android-smoke.sh --no-build --only-auth-login --out /tmp/voidscape-android-login
 ```
 
 Run PC client:

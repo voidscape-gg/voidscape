@@ -6,9 +6,13 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -47,6 +51,7 @@ public class CacheUpdater extends Activity {
 
 		progressBar = findViewById(R.id.progressBar);
 		progressBar.setTextSize(18);
+		progressBar.setTextColor(getColor(R.color.voidscape_ink));
 		progressBar.setIndeterminate(false);
 		progressBar.setMax(100);
 
@@ -54,7 +59,7 @@ public class CacheUpdater extends Activity {
 		launchButton.setVisibility(View.GONE);
 		launchButton.setOnClickListener(v -> {
 			if (completed) {
-				selectServer(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+				selectServer(getDefaultServerHost(), osConfig.VOIDSCAPE_DEFAULT_PORT);
 			}
 		});
 		launchButton.setOnLongClickListener(v -> {
@@ -126,6 +131,22 @@ public class CacheUpdater extends Activity {
 
 	private boolean hasRemoteCacheEndpoint() {
 		return osConfig.CACHE_URL != null && osConfig.CACHE_URL.trim().length() > 0;
+	}
+
+	private String getDefaultServerHost() {
+		return isProbablyEmulator() ? osConfig.VOIDSCAPE_EMULATOR_HOST : osConfig.VOIDSCAPE_PUBLIC_HOST;
+	}
+
+	private boolean isProbablyEmulator() {
+		return Build.FINGERPRINT.startsWith("generic")
+			|| Build.FINGERPRINT.startsWith("unknown")
+			|| Build.MODEL.contains("Emulator")
+			|| Build.MODEL.contains("Android SDK built for")
+			|| Build.MANUFACTURER.contains("Genymotion")
+			|| Build.PRODUCT.contains("sdk_gphone")
+			|| Build.PRODUCT.contains("emulator")
+			|| Build.HARDWARE.contains("goldfish")
+			|| Build.HARDWARE.contains("ranchu");
 	}
 
 	private boolean seedBundledCache(File cacheHome) {
@@ -260,26 +281,28 @@ public class CacheUpdater extends Activity {
 	}
 
 	private void showCacheFailureDialog() {
-		new AlertDialog.Builder(CacheUpdater.this)
+		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this, R.style.VoidscapeDialogTheme)
 			.setTitle("Game data unavailable")
 			.setMessage("The bundled cache could not be installed. Rebuild the APK from a repository with Client_Base/Cache populated.")
-			.setPositiveButton("Retry", (dialog, which) -> new UpdateTask().execute())
-			.setNegativeButton("Close", (dialog, which) -> finish())
+			.setPositiveButton("Retry", (d, which) -> new UpdateTask().execute())
+			.setNegativeButton("Close", (d, which) -> finish())
 			.show();
+		styleDialog(dialog);
 	}
 
 	private void showGameSelectionDialog() {
 		launchButton.setVisibility(View.VISIBLE);
 
-		String publicServer = "Voidscape (" + osConfig.VOIDSCAPE_PUBLIC_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
-		String emulator = "Voidscape Emulator (" + osConfig.VOIDSCAPE_EMULATOR_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
-		String lan = "Voidscape LAN (" + osConfig.VOIDSCAPE_LAN_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT + ")";
+		String publicServer = "Public: " + osConfig.VOIDSCAPE_PUBLIC_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT;
+		String emulator = "Emulator: " + osConfig.VOIDSCAPE_EMULATOR_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT;
+		String lan = "LAN: " + osConfig.VOIDSCAPE_LAN_HOST + ":" + osConfig.VOIDSCAPE_DEFAULT_PORT;
 		String manual = "Manual Server";
 		String[] choices = {publicServer, emulator, lan, manual};
+		ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.voidscape_dialog_item, choices);
 
-		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this)
+		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this, R.style.VoidscapeDialogTheme)
 			.setTitle("Server Options")
-			.setItems(choices, (d, which) -> {
+			.setAdapter(adapter, (d, which) -> {
 				if (which == 0) {
 					selectServer(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
 				} else if (which == 1) {
@@ -293,30 +316,39 @@ public class CacheUpdater extends Activity {
 			.create();
 		dialog.setOnCancelListener(d -> launchButton.setVisibility(View.VISIBLE));
 		dialog.show();
+		styleDialog(dialog);
 	}
 
 	private void showManualServerDialog() {
 		LinearLayout layout = new LinearLayout(CacheUpdater.this);
 		layout.setOrientation(LinearLayout.VERTICAL);
-		layout.setPadding(32, 8, 32, 0);
+		layout.setPadding(dp(24), dp(8), dp(24), 0);
 
 		final EditText hostBox = new EditText(CacheUpdater.this);
 		hostBox.setHint(osConfig.VOIDSCAPE_PUBLIC_HOST);
 		hostBox.setSingleLine(true);
 		hostBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-		layout.addView(hostBox);
+		styleInput(hostBox);
+		LinearLayout.LayoutParams hostParams = new LinearLayout.LayoutParams(
+			LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
+		hostParams.setMargins(0, dp(20), 0, 0);
+		layout.addView(hostBox, hostParams);
 
 		final EditText portBox = new EditText(CacheUpdater.this);
 		portBox.setHint(osConfig.VOIDSCAPE_DEFAULT_PORT);
 		portBox.setSingleLine(true);
 		portBox.setInputType(InputType.TYPE_CLASS_NUMBER);
-		layout.addView(portBox);
+		styleInput(portBox);
+		LinearLayout.LayoutParams portParams = new LinearLayout.LayoutParams(
+			LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
+		portParams.setMargins(0, dp(8), 0, 0);
+		layout.addView(portBox, portParams);
 
-		new AlertDialog.Builder(CacheUpdater.this)
+		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this, R.style.VoidscapeDialogTheme)
 			.setTitle("Manual Server")
 			.setMessage("Enter the Voidscape host and port.")
 			.setView(layout)
-			.setPositiveButton("Play", (dialog, whichButton) -> {
+			.setPositiveButton("Play", (d, whichButton) -> {
 				String host = hostBox.getText().toString().trim();
 				String port = portBox.getText().toString().trim();
 				if (host.length() == 0) {
@@ -327,30 +359,86 @@ public class CacheUpdater extends Activity {
 				}
 				selectServer(host, port);
 			})
-			.setNegativeButton("Back", (dialog, whichButton) -> showGameSelectionDialog())
+			.setNegativeButton("Back", (d, whichButton) -> showGameSelectionDialog())
 			.show();
+		styleDialog(dialog);
+	}
+
+	private void styleDialog(AlertDialog dialog) {
+		Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+		if (positive != null) {
+			positive.setTextColor(getColor(R.color.voidscape_gold));
+			positive.setAllCaps(false);
+		}
+		Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+		if (negative != null) {
+			negative.setTextColor(getColor(R.color.voidscape_muted));
+			negative.setAllCaps(false);
+		}
+	}
+
+	private void styleInput(EditText editText) {
+		editText.setTextColor(getColor(R.color.voidscape_text));
+		editText.setHintTextColor(getColor(R.color.voidscape_muted));
+		editText.setBackgroundResource(R.drawable.voidscape_text_field);
+		editText.setBackgroundTintList(null);
+		editText.setPadding(dp(12), 0, dp(12), 0);
+		editText.setTextSize(18);
+	}
+
+	private int dp(int value) {
+		return Math.round(value * getResources().getDisplayMetrics().density);
 	}
 
 	private void selectServer(String host, String port) {
 		if (host == null || host.trim().length() == 0 || port == null || port.trim().length() == 0) {
-			Toast.makeText(this, "Server host and port are required", Toast.LENGTH_LONG).show();
+			showServerSelectionError("Server host and port are required");
+			return;
+		}
+
+		String selectedHost = host.trim();
+		String selectedPort = port.trim();
+		if (!selectedHost.matches("[A-Za-z0-9._:-]+")) {
+			showServerSelectionError("Use a host name or IP address only");
 			return;
 		}
 
 		try {
-			Integer.parseInt(port.trim());
-			writeTextFile(new File(getFilesDir(), "ip.txt"), host.trim());
-			writeTextFile(new File(getFilesDir(), "port.txt"), port.trim());
+			int parsedPort = Integer.parseInt(selectedPort);
+			if (parsedPort < 1 || parsedPort > 65535) {
+				showServerSelectionError("Port must be between 1 and 65535");
+				return;
+			}
+			writeTextFile(new File(getFilesDir(), "ip.txt"), selectedHost);
+			writeTextFile(new File(getFilesDir(), "port.txt"), selectedPort);
+			Log.i("Voidscape", "Selected server " + selectedHost + ":" + selectedPort);
+		} catch (NumberFormatException e) {
+			showServerSelectionError("Port must be a number");
+			return;
 		} catch (Exception e) {
 			e.printStackTrace();
-			Toast.makeText(this, "Unable to save server selection", Toast.LENGTH_LONG).show();
+			showServerSelectionError("Unable to save server selection");
 			return;
 		}
 
 		Intent mainIntent = new Intent(CacheUpdater.this, GameActivity.class);
+		hideSoftKeyboard();
 		mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
 		startActivity(mainIntent);
 		finish();
+	}
+
+	private void hideSoftKeyboard() {
+		InputMethodManager inputManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+		View focused = getCurrentFocus();
+		if (inputManager != null && focused != null) {
+			inputManager.hideSoftInputFromWindow(focused.getWindowToken(), 0);
+		}
+	}
+
+	private void showServerSelectionError(String message) {
+		setStatus(message);
+		Toast.makeText(this, message, Toast.LENGTH_LONG).show();
 	}
 
 	private void writeTextFile(File file, String value) throws IOException {

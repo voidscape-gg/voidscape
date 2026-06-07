@@ -16,6 +16,15 @@
     <color name="blue">#0000FF</color>
     <color name="navy">#000080</color>
     <color name="black">#000000</color>
+    <color name="voidscape_gold">#F0C75E</color>
+    <color name="voidscape_gold_dark">#8E6425</color>
+    <color name="voidscape_panel">#DD080B10</color>
+    <color name="voidscape_panel_border">#68717A</color>
+    <color name="voidscape_panel_border_hot">#B78A37</color>
+    <color name="voidscape_scrim">#B8010307</color>
+    <color name="voidscape_text">#F5F1E8</color>
+    <color name="voidscape_muted">#B8C0C8</color>
+    <color name="voidscape_ink">#151008</color>
     <color name="White">#FFFFFF</color>
     <color name="Ivory">#FFFFF0</color>
     <color name="LightYellow">#FFFFE0</color>

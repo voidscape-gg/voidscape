@@ -16,10 +16,16 @@ public class ApplicationUpdater extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		if (!isTaskRoot()) {
+			finish();
+			return;
+		}
+
 		setContentView(R.layout.applicationupdater);
 
 		TextProgressBar progressBar = findViewById(R.id.progressBar1);
 		progressBar.setTextSize(18);
+		progressBar.setTextColor(getColor(R.color.voidscape_ink));
 		progressBar.setIndeterminate(false);
 		progressBar.setProgress(100);
 		progressBar.setText("Voidscape");

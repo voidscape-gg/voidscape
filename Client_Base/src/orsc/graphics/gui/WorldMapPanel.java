@@ -3,12 +3,17 @@ package orsc.graphics.gui;
 import com.openrsc.client.model.Sprite;
 import orsc.Config;
 import orsc.graphics.two.GraphicsController;
+import orsc.mudclient;
 import orsc.util.PngSpriteLoader;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -138,6 +143,29 @@ public final class WorldMapPanel {
 	public boolean isSearchFocused() { return visible && searchFocused; }
 	public void toggleVisible() { setVisible(!this.visible); }
 	public int getCurrentFloor() { return currentFloor; }
+	public int getZoomLevel() { return zoomLevel; }
+	public int getPanXRounded() { return Math.round(panX); }
+	public int getPanYRounded() { return Math.round(panY); }
+	public String getSearchQuery() { return searchQuery; }
+	public int getWindowX() { return winX; }
+	public int getWindowY() { return winY; }
+	public int getWindowW() { return winW; }
+	public int getWindowH() { return winH; }
+	public int getContentCenterX() { return contentX + contentW / 2; }
+	public int getContentCenterY() { return contentY + contentH / 2; }
+	public int getZoomInCenterX() { return btnX + BTN_W / 2; }
+	public int getZoomInCenterY() { return btnZoomInY + BTN_H / 2; }
+	public int getZoomOutCenterX() { return btnX + BTN_W / 2; }
+	public int getZoomOutCenterY() { return btnZoomOutY + BTN_H / 2; }
+	public int getResetCenterX() { return btnX + BTN_W / 2; }
+	public int getResetCenterY() { return btnResetY + BTN_H / 2; }
+	public int getCloseCenterX() { return closeLinkX + CLOSE_LINK_W / 2; }
+	public int getCloseCenterY() { return closeLinkY + TITLE_H / 2; }
+	public int getSearchCenterX() { return searchBoxX + searchBoxW / 2; }
+	public int getSearchCenterY() { return searchBoxY + searchBoxH / 2; }
+	public boolean containsWindow(final int x, final int y) {
+		return visible && x >= winX && x < winX + winW && y >= winY && y < winY + winH;
+	}
 
 	public void zoomIn()    { setZoomLevel(zoomLevel + 1, contentX + contentW / 2, contentY + contentH / 2); }
 	public void zoomOut()   { setZoomLevel(zoomLevel - 1, contentX + contentW / 2, contentY + contentH / 2); }
@@ -145,6 +173,55 @@ public final class WorldMapPanel {
 	public void zoomReset() {
 		zoomLevel = DEFAULT_ZOOM_LEVEL;
 		panInitialized = false;
+	}
+	public void panBy(final int dx, final int dy) {
+		panX += dx;
+		panY += dy;
+		panInitialized = true;
+		clampPan();
+	}
+	public void focusSearch() {
+		searchFocused = true;
+		searchBlinkFrame = 0;
+	}
+
+	public void prepareLayout(final int gameWidth, final int gameHeight,
+	                          final int playerWorldX, final int playerWorldY) {
+		// Windowed dialog at 75% of the game area, centered. Side-panel icons
+		// and chat tabs remain visible around the edges; clicks outside the
+		// panel pass through on desktop.
+		winW = (gameWidth  * 3) / 4;
+		winH = (gameHeight * 3) / 4;
+		winX = (gameWidth  - winW) / 2;
+		winY = (gameHeight - winH) / 2;
+		closeLinkX = winX + winW - CLOSE_LINK_W - 4;
+		closeLinkY = winY + 2;
+
+		// Map content rect — fills the panel edge-to-edge below the title bar.
+		contentX = winX + 2;
+		contentY = winY + TITLE_H + 1;
+		contentW = winW - 4;
+		contentH = winY + winH - contentY - 2;
+
+		// Zoom buttons at top-right of content (overlay).
+		btnX = contentX + contentW - BTN_W - 6;
+		btnZoomInY = contentY + 4;
+		btnZoomOutY = btnZoomInY + BTN_H + 4;
+		btnResetY = btnZoomOutY + BTN_H + 4;
+		btnTilesY = btnResetY + BTN_H + 4;
+
+		// Search box at bottom-left of content (overlay).
+		searchBoxW = 200;
+		searchBoxH = 22;
+		searchBoxX = contentX + 6;
+		searchBoxY = contentY + contentH - searchBoxH - 6;
+
+		// Initialize pan to centre on player on first frame after show.
+		if (!panInitialized) {
+			centerOnPlayer(playerWorldX, playerWorldY);
+			panInitialized = true;
+		}
+		clampPan();
 	}
 
 	/** Mouse-wheel from mudclient. Positive = zoom in, negative = zoom out. */
@@ -174,15 +251,7 @@ public final class WorldMapPanel {
 	                   int[] routeXs, int[] routeYs) {
 
 		ensureAssetsLoaded();
-
-		// Windowed dialog at 75% of the game area, centered. Side-panel icons
-		// and chat tabs remain visible around the edges; clicks outside the
-		// panel pass through (pollMouse returns OUTSIDE → mudclient leaves
-		// mouseButtonClick alone).
-		winW = (gameWidth  * 3) / 4;
-		winH = (gameHeight * 3) / 4;
-		winX = (gameWidth  - winW) / 2;
-		winY = (gameHeight - winH) / 2;
+		prepareLayout(gameWidth, gameHeight, playerWorldX, playerWorldY);
 
 		// Solid panel background + light border so it reads as a floating
 		// modal over the side panels.
@@ -196,35 +265,6 @@ public final class WorldMapPanel {
 		closeLinkY = winY + 2;
 		surface.drawColoredStringCentered(closeLinkX + CLOSE_LINK_W / 2,
 			"Close window", 0xFFFFFF, 0, 1, winY + TITLE_H - 7);
-
-		// Map content rect — fills the panel edge-to-edge below the title bar.
-		// Zoom buttons + search bar are overlaid on the map (rendered after,
-		// so they sit on top of the cartography). World-map walker is
-		// surface-only by design — no floor tabs.
-		contentX = winX + 2;
-		contentY = winY + TITLE_H + 1;
-		contentW = winW - 4;
-		contentH = winY + winH - contentY - 2;
-
-		// Zoom buttons at top-right of content (overlay).
-		btnX = contentX + contentW - BTN_W - 6;
-		btnZoomInY = contentY + 4;
-		btnZoomOutY = btnZoomInY + BTN_H + 4;
-		btnResetY = btnZoomOutY + BTN_H + 4;
-		btnTilesY = btnResetY + BTN_H + 4;
-
-		// Search box at bottom-left of content (overlay).
-		searchBoxW = 200;
-		searchBoxH = 22;
-		searchBoxX = contentX + 6;
-		searchBoxY = contentY + contentH - searchBoxH - 6;
-
-		// Initialize pan to centre on player on first frame after show.
-		if (!panInitialized) {
-			centerOnPlayer(playerWorldX, playerWorldY);
-			panInitialized = true;
-		}
-		clampPan();
 
 		// Map content (clipped).
 		float scl = scale();
@@ -683,7 +723,26 @@ public final class WorldMapPanel {
 	}
 
 	private static Sprite readPngAsSprite(File f) {
-		return PngSpriteLoader.read(f);
+		Sprite sprite = PngSpriteLoader.read(f);
+		if (sprite != null) return sprite;
+		if (!f.isFile() || mudclient.clientPort == null) return null;
+		try {
+			return mudclient.clientPort.getSpriteFromByteArray(new ByteArrayInputStream(readFileBytes(f)));
+		} catch (Throwable ex) {
+			return null;
+		}
+	}
+
+	private static byte[] readFileBytes(File file) throws IOException {
+		try (InputStream in = new FileInputStream(file);
+			 ByteArrayOutputStream out = new ByteArrayOutputStream((int) Math.min(file.length(), 1024 * 1024))) {
+			byte[] buffer = new byte[8192];
+			int read;
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
+			}
+			return out.toByteArray();
+		}
 	}
 
 	private static File worldMapAsset(String path) {

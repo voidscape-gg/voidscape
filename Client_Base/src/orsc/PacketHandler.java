@@ -21,6 +21,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
@@ -145,10 +146,13 @@ public class PacketHandler {
 	}
 
 	public final Socket openSocket(int port, String host) throws IOException {
-		Socket s = new Socket(InetAddress.getByName(host), port);
+		Socket s = new Socket();
+		int connectTimeout = isAndroid() ? 5000 : 10000;
+		int readTimeout = isAndroid() ? 10000 : 30000;
+		s.connect(new InetSocketAddress(InetAddress.getByName(host), port), connectTimeout);
 		//s.setSendBufferSize(25000);
 		//s.setReceiveBufferSize(25000);
-		s.setSoTimeout(30000);
+		s.setSoTimeout(readTimeout);
 		s.setTcpNoDelay(true);
 		return s;
 	}
