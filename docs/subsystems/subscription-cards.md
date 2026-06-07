@@ -55,8 +55,8 @@ The claim scenario uses the real client NPC command packet against NPC `848`, ve
 
 The card and vendor are client-visible definitions.
 
-- `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10069`
-- Server presets with the custom client use `client_version: 10069`
+- `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10070`
+- Server presets with the custom client use `client_version: 10070`
 - Client item and NPC rows are appended in `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`
 - Custom clients `10054+` still read a 32-bit per-item shop price override after each shop item row in `SEND_SHOP_OPEN`; the claim-only subscription vendor no longer uses that shop path.
 - Custom clients `10055+` read subscription status and effective combat/skilling XP rates from `SEND_GAME_SETTINGS` for the wrench Profile panel.

@@ -75,6 +75,13 @@ public final class mudclient implements Runnable {
 	private static final int VOID_RUSH_ARENA_MAX_X = 522;
 	private static final int VOID_RUSH_ARENA_MAX_Y = 86;
 	private static final int VOID_RUSH_WAVE_VISUAL_MILLIS = 640;
+	private static final int VOID_STARTER_MIN_X = 16;
+	private static final int VOID_STARTER_MAX_X = 32;
+	private static final int VOID_STARTER_MIN_Y = 17;
+	private static final int VOID_STARTER_MAX_Y = 42;
+	private static final int[][] VOID_STARTER_INTRO_BEAM_TILES = new int[][]{
+		{20, 35}, {28, 35}, {22, 40}, {26, 40}, {24, 33}
+	};
 	private static final int CINEMATIC_CAMERA_CLASSIC = 0;
 	private static final int CINEMATIC_CAMERA_FIRST_PERSON = 1;
 	private static final int CINEMATIC_CAMERA_CLOSE = 2;
@@ -6373,6 +6380,7 @@ public final class mudclient implements Runnable {
 						drawWorldWalkSceneRoute();
 					}
 					drawRareDropBeams();
+					drawVoidStarterIntroBeams();
 					this.advanceCinematicCameraPath();
 
 					if (this.isCinematicHudHidden()) {
@@ -6512,14 +6520,14 @@ public final class mudclient implements Runnable {
 							centerX = -50;
 						}
 
-						// Voidscape: Void Enclave is a safe-zone carve-out inside the wilderness
-						// (server bounds in WildernessLocation). Suppress the wilderness overlay
-						// inside it so players see they're in a safe area.
+						// Voidscape: suppress wilderness overlay inside safe-zone carve-outs
+						// that share old wilderness coordinates.
 						int serverX = this.worldOffsetX + this.playerLocalX + this.midRegionBaseX - 2304;
 						int serverY = this.playerLocalZ + this.worldOffsetZ + this.midRegionBaseZ - 1776;
 						boolean inVoidEnclave = serverX >= 98 && serverX <= 128 && serverY >= 300 && serverY <= 330;
+						boolean inVoidIsland = serverX >= 16 && serverX <= 32 && serverY >= 17 && serverY <= 42;
 
-						if (centerX > 0 && !inVoidEnclave) {
+						if (centerX > 0 && !inVoidEnclave && !inVoidIsland) {
 							inWild = true;
 							centerZ = centerX / 6 + 1;
 							this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), this.getGameWidth() - 59, this.getGameHeight() - 56);
@@ -7774,6 +7782,44 @@ public final class mudclient implements Runnable {
 
 			drawRareDropBeam(i, this.rareDropBeamBaseProjection, this.rareDropBeamTopProjection);
 		}
+	}
+
+	private void drawVoidStarterIntroBeams() {
+		if (this.getSurface() == null || this.world == null || this.scene == null) {
+			return;
+		}
+		if (!isInVoidStarterVisualArea()) {
+			return;
+		}
+
+		for (int i = 0; i < VOID_STARTER_INTRO_BEAM_TILES.length; i++) {
+			final int worldX = VOID_STARTER_INTRO_BEAM_TILES[i][0];
+			final int worldY = VOID_STARTER_INTRO_BEAM_TILES[i][1];
+			final int localX = worldX - this.midRegionBaseX;
+			final int localZ = worldY - this.midRegionBaseZ;
+			if (localX < 0 || localZ < 0 || localX >= 96 || localZ >= 96) {
+				continue;
+			}
+
+			final int sceneX = localX * this.tileSize + 64;
+			final int sceneZ = localZ * this.tileSize + 64;
+			final int baseY = -this.world.getElevation(sceneX, sceneZ) - 10;
+			if (!this.scene.projectToScreen(sceneX, baseY, sceneZ, this.rareDropBeamBaseProjection)) {
+				continue;
+			}
+			if (!projectRareDropBeamTop(sceneX, baseY, sceneZ)) {
+				continue;
+			}
+
+			drawRareDropBeam(1200 + i, this.rareDropBeamBaseProjection, this.rareDropBeamTopProjection);
+		}
+	}
+
+	private boolean isInVoidStarterVisualArea() {
+		final int worldX = this.playerLocalX + this.midRegionBaseX;
+		final int worldY = this.playerLocalZ + this.midRegionBaseZ;
+		return worldX >= VOID_STARTER_MIN_X && worldX <= VOID_STARTER_MAX_X
+			&& worldY >= VOID_STARTER_MIN_Y && worldY <= VOID_STARTER_MAX_Y;
 	}
 
 	private boolean hasEarlierRareDropBeamOnTile(final int index) {

@@ -157,7 +157,7 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10069`. Server's `client_version` config key (e.g. `10069`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10070`. Server's `client_version` config key (e.g. `10070`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
 
 Voidscape custom-client packet notes:
 - `10051`: Auction House market-intel payload was added to the existing custom Auction House packet.
@@ -178,6 +178,7 @@ Voidscape custom-client packet notes:
 - `10067`: removed the fantasy `Moon`, `Void`, and `Frost` trial skin tones from the selector and server acceptance, leaving grounded skin tone indexes `43..47`. No packet shape changed.
 - `10068`: restored classic clothing colours to the Top/Bottom selectors while keeping the muted Voidscape clothing colours appended at indexes `15..22`. No packet shape changed.
 - `10069`: custom `SEND_GAME_SETTINGS` appends one byte for the Global Chat country-flag visibility toggle after the HD visual settings block. The custom client also renders server-sent `@flg@CC` chat tokens as country-flag icons, used by simplified global chat formatting.
+- `10070`: client-visible Void Council starter intro release. Adds Void Councilor NPC definitions, starter-island custom landscape/cache changes, and client-side starter-island visual polish/safe-zone overlay suppression. No packet shape changed.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

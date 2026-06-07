@@ -2432,6 +2432,14 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, 154, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Subscription Vendor", "A void clerk guarding reserved subscription cards.", "Subscribe", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: starter intro council around the connected Void Island clearing (server ids 849-851)
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Councilor", "A scythe-bearing survivor of the void.", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++));
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Councilor", "A scythe-bearing survivor of the void.", "", 0, 0, 5, 0, false, sprites, 0, 5263440, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Councilor", "A scythe-bearing survivor of the void.", "", 0, 0, 5, 0, false, sprites, 0, 3151156, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

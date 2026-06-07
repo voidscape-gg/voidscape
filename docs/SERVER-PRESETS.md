@@ -124,7 +124,7 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |
-| `client_version` | `10069` | Protocol version (must match client) |
+| `client_version` | `10070` | Protocol version (must match client) |
 | `enforce_custom_client_version` | `true` | Reject mismatched clients |
 | `location_data` | `1` | Item/NPC data set (0=strict authentic, 1=preservation, 2=custom, 4=openpk) |
 | `character_creation_mode` | `0` | 0=standard, 1=ironman+1x, 2=classes+globalPK |

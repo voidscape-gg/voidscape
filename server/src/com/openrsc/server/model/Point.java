@@ -24,6 +24,9 @@ public class Point {
 		 * Bounds use strict inequality in getWildernessLocation(), so the
 		 * playable interior is X=98..128, Y=300..330. */
 		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 97, 299, 129, 331));
+		/* Void Island — non-PvP starter island. Strict bounds make the
+		 * playable starter island X=16..32, Y=17..42. */
+		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 15, 16, 33, 43));
 	}
 
 	protected short x, y;
@@ -181,12 +184,29 @@ public class Point {
 	}
 
 	public static boolean inWilderness(int x, int y) {
+		if (isSafeZone(x, y)) {
+			return false;
+		}
+
 		int wild = 2203 - (y + (1776 - (944 * (int) (y / 944))));
 		if (x + 2304 >= 2640) {
 			wild = -50;
 		}
 		if (wild > 0) {
 			return (1 + wild / 6) >= 1;
+		}
+		return false;
+	}
+
+	private static boolean isSafeZone(int x, int y) {
+		for (WildernessLocation location : wildernessLocations) {
+			if (location.getWildState() == WildState.SAFE_ZONE
+				&& x > location.getMinX()
+				&& y > location.getMinY()
+				&& x < location.getMaxX()
+				&& y < location.getMaxY()) {
+				return true;
+			}
 		}
 		return false;
 	}
@@ -263,7 +283,7 @@ public class Point {
 	}
 
 	public boolean inVoidIsland() {
-		return inBounds(16, 17, 32, 31);
+		return inBounds(16, 17, 32, 42);
 	}
 
 	public boolean onTutorialIsland() {
@@ -391,6 +411,10 @@ public class Point {
 	}
 
 	public int wildernessLevel() {
+		if (isInSafeZone()) {
+			return 0;
+		}
+
 		int wild = 2203 - (y + (1776 - (944 * Formulae.getHeight(this))));
 		if (x + 2304 >= 2640) {
 			wild = -50;

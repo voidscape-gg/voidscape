@@ -27,6 +27,19 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Void Council starter intro
+
+Added a one-time cinematic starter intro before the Void Path choice. New characters now enter a connected southern clearing on Void Island, click a Void Councilor to hear the void infection intro, then walk north to the existing Void Herald path area without a post-dialogue teleport. The starter route now tracks `void_intro_seen`, blocks northward movement until the council sequence finishes, reroutes unchosen players from the expanded starter island to the correct entry point, adds three council NPC definitions/spawns, marks Void Island as a non-PvP safe zone despite its wilderness coordinates, extends the custom landscape, renders cosmetic purple beams over the council props, and bumps the custom client/server version to `10070` for the client-visible NPC/cache changes.
+
+Files touched:
+- `server/src/com/openrsc/server/content/VoidStarterIntro.java`, `VoidPath.java`, `Point.java`, `WalkRequest.java`, `WorldWalkRequest.java`, and new-character login/appearance handlers — intro state, one-time dialogue, starter routing, safe-zone carve-out, and pre-dialogue path gate.
+- `server/conf/server/defs/NpcDefsCustom.json`, `server/conf/server/defs/locs/NpcLocsVoidIsland.json`, and `server/src/com/openrsc/server/constants/NpcId.java` — Void Councilor definitions and spawns.
+- `scripts/patch-void-enclave-landscape.py`, server/client custom landscape caches, and `Client_Base/Cache/MD5.SUM` — connected intro clearing terrain.
+- `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `Client_Base/src/orsc/mudclient.java`, `Config.java`, and matching server presets — client-side council definitions, cosmetic intro beams, starter-island wilderness overlay suppression, and client/server version `10070`.
+- `docs/subsystems/void-island-starter.md` — starter flow documentation.
+
+Reversibility: remove the intro cache key/routing hooks, council NPC ids/defs/spawns, landscape extension, cosmetic beam renderer, restore `CLIENT_VERSION`/`client_version` to `10069`, and remove the docs entry together. No packet opcode, combat formula, item definition, account schema, subscription behavior, Android-specific behavior, or launcher behavior changed.
+
 ### 2026-06-07 — Starter path refresh and settings profile polish
 
 Tightened the first-session settings experience for new Voidscape players. The Void Herald now pushes fresh game settings and queues a save immediately after starter path selection, so the Profile panel shows the chosen path without waiting for a later settings refresh. New players default to manual camera, muted sound effects, hidden roofs, fog disabled, and kill feed enabled through client fallbacks plus server/database defaults. The desktop custom settings panel now keeps Profile as the primary tab, adds a gear-icon entry point that opens the existing custom Advanced settings modal, and moves camera angle / mouse button toggles to the top of Profile while removing total time from that panel.

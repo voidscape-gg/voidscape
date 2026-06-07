@@ -1,14 +1,23 @@
 # Void Island Starter Flow
 
-Voidscape routes new accounts to a small Void Island after appearance creation. The island is a one-time onboarding step: players talk to the Void Herald, choose one of three paths, receive an early-game XP boost for that path's skills, get a matching starter kit, then teleport to the configured respawn location.
+Voidscape routes new accounts to a small Void Island after appearance creation. The island is a one-time onboarding step: players begin in a connected Void Council clearing, hear the infection intro, walk north to the Void Herald, choose one of three paths, receive an early-game XP boost for that path's skills, get a matching starter kit, then teleport to the configured respawn location.
 
 ## Path State
 
 - `server/src/com/openrsc/server/content/VoidPath.java` owns the starter path state.
 - `void_path` stores the chosen path in the existing player cache. `1` is Warrior, `2` is Forager, and `3` is Arcanist.
 - `void_path_starter_kit` records that the starter kit has been granted. This prevents starter-item farming if path state is ever manipulated during testing.
-- `PlayerAppearanceUpdater` teleports unchosen new accounts to Void Island after appearance submission.
-- `LoginPacketHandler` routes unchosen accounts saved on Tutorial Island, Tutorial Landing, or the legacy Void Island bounds back to current Void Island.
+- `void_intro_seen` records that the Void Council intro finished. If a new player disconnects before the sequence ends, the intro plays again on their next login.
+- `PlayerAppearanceUpdater` sends unchosen new accounts to the council clearing after appearance submission.
+- `LoginPacketHandler` routes unchosen accounts saved on Tutorial Island, Tutorial Landing, the legacy Void Island bounds, or the current starter island back to the appropriate starter entry point.
+
+## Council Intro
+
+`server/src/com/openrsc/server/content/VoidStarterIntro.java` owns the first-login intro. Players start in the southern clearing at `(24,37)`, surrounded by three Void Councilors. The council speaks one line at a time, then releases the player with a message that the path north is open. No teleport occurs after the dialogue; the clearing is part of the same starter island and is connected directly to the Void Herald path area.
+
+The desktop client draws purple beams over decorative skull/item tiles in the intro clearing using fixed tile markers. Those beams are cosmetic only and do not create ground items or loot interactions.
+
+Void Island is carved out as a safe zone even though its coordinates sit inside the classic wilderness-level calculation. Players cannot attack each other there, the wilderness overlay is suppressed, and starter players are not eligible for wilderness-only systems while they are choosing a path.
 
 ## Paths
 

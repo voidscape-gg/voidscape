@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc;
 
 import com.openrsc.server.Server;
 import com.openrsc.server.content.VoidPath;
+import com.openrsc.server.content.VoidStarterIntro;
 import com.openrsc.server.database.struct.PlayerLoginData;
 import com.openrsc.server.database.struct.PlayerRecoveryQuestions;
 import com.openrsc.server.login.*;
@@ -76,7 +77,7 @@ public class LoginPacketHandler {
 
 	private void routeUnchosenStarterPlayer(Player loadedPlayer) {
 		if (VoidPath.shouldRouteToVoidIsland(loadedPlayer)) {
-			loadedPlayer.setInitialLocation(Point.location(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y));
+			loadedPlayer.setInitialLocation(VoidStarterIntro.entryPoint(loadedPlayer));
 		}
 	}
 

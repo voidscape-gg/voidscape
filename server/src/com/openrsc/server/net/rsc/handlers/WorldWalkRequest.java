@@ -1,5 +1,6 @@
 package com.openrsc.server.net.rsc.handlers;
 
+import com.openrsc.server.content.VoidStarterIntro;
 import com.openrsc.server.event.rsc.impl.AutoWalkEvent;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.WorldPathfinder;
@@ -59,6 +60,11 @@ public class WorldWalkRequest implements PayloadProcessor<WorldWalkStruct, Opcod
 		if (path.isEmpty()) {
 			// Already standing on the requested tile.
 			ActionSender.sendWorldWalkRoute(player, false, REASON_SAME_TILE, Collections.emptyList());
+			return;
+		}
+		if (VoidStarterIntro.blocksUnseenIntroPath(player, path)) {
+			player.message("@mag@The Void Council blocks the path north. Speak to one of them.");
+			ActionSender.sendWorldWalkRoute(player, false, REASON_BUSY, Collections.emptyList());
 			return;
 		}
 

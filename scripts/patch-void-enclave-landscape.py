@@ -49,6 +49,8 @@ VOID_ISLAND_SECTOR_BASE_X = 0
 VOID_ISLAND_SECTOR_BASE_Y = 0
 VOID_ISLAND_CENTER_X = 24
 VOID_ISLAND_CENTER_Y = 24
+VOID_ISLAND_INTRO_CENTER_X = 24
+VOID_ISLAND_INTRO_CENTER_Y = 37
 LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 
 CATCHSIM_SECTORS = (
@@ -321,17 +323,31 @@ def patch_void_island_sector(sector_bytes: bytes) -> bytes:
             if (dx * 1.15) + dy <= 9.0:
                 land.add((x, y))
 
+    for x in range(VOID_ISLAND_INTRO_CENTER_X - 7, VOID_ISLAND_INTRO_CENTER_X + 8):
+        for y in range(VOID_ISLAND_INTRO_CENTER_Y - 5, VOID_ISLAND_INTRO_CENTER_Y + 6):
+            dx = abs(x - VOID_ISLAND_INTRO_CENTER_X)
+            dy = abs(y - VOID_ISLAND_INTRO_CENTER_Y)
+            if (dx * 1.10) + (dy * 1.35) <= 7.2:
+                land.add((x, y))
+
+    for y in range(VOID_ISLAND_CENTER_Y + 6, VOID_ISLAND_INTRO_CENTER_Y - 4):
+        for x in range(VOID_ISLAND_CENTER_X - 2, VOID_ISLAND_CENTER_X + 3):
+            if abs(x - VOID_ISLAND_CENTER_X) <= (2 if y in (31, 32, 33) else 1):
+                land.add((x, y))
+
     for x, y in land:
         off = tile_offset(x, y)
         edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
-        inner_ring = abs(x - VOID_ISLAND_CENTER_X) + abs(y - VOID_ISLAND_CENTER_Y) in (2, 3)
-        center = abs(x - VOID_ISLAND_CENTER_X) <= 1 and abs(y - VOID_ISLAND_CENTER_Y) <= 1
+        main_inner_ring = abs(x - VOID_ISLAND_CENTER_X) + abs(y - VOID_ISLAND_CENTER_Y) in (2, 3)
+        main_center = abs(x - VOID_ISLAND_CENTER_X) <= 1 and abs(y - VOID_ISLAND_CENTER_Y) <= 1
+        intro_inner_ring = abs(x - VOID_ISLAND_INTRO_CENTER_X) + abs(y - VOID_ISLAND_INTRO_CENTER_Y) in (2, 3)
+        intro_center = abs(x - VOID_ISLAND_INTRO_CENTER_X) <= 1 and abs(y - VOID_ISLAND_INTRO_CENTER_Y) <= 1
 
         buf[off + 0] = 52 if edge else 68
         buf[off + 1] = (112 + ((x * 7 + y * 3) % 20)) & 0xFF
-        if center:
+        if main_center or intro_center:
             buf[off + 2] = FLOOR_RITUAL
-        elif inner_ring:
+        elif main_inner_ring or intro_inner_ring or (abs(x - VOID_ISLAND_CENTER_X) <= 1 and 30 <= y <= 34):
             buf[off + 2] = FLOOR_MID
         else:
             buf[off + 2] = FLOOR_INDOOR

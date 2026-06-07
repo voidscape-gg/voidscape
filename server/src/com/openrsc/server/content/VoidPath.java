@@ -71,6 +71,8 @@ public final class VoidPath {
 		return player != null
 			&& !hasChosen(player)
 			&& (inLegacyVoidIsland(player)
+				|| player.getLocation().inVoidIsland()
+				|| VoidStarterIntro.inIntroArea(player)
 				|| player.getLocation().inTutorialLanding()
 				|| player.getLocation().onTutorialIsland());
 	}

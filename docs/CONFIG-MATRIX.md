@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10069` | `10069` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10070` | `10070` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Decide before beta | Local comment says this keeps completed Dragon sword wieldable. Earlier project docs described F2P-by-default. Pick one and update docs/presets. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
@@ -24,7 +24,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10069` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10070` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_packet_register` | `false` | `false` | `false` | Portal-first account/character creation. |
 
@@ -92,9 +92,9 @@ These are positional in many loaders. Keep server and client append order aligne
 | Type | Current high-water mark | Notes |
 |---|---:|---|
 | Custom item ids | `1602` | Subscription card is currently the latest documented item. |
-| Custom NPC ids | `848` | Void Subscription Vendor is current high-water mark. |
+| Custom NPC ids | `851` | Void Councilor 3 is current high-water mark. |
 | Custom scenery ids | `1306` | Void Rift is current high-water mark. |
-| Custom client version | `10069` | Current working tree value. |
+| Custom client version | `10070` | Current working tree value. |
 
 ## Pre-release config sign-off
 
