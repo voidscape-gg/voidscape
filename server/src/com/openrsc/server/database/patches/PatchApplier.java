@@ -58,7 +58,8 @@ public abstract class PatchApplier {
                     .filter(file -> file.isFile() && file.getName().length() > 10 && file.getName().contains(".sql"))
                     .filter(file -> !alreadyExecutedPatches.contains(file.getName()))
                     .map(this::createLocalDateFilePair)
-                    .sorted(Map.Entry.comparingByKey())
+                    .sorted(Map.Entry.<LocalDate, File>comparingByKey()
+                            .thenComparing(entry -> entry.getValue().getName()))
                     .filter(Objects::nonNull)
                     .map(Pair::getValue)
                     .collect(Collectors.toList());

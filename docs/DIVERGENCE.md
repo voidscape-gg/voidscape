@@ -27,6 +27,16 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Deterministic DB patch ordering for beta deploys
+
+Hardened database patch application after the friend beta VPS was updated with current server jars but an older `server/database` patch directory. The stale directory left `players.hairstyle` unapplied, causing current login loads to roll back halfway and kick new beta accounts during first appearance updates. The patch applier now sorts same-date SQL patches by filename after sorting by date, so additive schema patches run before later same-day data migrations. Operations docs now call out that server jars, `server/conf/`, and `server/database/` must deploy together, while preserving the live DB/log/runtime files and matching `client_version`.
+
+Files touched:
+- `server/src/com/openrsc/server/database/patches/PatchApplier.java` — deterministic date+filename patch ordering.
+- `docs/OPERATIONS.md` — beta server update checklist for jars, config, migrations, DB backup, and endpoint verification.
+
+Reversibility: revert the sorter and operations note. No protocol, gameplay, account data model, or client behavior changed; this only affects future patch application order.
+
 ### 2026-06-07 — Android wilderness player-target smoke
 
 Verified Android wilderness player target selection against the shared player menu/action path without changing PvP mechanics. The shared client now emits `ANDROID_SMOKE_PLAYER_TARGET` and `ANDROID_SMOKE_PLAYER_ACTION` markers behind an app-private Android flag, and the existing context-menu logger now wakes up for player-target smoke. The Android smoke helper gained a focused authenticated `--only-auth-wilderness-target` pass that snapshots/restores the auth fixture's position and `group_id`, temporarily promotes it only to spawn a cinematic player at a quiet wilderness tile with a non-combat anchor, long-presses the projected player target, selects the logged attack row, asserts a shared `PLAYER_ATTACK_*` action, stops the cinematic scene, and restores the account.

@@ -89,6 +89,17 @@ Static beta deployment:
 
 In both modes, the launcher checks the manifest on Play, verifies SHA-256 hashes, downloads only changed files, preserves runtime files like credentials and endpoint settings, and then launches the cached `Open_RSC_Client.jar`.
 
+## Server updates
+
+When shipping a beta server update, deploy the runtime and migrations as one unit:
+
+- Back up the active database before changing files.
+- Sync `server/core.jar`, `server/plugins.jar`, `server/conf/`, and `server/database/`.
+- Preserve runtime state such as `server/inc/sqlite/*.db`, `server/logs/`, `server/avatars/`, and `server/local.conf`.
+- Set the deployed `server/local.conf` `client_version` to match `Client_Base/src/orsc/Config.java` before restart.
+- Restart the server and watch the runner log until database patches finish and the game port opens.
+- Verify both the public game port and the launcher manifest before sending testers back in.
+
 ## Config files
 
 | File | Purpose | Git status |
