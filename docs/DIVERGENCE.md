@@ -3191,3 +3191,14 @@ Details:
 - The crash detector now fails only on app-relevant fatal exception blocks, avoiding false failures from emulator system-service noise such as NFC warnings.
 - Verified lifecycle smoke on `voidscape_small_api35` and `voidscape_tablet_api35`; both completed login, resume, duplicate launcher relaunch, logout, post-logout keyboard, and crash checks.
 - No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.
+
+### 2026-06-07 - Android launch branding polish
+
+Finished the Android OS-facing launch identity so the app icon and first app-owned frames match the Voidscape wrapper instead of exposing legacy/default Android surfaces.
+
+Details:
+- Added an Android 8+ adaptive launcher icon resource that pairs a dark background with the Voidscape cracked-`V` foreground while keeping the legacy density PNGs as fallback.
+- Added a `VoidscapeLaunchTheme` on the exported `ApplicationUpdater` Activity, with Android 12+ splash attributes for a centered Voidscape launch icon and a dark Voidscape scene window background for the handoff into the updater layout.
+- Avoided using a centered bitmap layer in the generic window background after emulator screenshots showed it could clip during the portrait-to-landscape transition.
+- Verified `scripts/build-android.sh`, manual cold-start/icon screenshots in `/tmp/voidscape-android-launch-branding-v3/manual`, and the normal wrapper/login smoke in `/tmp/voidscape-android-launch-branding-v3-smoke`.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.

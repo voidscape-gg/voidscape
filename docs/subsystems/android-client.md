@@ -60,6 +60,8 @@ Android hides last-login host/IP information by default and does not expose the 
 
 Android login status messages dismiss the soft keyboard before drawing on the existing-user/recovery panels. Local validation now reports missing username/password immediately instead of silently returning with the keyboard still open, and the existing-user field labels hide while a status is visible so the compact mobile layout stays readable. If an Android player chooses an unreachable manual server, startup now stops on a clear selected-server error instead of hanging or crashing before login. Backgrounding from the login screen and relaunching from the app icon resumes the existing game task, refreshes fullscreen/network/focus state, and keeps input usable. The Android touch layer maps a single terrain tap into the shared client's normal `LANDSCAPE_WALK_HERE` path; the auth smoke can verify this by comparing the saved DB position before and after a tap/logout. The same tap path reaches shared NPC, scenery, and inventory menu actions: the smoke helper can temporarily enable app-private target logging, tap projected NPC/object/item coordinates, and assert resulting shared `NPC_TALK_TO`/`NPC_ATTACK*`, `OBJECT_COMMAND1`, `OBJECT_USE_ITEM`, `NPC_USE_ITEM`, `ITEM_USE`, and `ITEM_USE_ITEM` actions in logcat. Long-press now explicitly synthesizes the shared right-click path, opens the normal `Choose option` menu, suppresses the release tap so the player can review options, and lets the next tap choose a row. Logging out from the in-game settings panel returns Android to the branded login home, closes stale game overlays, and leaves the existing-user form/keyboard usable without an app restart.
 
+Android launcher branding uses the modern platform path while keeping old-device fallbacks. Android 8+ reads the adaptive launcher icon from `res/drawable-anydpi-v26/ic_launcher.xml`, with a dark background and the Voidscape cracked-`V` foreground. Android 12+ reads `VoidscapeLaunchTheme` from `res/values-v31/styles.xml`, using `windowSplashScreenAnimatedIcon` for a centered app-owned launch mark and `voidscape_launch_background` for the dark scene preview between the platform splash and the updater layout. Verification screenshots live at `/tmp/voidscape-android-launch-branding-v3/manual` for the cold-start/icon frames and `/tmp/voidscape-android-launch-branding-v3-smoke` for the wrapper/login smoke set.
+
 ## Shared Client Constraints
 
 Everything in `Client_Base/src` must compile on Android. Avoid direct imports of desktop-only APIs such as AWT, Swing, `java.awt.image.BufferedImage`, or `javax.imageio.ImageIO` in shared code. Use `orsc.multiclient.ClientPort` for platform-specific image decoding or rendering behavior.
@@ -113,8 +115,8 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Restyle the advanced server picker so it does not use the default white AlertDialog on a black game screen.
 - [x] Restyle manual host/port entry with dark theme, legible fields, and clear cancel/back behavior.
 - [x] Replace legacy Android launcher icon PNG densities with Voidscape artwork.
-- [ ] Add a true Android adaptive icon foreground/background pair.
-- [ ] Add a branded Android splash screen for cold app start.
+- [x] Add a true Android adaptive icon foreground/background pair.
+- [x] Add a branded Android splash screen for cold app start.
 - [x] Make fullscreen education overlay acceptable on first boot, or document that it is OS-owned and appears only once.
 - [ ] Verify portrait-to-landscape transition feels intentional and not like the app is rotating by accident.
 - [x] Make native Android text sizes and spacing look polished at 420 dpi and smaller densities.

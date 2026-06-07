@@ -25,7 +25,8 @@
             android:name="com.openrsc.android.updater.ApplicationUpdater"
             android:configChanges="orientation"
             android:exported="true"
-            android:screenOrientation="landscape">
+            android:screenOrientation="landscape"
+            android:theme="@style/VoidscapeLaunchTheme">
             <intent-filter>
                 <category android:name="android.intent.category.LAUNCHER" />
 
