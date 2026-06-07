@@ -19586,28 +19586,27 @@ public final class mudclient implements Runnable {
 				this.setExperienceArray();
 				MiscFunctions.maxReadTries = 1000;
 				// We must fetch the server config before continuing.
+				String ip;
+				int port;
 				if ((Config.SERVER_IP != null)) {
-					String ip = Config.SERVER_IP; // allows override if manually set in Config code
-					int port = Config.SERVER_PORT; // allows override if manually set in Config code
-					System.out.println(" ");
-					System.out.println(" ");
-					System.out.println("Fetching server configs from " + ip + ":" + port);
-					System.out.println(" ");
-					System.out.println(" ");
+					ip = Config.SERVER_IP; // allows override if manually set in Config code
+					port = Config.SERVER_PORT; // allows override if manually set in Config code
 				} else {
-					String ip = ClientPort.loadIP(); // loads based on Cache/ip.txt
-					int port = ClientPort.loadPort(); // loads based on Cache/port.txt
-					System.out.println(" ");
-					System.out.println(" ");
-					System.out.println("Fetching server configs from " + ip + ":" + port);
-					System.out.println(" ");
-					System.out.println(" ");
+					ip = ClientPort.loadIP(); // loads based on Cache/ip.txt
+					port = ClientPort.loadPort(); // loads based on Cache/port.txt
 				}
+				System.out.println(" ");
+				System.out.println(" ");
+				System.out.println("Fetching server configs from " + ip + ":" + port);
+				System.out.println(" ");
+				System.out.println(" ");
+				clientPort.showLoadingProgress(5, "Connecting to " + ip + ":" + port);
 				try {
 					this.getServerConfig();
 				} catch (RuntimeException configError) {
 					configError.printStackTrace();
 					this.errorLoadingData = true;
+					clientPort.showLoadingProgress(0, "Unable to connect to server");
 					clientPort.drawLoadingError();
 				}
 			}

@@ -27,6 +27,14 @@ public class OpenRSC extends ORSCApplet {
 			// Required for newer versions of Oracle 8 to disable OS-level scaling
 			System.setProperty("sun.java2d.dpiaware", "true");
 
+			if (Utils.isWindowsOS()) {
+				// Some Windows/JRE/GPU combinations leave the Swing back buffer black.
+				// The classic viewport is tiny, so the software Java2D path is safer.
+				System.setProperty("sun.java2d.d3d", "false");
+				System.setProperty("sun.java2d.noddraw", "true");
+				System.setProperty("sun.java2d.opengl", "false");
+			}
+
 			// Linux / other
 			if (!Utils.isWindowsOS()) {
 				System.setProperty("GDK_SCALE", "1");

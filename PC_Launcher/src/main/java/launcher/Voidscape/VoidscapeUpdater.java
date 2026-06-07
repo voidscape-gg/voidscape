@@ -95,15 +95,7 @@ public class VoidscapeUpdater {
       prepare(false);
       File jar = VoidscapeLauncherConfig.clientJar(cacheDir);
       if (hasManifestUrl()) {
-        try {
-          updateFromManifest();
-        } catch (Exception updateError) {
-          if (!jar.exists()) {
-            throw updateError;
-          }
-          Logger.Warn("Update check failed, launching installed client: " + updateError.getMessage());
-          status("Update unavailable - launching installed client", 100, false);
-        }
+        updateFromManifest();
       }
       if (!jar.exists()) {
         JOptionPane.showMessageDialog(parent,
@@ -114,7 +106,14 @@ public class VoidscapeUpdater {
       }
 
       status("Launching Voidscape...", 100, false);
-      Utils.execCmd(new String[] {"java", "-jar", jar.getAbsolutePath()}, cacheDir);
+      Utils.execCmd(new String[] {
+          "java",
+          "-Dsun.java2d.d3d=false",
+          "-Dsun.java2d.noddraw=true",
+          "-Dsun.java2d.opengl=false",
+          "-jar",
+          jar.getAbsolutePath()
+      }, cacheDir);
     } catch (Exception e) {
       Logger.Error("Unable to launch Voidscape client: " + e.getMessage());
       JOptionPane.showMessageDialog(parent,

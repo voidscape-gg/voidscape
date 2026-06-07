@@ -11,6 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -338,6 +339,12 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 
 	public boolean isViewportLoaded() {
 		return scaledViewport.isViewportImageLoaded();
+	}
+
+	public void repaintBootstrapStatus() {
+		if (scaledViewport != null && !scaledViewport.isViewportImageLoaded()) {
+			scaledViewport.repaint();
+		}
 	}
 
 	public int getWindowWidthInsets() {
@@ -813,6 +820,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			if (viewportImage == null
 				|| getInstance().viewportWidth == 0
 				|| getInstance().viewportHeight == 0) {
+				drawBootstrapStatus(g);
 				return;
 			}
 
@@ -869,6 +877,57 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 				// Draw the interpolation-scaled image
 				g.drawImage(interpolationBackground, drawX, drawY, null);
 			}
+		}
+
+		private void drawBootstrapStatus(Graphics g) {
+			Graphics2D g2d = (Graphics2D) g.create();
+			try {
+				int width = getWidth();
+				int height = getHeight();
+				g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				g2d.setColor(Color.black);
+				g2d.fillRect(0, 0, width, height);
+
+				String state = ORSCApplet.globalLoadingState;
+				if (state == null || state.trim().length() == 0) {
+					state = "Starting Voidscape...";
+				}
+				boolean error = state.toLowerCase(Locale.ENGLISH).contains("unable")
+					|| state.toLowerCase(Locale.ENGLISH).contains("failed")
+					|| state.toLowerCase(Locale.ENGLISH).contains("error");
+				int accent = error ? 0xd45b5b : 0x9b62ff;
+				int panelWidth = Math.min(340, Math.max(240, width - 64));
+				int panelHeight = 96;
+				int x = Math.max(16, (width - panelWidth) / 2);
+				int y = Math.max(24, (height - panelHeight) / 2);
+
+				g2d.setColor(new Color(10, 10, 14));
+				g2d.fillRect(x, y, panelWidth, panelHeight);
+				g2d.setColor(new Color(accent));
+				g2d.drawRect(x, y, panelWidth, panelHeight);
+				g2d.setColor(new Color(230, 225, 214));
+				g2d.setFont(new Font("SansSerif", Font.BOLD, 15));
+				drawCentered(g2d, "VOIDSCAPE", x, y + 24, panelWidth);
+				g2d.setFont(new Font("SansSerif", Font.PLAIN, 12));
+				drawCentered(g2d, state, x + 14, y + 50, panelWidth - 28);
+
+				int progress = Math.max(0, Math.min(100, ORSCApplet.globalLoadingPercent));
+				int barX = x + 28;
+				int barY = y + 68;
+				int barWidth = panelWidth - 56;
+				g2d.setColor(new Color(45, 40, 54));
+				g2d.fillRect(barX, barY, barWidth, 9);
+				g2d.setColor(new Color(accent));
+				g2d.fillRect(barX, barY, Math.max(6, progress * barWidth / 100), 9);
+			} finally {
+				g2d.dispose();
+			}
+		}
+
+		private void drawCentered(Graphics2D g2d, String text, int x, int y, int width) {
+			FontMetrics metrics = g2d.getFontMetrics();
+			int textX = x + Math.max(0, (width - metrics.stringWidth(text)) / 2);
+			g2d.drawString(text, textX, y);
 		}
 
 		/** Scales a {@link BufferedImage} using interpolation algorithms across four threads */

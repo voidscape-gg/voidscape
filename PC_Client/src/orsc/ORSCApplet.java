@@ -20,7 +20,7 @@ import static orsc.osConfig.C_LAST_ZOOM;
 public class ORSCApplet extends Applet implements ComponentListener, ImageObserver, ImageProducer, ClientPort {
 	private static final long serialVersionUID = 1L;
 	public static int globalLoadingPercent = 0;
-	public static String globalLoadingState = "";
+	public static String globalLoadingState = "Starting Voidscape...";
 	private static mudclient mudclient;
 	private static ORSCApplet workbenchApplet;
 	static PacketHandler packetHandler;
@@ -110,8 +110,17 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		}
 	}
 
+	private static void setGlobalLoadingStatus(int percent, String state) {
+		globalLoadingPercent = Math.max(0, Math.min(100, percent));
+		globalLoadingState = state == null || state.trim().length() == 0 ? "Starting Voidscape..." : state;
+		if (scaledWindow != null) {
+			scaledWindow.repaintBootstrapStatus();
+		}
+	}
+
 	public final boolean drawLoading(int var1) {
 		try {
+			setGlobalLoadingStatus(0, "Starting Voidscape...");
 			Graphics var2 = this.getGraphics();
 			if (var2 != null) {
 				this.loadingGraphics = scaledWindow.getGraphics();
@@ -133,6 +142,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 	private void drawLoadingScreen(String state, int percent, int var3) {
 		try {
+			setGlobalLoadingStatus(percent, state);
 			try {
 				int x = (this.width - 281) / 2;
 				int y = (this.height - 148) / 2;
@@ -198,6 +208,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 	public final void showLoadingProgress(int percent, String state) {
 		try {
+			setGlobalLoadingStatus(percent, state);
 			try {
 				int x = (this.width - 281) / 2;
 				x += 2;

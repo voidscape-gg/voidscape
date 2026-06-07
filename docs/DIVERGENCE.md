@@ -27,6 +27,17 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-07 — Beta client black-window hardening
+
+Hardened the hosted desktop beta after some Windows testers could open the launcher but saw a plain black game window. The PC client now disables the fragile Windows Java2D hardware pipelines before Swing starts, paints a Voidscape startup/connection status directly from the scaled viewport before the first game frame exists, and shows an explicit connection-failure state instead of silently leaving the canvas black. The launcher now treats manifest update failure as launch-blocking, so it will not fall through to a stale or mixed local client/cache after a partial update.
+
+Files touched:
+- `PC_Client/src/orsc/OpenRSC.java`, `ORSCApplet.java`, and `ScaledWindow.java` — Windows-safe Java2D flags plus bootstrap status/error rendering.
+- `Client_Base/src/orsc/mudclient.java` — visible server-config connection status and failure message.
+- `PC_Launcher/src/main/java/launcher/Voidscape/VoidscapeUpdater.java` — strict manifest update before Play and Windows-safe client launch flags.
+
+Reversibility: revert these client/launcher startup changes and republish the beta launcher/update folder. No packet opcode, server config, client version, cache format, item/NPC definition, account data, or gameplay behavior changed.
+
 ### 2026-06-07 — Void Council starter intro
 
 Added a one-time cinematic starter intro before the Void Path choice. New characters now enter a connected southern clearing on Void Island, click a Void Councilor to hear the void infection intro, then walk north to the existing Void Herald path area without a post-dialogue teleport. The starter route now tracks `void_intro_seen`, blocks northward movement until the council sequence finishes, reroutes unchosen players from the expanded starter island to the correct entry point, adds three council NPC definitions/spawns, marks Void Island as a non-PvP safe zone despite its wilderness coordinates, extends the custom landscape, renders cosmetic purple beams over the council props, and bumps the custom client/server version to `10070` for the client-visible NPC/cache changes.
