@@ -62,6 +62,8 @@ Android login status messages dismiss the soft keyboard before drawing on the ex
 
 Android launcher branding uses the modern platform path while keeping old-device fallbacks. Android 8+ reads the adaptive launcher icon from `res/drawable-anydpi-v26/ic_launcher.xml`, with a dark background and the Voidscape cracked-`V` foreground. Android 12+ reads `VoidscapeLaunchTheme` from `res/values-v31/styles.xml`, using `windowSplashScreenAnimatedIcon` for a centered app-owned launch mark and `voidscape_launch_background` for the dark scene preview between the platform splash and the updater layout. Verification screenshots live at `/tmp/voidscape-android-launch-branding-v3/manual` for the cold-start/icon frames and `/tmp/voidscape-android-launch-branding-v3-smoke` for the wrapper/login smoke set. The launch transition is intentional on the baseline AVD: the Android launcher/home screen is portrait with the adaptive icon visible, and the first app-owned frame is already landscape with the Voidscape updater background.
 
+Android native wrapper screens tolerate system dark mode and a larger Android font scale on the current emulator matrix. Baseline `voidscape_api35` and small `voidscape_small_api35` were both checked with `font_scale=1.3` and `cmd uimode night yes`; ready/play, server picker, manual server, login handoff, and bad-server screenshots remained readable without clipped text. Proof screenshots are `/tmp/voidscape-android-dark-font-v1`, `/tmp/voidscape-android-dark-font-small-v1`, and the small manual-dialog follow-up `/tmp/voidscape-android-dark-font-small-v1/manual-proof`.
+
 ## Shared Client Constraints
 
 Everything in `Client_Base/src` must compile on Android. Avoid direct imports of desktop-only APIs such as AWT, Swing, `java.awt.image.BufferedImage`, or `javax.imageio.ImageIO` in shared code. Use `orsc.multiclient.ClientPort` for platform-specific image decoding or rendering behavior.
@@ -120,7 +122,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Make fullscreen education overlay acceptable on first boot, or document that it is OS-owned and appears only once.
 - [x] Verify portrait-to-landscape transition feels intentional and not like the app is rotating by accident.
 - [x] Make native Android text sizes and spacing look polished at 420 dpi and smaller densities.
-- [ ] Ensure all Android native screens look good with system dark mode and font scaling.
+- [x] Ensure all Android native screens look good with system dark mode and font scaling.
 - [x] Decide whether Android should reuse the desktop launcher layered assets or have a phone-specific composition.
 - [ ] Keep the actual game surface classic RSC once logged in; polish wrapper and login without turning the game HUD into a different product.
 
