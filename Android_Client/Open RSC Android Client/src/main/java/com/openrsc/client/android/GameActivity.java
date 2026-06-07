@@ -116,8 +116,35 @@ public class GameActivity extends Activity implements ClientPort {
 
 	@Override
 	protected void onDestroy() {
-		super.onDestroy();
 		unsetReceivers();
+		shutdownClientThread();
+		inputImpl = null;
+		gameView = null;
+		super.onDestroy();
+	}
+
+	private void shutdownClientThread() {
+		mudclient client = mudclient;
+		if (client == null) {
+			return;
+		}
+
+		client.threadState = -1;
+		try {
+			client.closeConnection(false);
+		} catch (RuntimeException ignored) {
+		}
+
+		Thread thread = client.clientBaseThread;
+		if (thread != null && thread != Thread.currentThread() && thread.isAlive()) {
+			thread.interrupt();
+			try {
+				thread.join(750L);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}
+		mudclient = null;
 	}
 
 	@Override
@@ -314,7 +341,8 @@ public class GameActivity extends Activity implements ClientPort {
 
     @Override
     public Sprite getSpriteFromByteArray(ByteArrayInputStream byteArrayInputStream) {
-        return gameView.getSpriteFromByteArray(byteArrayInputStream);
+        if (gameView != null) return gameView.getSpriteFromByteArray(byteArrayInputStream);
+		return null;
     }
 
     @Override
@@ -344,6 +372,7 @@ public class GameActivity extends Activity implements ClientPort {
     }
 
     public void drawKeyboard() {
+		if (gameView == null || mudclient == null) return;
         InputMethodManager imm = (InputMethodManager) this
                 .getSystemService(Context.INPUT_METHOD_SERVICE);
         gameView.requestFocus();
@@ -356,10 +385,11 @@ public class GameActivity extends Activity implements ClientPort {
     }
 
     public void closeKeyboard() {
+		if (gameView == null) return;
         ((InputMethodManager) Objects.requireNonNull(getSystemService(Activity.INPUT_METHOD_SERVICE)))
                 .hideSoftInputFromWindow(gameView.getWindowToken(), 0);
         osConfig.F_SHOWING_KEYBOARD = false;
-		if (Config.S_SIDE_MENU_TOGGLE) {
+		if (Config.S_SIDE_MENU_TOGGLE && mudclient != null) {
 			mudclient.setOptionSideMenu(hadSideMenu);
 		}
     }

@@ -146,6 +146,13 @@ Android login-only proof:
 scripts/android-smoke.sh --no-build --only-auth-login --out /tmp/voidscape-android-login
 ```
 
+Android lifecycle proof:
+```bash
+# Logs in, closes the welcome panel, backgrounds/resumes through the launcher,
+# checks duplicate launcher starts, logs out, and fails on Android runtime crashes.
+scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-lifecycle
+```
+
 Run PC client:
 ```bash
 cd Client_Base

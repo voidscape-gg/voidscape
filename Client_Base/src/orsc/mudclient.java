@@ -1150,11 +1150,18 @@ public final class mudclient implements Runnable {
 					this.gameState = 2;
 				}
 
-				while (this.gameState == 2) {
+				while (this.gameState == 2 && this.threadState >= 0) {
 					if (this.gotInitialConfigs) {
 						this.gameState = 0;
 						run2();
 					}
+					GenUtil.sleepShadow(10L);
+				}
+				if (this.threadState < 0) {
+					if (this.threadState == -1) {
+						this.closeProgram();
+					}
+					this.clientBaseThread = null;
 				}
 
 			} catch (Exception var10) {

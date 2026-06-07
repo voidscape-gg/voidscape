@@ -43,6 +43,7 @@ public class CacheUpdater extends Activity {
 	private TextView statusText;
 	private Button launchButton;
 	private boolean completed = false;
+	private boolean launching = false;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -120,8 +121,10 @@ public class CacheUpdater extends Activity {
 		@Override
 		protected void onPostExecute(Boolean ready) {
 			completed = ready;
+			launching = false;
 			if (ready) {
 				setStatus("Ready to play");
+				launchButton.setEnabled(true);
 				launchButton.setVisibility(View.VISIBLE);
 			} else {
 				showCacheFailureDialog();
@@ -391,6 +394,9 @@ public class CacheUpdater extends Activity {
 	}
 
 	private void selectServer(String host, String port) {
+		if (launching) {
+			return;
+		}
 		if (host == null || host.trim().length() == 0 || port == null || port.trim().length() == 0) {
 			showServerSelectionError("Server host and port are required");
 			return;
@@ -409,6 +415,9 @@ public class CacheUpdater extends Activity {
 				showServerSelectionError("Port must be between 1 and 65535");
 				return;
 			}
+			launching = true;
+			launchButton.setEnabled(false);
+			setStatus("Launching game");
 			writeTextFile(new File(getFilesDir(), "ip.txt"), selectedHost);
 			writeTextFile(new File(getFilesDir(), "port.txt"), selectedPort);
 			Log.i("Voidscape", "Selected server " + selectedHost + ":" + selectedPort);
@@ -417,6 +426,8 @@ public class CacheUpdater extends Activity {
 			return;
 		} catch (Exception e) {
 			e.printStackTrace();
+			launching = false;
+			launchButton.setEnabled(true);
 			showServerSelectionError("Unable to save server selection");
 			return;
 		}

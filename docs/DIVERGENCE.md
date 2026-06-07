@@ -3165,3 +3165,16 @@ Details:
 - `scripts/android-smoke.sh --only-auth-login` defaults to the local `AndroidMap/androidmap1` fixture and `server/inc/sqlite/voidscape.db`, verifies the SQLite password hash, checks that the launcher selected `10.0.2.2:43596`, submits credentials through Android input, waits for the successful login response, checks immediate Android runtime crash logs, and force-stops cleanly.
 - The Android emulator docs now point auth debugging at this focused path before bank/shop/world-map or other deep in-game smoke modes.
 - No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay behavior changed.
+
+### 2026-06-07 - Android lifecycle relaunch hardening
+
+Hardened Android activity/render ownership so successful login followed by launcher resume or relaunch does not start duplicate game clients or crash on stale renderer state.
+
+Details:
+- `CacheUpdater` now ignores repeated `Play` taps once launch has begun and disables the button while the selected endpoint is being written.
+- `GameActivity` now asks the active shared `mudclient` to disconnect/stop when the Activity is destroyed, interrupts and briefly joins the old game thread, and nulls Activity-owned input/render references after teardown.
+- The shared client startup loop now exits cleanly while waiting for initial configs if `threadState` is driven negative during Android teardown.
+- `RSCBitmapSurfaceView` now guards drawing until `MudClientGraphics.pixelData` and sane dimensions exist, avoiding startup races where the Android view is asked to draw before the classic framebuffer is ready.
+- `scripts/android-smoke.sh --only-auth-lifecycle` verifies login, welcome close, Home/background, launcher resume, duplicate launcher relaunch, logout, post-logout keyboard input, and crash-free logcat.
+- PC and Android login parity screenshots were captured through the PC workbench and Android lifecycle smoke; Android intentionally keeps `Create Account` and larger touch targets while preserving the branded Voidscape background/panel.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.

@@ -39,6 +39,7 @@ ONLY_AUTH_WORLD_MAP=0
 ONLY_AUTH_SETTINGS=0
 ONLY_AUTH_GROUND_LOOT=0
 ONLY_AUTH_LOGIN=0
+ONLY_AUTH_LIFECYCLE=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
@@ -127,7 +128,7 @@ AUTH_FIXTURE_ITEM_ID_BASE="${ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE:-1000000}"
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -142,6 +143,7 @@ Environment:
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
   --only-auth-login                Focused auth smoke; defaults to AndroidMap/androidmap1 and server/inc/sqlite/voidscape.db
+  --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
   ANDROID_SMOKE_NPC_ACTION         Expected shared NPC action, default: NPC_TALK_TO
   ANDROID_SMOKE_NPC_PLAYER_X       Optional DB x for NPC fixture, default: 23
@@ -263,6 +265,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --only-auth-login)
             ONLY_AUTH_LOGIN=1
+            shift
+            ;;
+        --only-auth-lifecycle)
+            ONLY_AUTH_LIFECYCLE=1
             shift
             ;;
         --out)
@@ -906,6 +912,93 @@ run_authenticated_login_smoke() {
 	"$ADB" shell am force-stop com.voidscape.client || true
 	wait_auth_offline 45 || true
 	echo "Android auth/login smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
+}
+
+run_authenticated_lifecycle_smoke() {
+	preflight_auth_login_fixture
+	wait_auth_offline 45 || true
+
+	"$ADB" shell am force-stop com.voidscape.client || true
+	"$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+	"$ADB" logcat -c || true
+
+	if [[ "$AUTH_HOST" == "10.0.2.2" && "$AUTH_PORT" == "43596" ]]; then
+		launch_to_login_home
+	else
+		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+	fi
+	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || exit 1
+	screenshot 00-lifecycle-login-home
+
+	tap_pct 50 65
+	sleep 3
+	enter_auth_credentials
+	screenshot 01-lifecycle-credentials-entered
+	submit_login_and_wait || exit 1
+	wait_auth_online 20 || exit 1
+	sleep 6
+	assert_no_android_runtime_crash "after lifecycle login" || {
+		screenshot 02-lifecycle-login-crash || true
+		exit 1
+	}
+	screenshot 02-lifecycle-post-login
+
+	tap_pct 50 72
+	sleep 1
+	tap_pct 50 72
+	sleep 2
+	assert_game_activity_for_input "lifecycle game HUD" "03-lifecycle-lost-before-hud" || exit 1
+	screenshot 03-lifecycle-game-hud
+
+	"$ADB" shell input keyevent HOME
+	sleep 2
+	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	wait_for_resumed_activity "GameActivity" 20 || {
+		assert_resumed_activity "GameActivity" || true
+		screenshot 04-lifecycle-resume-failed || true
+		exit 1
+	}
+	sleep 2
+	assert_no_android_runtime_crash "after launcher resume" || {
+		screenshot 04-lifecycle-resume-crash || true
+		exit 1
+	}
+	screenshot 04-lifecycle-after-resume
+
+	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	wait_for_resumed_activity "GameActivity" 20 || {
+		assert_resumed_activity "GameActivity" || true
+		screenshot 05-lifecycle-relaunch-failed || true
+		exit 1
+	}
+	sleep 3
+	assert_no_android_runtime_crash "after duplicate launcher relaunch" || {
+		screenshot 05-lifecycle-relaunch-crash || true
+		exit 1
+	}
+	screenshot 05-lifecycle-after-duplicate-relaunch
+
+	tap_pct 60 6
+	sleep 2
+	screenshot 06-lifecycle-settings-open
+	tap_pct 67 85
+	sleep 10
+	assert_no_android_runtime_crash "after lifecycle logout" || {
+		screenshot 07-lifecycle-logout-crash || true
+		exit 1
+	}
+	wait_auth_offline 45 || exit 1
+	screenshot 07-lifecycle-after-logout-login-home
+	tap_pct 50 65
+	sleep 3
+	assert_soft_keyboard_visible
+	screenshot 08-lifecycle-after-logout-keyboard
+
+	"$ADB" shell input keyevent BACK || true
+	"$ADB" shell am force-stop com.voidscape.client || true
+	wait_auth_offline 45 || true
+	echo "Android auth/lifecycle smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
 
 wait_for_npc_target() {
@@ -4163,6 +4256,12 @@ launch_to_login_home() {
 if [[ "$ONLY_AUTH_LOGIN" -eq 1 ]]; then
 	run_authenticated_login_smoke
 	echo "Android auth/login smoke screenshots written to $OUT_DIR"
+	exit 0
+fi
+
+if [[ "$ONLY_AUTH_LIFECYCLE" -eq 1 ]]; then
+	run_authenticated_lifecycle_smoke
+	echo "Android auth/lifecycle smoke screenshots written to $OUT_DIR"
 	exit 0
 fi
 

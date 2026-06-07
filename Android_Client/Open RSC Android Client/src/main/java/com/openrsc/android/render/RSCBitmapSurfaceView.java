@@ -32,6 +32,8 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+import orsc.graphics.two.MudClientGraphics;
+import orsc.mudclient;
 import orsc.multiclient.ClientPort;
 import orsc.osConfig;
 import orsc.util.Utils;
@@ -279,23 +281,46 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public void draw() {
-		if (gameActivity.getMudclient() != null) {
-			currentFrame.setPixels(gameActivity.getMudclient().getSurface().pixelData, 0,
-				gameActivity.getMudclient().getGameWidth(), 0, 0, gameActivity.getMudclient().getGameWidth(),
-				gameActivity.getMudclient().getGameHeight() + 12);
-			postInvalidate();
+		mudclient client = gameActivity.getMudclient();
+		if (client == null) {
+			return;
 		}
+
+		MudClientGraphics surface = client.getSurface();
+		if (surface == null || surface.pixelData == null) {
+			return;
+		}
+
+		int gameWidth = client.getGameWidth();
+		int gameHeight = client.getGameHeight() + 12;
+		if (gameWidth <= 0 || gameHeight <= 0) {
+			return;
+		}
+
+		int copyWidth = Math.min(gameWidth, currentFrame.getWidth());
+		int copyHeight = Math.min(gameHeight, currentFrame.getHeight());
+		int requiredPixels = ((copyHeight - 1) * gameWidth) + copyWidth;
+		if (copyWidth <= 0 || copyHeight <= 0 || surface.pixelData.length < requiredPixels) {
+			return;
+		}
+
+		currentFrame.setPixels(surface.pixelData, 0, gameWidth, 0, 0, copyWidth, copyHeight);
+		postInvalidate();
 	}
 
 	private void doDraw(Canvas c) {
-		if (gameActivity.getMudclient() == null) {
+		mudclient client = gameActivity.getMudclient();
+		if (client == null) {
 			return;
 		}
 		c.drawRGB(0, 0, 0);
 		int resizedWidth = c.getWidth();
 		int resizedHeight = c.getHeight();
-		float gameWidth = gameActivity.getMudclient().getGameWidth();
-		float gameHeight = gameActivity.getMudclient().getGameHeight() + 12;
+		float gameWidth = client.getGameWidth();
+		float gameHeight = client.getGameHeight() + 12;
+		if (gameWidth <= 0 || gameHeight <= 0) {
+			return;
+		}
 		float scale = Math.min(resizedWidth / gameWidth, resizedHeight / gameHeight);
 		float left = (resizedWidth - gameWidth * scale) / 2.0f;
 		float top = (resizedHeight - gameHeight * scale) / 2.0f;
@@ -327,6 +352,9 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public Sprite getSpriteFromByteArray(ByteArrayInputStream byteArrayInputStream) {
 		Bitmap bp = BitmapFactory.decodeStream(byteArrayInputStream);
+		if (bp == null) {
+			return null;
+		}
 		int width = bp.getWidth();
 		int height = bp.getHeight();
 		int[] captchaPixels = new int[width * height];
