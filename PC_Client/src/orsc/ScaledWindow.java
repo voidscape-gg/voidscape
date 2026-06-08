@@ -38,6 +38,12 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static boolean shouldRealign = false;
 	private static final int BASE_VIEWPORT_WIDTH = 1024;
 	private static final int BASE_VIEWPORT_HEIGHT = 768;
+	// Voidscape: the HUD renders at the fixed 1024x768 buffer, but the window may open smaller and
+	// downscale (and be dragged larger). MIN_WINDOW_SCALE is the smallest display scale; the window
+	// opens at this scale by default (768x576) and can grow from there.
+	private static final float MIN_WINDOW_SCALE = 0.75f;
+	private static final int MIN_VIEWPORT_WIDTH = Math.round(BASE_VIEWPORT_WIDTH * MIN_WINDOW_SCALE);
+	private static final int MIN_VIEWPORT_HEIGHT = Math.round(BASE_VIEWPORT_HEIGHT * MIN_WINDOW_SCALE);
 	private static final float MAX_INTEGER_SCALE = 6.0f;
 	private static final float MAX_INTERPOLATION_SCALE = 4.0f;
 	private int frameWidth = 0;
@@ -113,8 +119,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			}
 		}
 
-		// Set minimum size to applet size
-		setMinimumSize(new Dimension(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT));
+		// Set minimum size to the smallest allowed (downscaled) window size
+		setMinimumSize(new Dimension(MIN_VIEWPORT_WIDTH, MIN_VIEWPORT_HEIGHT));
 
 		// Default icon, will be overridden later
 		setIconImage(Utils.getImage("icon.png").getImage());
@@ -378,8 +384,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	/** Resizes the window to the classic applet size for window-follow scaling mode. */
 	private void resizeWindowToDefaultSize() {
 		Dimension minimumWindowSize = new Dimension(
-			BASE_VIEWPORT_WIDTH + getWindowWidthInsets(),
-			BASE_VIEWPORT_HEIGHT + getWindowHeightInsets());
+			MIN_VIEWPORT_WIDTH + getWindowWidthInsets(),
+			MIN_VIEWPORT_HEIGHT + getWindowHeightInsets());
 
 		setMinimumSize(minimumWindowSize);
 
@@ -404,7 +410,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	/** Determines the minimum window size for the applet based on the scalar */
 	public Dimension getMinimumViewportSizeForScalar() {
 		if (mudclient.windowScaleMode) {
-			return new Dimension(BASE_VIEWPORT_WIDTH, BASE_VIEWPORT_HEIGHT);
+			return new Dimension(MIN_VIEWPORT_WIDTH, MIN_VIEWPORT_HEIGHT);
 		}
 
 		return new Dimension(
@@ -458,9 +464,9 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			return;
 		}
 
-		int availableWidth = Math.max(BASE_VIEWPORT_WIDTH, scaledViewport.getWidth());
-		int availableHeight = Math.max(BASE_VIEWPORT_HEIGHT, scaledViewport.getHeight());
-		float scalar = Math.max(1.0f, Math.min(
+		int availableWidth = Math.max(MIN_VIEWPORT_WIDTH, scaledViewport.getWidth());
+		int availableHeight = Math.max(MIN_VIEWPORT_HEIGHT, scaledViewport.getHeight());
+		float scalar = Math.max(MIN_WINDOW_SCALE, Math.min(
 			availableWidth / (float) BASE_VIEWPORT_WIDTH,
 			availableHeight / (float) BASE_VIEWPORT_HEIGHT));
 
@@ -468,8 +474,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		mudclient.newRenderingScalar = scalar;
 		ORSCApplet.oldRenderingScalar = scalar;
 
-		scaledDrawWidth = Math.max(BASE_VIEWPORT_WIDTH, Math.round(BASE_VIEWPORT_WIDTH * scalar));
-		scaledDrawHeight = Math.max(BASE_VIEWPORT_HEIGHT, Math.round(BASE_VIEWPORT_HEIGHT * scalar));
+		scaledDrawWidth = Math.round(BASE_VIEWPORT_WIDTH * scalar);
+		scaledDrawHeight = Math.round(BASE_VIEWPORT_HEIGHT * scalar);
 		scaledDrawX = Math.max(0, (scaledViewport.getWidth() - scaledDrawWidth) / 2);
 		scaledDrawY = Math.max(0, (scaledViewport.getHeight() - scaledDrawHeight) / 2);
 

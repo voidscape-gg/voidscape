@@ -3322,3 +3322,40 @@ Details:
 - Skinned the Options/Profile panel into the ornate frame under the gear icon (dark themed boxes, readable text). Fixed the settings click hit-testing for the new position: `handleSocialSettingsClicks` recomputed its own `panelTop` from `getUITabsY()-240`, so it was re-pointed at the voidscape panel top to keep toggle clicks aligned with the drawn rows (verified Camera angle / Mouse buttons toggles).
 - Reused existing chrome + two new top-icon PNGs under `Client_Base/Cache/voidscape/ui/skin/` (`top-bag.png`, `top-gear.png`); not added to `MD5.SUM` yet (pending final art sign-off).
 - Verified via the AI workbench at 1024x768. Remaining: typography pass. No server packet, opcode, DB schema, definition, client-version, launcher binary, or gameplay rule changed.
+
+### 2026-06-08 - Concept HUD: authentic menu behaviour + chrome/Options polish
+
+Quality + faithful-behaviour pass on the desktop voidscape HUD.
+
+Details:
+- Menu now mirrors authentic RSC: side panels open on HOVER over the top icon, auto-close when the mouse leaves the icon+panel region, and only one panel shows at a time. Rewrote `handleVoidscapeHudSkinTabClick` (now hover-driven, every frame) + added `mouseOverVoidscapeActivePanel()` / `voidscapePanelHeightFor()` for the keep-open bounds.
+- Minimap is mutually exclusive again (driven by `showUiTab == MINIMAP_AND_COMPASS_TAB` for the skin, not the persistent `drawMinimap` flag) — it no longer stays open over other panels.
+- `drawVoidscapePanelChrome` dark fill now reaches the frame's inner bottom edge (right-panel-frame.png has ~4.3% top/bottom, ~7.8% side borders); fill tucks under the bottom border so no gameplay peeks through and the corner gems still draw on top.
+- Options/Profile panel: widened content to the panel inner width, replaced the gear sub-icon with a second text tab ("Profile | Settings", equal halves) — Settings opens the existing advanced-settings window; snugged the panel height. Fixed the settings hit-test gate/split for the wider voidscape panel.
+- Verified via AI workbench: hover-open, auto-close, minimap exclusion, no panel bottom gaps, Options tabs + toggles. `scripts/build.sh` passes. No server packet, opcode, schema, definition, client-version, launcher, or gameplay change.
+
+### 2026-06-08 - Concept HUD: menu fixes, map placement, options/chat polish + critique tool
+
+- Fixed Magic↔Prayer and Friends↔Ignore sub-tab switching: the click hit-gates were hardcoded to 196px but the voidscape panels were widened, so the right tab was only clickable in a narrow strip. Hit-split + gates now use the panel width.
+- Minimap now opens directly under its top icon (`voidscapeMinimapX()`), not pinned far-right.
+- Options "Profile" rows: values are right-aligned to the panel edge (new `drawSettingsRow` helper) so rows fill the container; classic UI unchanged.
+- Chat box interior is now solid-dark across the full chat area so messages read clearly instead of fighting the game world behind them.
+- Added `scripts/ui-critique.py`: sends a HUD screenshot to the OpenAI vision API for an actionable design critique, to drive iteration.
+- Verified via workbench. `scripts/build.sh` passes. No server/packet/gameplay change.
+
+### 2026-06-08 - Smaller default window with sub-1.0 downscale
+
+The desktop client now opens at a smaller default (~768x576) and can be dragged larger, instead of being pinned at 1024x768. The HUD still renders to a fixed 1024x768 buffer (so layout/quality is unchanged); the ScaledWindow downscales that buffer to the window when below 1.0x and upscales above it.
+
+Details:
+- `ScaledWindow`: added `MIN_WINDOW_SCALE = 0.75f` (MIN_VIEWPORT 768x576). `updateWindowScaleFromViewport()` now clamps the window-follow scalar to [0.75, ...] instead of [1.0, ...] and no longer floors the draw size at the base, so windows smaller than 1024x768 downscale the buffer. Default window size, initial minimum size, and `getMinimumViewportSizeForScalar()` (window-scale mode) use MIN_VIEWPORT. The applet/mudclient buffer stays pinned at 1024x768 via `resizeAppletToBase()`.
+- Verified the 1024 buffer + HUD are unaffected via the workbench (it captures the internal frame, not the OS window); the on-screen window size needs visual confirmation on a real display.
+- No server/packet/gameplay change.
+
+### 2026-06-08 - HUD: full-menu containment, minimap +30%, chat opacity, combat-style selector
+
+- Containment: inset every right-side panel's content so headers, tabs, dividers, labels and values sit inside the ornate stone frame (no overflow). Applied the Options-style inset (`+27` origin, `width-58`) to Magic (`magicPanelX`/`magicPanelWidth`), Stats (`innerX`/`innerW`), Friends (`var3`/`var5`), and the shared `repositionCustomUI` widget bounds (`vInnerX`/`vInnerW`, which cover the magic/social/quest lists). Inventory grid was already centered (`panelX+(panelW-245)/2`) and left unchanged. Audited via a parallel multi-agent pass + verified each panel visually.
+- Minimap: ~30% larger for the voidscape skin only — box `156x152 -> 203x198` and projection scale `192 -> 250` scale together so it looks identical but bigger; `voidscapeMinimapX()` clamp, World-Map button size, and auto-close rect updated to match.
+- Chat: halved the chat-box interior opacity (alpha `240 -> 120`) so the world shows through more while text stays legible. Also moved the chat input line up off the bottom border with horizontal padding so typed text no longer overflows the frame.
+- Combat-style selector (`drawDialogCombatStyle`): for the voidscape skin, moved it below the location plaque (`sy 15 -> 92`, plaque spans y18..86), scaled it ~25% (`width 175 -> 219`, row height `20 -> 25`), and skinned it dark-fantasy (near-black rows, purple selection bar, gold header, cream text, purple border). Classic position/size/style unchanged. Concept art generated at tmp/uiwork/concept_combat.png for further polish (per-row icons + gem frame) if wanted.
+- New tool: scripts/ui-critique.py (vision critique) used throughout. `scripts/build.sh` passes. No server/packet/gameplay change.
