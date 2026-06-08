@@ -38,10 +38,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static boolean shouldRealign = false;
 	private static final int BASE_VIEWPORT_WIDTH = 1024;
 	private static final int BASE_VIEWPORT_HEIGHT = 768;
-	// Voidscape: the HUD renders at the fixed 1024x768 buffer, but the window may open smaller and
-	// downscale (and be dragged larger). MIN_WINDOW_SCALE is the smallest display scale; the window
-	// opens at this scale by default (768x576) and can grow from there.
-	private static final float MIN_WINDOW_SCALE = 0.75f;
+	// Voidscape: the HUD renders at the fixed 1024x768 buffer. A sub-1.0 default was tried (smaller
+	// window) but downscaling the pixel-art HUD looks pixelated/blurry, so the window opens at the
+	// native 1024x768 (crisp 1:1) and can be dragged larger. Keep at 1.0 unless a true low-res HUD exists.
+	private static final float MIN_WINDOW_SCALE = 1.0f;
 	private static final int MIN_VIEWPORT_WIDTH = Math.round(BASE_VIEWPORT_WIDTH * MIN_WINDOW_SCALE);
 	private static final int MIN_VIEWPORT_HEIGHT = Math.round(BASE_VIEWPORT_HEIGHT * MIN_WINDOW_SCALE);
 	private static final float MAX_INTEGER_SCALE = 6.0f;

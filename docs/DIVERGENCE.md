@@ -3363,3 +3363,9 @@ Details:
 ### 2026-06-08 - Location plaque shows the town/area name
 
 The voidscape location plaque now names the town/area you're in (Lumbridge, Varrock, Falador, Edgeville, Ardougne, ...) the same way it already showed WILDERNESS/DEEP WILDERNESS, instead of always reading "VOIDSCAPE". Ported the server's `Point.returnLocationName()` coordinate table client-side into `voidscapeAreaName(worldX, worldY)` (a list of `inBounds` town boxes) so there's no packet/protocol change — the client already has the player's world coords. Wilderness still uses the existing `inWild`/`voidscapeWildLevel` path; unmapped areas fall back to "VOIDSCAPE". The custom Void-Council intro sits on Edgeville's coords, so it currently reads EDGEVILLE (a safe-zone/enclave name would need the server's safe-zone bounds, which the client doesn't have).
+
+### 2026-06-08 - Revert smaller-window downscale; beta requires want_custom_ui
+
+Two beta regressions fixed:
+- The sub-1.0 default window (768, downscaling the fixed 1024 HUD buffer) looked pixelated/blurry on real displays. `ScaledWindow.MIN_WINDOW_SCALE` is back to 1.0 — the window opens at the native 1024x768 (crisp 1:1) and can be dragged larger. A smaller crisp window isn't possible without a true low-res HUD.
+- The voidscape HUD only renders when the SERVER tells the client custom UI is on (`Player.getCustomUI()` gated by `want_custom_ui`). The deployed beta VPS had `want_custom_ui: false`, so every tester got the classic UI. Set it to `true` on the VPS `server/local.conf` and restarted (DB + config backed up). `getCustomUI()` defaults to true when `want_custom_ui` is on, so all testers now get the HUD by default.
