@@ -90,6 +90,7 @@ scripts/run-client.sh         # run PC client against local server
 scripts/run-launcher.sh       # build + run the Voidscape desktop launcher
 scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
 scripts/run-portal.sh         # run website/account portal with local prototype API
+scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
 scripts/test-portal-api.sh    # smoke-test portal API flows
 scripts/test-portal-schema.sh # validate portal account-management schema contract
 scripts/build-android.sh      # build Android APK; requires Android SDK

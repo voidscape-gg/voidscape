@@ -8,3 +8,4 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Feedback: working preferences](feedback_preferences.md) — confirmed conventions for this project
 - [Android: emulation QA](android_emulation.md) — AVD roles and current headless screenshot gotchas
 - [Beta deployments](beta_deployments.md) — VPS beta deploy paths, runtime/migration sync, checks
+- [Content pipeline](content_pipeline.md) — custom content/art starts with scripts/content.sh packs and validation

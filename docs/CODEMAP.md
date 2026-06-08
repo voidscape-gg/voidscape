@@ -15,6 +15,8 @@ voidscape/
 │
 ├── docs/                           # Voidscape architecture / recipes / glossary
 ├── scripts/                        # Voidscape canonical entry points (build, run, reset)
+├── content/                        # Voidscape custom content-pack manifests and art workspaces
+├── tools/                          # Voidscape local authoring, simulation, and art tools
 ├── memory/                         # Voidscape persistent memory (loaded each session)
 ├── .agents/                        # Codex skills / workflow scaffolding
 ├── .claude/                        # Claude Code config + custom subagents
@@ -241,7 +243,7 @@ Backups/                            # Empty placeholder; manual SQL dumps go her
 Portable_Windows/                   # Windows portable bundle (HeidiSQL, scripts)
 ```
 
-## `docs/`, `scripts/`, `memory/`, `.agents/`, `.claude/` — voidscape additions
+## `docs/`, `scripts/`, `content/`, `tools/`, `memory/`, `.agents/`, `.claude/` — voidscape additions
 
 ```
 docs/
@@ -265,6 +267,7 @@ docs/
 └── subsystems/                     # Deep dives, one per major subsystem
     ├── ai-workbench.md
     ├── client-cache.md
+    ├── content-pipeline.md
     ├── combat-system.md
     ├── dynamic-wilderness-spawns.md
     ├── networking-protocol.md
@@ -279,11 +282,21 @@ docs/
 scripts/
 ├── build.sh                        # Compile server + plugins + client
 ├── combat-sim.sh                   # Run local combat formula/cadence simulator
+├── content.sh                      # Scaffold/report/validate custom content packs
 ├── run-server.sh                   # Run server with voidscape's local.conf
 ├── run-client.sh                   # Run PC client
 ├── run-workbench-client.sh         # Run PC client with local AI workbench endpoints
 ├── reset-db.sh                     # Wipe + reseed dev DB
 └── fetch-upstream-snapshot.sh      # Recreate upstream/openrsc-snapshot/
+
+content/
+└── custom/                         # One folder per custom item/NPC/boss/arena/texture pack
+
+tools/
+├── combat-sim/                     # Combat simulator used by tuning docs
+├── hairstyle-art/                  # Hair-art helper scripts
+├── voidscape-content/              # Content-pack CLI, validators, and ChatGPT art brief
+└── voidscim-art/                   # Legacy item-icon/wielded-sprite pipeline, bridged by content.sh
 
 memory/
 ├── MEMORY.md                       # Index — always loaded
@@ -321,3 +334,4 @@ memory/
 | Add an admin command | (see `docs/recipes/add-admin-command.md`) |
 | Add an opcode | `server/src/com/openrsc/server/net/rsc/enums/Opcode{In,Out}.java` **and** `Client_Base/src/orsc/net/Opcodes.java` (append only — never insert mid-list) |
 | Measure combat formula impact | `scripts/combat-sim.sh` |
+| Add custom content/art | Start with `scripts/content.sh new ...`, then `scripts/content.sh validate` |

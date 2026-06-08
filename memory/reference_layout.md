@@ -11,6 +11,8 @@ Voidscape preserves OpenRSC's tree structure (`server/`, `PC_Client/`, `Client_B
   - `docs/subsystems/` — deep dives per subsystem (networking, world tick, combat, persistence, scripting/plugins, client).
   - `docs/recipes/` — step-by-step "how to add X" playbooks.
 - `scripts/` — `build.sh`, `run-server.sh`, `run-client.sh`, `reset-db.sh`, `fetch-upstream-snapshot.sh`. Canonical entry points. **Use these, not raw `gradlew`.**
+- `content/` — custom content-pack manifests and art workspaces. Start new custom items/NPCs/bosses/arenas/textures with `scripts/content.sh new`.
+- `tools/voidscape-content/` — content-pack CLI, validators, and Voidscape ChatGPT art brief. Bridges legacy item art through `scripts/content.sh voidscim ...`.
 - `.claude/` — Claude Code config (`settings.json` tracked, `settings.local.json` gitignored), custom subagents in `.claude/agents/`.
 - `.agents/` — Codex skills/workflow scaffolding, including the discovery-first `feature` skill.
 - `memory/` — persistent project memory (this directory).
