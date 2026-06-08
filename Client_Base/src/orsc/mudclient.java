@@ -13166,18 +13166,66 @@ public final class mudclient implements Runnable {
 		int width = Math.min(300, Math.max(250, this.getGameWidth() / 3));
 		int height = 68;
 		drawVoidscapeSkinSprite("location-plaque.png", x, y, width, height);
-		String title = inWild ? (this.voidscapeWildLevel >= 30 ? "DEEP WILDERNESS" : "WILDERNESS") : "VOIDSCAPE";
-		int titleColor = inWild ? 0xF2B6A0 : 0xEBDCB0;
+		boolean haveLoc = this.localPlayer != null;
+		int worldX = 0;
+		int worldY = 0;
+		int floor = 0;
+		if (haveLoc) {
+			worldX = this.playerLocalX + this.midRegionBaseX;
+			worldY = this.playerLocalZ + this.midRegionBaseZ;
+			floor = worldY / 944;
+		}
+		String title;
+		int titleColor;
+		if (inWild) {
+			title = this.voidscapeWildLevel >= 30 ? "DEEP WILDERNESS" : "WILDERNESS";
+			titleColor = 0xF2B6A0;
+		} else {
+			String area = haveLoc ? voidscapeAreaName(worldX, worldY) : null;
+			title = area != null ? area.toUpperCase(Locale.ROOT) : "VOIDSCAPE";
+			titleColor = 0xEBDCB0;
+		}
 		this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 4, y + 28);
-		if (this.localPlayer != null) {
-			int worldX = this.playerLocalX + this.midRegionBaseX;
-			int worldY = this.playerLocalZ + this.midRegionBaseZ;
-			int floor = worldY / 944;
+		if (haveLoc) {
 			String subtitle = inWild
 				? ("Level " + this.voidscapeWildLevel + "    " + worldX + ", " + worldY)
 				: (worldX + ", " + worldY + "  F" + floor);
 			this.getSurface().drawColoredStringCentered(x + width / 2, subtitle, 0x9F8DB7, 0, 1, y + 47);
 		}
+	}
+
+	private boolean vInBounds(int wx, int wy, int x1, int y1, int x2, int y2) {
+		return wx >= x1 && wx <= x2 && wy >= y1 && wy <= y2;
+	}
+
+	// Town/area name from world coords, mirroring the server's Point.returnLocationName() table
+	// (towns + notable areas; wilderness is handled by the caller). Returns null for unmapped areas.
+	private String voidscapeAreaName(int wx, int wy) {
+		if (vInBounds(wx, wy, 190, 720, 240, 770)) return "Tutorial Island";
+		if (vInBounds(wx, wy, 303, 3298, 307, 3302)) return "Black Hole";
+		if (vInBounds(wx, wy, 64, 1639, 80, 1643)) return "Mod Room";
+		if (vInBounds(wx, wy, 16, 17, 32, 42)) return "Void Island";
+		if (vInBounds(wx, wy, 78, 490, 175, 537) || vInBounds(wx, wy, 92, 444, 150, 490)) return "Varrock";
+		if (vInBounds(wx, wy, 198, 427, 229, 450) || vInBounds(wx, wy, 208, 451, 227, 472)) return "Edgeville";
+		if (vInBounds(wx, wy, 209, 491, 247, 529)) return "Barbarian Village";
+		if (vInBounds(wx, wy, 210, 608, 233, 659)) return "Draynor";
+		if (vInBounds(wx, wy, 108, 620, 147, 670)) return "Lumbridge";
+		if (vInBounds(wx, wy, 48, 659, 96, 703)) return "Al Kharid";
+		if (vInBounds(wx, wy, 245, 531, 341, 583)) return "Falador";
+		if (vInBounds(wx, wy, 246, 621, 286, 670)) return "Port Sarim";
+		if (vInBounds(wx, wy, 343, 454, 389, 512)) return "Taverly";
+		if (vInBounds(wx, wy, 395, 525, 441, 573)) return "Entrana";
+		if (vInBounds(wx, wy, 415, 475, 456, 508)) return "Catherby";
+		if (vInBounds(wx, wy, 490, 1408, 500, 1415) || vInBounds(wx, wy, 490, 464, 500, 471)) return "Seers Party Hall";
+		if (vInBounds(wx, wy, 486, 438, 534, 482)) return "Seers Village";
+		if (vInBounds(wx, wy, 673, 432, 751, 537)) return "Gnome Stronghold";
+		if (vInBounds(wx, wy, 500, 537, 600, 708)) return "Ardougne";
+		if (vInBounds(wx, wy, 577, 741, 647, 767)) return "Yanille";
+		if (vInBounds(wx, wy, 435, 644, 477, 709)) return "Brimhaven";
+		if (vInBounds(wx, wy, 384, 817, 430, 860)) return "Shilo Village";
+		if (vInBounds(wx, wy, 323, 644, 679, 908)) return "Karamja";
+		if (vInBounds(wx, wy, 410, 158, 422, 170)) return "Grand Tree";
+		return null;
 	}
 
 	private void drawVoidscapeTopTabs() {
