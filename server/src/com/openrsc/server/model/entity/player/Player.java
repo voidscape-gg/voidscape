@@ -3409,9 +3409,8 @@ public final class Player extends Mob {
 		if (getWorld().getServer().getConfig().WANT_CUSTOM_UI) {
 			if (getCache().hasKey("custom_ui")) {
 				return getCache().getBoolean("custom_ui");
-			} else {
-				return false;
 			}
+			return true;
 		} else {
 			return false;
 		}

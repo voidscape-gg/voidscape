@@ -3260,3 +3260,65 @@ Details:
 - Avoided using a centered bitmap layer in the generic window background after emulator screenshots showed it could clip during the portrait-to-landscape transition.
 - Verified `scripts/build-android.sh`, manual cold-start/icon screenshots in `/tmp/voidscape-android-launch-branding-v3/manual`, and the normal wrapper/login smoke in `/tmp/voidscape-android-launch-branding-v3-smoke`.
 - No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.
+
+### 2026-06-07 - Content factory first slice
+
+Added the first supported content-authoring layer so custom items, NPCs, bosses, arenas, textures, and ChatGPT-assisted art can start from one repeatable workflow instead of scattered hand edits.
+
+Details:
+- Added `scripts/content.sh` as the canonical wrapper for `tools/voidscape-content` plus the existing `tools/voidscim-art` item-sprite pipeline.
+- Added content-pack scaffolding under `content/custom/<slug>/` with `content.yaml`, notes, art prompt/source/working/final folders, and a reusable Voidscape ChatGPT art brief.
+- Added `scripts/content.sh report` for current safe allocation points; the first report shows next item id `1603`, next NPC id `852`, and next item spriteID `618` / archive index `2768`.
+- Added `scripts/content.sh validate` guardrails for sequential server item/NPC IDs, client/server content coverage, custom item sprite archive availability, content-pack shape, and client version visibility. Historical OpenRSC/Voidscape drift is reported as warnings; new tail drift that would strand beta clients remains an error.
+- Documented the content pipeline in `docs/subsystems/content-pipeline.md`, updated the development/code-map docs, and added persistent memory for the new workflow convention.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client cache, client-version, launcher binary, or live gameplay rule changed.
+
+### 2026-06-07 - Concept-driven desktop HUD skin
+
+Rebuilt the desktop in-game HUD around the ChatGPT concept-art pass instead of the classic OpenRSC tab strip.
+
+Details:
+- Added lightweight generated PNG chrome/icons under `Client_Base/Cache/voidscape/ui/skin/` and listed them in `Client_Base/Cache/MD5.SUM` so cache packaging/updaters can carry the skin.
+- Desktop custom UI now draws a 4:3 concept-style HUD: top-left location plaque, top-right ornate icon tabs plus coin panel, framed bottom chat box/tabs, and a large right-side stats/skills/equipment panel.
+- The PC client default viewport is now `1024x768` via `OpenRSC` and `ScaledWindow`, matching the concept's 4:3 shape while staying practical for beta testers.
+- When a server enables `want_custom_ui`, fresh accounts now default to custom UI on desktop; Android ignores this desktop skin and keeps its separate mobile UI path.
+- Verified `scripts/build.sh` and PC workbench screenshots at `1024x768`, including login, default HUD, and stats panel.
+- No OpenRSC server packet, opcode, DB schema, item definition, NPC definition, client-version, launcher binary, or live gameplay rule changed.
+
+### 2026-06-07 - Concept HUD layout pass (iteration)
+
+Tightened the concept-driven desktop HUD against the in-game concept art (deep-wilderness reference) after the first pass rendered too large with cut-off chrome.
+
+Details:
+- Fixed the bottom chat-tab cutoff: the message tabs were drawn at `gameHeight - 5` into 30px sprites that spilled off the bottom edge. Rebuilt them as a full-width row of five ornate tabs (`All Messages`, `Chat History`, `Quest History`, `Private History`, `Report Abuse`) that sit fully inside the buffer, with a single source-of-truth `voidscapeChatTabRect()` shared by draw, click hit-testing, and the chat-frame reposition.
+- Repositioned the chat frame, message panels, input line, and the floating ALL-tab messages to live inside the new frame above the tab row; pulled the right STATS & SKILLS panel up and made it snug to its content (no empty bottom gap).
+- Reworked the STATS & SKILLS panel to match the concept: a two-column STATS grid (Combat XP / Skill XP rates, Total Level, Total XP | Combat Lvl, Quests, Days Played — all real client fields), single-line skill rows split combat-left / non-combat-right with right-aligned levels, and a 3+2 EQUIPMENT STATUS block (`Armour`, `Weapon Aim`, `Weapon Power` | `Magic`, `Prayer`). Skill hover detail is now a floating tooltip instead of a fixed footer.
+- Location plaque now reads `WILDERNESS` / `DEEP WILDERNESS` (level ≥ 30) with the wilderness level + coords when in the wild; suppressed the classic bottom-right skull/`Wilderness Level` overlay for the voidscape skin so it no longer collides with the chat tabs.
+- Raised `getUITabsY()` for the voidscape skin so the still-classic inventory/magic/friends/quest panels render clear of the bottom chat tab row (those panels are not yet skinned to the concept — tracked as a follow-up; the concept only specifies the stats panel).
+- Verified via the AI workbench at `1024x768`: login, default HUD, stats/skills (low-level and maxed), inventory, magic, and minimap tabs, plus a deep-wilderness scenario (`setstats 60` + `tele`).
+- Still open: the on-screen window size (engine renders the HUD at a fixed `1024x768` and only scales up, so a physically smaller window needs a separate scaling change) and skinning the non-stats tabs. No server packet, opcode, DB schema, definition, client-version, launcher binary, or gameplay rule changed.
+
+### 2026-06-07 - Concept HUD: skin remaining side-panel tabs
+
+Extended the voidscape desktop HUD skin from the stats panel to the rest of the side-panel tabs so the whole in-game UI shares the concept's ornate dark-metal / purple-gem aesthetic.
+
+Details:
+- Added a shared `drawVoidscapePanelChrome()` (frame + dark bg + title bar) reused by every tab.
+- Skinned and repositioned into the top-right ornate panel (matching the stats panel): Inventory (themed slots + equipment sub-tab), Magic & Prayer (spell/prayer lists), and Friends/Ignore. Each draws plus its mouse hit-testing and the relevant `Panel` widget (`repositionCustomUI`) were aligned to the new origin; the friends "Remove" column and click bands were re-expressed relative to the panel origin instead of `getGameWidth()`.
+- Restored quest access (the original voidscape stats panel had dropped the skills/quests sub-tab): added a SKILLS/QUESTS toggle to the stats panel and a `drawVoidscapeQuestList()` quest journal in the concept style.
+- Options/settings (opened via the coin panel) is intentionally left in the classic style for now — kept internally consistent (widget anchor reverted to classic) rather than half-skinned. Tracked as a follow-up.
+- Reused existing `Client_Base/Cache/voidscape/ui/skin/` chrome plus in-game item/rune/equip sprites — no new art assets generated, so no `MD5.SUM`/cache changes.
+- Verified via the AI workbench at 1024x768 (deep-wilderness, maxed stats, spawned inventory): skills, quests, inventory, magic, prayer, friends, and minimap tabs all render in the cohesive ornate panel; magic/prayer and skills/quests toggles confirmed working. `scripts/build.sh` passes. No server packet, opcode, DB schema, definition, client-version, launcher binary, or gameplay rule changed.
+
+### 2026-06-07 - Concept HUD: top-bar order, iron icons, panel-under-icon, Options skin
+
+Iterated the desktop HUD top bar and side panels on user feedback.
+
+Details:
+- Re-ordered the top tab bar to the authentic-style order (left to right: Options, Friends, Stats, Magic/Prayer, Minimap, Inventory) via a single source-of-truth `VOIDSCAPE_TOP_TAB_ORDER`/`VOIDSCAPE_TOP_TAB_ICONS` used by draw + click hit-testing.
+- Generated two iron-style ornate icons (gpt-image-1.5, forced into the existing pewter palette) for Inventory (leather satchel) and Options (cog), replacing the misleading sword/flat-gear; coin readout is now display-only.
+- Each side panel now opens directly under its own top icon (`voidscapeRightPanelX()` anchors to the active tab's icon, clamped on-screen); the bottom chat frame uses a stable `voidscapeRightPanelHomeX()` so it doesn't resize when the active panel moves.
+- Widened the friends/magic/quest list content to fill the ornate panel width instead of floating at the legacy 196px.
+- Skinned the Options/Profile panel into the ornate frame under the gear icon (dark themed boxes, readable text). Fixed the settings click hit-testing for the new position: `handleSocialSettingsClicks` recomputed its own `panelTop` from `getUITabsY()-240`, so it was re-pointed at the voidscape panel top to keep toggle clicks aligned with the drawn rows (verified Camera angle / Mouse buttons toggles).
+- Reused existing chrome + two new top-icon PNGs under `Client_Base/Cache/voidscape/ui/skin/` (`top-bag.png`, `top-gear.png`); not added to `MD5.SUM` yet (pending final art sign-off).
+- Verified via the AI workbench at 1024x768. Remaining: typography pass. No server packet, opcode, DB schema, definition, client-version, launcher binary, or gameplay rule changed.

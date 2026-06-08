@@ -36,8 +36,8 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static int numCores;
 	private static boolean isMacOS = false;
 	private static boolean shouldRealign = false;
-	private static final int BASE_VIEWPORT_WIDTH = 512;
-	private static final int BASE_VIEWPORT_HEIGHT = 346;
+	private static final int BASE_VIEWPORT_WIDTH = 1024;
+	private static final int BASE_VIEWPORT_HEIGHT = 768;
 	private static final float MAX_INTEGER_SCALE = 6.0f;
 	private static final float MAX_INTERPOLATION_SCALE = 4.0f;
 	private int frameWidth = 0;
