@@ -51,7 +51,8 @@ public class RegionManager {
 		final LinkedHashSet<Player> localPlayers = new LinkedHashSet<Player>();
 		for (final Region region : getVisibleRegions(entity.getLocation())) {
 			for (final Player player : region.getPlayers()) {
-				if (player.withinRange(entity)) {
+				// voidscape instancing: players only see players sharing their phase (id 0 == overworld).
+				if (player.withinRange(entity) && entity.getInstanceId() == player.getInstanceId()) {
 					localPlayers.add(player);
 				}
 			}
@@ -69,7 +70,8 @@ public class RegionManager {
 		final LinkedHashSet<Npc> localNpcs = new LinkedHashSet<>();
 		for (final Region region : getVisibleRegions(entity.getLocation())) {
 			for (final Npc npc : region.getNpcs()) {
-				if (npc.withinRange(entity)) {
+				// voidscape instancing: only NPCs sharing the observer's phase are visible/interactable.
+				if (npc.withinRange(entity) && entity.getInstanceId() == npc.getInstanceId()) {
 					localNpcs.add(npc);
 				}
 			}
@@ -103,7 +105,9 @@ public class RegionManager {
 		final LinkedHashSet<GroundItem> localItems = new LinkedHashSet<GroundItem>();
 		for (final Region region : getVisibleRegions(entity.getLocation())) {
 			for (final GroundItem o : region.getGroundItems()) {
-				if (o.getLocation().withinGridRange(entity.getLocation(), getWorld().getServer().getConfig().VIEW_DISTANCE)) {
+				// voidscape instancing: ground items (e.g. a boss instance's loot) are phase-private.
+				if (o.getLocation().withinGridRange(entity.getLocation(), getWorld().getServer().getConfig().VIEW_DISTANCE)
+						&& entity.getInstanceId() == o.getInstanceId()) {
 					localItems.add(o);
 				}
 			}

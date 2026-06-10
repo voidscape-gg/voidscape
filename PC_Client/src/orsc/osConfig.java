@@ -19,5 +19,5 @@ public class osConfig {
 	public static int C_SWIPE_TO_ZOOM_MODE = 1; // default to normal
 	public static int C_VOLUME_FUNCTION = 0; // default as rotate
 	public static boolean C_ANDROID_INV_TOGGLE = false;
-	public static int C_LAST_ZOOM = 75;
+	public static int C_LAST_ZOOM = 35;
 }

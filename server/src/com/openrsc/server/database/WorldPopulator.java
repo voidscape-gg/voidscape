@@ -228,6 +228,9 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidEnclave.json", type);
 				}
+					if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
+						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidDungeon.json", type);
+					}
 				return;
 			}
 			case Scenery: {
@@ -267,6 +270,12 @@ public final class WorldPopulator {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsDeathMatchArena.json", type);
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidRift.json", type);
 				}
+				if (getWorld().getServer().getConfig().WANT_VOID_COLOSSUS) {
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidColossusArena.json", type);
+				}
+				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidDungeon.json", type);
+				}
 				return;
 			}
 			case NPC: {
@@ -291,6 +300,9 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsDeathMatchArena.json");
+				}
+				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidDungeon.json");
 				}
 				if (getWorld().getServer().getConfig().LOCATION_DATA == 2) {
 					if (getWorld().getServer().getConfig().WANT_DECORATED_MOD_ROOM) {

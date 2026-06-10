@@ -2440,6 +2440,42 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Councilor", "A scythe-bearing survivor of the void.", "", 0, 0, 5, 0, false, sprites, 0, 3151156, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
 
+		// voidscape: Void Colossus raid boss (server id 852). Uses the custom "voidcolossus" body
+		// animation (list index 233 = the former reserved_custom_npc_838 slot); frames packed into
+		// Authentic_Sprites.orsc at that animation's runtime number. camera 820x1150 (width x height):
+		// ~5.3x the player, aspect-matched to the 153x214 logical sprite so it scales up without squish.
+		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Colossus", "An armoured titan animated by the void itself", "", 250, 250, 1000, 130, true, sprites, 0, 0, 0, 0, 820, 1150, 16, 14, 6, i++));
+
+		// voidscape: Void Knight (server id 853). A TRUE Black Knight clone (same fullhelm+platebody+
+		// platelegs layer layout, same camera 145x220 and combat models walk 6 / combat 6 / sprite 5
+		// → identical gap, speed, directional angles and timing), wearing the baked void-colorway
+		// armour (helm #236, body #237, legs #238). Unarmed (no weapon slot) per design. Baked sprites
+		// carry their own colour, so NPCDef tint fields are 0.
+		sprites = new int[]{236, 237, 238, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Knight", "A knight consumed by the void.", "", 60, 65, 70, 60, true, sprites, 0, 0, 0, 0, 145, 220, 6, 6, 5, i++));
+
+		// voidscape: void dungeon mobs (server ids 854-860). All Tier-A recolours, NO baking / NO archive
+		// change: the creatures (spider/wolf/demon/unicorn) tint a gray-ramped sprite via the void-purple
+		// charColour AnimationDefs added above (idx 239-242); the brutes/caster (giant/ogre/wizard) tint
+		// the gray base body via the NPCDef colour fields (hair 0x6A0DAD, top/bottom 0x4A2C6F clothing
+		// luster, skin 0x6a0dad). Same camera + walk/combat models as their source NPC, so motion is
+		// authentic. See docs/DIVERGENCE.md + the add-void-npc skill.
+		sprites = new int[]{239, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Spider", "A spider swollen with void energy.", "", 12, 12, 8, 12, true, sprites, 0, 0, 0, 0, 150, 130, 6, 6, 5, i++)); // 854
+		sprites = new int[]{6, 1, 2, -1, -1, -1, -1, -1, -1, 243, -1, -1};
+		npcs.add(new NPCDef("Void Giant", "A giant consumed by the void.", "", 50, 50, 60, 50, true, sprites, 0x6A0DAD, 0x4A2C6F, 0x4A2C6F, 0x6a0dad, 218, 330, 6, 6, 5, i++)); // 855
+		sprites = new int[]{240, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Wolf", "A wolf warped by the void.", "", 40, 42, 44, 41, true, sprites, 0, 0, 0, 0, 260, 198, 6, 10, 30, i++)); // 856
+		sprites = new int[]{241, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Demon", "A demon of pure void.", "", 80, 80, 90, 80, true, sprites, 0, 0, 0, 0, 275, 262, 11, 11, 30, i++)); // 857
+		sprites = new int[]{7, 1, 2, -1, -1, -1, -1, -1, -1, 243, -1, -1};
+		npcs.add(new NPCDef("Void Ogre", "An ogre consumed by the void.", "", 60, 50, 70, 60, true, sprites, 0x6A0DAD, 0x4A2C6F, 0x4A2C6F, 0x6a0dad, 212, 280, 6, 6, 5, i++)); // 858
+		sprites = new int[]{6, 1, 2, -1, -1, -1, -1, -1, -1, 243, -1, -1};
+		npcs.add(new NPCDef("Void Wizard", "A wizard who channels the void.", "", 40, 30, 40, 40, true, sprites, 0x6A0DAD, 0x4A2C6F, 0x4A2C6F, 0x6a0dad, 145, 220, 6, 6, 5, i++)); // 859
+		sprites = new int[]{242, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+		npcs.add(new NPCDef("Void Unicorn", "A unicorn corrupted by the void.", "", 25, 25, 22, 25, true, sprites, 0, 0, 0, 0, 201, 230, 6, 6, 7, i++)); // 860
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};
@@ -5010,9 +5046,29 @@ public class EntityHandler {
 		animations.add(new AnimationDef("voidbow", "equipment", 0, 0, false, false, 0)); // voidscape: void bow (runtime idx 230, JSON appearanceID 231). References a custom 'voidbow' sprite block in Custom_Sprites.osar — clone of 'longbow' with the 4-color palette swapped to void purples (charColour-based tinting doesn't work on bow sprites since 'longbow' has no reserved-tint palette index).
 		animations.add(new AnimationDef("voidneck", "equipment", 0, 0, true, false, 0)); // voidscape: void amulet wielded (runtime idx 231, JSON appearanceID 232). Custom name "voidneck" gets a unique animationNumber slot at startup; we pack pre-recolored necklace frames (purple chain + purple gem, no yellow leak) at sprites[number..number+17].
 		animations.add(new AnimationDef("voidmace", "equipment", 0, 0, true, false, 0)); // voidscape: void mace wielded (runtime idx 232, JSON appearanceID 233). Custom name "voidmace" → unique animationNumber slot at startup; we pack pre-recolored mace frames at sprites[number..number+17].
-		animations.add(new AnimationDef("reserved_custom_npc_838", "npc", 0, 0, true, false, 0)); // voidscape: reserved slot. Keep the animation index stable for later custom animations.
+		animations.add(new AnimationDef("voidcolossus", "npc", 0, 0, true, false, 0)); // voidscape: Void Colossus raid boss body (list index 233, was reserved_custom_npc_838). Frames packed into Authentic_Sprites.orsc at this animation's runtime number.
 		animations.add(new AnimationDef("cursed_greatsword", "equipment", 0, 0, true, false, 0));
 		animations.add(new AnimationDef("fullhelm", "equipment", 65535, 0x6a0dad, 0, true, false, 0)); // voidscape: reserved rune full helm variant with void-purple secondary tint.
+		// voidscape: Void Knight (server id 853) armour — a custom void COLORWAY baked into copies of the
+		// Black Knight's three plate blocks (helm/body/legs). Earlier this was a flat 0x6a0dad luster fill,
+		// but the plate's gray ramp tops out at luminance ~144 (below the luster's 150 bright threshold),
+		// so it only hit the dark shades = flat dark purple. Instead we bake a full indigo-shadow ->
+		// bright-violet-highlight ramp per pixel (matches the ::appearance void hair depth), recolour the
+		// platebody's gold trim to a lavender accent, and keep the lavender helm plume. All three are
+		// baked (charColour 0 = show pixels as-is, no fill). Frames packed into Authentic_Sprites.orsc.
+		animations.add(new AnimationDef("voidhelm", "equipment", 0, 0, true, false, 0)); // idx 236 - void helm (baked colorway + lavender plume), archive 1809
+		animations.add(new AnimationDef("voidbody", "equipment", 0, 0, true, false, 0)); // idx 237 - void platebody (baked colorway + lavender trim), archive 1836
+		animations.add(new AnimationDef("voidlegs", "equipment", 0, 0, true, false, 0)); // idx 238 - void plate legs (baked colorway), archive 1863
+		// voidscape: void dungeon creature tints. The base spider/wolf/demon/unicorn sprite blocks are
+		// gray-ramped (90-100% gray), so a new same-named AnimationDef with a void-purple charColour
+		// reuses the SAME sprite block (by name-dedup) and tints it void-purple via the luster. No new
+		// sprites, no archive change. (This is exactly how the authentic Ice/Shadow/Red spider variants
+		// tint the one shared spider sprite — we just add a void tint.)
+		animations.add(new AnimationDef("spider", "npc", 0x6a0dad, 0, true, false, 0));  // idx 239 - void spider (tints shared sprite 891)
+		animations.add(new AnimationDef("wolf", "npc", 0x6a0dad, 0, true, false, 0));    // idx 240 - void wolf (tints shared sprite 1350)
+		animations.add(new AnimationDef("demon", "npc", 0x6a0dad, 0, true, false, 0));   // idx 241 - void demon (tints shared sprite 864)
+		animations.add(new AnimationDef("unicorn", "npc", 0x6a0dad, 0, true, false, 0)); // idx 242 - void unicorn (tints shared sprite 999)
+		animations.add(new AnimationDef("boots", "equipment", 0x6a0dad, 0, true, false, 0)); // idx 243 - void boots (covers the base body's baked brown feet on the humanoid void mobs)
 	}
 
 	@SuppressWarnings("unchecked")

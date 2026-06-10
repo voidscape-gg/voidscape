@@ -25,6 +25,12 @@ public abstract class Entity {
 
 	private boolean removed = false;
 
+	// voidscape instancing: 0 = the normal shared overworld. Any non-zero value puts this entity in a
+	// private phase — it is only visible to / can only interact with entities sharing the same id.
+	// The visibility filter lives in RegionManager's getLocal* methods; default 0 makes it a no-op for
+	// everything outside an instance.
+	private volatile int instanceId = 0;
+
 	private final EntityType entityType;
 
 	public Entity(
@@ -166,6 +172,23 @@ public abstract class Entity {
 
 	protected void setRemoved(final boolean removed) {
 		this.removed = removed;
+	}
+
+	/** voidscape instancing: the private phase this entity belongs to (0 = normal overworld). */
+	public int getInstanceId() {
+		return instanceId;
+	}
+
+	public void setInstanceId(final int instanceId) {
+		this.instanceId = instanceId;
+	}
+
+	/**
+	 * Whether this entity and the other share a phase. Entities in the overworld (id 0) and entities
+	 * in the same private instance can see/interact; entities in different instances cannot.
+	 */
+	public boolean sharesInstanceWith(final Entity other) {
+		return other != null && this.instanceId == other.getInstanceId();
 	}
 
 	public void remove() {

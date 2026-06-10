@@ -65,6 +65,10 @@ public class OpenRSC extends ORSCApplet {
 					mudclient.newRenderingScalar = Float.parseFloat(scalarString);
 					loadedScalingScalar = true;
 				}
+				String viewportPresetString = props.getProperty("viewport_preset");
+				if (viewportPresetString != null && !viewportPresetString.isEmpty()) {
+					ScaledWindow.setViewportPresetIndex(Integer.parseInt(viewportPresetString));
+				}
 			} catch (Exception e) {
 				System.out.println("Something went wrong loading scaling settings");
 				e.printStackTrace();
@@ -80,8 +84,8 @@ public class OpenRSC extends ORSCApplet {
 		try {
 			jframe = new JFrame(Config.getServerNameWelcome());
 			applet = new OpenRSC();
-			// Here we add 12 because 12 was added back in 2009 for the skip tutorial line.
-			applet.setPreferredSize(new Dimension(1024, 756 + 12));
+			// Voidscape: desktop viewport preset. Height includes the historic 12px client footer area.
+			applet.setPreferredSize(new Dimension(ScaledWindow.getBaseViewportWidth(), ScaledWindow.getBaseViewportHeight()));
 			jframe.getContentPane().setLayout(new BorderLayout());
 			jframe.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 			jframe.setIconImage(Utils.getImage("icon.png").getImage());
@@ -91,7 +95,7 @@ public class OpenRSC extends ORSCApplet {
 			jframe.setVisible(false); // All rendering is forwarded to the ScaledWindow class
 			jframe.setBackground(Color.black);
 			// Just like above, here we add 12 because 12 was added back in 2009 for the skip tutorial line.
-			jframe.setMinimumSize(new Dimension(1024, 756 + 12));
+			jframe.setMinimumSize(new Dimension(ScaledWindow.getBaseViewportWidth(), ScaledWindow.getBaseViewportHeight()));
 			jframe.pack();
 			jframe.setLocationRelativeTo(null);
 			applet.init();
@@ -99,7 +103,7 @@ public class OpenRSC extends ORSCApplet {
 
 			scaledWindow.launchScaledWindow();
 
-			applet.resizeMudclient(1024, 768);
+			applet.resizeMudclient(ScaledWindow.getBaseViewportWidth(), ScaledWindow.getBaseViewportHeight());
 			WorkbenchServer.start();
 		} catch (HeadlessException e) {
 			e.printStackTrace();

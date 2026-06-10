@@ -169,7 +169,10 @@ public class ProjectileEvent extends SingleTickEvent {
 			if (opponent.isNpc() && caster.isPlayer()) {
 				Npc npc = (Npc) opponent;
 				Player player = (Player) caster;
-				if (!npc.isChasing() && !npc.inCombat() && npc.getCombatState() != CombatState.RUNNING && this.shouldChase) {
+				// voidscape: raid bosses (Void Colossus) never chase ranged/magic attackers — they
+				// hold their arena position and retaliate via their own AI event instead.
+				if (!npc.getAttribute("raid_boss", false)
+					&& !npc.isChasing() && !npc.inCombat() && npc.getCombatState() != CombatState.RUNNING && this.shouldChase) {
 					npc.setChasing(player);
 				}
 			}

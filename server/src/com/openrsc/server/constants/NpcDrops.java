@@ -1777,6 +1777,78 @@ public class NpcDrops {
 		balrog.addItemDrop(ItemId.TEDDY_HEAD.id(), 1, 0);
 		this.npcDrops.put(NpcId.BALROG.id(), balrog);
 		this.ashesNpcs.add(NpcId.BALROG.id());
+
+		// voidscape: Void Dungeon mob drops (ids 854-860). Tiered: trash drop coins + a few runes,
+		// brutes/casters add gems + a rare chance at void gear, the Void Demon boss is the jackpot.
+		DropTable voidDrop;
+
+		voidDrop = new DropTable("Void Spider (854)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 8, 40);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 20, 12);
+		voidDrop.addItemDrop(ItemId.CHAOS_RUNE.id(), 1, 8);
+		voidDrop.addItemDrop(ItemId.RED_SPIDERS_EGGS.id(), 1, 4);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_SPIDER.id(), voidDrop);
+		this.bonelessNpcs.add(NpcId.VOID_SPIDER.id());
+
+		voidDrop = new DropTable("Void Wolf (856)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 30, 45);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 70, 14);
+		voidDrop.addItemDrop(ItemId.CHAOS_RUNE.id(), 3, 12);
+		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 1, 5);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_WOLF.id(), voidDrop);
+
+		voidDrop = new DropTable("Void Unicorn (860)");
+		voidDrop.addItemDrop(ItemId.UNICORN_HORN.id(), 1, 64);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 40, 30);
+		voidDrop.addItemDrop(ItemId.UNCUT_SAPPHIRE.id(), 1, 6);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_UNICORN.id(), voidDrop);
+
+		voidDrop = new DropTable("Void Wizard (859)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 60, 30);
+		voidDrop.addItemDrop(ItemId.CHAOS_RUNE.id(), 5, 18);
+		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 3, 12);
+		voidDrop.addItemDrop(ItemId.BLOOD_RUNE.id(), 2, 6);
+		voidDrop.addItemDrop(ItemId.SOUL_RUNE.id(), 2, 4);
+		voidDrop.addItemDrop(ItemId.VOID_AMULET.id(), 1, 1);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_WIZARD.id(), voidDrop);
+
+		voidDrop = new DropTable("Void Ogre (858)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 120, 40);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 250, 12);
+		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 3, 12);
+		voidDrop.addItemDrop(ItemId.UNCUT_EMERALD.id(), 1, 6);
+		voidDrop.addItemDrop(ItemId.VOID_MACE.id(), 1, 1);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_OGRE.id(), voidDrop);
+
+		voidDrop = new DropTable("Void Giant (855)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 150, 40);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 300, 14);
+		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 5, 12);
+		voidDrop.addItemDrop(ItemId.UNCUT_EMERALD.id(), 1, 6);
+		voidDrop.addItemDrop(ItemId.VOID_SCIMITAR.id(), 1, 2);
+		voidDrop.addItemDrop(ItemId.VOID_BOW.id(), 1, 1);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_GIANT.id(), voidDrop);
+
+		voidDrop = new DropTable("Void Demon (857)");
+		voidDrop.addItemDrop(ItemId.COINS.id(), 400, 40);
+		voidDrop.addItemDrop(ItemId.COINS.id(), 800, 18);
+		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 10, 16);
+		voidDrop.addItemDrop(ItemId.BLOOD_RUNE.id(), 8, 12);
+		voidDrop.addItemDrop(ItemId.SOUL_RUNE.id(), 6, 8);
+		voidDrop.addItemDrop(ItemId.UNCUT_EMERALD.id(), 2, 8);
+		voidDrop.addItemDrop(ItemId.VOID_SCIMITAR.id(), 1, 4);
+		voidDrop.addItemDrop(ItemId.VOID_MACE.id(), 1, 3);
+		voidDrop.addItemDrop(ItemId.VOID_BOW.id(), 1, 3);
+		voidDrop.addItemDrop(ItemId.VOID_AMULET.id(), 1, 2);
+		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
+		this.npcDrops.put(NpcId.VOID_DEMON.id(), voidDrop);
+		this.ashesNpcs.add(NpcId.VOID_DEMON.id());
 	}
 
 	private void initializeBadLuckMitigation() {

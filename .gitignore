@@ -205,3 +205,8 @@ tmp/
 # rsc-mapgen working dir — restaged from server/.../maps on each render
 tools/rsc-mapgen/input/
 tools/rsc-mapgen/map.png
+
+# voidscape: sprite/landscape packer scratch files
+*.orsc.bak
+*.orsc.new
+*.orsc.predungeon

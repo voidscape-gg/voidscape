@@ -533,8 +533,20 @@ public final class GameStateUpdater {
 				updates.add((short) safeNPCIndex(player, npcNeedingHitsUpdate.getIndex()));
 				updates.add((byte) 2);
 				updates.add((byte) npcNeedingHitsUpdate.getDamage());
-				updates.add((byte) npcNeedingHitsUpdate.getCurHits());
-				updates.add(((byte) npcNeedingHitsUpdate.getMaxHits()));
+				// The hit-bar fields are single unsigned bytes; raid bosses (e.g. Void Colossus,
+				// 5000 HP) would wrap past 255. Scale cur/max into a 0-100 range when max > 255 —
+				// the client only uses the cur/max ratio for the bar, so this is visually lossless
+				// and untouched for all authentic NPCs (max authentic HP is KBD's ~250).
+				int colossusCurHits = npcNeedingHitsUpdate.getCurHits();
+				int colossusMaxHits = npcNeedingHitsUpdate.getMaxHits();
+				if (colossusMaxHits > 255) {
+					int scaledCur = colossusCurHits <= 0 ? 0 : Math.max(1, (colossusCurHits * 100) / colossusMaxHits);
+					updates.add((byte) scaledCur);
+					updates.add((byte) 100);
+				} else {
+					updates.add((byte) colossusCurHits);
+					updates.add((byte) colossusMaxHits);
+				}
 			}
 			if (player.isUsingCustomClient()) {
 				Projectile projectile;

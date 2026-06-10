@@ -30,6 +30,7 @@ Local tile coords: tx = worldX - 96, ty = worldY - 288.
 """
 
 import io
+import json
 import shutil
 import zipfile
 from pathlib import Path
@@ -78,6 +79,16 @@ DEATHMATCH_BASEMENT_MIN_Y, DEATHMATCH_BASEMENT_MAX_Y = 662, 670
 DEATHMATCH_BASEMENT_CENTER_X = 984
 DEATHMATCH_BASEMENT_CENTER_Y = 666
 LEGACY_DEATHMATCH_SECTORS = ("h0x54y38", "h0x54y57")
+
+COLOSSUS_SECTOR = "h0x59y38"
+COLOSSUS_SECTOR_BASE_X = 528
+COLOSSUS_SECTOR_BASE_Y = 48
+COLOSSUS_CENTER_X = 552
+COLOSSUS_CENTER_Y = 71
+COLOSSUS_PLAZA_RADIUS = 14.0
+# Portal landing on the south rim of the plaza; boss stands at center.
+COLOSSUS_LANDING_X = 552
+COLOSSUS_LANDING_Y = 82
 
 VOIDRUSH_SECTOR = "h0x58y38"
 VOIDRUSH_SECTOR_BASE_X = 480
@@ -521,6 +532,113 @@ def patch_voidrush_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
+def patch_colossus_sector(sector_bytes: bytes) -> bytes:
+    """Bake the Void Colossus raid plaza: a dark circular arena ringed by ocean.
+
+    Visual language follows the concept art: checkered dark stone plaza, a bright
+    ritual circle under the boss, and a mid-purple ring walkway around it. The
+    surrounding ocean tiles are left untouched so the plaza is escape-proof
+    without any wall bytes.
+    """
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - COLOSSUS_SECTOR_BASE_X
+        ty = worldY - COLOSSUS_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {COLOSSUS_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    land = set()
+    r = COLOSSUS_PLAZA_RADIUS
+    for x in range(int(COLOSSUS_CENTER_X - r), int(COLOSSUS_CENTER_X + r) + 1):
+        for y in range(int(COLOSSUS_CENTER_Y - r), int(COLOSSUS_CENTER_Y + r) + 1):
+            dx = x - COLOSSUS_CENTER_X
+            dy = y - COLOSSUS_CENTER_Y
+            if dx * dx + dy * dy <= r * r:
+                land.add((x, y))
+
+    for x, y in land:
+        off = tile_offset(x, y)
+        dx = x - COLOSSUS_CENTER_X
+        dy = y - COLOSSUS_CENTER_Y
+        dist2 = dx * dx + dy * dy
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (106 + ((x * 9 + y * 7) % 26)) & 0xFF
+        if dist2 <= 4:
+            # Boss platform: bright ritual core under the Colossus.
+            buf[off + 2] = FLOOR_RITUAL
+        elif 9 <= dist2 <= 20:
+            # The ring walkway circling the boss platform (concept's glowing circle).
+            buf[off + 2] = FLOOR_MID
+        elif edge or dist2 >= (r - 1.5) * (r - 1.5):
+            # Outer rim band so the plaza reads as a deliberate disc.
+            buf[off + 2] = FLOOR_MID
+        else:
+            # Checkered dark plaza body, 2x2 squares like the concept art.
+            buf[off + 2] = FLOOR_INDOOR if ((x // 2) + (y // 2)) % 2 == 0 else FLOOR_V3_STONE
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
+# === Void Dungeon floor (Floor 2 black-void) ===
+# Gives the shared Void Dungeon a dark void floor + minimap instead of pure black. The walkable-tile
+# mask is emitted by scripts/gen-void-dungeon.py (server/conf/server/data/void_dungeon_floor.json), so
+# the floor always matches the generated room/corridor layout exactly. Sector name -> world base:
+# sectionX = worldX//48 + 48, sectionY = (worldY%944)//48 + 37, height = worldY//944 (per
+# WorldLoader.loadSection). Only the dungeon's own tiles are touched; the rest stays black void.
+DUNGEON_FLOOR_MASK = REPO / "server/conf/server/data/void_dungeon_floor.json"
+
+
+def _tile_sector(x: int, y: int) -> str:
+    return f"h{y // 944}x{x // 48 + 48}y{(y % 944) // 48 + 37}"
+
+
+def _sector_base(name: str) -> tuple:
+    height = int(name[1])
+    sx = int(name[name.index("x") + 1:name.index("y")])
+    sy = int(name[name.index("y") + 1:])
+    return (sx - 48) * 48, height * 944 + (sy - 37) * 48
+
+
+def load_dungeon_floor() -> dict:
+    """Read the generated walkable mask, grouped by sector name -> [(x,y), ...]. {} if absent."""
+    if not DUNGEON_FLOOR_MASK.exists():
+        return {}
+    by_sector = {}
+    for x, y in json.loads(DUNGEON_FLOOR_MASK.read_text())["tiles"]:
+        by_sector.setdefault(_tile_sector(x, y), []).append((x, y))
+    return by_sector
+
+
+def patch_dungeon_sector(sector_bytes: bytes, sector_name: str, tiles: list) -> bytes:
+    """Bake a dark void floor (Colossus-plaza recipe: 2x2 FLOOR_INDOOR/FLOOR_V3_STONE checker) into the
+    given dungeon tiles within this sector. Walls are JSON boundaries, so no wall bytes."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+    base_x, base_y = _sector_base(sector_name)
+    for x, y in tiles:
+        tx, ty = x - base_x, y - base_y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            continue
+        off = (tx * 48 + ty) * 10
+        buf[off + 0] = 66
+        buf[off + 1] = (106 + ((x * 9 + y * 7) % 26)) & 0xFF
+        buf[off + 2] = FLOOR_INDOOR if ((x // 2) + (y // 2)) % 2 == 0 else FLOOR_V3_STONE
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+    return bytes(buf)
+
+
 def main():
     # 1. Read clean source sectors from Authentic
     with zipfile.ZipFile(AUTHENTIC) as z:
@@ -529,6 +647,9 @@ def main():
         catchsim_sources = {sector: z.read(sector) for sector, _, _, _, _ in CATCHSIM_SECTORS}
         deathmatch_source = z.read(DEATHMATCH_SECTOR)
         voidrush_source = z.read(VOIDRUSH_SECTOR)
+        colossus_source = z.read(COLOSSUS_SECTOR)
+        dungeon_floor = load_dungeon_floor()
+        dungeon_sources = {sector: z.read(sector) for sector in dungeon_floor}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
         legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
         legacy_deathmatch_sources = {sector: z.read(sector) for sector in LEGACY_DEATHMATCH_SECTORS}
@@ -546,7 +667,10 @@ def main():
         VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
         DEATHMATCH_SECTOR: patch_deathmatch_sector(deathmatch_source),
         VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
+        COLOSSUS_SECTOR: patch_colossus_sector(colossus_source),
     }
+    for sector, tiles in dungeon_floor.items():
+        patched_sectors[sector] = patch_dungeon_sector(dungeon_sources[sector], sector, tiles)
     for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
         patched_sectors[sector] = patch_catchsim_island_sector(
             catchsim_sources[sector], sector, base_x, base_y, offset_x, offset_y
@@ -561,6 +685,8 @@ def main():
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
     print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
+    print(f"Patched Void Colossus raid plaza into sector {COLOSSUS_SECTOR}")
+    print(f"Patched Void Dungeon dark floor ({sum(len(t) for t in dungeon_floor.values())} tiles) into sectors {', '.join(sorted(dungeon_floor))}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
     # server copy and the client cache copy (client reads its own when

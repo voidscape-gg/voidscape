@@ -978,3 +978,47 @@ Regular Player Commands
   - Usage `::globalchat`
   - Alias: `::gc`
   - Informs the user of the functionality of Global Chat on the server, including any total level restrictions.
+
+## Voidscape dev/testing commands
+
+Dev-only (`player.isDev()`). These drive real action paths by id/coords instead of
+needing pixel-precise mouse clicks — handy for headless/workbench testing of custom
+content. Defined in `server/plugins/com/openrsc/server/plugins/custom/commands/VoidTestCommands.java`.
+
+- atnpc
+  - Usage: `::atnpc [npcId]`
+  - Alias: `::attacknpc`
+  - Walks to and melee-attacks the nearest visible NPC of that id, through the real
+    attack path (fires `AttackNpcTrigger`, so custom boss carve-outs are exercised).
+- atobject
+  - Usage: `::atobject [objId] (2)`
+  - Alias: `::atobj`, `::oploc`, `::usescenery`
+  - Walks to and operates the nearest visible scenery of that id through the real
+    `OpLocTrigger` path. Pass `2` to use the right-click / second command.
+- walkto
+  - Usage: `::walkto [x] [y]`
+  - Walks to world tile (x, y) through real pathing/collision (not a teleport).
+- npcinfo
+  - Usage: `::npcinfo (npcId)`
+  - Prints the nearest matching NPC's name, id, HP, coords, and combat state. With no
+    id, reports the nearest NPC in view. Useful for watching boss HP during a fight.
+- killnpc / damagenpc
+  - Usage: `::killnpc [npcId]` or `::damagenpc [npcId] [amount]`
+  - Kills (or drains HP from) the nearest matching NPC through the real death path
+    (fires `KillNpcTrigger`, default drops, and respawn). Useful for testing boss drops.
+- take / grounditems
+  - Usage: `::take [itemId]`, `::grounditems (radius)` (alias `::gi`)
+  - `take` walks to and picks up the nearest ground item of that id via the real
+    `TakeObjTrigger` path. `grounditems` lists nearby ground items with id, name, coords,
+    amount, and whether they are FFA (ownerless) or owned.
+- talknpc / opnpc
+  - Usage: `::talknpc [npcId]`, `::opnpc [npcId] (command|2)`
+  - Walks to and talks to (`TalkNpcTrigger`) or operates a menu command (`OpNpcTrigger`)
+    on the nearest matching NPC. `opnpc` takes an explicit command word, or `2` for the
+    right-click/second command.
+- dropinv
+  - Usage: `::dropinv [itemId]` (alias `::dropitem`)
+  - Drops the first matching inventory item through the real drop path.
+
+Tip: dialogue/option menus accept number keys — send key `1`/`2` (e.g. workbench
+`POST /input/key {"key":"1"}`) to pick an option without clicking.
