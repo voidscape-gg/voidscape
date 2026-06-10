@@ -179,6 +179,7 @@ Voidscape custom-client packet notes:
 - `10068`: restored classic clothing colours to the Top/Bottom selectors while keeping the muted Voidscape clothing colours appended at indexes `15..22`. No packet shape changed.
 - `10069`: custom `SEND_GAME_SETTINGS` appends one byte for the Global Chat country-flag visibility toggle after the HD visual settings block. The custom client also renders server-sent `@flg@CC` chat tokens as country-flag icons, used by simplified global chat formatting.
 - `10070`: client-visible Void Council starter intro release. Adds Void Councilor NPC definitions, starter-island custom landscape/cache changes, and client-side starter-island visual polish/safe-zone overlay suppression. No packet shape changed.
+- `10087`: the client now renders the previously server-only `SEND_INPUT_BOX` (custom wire opcode 110, one prompt string; `%` splits lines) using the generic inputX popup, and replies with the typed text through the existing `INTERFACE_OPTIONS` packet (wire 199) sub-option `9` (formerly `UNUSED`): byte 9 + string. Server side gates sends on `ActionSender.supportsInputBox` (custom client ≥ 10087); plugins consume replies via the blocking `Functions.inputBox`. No new wire opcode and no ordinal shifts — both directions reuse existing packet numbers.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

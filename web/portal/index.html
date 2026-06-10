@@ -104,21 +104,29 @@
 										<span>Username to reserve</span>
 										<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
 									</label>
-									<input id="founder-email" type="hidden" autocomplete="email">
+									<label class="prelaunch-field" id="founder-email-row">
+										<span>Email</span>
+										<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
+									</label>
 									<input id="founder-password" type="hidden" autocomplete="new-password">
-									<button class="google-button prelaunch-google" type="button" id="google-auth-button">
-										<span class="google-mark" aria-hidden="true">G</span>
-										<strong id="google-auth-label">Login with Google</strong>
-									</button>
+									<button class="prelaunch-manage prelaunch-submit" type="submit" id="founder-submit">Reserve &amp; get my code</button>
 								</div>
-								<p class="prelaunch-state" id="founder-message">Reserve your username with Google. Claim your card in Lumbridge.</p>
+								<p class="prelaunch-state" id="founder-message">Enter your email and the username you want. You'll get a code for a free 1-week subscription card.</p>
 								<div class="prelaunch-success" id="prelaunch-success" hidden>
 									<h2>Your username is reserved</h2>
 									<p>Log in and speak to the Subscription Vendor in Lumbridge to claim your free 1-week subscription card.</p>
 									<div class="prelaunch-success-meta" aria-label="Reserved card details">
-										<span>Google <strong id="prelaunch-success-account">-</strong></span>
+										<span>Email <strong id="prelaunch-success-account">-</strong></span>
 										<span>Reserved <strong id="prelaunch-success-name">-</strong></span>
 										<span>Status <strong id="prelaunch-success-status">Password needed</strong></span>
+									</div>
+									<div class="signup-code-block" id="signup-code-block" hidden>
+										<span class="signup-code-label">Your subscription card code</span>
+										<div class="copy-row">
+											<strong class="signup-code" id="prelaunch-success-code">-</strong>
+											<button class="ghost-button" type="button" id="copy-signup-code">Copy</button>
+										</div>
+										<p class="signup-code-help" id="signup-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.</p>
 									</div>
 									<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
 										<label class="prelaunch-field">
@@ -127,7 +135,7 @@
 										</label>
 										<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
 									</div>
-									<div class="prelaunch-success-actions">
+									<div class="prelaunch-success-actions" id="prelaunch-success-actions">
 										<a class="prelaunch-download" id="prelaunch-download" href="/downloads/launcher" download>Download launcher</a>
 										<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
 									</div>

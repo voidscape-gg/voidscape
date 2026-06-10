@@ -14,7 +14,7 @@ public enum InterfaceOptions {
 	CANCEL_BATCH(6),
 	IRONMAN_MODE(7),
 	BANK_PIN(8),
-	UNUSED(9), // 9 unused
+	INPUT_BOX_REPLY(9), // generic SEND_INPUT_BOX text reply
 	AUCTION(10),
 	CLAN(11),
 	PARTY(12),

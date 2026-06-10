@@ -2241,7 +2241,7 @@ body.prelaunch-mode::before {
 
 .prelaunch-fields {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(230px, 0.98fr);
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
 	gap: 12px;
 	align-items: end;
 }
@@ -2508,6 +2508,73 @@ body.prelaunch-mode::before {
 .prelaunch-download:hover,
 .prelaunch-manage:hover {
 	filter: brightness(1.08);
+}
+
+.prelaunch-submit {
+	grid-column: 1 / -1;
+	min-height: 46px;
+	width: 100%;
+	cursor: pointer;
+}
+
+.prelaunch-submit:disabled {
+	cursor: default;
+	filter: grayscale(0.4) brightness(0.75);
+}
+
+.signup-code-block {
+	grid-column: 1 / 2;
+	display: grid;
+	gap: 6px;
+	margin-top: 4px;
+	padding: 10px 12px;
+	border: 1px solid rgba(214, 173, 88, 0.45);
+	border-radius: 6px;
+	background: rgba(6, 5, 7, 0.42);
+}
+
+.signup-code-block[hidden] {
+	display: none;
+}
+
+.signup-code-label {
+	color: rgba(239, 209, 141, 0.82);
+	font-family: "Palatino", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+	font-size: 10px;
+	font-weight: 800;
+	text-transform: uppercase;
+	text-shadow: 0 2px 0 rgba(0, 0, 0, 0.95);
+}
+
+.signup-code-block .copy-row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.signup-code {
+	flex: 1 1 auto;
+	color: #ffe9ad;
+	font-family: "Courier New", ui-monospace, monospace;
+	font-size: clamp(20px, 2vw, 26px);
+	font-weight: 800;
+	letter-spacing: 2px;
+	text-shadow: 0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.signup-code-help {
+	margin: 0;
+	color: #d7cdbc;
+	font-family: "Palatino", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+	font-size: clamp(11px, 0.9vw, 13px);
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.signup-code-help code {
+	color: #c9f2ee;
+	font-family: "Courier New", ui-monospace, monospace;
+	font-weight: 700;
 }
 
 .prelaunch-signup.is-claimed .prelaunch-fields {

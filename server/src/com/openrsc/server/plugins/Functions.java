@@ -382,6 +382,35 @@ public class Functions {
 			player.getMenuHandler() == null);
 	}
 
+	/**
+	 * Shows the custom client's text input box and blocks the plugin (like multi())
+	 * until the player submits or the timeout elapses. The client sends nothing on
+	 * cancel, so cancel surfaces as a timeout. Returns the submitted text, or null
+	 * on timeout/unsupported client. Check ActionSender.supportsInputBox(player)
+	 * first when a fallback message is wanted.
+	 */
+	public static String inputBox(final Player player, final String prompt) {
+		if (!ActionSender.supportsInputBox(player)) {
+			return null;
+		}
+		player.removeAttribute("input_box_reply");
+		player.setAttribute("input_box_pending", System.currentTimeMillis());
+		ActionSender.sendInputBox(player, prompt);
+		final long start = System.currentTimeMillis();
+		try {
+			while (player.isLoggedIn() && System.currentTimeMillis() - start < 60000L) {
+				String reply = player.getAttribute("input_box_reply", null);
+				if (reply != null) {
+					return reply;
+				}
+				delay();
+			}
+			return null;
+		} finally {
+			player.removeAttribute("input_box_pending");
+			player.removeAttribute("input_box_reply");
+		}
+	}
 
 	public static void advancestat(Player player, int skillId, int baseXp, int expPerLvl) {
 		player.incExp(skillId, player.getSkills().getMaxStat(skillId) * expPerLvl + baseXp, true);

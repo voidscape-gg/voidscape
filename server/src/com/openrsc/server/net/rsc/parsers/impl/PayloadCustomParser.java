@@ -923,8 +923,8 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 							os.pin = packet.readString();
 						}
 						break;
-					case UNUSED:
-						//inexistent
+					case INPUT_BOX_REPLY:
+						os.name = packet.readString();
 						break;
 					case AUCTION:
 						os.value = packet.readByte();

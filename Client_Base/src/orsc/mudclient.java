@@ -8826,6 +8826,11 @@ public final class mudclient implements Runnable {
 					this.packetHandler.getClientStream().finishPacket();
 				} else if (this.inputX_Action == InputXAction.PARTY_LEAVE) {
 					party.getPartyInterface().sendPartyLeave();
+				} else if (this.inputX_Action == InputXAction.SERVER_PROMPT) {
+					this.packetHandler.getClientStream().newPacket(199);
+					this.packetHandler.getClientStream().bufferBits.putByte(9);
+					this.packetHandler.getClientStream().bufferBits.putString(str);
+					this.packetHandler.getClientStream().finishPacket();
 				}
 				this.inputX_Action = InputXAction.ACT_0;
 			}
@@ -20547,6 +20552,11 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var6,
 				"client.RA(" + (lines != null ? "{...}" : "null") + ',' + "dummy" + ',' + var3 + ',' + var4 + ')');
 		}
+	}
+
+	/** Server-driven text prompt (SEND_INPUT_BOX). The reply goes back via INTERFACE_OPTIONS sub-option 9. */
+	public final void showServerInputPopup(String prompt) {
+		this.showItemModX(prompt.split("%"), InputXAction.SERVER_PROMPT, true);
 	}
 
 	private void showLoginScreenStatus(String a, String b) {

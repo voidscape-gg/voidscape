@@ -13,6 +13,10 @@ const execFile = promisify(execFileCallback);
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(rootDir, "../..");
 const port = Number(process.env.PORT || 8788);
+const bindHost = process.env.PORTAL_BIND_HOST || "127.0.0.1";
+const trustProxyHeader = process.env.PORTAL_TRUST_PROXY === "1";
+// Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
+const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
 const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
 const storePath = join(dataDir, "dev-store.json");
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
@@ -25,8 +29,12 @@ const starterCardCachePrefix = "starter_card:";
 const starterCardAvailable = 1;
 const starterCardClaimed = 2;
 const accountSubscriptionCachePrefix = "acct_sub:";
+const signupCodeCachePrefix = "signup_code:";
+const signupCodeAvailable = 1;
+const signupCodeRedeemed = 2;
 const starterFreeSubscriptionType = "starter_free_subscription";
 const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || 5));
+const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
 const abuseHashSalt = process.env.PORTAL_ABUSE_HASH_SALT || "voidscape-portal-dev";
 const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
@@ -144,13 +152,29 @@ const server = createServer((request, response) => {
 	});
 });
 
-server.listen(port, "127.0.0.1", () => {
-	console.log(`Voidscape portal dev server: http://127.0.0.1:${port}/`);
+const loopbackBind = bindHost === "127.0.0.1" || bindHost === "::1" || bindHost === "localhost";
+if (!loopbackBind && !process.env.PORTAL_DATA_DIR && process.env.PORTAL_ALLOW_TMPDIR !== "1") {
+	console.error(
+		`Refusing to bind ${bindHost} with the default temp data dir: the signup list would be lost on reboot.\n` +
+		"Set PORTAL_DATA_DIR=/path/to/durable/dir (recommended) or PORTAL_ALLOW_TMPDIR=1 to override."
+	);
+	process.exit(1);
+}
+
+server.listen(port, bindHost, () => {
+	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${publicMode ? " (PUBLIC PRELAUNCH MODE)" : ""}`);
 	console.log(`Portal API data: ${storePath}`);
 });
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+	if (publicMode && (
+		url.pathname === "/api/launcher/manifest.properties"
+		|| url.pathname.startsWith("/downloads/")
+		|| url.pathname.startsWith("/openrsc/avatar/")
+	)) {
+		throw new HttpError(404, "not_available_during_prelaunch");
+	}
 	if (url.pathname === "/api/launcher/manifest.properties") {
 		if (!["GET", "HEAD"].includes(request.method || "GET")) {
 			throw new HttpError(405, "method_not_allowed");
@@ -175,6 +199,17 @@ async function handleRequest(request, response) {
 
 async function handleApi(request, response, url) {
 	const method = request.method || "GET";
+
+	if (publicMode) {
+		const allowed =
+			(method === "GET" && url.pathname === "/api/health")
+			|| (method === "GET" && url.pathname === "/api/public")
+			|| (method === "POST" && url.pathname === "/api/founder/reservations")
+			|| url.pathname.startsWith("/api/admin/");
+		if (!allowed) {
+			throw new HttpError(404, "not_available_during_prelaunch");
+		}
+	}
 
 	if (method === "GET" && url.pathname === "/api/health") {
 		json(response, 200, { ok: true, service: "voidscape-portal-dev" });
@@ -218,9 +253,32 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/founder/reservations") {
 		const payload = await readJson(request);
-		const result = await updateStore((store) => {
+		const ip = clientIp(request);
+		const result = await updateStore(async (store) => {
+			if (!isLocalIp(ip)) {
+				const since = Date.now() - 1000 * 60 * 60 * 24;
+				if (countAbuseSignals(store, "founder_signup_ip", ip, since) >= signupIpDailyLimit) {
+					throw new HttpError(429, "rate_limited");
+				}
+			}
 			const founder = reserveFounder(store, payload);
-			return { founder: founderState(founder) };
+			// Codes are minted only on this public landing route: registered portal
+			// accounts get their starter card through the account-bound marker instead.
+			ensureFounderSignupCode(store, founder);
+			recordAbuseSignal(store, {
+				signalType: "founder_signup_ip",
+				signalValue: ip,
+				bucket: dailyBucket(),
+				metadata: { local: isLocalIp(ip) }
+			});
+			try {
+				if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
+					founder.signupCodeSyncedAt = now();
+				}
+			} catch (error) {
+				audit(store, "signup_code_sync_failed", { founderId: founder.id, error: String(error && error.message || error) });
+			}
+			return { founder: founderState(founder), signup: signupState(founder) };
 		});
 		json(response, 200, result);
 		return;
@@ -524,6 +582,67 @@ async function handleApi(request, response, url) {
 			});
 			audit(store, "account_sessions_revoked", { accountId: account.id, revoked });
 			return accountState(store, account, session);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/admin/signups") {
+		requireAdmin(request);
+		const store = await loadStore();
+		const gameValues = await signupCodeGameValues();
+		const rows = store.founders.map((founder) => ({
+			id: founder.id,
+			username: founder.username,
+			email: founder.emailDisplay || founder.emailCanonical,
+			code: founder.signupCode || "",
+			status: signupCodeStatus(founder, gameValues),
+			createdAt: founder.createdAt
+		}));
+		if ((url.searchParams.get("format") || "").toLowerCase() === "csv") {
+			const header = "id,username,email,code,status,createdAt";
+			const lines = rows.map((row) =>
+				[row.id, row.username, row.email, row.code, row.status, row.createdAt].map(csvCell).join(","));
+			response.writeHead(200, {
+				"content-type": "text/csv; charset=utf-8",
+				"content-disposition": "attachment; filename=\"voidscape-signups.csv\"",
+				"cache-control": "no-store"
+			});
+			response.end([header, ...lines].join("\n") + "\n");
+			return;
+		}
+		json(response, 200, { signups: rows });
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/admin/signups/sync") {
+		requireAdmin(request);
+		if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+		const result = await updateStore(async (store) => {
+			let synced = 0;
+			let skippedRedeemed = 0;
+			let failed = 0;
+			let noCode = 0;
+			const gameValues = await signupCodeGameValues();
+			for (const founder of store.founders) {
+				if (!founder.signupCode) {
+					noCode += 1;
+					continue;
+				}
+				if (gameValues.get(signupCodeCacheKey(founder.signupCode)) === signupCodeRedeemed) {
+					skippedRedeemed += 1;
+					continue;
+				}
+				try {
+					await syncSignupCodeToOpenRsc(founder);
+					if (!founder.signupCodeSyncedAt) founder.signupCodeSyncedAt = now();
+					synced += 1;
+				} catch (error) {
+					failed += 1;
+				}
+			}
+			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode });
+			return { synced, skippedRedeemed, failed, noCode };
 		});
 		json(response, 200, result);
 		return;
@@ -1059,6 +1178,11 @@ async function createAccountCharacter(store, account, payload, request) {
 	const username = cleanUsername(payload.name || payload.username || "");
 	const normalizedName = normalizeUsername(username);
 	if (!normalizedName) throw new HttpError(400, "invalid_character_name");
+	const reservedByOther = store.founders.find((entry) =>
+		entry.normalizedName === normalizedName && entry.emailCanonical !== account.emailCanonical);
+	if (reservedByOther) {
+		throw new HttpError(409, "username_reserved");
+	}
 	const existingCharacter = store.characters.find((character) => character.normalizedName === normalizedName);
 	const reservedForAccount = existingCharacter
 		&& existingCharacter.accountId === account.id
@@ -1327,6 +1451,23 @@ async function publicState(store) {
 	const founderUnlocks = store.founders.filter((founder) =>
 		Boolean(founder.starterCardUnlocked) || founder.creditedReferrals >= 2
 	).length;
+	if (publicMode) {
+		// No fake world stats or download links on the public prelaunch site.
+		return {
+			publicMode: true,
+			status: { world: "Voidscape", online: false, playersOnline: 0, patch: "prelaunch", lastSave: "" },
+			rates: { baseCombat: 7, baseSkill: 4, subscribedCombat: 10, subscribedSkill: 6 },
+			founderStats: {
+				reservations: store.founders.length,
+				starterCardsUnlocked: founderUnlocks
+			},
+			downloads: [],
+			news: [],
+			highscores: [],
+			market: [],
+			activity: []
+		};
+	}
 	return {
 		status: {
 			world: "World 1",
@@ -1571,6 +1712,56 @@ async function syncStarterCardToOpenRsc(account) {
 	`);
 }
 
+async function syncSignupCodeToOpenRsc(founder) {
+	if (!openRscDbPath || !founder || !founder.signupCode) return false;
+	const key = signupCodeCacheKey(founder.signupCode);
+	if (!key) return false;
+
+	const current = await sqliteJson(`
+		SELECT value
+		FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		ORDER BY dbid DESC
+		LIMIT 1
+	`);
+	if (current.length && Number(current[0].value) === signupCodeRedeemed) {
+		return true;
+	}
+
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
+		INSERT INTO player_cache (playerID, type, key, value)
+			VALUES (0, 0, ${sqlString(key)}, ${sqlString(signupCodeAvailable)});
+		COMMIT;
+		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
+	`);
+	return true;
+}
+
+async function signupCodeGameValues() {
+	if (!openRscDbPath) return new Map();
+	const rows = await sqliteJson(`
+		SELECT key, value
+		FROM player_cache
+		WHERE playerID = 0 AND key LIKE '${signupCodeCachePrefix}%'
+	`);
+	return new Map(rows.map((row) => [row.key, Number(row.value)]));
+}
+
+function signupCodeStatus(founder, gameValues) {
+	if (!founder.signupCode) return "no_code";
+	if (!openRscDbPath) return founder.signupCodeSyncedAt ? "issued" : "not_synced";
+	const value = gameValues.get(signupCodeCacheKey(founder.signupCode));
+	if (value === undefined) return "not_synced";
+	return value === signupCodeRedeemed ? "redeemed" : "issued";
+}
+
+function csvCell(value) {
+	const text = String(value == null ? "" : value);
+	return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
 function starterCardCacheKey(accountId) {
 	const id = Number(accountId);
 	return Number.isInteger(id) && id > 0 ? `${starterCardCachePrefix}${id}` : "";
@@ -1646,7 +1837,7 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 			${sqlString(passwordState.salt)},
 			${createdAt},
 			${sqlString(ip || "127.0.0.1")},
-			1
+			10
 		);
 		INSERT INTO maxstats (playerID)
 			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
@@ -2489,8 +2680,14 @@ function legacyGamePasswordHash(password) {
 }
 
 function clientIp(request) {
-	const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
-	const raw = forwarded || request.socket.remoteAddress || "127.0.0.1";
+	const peer = String(request.socket.remoteAddress || "127.0.0.1");
+	const peerIsLocal = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+	// x-forwarded-for is attacker-controlled on a direct connection; only trust it
+	// behind an explicit proxy opt-in or from a same-host (loopback) proxy.
+	const forwarded = (trustProxyHeader || peerIsLocal)
+		? String(request.headers["x-forwarded-for"] || "").split(",")[0].trim()
+		: "";
+	const raw = forwarded || peer;
 	return raw === "::1" || raw === "::ffff:127.0.0.1" ? "127.0.0.1" : raw;
 }
 
@@ -2550,6 +2747,49 @@ function makeCode(username) {
 
 function makeLinkCode() {
 	return `VLINK-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+// No 0/O/1/I/L/U: signup codes get typed into RSC chat from memory or paper.
+const signupCodeAlphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
+
+function makeSignupCode() {
+	const pick = (count) => Array.from(randomBytes(count))
+		.map((byte) => signupCodeAlphabet[byte % signupCodeAlphabet.length])
+		.join("");
+	return `VOID-${pick(4)}-${pick(4)}`;
+}
+
+function normalizeSignupCode(code) {
+	return String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+}
+
+function signupCodeCacheKey(code) {
+	const normalized = normalizeSignupCode(code);
+	return normalized ? `${signupCodeCachePrefix}${normalized}` : "";
+}
+
+function ensureFounderSignupCode(store, founder) {
+	if (founder.signupCode) return founder;
+	let code = makeSignupCode();
+	while (store.founders.some((entry) => entry.signupCodeNormalized === normalizeSignupCode(code))) {
+		code = makeSignupCode();
+	}
+	founder.signupCode = code;
+	founder.signupCodeNormalized = normalizeSignupCode(code);
+	founder.signupCodeCreatedAt = now();
+	founder.signupCodeSyncedAt = null;
+	audit(store, "signup_code_minted", { founderId: founder.id });
+	return founder;
+}
+
+function signupState(founder) {
+	if (!founder || !founder.signupCode) return null;
+	return {
+		code: founder.signupCode,
+		redeemHint: "Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.",
+		syncedToGame: Boolean(founder.signupCodeSyncedAt),
+		createdAt: founder.signupCodeCreatedAt || null
+	};
 }
 
 function makeRecoveryCode() {

@@ -59,6 +59,28 @@ const founder = await api("/api/founder/reservations", {
 	}
 });
 assert(founder.founder.code, "founder reservation should return a code");
+assert(founder.signup && /^VOID-[A-HJ-NP-TV-Z2-9]{4}-[A-HJ-NP-TV-Z2-9]{4}$/.test(founder.signup.code), "founder reservation should mint a VOID-XXXX-XXXX signup code");
+assert(typeof founder.signup.redeemHint === "string" && founder.signup.redeemHint.includes("Void Subscription Vendor"), "signup state should explain in-game redemption at the vendor");
+assert(founder.signup.syncedToGame === true, "signup code should sync to the configured game DB");
+
+const sameEmailAgain = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "SmokeHero",
+		email: "smoke+resub@example.com"
+	}
+});
+assert(sameEmailAgain.signup.code === founder.signup.code, "re-signing up with the same email should return the same signup code");
+
+const takenName = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "SmokeHero",
+		email: "squatter@example.com"
+	},
+	expectStatus: 409
+});
+assert(takenName.error === "username_reserved", "a name reserved by another email should 409");
 
 const invalidReferral = await api("/api/founder/reservations", {
 	method: "POST",
@@ -117,6 +139,24 @@ assert(registered.characters.length === 1, "registration should create the first
 assert(registered.founder.starterCardUnlocked === true, "prelaunch signup should reserve the starter subscription card");
 assert(registered.rewards.starterSubscriptionCards === 1, "reserved starter card should appear in account reward state");
 assert(registered.characters[0].appearanceData.topColour === 4, "starter characters should expose default appearance data");
+
+const heldReservation = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "HeldName",
+		email: "held-by@example.com"
+	}
+});
+assert(heldReservation.signup.code, "founder-only signups should still mint a code");
+const heldNameBlocked = await api("/api/characters", {
+	method: "POST",
+	body: {
+		name: "HeldName",
+		gamePassword: "smokepass"
+	},
+	expectStatus: 409
+});
+assert(heldNameBlocked.error === "username_reserved", "character creation should respect founder reservations held by another email");
 
 const originalToken = token;
 const secondLogin = await api("/api/accounts/login", {
@@ -394,6 +434,38 @@ assert(abuseOne.rewards.starterSubscriptionCards === 1, "first account from an I
 assert(abuseTwo.rewards.starterSubscriptionCards === 1, "second account within the configured IP limit should keep the starter card");
 assert(abuseThree.rewards.starterSubscriptionCards === 0, "account creation should continue but withhold the starter card after the IP limit");
 assert(abuseThree.abuse.starterCard.status === "review", "withheld starter cards should be visible as review state");
+
+const signupIp = "203.0.113.99";
+const signupLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
+for (let i = 1; i <= signupLimit; i += 1) {
+	const limited = await api("/api/founder/reservations", {
+		method: "POST",
+		headers: { "x-forwarded-for": signupIp },
+		body: {
+			username: `RateGuy${i}`,
+			email: `rate-guy-${i}@example.com`
+		}
+	});
+	assert(limited.signup && limited.signup.code, `signup ${i} within the IP limit should mint a code`);
+}
+const overLimit = await api("/api/founder/reservations", {
+	method: "POST",
+	headers: { "x-forwarded-for": signupIp },
+	body: {
+		username: "RateGuyOver",
+		email: "rate-guy-over@example.com"
+	},
+	expectStatus: 429
+});
+assert(overLimit.error === "rate_limited", "signups past the per-IP daily limit should be rate limited");
+const loopbackAfterLimit = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "LocalAfter",
+		email: "local-after-limit@example.com"
+	}
+});
+assert(loopbackAfterLimit.signup && loopbackAfterLimit.signup.code, "loopback signups should be exempt from the IP limit");
 
 const updatedPublic = await api("/api/public");
 assert(updatedPublic.founderStats.reservations >= 1, "public endpoint should include reservation count");

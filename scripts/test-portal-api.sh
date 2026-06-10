@@ -183,6 +183,7 @@ PORT="$PORT" \
 	PORTAL_OPENRSC_DB="$fixture_db" \
 	PORTAL_ADMIN_TOKEN="dev-admin" \
 	PORTAL_STARTER_IP_DAILY_LIMIT=2 \
+	PORTAL_SIGNUP_IP_DAILY_LIMIT=3 \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
 server_pid="$!"
 
@@ -194,7 +195,19 @@ for _ in {1..60}; do
 done
 
 curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
-PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" node web/portal/api-smoke.mjs
+PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" PORTAL_SIGNUP_IP_DAILY_LIMIT=3 node web/portal/api-smoke.mjs
+
+signup_code_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:VOID%' AND value='1';")"
+if [[ "$signup_code_count" -lt 1 ]]; then
+	echo "expected at least one available signup_code row in the OpenRSC cache, got ${signup_code_count:-0}"
+	exit 1
+fi
+
+bad_signup_keys="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:%' AND length(key) > 32;")"
+if [[ "$bad_signup_keys" != "0" ]]; then
+	echo "signup_code cache keys must fit player_cache.key varchar(32)"
+	exit 1
+fi
 
 starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
 if [[ "$starter_card_state" != "1" ]]; then
@@ -249,5 +262,100 @@ fi
 bad_hits_xp="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM experience e JOIN players p ON p.id = e.playerID WHERE p.username LIKE 'Smoke%' AND p.id <> 77 AND e.hits <> 4000;")"
 if [[ "$bad_hits_xp" != "0" ]]; then
 	echo "portal-created players should initialize hits xp to the Java createPlayer baseline"
+	exit 1
+fi
+
+# Group.USER is 10; Group.ADMIN is 1. Portal-created players must never be staff.
+elevated_players="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username LIKE 'Smoke%' AND id <> 77 AND group_id < 10;")"
+if [[ "$elevated_players" != "0" ]]; then
+	echo "portal-created players must be created in the default USER group (10), not staff groups"
+	exit 1
+fi
+
+# ---- PORTAL_PUBLIC_MODE lockdown ----
+public_port=$((PORT + 1))
+PORT="$public_port" \
+	PORTAL_DATA_DIR="$tmp_dir/public-store" \
+	PORTAL_ADMIN_TOKEN="dev-admin" \
+	PORTAL_PUBLIC_MODE=1 \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-public-smoke.log 2>&1 &
+public_pid="$!"
+trap 'kill "$public_pid" >/dev/null 2>&1 || true; cleanup' EXIT
+
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${public_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+expect_status() {
+	local expected="$1"; shift
+	local actual
+	actual="$(curl -s -o /dev/null -w '%{http_code}' "$@")"
+	if [[ "$actual" != "$expected" ]]; then
+		echo "public-mode lockdown: expected HTTP $expected from $*, got $actual"
+		exit 1
+	fi
+}
+
+# the one public write path still works and mints a code
+public_signup="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"PublicGuy","email":"public-guy@example.com"}')"
+grep -q '"code": "VOID-' <<<"$public_signup" || { echo "public-mode signup should mint a code"; exit 1; }
+
+# everything dangerous is gone
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/accounts/register" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/accounts/login" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/accounts/google/dev" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/founder/simulate-referral" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/subscriptions/redeem" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/characters" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/character-links/simulate-verify" -H 'content-type: application/json' -d '{}'
+expect_status 404 "http://127.0.0.1:${public_port}/api/openrsc/characters/SmokeHero"
+expect_status 404 "http://127.0.0.1:${public_port}/api/launcher/manifest.properties"
+expect_status 404 "http://127.0.0.1:${public_port}/downloads/pc-client"
+expect_status 404 "http://127.0.0.1:${public_port}/downloads/launcher"
+
+# /api/public is sanitized: no fake live-world stats, flagged for the UI
+public_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/public")"
+grep -q '"publicMode": true' <<<"$public_payload" || { echo "public-mode /api/public should be flagged"; exit 1; }
+grep -q '"playersOnline": 0' <<<"$public_payload" || { echo "public-mode /api/public should not report fake players online"; exit 1; }
+
+# admin stays available with the token, refused without
+expect_status 403 "http://127.0.0.1:${public_port}/api/admin/signups"
+admin_signups="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/signups")"
+grep -q '"PublicGuy"' <<<"$admin_signups" || { echo "public-mode admin signup list should include the signup"; exit 1; }
+
+kill "$public_pid" >/dev/null 2>&1 || true
+wait "$public_pid" >/dev/null 2>&1 || true
+trap cleanup EXIT
+
+# Simulate one in-game redemption, then check the admin signup list reflects it.
+sqlite3 "$fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key=(SELECT key FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:%' ORDER BY dbid LIMIT 1);"
+
+signups_json="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups")"
+if ! grep -q '"redeemed"' <<<"$signups_json"; then
+	echo "admin signup list should report the simulated redemption as redeemed"
+	exit 1
+fi
+if ! grep -q '"issued"' <<<"$signups_json"; then
+	echo "admin signup list should report unredeemed codes as issued"
+	exit 1
+fi
+
+csv_header="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups?format=csv" | head -1)"
+if [[ "$csv_header" != "id,username,email,code,status,createdAt" ]]; then
+	echo "admin signup CSV export should include the expected header, got: $csv_header"
+	exit 1
+fi
+
+sync_result="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
+if ! python3 -c "
+import json, sys
+result = json.loads(sys.argv[1])
+assert result['skippedRedeemed'] >= 1, 'sync should skip the redeemed code'
+assert result['failed'] == 0, 'sync should not fail against the fixture DB'
+" "$sync_result"; then
+	echo "admin signup sync failed: $sync_result"
 	exit 1
 fi

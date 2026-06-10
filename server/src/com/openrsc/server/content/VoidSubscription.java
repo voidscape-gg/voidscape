@@ -10,6 +10,11 @@ public final class VoidSubscription {
 	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
 	public static final int STARTER_CARD_AVAILABLE = 1;
 	public static final int STARTER_CARD_CLAIMED = 2;
+	public static final String SIGNUP_CODE_CACHE_PREFIX = "signup_code:";
+	public static final int SIGNUP_CODE_AVAILABLE = 1;
+	public static final int SIGNUP_CODE_REDEEMED = 2;
+	// player_cache.key is varchar(32); 32 - "signup_code:".length() = 20
+	private static final int SIGNUP_CODE_MAX_LENGTH = 20;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
 	public static final int PROFILE_CLIENT_VERSION = 10055;
 	public static final double COMBAT_EXP_RATE = 10.0;
@@ -112,6 +117,25 @@ public final class VoidSubscription {
 			player.getCache().remove(ACCOUNT_ID_CACHE_KEY);
 			return 0;
 		}
+	}
+
+	public static String normalizeSignupCode(String raw) {
+		if (raw == null) {
+			return "";
+		}
+		String normalized = raw.toUpperCase().replaceAll("[^A-Z0-9]", "");
+		if (normalized.isEmpty() || normalized.length() > SIGNUP_CODE_MAX_LENGTH) {
+			return "";
+		}
+		return normalized;
+	}
+
+	public static String signupCodeCacheKey(String normalizedCode) {
+		if (normalizedCode == null || normalizedCode.isEmpty()
+			|| normalizedCode.length() > SIGNUP_CODE_MAX_LENGTH) {
+			return "";
+		}
+		return SIGNUP_CODE_CACHE_PREFIX + normalizedCode;
 	}
 
 	public static String starterCardCacheKey(Player player) {

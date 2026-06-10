@@ -2,6 +2,62 @@
 
 Static click-through prototype for the Voidscape pre-release landing, account-management, and subscription portal.
 
+## Prelaunch signup flow (current landing)
+
+The public landing page is a pure interest-list flow: a visitor enters an email + desired username, the username is reserved, and a one-time `VOID-XXXX-XXXX` signup code is shown on-screen (no Google, no game-account creation). The code is written into the game DB as a global `player_cache` row (`signup_code:<CODE>` = 1) when `PORTAL_OPENRSC_DB` is set. In-game, the player talks to the Void Subscription Vendor in Lumbridge, types the code into the popup he opens (custom client 10087+), and receives one tradable Subscription card. One code per canonical email — re-signing up with the same email shows the same code (codes are bearer tokens; anyone who knows the email can re-view the code — accepted for prelaunch stakes). Codes are minted only on this public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
+
+Signup-list export (token-gated):
+
+```bash
+curl -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:8788/api/admin/signups
+curl -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" "http://127.0.0.1:8788/api/admin/signups?format=csv" > signups.csv
+curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:8788/api/admin/signups/sync  # re-push unsynced codes
+```
+
+## Launching the public prelaunch site
+
+Set `PORTAL_PUBLIC_MODE=1` for any internet-facing deployment. It locks the server down to exactly: static files, `GET /api/health`, `GET /api/public` (sanitized — no fake world stats, no downloads), `POST /api/founder/reservations`, and the token-gated `/api/admin/*`. Everything else — registration, login, dev Google sign-in, character creation, link simulation, subscription redeem, snapshots, downloads, the launcher manifest — returns 404. The UI pins itself to the landing view (deep links like `#admin` or `#dashboard` land on the signup page).
+
+Recommended shape: the portal bound to loopback on the host, with Caddy (or nginx/Cloudflare) in front doing TLS. A same-host proxy is auto-trusted for `x-forwarded-for`, so the per-IP signup limit sees real visitor IPs with no extra config.
+
+```bash
+# /etc/systemd/system/voidscape-portal.service (adjust paths/user)
+[Unit]
+Description=Voidscape prelaunch signup portal
+After=network.target
+
+[Service]
+User=voidscape
+WorkingDirectory=/opt/voidscape
+Environment=PORT=8788
+Environment=PORTAL_PUBLIC_MODE=1
+Environment=PORTAL_DATA_DIR=/var/lib/voidscape-portal
+Environment=PORTAL_ADMIN_TOKEN=<long random secret>
+Environment=PORTAL_ABUSE_HASH_SALT=<long random secret, set once, never change>
+Environment=PORTAL_SIGNUP_IP_DAILY_LIMIT=10
+ExecStart=/usr/bin/node web/portal/dev-server.mjs
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```
+# Caddyfile — automatic HTTPS once DNS points at the box
+yourdomain.com {
+	reverse_proxy 127.0.0.1:8788
+}
+```
+
+Notes:
+- The deployment needs `web/portal/` from this repo plus Node 18+. No game DB on the public host: codes mint with `syncedToGame: false` and are honored later (below).
+- Back up the signup list: it is one file, `$PORTAL_DATA_DIR/dev-store.json` (atomic writes). A cron copy or the CSV export both work as backups.
+- Pull the list any time: `curl -H "x-portal-admin-token: $TOKEN" "https://yourdomain.com/api/admin/signups?format=csv"`.
+- Launch day, to make codes redeemable in-game: copy `dev-store.json` from the public host into a `PORTAL_DATA_DIR` on the game machine, run the portal there with `PORTAL_OPENRSC_DB=/path/to/voidscape.db` (loopback is fine, no public mode needed), and `curl -X POST -H "x-portal-admin-token: $TOKEN" http://127.0.0.1:8788/api/admin/signups/sync`. Already-redeemed codes are skipped; the endpoint is idempotent.
+- If bot signups become a problem, put Cloudflare in front with a managed challenge on `POST /api/founder/reservations` — the app-side per-IP cap is the backstop, not the whole defense.
+
+Binding non-loopback without `PORTAL_DATA_DIR` refuses to start (the signup list would live in $TMPDIR); `PORTAL_ALLOW_TMPDIR=1` overrides. `x-forwarded-for` is only trusted from loopback peers (same-host reverse proxy) or with `PORTAL_TRUST_PROXY=1` — only set that when the origin is reachable exclusively through the proxy. `PORTAL_SIGNUP_IP_DAILY_LIMIT` (default 10) caps signups per non-local IP per day (429 past it).
+
 Open directly in a browser:
 
 ```bash
@@ -67,6 +123,10 @@ Useful local API environment variables:
 - `PORTAL_OPENRSC_DB=/path/to/voidscape.db` enables the SQLite game bridge.
 - `PORTAL_ADMIN_TOKEN=...` enables `/api/admin/*`; without it the admin API returns `admin_not_configured`.
 - `PORTAL_STARTER_IP_DAILY_LIMIT=5` controls how many starter-card grants a non-local IP bucket can receive per day before new accounts are left active but their free card is marked for review.
+- `PORTAL_SIGNUP_IP_DAILY_LIMIT=10` caps prelaunch landing signups per non-local IP per day (429 `rate_limited` past it).
+- `PORTAL_PUBLIC_MODE=1` locks the server to the prelaunch signup surface (see "Launching the public prelaunch site").
+- `PORTAL_BIND_HOST=127.0.0.1` sets the listen address; non-loopback binds require `PORTAL_DATA_DIR` (or `PORTAL_ALLOW_TMPDIR=1`).
+- `PORTAL_TRUST_PROXY=1` trusts `x-forwarded-for` from non-loopback peers (only set behind a real proxy).
 - `PORTAL_ABUSE_HASH_SALT=...` salts stored IP/email/identity hashes. Set a stable private value before using persistent data.
 
 To let the Characters screen load real saved character state from a local OpenRSC SQLite database, start the server with:

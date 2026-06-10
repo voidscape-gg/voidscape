@@ -66,8 +66,11 @@
 	var prelaunchCreateGameLogin = document.getElementById("prelaunch-create-game-login");
 	var prelaunchDownload = document.getElementById("prelaunch-download");
 	var accountModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-account-mode]"));
-	var googleAuthButton = document.getElementById("google-auth-button");
-	var googleAuthLabel = document.getElementById("google-auth-label");
+	var prelaunchSuccessActions = document.getElementById("prelaunch-success-actions");
+	var prelaunchSuccessCode = document.getElementById("prelaunch-success-code");
+	var signupCodeBlock = document.getElementById("signup-code-block");
+	var signupCodeHelp = document.getElementById("signup-code-help");
+	var copySignupCode = document.getElementById("copy-signup-code");
 	var founderProgressLabel = document.getElementById("founder-progress-label");
 	var founderRewardLabel = document.getElementById("founder-reward-label");
 	var founderProgressFill = document.getElementById("founder-progress-fill");
@@ -153,6 +156,7 @@
 	var sessionToken = localStorage.getItem(sessionKey) || "";
 	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
+	var publicModeActive = false;
 	var lastCharacterRefreshAt = 0;
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
@@ -585,8 +589,13 @@
 		});
 	}
 
-	if (googleAuthButton) {
-		googleAuthButton.addEventListener("click", handleGoogleAuth);
+	if (copySignupCode) {
+		copySignupCode.addEventListener("click", function () {
+			if (!prelaunchSuccessCode || !prelaunchSuccessCode.textContent || prelaunchSuccessCode.textContent === "-") return;
+			copyText(prelaunchSuccessCode.textContent);
+			copySignupCode.textContent = "Copied";
+			setTimeout(function () { copySignupCode.textContent = "Copy"; }, 1500);
+		});
 	}
 
 	if (prelaunchCreateGameLogin) {
@@ -602,7 +611,7 @@
 
 		founderForm.addEventListener("submit", async function (event) {
 			event.preventDefault();
-			handleGoogleAuth();
+			handlePrelaunchSignup();
 		});
 	}
 
@@ -613,11 +622,10 @@
 		});
 		if (founderNameRow) founderNameRow.hidden = false;
 		if (founderTitle) founderTitle.textContent = "Reserve your username";
-		if (founderSubmit) founderSubmit.textContent = "Reserve with Google";
-		if (googleAuthLabel) googleAuthLabel.textContent = "Login with Google";
+		if (founderSubmit) founderSubmit.textContent = "Reserve & get my code";
 		if (founderPassword) founderPassword.setAttribute("autocomplete", "new-password");
 		if (founderMessage) {
-			founderMessage.textContent = "Reserve your username with Google. Claim your card in Lumbridge.";
+			founderMessage.textContent = "Enter your email and the username you want. You'll get a code for a free 1-week subscription card.";
 		}
 	}
 
@@ -728,45 +736,84 @@
 		}
 	}
 
-	async function handleGoogleAuth() {
+	async function handlePrelaunchSignup() {
 		var name = normalizeName(founderName.value || "");
+		var email = (founderEmail && founderEmail.value || "").trim();
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 			founderMessage.textContent = "Choose a 2-12 character username to reserve.";
 			founderName.focus();
 			return;
 		}
-		googleAuthButton.disabled = true;
-		founderMessage.textContent = "Signing in with Google and reserving " + name + "...";
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			founderMessage.textContent = "Enter a valid email address. Your code is tied to it.";
+			if (founderEmail) founderEmail.focus();
+			return;
+		}
+		if (founderSubmit) founderSubmit.disabled = true;
+		founderMessage.textContent = "Reserving " + name + "...";
 		try {
-			var state = await apiRequest("/api/accounts/google/dev", {
+			var result = await apiRequest("/api/founder/reservations", {
 				method: "POST",
 				body: {
-					displayName: name,
 					username: name,
+					email: email,
 					referrerCode: currentReferralCode() || undefined
 				}
 			});
-			applyAccountState(state);
-			showPrelaunchClaimSuccess(state);
-			if (founderPassword) founderPassword.value = "";
-			founderMessage.textContent = "Your username is reserved. Set a game password to finish.";
+			saveFounder({
+				username: result.founder.username,
+				email: result.founder.email,
+				code: result.founder.code,
+				invites: result.founder.creditedReferrals || 0
+			});
+			showSignupCodeSuccess(result);
 		} catch (error) {
-			if (error.status === 409 && error.code === "google_identity_conflict") {
-				founderMessage.textContent = "This portal account is already linked to another Google identity.";
-			} else if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
+			if (error.code === "referrer_not_found" || error.code === "self_referral_not_allowed") {
 				founderMessage.textContent = referralErrorMessage(error);
 			} else if (error.status === 400 && error.code === "invalid_username") {
 				founderMessage.textContent = "Choose a 2-12 character username to reserve.";
+			} else if (error.status === 400 && error.code === "invalid_email") {
+				founderMessage.textContent = "Enter a valid email address. Your code is tied to it.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
-				founderMessage.textContent = "That username is already reserved.";
-			} else if (error.status && error.status !== 404) {
-				founderMessage.textContent = "Google sign-in failed: " + error.code + ".";
+				founderMessage.textContent = "That username is already reserved by someone else.";
+			} else if (error.status === 429) {
+				founderMessage.textContent = "Too many signups from your network today. Try again tomorrow.";
 			} else {
-				founderMessage.textContent = "Start the local portal API to test Google sign-in.";
+				founderMessage.textContent = "Signup is unavailable right now. Please try again soon.";
 			}
 		} finally {
-			googleAuthButton.disabled = false;
+			if (founderSubmit) founderSubmit.disabled = false;
 		}
+	}
+
+	function showSignupCodeSuccess(result) {
+		if (!founderForm || !prelaunchSuccess || !result || !result.founder) return;
+		var signup = result.signup || null;
+		founderForm.classList.add("is-claimed");
+		founderForm.classList.remove("needs-game-login");
+		founderForm.classList.add("has-game-login");
+		prelaunchSuccess.hidden = false;
+		var successTitle = prelaunchSuccess.querySelector("h2");
+		var successCopy = prelaunchSuccess.querySelector("p");
+		if (successTitle) successTitle.textContent = "Your username is reserved";
+		if (successCopy) {
+			successCopy.textContent = signup
+				? "Keep your code safe - you'll also get it back any time by signing up again with the same email."
+				: "Your username is reserved.";
+		}
+		if (prelaunchSuccessAccount) prelaunchSuccessAccount.textContent = result.founder.email || "-";
+		if (prelaunchSuccessName) prelaunchSuccessName.textContent = result.founder.username || "-";
+		if (prelaunchSuccessStatus) prelaunchSuccessStatus.textContent = signup ? "Code issued" : "Reserved";
+		if (signupCodeBlock) signupCodeBlock.hidden = !signup;
+		if (signup) {
+			if (prelaunchSuccessCode) prelaunchSuccessCode.textContent = signup.code;
+			if (signupCodeHelp && signup.redeemHint) signupCodeHelp.textContent = signup.redeemHint;
+		}
+		if (prelaunchGameOnboarding) prelaunchGameOnboarding.hidden = true;
+		if (prelaunchDownload) prelaunchDownload.hidden = true;
+		if (prelaunchSuccessActions) prelaunchSuccessActions.hidden = true;
+		founderMessage.textContent = "You're on the list! We'll see you in Lumbridge.";
+		renderFounder();
 	}
 
 	if (copyFounderLink) {
@@ -844,7 +891,7 @@
 			var publicState = await apiRequest("/api/public");
 			applyPublicState(publicState);
 			if (!sessionToken) {
-				founderMessage.textContent = "Reserve your username with Google. Claim your card in Lumbridge.";
+				founderMessage.textContent = "Enter your email and the username you want. You'll get a code for a free 1-week subscription card.";
 				return;
 			}
 			var state = await apiRequest("/api/account");
@@ -857,6 +904,10 @@
 
 	function applyPublicState(state) {
 		if (!state) return;
+		if (state.publicMode && !publicModeActive) {
+			publicModeActive = true;
+			activateView("account");
+		}
 		if (state.status) {
 			if (serverWorldLabel) serverWorldLabel.textContent = state.status.world || "World 1";
 			if (serverOnlineCount) serverOnlineCount.textContent = (state.status.playersOnline || 0) + " online";
@@ -1199,6 +1250,7 @@
 	}
 
 	function activateView(id) {
+		if (publicModeActive) id = "account";
 		id = retiredViews[id] || id;
 		var next = views.find(function (view) {
 			return view.id === id;
@@ -1904,8 +1956,17 @@
 			navigator.clipboard.writeText(text);
 			return;
 		}
-		(fallbackInput || founderLink).select();
+		if (fallbackInput) {
+			fallbackInput.select();
+			document.execCommand("copy");
+			return;
+		}
+		var scratch = document.createElement("textarea");
+		scratch.value = text;
+		document.body.appendChild(scratch);
+		scratch.select();
 		document.execCommand("copy");
+		scratch.remove();
 	}
 
 	function formatSessionDate(value) {

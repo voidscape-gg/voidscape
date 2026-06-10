@@ -2127,6 +2127,13 @@ public class ActionSender {
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_BANK_PIN_INTERFACE, struct, player);
 	}
 
+	/** First custom client version whose input box renders SEND_INPUT_BOX and replies via INTERFACE_OPTIONS sub-option 9. */
+	public static final int INPUT_BOX_CLIENT_VERSION = 10087;
+
+	public static boolean supportsInputBox(Player player) {
+		return player.isUsingCustomClient() && player.getClientVersion() >= INPUT_BOX_CLIENT_VERSION;
+	}
+
 	public static void sendInputBox(Player player, String s) {
 		if (!player.isUsingCustomClient()) {
 			sendMessage(player, "@lre@Input Box not implemented for authentic clients.");

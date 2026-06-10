@@ -108,6 +108,7 @@ public class PacketHandler {
 		put(113, "SEND_IRONMAN");
 		put(115, "SEND_ON_BLACK_HOLE");
 		put(129, "COMBAT_STYLE_CHANGED");
+		put(110, "SEND_INPUT_BOX");
 		put(135, "BANK_PIN_INTERFACE");
 		put(136, "ONLINE_LIST");
 		put(144, "SHOW_POINTS_TO_GP");
@@ -193,6 +194,8 @@ public class PacketHandler {
 
 			// Bank Pin Overlay
 			else if (opcode == 135) displayBankPin();
+
+			else if (opcode == 110) showServerInputBox();
 
 				// Ironman Options
 			else if (opcode == 113) setIronmanOptions();
@@ -601,6 +604,11 @@ public class PacketHandler {
 		} else if (action == 0) {
 			mc.hideBankPinInterface();
 		}
+	}
+
+	private void showServerInputBox() {
+		String prompt = packetsIncoming.readString();
+		mc.showServerInputPopup(prompt);
 	}
 
 	private void setIronmanOptions() {

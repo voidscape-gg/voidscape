@@ -29,7 +29,8 @@ public enum InputXAction {
 	LOADPRESET_X(25),
 	POINTS_TO_GP(26),
 	REDUCELEVELS_X(27),
-	INCLEVELS_X(28);
+	INCLEVELS_X(28),
+	SERVER_PROMPT(29);
 
 	public final int id;
 

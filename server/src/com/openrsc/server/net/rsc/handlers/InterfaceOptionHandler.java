@@ -83,6 +83,9 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				if (!player.getConfig().WANT_BANK_PINS && !player.getConfig().TOLERATE_BANK_PINS) return;
 				handleBankPinEntry(player, payload);
 				break;
+			case INPUT_BOX_REPLY:
+				handleInputBoxReply(player, payload);
+				break;
 			case AUCTION:
 				if (!player.getConfig().SPAWN_AUCTION_NPCS) return;
 				handleAuction(player, payload);
@@ -104,6 +107,18 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				handleBankClearPreset(player, payload);
 				break;
 		}
+	}
+
+	private void handleInputBoxReply(Player player, OptionsStruct payload) {
+		// Only meaningful while a plugin is blocked in Functions.inputBox().
+		if (player.getAttribute("input_box_pending", null) == null) {
+			return;
+		}
+		String reply = payload.name == null ? "" : payload.name.trim();
+		if (reply.length() > 80) {
+			reply = reply.substring(0, 80);
+		}
+		player.setAttribute("input_box_reply", reply);
 	}
 
 	private void handleBankSwap(Player player, OptionsStruct payload) {

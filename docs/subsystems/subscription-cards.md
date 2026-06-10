@@ -34,7 +34,20 @@ Voidscape subscription is an account-level timed XP boost unlocked by redeeming 
 - The vendor does not sell subscription cards, does not open a shop, and does not maintain stock or price tiers.
 - Starter cards use global `player_cache` keys named `starter_card:<webAccountId>` with value `1` for available and `2` for claimed.
 
-Pre-release starter-card reservations use the same global-cache pattern while the website/account system is still a local prototype. The website flow asks for a desired reserved username and uses Google login for the portal identity; the local dev Google endpoint can synthesize a `@google.voidscape.local` account for testing. The portal writes the available marker when `PORTAL_OPENRSC_DB` points at the game SQLite database; the game server marks it claimed after the vendor successfully puts the card in the player's inventory. Redeeming the physical item is still the only action that starts or extends subscription time.
+Pre-release starter-card reservations use the same global-cache pattern while the website/account system is still a local prototype. The portal writes the available marker when `PORTAL_OPENRSC_DB` points at the game SQLite database; the game server marks it claimed after the vendor successfully puts the card in the player's inventory. Redeeming the physical item is still the only action that starts or extends subscription time.
+
+## Signup Codes (vendor input box)
+
+The public prelaunch landing page (email + username, no account) hands out one-time signup codes instead of account-bound markers.
+
+- The portal mints `VOID-XXXX-XXXX` (alphabet excludes 0/O/1/I/L/U), one per canonical email; re-signing up with the same email returns the same code.
+- Issued codes are reserved as global cache rows: `playerID = 0`, `key = signup_code:<NORMALIZED CODE>`, `value = 1` (issued) / `2` (redeemed). Normalization uppercases and strips non-alphanumerics, so `void-abcd-2345` and `VOID ABCD 2345` both work.
+- Redemption is part of the vendor dialogue: talking to the Void Subscription Vendor (NPC 848) with no account-reserved card pops the custom client's text input box ("Got a signup code from the website?"). The plugin blocks in `Functions.inputBox` (mirrors `multi()`: 60s timeout; cancel sends nothing and surfaces as timeout; the reply arrives via `INTERFACE_OPTIONS` sub-option 9 and is ignored unless `input_box_pending` is set). On a valid code it marks the row redeemed *before* granting one Subscription card 1602, so a partial failure can never mint two cards. Full inventory refuses without consuming the code. Requires custom client `10087+` (`ActionSender.supportsInputBox`); older clients are told to update.
+- The vendor is non-exclusive during the prompt: the plugin clears the NPC's busy/interaction state before showing the popup, so multiple players can enter codes simultaneously instead of queueing behind "the vendor is busy". Single-use correctness comes from the redeem lock plus the ledger value, not NPC exclusivity.
+- Codes are deliberately not bound to a character or username: the card itself is tradable, so binding would add friction without preventing anything.
+- Staff visibility: `GET /api/admin/signups` (JSON or `?format=csv`) lists every signup with live issued/redeemed status read from the game DB; `POST /api/admin/signups/sync` re-writes codes minted while the game DB was unavailable, skipping redeemed ones.
+
+For a quick server-side test without the portal: insert a row (`INSERT INTO player_cache (playerID,type,key,value) VALUES (0,0,'signup_code:VOIDTESTAA22','1');`), talk to the vendor, and enter `VOID-TEST-AA22` in the popup.
 
 Because cards are tradable, abuse prevention belongs before item creation: the portal grants at most one starter-card marker per web account, records account identity/risk signals, and can hold suspicious signups for staff review without changing the in-game item. Once a card exists, it behaves like any other tradable subscription card.
 
