@@ -7,7 +7,7 @@ public final class VoidScout {
 	public static final int ITEM_ID = ItemId.VOID_SPARROW.id();
 	public static final int MAX_DISTANCE = 96;
 	public static final long DURATION_MILLIS = 30_000L;
-	public static final long COOLDOWN_MILLIS = 0L;
+	public static final long COOLDOWN_MILLIS = 5L * 60L * 1000L;
 
 	private static final String COOLDOWN_KEY = "void_scout_cooldown_until";
 
