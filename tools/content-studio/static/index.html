@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voidscape Content Studio</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Voidscape Tools</p>
+      <h1>Content Studio</h1>
+    </div>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+
+  <main>
+    <section class="status-grid" aria-label="Repository status">
+      <article class="metric">
+        <span>Client Version</span>
+        <strong id="client-version">...</strong>
+      </article>
+      <article class="metric">
+        <span>Next Item ID</span>
+        <strong id="next-item">...</strong>
+      </article>
+      <article class="metric">
+        <span>Next NPC ID</span>
+        <strong id="next-npc">...</strong>
+      </article>
+      <article class="metric">
+        <span>Validation</span>
+        <strong id="validation-summary">...</strong>
+      </article>
+    </section>
+
+    <section class="workspace">
+      <article class="panel create-panel">
+        <div class="panel-title">
+          <h2>Create Pack</h2>
+          <p>Scaffold a content pack before touching server/client files.</p>
+        </div>
+        <form id="pack-form">
+          <label>
+            Kind
+            <select id="kind" name="kind"></select>
+          </label>
+          <label>
+            Slug
+            <input id="slug" name="slug" autocomplete="off" placeholder="void_relic" required>
+          </label>
+          <label>
+            Name
+            <input id="name" name="name" autocomplete="off" placeholder="Void relic">
+          </label>
+          <label>
+            Imitate
+            <input id="like" name="like" autocomplete="off" placeholder="optional item/NPC id or name">
+          </label>
+          <label class="wide">
+            Description
+            <textarea id="description" name="description" rows="4" placeholder="Short design intent for the pack"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input id="force" name="force" type="checkbox">
+            Refresh missing generated files if the pack already exists
+          </label>
+          <button type="submit">Create Pack</button>
+        </form>
+        <p id="form-message" class="message" role="status"></p>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title">
+          <h2>Allocation</h2>
+          <p>Current safe IDs and sprite slots.</p>
+        </div>
+        <dl class="details" id="allocation"></dl>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title">
+          <h2>Validation</h2>
+          <p>Same checks as <code>scripts/content.sh validate</code>.</p>
+        </div>
+        <div id="findings" class="findings"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-title">
+          <h2>Content Packs</h2>
+          <p>Drafts under <code>content/custom</code>.</p>
+        </div>
+        <div id="packs" class="packs"></div>
+      </article>
+
+      <article class="panel commands-panel">
+        <div class="panel-title">
+          <h2>Art Bridge</h2>
+          <p>Existing item-art commands this GUI will wrap next.</p>
+        </div>
+        <ol id="commands"></ol>
+      </article>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
