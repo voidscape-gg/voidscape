@@ -1,5 +1,6 @@
 package com.openrsc.server.plugins.authentic.defaults;
 
+import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Spells;
 import com.openrsc.server.external.SpellDef;
 import com.openrsc.server.model.container.Item;
@@ -246,6 +247,14 @@ public class Default implements DefaultHandler,
 
 	@Override
 	public void onAttackNpc(Player player, Npc affectedmob) {
+		if (affectedmob != null
+			&& affectedmob.getID() == NpcId.VOID_COLOSSUS.id()
+			&& player.getRangeEquip() < 0
+			&& player.getThrowingEquip() < 0) {
+			player.message("The Void Colossus is bound beyond melee reach. Use ranged or magic.");
+			player.resetPath();
+			return;
+		}
 		player.setLastTileClicked(null);
 		player.startCombat(affectedmob);
 		if (config().WANT_PARTIES) {

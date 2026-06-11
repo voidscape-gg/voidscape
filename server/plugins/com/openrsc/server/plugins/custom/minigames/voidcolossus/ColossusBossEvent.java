@@ -1,40 +1,52 @@
 package com.openrsc.server.plugins.custom.minigames.voidcolossus;
 
+import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
-import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.event.rsc.impl.ObjectRemover;
+import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
+import com.openrsc.server.external.NPCLoc;
+import com.openrsc.server.model.Point;
+import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.update.ChatMessage;
-import com.openrsc.server.model.entity.update.Damage;
-import com.openrsc.server.model.entity.update.Projectile;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.util.rsc.CollisionFlag;
 import com.openrsc.server.util.rsc.DataConversions;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Void Colossus special moves.
+ * Ranged/magic controller for the hybrid Void Colossus.
  *
- * Now that the boss is a solo phased instance, the ENGINE owns the base fight: the player attacks, the
- * engine starts combat (the 1v1 lock is fine — only one player is ever in the arena), and the boss
- * walks/chases ({@link com.openrsc.server.model.entity.npc.NpcBehavior}) and plays its walk + slam
- * combat frames natively. This per-boss tick event only LAYERS the two timed specials on top while the
- * boss is engaged with its player: a telegraphed roar and a prayer-draining void torrent. It never
- * touches the combat sprite or facing — the engine owns those during the fight.
+ * The boss does not melee, walk, or chase. It holds the centre of the arena as a sprite NPC standing
+ * on a 3D rift base, and this tick event pressures the phased player with ranged shards, void claw
+ * magic, and capped voidborn summons.
  */
 public final class ColossusBossEvent extends GameTickEvent {
 
 	private static final String AI_FLAG = "colossus_ai";
-	private static final String NEXT_ROAR = "colossus_next_roar";
-	private static final String NEXT_TORRENT = "colossus_next_torrent";
+	private static final String NEXT_SHARD = "colossus_next_shard";
+	private static final String NEXT_CLAWS = "colossus_next_claws";
+	private static final String NEXT_SUMMON = "colossus_next_summon";
 
-	private static final int ROAR_MIN_DELAY = 15;
-	private static final int ROAR_MAX_DELAY = 25;
-	private static final int TORRENT_MIN_DELAY = 10;
-	private static final int TORRENT_MAX_DELAY = 18;
+	private static final int SHARD_MIN_DELAY = 4;
+	private static final int SHARD_MAX_DELAY = 6;
+	private static final int CLAWS_MIN_DELAY = 9;
+	private static final int CLAWS_MAX_DELAY = 14;
+	private static final int SUMMON_MIN_DELAY = 15;
+	private static final int SUMMON_MAX_DELAY = 24;
+	private static final int MAX_SUMMONS = 3;
+	private static final int SUMMON_SCATTER_RADIUS = 10;
+	private static final int VOID_SHARD_PROJECTILE = 7;
+	private static final int VOID_CLAW_PROJECTILE = 8;
+	private static final int VOID_SHARD_CHARGE_OBJECT = 1308;
+	private static final int VOID_CLAW_CHARGE_OBJECT = 1309;
 
-	// Dev inspection toggle (::colossuspeace): suppress the specials. The base engine melee is avoided
-	// during inspection simply by not attacking the boss, which is non-aggressive and only paces.
+	// Dev inspection toggle (::colossuspeace): suppress boss offense while keeping the model spawned.
 	public static volatile boolean PEACEFUL = false;
 
 	private final Npc boss;
@@ -51,13 +63,13 @@ public final class ColossusBossEvent extends GameTickEvent {
 	public static void arm(Npc boss) {
 		boss.setAttribute(AI_FLAG, true);
 		long tick = boss.getWorld().getServer().getCurrentTick();
-		boss.setAttribute(NEXT_ROAR, tick + ROAR_MAX_DELAY);
-		boss.setAttribute(NEXT_TORRENT, tick + TORRENT_MIN_DELAY);
+		boss.setAttribute(NEXT_SHARD, tick + SHARD_MIN_DELAY);
+		boss.setAttribute(NEXT_CLAWS, tick + CLAWS_MIN_DELAY);
+		boss.setAttribute(NEXT_SUMMON, tick + SUMMON_MIN_DELAY);
 	}
 
 	@Override
 	public void run() {
-		// Permanent per-boss event (started at spawn). Only stops if the NPC is truly removed.
 		if (boss == null || boss.isRemoved()) {
 			shutDown();
 			return;
@@ -67,69 +79,136 @@ public final class ColossusBossEvent extends GameTickEvent {
 			return;
 		}
 
-		// Specials only fire while the boss is actually engaged with its solo player (provoked). When
-		// idle the boss just paces via the engine roam — no unprovoked attacks.
-		Player target = engagedPlayer();
-		if (target == null || PEACEFUL) {
+		List<Player> targets = arenaTargets();
+		if (targets.isEmpty() || PEACEFUL) {
 			setDelayTicks(1);
 			return;
 		}
 
 		long tick = boss.getWorld().getServer().getCurrentTick();
-		if (tick >= boss.getAttribute(NEXT_ROAR, 0L)) {
-			roar(target);
-			boss.setAttribute(NEXT_ROAR, tick + DataConversions.random(ROAR_MIN_DELAY, ROAR_MAX_DELAY));
+		if (tick >= boss.getAttribute(NEXT_SHARD, 0L)) {
+			voidShard(randomTarget(targets));
+			boss.setAttribute(NEXT_SHARD, tick + DataConversions.random(SHARD_MIN_DELAY, SHARD_MAX_DELAY));
 		}
-		if (tick >= boss.getAttribute(NEXT_TORRENT, 0L)) {
-			voidTorrent(target);
-			boss.setAttribute(NEXT_TORRENT, tick + DataConversions.random(TORRENT_MIN_DELAY, TORRENT_MAX_DELAY));
+		if (tick >= boss.getAttribute(NEXT_CLAWS, 0L)) {
+			voidClaws(randomTarget(targets));
+			boss.setAttribute(NEXT_CLAWS, tick + DataConversions.random(CLAWS_MIN_DELAY, CLAWS_MAX_DELAY));
+		}
+		if (tick >= boss.getAttribute(NEXT_SUMMON, 0L)) {
+			summonVoidborn(randomTarget(targets));
+			boss.setAttribute(NEXT_SUMMON, tick + DataConversions.random(SUMMON_MIN_DELAY, SUMMON_MAX_DELAY));
 		}
 		setDelayTicks(1);
 	}
 
-	/** The solo player the boss is fighting, if any (its opponent, in-arena and alive). */
-	private Player engagedPlayer() {
-		Mob opponent = boss.getOpponent();
-		if (opponent != null && opponent.isPlayer()) {
-			Player p = (Player) opponent;
-			if (p.loggedIn() && p.getSkills().getLevel(Skill.HITS.id()) > 0
-					&& VoidColossusArena.inArena(p.getX(), p.getY())) {
-				return p;
+	private List<Player> arenaTargets() {
+		List<Player> targets = new ArrayList<>();
+		int instanceId = boss.getInstanceId();
+		for (Player player : getWorld().getPlayers()) {
+			if (player == null || !player.loggedIn() || player.isRemoved()) {
+				continue;
 			}
+			if (player.getInstanceId() != instanceId) {
+				continue;
+			}
+			if (player.getSkills().getLevel(Skill.HITS.id()) <= 0) {
+				continue;
+			}
+			if (!VoidColossusArena.inArena(player.getX(), player.getY())) {
+				continue;
+			}
+			targets.add(player);
 		}
-		return null;
+		return targets;
 	}
 
-	/** Telegraphed heavy roar on the engaged player. */
-	private void roar(Player target) {
-		boss.getUpdateFlags().setChatMessage(new ChatMessage(boss, "The Void Colossus unleashes a roar!", target));
-		target.message("@mag@The Void Colossus unleashes a roar!");
-		hit(target, DataConversions.random(0, 8));
+	private Player randomTarget(List<Player> targets) {
+		return targets.get(DataConversions.getRandom().nextInt(targets.size()));
 	}
 
-	/** Prayer-draining torrent: projectile + prayer drain + light damage. No face() — the engine owns
-	 *  the boss's orientation/combat sprite during the fight, and the projectile fires boss -> target. */
-	private void voidTorrent(Player target) {
-		boss.getUpdateFlags().setProjectile(new Projectile(boss, target, 1));
+	private void voidShard(Player target) {
+		if (target == null) {
+			return;
+		}
+		flashBossEffect(VOID_SHARD_CHARGE_OBJECT, Point.location(VoidColossusArena.ARENA_CENTER_X + 2,
+			VoidColossusArena.ARENA_CENTER_Y - 1));
+		boss.getUpdateFlags().setChatMessage(new ChatMessage(boss, "The Void Colossus fires a void shard!", target));
+		getWorld().getServer().getGameEventHandler().add(
+			new ProjectileEvent(getWorld(), boss, target, DataConversions.random(0, 7), VOID_SHARD_PROJECTILE, false));
+	}
+
+	private void voidClaws(Player target) {
+		if (target == null) {
+			return;
+		}
+		flashBossEffect(VOID_CLAW_CHARGE_OBJECT, Point.location(VoidColossusArena.ARENA_CENTER_X - 2,
+			VoidColossusArena.ARENA_CENTER_Y - 1));
+		GameObject claws = new GameObject(getWorld(), target.getLocation(), 1142, 0, 0);
+		claws.setInstanceId(boss.getInstanceId());
+		getWorld().registerGameObject(claws);
+		getWorld().getServer().getGameEventHandler().add(new ObjectRemover(getWorld(), claws, 2));
+
 		int prayer = target.getSkills().getLevel(Skill.PRAYER.id());
-		int drain = Math.min(prayer, DataConversions.random(3, 8));
+		int drain = Math.min(prayer, DataConversions.random(2, 5));
 		if (drain > 0) {
 			target.getSkills().setLevel(Skill.PRAYER.id(), prayer - drain, true);
-			target.message("@mag@The Void Colossus summons a void torrent! Your prayers are drained.");
+			target.message("@mag@Void claws tear at the ground beneath you. Your prayers are drained.");
 		} else {
-			target.message("@mag@The Void Colossus summons a void torrent!");
+			target.message("@mag@Void claws tear at the ground beneath you.");
 		}
-		hit(target, DataConversions.random(0, 5));
+		getWorld().getServer().getGameEventHandler().add(
+			new ProjectileEvent(getWorld(), boss, target, DataConversions.random(0, 6), VOID_CLAW_PROJECTILE, false));
 	}
 
-	private void hit(Player player, int damage) {
-		int current = player.getSkills().getLevel(Skill.HITS.id());
-		int actual = Math.min(Math.max(damage, 0), current);
-		player.getSkills().subtractLevel(Skill.HITS.id(), actual, true);
-		player.getUpdateFlags().setDamage(new Damage(player, actual));
-		if (player.getSkills().getLevel(Skill.HITS.id()) <= 0) {
-			player.killedBy(boss);
+	private void flashBossEffect(int objectId, Point location) {
+		GameObject effect = new GameObject(getWorld(), location, objectId, 0, 0);
+		effect.setInstanceId(boss.getInstanceId());
+		getWorld().registerGameObject(effect);
+		getWorld().getServer().getGameEventHandler().add(new ObjectRemover(getWorld(), effect, 2));
+	}
+
+	private void summonVoidborn(Player target) {
+		if (target == null || VoidColossusArena.liveSummonCount(boss.getInstanceId()) >= MAX_SUMMONS) {
+			return;
 		}
+		int count = DataConversions.random(1, 2);
+		for (int i = 0; i < count && VoidColossusArena.liveSummonCount(boss.getInstanceId()) < MAX_SUMMONS; i++) {
+			Point tile = randomSummonTile();
+			if (tile == null) {
+				continue;
+			}
+			NPCLoc loc = new NPCLoc(NpcId.VOID_KNIGHT_VOIDBORN.id(),
+				tile.getX(), tile.getY(),
+				tile.getX() - 3, tile.getX() + 3,
+				tile.getY() - 3, tile.getY() + 3);
+			Npc summon = new Npc(getWorld(), loc);
+			summon.setShouldRespawn(false);
+			summon.setInstanceId(boss.getInstanceId());
+			getWorld().registerNpc(summon);
+			VoidColossusArena.trackSummon(summon);
+			summon.setChasing(target);
+		}
+		target.message("@mag@The Void Colossus tears open the rift and calls voidborn to the arena.");
+	}
+
+	private Point randomSummonTile() {
+		for (int attempt = 0; attempt < 40; attempt++) {
+			int x = VoidColossusArena.ARENA_CENTER_X + DataConversions.random(-SUMMON_SCATTER_RADIUS, SUMMON_SCATTER_RADIUS);
+			int y = VoidColossusArena.ARENA_CENTER_Y + DataConversions.random(-SUMMON_SCATTER_RADIUS, SUMMON_SCATTER_RADIUS);
+			if (!VoidColossusArena.inArena(x, y)) {
+				continue;
+			}
+			if (Math.abs(x - VoidColossusArena.ARENA_CENTER_X) <= 2
+				&& Math.abs(y - VoidColossusArena.ARENA_CENTER_Y) <= 2) {
+				continue;
+			}
+			if (getWorld().getTile(x, y) == null
+				|| (getWorld().getTile(x, y).traversalMask & CollisionFlag.FULL_BLOCK) != 0) {
+				continue;
+			}
+			return Point.location(x, y);
+		}
+		return null;
 	}
 
 	private void shutDown() {

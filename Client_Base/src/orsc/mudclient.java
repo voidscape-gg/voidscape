@@ -64,6 +64,7 @@ public final class mudclient implements Runnable {
 	public static final int spriteUtil = 2100;
 	public static final int spriteItem = 2150;
 	public static final int spriteProjectile = 3160;
+	private static final int SPRITE_PROJECTILE_COUNT = 9;
 	public static final int spriteTexture = 3225;
 	static final int spriteLogo = 3150;
 	private static final int VOID_RUSH_UI_MIN_X = 486;
@@ -82,6 +83,12 @@ public final class mudclient implements Runnable {
 	private static final int[][] VOID_STARTER_INTRO_BEAM_TILES = new int[][]{
 		{20, 35}, {28, 35}, {22, 40}, {26, 40}, {24, 33}
 	};
+	private static final int VOID_COLOSSUS_NPC_ID = 852;
+	private static final int VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET = 420;
+	private static final int VOID_COLOSSUS_COMBAT_LEVEL = 350;
+	private static final int STANDARD_PLAYER_PROJECTILE_Y_OFFSET = 110;
+	private static final int VOID_COLOSSUS_BOSS_HUD_WIDTH = 224;
+	private static final int VOID_COLOSSUS_BOSS_HUD_HEIGHT = 50;
 	private static final int CINEMATIC_CAMERA_CLASSIC = 0;
 	private static final int CINEMATIC_CAMERA_FIRST_PERSON = 1;
 	private static final int CINEMATIC_CAMERA_CLOSE = 2;
@@ -556,6 +563,8 @@ public final class mudclient implements Runnable {
 	private int appearanceHeadGender = 1;
 	private int appearanceHeadType = 0;
 	private int autoLoginTimeout = 0;
+	private boolean devAutoLoginAttempted = false;
+	private int devAutoLoginFrames = 0;
 	private int cameraAngle = 1;
 	private int cameraPositionX = 0;
 	private int cameraPositionZ = 0;
@@ -3512,6 +3521,77 @@ public final class mudclient implements Runnable {
 		return getSurface().spriteSelect(sprite);
 	}
 
+	private boolean isVoidColossusNpc(ORSCharacter character) {
+		return character != null && character.npcId == VOID_COLOSSUS_NPC_ID;
+	}
+
+	private int projectileSourceYOffset(ORSCharacter caster, boolean casterIsNpc) {
+		if (casterIsNpc && isVoidColossusNpc(caster)) {
+			return VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET;
+		}
+		return STANDARD_PLAYER_PROJECTILE_Y_OFFSET;
+	}
+
+	private int projectileTargetYOffset(ORSCharacter target, boolean targetIsNpc) {
+		if (targetIsNpc) {
+			if (isVoidColossusNpc(target)) {
+				return VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET + 90;
+			}
+			return EntityHandler.getNpcDef(target.npcId).getCamera2() / 2;
+		}
+		return STANDARD_PLAYER_PROJECTILE_Y_OFFSET;
+	}
+
+	private ORSCharacter findVoidColossusForHud() {
+		for (int i = 0; i < this.npcCount; i++) {
+			ORSCharacter npc = this.npcs[i];
+			if (isVoidColossusNpc(npc)) {
+				return npc;
+			}
+		}
+		return null;
+	}
+
+	private void drawVoidColossusBossHud() {
+		ORSCharacter boss = findVoidColossusForHud();
+		if (boss == null) {
+			return;
+		}
+		NPCDef def = EntityHandler.getNpcDef(VOID_COLOSSUS_NPC_ID);
+		int maxHp = Math.max(1, def.getHits());
+		int scaledMax = boss.healthMax > 0 ? boss.healthMax : maxHp;
+		int scaledCurrent = boss.healthMax > 0 ? boss.healthCurrent : scaledMax;
+		int currentHp = boss.healthMax > 0
+			? Math.max(0, Math.min(maxHp, (scaledCurrent * maxHp) / Math.max(1, scaledMax)))
+			: maxHp;
+		int barWidth = VOID_COLOSSUS_BOSS_HUD_WIDTH - 18;
+		int fill = Math.max(0, Math.min(barWidth, (barWidth * currentHp) / maxHp));
+		int x = 12;
+		int y = useVoidscapeHudSkin() ? 74 : 26;
+		if (getGameWidth() < 560) {
+			x = Math.max(8, (getGameWidth() - VOID_COLOSSUS_BOSS_HUD_WIDTH) / 2);
+			y = 54;
+		}
+
+		this.getSurface().drawBoxAlpha(x, y, VOID_COLOSSUS_BOSS_HUD_WIDTH, VOID_COLOSSUS_BOSS_HUD_HEIGHT,
+			0x09040F, 210);
+		this.getSurface().drawBoxBorder(x, VOID_COLOSSUS_BOSS_HUD_WIDTH, y, VOID_COLOSSUS_BOSS_HUD_HEIGHT,
+			0x6F3DC4);
+		this.getSurface().drawLineHoriz(x + 1, y + 1, VOID_COLOSSUS_BOSS_HUD_WIDTH - 2, 0x1C0B32);
+		this.getSurface().drawColoredStringCentered(x + VOID_COLOSSUS_BOSS_HUD_WIDTH / 2,
+			def.getName() + " (level-" + VOID_COLOSSUS_COMBAT_LEVEL + ")", 0xFF4040, 0, 1, y + 14);
+		int barX = x + 9;
+		int barY = y + 24;
+		this.getSurface().drawBoxAlpha(barX, barY, barWidth, 13, 0x140819, 230);
+		this.getSurface().drawBoxAlpha(barX, barY, fill, 13, 0x8F2BFF, 230);
+		if (fill > 3) {
+			this.getSurface().drawBoxAlpha(barX, barY, Math.max(1, fill / 3), 13, 0xC35CFF, 170);
+		}
+		this.getSurface().drawBoxBorder(barX, barWidth, barY, 13, 0x2A173A);
+		this.getSurface().drawColoredStringCentered(x + VOID_COLOSSUS_BOSS_HUD_WIDTH / 2,
+			currentHp + " / " + maxHp, 0xFFFFFF, 0, 0, y + 35);
+	}
+
 	private void drawCharacterOverlay() {
 		try {
 			for (int i = 0; this.characterDialogCount > i; ++i) {
@@ -3648,19 +3728,18 @@ public final class mudclient implements Runnable {
 
 	private void drawDialogCombatStyle() {
 		try {
-			boolean voidSkin = useVoidscapeHudSkin();
 			byte sx = 7;
-			// Voidscape: drop it below the location plaque (which spans y18..86) so it isn't covered,
-			// and draw it at double size. Classic keeps the original top-left position/size.
-			int sy = voidSkin ? 92 : 15;
-			int rowH = voidSkin ? 33 : 20;
-			int textOff = voidSkin ? 22 : 16;
-			short width = (short) (isAndroid() ? 140 : (voidSkin ? 285 : 175));
-			int font = voidSkin ? 5 : 3;
+			byte sy = 15;
+			short width;
+			if (isAndroid()) {
+				width = 140;
+			} else {
+				width = 175;
+			}
 			if (this.mouseButtonClick != 0) {
 				for (int row = 1; row < 5; ++row) {
-					if (sx < this.mouseX && this.mouseX < width + sx && this.mouseY > row * rowH + sy
-						&& row * rowH + sy + rowH > this.mouseY) {
+					if (sx < this.mouseX && this.mouseX < width + sx && this.mouseY > row * 20 + sy
+						&& row * 20 + sy + 20 > this.mouseY) {
 						this.mouseButtonClick = 0;
 						this.combatStyle = row - 1;
 						this.proposedStyle = this.combatStyle;
@@ -3673,29 +3752,21 @@ public final class mudclient implements Runnable {
 			}
 
 			for (int row = 0; row < 5; ++row) {
-				boolean selected = 1 + this.combatStyle == row;
-				if (voidSkin) {
-					this.getSurface().drawBoxAlpha(sx, sy + row * rowH, width, rowH, selected ? 0x4B2472 : 0x130E1A, 225);
-				} else if (selected) {
-					this.getSurface().drawBoxAlpha(sx, sy + row * rowH, width, rowH, GenUtil.buildColor(255, 0, 0), 128);
+				if (1 + this.combatStyle == row) {
+					this.getSurface().drawBoxAlpha(sx, sy + row * 20, width, 20, GenUtil.buildColor(255, 0, 0), 128);
 				} else {
-					this.getSurface().drawBoxAlpha(sx, sy + row * rowH, width, rowH, GenUtil.buildColor(190, 190, 190), 128);
+					this.getSurface().drawBoxAlpha(sx, sy + row * 20, width, 20, GenUtil.buildColor(190, 190, 190), 128);
 				}
 
-				this.getSurface().drawLineHoriz(sx, sy + row * rowH, width, voidSkin ? 0x2E2140 : 0);
-				this.getSurface().drawLineHoriz(sx, rowH + sy + row * rowH, width, voidSkin ? 0x2E2140 : 0);
-			}
-			if (voidSkin) {
-				this.getSurface().drawBoxBorder(sx, width, sy, 5 * rowH, 0x6A4FA0);
+				this.getSurface().drawLineHoriz(sx, sy + row * 20, width, 0);
+				this.getSurface().drawLineHoriz(sx, 20 + sy + row * 20, width, 0);
 			}
 
-			int headColor = voidSkin ? 0xF0DFA3 : 0xFFFFFF;
-			int rowColor = voidSkin ? 0xE7DEBC : 0;
-			this.getSurface().drawColoredStringCentered(width / 2 + sx, (isAndroid() ? "C" : "Select c") + "ombat style", headColor, 0, font, textOff + sy);
-			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Controlled (+1 " + (isAndroid() ? "all" : "of each") + ")", rowColor, 0, font, sy + rowH + textOff);
-			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Aggressive (+3 " + (isAndroid() ? "str" : "strength") + ")", rowColor, 0, font, sy + 2 * rowH + textOff);
-			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Accurate   (+3 " + (isAndroid() ? "att" : "attack") + ")", rowColor, 0, font, sy + 3 * rowH + textOff);
-			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Defensive  (+3 " + (isAndroid() ? "def" : "defense") + ")", rowColor, 0, font, sy + 4 * rowH + textOff);
+			this.getSurface().drawColoredStringCentered(width / 2 + sx, (isAndroid() ? "C" : "Select c") + "ombat style", 0xFFFFFF, 0, 3, 16 + sy);
+			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Controlled (+1 " + (isAndroid() ? "all" : "of each") + ")", 0, 0, 3, sy + 36);
+			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Aggressive (+3 " + (isAndroid() ? "str" : "strength") + ")", 0, 0, 3, sy + 56);
+			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Accurate   (+3 " + (isAndroid() ? "att" : "attack") + ")", 0, 0, 3, sy + 76);
+			this.getSurface().drawColoredStringCentered(width / 2 + sx, "Defensive  (+3 " + (isAndroid() ? "def" : "defense") + ")", 0, 0, 3, sy + 96);
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7, "client.TB(" + "dummy" + ')');
 		}
@@ -4444,32 +4515,47 @@ public final class mudclient implements Runnable {
 			} else {
 				int var2;
 				int startY = 0;
+				int startX = 6;
+				int rowHeight = 12;
 				if (C_CUSTOM_UI) {
-					startY = getGameHeight() - 100;
+					if (useVoidscapeHudSkin()) {
+						startY = Math.max(8, voidscapeChatFrameTop() - this.optionsMenuCount * rowHeight - 10);
+					} else {
+						startY = getGameHeight() - 100;
+					}
+				}
+				int shortcutWidth = S_WANT_KEYBOARD_SHORTCUTS > 1 ? 24 : 9;
+				int menuWidth = 0;
+				for (var2 = 0; var2 < this.optionsMenuCount; ++var2) {
+					menuWidth = Math.max(menuWidth, this.getSurface().stringWidth(1, this.optionsMenuText[var2]) + shortcutWidth);
+				}
+				if (C_CUSTOM_UI && useVoidscapeHudSkin() && this.mouseButtonClick == 0) {
+					this.getSurface().drawBoxAlpha(2, startY, Math.min(menuWidth + 12, this.getGameWidth() - 4),
+						this.optionsMenuCount * rowHeight + 6, 0x080510, 190);
 				}
 				if (this.mouseButtonClick == 0) {
 					// Draw
 					var2 = 0;
 					while (this.optionsMenuCount > var2) {
 						int var3 = '\uffff';
-						if (this.mouseX < this.getSurface().stringWidth(1, this.optionsMenuText[var2])
-							+ (S_WANT_KEYBOARD_SHORTCUTS > 1 ? 24 : 9)
-							&& this.mouseY > startY + 2 + var2 * 12 && this.mouseY < startY + 2 + var2 * 12 + 12) {
+						if (this.mouseX >= startX && this.mouseX < startX + this.getSurface().stringWidth(1, this.optionsMenuText[var2])
+							+ shortcutWidth
+							&& this.mouseY > startY + 2 + var2 * rowHeight && this.mouseY < startY + 2 + var2 * rowHeight + rowHeight) {
 							var3 = 0xFF0000;
 						}
 
 						this.getSurface().drawString(
 							(S_WANT_KEYBOARD_SHORTCUTS > 1 ? "(" + (var2 + 1) + ") " : "") + this.optionsMenuText[var2],
-							6, var2 * 12 + 12 + startY, var3, 1);
+							startX, var2 * rowHeight + 12 + startY, var3, 1);
 						++var2;
 					}
 				} else {
 					// Click
 					boolean nullOption = true;
 					for (var2 = 0; var2 < this.optionsMenuCount; ++var2) {
-						if (this.getSurface().stringWidth(1, this.optionsMenuText[var2])
-							+ (S_WANT_KEYBOARD_SHORTCUTS > 1 ? 24 : 9) > this.mouseX
-							&& startY + 2 + var2 * 12 < this.mouseY && startY + 2 + 12 + var2 * 12 > this.mouseY) {
+						if (this.mouseX >= startX && this.mouseX < startX + this.getSurface().stringWidth(1, this.optionsMenuText[var2])
+							+ shortcutWidth
+							&& startY + 2 + var2 * rowHeight < this.mouseY && startY + 2 + rowHeight + var2 * rowHeight > this.mouseY) {
 							this.packetHandler.getClientStream().newPacket(116);
 							this.packetHandler.getClientStream().bufferBits.putByte(var2);
 							this.packetHandler.getClientStream().finishPacket();
@@ -6252,22 +6338,25 @@ public final class mudclient implements Runnable {
 						ORSCharacter var3 = this.players[centerX];
 						if (var3.projectileRange > 0) {
 							ORSCharacter var16 = null;
+							boolean targetIsNpc = false;
 							if (var3.attackingNpcServerIndex == -1) {
 								if (var3.attackingPlayerServerIndex != -1) {
 									var16 = this.playerServer[var3.attackingPlayerServerIndex];
 								}
 							} else {
 								var16 = this.npcsServer[var3.attackingNpcServerIndex];
+								targetIsNpc = true;
 							}
 
 							if (null != var16) {
 								int var5 = var3.currentX;
 								int var6 = var3.currentZ;
-								int var7 = -this.world.getElevation(var5, var6) - 110;
+								int var7 = -this.world.getElevation(var5, var6)
+									- projectileSourceYOffset(var3, false);
 								int var8 = var16.currentX;
 								int var9 = var16.currentZ;
 								int var10 = -this.world.getElevation(var8, var9)
-									- EntityHandler.getNpcDef(var3.npcId).getCamera2() / 2;
+									- projectileTargetYOffset(var16, targetIsNpc);
 								int var11 = (var8 * (this.projectileMaxRange - var3.projectileRange)
 									+ var5 * var3.projectileRange) / this.projectileMaxRange;
 								int var12 = (var7 * var3.projectileRange
@@ -6286,22 +6375,25 @@ public final class mudclient implements Runnable {
 						ORSCharacter var3 = this.npcs[centerX];
 						if (var3.projectileRange > 0) {
 							ORSCharacter var16 = null;
+							boolean targetIsNpc = false;
 							if (var3.attackingNpcServerIndex == -1) {
 								if (var3.attackingPlayerServerIndex != -1) {
 									var16 = this.playerServer[var3.attackingPlayerServerIndex];
 								}
 							} else {
 								var16 = this.npcsServer[var3.attackingNpcServerIndex];
+								targetIsNpc = true;
 							}
 
 							if (null != var16) {
 								int var5 = var3.currentX;
 								int var6 = var3.currentZ;
-								int var7 = -this.world.getElevation(var5, var6) - 110;
+								int var7 = -this.world.getElevation(var5, var6)
+									- projectileSourceYOffset(var3, true);
 								int var8 = var16.currentX;
 								int var9 = var16.currentZ;
 								int var10 = -this.world.getElevation(var8, var9)
-									- EntityHandler.getNpcDef(var3.npcId).getCamera2() / 2;
+									- projectileTargetYOffset(var16, targetIsNpc);
 								int var11 = (var8 * (this.projectileMaxRange - var3.projectileRange)
 									+ var5 * var3.projectileRange) / this.projectileMaxRange;
 								int var12 = (var7 * var3.projectileRange
@@ -6471,6 +6563,7 @@ public final class mudclient implements Runnable {
 					groundItems.clear();
 
 					this.drawCharacterOverlay();
+					drawVoidColossusBossHud();
 
 					if (this.mouseClickXStep > 0) {
 						switch ((24 - this.mouseClickXStep) / 6) {
@@ -11185,6 +11278,9 @@ public final class mudclient implements Runnable {
 										+ EntityHandler.getNpcDef(var13).getAtt()
 										+ EntityHandler.getNpcDef(var13).getDef()
 										+ EntityHandler.getNpcDef(var13).getHits()) / 4;
+									if (var13 == VOID_COLOSSUS_NPC_ID) {
+										npcLevel = VOID_COLOSSUS_COMBAT_LEVEL;
+									}
 									int playerLevel = (this.playerStatBase[3] + this.playerStatBase[2]
 										+ this.playerStatBase[1] + this.playerStatBase[0] + 27) / 4;
 									var11 = "@yel@";
@@ -11268,7 +11364,7 @@ public final class mudclient implements Runnable {
 											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
 									}
 
-									if (!attackOnlyVoidKnight) {
+									if (!attackOnlyVoidKnight && this.npcs[var9].npcId != VOID_COLOSSUS_NPC_ID) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_TALK_TO, "Talk-to",
 											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
@@ -17850,6 +17946,8 @@ public final class mudclient implements Runnable {
 			}
 
 
+			maybeStartDevAutoLogin();
+
 			if (this.loginScreenNumber != 0) {
 					if (loginScreenNumber == 1) {
 						menuNewUser.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
@@ -19863,7 +19961,7 @@ public final class mudclient implements Runnable {
 		loadSprite(spriteUtil, "media", 2);
 		loadSprite(spriteUtil + 2, "media", 4);
 		loadSprite(spriteUtil + 6, "media", 2);
-		loadSprite(spriteProjectile, "media", 7);
+		loadSprite(spriteProjectile, "media", SPRITE_PROJECTILE_COUNT);
 		// voidscape: architecture textures now occupy the old 3285+ media range.
 		// Load those UI/media sprites from their relocated safe slots instead.
 		loadSprite(3318, "media", 9);
@@ -20501,6 +20599,44 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var16, "client.IB(" + var1 + ',' + (pass != null ? "{...}" : "null") + ','
 				+ (user != null ? "{...}" : "null") + ',' + reconnecting + ')');
 		}
+	}
+
+	private String devAutoLoginValue(String property, String env) {
+		String value = System.getProperty(property);
+		if (value == null || value.trim().length() == 0) {
+			value = System.getenv(env);
+		}
+		return value == null ? "" : value.trim();
+	}
+
+	private void maybeStartDevAutoLogin() {
+		if (this.devAutoLoginAttempted || this.autoLoginTimeout > 0 || this.panelLogin == null || isAndroid()) {
+			return;
+		}
+		if (++this.devAutoLoginFrames < 10) {
+			return;
+		}
+
+		String autoUser = devAutoLoginValue("voidscape.autologin.user", "VOIDSCAPE_AUTO_LOGIN_USER");
+		String autoPass = devAutoLoginValue("voidscape.autologin.pass", "VOIDSCAPE_AUTO_LOGIN_PASS");
+		if (autoUser.length() == 0 && autoPass.length() == 0) {
+			return;
+		}
+
+		this.devAutoLoginAttempted = true;
+		if (autoUser.length() == 0 || autoPass.length() == 0) {
+			this.loginScreenNumber = 2;
+			showLoginScreenStatus("Dev auto-login needs both username", "and password.");
+			return;
+		}
+
+		this.loginScreenNumber = 2;
+		this.panelLogin.setText(this.controlLoginUser, autoUser);
+		this.panelLogin.setText(this.controlLoginPass, autoPass);
+		this.setUsername(autoUser);
+		this.password = autoPass;
+		this.autoLoginTimeout = 2;
+		this.login(-12, this.password, this.getUsername(), false);
 	}
 
 	private void tellLimitations(RSBuffer_Bits bufferBits) {

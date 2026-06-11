@@ -100,6 +100,7 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 
 **Session**
 - `voidbot start --user U --pass P` — launch the daemon (logs in, holds the session)
+- `voidbot login --user U --pass P` — alias for `start`
 - `voidbot stop` — clean logout + shutdown
 - `voidbot ping` — daemon/login liveness
 
@@ -111,6 +112,8 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 - `voidbot attack-npc (--id|--server-index)` — NPC_ATTACK
 - `voidbot attack-player --server-index <i>` — PLAYER_ATTACK
 - `voidbot take-item <x> <y> <itemId>` — GROUND_ITEM_TAKE
+- `voidbot object-action <x> <y> [1|2] [--id <objectId>]` — OBJECT_COMMAND1/2; `--id` lets the bot calculate the same object-edge prewalk the real client sends for large scenery
+- `voidbot cast-object <spellId> <x> <y>` — CAST_ON_SCENERY
 - `voidbot drop <slot> [--amount N]` — ITEM_DROP
 - `voidbot item-command <slot> [--amount N] [--command K]` — ITEM_COMMAND (eat/redeem/...)
 - `voidbot equip <slot>` / `voidbot unequip <slot>`

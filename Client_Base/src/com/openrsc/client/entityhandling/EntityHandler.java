@@ -365,7 +365,9 @@ public class EntityHandler {
 		GNOMEBALL(3),
 		SKULL(4),
 		SPIKEBALL(5),
-		BLANK(6); //not sure if this is even used for anything
+		BLANK(6), //not sure if this is even used for anything
+		VOID_SHARD(7),
+		VOID_CLAW(8);
 
 		private final int value;
 
@@ -390,6 +392,8 @@ public class EntityHandler {
 		projectiles.add(new SpriteDef("skull projectile", mudclient.spriteProjectile + 4, "projectiles:4", 4));
 		projectiles.add(new SpriteDef("spiked ball projectile", mudclient.spriteProjectile + 5, "projectiles:5", 5));
 		projectiles.add(new SpriteDef("blank projectile", mudclient.spriteProjectile + 6, "projectiles:6", 6));
+		projectiles.add(new SpriteDef("void shard projectile", mudclient.spriteProjectile + 7, "projectiles:7", 7));
+		projectiles.add(new SpriteDef("void claw projectile", mudclient.spriteProjectile + 8, "projectiles:8", 8));
 	}
 
 	public enum GUIPARTS {
@@ -2440,10 +2444,8 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Councilor", "A scythe-bearing survivor of the void.", "", 0, 0, 5, 0, false, sprites, 0, 3151156, 2106401, 12100313, 145, 220, 6, 6, 5, i++));
 
-		// voidscape: Void Colossus raid boss (server id 852). Uses the custom "voidcolossus" body
-		// animation (list index 233 = the former reserved_custom_npc_838 slot); frames packed into
-		// Authentic_Sprites.orsc at that animation's runtime number. camera 820x1150 (width x height):
-		// ~5.3x the player, aspect-matched to the 153x214 logical sprite so it scales up without squish.
+		// voidscape: Void Colossus raid boss (server id 852). The high-detail sprite sheet supplies
+		// the body; the matching scenery object is only the rift/base under it for extra depth.
 		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 		npcs.add(new NPCDef("Void Colossus", "An armoured titan animated by the void itself", "", 250, 110, 1000, 130, true, sprites, 0, 0, 0, 0, 820, 1150, 24, 16, 32, i++));
 
@@ -7190,6 +7192,9 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void chest", "A void-bound chest humming with stolen wilderness power", "Open", "Examine", 1, 1, 1, 0, "VoidChestClosed", ++i)); //1304
 		objects.add(new GameObjectDef("Void chest", "The void chest hangs open", "WalkTo", "Examine", 1, 1, 1, 0, "VoidChestOpen", ++i)); //1305
 		objects.add(new GameObjectDef("Void Rift", "A cosmic portal", "Enter", "Examine", 1, 2, 2, 0, "rockpool", ++i)); //1306
+		objects.add(new GameObjectDef("Void Colossus", "A rift pedestal binding the Colossus to the shattered plaza", "Attack", "Examine", 0, 4, 4, 0, "voidcolossus3d", ++i)); //1307
+		objects.add(new GameObjectDef("Void shard charge", "A burst of void energy gathering into a shard", "WalkTo", "Examine", 0, 1, 1, 0, "voidshardcharge", ++i)); //1308
+		objects.add(new GameObjectDef("Void claw charge", "A clawed void sigil tearing into shape", "WalkTo", "Examine", 0, 1, 1, 0, "voidclawcharge", ++i)); //1309
 	}
 
 	public static void load(boolean loadMembers) {

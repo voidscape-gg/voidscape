@@ -16,6 +16,7 @@ import socket
 import sys
 import threading
 import time
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import protocol as P
@@ -48,6 +49,26 @@ def load_item_defs(defs_dir):
             if it.get("isStackable"):
                 stackable.add(iid)
     return stackable, names
+
+
+def load_object_defs(defs_dir):
+    """Return id -> {name,width,height,type} from GameObjectDef.xml."""
+    path = os.path.join(defs_dir, "GameObjectDef.xml")
+    if not os.path.exists(path):
+        return {}
+    objects = {}
+    root = ET.parse(path).getroot()
+    for oid, obj in enumerate(root.findall("GameObjectDef")):
+        def text(name, default):
+            node = obj.find(name)
+            return node.text.strip() if node is not None and node.text is not None else default
+        objects[oid] = {
+            "name": text("name", ""),
+            "width": int(text("width", "1")),
+            "height": int(text("height", "1")),
+            "type": int(text("type", "0")),
+        }
+    return objects
 
 
 class GameState:
@@ -95,8 +116,10 @@ class Daemon:
         self.send_lock = threading.Lock()
         self.last_write = 0
         self.stackable, self.names = (set(), {})
+        self.object_defs = {}
         if args.defs and os.path.isdir(args.defs):
             self.stackable, self.names = load_item_defs(args.defs)
+            self.object_defs = load_object_defs(args.defs)
         self.running = True
 
     # ---------------- connection / login ----------------
@@ -504,6 +527,32 @@ class Daemon:
             return cands[0] if cands else None
         return None
 
+    def object_prewalk_tile(self, x, y, object_id=None, direction=0):
+        if object_id is None or self.st.x is None or self.st.y is None:
+            return None
+        obj_def = self.object_defs.get(int(object_id))
+        if not obj_def:
+            return None
+        width = obj_def["width"]
+        height = obj_def["height"]
+        if direction not in (0, 4):
+            width, height = height, width
+        min_x, min_y = int(x), int(y)
+        max_x, max_y = min_x + width - 1, min_y + height - 1
+
+        # The client walks to the edge of the object's footprint, then sends the
+        # object command. Pick the nearest perimeter tile outside the footprint.
+        candidates = []
+        for tx in range(min_x - 1, max_x + 2):
+            candidates.append((tx, min_y - 1))
+            candidates.append((tx, max_y + 1))
+        for ty in range(min_y, max_y + 1):
+            candidates.append((min_x - 1, ty))
+            candidates.append((max_x + 1, ty))
+        candidates = [p for p in candidates if p[0] >= 0 and p[1] >= 0]
+        candidates.sort(key=lambda p: abs(p[0] - self.st.x) + abs(p[1] - self.st.y))
+        return candidates[0] if candidates else None
+
     def handle(self, req):
         cmd = req.get("cmd")
         a = req.get("args", {})
@@ -547,6 +596,25 @@ class Daemon:
                 self.send("GROUND_ITEM_TAKE",
                           P.BitWriter().u16(int(a["x"])).u16(int(a["y"])).u16(int(a["id"])).b)
                 return {"ok": True}
+            if cmd == "object-action":
+                x = int(a["x"])
+                y = int(a["y"])
+                which = int(a.get("which", a.get("option", 1)))
+                walk_tile = None
+                if "walk_x" in a and "walk_y" in a:
+                    walk_tile = (int(a["walk_x"]), int(a["walk_y"]))
+                    self.send("WALK_TO_POINT", P.BitWriter().u16(int(a["walk_x"])).u16(int(a["walk_y"])).b)
+                else:
+                    walk_tile = self.object_prewalk_tile(x, y, a.get("id"), int(a.get("direction", 0)))
+                    if walk_tile:
+                        self.send("WALK_TO_POINT", P.BitWriter().u16(walk_tile[0]).u16(walk_tile[1]).b)
+                opcode = "OBJECT_COMMAND1" if which == 1 else "OBJECT_COMMAND2"
+                self.send(opcode, P.BitWriter().u16(x).u16(y).b)
+                return {"ok": True, "x": x, "y": y, "which": which, "walk_tile": walk_tile}
+            if cmd == "cast-object":
+                self.send("CAST_ON_SCENERY", P.BitWriter().u16(int(a["spell"]))
+                          .u16(int(a["x"])).u16(int(a["y"])).b)
+                return {"ok": True, "spell": int(a["spell"]), "x": int(a["x"]), "y": int(a["y"])}
             if cmd == "say":
                 txt = a["text"]
                 self.send("CHAT_MESSAGE", P.encrypted_chat_payload(txt))

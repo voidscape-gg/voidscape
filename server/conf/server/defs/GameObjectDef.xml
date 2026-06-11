@@ -14375,4 +14375,37 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>rockpool</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void Colossus</name>
+    <description>A rift pedestal binding the Colossus to the shattered plaza</description>
+    <command1>Attack</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>4</width>
+    <height>4</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>voidcolossus3d</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void shard charge</name>
+    <description>A burst of void energy gathering into a shard</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>voidshardcharge</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void claw charge</name>
+    <description>A clawed void sigil tearing into shape</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>voidclawcharge</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

@@ -82,6 +82,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Home teleport works and respects wilderness restrictions.
 - [ ] Edgeville Void Rift teleports to the Void Enclave.
 - [ ] Void Enclave safe zone blocks PvP and amenities work: bank, altar, healing pool, waystones, store.
+- [ ] Void Dungeon entrance at `112 296` charges 100,000 coins, enters the shared Wilderness cave, and the exit rift returns to `112 297`.
 - [ ] Void chest requires a Void Key and rolls rewards.
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
 - [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.

@@ -1,4 +1,4 @@
-"""voidbot wire protocol for the voidscape custom RSC client (client_version 10093).
+"""voidbot wire protocol for the voidscape custom RSC client (client_version 10098).
 
 Empirically validated 2026-06-10 against a live capture (see docs/bot-api.md and
 the project memory voidbot-protocol-spec). The custom client is the server's
@@ -41,6 +41,7 @@ OUT = {
     "ITEM_UNEQUIP_FROM_INVENTORY": 170,
     "OBJECT_COMMAND1": 136,
     "OBJECT_COMMAND2": 79,
+    "CAST_ON_SCENERY": 99,
     "OBJECT_USE_ITEM": 115,
     "WALL_OBJECT_COMMAND1": 14,
     "WALL_OBJECT_COMMAND2": 127,
@@ -90,7 +91,7 @@ LOGIN_TRAILER = bytes.fromhex(
     "1c000000df0100060000002f000000110000001600630000002504147fffffff"
     "66656533396431306639636235643630323762616331623332666133333566330a00"
 )
-CLIENT_VERSION = 10093
+CLIENT_VERSION = 10098
 
 
 class BitWriter:

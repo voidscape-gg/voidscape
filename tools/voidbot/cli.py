@@ -73,6 +73,12 @@ def main():
         args["x"], args["y"] = pos[0], pos[1]
     elif cmd == "take-item" and len(pos) >= 3:
         args["x"], args["y"], args["id"] = pos[0], pos[1], pos[2]
+    elif cmd == "object-action" and len(pos) >= 2:
+        args["x"], args["y"] = pos[0], pos[1]
+        if len(pos) >= 3:
+            args["which"] = pos[2]
+    elif cmd == "cast-object" and len(pos) >= 3:
+        args["spell"], args["x"], args["y"] = pos[0], pos[1], pos[2]
     elif cmd in ("npc-talk", "npc-command", "attack-npc") and pos and "id" not in args and "server_index" not in args:
         args["server_index"] = pos[0]
     elif cmd == "menu-reply" and pos:

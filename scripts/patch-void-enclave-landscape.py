@@ -588,7 +588,7 @@ def patch_colossus_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
-# === Void Dungeon floor (Floor 2 black-void) ===
+# === Void Dungeon floor (Floor 3 underground Wilderness black-void) ===
 # Gives the shared Void Dungeon a dark void floor + minimap instead of pure black. The walkable-tile
 # mask is emitted by scripts/gen-void-dungeon.py (server/conf/server/data/void_dungeon_floor.json), so
 # the floor always matches the generated room/corridor layout exactly. Sector name -> world base:

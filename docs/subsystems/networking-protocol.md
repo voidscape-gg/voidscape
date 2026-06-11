@@ -185,6 +185,12 @@ Voidscape custom-client packet notes:
 - `10090`: Void Sparrow cache art. Packed the custom inventory/overhead bubble icon into `Authentic_Sprites.orsc` as client spriteID `618` / archive entry `2768`. No packet shape changed.
 - `10091`: Void Sparrow usability polish. Repacked the same icon slightly smaller at archive entry `2768`, and made scout arrow-key movement held-key, screen-relative, one-tile nudges driven from server-confirmed scout view coordinates. No packet shape changed.
 - `10092`: Void Sparrow timer/counterplay. Appended a 32-bit remaining-milliseconds field to `SEND_VOID_SCOUT_STATE` after max-distance so the client can render a server-authoritative 30-second scout countdown. Nearby players now receive a throttled game message when the scout view flies overhead.
+- `10093`: Void Colossus sprite repair pass. Repacked the boss animation block in `Authentic_Sprites.orsc` and tuned NPCDef timing/anchors. No packet shape changed.
+- `10094`: Void Colossus 3D ranged-boss rework. Added `voidcolossus3d.ob3` to `models.orsc` as the rift/base under the high-detail boss sprite, and added a client/server scenery definition for that large click target. No packet shape changed.
+- `10095`: Void Colossus presentation repair. Rebuilt the 3D base/effect models, repacked the Colossus body frames, added `voidshardcharge`/`voidclawcharge` effect models plus projectile sprites 7/8, fixed Colossus projectile height targeting, and added a custom client boss HP panel. No packet shape changed.
+- `10096`: Void Dungeon revenant-cave pass. Rebuilt the generated dungeon layout/floor mask, moved the entry rift out of the Enclave into unsafe Wilderness, and repacked `Custom_Landscape.orsc` so the floor/minimap matches. No packet shape changed.
+- `10097`: Void Dungeon compact pass. Rebuilt the dungeon as a much smaller two-sector cave, moved the internal exit rift to `72,3250`, and repacked `Custom_Landscape.orsc`. No packet shape changed.
+- `10098`: Void Dungeon prompt/UI polish. Restored confirmed rift entry/exit after moving ordinary server option prompts above the Voidscape chat frame, raised the cave entry fee to 100,000 coins, and reverted the combat-style selector to upstream size. No packet shape changed.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

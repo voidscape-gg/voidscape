@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """gen-void-dungeon.py — generate the Void Dungeon layout (boundaries, scenery, NPC spawns, floor mask).
 
-The Void Dungeon is a SHARED, persistent multi-room dungeon on the black-void underground (Floor 2).
+The Void Dungeon is a SHARED, persistent multi-room dungeon on the black-void underground (Floor 3).
 It is built entirely from server-side JSON rendered by already-existing client defs (void walls 214/215,
 rift 1306, mobs 854-860) plus a dark-floor landscape patch — see scripts/patch-void-enclave-landscape.py,
 which reads the floor mask this script emits.
 
-Layout = a set of ROOMS (rectangles) joined by CORRIDORS (rectangles). The walkable area is their union;
-walls are auto-placed on every edge between a walkable and a non-walkable tile, so doorways form
-automatically wherever a corridor meets a room. Players teleport in at the south entrance and fight a
-south->north difficulty gradient of dense void-mob packs up to the Void Demon boss in the Maw of the Void.
+Layout = a set of compact ROOMS (rectangles) joined by CORRIDORS (rectangles). The walkable area is
+their union; walls are auto-placed on every edge between a walkable and a non-walkable tile, so
+doorways form automatically wherever a corridor meets a room. Players enter from an unsafe
+Wilderness rift, land in a short dungeon vestibule, and fight a tight south->north difficulty
+gradient of dense void-mob packs up to the Void Demon boss in the Maw of the Void.
 
-Stays within Floor-2 sectors h2x49y48/49/50 (sectionX 49 => worldX 48..95; sectionY 48..50 =>
-worldY 2416..2559), which already exist in the landscape archive.
+Stays within Floor-3 sectors h3x49y42/43/44/45 (sectionX 49 => worldX 48..95; sectionY 42..45 =>
+worldY 3072..3263), which already exist in the landscape archive and resolve as Wilderness.
 
 Run:  python3 scripts/gen-void-dungeon.py   (then re-run the landscape patcher for the floor)
 """
@@ -32,36 +33,28 @@ PILLAR = 20           # stone post / pillar
 NPC = {"spider": 854, "giant": 855, "wolf": 856, "demon": 857,
        "ogre": 858, "wizard": 859, "unicorn": 860, "knight": 853}
 
-# --- Rooms (x0,y0,x1,y1 inclusive) — a winding descent, south (high Y) -> north (low Y, boss) ---------
+# --- Rooms (x0,y0,x1,y1 inclusive) — compact descent, south (high Y) -> north (low Y, boss) ----------
 ROOMS = {
-    "entrance":      (64, 2546, 80, 2557),  # arrival hall (south)
-    "spider_warren": (50, 2516, 92, 2544),  # big swarm room
-    "spider_nest":   (50, 2517, 62, 2533),  # (west alcove, overlaps warren edge)
-    "howling_den":   (52, 2488, 80, 2513),  # wolves
-    "beast_pit":     (80, 2490, 93, 2510),  # east branch: wolves + unicorns
-    "brute_hall":    (52, 2456, 90, 2486),  # ogres + giants
-    "giants_rest":   (50, 2458, 62, 2478),  # west branch: giants
-    "void_sanctum":  (54, 2432, 86, 2454),  # wizards + knights
-    "antechamber":   (62, 2424, 78, 2433),  # short hall before the boss
-    "maw":           (50, 2406, 90, 2423),  # boss chamber: Void Demon + adds
+    "threshold":     (66, 3246, 78, 3256),  # calm landing/exit vestibule, low Wilderness
+    "web_cross":     (60, 3229, 84, 3245),  # first money-making room
+    "western_den":   (54, 3216, 66, 3228),  # low-risk side pocket
+    "eastern_den":   (78, 3216, 90, 3228),  # higher-value side pocket
+    "void_chamber":  (61, 3202, 83, 3215),  # central caster/brute room
+    "maw":           (64, 3189, 80, 3201),  # boss chamber: Void Demon + adds
 }
 # --- Corridors join the rooms (each overlaps the two rooms it connects) -------------------------------
 CORRIDORS = [
-    (70, 2543, 74, 2547),   # entrance -> warren
-    (64, 2512, 68, 2518),   # warren -> howling den
-    (78, 2498, 82, 2502),   # howling den -> beast pit
-    (60, 2485, 64, 2490),   # howling den -> brute hall
-    (54, 2476, 58, 2488),   # brute hall <-> giants rest
-    (68, 2453, 72, 2458),   # brute hall -> sanctum
-    (68, 2431, 72, 2435),   # sanctum -> antechamber
-    (66, 2421, 74, 2426),   # antechamber -> maw
+    (70, 3242, 74, 3247),   # threshold -> web cross
+    (62, 3226, 66, 3231),   # web cross -> western den
+    (78, 3226, 82, 3231),   # web cross -> eastern den
+    (70, 3212, 74, 3230),   # web cross -> void chamber
+    (67, 3198, 77, 3204),   # void chamber -> maw
 ]
 
-ENTRANCE_ROOM = "entrance"
-ARRIVAL = (72, 2552)            # inside the entrance hall
-EXIT_RIFT = (72, 2554)          # dungeon exit rift
-ENCLAVE_RIFT = (108, 322)       # entry rift in the Void Enclave
-ENCLAVE_RETURN = (108, 323)
+ENTRANCE_ROOM = "threshold"
+ARRIVAL = (72, 3252)              # inside the entry vestibule
+EXIT_RIFT = (72, 3250)            # dungeon exit rift, centered away from the chatbox edge
+WILDERNESS_RIFT = (112, 296)      # unsafe surface entry, just north of the Void Enclave
 
 # --- Build the walkable tile set ---------------------------------------------------------------------
 def rect_tiles(r):
@@ -102,7 +95,7 @@ def scenery(sid, x, y, direction=0):
     sceneries.append({"id": sid, "pos": {"X": x, "Y": y}, "direction": direction})
 
 scenery(RIFT, *EXIT_RIFT)
-scenery(RIFT, *ENCLAVE_RIFT)
+scenery(RIFT, *WILDERNESS_RIFT)
 for name, (x0, y0, x1, y1) in ROOMS.items():
     # torches at the four inner corners of each room
     for tx, ty in ((x0 + 1, y0 + 1), (x1 - 1, y0 + 1), (x0 + 1, y1 - 1), (x1 - 1, y1 - 1)):
@@ -134,17 +127,14 @@ def scatter(room, count, step=3):
 
 # (room, [(mob, count), ...])  — dense, tiered
 PACKS = {
-    "spider_warren": [("spider", 18)],
-    "spider_nest":   [("spider", 6)],
-    "howling_den":   [("wolf", 10), ("unicorn", 2)],
-    "beast_pit":     [("wolf", 6), ("unicorn", 4)],
-    "brute_hall":    [("ogre", 7), ("giant", 4)],
-    "giants_rest":   [("giant", 4)],
-    "void_sanctum":  [("wizard", 7), ("knight", 5)],
-    "maw":           [("demon", 2), ("wizard", 5), ("knight", 3)],
+    "web_cross":    [("spider", 10)],
+    "western_den":  [("wolf", 4), ("unicorn", 2)],
+    "eastern_den":  [("ogre", 3), ("giant", 2)],
+    "void_chamber": [("wizard", 5), ("knight", 4), ("giant", 2)],
+    "maw":          [("demon", 1), ("wizard", 3), ("knight", 2)],
 }
-# scatter spiders down the corridors too, for ambient density
-for c in CORRIDORS[:3]:
+# scatter spiders down the lower corridors too, for ambient density without camping the entry rift.
+for c in CORRIDORS[1:3]:
     cx, cy = (c[0] + c[2]) // 2, (c[1] + c[3]) // 2
     spawn("spider", cx, cy, 1)
 

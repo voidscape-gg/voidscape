@@ -12,6 +12,7 @@ import com.openrsc.server.model.world.World;
 import com.openrsc.server.plugins.triggers.KillNpcTrigger;
 import com.openrsc.server.plugins.triggers.OpLocTrigger;
 import com.openrsc.server.plugins.triggers.PlayerDeathTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
 import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 
 import java.util.Map;
@@ -35,7 +36,7 @@ import static com.openrsc.server.plugins.Functions.multi;
  * an in-instance respawn so the player keeps farming. Leaving (exit rift), dying, or logging out tears
  * the instance down and returns the player to the normal phase (instanceId 0).
  */
-public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLogoutTrigger, PlayerDeathTrigger {
+public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLoginTrigger, PlayerLogoutTrigger, PlayerDeathTrigger {
 
 	public static final int ARENA_CENTER_X = 552;
 	public static final int ARENA_CENTER_Y = 71;
@@ -46,19 +47,24 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	private static final int RESPAWN_DELAY_MS = 12_000; // in-instance boss respawn (solo farming)
 
 	private static final int VOID_RIFT_ID = 1306;
+	static final int VOID_COLOSSUS_OBJECT_ID = 1307;
 	private static final int HUB_RIFT_X = 113;
 	private static final int HUB_RIFT_Y = 321;
 	private static final int HUB_ARRIVAL_X = 113;
 	private static final int HUB_ARRIVAL_Y = 322;
 	private static final int ARENA_RIFT_X = 553;
 	private static final int ARENA_RIFT_Y = 83;
+	private static final int BOSS_OBJECT_X = ARENA_CENTER_X - 2;
+	private static final int BOSS_OBJECT_Y = ARENA_CENTER_Y - 2;
 
 	// Instance bookkeeping. instanceId starts at 1 (0 is reserved for the normal overworld).
 	private static final AtomicInteger nextInstanceId = new AtomicInteger(1);
 	private final Map<Long, Integer> playerInstance = new ConcurrentHashMap<>();  // playerHash -> instanceId
 	private final Map<Integer, Long> instanceOwner = new ConcurrentHashMap<>();   // instanceId -> playerHash
 	private final Map<Integer, Npc> instanceBoss = new ConcurrentHashMap<>();     // instanceId -> live boss
+	private final Map<Integer, GameObject> instanceBossObject = new ConcurrentHashMap<>();
 	private final Map<Integer, Set<GroundItem>> instanceDrops = new ConcurrentHashMap<>();
+	private final Map<Integer, Set<Npc>> instanceSummons = new ConcurrentHashMap<>();
 
 	// Singleton handle so dev tooling (::colossus) can drive the real entry flow without the rift.
 	private static volatile VoidColossusArena instance;
@@ -87,6 +93,54 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		}
 		self.instanceDrops.computeIfAbsent(item.getInstanceId(), ignored -> ConcurrentHashMap.newKeySet())
 			.add(item);
+	}
+
+	static void trackSummon(Npc npc) {
+		VoidColossusArena self = instance;
+		if (self == null || npc == null || npc.getInstanceId() <= 0) {
+			return;
+		}
+		self.instanceSummons.computeIfAbsent(npc.getInstanceId(), ignored -> ConcurrentHashMap.newKeySet())
+			.add(npc);
+	}
+
+	static boolean isColossusObject(GameObject obj) {
+		return obj != null && obj.getID() == VOID_COLOSSUS_OBJECT_ID;
+	}
+
+	static Npc bossFor(Player player) {
+		VoidColossusArena self = instance;
+		if (self == null || player == null) {
+			return null;
+		}
+		Integer instanceId = self.playerInstance.get(player.getUsernameHash());
+		if (instanceId == null || instanceId != player.getInstanceId()) {
+			return null;
+		}
+		Npc boss = self.instanceBoss.get(instanceId);
+		if (boss == null || boss.isRemoved()) {
+			return null;
+		}
+		return boss;
+	}
+
+	static int liveSummonCount(int instanceId) {
+		VoidColossusArena self = instance;
+		if (self == null) {
+			return 0;
+		}
+		Set<Npc> summons = self.instanceSummons.get(instanceId);
+		if (summons == null) {
+			return 0;
+		}
+		int live = 0;
+		for (Npc summon : summons) {
+			if (summon != null && !summon.isRemoved()
+				&& summon.getSkills().getLevel(com.openrsc.server.constants.Skill.HITS.id()) > 0) {
+				live++;
+			}
+		}
+		return live;
 	}
 
 	/** True if (x,y) is inside the circular plaza (a couple tiles of slack for the rim). */
@@ -144,8 +198,13 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	private void enterInstance(Player player) {
 		long hash = player.getUsernameHash();
 		// Defensive: tear down any stale instance the player still owns.
-		if (playerInstance.containsKey(hash)) {
-			exitInstance(player, false);
+		Integer previousInstance = playerInstance.remove(hash);
+		if (previousInstance != null) {
+			cleanupInstance(previousInstance);
+		}
+		if (player.getInstanceId() > 0 && inArena(player.getX(), player.getY())) {
+			cleanupInstance(player.getInstanceId());
+			clearPlayerState(player);
 		}
 		int instanceId = nextInstanceId.getAndIncrement();
 		playerInstance.put(hash, instanceId);
@@ -164,18 +223,9 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		long hash = player.getUsernameHash();
 		Integer instanceId = playerInstance.remove(hash);
 		if (instanceId != null) {
-			instanceOwner.remove(instanceId);
-			cleanupInstanceDrops(instanceId);
-			Npc boss = instanceBoss.remove(instanceId);
-			if (boss != null && !boss.isRemoved()) {
-				boss.setShouldRespawn(false);
-				world.unregisterNpc(boss);
-			}
+			cleanupInstance(instanceId);
 		}
-		player.resetCombatEvent();
-		player.setLastOpponent(null);
-		player.setBusy(false);
-		player.setInstanceId(0);
+		clearPlayerState(player);
 		if (teleport) {
 			player.message("You step into the Void Rift.");
 			displayTeleportBubble(player, player.getX(), player.getY(), false);
@@ -183,6 +233,28 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 			player.teleport(HUB_ARRIVAL_X, HUB_ARRIVAL_Y, true);
 			player.message("The void folds around you and opens into the Void Enclave.");
 		}
+	}
+
+	private void cleanupInstance(int instanceId) {
+		instanceOwner.remove(instanceId);
+		cleanupInstanceDrops(instanceId);
+		cleanupInstanceSummons(instanceId);
+		GameObject bossObject = instanceBossObject.remove(instanceId);
+		if (bossObject != null && !bossObject.isRemoved()) {
+			world.unregisterGameObject(bossObject);
+		}
+		Npc boss = instanceBoss.remove(instanceId);
+		if (boss != null && !boss.isRemoved()) {
+			boss.setShouldRespawn(false);
+			world.unregisterNpc(boss);
+		}
+	}
+
+	private void clearPlayerState(Player player) {
+		player.resetCombatEvent();
+		player.setLastOpponent(null);
+		player.setBusy(false);
+		player.setInstanceId(0);
 	}
 
 	private void cleanupInstanceDrops(int instanceId) {
@@ -197,22 +269,44 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		}
 	}
 
+	private void cleanupInstanceSummons(int instanceId) {
+		Set<Npc> summons = instanceSummons.remove(instanceId);
+		if (summons == null) {
+			return;
+		}
+		for (Npc summon : summons) {
+			if (summon != null && !summon.isRemoved()) {
+				summon.setShouldRespawn(false);
+				world.unregisterNpc(summon);
+			}
+		}
+	}
+
 	/** Spawn (or respawn) the boss for an instance at the shared arena center, tagged to that phase. */
 	private void spawnBoss(int instanceId) {
-		// Wander/chase box = the whole plaza. A real (non-degenerate) box is what lets the engine
-		// roam the boss when idle and chase the player when provoked, which in turn advances the
-		// client walk frames (a 1x1 box pins it to one tile so it can never animate a step).
+		GameObject staleObject = instanceBossObject.remove(instanceId);
+		if (staleObject != null && !staleObject.isRemoved()) {
+			world.unregisterGameObject(staleObject);
+		}
+
+		GameObject bossObject = new GameObject(world, com.openrsc.server.model.Point.location(BOSS_OBJECT_X, BOSS_OBJECT_Y),
+			VOID_COLOSSUS_OBJECT_ID, 0, 0);
+		bossObject.setInstanceId(instanceId);
+		world.registerGameObject(bossObject);
+		instanceBossObject.put(instanceId, bossObject);
+
+		// The NPC sprite is the visible boss body; the object above is the rift/base under it. Keeping
+		// the real combat state on the NPC preserves ranged/magic target packets, projectiles, HP,
+		// hit splats, and drops without making NPCs true 3D entities.
 		NPCLoc loc = new NPCLoc(NpcId.VOID_COLOSSUS.id(),
 			ARENA_CENTER_X, ARENA_CENTER_Y,
-			ARENA_CENTER_X - ARENA_RADIUS, ARENA_CENTER_X + ARENA_RADIUS,
-			ARENA_CENTER_Y - ARENA_RADIUS, ARENA_CENTER_Y + ARENA_RADIUS);
+			ARENA_CENTER_X, ARENA_CENTER_X,
+			ARENA_CENTER_Y, ARENA_CENTER_Y);
 		Npc boss = new Npc(world, loc);
 		boss.setShouldRespawn(false); // respawn is handled per-instance below, not by the engine
 		boss.setAttribute("raid_boss", true);
 		boss.setInstanceId(instanceId);
 		world.registerNpc(boss);
-		// Initial orientation toward the arena entrance (south). During a fight the engine faces the
-		// target itself; the boss is non-aggressive, so until provoked it just paces and faces here.
 		boss.face(ARENA_LANDING_X, ARENA_LANDING_Y);
 		instanceBoss.put(instanceId, boss);
 		VoidColossusCombat.ensureBossAi(boss);
@@ -234,6 +328,11 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		}
 		final int instanceId = npc.getInstanceId();
 		instanceBoss.remove(instanceId);
+		cleanupInstanceSummons(instanceId);
+		GameObject bossObject = instanceBossObject.remove(instanceId);
+		if (bossObject != null && !bossObject.isRemoved()) {
+			world.unregisterGameObject(bossObject);
+		}
 		// Respawn only if the instance is still owned by an online player.
 		world.getServer().getGameEventHandler().add(new DelayedEvent(world, null, RESPAWN_DELAY_MS,
 				"Colossus Respawn") {
@@ -258,6 +357,29 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	public void onPlayerLogout(Player player) {
 		if (playerInstance.containsKey(player.getUsernameHash())) {
 			exitInstance(player, false);
+		}
+	}
+
+	@Override
+	public boolean blockPlayerLogin(Player player) {
+		return playerInstance.containsKey(player.getUsernameHash())
+			|| inArena(player.getX(), player.getY());
+	}
+
+	@Override
+	public void onPlayerLogin(Player player) {
+		long hash = player.getUsernameHash();
+		Integer instanceId = playerInstance.remove(hash);
+		if (instanceId != null) {
+			cleanupInstance(instanceId);
+		}
+		if (player.getInstanceId() > 0 && inArena(player.getX(), player.getY())) {
+			cleanupInstance(player.getInstanceId());
+		}
+		if (inArena(player.getX(), player.getY())) {
+			clearPlayerState(player);
+			player.teleport(HUB_ARRIVAL_X, HUB_ARRIVAL_Y, true);
+			player.message("You are returned from the Void Colossus arena.");
 		}
 	}
 

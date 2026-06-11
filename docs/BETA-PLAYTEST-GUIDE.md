@@ -198,6 +198,8 @@ Use exact coordinates with `::goto <x> <y>`.
 | Void Auctioneer | `217 460` | Auction House UI, listing, buying, intel. |
 | Void Rift | `192 443` | Enter prompt to Void Enclave. |
 | Void Enclave | `113 314` | Safe zone, amenities, waystones, boss entry. |
+| Void Dungeon entrance | `112 296` | Unsafe Wilderness rift; requires 100,000 coins to enter. |
+| Void Dungeon | `72 3252` | Compact shared underground Wilderness cave, void NPC route, exit rift at `72 3250` returns to `112 297`. |
 | Void Knight boss ladder | `122 313` | Climb down from Enclave to boss chamber. |
 | Void Knight chamber | `984 667` | Attack the Void Knight to start the solo fight. |
 | Wilderness hobgoblins | `217 255` | Dynamic spawns and faster respawns. |

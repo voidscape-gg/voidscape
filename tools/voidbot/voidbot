@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # voidbot — headless game-interaction CLI. Talks to a running voidbotd.
 #   voidbot start --user U --pass P     # launch the daemon (backgrounds it)
+#   voidbot login --user U --pass P     # alias for start
 #   voidbot <command> [args]            # send a command to the daemon
 #   voidbot stop                        # shut the daemon down
 # See docs/bot-api.md for the full command table.
@@ -17,7 +18,7 @@ fi
 CTRL_PORT="${VOIDBOT_CTRL_PORT:-18900}"
 
 case "${1:-}" in
-  start)
+  start|login)
     shift
     HOST="${VOIDBOT_HOST:-127.0.0.1}"
     GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
@@ -36,9 +37,9 @@ case "${1:-}" in
     # Redirect daemon output to a log file so this command-substitution-friendly
     # wrapper returns immediately (a backgrounded child sharing our stdout pipe
     # would otherwise keep $(voidbot start) blocked forever).
-    "$PY" "$HERE/voidbotd.py" --host "$HOST" --game-port "$GAME_PORT" \
+    nohup "$PY" "$HERE/voidbotd.py" --host "$HOST" --game-port "$GAME_PORT" \
         --ctrl-port "$CTRL_PORT" --user "$USER" --pass "$PASS" \
-        --defs "$REPO/server/conf/server/defs" >"$LOG" 2>&1 &
+        --defs "$REPO/server/conf/server/defs" >"$LOG" 2>&1 </dev/null &
     DPID=$!
     disown 2>/dev/null || true
     START_TIMEOUT="${VOIDBOT_START_TIMEOUT:-30}"

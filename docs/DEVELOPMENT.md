@@ -164,6 +164,16 @@ cd Client_Base
 ant runclient
 ```
 
+Preferred local wrapper:
+```bash
+scripts/run-client.sh
+
+# Developer-only: launch the visible PC client and send the normal login packet
+# automatically after startup, avoiding mouse/keyboard login clicks during QA.
+scripts/run-client.sh --login StepAlt:stepalt
+scripts/run-client.sh --user StepAlt --pass stepalt
+```
+
 Compile plugins standalone:
 ```bash
 cd server
@@ -310,6 +320,9 @@ scripts/run-server.sh
 
 # In another terminal, run client against local server
 scripts/run-client.sh
+
+# Optional developer auto-login for visible client QA
+scripts/run-client.sh --login StepAlt:stepalt
 
 # Or test the production-style launcher shell
 scripts/run-launcher.sh
