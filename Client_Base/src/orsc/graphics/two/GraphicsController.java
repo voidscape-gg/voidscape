@@ -1942,6 +1942,9 @@ public class GraphicsController {
 							color = 0x4D33BD;
 						} else if (key.equalsIgnoreCase("sil")) {
 							color = 0xC0C0C0;
+						} else if (key.equalsIgnoreCase("gry")) {
+							color = 0x909090; // muted grey for disabled/greyed-out list entries
+
 						} else if (key.equalsIgnoreCase("pre")) {
 							color = 0x44eadf;
 						} else if (key.equalsIgnoreCase("cla")) {

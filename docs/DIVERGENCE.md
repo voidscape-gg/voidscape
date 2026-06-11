@@ -27,6 +27,16 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-10 — Fix appearance-menu arrows + magic/prayer list colours
+
+Three player-reported HUD bugs:
+
+1. **Appearance/makeover arrows did nothing.** The makeover panel's clickable arrow *buttons* are positioned once at client startup (at the startup window width), but the arrows are *redrawn* every frame at the live width — so after any window resize the hit-boxes sit offset from the drawn arrows and clicks land on empty space. Opcode 59 (`setShowAppearanceChange(true)`) only flipped a boolean and never rebuilt the panel, and `reposition()` skipped `panelAppearance`. Fix: rebuild the panel (`createAppearancePanel(-24595, S_CHARACTER_CREATION_MODE)`) when the makeover opens and on resize while open, so the hit-boxes are laid out at the same width the draw code uses. `-24595` skips the login-viewport side-effect (we're in-game).
+2. **Magic spells you lack the level for showed bright green.** The "disabled" colour code for the void skin was `@gr3@`, which the text decoder maps to 0x40FF00 (lime green), not grey. Added a real grey code `@gry@` = 0x909090 and used it for the no-level case. Now: grey = no level, white = have level but lack runes, yellow = have level + runes.
+3. **Prayer colouring used green for unavailable prayers.** Same `@gr3@`→`@gry@` fix. Now: grey = no level, white = have level but off, green (`@gre@`) only when the prayer is active.
+
+Files: `Client_Base/src/orsc/graphics/two/GraphicsController.java` (new `@gry@` code), `Client_Base/src/orsc/mudclient.java` (`setShowAppearanceChange`/`reposition` rebuilds; magic+prayer no-level colour). Verified at 640×480: arrows cycle each category; spells/prayers above level render grey, active prayers green. Authentic-UI paths keep `@bla@`.
+
 ### 2026-06-10 — Location plaque width adapts to the area name (fixes overflow)
 
 The compact location plaque was a fixed 120px wide, so long area names clipped past the ornate end-caps — "DEEP WILDERNESS" lost its leading "D" and ran off the right, and long towns (BARBARIAN VILLAGE, GNOME STRONGHOLD, SEERS PARTY HALL) would too. `drawVoidscapeLocationPlaque` now measures the title with `stringWidth` and sizes the plaque to `max(base, min(maxCap, titleWidth + 40))`, anchored top-left and capped (230 compact / 280 otherwise) so it never reaches the top-tab row. Verified at 640×480: DEEP WILDERNESS + "Level 30" and BARBARIAN VILLAGE both fit cleanly; short names (LUMBRIDGE) are unchanged.

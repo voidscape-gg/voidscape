@@ -12031,7 +12031,8 @@ public final class mudclient implements Runnable {
 
 						var12 = this.playerStatCurrent[6];
 						if (EntityHandler.getSpellDef(magicLevel).getReqLevel() > var12) {
-							var11 = voidSkin ? "@gr3@" : "@bla@";
+							// No level: greyed out (must override the rune-based yellow/white above).
+							var11 = voidSkin ? "@gry@" : "@bla@";
 						}
 
 						this.panelMagic
@@ -12112,13 +12113,13 @@ public final class mudclient implements Runnable {
 					spellIndex = 0;
 
 					for (magicLevel = 0; magicLevel < EntityHandler.prayerCount(); ++magicLevel) {
-						var11 = "@whi@";
+						var11 = "@whi@"; // have the level, prayer off
 						if (EntityHandler.getPrayerDef(magicLevel).getReqLevel() > this.playerStatBase[5]) {
-							var11 = voidSkin ? "@gr3@" : "@bla@";
+							var11 = voidSkin ? "@gry@" : "@bla@"; // no level: greyed out
 						}
 
 						if (this.prayerOn[magicLevel]) {
-							var11 = "@gre@";
+							var11 = "@gre@"; // active prayer: green (only here)
 						}
 
 						this.panelMagic
@@ -16504,6 +16505,10 @@ public final class mudclient implements Runnable {
 			repositionCustomUI();
 		} else {
 			repositionAuthenticUI();
+		}
+		// Keep the appearance arrows clickable after a resize while the makeover is open.
+		if (this.showAppearanceChange) {
+			this.createAppearancePanel(-24595, Config.S_CHARACTER_CREATION_MODE);
 		}
 		return true;
 	}
@@ -21607,6 +21612,13 @@ public final class mudclient implements Runnable {
 
 	public void setShowAppearanceChange(boolean show) {
 		this.showAppearanceChange = show;
+		if (show) {
+			// Rebuild the panel at the CURRENT window width so the clickable arrow
+			// hit-boxes line up with the arrows drawn this frame. They diverge if the
+			// window was resized since the panel was first built at startup.
+			// -24595 skips the login-screen viewport side-effect (we're in-game here).
+			this.createAppearancePanel(-24595, Config.S_CHARACTER_CREATION_MODE);
+		}
 	}
 
 	public void setShowDialogShop(boolean show) {
