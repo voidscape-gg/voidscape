@@ -6785,21 +6785,51 @@ public final class mudclient implements Runnable {
 
 					drawVoidscapeChatFrame();
 
+					if (useVoidscapeHudSkin()) {
+						// Clip chat history + input to the frame interior so long lines
+						// can't march past the filigree border onto the world.
+						this.getSurface().setClip(voidscapeChatFrameX() + 10,
+							voidscapeChatFrameX() + voidscapeChatFrameWidth() - 10,
+							voidscapeChatFrameBottom() - 8, voidscapeChatFrameTop() + 6);
+					}
+
 					if (this.messageTabSelected == MessageTab.ALL) {
-						for (centerX = 0; centerX < messagesArray.length; ++centerX) {
-							if (MessageHistory.messageHistoryTimeout[centerX] > 0) {
+						if (useVoidscapeHudSkin()) {
+							// Word-wrap recent messages inside the frame so long lines stay
+							// fully readable instead of clipping at the border. Newest message
+							// sits at the bottom; wrapped lines stack upward.
+							int wrapW = voidscapeChatFrameWidth() - 40;
+							int msgX = voidscapeChatFrameX() + 20;
+							int yLine = voidscapeChatFrameBottom() - 22 - 18;
+							int yTop = voidscapeChatFrameTop() + 8;
+							for (centerX = 0; centerX < messagesArray.length && yLine > yTop; ++centerX) {
+								if (MessageHistory.messageHistoryTimeout[centerX] <= 0) {
+									continue;
+								}
 								String var17 = MessageHistory.messageHistoryColor[centerX]
 									+ StringUtil.formatMessage(MessageHistory.messageHistoryMessage[centerX],
 									MessageHistory.messageHistorySender[centerX],
 									MessageHistory.messageHistoryType[centerX], MessageHistory.messageHistoryColor[centerX]);
-								double boost = this.getGameHeight();
-								if (isAndroid() && osConfig.F_SHOWING_KEYBOARD)
-									boost = (boost / 2.5) + 8;
-								else if (useVoidscapeHudSkin())
-									boost = voidscapeChatFrameBottom() - 22;
-								int msgX = useVoidscapeHudSkin() ? voidscapeChatFrameX() + 20 : 7;
-								this.getSurface().drawColoredString(msgX, (int) boost - centerX * 12 - 18, var17,
-									1, 0xFFFF00, MessageHistory.messageHistoryCrownID[centerX]);
+								java.util.List<String> wrapped = voidscapeWrapColoredString(var17, wrapW, 1);
+								for (int wl = wrapped.size() - 1; wl >= 0 && yLine > yTop; --wl) {
+									int crown = wl == 0 ? MessageHistory.messageHistoryCrownID[centerX] : 0;
+									this.getSurface().drawColoredString(msgX, yLine, wrapped.get(wl), 1, 0xFFFF00, crown);
+									yLine -= 12;
+								}
+							}
+						} else {
+							for (centerX = 0; centerX < messagesArray.length; ++centerX) {
+								if (MessageHistory.messageHistoryTimeout[centerX] > 0) {
+									String var17 = MessageHistory.messageHistoryColor[centerX]
+										+ StringUtil.formatMessage(MessageHistory.messageHistoryMessage[centerX],
+										MessageHistory.messageHistorySender[centerX],
+										MessageHistory.messageHistoryType[centerX], MessageHistory.messageHistoryColor[centerX]);
+									double boost = this.getGameHeight();
+									if (isAndroid() && osConfig.F_SHOWING_KEYBOARD)
+										boost = (boost / 2.5) + 8;
+									this.getSurface().drawColoredString(7, (int) boost - centerX * 12 - 18, var17,
+										1, 0xFFFF00, MessageHistory.messageHistoryCrownID[centerX]);
+								}
 							}
 						}
 					}
@@ -6823,6 +6853,10 @@ public final class mudclient implements Runnable {
 					MiscFunctions.textListEntryHeightMod = 2;
 					this.panelMessageTabs.drawPanel();
 					MiscFunctions.textListEntryHeightMod = 0;
+
+					if (useVoidscapeHudSkin()) {
+						this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
+					}
 
 					boolean voidRushUiLocked = isVoidRushUiLocked();
 					if (voidRushUiLocked) {
@@ -8372,6 +8406,21 @@ public final class mudclient implements Runnable {
 		return (value * (256 - alpha) + target * alpha) >> 8;
 	}
 
+	/**
+	 * A SERVER_PROMPT input box has a plugin blocked in Functions.inputBox() server-side.
+	 * Dismissing the popup must still send a (empty) reply, or the player stays
+	 * script-frozen until the server's 60s timeout.
+	 */
+	private void sendServerPromptCancel() {
+		if (this.inputX_Action != InputXAction.SERVER_PROMPT) {
+			return;
+		}
+		this.packetHandler.getClientStream().newPacket(199);
+		this.packetHandler.getClientStream().bufferBits.putByte(9);
+		this.packetHandler.getClientStream().bufferBits.putString("");
+		this.packetHandler.getClientStream().finishPacket();
+	}
+
 	private void drawInputX() {
 		try {
 			if (this.inputTextFinal.length() <= 0 && !this.inputX_OK) {
@@ -8428,6 +8477,7 @@ public final class mudclient implements Runnable {
 					color = 0xFFFF00;
 					if (this.mouseButtonClick != 0) {
 						this.mouseButtonClick = 0;
+						sendServerPromptCancel();
 						this.inputX_Action = InputXAction.ACT_0;
 					}
 				}
@@ -8435,6 +8485,7 @@ public final class mudclient implements Runnable {
 
 				if (this.mouseButtonClick == 1 && (this.mouseX < xr || this.inputX_Width + xr < this.mouseX
 					|| this.mouseY < yr || this.mouseY > this.inputX_Height + yr)) {
+					sendServerPromptCancel();
 					this.inputX_Action = InputXAction.ACT_0;
 					this.mouseButtonClick = 0;
 				}
@@ -13215,7 +13266,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeTopTabsSpan() {
-		return (VOIDSCAPE_TOP_TAB_SIZE * VOIDSCAPE_TOP_TAB_COUNT)
+		return (voidscapeTopTabSize() * VOIDSCAPE_TOP_TAB_COUNT)
 			+ (VOIDSCAPE_TOP_TAB_GAP * (VOIDSCAPE_TOP_TAB_COUNT - 1));
 	}
 
@@ -13231,6 +13282,16 @@ public final class mudclient implements Runnable {
 		if (width <= 860) return 2;
 		if (width <= 960) return 3;
 		return 4;
+	}
+
+	// Compact chrome at the smallest (640-wide) viewport — the most-played size, so the
+	// HUD has to give as much screen as possible back to the world there.
+	private boolean voidscapeCompactHud() {
+		return voidscapePanelSizeClass() == 0;
+	}
+
+	private int voidscapeTopTabSize() {
+		return voidscapeCompactHud() ? 40 : VOIDSCAPE_TOP_TAB_SIZE;
 	}
 
 	private int voidscapeRightPanelWidth() {
@@ -13356,7 +13417,7 @@ public final class mudclient implements Runnable {
 	private int voidscapeRightPanelX() {
 		int activeTab = this.showUiTab != 0 ? this.showUiTab : Config.INVENTORY_TAB;
 		int iconX = voidscapeTopTabsStartX()
-			+ voidscapeTabIndexFor(activeTab) * (VOIDSCAPE_TOP_TAB_SIZE + VOIDSCAPE_TOP_TAB_GAP);
+			+ voidscapeTabIndexFor(activeTab) * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
 		if (this.getGameWidth() <= 760
 			&& (activeTab == Config.OPTIONS_TAB || activeTab == Config.FRIENDS_TAB)) {
 			return Math.max(18, Math.min(iconX, voidscapeRightPanelHomeX()));
@@ -13374,7 +13435,7 @@ public final class mudclient implements Runnable {
 	// Minimap opens directly under the minimap top icon (clamped so the 156px map fits on-screen).
 	private int voidscapeMinimapX() {
 		int iconX = voidscapeTopTabsStartX()
-			+ voidscapeTabIndexFor(Config.MINIMAP_AND_COMPASS_TAB) * (VOIDSCAPE_TOP_TAB_SIZE + VOIDSCAPE_TOP_TAB_GAP);
+			+ voidscapeTabIndexFor(Config.MINIMAP_AND_COMPASS_TAB) * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
 		return Math.min(iconX, this.getSurface().width2 - 203 - 16);
 	}
 
@@ -13404,6 +13465,11 @@ public final class mudclient implements Runnable {
 					return 378;
 			}
 		}
+		if (tabId == Config.MAGIC_AND_PRAYER_TAB) {
+			// Snug to content: 24px Magic/Prayers strip + 90px spell list + 68px description
+			// footer, plus clearance for the frame's 16px bottom border art.
+			return voidscapeRightPanelContentTop() + 182 + 20;
+		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
 				return 250;
@@ -13423,8 +13489,8 @@ public final class mudclient implements Runnable {
 			return false;
 		}
 		int iconX = voidscapeTopTabsStartX()
-			+ voidscapeTabIndexFor(this.showUiTab) * (VOIDSCAPE_TOP_TAB_SIZE + VOIDSCAPE_TOP_TAB_GAP);
-		int iconRight = iconX + VOIDSCAPE_TOP_TAB_SIZE;
+			+ voidscapeTabIndexFor(this.showUiTab) * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
+		int iconRight = iconX + voidscapeTopTabSize();
 		int px;
 		int py;
 		int pw;
@@ -13450,10 +13516,7 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeLocationPlaque() {
 		int x = 18;
 		int y = 18;
-		// Compact plaque (~half the old size) so it clears the top-tab row at smaller window sizes.
-		int width = Math.min(170, Math.max(140, this.getGameWidth() / 4));
-		int height = 40;
-		drawVoidscapeSkinSprite("location-plaque.png", x, y, width, height);
+		int height = voidscapeCompactHud() ? 30 : 40;
 		boolean haveLoc = this.localPlayer != null;
 		int worldX = 0;
 		int worldY = 0;
@@ -13473,13 +13536,22 @@ public final class mudclient implements Runnable {
 			title = area != null ? area.toUpperCase(Locale.ROOT) : "VOIDSCAPE";
 			titleColor = 0xEBDCB0;
 		}
+		// Width adapts to the title so long names (DEEP WILDERNESS, BARBARIAN VILLAGE, ...)
+		// don't clip past the ornate end-caps; capped so it never reaches the top-tab row.
+		int baseWidth = voidscapeCompactHud() ? 120 : Math.min(170, Math.max(140, this.getGameWidth() / 4));
+		int maxWidth = voidscapeCompactHud() ? 230 : 280;
+		int width = Math.max(baseWidth, Math.min(maxWidth, this.getSurface().stringWidth(0, title) + 40));
+		drawVoidscapeSkinSprite("location-plaque.png", x, y, width, height);
 		// Town: just the location name (no coords), nudged down so it clears the plaque's top border.
 		// Wilderness: name + level (still no coords).
 		if (inWild && haveLoc) {
-			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0, y + 16);
-			this.getSurface().drawColoredStringCentered(x + width / 2, "Level " + this.voidscapeWildLevel, 0x9F8DB7, 0, 0, y + 29);
+			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0,
+				y + (voidscapeCompactHud() ? 13 : 16));
+			this.getSurface().drawColoredStringCentered(x + width / 2, "Level " + this.voidscapeWildLevel,
+				0x9F8DB7, 0, 0, y + (voidscapeCompactHud() ? 24 : 29));
 		} else {
-			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0, y + 24);
+			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0,
+				y + (voidscapeCompactHud() ? 19 : 24));
 		}
 	}
 
@@ -13523,15 +13595,18 @@ public final class mudclient implements Runnable {
 		int x = voidscapeTopTabsStartX();
 		for (int i = 0; i < VOIDSCAPE_TOP_TAB_COUNT; i++) {
 			int tabId = VOIDSCAPE_TOP_TAB_ORDER[i];
-			int tabX = x + i * (VOIDSCAPE_TOP_TAB_SIZE + VOIDSCAPE_TOP_TAB_GAP);
+			int tabX = x + i * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
 			boolean active = this.showUiTab == tabId;
 			drawVoidscapeSkinSprite(active ? "top-tab-active.png" : "top-tab-normal.png",
-				tabX, VOIDSCAPE_TOP_TAB_Y, VOIDSCAPE_TOP_TAB_SIZE, VOIDSCAPE_TOP_TAB_SIZE);
+				tabX, VOIDSCAPE_TOP_TAB_Y, voidscapeTopTabSize(), voidscapeTopTabSize());
+			int icon = voidscapeCompactHud() ? 24 : 34;
+			int iconPad = (voidscapeTopTabSize() - icon) / 2;
 			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(VOIDSCAPE_TOP_TAB_ICONS[i], 34),
-				tabX + 10, VOIDSCAPE_TOP_TAB_Y + 10, 34, 34);
+				tabX + iconPad, VOIDSCAPE_TOP_TAB_Y + iconPad, icon, icon);
 			if (tabId == Config.INVENTORY_TAB && S_INVENTORY_COUNT_TOGGLE && C_INV_COUNT) {
-				this.getSurface().drawColoredStringCentered(tabX + 41,
-					Integer.toString(this.inventoryItemCount), 0xEBDCB0, 0, 1, VOIDSCAPE_TOP_TAB_Y + 45);
+				this.getSurface().drawColoredStringCentered(tabX + voidscapeTopTabSize() - 13,
+					Integer.toString(this.inventoryItemCount), 0xEBDCB0, 0, 1,
+					VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() - 9);
 			}
 		}
 
@@ -13541,12 +13616,12 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_CHAT_TAB_COUNT = 5;
 
 	private int voidscapeChatTabHeight() {
-		return 38;
+		return voidscapeCompactHud() ? 28 : 38;
 	}
 
 	private int voidscapeChatTabTop() {
 		// Sit the row fully inside the buffer (surface is gameHeight + 12 tall).
-		return this.getGameHeight() - 30;
+		return this.getGameHeight() - (voidscapeCompactHud() ? 20 : 30);
 	}
 
 	private int[] voidscapeChatTabRect(int index) {
@@ -13574,7 +13649,86 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeChatFrameTop() {
-		return voidscapeChatFrameBottom() - 120;
+		return voidscapeChatFrameBottom() - (voidscapeCompactHud() ? 96 : 120);
+	}
+
+	// Greedy word-wrap that keeps each line within maxWidth (measured with stringWidth,
+	// which skips @xxx@ colour codes) and carries the active colour code onto continuation
+	// lines so wrapped text keeps its colour. A single over-long word is hard-split.
+	private java.util.List<String> voidscapeWrapColoredString(String s, int maxWidth, int font) {
+		java.util.List<String> lines = new java.util.ArrayList<String>();
+		if (s == null || s.isEmpty()) {
+			lines.add("");
+			return lines;
+		}
+		String active = "";
+		StringBuilder line = new StringBuilder();
+		for (String word : s.split(" ")) {
+			if (word.isEmpty()) {
+				continue;
+			}
+			// hard-split a word that alone exceeds the width
+			while (this.getSurface().stringWidth(font, word) > maxWidth && word.length() > 1) {
+				int cut = word.length();
+				while (cut > 1 && this.getSurface().stringWidth(font, word.substring(0, cut)) > maxWidth) {
+					cut--;
+				}
+				if (line.length() > 0) {
+					lines.add(line.toString());
+					active = voidscapeLastColorCode(line.toString(), active);
+					line = new StringBuilder(active);
+				}
+				line.append(word, 0, cut);
+				lines.add(line.toString());
+				active = voidscapeLastColorCode(line.toString(), active);
+				line = new StringBuilder(active);
+				word = word.substring(cut);
+			}
+			String candidate = line.length() == 0 ? word : line + " " + word;
+			if (this.getSurface().stringWidth(font, candidate) <= maxWidth || line.length() == 0) {
+				if (line.length() > 0) {
+					line.append(' ');
+				}
+				line.append(word);
+			} else {
+				lines.add(line.toString());
+				active = voidscapeLastColorCode(line.toString(), active);
+				line = new StringBuilder(active);
+				line.append(word);
+			}
+		}
+		if (line.length() > 0 || lines.isEmpty()) {
+			lines.add(line.toString());
+		}
+		return lines;
+	}
+
+	// Add a chat message to a scroll-tab list, word-wrapped to the frame width under the
+	// voidscape skin so long history lines stay readable instead of clipping. Continuation
+	// lines drop the crown; the sender is kept on every line so click-to-PM still works.
+	// Falls back to the plain single-entry add for the authentic UI / Android.
+	private void voidscapeAddWrapped(String msg, boolean scrollToEnd, int crownId, String sender,
+									 String formerName, int control) {
+		if (!useVoidscapeHudSkin()) {
+			this.panelMessageTabs.addToList(msg, scrollToEnd, crownId, sender, formerName, control);
+			return;
+		}
+		java.util.List<String> lines = voidscapeWrapColoredString(msg, voidscapeChatFrameWidth() - 56, 1);
+		for (int i = 0; i < lines.size(); i++) {
+			this.panelMessageTabs.addToList(lines.get(i), scrollToEnd, i == 0 ? crownId : 0,
+				sender, formerName, control);
+		}
+	}
+
+	private String voidscapeLastColorCode(String s, String fallback) {
+		String code = fallback;
+		for (int i = 0; i + 4 < s.length(); i++) {
+			if (s.charAt(i) == '@' && s.charAt(i + 4) == '@') {
+				code = s.substring(i, i + 5);
+				i += 4;
+			}
+		}
+		return code;
 	}
 
 	private void drawVoidscapeChatFrame() {
@@ -19144,9 +19298,9 @@ public final class mudclient implements Runnable {
 		int y = VOIDSCAPE_TOP_TAB_Y;
 		for (int i = 0; i < VOIDSCAPE_TOP_TAB_COUNT; i++) {
 			int tabId = VOIDSCAPE_TOP_TAB_ORDER[i];
-			int tabX = x + i * (VOIDSCAPE_TOP_TAB_SIZE + VOIDSCAPE_TOP_TAB_GAP);
-			if (this.mouseX >= tabX && this.mouseX < tabX + VOIDSCAPE_TOP_TAB_SIZE
-				&& this.mouseY >= y && this.mouseY < y + VOIDSCAPE_TOP_TAB_SIZE) {
+			int tabX = x + i * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
+			if (this.mouseX >= tabX && this.mouseX < tabX + voidscapeTopTabSize()
+				&& this.mouseY >= y && this.mouseY < y + voidscapeTopTabSize()) {
 				if (this.showUiTab != tabId) {
 					this.showUiTab = tabId;
 					if (tabId == Config.SKILLS_AND_QUESTS_TAB) {
@@ -19178,7 +19332,7 @@ public final class mudclient implements Runnable {
 				int tabsEndX = tabsStartX + voidscapeTopTabsSpan();
 				if (this.mouseX >= tabsStartX && this.mouseX < tabsEndX
 					&& this.mouseY >= VOIDSCAPE_TOP_TAB_Y
-					&& this.mouseY < VOIDSCAPE_TOP_TAB_Y + VOIDSCAPE_TOP_TAB_SIZE) {
+					&& this.mouseY < VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize()) {
 					return true;
 				}
 				return mouseOverVoidscapeActivePanel();
@@ -20676,21 +20830,21 @@ public final class mudclient implements Runnable {
 			String msg = colour + StringUtil.formatMessage(message, sender, type, colour);
 
 			if (type == MessageType.CHAT) {
-				this.panelMessageTabs.addToList(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageChat]
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageChat]
 					- 4, crownID, sender, formerName, this.panelMessageChat);
 			}
 
 			if (type == MessageType.QUEST) {
-				this.panelMessageTabs.addToList(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageQuest]
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageQuest]
 						- 4, 0, null, null,
 					this.panelMessageQuest);
 			}
 			if (type == MessageType.GLOBAL_CHAT) {
-				this.panelMessageTabs.addToList(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] == this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] == this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
 					- 4, crownID, sender, formerName, this.panelMessagePrivate);
 			}
 			if (type == MessageType.CLAN_CHAT) {
-				this.panelMessageTabs.addToList(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageClan]
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageClan]
 					- 4, crownID, sender, formerName, this.panelMessageClan);
 			}
 
@@ -20700,7 +20854,7 @@ public final class mudclient implements Runnable {
 					crown = 0;
 				}
 
-				this.panelMessageTabs.addToList(msg, this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
 					- 4 == this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate], crown, sender, formerName, this.panelMessagePrivate);
 			}
 
