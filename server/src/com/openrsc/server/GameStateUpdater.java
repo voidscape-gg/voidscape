@@ -150,6 +150,7 @@ public final class GameStateUpdater {
 	protected void updateNpcs(final Player playerToUpdate) {
 		MobsUpdateStruct struct = new MobsUpdateStruct();
 		ClearMobsStruct clearStruct = new ClearMobsStruct();
+		final Point viewLocation = playerToUpdate.getViewLocation();
 		boolean isRetroClient = playerToUpdate.isUsing38CompatibleClient() || playerToUpdate.isUsing39CompatibleClient();
 		if (isRetroClient) {
 			// TODO: check impl
@@ -159,14 +160,14 @@ public final class GameStateUpdater {
 			for (final Iterator<Npc> it$ = playerToUpdate.getLocalNpcs().iterator(); it$.hasNext(); ) {
 				Npc localNpc = it$.next();
 
-				if (!localNpc.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(localNpc) || localNpc.isRemoved() || localNpc.isRespawning() || localNpc.isTeleporting() || localNpc.inCombat()) {
+				if (!localNpc.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(localNpc) || localNpc.isRemoved() || localNpc.isRespawning() || localNpc.isTeleporting() || localNpc.inCombat()) {
 					if (!localNpc.inCombat() || localNpc.getOpponent() != playerToUpdate) {
 						// TODO: check if more conditions need to be added from outer if
 						clearIdx.add(localNpc.getIndex());
 					}
 					it$.remove();
 				} else {
-					final byte[] offsets = DataConversions.getMobPositionOffsets(localNpc.getLocation(), playerToUpdate.getLocation());
+					final byte[] offsets = DataConversions.getMobPositionOffsets(localNpc.getLocation(), viewLocation);
 
 					int X = offsets[0];
 					int Y = offsets[1];
@@ -181,12 +182,12 @@ public final class GameStateUpdater {
 			for (final Npc newNPC : playerToUpdate.getViewArea().getNpcsInView()) {
 				if (playerToUpdate.getLocalNpcs().contains(newNPC) || newNPC.isRemoved() || newNPC.isRespawning()
 					|| newNPC.getID() == NpcId.NED_BOAT.id() && !playerToUpdate.getCache().hasKey("ned_hired")
-					|| !newNPC.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(newNPC) || (newNPC.isTeleporting() && !newNPC.inCombat())) {
+					|| !newNPC.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(newNPC) || (newNPC.isTeleporting() && !newNPC.inCombat())) {
 					continue;
 				} else if (playerToUpdate.getLocalNpcs().size() >= 255) {
 					break;
 				}
-				final byte[] offsets = DataConversions.getMobPositionOffsets(newNPC.getLocation(), playerToUpdate.getLocation());
+				final byte[] offsets = DataConversions.getMobPositionOffsets(newNPC.getLocation(), viewLocation);
 
 				int X = offsets[0];
 				int Y = offsets[1];
@@ -221,7 +222,7 @@ public final class GameStateUpdater {
 					mobsUpdate.add(new AbstractMap.SimpleEntry<>(REMOVE_NPC, 2));
 				}
 
-				if (!localNpc.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(localNpc) || // remove because they are out of range
+				if (!localNpc.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(localNpc) || // remove because they are out of range
 					localNpc.isRemoved() || // remove because they are removed
 					localNpc.isTeleporting() || // if they've teleported, then they may have moved more than one square, and thus require a full coordinate refresh
 					localNpc.inCombat() || // remove because when FIRST entering combat, they may have advanced towards the player, then their sprite is incompatible with a movement update (no direction, and > 7) TODO: should be inCombatChanged(), since it's only necessary on the first round of combat.
@@ -260,7 +261,7 @@ public final class GameStateUpdater {
 				if (playerToUpdate.getLocalNpcs().contains(newNPC) || // The NPC is cached & updated successfully. Don't refresh & don't duplicate them in the localNpcs cache.
 					newNPC.isRemoved() || // The NPC is removed & shouldn't be added.
 					newNPC.isRespawning() || // The NPC has not yet spawned & shouldn't be added.
-					!newNPC.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(newNPC) // only have 5 bits in the rsc235 protocol, so the npc can only be shown up to 16 tiles away
+					!newNPC.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(newNPC) // only have 5 bits in the rsc235 protocol, so the npc can only be shown up to 16 tiles away
 					// || (newNPC.isTeleporting() && !newNPC.inCombat()) // ??? Might be a bug. If they teleported this tick, and ended up within range, we want to refresh them for sure, right?
 				) {
 					continue;
@@ -268,7 +269,7 @@ public final class GameStateUpdater {
 					break;
 				}
 
-				final byte[] offsets = DataConversions.getMobPositionOffsets(newNPC.getLocation(), playerToUpdate.getLocation());
+				final byte[] offsets = DataConversions.getMobPositionOffsets(newNPC.getLocation(), viewLocation);
 				boolean forClient115 = playerToUpdate.isUsing115CompatibleClient();
 				boolean forClient140 = playerToUpdate.isUsing140CompatibleClient();
 				mobsUpdate.add(new AbstractMap.SimpleEntry<>(safeNPCIndex(playerToUpdate, newNPC.getIndex()), forClient115 || forClient140 ? 11 : 12));
@@ -295,10 +296,11 @@ public final class GameStateUpdater {
 	protected void updatePlayers(final Player playerToUpdate) {
 		MobsUpdateStruct struct = new MobsUpdateStruct();
 		ClearMobsStruct clearStruct = new ClearMobsStruct();
+		final Point viewLocation = playerToUpdate.getViewLocation();
 
 		Point midRegion = playerToUpdate.getAttribute("midpointRegion");
 		if (midRegion != null) {
-			if (!playerToUpdate.getLocation().inBounds(midRegion.getX() - 32, midRegion.getY() - 32, midRegion.getX() + 32, midRegion.getY() + 32)) {
+			if (!viewLocation.inBounds(midRegion.getX() - 32, midRegion.getY() - 32, midRegion.getX() + 32, midRegion.getY() + 32)) {
 				playerToUpdate.setNextRegionLoad();
 				playerToUpdate.changeZone();
 			}
@@ -315,18 +317,18 @@ public final class GameStateUpdater {
 			List<Integer> clearIdx = new ArrayList<>();
 
 			mobsUpdate.add((short) playerToUpdate.getIndex());
-			mobsUpdate.add((short) playerToUpdate.getX());
-			mobsUpdate.add((short) playerToUpdate.getY());
+			mobsUpdate.add((short) playerToUpdate.getViewX());
+			mobsUpdate.add((short) playerToUpdate.getViewY());
 			mobsUpdate.add((byte) playerToUpdate.getSprite());
 
 			if (playerToUpdate.loggedIn()) {
 				for (final Iterator<Player> it$ = playerToUpdate.getLocalPlayers().iterator(); it$.hasNext(); ) {
 					final Player otherPlayer = it$.next();
 
-					if (!otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(otherPlayer) || !otherPlayer.loggedIn() || otherPlayer.isRemoved()
+					if (!otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(otherPlayer) || !otherPlayer.loggedIn() || otherPlayer.isRemoved()
 						|| otherPlayer.isTeleporting() || otherPlayer.isInvisibleTo(playerToUpdate)
 						|| otherPlayer.inCombat() || otherPlayer.hasMoved() || otherPlayer.isUnregistering()) {
-						if ((!otherPlayer.hasMoved() || !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(otherPlayer)) && !otherPlayer.inCombat()) {
+						if ((!otherPlayer.hasMoved() || !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(otherPlayer)) && !otherPlayer.inCombat()) {
 							// TODO: check if more conditions need to be added from outer if
 							clearIdx.add(otherPlayer.getIndex());
 						}
@@ -334,7 +336,7 @@ public final class GameStateUpdater {
 						playerToUpdate.getKnownPlayerAppearanceIDs().remove(otherPlayer.getUsernameHash());
 					} else {
 						final byte[] offsets = DataConversions.getMobPositionOffsets(otherPlayer.getLocation(),
-							playerToUpdate.getLocation());
+							viewLocation);
 
 						int X = offsets[0];
 						int Y = offsets[1];
@@ -355,14 +357,14 @@ public final class GameStateUpdater {
 
 				for (final Player otherPlayer : playerToUpdate.getViewArea().getPlayersInView()) {
 					if (playerToUpdate.getLocalPlayers().contains(otherPlayer) || otherPlayer.equals(playerToUpdate)
-						|| !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !otherPlayer.withinRange(playerToUpdate) || !otherPlayer.loggedIn() || otherPlayer.isUnregistering()
+						|| !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(otherPlayer) || !otherPlayer.loggedIn() || otherPlayer.isUnregistering()
 						|| otherPlayer.isRemoved() || otherPlayer.isInvisibleTo(playerToUpdate)
 						|| (otherPlayer.isTeleporting() && !otherPlayer.inCombat())) {
 						continue;
 					}
 
 					final byte[] offsets = DataConversions.getMobPositionOffsets(otherPlayer.getLocation(),
-						playerToUpdate.getLocation());
+						viewLocation);
 
 					int X = offsets[0];
 					int Y = offsets[1];
@@ -390,11 +392,11 @@ public final class GameStateUpdater {
 			List<AbstractMap.SimpleEntry<Integer, Integer>> mobsUpdate = new ArrayList<>();
 
 			if (playerToUpdate.isUsing140CompatibleClient() || playerToUpdate.isUsing115CompatibleClient() || playerToUpdate.isUsing69CompatibleClient()) {
-				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getX(), 10));
-				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getY(), 12));
+				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getViewX(), 10));
+				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getViewY(), 12));
 			} else {
-				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getX(), 11));
-				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getY(), 13));
+				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getViewX(), 11));
+				mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getViewY(), 13));
 			}
 			mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getSprite(), 4));
 			mobsUpdate.add(new AbstractMap.SimpleEntry<>(playerToUpdate.getLocalPlayers().size(), 8));
@@ -402,7 +404,7 @@ public final class GameStateUpdater {
 				for (final Iterator<Player> it$ = playerToUpdate.getLocalPlayers().iterator(); it$.hasNext(); ) {
 					final Player otherPlayer = it$.next();
 
-					if (!otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinRange(otherPlayer) || !otherPlayer.loggedIn() || otherPlayer.isRemoved()
+					if (!otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(otherPlayer) || !otherPlayer.loggedIn() || otherPlayer.isRemoved()
 						|| otherPlayer.isTeleporting() || otherPlayer.isInvisibleTo(playerToUpdate)
 						|| otherPlayer.inCombat() || otherPlayer.hasMoved())
 					{
@@ -431,14 +433,14 @@ public final class GameStateUpdater {
 
 				for (final Player otherPlayer : playerToUpdate.getViewArea().getPlayersInView()) {
 					if (playerToUpdate.getLocalPlayers().contains(otherPlayer) || otherPlayer.equals(playerToUpdate)
-						|| !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !otherPlayer.withinRange(playerToUpdate) || !otherPlayer.loggedIn()
+						|| !otherPlayer.withinAuthenticRangeAdditionally(playerToUpdate) || !playerToUpdate.withinViewRange(otherPlayer) || !otherPlayer.loggedIn()
 						|| otherPlayer.isRemoved() || otherPlayer.isInvisibleTo(playerToUpdate)
 						|| (otherPlayer.isTeleporting() && !otherPlayer.inCombat())) {
 						continue;
 					}
 
 					final byte[] offsets = DataConversions.getMobPositionOffsets(otherPlayer.getLocation(),
-						playerToUpdate.getLocation());
+						viewLocation);
 					mobsUpdate.add(new AbstractMap.SimpleEntry<>(otherPlayer.getIndex(), 11));
 					boolean forAuthentic = !playerToUpdate.isUsingCustomClient();
 					mobsUpdate.add(new AbstractMap.SimpleEntry<>((int) offsets[0], forAuthentic ? 5 : 6));
@@ -1082,9 +1084,9 @@ public final class GameStateUpdater {
 
 		for (final Iterator<GameObject> it$ = playerToUpdate.getLocalGameObjects().iterator(); it$.hasNext(); ) {
 			final GameObject o = it$.next();
-			if (!playerToUpdate.withinGridRange(o) || o.isRemoved() || o.isInvisibleTo(playerToUpdate)) {
-				final int offsetX = o.getX() - playerToUpdate.getX();
-				final int offsetY = o.getY() - playerToUpdate.getY();
+			if (!playerToUpdate.withinViewGridRange(o) || o.isRemoved() || o.isInvisibleTo(playerToUpdate)) {
+				final int offsetX = o.getX() - playerToUpdate.getViewX();
+				final int offsetY = o.getY() - playerToUpdate.getViewY();
 				//If the object is close enough we can use regular way to remove:
 				if (offsetX > -128 && offsetY > -128 && offsetX < 128 && offsetY < 128) {
 					objectLocs.add(new GameObjectLoc(60000, offsetX, offsetY, o.getDirection(), 0));
@@ -1108,16 +1110,16 @@ public final class GameStateUpdater {
 			if (!playerToUpdate.isUsingCustomClient()) {
 				// Honestly don't think this does anything because the scenery isn't iterated over in the view anyway
 				// TODO: funny behaviour where if a rock is mined > 16 tiles from you, it can be removed but not replaced until you get closer.
-				skipAdd |= !playerToUpdate.within4GridRange(newObject);
+				skipAdd |= !playerToUpdate.withinView4GridRange(newObject);
 			} else {
-				skipAdd |= !playerToUpdate.withinGridRange(newObject);
+				skipAdd |= !playerToUpdate.withinViewGridRange(newObject);
 			}
 			if (skipAdd) {
 				continue;
 			}
 
-			final int offsetX = newObject.getX() - playerToUpdate.getX();
-			final int offsetY = newObject.getY() - playerToUpdate.getY();
+			final int offsetX = newObject.getX() - playerToUpdate.getViewX();
+			final int offsetY = newObject.getY() - playerToUpdate.getViewY();
 
 			final int newObjectId = retroRockConverter(playerToUpdate, newObject.getLoc());
 
@@ -1153,10 +1155,10 @@ public final class GameStateUpdater {
 
 		for (final Iterator<GroundItem> it$ = playerToUpdate.getLocalGroundItems().iterator(); it$.hasNext(); ) {
 			final GroundItem groundItem = it$.next();
-			final int offsetX = (groundItem.getX() - playerToUpdate.getX());
-			final int offsetY = (groundItem.getY() - playerToUpdate.getY());
+			final int offsetX = (groundItem.getX() - playerToUpdate.getViewX());
+			final int offsetY = (groundItem.getY() - playerToUpdate.getViewY());
 
-			if (!playerToUpdate.withinGridRange(groundItem)) {
+			if (!playerToUpdate.withinViewGridRange(groundItem)) {
 				if (offsetX > -128 && offsetY > -128 && offsetX < 128 && offsetY < 128) {
 					// respawnTime = -1 to indicate to clear not on range
 					itemLocs.add(new ItemLoc(groundItem.getID(), offsetX, offsetY, groundItem.getAmount(), -1,
@@ -1176,13 +1178,13 @@ public final class GameStateUpdater {
 		}
 
 		for (final GroundItem groundItem : playerToUpdate.getViewArea().getItemsInView()) {
-			if (!playerToUpdate.withinGridRange(groundItem) || groundItem.isRemoved()
+			if (!playerToUpdate.withinViewGridRange(groundItem) || groundItem.isRemoved()
 				|| groundItem.isInvisibleTo(playerToUpdate)
 				|| playerToUpdate.getLocalGroundItems().contains(groundItem)) {
 				continue;
 			}
-			final int offsetX = groundItem.getX() - playerToUpdate.getX();
-			final int offsetY = groundItem.getY() - playerToUpdate.getY();
+			final int offsetX = groundItem.getX() - playerToUpdate.getViewX();
+			final int offsetY = groundItem.getY() - playerToUpdate.getViewY();
 			itemLocs.add(new ItemLoc(groundItem.getID(), offsetX, offsetY, groundItem.getAmount(), 0,
 				groundItem.getNoted() && getServer().getConfig().WANT_BANK_NOTES ? 1 : 0,
 				LootBeamSettings.shouldShowBeam(playerToUpdate, groundItem)));
@@ -1204,9 +1206,9 @@ public final class GameStateUpdater {
 		// remove all boundaries that need to be removed
 		for (final Iterator<GameObject> it$ = playerToUpdate.getLocalWallObjects().iterator(); it$.hasNext(); ) {
 			final GameObject o = it$.next();
-			if (!playerToUpdate.withinGridRange(o) || (o.isRemoved() || o.isInvisibleTo(playerToUpdate))) {
-				final int offsetX = o.getX() - playerToUpdate.getX();
-				final int offsetY = o.getY() - playerToUpdate.getY();
+			if (!playerToUpdate.withinViewGridRange(o) || (o.isRemoved() || o.isInvisibleTo(playerToUpdate))) {
+				final int offsetX = o.getX() - playerToUpdate.getViewX();
+				final int offsetY = o.getY() - playerToUpdate.getViewY();
 				if (offsetX > -128 && offsetY > -128 && offsetX < 128 && offsetY < 128) {
 					if (!playerToUpdate.isUsingCustomClient()) {
 						// The authentic server does not really send removals for boundaries.
@@ -1259,14 +1261,14 @@ public final class GameStateUpdater {
 
 		// add all new boundaries to be added
 		for (final GameObject newObject : playerToUpdate.getViewArea().getGameObjectsInView()) {
-			if (!playerToUpdate.withinGridRange(newObject) || newObject.isRemoved()
+			if (!playerToUpdate.withinViewGridRange(newObject) || newObject.isRemoved()
 				|| newObject.isInvisibleTo(playerToUpdate) || newObject.getType() != 1
 				|| playerToUpdate.getLocalWallObjects().contains(newObject)) {
 				continue;
 			}
 
-			final int offsetX = newObject.getX() - playerToUpdate.getX();
-			final int offsetY = newObject.getY() - playerToUpdate.getY();
+			final int offsetX = newObject.getX() - playerToUpdate.getViewX();
+			final int offsetY = newObject.getY() - playerToUpdate.getViewY();
 			objectLocs.add(new GameObjectLoc(newObject.getID(), offsetX, offsetY, newObject.getDirection(), 1));
 			playerToUpdate.getLocalWallObjects().add(newObject);
 			changed = true;
@@ -1287,8 +1289,8 @@ public final class GameStateUpdater {
 			ClearLocationsStruct struct = new ClearLocationsStruct();
 			List<Point> pointList = new ArrayList<>();
 			for (final Point point : player.getLocationsToClear()) {
-				final int offsetX = point.getX() - player.getX();
-				final int offsetY = point.getY() - player.getY();
+				final int offsetX = point.getX() - player.getViewX();
+				final int offsetY = point.getY() - player.getViewY();
 				pointList.add(new Point(offsetX, offsetY));
 			}
 			player.getLocationsToClear().clear();

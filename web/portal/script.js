@@ -616,6 +616,7 @@
 	}
 
 	function setAccountMode(mode) {
+		document.body.classList.remove("prelaunch-claimed");
 		accountMode = mode === "signin" ? "signin" : "reserve";
 		accountModeButtons.forEach(function (button) {
 			button.classList.toggle("is-active", button.getAttribute("data-account-mode") === accountMode);
@@ -634,6 +635,7 @@
 		var rewards = state && state.rewards ? state.rewards : null;
 		var hasCard = rewards && rewards.starterSubscriptionCards > 0;
 		if (!hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
+		document.body.classList.add("prelaunch-claimed");
 		var founderUsername = state && state.founder ? state.founder.username : founderName.value;
 		var character = prelaunchReservedCharacter(state, founderUsername);
 		var needsGameLogin = Boolean(character && character.source === "founder-reserved");
@@ -789,6 +791,7 @@
 	function showSignupCodeSuccess(result) {
 		if (!founderForm || !prelaunchSuccess || !result || !result.founder) return;
 		var signup = result.signup || null;
+		document.body.classList.add("prelaunch-claimed");
 		founderForm.classList.add("is-claimed");
 		founderForm.classList.remove("needs-game-login");
 		founderForm.classList.add("has-game-login");

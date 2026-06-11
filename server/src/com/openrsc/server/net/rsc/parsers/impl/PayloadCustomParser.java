@@ -299,6 +299,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case 36:
 				opcode = OpcodeIn.ITEM_EXAMINE_REQUEST;
 				break;
+			case 37:
+				opcode = OpcodeIn.VOID_SCOUT_CANCEL;
+				break;
 			default:
 				break;
 		}
@@ -457,6 +460,7 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case ON_BLACK_HOLE:
 			case LOGOUT:
 			case CONFIRM_LOGOUT:
+			case VOID_SCOUT_CANCEL:
 				return packet.getLength() == 0;
 			case WALK_TO_POINT:
 			case WALK_TO_ENTITY:
@@ -1103,6 +1107,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				ItemExamineRequestStruct ie = new ItemExamineRequestStruct();
 				ie.slot = packet.readShort();
 				result = ie;
+				break;
+			case VOID_SCOUT_CANCEL:
+				result = new NoPayloadStruct();
 				break;
 		}
 

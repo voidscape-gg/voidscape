@@ -6,6 +6,7 @@ import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
 import com.openrsc.server.model.Path;
 import com.openrsc.server.model.Path.PathType;
 import com.openrsc.server.model.Point;
+import com.openrsc.server.model.WorldPathfinder;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
@@ -16,12 +17,22 @@ import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.WalkStruct;
 import com.openrsc.server.plugins.triggers.EscapeNpcTrigger;
 
+import java.util.List;
+
 public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 
 	@Override
 	public void process(final WalkStruct payload, final Player player) throws Exception {
 
 		OpcodeIn packetOpcode = payload.getOpcode();
+		if (player.isVoidScouting()) {
+			if (player.inCombat()) {
+				player.stopVoidScout("@mag@Your vision snaps back as danger finds your body.");
+				return;
+			}
+			queueVoidScoutWalk(payload, player);
+			return;
+		}
 		if (player.isBusy() && player.getMenuHandler() == null) {
 			if (player.getConfig().BATCH_PROGRESSION) {
 				player.interruptPlugins();
@@ -113,5 +124,22 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 			path.finish();
 		}
 		player.getWalkingQueue().setPath(path);
+	}
+
+	private void queueVoidScoutWalk(final WalkStruct payload, final Player player) {
+		if (payload.firstStep == null) return;
+
+		Point destination = payload.firstStep;
+		for (Point step : payload.steps) {
+			destination = Point.location(payload.firstStep.getX() + step.getX(), payload.firstStep.getY() + step.getY());
+		}
+
+		final WorldPathfinder pathfinder = new WorldPathfinder(player.getWorld(), player);
+		final List<Point> path = pathfinder.findPath(player.getViewLocation(), destination, 8_192);
+		if (path == null || path.isEmpty()) {
+			player.sendVoidScoutBlockedMessage("The sparrow can't find a path there.");
+			return;
+		}
+		player.queueVoidScoutPath(path);
 	}
 }

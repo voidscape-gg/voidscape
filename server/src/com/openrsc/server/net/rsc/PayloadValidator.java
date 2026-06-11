@@ -116,6 +116,7 @@ public class PayloadValidator {
 		put(OpcodeOut.SEND_UNLOCKED_APPEARANCES, UnlockedAppearancesStruct.class);
 		put(OpcodeOut.SEND_WORLD_WALK_ROUTE, WorldWalkRouteStruct.class); // voidscape — world-map auto-walker
 		put(OpcodeOut.SEND_VOID_RUSH_WAVE, VoidRushWaveStruct.class); // voidscape — Void Rush low-cost wave visual
+		put(OpcodeOut.SEND_VOID_SCOUT_STATE, VoidScoutStateStruct.class); // voidscape — Void Sparrow scout UI state
 	}};
 
 	public static boolean isPayloadCorrectInstance(AbstractStruct<OpcodeOut> payload, OpcodeOut opcode) {

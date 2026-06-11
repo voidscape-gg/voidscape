@@ -379,7 +379,7 @@ public abstract class Mob extends Entity {
 			if (playerToUpdate.isUsingCustomClient() || getWorld().getServer().getConfig().VIEW_DISTANCE <= 2)
 				return true; // don't need additional restraint in these cases
 
-			return getLocation().withinRange(playerToUpdate.getLocation(), 15);
+			return getLocation().withinRange(playerToUpdate.getViewLocation(), 15);
 		}
 		return false;
 	}

@@ -20,6 +20,7 @@ import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerInventory;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
+import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.PluginTask;
 import com.openrsc.server.event.rsc.impl.DesertHeatEvent;
 import com.openrsc.server.event.rsc.impl.PoisonEvent;
@@ -80,6 +81,8 @@ public final class Player extends Mob {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int VOID_SCOUT_OVERHEAD_NOTICE_RADIUS = 5;
+	private static final long VOID_SCOUT_OVERHEAD_NOTICE_INTERVAL_MILLIS = 10_000L;
 
 	// activity indicator for kitten to cat growth
 	// 100 trigger up a Kitten to cat event
@@ -98,6 +101,14 @@ public final class Player extends Mob {
 	private ThrowingEvent throwingEvent;
 	private DelayedEvent chargeEvent = null;
 	private com.openrsc.server.event.rsc.impl.AutoWalkEvent autoWalkEvent;
+	private Point voidScoutOrigin;
+	private Point voidScoutLocation;
+	private long voidScoutEndsAt;
+	private int voidScoutMaxDistance;
+	private GameTickEvent voidScoutEvent;
+	private final ArrayDeque<Point> voidScoutPath = new ArrayDeque<>();
+	private final Map<Integer, Long> voidScoutOverheadNotices = new HashMap<>();
+	private long lastVoidScoutBlockMessage;
 	private boolean sleeping = false;
 	private int activity = 0;
 	private int kills = 0;
@@ -659,8 +670,8 @@ public final class Player extends Mob {
 	}
 
 	public void setNextRegionLoad() {
-		int x = this.getLocation().getX();
-		int y = this.getLocation().getY();
+		int x = this.getViewLocation().getX();
+		int y = this.getViewLocation().getY();
 
 		int PLANE_WIDTH = 2304;
 		int PLANE_HEIGHT = 1776;
@@ -1533,6 +1544,206 @@ public final class Player extends Mob {
 			autoWalkEvent = null;
 			getWalkingQueue().setPath(null);
 		}
+	}
+
+	public boolean isVoidScouting() {
+		return voidScoutLocation != null;
+	}
+
+	public Point getViewLocation() {
+		return isVoidScouting() ? voidScoutLocation : getLocation();
+	}
+
+	public Point getVoidScoutOrigin() {
+		return voidScoutOrigin;
+	}
+
+	public int getVoidScoutMaxDistance() {
+		return voidScoutMaxDistance;
+	}
+
+	public int getViewX() {
+		return getViewLocation().getX();
+	}
+
+	public int getViewY() {
+		return getViewLocation().getY();
+	}
+
+	public boolean withinViewRange(final Entity entity) {
+		return entity != null && getViewLocation().withinRange(entity.getLocation(),
+			(getWorld().getServer().getConfig().VIEW_DISTANCE * 8) - 1);
+	}
+
+	public boolean withinViewGridRange(final Entity entity) {
+		return entity != null && getViewLocation().withinGridRange(entity.getLocation(),
+			getWorld().getServer().getConfig().VIEW_DISTANCE);
+	}
+
+	public boolean withinView4GridRange(final Entity entity) {
+		return entity != null && getViewLocation().withinGridRange(entity.getLocation(), 4);
+	}
+
+	public void startVoidScout(final long durationMillis, final int maxDistance) {
+		stopVoidScout(null);
+		cancelAutoWalk();
+		resetPath();
+		voidScoutOrigin = Point.location(getX(), getY());
+		voidScoutLocation = Point.location(getX(), getY());
+		voidScoutEndsAt = durationMillis > 0L ? System.currentTimeMillis() + durationMillis : 0L;
+		voidScoutMaxDistance = maxDistance;
+		voidScoutPath.clear();
+		voidScoutOverheadNotices.clear();
+		setNextRegionLoad();
+		ActionSender.sendWorldInfo(this);
+		ActionSender.sendVoidScoutState(this);
+		message("@mag@You release the void sparrow. Your body remains behind.");
+		message("@mag@Use arrow keys to scout. Press Escape to return.");
+
+		voidScoutEvent = new GameTickEvent(getWorld(), this, 1, "Void Sparrow scouting", DuplicationStrategy.ONE_PER_MOB) {
+			@Override
+			public void run() {
+				setDelayTicks(1);
+				if (!((Player) getOwner()).pulseVoidScout()) {
+					stop();
+				}
+			}
+		};
+		getWorld().getServer().getGameEventHandler().add(voidScoutEvent);
+	}
+
+	public void stopVoidScout(final String message) {
+		if (!isVoidScouting()) return;
+		if (voidScoutEvent != null) {
+			voidScoutEvent.stop();
+			voidScoutEvent = null;
+		}
+		voidScoutOrigin = null;
+		voidScoutLocation = null;
+		voidScoutEndsAt = 0L;
+		voidScoutMaxDistance = 0;
+		voidScoutPath.clear();
+		voidScoutOverheadNotices.clear();
+		setNextRegionLoad();
+		ActionSender.sendWorldInfo(this);
+		ActionSender.sendVoidScoutState(this);
+		if (message != null && !message.isEmpty()) {
+			message(message);
+		}
+	}
+
+	public void queueVoidScoutPath(final Point firstStep, final List<Point> steps) {
+		if (!isVoidScouting() || firstStep == null) return;
+
+		final ArrayList<Point> path = new ArrayList<>();
+		path.add(firstStep);
+		if (steps != null) {
+			for (Point step : steps) {
+				path.add(Point.location(firstStep.getX() + step.getX(), firstStep.getY() + step.getY()));
+			}
+		}
+		queueVoidScoutPath(path);
+	}
+
+	public void queueVoidScoutPath(final List<Point> path) {
+		if (!isVoidScouting() || path == null || path.isEmpty()) return;
+
+		final ArrayDeque<Point> accepted = new ArrayDeque<>();
+		Point previous = voidScoutLocation;
+		for (Point point : path) {
+			if (!validVoidScoutStep(previous, point)) {
+				sendVoidScoutBlockedMessage("The sparrow won't fly any farther from your body.");
+				break;
+			}
+			accepted.add(point);
+			previous = point;
+		}
+		voidScoutPath.clear();
+		voidScoutPath.addAll(accepted);
+	}
+
+	public boolean canUseVoidScout() {
+		if (!getLocation().inWilderness()) {
+			message("The void sparrow only answers from within the wilderness.");
+			return false;
+		}
+		if (isVoidScouting()) {
+			message("Your void sparrow is already scouting.");
+			return false;
+		}
+		if (inCombat() || System.currentTimeMillis() - getCombatTimer() < 10000) {
+			message("You need to be out of combat for 10 seconds before scouting.");
+			return false;
+		}
+		return true;
+	}
+
+	public long getVoidScoutMillisRemaining() {
+		if (!isVoidScouting()) return 0L;
+		if (voidScoutEndsAt <= 0L) return Long.MAX_VALUE;
+		return Math.max(0L, voidScoutEndsAt - System.currentTimeMillis());
+	}
+
+	private boolean pulseVoidScout() {
+		if (!isVoidScouting()) return false;
+		if (voidScoutEndsAt > 0L && System.currentTimeMillis() >= voidScoutEndsAt) {
+			stopVoidScout("@mag@The void sparrow fades from your sight.");
+			return false;
+		}
+		if (!getLocation().equals(voidScoutOrigin)) {
+			stopVoidScout("@mag@Your vision snaps back as your body moves.");
+			return false;
+		}
+		if (inCombat()) {
+			stopVoidScout("@mag@Your vision snaps back as danger finds your body.");
+			return false;
+		}
+		if (!voidScoutPath.isEmpty()) {
+			final Point next = voidScoutPath.poll();
+			if (!validVoidScoutStep(voidScoutLocation, next)) {
+				voidScoutPath.clear();
+				sendVoidScoutBlockedMessage("The sparrow won't fly any farther from your body.");
+			} else {
+				voidScoutLocation = next;
+				notifyPlayersUnderVoidScout();
+				ActionSender.sendVoidScoutState(this);
+			}
+		}
+		return true;
+	}
+
+	private void notifyPlayersUnderVoidScout() {
+		if (voidScoutLocation == null) return;
+
+		final long now = System.currentTimeMillis();
+		final int scoutHeight = Formulae.getHeight(voidScoutLocation);
+		for (Player observer : getWorld().getPlayers()) {
+			if (observer == null || observer == this) continue;
+			if (Formulae.getHeight(observer.getLocation()) != scoutHeight) continue;
+			if (!observer.getLocation().withinRange(voidScoutLocation, VOID_SCOUT_OVERHEAD_NOTICE_RADIUS)) continue;
+
+			final long lastNotice = voidScoutOverheadNotices.getOrDefault(observer.getIndex(), 0L);
+			if (now - lastNotice < VOID_SCOUT_OVERHEAD_NOTICE_INTERVAL_MILLIS) continue;
+
+			observer.message("@mag@A void sparrow flies overhead.");
+			voidScoutOverheadNotices.put(observer.getIndex(), now);
+		}
+	}
+
+	private boolean validVoidScoutStep(final Point previous, final Point point) {
+		if (previous == null || point == null || voidScoutOrigin == null) return false;
+		if (Formulae.getHeight(point) != Formulae.getHeight(voidScoutOrigin)) return false;
+		if (Math.max(Math.abs(previous.getX() - point.getX()), Math.abs(previous.getY() - point.getY())) > 1) {
+			return false;
+		}
+		return Math.max(Math.abs(point.getX() - voidScoutOrigin.getX()), Math.abs(point.getY() - voidScoutOrigin.getY())) <= voidScoutMaxDistance;
+	}
+
+	public void sendVoidScoutBlockedMessage(final String message) {
+		final long now = System.currentTimeMillis();
+		if (now - lastVoidScoutBlockMessage < 1500L) return;
+		lastVoidScoutBlockMessage = now;
+		message(message);
 	}
 
 	public String getStaffName() {
@@ -2800,6 +3011,7 @@ public final class Player extends Mob {
 
 	public void logout() {
 		LOGGER.info("Player logout requested for " + this.getUsername());
+		stopVoidScout(null);
 		try {
 			ActionSender.sendLogoutRequestConfirm(this);
 		} catch (NullPointerException ex) {

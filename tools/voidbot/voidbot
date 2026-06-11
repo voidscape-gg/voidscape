@@ -7,7 +7,13 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-PY="${VOIDBOT_PYTHON:-python}"
+if [ -n "${VOIDBOT_PYTHON:-}" ]; then
+  PY="$VOIDBOT_PYTHON"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  PY="python"
+fi
 CTRL_PORT="${VOIDBOT_CTRL_PORT:-18900}"
 
 case "${1:-}" in
@@ -35,6 +41,27 @@ case "${1:-}" in
         --defs "$REPO/server/conf/server/defs" >"$LOG" 2>&1 &
     DPID=$!
     disown 2>/dev/null || true
+    START_TIMEOUT="${VOIDBOT_START_TIMEOUT:-30}"
+    DEADLINE=$((SECONDS + START_TIMEOUT))
+    READY=""
+    while [ "$SECONDS" -lt "$DEADLINE" ]; do
+      if ! kill -0 "$DPID" >/dev/null 2>&1; then
+        echo "{\"ok\":false,\"error\":\"voidbotd exited before login\",\"pid\":$DPID,\"ctrl_port\":$CTRL_PORT,\"log\":\"$LOG\"}"
+        exit 1
+      fi
+      PING="$("$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" ping 2>/dev/null || true)"
+      if echo "$PING" | grep -q '"ok": *true' && echo "$PING" | grep -q '"logged_in": *true'; then
+        READY="yes"
+        break
+      fi
+      sleep 0.2
+    done
+    if [ -z "$READY" ]; then
+      "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" shutdown >/dev/null 2>&1 || true
+      kill "$DPID" >/dev/null 2>&1 || true
+      echo "{\"ok\":false,\"error\":\"voidbotd did not log in before timeout\",\"pid\":$DPID,\"ctrl_port\":$CTRL_PORT,\"log\":\"$LOG\"}"
+      exit 1
+    fi
     echo "{\"ok\":true,\"started\":true,\"pid\":$DPID,\"ctrl_port\":$CTRL_PORT,\"log\":\"$LOG\"}"
     ;;
   stop)

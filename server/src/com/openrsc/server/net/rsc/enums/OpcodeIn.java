@@ -118,4 +118,5 @@ public enum OpcodeIn {
 
 	WORLD_WALK_REQUEST, // voidscape — world-map auto-walker
 	ITEM_EXAMINE_REQUEST, // voidscape — per-instance item examine (Item Memory)
+	VOID_SCOUT_CANCEL, // voidscape — return from Void Sparrow scout mode
 }

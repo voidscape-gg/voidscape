@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.content.VoidStarterIntro;
+import com.openrsc.server.content.VoidScout;
 import com.openrsc.server.event.rsc.impl.AutoWalkEvent;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.WorldPathfinder;
@@ -38,6 +39,36 @@ public class WorldWalkRequest implements PayloadProcessor<WorldWalkStruct, Opcod
 
 	@Override
 	public void process(final WorldWalkStruct payload, final Player player) throws Exception {
+		if (player.isVoidScouting()) {
+			if (player.inCombat()) {
+				player.stopVoidScout("@mag@Your vision snaps back as danger finds your body.");
+				ActionSender.sendWorldWalkRoute(player, false, REASON_COMBAT, Collections.emptyList());
+				return;
+			}
+			final Point start = player.getViewLocation();
+			final Point end = Point.location(payload.destX, payload.destY);
+			if (Math.max(Math.abs(end.getX() - player.getLocation().getX()), Math.abs(end.getY() - player.getLocation().getY())) > VoidScout.MAX_DISTANCE) {
+				ActionSender.sendWorldWalkRoute(player, false, REASON_NO_PATH, Collections.emptyList());
+				player.message("The sparrow won't fly any farther from your body.");
+				return;
+			}
+
+			final WorldPathfinder pf = new WorldPathfinder(player.getWorld(), player);
+			final List<Point> path = pf.findPath(start, end, 8_192);
+
+			if (path == null) {
+				ActionSender.sendWorldWalkRoute(player, false, mapReason(pf.getLastReason()), Collections.emptyList());
+				return;
+			}
+			if (path.isEmpty()) {
+				ActionSender.sendWorldWalkRoute(player, false, REASON_SAME_TILE, Collections.emptyList());
+				return;
+			}
+
+			player.queueVoidScoutPath(path);
+			ActionSender.sendWorldWalkRoute(player, true, REASON_OK, path);
+			return;
+		}
 		if (player.inCombat()) {
 			ActionSender.sendWorldWalkRoute(player, false, REASON_COMBAT, Collections.emptyList());
 			return;

@@ -49,10 +49,12 @@ public class RegionManager {
 	 */
 	public Collection<Player> getLocalPlayers(final Entity entity) {
 		final LinkedHashSet<Player> localPlayers = new LinkedHashSet<Player>();
-		for (final Region region : getVisibleRegions(entity.getLocation())) {
+		final Point viewLocation = getViewLocation(entity);
+		for (final Region region : getVisibleRegions(viewLocation)) {
 			for (final Player player : region.getPlayers()) {
 				// voidscape instancing: players only see players sharing their phase (id 0 == overworld).
-				if (player.withinRange(entity) && entity.getInstanceId() == player.getInstanceId()) {
+				if (player.getLocation().withinRange(viewLocation, (getWorld().getServer().getConfig().VIEW_DISTANCE * 8) - 1)
+						&& entity.getInstanceId() == player.getInstanceId()) {
 					localPlayers.add(player);
 				}
 			}
@@ -68,10 +70,12 @@ public class RegionManager {
 	 */
 	public Collection<Npc> getLocalNpcs(final Entity entity) {
 		final LinkedHashSet<Npc> localNpcs = new LinkedHashSet<>();
-		for (final Region region : getVisibleRegions(entity.getLocation())) {
+		final Point viewLocation = getViewLocation(entity);
+		for (final Region region : getVisibleRegions(viewLocation)) {
 			for (final Npc npc : region.getNpcs()) {
 				// voidscape instancing: only NPCs sharing the observer's phase are visible/interactable.
-				if (npc.withinRange(entity) && entity.getInstanceId() == npc.getInstanceId()) {
+				if (npc.getLocation().withinRange(viewLocation, (getWorld().getServer().getConfig().VIEW_DISTANCE * 8) - 1)
+						&& entity.getInstanceId() == npc.getInstanceId()) {
 					localNpcs.add(npc);
 				}
 			}
@@ -81,7 +85,8 @@ public class RegionManager {
 
 	public Collection<GameObject> getLocalObjects(final Mob entity) {
 		LinkedHashSet<GameObject> localObjects = new LinkedHashSet<GameObject>();
-		for (final Iterator<Region> region = getVisibleRegions(entity.getLocation()).iterator(); region.hasNext(); ) {
+		final Point viewLocation = getViewLocation(entity);
+		for (final Iterator<Region> region = getVisibleRegions(viewLocation).iterator(); region.hasNext(); ) {
 			Collection<GameObject> objects = region.next().getGameObjects();
 			synchronized (objects) {
 				for (final Iterator<GameObject> o = objects.iterator(); o.hasNext(); ) {
@@ -89,7 +94,7 @@ public class RegionManager {
 					if (gameObject
 						.getLocation()
 						.withinGridRange(
-							entity.getLocation(),
+							viewLocation,
 							getWorld().getServer().getConfig().VIEW_DISTANCE
 						)
 					) {
@@ -103,16 +108,24 @@ public class RegionManager {
 
 	public Collection<GroundItem> getLocalGroundItems(final Mob entity) {
 		final LinkedHashSet<GroundItem> localItems = new LinkedHashSet<GroundItem>();
-		for (final Region region : getVisibleRegions(entity.getLocation())) {
+		final Point viewLocation = getViewLocation(entity);
+		for (final Region region : getVisibleRegions(viewLocation)) {
 			for (final GroundItem o : region.getGroundItems()) {
 				// voidscape instancing: ground items (e.g. a boss instance's loot) are phase-private.
-				if (o.getLocation().withinGridRange(entity.getLocation(), getWorld().getServer().getConfig().VIEW_DISTANCE)
+				if (o.getLocation().withinGridRange(viewLocation, getWorld().getServer().getConfig().VIEW_DISTANCE)
 						&& entity.getInstanceId() == o.getInstanceId()) {
 					localItems.add(o);
 				}
 			}
 		}
 		return localItems;
+	}
+
+	private Point getViewLocation(final Entity entity) {
+		if (entity instanceof Player) {
+			return ((Player) entity).getViewLocation();
+		}
+		return entity.getLocation();
 	}
 
 	/**

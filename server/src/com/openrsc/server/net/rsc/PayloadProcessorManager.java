@@ -135,6 +135,7 @@ public class PayloadProcessorManager {
 
 		bind(OpcodeIn.WORLD_WALK_REQUEST, WorldWalkRequest.class); // voidscape — world-map auto-walker
 		bind(OpcodeIn.ITEM_EXAMINE_REQUEST, ItemExamineRequest.class); // voidscape — per-instance item examine
+		bind(OpcodeIn.VOID_SCOUT_CANCEL, VoidScoutCancel.class); // voidscape — return from Void Sparrow scout mode
 	}
 
 	private static void bind(OpcodeIn opcode, Class<?> clazz) {
@@ -164,6 +165,10 @@ public class PayloadProcessorManager {
 					}
 				}
 				if (method != null) {
+					if (player.isVoidScouting() && !isVoidScoutAllowed(payload.getOpcode())) {
+						player.sendVoidScoutBlockedMessage("You can't do that while scouting.");
+						return true;
+					}
 					checkIfShouldCancelMenu(player, payload.getOpcode());
 					method.invoke(processor, payload, player); //processor.process(payload, player);
 				}
@@ -173,6 +178,31 @@ public class PayloadProcessorManager {
 			return true;
 		}
 		return false;
+	}
+
+	private static boolean isVoidScoutAllowed(final OpcodeIn opcode) {
+		switch (opcode) {
+			case HEARTBEAT:
+			case WALK_TO_ENTITY:
+			case WALK_TO_POINT:
+			case WORLD_WALK_REQUEST:
+			case VOID_SCOUT_CANCEL:
+			case LOGOUT:
+			case CONFIRM_LOGOUT:
+			case CHAT_MESSAGE:
+			case SOCIAL_SEND_PRIVATE_MESSAGE:
+			case SOCIAL_ADD_FRIEND:
+			case SOCIAL_REMOVE_FRIEND:
+			case SOCIAL_ADD_IGNORE:
+			case SOCIAL_REMOVE_IGNORE:
+			case COMBAT_STYLE_CHANGED:
+			case GAME_SETTINGS_CHANGED:
+			case PRIVACY_SETTINGS_CHANGED:
+			case KNOWN_PLAYERS:
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	private static void checkIfShouldCancelMenu(Player player, OpcodeIn opcode) {

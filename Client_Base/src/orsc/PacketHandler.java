@@ -63,6 +63,7 @@ public class PacketHandler {
 		put(99, "GROUNDITEM_HANDLER");
 		put(101, "SHOW_SHOP");
 		put(102, "VOID_RUSH_WAVE");
+		put(103, "VOID_SCOUT_STATE");
 		put(104, "UPDATE_NPC");
 		put(109, "SET_IGNORE");
 		put(111, "COMPLETED_TUTORIAL");
@@ -281,6 +282,9 @@ public class PacketHandler {
 
 				// voidscape — Void Rush low-cost wave visual
 			else if (opcode == 102) handleVoidRushWave();
+
+				// voidscape — Void Sparrow scout UI state
+			else if (opcode == 103) handleVoidScoutState();
 
 			else this.handlePacket2(opcode, length);
 
@@ -1010,6 +1014,17 @@ public class PacketHandler {
 		int gapEnd = packetsIncoming.getShort();
 		boolean lethal = packetsIncoming.getUnsignedByte() != 0;
 		mc.showVoidRushWaveProjectile(direction, fromLine, toLine, gapStart, gapEnd, lethal);
+	}
+
+	private void handleVoidScoutState() {
+		boolean active = packetsIncoming.getUnsignedByte() != 0;
+		int bodyX = packetsIncoming.getShort();
+		int bodyY = packetsIncoming.getShort();
+		int viewX = packetsIncoming.getShort();
+		int viewY = packetsIncoming.getShort();
+		int maxDistance = packetsIncoming.getShort();
+		int remainingMillis = packetsIncoming.get32();
+		mc.setVoidScoutState(active, bodyX, bodyY, viewX, viewY, maxDistance, remainingMillis);
 	}
 
 	private void setServerConfiguration() {

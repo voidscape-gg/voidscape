@@ -2590,6 +2590,43 @@ body.prelaunch-mode::before {
 	aspect-ratio: auto;
 }
 
+body.prelaunch-claimed .prelaunch-content {
+	padding-top: 10px;
+	padding-bottom: 24px;
+}
+
+body.prelaunch-claimed .prelaunch-logo {
+	width: clamp(300px, 30vw, 500px);
+	margin-bottom: 4px;
+}
+
+body.prelaunch-claimed .prelaunch-prize {
+	margin-top: 2px;
+}
+
+body.prelaunch-claimed .prelaunch-card {
+	width: clamp(112px, 10vw, 180px);
+	margin-top: 8px;
+}
+
+body.prelaunch-claimed .prelaunch-signup {
+	margin-top: 8px;
+}
+
+body.prelaunch-claimed .prelaunch-signup-content {
+	gap: 8px;
+	padding: 14px 18px;
+}
+
+body.prelaunch-claimed .prelaunch-success {
+	gap: 6px clamp(16px, 2vw, 24px);
+}
+
+body.prelaunch-claimed .signup-code-block {
+	gap: 4px;
+	padding: 8px 10px;
+}
+
 .prelaunch-google,
 .prelaunch-referral,
 .prelaunch-progress,

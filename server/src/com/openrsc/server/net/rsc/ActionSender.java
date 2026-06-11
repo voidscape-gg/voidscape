@@ -1948,9 +1948,27 @@ public class ActionSender {
 		struct.serverIndex = player.getIndex();
 		struct.planeWidth = 2304;
 		struct.planeHeight = 1776;
-		struct.planeFloor = Formulae.getHeight(player.getLocation());
+		struct.planeFloor = Formulae.getHeight(player.getViewLocation());
 		struct.distanceBetweenFloors = 944;
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_WORLD_INFO, struct, player);
+	}
+
+	public static void sendVoidScoutState(Player player) {
+		VoidScoutStateStruct struct = new VoidScoutStateStruct();
+		struct.active = player.isVoidScouting();
+		Point body = player.getVoidScoutOrigin();
+		Point view = player.getViewLocation();
+		if (body == null) {
+			body = player.getLocation();
+		}
+		struct.bodyX = body.getX();
+		struct.bodyY = body.getY();
+		struct.viewX = view.getX();
+		struct.viewY = view.getY();
+		struct.maxDistance = player.getVoidScoutMaxDistance();
+		long remainingMillis = player.getVoidScoutMillisRemaining();
+		struct.remainingMillis = remainingMillis == Long.MAX_VALUE ? 0 : (int) Math.min(Integer.MAX_VALUE, remainingMillis);
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_VOID_SCOUT_STATE, struct, player);
 	}
 
 	/**

@@ -19,6 +19,13 @@ VB="$REPO/tools/voidbot/voidbot"
 USER="${VOIDBOT_USER:-wbtest}"
 PASS="${VOIDBOT_PASS:-voidtest123}"
 GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
+if [ -n "${VOIDBOT_PYTHON:-}" ]; then
+  PY="$VOIDBOT_PYTHON"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  PY="python"
+fi
 
 PASS_N=0; FAIL_N=0
 DAEMON_PID=""
@@ -87,7 +94,7 @@ for attempt in 1 2 3; do
   "$VB" admin "::spawnnpc 3 30 2 127 651" >/dev/null
   PR=$("$VB" wait npc-present --id 3 --timeout 12)
   if echo "$PR" | grep -q '"matched": *true'; then
-    RAT_SI=$("$VB" state npcs | python -c 'import sys,json
+    RAT_SI=$("$VB" state npcs | "$PY" -c 'import sys,json
 n=[x for x in json.load(sys.stdin)["state"]["npcs"] if x["id"]==3]
 print(n[0]["server_index"] if n else "")')
     [ -n "$RAT_SI" ] && { SPAWN_OK="yes"; break; }
@@ -115,17 +122,17 @@ fi
 echo "[5] loot"
 ok    "get bones (item 20)" "$("$VB" admin "::item 20 1")"
 matched "bones in inventory" "$("$VB" wait inventory-contains --id 20 --amount 1 --timeout 10)"
-SLOT=$("$VB" state inventory | python -c 'import sys,json
+SLOT=$("$VB" state inventory | "$PY" -c 'import sys,json
 inv=json.load(sys.stdin)["state"]["inventory"]
 print(next((i["slot"] for i in inv if i["id"]==20), 0))')
 ok    "drop bones" "$("$VB" drop "$SLOT")"
 # bones now on the ground at our tile; find and take them back (proves drop+take packets)
 matched "bones on ground" "$("$VB" wait ground-item --id 20 --timeout 12 2>/dev/null || echo '{"matched":false}')"
-BONE_XY=$("$VB" state ground-items | python -c 'import sys,json
+BONE_XY=$("$VB" state ground-items | "$PY" -c 'import sys,json
 gs=json.load(sys.stdin)["state"]["ground_items"]
 b=[g for g in gs if g["id"]==20]
 print(f"{b[0][\"x\"]} {b[0][\"y\"]}" if b else "")' 2>/dev/null || true)
-POS=$("$VB" state position | python -c 'import sys,json;p=json.load(sys.stdin)["state"]["position"];print(p["x"],p["y"])')
+POS=$("$VB" state position | "$PY" -c 'import sys,json;p=json.load(sys.stdin)["state"]["position"];print(p["x"],p["y"])')
 [ -z "$BONE_XY" ] && BONE_XY="$POS"
 ok    "take bones (GROUND_ITEM_TAKE)" "$("$VB" take-item $BONE_XY 20)"
 matched "bones back in inventory" "$("$VB" wait inventory-contains --id 20 --amount 1 --timeout 15)"
@@ -136,12 +143,12 @@ ok    "spawn coins" "$("$VB" admin "::item 10 500")"
 matched "coins in inventory" "$("$VB" wait inventory-contains --id 10 --amount 500 --timeout 10)"
 ok    "open bank (::quickbank)" "$("$VB" admin "::quickbank")"
 matched "bank open" "$("$VB" wait bank-open --timeout 10)"
-BEFORE=$("$VB" state bank | python -c 'import sys,json
+BEFORE=$("$VB" state bank | "$PY" -c 'import sys,json
 b=json.load(sys.stdin)["state"]["bank"]["items"]
 print(sum(i["amount"] for i in b if i["id"]==10))')
 ok    "deposit coins" "$("$VB" bank-deposit --id 10 --amount 500)"
 sleep 1
-AFTER=$("$VB" state bank | python -c 'import sys,json
+AFTER=$("$VB" state bank | "$PY" -c 'import sys,json
 b=json.load(sys.stdin)["state"]["bank"]["items"]
 print(sum(i["amount"] for i in b if i["id"]==10))')
 if [ "$((AFTER - BEFORE))" -ge 500 ]; then

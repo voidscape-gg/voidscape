@@ -1,12 +1,12 @@
 # voidbot packet API (bot-api.md)
 
-Spec for `tools/voidbot`, the headless game-interaction client. Every player action the server accepts is exposed as a `voidbot` command. The wire protocol was reverse-engineered and **validated against a live login capture** (2026-06-10); see the *Protocol* section at the bottom and the project memory `voidbot-protocol-spec`.
+Spec for `tools/voidbot`, the headless game-interaction client. The implemented command list below is the current CLI surface; the larger handler table is a protocol reference/roadmap for adding more real player actions. The wire protocol was reverse-engineered and **validated against a live login capture** (2026-06-10); see the *Protocol* section at the bottom and the capture notes in `tools/voidbot/protocol.py`.
 
-> Rule of thumb: if an action has no command here, extend voidbot first (this file is the spec), then use it. Never drive the game by screenshot, mouse, or click coordinates.
+> Rule of thumb: if an action is not in **Implemented voidbot commands**, extend voidbot first, then use it. Never drive the game by screenshot, mouse, or click coordinates.
 
 ## Command table
 
-Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → voidbot commands. `precond` = client/interface state the daemon must hold.
+Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → intended voidbot command coverage. `precond` = client/interface state the daemon must hold.
 
 | Handler | Opcode (wire) | Payload | Player action | voidbot command | Preconditions |
 |---|---|---|---|---|---|
@@ -74,7 +74,7 @@ Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → voidbo
 | TutorialHandler | SKIP_TUTORIAL (enum ordinal 77; CUSTOM wire packet id 84) | none (NoPayloadStruct; parser requires payload length == 0) | Skip Tutorial Island and teleport to the spawn town | `voidbot skip-tutorial` | Player must be located on Tutorial Island AND server config  |
 | WalkRequest | WALK_TO_POINT (enum ordinal 2; CUSTOM wire packet id 187) | firstStepX:short (absolute tile X), firstStepY:short (absolute tile Y), then 0..n waypoint | Ground-click walk to a tile (also THE retreat-from-combat packet) | `voidbot walk <x> <y> [<x2> <y2> ...] (daemon encodes first waypoint absolute, re` | Not busy (busy with no menu open -> packet dropped, batching |
 | WalkRequest | WALK_TO_ENTITY (enum ordinal 1; CUSTOM wire packet id 16) | Identical to WALK_TO_POINT: firstStepX:short, firstStepY:short, then 0..n [stepDeltaX:byte | Movement prelude the client emits when walking toward an entity to interact (NPC | `voidbot walk --to-entity <x> <y> [<x2> <y2> ...] (daemon-internal: interaction c` | Not busy. If in combat the packet is silently dropped — this |
-| WorldWalkRequest | WORLD_WALK_REQUEST (enum ordinal 93; CUSTOM wire packet id 3 | destX:short, destY:short (absolute server coordinates; floor is encoded in Y as floor = de | World-map click: server-side long-distance auto-walk to a destination tile | `voidbot goto <x> <y>` | Not in combat (reply reason 7 COMBAT), not busy unless a men |
+| WorldWalkRequest | WORLD_WALK_REQUEST (enum ordinal 93; CUSTOM wire packet id 35) | destX:short, destY:short (absolute server coordinates; floor is encoded in Y as floor = de | World-map click: server-side long-distance auto-walk to a destination tile | `voidbot goto <x> <y>` | Not in combat (reply reason 7 COMBAT), not busy unless a men |
 
 ## Coverage notes
 

@@ -229,6 +229,23 @@ public final class mudclient implements Runnable {
 	public int worldWalkRouteReason;
 	public int[] worldWalkRouteX = new int[0];
 	public int[] worldWalkRouteY = new int[0];
+	private static final int VOID_SPARROW_ITEM_ID = 1603;
+	private static final int VOID_SCOUT_KEY_STEP = 1;
+	private static final long VOID_SCOUT_NUDGE_INTERVAL_MS = 600L;
+	private boolean voidScoutActive = false;
+	private int voidScoutBodyX = 0;
+	private int voidScoutBodyY = 0;
+	private int voidScoutViewX = 0;
+	private int voidScoutViewY = 0;
+	private int voidScoutMaxDistance = 0;
+	private long voidScoutExpiresAtMillis = 0L;
+	private long voidScoutLastNudgeMillis = 0L;
+	private boolean voidScoutNudgePending = false;
+	private long voidScoutNudgePendingMillis = 0L;
+	private long voidScoutLastClickBlockedMillis = 0L;
+	private ORSCharacterDirection voidScoutBodyDirection = ORSCharacterDirection.NORTH;
+	private int voidScoutBodySpriteIndex = -1;
+	private ORSCharacter voidScoutBodyPreviousPlayer = null;
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
@@ -6204,6 +6221,9 @@ public final class mudclient implements Runnable {
 
 					for (centerX = 0; this.playerCount > centerX; ++centerX) {
 						ORSCharacter var3 = this.players[centerX];
+						if (this.voidScoutActive && var3 == this.localPlayer) {
+							continue;
+						}
 						if (!this.isInFirstPersonView() || var3.accountName != this.localPlayer.accountName) {
 							if (var3.colourBottom != 255) {
 								int var4 = var3.currentX;
@@ -6226,6 +6246,7 @@ public final class mudclient implements Runnable {
 							}
 						}
 					}
+					queueVoidScoutBodySprite();
 
 					for (centerX = 0; centerX < this.playerCount; ++centerX) {
 						ORSCharacter var3 = this.players[centerX];
@@ -6422,6 +6443,7 @@ public final class mudclient implements Runnable {
 						logAndroidSmokePlayerTargets();
 						logAndroidSmokeObjectTargets();
 						this.scene.endScene(-113);
+						clearQueuedVoidScoutBodySprite();
 						drawGameLookSceneOverlay();
 					drawVoidRushWaveProjectile();
 					if (!this.isCinematicHudHidden()) {
@@ -6506,6 +6528,7 @@ public final class mudclient implements Runnable {
 								this.getGameHeight() - 7);
 						}
 					}
+					drawVoidScoutTimer();
 
 					if (S_WANT_EXPERIENCE_ELIXIRS && this.elixirTimer != 0) {
 						centerX = this.elixirTimer / 50;
@@ -6949,6 +6972,90 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	private void queueVoidScoutBodySprite() {
+		if (!this.voidScoutActive || this.localPlayer == null || this.playerCount >= this.players.length) return;
+
+		final int localTileX = this.voidScoutBodyX - this.midRegionBaseX;
+		final int localTileZ = this.voidScoutBodyY - this.midRegionBaseZ;
+		if (localTileX < 0 || localTileZ < 0 || localTileX >= 96 || localTileZ >= 96) return;
+
+		final int sceneX = localTileX * this.tileSize + 64;
+		final int sceneZ = localTileZ * this.tileSize + 64;
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ);
+		final int slot = this.playerCount;
+		final ORSCharacter bodyMarker = createVoidScoutBodyMarker(sceneX, sceneZ);
+
+		this.voidScoutBodySpriteIndex = slot;
+		this.voidScoutBodyPreviousPlayer = this.players[slot];
+		this.players[slot] = bodyMarker;
+
+		int sprite = this.scene.drawSprite(slot + 5000, sceneZ, slot + 10000, sceneX, sceneY, 145, 220, (byte) 109);
+		++this.spriteCount;
+		this.scene.setFaceSpriteLocalPlayer('\u8000', sprite);
+	}
+
+	private ORSCharacter createVoidScoutBodyMarker(final int sceneX, final int sceneZ) {
+		final ORSCharacter marker = new ORSCharacter();
+		marker.accountName = this.localPlayer.accountName;
+		marker.displayName = this.localPlayer.displayName;
+		marker.title = this.localPlayer.title;
+		marker.clanTag = this.localPlayer.clanTag;
+		marker.partyTag = this.localPlayer.partyTag;
+		marker.groupID = this.localPlayer.groupID;
+		marker.serverIndex = this.localPlayer.serverIndex;
+		marker.colourBottom = this.localPlayer.colourBottom;
+		marker.colourHair = this.localPlayer.colourHair;
+		marker.hairStyle = this.localPlayer.hairStyle;
+		marker.colourSkin = this.localPlayer.colourSkin;
+		marker.colourTop = this.localPlayer.colourTop;
+		marker.wield = this.localPlayer.wield;
+		marker.wield2 = this.localPlayer.wield2;
+		marker.skull = this.localPlayer.skull;
+		marker.skullVisible = this.localPlayer.skullVisible;
+		marker.level = this.localPlayer.level;
+		marker.healthCurrent = this.localPlayer.healthCurrent;
+		marker.healthMax = this.localPlayer.healthMax;
+		marker.isInvisible = this.localPlayer.isInvisible;
+		marker.isInvulnerable = this.localPlayer.isInvulnerable;
+		System.arraycopy(this.localPlayer.layerAnimation, 0, marker.layerAnimation, 0, marker.layerAnimation.length);
+		marker.currentX = sceneX;
+		marker.currentZ = sceneZ;
+		marker.waypointIndexCurrent = 0;
+		marker.waypointIndexNext = 0;
+		marker.waypointsX[0] = sceneX;
+		marker.waypointsZ[0] = sceneZ;
+		marker.stepFrame = 0;
+		marker.direction = this.voidScoutBodyDirection;
+		marker.animationNext = this.voidScoutBodyDirection.rsDir;
+		marker.bubbleTimeout = 1;
+		marker.bubbleItem = VOID_SPARROW_ITEM_ID;
+		return marker;
+	}
+
+	private void clearQueuedVoidScoutBodySprite() {
+		if (this.voidScoutBodySpriteIndex < 0) return;
+
+		this.players[this.voidScoutBodySpriteIndex] = this.voidScoutBodyPreviousPlayer;
+		this.voidScoutBodySpriteIndex = -1;
+		this.voidScoutBodyPreviousPlayer = null;
+	}
+
+	private void drawVoidScoutTimer() {
+		if (!this.voidScoutActive || this.voidScoutExpiresAtMillis <= 0L) return;
+
+		final long remainingMillis = Math.max(0L, this.voidScoutExpiresAtMillis - System.currentTimeMillis());
+		final int remainingSeconds = (int) ((remainingMillis + 999L) / 1000L);
+		final String label = "Void Sparrow: 0:" + (remainingSeconds < 10 ? "0" : "") + remainingSeconds;
+		final int width = Math.max(118, this.getSurface().stringWidth(1, label) + 18);
+		final int x = this.getGameWidth() / 2 - width / 2;
+		final int y = 8;
+		final int color = remainingSeconds <= 5 ? 0xff6060 : 0xf3d46b;
+
+		this.getSurface().drawBoxAlpha(x, y, width, 18, 0x07040b, 218);
+		this.getSurface().drawBoxAlpha(x, y, width, 2, 0x7d28c7, 230);
+		this.getSurface().drawColoredStringCentered(this.getGameWidth() / 2, label, color, 0, 1, y + 13);
 	}
 
 	private boolean isAndroidSmokeNpcTargetLoggingEnabled() {
@@ -8421,6 +8528,14 @@ public final class mudclient implements Runnable {
 		this.packetHandler.getClientStream().finishPacket();
 	}
 
+	private void cancelInputX() {
+		sendServerPromptCancel();
+		this.inputX_Action = InputXAction.ACT_0;
+		this.inputTextCurrent = "";
+		this.inputTextFinal = "";
+		this.inputX_OK = false;
+	}
+
 	private void drawInputX() {
 		try {
 			if (this.inputTextFinal.length() <= 0 && !this.inputX_OK) {
@@ -8477,16 +8592,14 @@ public final class mudclient implements Runnable {
 					color = 0xFFFF00;
 					if (this.mouseButtonClick != 0) {
 						this.mouseButtonClick = 0;
-						sendServerPromptCancel();
-						this.inputX_Action = InputXAction.ACT_0;
+						cancelInputX();
 					}
 				}
 				this.getSurface().drawString("Cancel", 200 + xr + 8, okLineY, color, 1);
 
 				if (this.mouseButtonClick == 1 && (this.mouseX < xr || this.inputX_Width + xr < this.mouseX
 					|| this.mouseY < yr || this.mouseY > this.inputX_Height + yr)) {
-					sendServerPromptCancel();
-					this.inputX_Action = InputXAction.ACT_0;
+					cancelInputX();
 					this.mouseButtonClick = 0;
 				}
 			} else {
@@ -9006,16 +9119,28 @@ public final class mudclient implements Runnable {
 			this.panelLoginWelcome.drawPanel();
 		} else if (this.loginScreenNumber == 1) {
 			drawVoidscapeNewUser();
-			this.menuNewUser.drawPanel();
+			drawVoidscapePanelSkippingControls(this.menuNewUser,
+				this.menuNewUserUsername, this.menuNewUserPassword, this.menuNewUserConfirmPassword, this.menuNewUserEmail);
+			drawVoidscapeFieldValue(this.menuNewUser, this.menuNewUserUsername, halfGameWidth(), voidscapeNewUserY(), 214, 1, false);
+			drawVoidscapeFieldValue(this.menuNewUser, this.menuNewUserPassword, halfGameWidth() - 63, voidscapeNewPasswordY(), 120, 1, true);
+			drawVoidscapeFieldValue(this.menuNewUser, this.menuNewUserConfirmPassword, halfGameWidth() + 63, voidscapeNewPasswordY(), 120, 1, true);
+			if (wantEmail()) {
+				drawVoidscapeFieldValue(this.menuNewUser, this.menuNewUserEmail, halfGameWidth(), voidscapeNewEmailY(), 214, 1, false);
+			}
 		} else if (this.loginScreenNumber == 2) {
 			drawVoidscapeExistingUser();
-			this.panelLogin.drawPanel();
+			drawVoidscapePanelSkippingControls(this.panelLogin, this.controlLoginUser, this.controlLoginPass);
+			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginUser, halfGameWidth(), voidscapeExistingUserY(), 210, 1, false);
+			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginPass, halfGameWidth(), voidscapeExistingPassY(), 210, 1, true);
 		} else if (this.loginScreenNumber == 3) {
 			drawVoidscapeFrame(96, 104, 320, 156);
 			panelLoginOptions.drawPanel();
 		} else if (this.loginScreenNumber == 4) {
 			drawVoidscapeRecovery();
-			this.panelRecovery.drawPanel();
+			drawVoidscapePanelSkippingControls(this.panelRecovery, this.controlPassAnswer[0], this.controlPassAnswer[1],
+				this.controlPassAnswer[2], this.controlPassAnswer[3], this.controlPassAnswer[4],
+				this.controlPreviousPassword, this.controlNewPassword, this.controlConfirmation);
+			drawVoidscapeRecoveryFieldValues();
 			drawVoidscapeButton(halfGameWidth() - 46, 278, 86, 28, "Submit", true);
 			drawVoidscapeButton(halfGameWidth() + 46, 278, 86, 28, "Cancel", false);
 		}
@@ -9101,7 +9226,7 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeExistingUser() {
 		int cx = halfGameWidth();
-		boolean hideFieldLabels = shouldHideAndroidExistingFieldLabels();
+		boolean hideFieldLabels = shouldHideExistingFieldLabels();
 		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
 		drawVoidscapeCenteredText(cx, "EXISTING USER", 0xf3d46b, 1, voidscapeExistingTitleY());
 		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, 23, hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
@@ -9134,8 +9259,7 @@ public final class mudclient implements Runnable {
 		return isAndroid() ? halfGameWidth() : halfGameWidth() - 54;
 	}
 
-	private boolean shouldHideAndroidExistingFieldLabels() {
-		if (!isAndroid()) return false;
+	private boolean shouldHideExistingFieldLabels() {
 		String status1 = this.panelLogin.getControlText(this.controlLoginStatus1);
 		String status2 = this.panelLogin.getControlText(this.controlLoginStatus2);
 		return (status1 != null && status1.trim().length() > 0)
@@ -9223,6 +9347,72 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxAlpha(x, y, width, height, 0x07090c, 218);
 		this.getSurface().drawBoxBorder(x, width, y, height, focused ? 0xb68aff : 0x56606a);
 		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x12171d);
+	}
+
+	private void drawVoidscapePanelSkippingControls(Panel panel, int... controls) {
+		for (int control : controls) {
+			if (control >= 0) {
+				panel.hide(control);
+			}
+		}
+		panel.drawPanel();
+		for (int control : controls) {
+			if (control >= 0) {
+				panel.show(control);
+			}
+		}
+	}
+
+	private void drawVoidscapeRecoveryFieldValues() {
+		int cx = halfGameWidth();
+		int y = 73;
+		for (int i = 0; i < 5; i++) {
+			drawVoidscapeFieldValue(this.panelRecovery, this.controlPassAnswer[i], cx, y + 7, 310, 1, true);
+			y += 28;
+		}
+		drawVoidscapeFieldValue(this.panelRecovery, this.controlPreviousPassword, cx, y + 8, 310, 1, true);
+		y += 31;
+		drawVoidscapeFieldValue(this.panelRecovery, this.controlNewPassword, cx - 88, y + 8, 150, 1, true);
+		drawVoidscapeFieldValue(this.panelRecovery, this.controlConfirmation, cx + 88, y + 8, 150, 1, true);
+	}
+
+	private void drawVoidscapeFieldValue(Panel panel, int control, int cx, int cy, int width, int font, boolean maskText) {
+		if (control < 0) {
+			return;
+		}
+		int x = cx - width / 2;
+		if (this.lastMouseButtonDown == 1 && this.mouseX >= x && this.mouseX <= x + width
+			&& this.mouseY >= cy - 12 && this.mouseY <= cy + 12) {
+			panel.setFocus(control);
+		}
+		String text = panel.getControlText(control);
+		if (text == null || "null".equals(text)) {
+			text = "";
+		}
+		if (maskText) {
+			StringBuilder masked = new StringBuilder(text.length());
+			for (int i = 0; i < text.length(); i++) {
+				masked.append('X');
+			}
+			text = masked.toString();
+		}
+		if (panel.focusOn(control)) {
+			text += "*";
+		}
+		int maxWidth = width - 10;
+		while (text.length() > 0 && this.getSurface().stringWidth(font, text) > maxWidth) {
+			text = text.substring(1);
+		}
+		int left = x + 5;
+		int drawX = cx - this.getSurface().stringWidth(font, text) / 2;
+		if (drawX < left) {
+			drawX = left;
+		}
+		int baselineY = cy + this.getSurface().fontHeight(font) / 3;
+		this.getSurface().setClip(left, x + width - 5, cy + 10, cy - 10);
+		this.getSurface().drawColoredString(drawX, baselineY + 1, text, font, 0x0f0f10, 0);
+		this.getSurface().drawColoredString(drawX, baselineY, text, font, 0xffffff, 0);
+		this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
 	}
 
 	private void drawVoidscapeCenteredText(int x, String text, int color, int font, int y) {
@@ -17237,7 +17427,9 @@ public final class mudclient implements Runnable {
 					final int androidSmokeBeforeCameraAngle = this.cameraAngle;
 					final boolean androidSmokeBeforeKeyLeft = this.keyLeft;
 					final boolean androidSmokeBeforeKeyRight = this.keyRight;
-					if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
+					if (this.voidScoutActive && handleVoidScoutArrowKeys()) {
+						// Void Sparrow consumes arrow keys for scout flight.
+					} else if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
 						if (this.m_Wc == 0 || this.cameraAutoAngleDebug) {
 							if (this.keyLeft) {
 								this.keyLeft = false;
@@ -17454,6 +17646,16 @@ public final class mudclient implements Runnable {
 				}
 			}
 
+			if (this.currentViewMode == GameMode.GAME && this.voidScoutActive && key == 27) {
+				sendVoidScoutCancel();
+				return;
+			}
+
+			if (this.currentViewMode == GameMode.GAME && key == 27 && this.inputX_Action != InputXAction.ACT_0) {
+				cancelInputX();
+				return;
+			}
+
 			if (var1 > 105) {
 				if (this.currentViewMode == GameMode.GAME) {
 					if (this.showAppearanceChange) {
@@ -17543,6 +17745,13 @@ public final class mudclient implements Runnable {
 			if (!isAndroid()) {
 				return false;
 			}
+			if (this.currentViewMode == GameMode.GAME && this.inputX_Action != InputXAction.ACT_0) {
+				cancelInputX();
+				if (osConfig.F_SHOWING_KEYBOARD) {
+					clientPort.closeKeyboard();
+				}
+				return true;
+			}
 			if (this.worldMapPanel.isVisible()) {
 				this.worldMapPanel.setVisible(false);
 				if (osConfig.F_SHOWING_KEYBOARD) {
@@ -17570,6 +17779,66 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private boolean voidscapeLoginFieldClicked(int cx, int cy, int width, int height) {
+		if (!useVoidscapeLogin() || this.lastMouseButtonDown != 1) {
+			return false;
+		}
+		int x = cx - width / 2;
+		int y = cy - height / 2;
+		return this.mouseX >= x && this.mouseX <= x + width
+			&& this.mouseY >= y && this.mouseY <= y + height;
+	}
+
+	private void focusVoidscapeNewUserFieldClick() {
+		int cx = halfGameWidth();
+		if (voidscapeLoginFieldClicked(cx, voidscapeNewUserY(), 214, 23)) {
+			this.menuNewUser.setFocus(this.menuNewUserUsername);
+			this.enterPressed = false;
+		} else if (voidscapeLoginFieldClicked(cx - 63, voidscapeNewPasswordY(), 120, 23)) {
+			this.menuNewUser.setFocus(this.menuNewUserPassword);
+			this.enterPressed = false;
+		} else if (voidscapeLoginFieldClicked(cx + 63, voidscapeNewPasswordY(), 120, 23)) {
+			this.menuNewUser.setFocus(this.menuNewUserConfirmPassword);
+			this.enterPressed = false;
+		} else if (wantEmail() && voidscapeLoginFieldClicked(cx, voidscapeNewEmailY(), 214, 23)) {
+			this.menuNewUser.setFocus(this.menuNewUserEmail);
+			this.enterPressed = false;
+		}
+	}
+
+	private void focusVoidscapeExistingFieldClick() {
+		int cx = halfGameWidth();
+		if (voidscapeLoginFieldClicked(cx, voidscapeExistingUserY(), 210, 23)) {
+			this.panelLogin.setFocus(this.controlLoginUser);
+			this.enterPressed = false;
+		} else if (voidscapeLoginFieldClicked(cx, voidscapeExistingPassY(), 210, 23)) {
+			this.panelLogin.setFocus(this.controlLoginPass);
+			this.enterPressed = false;
+		}
+	}
+
+	private void focusVoidscapeRecoveryFieldClick() {
+		int cx = halfGameWidth();
+		int y = 73;
+		for (int i = 0; i < 5; i++) {
+			if (voidscapeLoginFieldClicked(cx, y + 7, 310, 23)) {
+				this.panelRecovery.setFocus(this.controlPassAnswer[i]);
+				return;
+			}
+			y += 28;
+		}
+		if (voidscapeLoginFieldClicked(cx, y + 8, 310, 24)) {
+			this.panelRecovery.setFocus(this.controlPreviousPassword);
+			return;
+		}
+		y += 31;
+		if (voidscapeLoginFieldClicked(cx - 88, y + 8, 150, 24)) {
+			this.panelRecovery.setFocus(this.controlNewPassword);
+		} else if (voidscapeLoginFieldClicked(cx + 88, y + 8, 150, 24)) {
+			this.panelRecovery.setFocus(this.controlConfirmation);
+		}
+	}
+
 	private void handleLoginScreenInput(int var1) {
 		try {
 			if (var1 != 2) {
@@ -17582,12 +17851,13 @@ public final class mudclient implements Runnable {
 
 
 			if (this.loginScreenNumber != 0) {
-				if (loginScreenNumber == 1) {
-					menuNewUser.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
-						this.lastMouseButtonDown);
-					if (menuNewUser.isClicked(menuNewUserUsername)) {
-						enterPressed = false;
-						menuNewUser.setFocus(menuNewUserPassword);
+					if (loginScreenNumber == 1) {
+						menuNewUser.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
+							this.lastMouseButtonDown);
+						focusVoidscapeNewUserFieldClick();
+						if (menuNewUser.isClicked(menuNewUserUsername)) {
+							enterPressed = false;
+							menuNewUser.setFocus(menuNewUserPassword);
 					}
 					if (menuNewUser.isClicked(menuNewUserPassword)) {
 						enterPressed = false;
@@ -17642,12 +17912,13 @@ public final class mudclient implements Runnable {
 
 						sendRegister(username, password, confirm, email);
 					}
-				} else if (this.loginScreenNumber == 2) {
-					this.panelLogin.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
-						this.lastMouseButtonDown);
-					if (this.panelLogin.isClicked(this.m_Xi)) {
-						this.loginScreenNumber = 0;
-					}
+					} else if (this.loginScreenNumber == 2) {
+						this.panelLogin.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
+							this.lastMouseButtonDown);
+						focusVoidscapeExistingFieldClick();
+						if (this.panelLogin.isClicked(this.m_Xi)) {
+							this.loginScreenNumber = 0;
+						}
 					if (shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
 						if (this.panelLogin.isClicked(this.rememberButtonIdx)) {
 							String savedUser = this.panelLogin.getControlText(this.controlLoginUser);
@@ -17717,10 +17988,10 @@ public final class mudclient implements Runnable {
 
 						this.username = this.panelLogin.getControlText(this.controlLoginUser);
 						this.username = DataOperations.addCharacters(this.username, 20);
-						if (this.username.trim().length() == 0) {
-							showLoginScreenStatus("You must enter your username to recover your password", "");
-							return;
-						}
+							if (this.username.trim().length() == 0) {
+								showLoginScreenStatus("Enter username first.", "Then click Forgot password.");
+								return;
+							}
 
 						showLoginScreenStatus("Please wait...", "Connecting to server");
 
@@ -17749,10 +18020,10 @@ public final class mudclient implements Runnable {
 							int var11 = this.packetHandler.getClientStream().read();
 
 							System.out.println("Getting response: " + var11);
-							if (var11 == 0) {
-								showLoginScreenStatus("Sorry, the recovery questions for this user have not been set", "");
-								return;
-							}
+								if (var11 == 0) {
+									showLoginScreenStatus("Recovery questions not set.", "Please contact support.");
+									return;
+								}
 
 							int premadeQuestionNum;
 							for (int i = 0; i < 5; ++i) {
@@ -17799,10 +18070,11 @@ public final class mudclient implements Runnable {
 							return;
 						}
 					}
-				} else if (this.loginScreenNumber == 4) {
-					this.panelRecovery.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
-						this.lastMouseButtonDown);
-					if (this.panelRecovery.isClicked(this.passwordRecoverSubmit)) {
+					} else if (this.loginScreenNumber == 4) {
+						this.panelRecovery.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
+							this.lastMouseButtonDown);
+						focusVoidscapeRecoveryFieldClick();
+						if (this.panelRecovery.isClicked(this.passwordRecoverSubmit)) {
 						String newPass = this.panelRecovery.getControlText(this.controlNewPassword);
 						String confPass = this.panelRecovery.getControlText(this.controlConfirmation);
 						if (!newPass.equalsIgnoreCase(confPass)) {
@@ -20639,6 +20911,10 @@ public final class mudclient implements Runnable {
 	private boolean sendWalkToGroundItem(int startX, int startZ, int x1, int x2, int z1, int z2, boolean var4,
 										 boolean var9) {
 		try {
+			if (this.voidScoutActive) {
+				showVoidScoutClickBlocked();
+				return false;
+			}
 
 			int var10 = this.world.findPath(this.pathX, this.pathZ, startX, startZ, x1, x2, z1, z2, var4);
 			if (var10 == -1) {
@@ -22789,6 +23065,10 @@ public final class mudclient implements Runnable {
 	private void walkToArea(int startX, int startZ, int x1, int z1, int x2, int z2, boolean reachBorder,
 							boolean walkToEntity) {
 		try {
+			if (this.voidScoutActive) {
+				showVoidScoutClickBlocked();
+				return;
+			}
 
 			int count = this.world.findPath(this.pathX, this.pathZ, startX, startZ, x1, x2, z1, z2, reachBorder);
 			if (count == -1) {
@@ -22858,6 +23138,12 @@ public final class mudclient implements Runnable {
 		this.worldWalkRouteReason = reason;
 		this.worldWalkRouteX = xs;
 		this.worldWalkRouteY = ys;
+		if (this.voidScoutActive) {
+			if (ok) {
+				return;
+			}
+			this.voidScoutNudgePending = false;
+		}
 		String msg;
 		if (ok) {
 			msg = "@gre@World-walk: @whi@" + xs.length + " tiles.";
@@ -22875,6 +23161,127 @@ public final class mudclient implements Runnable {
 			}
 		}
 		this.showMessage(false, null, msg, MessageType.GAME, 0, null);
+	}
+
+	/** Receiver for SEND_VOID_SCOUT_STATE; called from PacketHandler. */
+	public void setVoidScoutState(boolean active, int bodyX, int bodyY, int viewX, int viewY, int maxDistance, int remainingMillis) {
+		final boolean wasActive = this.voidScoutActive;
+		final boolean viewChanged = this.voidScoutViewX != viewX || this.voidScoutViewY != viewY;
+		this.voidScoutActive = active;
+		this.voidScoutBodyX = bodyX;
+		this.voidScoutBodyY = bodyY;
+		this.voidScoutViewX = viewX;
+		this.voidScoutViewY = viewY;
+		this.voidScoutMaxDistance = maxDistance;
+		this.voidScoutExpiresAtMillis = active && remainingMillis > 0
+			? System.currentTimeMillis() + remainingMillis
+			: 0L;
+		if (active && !wasActive && this.localPlayer != null) {
+			this.voidScoutBodyDirection = this.localPlayer.direction;
+		}
+		this.voidScoutLastNudgeMillis = 0L;
+		if (viewChanged) {
+			this.voidScoutNudgePending = false;
+		}
+		if (!active) {
+			this.voidScoutBodySpriteIndex = -1;
+			this.voidScoutBodyPreviousPlayer = null;
+			this.voidScoutNudgePending = false;
+			this.voidScoutExpiresAtMillis = 0L;
+		}
+		this.mouseClickXStep = 0;
+		this.topMouseMenuVisible = false;
+	}
+
+	private void sendVoidScoutCancel() {
+		this.packetHandler.getClientStream().newPacket(orsc.net.Opcodes.Out.VOID_SCOUT_CANCEL.getOpcode());
+		this.packetHandler.getClientStream().finishPacket();
+	}
+
+	private boolean handleVoidScoutArrowKeys() {
+		if (!this.voidScoutActive) return false;
+
+		int screenDx = 0;
+		int screenDy = 0;
+		if (this.keyLeft && !this.keyRight) screenDx = -1;
+		if (this.keyRight && !this.keyLeft) screenDx = 1;
+		if (this.keyUp && !this.keyDown) screenDy = -1;
+		if (this.keyDown && !this.keyUp) screenDy = 1;
+
+		if (screenDx == 0 && screenDy == 0) return false;
+
+		long now = System.currentTimeMillis();
+		if (this.voidScoutNudgePending && now - this.voidScoutNudgePendingMillis < 1500L) {
+			return true;
+		}
+		if (now - this.voidScoutLastNudgeMillis < VOID_SCOUT_NUDGE_INTERVAL_MS) {
+			return true;
+		}
+		this.voidScoutLastNudgeMillis = now;
+		this.voidScoutNudgePending = true;
+		this.voidScoutNudgePendingMillis = now;
+
+		final int[] step = resolveVoidScoutScreenStep(screenDx, screenDy);
+		final int viewX = this.voidScoutViewX > 0 ? this.voidScoutViewX : this.playerLocalX + this.midRegionBaseX;
+		final int viewY = this.voidScoutViewY > 0 ? this.voidScoutViewY : this.playerLocalZ + this.midRegionBaseZ;
+		this.sendWorldWalkRequest(viewX + step[0] * VOID_SCOUT_KEY_STEP, viewY + step[1] * VOID_SCOUT_KEY_STEP);
+		return true;
+	}
+
+	private int[] resolveVoidScoutScreenStep(int screenDx, int screenDy) {
+		final int fallbackX = screenDx;
+		final int fallbackY = screenDy;
+		final int localX = this.voidScoutViewX - this.midRegionBaseX;
+		final int localZ = this.voidScoutViewY - this.midRegionBaseZ;
+		if (localX <= 0 || localZ <= 0 || localX >= 95 || localZ >= 95) {
+			return new int[]{fallbackX, fallbackY};
+		}
+
+		final int baseSceneX = localX * this.tileSize + 64;
+		final int baseSceneZ = localZ * this.tileSize + 64;
+		final int[] baseProjection = new int[3];
+		if (!projectVoidScoutTileCenter(baseProjection, baseSceneX, baseSceneZ)) {
+			return new int[]{fallbackX, fallbackY};
+		}
+
+		int bestDx = fallbackX;
+		int bestDy = fallbackY;
+		int bestScore = Integer.MIN_VALUE;
+		for (int tileDx = -1; tileDx <= 1; tileDx++) {
+			for (int tileDy = -1; tileDy <= 1; tileDy++) {
+				if (tileDx == 0 && tileDy == 0) continue;
+				final int candidateLocalX = localX + tileDx;
+				final int candidateLocalZ = localZ + tileDy;
+				if (candidateLocalX <= 0 || candidateLocalZ <= 0 || candidateLocalX >= 95 || candidateLocalZ >= 95) continue;
+
+				final int[] projection = new int[3];
+				final int sceneX = candidateLocalX * this.tileSize + 64;
+				final int sceneZ = candidateLocalZ * this.tileSize + 64;
+				if (!projectVoidScoutTileCenter(projection, sceneX, sceneZ)) continue;
+
+				final int projectedDx = projection[0] - baseProjection[0];
+				final int projectedDy = projection[1] - baseProjection[1];
+				final int score = projectedDx * screenDx + projectedDy * screenDy;
+				if (score > bestScore) {
+					bestScore = score;
+					bestDx = tileDx;
+					bestDy = tileDy;
+				}
+			}
+		}
+		return new int[]{bestDx, bestDy};
+	}
+
+	private boolean projectVoidScoutTileCenter(final int[] out, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, out);
+	}
+
+	private void showVoidScoutClickBlocked() {
+		long now = System.currentTimeMillis();
+		if (now - this.voidScoutLastClickBlockedMillis < 1500L) return;
+		this.voidScoutLastClickBlockedMillis = now;
+		this.showMessage(false, null, "@mag@Use arrow keys to fly the sparrow. Press Escape to return.", MessageType.GAME, 0, null);
 	}
 
 	/** Receiver for SEND_VOID_RUSH_WAVE; called from PacketHandler. */

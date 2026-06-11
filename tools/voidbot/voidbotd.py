@@ -548,9 +548,8 @@ class Daemon:
                           P.BitWriter().u16(int(a["x"])).u16(int(a["y"])).u16(int(a["id"])).b)
                 return {"ok": True}
             if cmd == "say":
-                # CHAT_MESSAGE expects RSC-encrypted text; admin chat via COMMAND is simpler.
                 txt = a["text"]
-                self.send("CHAT_MESSAGE", P.BitWriter().u8(len(txt)).raw(txt.encode("latin1")).b)
+                self.send("CHAT_MESSAGE", P.encrypted_chat_payload(txt))
                 return {"ok": True}
             if cmd == "admin" or cmd == "command":
                 c = a["command"].lstrip(":")

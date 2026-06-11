@@ -4297,6 +4297,9 @@ public class EntityHandler {
 
 		// voidscape: Subscription card (id 1602). spriteID 617 = AI-generated icon at archive index 2767.
 		items.add(new ItemDef("Subscription card", "A void-marked card that adds one week of account subscription.", "Redeem", 10000, 617, "items:617", false, false, 0, 0, false, false, true, 1602));
+
+		// voidscape: Void Sparrow (id 1603). spriteID 618 = AI-generated sparrow icon at archive index 2768.
+		items.add(new ItemDef("Void Sparrow", "A restless void-touched sparrow used for wilderness scouting.", "Release", 25000, 618, "items:618", false, false, 0, 0, false, false, true, 1603));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {

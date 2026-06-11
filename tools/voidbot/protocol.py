@@ -1,4 +1,4 @@
-"""voidbot wire protocol for the voidscape custom RSC client (client_version 10087).
+"""voidbot wire protocol for the voidscape custom RSC client (client_version 10092).
 
 Empirically validated 2026-06-10 against a live capture (see docs/bot-api.md and
 the project memory voidbot-protocol-spec). The custom client is the server's
@@ -20,6 +20,7 @@ OUT = {
     "WALK_TO_POINT": 187,
     "WALK_TO_ENTITY": 16,
     "WORLD_WALK_REQUEST": 35,        # voidscape: server-side pathfind to absolute (x,y)
+    "VOID_SCOUT_CANCEL": 37,         # voidscape: return from Void Sparrow scout mode
     "NPC_TALK_TO": 153,
     "NPC_COMMAND1": 202,
     "NPC_COMMAND2": 203,
@@ -69,6 +70,7 @@ IN = {
     92: "INITIATE_TRADE", 97: "TRADE_ITEMS", 99: "GROUNDITEM_HANDLER",
     101: "SHOP_OPEN", 104: "UPDATE_NPC", 109: "SET_IGNORE", 110: "INPUT_BOX",
     111: "TUTORIAL_DONE",
+    103: "VOID_SCOUT_STATE",
     114: "FATIGUE", 117: "FALL_ASLEEP", 120: "RECEIVE_PM",
     123: "REMOVE_INVENTORY_SLOT", 128: "CONCLUDE_TRADE", 131: "SEND_MESSAGE",
     137: "EXIT_SHOP", 149: "UPDATE_FRIEND", 153: "EQUIP_STATS", 156: "SET_STATS",
@@ -81,14 +83,14 @@ IN = {
     245: "DIALOGUE_MENU", 249: "BANK_UPDATE", 252: "DISABLE_OPTION_MENU",
 }
 
-# Constant UID(8)+limitations trailer for client_version 10087 (captured; re-capture
+# Constant UID(8)+limitations trailer last captured for client_version 10088 (re-capture
 # if the client cache/version changes — see capture-proxy.py).
 LOGIN_TRAILER = bytes.fromhex(
-    "000000000000000000f3000006420000035c0000051a000d0030110006004100"
+    "000000000000000000f3000006430000035c0000051a000d0030110006004100"
     "1c000000df0100060000002f000000110000001600630000002504147fffffff"
     "66656533396431306639636235643630323762616331623332666133333566330a00"
 )
-CLIENT_VERSION = 10087
+CLIENT_VERSION = 10092
 
 
 class BitWriter:
@@ -105,6 +107,117 @@ class BitWriter:
     def rsstr(self, s):
         """RSBuffer.putString: raw bytes + 0x0A terminator."""
         self.b += s.encode("latin1"); self.b.append(0x0A); return self
+
+
+_CHAT_INIT = (
+    22, 22, 22, 22, 22, 22, 21, 22, 22, 20, 22, 22, 22, 21, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    3, 8, 22, 16, 22, 16, 17, 7, 13, 13, 13, 16, 7, 10, 6, 16,
+    10, 11, 12, 12, 12, 12, 13, 13, 14, 14, 11, 14, 19, 15, 17, 8,
+    11, 9, 10, 10, 10, 10, 11, 10, 9, 7, 12, 11, 10, 10, 9, 10,
+    10, 12, 10, 9, 8, 12, 12, 9, 14, 8, 12, 17, 16, 17, 22, 13,
+    21, 4, 7, 6, 5, 3, 6, 6, 5, 4, 10, 7, 5, 6, 4, 4,
+    6, 10, 5, 4, 4, 5, 7, 6, 10, 6, 10, 22, 19, 22, 14, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 21, 22, 21, 22, 22, 22, 21, 22, 22,
+)
+assert len(_CHAT_INIT) == 256
+
+_SPECIAL_CHARS = (
+    "\u20ac", "\u0000", "\u201a", "\u0192", "\u201e", "\u2026", "\u2020", "\u2021",
+    "\u02c6", "\u2030", "\u0160", "\u2039", "\u0152", "\u0000", "\u017d", "\u0000",
+    "\u0000", "\u2018", "\u2019", "\u201c", "\u201d", "\u2022", "\u2013", "\u2014",
+    "\u02dc", "\u2122", "\u0161", "\u203a", "\u0153", "\u0000", "\u017e", "\u0178",
+)
+_SPECIAL_TO_BYTE = {ch: 128 + i for i, ch in enumerate(_SPECIAL_CHARS) if ch != "\u0000"}
+
+
+def _build_chat_blocks():
+    blocks = [0] * len(_CHAT_INIT)
+    builder = [0] * 33
+    next_index = 0
+    for ch, bit_count in enumerate(_CHAT_INIT):
+        if bit_count == 0:
+            continue
+        bit_selector = 1 << (32 - bit_count)
+        builder_value = builder[bit_count] & 0xFFFFFFFF
+        blocks[ch] = builder_value
+        if builder_value & bit_selector:
+            new_value = builder[bit_count - 1] & 0xFFFFFFFF
+        else:
+            for counter in range(bit_count - 1, 0, -1):
+                value2 = builder[counter] & 0xFFFFFFFF
+                if builder_value != value2:
+                    break
+                selector2 = 1 << (32 - counter)
+                if value2 & selector2:
+                    builder[counter] = builder[counter - 1] & 0xFFFFFFFF
+                    break
+                builder[counter] = (value2 | selector2) & 0xFFFFFFFF
+            new_value = (builder_value | bit_selector) & 0xFFFFFFFF
+        builder[bit_count] = new_value
+        for counter in range(bit_count + 1, 33):
+            if (builder[counter] & 0xFFFFFFFF) == builder_value:
+                builder[counter] = new_value
+
+        dictionary_index = 0
+        for counter in range(bit_count):
+            selector = (0x80000000 >> counter) & 0xFFFFFFFF
+            if (builder_value & selector) == 0:
+                dictionary_index += 1
+            else:
+                # We only need blocks for encoding, but mirror the Java table builder so
+                # future decode checks can reuse the same construction.
+                pass
+        if dictionary_index >= next_index:
+            next_index = dictionary_index + 1
+    return blocks
+
+
+_CHAT_BLOCKS = _build_chat_blocks()
+
+
+def _smart08_16(value):
+    if 0 <= value < 128:
+        return bytes([value])
+    if 0 <= value < 32768:
+        return struct.pack(">H", value + 32768)
+    raise ValueError("smart08_16 out of range: %d" % value)
+
+
+def _rsc_string_bytes(text):
+    out = bytearray()
+    for ch in text:
+        code = ord(ch)
+        if 0 < code < 128 or 160 <= code <= 255:
+            out.append(code)
+        else:
+            out.append(_SPECIAL_TO_BYTE.get(ch, ord("?")))
+    return bytes(out)
+
+
+def encrypted_chat_payload(text):
+    """RSBufferUtils.putEncryptedString payload for CHAT_MESSAGE."""
+    data = _rsc_string_bytes(text)
+    bit_count = sum(_CHAT_INIT[b] for b in data)
+    encoded = bytearray((bit_count + 7) // 8)
+    bit_pos = 0
+    for value in data:
+        block = _CHAT_BLOCKS[value]
+        width = _CHAT_INIT[value]
+        if width == 0:
+            raise ValueError("unencodable chat byte: %d" % value)
+        for i in range(width):
+            if block & (0x80000000 >> i):
+                encoded[bit_pos >> 3] |= 1 << (7 - (bit_pos & 7))
+            bit_pos += 1
+    return _smart08_16(len(data)) + bytes(encoded)
 
 
 class BitReader:
