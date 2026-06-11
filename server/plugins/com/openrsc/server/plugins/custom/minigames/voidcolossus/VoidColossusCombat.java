@@ -59,6 +59,7 @@ public final class VoidColossusCombat implements KillNpcTrigger {
 			GroundItem cracker = new GroundItem(world, ItemId.CHRISTMAS_CRACKER.id(),
 				tile.getX(), tile.getY(), 1, (Player) null);
 			cracker.setInstanceId(instanceId);
+			VoidColossusArena.trackDrop(cracker);
 			world.registerItem(cracker, world.getServer().getConfig().GAME_TICK * CRACKER_DESPAWN_TICKS);
 			dropped++;
 		}

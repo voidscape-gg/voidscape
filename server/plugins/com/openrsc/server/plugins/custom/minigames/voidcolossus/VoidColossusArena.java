@@ -5,6 +5,7 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.external.NPCLoc;
 import com.openrsc.server.model.entity.GameObject;
+import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -14,6 +15,7 @@ import com.openrsc.server.plugins.triggers.PlayerDeathTrigger;
 import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -56,6 +58,7 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	private final Map<Long, Integer> playerInstance = new ConcurrentHashMap<>();  // playerHash -> instanceId
 	private final Map<Integer, Long> instanceOwner = new ConcurrentHashMap<>();   // instanceId -> playerHash
 	private final Map<Integer, Npc> instanceBoss = new ConcurrentHashMap<>();     // instanceId -> live boss
+	private final Map<Integer, Set<GroundItem>> instanceDrops = new ConcurrentHashMap<>();
 
 	// Singleton handle so dev tooling (::colossus) can drive the real entry flow without the rift.
 	private static volatile VoidColossusArena instance;
@@ -75,6 +78,15 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		}
 		self.enterInstance(player);
 		return true;
+	}
+
+	static void trackDrop(GroundItem item) {
+		VoidColossusArena self = instance;
+		if (self == null || item == null || item.getInstanceId() <= 0) {
+			return;
+		}
+		self.instanceDrops.computeIfAbsent(item.getInstanceId(), ignored -> ConcurrentHashMap.newKeySet())
+			.add(item);
 	}
 
 	/** True if (x,y) is inside the circular plaza (a couple tiles of slack for the rim). */
@@ -153,12 +165,16 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		Integer instanceId = playerInstance.remove(hash);
 		if (instanceId != null) {
 			instanceOwner.remove(instanceId);
+			cleanupInstanceDrops(instanceId);
 			Npc boss = instanceBoss.remove(instanceId);
 			if (boss != null && !boss.isRemoved()) {
 				boss.setShouldRespawn(false);
 				world.unregisterNpc(boss);
 			}
 		}
+		player.resetCombatEvent();
+		player.setLastOpponent(null);
+		player.setBusy(false);
 		player.setInstanceId(0);
 		if (teleport) {
 			player.message("You step into the Void Rift.");
@@ -166,6 +182,18 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 			delay(2);
 			player.teleport(HUB_ARRIVAL_X, HUB_ARRIVAL_Y, true);
 			player.message("The void folds around you and opens into the Void Enclave.");
+		}
+	}
+
+	private void cleanupInstanceDrops(int instanceId) {
+		Set<GroundItem> drops = instanceDrops.remove(instanceId);
+		if (drops == null) {
+			return;
+		}
+		for (GroundItem drop : drops) {
+			if (drop != null && !drop.isRemoved()) {
+				world.unregisterItem(drop);
+			}
 		}
 	}
 
@@ -223,7 +251,7 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	@Override
 	public boolean blockPlayerLogout(Player player) {
-		return false;
+		return playerInstance.containsKey(player.getUsernameHash());
 	}
 
 	@Override
@@ -235,7 +263,7 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	@Override
 	public boolean blockPlayerDeath(Player player) {
-		return false;
+		return playerInstance.containsKey(player.getUsernameHash());
 	}
 
 	@Override

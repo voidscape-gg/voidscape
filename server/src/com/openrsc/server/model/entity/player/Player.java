@@ -51,6 +51,7 @@ import com.openrsc.server.plugins.QuestInterface;
 import com.openrsc.server.plugins.menu.Menu;
 import com.openrsc.server.plugins.triggers.CatGrowthTrigger;
 import com.openrsc.server.plugins.triggers.DropObjTrigger;
+import com.openrsc.server.plugins.triggers.PlayerDeathTrigger;
 import com.openrsc.server.plugins.triggers.WineFermentTrigger;
 import com.openrsc.server.util.PidShuffler;
 import com.openrsc.server.util.UsernameChange;
@@ -2574,6 +2575,11 @@ public final class Player extends Mob {
 		} else {
 			setLocation(Point.location(getConfig().RESPAWN_LOCATION_X, getConfig().RESPAWN_LOCATION_Y), true);
 		}
+
+		// Fire death cleanup hooks after drops used the death tile, but before the respawned
+		// player receives world state. Instanced content uses this to restore the normal phase.
+		getWorld().getServer().getPluginHandler().handlePlugin(
+			PlayerDeathTrigger.class, this, new Object[]{this});
 
 		ActionSender.sendWorldInfo(this);
 		ActionSender.sendEquipmentStats(this);

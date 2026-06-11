@@ -119,27 +119,31 @@ public final class NpcPreview {
 		NPCDef def = EntityHandler.getNpcDef(npcId);
 		if (combatScene) {
 			// Both fighters stand on adjacent tiles facing each other; the engine LOCKS combat to a
-			// side view (var11=2), so this is the true in-combat composition. NPC on the left uses
-			// COMBAT_B (mirrored -> faces/lunges right, toward the opponent); the opponent (a Man) on
-			// the right uses COMBAT_A (faces/lunges left). `overlay` drives the lunge each frame.
+			// side view (var11=2), so this is the true in-combat composition. COMBAT_A uses the
+			// unmirrored right-facing source strip; COMBAT_B mirrors that same strip to face left.
+			// This matches vanilla Man frames and the server's sprite 8/9 combat assignment.
 			NPCDef opp = EntityHandler.getNpcDef(opponentId);
 			int oppCam1 = opp.getCamera1(), oppCam2 = opp.getCamera2();
 			// One shared zoom so the NPC's size RELATIVE to the player is faithful (the bigger fighter
 			// looks bigger). Scale so the taller fighter is ~62% of the buffer height.
 			int sZoom = (int) (BUF_H * 0.62 / Math.max(camera2, oppCam2) * 100);
 			int half = gap / 2;
-			drawFigure(def, 0, 1, camera1, camera2, sZoom, BUF_W / 2 - half, overlay);          // NPC, combat-A (right-facing art -> faces opponent), left
-			drawFigure(opp, 0, 2, oppCam1, oppCam2, sZoom, BUF_W / 2 + half, overlay);           // opponent, combat-B (faces left toward NPC), right
+			drawFigure(def, 0, 1, camera1, camera2, walkModel, combatModel, combatSprite,
+				sZoom, BUF_W / 2 - half, overlay);          // NPC, combat-A, right-facing source
+			drawFigure(opp, 0, 2, oppCam1, oppCam2, opp.getWalkModel(), opp.getCombatModel(),
+				opp.getCombatSprite(), sZoom, BUF_W / 2 + half, overlay); // opponent, combat-B, mirrored left
 		} else {
-			drawFigure(def, rsDir, combat, camera1, camera2, zoom, BUF_W / 2, combat != 0 ? overlay : 0);
+			drawFigure(def, rsDir, combat, camera1, camera2, walkModel, combatModel, combatSprite,
+				zoom, BUF_W / 2, combat != 0 ? overlay : 0);
 		}
 		image.setRGB(0, 0, BUF_W, BUF_H, g.pixelData, 0, BUF_W);
 	}
 
 	/** Faithful replica of mudclient.drawNPC frame-selection + 12-layer composite, for one figure
 	 *  centred horizontally at screenCx. combatMode: 0 none, 1 COMBAT_A, 2 COMBAT_B. */
-	private void drawFigure(NPCDef def, int dir, int combatMode, int cam1, int cam2, int zoomPct,
-							int screenCx, int overlayMovement) {
+	private void drawFigure(NPCDef def, int dir, int combatMode, int cam1, int cam2,
+							int wmOverride, int cmOverride, int csOverride,
+							int zoomPct, int screenCx, int overlayMovement) {
 		int width1 = Math.max(1, cam1 * zoomPct / 100);
 		int height = Math.max(1, cam2 * zoomPct / 100);
 		int x = screenCx - width1 / 2;
@@ -152,17 +156,17 @@ public final class NpcPreview {
 		else if (var11 == 6) { var12 = true; var13 = 2; }
 		else if (var11 == 7) { var12 = true; var13 = 1; }
 
-		int wm = Math.max(1, def.getWalkModel());
+		int wm = Math.max(1, wmOverride);
 		int var14 = WALK[(stepFrame / wm) % 4] + var13 * 3;
 		if (combatMode == 1) {
 			var12 = false; var13 = 5; var11 = 2;
-			x -= overlayMovement * def.getCombatSprite() / 100;
-			int cm = Math.max(2, def.getCombatModel());
+			x -= overlayMovement * csOverride / 100;
+			int cm = Math.max(2, cmOverride);
 			var14 = var13 * 3 + COMBAT_A[(frameCounter / (cm - 1)) % 8];
 		} else if (combatMode == 2) {
 			var13 = 5; var11 = 2; var12 = true;
-			x += def.getCombatSprite() * overlayMovement / 100;
-			int cm = Math.max(1, def.getCombatModel());
+			x += csOverride * overlayMovement / 100;
+			int cm = Math.max(1, cmOverride);
 			var14 = COMBAT_B[(frameCounter / cm) % 8] + var13 * 3;
 		}
 

@@ -2445,7 +2445,7 @@ public class EntityHandler {
 		// Authentic_Sprites.orsc at that animation's runtime number. camera 820x1150 (width x height):
 		// ~5.3x the player, aspect-matched to the 153x214 logical sprite so it scales up without squish.
 		sprites = new int[]{233, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-		npcs.add(new NPCDef("Void Colossus", "An armoured titan animated by the void itself", "", 250, 250, 1000, 130, true, sprites, 0, 0, 0, 0, 820, 1150, 16, 14, 6, i++));
+		npcs.add(new NPCDef("Void Colossus", "An armoured titan animated by the void itself", "", 250, 110, 1000, 130, true, sprites, 0, 0, 0, 0, 820, 1150, 24, 16, 32, i++));
 
 		// voidscape: Void Knight (server id 853). A TRUE Black Knight clone (same fullhelm+platebody+
 		// platelegs layer layout, same camera 145x220 and combat models walk 6 / combat 6 / sprite 5

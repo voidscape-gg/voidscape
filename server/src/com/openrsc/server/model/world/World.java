@@ -43,6 +43,7 @@ import com.openrsc.server.net.PcapLogger;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.MiniGameInterface;
 import com.openrsc.server.plugins.QuestInterface;
+import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 import com.openrsc.server.util.EntityList;
 import com.openrsc.server.util.IPTracker;
 import com.openrsc.server.util.PathfindingDebug;
@@ -904,6 +905,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 					LOGGER.error("Error generating avatar: ", e);
 				}
 			}
+			getServer().getPluginHandler().handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player});
 			player.resetSceneryMorph();
 			bountyHunter.onPlayerLogout(player);
 			player.logout();
