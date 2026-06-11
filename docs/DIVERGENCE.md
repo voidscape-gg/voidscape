@@ -27,6 +27,63 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-10 — Location plaque width adapts to the area name (fixes overflow)
+
+The compact location plaque was a fixed 120px wide, so long area names clipped past the ornate end-caps — "DEEP WILDERNESS" lost its leading "D" and ran off the right, and long towns (BARBARIAN VILLAGE, GNOME STRONGHOLD, SEERS PARTY HALL) would too. `drawVoidscapeLocationPlaque` now measures the title with `stringWidth` and sizes the plaque to `max(base, min(maxCap, titleWidth + 40))`, anchored top-left and capped (230 compact / 280 otherwise) so it never reaches the top-tab row. Verified at 640×480: DEEP WILDERNESS + "Level 30" and BARBARIAN VILLAGE both fit cleanly; short names (LUMBRIDGE) are unchanged.
+
+Files: `Client_Base/src/orsc/mudclient.java` (`drawVoidscapeLocationPlaque` — title computed before width; adaptive width).
+
+Reversibility: restore the fixed `width` expression. No data/opcode/version change.
+
+### 2026-06-10 — Chat word-wrap in the compact HUD (readable long lines)
+
+The earlier small-viewport pass clipped chat to the frame interior so long lines couldn't spill onto the world, but that truncated them. Replaced truncation with real word-wrap in both chat views:
+
+- **ALL-tab overlay** (the default floating view): a new `voidscapeWrapColoredString` greedily wraps each message to the frame's interior width using `stringWidth` (which skips `@xxx@` colour codes), carries the active colour code onto continuation lines, and hard-splits any single over-long word. The overlay draws newest-at-bottom with wrapped lines stacking upward, the crown only on a message's first line.
+- **CHAT/QUEST/PRIVATE/CLAN scroll tabs**: wrapped at message-add time via `voidscapeAddWrapped`, which splits the message into per-line `addToList` entries (continuation lines drop the crown; the sender is kept on every line so click-to-PM still works). This stays in mudclient — the shared `Panel.renderScrollingList2`/`addToList` (also used by shops, friends, etc.) is **not** modified, so non-chat list UIs are unaffected.
+
+Verified at 640×480: long lines wrap to multiple fully-readable lines in both views, colours carry across the wrap, continuation lines align under the text, crown shows only on the first line, and short/colour-coded system messages are unchanged. Authentic UI and Android paths untouched (both wrap paths are gated on `useVoidscapeHudSkin()`).
+
+Files: `Client_Base/src/orsc/mudclient.java` (`voidscapeWrapColoredString` / `voidscapeLastColorCode` / `voidscapeAddWrapped` helpers; ALL-tab overlay rewrite in `drawGame`; the 5 chat `addToList` call sites in `showMessage` routed through `voidscapeAddWrapped`).
+
+Reversibility: restore the single-line overlay loop, point the 5 chat calls back at `panelMessageTabs.addToList`, and delete the three helpers; the frame clip from the earlier pass remains.
+
+### 2026-06-10 — Tried + reverted: native 24px top-tab icons
+
+An AI vision critique flagged the compact-HUD top-tab icons (640-wide; runtime-downscaled from the 34px assets to 24px) as the most visible blur. Generated native 24×24 variants from the 68px masters (Lanczos + gentle unsharp) and pointed the draw call at the size-matched variant. **A zoomed before/after at 640×480 showed the native-24 icons came out slightly dimmer and softer than the runtime 34→24 downscale** — the original was actually fine and the critique overstated it. Reverted: removed the `-24.png` assets and restored the unconditional 34-variant resolution in `drawVoidscapeTopTabs`. Net change: none. Recorded so we don't re-attempt this without first improving the source art's small-size contrast (the 34px asset has more punch than a Lanczos 68→24, suggesting the 34px was hand-tuned).
+
+### 2026-06-10 — voidbot: headless command-driven game client + test harness
+
+Added `tools/voidbot`, a screenshot-free way to drive and inspect the game entirely through commands, plus `tests/smoke.sh` (session → walk → npc dialog → kill → loot → bank, 26/26 green against the local server). A Python daemon (`voidbotd.py`) logs in over the real wire protocol, decodes server packets into live state (position, inventory, equipment, skills/XP, nearby NPCs, ground items, dialog/input-box, bank, timestamped messages/events), and serves a JSON-lines control socket; a thin CLI (`cli.py` via the `voidbot` wrapper) issues actions, queries, `wait <condition>`, `events --since`, and `admin "<::cmd>"`. The full handler→command spec is `docs/bot-api.md`; CLAUDE.md now mandates voidbot for all game interaction.
+
+The wire protocol was reverse-engineered and validated against a live login capture (logging TCP proxy `tools/voidbot/capture-proxy.py`): the custom client is the server's `authenticClient == -1` path — plaintext framing, no ISAAC, no opcode rotation, RSA only at login; config + login use two separate connections; the password RSA block was reproduced byte-for-byte. No server/client code changed — voidbot only speaks the existing protocol and uses existing admin commands for test setup. Implementation language is Python (not Java) to avoid the GUI/static-init entanglement of reusing `Client_Base`, and because the plaintext protocol makes a from-scratch client tractable.
+
+Known limitation: the bit-packed NPC AoI stream is decoded incrementally and can drop a single frame under rapid region changes; mitigated by a 3s "recently seen" NPC cache and caller-side retries. Tracking an NPC by `--server-index` is reliable; by `--id` across respawns is best-effort.
+
+Files: `tools/voidbot/{protocol,voidbotd,cli}.py`, `tools/voidbot/voidbot`, `tools/voidbot/capture-proxy.py`, `tests/smoke.sh`, `docs/bot-api.md`, `CLAUDE.md` (Game interaction section). Reversibility: delete `tools/voidbot`, `tests/smoke.sh`, `docs/bot-api.md`, and the CLAUDE.md section. No data, schema, opcode, or gameplay change.
+
+### 2026-06-10 — Input-box dismiss no longer soft-locks the player
+
+Dismissing a server-driven input box (`SEND_INPUT_BOX`, e.g. the subscription vendor's signup-code prompt) via its Cancel button or by clicking outside the popup closed the dialog client-side **without replying**, leaving the plugin blocked in `Functions.inputBox` — the player couldn't move or act until the 60s timeout (reported as a total game freeze at the vendor). The client now sends an empty `INTERFACE_OPTIONS` sub-option `9` reply on either dismissal path, which unblocks the script immediately (`handleInputBoxReply` already accepted empty replies; `promptSignupCode` treats them as "no code"). No wire-format or server change.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — `sendServerPromptCancel()` helper; called from the inputX Cancel button and click-outside dismiss paths when the action is `SERVER_PROMPT`.
+
+Reversibility: remove the helper + two calls. Follow-up candidate: ESC-key dismissal (currently no key closes the popup).
+
+### 2026-06-10 — Small-viewport HUD fixes: chat clipping, magic panel height, compact chrome
+
+Three fixes for the Concept HUD at the smallest (640x480) viewport preset, where most players run:
+
+1. **Chat clipped to its frame.** Chat history/input was drawn unwrapped and unclipped (three draw paths: ALL-tab raw history, `Panel.renderScrollingList2` lists, text entry), so any line wider than the frame's ~312px inner width marched onto the world. The chat block now sets the surface clip to the frame interior (same pattern as the minimap clip) and restores it after `panelMessageTabs.drawPanel()`. Long lines truncate at the border; proper word-wrap at add-time is the follow-up.
+2. **Magic & Prayer panel height.** The tab used the generic 250px fallback height while its fixed content stack (24px tab strip + 90px list + 68px description) is exactly 182px below contentTop = 250px total — content sat flush on the chrome's bottom border art. Added a content-driven branch in `voidscapePanelHeightFor` (`contentTop + 182 + 20`), giving the bottom border 4px of air. Size classes 3/4 numerically unchanged.
+3. **Compact chrome at width ≤ 680** (`voidscapeCompactHud()`, keyed off the existing size-class 0): top tab buttons 54→40px (icons 34→24px, drawn from the 34px variants), location plaque 170x40→120x30, chat frame 120→96px tall, chat tab row 38→28px. All `VOIDSCAPE_TOP_TAB_SIZE` consumers (draw, panel/minimap anchors, keep-open bounds, hover/click hit-tests) now share `voidscapeTopTabSize()` so draw and hit-tests can't desync. Chat block drops from ~34% to ~27% of the 480px surface; chat history shows 4 lines instead of 5 in compact mode.
+
+Files touched:
+- `Client_Base/src/orsc/mudclient.java` — chat clip set/restore in `drawGame`; `MAGIC_AND_PRAYER_TAB` branch in `voidscapePanelHeightFor`; `voidscapeCompactHud()`/`voidscapeTopTabSize()` + compact metrics in plaque/top-tab/chat geometry helpers.
+
+Verified in-game at 640x480 via the AI workbench (long chat lines truncate at the frame, magic panel clears its border, compact chrome renders with matching hitboxes). Larger viewports unaffected (compact gate is size-class 0 only; 720+ keeps prior metrics). Authentic mode and Android untouched (`useVoidscapeHudSkin()` gated). Follow-ups noted from design critique: word-wrap chat lines instead of truncating, dedicated 24px top-tab icon exports (24px is currently downscaled from 34px), chat-tab spacing polish.
+
 ### 2026-06-10 — Prelaunch landing signup codes + vendor code-entry popup
 
 Reworked the public landing page into a pure interest-list flow: a visitor submits email + desired username, the name is reserved (now also enforced at portal character creation against other emails), and a one-time `VOID-XXXX-XXXX` code is shown on-screen. The code is written to the game DB as a global `player_cache` row (`playerID=0`, `key=signup_code:<CODE>`, `value=1`). In-game, talking to the Lumbridge Void Subscription Vendor with no account-reserved card pops a text input box asking for the code; a valid entry flips the row to `2` and grants one tradable Subscription card 1602 (redeemed-before-grant, so a partial failure can't mint two cards). This shipped the client's first real `SEND_INPUT_BOX` support (custom client `10087`): the generic inputX popup renders the prompt and replies through the existing `INTERFACE_OPTIONS` packet sub-option `9` (formerly `UNUSED`) — no new wire opcode, no ordinal shifts (see `docs/subsystems/networking-protocol.md`). Plugins consume replies via the new blocking `Functions.inputBox` (multi()-style, 60s timeout, late replies dropped via a pending-flag guard). The Google button was removed from the landing; codes are minted only on the public reservations route, not for registered portal accounts. Hardening for public exposure: `PORTAL_BIND_HOST` (refuses non-loopback bind without `PORTAL_DATA_DIR`), `x-forwarded-for` trusted only from loopback peers or with `PORTAL_TRUST_PROXY=1`, and a per-IP daily signup cap (`PORTAL_SIGNUP_IP_DAILY_LIMIT`, default 10, 429 past it). New token-gated admin endpoints list/export the signup list (`GET /api/admin/signups[?format=csv]`, live redeemed status from the game DB) and resync unsynced codes (`POST /api/admin/signups/sync`).
