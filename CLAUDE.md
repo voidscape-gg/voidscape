@@ -75,6 +75,47 @@ For anything not covered by a script, look it up in `docs/DEVELOPMENT.md` before
 
 ---
 
+## Game interaction
+
+Use **voidbot** for every interaction with the game. Never screenshot the client, never
+send mouse or keyboard input, never compute click coordinates. Verify outcomes with
+`voidbot wait` and `voidbot state`, not by looking at the screen. If an action has no
+command, extend voidbot first (`docs/bot-api.md` is the spec), then continue.
+
+`tools/voidbot/voidbot` is a headless client: a daemon holds a logged-in session and
+decodes server packets into live state; the CLI issues actions, queries state, and blocks
+on conditions. Every command prints JSON and sets an exit code (`0` ok/matched, `1`
+not-ok/timeout, `2` usage/connection). Full table + protocol: `docs/bot-api.md`.
+Acceptance test: `tests/smoke.sh` (session → walk → npc dialog → kill → loot → bank).
+
+```bash
+tools/voidbot/voidbot start --user wbtest --pass voidtest123   # log in, hold session
+tools/voidbot/voidbot goto 120 648                              # WORLD_WALK_REQUEST
+tools/voidbot/voidbot wait near --x 120 --y 648 --radius 2 --timeout 15
+tools/voidbot/voidbot npc-talk --id 848                         # NPC_TALK_TO (nearest 848)
+tools/voidbot/voidbot wait input-open --timeout 10
+tools/voidbot/voidbot input-reply --text ""                     # answer/dismiss input box
+tools/voidbot/voidbot attack-npc --server-index 3704            # NPC_ATTACK
+tools/voidbot/voidbot wait npc-dead --server_index 3704 --timeout 40
+tools/voidbot/voidbot take-item 127 651 20                      # GROUND_ITEM_TAKE
+tools/voidbot/voidbot state inventory                           # JSON inventory
+tools/voidbot/voidbot admin "::item 10 1000"                    # server admin command
+tools/voidbot/voidbot wait inventory-contains --id 10 --amount 1000 --timeout 8
+tools/voidbot/voidbot bank-deposit --id 10 --amount 1000        # BANK_DEPOSIT
+tools/voidbot/voidbot events --since 0                          # timestamped event log
+tools/voidbot/voidbot stop                                      # clean logout
+```
+
+Commands: actions (`goto`, `walk-step`, `npc-talk`, `npc-command`, `attack-npc`,
+`attack-player`, `take-item`, `drop`, `item-command`, `equip`/`unequip`,
+`bank-withdraw`/`bank-deposit`/`bank-deposit-all`/`bank-close`, `menu-reply`/`menu-cancel`,
+`input-reply`, `say`, `admin`, `logout`); queries (`state position|inventory|skills|npcs|
+ground-items|bank|dialog|messages|all`); waits (`logged-in`, `position`, `near`,
+`inventory-contains`, `inventory-lacks`, `message --regex`, `dialog-open`, `input-open`,
+`bank-open`, `npc-present`, `npc-dead`, `ground-item`, `xp-gained`); `events --since`.
+
+---
+
 ## Memory
 
 The `memory/` directory is loaded each session. If you discover something that should persist across sessions (a non-obvious decision, a gotcha that bit us, a stable convention), add a memory entry. See the **auto memory** section in your system prompt for the format.

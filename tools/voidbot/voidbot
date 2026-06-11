@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# voidbot — headless game-interaction CLI. Talks to a running voidbotd.
+#   voidbot start --user U --pass P     # launch the daemon (backgrounds it)
+#   voidbot <command> [args]            # send a command to the daemon
+#   voidbot stop                        # shut the daemon down
+# See docs/bot-api.md for the full command table.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+PY="${VOIDBOT_PYTHON:-python}"
+CTRL_PORT="${VOIDBOT_CTRL_PORT:-18900}"
+
+case "${1:-}" in
+  start)
+    shift
+    HOST="${VOIDBOT_HOST:-127.0.0.1}"
+    GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
+    USER=""; PASS=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --user) USER="$2"; shift 2;;
+        --pass) PASS="$2"; shift 2;;
+        --game-port) GAME_PORT="$2"; shift 2;;
+        --host) HOST="$2"; shift 2;;
+        *) shift;;
+      esac
+    done
+    [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"start needs --user and --pass"}'; exit 2; }
+    LOG="${VOIDBOT_LOG:-${TMPDIR:-/tmp}/voidbotd-$CTRL_PORT.log}"
+    # Redirect daemon output to a log file so this command-substitution-friendly
+    # wrapper returns immediately (a backgrounded child sharing our stdout pipe
+    # would otherwise keep $(voidbot start) blocked forever).
+    "$PY" "$HERE/voidbotd.py" --host "$HOST" --game-port "$GAME_PORT" \
+        --ctrl-port "$CTRL_PORT" --user "$USER" --pass "$PASS" \
+        --defs "$REPO/server/conf/server/defs" >"$LOG" 2>&1 &
+    DPID=$!
+    disown 2>/dev/null || true
+    echo "{\"ok\":true,\"started\":true,\"pid\":$DPID,\"ctrl_port\":$CTRL_PORT,\"log\":\"$LOG\"}"
+    ;;
+  stop)
+    "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" shutdown || true
+    ;;
+  "")
+    echo '{"ok":false,"error":"usage: voidbot <command> [args]  (try: start, state, goto, ...)"}'; exit 2;;
+  *)
+    exec "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" "$@"
+    ;;
+esac

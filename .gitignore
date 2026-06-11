@@ -210,3 +210,8 @@ tools/rsc-mapgen/map.png
 *.orsc.bak
 *.orsc.new
 *.orsc.predungeon
+
+# voidbot dev capture artifacts
+tools/voidbot/capture.jsonl
+tools/voidbot/dbg.jsonl
+tools/voidbot/__pycache__/
