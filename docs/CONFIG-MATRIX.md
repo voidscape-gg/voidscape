@@ -24,7 +24,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10092` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10099` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_packet_register` | `false` | `false` | `false` | Portal-first account/character creation. |
 
@@ -44,7 +44,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Key | Dev/local | Staging | Production | Release note |
 |---|---:|---:|---:|---|
 | `game_tick` | `640` | `640` | `640` | Authentic RSC combat/movement feel. |
-| `combat_exp_rate` / `skilling_exp_rate` | `7` / `4` | `7` / `4` | `7` / `4` | Subscription raises these floors to 10x combat / 6x skills. |
+| `combat_exp_rate` / `skilling_exp_rate` | `10` / `2` | `10` / `2` | `10` / `2` | Subscription adds +1x to each, normally 11x combat / 3x skills while active. |
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
@@ -63,6 +63,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
 | `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
 | `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
+| `more_shafts_per_better_log` | `true` | Lets higher-tier logs feed the player-made arrow economy instead of every log producing the same 10 shafts. |
 | Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days; Lumbridge vendor grants one starter card reserved by the portal account flow. |
 | `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
 | `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
@@ -91,15 +92,15 @@ These are positional in many loaders. Keep server and client append order aligne
 
 | Type | Current high-water mark | Notes |
 |---|---:|---|
-| Custom item ids | `1602` | Subscription card is currently the latest documented item. |
-| Custom NPC ids | `851` | Void Councilor 3 is current high-water mark. |
-| Custom scenery ids | `1306` | Void Rift is current high-water mark. |
-| Custom client version | `10070` | Current working tree value. |
+| Custom item ids | `1608` | Void ashes are current high-water mark. |
+| Custom NPC ids | `860` | Void Unicorn is current high-water mark. |
+| Custom scenery ids | `1309` | Colossus charge effect objects are current high-water mark. |
+| Custom client version | `10099` | Current working tree value. |
 
 ## Pre-release config sign-off
 
 - [ ] F2P vs members default decided.
-- [x] XP rates decided: 7x combat / 4x skills, subscription floors at 10x / 6x.
+- [x] XP rates decided: 10x combat / 2x skills, subscription adds +1x to each.
 - [ ] PvP/safe-zone policy decided.
 - [ ] Economy-affecting QoL toggles decided: notes, auction house, bank presets, batch skilling.
 - [ ] Production database selected.

@@ -14,6 +14,7 @@ import static com.openrsc.server.plugins.Functions.getCurrentLevel;
 import static com.openrsc.server.plugins.Functions.getMaxLevel;
 
 public final class Formulae {
+	private static final int COOKING_CAPE_BURN_BONUS = 20;
 
 	public static final int[] arrowIDs = {ItemId.POISON_DRAGON_ARROWS.id(), ItemId.DRAGON_ARROWS.id(), ItemId.ICE_ARROWS.id(), ItemId.POISON_RUNE_ARROWS.id(),
 		ItemId.RUNE_ARROWS.id(), ItemId.POISON_ADAMANTITE_ARROWS.id(), ItemId.ADAMANTITE_ARROWS.id(),
@@ -172,8 +173,12 @@ public final class Formulae {
 		//chef: Wearing them means you will burn your lobsters, swordfish and shark less
 		final boolean gauntletBonus = player.getCarriedItems().getEquipment().hasEquipped(ItemId.GAUNTLETS_OF_COOKING.id())
 			&& player.getCache().getInt("famcrest_gauntlets") == Gauntlets.COOKING.id();
+		final boolean capeBonus = player.getCarriedItems().getEquipment().hasEquipped(ItemId.COOKING_CAPE.id());
 		int bonusLevel = gauntletBonus ? (foodId == ItemId.RAW_SWORDFISH.id() ? 6 :
 				foodId == ItemId.RAW_LOBSTER.id() || foodId == ItemId.RAW_SHARK.id() ? 11 : 0) : 0;
+		if (capeBonus) {
+			bonusLevel += COOKING_CAPE_BURN_BONUS;
+		}
 		int effectiveLevel = cookingLevel + bonusLevel;
 		int levelReq = player.getWorld().getServer().getEntityHandler().getItemCookingDef(foodId).getReqLevel();
 		//if not on def file from cooking training table, level stop failing

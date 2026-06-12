@@ -16,21 +16,31 @@ public class VoidChest implements OpLocTrigger, UseLocTrigger {
 	private static final int OPEN_RESPAWN_MS = 3000;
 
 	private static final Reward[] REWARDS = {
-		new Reward(ItemId.IRON_ORE.id(), 100, 100, 12, true),
-		new Reward(ItemId.COAL.id(), 40, 75, 10, true),
-		new Reward(ItemId.SWORDFISH.id(), 10, 25, 10, true),
-		new Reward(ItemId.LOBSTER.id(), 20, 40, 10, true),
+		new Reward(ItemId.IRON_ORE.id(), 80, 140, 14, true),
+		new Reward(ItemId.COAL.id(), 60, 110, 13, true),
+		new Reward(ItemId.RAW_SWORDFISH.id(), 20, 45, 10, true),
+		new Reward(ItemId.RAW_LOBSTER.id(), 35, 70, 10, true),
 		new Reward(ItemId.CHAOS_RUNE.id(), 20, 45, 10),
 		new Reward(ItemId.DEATH_RUNE.id(), 8, 20, 8),
 		new Reward(ItemId.LAW_RUNE.id(), 8, 18, 8),
 		new Reward(ItemId.NATURE_RUNE.id(), 10, 25, 8),
-		new Reward(ItemId.BIG_BONES.id(), 4, 8, 8, true),
-		new Reward(ItemId.COINS.id(), 1000, 5000, 8),
-		new Reward(ItemId.ADAMANTITE_ARROWS.id(), 30, 80, 6),
-		new Reward(ItemId.UNCUT_SAPPHIRE.id(), 2, 5, 6, true),
-		new Reward(ItemId.UNCUT_EMERALD.id(), 2, 4, 5, true),
-		new Reward(ItemId.UNCUT_RUBY.id(), 1, 3, 4, true),
-		new Reward(ItemId.UNCUT_DIAMOND.id(), 1, 2, 2, true)
+		new Reward(ItemId.BIG_BONES.id(), 4, 8, 6, true),
+		new Reward(ItemId.COINS.id(), 1000, 5000, 6),
+		new Reward(ItemId.MITHRIL_ARROW_HEADS.id(), 40, 90, 4),
+		new Reward(ItemId.ADAMANTITE_ARROW_HEADS.id(), 25, 60, 3),
+		new Reward(ItemId.UNIDENTIFIED_MARRENTILL.id(), 3, 8, 4, true),
+		new Reward(ItemId.UNIDENTIFIED_TARROMIN.id(), 3, 8, 4, true),
+		new Reward(ItemId.UNIDENTIFIED_HARRALANDER.id(), 3, 8, 4, true),
+		new Reward(ItemId.UNIDENTIFIED_RANARR_WEED.id(), 2, 5, 3, true),
+		new Reward(ItemId.UNIDENTIFIED_KWUARM.id(), 1, 3, 2, true),
+		new Reward(ItemId.RED_SPIDERS_EGGS.id(), 5, 12, 5, true),
+		new Reward(ItemId.UNICORN_HORN.id(), 4, 10, 5, true),
+		new Reward(ItemId.LIMPWURT_ROOT.id(), 4, 10, 4, true),
+		new Reward(ItemId.SNAPE_GRASS.id(), 2, 5, 2, true),
+		new Reward(ItemId.UNCUT_SAPPHIRE.id(), 2, 5, 7, true),
+		new Reward(ItemId.UNCUT_EMERALD.id(), 2, 4, 6, true),
+		new Reward(ItemId.UNCUT_RUBY.id(), 1, 3, 5, true),
+		new Reward(ItemId.UNCUT_DIAMOND.id(), 1, 2, 3, true)
 	};
 
 	@Override

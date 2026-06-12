@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.SkillCapes;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
@@ -37,8 +38,8 @@ public class CombatFormula {
 	 * @param source      The mob doing the damage
 	 * @return The randomized value.
 	 */
-	private static int calculateMeleeDamage(final Mob source) {
-		int maxRoll = getMeleeDamage(source);
+	private static int calculateMeleeDamage(final Mob source, final Mob victim) {
+		int maxRoll = getMeleeDamage(source, victim);
 		int chosenHit = maxRoll <= 0 ? 0 : (DataConversions.getRandom().nextInt(maxRoll) + 320) / 640;
 		return chosenHit;
 	}
@@ -52,8 +53,8 @@ public class CombatFormula {
 	 * @param arrowId	  The type of ranged ammunition
 	 * @return The randomized value.
 	 */
-	private static int calculateRangedDamage(final Mob source, final int bowId, final int arrowId) {
-		int maxRoll = getRangedDamage(source, bowId, arrowId);
+	private static int calculateRangedDamage(final Mob source, final int bowId, final int arrowId, final Mob victim) {
+		int maxRoll = getRangedDamage(source, bowId, arrowId, victim);
 		int chosenHit = (DataConversions.getRandom().nextInt(maxRoll) + 320) / 640;
 		return chosenHit;
 	}
@@ -150,7 +151,7 @@ public class CombatFormula {
 	 * @return True if the attack is a hit, false if the attack is a miss
 	 */
 	private static boolean calculateMeleeAccuracy(final Mob source, final Mob victim) {
-		return calculateAccuracy(getMeleeAccuracy(source), getMeleeDefence(victim));
+		return calculateAccuracy(getMeleeAccuracy(source, victim), getMeleeDefence(victim));
 	}
 
 	/**
@@ -162,7 +163,7 @@ public class CombatFormula {
 	 * @return True if the attack is a hit, false if the attack is a miss
 	 */
 	private static boolean calculateRangedAccuracy(final Mob source, final int bowId, final Mob victim) {
-		return calculateAccuracy(getRangedAccuracy(source, bowId), getMeleeDefence(victim));
+		return calculateAccuracy(getRangedAccuracy(source, bowId, victim), getMeleeDefence(victim));
 	}
 
 	/**
@@ -209,7 +210,7 @@ public class CombatFormula {
 		}
 		if (source instanceof Player) {
 
-			final double maximum = (double) (getMeleeDamage(source) + 320) / 640;
+			final double maximum = (double) (getMeleeDamage(source, victim) + 320) / 640;
 			if (damage >= (maximum * 0.5) && SkillCapes.shouldActivate((Player) source, STRENGTH_CAPE, isHit)) {
 				damage += (maximum*0.2);
 				((Player) source).message("@ora@Your Strength cape has granted you a critical hit");
@@ -225,9 +226,9 @@ public class CombatFormula {
 	}
 
 	private static int rollMeleeDamage(final Mob source, final Mob victim, final boolean hasMomentum) {
-		int damage = calculateMeleeDamage(source);
+		int damage = calculateMeleeDamage(source, victim);
 		if (hasMomentum) {
-			damage = Math.max(damage, calculateMeleeDamage(source));
+			damage = Math.max(damage, calculateMeleeDamage(source, victim));
 		}
 		return applyPhysicalDamageReduction(damage, victim);
 	}
@@ -248,10 +249,10 @@ public class CombatFormula {
 
 		final int damage;
 		if (skillCape) {
-			int maxHit = (getRangedDamage(source, bowId, arrowId) + 320) / 640;
+			int maxHit = (getRangedDamage(source, bowId, arrowId, victim) + 320) / 640;
 			damage = DataConversions.getRandom().nextInt(maxHit * 2);
 		} else {
-			damage = calculateRangedDamage(source, bowId, arrowId);
+			damage = calculateRangedDamage(source, bowId, arrowId, victim);
 		}
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
@@ -275,6 +276,10 @@ public class CombatFormula {
 		return (int)maxRoll;
 	}
 
+	private static int getMeleeDamage(final Mob source, final Mob victim) {
+		return (int) (getMeleeDamage(source) * voidMeleeMultiplier(source, victim));
+	}
+
 	/**
 	 * Gets the ranged max roll of the attacking mob.
 	 *
@@ -286,6 +291,10 @@ public class CombatFormula {
 		final int power = source.getConfig().RETRO_RANGED_DAMAGE ? rangedPowerRetro(bowId) : rangedPower(arrowId);
 		final double maxRoll = (source.getSkills().getLevel(Skill.RANGED.id()) + bonusConstant) * (power + 1 + 64);
 		return (int)maxRoll;
+	}
+
+	private static int getRangedDamage(final Mob source, final int bowId, final int arrowId, final Mob victim) {
+		return (int) (getRangedDamage(source, bowId, arrowId) * voidRangedMultiplier(source, bowId, victim));
 	}
 
 	/**
@@ -364,7 +373,7 @@ public class CombatFormula {
 	}
 
 	private static int getTargetAdjustedMeleeMaxHit(final Mob source, final Mob victim) {
-		final int maxRoll = getMeleeDamage(source);
+		final int maxRoll = getMeleeDamage(source, victim);
 		if (maxRoll <= 0) {
 			return 0;
 		}
@@ -389,6 +398,10 @@ public class CombatFormula {
 		return (attacker.getSkills().getLevel(Skill.RANGED.id()) + bonusConstant) * (rangedAim(bowId) + 1 + 64);
 	}
 
+	private static double getRangedAccuracy(final Mob attacker, final int bowId, final Mob defender) {
+		return getRangedAccuracy(attacker, bowId) * voidRangedMultiplier(attacker, bowId, defender);
+	}
+
 	/**
 	 * Gets the melee accuracy of the attacking mob
 	 *
@@ -405,6 +418,31 @@ public class CombatFormula {
 		final double accuracy = (Math.floor(attacker.getSkills().getLevel(Skill.ATTACK.id()) * prayerBonus) + bonusConstant + styleBonus) * (attacker.getWeaponAimPoints() + 64);
 
 		return accuracy;
+	}
+
+	private static double getMeleeAccuracy(final Mob attacker, final Mob defender) {
+		return getMeleeAccuracy(attacker) * voidMeleeMultiplier(attacker, defender);
+	}
+
+	private static double voidMeleeMultiplier(final Mob attacker, final Mob defender) {
+		if (!(attacker instanceof Player) || !VoidContent.isVoidNpc(defender)) {
+			return 1.0D;
+		}
+		final Player player = (Player) attacker;
+		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_MACE.id())) {
+			return VoidContent.VOID_MACE_MELEE_MULTIPLIER;
+		}
+		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_SCIMITAR.id())) {
+			return VoidContent.VOID_SCIMITAR_MELEE_MULTIPLIER;
+		}
+		return 1.0D;
+	}
+
+	private static double voidRangedMultiplier(final Mob attacker, final int bowId, final Mob defender) {
+		if (!(attacker instanceof Player) || bowId != VOID_BOW.id() || !VoidContent.isVoidNpc(defender)) {
+			return 1.0D;
+		}
+		return VoidContent.VOID_BOW_RANGED_MULTIPLIER;
 	}
 
 	/**

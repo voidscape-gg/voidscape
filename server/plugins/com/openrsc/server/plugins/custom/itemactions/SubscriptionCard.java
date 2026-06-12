@@ -46,8 +46,8 @@ public final class SubscriptionCard implements OpInvTrigger {
 		ActionSender.sendInventory(player);
 		ActionSender.sendBox(player, "@mag@Subscription " + (wasActive ? "extended" : "activated") + "% %"
 			+ "@whi@This card adds @gre@7 days@whi@ of account subscription time.%"
-			+ "@whi@Combat XP uses @gre@10x@whi@ global rate while active.%"
-			+ "@whi@Skill XP uses @gre@6x@whi@ global rate while active.% %"
+			+ "@whi@Subscribed accounts gain @gre@+1x@whi@ combat and skilling XP.%"
+			+ "@whi@At base rates, that is @gre@11x@whi@ combat and @gre@3x@whi@ skilling XP.% %"
 			+ "@lre@Time remaining: " + VoidSubscription.formatRemaining(remaining) + ".", true);
 		player.save(false, true);
 	}

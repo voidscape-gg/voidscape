@@ -655,6 +655,12 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
 				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
 
+				if (!SwingUtilities.isRightMouseButton(var1)
+					&& (mudclient.closeWelcomeDialogAt(mudclient.mouseX, mudclient.mouseY)
+					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY))) {
+					return;
+				}
+
 				if (!SwingUtilities.isRightMouseButton(var1)) mudclient.currentMouseButtonDown = 1;
 				else mudclient.currentMouseButtonDown = 2;
 
@@ -859,7 +865,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				}
 
 				boolean hitInputFilter = false;
-				mudclient.handleKeyPress((byte) 126, (int) keyChar);
+				int clientKey = keyCode == KeyEvent.VK_ESCAPE ? 27 : (int) keyChar;
+				mudclient.handleKeyPress((byte) 126, clientKey);
 				mudclient.lastMouseAction = 0;
 
 				if (keyCode == 112) mudclient.interlace = !mudclient.interlace;

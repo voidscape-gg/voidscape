@@ -185,13 +185,6 @@ public class CombatEvent extends GameTickEvent {
 				damage = CombatFormula.doMeleeDamage(hitter, target);
 			}
 
-			// voidscape: Void Mace deals 2.5x damage vs NPCs (PvE only). Post-roll multiplier
-			// keeps formula internals untouched and mirrors the Strength Cape +20% pattern.
-			if (hitter.isPlayer() && target.isNpc()
-				&& ((Player) hitter).getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_MACE.id())) {
-				damage = (int) (damage * 2.5);
-			}
-
 			inflictDamage(hitter, target, damage);
 			if (target.isPlayer()) {
 				if (((Player)target).getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_RECOIL.id())) {

@@ -1,6 +1,8 @@
 package orsc;
 
+import com.openrsc.client.entityhandling.instances.Item;
 import com.openrsc.interfaces.misc.AuctionHouse;
+import com.openrsc.interfaces.misc.CustomBankInterface;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import orsc.enumerations.MessageType;
@@ -65,10 +67,13 @@ final class WorkbenchServer {
 			httpServer.createContext("/screenshot", WorkbenchServer::handleScreenshot);
 			httpServer.createContext("/captures/latest", WorkbenchServer::handleLatestCapture);
 			httpServer.createContext("/input/click", WorkbenchServer::handleClick);
+			httpServer.createContext("/input/drag", WorkbenchServer::handleDrag);
 			httpServer.createContext("/input/key", WorkbenchServer::handleKey);
 			httpServer.createContext("/input/type", WorkbenchServer::handleType);
 			httpServer.createContext("/input/command", WorkbenchServer::handleCommand);
+			httpServer.createContext("/input/npc-action", WorkbenchServer::handleNpcAction);
 			httpServer.createContext("/dev/ready", WorkbenchServer::handleDevReady);
+			httpServer.createContext("/dev/viewport", WorkbenchServer::handleViewportPreset);
 			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
 			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
 			httpServer.createContext("/scenario/subscription-vendor-claim", WorkbenchServer::handleSubscriptionVendorScenario);
@@ -180,6 +185,23 @@ final class WorkbenchServer {
 		sendJson(exchange, 200, controlJson("click", "\"x\":" + x + ",\"y\":" + y + ",\"button\":\"" + jsonEscape(button) + "\""));
 	}
 
+	private static void handleDrag(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		int fromX = requiredInt(fields, "fromX");
+		int fromY = requiredInt(fields, "fromY");
+		int toX = requiredInt(fields, "toX");
+		int toY = requiredInt(fields, "toY");
+		String button = fields.containsKey("button") ? fields.get("button") : "left";
+		int steps = fields.containsKey("steps") ? requiredInt(fields, "steps") : 8;
+		int durationMs = fields.containsKey("durationMs") ? requiredInt(fields, "durationMs") : 450;
+		dragGame(fromX, fromY, toX, toY, button, steps, durationMs);
+		sendJson(exchange, 200, controlJson("drag",
+			"\"fromX\":" + fromX + ",\"fromY\":" + fromY
+				+ ",\"toX\":" + toX + ",\"toY\":" + toY
+				+ ",\"button\":\"" + jsonEscape(button) + "\""));
+	}
+
 	private static void handleKey(HttpExchange exchange) throws IOException {
 		if (!requirePost(exchange)) return;
 		Map<String, String> fields = requestFields(exchange);
@@ -209,10 +231,55 @@ final class WorkbenchServer {
 		sendJson(exchange, 200, controlJson("command", "\"command\":\"" + jsonEscape(command) + "\""));
 	}
 
+	private static void handleNpcAction(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String action = fields.containsKey("action") ? fields.get("action") : "command1";
+		ORSCharacter npc = findWorkbenchNpc(fields);
+		if (npc == null) {
+			sendJson(exchange, 404, "{\"ok\":false,\"error\":\"NPC is not visible\"}");
+			return;
+		}
+
+		int serverIndex = npc.serverIndex;
+		if ("talk".equalsIgnoreCase(action) || "talk-to".equalsIgnoreCase(action)) {
+			sendNpcTalk(serverIndex);
+			action = "talk";
+		} else if ("command1".equalsIgnoreCase(action) || "op1".equalsIgnoreCase(action)) {
+			sendNpcCommand1(serverIndex);
+			action = "command1";
+		} else if ("command2".equalsIgnoreCase(action) || "op2".equalsIgnoreCase(action)) {
+			sendNpcCommand2(serverIndex);
+			action = "command2";
+		} else {
+			sendJson(exchange, 400, "{\"ok\":false,\"error\":\"Unknown NPC action\"}");
+			return;
+		}
+
+		sendJson(exchange, 200, controlJson("npc-action",
+			"\"npcAction\":\"" + jsonEscape(action) + "\",\"npcId\":" + npc.npcId + ",\"npcServerIndex\":" + serverIndex
+				+ ",\"npcName\":\"" + jsonEscape(npc.displayName) + "\""));
+	}
+
 	private static void handleDevReady(HttpExchange exchange) throws IOException {
 		if (!requirePost(exchange)) return;
 		try {
 			sendJson(exchange, 200, devReadyJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleViewportPreset(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		int index = requiredInt(fields, "index");
+		try {
+			runOnEdt(() -> ScaledWindow.getInstance().applyViewportPreset(index));
+			sleep(600);
+			sendJson(exchange, 200, controlJson("viewport",
+				"\"index\":" + ScaledWindow.getViewportPresetIndex()
+					+ ",\"label\":\"" + jsonEscape(ScaledWindow.getViewportPresetLabel()) + "\""));
 		} catch (IOException e) {
 			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
 		}
@@ -332,7 +399,9 @@ final class WorkbenchServer {
 			json.append("\"available\":true,");
 			json.append("\"state\":").append(client.getGameState()).append(",");
 			json.append("\"width\":").append(client.getGameWidth()).append(",");
-			json.append("\"height\":").append(client.getGameHeight());
+			json.append("\"height\":").append(client.getGameHeight()).append(",");
+			appendString(json, "inputXAction", client.inputX_Action == null ? "" : client.inputX_Action.name()).append(",");
+			appendString(json, "inputTextCurrent", client.inputTextCurrent);
 		}
 		json.append("}");
 	}
@@ -381,6 +450,8 @@ final class WorkbenchServer {
 		appendWorldMap(json, client);
 		json.append(",");
 		appendShop(json, client);
+		json.append(",");
+		appendBank(json, client);
 		json.append("}");
 	}
 
@@ -425,6 +496,117 @@ final class WorkbenchServer {
 		json.append("\"selectedItemIndex\":").append(client.getShopSelectedItemIndex()).append(",");
 		json.append("\"selectedItemType\":").append(client.getShopSelectedItemType());
 		json.append("}");
+	}
+
+	private static void appendBank(StringBuilder json, mudclient client) {
+		json.append("\"bank\":");
+		CustomBankInterface bank = client == null ? null : client.getBank();
+		if (client == null || bank == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		json.append("\"visible\":").append(client.isShowDialogBank()).append(",");
+		json.append("\"page\":").append(client.bankPage).append(",");
+		json.append("\"maxItems\":").append(client.bankItemsMax).append(",");
+		json.append("\"count\":").append(bank.workbenchBankItemCount()).append(",");
+		json.append("\"matches\":").append(bank.workbenchSearchMatchCount()).append(",");
+		json.append("\"scrollRow\":").append(bank.workbenchScrollRow()).append(",");
+		appendString(json, "search", bank.workbenchSearchText()).append(",");
+		json.append("\"searchFocused\":").append(bank.workbenchSearchFocused()).append(",");
+		json.append("\"noteMode\":").append(bank.workbenchNoteMode()).append(",");
+		json.append("\"certMode\":").append(bank.workbenchCertMode()).append(",");
+		json.append("\"organizeMode\":").append(bank.workbenchOrganizeMode()).append(",");
+		json.append("\"arrangeMenuOpen\":").append(bank.workbenchArrangeMenuOpen()).append(",");
+		json.append("\"loadoutsOpen\":").append(bank.workbenchLoadoutsOpen()).append(",");
+		json.append("\"contextMenuOpen\":").append(bank.workbenchContextMenuOpen()).append(",");
+		json.append("\"selectedBankSlot\":").append(bank.workbenchSelectedBankSlot()).append(",");
+		json.append("\"selectedInventorySlot\":").append(bank.workbenchSelectedInventorySlot()).append(",");
+		json.append("\"contextMenuX\":").append(bank.workbenchContextMenuX()).append(",");
+		json.append("\"contextMenuY\":").append(bank.workbenchContextMenuY()).append(",");
+		json.append("\"contextRowTopOffset\":").append(bank.workbenchContextMenuRowTopOffset()).append(",");
+		json.append("\"contextRowHeight\":").append(bank.workbenchContextMenuRowHeight()).append(",");
+		json.append("\"pendingSavePresetSlot\":").append(bank.workbenchPendingSavePresetSlot()).append(",");
+		json.append("\"pendingClearPresetSlot\":").append(bank.workbenchPendingClearPresetSlot()).append(",");
+		appendBankLayout(json, bank);
+		json.append(",");
+		appendBankItems(json, bank);
+		json.append(",");
+		appendInventoryItems(json, client);
+		json.append(",");
+		appendBankPresets(json, bank);
+		json.append("}");
+	}
+
+	private static void appendBankLayout(StringBuilder json, CustomBankInterface bank) {
+		json.append("\"layout\":{");
+		json.append("\"panelX\":").append(bank.workbenchPanelX()).append(",");
+		json.append("\"panelY\":").append(bank.workbenchPanelY()).append(",");
+		json.append("\"panelWidth\":").append(bank.workbenchPanelWidth()).append(",");
+		json.append("\"panelHeight\":").append(bank.workbenchPanelHeight()).append(",");
+		json.append("\"bankGridX\":").append(bank.workbenchBankGridX()).append(",");
+		json.append("\"bankGridY\":").append(bank.workbenchBankGridY()).append(",");
+		json.append("\"inventoryGridY\":").append(bank.workbenchInventoryGridY()).append(",");
+		json.append("\"slotWidth\":").append(bank.workbenchBankSlotWidth()).append(",");
+		json.append("\"slotHeight\":").append(bank.workbenchBankSlotHeight()).append(",");
+		appendPoint(json, "search", bank.workbenchSearchCenterX(), bank.workbenchSearchCenterY()).append(",");
+		appendPoint(json, "searchClear", bank.workbenchSearchClearCenterX(), bank.workbenchSearchClearCenterY()).append(",");
+		appendPoint(json, "depositInventory", bank.workbenchDepositInventoryCenterX(), bank.workbenchDepositInventoryCenterY()).append(",");
+		appendPoint(json, "arrange", bank.workbenchArrangeCenterX(), bank.workbenchArrangeCenterY()).append(",");
+		appendPoint(json, "loadouts", bank.workbenchLoadoutsCenterX(), bank.workbenchLoadoutsCenterY()).append(",");
+		appendPoint(json, "itemMode", bank.workbenchItemModeCenterX(), bank.workbenchItemModeCenterY()).append(",");
+		appendPoint(json, "noteMode", bank.workbenchNoteModeCenterX(), bank.workbenchNoteModeCenterY()).append(",");
+		appendPoint(json, "close", bank.workbenchCloseCenterX(), bank.workbenchCloseCenterY()).append(",");
+		appendPoint(json, "bankSlot0", bank.workbenchBankSlotCenterX(0), bank.workbenchBankSlotCenterY(0)).append(",");
+		appendPoint(json, "inventorySlot0", bank.workbenchInventorySlotCenterX(0), bank.workbenchInventorySlotCenterY(0));
+		json.append("}");
+	}
+
+	private static void appendBankItems(StringBuilder json, CustomBankInterface bank) {
+		json.append("\"items\":[");
+		for (int i = 0; i < bank.workbenchBankItemCount(); i++) {
+			if (i > 0) json.append(",");
+			json.append("{");
+			json.append("\"slot\":").append(i).append(",");
+			json.append("\"id\":").append(bank.workbenchBankItemCatalogId(i)).append(",");
+			json.append("\"amount\":").append(bank.workbenchBankItemAmount(i)).append(",");
+			json.append("\"noted\":").append(bank.workbenchBankItemNoted(i)).append(",");
+			appendString(json, "name", bank.workbenchBankItemName(i));
+			json.append("}");
+		}
+		json.append("]");
+	}
+
+	private static void appendInventoryItems(StringBuilder json, mudclient client) {
+		json.append("\"inventory\":[");
+		for (int slot = 0; slot < client.getInventoryItemCount(); slot++) {
+			if (slot > 0) json.append(",");
+			Item item = client.getInventoryItem(slot);
+			json.append("{");
+			json.append("\"slot\":").append(slot).append(",");
+			json.append("\"id\":").append(client.getInventoryItemID(slot)).append(",");
+			json.append("\"amount\":").append(client.getInventoryItemAmount(slot)).append(",");
+			json.append("\"noted\":").append(item != null && item.getNoted()).append(",");
+			appendString(json, "name", item == null || item.getItemDef() == null ? null : item.getItemDef().getName());
+			json.append("}");
+		}
+		json.append("]");
+	}
+
+	private static void appendBankPresets(StringBuilder json, CustomBankInterface bank) {
+		json.append("\"presets\":[");
+		for (int slot = 0; slot < bank.workbenchPresetCount(); slot++) {
+			if (slot > 0) json.append(",");
+			json.append("{\"slot\":").append(slot)
+				.append(",\"empty\":").append(bank.workbenchPresetEmpty(slot)).append("}");
+		}
+		json.append("]");
+	}
+
+	private static StringBuilder appendPoint(StringBuilder json, String key, int x, int y) {
+		json.append("\"").append(key).append("\":{\"x\":").append(x).append(",\"y\":").append(y).append("}");
+		return json;
 	}
 
 	private static String auctionHouseScenarioJson() throws IOException {
@@ -722,8 +904,53 @@ final class WorkbenchServer {
 			ORSCApplet.MouseHandler mouseHandler = applet.getMouseHandler();
 			mouseHandler.mouseMoved(new MouseEvent(source, MouseEvent.MOUSE_MOVED, now, 0, eventX, eventY, 0, false, MouseEvent.NOBUTTON));
 			mouseHandler.mousePressed(new MouseEvent(source, MouseEvent.MOUSE_PRESSED, now, modifiers, eventX, eventY, 1, false, button));
-			mouseHandler.mouseReleased(new MouseEvent(source, MouseEvent.MOUSE_RELEASED, now + 1, 0, eventX, eventY, 1, false, button));
-			mouseHandler.mouseClicked(new MouseEvent(source, MouseEvent.MOUSE_CLICKED, now + 2, 0, eventX, eventY, 1, false, button));
+		});
+		sleep(55);
+		runOnEdt(() -> {
+			int eventX = x + client.screenOffsetX;
+			int eventY = y + client.screenOffsetY;
+			long now = System.currentTimeMillis();
+			Component source = applet;
+			ORSCApplet.MouseHandler mouseHandler = applet.getMouseHandler();
+			mouseHandler.mouseReleased(new MouseEvent(source, MouseEvent.MOUSE_RELEASED, now, 0, eventX, eventY, 1, false, button));
+			mouseHandler.mouseClicked(new MouseEvent(source, MouseEvent.MOUSE_CLICKED, now + 1, 0, eventX, eventY, 1, false, button));
+		});
+	}
+
+	private static void dragGame(final int fromX, final int fromY, final int toX, final int toY,
+		final String buttonName, int steps, int durationMs) throws IOException {
+		final mudclient client = requireClient();
+		final ORSCApplet applet = requireApplet();
+		final int button = "right".equalsIgnoreCase(buttonName) ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
+		final int modifiers = button == MouseEvent.BUTTON3 ? InputEvent.BUTTON3_DOWN_MASK : InputEvent.BUTTON1_DOWN_MASK;
+		final int safeSteps = Math.max(1, steps);
+		final int delay = Math.max(15, durationMs / safeSteps);
+		final Component source = applet;
+		final ORSCApplet.MouseHandler mouseHandler = applet.getMouseHandler();
+
+		runOnEdt(() -> {
+			long now = System.currentTimeMillis();
+			int eventX = fromX + client.screenOffsetX;
+			int eventY = fromY + client.screenOffsetY;
+			mouseHandler.mouseMoved(new MouseEvent(source, MouseEvent.MOUSE_MOVED, now, 0, eventX, eventY, 0, false, MouseEvent.NOBUTTON));
+			mouseHandler.mousePressed(new MouseEvent(source, MouseEvent.MOUSE_PRESSED, now + 1, modifiers, eventX, eventY, 1, false, button));
+		});
+
+		for (int step = 1; step <= safeSteps; step++) {
+			sleep(delay);
+			final int eventX = fromX + (toX - fromX) * step / safeSteps + client.screenOffsetX;
+			final int eventY = fromY + (toY - fromY) * step / safeSteps + client.screenOffsetY;
+			runOnEdt(() -> {
+				long now = System.currentTimeMillis();
+				mouseHandler.mouseDragged(new MouseEvent(source, MouseEvent.MOUSE_DRAGGED, now, modifiers, eventX, eventY, 0, false, button));
+			});
+		}
+
+		runOnEdt(() -> {
+			long now = System.currentTimeMillis();
+			int eventX = toX + client.screenOffsetX;
+			int eventY = toY + client.screenOffsetY;
+			mouseHandler.mouseReleased(new MouseEvent(source, MouseEvent.MOUSE_RELEASED, now, 0, eventX, eventY, 1, false, button));
 		});
 	}
 
@@ -799,13 +1026,25 @@ final class WorkbenchServer {
 		runOnEdt(() -> client.sendCommandString(normalized));
 	}
 
+	private static void sendNpcTalk(final int serverIndex) throws IOException {
+		sendNpcPacket(serverIndex, 153);
+	}
+
 	private static void sendNpcCommand1(final int serverIndex) throws IOException {
+		sendNpcPacket(serverIndex, 202);
+	}
+
+	private static void sendNpcCommand2(final int serverIndex) throws IOException {
+		sendNpcPacket(serverIndex, 203);
+	}
+
+	private static void sendNpcPacket(final int serverIndex, final int opcode) throws IOException {
 		final mudclient client = requireClient();
 		if (client.packetHandler == null || client.packetHandler.getClientStream() == null) {
 			throw new IOException("Client packet stream is not ready");
 		}
 		runOnEdt(() -> {
-			client.packetHandler.getClientStream().newPacket(202);
+			client.packetHandler.getClientStream().newPacket(opcode);
 			client.packetHandler.getClientStream().bufferBits.putShort(serverIndex);
 			client.packetHandler.getClientStream().finishPacket();
 		});
@@ -846,6 +1085,31 @@ final class WorkbenchServer {
 			}
 		}
 		return null;
+	}
+
+	private static ORSCharacter findVisibleNpcByServerIndex(int serverIndex) {
+		mudclient client = ORSCApplet.getMudclientForWorkbench();
+		if (client == null) return null;
+		for (int i = 0; i < client.getNpcCount(); i++) {
+			ORSCharacter npc = client.getNpc(i);
+			if (npc != null && npc.serverIndex == serverIndex) {
+				return npc;
+			}
+		}
+		return null;
+	}
+
+	private static ORSCharacter findWorkbenchNpc(Map<String, String> fields) throws IOException {
+		if (fields.containsKey("serverIndex")) {
+			return findVisibleNpcByServerIndex(requiredInt(fields, "serverIndex"));
+		}
+		if (fields.containsKey("npcId")) {
+			return findVisibleNpcById(requiredInt(fields, "npcId"));
+		}
+		if (fields.containsKey("id")) {
+			return findVisibleNpcById(requiredInt(fields, "id"));
+		}
+		throw new IOException("Missing required field: npcId or serverIndex");
 	}
 
 	private static String normalizeCommand(String command) {

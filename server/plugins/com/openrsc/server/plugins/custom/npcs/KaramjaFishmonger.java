@@ -14,7 +14,7 @@ import static com.openrsc.server.plugins.Functions.*;
 
 public final class KaramjaFishmonger implements TalkNpcTrigger, OpNpcTrigger {
 	private static final int NPC_ID = NpcId.KARAMJA_FISHMONGER.id();
-	private static final String COOK_COMMAND = "Cook fish";
+	private static final String LEGACY_COOK_COMMAND = "Cook fish";
 	private static final String NOTE_COMMAND = "Note fish";
 
 	private static final Fish[] FISH = {
@@ -46,18 +46,14 @@ public final class KaramjaFishmonger implements TalkNpcTrigger, OpNpcTrigger {
 		if (!isFishmonger(npc)) return;
 
 		npcsay(player, npc,
-			"I'll cook your raw fish for a half share.",
-			"Or I can pack raw and cooked fish into notes.");
+			"I can pack raw and cooked fish into notes.",
+			"Cooking is honest work. I leave that to cooks.");
 
 		int option = multi(player, npc,
-			"Cook my raw fish.",
 			"Note my fish.",
 			"Never mind.");
 
 		if (option == 0) {
-			say(player, npc, "Cook my raw fish.");
-			cookFish(player, npc);
-		} else if (option == 1) {
 			say(player, npc, "Note my fish.");
 			noteFish(player, npc);
 		} else {
@@ -69,47 +65,24 @@ public final class KaramjaFishmonger implements TalkNpcTrigger, OpNpcTrigger {
 	public boolean blockOpNpc(Player player, Npc npc, String command) {
 		return isFishmonger(npc)
 			&& command != null
-			&& (command.equalsIgnoreCase(COOK_COMMAND) || command.equalsIgnoreCase(NOTE_COMMAND));
+			&& (command.equalsIgnoreCase(LEGACY_COOK_COMMAND) || command.equalsIgnoreCase(NOTE_COMMAND));
 	}
 
 	@Override
 	public void onOpNpc(Player player, Npc npc, String command) {
 		if (!blockOpNpc(player, npc, command)) return;
 
-		if (command.equalsIgnoreCase(COOK_COMMAND)) {
-			cookFish(player, npc);
+		if (command.equalsIgnoreCase(LEGACY_COOK_COMMAND)) {
+			declineCooking(player, npc);
 		} else {
 			noteFish(player, npc);
 		}
 	}
 
-	private void cookFish(Player player, Npc npc) {
-		int rawTaken = 0;
-		int cookedGiven = 0;
-
-		for (Fish fish : FISH) {
-			int rawCount = player.getCarriedItems().getInventory().countId(fish.rawId, Optional.of(false));
-			if (rawCount < 2) {
-				continue;
-			}
-
-			int cookedCount = rawCount / 2;
-			if (player.getCarriedItems().remove(new Item(fish.rawId, rawCount, false)) == -1) {
-				continue;
-			}
-
-			giveUnstacked(player, new Item(fish.cookedId, cookedCount, false));
-			rawTaken += rawCount;
-			cookedGiven += cookedCount;
-		}
-
-		if (rawTaken == 0) {
-			npcsay(player, npc, "Bring me at least two raw fish of a kind.");
-			return;
-		}
-
-		player.message("The fishmonger cooks " + rawTaken + " raw fish and keeps half.");
-		player.message("You receive " + cookedGiven + " cooked fish.");
+	private void declineCooking(Player player, Npc npc) {
+		npcsay(player, npc,
+			"I do not cook fish anymore.",
+			"Bring cooked fish if you want them packed into notes.");
 	}
 
 	private void noteFish(Player player, Npc npc) {
@@ -140,17 +113,6 @@ public final class KaramjaFishmonger implements TalkNpcTrigger, OpNpcTrigger {
 
 		player.getCarriedItems().getInventory().add(new Item(itemId, count, true));
 		return count;
-	}
-
-	private void giveUnstacked(Player player, Item item) {
-		if (item.getAmount() > 1 && !item.getDef(player.getWorld()).isStackable() && !item.getNoted()) {
-			for (int i = 0; i < item.getAmount(); i++) {
-				player.getCarriedItems().getInventory().add(new Item(item.getCatalogId(), 1, false));
-			}
-			return;
-		}
-
-		player.getCarriedItems().getInventory().add(item);
 	}
 
 	private boolean isFishmonger(Npc npc) {

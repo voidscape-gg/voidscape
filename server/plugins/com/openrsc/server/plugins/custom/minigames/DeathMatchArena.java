@@ -132,9 +132,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	};
 
 	private static final Reward[] VOID_KNIGHT_SUPPLY_REWARDS = {
-		new Reward(ItemId.SWORDFISH.id(), 10, 18, 8, true),
-		new Reward(ItemId.LOBSTER.id(), 18, 30, 7, true),
-		new Reward(ItemId.FULL_STRENGTH_POTION.id(), 1, 2, 3, true),
+		new Reward(ItemId.RAW_SWORDFISH.id(), 12, 24, 8, true),
+		new Reward(ItemId.RAW_LOBSTER.id(), 24, 42, 7, true),
+		new Reward(ItemId.UNIDENTIFIED_TARROMIN.id(), 3, 8, 2, true),
+		new Reward(ItemId.LIMPWURT_ROOT.id(), 3, 8, 2, true),
 		new Reward(ItemId.DEATH_RUNE.id(), 20, 45, 6),
 		new Reward(ItemId.CHAOS_RUNE.id(), 35, 75, 6),
 		new Reward(ItemId.LAW_RUNE.id(), 15, 30, 4),

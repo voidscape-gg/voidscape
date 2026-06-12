@@ -733,12 +733,8 @@ public class ActionSender {
 		struct.totalPlayedSeconds = getTotalPlayedSeconds(player);
 		boolean subscriptionActive = VoidSubscription.isActive(player);
 		struct.subscriptionActive = subscriptionActive ? 1 : 0;
-		struct.effectiveCombatExpRateTenths = clampRateTenths(subscriptionActive
-			? Math.max(player.getConfig().COMBAT_EXP_RATE, VoidSubscription.COMBAT_EXP_RATE)
-			: player.getConfig().COMBAT_EXP_RATE);
-		struct.effectiveSkillingExpRateTenths = clampRateTenths(subscriptionActive
-			? Math.max(player.getConfig().SKILLING_EXP_RATE, VoidSubscription.SKILLING_EXP_RATE)
-			: player.getConfig().SKILLING_EXP_RATE);
+		struct.effectiveCombatExpRateTenths = clampRateTenths(VoidSubscription.effectiveCombatRate(player, player.getConfig().COMBAT_EXP_RATE));
+		struct.effectiveSkillingExpRateTenths = clampRateTenths(VoidSubscription.effectiveSkillingRate(player, player.getConfig().SKILLING_EXP_RATE));
 		struct.hdIntensity = player.getHdIntensity();
 		struct.hdSaturation = player.getHdSaturation();
 		struct.hdBloom = player.getHdBloom() ? 1 : 0;

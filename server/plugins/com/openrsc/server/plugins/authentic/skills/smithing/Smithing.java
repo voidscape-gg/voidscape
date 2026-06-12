@@ -639,7 +639,7 @@ public class Smithing implements UseLocTrigger {
 		else if (secondType == 7) return armourChoice(player);
 
 			// Arrowheads
-		else if (secondType == 8) return 18;
+		else if (secondType == 8) return arrowheadChoice(player);
 
 		// Dart tips
 		else if (secondType == 9) {
@@ -648,6 +648,18 @@ public class Smithing implements UseLocTrigger {
 			}
 		}
 
+		return -1;
+	}
+
+	private int arrowheadChoice(Player player) {
+		if (!config().BATCH_PROGRESSION) {
+			return 18;
+		}
+
+		player.message("How many arrow heads do you want to make?");
+		int option = multi(player, "10 arrow heads (1 bar)", "50 arrow heads (5 bars)", "Cancel");
+		if (option == 0) return 18;
+		if (option == 1) return 19;
 		return -1;
 	}
 

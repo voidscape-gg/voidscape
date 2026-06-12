@@ -87,7 +87,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
 - [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.
 - [ ] Player titles command opens and active title appears in chat.
-- [ ] Karamja Fishmonger cooks and notes supported fish.
+- [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
 - [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, and redeemed cards apply the intended account-wide XP rates.
 - [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.

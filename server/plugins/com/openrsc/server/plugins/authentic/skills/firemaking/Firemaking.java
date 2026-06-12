@@ -10,10 +10,12 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.World;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.plugins.triggers.UseInvTrigger;
 import com.openrsc.server.plugins.triggers.UseObjTrigger;
 import com.openrsc.server.util.rsc.CollisionFlag;
+import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
 import com.openrsc.server.util.rsc.MessageType;
 
@@ -90,6 +92,8 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 
 				// Remove logs and add fire scenery.
 				final int duration = SkillCapes.shouldActivate(player, ItemId.FIREMAKING_CAPE) ? def.getLength() * 2 : def.getLength();
+				final int ashId = getAshId(gItem.getID());
+				final int ashAmount = rollAshAmount(player, def);
 				player.getWorld().unregisterItem(gItem);
 				final GameObject fire = new GameObject(player.getWorld(), gItem.getLocation(), 97, 0, 0);
 				player.getWorld().registerGameObject(fire);
@@ -97,12 +101,7 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 					new SingleEvent(player.getWorld(), null, duration, "Light Logs Fire Removal") {
 						@Override
 						public void action() {
-							getWorld().registerItem(new GroundItem(
-								getWorld(),
-								ItemId.ASHES.id(),
-								fire.getX(),
-								fire.getY(),
-								1, (Player) null));
+							dropAshes(getWorld(), ashId, ashAmount, fire);
 							getWorld().unregisterGameObject(fire);
 						}
 					}
@@ -185,6 +184,8 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 
 				final GameObject fire = new GameObject(player.getWorld(), gItem.getLocation(), 97, 0, 0);
 				player.getWorld().registerGameObject(fire);
+				final int ashId = getAshId(gItem.getID());
+				final int ashAmount = rollAshAmount(player, def);
 
 				final int duration = SkillCapes.shouldActivate(player, ItemId.FIREMAKING_CAPE) ? (330 * 1000) : def.getLength();
 				player.getWorld().getServer().getGameEventHandler().add(
@@ -192,12 +193,7 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 						@Override
 						public void action() {
 							if (fire != null) {
-								getWorld().registerItem(new GroundItem(
-									player.getWorld(),
-									ItemId.ASHES.id(),
-									fire.getX(),
-									fire.getY(),
-									1, (Player) null));
+								dropAshes(getWorld(), ashId, ashAmount, fire);
 								getWorld().unregisterGameObject(fire);
 							}
 						}
@@ -238,6 +234,39 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 				delay(2);
 				batchCustomFiremaking(player, gItem, def);
 			}
+		}
+	}
+
+	private int getAshId(int logId) {
+		switch (ItemId.getById(logId)) {
+			case OAK_LOGS:
+				return ItemId.WARM_ASHES.id();
+			case WILLOW_LOGS:
+				return ItemId.BRIGHT_ASHES.id();
+			case MAPLE_LOGS:
+				return ItemId.SACRED_ASHES.id();
+			case YEW_LOGS:
+				return ItemId.BLESSED_ASHES.id();
+			case MAGIC_LOGS:
+				return ItemId.VOID_ASHES.id();
+			case LOGS:
+			default:
+				return ItemId.ASHES.id();
+		}
+	}
+
+	private int rollAshAmount(Player player, FiremakingDef def) {
+		int levelOverRequirement = Math.max(0, player.getSkills().getLevel(Skill.FIREMAKING.id()) - def.getRequiredLevel());
+		int bonusChance = Math.min(35, levelOverRequirement);
+		if (bonusChance > 0 && DataConversions.random(1, 100) <= bonusChance) {
+			return 2;
+		}
+		return 1;
+	}
+
+	private void dropAshes(World world, int ashId, int amount, GameObject fire) {
+		for (int i = 0; i < amount; i++) {
+			world.registerItem(new GroundItem(world, ashId, fire.getX(), fire.getY(), 1, (Player) null));
 		}
 	}
 

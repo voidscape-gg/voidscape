@@ -6,8 +6,8 @@ let token = "";
 
 const initialPublic = await api("/api/public");
 assert(initialPublic.status.online === true, "public endpoint should expose online state");
-assert(initialPublic.rates.baseCombat === 7, "public endpoint should expose base combat rate");
-assert(initialPublic.rates.subscribedSkill === 6, "public endpoint should expose subscribed skill rate");
+assert(initialPublic.rates.baseCombat === 10, "public endpoint should expose base combat rate");
+assert(initialPublic.rates.subscribedSkill === 3, "public endpoint should expose subscribed skill rate");
 assert(Array.isArray(initialPublic.news) && initialPublic.news.length >= 3, "public endpoint should expose news");
 assert(Array.isArray(initialPublic.market) && initialPublic.market.length >= 6, "public endpoint should expose market rows");
 assert(Array.isArray(initialPublic.highscores) && initialPublic.highscores.length >= 6, "public endpoint should expose highscores");
@@ -47,7 +47,7 @@ assert(snapshot.character.total === "1194", "snapshot endpoint should return tot
 assert(snapshot.character.status === "Lumbridge", "snapshot endpoint should summarize location");
 assert(snapshot.character.title === "Crownless Conqueror", "snapshot endpoint should resolve the active title");
 assert(snapshot.character.subscriptionState.active === false, "unlinked snapshot should not inherit subscription state");
-assert(snapshot.character.subscriptionState.combatXpRate === 7, "unlinked snapshot should use base combat XP rate");
+assert(snapshot.character.subscriptionState.combatXpRate === 10, "unlinked snapshot should use base combat XP rate");
 assert(Array.isArray(snapshot.character.equipment) && snapshot.character.equipment.length === 2, "snapshot endpoint should return wielded gear");
 assert(snapshot.character.gear.includes("Iron 2-handed Sword"), "snapshot endpoint should resolve item definition names");
 
@@ -376,8 +376,8 @@ const redeemed = await api("/api/subscriptions/redeem", {
 	body: { code: "VOID-WEEK-SMOKE" }
 });
 assert(redeemed.account.subscription.active === true, "redeeming a card should activate subscription state");
-assert(redeemed.account.subscription.combatXpRate === 10, "subscribed combat XP rate should be 10x");
-assert(redeemed.account.subscription.skillXpRate === 6, "subscribed skill XP rate should be 6x");
+assert(redeemed.account.subscription.combatXpRate === 11, "subscribed combat XP rate should be 11x");
+assert(redeemed.account.subscription.skillXpRate === 3, "subscribed skill XP rate should be 3x");
 
 const account = await api("/api/account");
 assert(account.characters.length === 10, "account endpoint should return the full roster");

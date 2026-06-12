@@ -191,6 +191,8 @@ Voidscape custom-client packet notes:
 - `10096`: Void Dungeon revenant-cave pass. Rebuilt the generated dungeon layout/floor mask, moved the entry rift out of the Enclave into unsafe Wilderness, and repacked `Custom_Landscape.orsc` so the floor/minimap matches. No packet shape changed.
 - `10097`: Void Dungeon compact pass. Rebuilt the dungeon as a much smaller two-sector cave, moved the internal exit rift to `72,3250`, and repacked `Custom_Landscape.orsc`. No packet shape changed.
 - `10098`: Void Dungeon prompt/UI polish. Restored confirmed rift entry/exit after moving ordinary server option prompts above the Voidscape chat frame, raised the cave entry fee to 100,000 coins, and reverted the combat-style selector to upstream size. No packet shape changed.
+- `10099`: Firemaking ash/prayer economy pass. Added client-visible tiered ash item definitions `1604-1608` using the existing ash sprite with recolor masks; oak through magic logs now leave those ashes for altar offering. No packet shape or cache archive changed.
+- `10100`: Food economy polish. The Karamja Fishmonger client/server NPC definition now advertises only `Note fish`, matching the no-cooking food economy pass; Cooking cape holders also receive a server-side burn-roll mastery bonus. No packet shape or cache archive changed.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

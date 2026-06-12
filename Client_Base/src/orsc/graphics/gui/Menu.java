@@ -5,6 +5,8 @@ import orsc.graphics.two.MudClientGraphics;
 import orsc.util.ArrayUtil;
 import orsc.util.GenUtil;
 
+import static orsc.Config.C_CUSTOM_UI;
+
 public final class Menu {
 	public int font;
 	private int itemCount;
@@ -301,7 +303,12 @@ public final class Menu {
 
 			if (this.menuWidth != 0 && this.menuHeight != 0) {
 				if (draw) {
-					this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, this.menuHeight, 13684944, 160);
+					if (C_CUSTOM_UI) {
+						this.surf.drawBoxAlpha(menuX - 2, menuY - 2, this.menuWidth + 4, this.menuHeight + 4, 0x08050C, 230);
+						this.surf.drawBoxBorder(menuX - 2, this.menuWidth + 4, menuY - 2, this.menuHeight + 4, 0x6A4FA0);
+					} else {
+						this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, this.menuHeight, 13684944, 160);
+					}
 				}
 
 				int lineHeight = 1 + this.surf.fontHeight(this.font);
@@ -341,6 +348,9 @@ public final class Menu {
 					}
 
 					if (draw) {
+						if (C_CUSTOM_UI && clickedLine == i) {
+							this.surf.drawBoxAlpha(menuX, lineY - lineHeight + 4, this.menuWidth, lineHeight, 0x4B2472, 190);
+						}
 						this.surf.drawString(this.menuItems[i].label + " " + this.menuItems[i].actor, menuX + 2, lineY,
 							lineColor, this.font);
 					}

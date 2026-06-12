@@ -4,6 +4,7 @@ import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.event.custom.NpcLootEvent;
@@ -463,12 +464,12 @@ public class Npc extends Mob {
 			if (!worldAllowsDrop(item)) {
 				continue;
 			}
-			// voidscape: Void Amulet boosts stackable drops by 1.5x. Common NPCs (men, goblins)
+			// voidscape: Void Amulet boosts stackable drops from Void NPCs. Common NPCs
 			// drop coins via the invariableItems path, not dropStackItem.
 			int amount = item.getAmount();
 			if (getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogId()).isStackable()) {
-				if (owner.getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_AMULET.id())) {
-					amount = (int) (amount * 1.5);
+				if (hasVoidAmuletDropBoost(owner)) {
+					amount = (int) (amount * VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER);
 				}
 			}
 			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), amount, owner);
@@ -678,11 +679,9 @@ public class Npc extends Mob {
 			amount += Formulae.getSplendorBoost(amount);
 			owner.message("Your ring of splendor shines brightly!");
 		}
-		// voidscape: Void Amulet boosts stackable NPC drops by 1.5x for the wearer (the kill owner).
-		// Applies on top of Ring of Splendor's coin bonus (multiplicative). Only stackable drops
-		// route through this method, so no per-item-stackable check is needed.
-		if (owner.getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_AMULET.id())) {
-			amount = (int) (amount * 1.5);
+		// voidscape: Void Amulet boosts stackable Void NPC drops for the wearer.
+		if (hasVoidAmuletDropBoost(owner)) {
+			amount = (int) (amount * VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER);
 		}
 		recordNpcDrop(owner, dropID, amount, isRareDrop(item));
 		final int finalAmount = amount;
@@ -747,6 +746,11 @@ public class Npc extends Mob {
 
 			}
 		}
+	}
+
+	private boolean hasVoidAmuletDropBoost(Player owner) {
+		return VoidContent.isVoidNpc(this)
+			&& owner.getCarriedItems().getEquipment().hasEquipped(ItemId.VOID_AMULET.id());
 	}
 
 	private void markRareDropBeam(GroundItem groundItem, Item item) {

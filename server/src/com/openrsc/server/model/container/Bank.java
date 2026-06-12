@@ -403,9 +403,14 @@ public class Bank {
 		synchronized (list) {
 			synchronized (player.getCarriedItems().getInventory().getItems()) {
 				try {
-					for (int i = player.getCarriedItems().getInventory().getItems().size(); i-- > 0;) {
-						Item item = player.getCarriedItems().getInventory().getItems().get(i);
-						depositItemFromInventory(item.getCatalogId(), item.getAmount(), true);
+					List<Integer> catalogIDs = new ArrayList<Integer>();
+					for (Item item : new ArrayList<Item>(player.getCarriedItems().getInventory().getItems())) {
+						if (item != null && !catalogIDs.contains(item.getCatalogId())) {
+							catalogIDs.add(item.getCatalogId());
+						}
+					}
+					for (Integer catalogID : catalogIDs) {
+						depositItemFromInventory(catalogID, Integer.MAX_VALUE, true);
 					}
 				} catch (Exception ex) {
 					LOGGER.error(ex.getMessage());

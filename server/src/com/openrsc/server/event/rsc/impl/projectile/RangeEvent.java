@@ -132,10 +132,9 @@ public class RangeEvent extends GameTickEvent {
 		final int ammoId;
 		final boolean isCrossbow = RangeUtils.isCrossbow(weaponId);
 
-		if (RangeUtils.isVoidBow(weaponId)) {
-			// Void Bow fires without consuming ammo. Pass the bow id itself as the
-			// "ammo" id so downstream power lookup (CombatFormula.rangedPower) and
-			// the no-drop guard in handleArrowLossAndDrop both key off it.
+		if (RangeUtils.canUseVoidBowFreeAmmo(weaponId, target)) {
+			// Against Void NPCs, the bow id is the ammo sentinel. Everywhere else
+			// the bow uses normal arrows so the arrow economy still matters.
 			ammoId = weaponId;
 		} else if (config.WANT_EQUIPMENT_TAB) {
 			ammoId = takeAmmoFromEquipment(weaponId, isCrossbow);

@@ -341,9 +341,14 @@ public class GraphicsController {
 
 	public Sprite spriteSelect(ItemDef item) {
 		if (!Config.S_WANT_CUSTOM_SPRITES) {
-			if (item.spriteID + mudclient.spriteItem >= sprites.length || null == sprites[item.spriteID + mudclient.spriteItem])
+			int spriteID = item.spriteID;
+			if (spriteID < 0) {
+				spriteID = itemSpriteIDFromLocation(item.getSpriteLocation());
+			}
+			int archiveIndex = spriteID + mudclient.spriteItem;
+			if (spriteID < 0 || archiveIndex < 0 || archiveIndex >= sprites.length || null == sprites[archiveIndex])
 				return Sprite.getUnknownSprite(48, 32);
-			return sprites[item.spriteID + mudclient.spriteItem];
+			return sprites[archiveIndex];
 		}
 
 		String[] location = item.getSpriteLocation().split(":");
@@ -351,6 +356,29 @@ public class GraphicsController {
 			return Sprite.getUnknownSprite(48, 32);
 		}
 		return spriteTree.get(location[0]).get(location[1]).getFrames()[0].getSprite();
+	}
+
+	private int itemSpriteIDFromLocation(String spriteLocation) {
+		if (spriteLocation == null || !spriteLocation.startsWith("items:")) {
+			return -1;
+		}
+
+		String spriteID = spriteLocation.substring("items:".length());
+		if (spriteID.isEmpty()) {
+			return -1;
+		}
+
+		for (int i = 0; i < spriteID.length(); i++) {
+			if (!Character.isDigit(spriteID.charAt(i))) {
+				return -1;
+			}
+		}
+
+		try {
+			return Integer.parseInt(spriteID);
+		} catch (NumberFormatException ex) {
+			return -1;
+		}
 	}
 
 	public Sprite spriteSelect(AnimationDef animation, int offset) {

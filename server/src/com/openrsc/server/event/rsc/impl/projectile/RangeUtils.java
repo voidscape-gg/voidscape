@@ -6,6 +6,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.DropTable;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.event.rsc.impl.combat.OSRSCombatFormula;
 import com.openrsc.server.model.container.Item;
@@ -185,7 +186,7 @@ public class RangeUtils {
     }
 
     public static void handleArrowLossAndDrop(World world, Player player, Mob target, int damage, int arrowId) {
-        // Void Bow uses no ammo — nothing to drop on the target.
+        // Void Bow uses itself as an ammo sentinel only against Void NPCs.
         if (isVoidBow(arrowId)) return;
         if (Formulae.loseArrow(damage)) {
             GroundItem arrows = getArrows(arrowId, target, player);
@@ -257,4 +258,8 @@ public class RangeUtils {
     public static boolean isVoidBow(int weaponId) {
         return weaponId == ItemId.VOID_BOW.id();
     }
+
+	public static boolean canUseVoidBowFreeAmmo(int weaponId, Mob target) {
+		return isVoidBow(weaponId) && VoidContent.isVoidNpc(target);
+	}
 }

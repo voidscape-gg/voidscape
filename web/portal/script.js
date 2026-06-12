@@ -441,8 +441,8 @@
 			sidebarSubTime.textContent = "13 days 21 hours";
 			if (subTitle) subTitle.textContent = "Subscribed";
 			if (subMeterFill) subMeterFill.style.width = "100%";
-			if (subCombatRate) subCombatRate.textContent = "10x";
-			if (subSkillRate) subSkillRate.textContent = "6x";
+			if (subCombatRate) subCombatRate.textContent = "11x";
+			if (subSkillRate) subSkillRate.textContent = "3x";
 		});
 	}
 

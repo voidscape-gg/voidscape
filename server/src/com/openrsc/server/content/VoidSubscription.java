@@ -17,8 +17,8 @@ public final class VoidSubscription {
 	private static final int SIGNUP_CODE_MAX_LENGTH = 20;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
 	public static final int PROFILE_CLIENT_VERSION = 10055;
-	public static final double COMBAT_EXP_RATE = 10.0;
-	public static final double SKILLING_EXP_RATE = 6.0;
+	public static final double COMBAT_EXP_BONUS = 1.0D;
+	public static final double SKILLING_EXP_BONUS = 1.0D;
 	public static final long DURATION_MILLIS = 7L * 24L * 60L * 60L * 1000L;
 	private static final long HOUR_MILLIS = 60L * 60L * 1000L;
 	private static final long ACCOUNT_SUBSCRIPTION_REFRESH_MILLIS = 30L * 1000L;
@@ -98,8 +98,15 @@ public final class VoidSubscription {
 		if (!isActive(player)) {
 			return currentRate;
 		}
-		double subscriptionRate = isCombatSkill(skill) ? COMBAT_EXP_RATE : SKILLING_EXP_RATE;
-		return Math.max(currentRate, subscriptionRate);
+		return currentRate + (isCombatSkill(skill) ? COMBAT_EXP_BONUS : SKILLING_EXP_BONUS);
+	}
+
+	public static double effectiveCombatRate(Player player, double baseRate) {
+		return applyRate(player, Skill.ATTACK.id(), baseRate);
+	}
+
+	public static double effectiveSkillingRate(Player player, double baseRate) {
+		return applyRate(player, Skill.WOODCUTTING.id(), baseRate);
 	}
 
 	public static boolean hasLinkedAccount(Player player) {

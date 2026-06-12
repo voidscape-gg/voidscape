@@ -1821,6 +1821,7 @@ public class NpcDrops {
 		voidDrop.addItemDrop(ItemId.COINS.id(), 250, 12);
 		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 3, 12);
 		voidDrop.addItemDrop(ItemId.UNCUT_EMERALD.id(), 1, 6);
+		voidDrop.addItemDrop(ItemId.LIMPWURT_ROOT.id(), 2, 8);
 		voidDrop.addItemDrop(ItemId.VOID_MACE.id(), 1, 1);
 		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());
 		this.npcDrops.put(NpcId.VOID_OGRE.id(), voidDrop);
@@ -1830,6 +1831,7 @@ public class NpcDrops {
 		voidDrop.addItemDrop(ItemId.COINS.id(), 300, 14);
 		voidDrop.addItemDrop(ItemId.DEATH_RUNE.id(), 5, 12);
 		voidDrop.addItemDrop(ItemId.UNCUT_EMERALD.id(), 1, 6);
+		voidDrop.addItemDrop(ItemId.LIMPWURT_ROOT.id(), 2, 8);
 		voidDrop.addItemDrop(ItemId.VOID_SCIMITAR.id(), 1, 2);
 		voidDrop.addItemDrop(ItemId.VOID_BOW.id(), 1, 1);
 		voidDrop.addEmptyDrop(128 - voidDrop.getTotalWeight());

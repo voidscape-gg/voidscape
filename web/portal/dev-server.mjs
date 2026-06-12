@@ -33,6 +33,9 @@ const signupCodeCachePrefix = "signup_code:";
 const signupCodeAvailable = 1;
 const signupCodeRedeemed = 2;
 const starterFreeSubscriptionType = "starter_free_subscription";
+const baseCombatXpRate = 10;
+const baseSkillXpRate = 2;
+const subscriptionXpBonus = 1;
 const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || 5));
 const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
@@ -1456,7 +1459,7 @@ async function publicState(store) {
 		return {
 			publicMode: true,
 			status: { world: "Voidscape", online: false, playersOnline: 0, patch: "prelaunch", lastSave: "" },
-			rates: { baseCombat: 7, baseSkill: 4, subscribedCombat: 10, subscribedSkill: 6 },
+			rates: xpRates(),
 			founderStats: {
 				reservations: store.founders.length,
 				starterCardsUnlocked: founderUnlocks
@@ -1476,12 +1479,7 @@ async function publicState(store) {
 			patch: "0.8.7",
 			lastSave: "2 min ago"
 		},
-		rates: {
-			baseCombat: 7,
-			baseSkill: 4,
-			subscribedCombat: 10,
-			subscribedSkill: 6
-		},
+		rates: xpRates(),
 		founderStats: {
 			reservations: store.founders.length,
 			starterCardsUnlocked: founderUnlocks
@@ -2062,8 +2060,8 @@ async function openRscSubscriptionState(cache) {
 		active,
 		expiresAt,
 		label: active && expiresAt > Date.now() ? formatRemaining(expiresAt) : active ? "Subscribed" : "Unsubscribed",
-		combatXpRate: active ? 10 : 7,
-		skillXpRate: active ? 6 : 4
+		combatXpRate: active ? baseCombatXpRate + subscriptionXpBonus : baseCombatXpRate,
+		skillXpRate: active ? baseSkillXpRate + subscriptionXpBonus : baseSkillXpRate
 	};
 }
 
@@ -2698,8 +2696,17 @@ function subscriptionState(account) {
 		active,
 		expiresAt,
 		label: active ? formatRemaining(expiresAt) : "Unsubscribed",
-		combatXpRate: active ? 10 : 7,
-		skillXpRate: active ? 6 : 4
+		combatXpRate: active ? baseCombatXpRate + subscriptionXpBonus : baseCombatXpRate,
+		skillXpRate: active ? baseSkillXpRate + subscriptionXpBonus : baseSkillXpRate
+	};
+}
+
+function xpRates() {
+	return {
+		baseCombat: baseCombatXpRate,
+		baseSkill: baseSkillXpRate,
+		subscribedCombat: baseCombatXpRate + subscriptionXpBonus,
+		subscribedSkill: baseSkillXpRate + subscriptionXpBonus
 	};
 }
 

@@ -27,5 +27,5 @@ echo "==> Building + launching PC client"
 
 cd Client_Base
 ant \
-    -Dworkbench.jvmargs="-Dvoidscape.workbench=true -Dvoidscape.workbench.port=$WORKBENCH_PORT -Dvoidscape.workbench.dir=$WORKBENCH_DIR" \
+    -Dworkbench.jvmargs="-Dvoidscape.workbench=true -Dvoidscape.workbench.port=$WORKBENCH_PORT -Dvoidscape.workbench.dir=$WORKBENCH_DIR ${VOIDSCAPE_WORKBENCH_JVMARGS:-}" \
     compile-and-run

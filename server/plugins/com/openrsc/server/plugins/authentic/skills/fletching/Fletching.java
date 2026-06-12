@@ -388,16 +388,17 @@ public class Fletching implements UseInvTrigger {
 
 		if (options.length == 2 && type >= 0) type += 1;
 
-		int reqLvl, exp, amount;
-		reqLvl = exp = amount = 0;
+		int reqLvl, exp;
+		reqLvl = exp = 0;
 		int id = ItemId.NOTHING.id();
 		String cutMessage = null;
+		int shaftAmount = getNumberOfShafts(player, cutDef);
 		switch (type) {
 			case 0:
 				id = ItemId.ARROW_SHAFTS.id();
 				reqLvl = cutDef.getShaftLvl();
 				exp = cutDef.getShaftExp();
-				cutMessage = "You carefully cut the wood into " + getNumberOfShafts(player, log.getCatalogId())
+				cutMessage = "You carefully cut the wood into " + shaftAmount
 					+ " arrow shafts";
 				break;
 			case 1:
@@ -420,10 +421,10 @@ public class Fletching implements UseInvTrigger {
 		}
 
 		startbatch(repeat);
-		batchLogCutting(player, log, id, reqLvl, exp, cutMessage);
+		batchLogCutting(player, log, id, reqLvl, exp, cutMessage, shaftAmount);
 	}
 
-	private void batchLogCutting(Player player, Item log, int id, int reqLvl, int exp, String cutMessage) {
+	private void batchLogCutting(Player player, Item log, int id, int reqLvl, int exp, String cutMessage, int shaftAmount) {
 		if (!canReceive(player, new Item(id))) {
 			player.message("Your client does not support the desired object");
 			return;
@@ -441,7 +442,7 @@ public class Fletching implements UseInvTrigger {
 		if (log == null) return;
 		if (player.getCarriedItems().remove(log) > -1) {
 			player.message(cutMessage);
-			give(player, id, id == ItemId.ARROW_SHAFTS.id() ? getNumberOfShafts(player, log.getCatalogId()) : 1);
+			give(player, id, id == ItemId.ARROW_SHAFTS.id() ? shaftAmount : 1);
 			player.incExp(Skill.FLETCHING.id(), exp, true);
 		}
 
@@ -449,19 +450,13 @@ public class Fletching implements UseInvTrigger {
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
 			delay(2);
-			batchLogCutting(player, log, id, reqLvl, exp, cutMessage);
+			batchLogCutting(player, log, id, reqLvl, exp, cutMessage, shaftAmount);
 		}
 	}
 
-	private int getNumberOfShafts(final Player player, final int logId) {
-
+	private int getNumberOfShafts(final Player player, final ItemLogCutDef cutDef) {
 		if (!config().MORE_SHAFTS_PER_BETTER_LOG) return 10;
-		for (int i = 0; i < logIds.length; ++i) {
-			if (logId == logIds[i]) {
-				return 10 + (i * 5);
-			}
-		}
-		return 10;
+		return Math.max(10, cutDef.getShaftAmount());
 	}
 
 	private void doPearlCut(final Player player, final Item chisel, final Item pearl) {

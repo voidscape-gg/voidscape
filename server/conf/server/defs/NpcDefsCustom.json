@@ -2122,9 +2122,9 @@
   {
     "id": 847,
     "name": "Karamja Fishmonger",
-    "description": "A dockside cook who can pack fish for travel.",
-    "command": "Cook fish",
-    "command2": "Note fish",
+    "description": "A dockside fish notary who can pack fish for travel.",
+    "command": "Note fish",
+    "command2": "",
     "attack": 0,
     "strength": 0,
     "hits": 5,

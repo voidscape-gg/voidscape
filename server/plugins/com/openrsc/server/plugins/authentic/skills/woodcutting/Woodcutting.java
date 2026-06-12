@@ -21,6 +21,13 @@ import java.util.Optional;
 import static com.openrsc.server.plugins.Functions.*;
 
 public class Woodcutting implements OpLocTrigger, UseLocTrigger {
+	private static final int VOID_SPARROW_MIN_WOODCUTTING = 90;
+	private static final int VOID_SPARROW_EXPERT_WOODCUTTING = 99;
+	private static final int VOID_SPARROW_YEW_LOG_CHANCE = 16384;
+	private static final int VOID_SPARROW_MAGIC_LOG_CHANCE = 4096;
+	private static final int VOID_SPARROW_LEVEL_BONUS_PERCENT_PER_LEVEL = 3;
+	private static final int VOID_SPARROW_MAX_LEVEL_BONUS_PERCENT = 25;
+	private static final int VOID_SPARROW_EXPERT_BONUS_PERCENT = 15;
 
 	@Override
 	public boolean blockOpLoc(final Player player, final GameObject obj,
@@ -115,6 +122,7 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 				}
 				player.getCarriedItems().getInventory().add(log);
 				player.playerServerMessage(MessageType.QUEST, "You get some wood");
+				rollVoidSparrow(player, def);
 				if (isOldWoodcut) {
 					player.incExp(Skill.WOODCUTTING.id(), getExpRetro(player.getSkills().getMaxStat(Skill.WOODCUTTING.id()), 25), true);
 				} else {
@@ -230,5 +238,50 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 			return true;
 		}
 		return false;
+	}
+
+	private void rollVoidSparrow(Player player, ObjectWoodcuttingDef def) {
+		int woodcuttingLevel = player.getSkills().getMaxStat(Skill.WOODCUTTING.id());
+		int chance = getVoidSparrowChance(def, woodcuttingLevel);
+		if (chance <= 0 || DataConversions.random(1, chance) != 1) {
+			return;
+		}
+
+		Item sparrow = new Item(ItemId.VOID_SPARROW.id(), 1);
+		if (player.getCarriedItems().getInventory().add(sparrow)) {
+			player.playerServerMessage(MessageType.QUEST, "@mag@A void sparrow flutters out from the branches and lands in your pack.");
+			return;
+		}
+
+		player.getWorld().registerItem(
+			new GroundItem(player.getWorld(), sparrow.getCatalogId(), player.getX(), player.getY(), 1, player),
+			player.getConfig().GAME_TICK * 150);
+		player.playerServerMessage(MessageType.QUEST, "@mag@A void sparrow flutters out from the branches and lands at your feet.");
+	}
+
+	private int getVoidSparrowChance(ObjectWoodcuttingDef def, int woodcuttingLevel) {
+		if (woodcuttingLevel < VOID_SPARROW_MIN_WOODCUTTING) {
+			return 0;
+		}
+
+		int baseChance;
+		if (def.getLogId() == ItemId.YEW_LOGS.id()) {
+			baseChance = VOID_SPARROW_YEW_LOG_CHANCE;
+		} else if (def.getLogId() == ItemId.MAGIC_LOGS.id()) {
+			baseChance = VOID_SPARROW_MAGIC_LOG_CHANCE;
+		} else {
+			return 0;
+		}
+
+		int levelBonus = Math.min(
+			VOID_SPARROW_MAX_LEVEL_BONUS_PERCENT,
+			(woodcuttingLevel - VOID_SPARROW_MIN_WOODCUTTING) * VOID_SPARROW_LEVEL_BONUS_PERCENT_PER_LEVEL
+		);
+		int expertBonus = woodcuttingLevel >= VOID_SPARROW_EXPERT_WOODCUTTING
+			? VOID_SPARROW_EXPERT_BONUS_PERCENT
+			: 0;
+		int bonusPercent = levelBonus + expertBonus;
+
+		return Math.max(1, (baseChance * (100 - bonusPercent)) / 100);
 	}
 }
