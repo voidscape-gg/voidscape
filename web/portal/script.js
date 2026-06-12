@@ -7,6 +7,8 @@
 	var workspace = document.querySelector(".workspace");
 	var views = Array.prototype.slice.call(document.querySelectorAll(".view"));
 	var viewLinks = Array.prototype.slice.call(document.querySelectorAll("[data-view-link]"));
+	var landingScrollButtons = Array.prototype.slice.call(document.querySelectorAll("[data-landing-scroll]"));
+	var whitepaperJumpButtons = Array.prototype.slice.call(document.querySelectorAll("[data-whitepaper-jump]"));
 	var characterCards = document.getElementById("character-cards");
 	var rankTable = document.getElementById("rank-table");
 	var marketTable = document.getElementById("market-table");
@@ -157,6 +159,9 @@
 	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
 	var publicModeActive = false;
+	var publicModeViews = {
+		account: true
+	};
 	var lastCharacterRefreshAt = 0;
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
@@ -220,6 +225,21 @@
 			event.preventDefault();
 			activateView(link.getAttribute("data-view-link"));
 			if (shell) shell.classList.remove("nav-open");
+		});
+	});
+
+	landingScrollButtons.forEach(function (button) {
+		button.addEventListener("click", function (event) {
+			event.preventDefault();
+			scrollToLandingTarget(button.getAttribute("data-landing-scroll"));
+			if (shell) shell.classList.remove("nav-open");
+		});
+	});
+
+	whitepaperJumpButtons.forEach(function (button) {
+		button.addEventListener("click", function (event) {
+			event.preventDefault();
+			scrollToLandingTarget(button.getAttribute("data-whitepaper-jump"));
 		});
 	});
 
@@ -909,7 +929,8 @@
 		if (!state) return;
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
-			activateView("account");
+			document.body.classList.add("public-mode");
+			activateView((window.location.hash || "#account").replace("#", "") || "account");
 		}
 		if (state.status) {
 			if (serverWorldLabel) serverWorldLabel.textContent = state.status.world || "World 1";
@@ -1253,7 +1274,9 @@
 	}
 
 	function activateView(id) {
-		if (publicModeActive) id = "account";
+		var landingTarget = landingAnchorFor(id);
+		if (landingTarget) id = "account";
+		if (publicModeActive && !publicModeViews[id]) id = "account";
 		id = retiredViews[id] || id;
 		var next = views.find(function (view) {
 			return view.id === id;
@@ -1273,12 +1296,36 @@
 		ensurePrelaunchVideoPlaying();
 		title.textContent = next.getAttribute("data-title") || "Voidscape";
 		if (workspace) workspace.scrollTop = 0;
-		if (window.location.hash !== "#" + next.id) {
-			window.history.replaceState(null, "", "#" + next.id);
+		if (landingTarget) {
+			window.setTimeout(function () {
+				landingTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+			}, 40);
+		}
+		var hashId = landingTarget ? landingTarget.id : next.id;
+		if (window.location.hash !== "#" + hashId) {
+			window.history.replaceState(null, "", "#" + hashId);
 		}
 		if (next.id === "characters") {
 			refreshCharactersFromApi(false);
 		}
+	}
+
+	function landingAnchorFor(id) {
+		if (!id || id === "account") return null;
+		var target = document.getElementById(id);
+		if (!target) return null;
+		var accountView = document.getElementById("account");
+		return accountView && accountView.contains(target) ? target : null;
+	}
+
+	function scrollToLandingTarget(id) {
+		var target = landingAnchorFor(id);
+		activateView("account");
+		if (!target) return;
+		window.setTimeout(function () {
+			target.scrollIntoView({ behavior: "smooth", block: "start" });
+			window.history.replaceState(null, "", "#" + target.id);
+		}, 40);
 	}
 
 	async function refreshCharactersFromApi(force) {

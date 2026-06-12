@@ -4,7 +4,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Voidscape Pre-Release Signup</title>
-	<meta name="description" content="Reserve your Voidscape username and claim your launch-week subscription card.">
+	<meta name="description" content="Reserve your Voidscape username, claim your launch-week subscription card, and read the Voidscape whitepaper.">
 	<link rel="icon" href="assets/favicon.png">
 	<link rel="preload" as="image" href="assets/voidscape-wordmark.png">
 	<link rel="stylesheet" href="styles.css">
@@ -90,6 +90,7 @@
 						<p class="prelaunch-prize">Claim Your Free 1-Week Subscription Card</p>
 
 						<img class="prelaunch-card" src="assets/prelaunch/subscription-card-large.png" alt="Voidscape 1-week subscription card">
+						<button class="prelaunch-whitepaper-link" type="button" data-landing-scroll="whitepaper">Read the Voidscape whitepaper</button>
 
 						<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
 							<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
@@ -180,6 +181,398 @@
 							<div id="download-actions"></div>
 						</div>
 					</div>
+
+					<section id="whitepaper" class="landing-whitepaper whitepaper-view" aria-label="Voidscape whitepaper">
+						<div class="whitepaper-layout">
+							<aside class="whitepaper-rail" aria-label="Whitepaper navigation">
+								<div class="whitepaper-rail-brand">
+									<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+									<span>Whitepaper</span>
+								</div>
+								<nav class="whitepaper-rail-nav" aria-label="Whitepaper sections">
+									<button class="is-active" type="button" data-whitepaper-jump="whitepaper-thesis"><span>Thesis</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-rates"><span>Rates</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-loop"><span>Economy Loop</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-void"><span>Void Branch</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-skills"><span>Skills</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-client"><span>Client Access</span></button>
+									<button type="button" data-whitepaper-jump="whitepaper-roadmap"><span>Roadmap</span></button>
+								</nav>
+								<div class="whitepaper-rail-card">
+									<div class="whitepaper-avatar">V</div>
+									<strong>Launch beta</strong>
+									<span>Reserve a username, claim the starter subscription card, and enter through the auto-updating client.</span>
+									<button class="mini-button" type="button" data-landing-scroll="founder-form">Reserve</button>
+								</div>
+							</aside>
+
+							<article class="whitepaper-shell">
+								<section class="whitepaper-hero panel" aria-labelledby="whitepaper-title">
+									<div class="whitepaper-hero-copy">
+										<p class="eyebrow">Voidscape whitepaper</p>
+										<h2 id="whitepaper-title">A classic game loop, finished with <span>intent.</span></h2>
+										<p>
+											You have seen servers open, spike, and shut down. Some teams loved RuneScape Classic and lacked the engineering.
+											Some teams marketed well and lacked design. Voidscape keeps the old rhythm, then connects the loops Jagex left half-built.
+										</p>
+										<div class="whitepaper-actions">
+											<button class="primary-button" type="button" data-landing-scroll="founder-form">Reserve username</button>
+											<button class="ghost-button" type="button" data-whitepaper-jump="whitepaper-loop">See the economy loop</button>
+										</div>
+									</div>
+									<div class="whitepaper-hero-art" aria-label="Voidscape game interface preview">
+										<figure>
+											<img src="assets/whitepaper/feature-void-chest.png" alt="Players inside the Void Dungeon near the Void Chest.">
+										</figure>
+										<figure>
+											<img src="assets/whitepaper/bank-beta.png" alt="Voidscape bank interface with the custom HUD.">
+										</figure>
+									</div>
+								</section>
+
+								<section class="whitepaper-toc panel" aria-label="Whitepaper contents">
+									<button type="button" data-whitepaper-jump="whitepaper-thesis">Thesis</button>
+									<button type="button" data-whitepaper-jump="whitepaper-rates">Rates</button>
+									<button type="button" data-whitepaper-jump="whitepaper-loop">Economy Loop</button>
+									<button type="button" data-whitepaper-jump="whitepaper-void">Void Branch</button>
+									<button type="button" data-whitepaper-jump="whitepaper-skills">Skills</button>
+									<button type="button" data-whitepaper-jump="whitepaper-client">Client Access</button>
+									<button type="button" data-whitepaper-jump="whitepaper-roadmap">Roadmap</button>
+									<button type="button" data-whitepaper-jump="whitepaper-proof">Build Proof</button>
+								</section>
+
+								<section class="whitepaper-kpis" aria-label="Voidscape beta numbers">
+									<article class="stat-tile whitepaper-kpi">
+										<img src="assets/whitepaper/combat-sword.png" alt="" aria-hidden="true">
+										<div>
+											<strong>10x</strong>
+											<p>Combat XP</p>
+										</div>
+										<small>A fast path into PKing.</small>
+									</article>
+									<article class="stat-tile whitepaper-kpi">
+										<img src="assets/whitepaper/skill-woodcut.png" alt="" aria-hidden="true">
+										<div>
+											<strong>2x</strong>
+											<p>Skilling XP</p>
+										</div>
+										<small>Slow enough for supplies to matter.</small>
+									</article>
+									<article class="stat-tile whitepaper-kpi">
+										<img src="assets/whitepaper/subscription-card.png" alt="" aria-hidden="true">
+										<div>
+											<strong>+1x</strong>
+											<p>Subscription Card</p>
+										</div>
+										<small>Tradable, account-wide, same as a founder card.</small>
+									</article>
+									<article class="stat-tile whitepaper-kpi">
+										<img src="assets/whitepaper/purple-diamond.png" alt="" aria-hidden="true">
+										<div>
+											<strong>High Risk</strong>
+											<p>Void Dungeon</p>
+										</div>
+										<small>100k entry fee, keys, chest rewards, and real danger.</small>
+									</article>
+								</section>
+
+								<section class="whitepaper-section whitepaper-loop-section" id="whitepaper-loop">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Economy loop</p>
+										<h2>Skillers feed combat. Combat feeds skillers.</h2>
+										<p>
+											Skillers make supplies. Combat players burn them. Void PvM, Bounty, and risky play return raw goods.
+											The Auction House prices the next grind, and the rewards flow back into the loop.
+										</p>
+									</div>
+									<div class="economy-track" aria-label="Voidscape economy loop">
+										<article class="economy-step">
+											<img src="assets/whitepaper/skill-woodcut.png" alt="" aria-hidden="true">
+											<strong>Skillers</strong>
+											<span>Gather and craft</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step">
+											<img src="assets/whitepaper/skill-smithing.png" alt="" aria-hidden="true">
+											<strong>Supplies</strong>
+											<span>Food, arrows, bars, ashes</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step">
+											<img src="assets/whitepaper/bank-chest.png" alt="" aria-hidden="true">
+											<strong>Auction House</strong>
+											<span>Trade and price</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step economy-rift">
+											<span class="void-rift" aria-hidden="true"></span>
+											<strong>Void Pressure</strong>
+											<span>Risk creates demand</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step">
+											<img src="assets/whitepaper/combat-sword.png" alt="" aria-hidden="true">
+											<strong>PKers</strong>
+											<span>Risk and pressure</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step">
+											<img src="assets/whitepaper/coin-stack.png" alt="" aria-hidden="true">
+											<strong>Stakers</strong>
+											<span>Wager and multiply</span>
+										</article>
+										<span class="economy-arrow" aria-hidden="true"></span>
+										<article class="economy-step">
+											<img src="assets/whitepaper/purple-diamond.png" alt="" aria-hidden="true">
+											<strong>PvM</strong>
+											<span>Keys and rewards</span>
+										</article>
+									</div>
+									<div class="economy-return" aria-hidden="true">Rewards flow back into the loop</div>
+								</section>
+
+								<section class="whitepaper-section" id="whitepaper-thesis">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">The thesis</p>
+										<h2>RSC was magic. It was also unfinished.</h2>
+										<p>
+											We keep the movement, tradeoffs, equipment identity, Wilderness pressure, staking culture, resource grind, and strange social rhythm.
+											Then we add pressure to the quiet parts so supplies, risk, rewards, and markets push players toward each other.
+										</p>
+									</div>
+									<div class="principle-grid">
+										<article>
+											<strong>Authentic first</strong>
+											<span>Core systems stay true to RuneScape Classic.</span>
+										</article>
+										<article>
+											<strong>Loops over gimmicks</strong>
+											<span>Every addition strengthens the player-driven loop.</span>
+										</article>
+										<article>
+											<strong>Visible risk</strong>
+											<span>Wilderness, Bounty, and Void Dungeon make reward feel earned.</span>
+										</article>
+										<article>
+											<strong>Low-friction start</strong>
+											<span>Starter paths get new players into the game fast.</span>
+										</article>
+									</div>
+								</section>
+
+								<section class="whitepaper-section whitepaper-split" id="whitepaper-rates">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Progression</p>
+										<h2>Fast combat, meaningful skilling.</h2>
+										<p>
+											Combat trains at 10x, skilling trains at 2x, and a subscription card adds +1x to both.
+											PK-ready accounts appear fast; high-volume skilling goods keep value because the grind still matters.
+										</p>
+										<div class="rate-stack">
+											<div><span>Base combat</span><strong>10x</strong></div>
+											<div><span>Base skilling</span><strong>2x</strong></div>
+											<div><span>Subscribed</span><strong>11x / 3x</strong></div>
+											<div><span>Rested XP</span><strong>1.5x window</strong></div>
+										</div>
+									</div>
+									<div class="path-cards">
+										<article>
+											<strong>Warrior</strong>
+											<span>2x Attack, Defense, Strength below 50.</span>
+										</article>
+										<article>
+											<strong>Forager</strong>
+											<span>2x Fishing, Cooking, Mining below 50.</span>
+										</article>
+										<article>
+											<strong>Arcanist</strong>
+											<span>2x Ranged and Magic paths below 50.</span>
+										</article>
+									</div>
+								</section>
+
+								<section class="whitepaper-section whitepaper-systems-section" id="whitepaper-systems">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Custom systems</p>
+										<h2>Risk, practice, and reward all need visible objects.</h2>
+										<p>
+											Players should see the loop working in the world: catch targets, train timing, chase beams, carry keys, and open chests inside dangerous places.
+										</p>
+									</div>
+									<div class="system-showcase-grid">
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-catching-trainer.png" alt="PK Catching Trainer menu in Edgeville.">
+											<figcaption><strong>Catching trainer</strong><span>Practice entry point for PK movement and catch timing.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-catching-drill.png" alt="PK Catching target with timer and successful catch feedback.">
+											<figcaption><strong>Catching drill</strong><span>Timed drills turn an old PK skill into a visible training loop.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-rare-drop-beam.png" alt="Purple rare drop beam in the Wilderness.">
+											<figcaption><strong>Loot beams</strong><span>Rare drops become social moments that players can notice from a distance.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-void-key.png" alt="Inventory full of Void Keys inside the Void Dungeon.">
+											<figcaption><strong>Void Keys</strong><span>Dungeon rewards become portable risk before they become loot.</span></figcaption>
+										</figure>
+										<figure class="proof-card proof-card-wide">
+											<img src="assets/whitepaper/feature-void-chest.png" alt="Void Chest inside the Void Dungeon.">
+											<figcaption><strong>Void Chest</strong><span>Keys dissolve into the lock, pay the player, and feed value back into the economy.</span></figcaption>
+										</figure>
+									</div>
+								</section>
+
+								<section class="whitepaper-section whitepaper-split" id="whitepaper-void">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Void branch</p>
+										<h2>Custom power belongs in Void PvM.</h2>
+										<p>
+											Void items feel rare and leave rune, arrows, food, and familiar tactics intact. We use them as anti-Void tools:
+											you fight Void monsters, chase Void Keys, and improve risky PvM. Against players, visible stats rule.
+										</p>
+										<div class="void-rule">
+											<strong>Principle</strong>
+											<span>No hidden global power creep. Void effects are for Void monsters; PvP and staking stay familiar.</span>
+										</div>
+									</div>
+									<div class="void-item-grid">
+										<article>
+											<img src="assets/whitepaper/void-scimitar.png" alt="" aria-hidden="true">
+											<strong>Void Scimitar</strong>
+											<span>Anti-Void melee chase weapon.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/void-shortbow.png" alt="" aria-hidden="true">
+											<strong>Void Shortbow</strong>
+											<span>No-arrow behavior only against Void NPCs.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/void-amulet.png" alt="" aria-hidden="true">
+											<strong>Void Amulet</strong>
+											<span>Boosts stackable drops from Void NPCs only.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/void-mace.png" alt="" aria-hidden="true">
+											<strong>Void Mace</strong>
+											<span>Crush-style Void PvM niche.</span>
+										</article>
+									</div>
+								</section>
+
+								<section class="whitepaper-section" id="whitepaper-skills">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Skill hooks</p>
+										<h2>Small changes, real reasons to skill.</h2>
+										<p>
+											We reuse RSC actions players already understand, then give those actions more buyers.
+										</p>
+									</div>
+									<div class="skill-hook-grid">
+										<article>
+											<img src="assets/whitepaper/skill-firemaking.png" alt="" aria-hidden="true">
+											<strong>Firemaking -> Prayer</strong>
+											<span>Oak through magic logs leave tiered ashes. Offer them at altars for scaling Prayer XP.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/skill-woodcut.png" alt="" aria-hidden="true">
+											<strong>Woodcutting -> Sparrow</strong>
+											<span>90+ Woodcutting can find a tradable Void Sparrow from yew and magic logs.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/skill-fletching.png" alt="" aria-hidden="true">
+											<strong>Fletching -> Ammo</strong>
+											<span>Better logs make more shafts, and Void rewards return arrowheads for fletchers to finish.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/skill-mining.png" alt="" aria-hidden="true">
+											<strong>Mining -> Smithing</strong>
+											<span>Void loot leans into ores, coal, gems, and processable goods. Smiths finish the value.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/skill-smithing.png" alt="" aria-hidden="true">
+											<strong>Smithing -> Arrowheads</strong>
+											<span>x50 arrowhead batches make smiths a real part of the ranged supply chain.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/skill-prayer.png" alt="" aria-hidden="true">
+											<strong>Prayer -> Combat demand</strong>
+											<span>Bones and ashes stay valuable because serious fights need Prayer levels and recharge access.</span>
+										</article>
+									</div>
+								</section>
+
+								<section class="whitepaper-section whitepaper-split" id="whitepaper-client">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Client access</p>
+										<h2>Custom first. Complexity earns its place.</h2>
+										<p>
+											The launcher updates the desktop client when testers press Play. The Android app shares the same game core so mobile players get the same rules.
+											The HUD, bank, inventory, chat, settings, world map, and onboarding have been rebuilt around the Voidscape identity while keeping the old game readable.
+										</p>
+										<div class="client-grid">
+											<article><strong>Auto-updating launcher</strong><span>Beta testers get new client/cache builds through the manifest when pressing Play.</span></article>
+											<article><strong>Android client</strong><span>Native Android shell, shared RSC core, emulator smoke coverage, and portal handoff for account creation.</span></article>
+											<article><strong>Workbench QA</strong><span>Command and screenshot tooling helps us test features through repeatable scenarios.</span></article>
+										</div>
+									</div>
+									<figure class="whitepaper-screenshot-card">
+										<img src="assets/whitepaper/hud-beta.png" alt="Voidscape game HUD with transparent chat and top menu icons.">
+										<figcaption>Current beta HUD direction: custom, readable, and still RSC.</figcaption>
+									</figure>
+								</section>
+
+								<section class="whitepaper-section" id="whitepaper-roadmap">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Roadmap discipline</p>
+										<h2>Ship the loop, then expand the world.</h2>
+										<p>
+											Voidscape already has a lot: starter paths, Void Council intro, subscription cards, Auction House, Bounty Hunter, Void Dungeon, Void Keys,
+											rare beams, titles, scouting, Android, and a custom UI. Next we pressure-test the loop and add features that strengthen it.
+										</p>
+									</div>
+									<div class="roadmap-grid">
+										<article><strong>Beta tuning</strong><span>Use playtests, AH prices, and balance reports to adjust drops and supply pressure.</span></article>
+										<article><strong>Content tools</strong><span>Make custom NPC, item, sprite, and map work easier so quality rises and updates keep moving.</span></article>
+										<article><strong>Boss standard</strong><span>Pause weak boss attempts until art, animation, arena, and mechanics can meet the Voidscape bar.</span></article>
+										<article><strong>Public launch</strong><span>Keep registration low-friction while protecting free starter cards before they enter the trade economy.</span></article>
+									</div>
+								</section>
+
+								<section class="whitepaper-section whitepaper-proof-section" id="whitepaper-proof">
+									<div class="whitepaper-section-copy">
+										<p class="eyebrow">Build proof</p>
+										<h2>The features are in the client, not just the pitch.</h2>
+										<p>
+											Onboarding, path choice, HD visual controls, Void story staging, XP-on-hit, beams, keys, chests, and catching practice are already visible in beta screenshots.
+										</p>
+									</div>
+									<div class="proof-grid">
+										<figure class="proof-card proof-card-large">
+											<img src="assets/whitepaper/feature-xp-on-hit.png" alt="Combat XP appearing immediately after a ranged hit.">
+											<figcaption><strong>XP on hit</strong><span>Combat feedback lands during the fight instead of waiting for the kill.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-login.png" alt="Voidscape branded login screen with New User and Existing User options.">
+											<figcaption><strong>Branded login</strong><span>New and existing users enter through a custom Voidscape client screen.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-path-choice.png" alt="Voidscape path choice menu showing Warrior, Forager, and Arcanist.">
+											<figcaption><strong>Starter paths</strong><span>Players pick a low-friction early-game direction after the intro.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-visual-settings.png" alt="Advanced visual settings menu with HD game look and lighting toggles.">
+											<figcaption><strong>Modern controls</strong><span>HD look, lighting, fog, roofs, and interface options sit in a real settings UI.</span></figcaption>
+										</figure>
+										<figure class="proof-card">
+											<img src="assets/whitepaper/feature-void-herald.png" alt="Void Herald and player on the starter island.">
+											<figcaption><strong>Void intro</strong><span>The custom world story starts before the player reaches normal progression.</span></figcaption>
+										</figure>
+									</div>
+								</section>
+							</article>
+						</div>
+					</section>
 				</div>
 			</section>
 
