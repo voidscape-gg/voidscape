@@ -193,6 +193,7 @@ Voidscape custom-client packet notes:
 - `10098`: Void Dungeon prompt/UI polish. Restored confirmed rift entry/exit after moving ordinary server option prompts above the Voidscape chat frame, raised the cave entry fee to 100,000 coins, and reverted the combat-style selector to upstream size. No packet shape changed.
 - `10099`: Firemaking ash/prayer economy pass. Added client-visible tiered ash item definitions `1604-1608` using the existing ash sprite with recolor masks; oak through magic logs now leave those ashes for altar offering. No packet shape or cache archive changed.
 - `10100`: Food economy polish. The Karamja Fishmonger client/server NPC definition now advertises only `Note fish`, matching the no-cooking food economy pass; Cooking cape holders also receive a server-side burn-roll mastery bonus. No packet shape or cache archive changed.
+- `10102` follow-up: HUD account switcher in-game account validation reuses custom `INTERFACE_OPTIONS` (wire opcode `199`) sub-option `15` with username/password strings, and replies through `SEND_SERVER_MESSAGE` using a hidden `@vsacct@status|username|combat|message` token (`status` is `1` or `0`) consumed by the client before chat display. No new wire opcode or enum ordinal shift.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

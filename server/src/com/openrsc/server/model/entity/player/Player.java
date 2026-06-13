@@ -38,7 +38,9 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.npc.NpcInteraction;
 import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.net.ConnectionAttachment;
 import com.openrsc.server.net.Packet;
+import com.openrsc.server.net.RSCConnectionHandler;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.ClientLimitations;
 import com.openrsc.server.net.rsc.PayloadProcessorManager;
@@ -826,6 +828,88 @@ public final class Player extends Mob {
 
 	public void unsetChannel() {
 		channel = null;
+	}
+
+	public boolean canResumeSessionFrom(final LoginRequest request) {
+		if (request == null || request.getChannel() == null) {
+			return false;
+		}
+		if (!loggedIn() || isRemoved() || isSaving() || isLoggingOut() || isUnregistering()) {
+			return false;
+		}
+		if (!getCurrentIP().equals(request.getIpAddress())) {
+			return false;
+		}
+
+		Channel currentChannel = getChannel();
+		if (currentChannel == null) {
+			return true;
+		}
+		if (currentChannel == request.getChannel()) {
+			return true;
+		}
+		if (currentChannel.isOpen() && currentChannel.isActive()) {
+			return false;
+		}
+		return hasUnregisterRequest() || getUnregisterEvent() != null
+			|| !currentChannel.isOpen() || !currentChannel.isActive();
+	}
+
+	public boolean resumeSessionFrom(final LoginRequest request) {
+		if (!canResumeSessionFrom(request)) {
+			return false;
+		}
+
+		Channel previousChannel = getChannel();
+		if (previousChannel != null && previousChannel != request.getChannel()) {
+			try {
+				if (previousChannel.hasAttr(RSCConnectionHandler.attachment)) {
+					ConnectionAttachment previousAttachment = previousChannel.attr(RSCConnectionHandler.attachment).get();
+					if (previousAttachment != null && previousAttachment.player.get() == this) {
+						previousAttachment.player.set(null);
+					}
+				}
+			} catch (Exception e) {
+				LOGGER.debug("Unable to detach stale channel for resumed player {}", username, e);
+			}
+		}
+
+		if (getUnregisterEvent() != null) {
+			getUnregisterEvent().stop();
+			setUnregisterEvent(null);
+		}
+		unsetUnregisterRequest();
+		setUnregistering(false);
+
+		channel = request.getChannel();
+		currentIP = ((InetSocketAddress) request.getChannel().remoteAddress()).getAddress().getHostAddress();
+		clientVersion = request.getClientVersion();
+		currentLogin = System.currentTimeMillis();
+		updateClientActivity();
+		setReconnecting(true);
+		clearClientSessionState();
+		return true;
+	}
+
+	private void clearClientSessionState() {
+		synchronized (incomingPackets) {
+			incomingPackets.clear();
+			activePackets.clear();
+		}
+		synchronized (outgoingPackets) {
+			outgoingPackets.clear();
+		}
+
+		knownPlayersAppearanceIDs.clear();
+		localPlayers.clear();
+		localNpcs.clear();
+		localObjects.clear();
+		localWallObjects.clear();
+		localGroundItems.clear();
+		locationsToClear.clear();
+		knownPlayersCount = 0;
+		Arrays.fill(knownPlayerPids, 0);
+		Arrays.fill(knownPlayerAppearanceIds, 0);
 	}
 
 	public void close() {

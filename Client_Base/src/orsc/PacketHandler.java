@@ -846,6 +846,10 @@ public class PacketHandler {
 			colour = packetsIncoming.readString();
 		}
 
+		if (mc.handleVoidscapeAccountAuthMessage(message)) {
+			return;
+		}
+
 		// Why is clan being sent into former name?
 		mc.showMessage(true, sender, message, type, crown, clan, colour);
 	}

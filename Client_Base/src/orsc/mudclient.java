@@ -60,6 +60,14 @@ import static orsc.ScaledWindow.ScalingAlgorithm;
 
 public final class mudclient implements Runnable {
 
+	private static final class VoidscapeSavedAccount {
+		String username;
+		String password;
+		String displayName;
+		int combatLevel;
+		long lastUsed;
+	}
+
 	public static final int spriteMedia = 2000;
 	public static final int spriteUtil = 2100;
 	public static final int spriteItem = 2150;
@@ -117,11 +125,18 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_WORLD_MAP_FLAG = "android-smoke-world-map.flag";
 	private static final String ANDROID_SMOKE_SETTINGS_FLAG = "android-smoke-settings.flag";
 	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
+	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
+	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
+	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
+	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
 	private static final long ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS = 1000L;
 	private static final int VOIDSCAPE_TOP_TAB_SIZE = 54;
-	private static final int VOIDSCAPE_TOP_TAB_GAP = 6;
+	private static final int VOIDSCAPE_TOP_TAB_GAP = -4;
 	private static final int VOIDSCAPE_TOP_TAB_COUNT = 6;
+	private static final int VOIDSCAPE_ACCOUNT_MAX = 3;
+	private static final long VOIDSCAPE_ACCOUNT_STATS_SAVE_INTERVAL_MS = 3000L;
+	private static final long VOIDSCAPE_ACCOUNT_VALIDATE_TIMEOUT_MS = 8000L;
 	// Authentic-style top tab order (left to right) + matching ornate icons. Single source of truth
 	// shared by draw, click hit-testing, and panel-under-icon anchoring.
 	private static final int[] VOIDSCAPE_TOP_TAB_ORDER = {
@@ -149,7 +164,10 @@ public final class mudclient implements Runnable {
 		"skill-smithing.png", "skill-strength.png", "skill-thieving.png", "skill-woodcut.png",
 		"top-book.png", "top-coin-panel.png", "top-combat-sword.png", "top-map-scroll.png",
 		"top-social-smiley.png", "top-stats-bars.png", "top-tab-active.png", "top-tab-normal.png",
-		"top-gear.png", "top-bag.png"
+		"top-gear.png", "top-bag.png", "account-top-button.png", "account-top-button-active.png",
+		"account-panel-frame.png", "account-title-bar.png", "account-row.png",
+		"account-row-current.png", "account-row-action.png", "account-avatar.png", "account-avatar-muted.png",
+		"account-switch-arrow.png", "account-add-row.png", "account-add.png"
 	};
 	public static KillAnnouncerQueue killQueue = new KillAnnouncerQueue();
 	public static int skillCount;
@@ -661,6 +679,7 @@ public final class mudclient implements Runnable {
 	private long lastAndroidSmokeSettingsLogMillis = 0L;
 	private long lastAndroidSmokeGroundLootLabelLogMillis = 0L;
 	private long lastAndroidSmokeGroundLootBeamLogMillis = 0L;
+	private long lastAndroidSmokeWelcomeDialogLogMillis = 0L;
 	private int lastAndroidSmokeZoomLastZoom = -1;
 	private int lastAndroidSmokeZoomCameraZoom = -1;
 	private boolean loadingArea = false;
@@ -698,6 +717,7 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_ACTION_GROUND_ITEMS = 1000;
 	private static final int ADVANCED_ACTION_HIDE_BONES = 1001;
 	private static final int ADVANCED_ACTION_EXPERIENCE_COUNTER = 1002;
+	private static final int ADVANCED_ACTION_CHAT_OVERLAY = 1003;
 	private int settingTab = SETTINGS_PROFILE_TAB;
 	private boolean settingsAdvancedMode = false;
 	private boolean showAdvancedSettingsWindow = false;
@@ -788,9 +808,31 @@ public final class mudclient implements Runnable {
 	private Sprite settingsGearIcon;
 	private final Map<String, Sprite> voidscapeUiSkinSprites = new HashMap<>();
 	private final Map<String, Sprite> voidscapeUiSkinSlices = new HashMap<>();
+	private final ArrayList<VoidscapeSavedAccount> voidscapeSavedAccounts = new ArrayList<>();
 	private boolean voidscapeLoginAssetLoadAttempted = false;
 	private boolean settingsGearIconLoadAttempted = false;
 	private boolean voidscapeUiSkinLoadAttempted = false;
+	private boolean voidscapeSavedAccountsLoaded = false;
+	private boolean voidscapeAccountMenuOpen = false;
+	private boolean voidscapeAccountAddFormOpen = false;
+	private boolean voidscapeAddAccountPending = false;
+	private boolean voidscapeOpenExistingLoginAfterLogout = false;
+	private String voidscapePendingSwitchUsername = "";
+	private String voidscapePendingSwitchPassword = "";
+	private long voidscapeLastAccountStatsWrite = 0L;
+	private Panel voidscapeAccountAddPanel;
+	private int voidscapeAccountAddUser = -1;
+	private int voidscapeAccountAddPass = -1;
+	private int voidscapeAccountAddSave = -1;
+	private int voidscapeAccountAddCancel = -1;
+	private int voidscapeAccountAddPanelX = -1;
+	private int voidscapeAccountAddPanelY = -1;
+	private int voidscapeAccountAddPanelWidth = -1;
+	private String voidscapeAccountAddStatus = "";
+	private boolean voidscapeAccountAddChecking = false;
+	private String voidscapeAccountAddPendingUser = "";
+	private String voidscapeAccountAddPendingPass = "";
+	private long voidscapeAccountAddStartedAt = 0L;
 	private String voidscapeLoginHomeStatus1 = "";
 	private String voidscapeLoginHomeStatus2 = "";
 	private Panel panelSetRecoveryQuestion;
@@ -998,6 +1040,7 @@ public final class mudclient implements Runnable {
 		}
 
 		initConfig();
+		loadVoidscapeClientSettings();
 	}
 
 	private static void saveScalingSettings(ScalingAlgorithm type, float scalar) {
@@ -1044,6 +1087,18 @@ public final class mudclient implements Runnable {
 			System.out.println("Something went wrong saving client settings");
 			e.printStackTrace();
 		}
+	}
+
+	private static void loadVoidscapeClientSettings() {
+		Properties props = loadClientSettings();
+		String chatOverlay = props.getProperty(CLIENT_SETTING_CHAT_OVERLAY);
+		if (chatOverlay != null && !chatOverlay.trim().isEmpty()) {
+			C_CHAT_OVERLAY = Boolean.parseBoolean(chatOverlay);
+		}
+	}
+
+	private static void saveChatOverlaySetting() {
+		saveClientSetting(CLIENT_SETTING_CHAT_OVERLAY, Boolean.toString(C_CHAT_OVERLAY));
 	}
 
 	private static boolean isValidEmailAddress(String email) {
@@ -2611,7 +2666,7 @@ public final class mudclient implements Runnable {
 		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingUserY(), 210, 320, 22, 1, false, true);
 		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingPassY(), 210, 20, 22, 1, true, true);
 
-		if (shouldOfferCredentialSave()) {
+		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
 			String cred = ClientPort.loadCredentials();
 			if (cred.length() > 0) {
 				String[] split = cred.split(",", 2);
@@ -5778,17 +5833,9 @@ public final class mudclient implements Runnable {
 	private void drawDialogWelcome(int var1) {
 		try {
 
-			//int var2 = 65;
-			int var2 = 135;
-				/*if (this.welcomeUnreadMessages > 0) {
-					var2 += 30;
-				}*/
-
-			if (!this.welcomeLastLoggedInIp.equalsIgnoreCase("0.0.0.0")) {
-				var2 += 45;
-			}
-			int welcomeWindowX = (getGameWidth() - 400) / 2;
-			int welcomeWindowY = (getGameHeight() - var2) / 2;
+			int var2 = welcomeDialogHeight();
+			int welcomeWindowX = welcomeDialogX();
+			int welcomeWindowY = welcomeDialogY();
 
 			this.getSurface().drawBox(welcomeWindowX, welcomeWindowY, 400, var2, 0);
 			int var3 = welcomeWindowY;
@@ -5912,20 +5959,21 @@ public final class mudclient implements Runnable {
 
 				if (isAndroid()) {
 
-					this.getSurface().drawBoxAlpha(150, var3 - 20, (207), var3 - (var3 - 12) + 20, 3158064, 160);
-					this.getSurface().drawBoxBorder(150, (207), var3 - 20, var3 - (var3 - 12) + 20, 4210752);
-					if (this.mouseY >= var3 - 20 && this.mouseY <= (var3 - 20) + (var3 - (var3 - 12) + 20) && this.mouseX >= 150 && this.mouseX < 150 + 207) {
+					this.getSurface().drawBoxAlpha(welcomeDialogCloseX(), welcomeDialogCloseY(), welcomeDialogCloseWidth(), welcomeDialogCloseHeight(), 3158064, 160);
+					this.getSurface().drawBoxBorder(welcomeDialogCloseX(), welcomeDialogCloseWidth(), welcomeDialogCloseY(), welcomeDialogCloseHeight(), 4210752);
+					if (isWelcomeDialogCloseHit(this.mouseX, this.mouseY)) {
 						var5 = 0xFF0000;
 					}
 
 				} else {
 
-					if (this.mouseY > var3 - 12 && this.mouseY <= var3 && this.mouseX > welcomeWindowX + 106 - 56 && this.mouseX < welcomeWindowX + 406 - 56) {
+					if (isWelcomeDialogCloseHit(this.mouseX, this.mouseY)) {
 						var5 = 0xFF0000;
 					}
 				}
 
 				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Click here to close window", var5, var1 ^ var1, 1, var3);
+				logAndroidSmokeWelcomeDialog(welcomeWindowX, welcomeWindowY, 400, var2);
 				if (this.mouseButtonClick == 1) {
 					if (var5 == 0xFF0000) {
 						this.showDialogMessage = false;
@@ -5973,12 +6021,13 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "In the wilderness an indicator at the bottom-right", 0xFFFFFF, 0, 1, halfGameHeight() + 39);
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "of the screen will show the current level of danger", 0xFFFFFF, 0, 1, halfGameHeight() + 52);
 			int var3 = 0xFFFFFF;
-			if (this.mouseY > halfGameHeight() + 62 && this.mouseY <= halfGameHeight() + 74 && this.mouseX > halfGameWidth() - 75 && this.mouseX < halfGameWidth() + 75) {
+			boolean closeHover = isWildWarningCloseHit(this.mouseX, this.mouseY);
+			if (closeHover) {
 				var3 = 0xFF0000;
 			}
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Click here to close window", var3, 0, 1, halfGameHeight() + 74);
 			if (this.mouseButtonClick != 0) {
-				if (halfGameHeight() + 62 < this.mouseY && halfGameHeight() + 74 >= this.mouseY && this.mouseX > halfGameWidth() - 75 && this.mouseX < halfGameWidth() + 75) {
+				if (closeHover) {
 					this.showUiWildWarn = 2;
 				}
 				this.mouseButtonClick = 0;
@@ -7137,102 +7186,76 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawColoredStringCentered(this.getGameWidth() / 2, label, color, 0, 1, y + 13);
 	}
 
-	private boolean isAndroidSmokeNpcTargetLoggingEnabled() {
+	private boolean isAndroidSmokeFilePresent(final String fileName) {
 		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_NPC_TARGETS_FLAG).isFile();
+			&& (isFileInDirectory(Config.F_CACHE_DIR, fileName)
+			|| isFileInDirectory(Config.F_ANDROID_SMOKE_DIR, fileName));
+	}
+
+	private boolean isFileInDirectory(final String directory, final String fileName) {
+		return directory != null
+			&& !directory.isEmpty()
+			&& new File(directory, fileName).isFile();
+	}
+
+	private boolean isAndroidSmokeNpcTargetLoggingEnabled() {
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_NPC_TARGETS_FLAG);
 	}
 
 	private boolean isAndroidSmokePlayerTargetLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_PLAYER_TARGETS_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_PLAYER_TARGETS_FLAG);
 	}
 
 	private boolean isAndroidSmokeObjectTargetLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_OBJECT_TARGETS_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_OBJECT_TARGETS_FLAG);
 	}
 
 	private boolean isAndroidSmokeInventoryTargetLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_INVENTORY_TARGETS_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_INVENTORY_TARGETS_FLAG);
+	}
+
+	private boolean isAndroidSmokeWalkLoggingEnabled() {
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_WALK_FLAG);
 	}
 
 	private boolean isAndroidSmokeCameraLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CAMERA_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_CAMERA_FLAG);
 	}
 
 	private boolean isAndroidSmokeZoomLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_ZOOM_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_ZOOM_FLAG);
 	}
 
 	private boolean isAndroidSmokeChatTabLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CHAT_TABS_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_CHAT_TABS_FLAG);
 	}
 
 	private boolean isAndroidSmokeChatSendLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_CHAT_SEND_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_CHAT_SEND_FLAG);
 	}
 
 	private boolean isAndroidSmokeShopLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_SHOP_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_SHOP_FLAG);
 	}
 
 	private boolean isAndroidSmokeEquipmentLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_EQUIPMENT_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_EQUIPMENT_FLAG);
 	}
 
 	private boolean isAndroidSmokeMagicPrayerLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_MAGIC_PRAYER_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_MAGIC_PRAYER_FLAG);
 	}
 
 	private boolean isAndroidSmokeWorldMapLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_WORLD_MAP_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_WORLD_MAP_FLAG);
 	}
 
 	private boolean isAndroidSmokeSettingsLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_SETTINGS_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_SETTINGS_FLAG);
 	}
 
 	private boolean isAndroidSmokeGroundLootLoggingEnabled() {
-		return isAndroid()
-			&& Config.F_CACHE_DIR != null
-			&& !Config.F_CACHE_DIR.isEmpty()
-			&& new File(Config.F_CACHE_DIR, ANDROID_SMOKE_GROUND_LOOT_FLAG).isFile();
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_GROUND_LOOT_FLAG);
 	}
 
 	private boolean isAndroidSmokeContextMenuLoggingEnabled() {
@@ -7242,6 +7265,43 @@ public final class mudclient implements Runnable {
 			|| isAndroidSmokeInventoryTargetLoggingEnabled()
 			|| isAndroidSmokeEquipmentLoggingEnabled()
 			|| isAndroidSmokeMagicPrayerLoggingEnabled();
+	}
+
+	private boolean isAndroidSmokeWelcomeDialogLoggingEnabled() {
+		return isAndroidSmokeNpcTargetLoggingEnabled()
+			|| isAndroidSmokePlayerTargetLoggingEnabled()
+			|| isAndroidSmokeObjectTargetLoggingEnabled()
+			|| isAndroidSmokeInventoryTargetLoggingEnabled()
+			|| isAndroidSmokeCameraLoggingEnabled()
+			|| isAndroidSmokeZoomLoggingEnabled()
+			|| isAndroidSmokeChatTabLoggingEnabled()
+			|| isAndroidSmokeChatSendLoggingEnabled()
+			|| isAndroidSmokeShopLoggingEnabled()
+			|| isAndroidSmokeEquipmentLoggingEnabled()
+			|| isAndroidSmokeMagicPrayerLoggingEnabled()
+			|| isAndroidSmokeWorldMapLoggingEnabled()
+			|| isAndroidSmokeSettingsLoggingEnabled()
+			|| isAndroidSmokeGroundLootLoggingEnabled();
+	}
+
+	private void logAndroidSmokeWelcomeDialog(final int dialogX, final int dialogY, final int dialogWidth, final int dialogHeight) {
+		if (!isAndroidSmokeWelcomeDialogLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeWelcomeDialogLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeWelcomeDialogLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_WELCOME_DIALOG"
+			+ " dialogX=" + dialogX
+			+ " dialogY=" + dialogY
+			+ " dialogW=" + dialogWidth
+			+ " dialogH=" + dialogHeight
+			+ " closeX=" + (welcomeDialogCloseX() + welcomeDialogCloseWidth() / 2)
+			+ " closeY=" + (welcomeDialogCloseY() + welcomeDialogCloseHeight() / 2)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
 	}
 
 	private String getAndroidSmokeContextMenuActions(final int itemCount) {
@@ -7527,6 +7587,7 @@ public final class mudclient implements Runnable {
 		this.lastAndroidSmokeMagicPrayerLogMillis = now;
 
 		final int listY = panelY + 24;
+		final int rowHeight = Math.max(1, this.getSurface().fontHeight(1));
 		final int row0X = panelX + 70;
 		final int row0Y = getAndroidSmokeMagicPrayerRowCenterY(listY, 0);
 		final String listName = this.magicOrPrayerList == 1 ? "prayer" : "magic";
@@ -7546,6 +7607,7 @@ public final class mudclient implements Runnable {
 			+ " prayerTabY=" + (panelY + 12)
 			+ " row0X=" + row0X
 			+ " row0Y=" + row0Y
+			+ " rowHeight=" + rowHeight
 			+ " selfCastX=256"
 			+ " selfCastY=170"
 			+ " magicCurrent=" + this.playerStatCurrent[6]
@@ -7926,6 +7988,16 @@ public final class mudclient implements Runnable {
 			+ " noted=" + noted
 			+ " secondary=" + secondary
 			+ " command=" + command);
+	}
+
+	private void logAndroidSmokeWalkAction(final MenuItemAction action, final int localX, final int localZ) {
+		if (!isAndroidSmokeWalkLoggingEnabled() || action == null) return;
+
+		System.out.println("ANDROID_SMOKE_WALK_ACTION action=" + action
+			+ " localX=" + localX
+			+ " localY=" + localZ
+			+ " worldX=" + (localX + this.midRegionBaseX)
+			+ " worldY=" + (localZ + this.midRegionBaseZ));
 	}
 
 	private void drawVoidRushWaveProjectile() {
@@ -9307,17 +9379,19 @@ public final class mudclient implements Runnable {
 		int cx = halfGameWidth();
 		boolean hideFieldLabels = shouldHideExistingFieldLabels();
 		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
-		drawVoidscapeCenteredText(cx, "EXISTING USER", 0xf3d46b, 1, voidscapeExistingTitleY());
+		drawVoidscapeCenteredText(cx, this.voidscapeAddAccountPending ? "ADD ACCOUNT" : "EXISTING USER",
+			0xf3d46b, 1, voidscapeExistingTitleY());
 		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, 23, hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
 		drawVoidscapeField(cx, voidscapeExistingPassY(), 210, 23, hideFieldLabels ? "" : "Password", this.panelLogin.focusOn(this.controlLoginPass));
 		if (shouldOfferHideIpToggle()) {
 			String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
 			drawVoidscapeButton(cx + 54, voidscapeExistingToggleY(), 96, 24, text, false);
 		}
-		if (shouldOfferCredentialSave()) {
+		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
 			drawVoidscapeButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24, "Save", false);
 		}
-		drawVoidscapeButton(cx - 46, voidscapeExistingActionY(), 84, 28, "Ok", true);
+		drawVoidscapeButton(cx - 46, voidscapeExistingActionY(), 84, 28,
+			this.voidscapeAddAccountPending ? "Add" : "Ok", true);
 		drawVoidscapeButton(cx + 46, voidscapeExistingActionY(), 84, 28, "Cancel", false);
 		drawVoidscapeButton(cx, voidscapeExistingForgotY(), 176, 25, isAndroid() ? "Recover account" : "Forgot password", false);
 	}
@@ -9332,6 +9406,471 @@ public final class mudclient implements Runnable {
 
 	private boolean shouldShowLastLoginHost() {
 		return !isAndroid() && this.settingsHideIP != null && this.settingsHideIP != 1;
+	}
+
+	private File voidscapeAccountsFile() {
+		if (Config.F_CACHE_DIR != null && !Config.F_CACHE_DIR.trim().isEmpty()) {
+			return new File(Config.F_CACHE_DIR, VOIDSCAPE_ACCOUNTS_FILE);
+		}
+		return new File(VOIDSCAPE_ACCOUNTS_FILE);
+	}
+
+	private String voidscapeAccountKey(String value) {
+		if (value == null) {
+			return "";
+		}
+		String key = StringUtil.displayNameToKey(value);
+		return key == null ? value.trim().toLowerCase(Locale.ROOT) : key;
+	}
+
+	private String voidscapeAccountDisplayName(VoidscapeSavedAccount account) {
+		if (account == null) {
+			return "";
+		}
+		if (account.displayName != null && !account.displayName.trim().isEmpty()) {
+			return account.displayName.trim();
+		}
+		return account.username == null ? "" : account.username.trim();
+	}
+
+	private void ensureVoidscapeSavedAccountsLoaded() {
+		if (this.voidscapeSavedAccountsLoaded) {
+			return;
+		}
+		this.voidscapeSavedAccountsLoaded = true;
+		this.voidscapeSavedAccounts.clear();
+		File file = voidscapeAccountsFile();
+		if (file.isFile()) {
+			Properties props = new Properties();
+			try (FileInputStream in = new FileInputStream(file)) {
+				props.load(in);
+				int count = parseIntOrDefault(props.getProperty("count"), 0);
+				for (int i = 0; i < count && this.voidscapeSavedAccounts.size() < VOIDSCAPE_ACCOUNT_MAX; i++) {
+					String username = props.getProperty("account." + i + ".username", "").trim();
+					String password = props.getProperty("account." + i + ".password", "");
+					if (username.isEmpty() || password.isEmpty()) {
+						continue;
+					}
+					VoidscapeSavedAccount account = new VoidscapeSavedAccount();
+					account.username = username;
+					account.password = password;
+					account.displayName = props.getProperty("account." + i + ".displayName", username).trim();
+					account.combatLevel = parseIntOrDefault(props.getProperty("account." + i + ".combatLevel"), 0);
+					account.lastUsed = parseLongOrDefault(props.getProperty("account." + i + ".lastUsed"), 0L);
+					this.voidscapeSavedAccounts.add(account);
+				}
+			} catch (IOException ignored) {
+			}
+		}
+		if (this.voidscapeSavedAccounts.isEmpty()) {
+			loadLegacyCredentialAsVoidscapeAccount();
+		}
+		sortVoidscapeSavedAccounts();
+	}
+
+	private int parseIntOrDefault(String value, int fallback) {
+		if (value == null) {
+			return fallback;
+		}
+		try {
+			return Integer.parseInt(value.trim());
+		} catch (NumberFormatException ignored) {
+			return fallback;
+		}
+	}
+
+	private long parseLongOrDefault(String value, long fallback) {
+		if (value == null) {
+			return fallback;
+		}
+		try {
+			return Long.parseLong(value.trim());
+		} catch (NumberFormatException ignored) {
+			return fallback;
+		}
+	}
+
+	private void loadLegacyCredentialAsVoidscapeAccount() {
+		String cred = ClientPort.loadCredentials();
+		if (cred.length() <= 0) {
+			return;
+		}
+		String[] split = cred.split(",", 2);
+		if (split.length != 2 || split[0].trim().isEmpty() || split[1].isEmpty()) {
+			return;
+		}
+		VoidscapeSavedAccount account = new VoidscapeSavedAccount();
+		account.username = split[0].trim();
+		account.password = split[1];
+		account.displayName = account.username;
+		account.combatLevel = 0;
+		account.lastUsed = System.currentTimeMillis();
+		this.voidscapeSavedAccounts.add(account);
+		saveVoidscapeSavedAccounts();
+	}
+
+	private VoidscapeSavedAccount findVoidscapeSavedAccount(String username) {
+		String key = voidscapeAccountKey(username);
+		if (key.isEmpty()) {
+			return null;
+		}
+		for (VoidscapeSavedAccount account : this.voidscapeSavedAccounts) {
+			if (key.equals(voidscapeAccountKey(account.username))
+				|| key.equals(voidscapeAccountKey(account.displayName))) {
+				return account;
+			}
+		}
+		return null;
+	}
+
+	private boolean saveVoidscapeCredentials(String username, String password, boolean markCurrent) {
+		if (username == null || username.trim().isEmpty() || password == null || password.isEmpty()) {
+			return false;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		String cleanUser = username.trim();
+		VoidscapeSavedAccount account = findVoidscapeSavedAccount(cleanUser);
+		if (account == null) {
+			if (this.voidscapeSavedAccounts.size() >= VOIDSCAPE_ACCOUNT_MAX) {
+				return false;
+			}
+			account = new VoidscapeSavedAccount();
+			this.voidscapeSavedAccounts.add(account);
+		}
+		account.username = cleanUser;
+		account.password = password;
+		if (account.displayName == null || account.displayName.trim().isEmpty()) {
+			account.displayName = cleanUser;
+		}
+		if (markCurrent) {
+			account.lastUsed = System.currentTimeMillis();
+			ClientPort.saveCredentials(cleanUser + "," + password);
+		}
+		sortVoidscapeSavedAccounts();
+		return saveVoidscapeSavedAccounts();
+	}
+
+	private boolean saveVoidscapeSavedAccounts() {
+		Properties props = new Properties();
+		int count = Math.min(this.voidscapeSavedAccounts.size(), VOIDSCAPE_ACCOUNT_MAX);
+		props.setProperty("count", Integer.toString(count));
+		for (int i = 0; i < count; i++) {
+			VoidscapeSavedAccount account = this.voidscapeSavedAccounts.get(i);
+			props.setProperty("account." + i + ".username", account.username == null ? "" : account.username);
+			props.setProperty("account." + i + ".password", account.password == null ? "" : account.password);
+			props.setProperty("account." + i + ".displayName", voidscapeAccountDisplayName(account));
+			props.setProperty("account." + i + ".combatLevel", Integer.toString(Math.max(0, account.combatLevel)));
+			props.setProperty("account." + i + ".lastUsed", Long.toString(Math.max(0L, account.lastUsed)));
+		}
+		File file = voidscapeAccountsFile();
+		File parent = file.getParentFile();
+		if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+			return false;
+		}
+		try (FileOutputStream out = new FileOutputStream(file)) {
+			props.store(out, "Voidscape saved accounts");
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
+	private void sortVoidscapeSavedAccounts() {
+		this.voidscapeSavedAccounts.sort((a, b) -> Long.compare(b.lastUsed, a.lastUsed));
+	}
+
+	private boolean removeVoidscapeSavedAccount(VoidscapeSavedAccount account) {
+		if (account == null || isCurrentVoidscapeAccount(account)) {
+			return false;
+		}
+		boolean removed = this.voidscapeSavedAccounts.remove(account);
+		if (!removed) {
+			return false;
+		}
+		String removedKey = voidscapeAccountKey(account.username);
+		String cred = ClientPort.loadCredentials();
+		String[] split = cred.split(",", 2);
+		if (split.length == 2 && removedKey.equals(voidscapeAccountKey(split[0]))
+			&& getUsername() != null && !getUsername().trim().isEmpty()
+			&& this.password != null && !this.password.isEmpty()) {
+			ClientPort.saveCredentials(getUsername().trim() + "," + this.password);
+		}
+		saveVoidscapeSavedAccounts();
+		return true;
+	}
+
+	private void noteVoidscapeLoginSucceeded(String username, String password) {
+		ensureVoidscapeSavedAccountsLoaded();
+		VoidscapeSavedAccount existing = findVoidscapeSavedAccount(username);
+		boolean shouldRemember = this.voidscapeAddAccountPending || existing != null || this.voidscapeSavedAccounts.isEmpty();
+		if (shouldRemember) {
+			saveVoidscapeCredentials(username, password, true);
+		}
+		this.voidscapeAddAccountPending = false;
+		this.voidscapeOpenExistingLoginAfterLogout = false;
+	}
+
+	private int currentVoidscapeCombatLevel() {
+		return this.localPlayer == null ? 0 : Math.max(0, this.localPlayer.level);
+	}
+
+	private void refreshVoidscapeCurrentAccountCache() {
+		if (this.currentViewMode != GameMode.GAME || this.localPlayer == null) {
+			return;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		String activeUser = getUsername();
+		if (activeUser == null || activeUser.trim().isEmpty()) {
+			activeUser = this.localPlayer.accountName;
+		}
+		VoidscapeSavedAccount account = findVoidscapeSavedAccount(activeUser);
+		if (account == null && this.voidscapeSavedAccounts.isEmpty()
+			&& activeUser != null && !activeUser.trim().isEmpty() && this.password != null && !this.password.isEmpty()) {
+			saveVoidscapeCredentials(activeUser, this.password, true);
+			account = findVoidscapeSavedAccount(activeUser);
+		}
+		if (account == null) {
+			return;
+		}
+		String display = this.localPlayer.displayName != null && !this.localPlayer.displayName.trim().isEmpty()
+			? this.localPlayer.displayName : this.localPlayer.accountName;
+		int combatLevel = currentVoidscapeCombatLevel();
+		boolean changed = false;
+		if (display != null && !display.trim().isEmpty()
+			&& !display.trim().equals(account.displayName)) {
+			account.displayName = display.trim();
+			changed = true;
+		}
+		if (combatLevel > 0 && combatLevel != account.combatLevel) {
+			account.combatLevel = combatLevel;
+			changed = true;
+		}
+		if (changed && System.currentTimeMillis() - this.voidscapeLastAccountStatsWrite > VOIDSCAPE_ACCOUNT_STATS_SAVE_INTERVAL_MS) {
+			this.voidscapeLastAccountStatsWrite = System.currentTimeMillis();
+			saveVoidscapeSavedAccounts();
+		}
+	}
+
+	private void startVoidscapeAccountSwitch(VoidscapeSavedAccount account) {
+		if (account == null || account.username == null || account.password == null
+			|| account.username.trim().isEmpty() || account.password.isEmpty()) {
+			return;
+		}
+		String activeKey = voidscapeAccountKey(getUsername());
+		String selectedKey = voidscapeAccountKey(account.username);
+		if (!activeKey.isEmpty() && activeKey.equals(selectedKey)) {
+			this.voidscapeAccountMenuOpen = false;
+			return;
+		}
+		if (this.combatTimeout > 0) {
+			this.showMessage(false, null, "You can't switch accounts right after combat",
+				MessageType.GAME, 0, null, "@cya@");
+			return;
+		}
+		this.voidscapePendingSwitchUsername = account.username;
+		this.voidscapePendingSwitchPassword = account.password;
+		account.lastUsed = System.currentTimeMillis();
+		ClientPort.saveCredentials(account.username + "," + account.password);
+		sortVoidscapeSavedAccounts();
+		saveVoidscapeSavedAccounts();
+		this.voidscapeAccountMenuOpen = false;
+		this.showUiTab = 0;
+		sendLogout(0);
+	}
+
+	private void startVoidscapeAddAccount() {
+		ensureVoidscapeSavedAccountsLoaded();
+		if (this.voidscapeSavedAccounts.size() >= VOIDSCAPE_ACCOUNT_MAX) {
+			this.voidscapeAccountAddStatus = "Remove an account first";
+			return;
+		}
+		this.voidscapeAddAccountPending = false;
+		this.voidscapeOpenExistingLoginAfterLogout = false;
+		this.voidscapeAccountAddFormOpen = true;
+		this.voidscapeAccountMenuOpen = true;
+		this.showUiTab = 0;
+		ensureVoidscapeAccountAddPanel();
+		this.voidscapeAccountAddPanel.setText(this.voidscapeAccountAddUser, "");
+		this.voidscapeAccountAddPanel.setText(this.voidscapeAccountAddPass, "");
+		this.voidscapeAccountAddPanel.setFocus(this.voidscapeAccountAddUser);
+		this.voidscapeAccountAddStatus = "";
+		clearVoidscapeAccountValidation();
+	}
+
+	private void closeVoidscapeAccountAddForm() {
+		this.voidscapeAccountAddFormOpen = false;
+		this.voidscapeAccountAddStatus = "";
+		clearVoidscapeAccountValidation();
+	}
+
+	private void clearVoidscapeAccountValidation() {
+		this.voidscapeAccountAddChecking = false;
+		this.voidscapeAccountAddPendingUser = "";
+		this.voidscapeAccountAddPendingPass = "";
+		this.voidscapeAccountAddStartedAt = 0L;
+	}
+
+	private void expireVoidscapeAccountValidation() {
+		if (!this.voidscapeAccountAddChecking) {
+			return;
+		}
+		long startedAt = this.voidscapeAccountAddStartedAt;
+		if (startedAt > 0L && System.currentTimeMillis() - startedAt >= VOIDSCAPE_ACCOUNT_VALIDATE_TIMEOUT_MS) {
+			clearVoidscapeAccountValidation();
+			this.voidscapeAccountAddStatus = "Unable to verify account";
+		}
+	}
+
+	private void ensureVoidscapeAccountAddPanel() {
+		int x = voidscapeAccountPanelX();
+		int y = voidscapeAccountPanelY();
+		int width = voidscapeAccountPanelWidth();
+		if (this.voidscapeAccountAddPanel != null
+			&& this.voidscapeAccountAddPanelX == x
+			&& this.voidscapeAccountAddPanelY == y
+			&& this.voidscapeAccountAddPanelWidth == width) {
+			return;
+		}
+		String user = this.voidscapeAccountAddPanel == null || this.voidscapeAccountAddUser < 0
+			? "" : this.voidscapeAccountAddPanel.getControlText(this.voidscapeAccountAddUser);
+		String pass = this.voidscapeAccountAddPanel == null || this.voidscapeAccountAddPass < 0
+			? "" : this.voidscapeAccountAddPanel.getControlText(this.voidscapeAccountAddPass);
+		int cx = x + width / 2;
+		this.voidscapeAccountAddPanel = new Panel(this.getSurface(), 8);
+		this.voidscapeAccountAddUser = this.voidscapeAccountAddPanel.addCenteredTextEntry(cx,
+			voidscapeAccountAddUserY(), voidscapeAccountAddFieldWidth(), 20, 22, 1, false, true);
+		this.voidscapeAccountAddPass = this.voidscapeAccountAddPanel.addCenteredTextEntry(cx,
+			voidscapeAccountAddPassY(), voidscapeAccountAddFieldWidth(), 20, 22, 1, true, true);
+		this.voidscapeAccountAddSave = this.voidscapeAccountAddPanel.addButton(cx - 45,
+			voidscapeAccountAddActionY(), 80, 26);
+		this.voidscapeAccountAddCancel = this.voidscapeAccountAddPanel.addButton(cx + 45,
+			voidscapeAccountAddActionY(), 80, 26);
+		this.voidscapeAccountAddPanel.setText(this.voidscapeAccountAddUser, user == null ? "" : user);
+		this.voidscapeAccountAddPanel.setText(this.voidscapeAccountAddPass, pass == null ? "" : pass);
+		this.voidscapeAccountAddPanel.setFocus(this.voidscapeAccountAddUser);
+		this.voidscapeAccountAddPanelX = x;
+		this.voidscapeAccountAddPanelY = y;
+		this.voidscapeAccountAddPanelWidth = width;
+	}
+
+	private void saveVoidscapeAccountAddForm() {
+		if (this.voidscapeAccountAddChecking) {
+			return;
+		}
+		ensureVoidscapeAccountAddPanel();
+		String user = this.voidscapeAccountAddPanel.getControlText(this.voidscapeAccountAddUser);
+		String pass = this.voidscapeAccountAddPanel.getControlText(this.voidscapeAccountAddPass);
+		if (user == null || user.trim().isEmpty() || pass == null || pass.isEmpty()) {
+			this.voidscapeAccountAddStatus = "Enter username and password";
+			return;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		VoidscapeSavedAccount existing = findVoidscapeSavedAccount(user);
+		if (existing == null && this.voidscapeSavedAccounts.size() >= VOIDSCAPE_ACCOUNT_MAX) {
+			this.voidscapeAccountAddStatus = "Remove an account first";
+			return;
+		}
+		if (isCurrentVoidscapeAccount(existing)) {
+			this.voidscapeAccountAddStatus = "Current account already saved";
+			return;
+		}
+		if (this.packetHandler == null || this.packetHandler.getClientStream() == null) {
+			this.voidscapeAccountAddStatus = "Unable to verify account";
+			return;
+		}
+		this.voidscapeAccountAddStatus = "Checking account...";
+		this.voidscapeAccountAddChecking = true;
+		this.voidscapeAccountAddPendingUser = user.trim();
+		this.voidscapeAccountAddPendingPass = pass;
+		this.voidscapeAccountAddStartedAt = System.currentTimeMillis();
+		try {
+			this.packetHandler.getClientStream().newPacket(199);
+			this.packetHandler.getClientStream().bufferBits.putByte(15);
+			this.packetHandler.getClientStream().bufferBits.putString(user.trim());
+			this.packetHandler.getClientStream().bufferBits.putString(pass);
+			this.packetHandler.getClientStream().finishPacketAndFlush();
+		} catch (Exception ignored) {
+			clearVoidscapeAccountValidation();
+			this.voidscapeAccountAddStatus = "Unable to verify account";
+		}
+	}
+
+	final boolean handleVoidscapeAccountAuthMessage(String message) {
+		if (message == null || !message.startsWith(VOIDSCAPE_ACCOUNT_AUTH_PREFIX)) {
+			return false;
+		}
+		String[] parts = message.substring(VOIDSCAPE_ACCOUNT_AUTH_PREFIX.length()).split("\\|", 4);
+		if (parts.length < 3 || !this.voidscapeAccountAddChecking) {
+			return true;
+		}
+		String user = parts[1] == null ? "" : parts[1].trim();
+		if (!voidscapeAccountKey(user).equals(voidscapeAccountKey(this.voidscapeAccountAddPendingUser))) {
+			return true;
+		}
+		boolean success = "1".equals(parts[0]);
+		int combatLevel = parseIntOrDefault(parts[2], 0);
+		String detail = parts.length >= 4 ? parts[3].trim() : "";
+		String pendingUser = this.voidscapeAccountAddPendingUser;
+		String pendingPass = this.voidscapeAccountAddPendingPass;
+		clearVoidscapeAccountValidation();
+		if (!success) {
+			this.voidscapeAccountAddStatus = detail.isEmpty() ? "Invalid username or password" : detail;
+			return true;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		if (findVoidscapeSavedAccount(pendingUser) == null && this.voidscapeSavedAccounts.size() >= VOIDSCAPE_ACCOUNT_MAX) {
+			this.voidscapeAccountAddStatus = "Remove an account first";
+			return true;
+		}
+		if (!saveVoidscapeCredentials(user.isEmpty() ? pendingUser : user, pendingPass, false)) {
+			this.voidscapeAccountAddStatus = "Unable to save account";
+			return true;
+		}
+		VoidscapeSavedAccount account = findVoidscapeSavedAccount(user.isEmpty() ? pendingUser : user);
+		if (account != null && combatLevel > 0 && account.combatLevel != combatLevel) {
+			account.combatLevel = combatLevel;
+			saveVoidscapeSavedAccounts();
+		}
+		this.voidscapeAccountAddFormOpen = false;
+		this.voidscapeAccountMenuOpen = true;
+		this.voidscapeAccountAddStatus = "";
+		return true;
+	}
+
+	private void openVoidscapeAddAccountLogin() {
+		this.loginScreenNumber = 2;
+		this.voidscapeOpenExistingLoginAfterLogout = false;
+		if (this.panelLogin != null) {
+			this.panelLogin.setText(this.controlLoginUser, "");
+			this.panelLogin.setText(this.controlLoginPass, "");
+			this.panelLogin.setFocus(this.controlLoginUser);
+		}
+		this.setUsername("");
+		this.password = "";
+		showLoginScreenStatus("Add another account", "Log in once to save it");
+	}
+
+	private void completeVoidscapePendingAccountSwitch() {
+		if (this.voidscapePendingSwitchUsername == null || this.voidscapePendingSwitchUsername.trim().isEmpty()
+			|| this.voidscapePendingSwitchPassword == null || this.voidscapePendingSwitchPassword.isEmpty()) {
+			if (this.voidscapeOpenExistingLoginAfterLogout) {
+				openVoidscapeAddAccountLogin();
+			}
+			return;
+		}
+		String nextUser = this.voidscapePendingSwitchUsername;
+		String nextPass = this.voidscapePendingSwitchPassword;
+		this.voidscapePendingSwitchUsername = "";
+		this.voidscapePendingSwitchPassword = "";
+		this.loginScreenNumber = 2;
+		if (this.panelLogin != null) {
+			this.panelLogin.setText(this.controlLoginUser, nextUser);
+			this.panelLogin.setText(this.controlLoginPass, nextPass);
+		}
+		this.setUsername(nextUser);
+		this.password = nextPass;
+		this.autoLoginTimeout = 2;
+		this.login(-12, nextPass, nextUser, false);
 	}
 
 	private int voidscapeExistingSaveX() {
@@ -11859,7 +12398,11 @@ public final class mudclient implements Runnable {
 
 			// friend tab
 			if (this.panelSocialTab == 0) {
+				int visibleFriendIndex = 0;
 				for (index = 0; index < SocialLists.friendListCount; ++index) {
+					if (voidscapeHideFriendListEntry(SocialLists.friendList[index])) {
+						continue;
+					}
 					if ((SocialLists.friendListOnlineStatus[index] & 2) == 0) {
 						if ((SocialLists.friendListOnlineStatus[index] & 4) == 0) {
 							colorKey = "@red@";
@@ -11870,17 +12413,18 @@ public final class mudclient implements Runnable {
 						colorKey = "@gre@";
 					}
 
-					String var11 = SocialLists.friendList[index];
+					String var11 = voidscapeSocialDisplayName(SocialLists.friendList[index]);
 					var12 = 0;
 
-					for (int var13 = SocialLists.friendList[index].length(); this.getSurface().stringWidth(1,
-						var11) > 120; var11 = SocialLists.friendList[index].substring(0, var13 - var12) + "...") {
+					for (int var13 = var11.length(); this.getSurface().stringWidth(1,
+						var11) > 120; var11 = voidscapeSocialDisplayName(SocialLists.friendList[index]).substring(0, var13 - var12) + "...") {
 						++var12;
 					}
 
-					this.panelSocial.setListEntry(this.controlSocialPanel, index,
+					this.panelSocial.setListEntry(this.controlSocialPanel, visibleFriendIndex,
 						colorKey + var11 + "~" + (var3 + 126) + "~" + "@whi@Remove         WWWWWWWWWW", 0,
 						null, null);
+					visibleFriendIndex++;
 				}
 				this.panelSocial.drawPanel();
 			}
@@ -12013,6 +12557,7 @@ public final class mudclient implements Runnable {
 			int var17;
 			if (this.panelSocialTab == 0) {
 				index = this.panelSocial.getControlSelectedListIndex(this.controlSocialPanel);
+				index = voidscapeFriendListIndexForVisibleIndex(index);
 				if (index >= 0 && this.mouseX < maxWidth) {
 					if (this.mouseX > minWidth) {
 						this.m_wk = -(index + 2);
@@ -12119,6 +12664,7 @@ public final class mudclient implements Runnable {
 							this.currentMouseButtonDown, this.lastMouseButtonDown);
 					if (this.mouseButtonClick == 1 && this.panelSocialTab == 0) {
 						index = this.panelSocial.getControlSelectedListIndex(this.controlSocialPanel);
+						index = voidscapeFriendListIndexForVisibleIndex(index);
 						if (index >= 0 && this.mouseX < maxWidth) {
 							if (this.mouseX > minWidth) { // Remove Friend
 								this.removeFriend(SocialLists.friendList[index], (byte) 69);
@@ -12559,11 +13105,11 @@ public final class mudclient implements Runnable {
 			int offX = C_CUSTOM_UI ? (useVoidscapeHudSkin() ? 176 : 170) : 199;
 			int posX = useVoidscapeHudSkin() ? voidscapeMinimapX() : this.getSurface().width2 - offX;
 			int posY = 36;
-			short var4 = (short) (useVoidscapeHudSkin() ? 203 : 156);
-			short var5 = (short) (useVoidscapeHudSkin() ? 198 : 152);
+			short var4 = (short) (useVoidscapeHudSkin() ? voidscapeMinimapWidth() : 156);
+			short var5 = (short) (useVoidscapeHudSkin() ? voidscapeMinimapHeight() : 152);
 			if (C_CUSTOM_UI) {
 				int borderSize = useVoidscapeHudSkin() ? 3 : 2;
-				posY = useVoidscapeHudSkin() ? 84 : 10;
+				posY = useVoidscapeHudSkin() ? voidscapeRightPanelY() + 10 : 10;
 				posX += borderSize;
 				posY += borderSize;
 				if (useVoidscapeHudSkin()) {
@@ -12582,7 +13128,7 @@ public final class mudclient implements Runnable {
 				this.characterHealthBar = null;
 			}
 
-			int var6 = (useVoidscapeHudSkin() ? 250 : 192) + this.minimapRandom_2;
+			int var6 = (useVoidscapeHudSkin() ? voidscapeMinimapScale() : 192) + this.minimapRandom_2;
 			int var7 = 255 & this.cameraRotation + this.minimapRandom_1;
 			int mX = var6 * (this.localPlayer.currentX - 6040) * 3 / 2048;
 			int mZ = var6 * (this.localPlayer.currentZ - 6040) * 3 / 2048;
@@ -12669,16 +13215,10 @@ public final class mudclient implements Runnable {
 					posX - 10, posY - 10, var4 + 20, var5 + 20, 32, 16, 16);
 			}
 			if (var1) {
-				posX = offX - this.getSurface().width2 + this.mouseX;
-				var13 = this.mouseY - posY;
-				if (posX >= 40 && var13 >= 0 && posX < 196 && var13 < 152) {
-					var5 = 152;
-					posX = this.getSurface().width2 - offX;
-					var4 = 156;
-					var6 = 192 + this.minimapRandom_2;
+				int mapMouseX = this.mouseX - posX;
+				int mapMouseY = this.mouseY - posY;
+				if (mapMouseX >= 0 && mapMouseY >= 0 && mapMouseX < var4 && mapMouseY < var5) {
 					var7 = 255 & this.cameraRotation + this.minimapRandom_1;
-					if (!C_CUSTOM_UI)
-						posX += 40;
 					mZ = (this.mouseY - var5 / 2 - posY) * 16384 / (var6 * 3);
 					mX = (this.mouseX + (-(var4 / 2) - posX)) * 16384 / (var6 * 3);
 					var10 = FastMath.trigTable_1024[1024 - var7 * 4 & 1023];
@@ -12705,10 +13245,10 @@ public final class mudclient implements Runnable {
 			// icon to its left, or the button itself. Mac users can't rely
 			// on Ctrl+M (modifier-state quirk in this client), so this is
 			// the canonical opener.
-			int mmW = useVoidscapeHudSkin() ? 203 : 156;
-			int mmH = useVoidscapeHudSkin() ? 198 : 152;
+			int mmW = useVoidscapeHudSkin() ? voidscapeMinimapWidth() : 156;
+			int mmH = useVoidscapeHudSkin() ? voidscapeMinimapHeight() : 152;
 			int mmLeft = useVoidscapeHudSkin() ? voidscapeMinimapX() : this.getSurface().width2 - (C_CUSTOM_UI ? 168 : 159);
-			int mmTop = C_CUSTOM_UI ? (useVoidscapeHudSkin() ? 86 : 12) : 36;
+			int mmTop = C_CUSTOM_UI ? (useVoidscapeHudSkin() ? voidscapeRightPanelY() + 13 : 12) : 36;
 			// MINIMAPTAB sprite sits at (mmLeft - 49, 3) per drawUiTabMinimap.
 			int hoverLeft = mmLeft - 50;
 			int hoverTop = 0;
@@ -13007,6 +13547,7 @@ public final class mudclient implements Runnable {
 			case ADVANCED_CATEGORY_CHAT:
 				this.getSurface().drawString("Chat", x, rowY, 0xd9b6ff, 1);
 				rowY += 22;
+				rowY = drawAdvancedToggle(x, rowY, width, "Chat box", "Show bottom chat background/frame", C_CHAT_OVERLAY, ADVANCED_ACTION_CHAT_OVERLAY);
 				rowY = drawAdvancedToggle(x, rowY, width, "Auto message switch", "Jump to active message tabs", C_MESSAGE_TAB_SWITCH, 29);
 				rowY = drawAdvancedToggle(x, rowY, width, "Kill feed", "Show world kill messages", C_KILL_FEED, 31);
 				rowY = drawAdvancedToggle(x, rowY, width, "Name and clan tags", "Show extra overhead labels", C_NAME_CLAN_TAG_OVERLAY, 35);
@@ -13126,6 +13667,10 @@ public final class mudclient implements Runnable {
 			case ADVANCED_ACTION_EXPERIENCE_COUNTER:
 				C_EXPERIENCE_COUNTER = (C_EXPERIENCE_COUNTER + 1) % 3;
 				sendGameSetting(33, C_EXPERIENCE_COUNTER);
+				break;
+			case ADVANCED_ACTION_CHAT_OVERLAY:
+				C_CHAT_OVERLAY = !C_CHAT_OVERLAY;
+				saveChatOverlaySetting();
 				break;
 			case 34:
 				C_INV_COUNT = !C_INV_COUNT;
@@ -13586,13 +14131,18 @@ public final class mudclient implements Runnable {
 		if (!useVoidscapeHudSkin()) {
 			return;
 		}
+		refreshVoidscapeCurrentAccountCache();
 		drawVoidscapeLocationPlaque();
 		drawVoidscapeTopTabs();
 	}
 
-	private int voidscapeTopTabsSpan() {
+	private int voidscapeIconTabsSpan() {
 		return (voidscapeTopTabSize() * VOIDSCAPE_TOP_TAB_COUNT)
 			+ (VOIDSCAPE_TOP_TAB_GAP * (VOIDSCAPE_TOP_TAB_COUNT - 1));
+	}
+
+	private int voidscapeTopTabsSpan() {
+		return voidscapeIconTabsSpan() + VOIDSCAPE_TOP_TAB_GAP + voidscapeAccountButtonWidth();
 	}
 
 	private int voidscapeTopTabsStartX() {
@@ -13619,9 +14169,99 @@ public final class mudclient implements Runnable {
 		return voidscapeCompactHud() ? 40 : VOIDSCAPE_TOP_TAB_SIZE;
 	}
 
+	private int voidscapeAccountButtonWidth() {
+		return voidscapeCompactHud() ? 72 : 108;
+	}
+
+	private int voidscapeAccountButtonX() {
+		return voidscapeTopTabsStartX() + voidscapeIconTabsSpan() + VOIDSCAPE_TOP_TAB_GAP;
+	}
+
+	private int voidscapeAccountPanelWidth() {
+		switch (voidscapePanelSizeClass()) {
+			case 0:
+				return 246;
+			case 1:
+				return 260;
+			case 2:
+				return 274;
+			default:
+				return 292;
+		}
+	}
+
+	private int voidscapeAccountRowHeight() {
+		return voidscapeCompactHud() ? 42 : 54;
+	}
+
+	private int voidscapeAccountRowGap() {
+		return voidscapeCompactHud() ? 4 : 5;
+	}
+
+	private int voidscapeAccountHeaderHeight() {
+		return voidscapeCompactHud() ? 54 : 66;
+	}
+
+	private boolean isCurrentVoidscapeAccount(VoidscapeSavedAccount account) {
+		if (account == null) {
+			return false;
+		}
+		String activeKey = voidscapeAccountKey(getUsername());
+		if (activeKey.isEmpty() && this.localPlayer != null) {
+			activeKey = voidscapeAccountKey(this.localPlayer.accountName);
+		}
+		return !activeKey.isEmpty() && activeKey.equals(voidscapeAccountKey(account.username));
+	}
+
+	private int voidscapeAccountPanelX() {
+		int width = voidscapeAccountPanelWidth();
+		int right = voidscapeAccountButtonX() + voidscapeAccountButtonWidth();
+		return Math.max(8, Math.min(right - width, this.getGameWidth() - width - 8));
+	}
+
+	private int voidscapeAccountPanelY() {
+		return VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() - (voidscapeCompactHud() ? 1 : 2);
+	}
+
+	private int voidscapeAccountAddFormHeight() {
+		return voidscapeCompactHud() ? 214 : 244;
+	}
+
+	private int voidscapeAccountAddFieldWidth() {
+		return voidscapeCompactHud() ? 178 : 210;
+	}
+
+	private int voidscapeAccountAddUserY() {
+		return voidscapeAccountPanelY() + voidscapeAccountHeaderHeight() + (voidscapeCompactHud() ? 26 : 31);
+	}
+
+	private int voidscapeAccountAddPassY() {
+		return voidscapeAccountAddUserY() + (voidscapeCompactHud() ? 42 : 50);
+	}
+
+	private int voidscapeAccountAddActionY() {
+		return voidscapeAccountAddPassY() + (voidscapeCompactHud() ? 42 : 50);
+	}
+
+	private int voidscapeVisibleAccountCount() {
+		ensureVoidscapeSavedAccountsLoaded();
+		return Math.min(this.voidscapeSavedAccounts.size(), VOIDSCAPE_ACCOUNT_MAX);
+	}
+
+	private int voidscapeAccountPanelHeight() {
+		if (this.voidscapeAccountAddFormOpen) {
+			return voidscapeAccountAddFormHeight();
+		}
+		int visibleAccounts = voidscapeVisibleAccountCount();
+		int rows = visibleAccounts + (visibleAccounts < VOIDSCAPE_ACCOUNT_MAX ? 1 : 0);
+		int bottom = voidscapeCompactHud() ? 14 : 18;
+		return voidscapeAccountHeaderHeight() + rows * voidscapeAccountRowHeight()
+			+ Math.max(0, rows - 1) * voidscapeAccountRowGap() + bottom;
+	}
+
 	private int voidscapeRightPanelWidth() {
 		if (this.showUiTab == Config.INVENTORY_TAB) {
-			return 286;
+			return voidscapeCompactHud() ? voidscapeRightPanelBaseWidth() : 286;
 		}
 		return voidscapeRightPanelBaseWidth();
 	}
@@ -13646,52 +14286,52 @@ public final class mudclient implements Runnable {
 	private int voidscapeRightPanelInset() {
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 22;
+				return 14;
 			case 1:
-				return 24;
+				return 15;
 			case 2:
-				return 25;
+				return 16;
 			default:
-				return 27;
+				return 18;
 		}
 	}
 
 	private int voidscapeRightPanelContentTop() {
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 68;
+				return 50;
 			case 1:
-				return 70;
+				return 52;
 			case 2:
-				return 72;
+				return 54;
 			default:
-				return 74;
+				return 56;
 		}
 	}
 
 	private int voidscapeOptionsContentTop() {
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 90;
+				return 72;
 			case 1:
-				return 92;
+				return 74;
 			case 2:
-				return 95;
+				return 76;
 			default:
-				return 98;
+				return 78;
 		}
 	}
 
 	private int voidscapeInventoryContentTop() {
-		return 70;
+		return voidscapeCompactHud() ? 48 : 54;
 	}
 
 	private int voidscapeInventoryCellWidth() {
-		return 49;
+		return voidscapeCompactHud() ? 40 : 49;
 	}
 
 	private int voidscapeInventoryCellHeight() {
-		return 34;
+		return voidscapeCompactHud() ? 28 : 34;
 	}
 
 	private int voidscapeSkillRowHeight() {
@@ -13754,14 +14394,26 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeRightPanelY() {
-		return 78;
+		return VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 4 : 6);
+	}
+
+	private int voidscapeMinimapWidth() {
+		return voidscapeCompactHud() ? 156 : 203;
+	}
+
+	private int voidscapeMinimapHeight() {
+		return voidscapeCompactHud() ? 152 : 198;
+	}
+
+	private int voidscapeMinimapScale() {
+		return voidscapeCompactHud() ? 192 : 250;
 	}
 
 	// Minimap opens directly under the minimap top icon (clamped so the 156px map fits on-screen).
 	private int voidscapeMinimapX() {
 		int iconX = voidscapeTopTabsStartX()
 			+ voidscapeTabIndexFor(Config.MINIMAP_AND_COMPASS_TAB) * (voidscapeTopTabSize() + VOIDSCAPE_TOP_TAB_GAP);
-		return Math.min(iconX, this.getSurface().width2 - 203 - 16);
+		return Math.max(18, Math.min(iconX, this.getSurface().width2 - voidscapeMinimapWidth() - 16));
 	}
 
 	// Per-tab panel height (single source for draw + auto-close bounds). Minimap handled separately.
@@ -13781,13 +14433,13 @@ public final class mudclient implements Runnable {
 		if (tabId == Config.OPTIONS_TAB) {
 			switch (voidscapePanelSizeClass()) {
 				case 0:
-					return 350;
+					return 328;
 				case 1:
-					return 356;
+					return 334;
 				case 2:
-					return 366;
+					return 344;
 				default:
-					return 378;
+					return 356;
 			}
 		}
 		if (tabId == Config.MAGIC_AND_PRAYER_TAB) {
@@ -13797,13 +14449,13 @@ public final class mudclient implements Runnable {
 		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 250;
+				return 238;
 			case 1:
-				return 258;
+				return 246;
 			case 2:
-				return 266;
+				return 254;
 			default:
-				return 276;
+				return 264;
 		}
 	}
 
@@ -13821,10 +14473,10 @@ public final class mudclient implements Runnable {
 		int pw;
 		int ph;
 		if (this.showUiTab == Config.MINIMAP_AND_COMPASS_TAB) {
-			px = voidscapeMinimapX();
-			py = 84;
-			pw = 215; // 203 map + border
-			ph = 240; // map + the "World Map" button below it
+			px = voidscapeMinimapX() - 10;
+			py = voidscapeRightPanelY();
+			pw = voidscapeMinimapWidth() + 20;
+			ph = voidscapeMinimapHeight() + 52; // map frame + the "World Map" button below it
 		} else {
 			px = voidscapeRightPanelX();
 			py = voidscapeRightPanelY();
@@ -13836,6 +14488,27 @@ public final class mudclient implements Runnable {
 		int keepBottom = py + ph;
 		return this.mouseX >= keepLeft && this.mouseX < keepRight
 			&& this.mouseY >= VOIDSCAPE_TOP_TAB_Y && this.mouseY < keepBottom;
+	}
+
+	private boolean mouseOverVoidscapeAccountButton() {
+		int x = voidscapeAccountButtonX();
+		int y = VOIDSCAPE_TOP_TAB_Y;
+		return this.mouseX >= x && this.mouseX < x + voidscapeAccountButtonWidth()
+			&& this.mouseY >= y && this.mouseY < y + voidscapeTopTabSize();
+	}
+
+	private boolean mouseOverVoidscapeAccountMenu() {
+		if (!this.voidscapeAccountMenuOpen) {
+			return false;
+		}
+		int x = voidscapeAccountPanelX();
+		int y = voidscapeAccountPanelY();
+		return this.mouseX >= x && this.mouseX < x + voidscapeAccountPanelWidth()
+			&& this.mouseY >= y && this.mouseY < y + voidscapeAccountPanelHeight();
+	}
+
+	private boolean mouseInVoidscapeAccountSwitcher() {
+		return mouseOverVoidscapeAccountButton() || mouseOverVoidscapeAccountMenu();
 	}
 
 	private void drawVoidscapeLocationPlaque() {
@@ -13914,9 +14587,31 @@ public final class mudclient implements Runnable {
 		return null;
 	}
 
+	private String voidscapeSocialDisplayName(String name) {
+		return name != null && name.equalsIgnoreCase("global$") ? "Global" : name;
+	}
+
+	private boolean voidscapeHideFriendListEntry(String name) {
+		return name != null && name.equalsIgnoreCase("global$");
+	}
+
+	private int voidscapeFriendListIndexForVisibleIndex(int visibleIndex) {
+		int visible = 0;
+		for (int i = 0; i < SocialLists.friendListCount; i++) {
+			if (voidscapeHideFriendListEntry(SocialLists.friendList[i])) {
+				continue;
+			}
+			if (visible == visibleIndex) {
+				return i;
+			}
+			visible++;
+		}
+		return -1;
+	}
+
 	private void drawVoidscapeTopTabs() {
 		// Order + icons: VOIDSCAPE_TOP_TAB_ORDER / VOIDSCAPE_TOP_TAB_ICONS
-		// (Options, Friends, Stats, Magic/Prayer, Minimap, Inventory).
+		// (Options, Friends, Stats, Magic/Prayer, Minimap, Inventory), then Account.
 		int x = voidscapeTopTabsStartX();
 		for (int i = 0; i < VOIDSCAPE_TOP_TAB_COUNT; i++) {
 			int tabId = VOIDSCAPE_TOP_TAB_ORDER[i];
@@ -13934,7 +14629,165 @@ public final class mudclient implements Runnable {
 					VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() - 9);
 			}
 		}
+		drawVoidscapeAccountButton();
+		drawVoidscapeAccountMenu();
+	}
 
+	private void drawVoidscapeAccountButton() {
+		int x = voidscapeAccountButtonX();
+		int y = VOIDSCAPE_TOP_TAB_Y;
+		int width = voidscapeAccountButtonWidth();
+		int height = voidscapeTopTabSize();
+		String asset = (this.voidscapeAccountMenuOpen || mouseOverVoidscapeAccountButton())
+			? "account-top-button-active.png" : "account-top-button.png";
+		if (getVoidscapeSkinSprite(asset) != null) {
+			drawVoidscapeSkinSprite(asset, x, y, width, height);
+			return;
+		}
+		drawVoidscapeSkinSprite(this.voidscapeAccountMenuOpen ? "top-tab-active.png" : "top-tab-normal.png",
+			x, y, width, height);
+		int icon = voidscapeCompactHud() ? 24 : 32;
+		drawVoidscapeSkinSprite(voidscapeSizedSkinAsset("private-heads.png", icon), x + 12,
+			y + (height - icon) / 2, icon, icon);
+		this.getSurface().drawString("v", x + width - 18, y + height / 2 + 4, 0xEBDCB0, 1);
+	}
+
+	private void drawVoidscapeAccountMenu() {
+		if (!this.voidscapeAccountMenuOpen) {
+			return;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		int x = voidscapeAccountPanelX();
+		int y = voidscapeAccountPanelY();
+		int width = voidscapeAccountPanelWidth();
+		int height = voidscapeAccountPanelHeight();
+		if (this.voidscapeAccountAddFormOpen) {
+			drawVoidscapeAccountAddForm(x, y, width, height);
+			return;
+		}
+		drawVoidscapePanelChrome(x, y, width, height, "ACCOUNT", 230);
+
+		int rowX = x + (voidscapeCompactHud() ? 12 : 14);
+		int rowW = width - (voidscapeCompactHud() ? 24 : 28);
+		int rowH = voidscapeAccountRowHeight();
+		int rowGap = voidscapeAccountRowGap();
+		int rowY = y + voidscapeAccountHeaderHeight();
+		int rows = voidscapeVisibleAccountCount();
+		for (int i = 0; i < rows; i++) {
+			drawVoidscapeAccountRow(this.voidscapeSavedAccounts.get(i), rowX, rowY + i * (rowH + rowGap), rowW, rowH, i);
+		}
+		if (rows < VOIDSCAPE_ACCOUNT_MAX) {
+			drawVoidscapeAddAccountRow(rowX, rowY + rows * (rowH + rowGap), rowW, rowH);
+		}
+	}
+
+	private void drawVoidscapeAccountRow(VoidscapeSavedAccount account, int x, int y, int width, int height, int index) {
+		boolean current = isCurrentVoidscapeAccount(account);
+		boolean hover = !current && this.mouseX >= x && this.mouseX < x + width
+			&& this.mouseY >= y && this.mouseY < y + height;
+		drawVoidscapeSkinSprite(current ? "account-row-current.png" : "account-row.png", x, y, width, height);
+		if (hover) {
+			this.getSurface().drawBoxAlpha(x + 8, y + 6, width - 16, height - 12, 0x5C2E86, 70);
+		}
+		int icon = voidscapeCompactHud() ? 28 : 36;
+		int iconX = x + (voidscapeCompactHud() ? 12 : 16);
+		int iconY = y + (height - icon) / 2;
+		drawVoidscapeSkinSprite(current ? "account-avatar.png" : "account-avatar-muted.png", iconX, iconY, icon, icon);
+		int textX = iconX + icon + (voidscapeCompactHud() ? 10 : 14);
+		int arrow = voidscapeCompactHud() ? 26 : 32;
+		int arrowX = x + width - arrow - (voidscapeCompactHud() ? 10 : 13);
+		int removeSize = voidscapeAccountRemoveButtonSize();
+		int removeX = voidscapeAccountRemoveButtonX(x, width);
+		int actionX = current ? x + width - (voidscapeCompactHud() ? 12 : 16) : removeX;
+		int nameW = Math.max(20, actionX - textX - 8);
+		String name = fitVoidscapeText(voidscapeAccountDisplayName(account), nameW, 4);
+		int nameColor = current ? 0xF0DFA3 : 0xFFFFFF;
+		this.getSurface().drawString(name, textX, y + (voidscapeCompactHud() ? 18 : 22), nameColor, 4);
+		String combat = account.combatLevel > 0 ? "Combat: " + account.combatLevel : "Combat: ?";
+		this.getSurface().drawString(fitVoidscapeText(combat, nameW, 1), textX,
+			y + (voidscapeCompactHud() ? 32 : 40), 0xC9BFA6, 1);
+		if (!current) {
+			drawVoidscapeAccountRemoveButton(removeX, y + (height - removeSize) / 2, removeSize);
+			drawVoidscapeSkinSprite("account-switch-arrow.png", arrowX, y + (height - arrow) / 2, arrow, arrow);
+		}
+	}
+
+	private int voidscapeAccountRemoveButtonSize() {
+		return voidscapeCompactHud() ? 18 : 20;
+	}
+
+	private int voidscapeAccountRemoveButtonX(int rowX, int rowWidth) {
+		int arrow = voidscapeCompactHud() ? 26 : 32;
+		int arrowX = rowX + rowWidth - arrow - (voidscapeCompactHud() ? 10 : 13);
+		return arrowX - voidscapeAccountRemoveButtonSize() - (voidscapeCompactHud() ? 6 : 8);
+	}
+
+	private boolean mouseOverVoidscapeAccountRemove(int rowX, int rowY, int rowW, int rowH) {
+		int size = voidscapeAccountRemoveButtonSize();
+		int x = voidscapeAccountRemoveButtonX(rowX, rowW);
+		int y = rowY + (rowH - size) / 2;
+		return this.mouseX >= x && this.mouseX <= x + size
+			&& this.mouseY >= y && this.mouseY <= y + size;
+	}
+
+	private void drawVoidscapeAccountRemoveButton(int x, int y, int size) {
+		boolean hover = this.mouseX >= x && this.mouseX <= x + size
+			&& this.mouseY >= y && this.mouseY <= y + size;
+		this.getSurface().drawBoxAlpha(x, y, size, size, hover ? 0x4a1118 : 0x13080c, hover ? 190 : 150);
+		this.getSurface().drawBoxBorder(x, size, y, size, hover ? 0xd09292 : 0x6e4b4f);
+		this.getSurface().drawString("X", x + size / 2 - 3, y + size / 2 + 4,
+			hover ? 0xffd0d0 : 0xcfa3a3, 1);
+	}
+
+	private void drawVoidscapeAddAccountRow(int x, int y, int width, int height) {
+		boolean hover = this.mouseX >= x && this.mouseX < x + width
+			&& this.mouseY >= y && this.mouseY < y + height;
+		drawVoidscapeSkinSprite("account-add-row.png", x, y, width, height);
+		if (hover) {
+			this.getSurface().drawBoxAlpha(x + 8, y + 6, width - 16, height - 12, 0x5C2E86, 70);
+		}
+		int icon = voidscapeCompactHud() ? 26 : 34;
+		int iconX = x + (voidscapeCompactHud() ? 13 : 17);
+		drawVoidscapeSkinSprite("account-add.png", iconX, y + (height - icon) / 2, icon, icon);
+		this.getSurface().drawString("Add account", iconX + icon + (voidscapeCompactHud() ? 10 : 14),
+			y + height / 2 + 5, hover ? 0xF0DFA3 : 0xC9BFA6, 4);
+	}
+
+	private void drawVoidscapeAccountAddForm(int x, int y, int width, int height) {
+		ensureVoidscapeAccountAddPanel();
+		expireVoidscapeAccountValidation();
+		drawVoidscapePanelChrome(x, y, width, height, "ADD ACCOUNT", 230);
+		int cx = x + width / 2;
+		int fieldW = voidscapeAccountAddFieldWidth();
+		drawVoidscapeField(cx, voidscapeAccountAddUserY(), fieldW, 23, "Username",
+			this.voidscapeAccountAddPanel.focusOn(this.voidscapeAccountAddUser));
+		drawVoidscapeField(cx, voidscapeAccountAddPassY(), fieldW, 23, "Password",
+			this.voidscapeAccountAddPanel.focusOn(this.voidscapeAccountAddPass));
+		drawVoidscapeFieldValue(this.voidscapeAccountAddPanel, this.voidscapeAccountAddUser,
+			cx, voidscapeAccountAddUserY(), fieldW, 1, false);
+		drawVoidscapeFieldValue(this.voidscapeAccountAddPanel, this.voidscapeAccountAddPass,
+			cx, voidscapeAccountAddPassY(), fieldW, 1, true);
+		drawVoidscapeButton(cx - 45, voidscapeAccountAddActionY(), 80, 26, "Save", true);
+		drawVoidscapeButton(cx + 45, voidscapeAccountAddActionY(), 80, 26, "Cancel", false);
+		if (this.voidscapeAccountAddStatus != null && !this.voidscapeAccountAddStatus.trim().isEmpty()) {
+			drawVoidscapeCenteredText(cx, this.voidscapeAccountAddStatus, 0xffd98a, 0,
+				voidscapeAccountAddActionY() + (voidscapeCompactHud() ? 27 : 32));
+		}
+	}
+
+	private String fitVoidscapeText(String value, int maxWidth, int font) {
+		if (value == null) {
+			return "";
+		}
+		if (this.getSurface().stringWidth(font, value) <= maxWidth) {
+			return value;
+		}
+		String ellipsis = "...";
+		int end = value.length();
+		while (end > 0 && this.getSurface().stringWidth(font, value.substring(0, end) + ellipsis) > maxWidth) {
+			end--;
+		}
+		return end <= 0 ? ellipsis : value.substring(0, end) + ellipsis;
 	}
 
 	// --- Bottom chat geometry: single source of truth shared by draw + click + reposition. ---
@@ -14057,19 +14910,19 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeChatFrame() {
-		if (!useVoidscapeHudSkin()) {
+		if (!useVoidscapeHudSkin() || !C_CHAT_OVERLAY) {
 			return;
 		}
 		int x = voidscapeChatFrameX();
 		int top = voidscapeChatFrameTop();
 		int width = voidscapeChatFrameWidth();
 		int height = voidscapeChatFrameBottom() - top;
+		int fillTop = top + 6;
+		int fillBottom = top + height - 8;
 		// Solid-dark interior so chat text reads clearly instead of fighting the game world behind it.
 		// 120 alpha proved too weak over bright water/grass; 170 keeps the world visible but text legible.
 		// Fill stays tucked under the frame rails (the slim filigree rails are ~10px) so no dark edge
 		// peeks past the frame bottom.
-		int fillTop = top + 6;
-		int fillBottom = top + height - 8;
 		this.getSurface().drawBoxAlpha(x + 10, fillTop, width - 20, fillBottom - fillTop, 0x080510, 170);
 		String chatFrameAsset = voidscapeSkinAssetOrDefault("right-panel-frame-thin.png", "chat-frame.png");
 		if ("right-panel-frame-thin.png".equals(chatFrameAsset)) {
@@ -14151,6 +15004,37 @@ public final class mudclient implements Runnable {
 		this.lastMouseButtonDown = 0;
 	}
 
+	private boolean shouldHandleVoidscapeChatPanelMouse() {
+		if (!useVoidscapeHudSkin()) {
+			return true;
+		}
+		if (mouseOverVoidscapeChatEntry()) {
+			return true;
+		}
+		return this.messageTabSelected != MessageTab.ALL && mouseOverVoidscapeChatList();
+	}
+
+	private boolean mouseOverVoidscapeChatEntry() {
+		int chatX = voidscapeChatFrameX() + 20;
+		int chatW = voidscapeChatFrameWidth() - 40;
+		int entryY = voidscapeChatFrameBottom() - 30;
+		return mouseInRect(chatX, entryY - 7, chatW, 18);
+	}
+
+	private boolean mouseOverVoidscapeChatList() {
+		int chatX = voidscapeChatFrameX() + 20;
+		int chatW = voidscapeChatFrameWidth() - 40;
+		int chatY = voidscapeChatFrameTop() + 10;
+		int entryY = voidscapeChatFrameBottom() - 30;
+		int chatH = (entryY - 4) - chatY;
+		return mouseInRect(chatX, chatY, chatW, chatH);
+	}
+
+	private boolean mouseInRect(int x, int y, int width, int height) {
+		return this.mouseX >= x && this.mouseX < x + width
+			&& this.mouseY >= y && this.mouseY < y + height;
+	}
+
 	private int getVoidscapeChatTabColor(int index) {
 		int color = 0xE7DEBC;
 		if ((index == 0 && this.messageTabSelected == MessageTab.ALL)
@@ -14183,7 +15067,7 @@ public final class mudclient implements Runnable {
 		return Long.toString(value);
 	}
 
-	// Shared ornate right-panel chrome (frame + dark bg + title bar) used by every voidscape tab.
+	// Shared ornate right-panel chrome used by every voidscape tab.
 	private void drawVoidscapePanelChrome(int x, int y, int width, int height, String title) {
 		drawVoidscapePanelChrome(x, y, width, height, title, 255);
 	}
@@ -17432,8 +18316,12 @@ public final class mudclient implements Runnable {
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 						} else {
-							this.panelMessageTabs.handleMouse(this.mouseX, this.mouseY,
-								this.currentMouseButtonDown, this.lastMouseButtonDown);
+							if (shouldHandleVoidscapeChatPanelMouse()) {
+								this.panelMessageTabs.handleMouse(this.mouseX, this.mouseY,
+									this.currentMouseButtonDown, this.lastMouseButtonDown);
+							} else {
+								this.panelMessageTabs.handleMouse(-1, -1, 0, 0);
+							}
 							auctionHouse.myAuctions.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							auctionHouse.auctionMenu.handleMouse(this.mouseX, this.mouseY,
@@ -17444,13 +18332,7 @@ public final class mudclient implements Runnable {
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
-							if (useVoidscapeHudSkin()) {
-								if (this.mouseX >= voidscapeChatFrameX()
-									&& this.mouseX < voidscapeChatFrameX() + voidscapeChatFrameWidth()
-									&& this.mouseY >= voidscapeChatFrameTop()) {
-									this.lastMouseButtonDown = 0;
-								}
-							} else if (this.messageTabSelected != MessageTab.ALL && this.mouseX >= 494
+							if (!useVoidscapeHudSkin() && this.messageTabSelected != MessageTab.ALL && this.mouseX >= 494
 								&& this.mouseY >= this.getGameHeight() - 66) {
 								this.lastMouseButtonDown = 0;
 							}
@@ -17801,13 +18683,36 @@ public final class mudclient implements Runnable {
 				return;
 			}
 
-			if (this.currentViewMode == GameMode.GAME && key == 27 && this.inputX_Action != InputXAction.ACT_0) {
-				cancelInputX();
-				return;
-			}
+		if (this.currentViewMode == GameMode.GAME && key == 27 && this.inputX_Action != InputXAction.ACT_0) {
+			cancelInputX();
+			return;
+		}
 
 			if (var1 > 105) {
 				if (this.currentViewMode == GameMode.GAME) {
+					if (this.voidscapeAccountAddFormOpen) {
+						if (key == 27) {
+							closeVoidscapeAccountAddForm();
+							this.voidscapeAccountMenuOpen = true;
+							return;
+						}
+						if (this.voidscapeAccountAddChecking) {
+							return;
+						}
+						ensureVoidscapeAccountAddPanel();
+						if ((key == '\n' || key == '\r')
+							&& this.voidscapeAccountAddPanel.focusOn(this.voidscapeAccountAddUser)) {
+							this.voidscapeAccountAddPanel.setFocus(this.voidscapeAccountAddPass);
+							return;
+						}
+						if ((key == '\n' || key == '\r')
+							&& this.voidscapeAccountAddPanel.focusOn(this.voidscapeAccountAddPass)) {
+							saveVoidscapeAccountAddForm();
+							return;
+						}
+						this.voidscapeAccountAddPanel.keyPress(key);
+						return;
+					}
 					if (this.showAppearanceChange) {
 						this.panelAppearance.keyPress(key);
 						return;
@@ -17921,6 +18826,12 @@ public final class mudclient implements Runnable {
 				this.enterPressed = false;
 				this.drawLogin();
 				this.zeroMF();
+				return true;
+			}
+			if (this.currentViewMode == GameMode.GAME) {
+				if (this.topMouseMenuVisible) {
+					this.topMouseMenuVisible = false;
+				}
 				return true;
 			}
 			return false;
@@ -18070,8 +18981,10 @@ public final class mudclient implements Runnable {
 						focusVoidscapeExistingFieldClick();
 						if (this.panelLogin.isClicked(this.m_Xi)) {
 							this.loginScreenNumber = 0;
+							this.voidscapeAddAccountPending = false;
+							this.voidscapeOpenExistingLoginAfterLogout = false;
 						}
-					if (shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
+					if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
 						if (this.panelLogin.isClicked(this.rememberButtonIdx)) {
 							String savedUser = this.panelLogin.getControlText(this.controlLoginUser);
 							String savedPass = this.panelLogin.getControlText(this.controlLoginPass);
@@ -18081,7 +18994,7 @@ public final class mudclient implements Runnable {
 								return;
 							}
 
-							boolean temp = ClientPort.saveCredentials(savedUser + "," + savedPass);
+							boolean temp = saveVoidscapeCredentials(savedUser, savedPass, true);
 
 							if (temp) {
 								this.panelLogin.setText(this.controlLoginStatus1, "");
@@ -18974,6 +19887,7 @@ public final class mudclient implements Runnable {
 				}
 				case LANDSCAPE_WALK_HERE: {
 					//System.out.println("LANDSCAPE_WALK_HERE: playerLocalX=" + this.playerLocalX + ", playerLocalZ= " + this.playerLocalZ + ", indexOrX=" + indexOrX + ", idOrZ=" + idOrZ);
+					logAndroidSmokeWalkAction(var3, indexOrX, idOrZ);
 					this.walkToActionSource(this.playerLocalX, this.playerLocalZ, indexOrX, idOrZ, false);
 					if (this.mouseClickXStep == -24) {
 						this.mouseClickXStep = 24;
@@ -19720,12 +20634,126 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
+	private boolean handleVoidscapeAccountSwitcher() {
+		boolean overButton = mouseOverVoidscapeAccountButton();
+		if (this.voidscapeAccountAddFormOpen) {
+			this.voidscapeAccountMenuOpen = true;
+		}
+		boolean overMenu = mouseOverVoidscapeAccountMenu();
+		if (this.voidscapeAccountAddFormOpen) {
+			if (this.mouseButtonClick == 1 && !this.topMouseMenuVisible) {
+				if (overMenu) {
+					handleVoidscapeAccountAddFormClick();
+				} else if (!overButton) {
+					closeVoidscapeAccountAddForm();
+					this.voidscapeAccountMenuOpen = false;
+				}
+				this.mouseButtonClick = 0;
+				this.currentMouseButtonDown = 0;
+				this.lastMouseButtonDown = 0;
+			}
+			return true;
+		}
+		if (overButton || overMenu) {
+			this.voidscapeAccountMenuOpen = true;
+			this.showUiTab = 0;
+			if (overMenu && this.mouseButtonClick == 1 && !this.topMouseMenuVisible) {
+				handleVoidscapeAccountMenuClick();
+				this.mouseButtonClick = 0;
+				this.currentMouseButtonDown = 0;
+				this.lastMouseButtonDown = 0;
+			}
+			return true;
+		}
+		if (this.voidscapeAccountMenuOpen) {
+			this.voidscapeAccountMenuOpen = false;
+		}
+		return false;
+	}
+
+	private void handleVoidscapeAccountAddFormClick() {
+		ensureVoidscapeAccountAddPanel();
+		int cx = voidscapeAccountPanelX() + voidscapeAccountPanelWidth() / 2;
+		int actionY = voidscapeAccountAddActionY();
+		if (pointInCenteredBox(cx - 45, actionY, 80, 26)) {
+			saveVoidscapeAccountAddForm();
+			return;
+		}
+		if (pointInCenteredBox(cx + 45, actionY, 80, 26)) {
+			closeVoidscapeAccountAddForm();
+			this.voidscapeAccountMenuOpen = true;
+			return;
+		}
+		if (this.voidscapeAccountAddChecking) {
+			return;
+		}
+		focusVoidscapeAccountAddFieldClick();
+		this.voidscapeAccountAddPanel.handleMouse(this.mouseX, this.mouseY,
+			this.currentMouseButtonDown, this.lastMouseButtonDown);
+	}
+
+	private boolean pointInCenteredBox(int cx, int cy, int width, int height) {
+		int x = cx - width / 2;
+		int y = cy - height / 2;
+		return this.mouseX >= x && this.mouseX <= x + width
+			&& this.mouseY >= y && this.mouseY <= y + height;
+	}
+
+	private void focusVoidscapeAccountAddFieldClick() {
+		int cx = voidscapeAccountPanelX() + voidscapeAccountPanelWidth() / 2;
+		int halfW = voidscapeAccountAddFieldWidth() / 2;
+		if (this.mouseX >= cx - halfW && this.mouseX <= cx + halfW) {
+			if (this.mouseY >= voidscapeAccountAddUserY() - 12 && this.mouseY <= voidscapeAccountAddUserY() + 12) {
+				this.voidscapeAccountAddPanel.setFocus(this.voidscapeAccountAddUser);
+			} else if (this.mouseY >= voidscapeAccountAddPassY() - 12 && this.mouseY <= voidscapeAccountAddPassY() + 12) {
+				this.voidscapeAccountAddPanel.setFocus(this.voidscapeAccountAddPass);
+			}
+		}
+	}
+
+	private void handleVoidscapeAccountMenuClick() {
+		int rowX = voidscapeAccountPanelX() + (voidscapeCompactHud() ? 12 : 14);
+		int rowW = voidscapeAccountPanelWidth() - (voidscapeCompactHud() ? 24 : 28);
+		if (this.mouseX < rowX || this.mouseX >= rowX + rowW) {
+			return;
+		}
+		int rowH = voidscapeAccountRowHeight();
+		int rowGap = voidscapeAccountRowGap();
+		int rowY = voidscapeAccountPanelY() + voidscapeAccountHeaderHeight();
+		int rowOffset = this.mouseY - rowY;
+		if (rowOffset < 0) {
+			return;
+		}
+		int rowStride = rowH + rowGap;
+		int index = rowOffset / rowStride;
+		if (rowOffset % rowStride >= rowH) {
+			return;
+		}
+		int accountCount = voidscapeVisibleAccountCount();
+		if (index < accountCount) {
+			VoidscapeSavedAccount account = this.voidscapeSavedAccounts.get(index);
+			boolean current = isCurrentVoidscapeAccount(account);
+			int accountRowY = rowY + index * rowStride;
+			if (!current && mouseOverVoidscapeAccountRemove(rowX, accountRowY, rowW, rowH)) {
+				removeVoidscapeSavedAccount(account);
+			} else if (!current) {
+				startVoidscapeAccountSwitch(account);
+			}
+		} else if (index == accountCount && accountCount < VOIDSCAPE_ACCOUNT_MAX) {
+			startVoidscapeAddAccount();
+		}
+	}
+
 	private boolean handleVoidscapeHudSkinTabClick() {
 		// Authentic og behaviour: panels open on HOVER, auto-close when the mouse leaves, and only
 		// one panel shows at a time (the minimap is mutually exclusive too). Called every frame.
 		if (this.isShowDialogBank() && this.combatTimeout == 0) {
 			this.showUiTab = 0;
+			this.voidscapeAccountMenuOpen = false;
 			return false;
+		}
+		if (handleVoidscapeAccountSwitcher()) {
+			return true;
 		}
 		int x = voidscapeTopTabsStartX();
 		int y = VOIDSCAPE_TOP_TAB_Y;
@@ -19766,6 +20794,9 @@ public final class mudclient implements Runnable {
 				if (this.mouseX >= tabsStartX && this.mouseX < tabsEndX
 					&& this.mouseY >= VOIDSCAPE_TOP_TAB_Y
 					&& this.mouseY < VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize()) {
+					return true;
+				}
+				if (mouseInVoidscapeAccountSwitcher()) {
 					return true;
 				}
 				return mouseOverVoidscapeActivePanel();
@@ -19859,6 +20890,7 @@ public final class mudclient implements Runnable {
 
 			this.systemUpdate = 0;
 			this.elixirTimer = 0;
+			completeVoidscapePendingAccountSwitch();
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "client.FC(" + "dummy" + ')');
 		}
@@ -20536,6 +21568,7 @@ public final class mudclient implements Runnable {
 								suffix += "[LAN]";
 							}
 							clientPort.setTitle(Config.getServerName() + " -- " + getUsername() + suffix);
+							noteVoidscapeLoginSucceeded(getUsername(), pass);
 						} else {
 							if (loginResponse == 1) {
 								this.autoLoginTimeout = 0;
@@ -22436,6 +23469,55 @@ public final class mudclient implements Runnable {
 			&& y >= closeY - 16 && y <= closeY + 9;
 	}
 
+	private boolean isWildWarningCloseHit(int x, int y) {
+		int halfWidth = isAndroid() ? 125 : 75;
+		int top = halfGameHeight() + (isAndroid() ? 54 : 62);
+		int bottom = halfGameHeight() + (isAndroid() ? 88 : 74);
+		return x > halfGameWidth() - halfWidth && x < halfGameWidth() + halfWidth
+			&& y > top && y <= bottom;
+	}
+
+	private int welcomeDialogHeight() {
+		int height = 135;
+		if (!this.welcomeLastLoggedInIp.equalsIgnoreCase("0.0.0.0")) {
+			height += 45;
+		}
+		return height;
+	}
+
+	private int welcomeDialogX() {
+		return (getGameWidth() - 400) / 2;
+	}
+
+	private int welcomeDialogY() {
+		return (getGameHeight() - welcomeDialogHeight()) / 2;
+	}
+
+	private int welcomeDialogCloseTextY() {
+		return welcomeDialogY() + welcomeDialogHeight() - 11;
+	}
+
+	private int welcomeDialogCloseX() {
+		return isAndroid() ? welcomeDialogX() + 94 : welcomeDialogX() + 50;
+	}
+
+	private int welcomeDialogCloseY() {
+		return welcomeDialogCloseTextY() - (isAndroid() ? 20 : 12);
+	}
+
+	private int welcomeDialogCloseWidth() {
+		return isAndroid() ? 207 : 300;
+	}
+
+	private int welcomeDialogCloseHeight() {
+		return isAndroid() ? 32 : 12;
+	}
+
+	private boolean isWelcomeDialogCloseHit(int x, int y) {
+		return x >= welcomeDialogCloseX() && x <= welcomeDialogCloseX() + welcomeDialogCloseWidth()
+			&& y >= welcomeDialogCloseY() && y <= welcomeDialogCloseY() + welcomeDialogCloseHeight();
+	}
+
 	public boolean closeServerMessageDialogAt(int x, int y) {
 		if (!this.showDialogServerMessage) {
 			return false;
@@ -22450,18 +23532,25 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
+	public boolean closeWildWarningDialogAt(int x, int y) {
+		if (this.showUiWildWarn != 1) {
+			return false;
+		}
+		if (isWildWarningCloseHit(x, y)) {
+			this.showUiWildWarn = 2;
+			this.currentMouseButtonDown = 0;
+			this.lastMouseButtonDown = 0;
+			this.mouseButtonClick = 0;
+			return true;
+		}
+		return false;
+	}
+
 	public boolean closeWelcomeDialogAt(int x, int y) {
 		if (!this.showDialogMessage || this.welcomeRecoverySetDays > 0) {
 			return false;
 		}
-		int boxHeight = 135;
-		if (!this.welcomeLastLoggedInIp.equalsIgnoreCase("0.0.0.0")) {
-			boxHeight += 45;
-		}
-		int boxX = (getGameWidth() - 400) / 2;
-		int boxY = (getGameHeight() - boxHeight) / 2;
-		if (y > boxY + boxHeight - 36 && y <= boxY + boxHeight - 8
-			&& x > boxX + 50 && x < boxX + 350) {
+		if (isWelcomeDialogCloseHit(x, y)) {
 			this.showDialogMessage = false;
 			this.currentMouseButtonDown = 0;
 			this.lastMouseButtonDown = 0;
@@ -23868,11 +24957,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private String readAndroidSmokePlayerCommand(final String fallback) {
-		if (Config.F_CACHE_DIR == null || Config.F_CACHE_DIR.isEmpty()) {
-			return fallback;
-		}
-
-		final File commandFile = new File(Config.F_CACHE_DIR, ANDROID_SMOKE_PLAYER_COMMAND_FILE);
+		final File commandFile = getAndroidSmokeFile(ANDROID_SMOKE_PLAYER_COMMAND_FILE);
 		if (!commandFile.isFile()) {
 			return fallback;
 		}
@@ -23885,6 +24970,16 @@ public final class mudclient implements Runnable {
 		} catch (IOException ignored) {
 		}
 		return fallback;
+	}
+
+	private File getAndroidSmokeFile(final String fileName) {
+		if (isFileInDirectory(Config.F_ANDROID_SMOKE_DIR, fileName)) {
+			return new File(Config.F_ANDROID_SMOKE_DIR, fileName);
+		}
+		if (Config.F_CACHE_DIR != null && !Config.F_CACHE_DIR.isEmpty()) {
+			return new File(Config.F_CACHE_DIR, fileName);
+		}
+		return new File(fileName);
 	}
 
 	public boolean dropAndroidSmokeGroundLootFromInput() {

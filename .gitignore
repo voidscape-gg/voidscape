@@ -106,6 +106,7 @@ server/logs/pcaps/*.gz
 server/logs/pcaps/**/*.gz
 
 Client_Base/Open_RSC_Client.jar
+Client_Base/Cache/accounts.txt
 Client_Base/Cache/credentials.txt
 Client_Base/clientSettings.conf
 Client_Base/logs/

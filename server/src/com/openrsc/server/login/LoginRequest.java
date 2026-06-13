@@ -137,18 +137,31 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 		loginValidated(loginResponse);
 
 		if (!isSimLogin && isLoginSuccessful(loginResponse)) {
-			final Player loadedPlayer = getServer().getPlayerService().loadPlayer(this);
-			loadedPlayer.setLoggedIn(true);
+			final boolean resumedSession = this.loadedPlayer != null;
+			final Player playerToLogin;
+			if (resumedSession) {
+				playerToLogin = this.loadedPlayer;
+			} else {
+				playerToLogin = getServer().getPlayerService().loadPlayer(this);
+				playerToLogin.setLoggedIn(true);
+			}
 
-			LOGGER.info("Player Loaded: " + getUsername() +  String.format("; Client Version: %d", clientVersion));
+			LOGGER.info("Player " + (resumedSession ? "Resumed" : "Loaded") + ": " + getUsername() +  String.format("; Client Version: %d", clientVersion));
 
 			getServer().getGameEventHandler().add(new ImmediateEvent(getServer().getWorld(), "Login Player") {
 				@Override
 				public void action() {
-					loadingComplete(loadedPlayer);
-					RestedExperience.applyOfflineGain(loadedPlayer);
-					loadedPlayer.desertHeatInit();
-					ActionSender.sendReleasedNameExplanation(loadedPlayer, usernameChangeType);
+					if (resumedSession && !playerToLogin.resumeSessionFrom(LoginRequest.this)) {
+						LOGGER.info("Session resume expired for " + getUsername() + "; closing replacement channel.");
+						getChannel().close();
+						return;
+					}
+					loadingComplete(playerToLogin);
+					if (!resumedSession) {
+						RestedExperience.applyOfflineGain(playerToLogin);
+						playerToLogin.desertHeatInit();
+						ActionSender.sendReleasedNameExplanation(playerToLogin, usernameChangeType);
+					}
 				}
 			});
 
@@ -232,20 +245,6 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 				return new ValidatedLogin(LoginResponse.INVALID_CREDENTIALS);
 			}
 
-			if(getServer().getWorld().getPlayers().size() >= getServer().getConfig().MAX_PLAYERS && !isAdmin) {
-					return new ValidatedLogin(LoginResponse.WORLD_IS_FULL);
-			}
-
-			if (getServer().getWorld().getPlayer(getUsernameHash()) != null) {
-				return new ValidatedLogin(LoginResponse.ACCOUNT_LOGGEDIN);
-			}
-
-			int playersCount = getServer().getPacketFilter().getPlayersCount(getIpAddress());
-			if (!isAdmin && !getIpAddress().equals("127.0.0.1") && playersCount >= getServer().getConfig().MAX_PLAYERS_PER_IP) {
-				LOGGER.info(getIpAddress() + " is using " + playersCount + " out of " + getServer().getConfig().MAX_PLAYERS_PER_IP + " allowed sessions, rejecting additional connection.");
-				return new ValidatedLogin(LoginResponse.IP_IN_USE);
-			}
-
 			final long banExpires = playerData.banned;
 			if (banExpires == -1) {
 				return new ValidatedLogin(LoginResponse.ACCOUNT_PERM_DISABLED);
@@ -267,6 +266,25 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 				return new ValidatedLogin(LoginResponse.INVALID_CREDENTIALS);
 			}
 
+			Player existingPlayer = getServer().getWorld().getPlayer(getUsernameHash());
+			if (existingPlayer != null) {
+				if (existingPlayer.canResumeSessionFrom(this)) {
+					loadedPlayer = existingPlayer;
+				} else {
+					return new ValidatedLogin(LoginResponse.ACCOUNT_LOGGEDIN);
+				}
+			}
+
+			if (loadedPlayer == null && getServer().getWorld().getPlayers().size() >= getServer().getConfig().MAX_PLAYERS && !isAdmin) {
+					return new ValidatedLogin(LoginResponse.WORLD_IS_FULL);
+			}
+
+			int playersCount = getServer().getPacketFilter().getPlayersCount(getIpAddress());
+			if (loadedPlayer == null && !isAdmin && !getIpAddress().equals("127.0.0.1") && playersCount >= getServer().getConfig().MAX_PLAYERS_PER_IP) {
+				LOGGER.info(getIpAddress() + " is using " + playersCount + " out of " + getServer().getConfig().MAX_PLAYERS_PER_IP + " allowed sessions, rejecting additional connection.");
+				return new ValidatedLogin(LoginResponse.IP_IN_USE);
+			}
+
 			// Doing this at end because we only want to flag the host as an admin _IF_ they know the password.
 			if(isAdmin) {
 				getServer().getPacketFilter().addAdminHost(getIpAddress());
@@ -282,6 +300,9 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 			return new ValidatedLogin(LoginResponse.RECONNECT_SUCCESFUL);
 		}
 		getServer().getPacketFilter().addLoggedInPlayer(getIpAddress(), getUsernameHash());
+		if (loadedPlayer != null) {
+			LOGGER.info("Validated session resume for " + getUsername() + " from " + getIpAddress());
+		}
 		return new ValidatedLogin(LoginResponse.LOGIN_SUCCESSFUL[groupId]);
 	}
 

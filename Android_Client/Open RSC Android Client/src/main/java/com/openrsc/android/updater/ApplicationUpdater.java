@@ -35,6 +35,10 @@ public class ApplicationUpdater extends Activity {
 
 		new Handler(Looper.getMainLooper()).postDelayed(() -> {
 			Intent mainIntent = new Intent(ApplicationUpdater.this, CacheUpdater.class);
+			Bundle extras = getIntent() == null ? null : getIntent().getExtras();
+			if (extras != null) {
+				mainIntent.putExtras(extras);
+			}
 			mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
 			startActivity(mainIntent);
 			finish();

@@ -19,7 +19,8 @@ public enum InterfaceOptions {
 	CLAN(11),
 	PARTY(12),
 	POINTS(13),
-	BANK_CLEAR_PRESET(14);
+	BANK_CLEAR_PRESET(14),
+	ACCOUNT_VALIDATE(15);
 
 	private int option;
 

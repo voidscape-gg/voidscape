@@ -372,7 +372,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	}
 
 	private Sprite getSpriteFromDrawableId(int drawableId) {
-		Drawable drawable = getResources().getDrawable(drawableId);
+		Drawable drawable = getResources().getDrawable(drawableId, getContext().getTheme());
 		BitmapDrawable bitmapDrawable = ((BitmapDrawable) drawable);
 		Bitmap bitmap = bitmapDrawable.getBitmap();
 		ByteArrayOutputStream stream = new ByteArrayOutputStream();

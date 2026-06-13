@@ -449,6 +449,8 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				return packet.getLength() == 2;
 			case PRIVACY_SETTINGS_CHANGED:
 				return packet.getLength() == 4;
+			case INTERFACE_OPTIONS:
+				return packet.getLength() >= 1;
 			case PLAYER_ACCEPTED_INIT_TRADE_REQUEST:
 			case PLAYER_ACCEPTED_TRADE:
 			case PLAYER_DECLINED_TRADE:
@@ -929,6 +931,10 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 						break;
 					case INPUT_BOX_REPLY:
 						os.name = packet.readString();
+						break;
+					case ACCOUNT_VALIDATE:
+						os.name = packet.readString();
+						os.password = packet.readString();
 						break;
 					case AUCTION:
 						os.value = packet.readByte();

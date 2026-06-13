@@ -1,4 +1,16 @@
 5d52fe1fb20bde0ecedbca3ac324a68e *./android_version.txt
+f8a3e844266eb6de02cb13e25856ab81 *./voidscape/ui/skin/account-add.png
+033fb8b32e1f2616e7578e5f1d4c973b *./voidscape/ui/skin/account-add-row.png
+f5dc3a3d06453df1727c4542afae8f48 *./voidscape/ui/skin/account-avatar.png
+ef3a0acc9a5a94c5c56d6adc9e81d86f *./voidscape/ui/skin/account-avatar-muted.png
+48226ca7a8dae39d5f10a6f1de3c9d61 *./voidscape/ui/skin/account-panel-frame.png
+c96fc3cf46e15eab513e2f470708e33e *./voidscape/ui/skin/account-row.png
+2dd5d3efdc9c6fec6f39e063603521b9 *./voidscape/ui/skin/account-row-current.png
+8f6782320dd89a1d78e609070d1879e5 *./voidscape/ui/skin/account-row-action.png
+7758e5bbf4b6a52c23987a3d3d85fe45 *./voidscape/ui/skin/account-switch-arrow.png
+3c3bdf75a99ed6146f73b370044aa0ed *./voidscape/ui/skin/account-title-bar.png
+a6b2cbb6cd115328bf7779c9948be86e *./voidscape/ui/skin/account-top-button.png
+9e562d3e28fafb6e34ce3f6a19029999 *./voidscape/ui/skin/account-top-button-active.png
 8f3b3864c52cf51814fdf0fa0b2b741b *./audio/advance.wav
 5eca4d35fc8ee3ea435560da0eca6c6d *./audio/anvil.wav
 eeaafe253ccb7f566fc2d30c03915842 *./audio/cooking.wav

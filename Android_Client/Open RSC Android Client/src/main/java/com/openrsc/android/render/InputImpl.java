@@ -5,9 +5,11 @@ import android.media.AudioManager;
 import android.view.GestureDetector;
 import android.view.GestureDetector.OnGestureListener;
 import android.view.HapticFeedbackConstants;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.OnGenericMotionListener;
 import android.view.View.OnKeyListener;
 import android.view.View.OnTouchListener;
 
@@ -21,7 +23,7 @@ import orsc.graphics.two.Fonts;
 import orsc.mudclient;
 import orsc.osConfig;
 
-public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListener {
+public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListener, OnGenericMotionListener {
 
     private final mudclient mudclient;
     private final GestureDetector gestureDetector;
@@ -35,6 +37,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
         view.setOnTouchListener(this);
         view.setOnKeyListener(this);
+        view.setOnGenericMotionListener(this);
     }
 
     private boolean isLongPress = false;
@@ -409,9 +412,48 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 		}
 	}
 
+	@Override
+	public boolean onGenericMotion(View v, MotionEvent e) {
+		if (!isMouseEvent(e)) {
+			return false;
+		}
+
+		setMousePosition(e);
+		mudclient.lastMouseAction = 0;
+
+		int action = e.getActionMasked();
+		if (action == MotionEvent.ACTION_BUTTON_PRESS && isSecondaryMouseAction(e)) {
+			return triggerRightClick();
+		}
+
+		if (action == MotionEvent.ACTION_BUTTON_RELEASE && isSecondaryMouseAction(e)) {
+			clearRightClickState();
+			return true;
+		}
+
+		return false;
+	}
+
     public boolean onTouch(View v, MotionEvent e) {
         setMousePosition(e);
         mudclient.lastMouseAction = 0;
+
+        if (isMouseEvent(e) && isSecondaryMouseAction(e)) {
+            int action = e.getActionMasked();
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+                    || action == MotionEvent.ACTION_BUTTON_RELEASE) {
+                clearRightClickState();
+                return true;
+            }
+            return triggerRightClick();
+        }
+
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN
+                && (mudclient.closeWelcomeDialogAt(mudclient.mouseX, mudclient.mouseY)
+                || mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY)
+                || mudclient.closeWildWarningDialogAt(mudclient.mouseX, mudclient.mouseY))) {
+            return true;
+        }
 
         if (handleWorldMapTouch(e)) {
             return true;
@@ -527,6 +569,21 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 		mudclient.lastMouseAction = 0;
 		mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 2;
 		return true;
+	}
+
+	private void clearRightClickState() {
+		isLongPress = false;
+		longPressTriggered = false;
+		mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 0;
+	}
+
+	private boolean isMouseEvent(MotionEvent e) {
+		return (e.getSource() & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE;
+	}
+
+	private boolean isSecondaryMouseAction(MotionEvent e) {
+		return (e.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0
+			|| e.getActionButton() == MotionEvent.BUTTON_SECONDARY;
 	}
 
     private float getHeight() {

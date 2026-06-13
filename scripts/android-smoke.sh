@@ -12,22 +12,24 @@ AVD_NAME="${AVD_NAME:-voidscape_api35}"
 APK="$REPO_ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
 OUT_DIR="${ANDROID_SCREENSHOT_DIR:-$REPO_ROOT/tmp/android-smoke-$(date +%Y%m%d-%H%M%S)}"
 APP_FILES="/data/user/0/com.voidscape.client/files"
-SMOKE_NPC_TARGETS_FLAG="$APP_FILES/android-smoke-npc-targets.flag"
-SMOKE_PLAYER_TARGETS_FLAG="$APP_FILES/android-smoke-player-targets.flag"
-SMOKE_PLAYER_COMMAND_FILE="$APP_FILES/android-smoke-player-command.txt"
-SMOKE_OBJECT_TARGETS_FLAG="$APP_FILES/android-smoke-object-targets.flag"
-SMOKE_INVENTORY_TARGETS_FLAG="$APP_FILES/android-smoke-inventory-targets.flag"
-SMOKE_CAMERA_FLAG="$APP_FILES/android-smoke-camera.flag"
-SMOKE_ZOOM_FLAG="$APP_FILES/android-smoke-zoom.flag"
-SMOKE_CHAT_TABS_FLAG="$APP_FILES/android-smoke-chat-tabs.flag"
-SMOKE_CHAT_SEND_FLAG="$APP_FILES/android-smoke-chat-send.flag"
-SMOKE_BANK_FLAG="$APP_FILES/android-smoke-bank.flag"
-SMOKE_SHOP_FLAG="$APP_FILES/android-smoke-shop.flag"
-SMOKE_EQUIPMENT_FLAG="$APP_FILES/android-smoke-equipment.flag"
-SMOKE_MAGIC_PRAYER_FLAG="$APP_FILES/android-smoke-magic-prayer.flag"
-SMOKE_WORLD_MAP_FLAG="$APP_FILES/android-smoke-world-map.flag"
-SMOKE_SETTINGS_FLAG="$APP_FILES/android-smoke-settings.flag"
-SMOKE_GROUND_LOOT_FLAG="$APP_FILES/android-smoke-ground-loot.flag"
+APP_SMOKE_FILES="/sdcard/Android/data/com.voidscape.client/files"
+SMOKE_NPC_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-npc-targets.flag"
+SMOKE_PLAYER_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-player-targets.flag"
+SMOKE_PLAYER_COMMAND_FILE="$APP_SMOKE_FILES/android-smoke-player-command.txt"
+SMOKE_OBJECT_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-object-targets.flag"
+SMOKE_INVENTORY_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-inventory-targets.flag"
+SMOKE_CAMERA_FLAG="$APP_SMOKE_FILES/android-smoke-camera.flag"
+SMOKE_ZOOM_FLAG="$APP_SMOKE_FILES/android-smoke-zoom.flag"
+SMOKE_CHAT_TABS_FLAG="$APP_SMOKE_FILES/android-smoke-chat-tabs.flag"
+SMOKE_CHAT_SEND_FLAG="$APP_SMOKE_FILES/android-smoke-chat-send.flag"
+SMOKE_BANK_FLAG="$APP_SMOKE_FILES/android-smoke-bank.flag"
+SMOKE_SHOP_FLAG="$APP_SMOKE_FILES/android-smoke-shop.flag"
+SMOKE_EQUIPMENT_FLAG="$APP_SMOKE_FILES/android-smoke-equipment.flag"
+SMOKE_MAGIC_PRAYER_FLAG="$APP_SMOKE_FILES/android-smoke-magic-prayer.flag"
+SMOKE_WORLD_MAP_FLAG="$APP_SMOKE_FILES/android-smoke-world-map.flag"
+SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
+SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
+SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
 BUILD=1
 INSTALL=1
 ONLY_AUTH_ZOOM=0
@@ -41,6 +43,7 @@ ONLY_AUTH_WORLD_MAP=0
 ONLY_AUTH_SETTINGS=0
 ONLY_AUTH_GROUND_LOOT=0
 ONLY_AUTH_WILDERNESS_TARGET=0
+ONLY_AUTH_PVP_STRESS=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
@@ -134,11 +137,21 @@ AUTH_WILDERNESS_BOSS_ID="${ANDROID_SMOKE_WILDERNESS_BOSS_ID:-1}"
 AUTH_WILDERNESS_RADIUS="${ANDROID_SMOKE_WILDERNESS_RADIUS:-3}"
 AUTH_WILDERNESS_TARGET_NAME="${ANDROID_SMOKE_WILDERNESS_TARGET_NAME:-cinebot0001}"
 AUTH_WILDERNESS_PLAYER_ACTION="${ANDROID_SMOKE_WILDERNESS_PLAYER_ACTION:-PLAYER_ATTACK}"
+AUTH_PVP_STRESS_FOOD_SLOT="${ANDROID_SMOKE_PVP_STRESS_FOOD_SLOT:-0}"
+AUTH_PVP_STRESS_FOOD_ID="${ANDROID_SMOKE_PVP_STRESS_FOOD_ID:-370}"
+AUTH_PVP_STRESS_POTION_SLOT="${ANDROID_SMOKE_PVP_STRESS_POTION_SLOT:-1}"
+AUTH_PVP_STRESS_POTION_ID="${ANDROID_SMOKE_PVP_STRESS_POTION_ID:-221}"
+AUTH_PVP_STRESS_POTION_NEXT_ID="${ANDROID_SMOKE_PVP_STRESS_POTION_NEXT_ID:-222}"
+AUTH_PVP_STRESS_SPELL_ID="${ANDROID_SMOKE_PVP_STRESS_SPELL_ID:-1}"
+AUTH_PVP_STRESS_WALK_CLIENT_X="${ANDROID_SMOKE_PVP_STRESS_WALK_CLIENT_X:-256}"
+AUTH_PVP_STRESS_WALK_CLIENT_Y="${ANDROID_SMOKE_PVP_STRESS_WALK_CLIENT_Y:-92}"
 AUTH_FIXTURE_ITEM_ID_BASE="${ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE:-1000000}"
+PENDING_SERVER_HOST=""
+PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -152,7 +165,7 @@ Environment:
   ANDROID_SMOKE_AUTH_HOST          Optional auth smoke host, default: 10.0.2.2
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
-  --only-auth-login                Focused auth smoke; defaults to AndroidMap/androidmap1 and server/inc/sqlite/voidscape.db
+  --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
   ANDROID_SMOKE_NPC_ACTION         Expected shared NPC action, default: NPC_TALK_TO
@@ -218,6 +231,7 @@ Environment:
   --only-auth-settings requires ANDROID_SMOKE_AUTH_DB and verifies camera/mouse setting persistence
   --only-auth-ground-loot requires ANDROID_SMOKE_AUTH_DB and verifies labels/beams from a real dropped item
   --only-auth-wilderness-target requires ANDROID_SMOKE_AUTH_DB and verifies player target selection in wilderness
+  --only-auth-pvp-stress requires ANDROID_SMOKE_AUTH_DB and verifies food/potion/spell/player target/walk-away input
   ANDROID_SMOKE_GROUND_LOOT_ITEM_ID Optional rare-beam fixture item id, default: 93 (Rune battle axe)
   ANDROID_SMOKE_GROUND_LOOT_PLAYER_X/Y Optional DB x/y for ground-loot fixture, default: 23,25
   ANDROID_SMOKE_WILDERNESS_PLAYER_X/Y Optional DB x/y for player-target fixture, default: 23,25
@@ -225,8 +239,168 @@ Environment:
   ANDROID_SMOKE_WILDERNESS_BOSS_ID   Optional cinematic anchor NPC id, default: 1 (Bob)
   ANDROID_SMOKE_WILDERNESS_RADIUS    Optional cinematic radius, default: 3
   ANDROID_SMOKE_WILDERNESS_TARGET_NAME Optional target player token, default: cinebot0001
+  ANDROID_SMOKE_PVP_STRESS_FOOD_ID   Optional food fixture item id, default: 370 (Swordfish)
+  ANDROID_SMOKE_PVP_STRESS_POTION_ID Optional potion fixture item id, default: 221 (Strength potion 4-dose)
+  ANDROID_SMOKE_PVP_STRESS_SPELL_ID  Optional player-cast spell id, default: 1 (Wind strike)
   ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE Optional DB-only fixture itemID floor, default: 1000000
 EOF
+}
+
+ensure_sqlite3_command() {
+    if command -v sqlite3 >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! command -v python >/dev/null 2>&1; then
+        echo "WARNING: sqlite3 is unavailable and python was not found for the smoke SQLite fallback." >&2
+        return 0
+    fi
+
+    local shim_dir shim
+    shim_dir="$OUT_DIR/.android-smoke-bin"
+    shim="$shim_dir/sqlite3"
+    mkdir -p "$shim_dir"
+    cat > "$shim" <<'PY'
+#!/usr/bin/env python
+import os
+import re
+import sqlite3
+import sys
+
+
+def normalize_path(path):
+    if re.match(r"^/[a-zA-Z]/", path):
+        return path[1] + ":" + path[2:].replace("/", "\\")
+    return path
+
+
+def sql_literal(value):
+    if value is None:
+        return "NULL"
+    if isinstance(value, bytes):
+        return "X'" + value.hex() + "'"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def row_value(value):
+    return "" if value is None else str(value)
+
+
+def parse_args(argv):
+    commands = []
+    options = {
+        "separator": "|",
+        "header": False,
+        "noheader": False,
+        "column": False,
+    }
+    db_path = None
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "-cmd":
+            commands.append(argv[i + 1])
+            i += 2
+        elif arg == "-separator":
+            options["separator"] = argv[i + 1]
+            i += 2
+        elif arg == "-header":
+            options["header"] = True
+            i += 1
+        elif arg == "-noheader":
+            options["noheader"] = True
+            i += 1
+        elif arg == "-column":
+            options["column"] = True
+            i += 1
+        elif arg.startswith("-"):
+            i += 1
+        else:
+            db_path = arg
+            commands.extend(argv[i + 1 :])
+            break
+    return db_path, commands, options
+
+
+def main():
+    db_path, commands, options = parse_args(sys.argv[1:])
+    if not db_path:
+        print("sqlite3 fallback requires a database path", file=sys.stderr)
+        return 1
+
+    if not sys.stdin.isatty():
+        stdin_sql = sys.stdin.read()
+        if stdin_sql.strip():
+            commands.append(stdin_sql)
+
+    mode_insert = None
+    try:
+        con = sqlite3.connect(normalize_path(db_path), timeout=5)
+        con.execute("PRAGMA busy_timeout = 5000")
+
+        def handle_dot(command):
+            nonlocal mode_insert
+            stripped = command.strip()
+            if not stripped:
+                return True
+            if stripped.startswith(".timeout"):
+                parts = stripped.split()
+                if len(parts) > 1 and parts[1].isdigit():
+                    con.execute(f"PRAGMA busy_timeout = {int(parts[1])}")
+                return True
+            if stripped.startswith(".mode"):
+                parts = stripped.split()
+                mode_insert = parts[2] if len(parts) >= 3 and parts[1] == "insert" else None
+                return True
+            return stripped.startswith(".")
+
+        def strip_dot_lines(command):
+            lines = []
+            for line in command.splitlines():
+                if handle_dot(line):
+                    continue
+                lines.append(line)
+            return "\n".join(lines).strip()
+
+        def emit_rows(cursor):
+            if options["header"] and not options["noheader"]:
+                print(options["separator"].join(column[0] for column in cursor.description or []))
+            for row in cursor.fetchall():
+                print(options["separator"].join(row_value(value) for value in row))
+
+        def emit_inserts(cursor, table):
+            for row in cursor.fetchall():
+                values = ", ".join(sql_literal(value) for value in row)
+                print(f"INSERT INTO {table} VALUES({values});")
+
+        for command in commands:
+            sql = strip_dot_lines(command)
+            if not sql:
+                continue
+            starts_with_select = sql.lstrip().lower().startswith(("select", "with", "pragma"))
+            if starts_with_select:
+                cursor = con.execute(sql)
+                if mode_insert:
+                    emit_inserts(cursor, mode_insert)
+                else:
+                    emit_rows(cursor)
+            else:
+                con.executescript(sql)
+        con.commit()
+        con.close()
+        return 0
+    except Exception as exc:
+        print(f"sqlite3 fallback error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PY
+    chmod +x "$shim"
+    export PATH="$shim_dir:$PATH"
+    echo "sqlite3 not found; using Python sqlite3 fallback at $shim" >&2
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -283,6 +457,10 @@ while [[ "$#" -gt 0 ]]; do
             ONLY_AUTH_WILDERNESS_TARGET=1
             shift
             ;;
+        --only-auth-pvp-stress)
+            ONLY_AUTH_PVP_STRESS=1
+            shift
+            ;;
         --only-auth-login)
             ONLY_AUTH_LOGIN=1
             shift
@@ -313,6 +491,7 @@ if [[ ! -x "$ADB" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
+ensure_sqlite3_command
 
 if [[ "$BUILD" -eq 1 ]]; then
     "$SCRIPT_DIR/build-android.sh"
@@ -336,129 +515,152 @@ if [[ "$INSTALL" -eq 1 ]]; then
     "$ADB" install -r "$APK"
 fi
 
+write_smoke_file() {
+    local file="$1"
+    local value="${2:-}"
+    "$ADB" shell "mkdir -p '$APP_SMOKE_FILES' && printf %s '$value' > '$file'"
+}
+
+touch_smoke_file() {
+    local file="$1"
+    "$ADB" shell "mkdir -p '$APP_SMOKE_FILES' && touch '$file'"
+}
+
+remove_smoke_files() {
+    "$ADB" shell "rm -f $*" 2>/dev/null || true
+}
+
 enable_android_smoke_npc_targets() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_NPC_TARGETS_FLAG'"
+    touch_smoke_file "$SMOKE_NPC_TARGETS_FLAG"
 }
 
 disable_android_smoke_npc_targets() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_NPC_TARGETS_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_NPC_TARGETS_FLAG"
 }
 
 enable_android_smoke_player_targets() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_PLAYER_TARGETS_FLAG'"
+    touch_smoke_file "$SMOKE_PLAYER_TARGETS_FLAG"
 }
 
 disable_android_smoke_player_targets() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_PLAYER_TARGETS_FLAG $SMOKE_PLAYER_COMMAND_FILE" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_PLAYER_TARGETS_FLAG" "$SMOKE_PLAYER_COMMAND_FILE"
 }
 
 write_android_smoke_player_command() {
     local command="$1"
-    "$ADB" shell "run-as com.voidscape.client sh -c 'echo $command > $SMOKE_PLAYER_COMMAND_FILE'"
+    write_smoke_file "$SMOKE_PLAYER_COMMAND_FILE" "$command"
 }
 
 enable_android_smoke_object_targets() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_OBJECT_TARGETS_FLAG'"
+    touch_smoke_file "$SMOKE_OBJECT_TARGETS_FLAG"
 }
 
 disable_android_smoke_object_targets() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_OBJECT_TARGETS_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_OBJECT_TARGETS_FLAG"
 }
 
 enable_android_smoke_inventory_targets() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_INVENTORY_TARGETS_FLAG'"
+    touch_smoke_file "$SMOKE_INVENTORY_TARGETS_FLAG"
 }
 
 disable_android_smoke_inventory_targets() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_INVENTORY_TARGETS_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_INVENTORY_TARGETS_FLAG"
+}
+
+enable_android_smoke_walk() {
+    touch_smoke_file "$SMOKE_WALK_FLAG"
+}
+
+disable_android_smoke_walk() {
+    remove_smoke_files "$SMOKE_WALK_FLAG"
 }
 
 enable_android_smoke_camera() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_CAMERA_FLAG'"
+    touch_smoke_file "$SMOKE_CAMERA_FLAG"
 }
 
 disable_android_smoke_camera() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_CAMERA_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_CAMERA_FLAG"
 }
 
 enable_android_smoke_zoom() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_ZOOM_FLAG'"
+    touch_smoke_file "$SMOKE_ZOOM_FLAG"
 }
 
 disable_android_smoke_zoom() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_ZOOM_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_ZOOM_FLAG"
 }
 
 enable_android_smoke_chat_tabs() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_CHAT_TABS_FLAG'"
+    touch_smoke_file "$SMOKE_CHAT_TABS_FLAG"
 }
 
 disable_android_smoke_chat_tabs() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_CHAT_TABS_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_CHAT_TABS_FLAG"
 }
 
 enable_android_smoke_chat_send() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_CHAT_SEND_FLAG'"
+    touch_smoke_file "$SMOKE_CHAT_SEND_FLAG"
 }
 
 disable_android_smoke_chat_send() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_CHAT_SEND_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_CHAT_SEND_FLAG"
 }
 
 enable_android_smoke_bank() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_BANK_FLAG'"
+    touch_smoke_file "$SMOKE_BANK_FLAG"
 }
 
 disable_android_smoke_bank() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_BANK_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_BANK_FLAG"
 }
 
 enable_android_smoke_shop() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_SHOP_FLAG'"
+    touch_smoke_file "$SMOKE_SHOP_FLAG"
 }
 
 disable_android_smoke_shop() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_SHOP_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_SHOP_FLAG"
 }
 
 enable_android_smoke_equipment() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_EQUIPMENT_FLAG'"
+    touch_smoke_file "$SMOKE_EQUIPMENT_FLAG"
 }
 
 disable_android_smoke_equipment() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_EQUIPMENT_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_EQUIPMENT_FLAG"
 }
 
 enable_android_smoke_magic_prayer() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_MAGIC_PRAYER_FLAG'"
+    touch_smoke_file "$SMOKE_MAGIC_PRAYER_FLAG"
 }
 
 disable_android_smoke_magic_prayer() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_MAGIC_PRAYER_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_MAGIC_PRAYER_FLAG"
 }
 
 enable_android_smoke_world_map() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_WORLD_MAP_FLAG'"
+    touch_smoke_file "$SMOKE_WORLD_MAP_FLAG"
 }
 
 disable_android_smoke_world_map() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_WORLD_MAP_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_WORLD_MAP_FLAG"
 }
 
 enable_android_smoke_settings() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_SETTINGS_FLAG'"
+    touch_smoke_file "$SMOKE_SETTINGS_FLAG"
 }
 
 disable_android_smoke_settings() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_SETTINGS_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_SETTINGS_FLAG"
 }
 
 enable_android_smoke_ground_loot() {
-    "$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && touch $SMOKE_GROUND_LOOT_FLAG'"
+    touch_smoke_file "$SMOKE_GROUND_LOOT_FLAG"
 }
 
 disable_android_smoke_ground_loot() {
-    "$ADB" shell "run-as com.voidscape.client rm -f $SMOKE_GROUND_LOOT_FLAG" 2>/dev/null || true
+    remove_smoke_files "$SMOKE_GROUND_LOOT_FLAG"
 }
 
 disable_android_smoke_targets() {
@@ -477,6 +679,7 @@ disable_android_smoke_targets() {
     disable_android_smoke_world_map
     disable_android_smoke_settings
     disable_android_smoke_ground_loot
+    disable_android_smoke_walk
 }
 
 disable_android_smoke_targets
@@ -485,14 +688,35 @@ trap disable_android_smoke_targets EXIT
 "$ADB" logcat -c || true
 "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 
+adb_screencap_to_file() {
+    local output="$1"
+    local tmp="$output.tmp"
+    local status=0
+
+    rm -f "$tmp"
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 20 "$ADB" exec-out screencap -p > "$tmp" || status=$?
+    else
+        "$ADB" exec-out screencap -p > "$tmp" || status=$?
+    fi
+
+    if [[ "$status" -ne 0 || ! -s "$tmp" ]]; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    mv "$tmp" "$output"
+}
+
 screen_size() {
     local screenshot_file size
     screenshot_file="$OUT_DIR/.tap-screen.png"
-    "$ADB" exec-out screencap -p > "$screenshot_file"
-    size="$(file "$screenshot_file" | sed -nE 's/.*PNG image data, ([0-9]+) x ([0-9]+).*/\1 \2/p')"
-    if [[ -n "$size" ]]; then
-        echo "$size"
-        return
+    if adb_screencap_to_file "$screenshot_file"; then
+        size="$(file "$screenshot_file" | sed -nE 's/.*PNG image data, ([0-9]+) x ([0-9]+).*/\1 \2/p')"
+        if [[ -n "$size" ]]; then
+            echo "$size"
+            return
+        fi
     fi
 
     size="$("$ADB" shell dumpsys window displays | tr -d '\r' | sed -nE 's/.*cur=([0-9]+)x([0-9]+).*/\1 \2/p' | head -1)"
@@ -576,8 +800,11 @@ swipe_client_xy() {
 
 screenshot() {
     local name="$1"
-    "$ADB" exec-out screencap -p > "$OUT_DIR/$name.png"
-    echo "Saved $OUT_DIR/$name.png"
+    if adb_screencap_to_file "$OUT_DIR/$name.png"; then
+        echo "Saved $OUT_DIR/$name.png"
+    else
+        echo "WARNING: timed out capturing screenshot $OUT_DIR/$name.png" >&2
+    fi
 }
 
 wait_for_text() {
@@ -623,7 +850,39 @@ tap_text() {
     y2="${BASH_REMATCH[4]}"
     x=$(((x1 + x2) / 2))
     y=$(((y1 + y2) / 2))
+    echo "Tapping text '$text' at $x,$y bounds=[$x1,$y1][$x2,$y2]" >&2
     "$ADB" shell input tap "$x" "$y"
+}
+
+tap_resource_id() {
+    local resource_id="$1"
+    local occurrence="${2:-first}"
+    local bounds
+    local x1 y1 x2 y2 x y
+
+    "$ADB" shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || return 1
+    bounds="$("$ADB" shell cat /sdcard/window.xml 2>/dev/null | tr -d '\r' | RESOURCE_ID="$resource_id" perl -ne '
+        while (/resource-id="\Q$ENV{RESOURCE_ID}\E"[^>]*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"/g) {
+            print "$1 $2 $3 $4\n";
+        }
+    ' | { if [[ "$occurrence" == "last" ]]; then tail -1; else head -1; fi; })"
+
+    if [[ ! "$bounds" =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]+)\ ([0-9]+)$ ]]; then
+        return 1
+    fi
+
+    x1="${BASH_REMATCH[1]}"
+    y1="${BASH_REMATCH[2]}"
+    x2="${BASH_REMATCH[3]}"
+    y2="${BASH_REMATCH[4]}"
+    x=$(((x1 + x2) / 2))
+    y=$(((y1 + y2) / 2))
+    echo "Tapping resource '$resource_id' at $x,$y bounds=[$x1,$y1][$x2,$y2]" >&2
+    "$ADB" shell input tap "$x" "$y"
+}
+
+tap_play_button() {
+    tap_resource_id "com.voidscape.client:id/launch_client" last || tap_text "Play" last || tap_pct 50 71
 }
 
 input_text() {
@@ -726,7 +985,7 @@ ensure_game_activity_from_wrapper() {
 
 		if is_resumed_activity "ApplicationUpdater|CacheUpdater"; then
 			wait_for_text "Play" 8 || true
-			tap_text "Play" last || tap_pct 50 60
+			tap_play_button
 		fi
 		sleep 3
 	done
@@ -737,7 +996,9 @@ ensure_game_activity_from_wrapper() {
 write_server_endpoint() {
 	local host="$1"
 	local port="$2"
-	"$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && printf %s \"$host\" > $APP_FILES/ip.txt && printf %s \"$port\" > $APP_FILES/port.txt'"
+	PENDING_SERVER_HOST="$host"
+	PENDING_SERVER_PORT="$port"
+	"$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && printf %s \"$host\" > $APP_FILES/ip.txt && printf %s \"$port\" > $APP_FILES/port.txt'" 2>/dev/null || true
 }
 
 launch_game_with_endpoint() {
@@ -747,18 +1008,9 @@ launch_game_with_endpoint() {
     write_server_endpoint "$host" "$port"
     launch_wrapper
     wait_for_wrapper_ready
-    long_press_pct 50 60 1200
-    wait_for_text "Server Options" 10 || sleep 1
-    tap_pct 33 60
-    wait_for_text "Manual Server" 10 || sleep 1
-    tap_pct 50 51
-    input_text "$host"
-    tap_pct 50 39
-    input_text "$port"
-    "$ADB" shell input keyevent BACK
-    sleep 1
-    tap_text "Play" last || tap_pct 74 60
+    tap_play_button
     ensure_game_activity_from_wrapper 120 || return 1
+    wait_for_selected_server "$host" "$port" 30 || return 1
     sleep 5
     dismiss_fullscreen_education
     return 0
@@ -795,10 +1047,10 @@ wait_for_successful_login() {
 
 ensure_auth_login_defaults() {
 	if [[ -z "$AUTH_USER" ]]; then
-		AUTH_USER="AndroidMap"
+		AUTH_USER="android"
 	fi
 	if [[ -z "$AUTH_PASS" ]]; then
-		AUTH_PASS="androidmap1"
+		AUTH_PASS="android"
 	fi
 	if [[ -z "$AUTH_DB" && -f "$REPO_ROOT/server/inc/sqlite/voidscape.db" ]]; then
 		AUTH_DB="$REPO_ROOT/server/inc/sqlite/voidscape.db"
@@ -848,7 +1100,7 @@ preflight_auth_login_fixture() {
 
 	IFS=$'\t' read -r player_id saved_user saved_pass saved_salt online <<< "$row"
 	expected_hash="$(auth_password_hash "$saved_salt" "$AUTH_PASS" || true)"
-	if [[ -n "$expected_hash" && "$expected_hash" != "$saved_pass" ]]; then
+	if [[ "$saved_pass" != "$AUTH_PASS" && -n "$expected_hash" && "$expected_hash" != "$saved_pass" ]]; then
 		echo "ERROR: password preflight failed for $saved_user in $AUTH_DB" >&2
 		echo "       This usually means the smoke script is pointed at the wrong DB or the wrong credentials." >&2
 		exit 1
@@ -858,7 +1110,7 @@ preflight_auth_login_fixture() {
 	fi
 
 	if [[ "$online" != "0" ]]; then
-		if [[ "$saved_user" == "AndroidMap" ]]; then
+		if [[ "$(printf '%s' "$AUTH_USER" | tr '[:upper:]' '[:lower:]')" == "android" ]]; then
 			echo "Auth fixture $saved_user was marked online; clearing stale online flag for smoke login."
 			sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
 				"update players set online = 0 where id = $player_id;"
@@ -1886,6 +2138,39 @@ wait_for_object_target() {
     return 1
 }
 
+wait_for_stable_object_target() {
+    local object_id="$1"
+    local timeout="${2:-30}"
+    local required_matches="${3:-2}"
+    local deadline=$((SECONDS + timeout))
+    local line x y last_x="" last_y="" matches=0
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_OBJECT_TARGET id=$object_id " | tail -1 || true)"
+        if [[ "$line" =~ clientX=([0-9]+).*clientY=([0-9]+) ]]; then
+            x="${BASH_REMATCH[1]}"
+            y="${BASH_REMATCH[2]}"
+            if [[ "$x" == "$last_x" && "$y" == "$last_y" ]]; then
+                matches=$((matches + 1))
+            else
+                last_x="$x"
+                last_y="$y"
+                matches=1
+            fi
+
+            if (( matches >= required_matches )); then
+                echo "$x $y"
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for stable Android object target id $object_id" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_OBJECT_" | tail -20 >&2 || true
+    return 1
+}
+
 wait_for_object_action() {
     local object_id="$1"
     local expected="$2"
@@ -1914,6 +2199,40 @@ tap_object_target() {
     read -r client_x client_y <<< "$coords"
     echo "Android object target $object_id at client $client_x,$client_y"
     tap_client_xy "$client_x" "$client_y"
+}
+
+wait_for_welcome_dialog() {
+    local timeout="${1:-8}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_WELCOME_DIALOG " | tail -1 || true)"
+        if [[ "$line" =~ closeX=([0-9]+).*closeY=([0-9]+) ]]; then
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
+close_welcome_dialog_if_present() {
+    local timeout="${1:-8}"
+    local coords client_x client_y
+
+    "$ADB" logcat -c || true
+    coords="$(wait_for_welcome_dialog "$timeout" || true)"
+    if [[ -z "$coords" ]]; then
+        echo "Android welcome dialog not observed; continuing without a close tap."
+        return 0
+    fi
+
+    read -r client_x client_y <<< "$coords"
+    echo "Closing Android welcome dialog at client $client_x,$client_y"
+    tap_client_xy "$client_x" "$client_y"
+    sleep 2
 }
 
 wait_for_inventory_target() {
@@ -1954,6 +2273,26 @@ wait_for_inventory_action() {
 
     echo "ERROR: timed out waiting for Android inventory action $expected on slot $slot" >&2
     "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_INVENTORY_" | tail -20 >&2 || true
+    return 1
+}
+
+wait_for_walk_action() {
+    local expected="${1:-LANDSCAPE_WALK_HERE}"
+    local timeout="${2:-15}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_WALK_ACTION action=$expected " | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "Verified Android walk action: $line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android walk action $expected" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_WALK_" | tail -20 >&2 || true
     return 1
 }
 
@@ -2167,6 +2506,27 @@ cast_selected_spell_on_self() {
     menu_index="$(wait_for_context_menu_action_index SELF_CAST_SPELL 10)" || return 1
     tap_context_menu_item "$menu_x" "$menu_y" "$menu_width" "$menu_height" "$menu_items" "$menu_index" || return 1
     wait_for_magic_prayer_action SELF_CAST_SPELL "$spell_id" 20
+}
+
+cast_selected_spell_on_player_target() {
+    local target_name="$1"
+    local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index
+
+    "$ADB" logcat -c || true
+    enable_android_smoke_player_targets
+    tap_player_target "$target_name" || return 1
+    if wait_for_player_action PLAYER_CAST_SPELL 20; then
+        return 0
+    fi
+
+    "$ADB" logcat -c || true
+    enable_android_smoke_player_targets
+    long_press_player_target "$target_name" 1200 || return 1
+    menu_values="$(wait_for_context_menu 20)" || return 1
+    read -r menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y <<< "$menu_values"
+    menu_index="$(wait_for_context_menu_action_index PLAYER_CAST_SPELL 10)" || return 1
+    tap_context_menu_item "$menu_x" "$menu_y" "$menu_width" "$menu_height" "$menu_items" "$menu_index" || return 1
+    wait_for_player_action PLAYER_CAST_SPELL 20
 }
 
 world_map_log_tail() {
@@ -2744,6 +3104,97 @@ read_auth_player_id() {
     echo "$player_id"
 }
 
+read_auth_inventory_slot_catalog() {
+    local player_id="$1"
+    local slot="$2"
+
+    sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+        "select coalesce(s.catalogID, -1)
+         from invitems i
+         join itemstatuses s on s.itemID = i.itemID
+         where i.playerID = $player_id and i.slot = $slot
+         limit 1;"
+}
+
+read_auth_curstat() {
+    local player_id="$1"
+    local stat="$2"
+
+    sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+        "select $stat from curstats where playerID = $player_id limit 1;"
+}
+
+set_auth_curstat() {
+    local player_id="$1"
+    local stat="$2"
+    local value="$3"
+
+    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
+        "update curstats set $stat = $value where playerID = $player_id;
+         update players set online = 0 where id = $player_id;"
+}
+
+ensure_auth_pvp_stress_stats() {
+    local player_id="$1"
+
+    sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+UPDATE curstats SET hits = 20, strength = 20, magic = CASE WHEN magic < 10 THEN 10 ELSE magic END
+WHERE playerID = $player_id;
+UPDATE maxstats SET hits = CASE WHEN hits < 40 THEN 40 ELSE hits END,
+    strength = CASE WHEN strength < 20 THEN 20 ELSE strength END,
+    magic = CASE WHEN magic < 10 THEN 10 ELSE magic END
+WHERE playerID = $player_id;
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+}
+
+wait_for_auth_inventory_slot_not_catalog() {
+    local player_id="$1"
+    local slot="$2"
+    local original_catalog_id="$3"
+    local timeout="${4:-45}"
+    local deadline=$((SECONDS + timeout))
+    local observed
+
+    while (( SECONDS < deadline )); do
+        observed="$(read_auth_inventory_slot_catalog "$player_id" "$slot" || true)"
+        if [[ -z "$observed" || "$observed" != "$original_catalog_id" ]]; then
+            echo "Verified Android inventory slot $slot changed from $original_catalog_id to ${observed:-empty}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    observed="$(read_auth_inventory_slot_catalog "$player_id" "$slot" || true)"
+    echo "ERROR: expected inventory slot $slot to change from catalog $original_catalog_id; observed ${observed:-empty}" >&2
+    return 1
+}
+
+wait_for_auth_curstat_greater_than() {
+    local player_id="$1"
+    local stat="$2"
+    local baseline="$3"
+    local timeout="${4:-45}"
+    local deadline=$((SECONDS + timeout))
+    local observed
+
+    while (( SECONDS < deadline )); do
+        observed="$(read_auth_curstat "$player_id" "$stat" || true)"
+        if [[ "$observed" =~ ^[0-9]+$ && "$observed" -gt "$baseline" ]]; then
+            echo "Verified Android stat change: $stat $baseline -> $observed"
+            return 0
+        fi
+        sleep 1
+    done
+
+    observed="$(read_auth_curstat "$player_id" "$stat" || true)"
+    echo "ERROR: expected $stat to increase above $baseline; observed ${observed:-unknown}" >&2
+    return 1
+}
+
 clear_auth_tutorial_appearance() {
     if [[ -z "$AUTH_DB" ]]; then
         return 0
@@ -2773,6 +3224,12 @@ reset_auth_itemstatus_sequence() {
     sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
         "update sqlite_sequence set seq = (select coalesce(max(itemID), 0) from itemstatuses) where name = 'itemstatuses';" \
         >/dev/null 2>&1 || true
+}
+
+auth_table_exists() {
+    local table_name="$1"
+    sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+        "select count(*) from sqlite_master where type = 'table' and name = '$table_name';" 2>/dev/null
 }
 
 restore_auth_inventory() {
@@ -2830,6 +3287,12 @@ restore_auth_bank() {
 
 snapshot_auth_equipment() {
     local player_id="$1"
+    if [[ "$(auth_table_exists equipped)" != "1" ]]; then
+        : > "$OUT_DIR/auth-equipment-itemstatuses.sql"
+        : > "$OUT_DIR/auth-equipment-items.sql"
+        return 0
+    fi
+
     sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert itemstatuses" \
         "select s.* from itemstatuses s join equipped e on e.itemID = s.itemID where e.playerID = $player_id order by e.itemID;" \
         > "$OUT_DIR/auth-equipment-itemstatuses.sql"
@@ -2841,6 +3304,11 @@ snapshot_auth_equipment() {
 restore_auth_equipment() {
     local player_id="$1"
     if [[ -z "$AUTH_DB" || ! -f "$OUT_DIR/auth-equipment-itemstatuses.sql" || ! -f "$OUT_DIR/auth-equipment-items.sql" ]]; then
+        return 0
+    fi
+    if [[ "$(auth_table_exists equipped)" != "1" ]]; then
+        sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
+            "UPDATE players SET online = 0 WHERE id = $player_id;" >/dev/null 2>&1 || true
         return 0
     fi
 
@@ -2908,6 +3376,19 @@ SQL
 
 clear_auth_equipment() {
     local player_id="$1"
+    if [[ "$(auth_table_exists equipped)" != "1" ]]; then
+        sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+UPDATE itemstatuses
+SET wielded = 0
+WHERE itemID IN (SELECT itemID FROM invitems WHERE playerID = $player_id);
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+        return 0
+    fi
+
     sqlite3 "$AUTH_DB" <<SQL
 .timeout 5000
 BEGIN;
@@ -3280,7 +3761,7 @@ run_authenticated_inventory_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
         tap_inventory_tab
         wait_for_inventory_target "$AUTH_INVENTORY_SLOT" 30 >/dev/null || exit 1
@@ -3797,11 +4278,14 @@ run_authenticated_bank_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
-        sleep 2
-        wait_for_object_target "$AUTH_BANK_OBJECT_ID" 30 >/dev/null || exit 1
+        close_welcome_dialog_if_present 8
+        "$ADB" logcat -c || true
+        local bank_object_coords bank_object_x bank_object_y
+        bank_object_coords="$(wait_for_stable_object_target "$AUTH_BANK_OBJECT_ID" 30)" || exit 1
+        read -r bank_object_x bank_object_y <<< "$bank_object_coords"
         screenshot 68-auth-before-bank-open
-        tap_object_target "$AUTH_BANK_OBJECT_ID" || exit 1
+        echo "Android object target $AUTH_BANK_OBJECT_ID at stable client $bank_object_x,$bank_object_y"
+        tap_client_xy "$bank_object_x" "$bank_object_y"
         wait_for_object_action "$AUTH_BANK_OBJECT_ID" "$AUTH_BANK_OBJECT_ACTION" 20 || exit 1
 
         local bank_line bank_slot_x bank_slot_y inventory_slot_x inventory_slot_y
@@ -3963,7 +4447,7 @@ run_authenticated_shop_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
         wait_for_npc_target "$AUTH_SHOP_NPC_ID" 30 >/dev/null || exit 1
         screenshot 79-auth-before-shop-open
@@ -4061,7 +4545,7 @@ run_authenticated_equipment_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
         tap_inventory_tab
         wait_for_inventory_target "$AUTH_EQUIPMENT_INVENTORY_SLOT" 30 >/dev/null || exit 1
@@ -4154,7 +4638,7 @@ run_authenticated_magic_prayer_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
 
         tap_magic_prayer_tab
@@ -4197,7 +4681,7 @@ run_authenticated_magic_prayer_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
 
         tap_magic_prayer_tab
@@ -4258,7 +4742,7 @@ run_authenticated_world_map_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
 
         local map_line before_zoom after_zoom before_pan_x before_pan_y
@@ -4341,7 +4825,7 @@ run_authenticated_settings_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
 
         "$ADB" logcat -c || true
@@ -4373,7 +4857,7 @@ run_authenticated_settings_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
 
         "$ADB" logcat -c || true
@@ -4565,15 +5049,171 @@ run_authenticated_wilderness_target_smoke() {
     return "$status"
 }
 
+run_authenticated_pvp_stress_smoke() {
+    if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+        return
+    fi
+    if [[ -z "$AUTH_DB" ]]; then
+        echo "Skipping Android PvP stress smoke; ANDROID_SMOKE_AUTH_DB is required to seed and restore fixtures."
+        return
+    fi
+    if [[ ! "$AUTH_WILDERNESS_PLAYER_X" =~ ^[0-9]+$ || ! "$AUTH_WILDERNESS_PLAYER_Y" =~ ^[0-9]+$ \
+        || ! "$AUTH_WILDERNESS_BOT_COUNT" =~ ^[0-9]+$ || ! "$AUTH_WILDERNESS_BOSS_ID" =~ ^[0-9]+$ \
+        || ! "$AUTH_WILDERNESS_RADIUS" =~ ^[0-9]+$ || ! "$AUTH_PVP_STRESS_SPELL_ID" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Android PvP stress fixture coordinates/count/boss/radius/spell must be numeric" >&2
+        return 1
+    fi
+
+    local status original_position original_x original_y original_online original_group player_id command
+    local fixture_position
+    wait_auth_offline 45
+    clear_auth_tutorial_appearance
+    original_position="$(read_auth_position)" || return 1
+    read -r original_x original_y original_online <<< "$original_position"
+    original_group="$(read_auth_group)" || return 1
+    player_id="$(read_auth_player_id)" || return 1
+    command="cinematic bossfight $AUTH_WILDERNESS_BOT_COUNT $AUTH_WILDERNESS_BOSS_ID $AUTH_WILDERNESS_RADIUS"
+    fixture_position="$AUTH_WILDERNESS_PLAYER_X $AUTH_WILDERNESS_PLAYER_Y 0"
+
+    snapshot_auth_inventory "$player_id"
+    snapshot_auth_stats "$player_id"
+    echo "Android PvP stress smoke moving $AUTH_USER from $original_x,$original_y to $AUTH_WILDERNESS_PLAYER_X,$AUTH_WILDERNESS_PLAYER_Y"
+    update_auth_position "$AUTH_WILDERNESS_PLAYER_X" "$AUTH_WILDERNESS_PLAYER_Y"
+    update_auth_group 1
+    ensure_auth_pvp_stress_stats "$player_id"
+    seed_auth_inventory_slot "$player_id" "$AUTH_PVP_STRESS_FOOD_SLOT" "$AUTH_PVP_STRESS_FOOD_ID" 1
+    seed_auth_inventory_slot "$player_id" "$AUTH_PVP_STRESS_POTION_SLOT" "$AUTH_PVP_STRESS_POTION_ID" 1
+    seed_auth_inventory_slot "$player_id" 2 33 50
+    seed_auth_inventory_slot "$player_id" 3 35 50
+    rm -f "$OUT_DIR/auth-pvp-stress-command-sent.flag"
+
+    status=0
+    (
+        set -e
+        "$ADB" logcat -c || true
+        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        enable_android_smoke_inventory_targets
+        enable_android_smoke_magic_prayer
+        enable_android_smoke_player_targets
+        enable_android_smoke_walk
+        launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT" || exit 1
+        enable_android_smoke_inventory_targets
+        enable_android_smoke_magic_prayer
+        enable_android_smoke_player_targets
+        enable_android_smoke_walk
+        tap_pct 50 65
+        sleep 3
+        enter_auth_credentials
+        submit_login_and_wait || exit 1
+        sleep 8
+        close_welcome_dialog_if_present 8
+        sleep 2
+        screenshot 115-auth-pvp-stress-ready
+
+        tap_inventory_tab
+        wait_for_inventory_target "$AUTH_PVP_STRESS_POTION_SLOT" 30 >/dev/null || exit 1
+        tap_inventory_slot "$AUTH_PVP_STRESS_POTION_SLOT" || exit 1
+        wait_for_inventory_action "$AUTH_PVP_STRESS_POTION_SLOT" ITEM_USE 20 || exit 1
+        sleep 2
+        screenshot 116-auth-pvp-stress-after-potion
+
+        wait_for_inventory_target "$AUTH_PVP_STRESS_FOOD_SLOT" 30 >/dev/null || exit 1
+        tap_inventory_slot "$AUTH_PVP_STRESS_FOOD_SLOT" || exit 1
+        wait_for_inventory_action "$AUTH_PVP_STRESS_FOOD_SLOT" ITEM_USE 20 || exit 1
+        sleep 2
+        screenshot 117-auth-pvp-stress-after-food
+
+        "$ADB" logcat -c || true
+        enable_android_smoke_player_targets
+        write_android_smoke_player_command "$command"
+        "$ADB" shell input keyevent 30
+        wait_for_player_command START 10 || exit 1
+        touch "$OUT_DIR/auth-pvp-stress-command-sent.flag"
+        sleep 1
+        wait_for_player_target "$AUTH_WILDERNESS_TARGET_NAME" 45 >/dev/null || exit 1
+        screenshot 118-auth-pvp-stress-target-visible
+
+        tap_magic_prayer_tab
+        local magic_line row_x row_y row_height spell_y
+        magic_line="$(wait_for_magic_prayer_tab magic 30)" || exit 1
+        row_x="$(log_int_or_default "$magic_line" row0X 383)"
+        row_y="$(log_int_or_default "$magic_line" row0Y 69)"
+        row_height="$(log_int_or_default "$magic_line" rowHeight 12)"
+        spell_y=$((row_y + AUTH_PVP_STRESS_SPELL_ID * row_height))
+        tap_magic_prayer_row_until_action "$row_x" "$spell_y" SPELL_SELECTED "$AUTH_PVP_STRESS_SPELL_ID" || exit 1
+        sleep 1
+        screenshot 119-auth-pvp-stress-spell-selected
+
+        cast_selected_spell_on_player_target "$AUTH_WILDERNESS_TARGET_NAME" || exit 1
+        sleep 2
+        screenshot 120-auth-pvp-stress-after-player-cast
+
+        "$ADB" logcat -c || true
+        enable_android_smoke_player_targets
+        long_press_player_target "$AUTH_WILDERNESS_TARGET_NAME" 1200 || exit 1
+        local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index
+        menu_values="$(wait_for_context_menu 20)" || exit 1
+        read -r menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y <<< "$menu_values"
+        menu_index="$(wait_for_player_attack_menu_index 10)" || exit 1
+        tap_context_menu_item "$menu_x" "$menu_y" "$menu_width" "$menu_height" "$menu_items" "$menu_index" || exit 1
+        wait_for_player_action "$AUTH_WILDERNESS_PLAYER_ACTION" 20 || exit 1
+        sleep 2
+        screenshot 121-auth-pvp-stress-after-attack
+
+        "$ADB" logcat -c || true
+        enable_android_smoke_walk
+        tap_client_xy "$AUTH_PVP_STRESS_WALK_CLIENT_X" "$AUTH_PVP_STRESS_WALK_CLIENT_Y"
+        wait_for_walk_action LANDSCAPE_WALK_HERE 20 || exit 1
+        sleep 8
+        screenshot 122-auth-pvp-stress-after-walk
+
+        "$ADB" shell input keyevent 31 || true
+        wait_for_player_command STOP 10 || true
+        sleep 1
+        "$ADB" shell am force-stop com.voidscape.client || true
+        wait_auth_offline 45 || true
+        wait_for_auth_inventory_slot_not_catalog "$player_id" "$AUTH_PVP_STRESS_FOOD_SLOT" "$AUTH_PVP_STRESS_FOOD_ID" 30 || exit 1
+        wait_for_auth_curstat_greater_than "$player_id" strength 20 30 || exit 1
+        assert_auth_position_changed_after_logout "$fixture_position" || exit 1
+    ) || status=$?
+
+    if [[ "$status" -ne 0 && -f "$OUT_DIR/auth-pvp-stress-command-sent.flag" ]]; then
+        "$ADB" shell input keyevent 31 >/dev/null 2>&1 || true
+        sleep 2
+    fi
+    disable_android_smoke_inventory_targets
+    disable_android_smoke_magic_prayer
+    disable_android_smoke_player_targets
+    disable_android_smoke_walk
+    "$ADB" shell am force-stop com.voidscape.client || true
+    wait_auth_offline 45 || true
+    restore_auth_inventory "$player_id" || true
+    restore_auth_stats "$player_id" || true
+    update_auth_position "$original_x" "$original_y" || true
+    update_auth_group "$original_group" || true
+    sleep 1
+    return "$status"
+}
+
 launch_wrapper() {
     "$ADB" shell am force-stop com.voidscape.client
-    "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+    if [[ -n "$PENDING_SERVER_HOST" && -n "$PENDING_SERVER_PORT" ]]; then
+        "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater \
+            -e voidscape.smoke.endpoint_host "$PENDING_SERVER_HOST" \
+            -e voidscape.smoke.endpoint_port "$PENDING_SERVER_PORT" \
+            --ez voidscape.smoke.clear_credentials true >/dev/null
+        PENDING_SERVER_HOST=""
+        PENDING_SERVER_PORT=""
+    else
+        "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater \
+            --ez voidscape.smoke.clear_credentials true >/dev/null
+    fi
 }
 
 launch_to_login_home() {
 	launch_wrapper
 	wait_for_wrapper_ready
-	tap_pct 50 60
+	tap_play_button
 	ensure_game_activity_from_wrapper
 	dismiss_fullscreen_education
 }
@@ -4720,18 +5360,32 @@ if [[ "$ONLY_AUTH_WILDERNESS_TARGET" -eq 1 ]]; then
     exit 0
 fi
 
+if [[ "$ONLY_AUTH_PVP_STRESS" -eq 1 ]]; then
+    if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+        echo "ERROR: --only-auth-pvp-stress requires ANDROID_SMOKE_AUTH_USER and ANDROID_SMOKE_AUTH_PASS" >&2
+        exit 1
+    fi
+    if [[ -z "$AUTH_DB" ]]; then
+        echo "ERROR: --only-auth-pvp-stress requires ANDROID_SMOKE_AUTH_DB" >&2
+        exit 1
+    fi
+    run_authenticated_pvp_stress_smoke
+    echo "Android PvP stress smoke screenshots written to $OUT_DIR"
+    exit 0
+fi
+
 launch_wrapper
 screenshot 00-bootstrap
 wait_for_wrapper_ready
 screenshot 01-ready-play
 
-long_press_pct 50 60 1200
+long_press_pct 50 71 1200
 wait_for_text "Server Options" 10 || sleep 1
 screenshot 02-server-picker
 "$ADB" shell input keyevent BACK
 sleep 1
 screenshot 03-server-picker-back-ready
-long_press_pct 50 60 1200
+long_press_pct 50 71 1200
 wait_for_text "Server Options" 10 || sleep 1
 screenshot 04-server-picker-reopened
 tap_pct 33 60
@@ -4825,11 +5479,12 @@ run_authenticated_world_map_smoke
 run_authenticated_settings_smoke
 run_authenticated_ground_loot_smoke
 run_authenticated_wilderness_target_smoke
+run_authenticated_pvp_stress_smoke
 
 launch_wrapper
 wait_for_wrapper_ready
 screenshot 110-bad-server-ready-play
-long_press_pct 50 60 1200
+long_press_pct 50 71 1200
 wait_for_text "Server Options" 10 || sleep 1
 screenshot 111-bad-server-picker
 tap_pct 33 60
@@ -4842,7 +5497,7 @@ input_text 9
 "$ADB" shell input keyevent BACK
 sleep 1
 screenshot 113-bad-server-manual-filled
-tap_text "Play" last || tap_pct 74 60
+tap_play_button
 sleep 45
 screenshot 114-bad-server-loading-error
 

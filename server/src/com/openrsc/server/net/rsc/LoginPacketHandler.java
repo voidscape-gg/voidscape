@@ -235,7 +235,9 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								if (!loadedPlayer.isReconnecting()) {
+									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								}
 								ActionSender.sendLogin(loadedPlayer);
 							}
 						};
@@ -318,7 +320,9 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								if (!loadedPlayer.isReconnecting()) {
+									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								}
 								ActionSender.sendLogin(loadedPlayer);
 							}
 						};
@@ -401,7 +405,9 @@ public class LoginPacketHandler {
 
 									initializePcapLogger(loadedPlayer, attachment);
 
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+									if (!loadedPlayer.isReconnecting()) {
+										server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+									}
 									ActionSender.sendLogin(loadedPlayer);
 								}
 							};
@@ -469,7 +475,9 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								if (!loadedPlayer.isReconnecting()) {
+									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+								}
 								ActionSender.sendLogin(loadedPlayer);
 							}
 						};
@@ -577,7 +585,9 @@ public class LoginPacketHandler {
 
 							initializePcapLogger(loadedPlayer, attachment);
 
-							server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+							if (!loadedPlayer.isReconnecting()) {
+								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+							}
 							ActionSender.sendLogin(loadedPlayer);
 						}
 					};

@@ -10,6 +10,8 @@ import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
+import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.struct.PlayerLoginData;
 import com.openrsc.server.model.container.BankPreset;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GroundItem;
@@ -32,17 +34,18 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 	private static String[] badWords = {
 		"fuck", "ass", "bitch", "admin", "mod", "dev", "developer", "nigger", "niger",
 		"whore", "pussy", "porn", "penis", "chink", "faggot", "cunt", "clit", "cock"};
+	private static final String ACCOUNT_AUTH_PREFIX = "@vsacct@";
 
 	@Override
 	public void process(OptionsStruct payload, Player player) throws Exception {
-		if (player.inCombat()) {
-			player.message("You can't do that whilst you are fighting");
-			return;
-		}
-
 		final InterfaceOptions option = InterfaceOptions.getById(payload.index);
 		if (option == null) {
 			player.setSuspiciousPlayer(true, "invalid interface option id " + payload.index);
+			return;
+		}
+
+		if (player.inCombat() && option != InterfaceOptions.ACCOUNT_VALIDATE) {
+			player.message("You can't do that whilst you are fighting");
 			return;
 		}
 
@@ -106,7 +109,57 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) return;
 				handleBankClearPreset(player, payload);
 				break;
+			case ACCOUNT_VALIDATE:
+				handleAccountValidate(player, payload);
+				break;
 		}
+	}
+
+	private void handleAccountValidate(Player player, OptionsStruct payload) {
+		String username = DataConversions.sanitizeUsername(payload.name == null ? "" : payload.name);
+		String password = payload.password == null ? "" : payload.password;
+		if (username.isEmpty() || password.isEmpty()) {
+			sendAccountAuthResult(player, false, username, 0, "Enter username and password");
+			return;
+		}
+		if (password.length() > 20) {
+			sendAccountAuthResult(player, false, username, 0, "Invalid username or password");
+			return;
+		}
+		if (!player.getCurrentIP().equals("127.0.0.1")
+			&& player.getWorld().getServer().getPacketFilter().getPasswordAttemptsCount(player.getCurrentIP())
+			>= player.getWorld().getServer().getConfig().MAX_PASSWORD_GUESSES_PER_FIVE_MINUTES
+			&& !player.getWorld().getServer().getPacketFilter().isHostAdmin(player.getCurrentIP())) {
+			sendAccountAuthResult(player, false, username, 0, "Login attempts exceeded");
+			return;
+		}
+		try {
+			PlayerLoginData data = player.getWorld().getServer().getDatabase().getPlayerLoginData(username);
+			if (data == null || !DataConversions.checkPassword(password, data.salt, data.password)) {
+				player.getWorld().getServer().getPacketFilter().addPasswordAttempt(player.getCurrentIP());
+				sendAccountAuthResult(player, false, username, 0, "Invalid username or password");
+				return;
+			}
+			sendAccountAuthResult(player, true, username, 0, "");
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Database exception validating account-switcher credentials for {}", username, e);
+			sendAccountAuthResult(player, false, username, 0, "Unable to verify account");
+		}
+	}
+
+	private void sendAccountAuthResult(Player player, boolean success, String username, int combatLevel, String message) {
+		String status = success ? "1" : "0";
+		String safeUser = accountAuthTokenPart(username);
+		String safeMessage = accountAuthTokenPart(message);
+		ActionSender.sendMessage(player, ACCOUNT_AUTH_PREFIX + status + "|" + safeUser + "|"
+			+ Math.max(0, combatLevel) + "|" + safeMessage);
+	}
+
+	private String accountAuthTokenPart(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.replace('|', ' ').replace('\n', ' ').replace('\r', ' ').trim();
 	}
 
 	private void handleInputBoxReply(Player player, OptionsStruct payload) {

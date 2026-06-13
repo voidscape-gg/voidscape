@@ -6,8 +6,18 @@ import orsc.util.ArrayUtil;
 import orsc.util.GenUtil;
 
 import static orsc.Config.C_CUSTOM_UI;
+import static orsc.Config.S_WANT_CUSTOM_UI;
+import static orsc.osConfig.F_ANDROID_BUILD;
 
 public final class Menu {
+	private static final int VOIDSCAPE_UI_TINT = 0x3C3125;
+	private static final int VOIDSCAPE_UI_LINE = 0x6E5737;
+	private static final int VOIDSCAPE_UI_PURPLE = 0x4B2472;
+	private static final int VOIDSCAPE_UI_GOLD = 0xF6DA7D;
+	private static final int VOIDSCAPE_MENU_ALPHA = 132;
+	private static final int VOIDSCAPE_MENU_LINE_ALPHA = 116;
+	private static final int VOIDSCAPE_MENU_HEADER_ALPHA = 96;
+	private static final int VOIDSCAPE_MENU_HOVER_ALPHA = 58;
 	public int font;
 	private int itemCount;
 	private int menuHeight;
@@ -303,9 +313,8 @@ public final class Menu {
 
 			if (this.menuWidth != 0 && this.menuHeight != 0) {
 				if (draw) {
-					if (C_CUSTOM_UI) {
-						this.surf.drawBoxAlpha(menuX - 2, menuY - 2, this.menuWidth + 4, this.menuHeight + 4, 0x08050C, 230);
-						this.surf.drawBoxBorder(menuX - 2, this.menuWidth + 4, menuY - 2, this.menuHeight + 4, 0x6A4FA0);
+					if (useVoidscapeMenuStyle()) {
+						this.drawVoidscapeMenuShell(menuX, menuY);
 					} else {
 						this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, this.menuHeight, 13684944, 160);
 					}
@@ -348,8 +357,11 @@ public final class Menu {
 					}
 
 					if (draw) {
-						if (C_CUSTOM_UI && clickedLine == i) {
-							this.surf.drawBoxAlpha(menuX, lineY - lineHeight + 4, this.menuWidth, lineHeight, 0x4B2472, 190);
+						if (useVoidscapeMenuStyle() && clickedLine == i) {
+							this.surf.drawBoxAlpha(menuX, lineY - lineHeight + 4, this.menuWidth, lineHeight,
+								VOIDSCAPE_UI_GOLD, VOIDSCAPE_MENU_HOVER_ALPHA);
+							this.surf.drawLineAlpha(menuX + 2, lineY + 3, menuX + this.menuWidth - 3, lineY + 3,
+								VOIDSCAPE_UI_GOLD, VOIDSCAPE_MENU_LINE_ALPHA);
 						}
 						this.surf.drawString(this.menuItems[i].label + " " + this.menuItems[i].actor, menuX + 2, lineY,
 							lineColor, this.font);
@@ -366,6 +378,28 @@ public final class Menu {
 			throw GenUtil.makeThrowable(var12,
 				"wb.R(" + mouseY + ',' + mouseX + ',' + menuY + ',' + menuX + ',' + var5 + ',' + draw + ')');
 		}
+	}
+
+	private boolean useVoidscapeMenuStyle() {
+		return C_CUSTOM_UI || F_ANDROID_BUILD && S_WANT_CUSTOM_UI;
+	}
+
+	private void drawVoidscapeMenuShell(int menuX, int menuY) {
+		this.surf.drawBoxAlpha(menuX - 2, menuY - 2, this.menuWidth + 4, this.menuHeight + 4,
+			VOIDSCAPE_UI_TINT, VOIDSCAPE_MENU_ALPHA);
+		this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, Math.min(this.menuHeight, this.surf.fontHeight(this.font) + 2),
+			VOIDSCAPE_UI_TINT, VOIDSCAPE_MENU_HEADER_ALPHA);
+		int left = menuX - 2;
+		int top = menuY - 2;
+		int right = menuX + this.menuWidth + 1;
+		int bottom = menuY + this.menuHeight + 1;
+		this.surf.drawLineAlpha(left, top, right, top, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
+		this.surf.drawLineAlpha(left, bottom, right, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
+		this.surf.drawLineAlpha(left, top, left, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
+		this.surf.drawLineAlpha(right, top, right, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
+		this.surf.drawLineAlpha(menuX, menuY + this.surf.fontHeight(this.font) + 1,
+			menuX + this.menuWidth - 1, menuY + this.surf.fontHeight(this.font) + 1,
+			VOIDSCAPE_UI_PURPLE, 96);
 	}
 
 	public final void recalculateSize(int var1) {

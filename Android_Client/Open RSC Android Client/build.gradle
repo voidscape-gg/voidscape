@@ -4,6 +4,7 @@ def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
 
 tasks.register("syncVoidscapeCache", Sync) {
     from("${rootDir}/../Client_Base/Cache") {
+        exclude "accounts.txt"
         exclude "config.txt"
         exclude "credentials.txt"
         exclude "hideIp.txt"
@@ -23,11 +24,11 @@ allprojects {
 }
 
 android {
-    compileSdkVersion 31
+    compileSdk 36
     defaultConfig {
         applicationId "com.voidscape.client"
-        minSdkVersion 23
-        targetSdkVersion 31
+        minSdk 26
+        targetSdk 35
         versionCode 1
         versionName "1.0"
         multiDexEnabled false
@@ -37,9 +38,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-project.txt'
             debuggable false
             jniDebuggable false
-            renderscriptDebuggable false
             multiDexEnabled = true
-            renderscriptOptimLevel = 3
             minifyEnabled = false
         }
         debug {
@@ -50,8 +49,6 @@ android {
     productFlavors {
     }
     compileOptions {
-        sourceCompatibility = '1.8'
-        targetCompatibility = '1.8'
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }

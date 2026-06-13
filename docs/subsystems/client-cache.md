@@ -68,7 +68,7 @@ Path: `Android_Client/`.
 - Source linkage: includes `Client_Base/src/` via Gradle `sourceSets`.
 - Build output: `voidscape.apk`.
 - Build helper: `scripts/build-android.sh` selects JDK 17 and runs Gradle; a local Android SDK is still required through `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `Android_Client/local.properties`, or Homebrew `android-commandlinetools` at `/opt/homebrew/share/android-commandlinetools`.
-- Cache seed: Gradle packages a generated asset copy of `Client_Base/Cache`, excluding mutable local files (`config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` copies that bundled cache into app-private storage before trying any optional remote cache URL.
+- Cache seed: Gradle packages a generated asset copy of `Client_Base/Cache`, excluding mutable local files (`accounts.txt`, `config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` copies that bundled cache into app-private storage before trying any optional remote cache URL.
 - Server selection: normal players get a one-tap `Play` path to `5.161.114.251:43596`. Long-pressing Play opens advanced choices for public, emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
 - Note: shares all `mudclient` logic with PC; differs only in input, rendering surface, server selection, and cache bootstrap strategy.
 
@@ -95,6 +95,7 @@ Expected contents:
 - `ip.txt` — server IP (single line, e.g. `127.0.0.1`).
 - `port.txt` — server port (single line, e.g. `43596` for the current local Voidscape preset).
 - `credentials.txt` — optional saved login.
+- `accounts.txt` — optional saved account switcher list, kept local and excluded from packaged cache assets.
 - `hideIp.txt` — privacy setting.
 - `video/spritepacks/` — custom sprite packs (symlinked from `PC_Launcher/SPRITEPACK_DIR`).
 - Game asset `.dat` files — **not bundled in source**; downloaded at runtime from server, or distributed via launcher updates.

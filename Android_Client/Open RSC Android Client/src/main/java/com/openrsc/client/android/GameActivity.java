@@ -11,8 +11,12 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.inputmethod.InputMethodManager;
 
 import com.openrsc.android.render.InputImpl;
@@ -21,8 +25,8 @@ import com.openrsc.client.R;
 import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.util.HashSet;
-import java.util.Objects;
 
 import orsc.Config;
 import orsc.PacketHandler;
@@ -48,6 +52,7 @@ public class GameActivity extends Activity implements ClientPort {
 	private boolean checkedNetworks = true;
 
     private boolean hadSideMenu;
+	private Object backCallback;
 
 	final BroadcastReceiver batteryReceiver = new BatteryReceiver();
 
@@ -102,6 +107,8 @@ public class GameActivity extends Activity implements ClientPort {
         if (mudclient.threadState >= 0) mudclient.threadState = 0;
 
         osConfig.F_ANDROID_BUILD = true;
+        File externalSmokeDir = getExternalFilesDir(null);
+        Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
 
         mudclient.startMainThread();
 
@@ -111,12 +118,14 @@ public class GameActivity extends Activity implements ClientPort {
 
 		// Hide the bars and stuff
 		updateHideUi();
+		registerBackHandler();
 		setReceivers();
     }
 
 	@Override
 	protected void onDestroy() {
 		unsetReceivers();
+		unregisterBackHandler();
 		shutdownClientThread();
 		inputImpl = null;
 		gameView = null;
@@ -148,11 +157,36 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	@Override
+	@SuppressWarnings("deprecation")
 	public void onBackPressed() {
+		handleBackNavigation();
+	}
+
+	private void handleBackNavigation() {
 		if (mudclient != null && mudclient.handleAndroidBackButton()) {
 			return;
 		}
-		super.onBackPressed();
+		finish();
+	}
+
+	private void registerBackHandler() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+			return;
+		}
+		android.window.OnBackInvokedCallback callback = this::handleBackNavigation;
+		getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+			android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+			callback);
+		backCallback = callback;
+	}
+
+	private void unregisterBackHandler() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || backCallback == null) {
+			return;
+		}
+		getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
+			(android.window.OnBackInvokedCallback) backCallback);
+		backCallback = null;
 	}
 
 	public void networkChange(Network network, NetworkCapabilities networkCapabilities) {
@@ -244,7 +278,21 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	private void updateHideUi() {
-		final View decorView = getWindow().getDecorView();
+		final Window window = getWindow();
+		final View decorView = window.getDecorView();
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			WindowInsetsController controller = decorView.getWindowInsetsController();
+			if (controller != null) {
+				controller.hide(WindowInsets.Type.systemBars());
+				controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+			}
+			return;
+		}
+		updateHideUiLegacy(decorView);
+	}
+
+	@SuppressWarnings("deprecation")
+	private void updateHideUiLegacy(final View decorView) {
 		final int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
 			| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
 			| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
@@ -375,8 +423,9 @@ public class GameActivity extends Activity implements ClientPort {
 		if (gameView == null || mudclient == null) return;
         InputMethodManager imm = (InputMethodManager) this
                 .getSystemService(Context.INPUT_METHOD_SERVICE);
+		if (imm == null) return;
         gameView.requestFocus();
-        Objects.requireNonNull(imm).showSoftInput(gameView, InputMethodManager.SHOW_FORCED);
+        gameView.post(() -> imm.showSoftInput(gameView, InputMethodManager.SHOW_IMPLICIT));
         osConfig.F_SHOWING_KEYBOARD = true;
         if (Config.S_SIDE_MENU_TOGGLE) {
         	hadSideMenu = mudclient.getOptionSideMenu();
@@ -386,8 +435,10 @@ public class GameActivity extends Activity implements ClientPort {
 
     public void closeKeyboard() {
 		if (gameView == null) return;
-        ((InputMethodManager) Objects.requireNonNull(getSystemService(Activity.INPUT_METHOD_SERVICE)))
-                .hideSoftInputFromWindow(gameView.getWindowToken(), 0);
+		InputMethodManager imm = (InputMethodManager) getSystemService(Activity.INPUT_METHOD_SERVICE);
+		if (imm != null) {
+			imm.hideSoftInputFromWindow(gameView.getWindowToken(), 0);
+		}
         osConfig.F_SHOWING_KEYBOARD = false;
 		if (Config.S_SIDE_MENU_TOGGLE && mudclient != null) {
 			mudclient.setOptionSideMenu(hadSideMenu);

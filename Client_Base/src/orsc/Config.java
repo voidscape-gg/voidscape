@@ -31,6 +31,7 @@ public class Config {
 	private static final boolean CUSTOM_CACHE_DIR_ENABLED = false;
 	private static final String CUSTOM_CACHE_DIR = System.getProperty("user.home") + File.separator + "OpenRSC";
 	public static String F_CACHE_DIR = "";
+	public static String F_ANDROID_SMOKE_DIR = "";
 
 	public static final int INVENTORY_TAB = 1;
 	public static final int MINIMAP_AND_COMPASS_TAB = 2;
@@ -53,6 +54,7 @@ public class Config {
 	public static boolean C_MESSAGE_TAB_SWITCH = false;
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
+	public static boolean C_CHAT_OVERLAY = true;
 	public static boolean C_SHOW_COORDS = true;
 	public static boolean C_KILL_FEED = true;
 	public static int C_FIGHT_MENU = 1;

@@ -2160,12 +2160,17 @@ public class ActionSender {
 	}
 
 	static void sendLogin(Player player) {
+		boolean resumedSession = player.isReconnecting() && player.getWorld().getPlayers().contains(player);
 		try {
-			if (player.getWorld().registerPlayer(player)) {
+			if (player.getWorld().registerPlayer(player) || resumedSession) {
                 sendPrivacySettings(player);
-                sendMessage(player, null,  MessageType.QUEST, "Welcome to " + player.getConfig().SERVER_NAME + "!", 0, null);
+				if (resumedSession) {
+					sendMessage(player, null, MessageType.QUEST, "Your previous session has been resumed.", 0, null);
+				} else {
+					sendMessage(player, null,  MessageType.QUEST, "Welcome to " + player.getConfig().SERVER_NAME + "!", 0, null);
+				}
 
-				if (HolidayDropEvent.isOccurring(player)) {
+				if (!resumedSession && HolidayDropEvent.isOccurring(player)) {
 				    sendMessage(player, null, MessageType.QUEST, "@mag@There is a Holiday Drop Event going on now! Type @gre@::drop@mag@ for more information.", 0, null);
                 }
 
@@ -2174,14 +2179,16 @@ public class ActionSender {
 				sendWorldInfo(player);
                 sendQuestInfo(player);
                 sendPlayerOnTutorial(player);
-                sendLoginBox(player);
+				if (!resumedSession) {
+					sendLoginBox(player);
+				}
 
 				sendPlayerOnBlackHole(player);
 				sendUnlockedAppearances(player);
 
 				final boolean playerInTutorialLanding = player.getLocation().inTutorialLanding();
 
-				if (player.getLastLogin() == 0L) {
+				if (!resumedSession && player.getLastLogin() == 0L) {
 					player.getCache().store("tutorial_appearance", false);
 
 					sendAppearanceScreen(player);
@@ -2262,6 +2269,10 @@ public class ActionSender {
 			}
 		} catch (Throwable e) {
 			LOGGER.error("Exception during ActionSender sendLogin()", e);
+		} finally {
+			if (resumedSession) {
+				player.setReconnecting(false);
+			}
 		}
 	}
 

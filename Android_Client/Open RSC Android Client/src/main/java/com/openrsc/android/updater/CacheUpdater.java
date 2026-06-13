@@ -1,13 +1,14 @@
 package com.openrsc.android.updater;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.res.AssetManager;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.util.Log;
 import android.view.View;
@@ -23,14 +24,19 @@ import com.openrsc.client.R;
 import com.openrsc.client.android.GameActivity;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import orsc.osConfig;
 
@@ -38,10 +44,15 @@ public class CacheUpdater extends Activity {
 
 	private static final String BUNDLED_CACHE_ROOT = "cache";
 	private static final int NETWORK_TIMEOUT_MS = 5000;
+	private static final String EXTRA_SMOKE_ENDPOINT_HOST = "voidscape.smoke.endpoint_host";
+	private static final String EXTRA_SMOKE_ENDPOINT_PORT = "voidscape.smoke.endpoint_port";
+	private static final String EXTRA_SMOKE_CLEAR_CREDENTIALS = "voidscape.smoke.clear_credentials";
 
 	private TextProgressBar progressBar;
 	private TextView statusText;
 	private Button launchButton;
+	private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
+	private final Handler mainHandler = new Handler(Looper.getMainLooper());
 	private boolean completed = false;
 	private boolean launching = false;
 
@@ -49,6 +60,7 @@ public class CacheUpdater extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.updater);
+		applyDebugLaunchExtras(getIntent());
 
 		progressBar = findViewById(R.id.progressBar);
 		progressBar.setTextSize(18);
@@ -60,7 +72,7 @@ public class CacheUpdater extends Activity {
 		launchButton.setVisibility(View.GONE);
 		launchButton.setOnClickListener(v -> {
 			if (completed) {
-				selectServer(getDefaultServerHost(), osConfig.VOIDSCAPE_DEFAULT_PORT);
+				selectServer(getSavedServerHost(), getSavedServerPort());
 			}
 		});
 		launchButton.setOnLongClickListener(v -> {
@@ -73,53 +85,59 @@ public class CacheUpdater extends Activity {
 
 		statusText = findViewById(R.id.textView1);
 		setStatus("Checking game data");
-		new UpdateTask().execute();
+		startUpdateTask();
 	}
 
 	private void setStatus(String status) {
 		statusText.setText(status);
 	}
 
-	@SuppressLint("StaticFieldLeak")
-	private class UpdateTask extends AsyncTask<Void, String, Boolean> {
-
-		@Override
-		protected Boolean doInBackground(Void... ignored) {
-			File cacheHome = getFilesDir();
-			if (!cacheHome.exists() && !cacheHome.mkdirs()) {
-				publishProgress("Unable to create cache directory", "0");
-				return false;
-			}
-
-			publishProgress("Installing bundled game data", "5");
-			boolean seeded = seedBundledCache(cacheHome);
-
-			if (hasRemoteCacheEndpoint()) {
-				publishProgress("Checking remote game data", "35");
-				updateRemoteCache(cacheHome);
-			}
-
-			boolean ready = seeded || hasRequiredCacheFiles(cacheHome);
-			publishProgress(ready ? "Game data ready" : "Game data unavailable", ready ? "100" : "0");
-			return ready;
+	private void applyDebugLaunchExtras(Intent intent) {
+		if (!isDebuggable() || intent == null) {
+			return;
 		}
 
-		@Override
-		protected void onProgressUpdate(String... values) {
-			if (values.length > 0) {
-				statusText.setText(values[0]);
+		String host = intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_HOST);
+		String port = intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_PORT);
+		try {
+			if (host != null && host.trim().length() > 0) {
+				writeTextFile(new File(getFilesDir(), "ip.txt"), host.trim());
 			}
-			if (values.length > 1) {
-				try {
-					progressBar.setProgress(Integer.parseInt(values[1]));
-				} catch (NumberFormatException ignored) {
+			if (port != null && port.trim().length() > 0) {
+				writeTextFile(new File(getFilesDir(), "port.txt"), port.trim());
+			}
+			if (intent.getBooleanExtra(EXTRA_SMOKE_CLEAR_CREDENTIALS, false)) {
+				File credentials = new File(getFilesDir(), "credentials.txt");
+				if (credentials.isFile() && !credentials.delete()) {
+					Log.w("Voidscape", "Unable to delete smoke credentials file");
 				}
-				progressBar.setText(values[0]);
 			}
+		} catch (IOException e) {
+			Log.w("Voidscape", "Unable to apply smoke launch extras", e);
 		}
+	}
 
-		@Override
-		protected void onPostExecute(Boolean ready) {
+	private boolean isDebuggable() {
+		return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+	}
+
+	@Override
+	protected void onDestroy() {
+		updateExecutor.shutdownNow();
+		super.onDestroy();
+	}
+
+	private void startUpdateTask() {
+		completed = false;
+		launching = false;
+		launchButton.setEnabled(false);
+		launchButton.setVisibility(View.GONE);
+		updateExecutor.execute(() -> {
+			boolean ready = updateCache();
+			mainHandler.post(() -> {
+				if (isFinishing() || isDestroyed()) {
+					return;
+				}
 			completed = ready;
 			launching = false;
 			if (ready) {
@@ -129,7 +147,39 @@ public class CacheUpdater extends Activity {
 			} else {
 				showCacheFailureDialog();
 			}
+			});
+		});
+	}
+
+	private boolean updateCache() {
+		File cacheHome = getFilesDir();
+		if (!cacheHome.exists() && !cacheHome.mkdirs()) {
+			publishUpdateProgress("Unable to create cache directory", 0);
+			return false;
 		}
+
+		publishUpdateProgress("Installing bundled game data", 5);
+		boolean seeded = seedBundledCache(cacheHome);
+
+		if (hasRemoteCacheEndpoint()) {
+			publishUpdateProgress("Checking remote game data", 35);
+			updateRemoteCache(cacheHome);
+		}
+
+		boolean ready = seeded || hasRequiredCacheFiles(cacheHome);
+		publishUpdateProgress(ready ? "Game data ready" : "Game data unavailable", ready ? 100 : 0);
+		return ready;
+	}
+
+	private void publishUpdateProgress(String status, int percent) {
+		mainHandler.post(() -> {
+			if (isFinishing() || isDestroyed()) {
+				return;
+			}
+			statusText.setText(status);
+			progressBar.setText(status);
+			progressBar.setProgress(Math.max(0, Math.min(100, percent)));
+		});
 	}
 
 	private boolean hasRemoteCacheEndpoint() {
@@ -270,7 +320,10 @@ public class CacheUpdater extends Activity {
 	}
 
 	private void publishDownloadStatus(String status, int percent) {
-		runOnUiThread(() -> {
+		mainHandler.post(() -> {
+			if (isFinishing() || isDestroyed()) {
+				return;
+			}
 			statusText.setText(status);
 			progressBar.setText(status);
 			progressBar.setProgress(Math.max(0, Math.min(100, percent)));
@@ -287,7 +340,7 @@ public class CacheUpdater extends Activity {
 		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this, R.style.VoidscapeDialogTheme)
 			.setTitle("Game data unavailable")
 			.setMessage("The bundled cache could not be installed. Rebuild the APK from a repository with Client_Base/Cache populated.")
-			.setPositiveButton("Retry", (d, which) -> new UpdateTask().execute())
+			.setPositiveButton("Retry", (d, which) -> startUpdateTask())
 			.setNegativeButton("Close", (d, which) -> finish())
 			.show();
 		styleDialog(dialog);
@@ -329,6 +382,7 @@ public class CacheUpdater extends Activity {
 
 		final EditText hostBox = new EditText(CacheUpdater.this);
 		hostBox.setHint(osConfig.VOIDSCAPE_PUBLIC_HOST);
+		hostBox.setText(readSavedServerValue("ip.txt", ""));
 		hostBox.setSingleLine(true);
 		hostBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
 		styleInput(hostBox);
@@ -339,6 +393,7 @@ public class CacheUpdater extends Activity {
 
 		final EditText portBox = new EditText(CacheUpdater.this);
 		portBox.setHint(osConfig.VOIDSCAPE_DEFAULT_PORT);
+		portBox.setText(readSavedServerValue("port.txt", ""));
 		portBox.setSingleLine(true);
 		portBox.setInputType(InputType.TYPE_CLASS_NUMBER);
 		styleInput(portBox);
@@ -456,6 +511,31 @@ public class CacheUpdater extends Activity {
 		try (FileOutputStream outputStream = new FileOutputStream(file);
 			 OutputStreamWriter outputWriter = new OutputStreamWriter(outputStream)) {
 			outputWriter.write(value);
+		}
+	}
+
+	private String getSavedServerHost() {
+		return readSavedServerValue("ip.txt", getDefaultServerHost());
+	}
+
+	private String getSavedServerPort() {
+		return readSavedServerValue("port.txt", osConfig.VOIDSCAPE_DEFAULT_PORT);
+	}
+
+	private String readSavedServerValue(String fileName, String fallback) {
+		File file = new File(getFilesDir(), fileName);
+		if (!file.isFile()) {
+			return fallback;
+		}
+
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)))) {
+			String value = reader.readLine();
+			if (value == null || value.trim().length() == 0) {
+				return fallback;
+			}
+			return value.trim();
+		} catch (IOException e) {
+			return fallback;
 		}
 	}
 
