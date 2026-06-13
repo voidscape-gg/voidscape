@@ -1,0 +1,22 @@
+Create one new account/profile icon for Voidscape's top menu bar.
+
+Use the reference image as two kinds of guidance:
+- Style reference: the six new topbar icons, with chunky pixel-art forms, dark navy/purple metal, gold trim, crisp highlights, and high readability at tiny sizes.
+- Subject reference: the old profile/account icon, which is a simple player/account bust silhouette.
+
+Target asset:
+- A single centered profile/account icon only.
+- It should read clearly at 24x24 and 32x32 pixels.
+- Keep the silhouette simple: head-and-shoulders bust or player profile mark, not a full hooded body.
+- Match the new icon set's materials and palette: deep void navy/purple, gold accent trim, subtle gem highlight if useful.
+- Fill most of the square canvas, but keep the full icon inside the canvas with a little padding.
+
+Background/removal constraints:
+- Put the icon on a perfectly flat solid #00ff00 chroma-key background.
+- The background must be one uniform color with no gradients, shadows, texture, floor, glow, or lighting variation.
+- Do not use #00ff00 anywhere in the icon.
+
+Avoid:
+- No text, labels, letters, numbers, watermark, UI frame, button frame, arrow, dropdown caret, menu tab, or surrounding border.
+- No tiny facial details that disappear at 24px.
+- No cropped edges.

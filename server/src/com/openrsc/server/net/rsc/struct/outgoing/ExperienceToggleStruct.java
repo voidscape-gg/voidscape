@@ -6,4 +6,5 @@ import com.openrsc.server.net.rsc.struct.AbstractStruct;
 public class ExperienceToggleStruct extends AbstractStruct<OpcodeOut> {
 
 	public int isExperienceFrozen;
+	public int skillExperienceLockMask;
 }

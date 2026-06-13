@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "npc loot header row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\loot\\npc-loot-header-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\loot\\npc-loot-header-row\\asset-green.png"
+  },
+  {
+    "asset": "loot item cell",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\loot\\loot-item-cell\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\loot\\loot-item-cell\\asset-green.png"
+  },
+  {
+    "asset": "loot scrollbar",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\loot\\loot-scrollbar\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\loot\\loot-scrollbar\\asset-green.png"
+  }
+]

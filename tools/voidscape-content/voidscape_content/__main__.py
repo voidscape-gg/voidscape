@@ -6,6 +6,7 @@ import sys
 from .manifest import VALID_KINDS, is_valid_slug, scaffold_pack
 from .paths import CUSTOM_CONTENT_DIR
 from .report import print_report
+from .ui_assets import add_ui_subcommands
 from .validate import print_validation, validate_repo
 
 
@@ -73,6 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_voidscim.add_argument("voidscim_args", nargs=argparse.REMAINDER)
     p_voidscim.set_defaults(func=_cmd_voidscim)
+
+    p_ui = sub.add_parser("ui", help="inspect, validate, preview, and ingest Voidscape UI assets")
+    add_ui_subcommands(p_ui)
 
     return parser
 

@@ -44,7 +44,7 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 			return;
 		}
 
-		if (player.inCombat() && option != InterfaceOptions.ACCOUNT_VALIDATE) {
+		if (player.inCombat() && option != InterfaceOptions.ACCOUNT_VALIDATE && option != InterfaceOptions.XP_LOCK) {
 			player.message("You can't do that whilst you are fighting");
 			return;
 		}
@@ -112,6 +112,30 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 			case ACCOUNT_VALIDATE:
 				handleAccountValidate(player, payload);
 				break;
+			case BESTIARY_REQUEST:
+				ActionSender.sendBestiary(player);
+				break;
+			case XP_LOCK:
+				handleXpLock(player, payload);
+				break;
+		}
+	}
+
+	private void handleXpLock(Player player, OptionsStruct payload) {
+		int skill = payload.value & 0xFF;
+		boolean locked = payload.value2 == 1;
+		if (!player.isExperienceLockableSkill(skill)) {
+			player.message("That skill cannot be XP locked.");
+			ActionSender.sendExperienceToggle(player);
+			return;
+		}
+		player.setSkillExperienceLocked(skill, locked);
+		ActionSender.sendExperienceToggle(player);
+		String skillName = player.getWorld().getServer().getConstants().getSkills().getSkill(skill).getLongName();
+		if (locked) {
+			player.message(skillName + " XP is now locked. You will not gain " + skillName + " XP.");
+		} else {
+			player.message(skillName + " XP is now unlocked. You can gain " + skillName + " XP again.");
 		}
 	}
 

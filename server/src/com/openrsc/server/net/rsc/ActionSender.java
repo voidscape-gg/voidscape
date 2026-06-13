@@ -40,6 +40,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -517,6 +519,45 @@ public class ActionSender {
 	    struct.recentNpcId = player.getLastNpcKilledId();
 	    struct.recentNpcKills = player.getRecentNpcKills();
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_NPC_KILLS, struct, player);
+	}
+
+	public static void sendBestiary(Player player) {
+		BestiaryStruct struct = new BestiaryStruct();
+		List<BestiaryStruct.NpcEntry> entries = new ArrayList<>();
+
+		for (Map.Entry<Integer, Integer> killEntry : player.getKillCache().entrySet()) {
+			if (killEntry.getValue() <= 0) {
+				continue;
+			}
+
+			BestiaryStruct.NpcEntry npcEntry = new BestiaryStruct.NpcEntry();
+			npcEntry.npcId = killEntry.getKey();
+			npcEntry.killCount = killEntry.getValue();
+
+			List<BestiaryStruct.DropEntry> drops = new ArrayList<>();
+			Map<Integer, Long> npcLoot = player.getBestiaryLootCache().getOrDefault(npcEntry.npcId, Collections.emptyMap());
+			for (Map.Entry<Integer, Long> itemEntry : npcLoot.entrySet()) {
+				if (itemEntry.getValue() <= 0) {
+					continue;
+				}
+				BestiaryStruct.DropEntry dropEntry = new BestiaryStruct.DropEntry();
+				dropEntry.itemId = itemEntry.getKey();
+				dropEntry.amount = itemEntry.getValue();
+				drops.add(dropEntry);
+			}
+			Collections.sort(drops, Comparator
+				.comparingLong((BestiaryStruct.DropEntry drop) -> drop.amount).reversed()
+				.thenComparingInt(drop -> drop.itemId));
+			npcEntry.drops = drops.toArray(new BestiaryStruct.DropEntry[0]);
+			entries.add(npcEntry);
+		}
+
+		Collections.sort(entries, Comparator
+			.comparingInt((BestiaryStruct.NpcEntry entry) -> entry.killCount).reversed()
+			.thenComparingInt(entry -> entry.npcId));
+		struct.entries = entries.toArray(new BestiaryStruct.NpcEntry[0]);
+
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
 	}
 
 	public static void sendPoints(Player player) {
@@ -1444,6 +1485,7 @@ public class ActionSender {
 	public static void sendExperienceToggle(Player player) {
 		ExperienceToggleStruct struct = new ExperienceToggleStruct();
 		struct.isExperienceFrozen = player.isExperienceFrozen() ? 1 : 0;
+		struct.skillExperienceLockMask = player.getSkillExperienceLockMask();
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_EXPERIENCE_TOGGLE, struct, player);
 	}
 
@@ -2247,7 +2289,7 @@ public class ActionSender {
 				if (player.getConfig().WANT_BANK_PRESETS)
 					sendBankPresets(player);
 
-				if (!player.getConfig().WANT_FATIGUE)
+				if (!player.getConfig().WANT_FATIGUE || player.supportsSkillExperienceLocks())
 					sendExperienceToggle(player);
 
 				/*if (!getServer().getConfig().MEMBER_WORLD) {

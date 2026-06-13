@@ -107,4 +107,5 @@ public enum OpcodeOut {
 	SEND_WORLD_WALK_ROUTE, // voidscape — world-map auto-walker
 	SEND_VOID_RUSH_WAVE, // voidscape — Void Rush low-cost wave visual
 	SEND_VOID_SCOUT_STATE, // voidscape — Void Sparrow scout UI state
+	SEND_BESTIARY, // voidscape — killed NPCs and observed loot
 }

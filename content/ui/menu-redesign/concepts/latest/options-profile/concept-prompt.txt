@@ -1,0 +1,10 @@
+Use case: ui-mockup
+Asset type: full in-game screenshot concept for the Options profile panel
+Primary request: redesign only the visible Voidscape UI panel/HUD elements in the screenshot so they match the new cohesive dark-fantasy UI aesthetic.
+Input images: Image 1 is the current live game screenshot and is the geometry contract. Additional style reference image(s): ChatGPT Image Jun 13, 2026, 10_24_20 AM.png, ChatGPT Image Jun 13, 2026, 11_55_45 AM.png. Match their dark fantasy Voidscape material language.
+Preserve: exact game viewport size, visible world/camera, panel position, panel footprint, menu function, runtime text hierarchy, item icons, NPC/player/world content, and the readable density of RuneScape Classic.
+Change: panel chrome, frames, title plaques, sub-tab treatments, row backgrounds, dividers, button styling, scrollbars, and ornamental material details.
+Style/medium: crisp pixel-art-inspired UI concept, dark wrought iron, obsidian stone, deep violet cloth/enamel, pale gold trim, small purple gems, warm cream/gold text accents.
+Typography/layout: do not crowd text against borders; keep header text smaller than plaques; align rows cleanly; leave practical padding around all labels and numbers.
+Constraints: no marketing layout, no modern OSRS/RS3 sidebar redesign, no oversized fantasy painting, no baked unreadable microtext, no new gameplay widgets, no overlapping UI. Output a full screenshot concept, not isolated assets.
+Avoid: pure black holes, neon gradients, one-note purple wash, soft blurry edges, dark-on-dark unreadable rows, green-screen background.

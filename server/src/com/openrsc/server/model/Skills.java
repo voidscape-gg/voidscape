@@ -210,6 +210,10 @@ public class Skills {
 	}
 
 	public void addExperience(int skill, int exp) {
+		if (getMob() != null && getMob().isPlayer()
+			&& ((Player) getMob()).shouldBlockSkillExperience(skill, true)) {
+			return;
+		}
 		int oldLevel = getMaxStat(skill);
 		int oldTotalLevel = getMob().isPlayer() ? ((Player) getMob()).getTotalLevel() : 0;
 		int oldExp = exps[skill];

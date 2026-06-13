@@ -86,6 +86,8 @@ public final class Player extends Mob {
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int VOID_SCOUT_OVERHEAD_NOTICE_RADIUS = 5;
 	private static final long VOID_SCOUT_OVERHEAD_NOTICE_INTERVAL_MILLIS = 10_000L;
+	public static final int XP_LOCK_CLIENT_VERSION = 10104;
+	private static final String XP_LOCK_MASK_CACHE_KEY = "xp_lock_mask";
 
 	// activity indicator for kitten to cat growth
 	// 100 trigger up a Kitten to cat event
@@ -131,6 +133,8 @@ public final class Player extends Mob {
 	public final String MEMBER_MESSAGE = "This feature is only available for members only";
 	private final Map<Integer, Integer> killCache = new HashMap<>();
 	private boolean killCacheUpdated = false;
+	private final Map<Integer, Map<Integer, Long>> bestiaryLootCache = new HashMap<>();
+	private boolean bestiaryLootCacheUpdated = false;
 	private final Map<Integer, Integer> questStages = new ConcurrentHashMap<>();
 	private int IRON_MAN_MODE = IronmanMode.None.id();
 	private int IRON_MAN_RESTRICTION = 1;
@@ -1328,12 +1332,24 @@ public final class Player extends Mob {
 		return killCache;
 	}
 
+	public Map<Integer, Map<Integer, Long>> getBestiaryLootCache() {
+		return bestiaryLootCache;
+	}
+
 	public boolean getKillCacheUpdated() {
 		return killCacheUpdated;
 	}
 
 	public void setKillCacheUpdated(boolean value) {
 		killCacheUpdated = value;
+	}
+
+	public boolean getBestiaryLootCacheUpdated() {
+		return bestiaryLootCacheUpdated;
+	}
+
+	public void setBestiaryLootCacheUpdated(boolean value) {
+		bestiaryLootCacheUpdated = value;
 	}
 
 	public long getCastTimer() {
@@ -2112,6 +2128,10 @@ public final class Player extends Mob {
 					"Use a sleeping bag or bed to re-enable,");
 				this.setAttribute("warned_xp_off", true);
 			}
+			return;
+		}
+
+		if (shouldBlockSkillExperience(skill, true)) {
 			return;
 		}
 
@@ -4127,6 +4147,19 @@ public final class Player extends Mob {
 		if (sendUpdate) message("Your " + n.getDef().getName() + " kill count is: @red@" + kills + "@whi@.");
 	}
 
+	public void addBestiaryDrop(final int npcId, final int itemId, final long amount) {
+		if (npcId < 0 || itemId < 0 || amount <= 0) {
+			return;
+		}
+		Map<Integer, Long> loot = bestiaryLootCache.get(npcId);
+		if (loot == null) {
+			loot = new HashMap<>();
+			bestiaryLootCache.put(npcId, loot);
+		}
+		loot.put(itemId, loot.getOrDefault(itemId, 0L) + amount);
+		setBestiaryLootCacheUpdated(true);
+	}
+
 	public boolean hasHigherRankThan(final Entity observer) {
 		// Players always have a higher rank than NPCs/GameObject/GroundItem
 		if (!(observer instanceof Player)) {
@@ -4203,6 +4236,111 @@ public final class Player extends Mob {
 
 	public boolean toggleFreezeXp() {
 		return setFreezeXp(!isExperienceFrozen());
+	}
+
+	public boolean supportsSkillExperienceLocks() {
+		return isUsingCustomClient() && getClientVersion() >= XP_LOCK_CLIENT_VERSION;
+	}
+
+	public boolean isExperienceLockableSkill(final int skill) {
+		return skill == Skill.ATTACK.id()
+			|| skill == Skill.DEFENSE.id()
+			|| skill == Skill.STRENGTH.id()
+			|| skill == Skill.RANGED.id()
+			|| skill == Skill.PRAYER.id()
+			|| skill == Skill.MAGIC.id();
+	}
+
+	private int getExperienceLockAllowedMask() {
+		int mask = 0;
+		int[] skills = {
+			Skill.ATTACK.id(),
+			Skill.DEFENSE.id(),
+			Skill.STRENGTH.id(),
+			Skill.RANGED.id(),
+			Skill.PRAYER.id(),
+			Skill.MAGIC.id()
+		};
+		for (int skill : skills) {
+			if (skill >= 0 && skill < Integer.SIZE) {
+				mask |= 1 << skill;
+			}
+		}
+		return mask;
+	}
+
+	public int getSkillExperienceLockMask() {
+		if (!getCache().hasKey(XP_LOCK_MASK_CACHE_KEY)) {
+			return 0;
+		}
+		Object storedMaskValue = getCache().getCacheMap().get(XP_LOCK_MASK_CACHE_KEY);
+		int storedMask;
+		if (storedMaskValue instanceof Number) {
+			storedMask = ((Number)storedMaskValue).intValue();
+		} else if (storedMaskValue instanceof String) {
+			try {
+				storedMask = Integer.parseInt((String)storedMaskValue);
+			} catch (NumberFormatException e) {
+				getCache().remove(XP_LOCK_MASK_CACHE_KEY);
+				return 0;
+			}
+		} else {
+			getCache().remove(XP_LOCK_MASK_CACHE_KEY);
+			return 0;
+		}
+		int mask = storedMask & getExperienceLockAllowedMask();
+		if (mask != storedMask || !(storedMaskValue instanceof Integer)) {
+			setSkillExperienceLockMask(mask);
+		}
+		return mask;
+	}
+
+	public boolean isSkillExperienceLocked(final int skill) {
+		if (!isExperienceLockableSkill(skill) || skill < 0 || skill >= Integer.SIZE) {
+			return false;
+		}
+		return (getSkillExperienceLockMask() & (1 << skill)) != 0;
+	}
+
+	public boolean setSkillExperienceLocked(final int skill, final boolean locked) {
+		if (!isExperienceLockableSkill(skill) || skill < 0 || skill >= Integer.SIZE) {
+			return false;
+		}
+		int mask = getSkillExperienceLockMask();
+		if (locked) {
+			mask |= 1 << skill;
+		} else {
+			mask &= ~(1 << skill);
+		}
+		setSkillExperienceLockMask(mask);
+		setAttribute(skillExperienceLockWarningKey(skill), false);
+		return true;
+	}
+
+	private void setSkillExperienceLockMask(final int mask) {
+		int allowedMask = mask & getExperienceLockAllowedMask();
+		if (allowedMask == 0) {
+			getCache().remove(XP_LOCK_MASK_CACHE_KEY);
+		} else {
+			getCache().set(XP_LOCK_MASK_CACHE_KEY, allowedMask);
+		}
+	}
+
+	public boolean shouldBlockSkillExperience(final int skill, final boolean notify) {
+		if (!isSkillExperienceLocked(skill)) {
+			return false;
+		}
+		if (notify && !getAttribute(skillExperienceLockWarningKey(skill), false)) {
+			ActionSender.sendMessage(this, "You have locked "
+				+ getWorld().getServer().getConstants().getSkills().getSkill(skill).getLongName()
+				+ " experience.");
+			setAttribute(skillExperienceLockWarningKey(skill), true);
+		}
+		return true;
+	}
+
+	private String skillExperienceLockWarningKey(final int skill) {
+		return "warned_xp_lock_" + skill;
 	}
 
 	public Point summon(final Point summonLocation) {

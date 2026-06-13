@@ -1,0 +1,228 @@
+{
+  "ok": true,
+  "scenario": "ui-panels",
+  "generatedAt": "2026-06-13T15:00:40.942-06:00",
+  "state": {
+    "generatedAt": "2026-06-13T15:00:40.942-06:00",
+    "clientVersion": 10104,
+    "serverIp": null,
+    "serverPort": 43598,
+    "screenshot": null,
+    "game": {
+      "available": true,
+      "state": 0,
+      "width": 640,
+      "height": 468,
+      "inputXAction": "ACT_0",
+      "inputTextCurrent": ""
+    },
+    "mouse": {
+      "available": true,
+      "x": 478,
+      "y": 106,
+      "click": 0,
+      "down": 0
+    },
+    "player": {
+      "displayName": "test",
+      "accountName": "test",
+      "x": 4928,
+      "z": 4160,
+      "level": 78,
+      "healthCurrent": 0,
+      "healthMax": 0,
+      "groupId": 1,
+      "admin": true,
+      "dev": true,
+      "mod": true
+    },
+    "interfaces": {
+      "auctionHouse": {
+        "visible": false,
+        "activeInterface": 0,
+        "activeInterfaceName": "browse"
+      },
+      "worldMap": {
+        "visible": false,
+        "floor": 0
+      },
+      "shop": {
+        "visible": false,
+        "containsSubscriptionCard": false,
+        "selectedItemIndex": -1,
+        "selectedItemType": -2
+      },
+      "bank": {
+        "visible": false,
+        "page": 0,
+        "maxItems": 50,
+        "count": 0,
+        "matches": 0,
+        "scrollRow": 0,
+        "search": "",
+        "searchFocused": false,
+        "noteMode": false,
+        "certMode": false,
+        "organizeMode": 0,
+        "arrangeMenuOpen": false,
+        "loadoutsOpen": false,
+        "contextMenuOpen": false,
+        "selectedBankSlot": -1,
+        "selectedInventorySlot": -1,
+        "contextMenuX": 0,
+        "contextMenuY": 0,
+        "contextRowTopOffset": 23,
+        "contextRowHeight": 17,
+        "pendingSavePresetSlot": -1,
+        "pendingClearPresetSlot": -1,
+        "layout": {
+          "panelX": 15,
+          "panelY": 55,
+          "panelWidth": 610,
+          "panelHeight": 376,
+          "bankGridX": 40,
+          "bankGridY": 137,
+          "inventoryGridY": 311,
+          "slotWidth": 56,
+          "slotHeight": 34,
+          "search": {
+            "x": 521,
+            "y": 120
+          },
+          "searchClear": {
+            "x": 591,
+            "y": 120
+          },
+          "depositInventory": {
+            "x": 246,
+            "y": 292
+          },
+          "arrange": {
+            "x": 365,
+            "y": 292
+          },
+          "loadouts": {
+            "x": 389,
+            "y": 120
+          },
+          "itemMode": {
+            "x": 528,
+            "y": 292
+          },
+          "noteMode": {
+            "x": 577,
+            "y": 292
+          },
+          "close": {
+            "x": 601,
+            "y": 81
+          },
+          "bankSlot0": {
+            "x": 68,
+            "y": 154
+          },
+          "inventorySlot0": {
+            "x": 68,
+            "y": 328
+          }
+        },
+        "items": [],
+        "inventory": [
+          {
+            "slot": 0,
+            "id": 81,
+            "amount": 1,
+            "noted": false,
+            "name": "rune 2-handed Sword"
+          },
+          {
+            "slot": 1,
+            "id": 87,
+            "amount": 1,
+            "noted": false,
+            "name": "bronze Axe"
+          },
+          {
+            "slot": 2,
+            "id": 87,
+            "amount": 1,
+            "noted": false,
+            "name": "bronze Axe"
+          },
+          {
+            "slot": 3,
+            "id": 189,
+            "amount": 1,
+            "noted": false,
+            "name": "Shortbow"
+          },
+          {
+            "slot": 4,
+            "id": 184,
+            "amount": 1,
+            "noted": false,
+            "name": "Wizards robe"
+          },
+          {
+            "slot": 5,
+            "id": 33,
+            "amount": 2,
+            "noted": false,
+            "name": "Air-Rune"
+          },
+          {
+            "slot": 6,
+            "id": 35,
+            "amount": 2,
+            "noted": false,
+            "name": "Mind-Rune"
+          }
+        ],
+        "presets": [
+          {
+            "slot": 0,
+            "empty": true
+          },
+          {
+            "slot": 1,
+            "empty": true
+          },
+          {
+            "slot": 2,
+            "empty": true
+          }
+        ]
+      }
+    }
+  },
+  "captures": [
+    {
+      "reason": "ui-panel-friends",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150039-837-ui-panel-friends.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150039-837-ui-panel-friends.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-ignore",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-219-ui-panel-ignore.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-219-ui-panel-ignore.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-magic",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-585-ui-panel-magic.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-585-ui-panel-magic.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-prayer",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-913-ui-panel-prayer.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-150040-913-ui-panel-prayer.json",
+      "width": 640,
+      "height": 480
+    }
+  ]
+}

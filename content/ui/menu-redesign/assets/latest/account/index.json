@@ -1,0 +1,22 @@
+[
+  {
+    "asset": "account drawer button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\account\\account-drawer-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\account\\account-drawer-button\\asset-green.png"
+  },
+  {
+    "asset": "account row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\account\\account-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\account\\account-row\\asset-green.png"
+  },
+  {
+    "asset": "add account row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\account\\add-account-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\account\\add-account-row\\asset-green.png"
+  },
+  {
+    "asset": "slide arrow cue",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\account\\slide-arrow-cue\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\account\\slide-arrow-cue\\asset-green.png"
+  }
+]

@@ -21,3 +21,7 @@ Established 2026-04-24 during foundation setup:
 - **Use `scripts/*.sh` over raw `gradlew`.** Standardized entry points reduce drift.
   - Why: when each session improvises its own build invocation, the project's command surface fragments.
   - How to apply: if a build/run step doesn't have a script, add one.
+
+- **Voidscape UI should stay compact and transparent where RSC benefits from it.** Utility panels such as inventory, friends/ignore, magic, and prayer should keep a clear glass/tinted content surface so the world remains visible and the client does not feel claustrophobic. Prefer smaller panels with tasteful borders over large nested frames; stats/loot/options can be more opaque when readability needs it.
+  - Why: the user explicitly prefers the classic roomy RuneScape feel over heavy fantasy UI chrome.
+  - How to apply: fit UI changes one element at a time, avoid raw-swapping generated art into slice-sensitive assets, and verify in-game screenshots before keeping a panel chrome change.

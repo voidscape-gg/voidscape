@@ -19,7 +19,8 @@ public class MySqlQueries {
 	public final String save_Password, save_PreviousPasswords, previousPassword, achievements, rewards, tasks;
 	public final String playerLoginData, fetchPlayerIps, fetchLinkedPlayers, playerPendingRecovery, playerChangeRecoveryInfo, playerRecoveryInfo, newPlayerRecoveryInfo, newPlayerChangeRecoveryInfo, playerRecoveryAttempt;
 	public final String playerLoginDataByFormerName, userToId, usernameToProperUsername, idToUser, initializeOnlineUsers;
-	public final String npcKillSelectAll, npcKillSelect, npcKillInsert, npcKillUpdate, playerLastRecoveryTryId, cancelRecoveryChangeRequest;
+	public final String npcKillSelectAll, npcKillSelect, npcKillInsert, npcKillUpdate, bestiaryLootSelectAll,
+		bestiaryLootInsert, bestiaryLootUpdate, playerLastRecoveryTryId, cancelRecoveryChangeRequest;
 	public final String contactDetails, newContactDetails, updateContactDetails;
 	public final String dropLogSelect, dropLogInsert, dropLogUpdate, renamePlayer, renamePlayerUpdateFriendsList, renamePlayerUpdateIgnoresList, banPlayer, unbanPlayer;
 	public final String addNpcSpawn, removeNpcSpawn, addObjectSpawn, removeObjectSpawn, addItemSpawn, removeItemSpawn;
@@ -164,6 +165,9 @@ public class MySqlQueries {
 		npcKillSelect = "SELECT * FROM `" + PREFIX + "npckills` WHERE npcID = ? AND playerID = ?";
 		npcKillInsert = "INSERT INTO `" + PREFIX + "npckills`(killCount, npcID, playerID) VALUES (?, ?, ?)";
 		npcKillUpdate = "UPDATE `" + PREFIX + "npckills` SET killCount = ? WHERE ID = ? AND npcID = ? AND playerID =?";
+		bestiaryLootSelectAll = "SELECT * FROM `" + PREFIX + "bestiaryloot` WHERE playerID = ?";
+		bestiaryLootInsert = "INSERT INTO `" + PREFIX + "bestiaryloot`(amount, npcID, itemID, playerID) VALUES (?, ?, ?, ?)";
+		bestiaryLootUpdate = "UPDATE `" + PREFIX + "bestiaryloot` SET amount = ? WHERE ID = ? AND npcID = ? AND itemID = ? AND playerID = ?";
 		dropLogSelect = "SELECT * FROM `" + PREFIX + "droplogs` WHERE itemID = ? AND playerID = ?";
 		dropLogInsert = "INSERT INTO `" + PREFIX + "droplogs`(itemID, playerID, dropAmount, npcId) VALUES (?, ?, ?, ?)";
 		dropLogUpdate = "UPDATE `" + PREFIX + "droplogs` SET dropAmount = ? WHERE itemID = ? AND playerID = ?";

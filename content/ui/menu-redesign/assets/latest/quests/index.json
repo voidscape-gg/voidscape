@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "quest list row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\quests\\quest-list-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\quests\\quest-list-row\\asset-green.png"
+  },
+  {
+    "asset": "quest detail row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\quests\\quest-detail-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\quests\\quest-detail-row\\asset-green.png"
+  }
+]

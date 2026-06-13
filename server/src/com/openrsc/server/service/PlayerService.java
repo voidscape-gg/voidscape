@@ -24,6 +24,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -62,6 +63,7 @@ public class PlayerService implements IPlayerService {
                 loadPlayerCache(loaded);
                 loadPlayerLastSpellCast(loaded);
                 loadPlayerNpcKills(loaded);
+                loadPlayerBestiaryLoot(loaded);
             });
 
 			loadPlayerLanguage(loaded);
@@ -95,6 +97,7 @@ public class PlayerService implements IPlayerService {
 				savePlayerCastTime(player);
 				savePlayerCache(player);
 				savePlayerNpcKills(player);
+				savePlayerBestiaryLoot(player);
 				savePlayerData(player);
 				savePlayerSkills(player);
 				savePlayerSocial(player);
@@ -375,6 +378,15 @@ public class PlayerService implements IPlayerService {
         }
     }
 
+    private void loadPlayerBestiaryLoot(final Player player) throws GameDatabaseException {
+        final PlayerBestiaryLoot[] loot = database.queryLoadPlayerBestiaryLoot(player);
+        for (PlayerBestiaryLoot entry : loot) {
+            player.getBestiaryLootCache()
+                .computeIfAbsent(entry.npcId, key -> new HashMap<>())
+                .put(entry.itemId, entry.amount);
+        }
+    }
+
     private void loadPlayerSkills(final Player player) throws GameDatabaseException {
         final PlayerExperience[] exp = database.queryLoadPlayerExperience(player.getDatabaseID());
         player.getSkills().loadExp(exp);
@@ -451,6 +463,13 @@ public class PlayerService implements IPlayerService {
         if (player.getKillCacheUpdated()) {
             database.querySavePlayerNpcKills(player);
             player.setKillCacheUpdated(false);
+        }
+    }
+
+    private void savePlayerBestiaryLoot(final Player player) throws GameDatabaseException {
+        if (player.getBestiaryLootCacheUpdated()) {
+            database.querySavePlayerBestiaryLoot(player);
+            player.setBestiaryLootCacheUpdated(false);
         }
     }
 

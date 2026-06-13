@@ -65,6 +65,7 @@ public class PacketHandler {
 		put(102, "VOID_RUSH_WAVE");
 		put(103, "VOID_SCOUT_STATE");
 		put(104, "UPDATE_NPC");
+		put(105, "SEND_BESTIARY");
 		put(109, "SET_IGNORE");
 		put(111, "COMPLETED_TUTORIAL");
 		put(114, "SET_FATIGUE");
@@ -453,6 +454,10 @@ public class PacketHandler {
 				mc.setStatKills3(packetsIncoming.get32());
 			}
 
+			else if (opcode == 105) {
+				updateBestiary();
+			}
+
 			else if (opcode == 148) // Set OpenPK Points
 				mc.setPoints(packetsIncoming.getLong(0));
 
@@ -507,8 +512,12 @@ public class PacketHandler {
 				// Draw Ground Items
 			else if (opcode == 99) drawGroundItems(length);
 
-				//toggle experience freeze
-			else if (opcode == 34) mc.toggleExperienceFreeze(packetsIncoming.getByte());
+				//toggle experience freeze and optional per-skill XP locks
+			else if (opcode == 34) {
+				byte expOff = packetsIncoming.getByte();
+				int skillExperienceLockMask = length >= 5 ? packetsIncoming.get32() : 0;
+				mc.setExperienceState(expOff, skillExperienceLockMask);
+			}
 
 			    //sync combat style with server (needed to compensate for network errors)
 			else if (opcode == 129) gotCombatStylePacket();
@@ -599,6 +608,24 @@ public class PacketHandler {
 			int repeat = packetsIncoming.getByte() & 0xff;
 			mc.updateBatchProgressBar(repeat);
 		}
+	}
+
+	private void updateBestiary() {
+		int npcCount = packetsIncoming.getShort();
+		mc.clearBestiarySnapshot();
+		for (int i = 0; i < npcCount; i++) {
+			int npcId = packetsIncoming.get32();
+			int killCount = packetsIncoming.get32();
+			mc.addBestiaryNpc(npcId, killCount);
+
+			int dropCount = packetsIncoming.getShort();
+			for (int drop = 0; drop < dropCount; drop++) {
+				int itemId = packetsIncoming.get32();
+				long amount = packetsIncoming.getLong(0);
+				mc.addBestiaryDrop(npcId, itemId, amount);
+			}
+		}
+		mc.finishBestiarySnapshot();
 	}
 
 	private void displayBankPin() {

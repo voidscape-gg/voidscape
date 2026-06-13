@@ -161,6 +161,8 @@ public abstract class GameDatabase {
 
 	public abstract PlayerNpcKills[] queryLoadPlayerNpcKills(Player player) throws GameDatabaseException;
 
+	public abstract PlayerBestiaryLoot[] queryLoadPlayerBestiaryLoot(Player player) throws GameDatabaseException;
+
 	public abstract PlayerSkills[] queryLoadPlayerSkills(Player player, boolean isMax) throws GameDatabaseException, NoSuchElementException;
 
 	public abstract PlayerExperience[] queryLoadPlayerExperience(final int playerId) throws GameDatabaseException;
@@ -247,6 +249,8 @@ public abstract class GameDatabase {
 	public abstract void querySaveGlobalCacheLong(String cacheKey, long value) throws GameDatabaseException;
 
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
+
+	public abstract void querySavePlayerBestiaryLoot(int playerId, PlayerBestiaryLoot[] loot) throws GameDatabaseException;
 
 	public abstract void querySavePlayerMaxSkills(int playerId, PlayerSkills[] maxSkillLevels) throws GameDatabaseException;
 
@@ -1115,6 +1119,27 @@ public abstract class GameDatabase {
 		}
 
 		querySavePlayerNpcKills(player.getDatabaseID(), killMap);
+	}
+
+	public void querySavePlayerBestiaryLoot(Player player) throws GameDatabaseException {
+		int lootSize = 0;
+		for (final Map<Integer, Long> npcLoot : player.getBestiaryLootCache().values()) {
+			lootSize += npcLoot.size();
+		}
+
+		final PlayerBestiaryLoot[] lootMap = new PlayerBestiaryLoot[lootSize];
+		int i = 0;
+		for (final Map.Entry<Integer, Map<Integer, Long>> npcEntry : player.getBestiaryLootCache().entrySet()) {
+			for (final Map.Entry<Integer, Long> itemEntry : npcEntry.getValue().entrySet()) {
+				lootMap[i] = new PlayerBestiaryLoot();
+				lootMap[i].npcId = npcEntry.getKey();
+				lootMap[i].itemId = itemEntry.getKey();
+				lootMap[i].amount = itemEntry.getValue();
+				i++;
+			}
+		}
+
+		querySavePlayerBestiaryLoot(player.getDatabaseID(), lootMap);
 	}
 
 	public void querySavePlayerSkills(Player player) throws GameDatabaseException {

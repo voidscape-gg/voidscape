@@ -1,0 +1,80 @@
+[
+  {
+    "panel": "hud",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\hud\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124456-936-ui-panel-hud.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\hud\\concept.png"
+  },
+  {
+    "panel": "options-profile",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\options-profile\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-281-ui-panel-options-profile.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\options-profile\\concept.png"
+  },
+  {
+    "panel": "options-settings",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\options-settings\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-615-ui-panel-options-settings.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\options-settings\\concept.png"
+  },
+  {
+    "panel": "friends",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\friends\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-941-ui-panel-friends.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\friends\\concept.png"
+  },
+  {
+    "panel": "ignore",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\ignore\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-269-ui-panel-ignore.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\ignore\\concept.png"
+  },
+  {
+    "panel": "magic",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\magic\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-596-ui-panel-magic.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\magic\\concept.png"
+  },
+  {
+    "panel": "prayers",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\prayers\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-927-ui-panel-prayers.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\prayers\\concept.png"
+  },
+  {
+    "panel": "skills",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\skills\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-262-ui-panel-skills.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\skills\\concept.png"
+  },
+  {
+    "panel": "quests",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\quests\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-597-ui-panel-quests.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\quests\\concept.png"
+  },
+  {
+    "panel": "loot",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\loot\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-927-ui-panel-loot.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\loot\\concept.png"
+  },
+  {
+    "panel": "minimap",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\minimap\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-265-ui-panel-minimap.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\minimap\\concept.png"
+  },
+  {
+    "panel": "inventory",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\inventory\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-590-ui-panel-inventory.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\inventory\\concept.png"
+  },
+  {
+    "panel": "account",
+    "prompt": "content\\ui\\menu-redesign\\concepts\\latest\\account\\concept-prompt.txt",
+    "screenshot": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-919-ui-panel-account.png",
+    "concept": "content\\ui\\menu-redesign\\concepts\\latest\\account\\concept.png"
+  }
+]

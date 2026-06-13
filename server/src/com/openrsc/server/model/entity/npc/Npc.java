@@ -766,6 +766,7 @@ public class Npc extends Mob {
 
 	private void recordNpcDrop(Player owner, int itemId, int amount, boolean rare) {
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
+		owner.addBestiaryDrop(getID(), itemId, amount);
 	}
 
 	/**

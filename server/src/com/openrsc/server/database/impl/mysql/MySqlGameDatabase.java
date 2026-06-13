@@ -951,6 +951,26 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public PlayerBestiaryLoot[] queryLoadPlayerBestiaryLoot(final Player player) throws GameDatabaseException {
+		final ArrayList<PlayerBestiaryLoot> list = new ArrayList<>();
+		try (final PreparedStatement statement = statementFromInteger(getMySqlQueries().bestiaryLootSelectAll, player.getDatabaseID());
+			 final ResultSet result = statement.executeQuery()) {
+
+			while (result.next()) {
+				final PlayerBestiaryLoot loot = new PlayerBestiaryLoot();
+				loot.npcId = result.getInt("npcID");
+				loot.itemId = result.getInt("itemID");
+				loot.amount = result.getLong("amount");
+
+				list.add(loot);
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return list.toArray(new PlayerBestiaryLoot[0]);
+	}
+
+	@Override
 	public PlayerSkills[] queryLoadPlayerSkills(final Player player, final boolean isMax) throws GameDatabaseException, NoSuchElementException  {
 		try {
 			final int[] skillLevels = fetchLevels(player.getDatabaseID(), isMax);
@@ -2144,6 +2164,45 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statementInsert.executeBatch();
 		} catch (final SQLException ex) {
 			// Convert SQLException to a general usage exception
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public void querySavePlayerBestiaryLoot(int playerId, PlayerBestiaryLoot[] loot) throws GameDatabaseException {
+		try (final PreparedStatement statement = statementFromInteger(getMySqlQueries().bestiaryLootSelectAll, playerId);
+			 final ResultSet result = statement.executeQuery();
+			 final PreparedStatement statementUpdate = getConnection().prepareStatement(getMySqlQueries().bestiaryLootUpdate);
+			 final PreparedStatement statementInsert = getConnection().prepareStatement(getMySqlQueries().bestiaryLootInsert)) {
+
+			final Map<String, Integer> uniqueIDMap = new HashMap<>();
+			while (result.next()) {
+				final String key = result.getInt("npcID") + ":" + result.getInt("itemID");
+				final int value = result.getInt("ID");
+				uniqueIDMap.put(key, value);
+			}
+
+			for (final PlayerBestiaryLoot entry : loot) {
+				final String key = entry.npcId + ":" + entry.itemId;
+				if (!uniqueIDMap.containsKey(key)) {
+					statementInsert.setLong(1, entry.amount);
+					statementInsert.setInt(2, entry.npcId);
+					statementInsert.setInt(3, entry.itemId);
+					statementInsert.setInt(4, playerId);
+					statementInsert.addBatch();
+				} else {
+					statementUpdate.setLong(1, entry.amount);
+					statementUpdate.setInt(2, uniqueIDMap.get(key));
+					statementUpdate.setInt(3, entry.npcId);
+					statementUpdate.setInt(4, entry.itemId);
+					statementUpdate.setInt(5, playerId);
+					statementUpdate.addBatch();
+				}
+			}
+
+			statementUpdate.executeBatch();
+			statementInsert.executeBatch();
+		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
 	}

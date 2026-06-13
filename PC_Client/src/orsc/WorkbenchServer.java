@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
@@ -73,9 +74,11 @@ final class WorkbenchServer {
 			httpServer.createContext("/input/command", WorkbenchServer::handleCommand);
 			httpServer.createContext("/input/npc-action", WorkbenchServer::handleNpcAction);
 			httpServer.createContext("/dev/ready", WorkbenchServer::handleDevReady);
+			httpServer.createContext("/dev/ui-panel", WorkbenchServer::handleDevUiPanel);
 			httpServer.createContext("/dev/viewport", WorkbenchServer::handleViewportPreset);
 			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
 			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
+			httpServer.createContext("/scenario/ui-panels", WorkbenchServer::handleUiPanelsScenario);
 			httpServer.createContext("/scenario/subscription-vendor-claim", WorkbenchServer::handleSubscriptionVendorScenario);
 			httpServer.createContext("/scenario/subscription-card-redeem", WorkbenchServer::handleSubscriptionCardRedeemScenario);
 			executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -270,6 +273,31 @@ final class WorkbenchServer {
 		}
 	}
 
+	private static void handleDevUiPanel(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String panel = requiredString(fields, "panel");
+		boolean capture = !"false".equalsIgnoreCase(fields.containsKey("capture") ? fields.get("capture") : "true");
+		try {
+			openUiPanel(panel);
+			StringBuilder json = new StringBuilder();
+			json.append("{\"ok\":true,");
+			json.append("\"action\":\"ui-panel\",");
+			json.append("\"panel\":\"").append(jsonEscape(panel)).append("\",");
+			json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\",");
+			if (capture) {
+				CaptureResult result = captureOnce("ui-panel-" + panel);
+				appendSingleCapture(json, result);
+				json.append(",");
+			}
+			json.append("\"state\":").append(stateJson(null, -1, -1));
+			json.append("}");
+			sendJson(exchange, 200, json.toString());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
 	private static void handleViewportPreset(HttpExchange exchange) throws IOException {
 		if (!requirePost(exchange)) return;
 		Map<String, String> fields = requestFields(exchange);
@@ -298,6 +326,17 @@ final class WorkbenchServer {
 		if (!requirePost(exchange)) return;
 		try {
 			sendJson(exchange, 200, auctionHouseScenarioJson());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleUiPanelsScenario(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String panels = fields.containsKey("panels") ? fields.get("panels") : "";
+		try {
+			sendJson(exchange, 200, uiPanelsScenarioJson(panels));
 		} catch (IOException e) {
 			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
 		}
@@ -727,6 +766,25 @@ final class WorkbenchServer {
 		return json.toString();
 	}
 
+	private static String uiPanelsScenarioJson(String requestedPanels) throws IOException {
+		ArrayList<CaptureResult> captures = new ArrayList<>();
+		devReadyJson();
+		String[] panels = parseUiPanelList(requestedPanels);
+		for (String panel : panels) {
+			openUiPanel(panel);
+			captures.add(captureOnce("ui-panel-" + panel));
+		}
+
+		StringBuilder json = new StringBuilder();
+		json.append("{\"ok\":true,");
+		json.append("\"scenario\":\"ui-panels\",");
+		json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\",");
+		json.append("\"state\":").append(stateJson(null, -1, -1)).append(",");
+		appendCaptures(json, captures);
+		json.append("}");
+		return json.toString();
+	}
+
 	private static String subscriptionCardRedeemScenarioJson() throws IOException {
 		ArrayList<CaptureResult> captures = new ArrayList<>();
 		requireLoggedIn();
@@ -755,6 +813,16 @@ final class WorkbenchServer {
 		return json.toString();
 	}
 
+	private static void appendSingleCapture(StringBuilder json, CaptureResult capture) {
+		json.append("\"capture\":{");
+		json.append("\"reason\":\"").append(jsonEscape(capture.reason)).append("\",");
+		json.append("\"pngPath\":\"").append(jsonEscape(capture.pngFile.getPath())).append("\",");
+		json.append("\"statePath\":\"").append(jsonEscape(capture.jsonFile.getPath())).append("\",");
+		json.append("\"width\":").append(capture.width).append(",");
+		json.append("\"height\":").append(capture.height);
+		json.append("}");
+	}
+
 	private static void appendCaptures(StringBuilder json, ArrayList<CaptureResult> captures) {
 		json.append("\"captures\":[");
 		for (int i = 0; i < captures.size(); i++) {
@@ -775,6 +843,51 @@ final class WorkbenchServer {
 		requireLoggedInAdmin();
 		sendCommand("workbenchauctionfixture");
 		sleep(900);
+	}
+
+	private static String[] parseUiPanelList(String requestedPanels) {
+		if (requestedPanels == null || requestedPanels.trim().isEmpty()) {
+			return new String[]{
+				"hud",
+				"options-profile",
+				"options-settings",
+				"friends",
+				"ignore",
+				"magic",
+				"prayers",
+				"skills",
+				"quests",
+				"loot",
+				"minimap",
+				"inventory",
+				"account"
+			};
+		}
+		String[] raw = requestedPanels.split(",");
+		ArrayList<String> panels = new ArrayList<>();
+		for (String value : raw) {
+			String panel = value == null ? "" : value.trim();
+			if (!panel.isEmpty()) {
+				panels.add(panel);
+			}
+		}
+		return panels.toArray(new String[0]);
+	}
+
+	private static void openUiPanel(final String panel) throws IOException {
+		final mudclient client = requireClient();
+		runOnEdt(() -> {
+			if (!client.workbenchOpenVoidscapeUiPanel(panel)) {
+				throw new IOException("Unknown or unavailable UI panel: " + panel);
+			}
+		});
+		sleep(isLootUiPanel(panel) ? 900 : 300);
+	}
+
+	private static boolean isLootUiPanel(String panel) {
+		if (panel == null) return false;
+		String key = panel.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+		return "loot".equals(key) || "bestiary".equals(key);
 	}
 
 	private static void waitForAuctionHouseVisible() throws IOException {

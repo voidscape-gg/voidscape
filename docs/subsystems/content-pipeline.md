@@ -49,6 +49,47 @@ scripts/content.sh voidscim register --png path/to/fit.png --name "Void relic" -
 This keeps the proven Void Scimitar/Subscription Card tooling alive while the
 general content factory grows around it.
 
+## UI Asset Bridge
+
+Voidscape HUD skin assets that are already filesystem PNGs should not go
+through `Authentic_Sprites.orsc`. The first supported UI flow targets the
+top-tab menu icons:
+
+```bash
+scripts/content.sh ui spec
+scripts/content.sh ui validate
+scripts/content.sh ui preview
+scripts/content.sh ui ingest-sheet path/to/sheet.png --cell-size 1024 --columns 3
+```
+
+The top-tab contract is tracked in `content/ui/voidscape-topbar-icons.json`.
+The tool validates 68x68 masters plus baked `20/24/30/32/34/36/40/42` variants,
+renders a quick preview contact sheet, and stages concept-sheet crops under
+`tools/voidscape-content/out/ui-ingest` unless `--commit` is passed.
+
+For larger menu redesign passes, use the workbench-backed concept loop:
+
+```bash
+scripts/content.sh ui capture-panels --out content/ui/menu-redesign/captures/latest.json
+scripts/content.sh ui concepts --manifest content/ui/menu-redesign/captures/latest.json
+scripts/content.sh ui asset-prompts --panel inventory --concept path/to/approved/concept.png
+scripts/content.sh ui asset-prompts --panel hud --concept path/to/approved/hud-concept.png --common-only
+scripts/content.sh ui asset-prompts --panel loot --concept path/to/approved/loot-concept.png --no-common
+```
+
+`capture-panels` asks the PC workbench to open and screenshot each visible
+Voidscape menu panel. `concepts` writes one `gpt-image-2` prompt per screenshot
+and can call the Images API with `--call` when `OPENAI_API_KEY` is visible.
+`asset-prompts` then turns an approved concept into one green-screen prompt per
+individual reusable UI asset. Generate the shared kit once with `--common-only`,
+then run panel-specific pieces with `--no-common`; `--only-asset` retries a
+single bad extraction. Concepts are review material; only approved, fitted
+assets should be committed into `Client_Base/Cache/voidscape/ui/skin`. Before
+generating or fitting menu chrome, read
+`content/ui/menu-redesign/BLUEPRINT.md`; the current design direction keeps
+inventory, friends/ignore, magic, and prayer compact with clear glass/tinted
+content surfaces rather than heavy opaque nested frames.
+
 ## Validation Rules
 
 `scripts/content.sh validate` checks the rules that most often break custom

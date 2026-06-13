@@ -22,8 +22,10 @@ Default base URL: `http://127.0.0.1:18787`.
 - `POST /input/type` accepts `{"text":"hello"}` and types each character through the key handler.
 - `POST /input/command` accepts `{"command":"quickauction"}` or `{"command":"::quickauction"}` and sends the existing client command packet.
 - `POST /dev/ready` uses the saved Existing User credentials to reach an in-game state, waits for the local player to appear, then clears blocking welcome/server-message dialogs and hides dev-iteration panels such as the Auction House and world map.
+- `POST /dev/ui-panel` accepts `{"panel":"inventory"}` and opens a named Voidscape HUD/menu state, optionally capturing it. Supported visible panel keys include `hud`, `options-profile`, `options-settings`, `friends`, `ignore`, `magic`, `prayers`, `skills`, `quests`, `loot`, `minimap`, `inventory`, and `account`.
 - `POST /fixture/auction-house` requires the logged-in player to be an admin, dispatches `::workbenchauctionfixture`, and reseeds deterministic Auction House listings plus recent sales through the server DB layer.
 - `POST /scenario/auction-house-open` opens the Auction House, captures Browse, first-listing selection, My Auctions, Intel, and Food category states, then returns a report with all saved image paths.
+- `POST /scenario/ui-panels` runs `/dev/ready`, opens the visible core Voidscape menu panels one by one, and saves screenshots for the UI concept-art pipeline.
 - `POST /scenario/subscription-vendor-claim` requires a logged-in account whose save has `web_account_id` plus a matching `starter_card:<webAccountId> = 1` global marker, teleports to the Lumbridge Void Subscription Vendor, sends the real client NPC command packet for `Subscribe`, verifies no vendor shop opens, and captures before/after screenshots.
 - `POST /scenario/subscription-card-redeem` requires a logged-in account with item `1602` in inventory, sends the real inventory item command packet for `Redeem`, waits for the card to be consumed, and captures before/after screenshots.
 

@@ -1,0 +1,73 @@
+{
+  "schema": "voidscape-ui-assets/v1",
+  "name": "voidscape-topbar-icons",
+  "description": "Voidscape HUD top-tab icon slots and baked PNG sizes.",
+  "skin_dir": "Client_Base/Cache/voidscape/ui/skin",
+  "master_size": 68,
+  "variant_sizes": [20, 24, 30, 32, 34, 36, 40, 42],
+  "runtime": {
+    "normal": {
+      "tab_size": 54,
+      "icon_size": 42
+    },
+    "compact": {
+      "tab_size": 40,
+      "icon_size": 32
+    }
+  },
+  "frames": [
+    {
+      "asset": "top-tab-normal.png",
+      "width": 54,
+      "height": 54
+    },
+    {
+      "asset": "top-tab-active.png",
+      "width": 54,
+      "height": 54
+    }
+  ],
+  "slots": [
+    {
+      "key": "options",
+      "label": "Options",
+      "client_tab": "Config.OPTIONS_TAB",
+      "asset": "top-gear.png"
+    },
+    {
+      "key": "friends",
+      "label": "Friends",
+      "client_tab": "Config.FRIENDS_TAB",
+      "asset": "top-social-smiley.png"
+    },
+    {
+      "key": "stats",
+      "label": "Stats",
+      "client_tab": "Config.SKILLS_AND_QUESTS_TAB",
+      "asset": "top-stats-bars.png"
+    },
+    {
+      "key": "magic_prayer",
+      "label": "Magic/Prayer",
+      "client_tab": "Config.MAGIC_AND_PRAYER_TAB",
+      "asset": "top-book.png"
+    },
+    {
+      "key": "map",
+      "label": "Map",
+      "client_tab": "Config.MINIMAP_AND_COMPASS_TAB",
+      "asset": "top-map-scroll.png"
+    },
+    {
+      "key": "inventory",
+      "label": "Inventory",
+      "client_tab": "Config.INVENTORY_TAB",
+      "asset": "top-bag.png"
+    }
+  ],
+  "sheet_ingest": {
+    "default_start_index": 0,
+    "slot_order": ["options", "friends", "stats", "magic_prayer", "map", "inventory"],
+    "background_key": "#ff00ff"
+  }
+}

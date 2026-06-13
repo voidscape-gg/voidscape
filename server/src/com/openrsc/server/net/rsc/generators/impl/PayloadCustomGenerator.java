@@ -121,6 +121,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 		put(OpcodeOut.SEND_WORLD_WALK_ROUTE, 100); // voidscape — world-map auto-walker
 		put(OpcodeOut.SEND_VOID_RUSH_WAVE, 102); // voidscape — Void Rush low-cost wave visual
 		put(OpcodeOut.SEND_VOID_SCOUT_STATE, 103); // voidscape — Void Sparrow scout UI state
+		put(OpcodeOut.SEND_BESTIARY, 105); // voidscape — killed NPCs and observed loot
 	}};
 
 	@Override
@@ -315,6 +316,9 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 				case SEND_EXPERIENCE_TOGGLE:
 					ExperienceToggleStruct ext = (ExperienceToggleStruct) payload;
 					builder.writeByte((byte) ext.isExperienceFrozen);
+					if (player.supportsSkillExperienceLocks()) {
+						builder.writeInt(ext.skillExperienceLockMask);
+					}
 					break;
 
 				case SEND_EXPSHARED:
@@ -798,6 +802,20 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					builder.writeInt(mk.totalCount);
 					builder.writeInt(mk.recentNpcId);
 					builder.writeInt(mk.recentNpcKills);
+					break;
+
+				case SEND_BESTIARY:
+					BestiaryStruct bestiary = (BestiaryStruct) payload;
+					builder.writeShort(bestiary.entries.length);
+					for (BestiaryStruct.NpcEntry entry : bestiary.entries) {
+						builder.writeInt(entry.npcId);
+						builder.writeInt(entry.killCount);
+						builder.writeShort(entry.drops.length);
+						for (BestiaryStruct.DropEntry drop : entry.drops) {
+							builder.writeInt(drop.itemId);
+							builder.writeLong(drop.amount);
+						}
+					}
 					break;
 
 				case SEND_OPENPK_POINTS:

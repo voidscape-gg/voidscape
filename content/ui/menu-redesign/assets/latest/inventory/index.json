@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "inventory slot background",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\inventory-slot-background\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\inventory-slot-background\\asset-green.png"
+  },
+  {
+    "asset": "inventory header tabs",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\inventory-header-tabs\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\inventory-header-tabs\\asset-green.png"
+  },
+  {
+    "asset": "stack count badge",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\stack-count-badge\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\inventory\\stack-count-badge\\asset-green.png"
+  }
+]

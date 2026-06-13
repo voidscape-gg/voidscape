@@ -8,6 +8,9 @@ REPO_ROOT = TOOL_DIR.parent.parent
 
 CONTENT_DIR = REPO_ROOT / "content"
 CUSTOM_CONTENT_DIR = CONTENT_DIR / "custom"
+UI_CONTENT_DIR = CONTENT_DIR / "ui"
+UI_TOPBAR_SPEC = UI_CONTENT_DIR / "voidscape-topbar-icons.json"
+TOOL_OUT_DIR = TOOL_DIR / "out"
 
 CLIENT_ENTITY_HANDLER = (
     REPO_ROOT
@@ -29,6 +32,7 @@ NPC_DEFS = DEFS_DIR / "NpcDefs.json"
 NPC_DEFS_CUSTOM = DEFS_DIR / "NpcDefsCustom.json"
 
 AUTHENTIC_SPRITES = REPO_ROOT / "Client_Base" / "Cache" / "video" / "Authentic_Sprites.orsc"
+VOIDSCAPE_SKIN_DIR = REPO_ROOT / "Client_Base" / "Cache" / "voidscape" / "ui" / "skin"
 
 SPRITE_ITEM = 2150
 SPRITE_LOGO = 3150

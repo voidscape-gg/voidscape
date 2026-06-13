@@ -1,0 +1,22 @@
+[
+  {
+    "asset": "chat box frame",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\hud\\chat-box-frame\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\hud\\chat-box-frame\\asset-green.png"
+  },
+  {
+    "asset": "location plaque",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\hud\\location-plaque\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\hud\\location-plaque\\asset-green.png"
+  },
+  {
+    "asset": "bottom chat tab normal state",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\hud\\bottom-chat-tab-normal-state\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\hud\\bottom-chat-tab-normal-state\\asset-green.png"
+  },
+  {
+    "asset": "bottom chat tab selected state",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\hud\\bottom-chat-tab-selected-state\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\hud\\bottom-chat-tab-selected-state\\asset-green.png"
+  }
+]
