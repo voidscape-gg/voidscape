@@ -167,6 +167,12 @@ public abstract class GameDatabase {
 
 	public abstract VoidArenaStats[] queryTopVoidArenaStats(String seasonId, int limit) throws GameDatabaseException;
 
+	public abstract VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecords(String seasonId, int limit) throws GameDatabaseException;
+
+	public abstract VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecordsForPlayer(String seasonId, int playerId, int limit) throws GameDatabaseException;
+
+	public abstract int queryCountVoidArenaMatchRecords(String seasonId) throws GameDatabaseException;
+
 	public abstract PlayerSkills[] queryLoadPlayerSkills(Player player, boolean isMax) throws GameDatabaseException, NoSuchElementException;
 
 	public abstract PlayerExperience[] queryLoadPlayerExperience(final int playerId) throws GameDatabaseException;

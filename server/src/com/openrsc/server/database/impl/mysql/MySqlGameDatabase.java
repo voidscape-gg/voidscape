@@ -1010,6 +1010,72 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecords(final String seasonId, final int limit) throws GameDatabaseException {
+		final ArrayList<VoidArenaMatchRecord> list = new ArrayList<>();
+		final String query = "SELECT m.*, winner.username AS winnerUsername, loser.username AS loserUsername FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX + "voidarena_ranked_matches` m "
+			+ "JOIN `" + getServer().getConfig().DB_TABLE_PREFIX + "players` winner ON winner.ID = m.winnerID "
+			+ "JOIN `" + getServer().getConfig().DB_TABLE_PREFIX + "players` loser ON loser.ID = m.loserID "
+			+ "WHERE m.seasonID = ? ORDER BY m.endedAt DESC, m.ID DESC LIMIT ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			statement.setInt(2, Math.max(1, limit));
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					list.add(readVoidArenaMatchRecord(result));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return list.toArray(new VoidArenaMatchRecord[0]);
+	}
+
+	@Override
+	public VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecordsForPlayer(final String seasonId,
+																			final int playerId,
+																			final int limit) throws GameDatabaseException {
+		final ArrayList<VoidArenaMatchRecord> list = new ArrayList<>();
+		final String query = "SELECT m.*, winner.username AS winnerUsername, loser.username AS loserUsername FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX + "voidarena_ranked_matches` m "
+			+ "JOIN `" + getServer().getConfig().DB_TABLE_PREFIX + "players` winner ON winner.ID = m.winnerID "
+			+ "JOIN `" + getServer().getConfig().DB_TABLE_PREFIX + "players` loser ON loser.ID = m.loserID "
+			+ "WHERE m.seasonID = ? AND (m.winnerID = ? OR m.loserID = ?) "
+			+ "ORDER BY m.endedAt DESC, m.ID DESC LIMIT ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			statement.setInt(2, playerId);
+			statement.setInt(3, playerId);
+			statement.setInt(4, Math.max(1, limit));
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					list.add(readVoidArenaMatchRecord(result));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return list.toArray(new VoidArenaMatchRecord[0]);
+	}
+
+	@Override
+	public int queryCountVoidArenaMatchRecords(final String seasonId) throws GameDatabaseException {
+		final String query = "SELECT COUNT(*) AS matchCount FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_matches` WHERE seasonID = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return result.getInt("matchCount");
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return 0;
+	}
+
+	@Override
 	public PlayerSkills[] queryLoadPlayerSkills(final Player player, final boolean isMax) throws GameDatabaseException, NoSuchElementException  {
 		try {
 			final int[] skillLevels = fetchLevels(player.getDatabaseID(), isMax);
@@ -2325,6 +2391,26 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		stats.resetCount = result.getInt("resetCount");
 		stats.updatedAt = result.getLong("updatedAt");
 		return stats;
+	}
+
+	private VoidArenaMatchRecord readVoidArenaMatchRecord(final ResultSet result) throws SQLException {
+		final VoidArenaMatchRecord record = new VoidArenaMatchRecord();
+		record.id = result.getInt("ID");
+		record.seasonId = result.getString("seasonID");
+		record.winnerId = result.getInt("winnerID");
+		record.loserId = result.getInt("loserID");
+		record.winnerUsername = result.getString("winnerUsername");
+		record.loserUsername = result.getString("loserUsername");
+		record.winnerRatingBefore = result.getInt("winnerRatingBefore");
+		record.winnerRatingAfter = result.getInt("winnerRatingAfter");
+		record.loserRatingBefore = result.getInt("loserRatingBefore");
+		record.loserRatingAfter = result.getInt("loserRatingAfter");
+		record.ratingDelta = result.getInt("ratingDelta");
+		record.disconnectLoss = result.getInt("disconnectLoss") != 0;
+		record.slotIndex = result.getInt("slotIndex");
+		record.startedAt = result.getLong("startedAt");
+		record.endedAt = result.getLong("endedAt");
+		return record;
 	}
 
 	@Override

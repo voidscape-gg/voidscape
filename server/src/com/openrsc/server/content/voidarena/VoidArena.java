@@ -202,6 +202,14 @@ public final class VoidArena {
 			sendLeaderboard(player);
 			return;
 		}
+		if (action.equals("season")) {
+			sendSeasonPreview(player);
+			return;
+		}
+		if (action.equals("audit")) {
+			sendAudit(player, args);
+			return;
+		}
 		if (action.equals("challenge") || action.equals("fight")) {
 			if (args.length < 2) {
 				player.message("Syntax: ::arena challenge <player>");
@@ -964,12 +972,156 @@ public final class VoidArena {
 		}
 	}
 
+	private void sendSeasonPreview(Player player) {
+		if (!requireArenaAdmin(player)) {
+			return;
+		}
+		try {
+			int rankedMatches = world.getServer().getDatabase()
+				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+			VoidArenaStats[] top = world.getServer().getDatabase()
+				.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 10);
+			VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
+				.queryRecentVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON, 5);
+			StringBuilder box = new StringBuilder("@yel@Void Arena Season Preview:%");
+			box.append("@whi@Season: @cya@").append(VoidArenaConfig.CURRENT_SEASON)
+				.append("@whi@, ranked matches: @yel@").append(rankedMatches).append("%");
+			box.append("@yel@Top ratings:%");
+			appendTopRatings(box, top, 5);
+			box.append("@yel@Recent ranked matches:%");
+			appendMatchRows(box, recent);
+			ActionSender.sendBox(player, box.toString(), true);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to load Void Arena season preview", e);
+			player.message("Unable to load the Void Arena season preview right now.");
+		}
+	}
+
+	private void sendAudit(Player player, String[] args) {
+		if (!requireArenaAdmin(player)) {
+			return;
+		}
+		int limit = auditLimit(args, 10);
+		try {
+			if (args.length < 2 || args[1].equalsIgnoreCase("recent") || (args.length == 2 && lastArgIsInteger(args))) {
+				VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
+					.queryRecentVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON, limit);
+				StringBuilder box = new StringBuilder("@yel@Void Arena Ranked Audit:%");
+				box.append("@whi@Recent ranked matches:%");
+				appendMatchRows(box, recent);
+				ActionSender.sendBox(player, box.toString(), true);
+				return;
+			}
+
+			int usernameEnd = lastArgIsInteger(args) ? args.length - 1 : args.length;
+			String username = joinArgs(args, 1, usernameEnd);
+			int playerId = world.getServer().getDatabase().playerIdFromUsername(username);
+			if (playerId < 0) {
+				player.message("No player named '" + username + "' was found.");
+				return;
+			}
+			VoidArenaStats stats = getStats(playerId, username);
+			VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
+				.queryRecentVoidArenaMatchRecordsForPlayer(VoidArenaConfig.CURRENT_SEASON, playerId, limit);
+			StringBuilder box = new StringBuilder("@yel@Void Arena Player Audit:%");
+			box.append("@whi@Player: @mag@").append(username)
+				.append("@whi@ rating @yel@").append(stats.rating)
+				.append("@whi@ (").append(stats.wins).append("-").append(stats.losses)
+				.append(", DC ").append(stats.disconnectLosses).append(")%");
+			box.append("@whi@Recent ranked matches:%");
+			appendMatchRows(box, recent);
+			ActionSender.sendBox(player, box.toString(), true);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to load Void Arena ranked audit", e);
+			player.message("Unable to load the Void Arena ranked audit right now.");
+		}
+	}
+
+	private boolean requireArenaAdmin(Player player) {
+		if (player.isAdmin()) {
+			return true;
+		}
+		player.message("Only administrators can audit Void Arena ranked matches.");
+		return false;
+	}
+
+	private int auditLimit(String[] args, int defaultLimit) {
+		if (args.length > 1 && lastArgIsInteger(args)) {
+			try {
+				return Math.max(1, Math.min(25, Integer.parseInt(args[args.length - 1])));
+			} catch (NumberFormatException ignored) {
+			}
+		}
+		return defaultLimit;
+	}
+
+	private boolean lastArgIsInteger(String[] args) {
+		if (args.length == 0) {
+			return false;
+		}
+		try {
+			Integer.parseInt(args[args.length - 1]);
+			return true;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
+	private void appendTopRatings(StringBuilder box, VoidArenaStats[] top, int limit) {
+		int displayed = 0;
+		for (VoidArenaStats stats : top) {
+			if (displayed >= limit) {
+				break;
+			}
+			displayed++;
+			box.append("@whi@").append(displayed).append(". @mag@")
+				.append(stats.username == null ? ("player " + stats.playerId) : stats.username)
+				.append("@whi@ - @yel@").append(stats.rating)
+				.append("@whi@ (").append(stats.wins).append("-").append(stats.losses)
+				.append(", DC ").append(stats.disconnectLosses).append(")%");
+		}
+		if (displayed == 0) {
+			box.append("@whi@No ranked stats yet.%");
+		}
+	}
+
+	private void appendMatchRows(StringBuilder box, VoidArenaMatchRecord[] records) {
+		if (records.length == 0) {
+			box.append("@whi@No ranked matches recorded yet.%");
+			return;
+		}
+		for (VoidArenaMatchRecord record : records) {
+			box.append("@whi@#").append(record.id).append(" @mag@")
+				.append(playerName(record.winnerUsername, record.winnerId))
+				.append("@whi@ defeated @mag@").append(playerName(record.loserUsername, record.loserId))
+				.append("@whi@ @gre@+").append(record.ratingDelta)
+				.append("@whi@ (").append(record.winnerRatingBefore).append("->")
+				.append(record.winnerRatingAfter).append(" / ")
+				.append(record.loserRatingBefore).append("->").append(record.loserRatingAfter).append(")");
+			if (record.disconnectLoss) {
+				box.append(" @red@DC");
+			}
+			box.append("%");
+		}
+	}
+
+	private String playerName(String username, int playerId) {
+		if (username != null && !username.isEmpty()) {
+			return username;
+		}
+		return "player " + playerId;
+	}
+
 	private void showHelp(Player player) {
 		player.playerServerMessage(MessageType.QUEST, "@mag@Void Arena commands:");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena enter@mag@ - teleport to the ranked lobby");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena stats@mag@ - show your rating");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena top@mag@ - show the top ranked fighters");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena leave@mag@ - leave the lobby");
+		if (player.isAdmin()) {
+			player.playerServerMessage(MessageType.QUEST, "@whi@::arena season@mag@ - preview current ranked season");
+			player.playerServerMessage(MessageType.QUEST, "@whi@::arena audit [recent|player]@mag@ - inspect ranked match ledger");
+		}
 		player.playerServerMessage(MessageType.QUEST,
 			"@whi@Ratings are hidden until " + VoidArenaConfig.RATING_VISIBLE_MATCHES + " ranked matches are complete.");
 	}
@@ -985,8 +1137,12 @@ public final class VoidArena {
 	}
 
 	private String joinArgs(String[] args, int startIndex) {
+		return joinArgs(args, startIndex, args.length);
+	}
+
+	private String joinArgs(String[] args, int startIndex, int endIndex) {
 		StringBuilder builder = new StringBuilder();
-		for (int i = startIndex; i < args.length; i++) {
+		for (int i = startIndex; i < endIndex; i++) {
 			if (builder.length() > 0) {
 				builder.append(' ');
 			}

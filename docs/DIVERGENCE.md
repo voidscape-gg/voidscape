@@ -3898,3 +3898,7 @@ Tightened Death Match lifecycle cleanup after QA moved from setup into match-end
 ### 2026-06-14 - Void Arena ranked match ledger
 
 Added an authoritative `voidarena_ranked_matches` ledger for resolved ranked Death Matches. Each ranked result now records season, winner, loser, both players' before/after ratings, applied delta, disconnect-loss flag, arena slot, and start/end timestamps after rating stats save successfully. MySQL and SQLite core schemas plus additive migration patches were updated together so future leaderboard, crown, season-reset, and anti-abuse work can audit individual ranked outcomes instead of inferring history from aggregate stats alone. No packet shape, cache, client version, or combat rule changed.
+
+### 2026-06-14 - Void Arena ranked audit commands
+
+Added read-only administrator tooling for the ranked Death Match season. `::arena season` now previews the current season id, ranked match count, top ratings, and the latest ledger rows, while `::arena audit`, `::arena audit recent <limit>`, and `::arena audit <player> <limit>` inspect recent ranked match outcomes from the new ledger. The ledger query surface joins player names and rating before/after values so staff can review disconnect losses, placement outcomes, repeated pairings, and rating movement before destructive season-reset or reward tooling exists. No packet shape, schema, cache, client version, or gameplay rule changed.
