@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-14 - Voidscape top-menu classic-width polish
+
+Narrowed the shared Voidscape top-menu glass panels back toward classic OpenRSC side-panel proportions while keeping them responsive: standard panels start at 196px on compact viewports and step up through larger widths as the screen preset grows, while Inventory keeps the classic grid-width frame. Open panels anchor under their active top-bar icon, start directly under the icon row, and only clamp when they would run off the right edge. Sub-header strips sit just inside the border, list/text content gains a viewport-aware inner inset, and the Stats panel now uses a real gutter between skill/equipment columns so typography does not converge at larger sizes. This is a draw/layout-only pass in `Client_Base/src/orsc/mudclient.java`; no packets, cache assets, schema, or gameplay behavior changed.
+
 ### 2026-06-14 - Void Rift city hub and Edgar spawn removal
 
 The new static Void Rift at `(139,636)` now acts as a city travel hub: using it opens a destination menu for Void Enclave, Lumbridge, Draynor, Falador, Edgeville, Varrock, Al Kharid, Karamja, Yanille, Ardougne, Catherby, Seers, and Gnome Stronghold, with the same combat safety check as the older rift flow. Edgar's Lumbridge spawn was removed from `NpcLocs.json` so the wizard no longer appears in-world; his NPC definition and handler remain in place to avoid shifting positional custom NPC ids. Files: `server/plugins/com/openrsc/server/plugins/custom/misc/VoidRift.java` and `server/conf/server/defs/locs/NpcLocs.json`. No packets, schema changes, client definitions, object ids, NPC ids, or `CLIENT_VERSION` changes were added; reversibility is restoring the Edgar spawn block and removing the `(139,636)` city-rift branch.

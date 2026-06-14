@@ -13243,7 +13243,7 @@ public final class mudclient implements Runnable {
 				int inset = voidscapeRightPanelReadableInset();
 				var5 = (short) (voidscapeRightPanelWidth() - inset * 2);
 				var6 = (short) (panelH - contentTop - 16);
-				var3 = voidscapeRightPanelX() + inset;
+				var3 = voidscapeRightPanelX() + inset + voidscapeRightPanelBodyShift();
 				var4 = voidscapeRightPanelY() + contentTop;
 				drawVoidscapeRightGlassPanel(var3, var4, var5, var6, "FRIENDS");
 			}
@@ -13752,7 +13752,7 @@ public final class mudclient implements Runnable {
 				var7 = this.magicOrPrayerList == 0 ? vSel : vBoxBg;
 				var8 = this.magicOrPrayerList != 0 ? vSel : vBoxBg;
 				magicPanelWidth = (short) (voidPanelW - inset * 2);
-				magicPanelX = voidPanelX + inset;
+				magicPanelX = voidPanelX + inset + voidscapeRightPanelBodyShift();
 				magicPanelYStart = voidscapeRightPanelY() + contentTop;
 				voidMagicOriginX = magicPanelX;
 				drawVoidscapeRightGlassPanel(magicPanelX, magicPanelYStart, magicPanelWidth, 182, "MAGIC & PRAYER");
@@ -13789,7 +13789,7 @@ public final class mudclient implements Runnable {
 				int lastSpellX = magicPanelX;
 				int lastSpellY = magicPanelYStart + 182;
 				String lastSpellNameColor = "@yel@";
-				int magicDetailPad = voidSkin ? 7 : 2;
+				int magicDetailPad = voidSkin ? voidscapeRightPanelListPad() : 2;
 				int magicDetailX = magicPanelX + magicDetailPad;
 
 				// 0 is magic list
@@ -14282,7 +14282,7 @@ public final class mudclient implements Runnable {
 				int panelH = voidscapePanelHeightFor(Config.OPTIONS_TAB);
 				// Inset the content so the tabs, labels, dividers and values all sit inside the
 				// slim glass border with no overflow.
-				var3 = voidscapeRightPanelX() + inset;
+				var3 = voidscapeRightPanelX() + inset + voidscapeRightPanelBodyShift();
 				var4 = voidscapeRightPanelY() + voidscapeOptionsContentTop();
 				var5 = (short) (voidscapeRightPanelWidth() - inset * 2);
 				voidOptionsOriginX = var3;
@@ -15322,13 +15322,12 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeInventoryPanelWidth() {
-		return Math.max(286, voidscapeIconTabsSpan());
+		int glassPad = voidscapeCompactHud() ? 7 : 8;
+		return voidscapeInventoryCellWidth() * 5 + glassPad * 2;
 	}
 
-	// Class width without the inventory special case — geometry that must NOT change when the
-	// active tab changes (e.g. the chat frame width) anchors on this.
 	private int voidscapeRightPanelBaseWidth() {
-		return voidscapeIconTabsSpan();
+		return voidscapeStandardPanelVisualWidth() + voidscapeRightPanelReadableInset() * 2;
 	}
 
 	private int voidscapeRightPanelInset() {
@@ -15348,8 +15347,27 @@ public final class mudclient implements Runnable {
 		return voidscapeRightPanelInset() + (voidscapeCompactHud() ? 4 : 6);
 	}
 
+	private int voidscapeRightPanelBodyShift() {
+		return -voidscapeRightPanelReadableInset();
+	}
+
 	private int voidscapeRightPanelSubHeaderPad() {
-		return voidscapeCompactHud() ? 7 : 9;
+		return 2;
+	}
+
+	private int voidscapeRightPanelListPad() {
+		switch (voidscapePanelSizeClass()) {
+			case 0:
+				return 8;
+			case 1:
+				return 9;
+			case 2:
+				return 10;
+			case 3:
+				return 11;
+			default:
+				return 12;
+		}
 	}
 
 	private int voidscapeRightPanelContentTop() {
@@ -15368,22 +15386,22 @@ public final class mudclient implements Runnable {
 	private int voidscapeOptionsContentTop() {
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 72;
+				return 49;
 			case 1:
-				return 74;
+				return 51;
 			case 2:
-				return 76;
+				return 51;
 			default:
-				return 78;
+				return 51;
 		}
 	}
 
 	private int voidscapeGlassRightPanelContentTop() {
-		return voidscapeCompactHud() ? 34 : 38;
+		return voidscapeCompactHud() ? 25 : 27;
 	}
 
 	private int voidscapeInventoryContentTop() {
-		return voidscapeCompactHud() ? 34 : 38;
+		return voidscapeCompactHud() ? 25 : 27;
 	}
 
 	private int voidscapeInventoryCellWidth() {
@@ -15440,13 +15458,38 @@ public final class mudclient implements Runnable {
 	// Stable rightmost anchor — used by the bottom chat frame so it doesn't resize when the
 	// active side panel slides under a different icon.
 	private int voidscapeRightPanelHomeX() {
-		return this.getSurface().width2 - voidscapeRightPanelWidth() - 3;
+		int iconX = voidscapeTopTabsStartX()
+			+ voidscapeTabIndexFor(this.showUiTab) * (voidscapeTopTabSize() + voidscapeTopTabGap());
+		int maxLeft = this.getSurface().width2 - voidscapeRightPanelVisualWidth() - 3;
+		return Math.max(0, Math.min(iconX, maxLeft));
 	}
 
 	// Original OpenRSC behavior: side panels live in the fixed right column, while the top
 	// tab strip only selects which panel is shown.
 	private int voidscapeRightPanelX() {
 		return voidscapeRightPanelHomeX();
+	}
+
+	private int voidscapeRightPanelVisualWidth() {
+		if (this.showUiTab == Config.INVENTORY_TAB) {
+			return voidscapeInventoryPanelWidth();
+		}
+		return voidscapeStandardPanelVisualWidth();
+	}
+
+	private int voidscapeStandardPanelVisualWidth() {
+		switch (voidscapePanelSizeClass()) {
+			case 0:
+				return 196;
+			case 1:
+				return 204;
+			case 2:
+				return 216;
+			case 3:
+				return 228;
+			default:
+				return 240;
+		}
 	}
 
 	private int voidscapeRightPanelY() {
@@ -15534,7 +15577,7 @@ public final class mudclient implements Runnable {
 		} else {
 			px = voidscapeRightPanelX();
 			py = voidscapeRightPanelY();
-			pw = voidscapeRightPanelWidth();
+			pw = voidscapeRightPanelVisualWidth();
 			ph = voidscapePanelHeightFor(this.showUiTab);
 		}
 		int keepLeft = Math.min(iconX, px);
@@ -16249,11 +16292,10 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeRightGlassPanel(int contentX, int contentY, int contentW, int contentH, String title,
 											  int bodyAlpha) {
-		int padX = voidscapeCompactHud() ? 7 : 8;
 		int headerH = voidscapeCompactHud() ? 25 : 27;
-		int x = contentX - padX;
+		int x = contentX;
 		int y = contentY - headerH;
-		int width = contentW + padX * 2;
+		int width = contentW;
 		int height = headerH + contentH;
 
 		this.getSurface().drawBoxAlpha(x, y, width, height, 0x050308, 50);
@@ -16328,7 +16370,7 @@ public final class mudclient implements Runnable {
 		int width = voidscapeRightPanelWidth();
 		int height = voidscapeRightPanelHeight();
 		int inset = voidscapeRightPanelReadableInset();
-		int innerX = x + inset;
+		int innerX = x + inset + voidscapeRightPanelBodyShift();
 		int innerW = width - inset * 2;
 		int contentTop = voidscapeGlassRightPanelContentTop();
 		int contentY = y + contentTop;
@@ -16401,7 +16443,7 @@ public final class mudclient implements Runnable {
 			drawVoidscapeStatLine(innerX, statsY + lineH * 5, innerW, "Quests", Integer.toString(this.questPoints), 0x6FE38A, 1);
 			statRows = 6;
 		} else {
-			int colGap = 12;
+			int colGap = Math.max(12, voidscapeStatsColumnGap());
 			int colW = (innerW - colGap) / 2;
 			int rightX = innerX + colW + colGap;
 			drawVoidscapeStatLine(innerX, statsY, colW, "Combat XP", formatXpRate(this.profileEffectiveCombatRateTenths), 0x6FE38A, 1);
@@ -16660,9 +16702,10 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor, int font) {
-		this.getSurface().drawString(label, x + 2, y + 10, 0xB7ABC8, font);
+		int pad = voidscapeRightPanelListPad();
+		this.getSurface().drawString(label, x + pad, y + 10, 0xB7ABC8, font);
 		int valueWidth = this.getSurface().stringWidth(font, value);
-		this.getSurface().drawString(value, x + width - valueWidth - 2, y + 10, valueColor, font);
+		this.getSurface().drawString(value, x + width - valueWidth - pad, y + 10, valueColor, font);
 	}
 
 	private int voidscapeSkillColumn(int skill) {
@@ -16673,11 +16716,27 @@ public final class mudclient implements Runnable {
 		return skill < VOIDSCAPE_COMBAT_SKILLS ? skill : skill - VOIDSCAPE_COMBAT_SKILLS;
 	}
 
+	private int voidscapeStatsColumnGap() {
+		switch (voidscapePanelSizeClass()) {
+			case 0:
+				return 6;
+			case 1:
+				return 8;
+			case 2:
+				return 10;
+			case 3:
+				return 12;
+			default:
+				return 14;
+		}
+	}
+
 	private int findVoidscapeHoveredSkill(int startX, int startY, int width) {
-		int columnWidth = width / 2;
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
 		for (int i = 0; i < skillCount; i++) {
-			int rowX = startX + voidscapeSkillColumn(i) * columnWidth;
+			int rowX = startX + voidscapeSkillColumn(i) * (columnWidth + columnGap);
 			int rowY = startY + voidscapeSkillRowIndex(i) * rowH;
 			if (this.mouseX >= rowX && this.mouseX < rowX + columnWidth - 4
 				&& this.mouseY >= rowY && this.mouseY < rowY + rowH) {
@@ -16688,14 +16747,15 @@ public final class mudclient implements Runnable {
 	}
 
 	private int findVoidscapeHoveredSkillLock(int startX, int startY, int width) {
-		int columnWidth = width / 2;
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
 		for (int i = 0; i < skillCount; i++) {
 			if (!isVoidscapeSkillExperienceLockable(i)) {
 				continue;
 			}
 			int lockSize = voidscapeSkillLockSize(rowH);
-			int rowX = startX + voidscapeSkillColumn(i) * columnWidth;
+			int rowX = startX + voidscapeSkillColumn(i) * (columnWidth + columnGap);
 			int rowY = startY + voidscapeSkillRowIndex(i) * rowH;
 			int lockX = voidscapeSkillLockX(rowX, columnWidth, lockSize);
 			int lockY = rowY + Math.max(0, (rowH - lockSize) / 2);
@@ -16708,10 +16768,11 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeSkillRows(int startX, int startY, int width, int hoveredSkill, int hoveredLockSkill) {
-		int columnWidth = width / 2;
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
 		for (int i = 0; i < skillCount; i++) {
-			int rowX = startX + voidscapeSkillColumn(i) * columnWidth;
+			int rowX = startX + voidscapeSkillColumn(i) * (columnWidth + columnGap);
 			int rowY = startY + voidscapeSkillRowIndex(i) * rowH;
 			if (i == hoveredSkill) {
 				this.getSurface().drawBoxAlpha(rowX - 2, rowY - 1, columnWidth - 6, rowH, 0x4B2472, 116);
@@ -16782,13 +16843,14 @@ public final class mudclient implements Runnable {
 		String[] icons = new String[]{"equip-armour.png", "equip-aim.png", "equip-power.png",
 			"equip-magic.png", "equip-prayer.png"};
 		String[] labels = new String[]{"Armour", "Weapon Aim", "Weapon Power", "Magic", "Prayer"};
-		int columnWidth = width / 2;
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (width - columnGap) / 2;
 		int leftRows = 3;
 		int count = Math.min(this.playerStatEquipment.length, icons.length);
 		for (int i = 0; i < count; i++) {
 			int col = i < leftRows ? 0 : 1;
 			int row = i < leftRows ? i : i - leftRows;
-			int rowX = x + col * columnWidth;
+			int rowX = x + col * (columnWidth + columnGap);
 			int rowY = y + row * 17;
 			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(icons[i], 14), rowX, rowY - 2, 14, 14);
 			this.getSurface().drawString(labels[i], rowX + 18, rowY + 8, 0x8E7EA7, 0);
@@ -16854,7 +16916,7 @@ public final class mudclient implements Runnable {
 	// Draw a "Label: value" settings row. For the voidscape skin, the value is right-aligned to the
 	// panel edge so rows fill the container; classic keeps the inline left-aligned string.
 	private void drawSettingsRow(int baseX, short boxWidth, int y, String full, int color) {
-		int leftPad = useVoidscapeHudSkin() ? 7 : 3;
+		int leftPad = useVoidscapeHudSkin() ? voidscapeRightPanelListPad() : 3;
 		int rightPad = useVoidscapeHudSkin() ? 12 : 8;
 		int sep = useVoidscapeHudSkin() ? full.indexOf(": ") : -1;
 		if (sep < 0) {
@@ -16874,7 +16936,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSettingsRowTextPad() {
-		return useVoidscapeHudSkin() ? 7 : 3;
+		return useVoidscapeHudSkin() ? voidscapeRightPanelListPad() : 3;
 	}
 
 	private String compactVoidscapeSettingsLabel(String label) {
@@ -19164,18 +19226,21 @@ public final class mudclient implements Runnable {
 		panelPlayerInfo.reposition(controlPlayerInfoPanel, var3, (maxY - 287) + 24, 196, 251);
 		if (useVoidscapeHudSkin()) {
 			int inset = voidscapeRightPanelReadableInset();
-			int vInnerX = voidscapeRightPanelX() + inset;
+			int vInnerX = voidscapeRightPanelX() + inset + voidscapeRightPanelBodyShift();
 			int vInnerW = voidscapeRightPanelWidth() - inset * 2;
 			int vGlassTop = voidscapeRightPanelY() + voidscapeGlassRightPanelContentTop();
 			int optionsTop = voidscapeRightPanelY() + voidscapeOptionsContentTop();
-			panelSettings.reposition(controlSettingPanel, vInnerX, optionsTop - 5, vInnerW, 181);
-			panelSocial.reposition(controlSocialPanel, vInnerX, vGlassTop + 40, vInnerW,
+			int listPad = voidscapeRightPanelListPad();
+			panelSettings.reposition(controlSettingPanel, vInnerX + listPad, optionsTop - 5,
+				vInnerW - listPad * 2, 181);
+			panelSocial.reposition(controlSocialPanel, vInnerX + listPad, vGlassTop + 40,
+				vInnerW - listPad * 2,
 				Math.max(126, voidscapePanelHeightFor(Config.FRIENDS_TAB) - voidscapeGlassRightPanelContentTop() - 78));
 			// +28 (not +24): a few px of air between the Magic/Prayers tab strip and the first list row.
-			int magicListInset = voidscapeRightPanelSubHeaderPad();
-			panelMagic.reposition(controlMagicPanel, vInnerX + magicListInset, vGlassTop + 28,
-				vInnerW - magicListInset * 2, 86);
-			panelQuestInfo.reposition(controlQuestInfoPanel, vInnerX, vGlassTop + 8, vInnerW,
+			panelMagic.reposition(controlMagicPanel, vInnerX + listPad, vGlassTop + 28,
+				vInnerW - listPad * 2, 86);
+			panelQuestInfo.reposition(controlQuestInfoPanel, vInnerX + listPad, vGlassTop + 8,
+				vInnerW - listPad * 2,
 				Math.max(170, voidscapeRightPanelHeight() - voidscapeGlassRightPanelContentTop() - 42));
 		} else {
 			panelSettings.reposition(controlSettingPanel, var3 + 1, (maxY - 240) + 16, 195, 184);
@@ -26745,7 +26810,7 @@ public final class mudclient implements Runnable {
 			this.mouseX = voidscapeMinimapX() + voidscapeMinimapWidth() / 2;
 			this.mouseY = voidscapeRightPanelY() + voidscapeMinimapHeight() / 2;
 		} else if (this.showUiTab != 0) {
-			this.mouseX = voidscapeRightPanelX() + voidscapeRightPanelWidth() / 2;
+			this.mouseX = voidscapeRightPanelX() + voidscapeRightPanelVisualWidth() / 2;
 			this.mouseY = voidscapeRightPanelY() + Math.min(50, Math.max(12, voidscapePanelHeightFor(this.showUiTab) / 2));
 		} else {
 			this.mouseX = Math.min(this.getGameWidth() - 1, voidscapeLocationPlaqueX() + 8);
