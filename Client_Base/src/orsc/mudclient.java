@@ -116,6 +116,23 @@ public final class mudclient implements Runnable {
 	private static final int VOID_RUSH_ARENA_MAX_X = 522;
 	private static final int VOID_RUSH_ARENA_MAX_Y = 86;
 	private static final int VOID_RUSH_WAVE_VISUAL_MILLIS = 640;
+	static final int VOID_RIFT_OBJECT_ID = 1306;
+	private static final int VOID_RIFT_EFFECT_Y_OFFSET = 7;
+	private static final int VOID_RIFT_GROUND_MODEL_Y_LIFT = 8;
+	private static final int VOID_RIFT_GROUND_MODEL_RADIUS = 80;
+	private static final int VOID_RIFT_GROUND_MODEL_INNER_RADIUS = 34;
+	private static final int VOID_RIFT_GROUND_MODEL_MID_RADIUS = 64;
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_INNER_RADIUS = 88;
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_TOP_RADIUS = 98;
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_OUTER_RADIUS = 108;
+	private static final int VOID_RIFT_GROUND_MODEL_SEGMENTS = 64;
+	private static final int VOID_RIFT_GROUND_MODEL_CORE_COLOR = GenUtil.colorToResource(12, 0, 24);
+	private static final int VOID_RIFT_GROUND_MODEL_MID_COLOR = GenUtil.colorToResource(62, 0, 106);
+	private static final int VOID_RIFT_GROUND_MODEL_EDGE_COLOR = GenUtil.colorToResource(28, 0, 50);
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_HIGHLIGHT_COLOR = GenUtil.colorToResource(88, 20, 128);
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_TOP_COLOR = GenUtil.colorToResource(34, 28, 42);
+	private static final int VOID_RIFT_GROUND_MODEL_BORDER_SHADOW_COLOR = GenUtil.colorToResource(12, 9, 18);
+	private static final int VOID_RIFT_GROUND_SWIRL_RADIUS = 74;
 	private static final int VOID_STARTER_MIN_X = 16;
 	private static final int VOID_STARTER_MAX_X = 32;
 	private static final int VOID_STARTER_MIN_Y = 17;
@@ -318,6 +335,8 @@ public final class mudclient implements Runnable {
 	private final int[] voidRushWaveMarkerProjection = new int[3];
 	private final int[] rareDropBeamBaseProjection = new int[3];
 	private final int[] rareDropBeamTopProjection = new int[3];
+	private final int[] voidRiftCenterProjection = new int[3];
+	private final int[] voidRiftEdgeProjection = new int[3];
 
 	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
 	// appears below the minimap on hover.
@@ -3299,6 +3318,79 @@ public final class mudclient implements Runnable {
 		return model;
 	}
 
+	public RSModel createVoidRiftGroundModel(final int sceneX, final int sceneZ) {
+		final int[] radii = new int[]{
+			VOID_RIFT_GROUND_MODEL_INNER_RADIUS,
+			VOID_RIFT_GROUND_MODEL_MID_RADIUS,
+			VOID_RIFT_GROUND_MODEL_RADIUS,
+			VOID_RIFT_GROUND_MODEL_BORDER_INNER_RADIUS,
+			VOID_RIFT_GROUND_MODEL_BORDER_TOP_RADIUS,
+			VOID_RIFT_GROUND_MODEL_BORDER_OUTER_RADIUS
+		};
+		final int[] ringLifts = new int[]{
+			VOID_RIFT_GROUND_MODEL_Y_LIFT,
+			VOID_RIFT_GROUND_MODEL_Y_LIFT,
+			VOID_RIFT_GROUND_MODEL_Y_LIFT,
+			13,
+			17,
+			7
+		};
+		final RSModel model = new RSModel(VOID_RIFT_GROUND_MODEL_SEGMENTS * radii.length + 1,
+			VOID_RIFT_GROUND_MODEL_SEGMENTS * radii.length);
+		final int centerElevation = this.world == null ? 0 : this.world.getElevation(sceneX, sceneZ);
+		final int center = model.insertVertex(0, -VOID_RIFT_GROUND_MODEL_Y_LIFT, 0);
+		final int[][] rings = new int[radii.length][VOID_RIFT_GROUND_MODEL_SEGMENTS];
+		for (int ring = 0; ring < rings.length; ring++) {
+			for (int i = 0; i < rings[ring].length; i++) {
+				final double radians = i * Math.PI * 2.0D / VOID_RIFT_GROUND_MODEL_SEGMENTS;
+				final int radius = radii[ring] + getVoidRiftGroundModelWobble(i, ring);
+				final int localX = (int)Math.round(Math.cos(radians) * radius);
+				final int localZ = (int)Math.round(Math.sin(radians) * radius);
+				final int edgeElevation = this.world == null
+					? centerElevation
+					: this.world.getElevation(sceneX + localX, sceneZ + localZ);
+				final int localY = centerElevation - edgeElevation - ringLifts[ring];
+				rings[ring][i] = model.insertVertex(localX, localY, localZ);
+			}
+		}
+
+		for (int i = 0; i < VOID_RIFT_GROUND_MODEL_SEGMENTS; i++) {
+			final int next = (i + 1) % VOID_RIFT_GROUND_MODEL_SEGMENTS;
+			setVoidRiftGroundFacePick(model.insertFace(3, new int[]{center, rings[0][i], rings[0][next]},
+				VOID_RIFT_GROUND_MODEL_CORE_COLOR, VOID_RIFT_GROUND_MODEL_CORE_COLOR, false), model);
+			setVoidRiftGroundFacePick(model.insertFace(4, new int[]{rings[0][i], rings[1][i], rings[1][next], rings[0][next]},
+				VOID_RIFT_GROUND_MODEL_MID_COLOR, VOID_RIFT_GROUND_MODEL_MID_COLOR, false), model);
+			setVoidRiftGroundFacePick(model.insertFace(4, new int[]{rings[1][i], rings[2][i], rings[2][next], rings[1][next]},
+				VOID_RIFT_GROUND_MODEL_EDGE_COLOR, VOID_RIFT_GROUND_MODEL_EDGE_COLOR, false), model);
+			setVoidRiftGroundFacePick(model.insertFace(4, new int[]{rings[2][i], rings[3][i], rings[3][next], rings[2][next]},
+				VOID_RIFT_GROUND_MODEL_BORDER_HIGHLIGHT_COLOR, VOID_RIFT_GROUND_MODEL_BORDER_HIGHLIGHT_COLOR, false), model);
+			setVoidRiftGroundFacePick(model.insertFace(4, new int[]{rings[3][i], rings[4][i], rings[4][next], rings[3][next]},
+				VOID_RIFT_GROUND_MODEL_BORDER_TOP_COLOR, VOID_RIFT_GROUND_MODEL_BORDER_TOP_COLOR, false), model);
+			setVoidRiftGroundFacePick(model.insertFace(4, new int[]{rings[4][i], rings[5][i], rings[5][next], rings[4][next]},
+				VOID_RIFT_GROUND_MODEL_BORDER_SHADOW_COLOR, VOID_RIFT_GROUND_MODEL_BORDER_SHADOW_COLOR, false), model);
+		}
+		model.setDiffuseLightAndColor(-50, -10, -50, 48, 48, true, 117);
+		return model;
+	}
+
+	private static int getVoidRiftGroundModelWobble(final int segment, final int ring) {
+		if (ring == 0) {
+			return 0;
+		}
+		if (ring >= 3) {
+			return 0;
+		}
+		final double primary = Math.sin(segment * Math.PI / 12.0D + 0.7D) * (ring == 1 ? 1.0D : 2.0D);
+		final double secondary = Math.sin(segment * Math.PI / 5.3D + 1.4D) * (ring == 1 ? 0.5D : 1.0D);
+		return (int)Math.round(primary + secondary);
+	}
+
+	private static void setVoidRiftGroundFacePick(final int face, final RSModel model) {
+		if (face >= 0) {
+			model.facePickIndex[face] = 0;
+		}
+	}
+
 	final void draw() {
 		try {
 
@@ -4772,10 +4864,11 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidArenaDeathMatchDialogY() {
-		int y = Math.max(8, Math.min(36, (this.getGameHeight() - 262) / 2));
+		int dialogHeight = 224;
+		int y = Math.max(8, Math.min(36, (this.getGameHeight() - dialogHeight) / 2));
 		if (useVoidscapeHudSkin()) {
 			int topClearance = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 6 : 8);
-			int maxY = Math.max(8, this.getGameHeight() - 282 - 8);
+			int maxY = Math.max(8, this.getGameHeight() - dialogHeight - 8);
 			y = Math.min(maxY, Math.max(y, topClearance));
 		}
 		return y;
@@ -4878,33 +4971,33 @@ public final class mudclient implements Runnable {
 		int localY = this.mouseY - y;
 		consumeVoidArenaDialogClick();
 
-		if (localX < 0 || localY < 0 || localX > 468 || localY > 262) {
+		if (localX < 0 || localY < 0 || localX > 468 || localY > 224) {
 			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
 			this.showDialogVoidArenaDeathMatch = false;
 			return;
 		}
 
 		if (this.voidArenaDeathMatchConfirmPhase) {
-			if (localX >= 83 && localX <= 188 && localY >= 238 && localY <= 259
+			if (localX >= 83 && localX <= 188 && localY >= 198 && localY <= 219
 				&& !this.voidArenaDeathMatchConfirmed) {
 				this.voidArenaDeathMatchConfirmed = true;
 				sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_CONFIRM);
 				return;
 			}
-			if (localX >= 317 && localX <= 423 && localY >= 238 && localY <= 259) {
+			if (localX >= 317 && localX <= 423 && localY >= 198 && localY <= 219) {
 				sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
 				this.showDialogVoidArenaDeathMatch = false;
 			}
 			return;
 		}
 
-		if (localX >= 217 && localX <= 286 && localY >= 238 && localY <= 259
+		if (localX >= 217 && localX <= 286 && localY >= 198 && localY <= 219
 			&& !this.voidArenaDeathMatchAccepted) {
 			this.voidArenaDeathMatchAccepted = true;
 			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_ACCEPT);
 			return;
 		}
-		if (localX >= 394 && localX <= 463 && localY >= 238 && localY <= 259) {
+		if (localX >= 394 && localX <= 463 && localY >= 198 && localY <= 219) {
 			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
 			this.showDialogVoidArenaDeathMatch = false;
 			return;
@@ -4925,16 +5018,16 @@ public final class mudclient implements Runnable {
 			return;
 		}
 		if (!this.voidArenaDeathMatchRanked) {
-			if (voidArenaLegacyRowHit(x, y, 137)) {
+			if (voidArenaLegacyRowHit(x, y, 130)) {
 				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
 				sendVoidArenaDeathMatchRules();
-			} else if (voidArenaLegacyRowHit(x, y, 153)) {
+			} else if (voidArenaLegacyRowHit(x, y, 146)) {
 				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
 				sendVoidArenaDeathMatchRules();
-			} else if (voidArenaLegacyRowHit(x, y, 169)) {
+			} else if (voidArenaLegacyRowHit(x, y, 162)) {
 				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
 				sendVoidArenaDeathMatchRules();
-			} else if (voidArenaLegacyRowHit(x, y, 185)) {
+			} else if (voidArenaLegacyRowHit(x, y, 178)) {
 				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
 				sendVoidArenaDeathMatchRules();
 			}
@@ -4949,88 +5042,64 @@ public final class mudclient implements Runnable {
 
 		if (this.voidArenaDeathMatchConfirmPhase) {
 			this.getSurface().drawBox(x, y, 468, 16, 192);
-			this.getSurface().drawBoxAlpha(x, y + 16, 468, 246, colorA, 160);
+			this.getSurface().drawBoxAlpha(x, y + 16, 468, 208, colorA, 160);
 			this.getSurface().drawColoredStringCentered(x + 234,
 				"Please confirm your Death Match with @yel@" + this.voidArenaDeathMatchTargetName,
 				0xFFFFFF, 0, 1, y + 12);
-			this.getSurface().drawColoredStringCentered(x + 117, "Death Match rules:", 0xFFFF00, 0, 1, y + 30);
+			this.getSurface().drawBoxAlpha(x + 16, y + 32, 202, 120, colorB, 175);
+			this.getSurface().drawBoxAlpha(x + 250, y + 32, 202, 120, colorB, 175);
+			this.getSurface().drawColoredStringCentered(x + 117, "Death Match rules", 0xFFFF00, 0, 1, y + 48);
 			this.getSurface().drawColoredStringCentered(x + 117, voidArenaDeathMatchModeText(),
-				0xFFFFFF, 0, 1, y + 48);
+				0xFFFFFF, 0, 1, y + 66);
 			this.getSurface().drawColoredStringCentered(x + 117,
 				this.voidArenaDeathMatchF2pOnly ? "F2P gear only" : "P2P gear allowed",
-				0xFFFFFF, 0, 1, y + 64);
+				0xFFFFFF, 0, 1, y + 84);
 			this.getSurface().drawColoredStringCentered(x + 117,
 				"Prayer " + (this.voidArenaDeathMatchAllowPrayer ? "on" : "off"),
-				this.voidArenaDeathMatchAllowPrayer ? 0xFFFFFF : 0xFF0000, 0, 1, y + 80);
+				this.voidArenaDeathMatchAllowPrayer ? 0xFFFFFF : 0xFF0000, 0, 1, y + 102);
 			this.getSurface().drawColoredStringCentered(x + 117,
 				"Ranged " + (this.voidArenaDeathMatchAllowRanged ? "on" : "off"),
-				this.voidArenaDeathMatchAllowRanged ? 0xFFFFFF : 0xFF0000, 0, 1, y + 96);
+				this.voidArenaDeathMatchAllowRanged ? 0xFFFFFF : 0xFF0000, 0, 1, y + 120);
 			this.getSurface().drawColoredStringCentered(x + 117,
 				"Magic " + (this.voidArenaDeathMatchAllowMagic ? "on" : "off"),
-				this.voidArenaDeathMatchAllowMagic ? 0xFFFFFF : 0xFF0000, 0, 1, y + 112);
-			this.getSurface().drawColoredStringCentered(x + 351, "Before combat:", 0xFFFF00, 0, 1, y + 30);
-			this.getSurface().drawColoredStringCentered(x + 351, "Both fighters heal to full",
-				0xFFFFFF, 0, 1, y + 48);
-			this.getSurface().drawColoredStringCentered(x + 351, "5 second countdown",
-				0xFFFFFF, 0, 1, y + 64);
+				this.voidArenaDeathMatchAllowMagic ? 0xFFFFFF : 0xFF0000, 0, 1, y + 138);
+			this.getSurface().drawColoredStringCentered(x + 351, "Time limit", 0xFFFF00, 0, 1, y + 76);
 			this.getSurface().drawColoredStringCentered(x + 351,
 				this.voidArenaDeathMatchRanked ? "10 minute ranked cap" : "5 minute unranked cap",
-				0xFFFFFF, 0, 1, y + 80);
+				0xFFFFFF, 0, 1, y + 98);
 			this.getSurface().drawColoredStringCentered(x + 234,
 				"Are you sure you want to do this?",
-				0xFFFF00, 0, 4, y + 200);
+				0xFFFF00, 0, 4, y + 164);
 			this.getSurface().drawColoredStringCentered(x + 234,
 				"This is wilderness-style combat. No staking is involved.",
-				0xFFFFFF, 0, 1, y + 215);
+				0xFFFFFF, 0, 1, y + 180);
 			this.getSurface().drawColoredStringCentered(x + 234,
 				"If you are sure click 'Accept' to begin.",
-				0xFFFFFF, 0, 1, y + 230);
+				0xFFFFFF, 0, 1, y + 194);
 			if (!this.voidArenaDeathMatchConfirmed) {
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 83, y + 238);
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 317, y + 238);
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 83, y + 198);
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 317, y + 198);
 			} else {
 				this.getSurface().drawColoredStringCentered(x + 234, "Waiting for other player...", 0xFFFF00, 0, 1,
-					y + 250);
+					y + 212);
 			}
 			return;
 		}
 
 		this.getSurface().drawBox(x, y, 468, 12, 192);
 		this.getSurface().drawBoxAlpha(x, y + 12, 468, 18, colorA, 160);
-		this.getSurface().drawBoxAlpha(x, y + 30, 8, 248, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 205, y + 30, 11, 248, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 462, y + 30, 6, 248, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 8, y + 99, 197, 24, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 8, y + 192, 197, 23, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 8, y + 258, 197, 20, colorA, 160);
-		this.getSurface().drawBoxAlpha(x + 216, y + 235, 246, 43, colorA, 160);
+		this.getSurface().drawBoxAlpha(x, y + 30, 8, 194, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 205, y + 30, 11, 194, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 462, y + 30, 6, 194, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 99, 197, 17, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 194, 454, 30, colorA, 160);
 		this.getSurface().drawBoxAlpha(x + 8, y + 30, 197, 69, colorB, 160);
-		this.getSurface().drawBoxAlpha(x + 8, y + 123, 197, 69, colorB, 160);
-		this.getSurface().drawBoxAlpha(x + 8, y + 215, 197, 43, colorB, 160);
-		this.getSurface().drawBoxAlpha(x + 216, y + 30, 246, 205, colorB, 160);
-		for (int i = 0; i < 3; ++i) {
-			this.getSurface().drawLineHoriz(x + 8, y + 30 + i * 34, 197, 0);
-			this.getSurface().drawLineHoriz(x + 8, y + 123 + i * 34, 197, 0);
-		}
-		for (int i = 0; i < 7; ++i) {
-			this.getSurface().drawLineHoriz(x + 216, y + 30 + i * 34, 246, 0);
-		}
-		for (int i = 0; i < 6; ++i) {
-			if (i < 5) {
-				this.getSurface().drawLineVert(x + 8 + i * 49, y + 30, 0, 69);
-				this.getSurface().drawLineVert(x + 8 + i * 49, y + 123, 0, 69);
-			}
-			this.getSurface().drawLineVert(x + 216 + i * 49, y + 30, 0, 205);
-		}
-		this.getSurface().drawLineHoriz(x + 8, y + 215, 197, 0);
-		this.getSurface().drawLineHoriz(x + 8, y + 257, 197, 0);
-		this.getSurface().drawLineVert(x + 8, y + 215, 0, 43);
-		this.getSurface().drawLineVert(x + 204, y + 215, 0, 43);
+		this.getSurface().drawBoxAlpha(x + 8, y + 116, 197, 78, colorB, 160);
+		this.getSurface().drawBoxAlpha(x + 216, y + 30, 246, 164, colorB, 160);
 		this.getSurface().drawString("Preparing Death Match with: " + this.voidArenaDeathMatchTargetName,
 			x + 1, y + 10, 0xFFFFFF, 1);
 		this.getSurface().drawString("Match Type", x + 9, y + 27, 0xFFFFFF, 4);
-		this.getSurface().drawString("Combat Rules", x + 9, y + 120, 0xFFFFFF, 4);
-		this.getSurface().drawString("Arena Rules", x + 9, y + 212, 0xFFFFFF, 4);
+		this.getSurface().drawString("Combat Rules", x + 9, y + 113, 0xFFFFFF, 4);
 		this.getSurface().drawString("Match Summary", x + 216, y + 27, 0xFFFFFF, 4);
 
 		this.getSurface().drawString("Ranked match", x + 9, y + 58,
@@ -5041,49 +5110,43 @@ public final class mudclient implements Runnable {
 		drawVoidArenaLegacyCheckbox(x + 185, y + 69, !this.voidArenaDeathMatchRanked, false);
 
 		if (this.voidArenaDeathMatchRanked) {
-			this.getSurface().drawString("Ranked rules are locked", x + 9, y + 137, 0xFFFF00, 3);
-			this.getSurface().drawString("Requires 99 melee and Hits", x + 9, y + 153, 0xFFFFFF, 1);
+			this.getSurface().drawString("Ranked rules are locked", x + 9, y + 130, 0xFFFF00, 3);
+			this.getSurface().drawString("Requires 99 melee and Hits", x + 9, y + 148, 0xFFFFFF, 1);
 		} else {
-			this.getSurface().drawString("F2P only", x + 9, y + 137, 0xFFFF00, 3);
-			drawVoidArenaLegacyCheckbox(x + 185, y + 126, this.voidArenaDeathMatchF2pOnly, false);
-			this.getSurface().drawString("Prayer", x + 9, y + 153, 0xFFFF00, 3);
-			drawVoidArenaLegacyCheckbox(x + 185, y + 142, this.voidArenaDeathMatchAllowPrayer, false);
-			this.getSurface().drawString("Ranged", x + 9, y + 169, 0xFFFF00, 3);
-			drawVoidArenaLegacyCheckbox(x + 185, y + 158, this.voidArenaDeathMatchAllowRanged, false);
-			this.getSurface().drawString("Magic", x + 9, y + 185, 0xFFFF00, 3);
-			drawVoidArenaLegacyCheckbox(x + 185, y + 174, this.voidArenaDeathMatchAllowMagic, false);
+			this.getSurface().drawString("F2P only", x + 9, y + 130, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 119, this.voidArenaDeathMatchF2pOnly, false);
+			this.getSurface().drawString("Prayer", x + 9, y + 146, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 135, this.voidArenaDeathMatchAllowPrayer, false);
+			this.getSurface().drawString("Ranged", x + 9, y + 162, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 151, this.voidArenaDeathMatchAllowRanged, false);
+			this.getSurface().drawString("Magic", x + 9, y + 178, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 167, this.voidArenaDeathMatchAllowMagic, false);
 		}
-		this.getSurface().drawString("Heal to full", x + 9, y + 231, 0xFFFF00, 3);
-		drawVoidArenaLegacyCheckbox(x + 93, y + 220, true, false);
-		this.getSurface().drawString("Countdown", x + 102, y + 231, 0xFFFF00, 3);
-		drawVoidArenaLegacyCheckbox(x + 191, y + 220, true, false);
-
 		this.getSurface().drawColoredStringCentered(x + 339, voidArenaDeathMatchModeText(), 0xFFFF00, 0, 1, y + 58);
 		this.getSurface().drawColoredStringCentered(x + 339,
-			this.voidArenaDeathMatchF2pOnly ? "F2P gear only" : "P2P gear allowed", 0xFFFFFF, 0, 1, y + 86);
+			this.voidArenaDeathMatchF2pOnly ? "F2P gear only" : "P2P gear allowed", 0xFFFFFF, 0, 1, y + 84);
 		this.getSurface().drawColoredStringCentered(x + 339,
 			"Prayer " + (this.voidArenaDeathMatchAllowPrayer ? "on" : "off"),
-			0xFFFFFF, 0, 1, y + 112);
+			0xFFFFFF, 0, 1, y + 110);
 		this.getSurface().drawColoredStringCentered(x + 339,
 			"Ranged " + (this.voidArenaDeathMatchAllowRanged ? "on" : "off"),
-			0xFFFFFF, 0, 1, y + 134);
+			0xFFFFFF, 0, 1, y + 136);
 		this.getSurface().drawColoredStringCentered(x + 339,
-			"Magic " + (this.voidArenaDeathMatchAllowMagic ? "on" : "off"), 0xFFFFFF, 0, 1, y + 156);
-		this.getSurface().drawColoredStringCentered(x + 339, "Heal to full before and after", 0xFFFFFF, 0, 1, y + 188);
+			"Magic " + (this.voidArenaDeathMatchAllowMagic ? "on" : "off"), 0xFFFFFF, 0, 1, y + 162);
 		this.getSurface().drawColoredStringCentered(x + 339,
 			this.voidArenaDeathMatchRanked ? "10 minute ranked cap" : "5 minute unranked cap",
-			0xFFFFFF, 0, 1, y + 210);
+			0xFFFFFF, 0, 1, y + 188);
 
 		if (!this.voidArenaDeathMatchAccepted) {
-			this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 217, y + 238);
+			this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 217, y + 199);
 		} else {
-			this.getSurface().drawColoredStringCentered(x + 252, "Waiting for", 0xFFFFFF, 0, 1, y + 246);
-			this.getSurface().drawColoredStringCentered(x + 252, "other player", 0xFFFFFF, 0, 1, y + 256);
+			this.getSurface().drawColoredStringCentered(x + 252, "Waiting for", 0xFFFFFF, 0, 1, y + 207);
+			this.getSurface().drawColoredStringCentered(x + 252, "other player", 0xFFFFFF, 0, 1, y + 217);
 		}
-		this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 394, y + 238);
+		this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 394, y + 199);
 		if (this.voidArenaDeathMatchOpponentAccepted) {
-			this.getSurface().drawColoredStringCentered(x + 341, "Other player", 0xFFFFFF, 0, 1, y + 246);
-			this.getSurface().drawColoredStringCentered(x + 341, "has accepted", 0xFFFFFF, 0, 1, y + 256);
+			this.getSurface().drawColoredStringCentered(x + 341, "Other player", 0xFFFFFF, 0, 1, y + 207);
+			this.getSurface().drawColoredStringCentered(x + 341, "has accepted", 0xFFFFFF, 0, 1, y + 217);
 		}
 	}
 
@@ -5192,14 +5255,6 @@ public final class mudclient implements Runnable {
 					}
 				}
 				int shortcutWidth = S_WANT_KEYBOARD_SHORTCUTS > 1 ? 24 : 9;
-				int menuWidth = 0;
-				for (var2 = 0; var2 < this.optionsMenuCount; ++var2) {
-					menuWidth = Math.max(menuWidth, this.getSurface().stringWidth(1, this.optionsMenuText[var2]) + shortcutWidth);
-				}
-				if (C_CUSTOM_UI && useVoidscapeHudSkin() && this.mouseButtonClick == 0) {
-					this.getSurface().drawBoxAlpha(2, startY, Math.min(menuWidth + 12, this.getGameWidth() - 4),
-						this.optionsMenuCount * rowHeight + 6, 0x080510, 190);
-				}
 				if (this.mouseButtonClick == 0) {
 					// Draw
 					var2 = 0;
@@ -7189,6 +7244,7 @@ public final class mudclient implements Runnable {
 						drawWorldWalkSceneRoute();
 					}
 					drawRareDropBeams();
+					drawVoidRifts();
 					drawVoidStarterIntroBeams();
 					this.advanceCinematicCameraPath();
 
@@ -8755,6 +8811,166 @@ public final class mudclient implements Runnable {
 
 			drawRareDropBeam(i, this.rareDropBeamBaseProjection, this.rareDropBeamTopProjection);
 		}
+	}
+
+	private void drawVoidRifts() {
+		if (this.getSurface() == null || this.world == null || this.scene == null) {
+			return;
+		}
+
+		for (int i = 0; i < this.gameObjectInstanceCount; i++) {
+			if (this.gameObjectInstanceID[i] != VOID_RIFT_OBJECT_ID) {
+				continue;
+			}
+
+			final GameObjectDef def = EntityHandler.getObjectDef(VOID_RIFT_OBJECT_ID);
+			if (def == null) {
+				continue;
+			}
+
+			final int dir = this.gameObjectInstanceDir[i];
+			final int xSize = (dir == 0 || dir == 4) ? def.getWidth() : def.getHeight();
+			final int zSize = (dir == 0 || dir == 4) ? def.getHeight() : def.getWidth();
+			final int sceneX = (2 * this.gameObjectInstanceX[i] + xSize) * this.tileSize / 2;
+			final int sceneZ = (2 * this.gameObjectInstanceZ[i] + zSize) * this.tileSize / 2;
+			final int baseY = -this.world.getElevation(sceneX, sceneZ) - VOID_RIFT_EFFECT_Y_OFFSET;
+			if (!this.scene.projectToScreen(sceneX, baseY, sceneZ, this.voidRiftCenterProjection)) {
+				continue;
+			}
+
+			drawVoidRiftPortal(i, sceneX, baseY, sceneZ);
+		}
+	}
+
+	private void drawVoidRiftPortal(final int index, final int sceneX, final int baseY, final int sceneZ) {
+		final MudClientGraphics surface = this.getSurface();
+		final int slowFrame = this.getFrameCounter();
+		final int phase = (slowFrame * 3 + index * 29) & 255;
+		final int pulsePhase = (slowFrame * 2 + index * 17) & 63;
+		final int pulse = pulsePhase < 32 ? pulsePhase : 63 - pulsePhase;
+
+		drawVoidRiftGroundFissures(surface, sceneX, sceneZ, index, phase, pulse);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_MODEL_RADIUS + 5,
+			-phase / 3, 256, 0x0A0011, 72 + pulse / 4);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_MODEL_RADIUS + 1,
+			phase / 2, 256, 0x9A45FF, 46 + pulse / 3);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS - 34,
+			-phase * 2 + 24, 132, 0xE3B5FF, 36 + pulse / 3);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS + 5,
+			phase, 88, 0xC46CFF, 88 + pulse);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS - 8,
+			phase + 96, 72, 0x7B2DE0, 70 + pulse / 2);
+		drawVoidRiftGroundArc(surface, sceneX, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS - 22,
+			-phase + 40, 64, 0x381066, 58);
+		drawVoidRiftGroundSwirl(surface, sceneX, baseY, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS - 6,
+			phase, 0xD8A2FF, 76 + pulse / 2);
+		drawVoidRiftGroundSwirl(surface, sceneX, baseY, sceneZ, VOID_RIFT_GROUND_SWIRL_RADIUS - 20,
+			-phase + 80, 0x7E32E6, 52 + pulse / 3);
+		drawVoidRiftSparkles(surface, sceneX, sceneZ, index, slowFrame, phase, pulse);
+	}
+
+	private void drawVoidRiftGroundFissures(final MudClientGraphics surface, final int sceneX, final int sceneZ,
+											final int index, final int phase, final int pulse) {
+		for (int fissure = 0; fissure < 7; fissure++) {
+			final int baseAngle = index * 19 + fissure * 37 + ((fissure & 1) == 0 ? 9 : -11);
+			final int flicker = (phase + fissure * 29) & 31;
+			final int extension = 14 + (flicker < 16 ? flicker / 2 : (31 - flicker) / 2);
+			final int startRadius = VOID_RIFT_GROUND_MODEL_RADIUS - 8 + (fissure % 3) * 3;
+			final int endRadius = VOID_RIFT_GROUND_MODEL_RADIUS + extension + fissure % 2 * 5;
+			final int alpha = Math.max(22, 48 + pulse / 2 - fissure * 3);
+			boolean previousProjected = false;
+			int previousX = 0;
+			int previousY = 0;
+			for (int step = 0; step <= 4; step++) {
+				final int radius = startRadius + (endRadius - startRadius) * step / 4;
+				final int bend = ((step & 1) == 0 ? -4 : 5) + fissure % 3 - 1;
+				if (!projectVoidRiftGroundPoint(sceneX, sceneZ, radius, baseAngle + bend, this.voidRiftEdgeProjection)) {
+					previousProjected = false;
+					continue;
+				}
+				if (previousProjected) {
+					final int fade = Math.max(16, alpha * (5 - step) / 5);
+					surface.drawLineAlpha(previousX, previousY, this.voidRiftEdgeProjection[0],
+						this.voidRiftEdgeProjection[1], 0x07000D, Math.min(110, fade + 36));
+					surface.drawLineAlpha(previousX, previousY, this.voidRiftEdgeProjection[0],
+						this.voidRiftEdgeProjection[1], fissure % 2 == 0 ? 0x7030B8 : 0x3E0B6B, fade);
+				}
+				previousX = this.voidRiftEdgeProjection[0];
+				previousY = this.voidRiftEdgeProjection[1];
+				previousProjected = true;
+			}
+		}
+	}
+
+	private void drawVoidRiftGroundArc(final MudClientGraphics surface, final int sceneX, final int sceneZ,
+									   final int radius, final int startPhase, final int phaseLength,
+									   final int color, final int alpha) {
+		boolean previousProjected = false;
+		int previousX = 0;
+		int previousY = 0;
+		for (int step = 0; step <= phaseLength; step += 2) {
+			final int angle = startPhase + step;
+			if (!projectVoidRiftGroundPoint(sceneX, sceneZ, radius, angle, this.voidRiftEdgeProjection)) {
+				previousProjected = false;
+				continue;
+			}
+			if (previousProjected) {
+				surface.drawLineAlpha(previousX, previousY, this.voidRiftEdgeProjection[0],
+					this.voidRiftEdgeProjection[1], color, alpha);
+			}
+			previousX = this.voidRiftEdgeProjection[0];
+			previousY = this.voidRiftEdgeProjection[1];
+			previousProjected = true;
+		}
+	}
+
+	private void drawVoidRiftGroundSwirl(final MudClientGraphics surface, final int sceneX, final int baseY,
+										 final int sceneZ, final int radius, final int phase,
+										 final int color, final int alpha) {
+		for (int arm = 0; arm < 3; arm++) {
+			if (!this.scene.projectToScreen(sceneX, baseY, sceneZ, this.voidRiftCenterProjection)) {
+				return;
+			}
+			int previousX = this.voidRiftCenterProjection[0];
+			int previousY = this.voidRiftCenterProjection[1];
+			for (int step = 1; step <= 10; step++) {
+				final int angle = phase + arm * 85 + step * 18;
+				final int amount = 18 + step * 22;
+				final int stepRadius = radius * amount / 256;
+				if (!projectVoidRiftGroundPoint(sceneX, sceneZ, stepRadius, angle, this.voidRiftEdgeProjection)) {
+					continue;
+				}
+				surface.drawLineAlpha(previousX, previousY, this.voidRiftEdgeProjection[0],
+					this.voidRiftEdgeProjection[1], color, Math.max(18, alpha * (11 - step) / 11));
+				previousX = this.voidRiftEdgeProjection[0];
+				previousY = this.voidRiftEdgeProjection[1];
+			}
+		}
+	}
+
+	private void drawVoidRiftSparkles(final MudClientGraphics surface, final int sceneX, final int sceneZ,
+									  final int index, final int slowFrame, final int phase, final int pulse) {
+		for (int sparkle = 0; sparkle < 5; sparkle++) {
+			final int twinkle = (slowFrame * (sparkle + 2) + index * 17 + sparkle * 23) & 63;
+			final int twinkleAmount = twinkle < 32 ? twinkle : 63 - twinkle;
+			final int alpha = Math.max(18, 30 + twinkleAmount + pulse / 4 - sparkle * 3);
+			final int radius = 28 + ((sparkle * 17 + slowFrame / 3) % 55);
+			final int angle = phase / 2 + sparkle * 49 + ((sparkle & 1) == 0 ? slowFrame / 4 : -slowFrame / 5);
+			if (!projectVoidRiftGroundPoint(sceneX, sceneZ, radius, angle, this.voidRiftEdgeProjection)) {
+				continue;
+			}
+			drawRareDropSparkle(surface, this.voidRiftEdgeProjection[0], this.voidRiftEdgeProjection[1],
+				sparkle == 0 ? 3 : 2, sparkle % 2 == 0 ? 0xC783FF : 0x8E4BFF, alpha);
+		}
+	}
+
+	private boolean projectVoidRiftGroundPoint(final int sceneX, final int sceneZ, final int radius,
+											   final int phase, final int[] projection) {
+		final double radians = phase * Math.PI / 128.0D;
+		final int pointX = sceneX + (int)(Math.cos(radians) * radius);
+		final int pointZ = sceneZ + (int)(Math.sin(radians) * radius);
+		final int pointY = -this.world.getElevation(pointX, pointZ) - VOID_RIFT_EFFECT_Y_OFFSET;
+		return this.scene.projectToScreen(pointX, pointY, pointZ, projection);
 	}
 
 	private void drawVoidStarterIntroBeams() {

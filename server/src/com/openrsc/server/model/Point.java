@@ -287,7 +287,11 @@ public class Point {
 	}
 
 	public boolean inVoidIsland() {
-		return inBounds(16, 17, 32, 42);
+		return inVoidIsland(x, y);
+	}
+
+	public static boolean inVoidIsland(int x, int y) {
+		return x >= 16 && x <= 32 && y >= 17 && y <= 42;
 	}
 
 	public boolean inVoidArena() {

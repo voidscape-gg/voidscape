@@ -14373,7 +14373,7 @@
     <width>2</width>
     <height>2</height>
     <groundItemVar>0</groundItemVar>
-    <objectModel>rockpool</objectModel>
+    <objectModel>voidriftportal</objectModel>
   </GameObjectDef>
   <GameObjectDef>
     <name>Void Colossus</name>

@@ -1620,8 +1620,13 @@ public class PacketHandler {
 					int tileSize = mc.getTileSize();
 					int xWorld = (xTile * 2 + xSize) * tileSize / 2;
 					int zWorld = (zTile * 2 + zSize) * tileSize / 2;
-					int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
-					RSModel m = mc.getModelCacheItem(modelIndex).clone();
+					RSModel m;
+					if (id == mudclient.VOID_RIFT_OBJECT_ID) {
+						m = mc.createVoidRiftGroundModel(xWorld, zWorld);
+					} else {
+						int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
+						m = mc.getModelCacheItem(modelIndex).clone();
+					}
 					mc.getScene().addModel(m);
 					m.key = mc.getGameObjectInstanceCount();
 					m.addRotation(0, dir * 32, 0);

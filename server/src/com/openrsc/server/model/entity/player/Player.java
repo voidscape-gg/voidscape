@@ -3360,6 +3360,9 @@ public final class Player extends Mob {
 	}
 
 	private void teleport(final int x, final int y, final boolean bubble, final boolean bypassVoidArenaCheck) {
+		if (VoidPath.blocksLeavingStarterIsland(this, x, y)) {
+			return;
+		}
 		if (!bypassVoidArenaCheck && getWorld().getVoidArena().blocksTeleport(this)) {
 			return;
 		}

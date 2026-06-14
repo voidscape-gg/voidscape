@@ -3,6 +3,7 @@ package com.openrsc.server.content;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.external.ItemDefinition;
+import com.openrsc.server.model.Point;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -60,11 +61,31 @@ public final class VoidPath {
 	}
 
 	public static boolean inLegacyVoidIsland(Player player) {
-		return player != null
-			&& player.getX() >= LEGACY_VOID_ISLAND_MIN_X
-			&& player.getX() <= LEGACY_VOID_ISLAND_MAX_X
-			&& player.getY() >= LEGACY_VOID_ISLAND_MIN_Y
-			&& player.getY() <= LEGACY_VOID_ISLAND_MAX_Y;
+		return player != null && inLegacyVoidIsland(player.getX(), player.getY());
+	}
+
+	public static boolean inStarterIsland(int x, int y) {
+		return Point.inVoidIsland(x, y) || inLegacyVoidIsland(x, y);
+	}
+
+	public static boolean blocksLeavingStarterIsland(Player player, int destinationX, int destinationY) {
+		if (player == null
+			|| hasChosen(player)
+			|| !inStarterIsland(player.getX(), player.getY())
+			|| inStarterIsland(destinationX, destinationY)) {
+			return false;
+		}
+
+		player.resetPath();
+		player.message("@mag@The Void Council prevents you from leaving until you choose a path.");
+		return true;
+	}
+
+	private static boolean inLegacyVoidIsland(int x, int y) {
+		return x >= LEGACY_VOID_ISLAND_MIN_X
+			&& x <= LEGACY_VOID_ISLAND_MAX_X
+			&& y >= LEGACY_VOID_ISLAND_MIN_Y
+			&& y <= LEGACY_VOID_ISLAND_MAX_Y;
 	}
 
 	public static boolean shouldRouteToVoidIsland(Player player) {

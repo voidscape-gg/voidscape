@@ -10,6 +10,7 @@ Voidscape routes new accounts to a small Void Island after appearance creation. 
 - `void_intro_seen` records that the Void Council intro finished. If a new player disconnects before the sequence ends, the intro plays again on their next login.
 - `PlayerAppearanceUpdater` sends unchosen new accounts to the council clearing after appearance submission.
 - `LoginPacketHandler` routes unchosen accounts saved on Tutorial Island, Tutorial Landing, the legacy Void Island bounds, or the current starter island back to the appropriate starter entry point.
+- While `void_path` is unset and the player is on Void Island, the shared server teleport path blocks any destination outside the starter island. This keeps spells, commands, object teleports, and other escape routes from skipping the path choice.
 
 ## Council Intro
 

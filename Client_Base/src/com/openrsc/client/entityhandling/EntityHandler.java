@@ -7200,7 +7200,7 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void waystone", "A humming marker pointed toward Edgeville", "Return", "Examine", 0, 1, 1, 0, "obelisk", ++i)); //1303
 		objects.add(new GameObjectDef("Void chest", "A void-bound chest humming with stolen wilderness power", "Open", "Examine", 1, 1, 1, 0, "VoidChestClosed", ++i)); //1304
 		objects.add(new GameObjectDef("Void chest", "The void chest hangs open", "WalkTo", "Examine", 1, 1, 1, 0, "VoidChestOpen", ++i)); //1305
-		objects.add(new GameObjectDef("Void Rift", "A cosmic portal", "Enter", "Examine", 1, 2, 2, 0, "rockpool", ++i)); //1306
+		objects.add(new GameObjectDef("Void Rift", "A cosmic portal", "Enter", "Examine", 1, 2, 2, 0, "voidriftportal", ++i)); //1306
 		objects.add(new GameObjectDef("Void Colossus", "A rift pedestal binding the Colossus to the shattered plaza", "Attack", "Examine", 0, 4, 4, 0, "voidcolossus3d", ++i)); //1307
 		objects.add(new GameObjectDef("Void shard charge", "A burst of void energy gathering into a shard", "WalkTo", "Examine", 0, 1, 1, 0, "voidshardcharge", ++i)); //1308
 		objects.add(new GameObjectDef("Void claw charge", "A clawed void sigil tearing into shape", "WalkTo", "Examine", 0, 1, 1, 0, "voidclawcharge", ++i)); //1309
