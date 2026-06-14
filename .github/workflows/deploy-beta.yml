@@ -1,0 +1,133 @@
+name: Deploy beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_mode:
+        description: Deploy only launcher/client assets, or deploy server plus launcher/client assets
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - client-only
+
+permissions:
+  contents: read
+
+env:
+  GAME_HOST: 5.161.114.251
+  GAME_PORT: "43596"
+  UPDATE_BASE_URL: https://voidscape.5.161.114.251.sslip.io/voidscape/update
+  LAUNCHER_URL: https://voidscape.5.161.114.251.sslip.io/voidscape/VoidscapeLauncher.jar
+  REMOTE_WEB_ROOT: /var/www/html/voidscape
+  REMOTE_GAME_ROOT: /opt/voidscape
+
+jobs:
+  deploy:
+    name: Build and publish beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Install build and deploy tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ant rsync openssh-client
+
+      - name: Build game and launcher
+        run: |
+          touch .env
+          scripts/build.sh
+
+      - name: Package launcher update
+        run: |
+          scripts/package-friend-beta.sh \
+            --skip-build \
+            --host "$GAME_HOST" \
+            --port "$GAME_PORT" \
+            --base-url "$UPDATE_BASE_URL"
+
+      - name: Prepare SSH
+        env:
+          BETA_HOST: ${{ secrets.BETA_HOST }}
+          BETA_USER: ${{ secrets.BETA_USER }}
+          BETA_SSH_KEY: ${{ secrets.BETA_SSH_KEY }}
+        run: |
+          test -n "$BETA_HOST"
+          test -n "$BETA_USER"
+          test -n "$BETA_SSH_KEY"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$BETA_SSH_KEY" > ~/.ssh/voidscape-beta
+          chmod 600 ~/.ssh/voidscape-beta
+          ssh-keyscan -H "$BETA_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload launcher update
+        env:
+          BETA_HOST: ${{ secrets.BETA_HOST }}
+          BETA_USER: ${{ secrets.BETA_USER }}
+        run: |
+          SSH=(ssh -i ~/.ssh/voidscape-beta -o StrictHostKeyChecking=yes)
+          RSYNC=(rsync -az -e "ssh -i ~/.ssh/voidscape-beta -o StrictHostKeyChecking=yes")
+
+          "${SSH[@]}" "$BETA_USER@$BETA_HOST" "mkdir -p '$REMOTE_WEB_ROOT/update'"
+          "${RSYNC[@]}" --exclude manifest.properties dist/friend-beta/update/ "$BETA_USER@$BETA_HOST:$REMOTE_WEB_ROOT/update/"
+          "${RSYNC[@]}" dist/friend-beta/update/manifest.properties "$BETA_USER@$BETA_HOST:$REMOTE_WEB_ROOT/update/manifest.properties"
+          "${RSYNC[@]}" dist/friend-beta/VoidscapeLauncher.jar "$BETA_USER@$BETA_HOST:$REMOTE_WEB_ROOT/VoidscapeLauncher.jar"
+
+      - name: Deploy server runtime
+        if: ${{ inputs.deploy_mode == 'full' }}
+        env:
+          BETA_HOST: ${{ secrets.BETA_HOST }}
+          BETA_USER: ${{ secrets.BETA_USER }}
+        run: |
+          SSH=(ssh -i ~/.ssh/voidscape-beta -o StrictHostKeyChecking=yes)
+          RSYNC=(rsync -az -e "ssh -i ~/.ssh/voidscape-beta -o StrictHostKeyChecking=yes")
+          STAGE="/tmp/voidscape-deploy-${GITHUB_SHA}"
+
+          "${SSH[@]}" "$BETA_USER@$BETA_HOST" "rm -rf '$STAGE' && mkdir -p '$STAGE/server/conf' '$STAGE/server/database'"
+          "${RSYNC[@]}" server/core.jar server/plugins.jar "$BETA_USER@$BETA_HOST:$STAGE/server/"
+          "${RSYNC[@]}" server/conf/ "$BETA_USER@$BETA_HOST:$STAGE/server/conf/"
+          "${RSYNC[@]}" server/database/ "$BETA_USER@$BETA_HOST:$STAGE/server/database/"
+
+          "${SSH[@]}" "$BETA_USER@$BETA_HOST" "STAGE='$STAGE' REMOTE_GAME_ROOT='$REMOTE_GAME_ROOT' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          BACKUP="$REMOTE_GAME_ROOT/backups/$(date -u +%Y%m%d%H%M%S)"
+          mkdir -p "$BACKUP"
+
+          systemctl stop voidscape
+
+          cp -a "$REMOTE_GAME_ROOT/server/core.jar" "$REMOTE_GAME_ROOT/server/plugins.jar" "$BACKUP"/ 2>/dev/null || true
+          cp -a "$REMOTE_GAME_ROOT/server/local.conf" "$REMOTE_GAME_ROOT/server/connections.conf" "$BACKUP"/ 2>/dev/null || true
+          if [ -d "$REMOTE_GAME_ROOT/server/inc/sqlite" ]; then
+            mkdir -p "$BACKUP/sqlite"
+            cp -a "$REMOTE_GAME_ROOT"/server/inc/sqlite/*.db "$BACKUP/sqlite"/ 2>/dev/null || true
+          fi
+
+          rsync -a "$STAGE/server/core.jar" "$STAGE/server/plugins.jar" "$REMOTE_GAME_ROOT/server/"
+          rsync -a --delete "$STAGE/server/conf/" "$REMOTE_GAME_ROOT/server/conf/"
+          rsync -a --delete "$STAGE/server/database/" "$REMOTE_GAME_ROOT/server/database/"
+          chown -R voidscape:voidscape "$REMOTE_GAME_ROOT/server/core.jar" "$REMOTE_GAME_ROOT/server/plugins.jar" "$REMOTE_GAME_ROOT/server/conf" "$REMOTE_GAME_ROOT/server/database"
+
+          systemctl start voidscape
+          sleep 5
+          systemctl is-active --quiet voidscape
+          journalctl -u voidscape --since "2 minutes ago" --no-pager | tail -120
+          rm -rf "$STAGE"
+          REMOTE
+
+      - name: Verify beta endpoints
+        run: |
+          curl -fsSI "$UPDATE_BASE_URL/manifest.properties"
+          curl -fsSI "$LAUNCHER_URL"
+          timeout 8 bash -c "</dev/tcp/$GAME_HOST/$GAME_PORT"
