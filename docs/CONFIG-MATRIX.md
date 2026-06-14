@@ -26,7 +26,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
 | `client_version` | `10099` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
-| `want_packet_register` | `false` | `false` | `false` | Portal-first account/character creation. |
+| `want_packet_register` | `true` | `true` for beta | Decide before public launch | Friend beta allows in-client account/character creation; the portal flow can still be used. |
 
 ## Portal account API
 

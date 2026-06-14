@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-14 - Beta in-client registration re-enabled
+
+Friend beta account creation now allows the desktop client registration packet again. The live VPS still owns `server/local.conf` outside git, so the `Deploy beta` full workflow normalizes `want_packet_register: true` on the remote config after backing it up and before restarting `voidscape`. This keeps launcher/VPS beta signups working without committing runtime secrets or the deployed `local.conf`.
+
 ### 2026-06-14 - Voidscape top-menu classic-width polish
 
 Narrowed the shared Voidscape top-menu glass panels back toward classic OpenRSC side-panel proportions while keeping them responsive: standard panels start at 196px on compact viewports and step up through larger widths as the screen preset grows, while Inventory keeps the classic grid-width frame. Open panels anchor under their active top-bar icon, start directly under the icon row, and only clamp when they would run off the right edge. Sub-header strips sit just inside the border, list/text content gains a viewport-aware inner inset, and the Stats panel now uses a real gutter between skill/equipment columns so typography does not converge at larger sizes. This is a draw/layout-only pass in `Client_Base/src/orsc/mudclient.java`; no packets, cache assets, schema, or gameplay behavior changed.

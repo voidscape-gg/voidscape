@@ -1,6 +1,6 @@
 # Voidscape Friend Beta Playtest Guide
 
-This beta flow is portal-first against one hosted Voidscape server: friends reserve/create their account and first character in the portal, claim the starter subscription card in-game, download the launcher, click Play, choose a starter path, and log in. Client packet registration is disabled for the public flow.
+This beta flow runs against one hosted Voidscape server: friends can create their account and first character directly in the desktop client, or use the portal flow to reserve/create the account, claim the starter subscription card in-game, download the launcher, click Play, choose a starter path, and log in.
 
 ## Host Setup
 
