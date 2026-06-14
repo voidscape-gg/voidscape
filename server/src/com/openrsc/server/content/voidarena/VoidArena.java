@@ -447,7 +447,7 @@ public final class VoidArena {
 			}
 			Player playerA = world.getPlayer(setup.playerAHash);
 			Player playerB = world.getPlayer(setup.playerBHash);
-			if (!canStartSetup(setup, playerA, playerB, player, true)) {
+			if (!canStartSetup(setup, playerA, playerB, player, true, false)) {
 				syncSetup(setup);
 				return;
 			}
@@ -482,7 +482,7 @@ public final class VoidArena {
 			}
 			Player playerA = world.getPlayer(setup.playerAHash);
 			Player playerB = world.getPlayer(setup.playerBHash);
-			if (!canStartSetup(setup, playerA, playerB, player, true)) {
+			if (!canStartSetup(setup, playerA, playerB, player, true, true)) {
 				syncSetup(setup);
 				return;
 			}
@@ -612,6 +612,11 @@ public final class VoidArena {
 
 	private boolean canStartSetup(DeathMatchSetup setup, Player playerA, Player playerB,
 								  Player messenger, boolean message) {
+		return canStartSetup(setup, playerA, playerB, messenger, message, true);
+	}
+
+	private boolean canStartSetup(DeathMatchSetup setup, Player playerA, Player playerB,
+								  Player messenger, boolean message, boolean checkLoadouts) {
 		if (playerA == null || playerB == null) {
 			if (message && messenger != null) messenger.message("That player is no longer online.");
 			return false;
@@ -640,8 +645,12 @@ public final class VoidArena {
 		if (setup.rules.ranked && (!hasRankedStats(playerA, message) || !hasRankedStats(playerB, message))) {
 			return false;
 		}
-		return !setup.rules.f2pOnly || (hasF2PLoadout(playerA, setup.rules.ranked)
-			&& hasF2PLoadout(playerB, setup.rules.ranked));
+		if (!checkLoadouts || !setup.rules.f2pOnly) {
+			return true;
+		}
+		boolean playerALoadoutValid = hasF2PLoadout(playerA, playerB, setup.rules.ranked);
+		boolean playerBLoadoutValid = hasF2PLoadout(playerB, playerA, setup.rules.ranked);
+		return playerALoadoutValid && playerBLoadoutValid;
 	}
 
 	private boolean supportsDeathMatchSetup(Player player) {
@@ -666,12 +675,16 @@ public final class VoidArena {
 		return true;
 	}
 
-	private boolean hasF2PLoadout(Player player, boolean ranked) {
+	private boolean hasF2PLoadout(Player player, Player opponent, boolean ranked) {
 		String prefix = ranked ? "Ranked Death Match" : "F2P Death Match";
 		synchronized (player.getCarriedItems().getInventory().getItems()) {
 			for (Item item : player.getCarriedItems().getInventory().getItems()) {
 				if (isMembersItem(player, item)) {
-					player.message(prefix + " allows F2P items only. Bank " + item.getDef(player.getWorld()).getName() + ".");
+					String itemName = item.getDef(player.getWorld()).getName();
+					player.message(prefix + " allows F2P items only. Bank " + itemName + ".");
+					if (opponent != null) {
+						opponent.message(player.getUsername() + " needs to bank " + itemName + " for this Death Match.");
+					}
 					return false;
 				}
 			}
@@ -679,7 +692,11 @@ public final class VoidArena {
 		synchronized (player.getCarriedItems().getEquipment().getList()) {
 			for (Item item : player.getCarriedItems().getEquipment().getList()) {
 				if (isMembersItem(player, item)) {
-					player.message(prefix + " allows F2P gear only. Remove " + item.getDef(player.getWorld()).getName() + ".");
+					String itemName = item.getDef(player.getWorld()).getName();
+					player.message(prefix + " allows F2P gear only. Remove " + itemName + ".");
+					if (opponent != null) {
+						opponent.message(player.getUsername() + " needs to remove " + itemName + " for this Death Match.");
+					}
 					return false;
 				}
 			}
