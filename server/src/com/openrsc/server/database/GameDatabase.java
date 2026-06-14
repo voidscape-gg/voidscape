@@ -256,6 +256,8 @@ public abstract class GameDatabase {
 
 	public abstract void querySavePlayerCache(int playerId, PlayerCache[] cache) throws GameDatabaseException;
 
+	public abstract void querySavePlayerCacheValue(int playerId, int type, String key, String value) throws GameDatabaseException;
+
 	public abstract void querySaveGlobalCacheInt(String cacheKey, int value) throws GameDatabaseException;
 
 	public abstract void querySaveGlobalCacheLong(String cacheKey, long value) throws GameDatabaseException;

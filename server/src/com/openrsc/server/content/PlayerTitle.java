@@ -104,6 +104,7 @@ public enum PlayerTitle {
 	NIGHTFINGER("nightfinger", "Nightfinger", "Reach level 90 Thieving.", RequirementType.SKILL_LEVEL, 90, Skill.THIEVING, TitleScope.UNIQUE),
 
 	VOIDBANE("voidbane", "Voidbane", "Defeat the Void Knight in the Death Match Arena.", RequirementType.MANUAL),
+	VOID_ARENA_CHAMPION("void_arena_champion", "Void Arena Champion", "Finish first in a Void Arena ranked season.", RequirementType.MANUAL),
 	VOIDWALKER("voidwalker", "Voidwalker", "Complete a major Voidscape encounter.", RequirementType.MANUAL),
 	VOID_TOUCHED("void_touched", "Void-Touched", "Earn a rare void-themed reward.", RequirementType.MANUAL),
 	AUCTIONEER("auctioneer", "Auctioneer", "Earn through auction house activity.", RequirementType.MANUAL),

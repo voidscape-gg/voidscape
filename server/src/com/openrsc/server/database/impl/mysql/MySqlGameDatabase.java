@@ -2216,6 +2216,28 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public void querySavePlayerCacheValue(final int playerId, final int type, final String key, final String value) throws GameDatabaseException {
+		final String deleteQuery = "DELETE FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` WHERE `playerID`=? AND `key`=?";
+		final String insertQuery = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "player_cache` (`playerID`, `type`, `key`, `value`) VALUES(?, ?, ?, ?)";
+		try (final PreparedStatement deleteStatement = getConnection().prepareStatement(deleteQuery);
+			 final PreparedStatement insertStatement = getConnection().prepareStatement(insertQuery)) {
+			deleteStatement.setInt(1, playerId);
+			deleteStatement.setString(2, key);
+			deleteStatement.executeUpdate();
+
+			insertStatement.setInt(1, playerId);
+			insertStatement.setInt(2, type);
+			insertStatement.setString(3, key);
+			insertStatement.setString(4, value);
+			insertStatement.executeUpdate();
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
 	public void querySaveGlobalCacheInt(final String cacheKey, final int value) throws GameDatabaseException {
 		final String deleteQuery = "DELETE FROM `" + getServer().getConfig().DB_TABLE_PREFIX
 			+ "player_cache` WHERE `playerID`=0 AND `key`=?";

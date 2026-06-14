@@ -160,7 +160,7 @@ public class MySqlQueries {
 		updateContactDetails = "UPDATE `" + PREFIX + "player_contact_details`" +
 			"SET `fullname`=?, `zipCode`=?, `country`=?, `email`=?, `date_modified`=?, `ip`=? WHERE `playerID`=?";
 		userToId = "SELECT DISTINCT `id` FROM `" + PREFIX + "players` WHERE `username` like ?";
-		idToUser = "SELECT DISTINCT `username` FROM `" + PREFIX + "players` WHERE `player_ID`=?";
+		idToUser = "SELECT DISTINCT `username` FROM `" + PREFIX + "players` WHERE `id`=?";
 		npcKillSelectAll = "SELECT * FROM `" + PREFIX + "npckills` WHERE playerID = ?";
 		npcKillSelect = "SELECT * FROM `" + PREFIX + "npckills` WHERE npcID = ? AND playerID = ?";
 		npcKillInsert = "INSERT INTO `" + PREFIX + "npckills`(killCount, npcID, playerID) VALUES (?, ?, ?)";

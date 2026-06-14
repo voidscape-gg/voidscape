@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-14 - Void Arena season champion title
+
+Void Arena ranked season resets now preserve a season winner before wiping ratings: the reset preview shows the visible champion candidate, confirmation aborts if that candidate changes before the token is used, and a successful reset records the current champion in global cache while unlocking the reusable `Void Arena Champion` player title for the winner even if they are offline. The leaderboard and admin season preview now show the current champion alongside the top ratings. This also fixes the shared player-id-to-username query to use the real `players.id` column, which the champion display path exercises. Files: `VoidArena.java`, `PlayerTitle.java`, and the shared database cache/query persistence hooks. No client packets, schema changes, or cache assets were added; reversibility is removing the champion cache/title award hooks and title enum entry.
+
 ### 2026-06-13 - Void Arena four-cage ranked hall
 
 Moved ranked Void Arena fights out of private instances and into a dedicated baked map sector at `h0x60y38`: four compact physical fight cages sit below a narrow public spectator hallway, with the Herald and bank chest in the hall and one prayer altar inside each cage. Cage perimeters use baked railings/jail bars instead of stone walls so spectators can visually read the matches. Ranked challenge acceptance now claims the first available cage, keeps both fighters in the public instance so spectators can watch, and still gates attacks so only assigned opponents can fight inside their assigned cage. The client lobby hitbox, server lobby/cage bounds, Herald/chest/altar locs, `Custom_Landscape.orsc` server/client copies, cache MD5, and the area plaque name were updated. No opcode, schema, or cache definition id changed; reversibility is restoring the old `VoidArenaConfig` coordinates/instancing behavior and removing the arena sector patch/loc updates.
