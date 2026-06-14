@@ -26,11 +26,20 @@ public final class VoidArena {
 	private static final int RULE_ALLOW_PRAYER = 1 << 2;
 	private static final int RULE_ALLOW_RANGED = 1 << 3;
 	private static final int RULE_ALLOW_MAGIC = 1 << 4;
+	private static final int ACTION_CHALLENGE = 0;
+	private static final int ACTION_DECLINE = 1;
+	private static final int ACTION_UPDATE_RULES = 2;
+	private static final int ACTION_ACCEPT = 3;
+	private static final int ACTION_CONFIRM = 4;
 	private static final int UNRANKED_MATCH_TIMEOUT_MS = 5 * 60 * 1000;
+	private static final int RANKED_MATCH_TIMEOUT_MS = 10 * 60 * 1000;
+	private static final int MATCH_COUNTDOWN_MS = 5 * 1000;
+	private static final int DEATH_MATCH_SETUP_CLIENT_VERSION = 10109;
 
 	private final World world;
 	private final Map<Long, Match> activeMatches = new ConcurrentHashMap<>();
 	private final Map<Long, Challenge> incomingChallenges = new ConcurrentHashMap<>();
+	private final Map<Long, DeathMatchSetup> activeSetups = new ConcurrentHashMap<>();
 	private final Map<Integer, VoidArenaStats> statsCache = new ConcurrentHashMap<>();
 
 	public VoidArena(World world) {
@@ -41,6 +50,9 @@ public final class VoidArena {
 		Match match = activeMatches.get(attacker.getUsernameHash());
 		if (match != null) {
 			if (match.contains(victim) && match.isInsideAssignedCage(attacker) && match.isInsideAssignedCage(victim)) {
+				if (!match.hasStarted()) {
+					return AttackCheck.deny("The Death Match has not started yet.");
+				}
 				if (missile && !match.rules.allowRanged) {
 					return AttackCheck.deny("Ranged is disabled for this Death Match.");
 				}
@@ -68,6 +80,9 @@ public final class VoidArena {
 		Match match = activeMatches.get(attacker.getUsernameHash());
 		if (match != null) {
 			if (match.contains(victim) && match.isInsideAssignedCage(attacker) && match.isInsideAssignedCage(victim)) {
+				if (!match.hasStarted()) {
+					return AttackCheck.deny("The Death Match has not started yet.");
+				}
 				return match.rules.allowMagic
 					? AttackCheck.allow()
 					: AttackCheck.deny("Magic is disabled for this Death Match.");
@@ -112,6 +127,8 @@ public final class VoidArena {
 	}
 
 	public void handleLogout(Player player) {
+		cancelSetup(player, true);
+		removeChallenges(player);
 		Match match = activeMatches.get(player.getUsernameHash());
 		if (match == null) {
 			sendRatingClear(player);
@@ -130,16 +147,35 @@ public final class VoidArena {
 	}
 
 	public void handleInterfaceOption(Player player, int action, int targetServerIndex, int ruleMask) {
-		Player target = world.getPlayer(targetServerIndex);
-		if (target == null || target.equals(player)) {
-			player.message("That player is not available for a Death Match.");
-			return;
+		switch (action) {
+			case ACTION_CHALLENGE: {
+				Player target = world.getPlayer(targetServerIndex);
+				if (target == null || target.equals(player)) {
+					player.message("That player is not available for a Death Match.");
+					return;
+				}
+				requestChallenge(player, target);
+				return;
+			}
+			case ACTION_DECLINE: {
+				Player target = world.getPlayer(targetServerIndex);
+				if (!cancelSetup(player, true) && target != null) {
+					cancelChallenge(player, target);
+				}
+				return;
+			}
+			case ACTION_UPDATE_RULES:
+				updateSetupRules(player, MatchRules.fromMask(ruleMask));
+				return;
+			case ACTION_ACCEPT:
+				acceptSetup(player);
+				return;
+			case ACTION_CONFIRM:
+				confirmSetup(player);
+				return;
+			default:
+				player.message("That Death Match option is not available.");
 		}
-		if (action == 1) {
-			cancelChallenge(player, target);
-			return;
-		}
-		challenge(player, target, MatchRules.fromMask(ruleMask));
 	}
 
 	public void handleCommand(Player player, String[] args) {
@@ -175,7 +211,7 @@ public final class VoidArena {
 				player.message("That player is not online.");
 				return;
 			}
-			challenge(player, target, MatchRules.ranked());
+			requestChallenge(player, target);
 			return;
 		}
 
@@ -201,6 +237,19 @@ public final class VoidArena {
 
 	public boolean isInsideLobby(Player player) {
 		return VoidArenaConfig.isInsideLobby(player.getLocation());
+	}
+
+	public boolean isInActiveMatch(Player player) {
+		return player != null && activeMatches.containsKey(player.getUsernameHash());
+	}
+
+	public boolean blocksTeleport(Player player) {
+		Match match = activeMatches.get(player.getUsernameHash());
+		if (match == null) {
+			return false;
+		}
+		player.message("You can't teleport during a Death Match.");
+		return true;
 	}
 
 	private int matchCount(VoidArenaStats stats) {
@@ -267,7 +316,7 @@ public final class VoidArena {
 			return;
 		}
 		player.setInstanceId(0);
-		player.teleport(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
 		restoreHits(player);
 		sendStats(player, player);
 		sendLobbyRatings(player);
@@ -283,33 +332,30 @@ public final class VoidArena {
 		sendRatingClear(player);
 		restoreHits(player);
 		player.setInstanceId(0);
-		player.teleport(VoidArenaConfig.EXIT_X, VoidArenaConfig.EXIT_Y, true);
+		player.teleportFromVoidArena(VoidArenaConfig.EXIT_X, VoidArenaConfig.EXIT_Y, true);
 	}
 
-	private void challenge(Player challenger, Player target, MatchRules rules) {
+	private void requestChallenge(Player challenger, Player target) {
 		Challenge reciprocal = incomingChallenges.get(challenger.getUsernameHash());
 		if (reciprocal != null && reciprocal.challengerHash == target.getUsernameHash() && !reciprocal.expired()) {
-			if (!canChallenge(challenger, target, reciprocal.rules)) {
+			if (!canOpenSetup(challenger, target, true)) {
 				return;
 			}
 			incomingChallenges.remove(challenger.getUsernameHash());
-			startMatch(target, challenger, reciprocal.rules);
+			openSetup(target, challenger);
 			return;
 		}
 
-		if (!canChallenge(challenger, target, rules)) {
+		if (!canOpenSetup(challenger, target, true)) {
 			return;
 		}
 
 		incomingChallenges.put(target.getUsernameHash(),
-			new Challenge(challenger.getUsernameHash(), target.getUsernameHash(), rules));
-		challenger.message("Death Match request sent to " + target.getUsername() + ": " + rules.title() + ".");
-		challenger.message("Rules: " + rules.summary() + ".");
+			new Challenge(challenger.getUsernameHash(), target.getUsernameHash()));
+		challenger.message("Death Match request sent to " + target.getUsername() + ".");
 		target.playerServerMessage(MessageType.QUEST,
-			"@mag@Death Match request from @whi@" + challenger.getUsername()
-				+ "@mag@: @yel@" + rules.title() + "@mag@.");
-		target.message(challenger.getUsername() + " challenged you to a " + rules.title() + ".");
-		target.message("Rules: " + rules.summary() + ".");
+			"@mag@Death Match request from @whi@" + challenger.getUsername() + "@mag@.");
+		target.message(challenger.getUsername() + " challenged you to a Death Match.");
 		target.message("Right-click " + challenger.getUsername() + " and choose Death Match to accept.");
 	}
 
@@ -321,36 +367,259 @@ public final class VoidArena {
 		}
 	}
 
-	private boolean canChallenge(Player challenger, Player target, MatchRules rules) {
+	private synchronized void openSetup(Player playerA, Player playerB) {
+		if (!canOpenSetup(playerA, playerB, true)) {
+			return;
+		}
+		MatchRules rules = (isRankedEligible(playerA) && isRankedEligible(playerB))
+			? MatchRules.ranked()
+			: MatchRules.unrankedDefault();
+		DeathMatchSetup setup = new DeathMatchSetup(playerA.getUsernameHash(), playerB.getUsernameHash(), rules);
+		activeSetups.put(playerA.getUsernameHash(), setup);
+		activeSetups.put(playerB.getUsernameHash(), setup);
+		removeChallenges(playerA);
+		removeChallenges(playerB);
+		syncSetup(setup);
+		playerA.message("Death Match setup opened with " + playerB.getUsername() + ".");
+		playerB.message("Death Match setup opened with " + playerA.getUsername() + ".");
+	}
+
+	private void updateSetupRules(Player player, MatchRules requestedRules) {
+		DeathMatchSetup setup = activeSetups.get(player.getUsernameHash());
+		if (setup == null) {
+			player.message("You are not setting up a Death Match.");
+			return;
+		}
+		synchronized (this) {
+			if (activeSetups.get(player.getUsernameHash()) != setup) {
+				return;
+			}
+			if (requestedRules.ranked && !setup.rankedAvailable()) {
+				player.message("Ranked Death Match requires both players to have 99 Attack, Strength, Defense, and Hits.");
+				requestedRules = MatchRules.unrankedDefault();
+			}
+			setup.rules = requestedRules;
+			setup.playerAAccepted = false;
+			setup.playerBAccepted = false;
+			setup.playerAConfirmed = false;
+			setup.playerBConfirmed = false;
+			setup.confirmPhase = false;
+			syncSetup(setup);
+		}
+	}
+
+	private void acceptSetup(Player player) {
+		DeathMatchSetup setup = activeSetups.get(player.getUsernameHash());
+		if (setup == null) {
+			player.message("You are not setting up a Death Match.");
+			return;
+		}
+		synchronized (this) {
+			if (activeSetups.get(player.getUsernameHash()) != setup) {
+				return;
+			}
+			Player playerA = world.getPlayer(setup.playerAHash);
+			Player playerB = world.getPlayer(setup.playerBHash);
+			if (!canStartSetup(setup, playerA, playerB, player, true)) {
+				syncSetup(setup);
+				return;
+			}
+			if (player.getUsernameHash() == setup.playerAHash) {
+				setup.playerAAccepted = true;
+			} else {
+				setup.playerBAccepted = true;
+			}
+			if (setup.playerAAccepted && setup.playerBAccepted) {
+				setup.confirmPhase = true;
+				setup.playerAConfirmed = false;
+				setup.playerBConfirmed = false;
+			}
+			syncSetup(setup);
+		}
+	}
+
+	private void confirmSetup(Player player) {
+		DeathMatchSetup setup = activeSetups.get(player.getUsernameHash());
+		if (setup == null) {
+			player.message("You are not setting up a Death Match.");
+			return;
+		}
+		synchronized (this) {
+			if (activeSetups.get(player.getUsernameHash()) != setup) {
+				return;
+			}
+			if (!setup.confirmPhase || !setup.playerAAccepted || !setup.playerBAccepted) {
+				player.message("Both players must accept the Death Match first.");
+				syncSetup(setup);
+				return;
+			}
+			Player playerA = world.getPlayer(setup.playerAHash);
+			Player playerB = world.getPlayer(setup.playerBHash);
+			if (!canStartSetup(setup, playerA, playerB, player, true)) {
+				syncSetup(setup);
+				return;
+			}
+			if (player.getUsernameHash() == setup.playerAHash) {
+				setup.playerAConfirmed = true;
+			} else {
+				setup.playerBConfirmed = true;
+			}
+			if (!setup.playerAConfirmed || !setup.playerBConfirmed) {
+				syncSetup(setup);
+				return;
+			}
+			removeSetup(setup);
+			sendArenaControl(playerA, "close");
+			sendArenaControl(playerB, "close");
+			startMatch(playerA, playerB, setup.rules);
+		}
+	}
+
+	private boolean cancelSetup(Player player, boolean notify) {
+		DeathMatchSetup setup = activeSetups.get(player.getUsernameHash());
+		if (setup == null) {
+			return false;
+		}
+		synchronized (this) {
+			if (activeSetups.get(player.getUsernameHash()) != setup) {
+				return false;
+			}
+			removeSetup(setup);
+		}
+		Player playerA = world.getPlayer(setup.playerAHash);
+		Player playerB = world.getPlayer(setup.playerBHash);
+		sendArenaControl(playerA, "close");
+		sendArenaControl(playerB, "close");
+		if (notify) {
+			Player opponent = setup.opponent(player);
+			if (opponent != null) {
+				opponent.message(player.getUsername() + " declined the Death Match.");
+			}
+			if (player.loggedIn()) {
+				player.message("Death Match cancelled.");
+			}
+		}
+		return true;
+	}
+
+	private void syncSetup(DeathMatchSetup setup) {
+		Player playerA = world.getPlayer(setup.playerAHash);
+		Player playerB = world.getPlayer(setup.playerBHash);
+		if (playerA == null || playerB == null) {
+			removeSetup(setup);
+			sendArenaControl(playerA, "close");
+			sendArenaControl(playerB, "close");
+			return;
+		}
+		sendSetupPayload(playerA, setup, playerB, setup.playerAAccepted, setup.playerBAccepted,
+			setup.playerAConfirmed, setup.playerBConfirmed);
+		sendSetupPayload(playerB, setup, playerA, setup.playerBAccepted, setup.playerAAccepted,
+			setup.playerBConfirmed, setup.playerAConfirmed);
+	}
+
+	private void sendSetupPayload(Player viewer, DeathMatchSetup setup, Player opponent,
+								  boolean viewerAccepted, boolean opponentAccepted,
+								  boolean viewerConfirmed, boolean opponentConfirmed) {
+		sendArenaControl(viewer, "setup|" + opponent.getIndex() + "|" + opponent.getUsername()
+			+ "|" + setup.rules.mask()
+			+ "|" + boolFlag(viewerAccepted)
+			+ "|" + boolFlag(opponentAccepted)
+			+ "|" + boolFlag(setup.confirmPhase)
+			+ "|" + boolFlag(viewerConfirmed)
+			+ "|" + boolFlag(opponentConfirmed)
+			+ "|" + boolFlag(setup.rankedAvailable()));
+	}
+
+	private void sendArenaControl(Player player, String payload) {
+		if (player != null && player.loggedIn()) {
+			ActionSender.sendMessage(player, "@vsarena@" + payload);
+		}
+	}
+
+	private String boolFlag(boolean value) {
+		return value ? "1" : "0";
+	}
+
+	private void removeSetup(DeathMatchSetup setup) {
+		activeSetups.remove(setup.playerAHash, setup);
+		activeSetups.remove(setup.playerBHash, setup);
+	}
+
+	private boolean canOpenSetup(Player challenger, Player target, boolean message) {
 		if (challenger.equals(target)) {
-			challenger.message("You cannot challenge yourself.");
+			if (message) challenger.message("You cannot challenge yourself.");
 			return false;
 		}
 		if (!isInsideLobby(challenger) || !isInsideLobby(target)) {
-			challenger.message("Both players must be in the Void Arena lobby.");
+			if (message) challenger.message("Both players must be in the Void Arena lobby.");
 			return false;
 		}
 		if (challenger.inCombat() || target.inCombat()) {
-			challenger.message("Both players must be out of combat.");
+			if (message) challenger.message("Both players must be out of combat.");
 			return false;
 		}
 		if (activeMatches.containsKey(challenger.getUsernameHash())
 			|| activeMatches.containsKey(target.getUsernameHash())) {
-			challenger.message("One of you is already in a Death Match.");
+			if (message) challenger.message("One of you is already in a Death Match.");
+			return false;
+		}
+		if (activeSetups.containsKey(challenger.getUsernameHash())
+			|| activeSetups.containsKey(target.getUsernameHash())) {
+			if (message) challenger.message("One of you is already setting up a Death Match.");
 			return false;
 		}
 		if (challenger.getParty() != null && target.getParty() != null && challenger.getParty() == target.getParty()) {
-			challenger.message("Leave your party before starting a Death Match.");
+			if (message) challenger.message("Leave your party before starting a Death Match.");
 			return false;
 		}
 		if (!hasAvailableSlot()) {
-			challenger.message("All Void Arena cages are occupied right now.");
+			if (message) challenger.message("All Void Arena cages are occupied right now.");
 			return false;
 		}
-		if (rules.ranked && (!hasRankedStats(challenger, true) || !hasRankedStats(target, true))) {
+		if (!supportsDeathMatchSetup(challenger) || !supportsDeathMatchSetup(target)) {
+			if (message) challenger.message("Both players need the current Voidscape client for Death Match setup.");
 			return false;
 		}
-		return !rules.f2pOnly || (hasF2PLoadout(challenger, rules.ranked) && hasF2PLoadout(target, rules.ranked));
+		return true;
+	}
+
+	private boolean canStartSetup(DeathMatchSetup setup, Player playerA, Player playerB,
+								  Player messenger, boolean message) {
+		if (playerA == null || playerB == null) {
+			if (message && messenger != null) messenger.message("That player is no longer online.");
+			return false;
+		}
+		if (!isInsideLobby(playerA) || !isInsideLobby(playerB)) {
+			if (message && messenger != null) messenger.message("Both players must stay in the Void Arena lobby.");
+			return false;
+		}
+		if (playerA.inCombat() || playerB.inCombat()) {
+			if (message && messenger != null) messenger.message("Both players must be out of combat.");
+			return false;
+		}
+		if (activeMatches.containsKey(playerA.getUsernameHash())
+			|| activeMatches.containsKey(playerB.getUsernameHash())) {
+			if (message && messenger != null) messenger.message("One of you is already in a Death Match.");
+			return false;
+		}
+		if (playerA.getParty() != null && playerB.getParty() != null && playerA.getParty() == playerB.getParty()) {
+			if (message && messenger != null) messenger.message("Leave your party before starting a Death Match.");
+			return false;
+		}
+		if (!hasAvailableSlot()) {
+			if (message && messenger != null) messenger.message("All Void Arena cages are occupied right now.");
+			return false;
+		}
+		if (setup.rules.ranked && (!hasRankedStats(playerA, message) || !hasRankedStats(playerB, message))) {
+			return false;
+		}
+		return !setup.rules.f2pOnly || (hasF2PLoadout(playerA, setup.rules.ranked)
+			&& hasF2PLoadout(playerB, setup.rules.ranked));
+	}
+
+	private boolean supportsDeathMatchSetup(Player player) {
+		return player != null && player.isUsingCustomClient()
+			&& player.getClientVersion() >= DEATH_MATCH_SETUP_CLIENT_VERSION;
 	}
 
 	private boolean isRankedEligible(Player player) {
@@ -408,7 +677,8 @@ public final class VoidArena {
 		}
 
 		VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
-		Match match = new Match(slotIndex, playerA.getUsernameHash(), playerB.getUsernameHash(), rules);
+		Match match = new Match(slotIndex, playerA.getUsernameHash(), playerB.getUsernameHash(), rules,
+			System.currentTimeMillis() + MATCH_COUNTDOWN_MS);
 		activeMatches.put(playerA.getUsernameHash(), match);
 		activeMatches.put(playerB.getUsernameHash(), match);
 		removeChallenges(playerA);
@@ -424,31 +694,30 @@ public final class VoidArena {
 		restoreHits(playerB);
 		playerA.setInstanceId(0);
 		playerB.setInstanceId(0);
-		playerA.teleport(slot.startAX, slot.startAY, true);
-		playerB.teleport(slot.startBX, slot.startBY, true);
-		playerA.message("@red@" + rules.title() + " started. Defeat " + playerB.getUsername() + ".");
-		playerB.message("@red@" + rules.title() + " started. Defeat " + playerA.getUsername() + ".");
+		playerA.teleportFromVoidArena(slot.startAX, slot.startAY, true);
+		playerB.teleportFromVoidArena(slot.startBX, slot.startBY, true);
+		sendArenaControl(playerA, "countdown|5");
+		sendArenaControl(playerB, "countdown|5");
+		playerA.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerB.getUsername() + ".");
+		playerB.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerA.getUsername() + ".");
 		playerA.message("Rules: " + rules.summary() + ".");
 		playerB.message("Rules: " + rules.summary() + ".");
-		if (!rules.ranked) {
-			playerA.message("Unranked fights end after 5 minutes if nobody wins.");
-			playerB.message("Unranked fights end after 5 minutes if nobody wins.");
-			scheduleUnrankedTimeout(match);
-		}
+		playerA.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
+		playerB.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
+		scheduleMatchTimeout(match);
 	}
 
-	private void scheduleUnrankedTimeout(final Match match) {
-		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, UNRANKED_MATCH_TIMEOUT_MS,
-			"Void Arena Unranked Timeout", DuplicationStrategy.ALLOW_MULTIPLE) {
+	private void scheduleMatchTimeout(final Match match) {
+		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, match.rules.timeoutMs(),
+			"Void Arena Match Timeout", DuplicationStrategy.ALLOW_MULTIPLE) {
 			public void action() {
-				expireUnrankedMatch(match);
+				expireTimedMatch(match);
 			}
 		});
 	}
 
-	private synchronized void expireUnrankedMatch(Match match) {
-		if (match.rules.ranked
-			|| activeMatches.get(match.playerAHash) != match
+	private synchronized void expireTimedMatch(Match match) {
+		if (activeMatches.get(match.playerAHash) != match
 			|| activeMatches.get(match.playerBHash) != match) {
 			return;
 		}
@@ -457,18 +726,18 @@ public final class VoidArena {
 		activeMatches.remove(match.playerBHash);
 		Player playerA = world.getPlayer(match.playerAHash);
 		Player playerB = world.getPlayer(match.playerBHash);
-		returnExpiredUnrankedPlayer(playerA);
-		returnExpiredUnrankedPlayer(playerB);
+		returnExpiredPlayer(playerA, match.rules);
+		returnExpiredPlayer(playerB, match.rules);
 	}
 
-	private void returnExpiredUnrankedPlayer(Player player) {
+	private void returnExpiredPlayer(Player player, MatchRules rules) {
 		if (player == null) {
 			return;
 		}
 		player.resetAll();
 		returnToLobby(player);
 		player.playerServerMessage(MessageType.QUEST,
-			"@mag@Unranked Death Match ended: @whi@time limit reached.");
+			"@mag@" + rules.title() + " ended: @whi@time limit reached.");
 	}
 
 	private boolean hasAvailableSlot() {
@@ -559,7 +828,7 @@ public final class VoidArena {
 
 	private void returnToLobby(Player player) {
 		player.setInstanceId(0);
-		player.teleport(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
 		restoreHits(player);
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipmentStats(player);
@@ -702,17 +971,46 @@ public final class VoidArena {
 	private static final class Challenge {
 		private final long challengerHash;
 		private final long targetHash;
-		private final MatchRules rules;
 		private final long createdAt = System.currentTimeMillis();
 
-		private Challenge(long challengerHash, long targetHash, MatchRules rules) {
+		private Challenge(long challengerHash, long targetHash) {
 			this.challengerHash = challengerHash;
 			this.targetHash = targetHash;
-			this.rules = rules;
 		}
 
 		private boolean expired() {
 			return System.currentTimeMillis() - createdAt > VoidArenaConfig.CHALLENGE_TIMEOUT_MS;
+		}
+	}
+
+	private final class DeathMatchSetup {
+		private final long playerAHash;
+		private final long playerBHash;
+		private MatchRules rules;
+		private boolean playerAAccepted;
+		private boolean playerBAccepted;
+		private boolean confirmPhase;
+		private boolean playerAConfirmed;
+		private boolean playerBConfirmed;
+
+		private DeathMatchSetup(long playerAHash, long playerBHash, MatchRules rules) {
+			this.playerAHash = playerAHash;
+			this.playerBHash = playerBHash;
+			this.rules = rules;
+		}
+
+		private Player opponent(Player player) {
+			if (player == null) {
+				return null;
+			}
+			long opponentHash = player.getUsernameHash() == playerAHash ? playerBHash : playerAHash;
+			return world.getPlayer(opponentHash);
+		}
+
+		private boolean rankedAvailable() {
+			Player playerA = world.getPlayer(playerAHash);
+			Player playerB = world.getPlayer(playerBHash);
+			return playerA != null && playerB != null && isRankedEligible(playerA) && isRankedEligible(playerB);
 		}
 	}
 
@@ -721,12 +1019,14 @@ public final class VoidArena {
 		private final long playerAHash;
 		private final long playerBHash;
 		private final MatchRules rules;
+		private final long startsAt;
 
-		private Match(int slotIndex, long playerAHash, long playerBHash, MatchRules rules) {
+		private Match(int slotIndex, long playerAHash, long playerBHash, MatchRules rules, long startsAt) {
 			this.slotIndex = slotIndex;
 			this.playerAHash = playerAHash;
 			this.playerBHash = playerBHash;
 			this.rules = rules;
+			this.startsAt = startsAt;
 		}
 
 		private boolean contains(Player player) {
@@ -736,6 +1036,10 @@ public final class VoidArena {
 
 		private boolean isInsideAssignedCage(Player player) {
 			return VoidArenaConfig.arenaSlot(slotIndex).contains(player.getLocation());
+		}
+
+		private boolean hasStarted() {
+			return System.currentTimeMillis() >= startsAt;
 		}
 
 		private Player opponent(Player player) {
@@ -764,6 +1068,10 @@ public final class VoidArena {
 			return new MatchRules(true, true, true, true, true);
 		}
 
+		private static MatchRules unrankedDefault() {
+			return new MatchRules(false, true, true, true, true);
+		}
+
 		private static MatchRules fromMask(int mask) {
 			if ((mask & RULE_RANKED) != 0) {
 				return ranked();
@@ -781,6 +1089,34 @@ public final class VoidArena {
 
 		private String title() {
 			return ranked ? "Ranked Death Match" : "Unranked Death Match";
+		}
+
+		private int timeoutMs() {
+			return ranked ? RANKED_MATCH_TIMEOUT_MS : UNRANKED_MATCH_TIMEOUT_MS;
+		}
+
+		private int timeoutMinutes() {
+			return timeoutMs() / 60000;
+		}
+
+		private int mask() {
+			if (ranked) {
+				return RULE_RANKED;
+			}
+			int mask = 0;
+			if (f2pOnly) {
+				mask |= RULE_F2P_ONLY;
+			}
+			if (allowPrayer) {
+				mask |= RULE_ALLOW_PRAYER;
+			}
+			if (allowRanged) {
+				mask |= RULE_ALLOW_RANGED;
+			}
+			if (allowMagic) {
+				mask |= RULE_ALLOW_MAGIC;
+			}
+			return mask;
 		}
 
 		private String summary() {

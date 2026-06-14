@@ -81,6 +81,10 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_INTERFACE_XP_LOCK = 17;
 	private static final int VOIDSCAPE_INTERFACE_VOID_ARENA = 18;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE = 0;
+	private static final int VOIDSCAPE_VOID_ARENA_ACTION_DECLINE = 1;
+	private static final int VOIDSCAPE_VOID_ARENA_ACTION_UPDATE_RULES = 2;
+	private static final int VOIDSCAPE_VOID_ARENA_ACTION_ACCEPT = 3;
+	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CONFIRM = 4;
 	private static final int VOIDSCAPE_VOID_ARENA_RULE_RANKED = 1;
 	private static final int VOIDSCAPE_VOID_ARENA_RULE_F2P_ONLY = 1 << 1;
 	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_PRAYER = 1 << 2;
@@ -949,6 +953,13 @@ public final class mudclient implements Runnable {
 	private boolean voidArenaDeathMatchAllowPrayer = true;
 	private boolean voidArenaDeathMatchAllowRanged = true;
 	private boolean voidArenaDeathMatchAllowMagic = true;
+	private boolean voidArenaDeathMatchConfirmPhase = false;
+	private boolean voidArenaDeathMatchAccepted = false;
+	private boolean voidArenaDeathMatchOpponentAccepted = false;
+	private boolean voidArenaDeathMatchConfirmed = false;
+	private boolean voidArenaDeathMatchOpponentConfirmed = false;
+	private boolean voidArenaDeathMatchRankedAvailable = true;
+	private long voidArenaCountdownEndMillis = 0L;
 	private boolean optionsMenuShow = false;
 	private int showUiWildWarn = 0;
 	private int recentSkill = -1;
@@ -4656,24 +4667,26 @@ public final class mudclient implements Runnable {
 	}
 
 	private void openVoidArenaDeathMatchDialog(int targetIndex, ORSCharacter target) {
-		this.showDialogVoidArenaDeathMatch = true;
 		this.voidArenaDeathMatchTargetIndex = targetIndex;
 		this.voidArenaDeathMatchTargetName = target.getStaffName();
 		this.voidArenaDeathMatchTargetKey = voidArenaCharacterKey(target);
-		this.voidArenaDeathMatchF2pOnly = true;
-		this.voidArenaDeathMatchAllowPrayer = true;
-		this.voidArenaDeathMatchAllowRanged = true;
-		this.voidArenaDeathMatchAllowMagic = true;
-		this.voidArenaDeathMatchRanked = !voidArenaRankedDisabled();
 		this.mouseButtonClick = 0;
+		sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE);
 	}
 
-	private boolean voidArenaRankedDisabled() {
-		String selfKey = voidArenaCharacterKey(this.localPlayer);
-		Boolean selfEligible = selfKey == null ? null : this.voidArenaRankedEligibleByName.get(selfKey);
-		Boolean targetEligible = this.voidArenaDeathMatchTargetKey == null
-			? null : this.voidArenaRankedEligibleByName.get(this.voidArenaDeathMatchTargetKey);
-		return Boolean.FALSE.equals(selfEligible) || Boolean.FALSE.equals(targetEligible);
+	private void applyVoidArenaDeathMatchRuleMask(int mask) {
+		this.voidArenaDeathMatchRanked = (mask & VOIDSCAPE_VOID_ARENA_RULE_RANKED) != 0;
+		if (this.voidArenaDeathMatchRanked) {
+			this.voidArenaDeathMatchF2pOnly = true;
+			this.voidArenaDeathMatchAllowPrayer = true;
+			this.voidArenaDeathMatchAllowRanged = true;
+			this.voidArenaDeathMatchAllowMagic = true;
+			return;
+		}
+		this.voidArenaDeathMatchF2pOnly = (mask & VOIDSCAPE_VOID_ARENA_RULE_F2P_ONLY) != 0;
+		this.voidArenaDeathMatchAllowPrayer = (mask & VOIDSCAPE_VOID_ARENA_RULE_ALLOW_PRAYER) != 0;
+		this.voidArenaDeathMatchAllowRanged = (mask & VOIDSCAPE_VOID_ARENA_RULE_ALLOW_RANGED) != 0;
+		this.voidArenaDeathMatchAllowMagic = (mask & VOIDSCAPE_VOID_ARENA_RULE_ALLOW_MAGIC) != 0;
 	}
 
 	private int voidArenaDeathMatchRuleMask() {
@@ -4688,13 +4701,25 @@ public final class mudclient implements Runnable {
 		return mask;
 	}
 
-	private void sendVoidArenaDeathMatchRequest() {
+	private void sendVoidArenaDeathMatchAction(int action) {
+		if (this.voidArenaDeathMatchTargetIndex < 0) {
+			return;
+		}
 		this.packetHandler.getClientStream().newPacket(199);
 		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_VOID_ARENA);
-		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE);
+		this.packetHandler.getClientStream().bufferBits.putByte(action);
 		this.packetHandler.getClientStream().bufferBits.putByte(voidArenaDeathMatchRuleMask());
 		this.packetHandler.getClientStream().bufferBits.putShort(this.voidArenaDeathMatchTargetIndex);
 		this.packetHandler.getClientStream().finishPacket();
+	}
+
+	private void sendVoidArenaDeathMatchRules() {
+		this.voidArenaDeathMatchAccepted = false;
+		this.voidArenaDeathMatchOpponentAccepted = false;
+		this.voidArenaDeathMatchConfirmed = false;
+		this.voidArenaDeathMatchOpponentConfirmed = false;
+		this.voidArenaDeathMatchConfirmPhase = false;
+		sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_UPDATE_RULES);
 	}
 
 	private boolean voidArenaDialogHit(int x, int y, int width, int height) {
@@ -4733,7 +4758,48 @@ public final class mudclient implements Runnable {
 			y + 4, value ? 0x66ff66 : 0xff5555, 1);
 	}
 
-	private boolean handleVoidArenaDeathMatchClick(int x, int y, int width, int height, boolean rankedDisabled,
+	private void drawVoidArenaSetupState(int x, int y, int width, String leftLabel, boolean leftReady,
+										 String rightLabel, boolean rightReady) {
+		int stateW = (width - 52) / 2;
+		drawVoidArenaChoice(x + 18, y, stateW, 22, leftLabel + ": " + (leftReady ? "READY" : "..."),
+			leftReady, false);
+		drawVoidArenaChoice(x + 34 + stateW, y, stateW, 22, rightLabel + ": " + (rightReady ? "READY" : "..."),
+			rightReady, false);
+	}
+
+	private int voidArenaDeathMatchDialogX() {
+		return Math.max(8, (this.getGameWidth() - 468) / 2);
+	}
+
+	private int voidArenaDeathMatchDialogY() {
+		int y = Math.max(8, Math.min(36, (this.getGameHeight() - 262) / 2));
+		if (useVoidscapeHudSkin()) {
+			int topClearance = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 6 : 8);
+			int maxY = Math.max(8, this.getGameHeight() - 282 - 8);
+			y = Math.min(maxY, Math.max(y, topClearance));
+		}
+		return y;
+	}
+
+	private void drawVoidArenaLegacyCheckbox(int x, int y, boolean checked, boolean disabled) {
+		int color = disabled ? 0x777777 : 0xFFFF00;
+		this.getSurface().drawBoxBorder(x, 11, y, 11, color);
+		if (checked) {
+			this.getSurface().drawBox(x + 2, y + 2, 7, 7, color);
+		}
+	}
+
+	private boolean voidArenaLegacyRowHit(int dialogX, int dialogY, int rowY) {
+		int localX = this.mouseX - dialogX;
+		int localY = this.mouseY - dialogY;
+		return localX >= 8 && localX <= 205 && localY >= rowY - 11 && localY <= rowY + 5;
+	}
+
+	private String voidArenaDeathMatchModeText() {
+		return this.voidArenaDeathMatchRanked ? "Ranked Death Match" : "Unranked Death Match";
+	}
+
+	private boolean handleVoidArenaDeathMatchClick(int x, int y, int width, int height,
 												   int modeY, int buttonW, int buttonGap, int rowX, int rowW,
 												   int footerY) {
 		if (!voidArenaDialogLeftClick()) {
@@ -4742,41 +4808,60 @@ public final class mudclient implements Runnable {
 		consumeVoidArenaDialogClick();
 
 		if (!voidArenaDialogHit(x, y, width, height)) {
-			this.showDialogVoidArenaDeathMatch = false;
-			return true;
-		}
-		if (voidArenaDialogHit(x + width / 2 - 92, footerY, 82, 24)) {
-			sendVoidArenaDeathMatchRequest();
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
 			this.showDialogVoidArenaDeathMatch = false;
 			return true;
 		}
 		if (voidArenaDialogHit(x + width / 2 + 10, footerY, 82, 24)) {
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
 			this.showDialogVoidArenaDeathMatch = false;
 			return true;
 		}
-		if (!rankedDisabled && voidArenaDialogHit(x + 18, modeY, buttonW, 24)) {
+		if (this.voidArenaDeathMatchConfirmPhase) {
+			if (voidArenaDialogHit(x + width / 2 - 92, footerY, 82, 24) && !this.voidArenaDeathMatchConfirmed) {
+				this.voidArenaDeathMatchConfirmed = true;
+				sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_CONFIRM);
+			}
+			return true;
+		}
+		if (voidArenaDialogHit(x + width / 2 - 92, footerY, 82, 24) && !this.voidArenaDeathMatchAccepted) {
+			this.voidArenaDeathMatchAccepted = true;
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_ACCEPT);
+			return true;
+		}
+		if (this.voidArenaDeathMatchRankedAvailable && voidArenaDialogHit(x + 18, modeY, buttonW, 24)) {
 			this.voidArenaDeathMatchRanked = true;
+			this.voidArenaDeathMatchF2pOnly = true;
+			this.voidArenaDeathMatchAllowPrayer = true;
+			this.voidArenaDeathMatchAllowRanged = true;
+			this.voidArenaDeathMatchAllowMagic = true;
+			sendVoidArenaDeathMatchRules();
 			return true;
 		}
 		if (voidArenaDialogHit(x + 18 + buttonW + buttonGap, modeY, buttonW, 24)) {
 			this.voidArenaDeathMatchRanked = false;
+			sendVoidArenaDeathMatchRules();
 			return true;
 		}
 		if (!this.voidArenaDeathMatchRanked) {
 			if (voidArenaDialogHit(rowX, y + 86, rowW, 20)) {
 				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
+				sendVoidArenaDeathMatchRules();
 				return true;
 			}
 			if (voidArenaDialogHit(rowX, y + 111, rowW, 20)) {
 				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
+				sendVoidArenaDeathMatchRules();
 				return true;
 			}
 			if (voidArenaDialogHit(rowX, y + 136, rowW, 20)) {
 				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
+				sendVoidArenaDeathMatchRules();
 				return true;
 			}
 			if (voidArenaDialogHit(rowX, y + 161, rowW, 20)) {
 				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
+				sendVoidArenaDeathMatchRules();
 				return true;
 			}
 		}
@@ -4784,69 +4869,245 @@ public final class mudclient implements Runnable {
 	}
 
 	private void handleVoidArenaDeathMatchInput() {
-		int width = Math.min(330, this.getGameWidth() - 20);
-		int height = 226;
-		int x = (this.getGameWidth() - width) / 2;
-		int y = Math.max(10, (this.getGameHeight() - height) / 2);
-		boolean rankedDisabled = voidArenaRankedDisabled();
-		if (rankedDisabled && this.voidArenaDeathMatchRanked) {
-			this.voidArenaDeathMatchRanked = false;
+		if (!voidArenaDialogLeftClick()) {
+			return;
 		}
-		int modeY = y + 52;
-		int buttonGap = 8;
-		int buttonW = (width - 36 - buttonGap) / 2;
-		int rowX = x + 22;
-		int rowW = width - 44;
-		int footerY = y + height - 35;
-		handleVoidArenaDeathMatchClick(x, y, width, height, rankedDisabled, modeY, buttonW, buttonGap,
-			rowX, rowW, footerY);
+		int x = voidArenaDeathMatchDialogX();
+		int y = voidArenaDeathMatchDialogY();
+		int localX = this.mouseX - x;
+		int localY = this.mouseY - y;
+		consumeVoidArenaDialogClick();
+
+		if (localX < 0 || localY < 0 || localX > 468 || localY > 262) {
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
+			this.showDialogVoidArenaDeathMatch = false;
+			return;
+		}
+
+		if (this.voidArenaDeathMatchConfirmPhase) {
+			if (localX >= 83 && localX <= 188 && localY >= 238 && localY <= 259
+				&& !this.voidArenaDeathMatchConfirmed) {
+				this.voidArenaDeathMatchConfirmed = true;
+				sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_CONFIRM);
+				return;
+			}
+			if (localX >= 317 && localX <= 423 && localY >= 238 && localY <= 259) {
+				sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
+				this.showDialogVoidArenaDeathMatch = false;
+			}
+			return;
+		}
+
+		if (localX >= 217 && localX <= 286 && localY >= 238 && localY <= 259
+			&& !this.voidArenaDeathMatchAccepted) {
+			this.voidArenaDeathMatchAccepted = true;
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_ACCEPT);
+			return;
+		}
+		if (localX >= 394 && localX <= 463 && localY >= 238 && localY <= 259) {
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
+			this.showDialogVoidArenaDeathMatch = false;
+			return;
+		}
+		if (voidArenaLegacyRowHit(x, y, 58) && this.voidArenaDeathMatchRankedAvailable
+			&& !this.voidArenaDeathMatchRanked) {
+			this.voidArenaDeathMatchRanked = true;
+			this.voidArenaDeathMatchF2pOnly = true;
+			this.voidArenaDeathMatchAllowPrayer = true;
+			this.voidArenaDeathMatchAllowRanged = true;
+			this.voidArenaDeathMatchAllowMagic = true;
+			sendVoidArenaDeathMatchRules();
+			return;
+		}
+		if (voidArenaLegacyRowHit(x, y, 80) && this.voidArenaDeathMatchRanked) {
+			this.voidArenaDeathMatchRanked = false;
+			sendVoidArenaDeathMatchRules();
+			return;
+		}
+		if (!this.voidArenaDeathMatchRanked) {
+			if (voidArenaLegacyRowHit(x, y, 137)) {
+				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
+				sendVoidArenaDeathMatchRules();
+			} else if (voidArenaLegacyRowHit(x, y, 153)) {
+				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
+				sendVoidArenaDeathMatchRules();
+			} else if (voidArenaLegacyRowHit(x, y, 169)) {
+				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
+				sendVoidArenaDeathMatchRules();
+			} else if (voidArenaLegacyRowHit(x, y, 185)) {
+				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
+				sendVoidArenaDeathMatchRules();
+			}
+		}
 	}
 
 	private void drawDialogVoidArenaDeathMatch() {
-		int width = Math.min(330, this.getGameWidth() - 20);
-		int height = 226;
-		int x = (this.getGameWidth() - width) / 2;
-		int y = Math.max(10, (this.getGameHeight() - height) / 2);
-		boolean rankedDisabled = voidArenaRankedDisabled();
-		if (rankedDisabled && this.voidArenaDeathMatchRanked) {
-			this.voidArenaDeathMatchRanked = false;
+		int x = voidArenaDeathMatchDialogX();
+		int y = voidArenaDeathMatchDialogY();
+		int colorA = 10000536;
+		int colorB = 13684944;
+
+		if (this.voidArenaDeathMatchConfirmPhase) {
+			this.getSurface().drawBox(x, y, 468, 16, 192);
+			this.getSurface().drawBoxAlpha(x, y + 16, 468, 246, colorA, 160);
+			this.getSurface().drawColoredStringCentered(x + 234,
+				"Please confirm your Death Match with @yel@" + this.voidArenaDeathMatchTargetName,
+				0xFFFFFF, 0, 1, y + 12);
+			this.getSurface().drawColoredStringCentered(x + 117, "Death Match rules:", 0xFFFF00, 0, 1, y + 30);
+			this.getSurface().drawColoredStringCentered(x + 117, voidArenaDeathMatchModeText(),
+				0xFFFFFF, 0, 1, y + 48);
+			this.getSurface().drawColoredStringCentered(x + 117,
+				this.voidArenaDeathMatchF2pOnly ? "F2P gear only" : "P2P gear allowed",
+				0xFFFFFF, 0, 1, y + 64);
+			this.getSurface().drawColoredStringCentered(x + 117,
+				"Prayer " + (this.voidArenaDeathMatchAllowPrayer ? "on" : "off"),
+				this.voidArenaDeathMatchAllowPrayer ? 0xFFFFFF : 0xFF0000, 0, 1, y + 80);
+			this.getSurface().drawColoredStringCentered(x + 117,
+				"Ranged " + (this.voidArenaDeathMatchAllowRanged ? "on" : "off"),
+				this.voidArenaDeathMatchAllowRanged ? 0xFFFFFF : 0xFF0000, 0, 1, y + 96);
+			this.getSurface().drawColoredStringCentered(x + 117,
+				"Magic " + (this.voidArenaDeathMatchAllowMagic ? "on" : "off"),
+				this.voidArenaDeathMatchAllowMagic ? 0xFFFFFF : 0xFF0000, 0, 1, y + 112);
+			this.getSurface().drawColoredStringCentered(x + 351, "Before combat:", 0xFFFF00, 0, 1, y + 30);
+			this.getSurface().drawColoredStringCentered(x + 351, "Both fighters heal to full",
+				0xFFFFFF, 0, 1, y + 48);
+			this.getSurface().drawColoredStringCentered(x + 351, "5 second countdown",
+				0xFFFFFF, 0, 1, y + 64);
+			this.getSurface().drawColoredStringCentered(x + 351,
+				this.voidArenaDeathMatchRanked ? "10 minute ranked cap" : "5 minute unranked cap",
+				0xFFFFFF, 0, 1, y + 80);
+			this.getSurface().drawColoredStringCentered(x + 234,
+				"Are you sure you want to do this?",
+				0xFFFF00, 0, 4, y + 200);
+			this.getSurface().drawColoredStringCentered(x + 234,
+				"This is wilderness-style combat. No staking is involved.",
+				0xFFFFFF, 0, 1, y + 215);
+			this.getSurface().drawColoredStringCentered(x + 234,
+				"If you are sure click 'Accept' to begin.",
+				0xFFFFFF, 0, 1, y + 230);
+			if (!this.voidArenaDeathMatchConfirmed) {
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 83, y + 238);
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 317, y + 238);
+			} else {
+				this.getSurface().drawColoredStringCentered(x + 234, "Waiting for other player...", 0xFFFF00, 0, 1,
+					y + 250);
+			}
+			return;
 		}
 
-		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 104);
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x101014, 242);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0x0a0b0d);
-		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, 0x7b5ab8);
-		this.getSurface().drawLineHoriz(x + 8, y + 25, width - 16, 0x8c6f3d);
-		this.getSurface().drawColoredStringCentered(x + width / 2, "Death Match", 0xffd66b, 0, 1, y + 17);
-		this.getSurface().drawColoredStringCentered(x + width / 2,
-			"Opponent: " + this.voidArenaDeathMatchTargetName, 0xffffff, 0, 1, y + 39);
+		this.getSurface().drawBox(x, y, 468, 12, 192);
+		this.getSurface().drawBoxAlpha(x, y + 12, 468, 18, colorA, 160);
+		this.getSurface().drawBoxAlpha(x, y + 30, 8, 248, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 205, y + 30, 11, 248, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 462, y + 30, 6, 248, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 99, 197, 24, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 192, 197, 23, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 258, 197, 20, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 216, y + 235, 246, 43, colorA, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 30, 197, 69, colorB, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 123, 197, 69, colorB, 160);
+		this.getSurface().drawBoxAlpha(x + 8, y + 215, 197, 43, colorB, 160);
+		this.getSurface().drawBoxAlpha(x + 216, y + 30, 246, 205, colorB, 160);
+		for (int i = 0; i < 3; ++i) {
+			this.getSurface().drawLineHoriz(x + 8, y + 30 + i * 34, 197, 0);
+			this.getSurface().drawLineHoriz(x + 8, y + 123 + i * 34, 197, 0);
+		}
+		for (int i = 0; i < 7; ++i) {
+			this.getSurface().drawLineHoriz(x + 216, y + 30 + i * 34, 246, 0);
+		}
+		for (int i = 0; i < 6; ++i) {
+			if (i < 5) {
+				this.getSurface().drawLineVert(x + 8 + i * 49, y + 30, 0, 69);
+				this.getSurface().drawLineVert(x + 8 + i * 49, y + 123, 0, 69);
+			}
+			this.getSurface().drawLineVert(x + 216 + i * 49, y + 30, 0, 205);
+		}
+		this.getSurface().drawLineHoriz(x + 8, y + 215, 197, 0);
+		this.getSurface().drawLineHoriz(x + 8, y + 257, 197, 0);
+		this.getSurface().drawLineVert(x + 8, y + 215, 0, 43);
+		this.getSurface().drawLineVert(x + 204, y + 215, 0, 43);
+		this.getSurface().drawString("Preparing Death Match with: " + this.voidArenaDeathMatchTargetName,
+			x + 1, y + 10, 0xFFFFFF, 1);
+		this.getSurface().drawString("Match Type", x + 9, y + 27, 0xFFFFFF, 4);
+		this.getSurface().drawString("Combat Rules", x + 9, y + 120, 0xFFFFFF, 4);
+		this.getSurface().drawString("Arena Rules", x + 9, y + 212, 0xFFFFFF, 4);
+		this.getSurface().drawString("Match Summary", x + 216, y + 27, 0xFFFFFF, 4);
 
-		int modeY = y + 52;
-		int buttonGap = 8;
-		int buttonW = (width - 36 - buttonGap) / 2;
-		int rowX = x + 22;
-		int rowW = width - 44;
-		int footerY = y + height - 35;
-
-		drawVoidArenaChoice(x + 18, modeY, buttonW, 24, "Ranked", this.voidArenaDeathMatchRanked, rankedDisabled);
-		drawVoidArenaChoice(x + 18 + buttonW + buttonGap, modeY, buttonW, 24, "Unranked",
-			!this.voidArenaDeathMatchRanked, false);
+		this.getSurface().drawString("Ranked match", x + 9, y + 58,
+			this.voidArenaDeathMatchRankedAvailable ? 0xFFFF00 : 0x777777, 3);
+		drawVoidArenaLegacyCheckbox(x + 185, y + 47, this.voidArenaDeathMatchRanked,
+			!this.voidArenaDeathMatchRankedAvailable);
+		this.getSurface().drawString("Unranked match", x + 9, y + 80, 0xFFFF00, 3);
+		drawVoidArenaLegacyCheckbox(x + 185, y + 69, !this.voidArenaDeathMatchRanked, false);
 
 		if (this.voidArenaDeathMatchRanked) {
-			this.getSurface().drawBoxAlpha(rowX, y + 88, rowW, 74, 0x151318, 190);
-			this.getSurface().drawBoxBorder(rowX, rowW, y + 88, 74, 0x3d3348);
-			this.getSurface().drawString("Ranked rules are locked", rowX + 8, y + 104, 0xffd66b, 1);
-			this.getSurface().drawString("F2P gear only", rowX + 8, y + 122, 0xffffff, 1);
-			this.getSurface().drawString("Prayer, ranged, and magic allowed", rowX + 8, y + 140, 0xffffff, 1);
+			this.getSurface().drawString("Ranked rules are locked", x + 9, y + 137, 0xFFFF00, 3);
+			this.getSurface().drawString("Requires 99 melee and Hits", x + 9, y + 153, 0xFFFFFF, 1);
 		} else {
-			drawVoidArenaToggleRow(rowX, y + 96, rowW, "F2P only", this.voidArenaDeathMatchF2pOnly);
-			drawVoidArenaToggleRow(rowX, y + 121, rowW, "Prayer", this.voidArenaDeathMatchAllowPrayer);
-			drawVoidArenaToggleRow(rowX, y + 146, rowW, "Ranged", this.voidArenaDeathMatchAllowRanged);
-			drawVoidArenaToggleRow(rowX, y + 171, rowW, "Magic", this.voidArenaDeathMatchAllowMagic);
+			this.getSurface().drawString("F2P only", x + 9, y + 137, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 126, this.voidArenaDeathMatchF2pOnly, false);
+			this.getSurface().drawString("Prayer", x + 9, y + 153, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 142, this.voidArenaDeathMatchAllowPrayer, false);
+			this.getSurface().drawString("Ranged", x + 9, y + 169, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 158, this.voidArenaDeathMatchAllowRanged, false);
+			this.getSurface().drawString("Magic", x + 9, y + 185, 0xFFFF00, 3);
+			drawVoidArenaLegacyCheckbox(x + 185, y + 174, this.voidArenaDeathMatchAllowMagic, false);
 		}
+		this.getSurface().drawString("Heal to full", x + 9, y + 231, 0xFFFF00, 3);
+		drawVoidArenaLegacyCheckbox(x + 93, y + 220, true, false);
+		this.getSurface().drawString("Countdown", x + 102, y + 231, 0xFFFF00, 3);
+		drawVoidArenaLegacyCheckbox(x + 191, y + 220, true, false);
 
-		drawVoidArenaChoice(x + width / 2 - 92, footerY, 82, 24, "Send", false, false);
-		drawVoidArenaChoice(x + width / 2 + 10, footerY, 82, 24, "Cancel", false, false);
+		this.getSurface().drawColoredStringCentered(x + 339, voidArenaDeathMatchModeText(), 0xFFFF00, 0, 1, y + 58);
+		this.getSurface().drawColoredStringCentered(x + 339,
+			this.voidArenaDeathMatchF2pOnly ? "F2P gear only" : "P2P gear allowed", 0xFFFFFF, 0, 1, y + 86);
+		this.getSurface().drawColoredStringCentered(x + 339,
+			"Prayer " + (this.voidArenaDeathMatchAllowPrayer ? "on" : "off"),
+			0xFFFFFF, 0, 1, y + 112);
+		this.getSurface().drawColoredStringCentered(x + 339,
+			"Ranged " + (this.voidArenaDeathMatchAllowRanged ? "on" : "off"),
+			0xFFFFFF, 0, 1, y + 134);
+		this.getSurface().drawColoredStringCentered(x + 339,
+			"Magic " + (this.voidArenaDeathMatchAllowMagic ? "on" : "off"), 0xFFFFFF, 0, 1, y + 156);
+		this.getSurface().drawColoredStringCentered(x + 339, "Heal to full before and after", 0xFFFFFF, 0, 1, y + 188);
+		this.getSurface().drawColoredStringCentered(x + 339,
+			this.voidArenaDeathMatchRanked ? "10 minute ranked cap" : "5 minute unranked cap",
+			0xFFFFFF, 0, 1, y + 210);
+
+		if (!this.voidArenaDeathMatchAccepted) {
+			this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), x + 217, y + 238);
+		} else {
+			this.getSurface().drawColoredStringCentered(x + 252, "Waiting for", 0xFFFFFF, 0, 1, y + 246);
+			this.getSurface().drawColoredStringCentered(x + 252, "other player", 0xFFFFFF, 0, 1, y + 256);
+		}
+		this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), x + 394, y + 238);
+		if (this.voidArenaDeathMatchOpponentAccepted) {
+			this.getSurface().drawColoredStringCentered(x + 341, "Other player", 0xFFFFFF, 0, 1, y + 246);
+			this.getSurface().drawColoredStringCentered(x + 341, "has accepted", 0xFFFFFF, 0, 1, y + 256);
+		}
+	}
+
+	private void drawVoidArenaCountdownOverlay() {
+		if (this.voidArenaCountdownEndMillis <= 0L) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		long remaining = this.voidArenaCountdownEndMillis - now;
+		boolean showStart = remaining <= 0L && now <= this.voidArenaCountdownEndMillis + 1000L;
+		if (remaining <= 0L && !showStart) {
+			this.voidArenaCountdownEndMillis = 0L;
+			return;
+		}
+		String text = showStart ? "START!" : String.valueOf(Math.max(1L, (remaining + 999L) / 1000L));
+		int boxW = showStart ? 142 : 92;
+		int boxH = 54;
+		int x = this.halfGameWidth() - boxW / 2;
+		int y = this.halfGameHeight() - boxH / 2 - 22;
+		this.getSurface().drawBoxAlpha(x, y, boxW, boxH, 0x07070a, 185);
+		this.getSurface().drawBoxBorder(x, boxW, y, boxH, 0xb8914f);
+		this.getSurface().drawBoxBorder(x + 2, boxW - 4, y + 2, boxH - 4, 0x5f4a78);
+		this.getSurface().drawColoredStringCentered(this.halfGameWidth(), text,
+			showStart ? 0x66ff66 : 0xffd66b, 0, 5, y + 36);
 	}
 
 	private void drawDialogLogout() {
@@ -7406,6 +7667,7 @@ public final class mudclient implements Runnable {
 					drawVoidscapeHudSkin();
 					this.getSurface().loggedIn = false;
 					this.drawChatMessageTabs(var1 - 8);
+					drawVoidArenaCountdownOverlay();
 					// this.getSurface().draw(this.graphics, this.screenOffsetX,
 					// 256, this.screenOffsetY);
 					clientPort.draw();
@@ -10206,7 +10468,37 @@ public final class mudclient implements Runnable {
 			this.voidArenaRankedEligibleByName.clear();
 			return true;
 		}
-		String[] parts = payload.split("\\|", 6);
+		if ("close".equals(payload)) {
+			this.showDialogVoidArenaDeathMatch = false;
+			this.voidArenaDeathMatchTargetIndex = -1;
+			this.voidArenaDeathMatchConfirmPhase = false;
+			this.voidArenaDeathMatchAccepted = false;
+			this.voidArenaDeathMatchOpponentAccepted = false;
+			this.voidArenaDeathMatchConfirmed = false;
+			this.voidArenaDeathMatchOpponentConfirmed = false;
+			return true;
+		}
+		String[] parts = payload.split("\\|", 11);
+		if (parts.length >= 2 && "countdown".equals(parts[0])) {
+			int seconds = Math.max(1, parseIntOrDefault(parts[1], 5));
+			this.voidArenaCountdownEndMillis = System.currentTimeMillis() + seconds * 1000L;
+			return true;
+		}
+		if (parts.length >= 10 && "setup".equals(parts[0])) {
+			this.voidArenaDeathMatchTargetIndex = parseIntOrDefault(parts[1], -1);
+			this.voidArenaDeathMatchTargetName = parts[2];
+			this.voidArenaDeathMatchTargetKey = StringUtil.displayNameToKey(parts[2]);
+			applyVoidArenaDeathMatchRuleMask(parseIntOrDefault(parts[3], 0));
+			this.voidArenaDeathMatchAccepted = "1".equals(parts[4]);
+			this.voidArenaDeathMatchOpponentAccepted = "1".equals(parts[5]);
+			this.voidArenaDeathMatchConfirmPhase = "1".equals(parts[6]);
+			this.voidArenaDeathMatchConfirmed = "1".equals(parts[7]);
+			this.voidArenaDeathMatchOpponentConfirmed = "1".equals(parts[8]);
+			this.voidArenaDeathMatchRankedAvailable = "1".equals(parts[9]);
+			this.showDialogVoidArenaDeathMatch = true;
+			this.mouseButtonClick = 0;
+			return true;
+		}
 		if (parts.length < 5 || !"rating".equals(parts[0])) {
 			return true;
 		}
@@ -19282,6 +19574,11 @@ public final class mudclient implements Runnable {
 				}
 
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
+						&& this.showDialogVoidArenaDeathMatch) {
+						handleVoidArenaDeathMatchInput();
+					}
+
+					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
 						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin()) {
 							handleVoidscapeChatTabClick();
@@ -19323,9 +19620,7 @@ public final class mudclient implements Runnable {
 						this.lastMouseButtonDown = 0;
 					}
 
-						if (this.showDialogVoidArenaDeathMatch) {
-							handleVoidArenaDeathMatchInput();
-						} else if (this.isShowDialogBank() && this.combatTimeout == 0) {
+						if (this.isShowDialogBank() && this.combatTimeout == 0) {
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 						} else {

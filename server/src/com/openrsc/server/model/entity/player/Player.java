@@ -2766,6 +2766,10 @@ public final class Player extends Mob {
 		teleport(x, y, false);
 	}
 
+	public void teleportFromVoidArena(final int x, final int y, final boolean bubble) {
+		teleport(x, y, bubble, true);
+	}
+
 	public void addPrivateMessage(final PrivateMessage privateMessage) {
 		if (getPrivateMessageQueue().size() < 2) {
 			getPrivateMessageQueue().add(privateMessage);
@@ -3351,6 +3355,13 @@ public final class Player extends Mob {
 	}
 
 	public void teleport(final int x, final int y, final boolean bubble) {
+		teleport(x, y, bubble, false);
+	}
+
+	private void teleport(final int x, final int y, final boolean bubble, final boolean bypassVoidArenaCheck) {
+		if (!bypassVoidArenaCheck && getWorld().getVoidArena().blocksTeleport(this)) {
+			return;
+		}
 		if (inCombat()) {
 			this.setLastOpponent(null);
 			combatEvent.resetCombat();

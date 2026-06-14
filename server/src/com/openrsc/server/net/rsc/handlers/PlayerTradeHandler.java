@@ -26,6 +26,28 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 		return player.isBusy() || player.isRanging() || player.accessingBank() || player.getDuel().isDuelActive() || player.inCombat();
 	}
 
+	private boolean voidArenaBlocksTrade(Player player, Player affectedPlayer) {
+		if (player != null && player.getWorld() != null
+			&& player.getWorld().getVoidArena().isInActiveMatch(player)) {
+			player.message("You can't trade during a Death Match.");
+			player.getTrade().resetAll();
+			if (affectedPlayer != null) {
+				affectedPlayer.getTrade().resetAll();
+			}
+			return true;
+		}
+		if (affectedPlayer != null && affectedPlayer.getWorld() != null
+			&& affectedPlayer.getWorld().getVoidArena().isInActiveMatch(affectedPlayer)) {
+			if (player != null) {
+				player.message(affectedPlayer.getUsername() + " is in a Death Match.");
+				player.getTrade().resetAll();
+			}
+			affectedPlayer.getTrade().resetAll();
+			return true;
+		}
+		return false;
+	}
+
 	public void process(PlayerTradeStruct payload, Player player) throws Exception {
 
 		/**
@@ -38,6 +60,10 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 		 */
 
 		Player affectedPlayer = null;
+
+		if (voidArenaBlocksTrade(player, null)) {
+			return;
+		}
 
 		if (busy(player)) {
 			player.getTrade().resetAll();
@@ -58,6 +84,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				}
 
 				if (affectedPlayer == null) {
+					return;
+				}
+				if (voidArenaBlocksTrade(player, affectedPlayer)) {
 					return;
 				}
 				if (player.isIronMan(IronmanMode.Ironman.id()) || player.isIronMan(IronmanMode.Ultimate.id())
@@ -182,6 +211,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ACCEPTED_INIT_TRADE_REQUEST:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (voidArenaBlocksTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (affectedPlayer == null || busy(affectedPlayer) || !player.getTrade().isTradeActive()
 					|| !affectedPlayer.getTrade().isTradeActive()) {
 					player.setSuspiciousPlayer(true, "accepted trade isn't active or affected player is null or busy");
@@ -219,6 +251,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ADDED_ITEMS_TO_TRADE_OFFER:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (voidArenaBlocksTrade(player, affectedPlayer)) {
+					return;
+				}
 
 				if (affectedPlayer == null || busy(affectedPlayer) || !player.getTrade().isTradeActive()
 					|| !affectedPlayer.getTrade().isTradeActive()
@@ -309,6 +344,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_DECLINED_TRADE:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (voidArenaBlocksTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (affectedPlayer == null || busy(affectedPlayer) || !player.getTrade().isTradeActive()
 					|| !affectedPlayer.getTrade().isTradeActive()) {
 					player.setSuspiciousPlayer(true, "declined trade isn't active or affected player is null or busy");
@@ -321,6 +359,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ACCEPTED_TRADE:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (voidArenaBlocksTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (affectedPlayer == null || busy(affectedPlayer) || !player.getTrade().isTradeActive()
 					|| !affectedPlayer.getTrade().isTradeActive() || !player.getTrade().isTradeAccepted()
 					|| !affectedPlayer.getTrade().isTradeAccepted()) {

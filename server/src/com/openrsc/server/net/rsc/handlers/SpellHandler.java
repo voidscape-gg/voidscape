@@ -1867,6 +1867,9 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private void handleTeleport(Player player, SpellDef spell, Spells spellEnum) {
+		if (player.getWorld().getVoidArena().blocksTeleport(player)) {
+			return;
+		}
 		if (!checkAndRemoveRunes(player, spell)) {
 			return;
 		}

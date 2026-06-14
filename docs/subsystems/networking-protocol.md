@@ -157,7 +157,7 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10108`. Server's `client_version` config key (e.g. `10108`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10109`. Server's `client_version` config key (e.g. `10109`) is checked at login. Mismatch → reject when the preset enforces custom client versions. Bump manually when protocol changes.
 
 Voidscape custom-client packet notes:
 - `10051`: Auction House market-intel payload was added to the existing custom Auction House packet.
@@ -200,6 +200,7 @@ Voidscape custom-client packet notes:
 - `10106`: Void Arena lobby rating labels. The server sends existing `SEND_SERVER_MESSAGE` metadata using hidden `@vsarena@rating|username|rating|matches|visible` tokens for custom clients `>= 10106`; the client consumes them before chat display and decorates arena-lobby player right-click labels. Ratings stay hidden until 5 ranked matches, with `visible=0` rendering as `unranked`. No new opcode or enum ordinal shift.
 - `10107`: Void Arena Herald NPC. Adds a client-visible custom NPC definition/spawn with a `Leaderboard` right-click that uses the existing NPC command opcodes and server-side leaderboard box. No custom packet or opcode changed.
 - `10108`: Void Arena Death Match setup. The right-click player option is now `Death Match`; the client sends existing custom `INTERFACE_OPTIONS` (wire opcode `199`) sub-option `18` as `byte action`, `byte ruleMask`, `short targetServerIndex`. `ruleMask` bit 0 selects ranked; unranked uses bit 1 F2P-only, bit 2 prayer allowed, bit 3 ranged allowed, and bit 4 magic allowed. The hidden arena lobby rating metadata appends a sixth ranked-eligibility field so the client can grey out Ranked when either player lacks ranked stats. No new opcode or enum ordinal shift.
+- `10109`: Void Arena Death Match setup moved to a server-owned duel-style handshake. Existing custom `INTERFACE_OPTIONS` sub-option `18` now uses action `0` challenge, `1` decline, `2` update rules, `3` accept, and `4` confirm; the same `ruleMask` and target server index remain. The existing hidden `@vsarena@` message channel now also sends `setup|...`, `close`, and `countdown|seconds` controls so both clients render the same setup/confirm state and center-screen countdown. No new opcode or enum ordinal shift.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

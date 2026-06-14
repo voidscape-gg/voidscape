@@ -1901,6 +1901,9 @@ public class Functions {
 	}
 
 	public static void boundaryTeleport(Player player, Point location) {
+		if (player.getWorld().getVoidArena().blocksTeleport(player)) {
+			return;
+		}
 		player.setLocation(location);
 	}
 
