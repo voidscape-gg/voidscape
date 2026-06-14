@@ -1760,7 +1760,8 @@ public final class mudclient implements Runnable {
 		try {
 
 			ORSCharacter player = this.players[index];
-			String name = voidArenaPlayerMenuName(player, player.getStaffName());
+			String name = player.getStaffName();
+			String voidArenaDeathMatchName = voidArenaPlayerMenuName(player, name);
 			int var5 = 2203 - this.midRegionBaseZ - this.playerLocalZ - this.worldOffsetZ;
 			if (this.midRegionBaseX + this.playerLocalX + this.worldOffsetX >= 2640) {
 				var5 = -50;
@@ -1821,9 +1822,17 @@ public final class mudclient implements Runnable {
 					MenuItemAction.PLAYER_USE_ITEM, "Use " + this.m_ig + " with", this.selectedItemInventoryIndex);
 			} else {
 
-				boolean bothVoidArenaLobby = isLocalPlayerInsideVoidArenaLobby() && isServerPlayerInsideVoidArenaLobby(player);
+				boolean localInsideVoidArenaLobby = isLocalPlayerInsideVoidArenaLobby();
+				boolean targetInsideVoidArenaLobby = isServerPlayerInsideVoidArenaLobby(player);
+				boolean bothVoidArenaLobby = localInsideVoidArenaLobby && targetInsideVoidArenaLobby;
+				boolean bothVoidArenaCage = isLocalPlayerInsideVoidArena() && isServerPlayerInsideVoidArena(player)
+					&& !localInsideVoidArenaLobby && !targetInsideVoidArenaLobby;
 				boolean eitherInsideVoidArena = isLocalPlayerInsideVoidArena() || isServerPlayerInsideVoidArena(player);
-				if (var5 > 0
+				if (bothVoidArenaCage) {
+					this.menuCommon.addCharacterItem(player.serverIndex, levelDelta >= 0 && levelDelta < 5
+							? MenuItemAction.PLAYER_ATTACK_SIMILAR : MenuItemAction.PLAYER_ATTACK_DIVERGENT, "Attack",
+						"@whi@" + name + level);
+				} else if (var5 > 0
 					&& (player.currentZ - 64) / this.tileSize - (-this.worldOffsetZ - this.midRegionBaseZ) < 2203) {
 					this.menuCommon.addCharacterItem(player.serverIndex, levelDelta >= 0 && levelDelta < 5
 							? MenuItemAction.PLAYER_ATTACK_SIMILAR : MenuItemAction.PLAYER_ATTACK_DIVERGENT, "Attack",
@@ -1835,7 +1844,7 @@ public final class mudclient implements Runnable {
 
 				if (bothVoidArenaLobby) {
 					this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_VOID_ARENA_DEATH_MATCH,
-						"Death Match", "@whi@" + name + level);
+						"Death Match", "@whi@" + voidArenaDeathMatchName + level);
 				}
 
 				this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_TRADE, "Trade with",
@@ -4693,7 +4702,17 @@ public final class mudclient implements Runnable {
 			&& this.mouseY >= y && this.mouseY <= y + height;
 	}
 
-	private boolean drawVoidArenaChoice(int x, int y, int width, int height, String text, boolean selected, boolean disabled) {
+	private boolean voidArenaDialogLeftClick() {
+		return this.mouseButtonClick == 1 || this.lastMouseButtonDown == 1;
+	}
+
+	private void consumeVoidArenaDialogClick() {
+		this.mouseButtonClick = 0;
+		this.lastMouseButtonDown = 0;
+		this.currentMouseButtonDown = 0;
+	}
+
+	private void drawVoidArenaChoice(int x, int y, int width, int height, String text, boolean selected, boolean disabled) {
 		boolean hover = !disabled && voidArenaDialogHit(x, y, width, height);
 		int fill = selected ? 0x342244 : (hover ? 0x2a2532 : 0x17151b);
 		int border = disabled ? 0x555555 : (selected ? 0xb8914f : 0x6f5a86);
@@ -4701,10 +4720,9 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 230);
 		this.getSurface().drawBoxBorder(x, width, y, height, border);
 		this.getSurface().drawColoredStringCentered(x + width / 2, text, textColor, 0, 1, y + height / 2 + 4);
-		return hover && this.mouseButtonClick == 1;
 	}
 
-	private boolean drawVoidArenaToggleRow(int x, int y, int width, String label, boolean value) {
+	private void drawVoidArenaToggleRow(int x, int y, int width, String label, boolean value) {
 		boolean hover = voidArenaDialogHit(x, y - 10, width, 20);
 		int fill = hover ? 0x25202d : 0x151318;
 		this.getSurface().drawBoxAlpha(x, y - 10, width, 20, fill, 190);
@@ -4713,11 +4731,75 @@ public final class mudclient implements Runnable {
 		String state = value ? "ON" : "OFF";
 		this.getSurface().drawString(state, x + width - this.getSurface().stringWidth(1, state) - 8,
 			y + 4, value ? 0x66ff66 : 0xff5555, 1);
-		if (hover && this.mouseButtonClick == 1) {
-			this.mouseButtonClick = 0;
+	}
+
+	private boolean handleVoidArenaDeathMatchClick(int x, int y, int width, int height, boolean rankedDisabled,
+												   int modeY, int buttonW, int buttonGap, int rowX, int rowW,
+												   int footerY) {
+		if (!voidArenaDialogLeftClick()) {
+			return false;
+		}
+		consumeVoidArenaDialogClick();
+
+		if (!voidArenaDialogHit(x, y, width, height)) {
+			this.showDialogVoidArenaDeathMatch = false;
 			return true;
 		}
-		return false;
+		if (voidArenaDialogHit(x + width / 2 - 92, footerY, 82, 24)) {
+			sendVoidArenaDeathMatchRequest();
+			this.showDialogVoidArenaDeathMatch = false;
+			return true;
+		}
+		if (voidArenaDialogHit(x + width / 2 + 10, footerY, 82, 24)) {
+			this.showDialogVoidArenaDeathMatch = false;
+			return true;
+		}
+		if (!rankedDisabled && voidArenaDialogHit(x + 18, modeY, buttonW, 24)) {
+			this.voidArenaDeathMatchRanked = true;
+			return true;
+		}
+		if (voidArenaDialogHit(x + 18 + buttonW + buttonGap, modeY, buttonW, 24)) {
+			this.voidArenaDeathMatchRanked = false;
+			return true;
+		}
+		if (!this.voidArenaDeathMatchRanked) {
+			if (voidArenaDialogHit(rowX, y + 86, rowW, 20)) {
+				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
+				return true;
+			}
+			if (voidArenaDialogHit(rowX, y + 111, rowW, 20)) {
+				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
+				return true;
+			}
+			if (voidArenaDialogHit(rowX, y + 136, rowW, 20)) {
+				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
+				return true;
+			}
+			if (voidArenaDialogHit(rowX, y + 161, rowW, 20)) {
+				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
+				return true;
+			}
+		}
+		return true;
+	}
+
+	private void handleVoidArenaDeathMatchInput() {
+		int width = Math.min(330, this.getGameWidth() - 20);
+		int height = 226;
+		int x = (this.getGameWidth() - width) / 2;
+		int y = Math.max(10, (this.getGameHeight() - height) / 2);
+		boolean rankedDisabled = voidArenaRankedDisabled();
+		if (rankedDisabled && this.voidArenaDeathMatchRanked) {
+			this.voidArenaDeathMatchRanked = false;
+		}
+		int modeY = y + 52;
+		int buttonGap = 8;
+		int buttonW = (width - 36 - buttonGap) / 2;
+		int rowX = x + 22;
+		int rowW = width - 44;
+		int footerY = y + height - 35;
+		handleVoidArenaDeathMatchClick(x, y, width, height, rankedDisabled, modeY, buttonW, buttonGap,
+			rowX, rowW, footerY);
 	}
 
 	private void drawDialogVoidArenaDeathMatch() {
@@ -4742,18 +4824,14 @@ public final class mudclient implements Runnable {
 		int modeY = y + 52;
 		int buttonGap = 8;
 		int buttonW = (width - 36 - buttonGap) / 2;
-		if (drawVoidArenaChoice(x + 18, modeY, buttonW, 24, "Ranked", this.voidArenaDeathMatchRanked, rankedDisabled)) {
-			this.voidArenaDeathMatchRanked = true;
-			this.mouseButtonClick = 0;
-		}
-		if (drawVoidArenaChoice(x + 18 + buttonW + buttonGap, modeY, buttonW, 24, "Unranked",
-			!this.voidArenaDeathMatchRanked, false)) {
-			this.voidArenaDeathMatchRanked = false;
-			this.mouseButtonClick = 0;
-		}
-
 		int rowX = x + 22;
 		int rowW = width - 44;
+		int footerY = y + height - 35;
+
+		drawVoidArenaChoice(x + 18, modeY, buttonW, 24, "Ranked", this.voidArenaDeathMatchRanked, rankedDisabled);
+		drawVoidArenaChoice(x + 18 + buttonW + buttonGap, modeY, buttonW, 24, "Unranked",
+			!this.voidArenaDeathMatchRanked, false);
+
 		if (this.voidArenaDeathMatchRanked) {
 			this.getSurface().drawBoxAlpha(rowX, y + 88, rowW, 74, 0x151318, 190);
 			this.getSurface().drawBoxBorder(rowX, rowW, y + 88, 74, 0x3d3348);
@@ -4761,33 +4839,14 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawString("F2P gear only", rowX + 8, y + 122, 0xffffff, 1);
 			this.getSurface().drawString("Prayer, ranged, and magic allowed", rowX + 8, y + 140, 0xffffff, 1);
 		} else {
-			if (drawVoidArenaToggleRow(rowX, y + 96, rowW, "F2P only", this.voidArenaDeathMatchF2pOnly)) {
-				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
-			}
-			if (drawVoidArenaToggleRow(rowX, y + 121, rowW, "Prayer", this.voidArenaDeathMatchAllowPrayer)) {
-				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
-			}
-			if (drawVoidArenaToggleRow(rowX, y + 146, rowW, "Ranged", this.voidArenaDeathMatchAllowRanged)) {
-				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
-			}
-			if (drawVoidArenaToggleRow(rowX, y + 171, rowW, "Magic", this.voidArenaDeathMatchAllowMagic)) {
-				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
-			}
+			drawVoidArenaToggleRow(rowX, y + 96, rowW, "F2P only", this.voidArenaDeathMatchF2pOnly);
+			drawVoidArenaToggleRow(rowX, y + 121, rowW, "Prayer", this.voidArenaDeathMatchAllowPrayer);
+			drawVoidArenaToggleRow(rowX, y + 146, rowW, "Ranged", this.voidArenaDeathMatchAllowRanged);
+			drawVoidArenaToggleRow(rowX, y + 171, rowW, "Magic", this.voidArenaDeathMatchAllowMagic);
 		}
 
-		int footerY = y + height - 35;
-		boolean send = drawVoidArenaChoice(x + width / 2 - 92, footerY, 82, 24, "Send", false, false);
-		boolean cancel = drawVoidArenaChoice(x + width / 2 + 10, footerY, 82, 24, "Cancel", false, false);
-		if (send) {
-			sendVoidArenaDeathMatchRequest();
-			this.showDialogVoidArenaDeathMatch = false;
-			this.mouseButtonClick = 0;
-		} else if (cancel || (this.mouseButtonClick == 1 && !voidArenaDialogHit(x, y, width, height))) {
-			this.showDialogVoidArenaDeathMatch = false;
-			this.mouseButtonClick = 0;
-		} else if (this.mouseButtonClick == 1 && voidArenaDialogHit(x, y, width, height)) {
-			this.mouseButtonClick = 0;
-		}
+		drawVoidArenaChoice(x + width / 2 - 92, footerY, 82, 24, "Send", false, false);
+		drawVoidArenaChoice(x + width / 2 + 10, footerY, 82, 24, "Cancel", false, false);
 	}
 
 	private void drawDialogLogout() {
@@ -19264,7 +19323,9 @@ public final class mudclient implements Runnable {
 						this.lastMouseButtonDown = 0;
 					}
 
-						if (this.isShowDialogBank() && this.combatTimeout == 0) {
+						if (this.showDialogVoidArenaDeathMatch) {
+							handleVoidArenaDeathMatchInput();
+						} else if (this.isShowDialogBank() && this.combatTimeout == 0) {
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 						} else {

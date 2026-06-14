@@ -3,6 +3,8 @@ package com.openrsc.server.content.voidarena;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.VoidArenaStats;
+import com.openrsc.server.event.SingleEvent;
+import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.container.Item;
@@ -24,6 +26,7 @@ public final class VoidArena {
 	private static final int RULE_ALLOW_PRAYER = 1 << 2;
 	private static final int RULE_ALLOW_RANGED = 1 << 3;
 	private static final int RULE_ALLOW_MAGIC = 1 << 4;
+	private static final int UNRANKED_MATCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 	private final World world;
 	private final Map<Long, Match> activeMatches = new ConcurrentHashMap<>();
@@ -300,12 +303,14 @@ public final class VoidArena {
 
 		incomingChallenges.put(target.getUsernameHash(),
 			new Challenge(challenger.getUsernameHash(), target.getUsernameHash(), rules));
-		challenger.message("You challenge " + target.getUsername() + " to a " + rules.modeName() + " Death Match.");
+		challenger.message("Death Match request sent to " + target.getUsername() + ": " + rules.title() + ".");
+		challenger.message("Rules: " + rules.summary() + ".");
 		target.playerServerMessage(MessageType.QUEST,
-			"@mag@" + challenger.getUsername() + "@whi@ has challenged you to a "
-				+ rules.modeName() + " Death Match.");
+			"@mag@Death Match request from @whi@" + challenger.getUsername()
+				+ "@mag@: @yel@" + rules.title() + "@mag@.");
+		target.message(challenger.getUsername() + " challenged you to a " + rules.title() + ".");
 		target.message("Rules: " + rules.summary() + ".");
-		target.message("Right-click them and choose Death Match to accept.");
+		target.message("Right-click " + challenger.getUsername() + " and choose Death Match to accept.");
 	}
 
 	private void cancelChallenge(Player player, Player target) {
@@ -425,6 +430,45 @@ public final class VoidArena {
 		playerB.message("@red@" + rules.title() + " started. Defeat " + playerA.getUsername() + ".");
 		playerA.message("Rules: " + rules.summary() + ".");
 		playerB.message("Rules: " + rules.summary() + ".");
+		if (!rules.ranked) {
+			playerA.message("Unranked fights end after 5 minutes if nobody wins.");
+			playerB.message("Unranked fights end after 5 minutes if nobody wins.");
+			scheduleUnrankedTimeout(match);
+		}
+	}
+
+	private void scheduleUnrankedTimeout(final Match match) {
+		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, UNRANKED_MATCH_TIMEOUT_MS,
+			"Void Arena Unranked Timeout", DuplicationStrategy.ALLOW_MULTIPLE) {
+			public void action() {
+				expireUnrankedMatch(match);
+			}
+		});
+	}
+
+	private synchronized void expireUnrankedMatch(Match match) {
+		if (match.rules.ranked
+			|| activeMatches.get(match.playerAHash) != match
+			|| activeMatches.get(match.playerBHash) != match) {
+			return;
+		}
+
+		activeMatches.remove(match.playerAHash);
+		activeMatches.remove(match.playerBHash);
+		Player playerA = world.getPlayer(match.playerAHash);
+		Player playerB = world.getPlayer(match.playerBHash);
+		returnExpiredUnrankedPlayer(playerA);
+		returnExpiredUnrankedPlayer(playerB);
+	}
+
+	private void returnExpiredUnrankedPlayer(Player player) {
+		if (player == null) {
+			return;
+		}
+		player.resetAll();
+		returnToLobby(player);
+		player.playerServerMessage(MessageType.QUEST,
+			"@mag@Unranked Death Match ended: @whi@time limit reached.");
 	}
 
 	private boolean hasAvailableSlot() {
