@@ -252,6 +252,17 @@ public final class VoidArena {
 		return true;
 	}
 
+	public void enforceMatchBounds(Player player) {
+		Match match = activeMatches.get(player.getUsernameHash());
+		if (match == null || match.isInsideAssignedCage(player)) {
+			return;
+		}
+		player.resetPath();
+		player.message("You cannot leave the Death Match cage.");
+		Point start = match.startFor(player);
+		player.teleportFromVoidArena(start.getX(), start.getY(), true);
+	}
+
 	private int matchCount(VoidArenaStats stats) {
 		return stats == null ? 0 : stats.wins + stats.losses;
 	}
@@ -734,7 +745,6 @@ public final class VoidArena {
 		if (player == null) {
 			return;
 		}
-		player.resetAll();
 		returnToLobby(player);
 		player.playerServerMessage(MessageType.QUEST,
 			"@mag@" + rules.title() + " ended: @whi@time limit reached.");
@@ -768,6 +778,7 @@ public final class VoidArena {
 
 		if (!match.rules.ranked) {
 			returnToLobby(winner);
+			finishArenaSession(loser, false);
 			winner.playerServerMessage(MessageType.QUEST,
 				"@mag@Unranked Death Match win: @whi@You defeated " + loser.getUsername() + ".");
 			loser.playerServerMessage(MessageType.QUEST,
@@ -797,6 +808,7 @@ public final class VoidArena {
 		saveStats(loserStats);
 
 		returnToLobby(winner);
+		finishArenaSession(loser, false);
 		sendResultMessage(winner, true, delta, oldWinnerRating, winnerStats);
 		sendResultMessage(loser, false, delta, oldLoserRating, loserStats);
 		if (disconnectLoss) {
@@ -827,9 +839,21 @@ public final class VoidArena {
 	}
 
 	private void returnToLobby(Player player) {
+		finishArenaSession(player, true);
+	}
+
+	private void finishArenaSession(Player player, boolean moveToLobby) {
+		if (player == null) {
+			return;
+		}
+		sendArenaControl(player, "close");
+		player.resetAll();
 		player.setInstanceId(0);
-		player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		if (moveToLobby) {
+			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		}
 		restoreHits(player);
+		ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipmentStats(player);
 	}
@@ -1036,6 +1060,13 @@ public final class VoidArena {
 
 		private boolean isInsideAssignedCage(Player player) {
 			return VoidArenaConfig.arenaSlot(slotIndex).contains(player.getLocation());
+		}
+
+		private Point startFor(Player player) {
+			if (player != null && player.getUsernameHash() == playerAHash) {
+				return VoidArenaConfig.arenaSlot(slotIndex).startA();
+			}
+			return VoidArenaConfig.arenaSlot(slotIndex).startB();
 		}
 
 		private boolean hasStarted() {

@@ -10466,11 +10466,14 @@ public final class mudclient implements Runnable {
 		if ("clear".equals(payload)) {
 			this.voidArenaRatingsByName.clear();
 			this.voidArenaRankedEligibleByName.clear();
+			this.showDialogVoidArenaDeathMatch = false;
+			this.voidArenaCountdownEndMillis = 0L;
 			return true;
 		}
 		if ("close".equals(payload)) {
 			this.showDialogVoidArenaDeathMatch = false;
 			this.voidArenaDeathMatchTargetIndex = -1;
+			this.voidArenaCountdownEndMillis = 0L;
 			this.voidArenaDeathMatchConfirmPhase = false;
 			this.voidArenaDeathMatchAccepted = false;
 			this.voidArenaDeathMatchOpponentAccepted = false;

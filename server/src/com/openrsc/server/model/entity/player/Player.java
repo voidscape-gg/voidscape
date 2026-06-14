@@ -2836,6 +2836,7 @@ public final class Player extends Mob {
 		Npc npc = getInteractingNpc();
 		NpcInteraction interaction = getNpcInteraction();
 		super.updatePosition();
+		getWorld().getVoidArena().enforceMatchBounds(this);
 
 		if (npc != null) {
 			switch (interaction) {
