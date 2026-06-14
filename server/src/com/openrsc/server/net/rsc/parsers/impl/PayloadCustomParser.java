@@ -922,6 +922,16 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 						os.value = packet.readByte();
 						os.value2 = packet.readByte();
 						break;
+					case VOID_ARENA:
+						os.value = packet.readByte();
+						if (packet.getReadableBytes() >= 3) {
+							os.value2 = packet.readByte();
+							os.id = packet.readShort();
+						} else {
+							os.value2 = 1;
+							os.id = packet.readShort();
+						}
+						break;
 					case IRONMAN_MODE:
 						os.value = packet.readByte();
 						if (os.value == 0 || os.value == 1) {

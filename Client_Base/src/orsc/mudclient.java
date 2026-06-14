@@ -79,6 +79,13 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY = 2;
 	private static final int VOIDSCAPE_INTERFACE_BESTIARY_REQUEST = 16;
 	private static final int VOIDSCAPE_INTERFACE_XP_LOCK = 17;
+	private static final int VOIDSCAPE_INTERFACE_VOID_ARENA = 18;
+	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE = 0;
+	private static final int VOIDSCAPE_VOID_ARENA_RULE_RANKED = 1;
+	private static final int VOIDSCAPE_VOID_ARENA_RULE_F2P_ONLY = 1 << 1;
+	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_PRAYER = 1 << 2;
+	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_RANGED = 1 << 3;
+	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_MAGIC = 1 << 4;
 	private static final int VOIDSCAPE_XP_LOCK_ALLOWED_MASK = (1 << 0) | (1 << 1) | (1 << 2)
 		| (1 << 4) | (1 << 5) | (1 << 6);
 	private static final int VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES = 500;
@@ -150,6 +157,7 @@ public final class mudclient implements Runnable {
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
+	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
 	private static final long ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS = 1000L;
 	private static final int VOIDSCAPE_TOP_TAB_SIZE = 32;
@@ -834,6 +842,8 @@ public final class mudclient implements Runnable {
 	private Sprite settingsGearIcon;
 	private final Map<String, Sprite> voidscapeUiSkinSprites = new HashMap<>();
 	private final Map<String, Sprite> voidscapeUiSkinSlices = new HashMap<>();
+	private final Map<String, Integer> voidArenaRatingsByName = new HashMap<>();
+	private final Map<String, Boolean> voidArenaRankedEligibleByName = new HashMap<>();
 	private final ArrayList<VoidscapeSavedAccount> voidscapeSavedAccounts = new ArrayList<>();
 	private boolean voidscapeLoginAssetLoadAttempted = false;
 	private boolean settingsGearIconLoadAttempted = false;
@@ -930,6 +940,15 @@ public final class mudclient implements Runnable {
 	private boolean showDialogShop = false;
 	private boolean showDialogTrade = false;
 	private boolean showDialogTradeConfirm = false;
+	private boolean showDialogVoidArenaDeathMatch = false;
+	private int voidArenaDeathMatchTargetIndex = -1;
+	private String voidArenaDeathMatchTargetName = "";
+	private String voidArenaDeathMatchTargetKey = "";
+	private boolean voidArenaDeathMatchRanked = true;
+	private boolean voidArenaDeathMatchF2pOnly = true;
+	private boolean voidArenaDeathMatchAllowPrayer = true;
+	private boolean voidArenaDeathMatchAllowRanged = true;
+	private boolean voidArenaDeathMatchAllowMagic = true;
 	private boolean optionsMenuShow = false;
 	private int showUiWildWarn = 0;
 	private int recentSkill = -1;
@@ -1681,11 +1700,67 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private boolean isInsideVoidArenaLobby(int worldX, int worldY) {
+		return worldX >= 582 && worldX <= 616 && worldY >= 78 && worldY <= 84;
+	}
+
+	private boolean isInsideVoidArena(int worldX, int worldY) {
+		return isInsideVoidArenaLobby(worldX, worldY)
+			|| worldX >= 584 && worldX <= 590 && worldY >= 65 && worldY <= 77
+			|| worldX >= 592 && worldX <= 598 && worldY >= 65 && worldY <= 77
+			|| worldX >= 600 && worldX <= 606 && worldY >= 65 && worldY <= 77
+			|| worldX >= 608 && worldX <= 614 && worldY >= 65 && worldY <= 77;
+	}
+
+	private boolean isLocalPlayerInsideVoidArenaLobby() {
+		return isInsideVoidArenaLobby(this.playerLocalX + this.midRegionBaseX, this.playerLocalZ + this.midRegionBaseZ);
+	}
+
+	private boolean isLocalPlayerInsideVoidArena() {
+		return isInsideVoidArena(this.playerLocalX + this.midRegionBaseX, this.playerLocalZ + this.midRegionBaseZ);
+	}
+
+	private boolean isServerPlayerInsideVoidArenaLobby(ORSCharacter player) {
+		int worldX = (player.currentX - 64) / this.tileSize + this.midRegionBaseX;
+		int worldY = (player.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+		return isInsideVoidArenaLobby(worldX, worldY);
+	}
+
+	private boolean isServerPlayerInsideVoidArena(ORSCharacter player) {
+		int worldX = (player.currentX - 64) / this.tileSize + this.midRegionBaseX;
+		int worldY = (player.currentZ - 64) / this.tileSize + this.midRegionBaseZ;
+		return isInsideVoidArena(worldX, worldY);
+	}
+
+	private String voidArenaCharacterKey(ORSCharacter player) {
+		if (player == null) {
+			return null;
+		}
+		String keySource = player.accountName != null && player.accountName.length() > 0
+			? player.accountName : player.displayName;
+		return StringUtil.displayNameToKey(keySource);
+	}
+
+	private String voidArenaPlayerMenuName(ORSCharacter player, String fallbackName) {
+		if (!isLocalPlayerInsideVoidArenaLobby() || !isServerPlayerInsideVoidArenaLobby(player)) {
+			return fallbackName;
+		}
+		String key = voidArenaCharacterKey(player);
+		if (key == null) {
+			return fallbackName;
+		}
+		Integer rating = this.voidArenaRatingsByName.get(key);
+		if (rating == null) {
+			return fallbackName;
+		}
+		return fallbackName + " @yel@(" + (rating >= 0 ? Integer.toString(rating) : "unranked") + ")";
+	}
+
 	private void addPlayerToMenu(int index) {
 		try {
 
 			ORSCharacter player = this.players[index];
-			String name = player.getStaffName();
+			String name = voidArenaPlayerMenuName(player, player.getStaffName());
 			int var5 = 2203 - this.midRegionBaseZ - this.playerLocalZ - this.worldOffsetZ;
 			if (this.midRegionBaseX + this.playerLocalX + this.worldOffsetX >= 2640) {
 				var5 = -50;
@@ -1746,16 +1821,22 @@ public final class mudclient implements Runnable {
 					MenuItemAction.PLAYER_USE_ITEM, "Use " + this.m_ig + " with", this.selectedItemInventoryIndex);
 			} else {
 
+				boolean bothVoidArenaLobby = isLocalPlayerInsideVoidArenaLobby() && isServerPlayerInsideVoidArenaLobby(player);
+				boolean eitherInsideVoidArena = isLocalPlayerInsideVoidArena() || isServerPlayerInsideVoidArena(player);
 				if (var5 > 0
 					&& (player.currentZ - 64) / this.tileSize - (-this.worldOffsetZ - this.midRegionBaseZ) < 2203) {
 					this.menuCommon.addCharacterItem(player.serverIndex, levelDelta >= 0 && levelDelta < 5
 							? MenuItemAction.PLAYER_ATTACK_SIMILAR : MenuItemAction.PLAYER_ATTACK_DIVERGENT, "Attack",
 						"@whi@" + name + level);
-				} else if (wantMembers()) {
+				} else if (wantMembers() && !eitherInsideVoidArena) {
 					this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_DUEL, "Duel with",
 						"@whi@" + name + level);
 				}
 
+				if (bothVoidArenaLobby) {
+					this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_VOID_ARENA_DEATH_MATCH,
+						"Death Match", "@whi@" + name + level);
+				}
 
 				this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_TRADE, "Trade with",
 					"@whi@" + name + level);
@@ -4562,6 +4643,150 @@ public final class mudclient implements Runnable {
 			}
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7, "client.VC(" + "dummy" + ')');
+		}
+	}
+
+	private void openVoidArenaDeathMatchDialog(int targetIndex, ORSCharacter target) {
+		this.showDialogVoidArenaDeathMatch = true;
+		this.voidArenaDeathMatchTargetIndex = targetIndex;
+		this.voidArenaDeathMatchTargetName = target.getStaffName();
+		this.voidArenaDeathMatchTargetKey = voidArenaCharacterKey(target);
+		this.voidArenaDeathMatchF2pOnly = true;
+		this.voidArenaDeathMatchAllowPrayer = true;
+		this.voidArenaDeathMatchAllowRanged = true;
+		this.voidArenaDeathMatchAllowMagic = true;
+		this.voidArenaDeathMatchRanked = !voidArenaRankedDisabled();
+		this.mouseButtonClick = 0;
+	}
+
+	private boolean voidArenaRankedDisabled() {
+		String selfKey = voidArenaCharacterKey(this.localPlayer);
+		Boolean selfEligible = selfKey == null ? null : this.voidArenaRankedEligibleByName.get(selfKey);
+		Boolean targetEligible = this.voidArenaDeathMatchTargetKey == null
+			? null : this.voidArenaRankedEligibleByName.get(this.voidArenaDeathMatchTargetKey);
+		return Boolean.FALSE.equals(selfEligible) || Boolean.FALSE.equals(targetEligible);
+	}
+
+	private int voidArenaDeathMatchRuleMask() {
+		if (this.voidArenaDeathMatchRanked) {
+			return VOIDSCAPE_VOID_ARENA_RULE_RANKED;
+		}
+		int mask = 0;
+		if (this.voidArenaDeathMatchF2pOnly) mask |= VOIDSCAPE_VOID_ARENA_RULE_F2P_ONLY;
+		if (this.voidArenaDeathMatchAllowPrayer) mask |= VOIDSCAPE_VOID_ARENA_RULE_ALLOW_PRAYER;
+		if (this.voidArenaDeathMatchAllowRanged) mask |= VOIDSCAPE_VOID_ARENA_RULE_ALLOW_RANGED;
+		if (this.voidArenaDeathMatchAllowMagic) mask |= VOIDSCAPE_VOID_ARENA_RULE_ALLOW_MAGIC;
+		return mask;
+	}
+
+	private void sendVoidArenaDeathMatchRequest() {
+		this.packetHandler.getClientStream().newPacket(199);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_VOID_ARENA);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE);
+		this.packetHandler.getClientStream().bufferBits.putByte(voidArenaDeathMatchRuleMask());
+		this.packetHandler.getClientStream().bufferBits.putShort(this.voidArenaDeathMatchTargetIndex);
+		this.packetHandler.getClientStream().finishPacket();
+	}
+
+	private boolean voidArenaDialogHit(int x, int y, int width, int height) {
+		return this.mouseX >= x && this.mouseX <= x + width
+			&& this.mouseY >= y && this.mouseY <= y + height;
+	}
+
+	private boolean drawVoidArenaChoice(int x, int y, int width, int height, String text, boolean selected, boolean disabled) {
+		boolean hover = !disabled && voidArenaDialogHit(x, y, width, height);
+		int fill = selected ? 0x342244 : (hover ? 0x2a2532 : 0x17151b);
+		int border = disabled ? 0x555555 : (selected ? 0xb8914f : 0x6f5a86);
+		int textColor = disabled ? 0x777777 : (selected ? 0xffd66b : 0xffffff);
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 230);
+		this.getSurface().drawBoxBorder(x, width, y, height, border);
+		this.getSurface().drawColoredStringCentered(x + width / 2, text, textColor, 0, 1, y + height / 2 + 4);
+		return hover && this.mouseButtonClick == 1;
+	}
+
+	private boolean drawVoidArenaToggleRow(int x, int y, int width, String label, boolean value) {
+		boolean hover = voidArenaDialogHit(x, y - 10, width, 20);
+		int fill = hover ? 0x25202d : 0x151318;
+		this.getSurface().drawBoxAlpha(x, y - 10, width, 20, fill, 190);
+		this.getSurface().drawBoxBorder(x, width, y - 10, 20, 0x3d3348);
+		this.getSurface().drawString(label, x + 8, y + 4, 0xffffff, 1);
+		String state = value ? "ON" : "OFF";
+		this.getSurface().drawString(state, x + width - this.getSurface().stringWidth(1, state) - 8,
+			y + 4, value ? 0x66ff66 : 0xff5555, 1);
+		if (hover && this.mouseButtonClick == 1) {
+			this.mouseButtonClick = 0;
+			return true;
+		}
+		return false;
+	}
+
+	private void drawDialogVoidArenaDeathMatch() {
+		int width = Math.min(330, this.getGameWidth() - 20);
+		int height = 226;
+		int x = (this.getGameWidth() - width) / 2;
+		int y = Math.max(10, (this.getGameHeight() - height) / 2);
+		boolean rankedDisabled = voidArenaRankedDisabled();
+		if (rankedDisabled && this.voidArenaDeathMatchRanked) {
+			this.voidArenaDeathMatchRanked = false;
+		}
+
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 104);
+		this.getSurface().drawBoxAlpha(x, y, width, height, 0x101014, 242);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0x0a0b0d);
+		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, 0x7b5ab8);
+		this.getSurface().drawLineHoriz(x + 8, y + 25, width - 16, 0x8c6f3d);
+		this.getSurface().drawColoredStringCentered(x + width / 2, "Death Match", 0xffd66b, 0, 1, y + 17);
+		this.getSurface().drawColoredStringCentered(x + width / 2,
+			"Opponent: " + this.voidArenaDeathMatchTargetName, 0xffffff, 0, 1, y + 39);
+
+		int modeY = y + 52;
+		int buttonGap = 8;
+		int buttonW = (width - 36 - buttonGap) / 2;
+		if (drawVoidArenaChoice(x + 18, modeY, buttonW, 24, "Ranked", this.voidArenaDeathMatchRanked, rankedDisabled)) {
+			this.voidArenaDeathMatchRanked = true;
+			this.mouseButtonClick = 0;
+		}
+		if (drawVoidArenaChoice(x + 18 + buttonW + buttonGap, modeY, buttonW, 24, "Unranked",
+			!this.voidArenaDeathMatchRanked, false)) {
+			this.voidArenaDeathMatchRanked = false;
+			this.mouseButtonClick = 0;
+		}
+
+		int rowX = x + 22;
+		int rowW = width - 44;
+		if (this.voidArenaDeathMatchRanked) {
+			this.getSurface().drawBoxAlpha(rowX, y + 88, rowW, 74, 0x151318, 190);
+			this.getSurface().drawBoxBorder(rowX, rowW, y + 88, 74, 0x3d3348);
+			this.getSurface().drawString("Ranked rules are locked", rowX + 8, y + 104, 0xffd66b, 1);
+			this.getSurface().drawString("F2P gear only", rowX + 8, y + 122, 0xffffff, 1);
+			this.getSurface().drawString("Prayer, ranged, and magic allowed", rowX + 8, y + 140, 0xffffff, 1);
+		} else {
+			if (drawVoidArenaToggleRow(rowX, y + 96, rowW, "F2P only", this.voidArenaDeathMatchF2pOnly)) {
+				this.voidArenaDeathMatchF2pOnly = !this.voidArenaDeathMatchF2pOnly;
+			}
+			if (drawVoidArenaToggleRow(rowX, y + 121, rowW, "Prayer", this.voidArenaDeathMatchAllowPrayer)) {
+				this.voidArenaDeathMatchAllowPrayer = !this.voidArenaDeathMatchAllowPrayer;
+			}
+			if (drawVoidArenaToggleRow(rowX, y + 146, rowW, "Ranged", this.voidArenaDeathMatchAllowRanged)) {
+				this.voidArenaDeathMatchAllowRanged = !this.voidArenaDeathMatchAllowRanged;
+			}
+			if (drawVoidArenaToggleRow(rowX, y + 171, rowW, "Magic", this.voidArenaDeathMatchAllowMagic)) {
+				this.voidArenaDeathMatchAllowMagic = !this.voidArenaDeathMatchAllowMagic;
+			}
+		}
+
+		int footerY = y + height - 35;
+		boolean send = drawVoidArenaChoice(x + width / 2 - 92, footerY, 82, 24, "Send", false, false);
+		boolean cancel = drawVoidArenaChoice(x + width / 2 + 10, footerY, 82, 24, "Cancel", false, false);
+		if (send) {
+			sendVoidArenaDeathMatchRequest();
+			this.showDialogVoidArenaDeathMatch = false;
+			this.mouseButtonClick = 0;
+		} else if (cancel || (this.mouseButtonClick == 1 && !voidArenaDialogHit(x, y, width, height))) {
+			this.showDialogVoidArenaDeathMatch = false;
+			this.mouseButtonClick = 0;
+		} else if (this.mouseButtonClick == 1 && voidArenaDialogHit(x, y, width, height)) {
+			this.mouseButtonClick = 0;
 		}
 	}
 
@@ -9912,6 +10137,40 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
+	final boolean handleVoidArenaRatingMessage(String message) {
+		if (message == null || !message.startsWith(VOIDSCAPE_ARENA_PREFIX)) {
+			return false;
+		}
+		String payload = message.substring(VOIDSCAPE_ARENA_PREFIX.length());
+		if ("clear".equals(payload)) {
+			this.voidArenaRatingsByName.clear();
+			this.voidArenaRankedEligibleByName.clear();
+			return true;
+		}
+		String[] parts = payload.split("\\|", 6);
+		if (parts.length < 5 || !"rating".equals(parts[0])) {
+			return true;
+		}
+		String key = StringUtil.displayNameToKey(parts[1]);
+		if (key == null) {
+			return true;
+		}
+		if (parts.length >= 6) {
+			this.voidArenaRankedEligibleByName.put(key, "1".equals(parts[5]));
+		}
+		if (!"1".equals(parts[4])) {
+			this.voidArenaRatingsByName.put(key, -1);
+			return true;
+		}
+		int rating = parseIntOrDefault(parts[2], -1);
+		if (rating > 0) {
+			this.voidArenaRatingsByName.put(key, rating);
+		} else {
+			this.voidArenaRatingsByName.remove(key);
+		}
+		return true;
+	}
+
 	private void openVoidscapeAddAccountLogin() {
 		this.loginScreenNumber = 2;
 		this.voidscapeOpenExistingLoginAfterLogout = false;
@@ -11428,6 +11687,8 @@ public final class mudclient implements Runnable {
 						this.drawDialogDuelConfirm();
 					} else if (this.showDialogDuel) {
 						this.drawDialogDuel();
+					} else if (this.showDialogVoidArenaDeathMatch) {
+						this.drawDialogVoidArenaDeathMatch();
 					} else if (this.panelPasswordChange_Mode != PasswordChangeMode.NONE) {
 						this.drawDialogueChangePassword();
 					} else if (this.reportAbuse_State != 1) {
@@ -14799,6 +15060,11 @@ public final class mudclient implements Runnable {
 		if (vInBounds(wx, wy, 303, 3298, 307, 3302)) return "Black Hole";
 		if (vInBounds(wx, wy, 64, 1639, 80, 1643)) return "Mod Room";
 		if (vInBounds(wx, wy, 16, 17, 32, 42)) return "Void Island";
+		if (vInBounds(wx, wy, 582, 78, 616, 84)
+			|| vInBounds(wx, wy, 584, 65, 590, 77)
+			|| vInBounds(wx, wy, 592, 65, 598, 77)
+			|| vInBounds(wx, wy, 600, 65, 606, 77)
+			|| vInBounds(wx, wy, 608, 65, 614, 77)) return "Void Arena";
 		if (vInBounds(wx, wy, 78, 490, 175, 537) || vInBounds(wx, wy, 92, 444, 150, 490)) return "Varrock";
 		if (vInBounds(wx, wy, 198, 427, 229, 450) || vInBounds(wx, wy, 208, 451, 227, 472)) return "Edgeville";
 		if (vInBounds(wx, wy, 209, 491, 247, 529)) return "Barbarian Village";
@@ -18956,7 +19222,8 @@ public final class mudclient implements Runnable {
 					this.cameraPositionZ = this.localPlayer.currentZ;
 				}
 
-					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage) {
+					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
+						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin()) {
 							handleVoidscapeChatTabClick();
 						} else if (mouseY > (getGameHeight() - 4)) { // Chat Tab Selection
@@ -19132,6 +19399,7 @@ public final class mudclient implements Runnable {
 					}
 					if (!this.showDialogMessage
 						&& !this.showDialogServerMessage
+						&& !this.showDialogVoidArenaDeathMatch
 						&& mainComponent.checkMouseInput(getMouseX(), getMouseY(), getMouseButtonDown(),
 						getMouseClick()) && !this.isShowDialogBank()) {
 						this.currentMouseButtonDown = 0;
@@ -20514,6 +20782,14 @@ public final class mudclient implements Runnable {
 					this.packetHandler.getClientStream().newPacket(103);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
 					this.packetHandler.getClientStream().finishPacket();
+					break;
+				}
+				case PLAYER_VOID_ARENA_DEATH_MATCH: {
+					character = this.getServerPlayer(indexOrX);
+					if (character == null) {
+						return;
+					}
+					openVoidArenaDeathMatchDialog(indexOrX, character);
 					break;
 				}
 				case PLAYER_TRADE: {

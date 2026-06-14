@@ -90,6 +90,10 @@ public class PrayerHandler implements PayloadProcessor<PrayerStruct, OpcodeIn> {
 			return;
 		}
 
+		if (!player.getWorld().getVoidArena().canActivatePrayer(player)) {
+			return;
+		}
+
 		if (prayerID == PROTECT_ITEMS && player.isIronMan(IronmanMode.Ultimate.id())) {
 			player.message("Ultimate Ironmen cannot protect items.");
 			return;

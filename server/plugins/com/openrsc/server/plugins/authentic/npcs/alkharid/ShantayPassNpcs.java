@@ -1,5 +1,6 @@
 package com.openrsc.server.plugins.authentic.npcs.alkharid;
 
+import com.openrsc.server.content.voidarena.VoidArenaConfig;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Quests;
@@ -458,7 +459,8 @@ public class ShantayPassNpcs extends AbstractShop implements OpLocTrigger, TakeO
 		boolean isVoidscapeF2pChest = obj.getID() == BANK_CHEST
 			&& ((obj.getX() >= 98 && obj.getX() <= 128
 					&& obj.getY() >= 300 && obj.getY() <= 330) // Void Enclave compound
-				|| (obj.getX() == 210 && obj.getY() == 439));
+				|| (obj.getX() == 210 && obj.getY() == 439)
+				|| VoidArenaConfig.isInsideLobby(obj.getLocation()));
 		// F2P cannot use bank or interact with Stone Gate (except voidscape custom chests).
 		if (!player.getWorld().getServer().getConfig().MEMBER_WORLD && !isVoidscapeF2pChest) {
 			player.message("you must be on a members' world to do that");

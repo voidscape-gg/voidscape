@@ -971,6 +971,45 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public VoidArenaStats queryLoadVoidArenaStats(final int playerId, final String seasonId) throws GameDatabaseException {
+		final String query = "SELECT * FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` WHERE playerID = ? AND seasonID = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, playerId);
+			statement.setString(2, seasonId);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return readVoidArenaStats(result, null);
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	@Override
+	public VoidArenaStats[] queryTopVoidArenaStats(final String seasonId, final int limit) throws GameDatabaseException {
+		final ArrayList<VoidArenaStats> list = new ArrayList<>();
+		final String query = "SELECT v.*, p.username FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` v JOIN `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "players` p ON p.ID = v.playerID WHERE v.seasonID = ? "
+			+ "ORDER BY v.rating DESC, v.wins DESC, v.losses ASC LIMIT ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			statement.setInt(2, Math.max(1, limit));
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					list.add(readVoidArenaStats(result, result.getString("username")));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return list.toArray(new VoidArenaStats[0]);
+	}
+
+	@Override
 	public PlayerSkills[] queryLoadPlayerSkills(final Player player, final boolean isMax) throws GameDatabaseException, NoSuchElementException  {
 		try {
 			final int[] skillLevels = fetchLevels(player.getDatabaseID(), isMax);
@@ -2205,6 +2244,62 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
+	}
+
+	@Override
+	public void querySaveVoidArenaStats(final VoidArenaStats stats) throws GameDatabaseException {
+		final String select = "SELECT ID FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` WHERE playerID = ? AND seasonID = ?";
+		final String insert = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats`(seasonID, playerID, rating, wins, losses, disconnectLosses, resetCount, updatedAt) "
+			+ "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+		final String update = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` SET rating = ?, wins = ?, losses = ?, disconnectLosses = ?, resetCount = ?, updatedAt = ? "
+			+ "WHERE ID = ?";
+		try (final PreparedStatement selectStatement = getConnection().prepareStatement(select);
+			 final PreparedStatement insertStatement = getConnection().prepareStatement(insert);
+			 final PreparedStatement updateStatement = getConnection().prepareStatement(update)) {
+			selectStatement.setInt(1, stats.playerId);
+			selectStatement.setString(2, stats.seasonId);
+			try (final ResultSet result = selectStatement.executeQuery()) {
+				if (result.next()) {
+					updateStatement.setInt(1, stats.rating);
+					updateStatement.setInt(2, stats.wins);
+					updateStatement.setInt(3, stats.losses);
+					updateStatement.setInt(4, stats.disconnectLosses);
+					updateStatement.setInt(5, stats.resetCount);
+					updateStatement.setLong(6, stats.updatedAt);
+					updateStatement.setInt(7, result.getInt("ID"));
+					updateStatement.executeUpdate();
+				} else {
+					insertStatement.setString(1, stats.seasonId);
+					insertStatement.setInt(2, stats.playerId);
+					insertStatement.setInt(3, stats.rating);
+					insertStatement.setInt(4, stats.wins);
+					insertStatement.setInt(5, stats.losses);
+					insertStatement.setInt(6, stats.disconnectLosses);
+					insertStatement.setInt(7, stats.resetCount);
+					insertStatement.setLong(8, stats.updatedAt);
+					insertStatement.executeUpdate();
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	private VoidArenaStats readVoidArenaStats(final ResultSet result, final String username) throws SQLException {
+		final VoidArenaStats stats = new VoidArenaStats();
+		stats.seasonId = result.getString("seasonID");
+		stats.playerId = result.getInt("playerID");
+		stats.username = username;
+		stats.rating = result.getInt("rating");
+		stats.wins = result.getInt("wins");
+		stats.losses = result.getInt("losses");
+		stats.disconnectLosses = result.getInt("disconnectLosses");
+		stats.resetCount = result.getInt("resetCount");
+		stats.updatedAt = result.getLong("updatedAt");
+		return stats;
 	}
 
 	@Override

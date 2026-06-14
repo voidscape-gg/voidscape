@@ -2477,6 +2477,8 @@ public class EntityHandler {
 		npcs.add(new NPCDef("Void Wizard", "A wizard who channels the void.", "", 40, 30, 40, 40, true, sprites, 0x6A0DAD, 0x4A2C6F, 0x4A2C6F, 0x6a0dad, 145, 220, 6, 6, 5, i++)); // 859
 		sprites = new int[]{242, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 		npcs.add(new NPCDef("Void Unicorn", "A unicorn corrupted by the void.", "", 25, 25, 22, 25, true, sprites, 0, 0, 0, 0, 201, 230, 6, 6, 7, i++)); // 860
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Arena Herald", "A robed keeper of the ranked deathmatch ladder.", "Leaderboard", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++)); // 861
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael

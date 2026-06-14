@@ -14,6 +14,7 @@ import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler;
 import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler.TrawlerBoat;
 import com.openrsc.server.content.party.PartyManager;
+import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.content.wilderness.BountyHunter;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
@@ -115,6 +116,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	private final Market market;
 	private final WorldAnnouncementService worldAnnouncementService;
 	private final BountyHunter bountyHunter;
+	private final VoidArena voidArena;
 	private final WildernessHobgoblinSpawnController wildernessHobgoblinSpawnController;
 	private final WorldLoader worldLoader;
 	private final CombatOdysseyData combatOdysseyData;
@@ -151,6 +153,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		this.combatOdysseyData = new CombatOdysseyData(this);
 		this.worldAnnouncementService = new WorldAnnouncementService(this);
 		this.bountyHunter = new BountyHunter(this);
+		this.voidArena = new VoidArena(this);
 		this.wildernessHobgoblinSpawnController = new WildernessHobgoblinSpawnController(this);
 
 		final ServerConfiguration config = server.getConfig();
@@ -193,6 +196,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public BountyHunter getBountyHunter() {
 		return bountyHunter;
+	}
+
+	public VoidArena getVoidArena() {
+		return voidArena;
 	}
 
 	public void delayedRemoveObject(final GameObject object, final int delay) {
@@ -297,6 +304,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	public Player removePlayer(final long usernameHash) {
 		Player player = players.getPlayerByHash(usernameHash);
 		if (player != null) {
+			voidArena.handleLogout(player);
 			bountyHunter.onPlayerLogout(player);
 		}
 		return players.removePlayerByHash(usernameHash);
@@ -907,6 +915,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			}
 			getServer().getPluginHandler().handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player});
 			player.resetSceneryMorph();
+			voidArena.handleLogout(player);
 			bountyHunter.onPlayerLogout(player);
 			player.logout();
 			LOGGER.info("Unregistered " + player.getUsername() + " from player list.");

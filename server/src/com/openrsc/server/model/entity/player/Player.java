@@ -8,6 +8,7 @@ import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
+import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanInvite;
@@ -989,6 +990,13 @@ public final class Player extends Mob {
 				if (victim.equals(opponent)) {
 					return true;
 				}
+			}
+			VoidArena.AttackCheck voidArenaAttack = getWorld().getVoidArena().checkAttack(this, victim, missile);
+			if (voidArenaAttack.applies) {
+				if (!voidArenaAttack.allowed && voidArenaAttack.message != null) {
+					message(voidArenaAttack.message);
+				}
+				return voidArenaAttack.allowed;
 			}
 			if (!missile) {
 				if (!((Player)mob).canBeReattacked()) {
@@ -2599,6 +2607,7 @@ public final class Player extends Mob {
 
 		final Player player = mob instanceof Player ? (Player) mob : null;
 		getWorld().getBountyHunter().onPlayerDeath(this, player);
+		final Point voidArenaRespawn = player == null ? null : getWorld().getVoidArena().handlePlayerDeath(this, player);
 
 		if (player != null) {
 			player.message(String.format("You have defeated %s!", getUsername()));
@@ -2653,10 +2662,14 @@ public final class Player extends Mob {
 			}
 		}
 
-		// Drops to world if player is null
-		getWorld().registerItem(new GroundItem(getWorld(), ItemId.BONES.id(), getX(), getY(), 1, player));
+		if (voidArenaRespawn == null) {
+			// Drops to world if player is null
+			getWorld().registerItem(new GroundItem(getWorld(), ItemId.BONES.id(), getX(), getY(), 1, player));
+		}
 
-			if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
+		if (voidArenaRespawn != null) {
+			// Void Arena is a safe death: score the fight, then skip bones and item loss.
+		} else if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
 				getDuel().dropOnDeath();
 				 // disables duel spam in activity feed
 				 // if (player != null) getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has just won a stake against <strong>%s</strong>", username)));
@@ -2664,7 +2677,7 @@ public final class Player extends Mob {
 			getCarriedItems().getInventory().dropOnDeath(mob);
 		}
 
-		if (isIronMan(IronmanMode.Hardcore.id())) {
+		if (voidArenaRespawn == null && isIronMan(IronmanMode.Hardcore.id())) {
 			updateHCIronman(IronmanMode.Ironman.id());
 			ActionSender.sendIronManMode(this);
 			getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(this, "has died and lost the HC Ironman Rank!"));
@@ -2676,6 +2689,9 @@ public final class Player extends Mob {
 		if (getCache().hasKey("death_location_x") || getCache().hasKey("death_location_y")) {
 			// Seems to never be set
 			setLocation(Point.location(getCache().getInt("death_location_x"), getCache().getInt("death_location_y")), true);
+		} else if (voidArenaRespawn != null) {
+			setInstanceId(0);
+			setLocation(voidArenaRespawn, true);
 		} else {
 			setLocation(Point.location(getConfig().RESPAWN_LOCATION_X, getConfig().RESPAWN_LOCATION_Y), true);
 		}

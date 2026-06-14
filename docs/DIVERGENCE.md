@@ -27,6 +27,26 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-13 - Void Arena four-cage ranked hall
+
+Moved ranked Void Arena fights out of private instances and into a dedicated baked map sector at `h0x60y38`: four compact physical fight cages sit below a narrow public spectator hallway, with the Herald and bank chest in the hall and one prayer altar inside each cage. Cage perimeters use baked railings/jail bars instead of stone walls so spectators can visually read the matches. Ranked challenge acceptance now claims the first available cage, keeps both fighters in the public instance so spectators can watch, and still gates attacks so only assigned opponents can fight inside their assigned cage. The client lobby hitbox, server lobby/cage bounds, Herald/chest/altar locs, `Custom_Landscape.orsc` server/client copies, cache MD5, and the area plaque name were updated. No opcode, schema, or cache definition id changed; reversibility is restoring the old `VoidArenaConfig` coordinates/instancing behavior and removing the arena sector patch/loc updates.
+
+### 2026-06-13 - Void Arena lobby bank chest
+
+Added the first lobby utility pass for Void Arena: a static bank chest (`SceneryId.BANK_CHEST`, object id `942`) now loads at `(550,84)` from `SceneryLocsVoidArena.json`, and `WorldPopulator` loads that file alongside the other Void Arena/Colossus scenery. The existing Shantay bank chest handler now whitelists chests inside `VoidArenaConfig.isInsideLobby(...)`, preserving Ultimate Ironman and bank-pin checks while letting the Arena chest work on F2P/local presets like other Voidscape custom chests. No client version or protocol change was needed because the chest object already exists in the cache/client definitions. Reversibility: remove the scenery loc/load call and the Arena whitelist clause.
+
+### 2026-06-13 - Void Arena leaderboard herald
+
+Added the in-world Void Arena Herald as the ranked lobby's leaderboard NPC. New custom NPC id `861` is appended to server/client NPC definitions, spawned statically at `(552,84)` through `NpcLocsVoidArena.json`, and handled by `VoidArenaHerald` so left-click talk or right-click `Leaderboard` opens the existing top-5 Elo box with the 5-placement-match visibility rule. The lobby teleport/detection now uses the valid Colossus-plaza landing tiles around `(552,82)` instead of the blocked ocean-edge tiles. `CLIENT_VERSION`, local `client_version`, and voidbot moved to `10107` because the NPC definition is client-visible; no new packet/opcode or schema change was added. Reversibility: remove NPC id `861`, its spawn file/load call/plugin, restore the prior lobby constants if needed, and downgrade the version to `10106`.
+
+### 2026-06-13 - Void Arena lobby rating visibility
+
+Added the next Void Arena slice for placement-aware Elo visibility. Ranked ratings are now hidden until a player has completed 5 ranked matches: `::arena stats`, match result messages, the top-5 box, and the client-side right-click lobby labels all respect that threshold. The server broadcasts hidden `@vsarena@rating|username|rating|matches|visible` metadata through the existing server-message channel to custom clients `>= 10106`, and the client consumes it before chat display to show `Name (rating)` or `Name (unranked)` only inside the Void Arena lobby. `CLIENT_VERSION`, local `client_version`, and voidbot moved to `10106`; no new opcode or schema change was added. Reversibility: remove the hidden rating handlers/broadcasts and downgrade the version to `10105`.
+
+### 2026-06-13 - Void Arena ranked combat foundation
+
+Added the first ranked Void Arena slice as normal 1v1 PvP combat instead of Duel/staking. Players can use `::arena` to enter the lobby, right-click another eligible lobby player for a ranked fight, and start an instanced wilderness-style match with safe death handling, disconnect-loss handling, F2P gear gating, maxed combat-stat gating, and 1200-start Elo persistence in `voidarena_ranked_stats`. The client reuses custom `INTERFACE_OPTIONS` packet `199` with new sub-option `18` for ranked challenge requests, so `CLIENT_VERSION`, local `client_version`, and voidbot moved to `10105`. Files: `server/src/com/openrsc/server/content/voidarena/`, `Player.java`, `World.java`, database schema/patches, `RegularPlayer.java`, `InterfaceOptions.java`, `PayloadCustomParser.java`, `InterfaceOptionHandler.java`, `Client_Base/src/orsc/mudclient.java`, `MenuItemAction.java`, `Config.java`, `tools/voidbot/protocol.py`. Reversibility: remove the arena service/hooks/schema patch and downgrade the client version; ranked stats are isolated in the new table.
+
 ### 2026-06-13 - Voidscape location plaque refresh
 
 Replaced only the top-left location plaque cache PNG with the approved new dark-metal/gold/violet generated asset while leaving the chat frame and right-panel chrome on the prior stable assets after the broader raw asset swap proved too stretched/blurry in-game. Refreshed `Client_Base/Cache/MD5.SUM` for the plaque. Verified with the workbench client capture at `content/ui/menu-redesign/captures/plaque-only-check-contact-sheet.png`; no code, packets, schema, or gameplay behavior changed.
@@ -3854,3 +3874,7 @@ Re-anchored the Voidscape-skinned top menu tabs to the original OpenRSC tab stri
 ### 2026-06-13 - Compact clear-glass right-panel pass
 
 Started standardizing the Voidscape side panels around the RSC-friendly clear-glass treatment instead of the heavier generated chrome. Inventory now uses a compact transparent grid shell; Friends/Ignore and Magic/Prayer use a shared slim glass panel with lower-alpha bodies and padded spell/prayer list content; Skills/Quests/Loot plus Options now sit in the same slimmer panel language with slightly stronger text contrast for dense rows; and the account switcher popup uses the same glass shell with lighter native row surfaces. A responsive workbench sweep now covers 640x480, 800x600, and 1024x768, with the loot-panel scenario waiting for the async tracker snapshot before capture. No packet, schema, cache archive, or gameplay behavior changed.
+
+### 2026-06-13 - Void Arena Death Match setup
+
+Replaced the Void Arena lobby's ranked-only right-click flow with a `Death Match` setup dialog. Ranked remains the fixed competitive ruleset with max Attack/Strength/Defense/Hits and F2P-only loadouts; unranked challenges can toggle F2P-only gear, prayer, ranged, and magic. The old duel/staking option is suppressed inside the Void Arena footprint so players use wilderness-style arena combat rather than the duel system. Match rules are enforced server-side through attack, spell, and prayer hooks, and players are restored to full Hits when entering, starting, returning from, or leaving arena fights. `CLIENT_VERSION`, local `client_version`, and voidbot moved to `10108` because custom `INTERFACE_OPTIONS` sub-option `18` now carries a rule mask and arena lobby metadata includes ranked eligibility.

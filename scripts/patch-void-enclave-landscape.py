@@ -100,10 +100,23 @@ VOIDRUSH_ARENA_MIN_Y, VOIDRUSH_ARENA_MAX_Y = 56, 86
 VOIDRUSH_CENTER_X = 505
 VOIDRUSH_CENTER_Y = 71
 
+VOIDARENA_SECTOR = "h0x60y38"
+VOIDARENA_SECTOR_BASE_X = 576
+VOIDARENA_SECTOR_BASE_Y = 48
+VOIDARENA_HALL_MIN_X, VOIDARENA_HALL_MAX_X = 582, 616
+VOIDARENA_HALL_MIN_Y, VOIDARENA_HALL_MAX_Y = 78, 84
+VOIDARENA_CAGES = (
+    (584, 65, 590, 77),
+    (592, 65, 598, 77),
+    (600, 65, 606, 77),
+    (608, 65, 614, 77),
+)
+
 # DoorDef IDs
 HIGHWALL = 7
 HIGH_DOOR = 8
 WALL = 0
+RAILINGS = 5
 DOOR = 2
 WEB = 24               # vanilla spider web — CutWeb.java handles cutting (kept for fallback)
 VOID_WALL = 214        # voidbricks-textured sanctum wall (DoorDef slot 214)
@@ -588,6 +601,115 @@ def patch_colossus_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
+def voidarena_floor_tiles():
+    """Return the four public fight cages plus the long northern spectator hall."""
+    floor = {
+        (x, y)
+        for x in range(VOIDARENA_HALL_MIN_X, VOIDARENA_HALL_MAX_X + 1)
+        for y in range(VOIDARENA_HALL_MIN_Y, VOIDARENA_HALL_MAX_Y + 1)
+    }
+    for min_x, min_y, max_x, max_y in VOIDARENA_CAGES:
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                floor.add((x, y))
+    return floor
+
+
+def voidarena_cage_for(x: int, y: int):
+    for index, (min_x, min_y, max_x, max_y) in enumerate(VOIDARENA_CAGES):
+        if min_x <= x <= max_x and min_y <= y <= max_y:
+            return index, min_x, min_y, max_x, max_y
+    return None
+
+
+def voidarena_floor_overlay(x: int, y: int) -> int:
+    cage = voidarena_cage_for(x, y)
+    if cage is not None:
+        _, min_x, min_y, max_x, max_y = cage
+        center_x = (min_x + max_x) // 2
+        center_y = 70
+        if abs(x - center_x) <= 1 and abs(y - (min_y + 2)) <= 1:
+            return FLOOR_RITUAL
+        if x == center_x or y == center_y:
+            return FLOOR_MID
+        return FLOOR_INDOOR if ((x // 2) + (y // 2)) % 2 == 0 else FLOOR_V3_STONE
+
+    if y in (VOIDARENA_HALL_MIN_Y, VOIDARENA_HALL_MAX_Y) or x in (VOIDARENA_HALL_MIN_X, VOIDARENA_HALL_MAX_X):
+        return FLOOR_MID
+    if x in (596, 600, 604):
+        return FLOOR_RITUAL
+    return FLOOR_V3_STONE if ((x // 2) + (y // 2)) % 2 == 0 else FLOOR_INDOOR
+
+
+def voidarena_walls():
+    """Yield (worldX, worldY, direction, doorDefId) for the ranked arena cages."""
+    walls = []
+    seen = set()
+
+    def b(x, y, direction, id_):
+        key = (x, y, direction)
+        if key in seen:
+            return
+        seen.add(key)
+        walls.append((x, y, direction, id_))
+
+    # Put bar-style boundaries around the fight cages first. The general
+    # perimeter pass below then keeps these slim jail bars instead of replacing
+    # them with fortress stone.
+    for _index, (min_x, min_y, max_x, max_y) in enumerate(VOIDARENA_CAGES):
+        for x in range(min_x, max_x + 1):
+            b(x, min_y, 0, RAILINGS)
+            b(x, max_y + 1, 0, RAILINGS)
+        for y in range(min_y, max_y + 1):
+            b(min_x, y, 1, RAILINGS)
+            b(max_x + 1, y, 1, RAILINGS)
+
+    floor = voidarena_floor_tiles()
+    for x, y in sorted(floor):
+        for nx, ny, wx, wy, direction in (
+            (x, y - 1, x, y, 0),
+            (x, y + 1, x, y + 1, 0),
+            (x - 1, y, x, y, 1),
+            (x + 1, y, x + 1, y, 1),
+        ):
+            if (nx, ny) not in floor:
+                b(wx, wy, direction, VOID_V3_BASTION)
+
+    return walls
+
+
+def patch_voidarena_sector(sector_bytes: bytes) -> bytes:
+    """Bake a four-cage public ranked arena with a long spectator hallway."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - VOIDARENA_SECTOR_BASE_X
+        ty = worldY - VOIDARENA_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {VOIDARENA_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    floor = voidarena_floor_tiles()
+    for x, y in floor:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in floor for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (106 + ((x * 11 + y * 5) % 26)) & 0xFF
+        buf[off + 2] = voidarena_floor_overlay(x, y)
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    for worldX, worldY, direction, doorDefId in voidarena_walls():
+        off = tile_offset(worldX, worldY)
+        buf[off + (5 if direction == 0 else 4)] = (doorDefId + 1) & 0xFF
+
+    return bytes(buf)
+
+
 # === Void Dungeon floor (Floor 3 underground Wilderness black-void) ===
 # Gives the shared Void Dungeon a dark void floor + minimap instead of pure black. The walkable-tile
 # mask is emitted by scripts/gen-void-dungeon.py (server/conf/server/data/void_dungeon_floor.json), so
@@ -648,6 +770,7 @@ def main():
         deathmatch_source = z.read(DEATHMATCH_SECTOR)
         voidrush_source = z.read(VOIDRUSH_SECTOR)
         colossus_source = z.read(COLOSSUS_SECTOR)
+        voidarena_source = z.read(VOIDARENA_SECTOR)
         dungeon_floor = load_dungeon_floor()
         dungeon_sources = {sector: z.read(sector) for sector in dungeon_floor}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
@@ -659,6 +782,8 @@ def main():
         print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
     print(f"Read {len(deathmatch_source)} bytes from {AUTHENTIC.name}!{DEATHMATCH_SECTOR}")
     print(f"Read {len(voidrush_source)} bytes from {AUTHENTIC.name}!{VOIDRUSH_SECTOR}")
+    print(f"Read {len(colossus_source)} bytes from {AUTHENTIC.name}!{COLOSSUS_SECTOR}")
+    print(f"Read {len(voidarena_source)} bytes from {AUTHENTIC.name}!{VOIDARENA_SECTOR}")
 
     # 2. Apply patches
     walls = enclave_walls()
@@ -668,6 +793,7 @@ def main():
         DEATHMATCH_SECTOR: patch_deathmatch_sector(deathmatch_source),
         VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
         COLOSSUS_SECTOR: patch_colossus_sector(colossus_source),
+        VOIDARENA_SECTOR: patch_voidarena_sector(voidarena_source),
     }
     for sector, tiles in dungeon_floor.items():
         patched_sectors[sector] = patch_dungeon_sector(dungeon_sources[sector], sector, tiles)
@@ -686,6 +812,7 @@ def main():
     print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
     print(f"Patched Void Colossus raid plaza into sector {COLOSSUS_SECTOR}")
+    print(f"Patched Void Arena four-cage ranked hall into sector {VOIDARENA_SECTOR}")
     print(f"Patched Void Dungeon dark floor ({sum(len(t) for t in dungeon_floor.values())} tiles) into sectors {', '.join(sorted(dungeon_floor))}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the

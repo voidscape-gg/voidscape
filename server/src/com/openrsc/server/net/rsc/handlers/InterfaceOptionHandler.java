@@ -118,7 +118,15 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 			case XP_LOCK:
 				handleXpLock(player, payload);
 				break;
+			case VOID_ARENA:
+				handleVoidArena(player, payload);
+				break;
 		}
+	}
+
+	private void handleVoidArena(Player player, OptionsStruct payload) {
+		player.getWorld().getVoidArena().handleInterfaceOption(player,
+			payload.value & 0xFF, payload.id, payload.value2 & 0xFF);
 	}
 
 	private void handleXpLock(Player player, OptionsStruct payload) {

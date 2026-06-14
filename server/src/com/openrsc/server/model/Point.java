@@ -64,6 +64,10 @@ public class Point {
 			return "Void Island";
 		}
 
+		else if (inVoidArena()) {
+			return "Void Arena";
+		}
+
 		else if (inTutorialLanding()) {
 			return "Tutorial Landing";
 		}
@@ -284,6 +288,14 @@ public class Point {
 
 	public boolean inVoidIsland() {
 		return inBounds(16, 17, 32, 42);
+	}
+
+	public boolean inVoidArena() {
+		return inBounds(582, 78, 616, 84)
+			|| inBounds(584, 65, 590, 77)
+			|| inBounds(592, 65, 598, 77)
+			|| inBounds(600, 65, 606, 77)
+			|| inBounds(608, 65, 614, 77);
 	}
 
 	public boolean onTutorialIsland() {

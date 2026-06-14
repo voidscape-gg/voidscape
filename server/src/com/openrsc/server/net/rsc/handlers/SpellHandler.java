@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.SkillCapes;
+import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.event.MiniEvent;
 import com.openrsc.server.event.rsc.impl.ObjectRemover;
@@ -559,6 +560,14 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		if (player.getDuel().isDuelActive() && player.getDuel().getDuelSetting(1)) {
 			player.message("Magic cannot be used during this duel!");
 			return true;
+		}
+
+		VoidArena.AttackCheck voidArenaAttack = player.getWorld().getVoidArena().checkMagic(player, affectedPlayer);
+		if (voidArenaAttack.applies) {
+			if (!voidArenaAttack.allowed && voidArenaAttack.message != null) {
+				player.message(voidArenaAttack.message);
+			}
+			return !voidArenaAttack.allowed;
 		}
 
 		// Note: Blocking magic casts near mage arena is inauthentic

@@ -873,7 +873,8 @@ public class PacketHandler {
 			colour = packetsIncoming.readString();
 		}
 
-		if (mc.handleVoidscapeAccountAuthMessage(message)) {
+		if (mc.handleVoidscapeAccountAuthMessage(message)
+			|| mc.handleVoidArenaRatingMessage(message)) {
 			return;
 		}
 

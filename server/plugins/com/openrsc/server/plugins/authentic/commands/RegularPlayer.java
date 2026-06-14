@@ -98,6 +98,8 @@ public final class RegularPlayer implements CommandTrigger {
 			queryPlayerInfo(player);
 		} else if (command.equalsIgnoreCase("bounty")) {
 			player.getWorld().getBountyHunter().sendStatus(player);
+		} else if (command.equalsIgnoreCase("arena") || command.equalsIgnoreCase("voidarena")) {
+			player.getWorld().getVoidArena().handleCommand(player, args);
 		} else if (command.equalsIgnoreCase("event")) {
 			queryEvents(player);
 		} else if (command.equalsIgnoreCase("g") || command.equalsIgnoreCase("pk")) {
@@ -2002,6 +2004,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::p <message> - talk in party chat %",
 		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
 		"@whi@::wilderness - shows the wilderness activity %",
+		"@whi@::arena - enter ranked Void Arena %",
 		"@whi@::event - to enter an ongoing server event %",
 		"@whi@::kills - shows kill counts of npcs %",
 		"@whi@::qoloptout - opts you out of Quality of Life features %",

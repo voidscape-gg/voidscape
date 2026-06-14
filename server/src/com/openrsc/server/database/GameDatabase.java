@@ -163,6 +163,10 @@ public abstract class GameDatabase {
 
 	public abstract PlayerBestiaryLoot[] queryLoadPlayerBestiaryLoot(Player player) throws GameDatabaseException;
 
+	public abstract VoidArenaStats queryLoadVoidArenaStats(int playerId, String seasonId) throws GameDatabaseException;
+
+	public abstract VoidArenaStats[] queryTopVoidArenaStats(String seasonId, int limit) throws GameDatabaseException;
+
 	public abstract PlayerSkills[] queryLoadPlayerSkills(Player player, boolean isMax) throws GameDatabaseException, NoSuchElementException;
 
 	public abstract PlayerExperience[] queryLoadPlayerExperience(final int playerId) throws GameDatabaseException;
@@ -251,6 +255,8 @@ public abstract class GameDatabase {
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
 
 	public abstract void querySavePlayerBestiaryLoot(int playerId, PlayerBestiaryLoot[] loot) throws GameDatabaseException;
+
+	public abstract void querySaveVoidArenaStats(VoidArenaStats stats) throws GameDatabaseException;
 
 	public abstract void querySavePlayerMaxSkills(int playerId, PlayerSkills[] maxSkillLevels) throws GameDatabaseException;
 
