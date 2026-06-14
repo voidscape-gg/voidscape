@@ -3902,3 +3902,7 @@ Added an authoritative `voidarena_ranked_matches` ledger for resolved ranked Dea
 ### 2026-06-14 - Void Arena ranked audit commands
 
 Added read-only administrator tooling for the ranked Death Match season. `::arena season` now previews the current season id, ranked match count, top ratings, and the latest ledger rows, while `::arena audit`, `::arena audit recent <limit>`, and `::arena audit <player> <limit>` inspect recent ranked match outcomes from the new ledger. The ledger query surface joins player names and rating before/after values so staff can review disconnect losses, placement outcomes, repeated pairings, and rating movement before destructive season-reset or reward tooling exists. No packet shape, schema, cache, client version, or gameplay rule changed.
+
+### 2026-06-14 - Void Arena ranked reset guardrail
+
+Added an administrator-only ranked reset flow for the current Void Arena season. `::arena season reset` now opens a destructive preview, emits a short-lived confirmation token, summarizes affected ranked profiles, preserves the ranked match ledger, and blocks confirmation while any Death Match setup or fight is active. `::arena season confirm <token>` re-checks that ranked profile and ledger counts have not changed since preview, resets affected profiles to the configured starting rating with zero wins/losses/disconnect losses, increments each profile's `resetCount`, clears cached ratings, and refreshes visible lobby rating labels. No packet shape, schema, cache, client version, or combat rule changed.

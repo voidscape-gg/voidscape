@@ -167,6 +167,8 @@ public abstract class GameDatabase {
 
 	public abstract VoidArenaStats[] queryTopVoidArenaStats(String seasonId, int limit) throws GameDatabaseException;
 
+	public abstract int queryCountVoidArenaStats(String seasonId) throws GameDatabaseException;
+
 	public abstract VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecords(String seasonId, int limit) throws GameDatabaseException;
 
 	public abstract VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecordsForPlayer(String seasonId, int playerId, int limit) throws GameDatabaseException;
@@ -263,6 +265,8 @@ public abstract class GameDatabase {
 	public abstract void querySavePlayerBestiaryLoot(int playerId, PlayerBestiaryLoot[] loot) throws GameDatabaseException;
 
 	public abstract void querySaveVoidArenaStats(VoidArenaStats stats) throws GameDatabaseException;
+
+	public abstract int queryResetVoidArenaStats(String seasonId, int startingRating, long updatedAt) throws GameDatabaseException;
 
 	public abstract void queryAddVoidArenaMatchRecord(VoidArenaMatchRecord record) throws GameDatabaseException;
 

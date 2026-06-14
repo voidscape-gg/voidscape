@@ -1010,6 +1010,23 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public int queryCountVoidArenaStats(final String seasonId) throws GameDatabaseException {
+		final String query = "SELECT COUNT(*) AS profileCount FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` WHERE seasonID = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return result.getInt("profileCount");
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return 0;
+	}
+
+	@Override
 	public VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecords(final String seasonId, final int limit) throws GameDatabaseException {
 		final ArrayList<VoidArenaMatchRecord> list = new ArrayList<>();
 		final String query = "SELECT m.*, winner.username AS winnerUsername, loser.username AS loserUsername FROM `"
@@ -2349,6 +2366,21 @@ public class MySqlGameDatabase extends JDBCDatabase {
 					insertStatement.executeUpdate();
 				}
 			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public int queryResetVoidArenaStats(final String seasonId, final int startingRating, final long updatedAt) throws GameDatabaseException {
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_stats` SET rating = ?, wins = 0, losses = 0, disconnectLosses = 0, "
+			+ "resetCount = resetCount + 1, updatedAt = ? WHERE seasonID = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, startingRating);
+			statement.setLong(2, updatedAt);
+			statement.setString(3, seasonId);
+			return statement.executeUpdate();
 		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}

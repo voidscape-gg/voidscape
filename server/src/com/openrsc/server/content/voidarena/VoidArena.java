@@ -19,6 +19,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 public final class VoidArena {
 	private static final Logger LOGGER = LogManager.getLogger(VoidArena.class);
@@ -36,12 +37,14 @@ public final class VoidArena {
 	private static final int RANKED_MATCH_TIMEOUT_MS = 10 * 60 * 1000;
 	private static final int MATCH_COUNTDOWN_MS = 5 * 1000;
 	private static final int DEATH_MATCH_SETUP_CLIENT_VERSION = 10109;
+	private static final long SEASON_RESET_CONFIRM_MS = 2 * 60 * 1000;
 
 	private final World world;
 	private final Map<Long, Match> activeMatches = new ConcurrentHashMap<>();
 	private final Map<Long, Challenge> incomingChallenges = new ConcurrentHashMap<>();
 	private final Map<Long, DeathMatchSetup> activeSetups = new ConcurrentHashMap<>();
 	private final Map<Integer, VoidArenaStats> statsCache = new ConcurrentHashMap<>();
+	private final Map<Long, SeasonResetConfirmation> pendingSeasonResets = new ConcurrentHashMap<>();
 
 	public VoidArena(World world) {
 		this.world = world;
@@ -203,7 +206,7 @@ public final class VoidArena {
 			return;
 		}
 		if (action.equals("season")) {
-			sendSeasonPreview(player);
+			handleSeasonCommand(player, args);
 			return;
 		}
 		if (action.equals("audit")) {
@@ -972,11 +975,25 @@ public final class VoidArena {
 		}
 	}
 
+	private void handleSeasonCommand(Player player, String[] args) {
+		if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
+			sendSeasonResetPreview(player);
+			return;
+		}
+		if (args.length >= 2 && (args[1].equalsIgnoreCase("confirm") || args[1].equalsIgnoreCase("finalize"))) {
+			confirmSeasonReset(player, args);
+			return;
+		}
+		sendSeasonPreview(player);
+	}
+
 	private void sendSeasonPreview(Player player) {
 		if (!requireArenaAdmin(player)) {
 			return;
 		}
 		try {
+			int rankedProfiles = world.getServer().getDatabase()
+				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
 			int rankedMatches = world.getServer().getDatabase()
 				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
 			VoidArenaStats[] top = world.getServer().getDatabase()
@@ -985,15 +1002,128 @@ public final class VoidArena {
 				.queryRecentVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON, 5);
 			StringBuilder box = new StringBuilder("@yel@Void Arena Season Preview:%");
 			box.append("@whi@Season: @cya@").append(VoidArenaConfig.CURRENT_SEASON)
-				.append("@whi@, ranked matches: @yel@").append(rankedMatches).append("%");
+				.append("@whi@, ranked profiles: @yel@").append(rankedProfiles)
+				.append("@whi@, ledger rows: @yel@").append(rankedMatches).append("%");
 			box.append("@yel@Top ratings:%");
 			appendTopRatings(box, top, 5);
 			box.append("@yel@Recent ranked matches:%");
 			appendMatchRows(box, recent);
+			box.append("@whi@Run @cya@::arena season reset@whi@ for a destructive reset preview.%");
 			ActionSender.sendBox(player, box.toString(), true);
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to load Void Arena season preview", e);
 			player.message("Unable to load the Void Arena season preview right now.");
+		}
+	}
+
+	private void sendSeasonResetPreview(Player player) {
+		if (!requireArenaAdmin(player)) {
+			return;
+		}
+		try {
+			int rankedProfiles = world.getServer().getDatabase()
+				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
+			int rankedMatches = world.getServer().getDatabase()
+				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+			VoidArenaStats[] top = world.getServer().getDatabase()
+				.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 10);
+			String token = Integer.toString(ThreadLocalRandom.current().nextInt(100000, 1000000));
+			pendingSeasonResets.put(player.getUsernameHash(),
+				new SeasonResetConfirmation(token, System.currentTimeMillis(), rankedProfiles, rankedMatches));
+
+			StringBuilder box = new StringBuilder("@red@Void Arena Ranked Reset Preview:%");
+			box.append("@whi@This will reset @yel@").append(rankedProfiles)
+				.append("@whi@ ranked profiles to @yel@").append(VoidArenaConfig.STARTING_RATING)
+				.append("@whi@ rating, 0 wins, 0 losses, and 0 disconnect losses.%");
+			box.append("@whi@The @yel@").append(rankedMatches)
+				.append("@whi@ ranked match ledger rows are retained for audit.%");
+			if (hasActiveSetupOrMatch()) {
+				box.append("@red@Blocked right now: @whi@")
+					.append(activeMatchCount()).append(" active match(es), ")
+					.append(activeSetupCount()).append(" setup(s).%");
+			}
+			box.append("@yel@Current top ratings before reset:%");
+			appendTopRatings(box, top, 5);
+			box.append("@whi@Confirm within 2 minutes with:%@cya@::arena season confirm ")
+				.append(token).append("%");
+			ActionSender.sendBox(player, box.toString(), true);
+			player.message("Void Arena reset token: " + token);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to load Void Arena reset preview", e);
+			player.message("Unable to load the Void Arena reset preview right now.");
+		}
+	}
+
+	private void confirmSeasonReset(Player player, String[] args) {
+		if (!requireArenaAdmin(player)) {
+			return;
+		}
+		if (args.length < 3) {
+			player.message("Syntax: ::arena season confirm <token>");
+			return;
+		}
+		SeasonResetConfirmation pending = pendingSeasonResets.get(player.getUsernameHash());
+		if (pending == null) {
+			player.message("Run ::arena season reset first to preview and generate a confirmation token.");
+			return;
+		}
+		if (pending.isExpired()) {
+			pendingSeasonResets.remove(player.getUsernameHash());
+			player.message("That Void Arena reset token expired. Run ::arena season reset again.");
+			return;
+		}
+		if (!pending.token.equals(args[2])) {
+			player.message("Incorrect Void Arena reset token.");
+			return;
+		}
+		if (hasActiveSetupOrMatch()) {
+			player.message("Cannot reset Void Arena ranked stats while a setup or match is active.");
+			return;
+		}
+		try {
+			int rankedProfiles = world.getServer().getDatabase()
+				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
+			int rankedMatches = world.getServer().getDatabase()
+				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+			if (rankedProfiles != pending.rankedProfiles || rankedMatches != pending.rankedMatches) {
+				pendingSeasonResets.remove(player.getUsernameHash());
+				player.message("Void Arena ranked data changed since preview. Run ::arena season reset again.");
+				return;
+			}
+			int affected = world.getServer().getDatabase().queryResetVoidArenaStats(
+				VoidArenaConfig.CURRENT_SEASON, VoidArenaConfig.STARTING_RATING, System.currentTimeMillis());
+			pendingSeasonResets.remove(player.getUsernameHash());
+			statsCache.clear();
+			refreshLobbyRatingDisplays();
+			LOGGER.warn("{} reset Void Arena ranked stats for season {} ({} profiles, {} ledger rows retained)",
+				player.getUsername(), VoidArenaConfig.CURRENT_SEASON, affected, rankedMatches);
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Void Arena ranked reset complete: @whi@" + affected
+					+ " profiles reset. The ranked match ledger was retained.");
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to reset Void Arena ranked stats", e);
+			player.message("Unable to reset Void Arena ranked stats right now.");
+		}
+	}
+
+	private boolean hasActiveSetupOrMatch() {
+		return !activeMatches.isEmpty() || !activeSetups.isEmpty();
+	}
+
+	private int activeMatchCount() {
+		return activeMatches.size() / 2;
+	}
+
+	private int activeSetupCount() {
+		return activeSetups.size() / 2;
+	}
+
+	private void refreshLobbyRatingDisplays() {
+		for (Player viewer : world.getPlayers()) {
+			if (VoidArenaConfig.isInsideVoidArena(viewer.getLocation())) {
+				sendRatingClear(viewer);
+				sendLobbyRatings(viewer);
+			}
 		}
 	}
 
@@ -1120,6 +1250,7 @@ public final class VoidArena {
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena leave@mag@ - leave the lobby");
 		if (player.isAdmin()) {
 			player.playerServerMessage(MessageType.QUEST, "@whi@::arena season@mag@ - preview current ranked season");
+			player.playerServerMessage(MessageType.QUEST, "@whi@::arena season reset@mag@ - preview/reset ranked profiles");
 			player.playerServerMessage(MessageType.QUEST, "@whi@::arena audit [recent|player]@mag@ - inspect ranked match ledger");
 		}
 		player.playerServerMessage(MessageType.QUEST,
@@ -1149,6 +1280,24 @@ public final class VoidArena {
 			builder.append(args[i]);
 		}
 		return builder.toString();
+	}
+
+	private static final class SeasonResetConfirmation {
+		private final String token;
+		private final long createdAt;
+		private final int rankedProfiles;
+		private final int rankedMatches;
+
+		private SeasonResetConfirmation(String token, long createdAt, int rankedProfiles, int rankedMatches) {
+			this.token = token;
+			this.createdAt = createdAt;
+			this.rankedProfiles = rankedProfiles;
+			this.rankedMatches = rankedMatches;
+		}
+
+		private boolean isExpired() {
+			return System.currentTimeMillis() - createdAt > SEASON_RESET_CONFIRM_MS;
+		}
 	}
 
 	public static final class AttackCheck {
