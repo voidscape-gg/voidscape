@@ -2,6 +2,7 @@ package com.openrsc.server.content.voidarena;
 
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.struct.VoidArenaMatchRecord;
 import com.openrsc.server.database.struct.VoidArenaStats;
 import com.openrsc.server.event.SingleEvent;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
@@ -806,6 +807,8 @@ public final class VoidArena {
 		loserStats.updatedAt = System.currentTimeMillis();
 		saveStats(winnerStats);
 		saveStats(loserStats);
+		recordRankedMatch(match, winner, loser, oldWinnerRating, winnerStats.rating,
+			oldLoserRating, loserStats.rating, delta, disconnectLoss);
 
 		returnToLobby(winner);
 		finishArenaSession(loser, false);
@@ -816,6 +819,30 @@ public final class VoidArena {
 		}
 		broadcastLobbyRating(winner);
 		broadcastLobbyRating(loser);
+	}
+
+	private void recordRankedMatch(Match match, Player winner, Player loser,
+								   int oldWinnerRating, int newWinnerRating,
+								   int oldLoserRating, int newLoserRating,
+								   int delta, boolean disconnectLoss) {
+		VoidArenaMatchRecord record = new VoidArenaMatchRecord();
+		record.seasonId = VoidArenaConfig.CURRENT_SEASON;
+		record.winnerId = winner.getDatabaseID();
+		record.loserId = loser.getDatabaseID();
+		record.winnerRatingBefore = oldWinnerRating;
+		record.winnerRatingAfter = newWinnerRating;
+		record.loserRatingBefore = oldLoserRating;
+		record.loserRatingAfter = newLoserRating;
+		record.ratingDelta = delta;
+		record.disconnectLoss = disconnectLoss;
+		record.slotIndex = match.slotIndex;
+		record.startedAt = match.createdAt;
+		record.endedAt = System.currentTimeMillis();
+		try {
+			world.getServer().getDatabase().queryAddVoidArenaMatchRecord(record);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to record Void Arena ranked match {} vs {}", winner.getUsername(), loser.getUsername(), e);
+		}
 	}
 
 	private void sendResultMessage(Player player, boolean winner, int delta, int oldRating, VoidArenaStats stats) {
@@ -1043,6 +1070,7 @@ public final class VoidArena {
 		private final long playerAHash;
 		private final long playerBHash;
 		private final MatchRules rules;
+		private final long createdAt;
 		private final long startsAt;
 
 		private Match(int slotIndex, long playerAHash, long playerBHash, MatchRules rules, long startsAt) {
@@ -1050,6 +1078,7 @@ public final class VoidArena {
 			this.playerAHash = playerAHash;
 			this.playerBHash = playerBHash;
 			this.rules = rules;
+			this.createdAt = System.currentTimeMillis();
 			this.startsAt = startsAt;
 		}
 

@@ -3894,3 +3894,7 @@ Moved Death Match setup from a client-owned one-shot popup to a server-owned due
 ### 2026-06-14 - Void Arena match-end cleanup hardening
 
 Tightened Death Match lifecycle cleanup after QA moved from setup into match-ending cases. Every end path now uses the same arena session cleanup for online fighters: close the client-side setup/countdown overlay, reset combat/trade/duel/menu/walk state, clear instance, heal Hits to full, and refresh inventory/equipment/prayer state. Active fighters are also checked every movement tick and snapped back to their assigned cage start tile if a pathing or object edge ever places them outside their cage. No packet shape, schema, cache, or client version changed.
+
+### 2026-06-14 - Void Arena ranked match ledger
+
+Added an authoritative `voidarena_ranked_matches` ledger for resolved ranked Death Matches. Each ranked result now records season, winner, loser, both players' before/after ratings, applied delta, disconnect-loss flag, arena slot, and start/end timestamps after rating stats save successfully. MySQL and SQLite core schemas plus additive migration patches were updated together so future leaderboard, crown, season-reset, and anti-abuse work can audit individual ranked outcomes instead of inferring history from aggregate stats alone. No packet shape, cache, client version, or combat rule changed.

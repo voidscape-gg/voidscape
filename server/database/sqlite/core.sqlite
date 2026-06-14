@@ -90,6 +90,28 @@ CREATE TABLE IF NOT EXISTS `voidarena_ranked_stats`
 CREATE UNIQUE INDEX `voidarena_ranked_player_season` ON `voidarena_ranked_stats` (`seasonID`, `playerID`);
 CREATE INDEX `voidarena_ranked_rating` ON `voidarena_ranked_stats` (`seasonID`, `rating`);
 
+DROP TABLE IF EXISTS `voidarena_ranked_matches`;
+CREATE TABLE IF NOT EXISTS `voidarena_ranked_matches`
+(
+    `ID`                  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    `seasonID`            varchar(16) NOT NULL DEFAULT 'global',
+    `winnerID`            INTEGER     NOT NULL,
+    `loserID`             INTEGER     NOT NULL,
+    `winnerRatingBefore`  INTEGER     NOT NULL,
+    `winnerRatingAfter`   INTEGER     NOT NULL,
+    `loserRatingBefore`   INTEGER     NOT NULL,
+    `loserRatingAfter`    INTEGER     NOT NULL,
+    `ratingDelta`         INTEGER     NOT NULL,
+    `disconnectLoss`      INTEGER     NOT NULL DEFAULT 0,
+    `slotIndex`           INTEGER     NOT NULL DEFAULT -1,
+    `startedAt`           INTEGER     NOT NULL DEFAULT 0,
+    `endedAt`             INTEGER     NOT NULL DEFAULT 0
+);
+
+CREATE INDEX `voidarena_ranked_matches_season_time` ON `voidarena_ranked_matches` (`seasonID`, `endedAt`);
+CREATE INDEX `voidarena_ranked_matches_winner` ON `voidarena_ranked_matches` (`winnerID`, `endedAt`);
+CREATE INDEX `voidarena_ranked_matches_loser` ON `voidarena_ranked_matches` (`loserID`, `endedAt`);
+
 DROP TABLE IF EXISTS `experience`;
 CREATE TABLE IF NOT EXISTS `experience`
 (

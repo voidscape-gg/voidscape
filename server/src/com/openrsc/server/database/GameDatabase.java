@@ -258,6 +258,8 @@ public abstract class GameDatabase {
 
 	public abstract void querySaveVoidArenaStats(VoidArenaStats stats) throws GameDatabaseException;
 
+	public abstract void queryAddVoidArenaMatchRecord(VoidArenaMatchRecord record) throws GameDatabaseException;
+
 	public abstract void querySavePlayerMaxSkills(int playerId, PlayerSkills[] maxSkillLevels) throws GameDatabaseException;
 
 	public abstract void querySavePlayerSkills(int playerId, PlayerSkills[] currSkillLevels) throws GameDatabaseException;

@@ -2288,6 +2288,31 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		}
 	}
 
+	@Override
+	public void queryAddVoidArenaMatchRecord(final VoidArenaMatchRecord record) throws GameDatabaseException {
+		final String query = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_matches`(seasonID, winnerID, loserID, winnerRatingBefore, "
+			+ "winnerRatingAfter, loserRatingBefore, loserRatingAfter, ratingDelta, disconnectLoss, "
+			+ "slotIndex, startedAt, endedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, record.seasonId);
+			statement.setInt(2, record.winnerId);
+			statement.setInt(3, record.loserId);
+			statement.setInt(4, record.winnerRatingBefore);
+			statement.setInt(5, record.winnerRatingAfter);
+			statement.setInt(6, record.loserRatingBefore);
+			statement.setInt(7, record.loserRatingAfter);
+			statement.setInt(8, record.ratingDelta);
+			statement.setInt(9, record.disconnectLoss ? 1 : 0);
+			statement.setInt(10, record.slotIndex);
+			statement.setLong(11, record.startedAt);
+			statement.setLong(12, record.endedAt);
+			statement.executeUpdate();
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
 	private VoidArenaStats readVoidArenaStats(final ResultSet result, final String username) throws SQLException {
 		final VoidArenaStats stats = new VoidArenaStats();
 		stats.seasonId = result.getString("seasonID");
