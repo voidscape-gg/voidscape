@@ -100,16 +100,31 @@ VOIDRUSH_ARENA_MIN_Y, VOIDRUSH_ARENA_MAX_Y = 56, 86
 VOIDRUSH_CENTER_X = 505
 VOIDRUSH_CENTER_Y = 71
 
-VOIDARENA_SECTOR = "h0x60y38"
+VOIDARENA_SECTOR = "h3x60y38"
 VOIDARENA_SECTOR_BASE_X = 576
-VOIDARENA_SECTOR_BASE_Y = 48
+VOIDARENA_SECTOR_BASE_Y = 2880
 VOIDARENA_HALL_MIN_X, VOIDARENA_HALL_MAX_X = 582, 616
-VOIDARENA_HALL_MIN_Y, VOIDARENA_HALL_MAX_Y = 78, 84
+VOIDARENA_HALL_MIN_Y, VOIDARENA_HALL_MAX_Y = 2910, 2916
+VOIDARENA_BACKDROP_MIN_X = VOIDARENA_SECTOR_BASE_X
+VOIDARENA_BACKDROP_MAX_X = VOIDARENA_SECTOR_BASE_X + 47
+VOIDARENA_BACKDROP_MIN_Y = VOIDARENA_SECTOR_BASE_Y
+VOIDARENA_BACKDROP_MAX_Y = VOIDARENA_SECTOR_BASE_Y + 47
 VOIDARENA_CAGES = (
-    (584, 65, 590, 77),
-    (592, 65, 598, 77),
-    (600, 65, 606, 77),
-    (608, 65, 614, 77),
+    (584, 2897, 590, 2909),
+    (592, 2897, 598, 2909),
+    (600, 2897, 606, 2909),
+    (608, 2897, 614, 2909),
+)
+LEGACY_VOIDARENA_SECTORS = ("h0x60y38",)
+VOIDARENA_SKY_SECTORS = (
+    ("h3x59y37", 528, 2832),
+    ("h3x60y37", 576, 2832),
+    ("h3x61y37", 624, 2832),
+    ("h3x59y38", 528, 2880),
+    ("h3x61y38", 624, 2880),
+    ("h3x59y39", 528, 2928),
+    ("h3x60y39", 576, 2928),
+    ("h3x61y39", 624, 2928),
 )
 
 # DoorDef IDs
@@ -138,6 +153,7 @@ FLOOR_INDOOR = 26     # Void Floor (TileDef 25): dark charcoal with subtle purpl
 FLOOR_RITUAL = 27     # Void Floor Accent (TileDef 26): bright magenta-purple — ritual circle + dots
 FLOOR_MID    = 28     # Void Floor Mid (TileDef 27): mid-purple — ring around ritual circle
 FLOOR_V3_STONE = 29   # Void V3 generated cracked-stone floor (TileDef 28 -> TextureDef 64)
+FLOOR_LAVA = 11       # Stock lava tile (TileDef 10 -> TextureDef 31); used as non-walkable backdrop.
 
 # === Enclave footprint ===
 ENCLAVE_MIN_X, ENCLAVE_MAX_X = 98, 128
@@ -615,6 +631,15 @@ def voidarena_floor_tiles():
     return floor
 
 
+def voidarena_backdrop_tiles():
+    """Return the underground cave plate around the walkable arena footprint."""
+    return {
+        (x, y)
+        for x in range(VOIDARENA_BACKDROP_MIN_X, VOIDARENA_BACKDROP_MAX_X + 1)
+        for y in range(VOIDARENA_BACKDROP_MIN_Y, VOIDARENA_BACKDROP_MAX_Y + 1)
+    }
+
+
 def voidarena_cage_for(x: int, y: int):
     for index, (min_x, min_y, max_x, max_y) in enumerate(VOIDARENA_CAGES):
         if min_x <= x <= max_x and min_y <= y <= max_y:
@@ -622,13 +647,18 @@ def voidarena_cage_for(x: int, y: int):
     return None
 
 
+def voidarena_backdrop_overlay(x: int, y: int) -> int:
+    """Use lava for all non-walkable tiles surrounding the arena footprint."""
+    return FLOOR_LAVA
+
+
 def voidarena_floor_overlay(x: int, y: int) -> int:
     cage = voidarena_cage_for(x, y)
     if cage is not None:
         _, min_x, min_y, max_x, max_y = cage
         center_x = (min_x + max_x) // 2
-        center_y = 70
-        if abs(x - center_x) <= 1 and abs(y - (min_y + 2)) <= 1:
+        center_y = 2903
+        if abs(x - center_x) <= 1 and abs(y - center_y) <= 1:
             return FLOOR_RITUAL
         if x == center_x or y == center_y:
             return FLOOR_MID
@@ -679,7 +709,7 @@ def voidarena_walls():
 
 
 def patch_voidarena_sector(sector_bytes: bytes) -> bytes:
-    """Bake a four-cage public ranked arena with a long spectator hallway."""
+    """Bake a four-cage underground lava arena with a long spectator hallway."""
     assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
     buf = bytearray(sector_bytes)
 
@@ -691,6 +721,19 @@ def patch_voidarena_sector(sector_bytes: bytes) -> bytes:
         return (tx * 48 + ty) * 10
 
     floor = voidarena_floor_tiles()
+    backdrop = voidarena_backdrop_tiles()
+    for x, y in backdrop:
+        off = tile_offset(x, y)
+        lava = voidarena_backdrop_overlay(x, y) == FLOOR_LAVA
+
+        buf[off + 0] = 34 if lava else 44
+        buf[off + 1] = (88 + ((x * 7 + y * 13) % 34)) & 0xFF
+        buf[off + 2] = voidarena_backdrop_overlay(x, y)
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
     for x, y in floor:
         off = tile_offset(x, y)
         edge = any((x + ox, y + oy) not in floor for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
@@ -707,6 +750,31 @@ def patch_voidarena_sector(sector_bytes: bytes) -> bytes:
         off = tile_offset(worldX, worldY)
         buf[off + (5 if direction == 0 else 4)] = (doorDefId + 1) & 0xFF
 
+    return bytes(buf)
+
+
+def voidarena_sky_overlay(x: int, y: int) -> int:
+    """Use lava for the unreachable backdrop sectors around the arena."""
+    return FLOOR_LAVA
+
+
+def patch_voidarena_sky_sector(sector_bytes: bytes, base_x: int, base_y: int) -> bytes:
+    """Bake a low, dark void-sky matte around the underground arena."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+    for tx in range(48):
+        for ty in range(48):
+            x = base_x + tx
+            y = base_y + ty
+            off = (tx * 48 + ty) * 10
+            overlay = voidarena_sky_overlay(x, y)
+            buf[off + 0] = 14 + ((x * 5 + y * 3) % 6)
+            buf[off + 1] = (42 + ((x * 7 + y * 11) % 18)) & 0xFF
+            buf[off + 2] = overlay
+            buf[off + 3] = 0
+            buf[off + 4] = 0
+            buf[off + 5] = 0
+            buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
     return bytes(buf)
 
 
@@ -771,11 +839,13 @@ def main():
         voidrush_source = z.read(VOIDRUSH_SECTOR)
         colossus_source = z.read(COLOSSUS_SECTOR)
         voidarena_source = z.read(VOIDARENA_SECTOR)
+        voidarena_sky_sources = {sector: z.read(sector) for sector, _, _ in VOIDARENA_SKY_SECTORS}
         dungeon_floor = load_dungeon_floor()
         dungeon_sources = {sector: z.read(sector) for sector in dungeon_floor}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
         legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
         legacy_deathmatch_sources = {sector: z.read(sector) for sector in LEGACY_DEATHMATCH_SECTORS}
+        legacy_voidarena_sources = {sector: z.read(sector) for sector in LEGACY_VOIDARENA_SECTORS}
     print(f"Read {len(enclave_source)} bytes from {AUTHENTIC.name}!{ENCLAVE_SECTOR}")
     print(f"Read {len(island_source)} bytes from {AUTHENTIC.name}!{VOID_ISLAND_SECTOR}")
     for sector, source in catchsim_sources.items():
@@ -784,6 +854,8 @@ def main():
     print(f"Read {len(voidrush_source)} bytes from {AUTHENTIC.name}!{VOIDRUSH_SECTOR}")
     print(f"Read {len(colossus_source)} bytes from {AUTHENTIC.name}!{COLOSSUS_SECTOR}")
     print(f"Read {len(voidarena_source)} bytes from {AUTHENTIC.name}!{VOIDARENA_SECTOR}")
+    for sector, source in voidarena_sky_sources.items():
+        print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
 
     # 2. Apply patches
     walls = enclave_walls()
@@ -795,6 +867,8 @@ def main():
         COLOSSUS_SECTOR: patch_colossus_sector(colossus_source),
         VOIDARENA_SECTOR: patch_voidarena_sector(voidarena_source),
     }
+    for sector, base_x, base_y in VOIDARENA_SKY_SECTORS:
+        patched_sectors[sector] = patch_voidarena_sky_sector(voidarena_sky_sources[sector], base_x, base_y)
     for sector, tiles in dungeon_floor.items():
         patched_sectors[sector] = patch_dungeon_sector(dungeon_sources[sector], sector, tiles)
     for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
@@ -804,15 +878,18 @@ def main():
     patched_sectors.update(legacy_sources)
     patched_sectors.update(legacy_enclave_sources)
     patched_sectors.update(legacy_deathmatch_sources)
+    patched_sectors.update(legacy_voidarena_sources)
     print(f"Patched {len(walls)} enclave walls into sector {ENCLAVE_SECTOR}")
     print(f"Restored {len(LEGACY_ENCLAVE_SECTORS)} legacy enclave sector(s) to authentic terrain")
     print(f"Restored {len(LEGACY_DEATHMATCH_SECTORS)} legacy deathmatch sector(s) to authentic terrain")
+    print(f"Restored {len(LEGACY_VOIDARENA_SECTORS)} legacy void arena sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
     print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
     print(f"Patched Void Colossus raid plaza into sector {COLOSSUS_SECTOR}")
-    print(f"Patched Void Arena four-cage ranked hall into sector {VOIDARENA_SECTOR}")
+    print(f"Patched Void Arena underground lava fight hall into sector {VOIDARENA_SECTOR}")
+    print(f"Patched {len(VOIDARENA_SKY_SECTORS)} Void Arena lava backdrop sector(s)")
     print(f"Patched Void Dungeon dark floor ({sum(len(t) for t in dungeon_floor.values())} tiles) into sectors {', '.join(sorted(dungeon_floor))}")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the

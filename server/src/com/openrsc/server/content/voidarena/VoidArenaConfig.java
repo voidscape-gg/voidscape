@@ -12,19 +12,19 @@ public final class VoidArenaConfig {
 	public static final int RATING_DISPLAY_CLIENT_VERSION = 10106;
 
 	public static final int LOBBY_X = 600;
-	public static final int LOBBY_Y = 82;
+	public static final int LOBBY_Y = 2914;
 	public static final int LOBBY_MIN_X = 582;
-	public static final int LOBBY_MIN_Y = 78;
+	public static final int LOBBY_MIN_Y = 2910;
 	public static final int LOBBY_MAX_X = 616;
-	public static final int LOBBY_MAX_Y = 84;
+	public static final int LOBBY_MAX_Y = 2916;
 	public static final int EXIT_X = 113;
 	public static final int EXIT_Y = 318;
 
 	private static final ArenaSlot[] ARENA_SLOTS = {
-		new ArenaSlot(0, 584, 65, 590, 77, 585, 72, 589, 72),
-		new ArenaSlot(1, 592, 65, 598, 77, 593, 72, 597, 72),
-		new ArenaSlot(2, 600, 65, 606, 77, 601, 72, 605, 72),
-		new ArenaSlot(3, 608, 65, 614, 77, 609, 72, 613, 72),
+		new ArenaSlot(0, 584, 2897, 590, 2909, 585, 2904, 589, 2904),
+		new ArenaSlot(1, 592, 2897, 598, 2909, 593, 2904, 597, 2904),
+		new ArenaSlot(2, 600, 2897, 606, 2909, 601, 2904, 605, 2904),
+		new ArenaSlot(3, 608, 2897, 614, 2909, 609, 2904, 613, 2904),
 	};
 
 	public static Point lobbyTile() {

@@ -291,11 +291,11 @@ public class Point {
 	}
 
 	public boolean inVoidArena() {
-		return inBounds(582, 78, 616, 84)
-			|| inBounds(584, 65, 590, 77)
-			|| inBounds(592, 65, 598, 77)
-			|| inBounds(600, 65, 606, 77)
-			|| inBounds(608, 65, 614, 77);
+		return inBounds(582, 2910, 616, 2916)
+			|| inBounds(584, 2897, 590, 2909)
+			|| inBounds(592, 2897, 598, 2909)
+			|| inBounds(600, 2897, 606, 2909)
+			|| inBounds(608, 2897, 614, 2909);
 	}
 
 	public boolean onTutorialIsland() {

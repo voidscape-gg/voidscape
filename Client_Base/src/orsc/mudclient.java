@@ -1701,15 +1701,15 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean isInsideVoidArenaLobby(int worldX, int worldY) {
-		return worldX >= 582 && worldX <= 616 && worldY >= 78 && worldY <= 84;
+		return worldX >= 582 && worldX <= 616 && worldY >= 2910 && worldY <= 2916;
 	}
 
 	private boolean isInsideVoidArena(int worldX, int worldY) {
 		return isInsideVoidArenaLobby(worldX, worldY)
-			|| worldX >= 584 && worldX <= 590 && worldY >= 65 && worldY <= 77
-			|| worldX >= 592 && worldX <= 598 && worldY >= 65 && worldY <= 77
-			|| worldX >= 600 && worldX <= 606 && worldY >= 65 && worldY <= 77
-			|| worldX >= 608 && worldX <= 614 && worldY >= 65 && worldY <= 77;
+			|| worldX >= 584 && worldX <= 590 && worldY >= 2897 && worldY <= 2909
+			|| worldX >= 592 && worldX <= 598 && worldY >= 2897 && worldY <= 2909
+			|| worldX >= 600 && worldX <= 606 && worldY >= 2897 && worldY <= 2909
+			|| worldX >= 608 && worldX <= 614 && worldY >= 2897 && worldY <= 2909;
 	}
 
 	private boolean isLocalPlayerInsideVoidArenaLobby() {
@@ -15060,11 +15060,11 @@ public final class mudclient implements Runnable {
 		if (vInBounds(wx, wy, 303, 3298, 307, 3302)) return "Black Hole";
 		if (vInBounds(wx, wy, 64, 1639, 80, 1643)) return "Mod Room";
 		if (vInBounds(wx, wy, 16, 17, 32, 42)) return "Void Island";
-		if (vInBounds(wx, wy, 582, 78, 616, 84)
-			|| vInBounds(wx, wy, 584, 65, 590, 77)
-			|| vInBounds(wx, wy, 592, 65, 598, 77)
-			|| vInBounds(wx, wy, 600, 65, 606, 77)
-			|| vInBounds(wx, wy, 608, 65, 614, 77)) return "Void Arena";
+		if (vInBounds(wx, wy, 582, 2910, 616, 2916)
+			|| vInBounds(wx, wy, 584, 2897, 590, 2909)
+			|| vInBounds(wx, wy, 592, 2897, 598, 2909)
+			|| vInBounds(wx, wy, 600, 2897, 606, 2909)
+			|| vInBounds(wx, wy, 608, 2897, 614, 2909)) return "Void Arena";
 		if (vInBounds(wx, wy, 78, 490, 175, 537) || vInBounds(wx, wy, 92, 444, 150, 490)) return "Varrock";
 		if (vInBounds(wx, wy, 198, 427, 229, 450) || vInBounds(wx, wy, 208, 451, 227, 472)) return "Edgeville";
 		if (vInBounds(wx, wy, 209, 491, 247, 529)) return "Barbarian Village";
