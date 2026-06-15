@@ -21,7 +21,8 @@ scripts/package-friend-beta.sh \
   --host play.example.com \
   --port 43596 \
   --base-url https://play.example.com/voidscape/update \
-  --discord-url https://discord.gg/example
+  --discord-url https://discord.gg/example \
+  --discord-application-id 123456789012345678
 ```
 
 The script emits `dist/friend-beta/VoidscapeLauncher.jar` for testers and `dist/friend-beta/update/` for static hosting. On first Play, the launcher downloads `Open_RSC_Client.jar` plus cache files from the manifest and writes the configured host/port into the runtime cache.
@@ -35,7 +36,16 @@ voidscape.manifestUrl=https://play.example.com/voidscape/update/manifest.propert
 voidscape.websiteUrl=
 voidscape.portalUrl=
 voidscape.discordUrl=https://discord.gg/example
+voidscape.discordApplicationId=123456789012345678
+voidscape.discordLargeImageKey=voidscape_logo
+voidscape.discordLargeImageText=Voidscape
 ```
+
+Discord rich presence uses the Discord application name for the activity title.
+Create a Discord developer application named `Voidscape`, upload a large image
+asset matching `voidscape.discordLargeImageKey`, then set
+`voidscape.discordApplicationId` so testers do not publish the inherited
+OpenRSC application in their status.
 
 The portal API can also host a live manifest at `/api/launcher/manifest.properties`. That manifest points at `/downloads/pc-client` and `/downloads/cache/...`, hashes every file with SHA-256, and is checked automatically when the player clicks Play. Static beta packaging still works for a tiny no-portal deployment; portal-hosted updates are the normal path once the account site is deployed.
 

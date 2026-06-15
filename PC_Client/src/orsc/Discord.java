@@ -19,7 +19,12 @@ public class Discord {
 
 	public static DiscordEventHandlers discord;
 
-	public static final String APPLICATION_ID = "811783536914333747";
+	public static final String APPLICATION_ID = setting("voidscape.discordApplicationId",
+		"VOIDSCAPE_DISCORD_APPLICATION_ID", "");
+	private static final String LARGE_IMAGE_KEY = setting("voidscape.discordLargeImageKey",
+		"VOIDSCAPE_DISCORD_LARGE_IMAGE_KEY", "voidscape_logo");
+	private static final String LARGE_IMAGE_TEXT = setting("voidscape.discordLargeImageText",
+		"VOIDSCAPE_DISCORD_LARGE_IMAGE_TEXT", "Voidscape");
 
 	public static boolean startedDiscord = false;
 
@@ -27,7 +32,19 @@ public class Discord {
 	private static final Runnable presenceTask = new PresenceCheck();
 	private static final Runnable discordTask = new DiscordUpdate();
 	private static ScheduledFuture scheduled;
-	private static String lastUpdate = "Open source RSC MMO";
+	private static String lastUpdate = "Voidscape";
+
+	private static String setting(String property, String env, String fallback) {
+		String value = System.getProperty(property);
+		if (value != null && value.trim().length() > 0) {
+			return value.trim();
+		}
+		value = System.getenv(env);
+		if (value != null && value.trim().length() > 0) {
+			return value.trim();
+		}
+		return fallback;
+	}
 
 	/**
 	 * Write whether or not Discord is currently in use. This prevents race conditions when multiple clients are
@@ -60,6 +77,15 @@ public class Discord {
 	 */
 	static class PresenceCheck implements Runnable {
 		public void run() {
+			if (APPLICATION_ID.length() == 0) {
+				startedDiscord = true;
+				setInUse(false);
+				System.out.println("Discord rich presence disabled: missing Voidscape Discord application id.");
+				if (scheduled != null && !scheduled.isCancelled()) {
+					scheduled.cancel(false);
+				}
+				return;
+			}
 			// discord natives not in use and have not started discord
 			if (!startedDiscord && !getInUse()) {
 				Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -77,7 +103,7 @@ public class Discord {
 				DiscordRPC.discordRegister(APPLICATION_ID, "");
 				scheduledExecutorService.scheduleAtFixedRate(discordTask, 0L, 5L, TimeUnit.SECONDS);
 				startedDiscord = true;
-				if (!scheduled.isCancelled()) {
+				if (scheduled != null && !scheduled.isCancelled()) {
 					System.out.println("Discord detection finished.");
 					scheduled.cancel(false);
 				}
@@ -104,7 +130,7 @@ public class Discord {
 		public void run() {
 			DiscordRPC.discordRunCallbacks();
 			DiscordRichPresence.Builder presence = new DiscordRichPresence.Builder(lastUpdate);
-			presence.setBigImage("openrsc_logo", "Check out rsc.vet!");
+			presence.setBigImage(LARGE_IMAGE_KEY, LARGE_IMAGE_TEXT);
 			DiscordRPC.discordUpdatePresence(presence.build());
 			// This will be the default message if the player hasn't done anything
 			// since the last update.

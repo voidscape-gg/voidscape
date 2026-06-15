@@ -106,14 +106,17 @@ public class VoidscapeUpdater {
       }
 
       status("Launching Voidscape...", 100, false);
-      Utils.execCmd(new String[] {
-          "java",
-          "-Dsun.java2d.d3d=false",
-          "-Dsun.java2d.noddraw=true",
-          "-Dsun.java2d.opengl=false",
-          "-jar",
-          jar.getAbsolutePath()
-      }, cacheDir);
+      List<String> command = new ArrayList<String>();
+      command.add("java");
+      command.add("-Dsun.java2d.d3d=false");
+      command.add("-Dsun.java2d.noddraw=true");
+      command.add("-Dsun.java2d.opengl=false");
+      addJvmProperty(command, "voidscape.discordApplicationId", VoidscapeLauncherConfig.discordApplicationId());
+      addJvmProperty(command, "voidscape.discordLargeImageKey", VoidscapeLauncherConfig.discordLargeImageKey());
+      addJvmProperty(command, "voidscape.discordLargeImageText", VoidscapeLauncherConfig.discordLargeImageText());
+      command.add("-jar");
+      command.add(jar.getAbsolutePath());
+      Utils.execCmd(command.toArray(new String[command.size()]), cacheDir);
     } catch (Exception e) {
       Logger.Error("Unable to launch Voidscape client: " + e.getMessage());
       JOptionPane.showMessageDialog(parent,
@@ -121,6 +124,13 @@ public class VoidscapeUpdater {
           VoidscapeLauncherConfig.TITLE,
           JOptionPane.ERROR_MESSAGE);
     }
+  }
+
+  private void addJvmProperty(List<String> command, String property, String value) {
+    if (value == null || value.trim().length() == 0) {
+      return;
+    }
+    command.add("-D" + property + "=" + value.trim());
   }
 
   private boolean hasManifestUrl() {

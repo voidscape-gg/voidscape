@@ -11,13 +11,13 @@ public class Discord {
 	 * version
 	 * */
 
-	public static final String APPLICATION_ID = "811783536914333747";
+	public static final String APPLICATION_ID = "";
 
 	public static boolean startedDiscord = false;
 
 	private static final ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
 	private static ScheduledFuture scheduled;
-	private static String lastUpdate = "Open source RSC MMO";
+	private static String lastUpdate = "Voidscape";
 
 	public static void setLastUpdate(String update) {
 		lastUpdate = update;

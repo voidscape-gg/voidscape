@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-14 - Portal whitepaper story redesign
+
+Rebuilt the pre-release portal whitepaper around a tighter story: "We love Classic. We are finishing what it started." The visible page now moves from premise, to what Classic left unfinished, to the Voidscape loop, to six proof-backed pillars, to a compact build-proof wall using current beta/workbench captures under `web/portal/assets/whitepaper/`. The public prelaunch page no longer embeds the MP4 background, relying on the static fallback for better scroll performance, and whitepaper screenshots can be expanded in a lightweight viewer. This is a static website/content change in `web/portal/index.html`, `web/portal/styles.css`, and `web/portal/script.js`; no game packets, schema, cache archives, or gameplay behavior changed. Reversibility is restoring the previous whitepaper markup/styles/script behavior and removing the added `feature-*-current.png` assets.
+
 ### 2026-06-14 - Beta in-client registration re-enabled
 
 Friend beta account creation now allows the desktop client registration packet again. The live VPS still owns `server/local.conf` outside git, so the `Deploy beta` full workflow normalizes `want_packet_register: true` on the remote config after backing it up and before restarting `voidscape`. This keeps launcher/VPS beta signups working without committing runtime secrets or the deployed `local.conf`.
@@ -3930,3 +3934,7 @@ Added read-only administrator tooling for the ranked Death Match season. `::aren
 ### 2026-06-14 - Void Arena ranked reset guardrail
 
 Added an administrator-only ranked reset flow for the current Void Arena season. `::arena season reset` now opens a destructive preview, emits a short-lived confirmation token, summarizes affected ranked profiles, preserves the ranked match ledger, and blocks confirmation while any Death Match setup or fight is active. `::arena season confirm <token>` re-checks that ranked profile and ledger counts have not changed since preview, resets affected profiles to the configured starting rating with zero wins/losses/disconnect losses, increments each profile's `resetCount`, clears cached ratings, and refreshes visible lobby rating labels. No packet shape, schema, cache, client version, or combat rule changed.
+
+### 2026-06-14 - Voidscape Discord rich presence branding
+
+Removed the PC client's hardcoded OpenRSC Discord application id, default status copy, and `openrsc_logo` image reference from Discord rich presence. The client now reads `voidscape.discordApplicationId` / `VOIDSCAPE_DISCORD_APPLICATION_ID` and disables RPC when no Voidscape application id is configured, preventing players from advertising the inherited Open RuneScape Classic application. The launcher passes the same Discord branding properties from packaged settings, system properties, or environment variables, and friend-beta packaging can embed them for testers. No packet shape, schema, cache, or client version changed.

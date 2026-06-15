@@ -1,0 +1,142 @@
+[
+  {
+    "label": "Portal landing",
+    "file": "portal-landing-chrome.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\portal-landing-chrome.png"
+  },
+  {
+    "label": "Signup code issued",
+    "file": "portal-signup-code-issued-tall.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\portal-signup-code-issued-tall.png"
+  },
+  {
+    "label": "Account dashboard",
+    "file": "portal-account-dashboard.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\portal-account-dashboard.png"
+  },
+  {
+    "label": "Character roster",
+    "file": "portal-character-roster.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\portal-character-roster.png"
+  },
+  {
+    "label": "Custom HUD",
+    "file": "ui-hud.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-hud.png"
+  },
+  {
+    "label": "Location plaque + hub",
+    "file": "void-enclave-hub-final.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-enclave-hub-final.png"
+  },
+  {
+    "label": "Rifts / waystones",
+    "file": "void-rift-city-hub-final.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-rift-city-hub-final.png"
+  },
+  {
+    "label": "World map route",
+    "file": "world-map-route-overlay.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\world-map-route-overlay.png"
+  },
+  {
+    "label": "Void Dungeon PvM",
+    "file": "void-dungeon-risky-pvm-final.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-dungeon-risky-pvm-final.png"
+  },
+  {
+    "label": "Void Colossus boss",
+    "file": "void-colossus-cinematic-bossfight.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-colossus-cinematic-bossfight.png"
+  },
+  {
+    "label": "Void Rush wave",
+    "file": "void-rush-wave-active.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-rush-wave-active.png"
+  },
+  {
+    "label": "PK catching trainer",
+    "file": "pk-catching-simulator-arena-final.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\pk-catching-simulator-arena-final.png"
+  },
+  {
+    "label": "Auction browse",
+    "file": "auction-house-clean-browse-v2.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\auction-house-clean-browse-v2.png"
+  },
+  {
+    "label": "Market Intel",
+    "file": "auction-house-market-intel-v2.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\auction-house-market-intel-v2.png"
+  },
+  {
+    "label": "Bank loadouts",
+    "file": "bank-loadouts.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\bank-loadouts.png"
+  },
+  {
+    "label": "Clear inventory",
+    "file": "ui-inventory.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-inventory.png"
+  },
+  {
+    "label": "LOOT tracker tab",
+    "file": "ui-loot.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-loot.png"
+  },
+  {
+    "label": "Rare drop beam",
+    "file": "rare-drop-beam-void-key-ownerless.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\rare-drop-beam-void-key-ownerless.png"
+  },
+  {
+    "label": "Loot beam settings",
+    "file": "loot-beam-custom-list.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\loot-beam-custom-list.png"
+  },
+  {
+    "label": "Titles menu",
+    "file": "player-titles-menu.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\player-titles-menu.png"
+  },
+  {
+    "label": "Herald announcements",
+    "file": "void-herald-announcement-previews.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-herald-announcement-previews.png"
+  },
+  {
+    "label": "Void chest reward",
+    "file": "void-chest-reward-opened.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\void-chest-reward-opened.png"
+  },
+  {
+    "label": "Void gear + dragon pieces",
+    "file": "custom-void-gear-dragon-components-inventory.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\custom-void-gear-dragon-components-inventory.png"
+  },
+  {
+    "label": "Combat XP locks",
+    "file": "ui-skills.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-skills.png"
+  },
+  {
+    "label": "Magic / Home teleport",
+    "file": "ui-magic.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-magic.png"
+  },
+  {
+    "label": "Prayer glass panel",
+    "file": "ui-prayers.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-prayers.png"
+  },
+  {
+    "label": "Account switcher",
+    "file": "ui-account.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\ui-account.png"
+  },
+  {
+    "label": "Portal security",
+    "file": "portal-security-recovery.png",
+    "path": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\content\\website\\feature-screenshots\\20260614-145709\\portal-security-recovery.png"
+  }
+]

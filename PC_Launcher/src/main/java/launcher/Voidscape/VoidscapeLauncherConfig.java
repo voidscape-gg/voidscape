@@ -75,6 +75,18 @@ public final class VoidscapeLauncherConfig {
     return setting("voidscape.discordUrl", "VOIDSCAPE_DISCORD_URL", "");
   }
 
+  public static String discordApplicationId() {
+    return setting("voidscape.discordApplicationId", "VOIDSCAPE_DISCORD_APPLICATION_ID", "");
+  }
+
+  public static String discordLargeImageKey() {
+    return setting("voidscape.discordLargeImageKey", "VOIDSCAPE_DISCORD_LARGE_IMAGE_KEY", "voidscape_logo");
+  }
+
+  public static String discordLargeImageText() {
+    return setting("voidscape.discordLargeImageText", "VOIDSCAPE_DISCORD_LARGE_IMAGE_TEXT", "Voidscape");
+  }
+
   public static String endpointLabel() {
     return serverHost() + ":" + serverPort();
   }

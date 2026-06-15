@@ -10,7 +10,8 @@
 #     --host play.example.com \
 #     --port 43596 \
 #     --base-url https://play.example.com/voidscape/update \
-#     --discord-url https://discord.gg/example
+#     --discord-url https://discord.gg/example \
+#     --discord-application-id 123456789012345678
 
 set -euo pipefail
 
@@ -23,6 +24,9 @@ BASE_URL=""
 WEBSITE_URL=""
 PORTAL_URL=""
 DISCORD_URL=""
+DISCORD_APPLICATION_ID=""
+DISCORD_LARGE_IMAGE_KEY="voidscape_logo"
+DISCORD_LARGE_IMAGE_TEXT="Voidscape"
 OUTPUT_DIR="$REPO_ROOT/dist/friend-beta"
 SKIP_BUILD=0
 
@@ -39,6 +43,12 @@ Options:
   --website-url URL        Optional website button URL.
   --portal-url URL         Optional account button URL.
   --discord-url URL        Optional Discord button URL.
+  --discord-application-id ID
+                           Optional Discord application ID for Voidscape rich presence.
+  --discord-large-image-key KEY
+                           Optional Discord rich presence image asset key. Default: voidscape_logo.
+  --discord-large-image-text TEXT
+                           Optional Discord rich presence image hover text. Default: Voidscape.
   --output-dir DIR         Output directory. Default: dist/friend-beta.
   --skip-build             Reuse existing Client_Base/Open_RSC_Client.jar.
   -h, --help               Show this help.
@@ -72,6 +82,18 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--discord-url)
 			DISCORD_URL="${2:-}"
+			shift 2
+			;;
+		--discord-application-id)
+			DISCORD_APPLICATION_ID="${2:-}"
+			shift 2
+			;;
+		--discord-large-image-key)
+			DISCORD_LARGE_IMAGE_KEY="${2:-}"
+			shift 2
+			;;
+		--discord-large-image-text)
+			DISCORD_LARGE_IMAGE_TEXT="${2:-}"
 			shift 2
 			;;
 		--output-dir)
@@ -215,6 +237,15 @@ fi
 	fi
 	if [[ -n "$DISCORD_URL" ]]; then
 		property_line "voidscape.discordUrl" "$DISCORD_URL"
+	fi
+	if [[ -n "$DISCORD_APPLICATION_ID" ]]; then
+		property_line "voidscape.discordApplicationId" "$DISCORD_APPLICATION_ID"
+	fi
+	if [[ -n "$DISCORD_LARGE_IMAGE_KEY" ]]; then
+		property_line "voidscape.discordLargeImageKey" "$DISCORD_LARGE_IMAGE_KEY"
+	fi
+	if [[ -n "$DISCORD_LARGE_IMAGE_TEXT" ]]; then
+		property_line "voidscape.discordLargeImageText" "$DISCORD_LARGE_IMAGE_TEXT"
 	fi
 } > "$LAUNCHER_RESOURCE"
 
