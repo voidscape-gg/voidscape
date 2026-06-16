@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .paths import CUSTOM_CONTENT_DIR, TOOL_DIR
 
-VALID_KINDS = ("item", "npc", "boss", "arena", "texture")
+VALID_KINDS = ("item", "npc", "boss", "arena", "texture", "model")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
@@ -68,8 +68,10 @@ def _prompt(kind: str, name: str, description: str) -> str:
         target = "a boss concept, arena mood, and later a strict sprite sheet"
     elif kind == "arena":
         target = "an arena concept with readable RSC terrain/material ideas"
-    else:
+    elif kind == "texture":
         target = "a tileable or reusable RSC-style texture asset"
+    else:
+        target = "a low-poly 3D scenery model that fits RuneScape Classic scale"
     return f"""Use the Voidscape art brief.
 
 Asset: {name}

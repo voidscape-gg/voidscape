@@ -14408,4 +14408,26 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>voidclawcharge</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void test cube</name>
+    <description>A colored cube for testing imported OB3 scenery</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>1</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>void_test_cube</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void portal arch</name>
+    <description>A violet stone arch humming around an empty portal frame</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>2</width>
+    <height>1</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>void_portal_arch</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

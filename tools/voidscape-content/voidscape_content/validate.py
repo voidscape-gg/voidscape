@@ -120,7 +120,7 @@ def _check_content_packs(findings: list[Finding]) -> None:
         _add(findings, "WARN", "CONTENT_DIR_MISSING", "content/custom does not exist yet")
         return
     for pack in sorted(p for p in CUSTOM_CONTENT_DIR.iterdir() if p.is_dir()):
-        if pack.name.startswith("."):
+        if pack.name.startswith((".", "_")):
             continue
         manifest = pack / "content.yaml"
         if not manifest.exists():

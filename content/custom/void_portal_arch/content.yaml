@@ -1,0 +1,36 @@
+# Voidscape content pack.
+
+schema: voidscape-content/v1
+kind: model
+slug: void_portal_arch
+name: "Void portal arch"
+description: "A CC0 stone arch recolored as a Voidscape portal frame."
+status: test
+
+gameplay:
+  like: "voidriftportal"
+  notes: "Kay Lousberg CC0 arch candidate, recolored into flat Voidscape materials."
+
+art:
+  style_brief: "../../../tools/voidscape-content/templates/voidscape-art-brief.md"
+  source_dir: "art/source"
+  working_dir: "art/working"
+  final_dir: "art/final"
+  selected_concept: "content/custom/_candidates/kay_lousberg_arch/source.glb"
+
+integration:
+  server_defs:
+    - "server/conf/server/defs/GameObjectDef.xml"
+  client_defs:
+    - "Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java"
+  cache_files:
+    - "Client_Base/Cache/video/models.orsc"
+  spawn_files:
+    - "server/conf/server/defs/locs/SceneryLocsVoidEnclave.json"
+  drop_files: []
+  client_version_bump_required: false
+
+rollout:
+  beta_package_required: false
+  test_notes:
+    - "Spawned near the Void Enclave test cube for local visual validation."

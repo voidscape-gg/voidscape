@@ -7204,6 +7204,8 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void Colossus", "A rift pedestal binding the Colossus to the shattered plaza", "Attack", "Examine", 0, 4, 4, 0, "voidcolossus3d", ++i)); //1307
 		objects.add(new GameObjectDef("Void shard charge", "A burst of void energy gathering into a shard", "WalkTo", "Examine", 0, 1, 1, 0, "voidshardcharge", ++i)); //1308
 		objects.add(new GameObjectDef("Void claw charge", "A clawed void sigil tearing into shape", "WalkTo", "Examine", 0, 1, 1, 0, "voidclawcharge", ++i)); //1309
+		objects.add(new GameObjectDef("Void test cube", "A colored cube for testing imported OB3 scenery", "WalkTo", "Examine", 0, 1, 1, 0, "void_test_cube", ++i)); //1310
+		objects.add(new GameObjectDef("Void portal arch", "A violet stone arch humming around an empty portal frame", "WalkTo", "Examine", 0, 2, 1, 0, "void_portal_arch", ++i)); //1311
 	}
 
 	public static void load(boolean loadMembers) {

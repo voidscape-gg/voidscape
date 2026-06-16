@@ -27,6 +27,14 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-16 - OB3 scenery model importer
+
+Added the first Voidscape content tool for untextured 3D scenery models: `scripts/content.sh model import` can read OBJ, glTF, or GLB meshes, convert material or vertex colors into RSC's packed RGB555 face fills, write OB3 bytes, and insert them into the OpenRSC/JAG-style `models.orsc` archive without changing the renderer. The tool includes OB3/JAG readers, round-trip tests against stock cache entries, and a small `Void test cube` proof object registered as scenery id `1310` and spawned in the Void Enclave for local client validation. Files are concentrated in `tools/voidscape-content/`, `Client_Base/Cache/video/models.orsc`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/GameObjectDef.xml`, and `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`. Reversibility is removing id `1310`, its loc and source fixture, and deleting `void_test_cube.ob3` from the model archive with the same JAG writer.
+
+### 2026-06-16 - Void portal arch model proof
+
+Imported the selected CC0 Kay Lousberg arch candidate as `void_portal_arch.ob3`, using a derived untextured OBJ/MTL with flat Voidscape palette fills: deep violet stone, dark gunmetal shadow faces, and restrained gold accents. The archive insert preserves the existing JAG u24/u24 framing and appends a new client/server scenery definition at id `1311`, spawned in the Void Enclave beside the prior test cube for local validation. Files: `content/custom/void_portal_arch/`, `Client_Base/Cache/video/models.orsc`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/GameObjectDef.xml`, and `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`. No renderer, packet, schema, or behavior changes were added; reversibility is removing object id `1311`, its loc/source pack, and deleting `void_portal_arch.ob3` from the model archive.
+
 ### 2026-06-14 - Portal whitepaper story redesign
 
 Rebuilt the pre-release portal whitepaper around a tighter story: "We love Classic. We are finishing what it started." The visible page now moves from premise, to what Classic left unfinished, to the Voidscape loop, to six proof-backed pillars, to a compact build-proof wall using current beta/workbench captures under `web/portal/assets/whitepaper/`. The public prelaunch page no longer embeds the MP4 background, relying on the static fallback for better scroll performance, and whitepaper screenshots can be expanded in a lightweight viewer. This is a static website/content change in `web/portal/index.html`, `web/portal/styles.css`, and `web/portal/script.js`; no game packets, schema, cache archives, or gameplay behavior changed. Reversibility is restoring the previous whitepaper markup/styles/script behavior and removing the added `feature-*-current.png` assets.

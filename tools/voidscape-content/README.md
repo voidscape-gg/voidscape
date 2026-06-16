@@ -9,6 +9,7 @@ scripts/content.sh report
 scripts/content.sh validate
 scripts/content.sh new boss void_behemoth --name "Void Behemoth"
 scripts/content.sh voidscim inspect 2233
+scripts/content.sh model import path/to/model.obj --name void_model
 scripts/content.sh ui validate
 scripts/content.sh ui preview
 ```
@@ -26,8 +27,25 @@ commands add content-pack manifests, ID reports, and repository validation.
   availability, and content-pack shape.
 - `voidscim` delegates to the existing item-art pipeline so old commands keep
   working while this tool grows.
+- `model import` converts untextured OBJ/glTF meshes to OB3, derives scale from
+  a stock cache model by default, and can insert the result into `models.orsc`.
 - `ui` validates and previews filesystem PNG UI skin assets, starting with the
   Voidscape top-tab icons.
+
+## Model pipeline
+
+OBJ, glTF, and GLB imports support per-face material color, with vertex colors
+as the fallback when material color is absent. UVs/textures are intentionally
+ignored for this first untextured OB3 slice.
+
+```bash
+scripts/content.sh model import content/custom/void_test_cube/art/source/void_test_cube.obj --name void_test_cube
+scripts/content.sh model import content/custom/void_test_cube/art/source/void_test_cube.obj --name void_test_cube --commit
+```
+
+The default `--axis blender` mapping treats Blender as Z-up and maps source
+`(x, y, z)` to RSC `(x, -z, y)`. The default scale is derived from
+`crate.ob3` in `Client_Base/Cache/video/models.orsc`.
 
 ## Intended pipeline
 

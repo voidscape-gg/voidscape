@@ -1,0 +1,8 @@
+Use the Voidscape art brief.
+
+Asset: Void test cube
+Description: A colored cube for testing imported OB3 scenery.
+Target: a low-poly 3D scenery model that fits RuneScape Classic scale.
+
+This pack intentionally uses a hand-authored OBJ/MTL fixture instead of an
+image-generation concept because it is a deterministic exporter smoke test.
