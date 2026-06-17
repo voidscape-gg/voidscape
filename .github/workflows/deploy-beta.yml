@@ -119,32 +119,6 @@ jobs:
           rsync -a --delete "$STAGE/server/database/" "$REMOTE_GAME_ROOT/server/database/"
           chown -R voidscape:voidscape "$REMOTE_GAME_ROOT/server/core.jar" "$REMOTE_GAME_ROOT/server/plugins.jar" "$REMOTE_GAME_ROOT/server/conf" "$REMOTE_GAME_ROOT/server/database"
 
-          if [ -f "$REMOTE_GAME_ROOT/server/local.conf" ]; then
-            python3 - "$REMOTE_GAME_ROOT/server/local.conf" <<'PY'
-          import re
-          import sys
-          from pathlib import Path
-
-          path = Path(sys.argv[1])
-          text = path.read_text()
-          text, count = re.subn(
-              r"^([ \t]*want_packet_register:\s*)\S+.*$",
-              r"\1true # Beta allows in-client account creation.",
-              text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          if count == 0:
-              line = "\twant_packet_register: true # Beta allows in-client account creation.\n"
-              if "\nparties:" in text:
-                  text = text.replace("\nparties:", "\n" + line + "parties:", 1)
-              else:
-                  text = text.rstrip() + "\n" + line
-          path.write_text(text)
-          PY
-            chown voidscape:voidscape "$REMOTE_GAME_ROOT/server/local.conf" 2>/dev/null || true
-          fi
-
           systemctl start voidscape
           sleep 5
           systemctl is-active --quiet voidscape
