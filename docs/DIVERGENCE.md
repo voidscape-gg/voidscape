@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-17 - 3D terrain editor Phase 3 brush tools
+
+Extended the dev-only in-client terrain editor from single-tile edits to brush operations. The editor now supports adjustable brush radius, raise/lower with radial falloff, smooth, flatten, water/grass/stone paint brushes, and in-memory undo/redo. Terrain rebuilds still use the existing client landscape renderer and unsaved override layer; this phase does not write `Custom_Landscape.orsc`, alter server state, add packets, or persist terrain. Files: `Client_Base/src/orsc/graphics/three/World.java`, `Client_Base/src/orsc/mudclient.java`, and `PC_Client/src/orsc/ORSCApplet.java`. Reversibility is removing the brush/snapshot stacks and null-grid scene add guard.
+
 ### 2026-06-17 - 3D terrain editor Phase 2 live edit proof
 
 Extended the dev-only terrain editor mode so clicking the highlighted terrain tile can mutate the loaded landscape in memory and immediately rebuild the current 3D terrain view. Phase 2 supports single-tile raise/lower plus visual water/grass/stone painting through the existing sector fields and renderer path, using an unsaved in-memory override layer so normal sector reloads preserve live edits without touching `Custom_Landscape.orsc`. Files: `Client_Base/src/orsc/graphics/three/World.java`, `Client_Base/src/orsc/mudclient.java`, and `PC_Client/src/orsc/ORSCApplet.java`. This phase deliberately has no archive save path, no server persistence, and no packet/schema changes; reversibility is removing the editor override map, click/key handlers, and current-region rebuild hook.

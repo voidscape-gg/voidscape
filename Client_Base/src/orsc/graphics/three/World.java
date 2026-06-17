@@ -823,7 +823,8 @@ public final class World {
 						false, 0);
 
 					for (int x = 0; x < 64; ++x)
-						this.scene.addModel(this.modelLandscapeGrid[x]);
+						if (this.modelLandscapeGrid[x] != null)
+							this.scene.addModel(this.modelLandscapeGrid[x]);
 
 					for (int x = 0; x < 96; ++x)
 						for (int z = 0; z < 96; ++z)
@@ -903,7 +904,8 @@ public final class World {
 					true, 0);
 
 				for (int x = 0; x < 64; ++x)
-					this.scene.addModel(this.modelWallGrid[plane][x]);
+					if (this.modelWallGrid[plane][x] != null)
+						this.scene.addModel(this.modelWallGrid[plane][x]);
 				this.modelAccumulate.resetFaceVertHead((int) 1);
 
 				// Prepare the elevation cache.
@@ -1157,7 +1159,8 @@ public final class World {
 					true, 0);
 
 				for (int x = 0; x < 64; ++x)
-					this.scene.addModel(this.modelRoofGrid[plane][x]);
+					if (this.modelRoofGrid[plane][x] != null)
+						this.scene.addModel(this.modelRoofGrid[plane][x]);
 
 				if (this.modelRoofGrid[plane][0] == null)
 					throw new RuntimeException("null roof!");
@@ -1652,6 +1655,20 @@ public final class World {
 	public int terrainEditorGetGroundOverlay(int xTile, int zTile) {
 		final Tile tile = getLoadedTile(xTile, zTile);
 		return tile == null ? -1 : tile.groundOverlay & 0xff;
+	}
+
+	public boolean terrainEditorSetVertexHeight(int plane, int archiveTileX, int archiveTileZ,
+												int localTileX, int localTileZ, int height) {
+		final Tile tile = getLoadedTile(localTileX, localTileZ);
+		if (tile == null) return false;
+
+		final int next = Math.max(0, Math.min(255, height));
+		final int current = tile.groundElevation & 0xff;
+		if (next == current) return false;
+
+		tile.groundElevation = (byte) next;
+		terrainEditorOverrideFor(plane, archiveTileX, archiveTileZ).groundElevation = next;
+		return true;
 	}
 
 	public boolean terrainEditorAdjustTileHeight(int plane, int archiveTileX, int archiveTileZ,

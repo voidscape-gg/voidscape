@@ -77,6 +77,8 @@ public final class mudclient implements Runnable {
 	private enum TerrainEditorAction {
 		RAISE("raise"),
 		LOWER("lower"),
+		SMOOTH("smooth"),
+		FLATTEN("flatten"),
 		PAINT_WATER("water"),
 		PAINT_GRASS("grass"),
 		PAINT_STONE("stone");
@@ -85,6 +87,73 @@ public final class mudclient implements Runnable {
 
 		TerrainEditorAction(String label) {
 			this.label = label;
+		}
+	}
+
+	private static final class TerrainEditorHeightSnapshot {
+		final int plane;
+		final int archiveX;
+		final int archiveZ;
+		final int height;
+
+		TerrainEditorHeightSnapshot(int plane, int archiveX, int archiveZ, int height) {
+			this.plane = plane;
+			this.archiveX = archiveX;
+			this.archiveZ = archiveZ;
+			this.height = height;
+		}
+	}
+
+	private static final class TerrainEditorPaintSnapshot {
+		final int plane;
+		final int archiveX;
+		final int archiveZ;
+		final int groundTexture;
+		final int groundOverlay;
+
+		TerrainEditorPaintSnapshot(int plane, int archiveX, int archiveZ, int groundTexture, int groundOverlay) {
+			this.plane = plane;
+			this.archiveX = archiveX;
+			this.archiveZ = archiveZ;
+			this.groundTexture = groundTexture;
+			this.groundOverlay = groundOverlay;
+		}
+	}
+
+	private static final class TerrainEditorHeightSample {
+		final int localX;
+		final int localZ;
+		final int archiveX;
+		final int archiveZ;
+		int delta;
+
+		TerrainEditorHeightSample(int localX, int localZ, int archiveX, int archiveZ, int delta) {
+			this.localX = localX;
+			this.localZ = localZ;
+			this.archiveX = archiveX;
+			this.archiveZ = archiveZ;
+			this.delta = delta;
+		}
+	}
+
+	private static final class TerrainEditorEdit {
+		final LinkedHashMap<Long, TerrainEditorHeightSnapshot> beforeHeights = new LinkedHashMap<>();
+		final LinkedHashMap<Long, TerrainEditorHeightSnapshot> afterHeights = new LinkedHashMap<>();
+		final LinkedHashMap<Long, TerrainEditorPaintSnapshot> beforePaint = new LinkedHashMap<>();
+		final LinkedHashMap<Long, TerrainEditorPaintSnapshot> afterPaint = new LinkedHashMap<>();
+
+		boolean hasChanges() {
+			for (Entry<Long, TerrainEditorHeightSnapshot> entry : afterHeights.entrySet()) {
+				TerrainEditorHeightSnapshot before = beforeHeights.get(entry.getKey());
+				if (before == null || before.height != entry.getValue().height) return true;
+			}
+			for (Entry<Long, TerrainEditorPaintSnapshot> entry : afterPaint.entrySet()) {
+				TerrainEditorPaintSnapshot before = beforePaint.get(entry.getKey());
+				TerrainEditorPaintSnapshot after = entry.getValue();
+				if (before == null || before.groundTexture != after.groundTexture
+					|| before.groundOverlay != after.groundOverlay) return true;
+			}
+			return false;
 		}
 	}
 
@@ -340,14 +409,18 @@ public final class mudclient implements Runnable {
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
+	private static final int TERRAIN_EDITOR_MAX_UNDO = 50;
 	private static final int TERRAIN_EDITOR_GRASS_TEXTURE = 96;
 	private static final int TERRAIN_EDITOR_WATER_OVERLAY = 2;
 	private static final int TERRAIN_EDITOR_STONE_OVERLAY = 29;
 	private boolean terrainEditorMode = false;
 	private TerrainEditorAction terrainEditorAction = TerrainEditorAction.RAISE;
 	private int terrainEditorHeightStep = 8;
+	private int terrainEditorBrushRadius = 1;
 	private int terrainEditorHoverLocalX = -1;
 	private int terrainEditorHoverLocalZ = -1;
+	private final Deque<TerrainEditorEdit> terrainEditorUndoStack = new ArrayDeque<>();
+	private final Deque<TerrainEditorEdit> terrainEditorRedoStack = new ArrayDeque<>();
 	private final int[][] terrainEditorTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
@@ -7816,7 +7889,7 @@ public final class mudclient implements Runnable {
 		this.lastMouseButtonDown = 0;
 		this.currentMouseButtonDown = 0;
 		this.showMessage(false, null, this.terrainEditorMode
-			? "@gre@Terrain editor Phase 2: 1/2 height, 3/4/5 paint, click applies."
+			? "@gre@Terrain editor Phase 3: brush edit mode enabled."
 			: "@or1@Terrain editor disabled.", MessageType.GAME, 0, null);
 	}
 
@@ -7829,20 +7902,35 @@ public final class mudclient implements Runnable {
 		} else if (key == '2') {
 			this.terrainEditorAction = TerrainEditorAction.LOWER;
 		} else if (key == '3') {
-			this.terrainEditorAction = TerrainEditorAction.PAINT_WATER;
+			this.terrainEditorAction = TerrainEditorAction.SMOOTH;
 		} else if (key == '4') {
-			this.terrainEditorAction = TerrainEditorAction.PAINT_GRASS;
+			this.terrainEditorAction = TerrainEditorAction.FLATTEN;
 		} else if (key == '5') {
+			this.terrainEditorAction = TerrainEditorAction.PAINT_WATER;
+		} else if (key == '6') {
+			this.terrainEditorAction = TerrainEditorAction.PAINT_GRASS;
+		} else if (key == '7') {
 			this.terrainEditorAction = TerrainEditorAction.PAINT_STONE;
-		} else if (key == '[' || key == '-') {
+		} else if (key == '[') {
+			this.terrainEditorBrushRadius = Math.max(0, this.terrainEditorBrushRadius - 1);
+		} else if (key == ']') {
+			this.terrainEditorBrushRadius = Math.min(8, this.terrainEditorBrushRadius + 1);
+		} else if (key == '-' || key == '_') {
 			this.terrainEditorHeightStep = Math.max(1, this.terrainEditorHeightStep - 1);
-		} else if (key == ']' || key == '=' || key == '+') {
+		} else if (key == '=' || key == '+') {
 			this.terrainEditorHeightStep = Math.min(32, this.terrainEditorHeightStep + 1);
+		} else if (key == 'u') {
+			terrainEditorUndo();
+			return true;
+		} else if (key == 'y') {
+			terrainEditorRedo();
+			return true;
 		} else {
 			return false;
 		}
 
 		this.showMessage(false, null, "@gre@Terrain editor: @whi@" + terrainEditorAction.label
+			+ " @gre@radius @whi@" + this.terrainEditorBrushRadius
 			+ " @gre@step @whi@" + this.terrainEditorHeightStep, MessageType.GAME, 0, null);
 		return true;
 	}
@@ -7864,6 +7952,39 @@ public final class mudclient implements Runnable {
 		this.terrainEditorHoverLocalX = localX;
 		this.terrainEditorHoverLocalZ = localZ;
 		handleTerrainEditorTileClick(localX, localZ);
+		drawTerrainEditorBrushOverlay(localX, localZ);
+		this.getSurface().drawString("Terrain editor: tile @gre@(" + (this.midRegionBaseX + localX)
+			+ "," + (this.midRegionBaseZ + localZ) + "@whi@) action @gre@"
+			+ this.terrainEditorAction.label + "@whi@ radius @gre@" + this.terrainEditorBrushRadius
+			+ "@whi@ step @gre@" + this.terrainEditorHeightStep, 7, 34, 0xFFFFFF, 1);
+		this.getSurface().drawString("material: tex @gre@" + this.world.terrainEditorGetGroundTexture(localX, localZ)
+			+ "@whi@ overlay @gre@" + this.world.terrainEditorGetGroundOverlay(localX, localZ)
+			+ "@whi@ height @gre@" + this.world.terrainEditorGetStoredElevation(localX, localZ)
+			+ "@whi@ undo @gre@" + this.terrainEditorUndoStack.size()
+			+ "@whi@ redo @gre@" + this.terrainEditorRedoStack.size(), 7, 47, 0xFFFFFF, 1);
+	}
+
+	private boolean projectTerrainEditorTileCorner(final int index, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 4;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.terrainEditorTileProjection[index]);
+	}
+
+	private void drawTerrainEditorBrushOverlay(final int centerLocalX, final int centerLocalZ) {
+		for (int dx = -this.terrainEditorBrushRadius; dx <= this.terrainEditorBrushRadius; dx++) {
+			for (int dz = -this.terrainEditorBrushRadius; dz <= this.terrainEditorBrushRadius; dz++) {
+				if (!isTerrainEditorBrushTile(dx, dz)) continue;
+				final int localX = centerLocalX + dx;
+				final int localZ = centerLocalZ + dz;
+				if (localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) continue;
+				final boolean center = dx == 0 && dz == 0;
+				drawTerrainEditorTileOverlay(localX, localZ, center ? 0x9A4DFF : 0x6D38D8,
+					center ? 95 : 45, center ? 0xFFE66D : 0xB58DFF, center ? 235 : 130);
+			}
+		}
+	}
+
+	private void drawTerrainEditorTileOverlay(final int localX, final int localZ, final int fillColor,
+											  final int fillAlpha, final int edgeColor, final int edgeAlpha) {
 		final int x0 = localX * this.tileSize;
 		final int z0 = localZ * this.tileSize;
 		final int x1 = x0 + this.tileSize;
@@ -7877,56 +7998,275 @@ public final class mudclient implements Runnable {
 		final int[] p1 = this.terrainEditorTileProjection[1];
 		final int[] p2 = this.terrainEditorTileProjection[2];
 		final int[] p3 = this.terrainEditorTileProjection[3];
-		final int fillColor = 0x9A4DFF;
-		final int edgeColor = 0xFFE66D;
 		this.getSurface().drawQuadrilateralAlpha(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1],
-			p3[0], p3[1], fillColor, 90);
-		this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], edgeColor, 230);
-		this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], edgeColor, 230);
-		this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], edgeColor, 230);
-		this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], edgeColor, 230);
-		this.getSurface().drawString("Terrain editor: tile @gre@(" + (this.midRegionBaseX + localX)
-			+ "," + (this.midRegionBaseZ + localZ) + "@whi@) action @gre@"
-			+ this.terrainEditorAction.label + "@whi@ step @gre@" + this.terrainEditorHeightStep, 7, 34, 0xFFFFFF, 1);
-		this.getSurface().drawString("material: tex @gre@" + this.world.terrainEditorGetGroundTexture(localX, localZ)
-			+ "@whi@ overlay @gre@" + this.world.terrainEditorGetGroundOverlay(localX, localZ)
-			+ "@whi@ height @gre@" + this.world.terrainEditorGetStoredElevation(localX, localZ), 7, 47, 0xFFFFFF, 1);
-	}
-
-	private boolean projectTerrainEditorTileCorner(final int index, final int sceneX, final int sceneZ) {
-		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 4;
-		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.terrainEditorTileProjection[index]);
+			p3[0], p3[1], fillColor, fillAlpha);
+		this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], edgeColor, edgeAlpha);
 	}
 
 	private void handleTerrainEditorTileClick(final int localX, final int localZ) {
 		if (this.mouseButtonClick != 1) return;
 
-		boolean changed = false;
-		final int archiveX = this.midRegionBaseX + this.worldOffsetX + localX;
-		final int archiveZ = this.midRegionBaseZ + this.worldOffsetZ + localZ;
-		if (this.terrainEditorAction == TerrainEditorAction.RAISE) {
-			changed = this.world.terrainEditorAdjustTileHeight(this.lastHeightOffset, archiveX, archiveZ,
-				localX, localZ, this.terrainEditorHeightStep);
-		} else if (this.terrainEditorAction == TerrainEditorAction.LOWER) {
-			changed = this.world.terrainEditorAdjustTileHeight(this.lastHeightOffset, archiveX, archiveZ,
-				localX, localZ, -this.terrainEditorHeightStep);
-		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_WATER) {
-			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
-				localX, localZ, -1, TERRAIN_EDITOR_WATER_OVERLAY);
-		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_GRASS) {
-			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
-				localX, localZ, TERRAIN_EDITOR_GRASS_TEXTURE, 0);
-		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_STONE) {
-			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
-				localX, localZ, -1, TERRAIN_EDITOR_STONE_OVERLAY);
-		}
-
+		final TerrainEditorEdit edit = applyTerrainEditorBrush(localX, localZ);
 		this.mouseButtonClick = 0;
 		this.lastMouseButtonDown = 0;
 		this.currentMouseButtonDown = 0;
-		if (changed) {
+		if (edit != null && edit.hasChanges()) {
+			pushTerrainEditorUndo(edit);
 			rebuildTerrainEditorRegion();
 		}
+	}
+
+	private TerrainEditorEdit applyTerrainEditorBrush(final int centerLocalX, final int centerLocalZ) {
+		if (this.world == null || this.lastHeightOffset < 0) return null;
+
+		final TerrainEditorEdit edit = new TerrainEditorEdit();
+		if (this.terrainEditorAction == TerrainEditorAction.PAINT_WATER
+			|| this.terrainEditorAction == TerrainEditorAction.PAINT_GRASS
+			|| this.terrainEditorAction == TerrainEditorAction.PAINT_STONE) {
+			applyTerrainEditorPaintBrush(edit, centerLocalX, centerLocalZ);
+		} else {
+			applyTerrainEditorHeightBrush(edit, centerLocalX, centerLocalZ);
+		}
+		return edit;
+	}
+
+	private void applyTerrainEditorPaintBrush(final TerrainEditorEdit edit,
+											  final int centerLocalX, final int centerLocalZ) {
+		for (int dx = -this.terrainEditorBrushRadius; dx <= this.terrainEditorBrushRadius; dx++) {
+			for (int dz = -this.terrainEditorBrushRadius; dz <= this.terrainEditorBrushRadius; dz++) {
+				if (!isTerrainEditorBrushTile(dx, dz)) continue;
+				final int localX = centerLocalX + dx;
+				final int localZ = centerLocalZ + dz;
+				if (localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) continue;
+
+				final int archiveX = this.midRegionBaseX + this.worldOffsetX + localX;
+				final int archiveZ = this.midRegionBaseZ + this.worldOffsetZ + localZ;
+				captureTerrainEditorPaint(edit.beforePaint, this.lastHeightOffset, archiveX, archiveZ, localX, localZ);
+
+				if (this.terrainEditorAction == TerrainEditorAction.PAINT_WATER) {
+					this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+						localX, localZ, -1, TERRAIN_EDITOR_WATER_OVERLAY);
+				} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_GRASS) {
+					this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+						localX, localZ, TERRAIN_EDITOR_GRASS_TEXTURE, 0);
+				} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_STONE) {
+					this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+						localX, localZ, -1, TERRAIN_EDITOR_STONE_OVERLAY);
+				}
+
+				captureTerrainEditorPaint(edit.afterPaint, this.lastHeightOffset, archiveX, archiveZ, localX, localZ);
+			}
+		}
+	}
+
+	private void applyTerrainEditorHeightBrush(final TerrainEditorEdit edit,
+											   final int centerLocalX, final int centerLocalZ) {
+		final LinkedHashMap<Long, TerrainEditorHeightSample> samples = collectTerrainEditorHeightSamples(
+			centerLocalX, centerLocalZ);
+		if (samples.isEmpty()) return;
+
+		final LinkedHashMap<Long, Integer> targets = new LinkedHashMap<>();
+		if (this.terrainEditorAction == TerrainEditorAction.FLATTEN) {
+			final int flattenHeight = terrainEditorCenterHeight(centerLocalX, centerLocalZ);
+			for (Long key : samples.keySet()) {
+				targets.put(key, flattenHeight);
+			}
+		} else if (this.terrainEditorAction == TerrainEditorAction.SMOOTH) {
+			for (Entry<Long, TerrainEditorHeightSample> entry : samples.entrySet()) {
+				final TerrainEditorHeightSample sample = entry.getValue();
+				final int current = this.world.terrainEditorGetStoredElevation(sample.localX, sample.localZ);
+				final int average = terrainEditorAverageNeighborHeight(sample.localX, sample.localZ);
+				if (current >= 0 && average >= 0) {
+					targets.put(entry.getKey(), (current + average) / 2);
+				}
+			}
+		} else {
+			for (Entry<Long, TerrainEditorHeightSample> entry : samples.entrySet()) {
+				final TerrainEditorHeightSample sample = entry.getValue();
+				final int current = this.world.terrainEditorGetStoredElevation(sample.localX, sample.localZ);
+				if (current >= 0) {
+					targets.put(entry.getKey(), current + sample.delta);
+				}
+			}
+		}
+
+		for (Entry<Long, TerrainEditorHeightSample> entry : samples.entrySet()) {
+			final Integer target = targets.get(entry.getKey());
+			if (target == null) continue;
+
+			final TerrainEditorHeightSample sample = entry.getValue();
+			captureTerrainEditorHeight(edit.beforeHeights, this.lastHeightOffset,
+				sample.archiveX, sample.archiveZ, sample.localX, sample.localZ);
+			this.world.terrainEditorSetVertexHeight(this.lastHeightOffset, sample.archiveX, sample.archiveZ,
+				sample.localX, sample.localZ, target);
+			captureTerrainEditorHeight(edit.afterHeights, this.lastHeightOffset,
+				sample.archiveX, sample.archiveZ, sample.localX, sample.localZ);
+		}
+	}
+
+	private LinkedHashMap<Long, TerrainEditorHeightSample> collectTerrainEditorHeightSamples(
+		final int centerLocalX, final int centerLocalZ) {
+		final LinkedHashMap<Long, TerrainEditorHeightSample> samples = new LinkedHashMap<>();
+		for (int dx = -this.terrainEditorBrushRadius; dx <= this.terrainEditorBrushRadius; dx++) {
+			for (int dz = -this.terrainEditorBrushRadius; dz <= this.terrainEditorBrushRadius; dz++) {
+				if (!isTerrainEditorBrushTile(dx, dz)) continue;
+				final int localX = centerLocalX + dx;
+				final int localZ = centerLocalZ + dz;
+				if (localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) continue;
+
+				final int brushDelta = terrainEditorBrushDelta(dx, dz);
+				addTerrainEditorHeightSample(samples, localX, localZ, brushDelta);
+				addTerrainEditorHeightSample(samples, localX + 1, localZ, brushDelta);
+				addTerrainEditorHeightSample(samples, localX, localZ + 1, brushDelta);
+				addTerrainEditorHeightSample(samples, localX + 1, localZ + 1, brushDelta);
+			}
+		}
+		return samples;
+	}
+
+	private void addTerrainEditorHeightSample(final LinkedHashMap<Long, TerrainEditorHeightSample> samples,
+											  final int localX, final int localZ, final int delta) {
+		if (localX < 0 || localZ < 0 || localX >= 96 || localZ >= 96) return;
+		final int archiveX = this.midRegionBaseX + this.worldOffsetX + localX;
+		final int archiveZ = this.midRegionBaseZ + this.worldOffsetZ + localZ;
+		final long key = terrainEditorSnapshotKey(this.lastHeightOffset, archiveX, archiveZ);
+		final TerrainEditorHeightSample existing = samples.get(key);
+		if (existing == null) {
+			samples.put(key, new TerrainEditorHeightSample(localX, localZ, archiveX, archiveZ, delta));
+		} else if (Math.abs(delta) > Math.abs(existing.delta)) {
+			existing.delta = delta;
+		}
+	}
+
+	private int terrainEditorBrushDelta(final int dx, final int dz) {
+		if (this.terrainEditorAction != TerrainEditorAction.RAISE
+			&& this.terrainEditorAction != TerrainEditorAction.LOWER) return 0;
+		int amount = this.terrainEditorHeightStep;
+		if (this.terrainEditorBrushRadius > 0) {
+			final double distance = Math.sqrt(dx * dx + dz * dz);
+			final double falloff = Math.max(0.25D, 1.0D - distance / (this.terrainEditorBrushRadius + 1.0D));
+			amount = Math.max(1, (int) Math.round(this.terrainEditorHeightStep * falloff));
+		}
+		return this.terrainEditorAction == TerrainEditorAction.LOWER ? -amount : amount;
+	}
+
+	private boolean isTerrainEditorBrushTile(final int dx, final int dz) {
+		if (this.terrainEditorBrushRadius <= 0) return dx == 0 && dz == 0;
+		return dx * dx + dz * dz <= this.terrainEditorBrushRadius * this.terrainEditorBrushRadius;
+	}
+
+	private int terrainEditorCenterHeight(final int localX, final int localZ) {
+		int total = 0;
+		int count = 0;
+		for (int dx = 0; dx <= 1; dx++) {
+			for (int dz = 0; dz <= 1; dz++) {
+				final int height = this.world.terrainEditorGetStoredElevation(localX + dx, localZ + dz);
+				if (height >= 0) {
+					total += height;
+					count++;
+				}
+			}
+		}
+		return count == 0 ? 0 : total / count;
+	}
+
+	private int terrainEditorAverageNeighborHeight(final int localX, final int localZ) {
+		int total = 0;
+		int count = 0;
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dz = -1; dz <= 1; dz++) {
+				final int height = this.world.terrainEditorGetStoredElevation(localX + dx, localZ + dz);
+				if (height >= 0) {
+					total += height;
+					count++;
+				}
+			}
+		}
+		return count == 0 ? -1 : total / count;
+	}
+
+	private void captureTerrainEditorHeight(final LinkedHashMap<Long, TerrainEditorHeightSnapshot> target,
+											final int plane, final int archiveX, final int archiveZ,
+											final int localX, final int localZ) {
+		final long key = terrainEditorSnapshotKey(plane, archiveX, archiveZ);
+		if (target.containsKey(key)) return;
+		final int height = this.world.terrainEditorGetStoredElevation(localX, localZ);
+		if (height >= 0) {
+			target.put(key, new TerrainEditorHeightSnapshot(plane, archiveX, archiveZ, height));
+		}
+	}
+
+	private void captureTerrainEditorPaint(final LinkedHashMap<Long, TerrainEditorPaintSnapshot> target,
+										   final int plane, final int archiveX, final int archiveZ,
+										   final int localX, final int localZ) {
+		final long key = terrainEditorSnapshotKey(plane, archiveX, archiveZ);
+		if (target.containsKey(key)) return;
+		final int groundTexture = this.world.terrainEditorGetGroundTexture(localX, localZ);
+		final int groundOverlay = this.world.terrainEditorGetGroundOverlay(localX, localZ);
+		if (groundTexture >= 0 && groundOverlay >= 0) {
+			target.put(key, new TerrainEditorPaintSnapshot(plane, archiveX, archiveZ, groundTexture, groundOverlay));
+		}
+	}
+
+	private void pushTerrainEditorUndo(final TerrainEditorEdit edit) {
+		this.terrainEditorUndoStack.addLast(edit);
+		while (this.terrainEditorUndoStack.size() > TERRAIN_EDITOR_MAX_UNDO) {
+			this.terrainEditorUndoStack.removeFirst();
+		}
+		this.terrainEditorRedoStack.clear();
+	}
+
+	private void terrainEditorUndo() {
+		if (this.terrainEditorUndoStack.isEmpty()) {
+			this.showMessage(false, null, "@or1@Terrain editor: nothing to undo.", MessageType.GAME, 0, null);
+			return;
+		}
+		final TerrainEditorEdit edit = this.terrainEditorUndoStack.removeLast();
+		applyTerrainEditorSnapshots(edit, false);
+		this.terrainEditorRedoStack.addLast(edit);
+		rebuildTerrainEditorRegion();
+	}
+
+	private void terrainEditorRedo() {
+		if (this.terrainEditorRedoStack.isEmpty()) {
+			this.showMessage(false, null, "@or1@Terrain editor: nothing to redo.", MessageType.GAME, 0, null);
+			return;
+		}
+		final TerrainEditorEdit edit = this.terrainEditorRedoStack.removeLast();
+		applyTerrainEditorSnapshots(edit, true);
+		this.terrainEditorUndoStack.addLast(edit);
+		rebuildTerrainEditorRegion();
+	}
+
+	private void applyTerrainEditorSnapshots(final TerrainEditorEdit edit, final boolean after) {
+		final LinkedHashMap<Long, TerrainEditorHeightSnapshot> heights = after
+			? edit.afterHeights
+			: edit.beforeHeights;
+		for (TerrainEditorHeightSnapshot snapshot : heights.values()) {
+			final int localX = snapshot.archiveX - this.midRegionBaseX - this.worldOffsetX;
+			final int localZ = snapshot.archiveZ - this.midRegionBaseZ - this.worldOffsetZ;
+			this.world.terrainEditorSetVertexHeight(snapshot.plane, snapshot.archiveX, snapshot.archiveZ,
+				localX, localZ, snapshot.height);
+		}
+
+		final LinkedHashMap<Long, TerrainEditorPaintSnapshot> paint = after
+			? edit.afterPaint
+			: edit.beforePaint;
+		for (TerrainEditorPaintSnapshot snapshot : paint.values()) {
+			final int localX = snapshot.archiveX - this.midRegionBaseX - this.worldOffsetX;
+			final int localZ = snapshot.archiveZ - this.midRegionBaseZ - this.worldOffsetZ;
+			this.world.terrainEditorPaintTile(snapshot.plane, snapshot.archiveX, snapshot.archiveZ,
+				localX, localZ, snapshot.groundTexture, snapshot.groundOverlay);
+		}
+	}
+
+	private static long terrainEditorSnapshotKey(final int plane, final int archiveX, final int archiveZ) {
+		return ((long) (plane & 0xff) << 56)
+			| ((long) archiveX & 0x0fffffffL) << 28
+			| ((long) archiveZ & 0x0fffffffL);
 	}
 
 	private void rebuildTerrainEditorRegion() {
