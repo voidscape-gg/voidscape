@@ -916,7 +916,10 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 						break;
 					case CANCEL_BATCH:
 					case BESTIARY_REQUEST:
-						//nothing
+						if (packet.getReadableBytes() >= 3) {
+							os.value = packet.readByte();
+							os.id = packet.readUnsignedShort();
+						}
 						break;
 					case XP_LOCK:
 						os.value = packet.readByte();

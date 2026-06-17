@@ -13,7 +13,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 public class DropTable {
 
@@ -98,6 +102,82 @@ public class DropTable {
 
 	public String getDropTableId() {
 		return dropTableId;
+	}
+
+	public ArrayList<DropChance> getDropChances() {
+		HashMap<String, DropChanceAccumulator> accumulator = new HashMap<>();
+		addDropChances(accumulator, 1L, 1L);
+
+		ArrayList<DropChance> chances = new ArrayList<>();
+		for (DropChanceAccumulator drop : accumulator.values()) {
+			if (drop.numerator <= 0 || drop.denominator <= 0 || drop.itemId == ItemId.NOTHING.id()) {
+				continue;
+			}
+			chances.add(new DropChance(drop.itemId, drop.amount, drop.noted, drop.numerator, drop.denominator));
+		}
+		Collections.sort(chances, Comparator
+			.comparingDouble((DropChance drop) -> (double) drop.numerator / (double) drop.denominator).reversed()
+			.thenComparingInt(drop -> drop.itemId)
+			.thenComparingInt(drop -> drop.amount));
+		return chances;
+	}
+
+	private void addDropChances(Map<String, DropChanceAccumulator> accumulator, long baseNumerator, long baseDenominator) {
+		if (baseNumerator <= 0 || baseDenominator <= 0) {
+			return;
+		}
+
+		long[] baseChance = reduce(baseNumerator, baseDenominator);
+		for (Drop drop : drops) {
+			if (drop.type == dropType.NOTHING) {
+				continue;
+			}
+
+			long numerator = baseChance[0];
+			long denominator = baseChance[1];
+			if (drop.weight > 0 && totalWeight > 0) {
+				numerator *= drop.weight;
+				denominator *= totalWeight;
+				long[] reduced = reduce(numerator, denominator);
+				numerator = reduced[0];
+				denominator = reduced[1];
+			}
+
+			if (drop.type == dropType.ITEM) {
+				if (drop.id != ItemId.NOTHING.id() && drop.amount > 0) {
+					String key = drop.id + ":" + drop.amount + ":" + drop.noted;
+					DropChanceAccumulator chance = accumulator.get(key);
+					if (chance == null) {
+						chance = new DropChanceAccumulator(drop.id, drop.amount, drop.noted);
+						accumulator.put(key, chance);
+					}
+					chance.add(numerator, denominator);
+				}
+			} else if (drop.type == dropType.TABLE && drop.table != null) {
+				drop.table.addDropChances(accumulator, numerator, denominator);
+			}
+		}
+	}
+
+	private static long[] reduce(long numerator, long denominator) {
+		if (denominator < 0) {
+			numerator = -numerator;
+			denominator = -denominator;
+		}
+		long divisor = gcd(Math.abs(numerator), Math.abs(denominator));
+		return new long[] { numerator / divisor, denominator / divisor };
+	}
+
+	private static long gcd(long a, long b) {
+		if (a == 0) {
+			return b == 0 ? 1 : b;
+		}
+		while (b != 0) {
+			long temp = a % b;
+			a = b;
+			b = temp;
+		}
+		return Math.max(1, a);
 	}
 
 	public boolean containsRareItemDrop(int itemId) {
@@ -340,6 +420,55 @@ public class DropTable {
 			this.id = id;
 			this.numerator = numerator;
 			this.denominator = denominator;
+		}
+	}
+
+	public static class DropChance {
+		public final int itemId;
+		public final int amount;
+		public final boolean noted;
+		public final long numerator;
+		public final long denominator;
+
+		private DropChance(int itemId, int amount, boolean noted, long numerator, long denominator) {
+			this.itemId = itemId;
+			this.amount = amount;
+			this.noted = noted;
+			this.numerator = numerator;
+			this.denominator = denominator;
+		}
+	}
+
+	private static class DropChanceAccumulator {
+		private final int itemId;
+		private final int amount;
+		private final boolean noted;
+		private long numerator = 0L;
+		private long denominator = 1L;
+
+		private DropChanceAccumulator(int itemId, int amount, boolean noted) {
+			this.itemId = itemId;
+			this.amount = amount;
+			this.noted = noted;
+		}
+
+		private void add(long addNumerator, long addDenominator) {
+			if (addNumerator <= 0 || addDenominator <= 0) {
+				return;
+			}
+			long[] added = reduce(addNumerator, addDenominator);
+			addNumerator = added[0];
+			addDenominator = added[1];
+
+			long common = gcd(denominator, addDenominator);
+			long leftMultiplier = addDenominator / common;
+			long rightMultiplier = denominator / common;
+			numerator = numerator * leftMultiplier + addNumerator * rightMultiplier;
+			denominator = denominator * leftMultiplier;
+
+			long[] reduced = reduce(numerator, denominator);
+			numerator = reduced[0];
+			denominator = reduced[1];
 		}
 	}
 

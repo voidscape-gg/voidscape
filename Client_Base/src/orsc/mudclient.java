@@ -71,7 +71,14 @@ public final class mudclient implements Runnable {
 	private static final class BestiaryEntry {
 		int npcId;
 		int killCount;
-		final LinkedHashMap<Integer, Long> loot = new LinkedHashMap<>();
+		final ArrayList<BestiaryDrop> drops = new ArrayList<>();
+	}
+
+	private static final class BestiaryDrop {
+		int itemId;
+		long amount;
+		long numerator;
+		long denominator;
 	}
 
 	private enum TerrainEditorAction {
@@ -161,6 +168,8 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_QUESTS = 1;
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY = 2;
 	private static final int VOIDSCAPE_INTERFACE_BESTIARY_REQUEST = 16;
+	private static final int VOIDSCAPE_BESTIARY_MODE_OBSERVED = 0;
+	private static final int VOIDSCAPE_BESTIARY_MODE_DROP_TABLE = 1;
 	private static final int VOIDSCAPE_INTERFACE_XP_LOCK = 17;
 	private static final int VOIDSCAPE_INTERFACE_VOID_ARENA = 18;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE = 0;
@@ -178,10 +187,9 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES = 500;
 	private static final long VOIDSCAPE_BESTIARY_REFRESH_MILLIS = 5000L;
 	private static final int VOIDSCAPE_BESTIARY_HEADER_H = 24;
-	private static final int VOIDSCAPE_BESTIARY_EMPTY_H = 22;
-	private static final int VOIDSCAPE_BESTIARY_SECTION_GAP = 8;
 	private static final int VOIDSCAPE_BESTIARY_SCROLLBAR_W = 8;
-	private static final int VOIDSCAPE_BESTIARY_MAX_COLUMNS = 5;
+	private static final int VOIDSCAPE_BESTIARY_RESULT_ROW_H = 18;
+	private static final int VOIDSCAPE_BESTIARY_DROP_ROW_H = 34;
 
 	public static final int spriteMedia = 2000;
 	public static final int spriteUtil = 2100;
@@ -1092,9 +1100,15 @@ public final class mudclient implements Runnable {
 	private final ArrayList<BestiaryEntry> bestiaryEntries = new ArrayList<>();
 	private final HashMap<Integer, BestiaryEntry> bestiaryEntriesByNpcId = new HashMap<>();
 	private int bestiarySelectedNpcId = -1;
+	private int bestiaryMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
+	private int bestiaryPendingNpcId = -1;
+	private int bestiaryRequestedNpcId = -1;
 	private boolean bestiaryLoaded = false;
 	private long bestiaryLastRequestMillis = 0L;
 	private int bestiaryScrollPixels = 0;
+	private Panel bestiarySearchPanel = null;
+	private int bestiarySearchField = -1;
+	private String bestiaryLastSearchText = "";
 	private int expShared = 0;
 	private int petFatigue = 0;
 	private long openPkPoints = 0;
@@ -16943,10 +16957,6 @@ public final class mudclient implements Runnable {
 			&& this.mouseX >= toggleX && this.mouseX < toggleX + toggleW) {
 			int selectedTab = Math.min(VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY,
 				Math.max(VOIDSCAPE_PLAYER_INFO_TAB_SKILLS, (this.mouseX - toggleX) * 3 / toggleW));
-			if (selectedTab == VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY
-				&& this.uiTabPlayerInfoSubTab != VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY) {
-				requestBestiarySnapshot(true);
-			}
 			this.uiTabPlayerInfoSubTab = selectedTab;
 			this.mouseButtonClick = 0;
 		}
@@ -17067,76 +17077,217 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeBestiary(int x, int y, int width, int height) {
-		requestBestiarySnapshot(false);
-
+		ensureBestiarySearchPanel();
 		this.getSurface().drawBoxAlpha(x, y, width, height, 0x0B0B0D, 128);
-		if (!this.bestiaryLoaded) {
-			this.getSurface().drawColoredStringCentered(x + width / 2, "Loading...", 0xE7DEBC, 0, 1,
-				y + height / 2);
-			return;
+
+		int pad = 6;
+		int fieldX = x + pad;
+		int fieldY = y + pad;
+		int fieldW = width - pad * 2;
+		int fieldH = 17;
+		boolean fieldFocused = this.bestiarySearchPanel.focusOn(this.bestiarySearchField);
+		boolean fieldWasFocused = fieldFocused;
+		this.getSurface().drawBoxAlpha(fieldX, fieldY, fieldW, fieldH, fieldFocused ? 0x191223 : 0x101015, 225);
+		this.getSurface().drawBoxBorder(fieldX, fieldW, fieldY, fieldH, fieldFocused ? 0x8B64D0 : 0x3D3448);
+		this.bestiarySearchPanel.reposition(this.bestiarySearchField, fieldX + 3, fieldY + 1, fieldW - 6, fieldH - 2);
+		this.bestiarySearchPanel.handleMouse(this.getMouseX(), this.getMouseY(), this.getMouseButtonDown(), this.getLastMouseDown());
+		this.bestiarySearchPanel.drawPanel();
+		fieldFocused = this.bestiarySearchPanel.focusOn(this.bestiarySearchField);
+		if (!fieldWasFocused && fieldFocused && isAndroid() && !osConfig.F_SHOWING_KEYBOARD) {
+			clientPort.drawKeyboard();
 		}
-		if (this.bestiaryEntries.isEmpty()) {
+		String searchText = bestiarySearchText();
+		if (searchText.length() == 0 && !fieldFocused) {
+			this.getSurface().drawString("Search NPC name or id", fieldX + 5, fieldY + 12, 0x756C85, 0);
+		}
+		if (!searchText.equals(this.bestiaryLastSearchText)) {
+			this.bestiaryLastSearchText = searchText;
 			this.bestiaryScrollPixels = 0;
-			this.getSurface().drawColoredStringCentered(x + width / 2, "No kills recorded yet", 0xC96B6B, 0, 1,
-				y + height / 2);
+		}
+
+		ArrayList<Integer> results = bestiarySearchResults(searchText);
+		int rowY = fieldY + fieldH + 6;
+		int maxRows = this.bestiaryRequestedNpcId >= 0 ? 4 : Math.max(4, (height - 35) / VOIDSCAPE_BESTIARY_RESULT_ROW_H);
+		int rowsDrawn = drawVoidscapeBestiarySearchResults(results, x + pad, rowY, fieldW, maxRows, searchText);
+		int detailY = rowY + Math.max(1, rowsDrawn) * VOIDSCAPE_BESTIARY_RESULT_ROW_H + 7;
+		int detailH = y + height - detailY - pad;
+		if (detailH <= 22) {
 			return;
 		}
 
-		int contentHeight = bestiaryContentHeight(width);
-		boolean needsScroll = contentHeight > height;
+		if (this.bestiaryRequestedNpcId < 0) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "Choose an NPC",
+				0xA996C6, 0, 1, detailY + 20);
+			return;
+		}
+
+		if (!this.bestiaryLoaded || this.bestiaryPendingNpcId == this.bestiaryRequestedNpcId) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "Loading drops...",
+				0xE7DEBC, 0, 1, detailY + 20);
+			return;
+		}
+
+		BestiaryEntry entry = this.bestiaryEntriesByNpcId.get(this.bestiaryRequestedNpcId);
+		drawVoidscapeBestiaryDropTable(entry, x + pad, detailY, fieldW, detailH);
+	}
+
+	private int drawVoidscapeBestiarySearchResults(ArrayList<Integer> results, int x, int y, int width, int maxRows,
+												   String searchText) {
+		if (results.isEmpty()) {
+			this.getSurface().drawString(searchText.length() == 0 ? "Start typing to filter NPCs" : "No NPCs found",
+				x + 4, y + 13, 0xA996C6, 0);
+			return 1;
+		}
+
+		int rows = Math.min(maxRows, Math.min(results.size(), VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES));
+		for (int i = 0; i < rows; i++) {
+			int npcId = results.get(i);
+			int rowY = y + i * VOIDSCAPE_BESTIARY_RESULT_ROW_H;
+			boolean selected = npcId == this.bestiaryRequestedNpcId;
+			boolean hover = this.mouseX >= x && this.mouseX < x + width
+				&& this.mouseY >= rowY && this.mouseY < rowY + VOIDSCAPE_BESTIARY_RESULT_ROW_H;
+			this.getSurface().drawBoxAlpha(x, rowY, width, VOIDSCAPE_BESTIARY_RESULT_ROW_H - 1,
+				selected ? 0x2B1D43 : hover ? 0x191725 : 0x0F1016, selected ? 232 : 185);
+			this.getSurface().drawBoxBorder(x, width, rowY, VOIDSCAPE_BESTIARY_RESULT_ROW_H - 1,
+				selected ? 0x8B64D0 : 0x312B3A);
+			String name = bestiaryNpcName(npcId);
+			int combat = bestiaryNpcCombatLevel(npcId);
+			String suffix = combat > 0 ? " lv " + combat : " #" + npcId;
+			int suffixWidth = this.getSurface().stringWidth(0, suffix);
+			this.getSurface().drawString(bestiaryFitText(name, width - suffixWidth - 14, 0), x + 5, rowY + 13,
+				selected ? 0xFFFFFF : 0xE7DEBC, 0);
+			this.getSurface().drawString(suffix, x + width - suffixWidth - 5, rowY + 13,
+				selected ? 0xE4D08D : 0x8E849D, 0);
+			if (hover && this.mouseButtonClick == 1) {
+				requestBestiaryDropTable(npcId, true);
+				this.bestiarySearchPanel.setFocus(-1);
+				if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+					clientPort.closeKeyboard();
+				}
+				this.mouseButtonClick = 0;
+			}
+		}
+		return rows;
+	}
+
+	private void drawVoidscapeBestiaryDropTable(BestiaryEntry entry, int x, int y, int width, int height) {
+		if (entry == null) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "No drop table", 0xC96B6B, 0, 1,
+				y + 18);
+			return;
+		}
+
+		this.getSurface().drawBoxAlpha(x, y, width, height, 0x0A0A0D, 156);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0x372A49);
+		String title = bestiaryNpcName(entry.npcId);
+		this.getSurface().drawString(bestiaryFitText(title, width - 12, 1), x + 6, y + 16, 0xFFFFFF, 1);
+		if (entry.killCount > 0) {
+			String kills = "KC " + formatExactLong(entry.killCount);
+			int killsWidth = this.getSurface().stringWidth(0, kills);
+			this.getSurface().drawString(kills, x + width - killsWidth - 6, y + 16, 0xE4D08D, 0);
+		}
+
+		int bodyY = y + VOIDSCAPE_BESTIARY_HEADER_H;
+		int bodyH = height - VOIDSCAPE_BESTIARY_HEADER_H;
+		if (entry.drops.isEmpty()) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "No regular drops", 0xA996C6, 0, 1,
+				bodyY + 18);
+			return;
+		}
+
+		int contentHeight = entry.drops.size() * VOIDSCAPE_BESTIARY_DROP_ROW_H;
+		boolean needsScroll = contentHeight > bodyH;
 		int drawWidth = needsScroll ? width - VOIDSCAPE_BESTIARY_SCROLLBAR_W - 3 : width;
-		contentHeight = bestiaryContentHeight(drawWidth);
-		int maxScroll = Math.max(0, contentHeight - height);
+		int maxScroll = Math.max(0, contentHeight - bodyH);
 		this.bestiaryScrollPixels = Math.max(0, Math.min(this.bestiaryScrollPixels, maxScroll));
 
-		this.getSurface().setClip(x, x + drawWidth, y + height, y);
-		int drawY = y - this.bestiaryScrollPixels;
-		int drawnEntries = 0;
-		for (BestiaryEntry entry : this.bestiaryEntries) {
-			if (drawnEntries >= VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES) {
-				break;
-			}
-			drawY = drawVoidscapeBestiaryEntry(entry, x, drawY, drawWidth);
-			drawnEntries++;
+		this.getSurface().setClip(x, x + drawWidth, y + height, bodyY);
+		int rowY = bodyY - this.bestiaryScrollPixels;
+		for (BestiaryDrop drop : entry.drops) {
+			drawVoidscapeBestiaryDropRow(drop, x, rowY, drawWidth);
+			rowY += VOIDSCAPE_BESTIARY_DROP_ROW_H;
 		}
 		this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
 
 		if (needsScroll) {
-			drawVoidscapeBestiaryScrollbar(x + width - VOIDSCAPE_BESTIARY_SCROLLBAR_W, y,
-				VOIDSCAPE_BESTIARY_SCROLLBAR_W, height, contentHeight);
+			drawVoidscapeBestiaryScrollbar(x + width - VOIDSCAPE_BESTIARY_SCROLLBAR_W, bodyY,
+				VOIDSCAPE_BESTIARY_SCROLLBAR_W, bodyH, contentHeight);
 		}
 	}
 
-	private int drawVoidscapeBestiaryEntry(BestiaryEntry entry, int x, int y, int width) {
-		int headerY = y;
-		this.getSurface().drawBoxAlpha(x, headerY, width, VOIDSCAPE_BESTIARY_HEADER_H, 0x070709, 238);
-		this.getSurface().drawLineHoriz(x, headerY, width, 0x2D2636);
-		this.getSurface().drawLineHoriz(x, headerY + VOIDSCAPE_BESTIARY_HEADER_H - 1, width, 0x2D2636);
-		String label = bestiaryNpcName(entry.npcId) + " x " + formatExactLong(entry.killCount);
-		this.getSurface().drawString(bestiaryFitText(label, width - 10, 1), x + 6, headerY + 16, 0xFFFFFF, 1);
+	private void drawVoidscapeBestiaryDropRow(BestiaryDrop drop, int x, int y, int width) {
+		this.getSurface().drawBoxAlpha(x, y, width, VOIDSCAPE_BESTIARY_DROP_ROW_H - 1, 0x101018, 178);
+		this.getSurface().drawLineHoriz(x, y + VOIDSCAPE_BESTIARY_DROP_ROW_H - 1, width, 0x282232);
+		drawVoidscapeBestiaryItemSprite(drop.itemId, x + 1, y + 1, 31);
 
-		int bodyY = headerY + VOIDSCAPE_BESTIARY_HEADER_H;
-		if (entry.loot.isEmpty()) {
-			this.getSurface().drawBoxAlpha(x, bodyY, width, VOIDSCAPE_BESTIARY_EMPTY_H, 0x151515, 146);
-			this.getSurface().drawString("No loot observed yet", x + 6, bodyY + 14, 0x9F8DB7, 1);
-			return bodyY + VOIDSCAPE_BESTIARY_EMPTY_H + VOIDSCAPE_BESTIARY_SECTION_GAP;
+		String itemName = bestiaryItemName(drop.itemId);
+		if (drop.amount > 1) {
+			itemName += " x" + formatExactLong(drop.amount);
+		}
+		String ratio = bestiaryRatioText(drop);
+		int ratioWidth = this.getSurface().stringWidth(0, ratio);
+		this.getSurface().drawString(bestiaryFitText(itemName, width - ratioWidth - 44, 0), x + 36, y + 14,
+			0xE7DEBC, 0);
+		this.getSurface().drawString(ratio, x + width - ratioWidth - 5, y + 14, 0xE4D08D, 0);
+	}
+
+	private void ensureBestiarySearchPanel() {
+		if (this.bestiarySearchPanel != null) {
+			return;
+		}
+		this.bestiarySearchPanel = new Panel(this.getSurface(), 1);
+		this.bestiarySearchField = this.bestiarySearchPanel.addLeftTextEntry(0, 0, 120, 16, 0, 32, false, true);
+	}
+
+	private String bestiarySearchText() {
+		if (this.bestiarySearchPanel == null || this.bestiarySearchField < 0) {
+			return "";
+		}
+		String text = this.bestiarySearchPanel.getControlText(this.bestiarySearchField);
+		return text == null ? "" : text.trim();
+	}
+
+	private boolean isBestiarySearchFocused() {
+		return this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
+			&& this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY
+			&& this.bestiarySearchPanel != null
+			&& this.bestiarySearchPanel.focusOn(this.bestiarySearchField);
+	}
+
+	private ArrayList<Integer> bestiarySearchResults(String query) {
+		ArrayList<Integer> results = new ArrayList<>();
+		String normalized = query == null ? "" : query.toLowerCase(Locale.ROOT).trim();
+		int numericQuery = -1;
+		try {
+			if (normalized.length() > 0) {
+				numericQuery = Integer.parseInt(normalized);
+			}
+		} catch (NumberFormatException ignored) {
+			numericQuery = -1;
 		}
 
-		int columns = bestiaryColumnsFor(width);
-		int cellSize = bestiaryCellSize(width, columns);
-		int gridWidth = columns * cellSize;
-		int gridX = x + Math.max(0, (width - gridWidth) / 2);
-		int index = 0;
-		for (Map.Entry<Integer, Long> drop : entry.loot.entrySet()) {
-			int col = index % columns;
-			int row = index / columns;
-			int cellX = gridX + col * cellSize;
-			int cellY = bodyY + row * cellSize;
-			drawVoidscapeBestiaryItemCell(drop.getKey(), drop.getValue(), cellX, cellY, cellSize);
-			index++;
+		for (int npcId = 0; npcId < EntityHandler.npcCount(); npcId++) {
+			NPCDef def = EntityHandler.getNpcDef(npcId);
+			if (def == null || def.getName() == null || def.getName().trim().length() == 0) {
+				continue;
+			}
+			String name = def.getName().toLowerCase(Locale.ROOT);
+			if (normalized.length() == 0 || name.contains(normalized) || npcId == numericQuery) {
+				results.add(npcId);
+			}
 		}
-		int rows = (entry.loot.size() + columns - 1) / columns;
-		return bodyY + rows * cellSize + VOIDSCAPE_BESTIARY_SECTION_GAP;
+		Collections.sort(results, (a, b) -> {
+			String an = bestiaryNpcName(a);
+			String bn = bestiaryNpcName(b);
+			boolean aExact = normalized.length() > 0 && an.equalsIgnoreCase(normalized);
+			boolean bExact = normalized.length() > 0 && bn.equalsIgnoreCase(normalized);
+			if (aExact != bExact) {
+				return aExact ? -1 : 1;
+			}
+			int nameCompare = an.compareToIgnoreCase(bn);
+			return nameCompare != 0 ? nameCompare : Integer.compare(a, b);
+		});
+		return results;
 	}
 
 	private String bestiaryNpcName(int npcId) {
@@ -17159,45 +17310,6 @@ public final class mudclient implements Runnable {
 			return EntityHandler.getItemDef(itemId).getName();
 		}
 		return "Item #" + itemId;
-	}
-
-	private int bestiaryContentHeight(int width) {
-		int total = 0;
-		int columns = bestiaryColumnsFor(width);
-		int cellSize = bestiaryCellSize(width, columns);
-		int count = 0;
-		for (BestiaryEntry entry : this.bestiaryEntries) {
-			if (count >= VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES) {
-				break;
-			}
-			total += VOIDSCAPE_BESTIARY_HEADER_H;
-			if (entry.loot.isEmpty()) {
-				total += VOIDSCAPE_BESTIARY_EMPTY_H;
-			} else {
-				total += ((entry.loot.size() + columns - 1) / columns) * cellSize;
-			}
-			total += VOIDSCAPE_BESTIARY_SECTION_GAP;
-			count++;
-		}
-		return Math.max(0, total - VOIDSCAPE_BESTIARY_SECTION_GAP);
-	}
-
-	private int bestiaryColumnsFor(int width) {
-		return Math.max(3, Math.min(VOIDSCAPE_BESTIARY_MAX_COLUMNS, Math.max(1, width) / 40));
-	}
-
-	private int bestiaryCellSize(int width, int columns) {
-		return Math.max(36, Math.max(1, width) / Math.max(1, columns));
-	}
-
-	private void drawVoidscapeBestiaryItemCell(int itemId, long amount, int x, int y, int size) {
-		drawVoidscapeBestiaryItemSprite(itemId, x, y, size);
-		if (amount > 1) {
-			String text = bestiaryQuantityText(amount);
-			int font = this.getSurface().stringWidth(1, text) <= size - 4 ? 1 : 0;
-			this.getSurface().drawString(text, x + 3, y + 12, 0x000000, font);
-			this.getSurface().drawString(text, x + 2, y + 11, 0xFFFF00, font);
-		}
 	}
 
 	private void drawVoidscapeBestiaryItemSprite(int itemId, int cellX, int cellY, int cellSize) {
@@ -17235,14 +17347,14 @@ public final class mudclient implements Runnable {
 		return trimmed + suffix;
 	}
 
-	private String bestiaryQuantityText(long amount) {
-		if (amount < 100000L) {
-			return Long.toString(amount);
+	private String bestiaryRatioText(BestiaryDrop drop) {
+		if (drop == null || drop.denominator <= 0) {
+			return "";
 		}
-		if (amount < 10000000L) {
-			return amount / 1000L + "K";
+		if (drop.numerator <= 0) {
+			return "0/" + drop.denominator;
 		}
-		return amount / 1000000L + "M";
+		return formatExactLong(drop.numerator) + "/" + formatExactLong(drop.denominator);
 	}
 
 	private void drawVoidscapeSectionHeader(String label, int x, int y, int width) {
@@ -17678,6 +17790,30 @@ public final class mudclient implements Runnable {
 		}
 		this.packetHandler.getClientStream().newPacket(199);
 		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_BESTIARY_REQUEST);
+		this.packetHandler.getClientStream().finishPacket();
+		this.bestiaryLastRequestMillis = now;
+	}
+
+	private void requestBestiaryDropTable(int npcId, boolean force) {
+		if (npcId < 0 || this.packetHandler == null || this.packetHandler.getClientStream() == null) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (!force && npcId == this.bestiaryPendingNpcId
+			&& now - this.bestiaryLastRequestMillis < VOIDSCAPE_BESTIARY_REFRESH_MILLIS) {
+			return;
+		}
+		this.bestiaryRequestedNpcId = npcId;
+		this.bestiarySelectedNpcId = npcId;
+		this.bestiaryPendingNpcId = npcId;
+		this.bestiaryLoaded = false;
+		this.bestiaryScrollPixels = 0;
+		this.bestiaryEntries.clear();
+		this.bestiaryEntriesByNpcId.clear();
+		this.packetHandler.getClientStream().newPacket(199);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_BESTIARY_REQUEST);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_BESTIARY_MODE_DROP_TABLE);
+		this.packetHandler.getClientStream().bufferBits.putShort(npcId);
 		this.packetHandler.getClientStream().finishPacket();
 		this.bestiaryLastRequestMillis = now;
 	}
@@ -20905,6 +21041,28 @@ public final class mudclient implements Runnable {
 						|| party.getPartyInterface().partySetupPanel.focusOn(party.getPartyInterface().partyTag_field)
 						|| party.getPartyInterface().partySetupPanel.focusOn(party.getPartyInterface().partySearch_field))) {
 						party.getPartyInterface().keyDown(key);
+						return;
+					}
+					if (isBestiarySearchFocused()) {
+						if (key == 27) {
+							this.bestiarySearchPanel.setFocus(-1);
+							if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+								clientPort.closeKeyboard();
+							}
+							return;
+						}
+						String before = bestiarySearchText();
+						this.bestiarySearchPanel.keyPress(key);
+						String after = bestiarySearchText();
+						if (!before.equals(after)) {
+							this.bestiaryScrollPixels = 0;
+						}
+						if ((key == 10 || key == 13) && after.length() > 0) {
+							ArrayList<Integer> results = bestiarySearchResults(after);
+							if (!results.isEmpty()) {
+								requestBestiaryDropTable(results.get(0), true);
+							}
+						}
 						return;
 					}
 					if (mainComponent.checkKeyPress(key)) {
@@ -25796,9 +25954,10 @@ public final class mudclient implements Runnable {
 		this.lastNpcKilledId = lastNpcKilledId;
 	}
 
-	public void clearBestiarySnapshot() {
+	public void clearBestiarySnapshot(int mode) {
 		this.bestiaryEntries.clear();
 		this.bestiaryEntriesByNpcId.clear();
+		this.bestiaryMode = mode;
 		this.bestiaryLoaded = false;
 	}
 
@@ -25810,17 +25969,24 @@ public final class mudclient implements Runnable {
 		this.bestiaryEntriesByNpcId.put(npcId, entry);
 	}
 
-	public void addBestiaryDrop(int npcId, int itemId, long amount) {
+	public void addBestiaryDrop(int npcId, int itemId, long amount, long numerator, long denominator) {
 		BestiaryEntry entry = this.bestiaryEntriesByNpcId.get(npcId);
 		if (entry == null) {
 			return;
 		}
-		entry.loot.put(itemId, amount);
+		BestiaryDrop drop = new BestiaryDrop();
+		drop.itemId = itemId;
+		drop.amount = amount;
+		drop.numerator = numerator;
+		drop.denominator = denominator;
+		entry.drops.add(drop);
 	}
 
 	public void finishBestiarySnapshot() {
 		this.bestiaryLoaded = true;
-		if (!this.bestiaryEntriesByNpcId.containsKey(this.bestiarySelectedNpcId)) {
+		if (this.bestiaryMode == VOIDSCAPE_BESTIARY_MODE_DROP_TABLE) {
+			this.bestiaryPendingNpcId = -1;
+		} else if (!this.bestiaryEntriesByNpcId.containsKey(this.bestiarySelectedNpcId)) {
 			this.bestiarySelectedNpcId = -1;
 		}
 	}
@@ -27326,7 +27492,6 @@ public final class mudclient implements Runnable {
 		if ("loot".equals(key) || "bestiary".equals(key)) {
 			this.showUiTab = Config.SKILLS_AND_QUESTS_TAB;
 			this.uiTabPlayerInfoSubTab = VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY;
-			requestBestiarySnapshot(true);
 			return workbenchFinishVoidscapeUiPanel();
 		}
 		if ("minimap".equals(key) || "map".equals(key)) {
