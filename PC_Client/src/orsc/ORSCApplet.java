@@ -864,6 +864,10 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 					return;
 				}
 
+				if (mudclient.handleTerrainEditorKey(keyChar, keyCode)) {
+					return;
+				}
+
 				boolean hitInputFilter = false;
 				int clientKey = keyCode == KeyEvent.VK_ESCAPE ? 27 : (int) keyChar;
 				mudclient.handleKeyPress((byte) 126, clientKey);
@@ -877,7 +881,9 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				if (keyCode == KeyEvent.VK_F6) mudclient.saveCinematicCameraPointA();
 				if (keyCode == KeyEvent.VK_F7) mudclient.saveCinematicCameraPointB();
 				if (keyCode == KeyEvent.VK_F8) mudclient.toggleCinematicCameraPath();
-				if (keyCode == KeyEvent.VK_F9) mudclient.toggleCinematicSlowOrbit();
+				if (keyCode == KeyEvent.VK_F9 && var1.isControlDown()) {
+					mudclient.toggleTerrainEditorMode();
+				} else if (keyCode == KeyEvent.VK_F9) mudclient.toggleCinematicSlowOrbit();
 				if (keyCode == KeyEvent.VK_F10) mudclient.cycleScalingType(); // type
 				if (keyCode == KeyEvent.VK_F11) mudclient.scaleDown(); // scale down
 				if (keyCode == KeyEvent.VK_F12) mudclient.scaleUp(); // scale up

@@ -27,6 +27,14 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-17 - 3D terrain editor Phase 2 live edit proof
+
+Extended the dev-only terrain editor mode so clicking the highlighted terrain tile can mutate the loaded landscape in memory and immediately rebuild the current 3D terrain view. Phase 2 supports single-tile raise/lower plus visual water/grass/stone painting through the existing sector fields and renderer path, using an unsaved in-memory override layer so normal sector reloads preserve live edits without touching `Custom_Landscape.orsc`. Files: `Client_Base/src/orsc/graphics/three/World.java`, `Client_Base/src/orsc/mudclient.java`, and `PC_Client/src/orsc/ORSCApplet.java`. This phase deliberately has no archive save path, no server persistence, and no packet/schema changes; reversibility is removing the editor override map, click/key handlers, and current-region rebuild hook.
+
+### 2026-06-17 - 3D terrain editor Phase 1 hover proof
+
+Added a dev-only terrain editor hover mode to the desktop client, toggled with `Ctrl+F9`, that reuses the existing scene pick buffer to map the mouse cursor back to the rendered landscape face and draw a translucent tile overlay in the 3D view. This is a Phase 1 interaction proof only: it does not mutate terrain, save landscape archives, alter packets, or touch server state. Files: `Client_Base/src/orsc/mudclient.java` and `PC_Client/src/orsc/ORSCApplet.java`. Reversibility is removing the toggle and overlay draw hook.
+
 ### 2026-06-16 - OB3 scenery model importer
 
 Added the first Voidscape content tool for untextured 3D scenery models: `scripts/content.sh model import` can read OBJ, glTF, or GLB meshes, convert material or vertex colors into RSC's packed RGB555 face fills, write OB3 bytes, and insert them into the OpenRSC/JAG-style `models.orsc` archive without changing the renderer. The tool includes OB3/JAG readers, round-trip tests against stock cache entries, and a small `Void test cube` proof object registered as scenery id `1310` and spawned in the Void Enclave for local client validation. Files are concentrated in `tools/voidscape-content/`, `Client_Base/Cache/video/models.orsc`, `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java`, `server/conf/server/defs/GameObjectDef.xml`, and `server/conf/server/defs/locs/SceneryLocsVoidEnclave.json`. Reversibility is removing id `1310`, its loc and source fixture, and deleting `void_test_cube.ob3` from the model archive with the same JAG writer.

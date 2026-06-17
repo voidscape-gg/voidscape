@@ -2,6 +2,7 @@ package orsc.graphics.three;
 
 import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.model.Sector;
+import com.openrsc.client.model.Tile;
 import com.openrsc.data.DataConversions;
 import orsc.Config;
 import orsc.graphics.two.GraphicsController;
@@ -11,16 +12,25 @@ import orsc.util.GenUtil;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 
 public final class World {
+	private static final class TerrainEditorTileOverride {
+		int groundElevation = -1;
+		int groundTexture = -1;
+		int groundOverlay = -1;
+	}
+
 	private final int[] colorToResource = new int[256];
 	private final int[][] tileElevationCache = new int[96][96];
 	private final int[][] pathFindSource = new int[96][96];
 	private final int[][] tileDirection = new int[96][96];
+	private final Map<Long, TerrainEditorTileOverride> terrainEditorOverrides = new HashMap<>();
 	private final boolean showInvisibleWalls = false;
 	public int baseMediaSprite = 750;
 	public int[][] collisionFlags = new int[96][96];
@@ -1629,6 +1639,119 @@ public final class World {
 		}
 	}
 
+	public int terrainEditorGetStoredElevation(int xTile, int zTile) {
+		final Tile tile = getLoadedTile(xTile, zTile);
+		return tile == null ? -1 : tile.groundElevation & 0xff;
+	}
+
+	public int terrainEditorGetGroundTexture(int xTile, int zTile) {
+		final Tile tile = getLoadedTile(xTile, zTile);
+		return tile == null ? -1 : tile.groundTexture & 0xff;
+	}
+
+	public int terrainEditorGetGroundOverlay(int xTile, int zTile) {
+		final Tile tile = getLoadedTile(xTile, zTile);
+		return tile == null ? -1 : tile.groundOverlay & 0xff;
+	}
+
+	public boolean terrainEditorAdjustTileHeight(int plane, int archiveTileX, int archiveTileZ,
+												 int localTileX, int localTileZ, int delta) {
+		boolean changed = false;
+		changed |= terrainEditorAdjustVertexHeight(plane, archiveTileX, archiveTileZ, localTileX, localTileZ, delta);
+		changed |= terrainEditorAdjustVertexHeight(plane, archiveTileX + 1, archiveTileZ,
+			localTileX + 1, localTileZ, delta);
+		changed |= terrainEditorAdjustVertexHeight(plane, archiveTileX, archiveTileZ + 1,
+			localTileX, localTileZ + 1, delta);
+		changed |= terrainEditorAdjustVertexHeight(plane, archiveTileX + 1, archiveTileZ + 1,
+			localTileX + 1, localTileZ + 1, delta);
+		return changed;
+	}
+
+	public boolean terrainEditorPaintTile(int plane, int archiveTileX, int archiveTileZ,
+										  int localTileX, int localTileZ, int groundTexture, int groundOverlay) {
+		final Tile tile = getLoadedTile(localTileX, localTileZ);
+		if (tile == null) return false;
+
+		boolean changed = false;
+		if (groundTexture >= 0 && groundTexture <= 255 && (tile.groundTexture & 0xff) != groundTexture) {
+			tile.groundTexture = (byte) groundTexture;
+			terrainEditorOverrideFor(plane, archiveTileX, archiveTileZ).groundTexture = groundTexture;
+			changed = true;
+		}
+		if (groundOverlay >= 0 && groundOverlay <= 255 && (tile.groundOverlay & 0xff) != groundOverlay) {
+			tile.groundOverlay = (byte) groundOverlay;
+			terrainEditorOverrideFor(plane, archiveTileX, archiveTileZ).groundOverlay = groundOverlay;
+			changed = true;
+		}
+		return changed;
+	}
+
+	private boolean terrainEditorAdjustVertexHeight(int plane, int archiveTileX, int archiveTileZ,
+													int localTileX, int localTileZ, int delta) {
+		final Tile tile = getLoadedTile(localTileX, localTileZ);
+		if (tile == null) return false;
+
+		final int current = tile.groundElevation & 0xff;
+		final int next = Math.max(0, Math.min(255, current + delta));
+		if (next == current) return false;
+
+		tile.groundElevation = (byte) next;
+		terrainEditorOverrideFor(plane, archiveTileX, archiveTileZ).groundElevation = next;
+		return true;
+	}
+
+	private TerrainEditorTileOverride terrainEditorOverrideFor(int plane, int archiveTileX, int archiveTileZ) {
+		final long key = terrainEditorTileKey(plane, archiveTileX, archiveTileZ);
+		TerrainEditorTileOverride override = this.terrainEditorOverrides.get(key);
+		if (override == null) {
+			override = new TerrainEditorTileOverride();
+			this.terrainEditorOverrides.put(key, override);
+		}
+		return override;
+	}
+
+	private void applyTerrainEditorOverrides(Sector sector, int plane, int sectionX, int sectionY) {
+		if (this.terrainEditorOverrides.isEmpty() || sector == null) return;
+		final int baseX = sectionX * 48;
+		final int baseZ = sectionY * 48;
+		for (int x = 0; x < 48; x++) {
+			for (int z = 0; z < 48; z++) {
+				final TerrainEditorTileOverride override = this.terrainEditorOverrides.get(
+					terrainEditorTileKey(plane, baseX + x, baseZ + z));
+				if (override == null) continue;
+
+				final Tile tile = sector.getTile(x, z);
+				if (override.groundElevation >= 0) tile.groundElevation = (byte) override.groundElevation;
+				if (override.groundTexture >= 0) tile.groundTexture = (byte) override.groundTexture;
+				if (override.groundOverlay >= 0) tile.groundOverlay = (byte) override.groundOverlay;
+			}
+		}
+	}
+
+	private static long terrainEditorTileKey(int plane, int archiveTileX, int archiveTileZ) {
+		return ((long) (plane & 0xff) << 56)
+			| ((long) archiveTileX & 0x0fffffffL) << 28
+			| ((long) archiveTileZ & 0x0fffffffL);
+	}
+
+	private Tile getLoadedTile(int xTile, int zTile) {
+		if (xTile < 0 || xTile >= 96 || zTile < 0 || zTile >= 96) return null;
+		int chunk = 0;
+		if (xTile >= 48 && zTile < 48) {
+			chunk = 1;
+			xTile -= 48;
+		} else if (xTile < 48 && zTile >= 48) {
+			chunk = 2;
+			zTile -= 48;
+		} else if (xTile >= 48 && zTile >= 48) {
+			chunk = 3;
+			xTile -= 48;
+			zTile -= 48;
+		}
+		if (this.sectors == null || this.sectors[chunk] == null) return null;
+		return this.sectors[chunk].getTile(xTile, zTile);
+	}
+
 	private void setTileDecorationOnBridge() {
 		try {
 
@@ -1924,6 +2047,7 @@ public final class World {
 			e.printStackTrace();
 			System.exit(1);
 		}
+		applyTerrainEditorOverrides(s, height, sectionX, sectionY);
 		sectors[sector] = s;
 	}
 

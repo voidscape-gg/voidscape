@@ -74,6 +74,20 @@ public final class mudclient implements Runnable {
 		final LinkedHashMap<Integer, Long> loot = new LinkedHashMap<>();
 	}
 
+	private enum TerrainEditorAction {
+		RAISE("raise"),
+		LOWER("lower"),
+		PAINT_WATER("water"),
+		PAINT_GRASS("grass"),
+		PAINT_STONE("stone");
+
+		final String label;
+
+		TerrainEditorAction(String label) {
+			this.label = label;
+		}
+	}
+
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_SKILLS = 0;
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_QUESTS = 1;
 	private static final int VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY = 2;
@@ -324,6 +338,17 @@ public final class mudclient implements Runnable {
 	private int voidScoutBodySpriteIndex = -1;
 	private ORSCharacter voidScoutBodyPreviousPlayer = null;
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
+		new int[3], new int[3], new int[3], new int[3]
+	};
+	private static final int TERRAIN_EDITOR_GRASS_TEXTURE = 96;
+	private static final int TERRAIN_EDITOR_WATER_OVERLAY = 2;
+	private static final int TERRAIN_EDITOR_STONE_OVERLAY = 29;
+	private boolean terrainEditorMode = false;
+	private TerrainEditorAction terrainEditorAction = TerrainEditorAction.RAISE;
+	private int terrainEditorHeightStep = 8;
+	private int terrainEditorHoverLocalX = -1;
+	private int terrainEditorHoverLocalZ = -1;
+	private final int[][] terrainEditorTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
 	private final int[][] voidRushWaveProjection = new int[][]{
@@ -7243,6 +7268,7 @@ public final class mudclient implements Runnable {
 					if (!this.isCinematicHudHidden()) {
 						drawWorldWalkSceneRoute();
 					}
+					drawTerrainEditorHoverOverlay();
 					drawRareDropBeams();
 					drawVoidRifts();
 					drawVoidStarterIntroBeams();
@@ -7776,6 +7802,193 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	public void toggleTerrainEditorMode() {
+		if (this.localPlayer == null || !this.localPlayer.isDev()) {
+			this.showMessage(false, null, "@or1@Terrain editor mode is dev-only.", MessageType.GAME, 0, null);
+			return;
+		}
+		this.terrainEditorMode = !this.terrainEditorMode;
+		this.terrainEditorHoverLocalX = -1;
+		this.terrainEditorHoverLocalZ = -1;
+		this.mouseButtonClick = 0;
+		this.lastMouseButtonDown = 0;
+		this.currentMouseButtonDown = 0;
+		this.showMessage(false, null, this.terrainEditorMode
+			? "@gre@Terrain editor Phase 2: 1/2 height, 3/4/5 paint, click applies."
+			: "@or1@Terrain editor disabled.", MessageType.GAME, 0, null);
+	}
+
+	public boolean handleTerrainEditorKey(final char keyChar, final int keyCode) {
+		if (!this.terrainEditorMode) return false;
+
+		final char key = Character.toLowerCase(keyChar);
+		if (key == '1') {
+			this.terrainEditorAction = TerrainEditorAction.RAISE;
+		} else if (key == '2') {
+			this.terrainEditorAction = TerrainEditorAction.LOWER;
+		} else if (key == '3') {
+			this.terrainEditorAction = TerrainEditorAction.PAINT_WATER;
+		} else if (key == '4') {
+			this.terrainEditorAction = TerrainEditorAction.PAINT_GRASS;
+		} else if (key == '5') {
+			this.terrainEditorAction = TerrainEditorAction.PAINT_STONE;
+		} else if (key == '[' || key == '-') {
+			this.terrainEditorHeightStep = Math.max(1, this.terrainEditorHeightStep - 1);
+		} else if (key == ']' || key == '=' || key == '+') {
+			this.terrainEditorHeightStep = Math.min(32, this.terrainEditorHeightStep + 1);
+		} else {
+			return false;
+		}
+
+		this.showMessage(false, null, "@gre@Terrain editor: @whi@" + terrainEditorAction.label
+			+ " @gre@step @whi@" + this.terrainEditorHeightStep, MessageType.GAME, 0, null);
+		return true;
+	}
+
+	private void drawTerrainEditorHoverOverlay() {
+		if (!this.terrainEditorMode || this.world == null || this.scene == null) return;
+		final int tileIndex = this.getHoveredLandscapeTileIndex();
+		if (tileIndex < 0) {
+			this.terrainEditorHoverLocalX = -1;
+			this.terrainEditorHoverLocalZ = -1;
+			this.getSurface().drawString("Terrain editor: no terrain tile", 7, 34, 0xFFC040, 1);
+			return;
+		}
+
+		final int localX = this.world.faceTileX[tileIndex];
+		final int localZ = this.world.faceTileZ[tileIndex];
+		if (localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) return;
+
+		this.terrainEditorHoverLocalX = localX;
+		this.terrainEditorHoverLocalZ = localZ;
+		handleTerrainEditorTileClick(localX, localZ);
+		final int x0 = localX * this.tileSize;
+		final int z0 = localZ * this.tileSize;
+		final int x1 = x0 + this.tileSize;
+		final int z1 = z0 + this.tileSize;
+		if (!projectTerrainEditorTileCorner(0, x0, z0)) return;
+		if (!projectTerrainEditorTileCorner(1, x1, z0)) return;
+		if (!projectTerrainEditorTileCorner(2, x1, z1)) return;
+		if (!projectTerrainEditorTileCorner(3, x0, z1)) return;
+
+		final int[] p0 = this.terrainEditorTileProjection[0];
+		final int[] p1 = this.terrainEditorTileProjection[1];
+		final int[] p2 = this.terrainEditorTileProjection[2];
+		final int[] p3 = this.terrainEditorTileProjection[3];
+		final int fillColor = 0x9A4DFF;
+		final int edgeColor = 0xFFE66D;
+		this.getSurface().drawQuadrilateralAlpha(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1],
+			p3[0], p3[1], fillColor, 90);
+		this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], edgeColor, 230);
+		this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], edgeColor, 230);
+		this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], edgeColor, 230);
+		this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], edgeColor, 230);
+		this.getSurface().drawString("Terrain editor: tile @gre@(" + (this.midRegionBaseX + localX)
+			+ "," + (this.midRegionBaseZ + localZ) + "@whi@) action @gre@"
+			+ this.terrainEditorAction.label + "@whi@ step @gre@" + this.terrainEditorHeightStep, 7, 34, 0xFFFFFF, 1);
+		this.getSurface().drawString("material: tex @gre@" + this.world.terrainEditorGetGroundTexture(localX, localZ)
+			+ "@whi@ overlay @gre@" + this.world.terrainEditorGetGroundOverlay(localX, localZ)
+			+ "@whi@ height @gre@" + this.world.terrainEditorGetStoredElevation(localX, localZ), 7, 47, 0xFFFFFF, 1);
+	}
+
+	private boolean projectTerrainEditorTileCorner(final int index, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 4;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.terrainEditorTileProjection[index]);
+	}
+
+	private void handleTerrainEditorTileClick(final int localX, final int localZ) {
+		if (this.mouseButtonClick != 1) return;
+
+		boolean changed = false;
+		final int archiveX = this.midRegionBaseX + this.worldOffsetX + localX;
+		final int archiveZ = this.midRegionBaseZ + this.worldOffsetZ + localZ;
+		if (this.terrainEditorAction == TerrainEditorAction.RAISE) {
+			changed = this.world.terrainEditorAdjustTileHeight(this.lastHeightOffset, archiveX, archiveZ,
+				localX, localZ, this.terrainEditorHeightStep);
+		} else if (this.terrainEditorAction == TerrainEditorAction.LOWER) {
+			changed = this.world.terrainEditorAdjustTileHeight(this.lastHeightOffset, archiveX, archiveZ,
+				localX, localZ, -this.terrainEditorHeightStep);
+		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_WATER) {
+			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+				localX, localZ, -1, TERRAIN_EDITOR_WATER_OVERLAY);
+		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_GRASS) {
+			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+				localX, localZ, TERRAIN_EDITOR_GRASS_TEXTURE, 0);
+		} else if (this.terrainEditorAction == TerrainEditorAction.PAINT_STONE) {
+			changed = this.world.terrainEditorPaintTile(this.lastHeightOffset, archiveX, archiveZ,
+				localX, localZ, -1, TERRAIN_EDITOR_STONE_OVERLAY);
+		}
+
+		this.mouseButtonClick = 0;
+		this.lastMouseButtonDown = 0;
+		this.currentMouseButtonDown = 0;
+		if (changed) {
+			rebuildTerrainEditorRegion();
+		}
+	}
+
+	private void rebuildTerrainEditorRegion() {
+		if (this.world == null || this.localPlayer == null || this.lastHeightOffset < 0) return;
+		final int wantX = this.playerLocalX + this.midRegionBaseX + this.worldOffsetX;
+		final int wantZ = this.playerLocalZ + this.midRegionBaseZ + this.worldOffsetZ;
+		this.world.loadSections(wantX, wantZ, this.lastHeightOffset);
+		readdTerrainEditorSceneModels();
+		this.world.playerAlive = true;
+	}
+
+	private void readdTerrainEditorSceneModels() {
+		for (int i = 0; i < this.gameObjectInstanceCount; ++i) {
+			final int xTile = this.gameObjectInstanceX[i];
+			final int zTile = this.gameObjectInstanceZ[i];
+			final int objectID = this.gameObjectInstanceID[i];
+			final RSModel model = this.gameObjectInstanceModel[i];
+			if (model == null) continue;
+
+			try {
+				final int dir = this.gameObjectInstanceDir[i];
+				this.world.registerObjectDir(xTile, zTile, dir);
+				final int xSize;
+				final int zSize;
+				if (dir == 0 || dir == 4) {
+					xSize = EntityHandler.getObjectDef(objectID).getWidth();
+					zSize = EntityHandler.getObjectDef(objectID).getHeight();
+				} else {
+					xSize = EntityHandler.getObjectDef(objectID).getHeight();
+					zSize = EntityHandler.getObjectDef(objectID).getWidth();
+				}
+
+				final int x = (2 * xTile + xSize) * this.tileSize / 2;
+				final int z = this.tileSize * (2 * zTile + zSize) / 2;
+				if (xTile >= 0 && zTile >= 0 && xTile < 96 && zTile < 96) {
+					this.scene.addModel(model);
+					model.setTranslate(x, -this.world.getElevation(x, z), z);
+					this.world.addGameObject_UpdateCollisionMap(xTile, zTile, objectID, false);
+					if (objectID == 74) {
+						model.translate2(0, -480, 0);
+					}
+				}
+			} catch (RuntimeException ex) {
+				System.out.println("Terrain editor loc rebuild error: " + ex.getMessage());
+				ex.printStackTrace();
+			}
+		}
+
+		for (int i = 0; i < this.wallObjectInstanceCount; ++i) {
+			final int xTile = this.wallObjectInstanceX[i];
+			final int zTile = this.wallObjectInstanceZ[i];
+			final int id = this.wallObjectInstanceID[i];
+			final int dir = this.wallObjectInstanceDir[i];
+			try {
+				this.world.registerObjectDir(xTile, zTile, dir);
+				this.world.applyWallToCollisionFlags(id, xTile, zTile, dir);
+				this.wallObjectInstanceModel[i] = this.createWallObjectModel(xTile, zTile, id, dir, i);
+			} catch (RuntimeException ex) {
+				System.out.println("Terrain editor wall rebuild error: " + ex.getMessage());
+				ex.printStackTrace();
+			}
+		}
 	}
 
 	private void queueVoidScoutBodySprite() {
