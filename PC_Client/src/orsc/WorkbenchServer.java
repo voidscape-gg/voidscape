@@ -69,6 +69,7 @@ final class WorkbenchServer {
 			httpServer.createContext("/captures/latest", WorkbenchServer::handleLatestCapture);
 			httpServer.createContext("/input/click", WorkbenchServer::handleClick);
 			httpServer.createContext("/input/drag", WorkbenchServer::handleDrag);
+			httpServer.createContext("/input/scroll", WorkbenchServer::handleScroll);
 			httpServer.createContext("/input/key", WorkbenchServer::handleKey);
 			httpServer.createContext("/input/type", WorkbenchServer::handleType);
 			httpServer.createContext("/input/command", WorkbenchServer::handleCommand);
@@ -203,6 +204,16 @@ final class WorkbenchServer {
 			"\"fromX\":" + fromX + ",\"fromY\":" + fromY
 				+ ",\"toX\":" + toX + ",\"toY\":" + toY
 				+ ",\"button\":\"" + jsonEscape(button) + "\""));
+	}
+
+	private static void handleScroll(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		int x = requiredInt(fields, "x");
+		int y = requiredInt(fields, "y");
+		int amount = requiredInt(fields, "amount");
+		scrollGame(x, y, amount);
+		sendJson(exchange, 200, controlJson("scroll", "\"x\":" + x + ",\"y\":" + y + ",\"amount\":" + amount));
 	}
 
 	private static void handleKey(HttpExchange exchange) throws IOException {
@@ -491,6 +502,8 @@ final class WorkbenchServer {
 		appendShop(json, client);
 		json.append(",");
 		appendBank(json, client);
+		json.append(",");
+		appendBestiary(json, client);
 		json.append("}");
 	}
 
@@ -576,6 +589,36 @@ final class WorkbenchServer {
 		json.append(",");
 		appendBankPresets(json, bank);
 		json.append("}");
+	}
+
+	private static void appendBestiary(StringBuilder json, mudclient client) {
+		json.append("\"bestiary\":");
+		if (client == null) {
+			json.append("null");
+			return;
+		}
+
+		json.append("{");
+		json.append("\"visible\":").append(client.workbenchBestiaryVisible()).append(",");
+		json.append("\"mode\":").append(client.workbenchBestiaryMode()).append(",");
+		json.append("\"loaded\":").append(client.workbenchBestiaryLoaded()).append(",");
+		json.append("\"requestedNpcId\":").append(client.workbenchBestiaryRequestedNpcId()).append(",");
+		json.append("\"pendingNpcId\":").append(client.workbenchBestiaryPendingNpcId()).append(",");
+		appendString(json, "search", client.workbenchBestiarySearchText()).append(",");
+		json.append("\"searchFocused\":").append(client.workbenchBestiarySearchFocused()).append(",");
+		json.append("\"resultCount\":").append(client.workbenchBestiarySearchResultCount()).append(",");
+		json.append("\"resultScrollRows\":").append(client.workbenchBestiaryResultScrollRows()).append(",");
+		json.append("\"dropScrollPixels\":").append(client.workbenchBestiaryDropScrollPixels()).append(",");
+		json.append("\"layout\":{");
+		appendPoint(json, "search", client.workbenchBestiarySearchCenterX(), client.workbenchBestiarySearchCenterY())
+			.append(",");
+		appendPoint(json, "firstResult", client.workbenchBestiaryFirstResultCenterX(),
+			client.workbenchBestiaryFirstResultCenterY()).append(",");
+		appendPoint(json, "back", client.workbenchBestiaryBackCenterX(), client.workbenchBestiaryBackCenterY())
+			.append(",");
+		appendPoint(json, "dropArea", client.workbenchBestiaryDropAreaCenterX(),
+			client.workbenchBestiaryDropAreaCenterY());
+		json.append("}}");
 	}
 
 	private static void appendBankLayout(StringBuilder json, CustomBankInterface bank) {
@@ -858,6 +901,7 @@ final class WorkbenchServer {
 				"skills",
 				"quests",
 				"loot",
+				"bestiary",
 				"minimap",
 				"inventory",
 				"account"
@@ -887,7 +931,7 @@ final class WorkbenchServer {
 	private static boolean isLootUiPanel(String panel) {
 		if (panel == null) return false;
 		String key = panel.trim().toLowerCase(Locale.ROOT).replace('_', '-');
-		return "loot".equals(key) || "bestiary".equals(key);
+		return "loot".equals(key) || "bestiary".equals(key) || "best".equals(key);
 	}
 
 	private static void waitForAuctionHouseVisible() throws IOException {
@@ -1065,6 +1109,16 @@ final class WorkbenchServer {
 			int eventY = toY + client.screenOffsetY;
 			mouseHandler.mouseReleased(new MouseEvent(source, MouseEvent.MOUSE_RELEASED, now, 0, eventX, eventY, 1, false, button));
 		});
+	}
+
+	private static void scrollGame(final int x, final int y, final int amount) throws IOException {
+		final mudclient client = requireClient();
+		runOnEdt(() -> {
+			client.mouseX = x;
+			client.mouseY = y;
+			client.runScroll(amount);
+		});
+		sleep(100);
 	}
 
 	private static void typeText(String text) throws IOException {

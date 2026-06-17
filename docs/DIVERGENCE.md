@@ -27,6 +27,14 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-17 - Bestiary browser usability pass
+
+Reworked the client-side `BEST` sub-tab into a smoother drop-table browser without changing packets or server drop math. NPC search now uses a cached, ranked client index instead of scanning and sorting definitions every frame; result-list scrolling and drop-table scrolling have independent state; selecting an NPC opens a focused detail view with a Back control; typing a new query or pressing Escape returns cleanly to the searchable list. The dev workbench JSON state now exposes bestiary visibility, search/result counters, scroll offsets, and click coordinates so QA can drive search/select/back/drop-scroll flows through the existing loopback workbench. Files: `Client_Base/src/orsc/mudclient.java`, `PC_Client/src/orsc/WorkbenchServer.java`, and docs. Reversibility is removing the cached search/result-scroll helpers and workbench bestiary state block.
+
+### 2026-06-17 - Loot tab and Bestiary split
+
+Restored the right-panel `LOOT` sub-tab to the observed NPC loot tracker: killed NPCs show kill count headers and grids of item sprites with observed quantities from the existing `bestiaryloot` persistence. The searchable authoritative NPC drop-table browser now lives in a separate fourth `BEST` sub-tab; the compact player-info selector uses existing icon assets for stats, quests, loot, and bestiary. Bestiary rates render as rounded `1/N` odds instead of raw reduced fractions such as `34/4000`. This is a client UI/workbench/documentation repair only; it reuses the existing mode byte on `SEND_BESTIARY` and does not add opcodes, change packet shape, bump `CLIENT_VERSION`, or alter the database schema. Files: `Client_Base/src/orsc/mudclient.java`, `PC_Client/src/orsc/WorkbenchServer.java`, and protocol/divergence docs. Reversibility is moving the browser renderer back onto `LOOT` and removing the observed-loot grid helpers.
+
 ### 2026-06-17 - 3D terrain editor Phase 3 brush tools
 
 Extended the dev-only in-client terrain editor from single-tile edits to brush operations. The editor now supports adjustable brush radius, raise/lower with radial falloff, smooth, flatten, water/grass/stone paint brushes, and in-memory undo/redo. Terrain rebuilds still use the existing client landscape renderer and unsaved override layer; this phase does not write `Custom_Landscape.orsc`, alter server state, add packets, or persist terrain. Files: `Client_Base/src/orsc/graphics/three/World.java`, `Client_Base/src/orsc/mudclient.java`, and `PC_Client/src/orsc/ORSCApplet.java`. Reversibility is removing the brush/snapshot stacks and null-grid scene add guard.
