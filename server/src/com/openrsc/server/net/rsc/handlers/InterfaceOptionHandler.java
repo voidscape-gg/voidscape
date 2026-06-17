@@ -116,6 +116,8 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 			case BESTIARY_REQUEST:
 				if (payload.value == BestiaryStruct.MODE_DROP_TABLE) {
 					ActionSender.sendBestiaryDropTable(player, payload.id);
+				} else if (payload.value == BestiaryStruct.MODE_CATALOG) {
+					ActionSender.sendBestiaryCatalog(player);
 				} else {
 					ActionSender.sendBestiary(player);
 				}

@@ -919,6 +919,10 @@ public final class EntityHandler {
 		return npcs.get(id);
 	}
 
+	public int getNpcCount() {
+		return npcs.size();
+	}
+
 	/**
 	 * @param name the entities name
 	 * @return the NPC name with the given NPC name, if found, otherwise ""

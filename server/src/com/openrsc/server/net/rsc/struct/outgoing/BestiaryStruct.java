@@ -7,6 +7,7 @@ public class BestiaryStruct extends AbstractStruct<OpcodeOut> {
 
 	public static final int MODE_OBSERVED = 0;
 	public static final int MODE_DROP_TABLE = 1;
+	public static final int MODE_CATALOG = 2;
 	public static final int DROP_TABLE_BROWSER_CLIENT_VERSION = 10110;
 
 	public int mode = MODE_OBSERVED;

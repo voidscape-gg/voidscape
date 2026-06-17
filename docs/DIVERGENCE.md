@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-17 - Bestiary catalog hides bone-only NPCs
+
+Moved the `BEST` sub-tab's searchable NPC list from a client-side "all NPC definitions" scan to a server-authored catalog response. The catalog reuses existing `INTERFACE_OPTIONS` sub-option `16` and `SEND_BESTIARY` packet shape as mode `2`, listing only NPCs with at least one allowed regular drop-table row beyond guaranteed bones or ashes, so bone-only beasts no longer appear in search. The selected NPC detail view and observed `LOOT` snapshot remain on modes `1` and `0` respectively. Files: `ActionSender.java`, `BestiaryStruct.java`, `InterfaceOptionHandler.java`, `EntityHandler.java`, `mudclient.java`, `WorkbenchServer.java`, and protocol docs. Reversibility is returning BEST search to the client definition index and removing the catalog mode branch.
+
 ### 2026-06-17 - Bestiary browser usability pass
 
 Reworked the client-side `BEST` sub-tab into a smoother drop-table browser without changing packets or server drop math. NPC search now uses a cached, ranked client index instead of scanning and sorting definitions every frame; result-list scrolling and drop-table scrolling have independent state; selecting an NPC opens a focused detail view with a Back control; typing a new query or pressing Escape returns cleanly to the searchable list. The dev workbench JSON state now exposes bestiary visibility, search/result counters, scroll offsets, and click coordinates so QA can drive search/select/back/drop-scroll flows through the existing loopback workbench. Files: `Client_Base/src/orsc/mudclient.java`, `PC_Client/src/orsc/WorkbenchServer.java`, and docs. Reversibility is removing the cached search/result-scroll helpers and workbench bestiary state block.

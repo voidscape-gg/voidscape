@@ -564,6 +564,35 @@ public class ActionSender {
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
 	}
 
+	public static void sendBestiaryCatalog(Player player) {
+		BestiaryStruct struct = new BestiaryStruct();
+		struct.mode = BestiaryStruct.MODE_CATALOG;
+		List<BestiaryStruct.NpcEntry> entries = new ArrayList<>();
+		int npcCount = player.getWorld().getServer().getEntityHandler().getNpcCount();
+
+		for (int npcId = 0; npcId < npcCount; npcId++) {
+			NPCDef npcDef = player.getWorld().getServer().getEntityHandler().getNpcDef(npcId);
+			if (npcDef == null || npcDef.getName() == null || npcDef.getName().trim().isEmpty()
+				|| !bestiaryHasCatalogDrop(player, npcId)) {
+				continue;
+			}
+			BestiaryStruct.NpcEntry npcEntry = new BestiaryStruct.NpcEntry();
+			npcEntry.npcId = npcId;
+			npcEntry.killCount = player.getKillCache().getOrDefault(npcId, 0);
+			entries.add(npcEntry);
+		}
+
+		Collections.sort(entries, Comparator
+			.comparing((BestiaryStruct.NpcEntry entry) -> {
+				NPCDef def = player.getWorld().getServer().getEntityHandler().getNpcDef(entry.npcId);
+				return def == null || def.getName() == null ? "" : def.getName().trim().toLowerCase();
+			})
+			.thenComparingInt(entry -> entry.npcId));
+		struct.entries = entries.toArray(new BestiaryStruct.NpcEntry[0]);
+
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+	}
+
 	public static void sendBestiaryDropTable(Player player, int npcId) {
 		BestiaryStruct struct = new BestiaryStruct();
 		struct.mode = BestiaryStruct.MODE_DROP_TABLE;
@@ -632,6 +661,27 @@ public class ActionSender {
 			return bestiaryBoneItem(player, ItemId.BONES.id());
 		}
 		return ItemId.NOTHING.id();
+	}
+
+	private static boolean bestiaryHasCatalogDrop(Player player, int npcId) {
+		DropTable dropTable = player.getWorld().getNpcDrops().getDropTable(npcId);
+		if (dropTable == null) {
+			return false;
+		}
+		for (DropTable.DropChance chance : dropTable.getDropChances()) {
+			if (bestiaryWorldAllowsDrop(player, chance.itemId) && !bestiaryIsBoneOnlyItem(chance.itemId)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean bestiaryIsBoneOnlyItem(int itemId) {
+		return itemId == ItemId.BONES.id()
+			|| itemId == ItemId.BIG_BONES.id()
+			|| itemId == ItemId.BAT_BONES.id()
+			|| itemId == ItemId.DRAGON_BONES.id()
+			|| itemId == ItemId.ASHES.id();
 	}
 
 	private static int bestiaryBoneItem(Player player, int boneId) {

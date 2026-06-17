@@ -602,6 +602,9 @@ final class WorkbenchServer {
 		json.append("\"visible\":").append(client.workbenchBestiaryVisible()).append(",");
 		json.append("\"mode\":").append(client.workbenchBestiaryMode()).append(",");
 		json.append("\"loaded\":").append(client.workbenchBestiaryLoaded()).append(",");
+		json.append("\"catalogLoaded\":").append(client.workbenchBestiaryCatalogLoaded()).append(",");
+		json.append("\"catalogPending\":").append(client.workbenchBestiaryCatalogPending()).append(",");
+		json.append("\"catalogCount\":").append(client.workbenchBestiaryCatalogCount()).append(",");
 		json.append("\"requestedNpcId\":").append(client.workbenchBestiaryRequestedNpcId()).append(",");
 		json.append("\"pendingNpcId\":").append(client.workbenchBestiaryPendingNpcId()).append(",");
 		appendString(json, "search", client.workbenchBestiarySearchText()).append(",");

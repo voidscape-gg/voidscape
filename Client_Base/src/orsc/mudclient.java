@@ -198,6 +198,7 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_INTERFACE_BESTIARY_REQUEST = 16;
 	private static final int VOIDSCAPE_BESTIARY_MODE_OBSERVED = 0;
 	private static final int VOIDSCAPE_BESTIARY_MODE_DROP_TABLE = 1;
+	private static final int VOIDSCAPE_BESTIARY_MODE_CATALOG = 2;
 	private static final int VOIDSCAPE_INTERFACE_XP_LOCK = 17;
 	private static final int VOIDSCAPE_INTERFACE_VOID_ARENA = 18;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE = 0;
@@ -1133,6 +1134,7 @@ public final class mudclient implements Runnable {
 	private final HashMap<Integer, BestiaryEntry> bestiaryEntriesByNpcId = new HashMap<>();
 	private int bestiarySelectedNpcId = -1;
 	private int bestiaryMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
+	private int bestiarySnapshotMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
 	private int bestiaryPendingNpcId = -1;
 	private int bestiaryRequestedNpcId = -1;
 	private boolean bestiaryLoaded = false;
@@ -1143,10 +1145,18 @@ public final class mudclient implements Runnable {
 	private Panel bestiarySearchPanel = null;
 	private int bestiarySearchField = -1;
 	private String bestiaryLastSearchText = "";
+	private final ArrayList<Integer> bestiaryCatalogNpcIds = new ArrayList<>();
+	private final HashSet<Integer> bestiaryCatalogNpcIdSet = new HashSet<>();
+	private boolean bestiaryCatalogLoaded = false;
+	private boolean bestiaryCatalogPending = false;
+	private long bestiaryCatalogLastRequestMillis = 0L;
+	private int bestiaryCatalogVersion = 0;
 	private final ArrayList<BestiaryNpcSearchEntry> bestiaryNpcSearchEntries = new ArrayList<>();
 	private final ArrayList<Integer> bestiaryCachedSearchResults = new ArrayList<>();
 	private String bestiaryCachedSearchText = null;
 	private int bestiaryCachedNpcCount = -1;
+	private int bestiarySearchIndexCatalogVersion = -1;
+	private int bestiaryCachedSearchCatalogVersion = -1;
 	private int expShared = 0;
 	private int petFatigue = 0;
 	private long openPkPoints = 0;
@@ -17211,6 +17221,7 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeBestiary(int x, int y, int width, int height) {
 		ensureBestiarySearchPanel();
+		requestBestiaryCatalog(false);
 		this.getSurface().drawBoxAlpha(x, y, width, height, 0x0B0B0D, 128);
 
 		int pad = 6;
@@ -17314,6 +17325,12 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeBestiarySearchResults(ArrayList<Integer> results, int x, int y, int width, int height,
 													String searchText) {
 		if (height <= 0) {
+			return;
+		}
+		if (!this.bestiaryCatalogLoaded) {
+			this.getSurface().drawString(this.bestiaryCatalogPending ? "Loading beasts..." : "Beast list unavailable",
+				x + 4, y + 13, 0xA996C6, 0);
+			this.bestiaryResultScrollRows = 0;
 			return;
 		}
 		if (results.isEmpty()) {
@@ -17460,6 +17477,7 @@ public final class mudclient implements Runnable {
 		int npcCount = EntityHandler.npcCount();
 		if (this.bestiaryCachedSearchText != null
 			&& this.bestiaryCachedNpcCount == npcCount
+			&& this.bestiaryCachedSearchCatalogVersion == this.bestiaryCatalogVersion
 			&& this.bestiaryCachedSearchText.equals(normalized)) {
 			return this.bestiaryCachedSearchResults;
 		}
@@ -17488,19 +17506,27 @@ public final class mudclient implements Runnable {
 		}
 		this.bestiaryCachedSearchText = normalized;
 		this.bestiaryCachedNpcCount = npcCount;
+		this.bestiaryCachedSearchCatalogVersion = this.bestiaryCatalogVersion;
 		return this.bestiaryCachedSearchResults;
 	}
 
 	private void ensureBestiarySearchIndex() {
 		int npcCount = EntityHandler.npcCount();
-		if (this.bestiaryCachedNpcCount == npcCount && !this.bestiaryNpcSearchEntries.isEmpty()) {
+		if (this.bestiaryCachedNpcCount == npcCount
+			&& this.bestiarySearchIndexCatalogVersion == this.bestiaryCatalogVersion) {
 			return;
 		}
 		this.bestiaryNpcSearchEntries.clear();
 		this.bestiaryCachedSearchResults.clear();
 		this.bestiaryCachedSearchText = null;
+		this.bestiaryCachedSearchCatalogVersion = -1;
 		this.bestiaryCachedNpcCount = npcCount;
-		for (int npcId = 0; npcId < npcCount; npcId++) {
+		this.bestiarySearchIndexCatalogVersion = this.bestiaryCatalogVersion;
+		if (!this.bestiaryCatalogLoaded) {
+			return;
+		}
+		for (Integer catalogNpcId : this.bestiaryCatalogNpcIds) {
+			int npcId = catalogNpcId == null ? -1 : catalogNpcId;
 			NPCDef def = EntityHandler.getNpcDef(npcId);
 			if (def == null || def.getName() == null || def.getName().trim().length() == 0) {
 				continue;
@@ -17601,6 +17627,7 @@ public final class mudclient implements Runnable {
 		this.bestiarySearchField = -1;
 		this.bestiaryLastSearchText = "";
 		this.bestiaryCachedSearchText = null;
+		this.bestiaryCachedSearchCatalogVersion = -1;
 		this.bestiaryResultScrollRows = 0;
 		ensureBestiarySearchPanel();
 		if (focus) {
@@ -18189,6 +18216,29 @@ public final class mudclient implements Runnable {
 		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_BESTIARY_REQUEST);
 		this.packetHandler.getClientStream().finishPacket();
 		this.bestiaryLastRequestMillis = now;
+	}
+
+	private void requestBestiaryCatalog(boolean force) {
+		if (this.packetHandler == null || this.packetHandler.getClientStream() == null) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (!force) {
+			if (this.bestiaryCatalogLoaded) {
+				return;
+			}
+			if (this.bestiaryCatalogPending
+				&& now - this.bestiaryCatalogLastRequestMillis < VOIDSCAPE_BESTIARY_REFRESH_MILLIS) {
+				return;
+			}
+		}
+		this.bestiaryCatalogPending = true;
+		this.packetHandler.getClientStream().newPacket(199);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_INTERFACE_BESTIARY_REQUEST);
+		this.packetHandler.getClientStream().bufferBits.putByte(VOIDSCAPE_BESTIARY_MODE_CATALOG);
+		this.packetHandler.getClientStream().bufferBits.putShort(0);
+		this.packetHandler.getClientStream().finishPacket();
+		this.bestiaryCatalogLastRequestMillis = now;
 	}
 
 	private void requestBestiaryDropTable(int npcId, boolean force) {
@@ -26367,6 +26417,15 @@ public final class mudclient implements Runnable {
 	}
 
 	public void clearBestiarySnapshot(int mode) {
+		this.bestiarySnapshotMode = mode;
+		if (mode == VOIDSCAPE_BESTIARY_MODE_CATALOG) {
+			this.bestiaryCatalogNpcIds.clear();
+			this.bestiaryCatalogNpcIdSet.clear();
+			this.bestiaryCatalogLoaded = false;
+			this.bestiaryCachedSearchText = null;
+			this.bestiaryCachedSearchCatalogVersion = -1;
+			return;
+		}
 		this.bestiaryEntries.clear();
 		this.bestiaryEntriesByNpcId.clear();
 		this.bestiaryMode = mode;
@@ -26374,6 +26433,12 @@ public final class mudclient implements Runnable {
 	}
 
 	public void addBestiaryNpc(int npcId, int killCount) {
+		if (this.bestiarySnapshotMode == VOIDSCAPE_BESTIARY_MODE_CATALOG) {
+			if (npcId >= 0 && this.bestiaryCatalogNpcIdSet.add(npcId)) {
+				this.bestiaryCatalogNpcIds.add(npcId);
+			}
+			return;
+		}
 		BestiaryEntry entry = new BestiaryEntry();
 		entry.npcId = npcId;
 		entry.killCount = killCount;
@@ -26386,7 +26451,7 @@ public final class mudclient implements Runnable {
 		if (entry == null) {
 			return;
 		}
-		if (this.bestiaryMode == VOIDSCAPE_BESTIARY_MODE_OBSERVED) {
+		if (this.bestiarySnapshotMode == VOIDSCAPE_BESTIARY_MODE_OBSERVED) {
 			entry.loot.put(itemId, amount);
 			return;
 		}
@@ -26399,8 +26464,18 @@ public final class mudclient implements Runnable {
 	}
 
 	public void finishBestiarySnapshot() {
+		if (this.bestiarySnapshotMode == VOIDSCAPE_BESTIARY_MODE_CATALOG) {
+			this.bestiaryCatalogLoaded = true;
+			this.bestiaryCatalogPending = false;
+			this.bestiaryCatalogVersion++;
+			this.bestiaryCachedSearchText = null;
+			this.bestiaryCachedSearchCatalogVersion = -1;
+			this.bestiarySearchIndexCatalogVersion = -1;
+			this.bestiaryResultScrollRows = 0;
+			return;
+		}
 		this.bestiaryLoaded = true;
-		if (this.bestiaryMode == VOIDSCAPE_BESTIARY_MODE_DROP_TABLE) {
+		if (this.bestiarySnapshotMode == VOIDSCAPE_BESTIARY_MODE_DROP_TABLE) {
 			this.bestiaryPendingNpcId = -1;
 		} else if (!this.bestiaryEntriesByNpcId.containsKey(this.bestiarySelectedNpcId)) {
 			this.bestiarySelectedNpcId = -1;
@@ -27919,6 +27994,7 @@ public final class mudclient implements Runnable {
 			this.uiTabPlayerInfoSubTab = VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY;
 			bestiaryReturnToSearch(false);
 			this.bestiaryResultScrollRows = 0;
+			requestBestiaryCatalog(!this.bestiaryCatalogLoaded);
 			return workbenchFinishVoidscapeUiPanel();
 		}
 		if ("minimap".equals(key) || "map".equals(key)) {
@@ -27978,6 +28054,18 @@ public final class mudclient implements Runnable {
 
 	public boolean workbenchBestiaryLoaded() {
 		return this.bestiaryLoaded;
+	}
+
+	public boolean workbenchBestiaryCatalogLoaded() {
+		return this.bestiaryCatalogLoaded;
+	}
+
+	public boolean workbenchBestiaryCatalogPending() {
+		return this.bestiaryCatalogPending;
+	}
+
+	public int workbenchBestiaryCatalogCount() {
+		return this.bestiaryCatalogNpcIds.size();
 	}
 
 	public int workbenchBestiaryRequestedNpcId() {
