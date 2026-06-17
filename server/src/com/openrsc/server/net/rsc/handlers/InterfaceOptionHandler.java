@@ -21,6 +21,7 @@ import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.OptionsStruct;
+import com.openrsc.server.net.rsc.struct.outgoing.BestiaryStruct;
 import com.openrsc.server.util.rsc.DataConversions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -113,7 +114,11 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				handleAccountValidate(player, payload);
 				break;
 			case BESTIARY_REQUEST:
-				ActionSender.sendBestiary(player);
+				if (payload.value == BestiaryStruct.MODE_DROP_TABLE) {
+					ActionSender.sendBestiaryDropTable(player, payload.id);
+				} else {
+					ActionSender.sendBestiary(player);
+				}
 				break;
 			case XP_LOCK:
 				handleXpLock(player, payload);

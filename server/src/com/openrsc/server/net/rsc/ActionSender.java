@@ -9,10 +9,13 @@ import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.struct.UsernameChangeType;
 import com.openrsc.server.event.custom.HolidayDropEvent;
+import com.openrsc.server.external.ItemDefinition;
+import com.openrsc.server.external.NPCDef;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.Shop;
 import com.openrsc.server.model.container.BankPreset;
@@ -523,6 +526,7 @@ public class ActionSender {
 
 	public static void sendBestiary(Player player) {
 		BestiaryStruct struct = new BestiaryStruct();
+		struct.mode = BestiaryStruct.MODE_OBSERVED;
 		List<BestiaryStruct.NpcEntry> entries = new ArrayList<>();
 
 		for (Map.Entry<Integer, Integer> killEntry : player.getKillCache().entrySet()) {
@@ -558,6 +562,100 @@ public class ActionSender {
 		struct.entries = entries.toArray(new BestiaryStruct.NpcEntry[0]);
 
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+	}
+
+	public static void sendBestiaryDropTable(Player player, int npcId) {
+		BestiaryStruct struct = new BestiaryStruct();
+		struct.mode = BestiaryStruct.MODE_DROP_TABLE;
+
+		NPCDef npcDef = player.getWorld().getServer().getEntityHandler().getNpcDef(npcId);
+		if (npcDef == null) {
+			tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+			return;
+		}
+
+		BestiaryStruct.NpcEntry npcEntry = new BestiaryStruct.NpcEntry();
+		npcEntry.npcId = npcId;
+		npcEntry.killCount = player.getKillCache().getOrDefault(npcId, 0);
+
+		List<BestiaryStruct.DropEntry> drops = new ArrayList<>();
+		int boneDrop = bestiaryBoneDrop(player, npcId);
+		if (boneDrop != ItemId.NOTHING.id() && bestiaryWorldAllowsDrop(player, boneDrop)) {
+			BestiaryStruct.DropEntry drop = new BestiaryStruct.DropEntry();
+			drop.itemId = boneDrop;
+			drop.amount = 1L;
+			drop.numerator = 1L;
+			drop.denominator = 1L;
+			drops.add(drop);
+		}
+
+		DropTable dropTable = player.getWorld().getNpcDrops().getDropTable(npcId);
+		if (dropTable != null) {
+			for (DropTable.DropChance chance : dropTable.getDropChances()) {
+				if (!bestiaryWorldAllowsDrop(player, chance.itemId)) {
+					continue;
+				}
+				BestiaryStruct.DropEntry drop = new BestiaryStruct.DropEntry();
+				drop.itemId = chance.itemId;
+				drop.amount = chance.amount;
+				drop.numerator = chance.numerator;
+				drop.denominator = chance.denominator;
+				drops.add(drop);
+			}
+		}
+
+		Collections.sort(drops, Comparator
+			.comparingDouble((BestiaryStruct.DropEntry drop) ->
+				drop.denominator <= 0 ? 0.0D : (double) drop.numerator / (double) drop.denominator).reversed()
+			.thenComparingInt(drop -> drop.itemId)
+			.thenComparingLong(drop -> drop.amount));
+		npcEntry.drops = drops.toArray(new BestiaryStruct.DropEntry[0]);
+		struct.entries = new BestiaryStruct.NpcEntry[] { npcEntry };
+
+		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+	}
+
+	private static int bestiaryBoneDrop(Player player, int npcId) {
+		if (player.getWorld().getNpcDrops().isBigBoned(npcId)) {
+			return bestiaryBoneItem(player, ItemId.BIG_BONES.id());
+		}
+		if (player.getWorld().getNpcDrops().isBatBoned(npcId)) {
+			return bestiaryBoneItem(player, ItemId.BAT_BONES.id());
+		}
+		if (player.getWorld().getNpcDrops().isDragon(npcId)) {
+			return bestiaryBoneItem(player, ItemId.DRAGON_BONES.id());
+		}
+		if (player.getWorld().getNpcDrops().isDemon(npcId)) {
+			return ItemId.ASHES.id();
+		}
+		if (!player.getWorld().getNpcDrops().isBoneless(npcId)) {
+			return bestiaryBoneItem(player, ItemId.BONES.id());
+		}
+		return ItemId.NOTHING.id();
+	}
+
+	private static int bestiaryBoneItem(Player player, int boneId) {
+		return player.getConfig().ONLY_REGULAR_BONES ? ItemId.BONES.id() : boneId;
+	}
+
+	private static boolean bestiaryWorldAllowsDrop(Player player, int itemId) {
+		if (itemId <= ItemId.NOTHING.id()) {
+			return false;
+		}
+		ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
+		if (itemDef == null) {
+			return false;
+		}
+		if (player.getWorld().getServer().getConfig().RESTRICT_ITEM_ID >= 0
+			&& itemId > player.getWorld().getServer().getConfig().RESTRICT_ITEM_ID) {
+			return false;
+		}
+		if (player.getWorld().getServer().getConfig().ONLY_BASIC_RUNES
+			&& itemDef.getName().endsWith("-Rune")
+			&& itemId >= ItemId.LIFE_RUNE.id()) {
+			return false;
+		}
+		return player.getWorld().getServer().getConfig().MEMBER_WORLD || !itemDef.isMembersOnly();
 	}
 
 	public static void sendPoints(Player player) {

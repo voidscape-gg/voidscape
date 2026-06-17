@@ -806,6 +806,10 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 
 				case SEND_BESTIARY:
 					BestiaryStruct bestiary = (BestiaryStruct) payload;
+					boolean sendDropTableRatios = player.getClientVersion() >= BestiaryStruct.DROP_TABLE_BROWSER_CLIENT_VERSION;
+					if (sendDropTableRatios) {
+						builder.writeByte(bestiary.mode);
+					}
 					builder.writeShort(bestiary.entries.length);
 					for (BestiaryStruct.NpcEntry entry : bestiary.entries) {
 						builder.writeInt(entry.npcId);
@@ -814,6 +818,10 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						for (BestiaryStruct.DropEntry drop : entry.drops) {
 							builder.writeInt(drop.itemId);
 							builder.writeLong(drop.amount);
+							if (sendDropTableRatios) {
+								builder.writeLong(drop.numerator);
+								builder.writeLong(drop.denominator);
+							}
 						}
 					}
 					break;

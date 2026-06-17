@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-16 - In-game NPC drop-table browser
+
+Reworked the custom Loot tab into a searchable NPC drop-table browser. Players can search any client-known NPC, select it, and receive an authoritative server-flattened drop table rendered with raw reduced ratios such as `1/128`, including guaranteed bone/ash drops and separate rows for different stack amounts. The feature reuses existing custom `INTERFACE_OPTIONS` sub-option `16` and `SEND_BESTIARY` wire opcode `105`, but extends their payloads with a mode byte plus ratio numerator/denominator fields, so `CLIENT_VERSION` and voidbot moved to `10110`. Files: `DropTable.java`, `ActionSender.java`, bestiary packet structs/parser/generator, `PacketHandler.java`, `mudclient.java`, `Config.java`, and `tools/voidbot/protocol.py`. Reversibility: restore the previous bestiary payload shape/client grid and downgrade the client version to `10109`.
+
 ### 2026-06-14 - Portal whitepaper story redesign
 
 Rebuilt the pre-release portal whitepaper around a tighter story: "We love Classic. We are finishing what it started." The visible page now moves from premise, to what Classic left unfinished, to the Voidscape loop, to six proof-backed pillars, to a compact build-proof wall using current beta/workbench captures under `web/portal/assets/whitepaper/`. The public prelaunch page no longer embeds the MP4 background, relying on the static fallback for better scroll performance, and whitepaper screenshots can be expanded in a lightweight viewer. This is a static website/content change in `web/portal/index.html`, `web/portal/styles.css`, and `web/portal/script.js`; no game packets, schema, cache archives, or gameplay behavior changed. Reversibility is restoring the previous whitepaper markup/styles/script behavior and removing the added `feature-*-current.png` assets.

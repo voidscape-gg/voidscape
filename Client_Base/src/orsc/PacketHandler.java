@@ -611,8 +611,9 @@ public class PacketHandler {
 	}
 
 	private void updateBestiary() {
+		int mode = packetsIncoming.getByte() & 0xff;
 		int npcCount = packetsIncoming.getShort();
-		mc.clearBestiarySnapshot();
+		mc.clearBestiarySnapshot(mode);
 		for (int i = 0; i < npcCount; i++) {
 			int npcId = packetsIncoming.get32();
 			int killCount = packetsIncoming.get32();
@@ -622,7 +623,9 @@ public class PacketHandler {
 			for (int drop = 0; drop < dropCount; drop++) {
 				int itemId = packetsIncoming.get32();
 				long amount = packetsIncoming.getLong(0);
-				mc.addBestiaryDrop(npcId, itemId, amount);
+				long numerator = packetsIncoming.getLong(0);
+				long denominator = packetsIncoming.getLong(0);
+				mc.addBestiaryDrop(npcId, itemId, amount, numerator, denominator);
 			}
 		}
 		mc.finishBestiarySnapshot();
