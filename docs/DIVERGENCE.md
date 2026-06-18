@@ -3990,3 +3990,7 @@ Removed the PC client's hardcoded OpenRSC Discord application id, default status
 ### 2026-06-18 - PC client frame pacing Phase 1
 
 Reduced desktop-client frame-pacing hitches without changing server tick rate, opcodes, or gameplay timing. The PC scaled-window handoff no longer blocks the game loop on `SwingUtilities.invokeAndWait`, the interpolation scaler now draws into a reusable buffer instead of allocating stitched scaled images every paint, and live-game roof/wall visibility now updates from cached scene state instead of removing and re-adding roof grid models every frame. Added an opt-in `FramePacingMonitor` controlled by `-Dvoidscape.framePacing=true` so future smoothness work can compare FPS and frame-time consistency in the same scene.
+
+### 2026-06-18 - PC client smooth camera Phase 2
+
+Smoothed the classic PC camera presentation without changing server tick rate, opcodes, pathing, combat, or gameplay timing. Classic camera follow and rotation now feed `scene.setCamera` through a render-time elapsed-clock smoother using the same smoothstep-style interpolation curve as the cinematic camera path, while cinematic camera modes keep their existing controls and teleports/region jumps still snap to the authoritative target instead of drifting across the map.
