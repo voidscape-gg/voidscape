@@ -281,7 +281,15 @@ async function handleApi(request, response, url) {
 			} catch (error) {
 				audit(store, "signup_code_sync_failed", { founderId: founder.id, error: String(error && error.message || error) });
 			}
-			return { founder: founderState(founder), signup: signupState(founder) };
+			try {
+				const rewardSync = await syncPendingReferralRewardsToOpenRsc(store);
+				if (rewardSync.failed > 0) {
+					audit(store, "referral_reward_code_sync_failed", rewardSync);
+				}
+			} catch (error) {
+				audit(store, "referral_reward_code_sync_failed", { error: String(error && error.message || error) });
+			}
+			return { founder: founderState(founder, store), signup: signupState(founder) };
 		});
 		json(response, 200, result);
 		return;
@@ -289,17 +297,32 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/founder/simulate-referral") {
 		const payload = await readJson(request);
-		const result = await updateStore((store) => {
+		const result = await updateStore(async (store) => {
 			const code = normalizeCode(payload.code || "");
 			const founder = store.founders.find((entry) => entry.code === code);
 			if (!founder) throw new HttpError(404, "founder_not_found");
-			founder.creditedReferrals = Math.min(2, (founder.creditedReferrals || 0) + 1);
+			const referral = {
+				id: nextId(store, "referral"),
+				referrerFounderId: founder.id,
+				referredFounderId: 0,
+				referrerCode: founder.code,
+				status: "credited",
+				riskScore: 0,
+				simulated: true,
+				createdAt: now(),
+				creditedAt: now()
+			};
+			store.referrals.push(referral);
+			founder.creditedReferrals = countCreditedReferrals(store, founder.id);
 			founder.updatedAt = now();
-			if (founder.creditedReferrals >= 2) {
-				grantStarterCardEntitlement(store, founder, "referral_simulated_dev");
-			}
+			grantReferralRewardCode(store, founder, referral, "referral_simulated_dev");
 			audit(store, "founder_referral_simulated", { founderId: founder.id });
-			return { founder: founderState(founder) };
+			try {
+				await syncPendingReferralRewardsToOpenRsc(store);
+			} catch (error) {
+				audit(store, "referral_reward_code_sync_failed", { founderId: founder.id, error: String(error && error.message || error) });
+			}
+			return { founder: founderState(founder, store) };
 		});
 		json(response, 200, result);
 		return;
@@ -600,12 +623,22 @@ async function handleApi(request, response, url) {
 			email: founder.emailDisplay || founder.emailCanonical,
 			code: founder.signupCode || "",
 			status: signupCodeStatus(founder, gameValues),
+			referralRewardCodes: referralRewardCodesForFounder(store, founder.id, gameValues),
 			createdAt: founder.createdAt
 		}));
 		if ((url.searchParams.get("format") || "").toLowerCase() === "csv") {
-			const header = "id,username,email,code,status,createdAt";
+			const header = "id,username,email,code,status,referralRewardCodeCount,referralRewardCodes,createdAt";
 			const lines = rows.map((row) =>
-				[row.id, row.username, row.email, row.code, row.status, row.createdAt].map(csvCell).join(","));
+				[
+					row.id,
+					row.username,
+					row.email,
+					row.code,
+					row.status,
+					row.referralRewardCodes.length,
+					row.referralRewardCodes.map((reward) => reward.code).join(" "),
+					row.createdAt
+				].map(csvCell).join(","));
 			response.writeHead(200, {
 				"content-type": "text/csv; charset=utf-8",
 				"content-disposition": "attachment; filename=\"voidscape-signups.csv\"",
@@ -644,8 +677,9 @@ async function handleApi(request, response, url) {
 					failed += 1;
 				}
 			}
-			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode });
-			return { synced, skippedRedeemed, failed, noCode };
+			const referralRewards = await syncPendingReferralRewardsToOpenRsc(store);
+			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode, referralRewards });
+			return { synced, skippedRedeemed, failed, noCode, referralRewards };
 		});
 		json(response, 200, result);
 		return;
@@ -1098,7 +1132,10 @@ function creditFounderReferral(store, founder, codeInput) {
 		entry.referredFounderId === founder.id &&
 		entry.status === "credited"
 	);
-	if (existing) return existing;
+	if (existing) {
+		grantReferralRewardCode(store, referrer, existing, "beta_referral_backfill");
+		return existing;
+	}
 
 	const alreadyReferred = store.referrals.find((entry) =>
 		entry.referredFounderId === founder.id &&
@@ -1123,9 +1160,7 @@ function creditFounderReferral(store, founder, codeInput) {
 	founder.updatedAt = now();
 	referrer.creditedReferrals = Math.max(referrer.creditedReferrals || 0, countCreditedReferrals(store, referrer.id));
 	referrer.updatedAt = now();
-	if (referrer.creditedReferrals >= 2) {
-		grantStarterCardEntitlement(store, referrer, "referral_2_verified_dev");
-	}
+	grantReferralRewardCode(store, referrer, referral, "beta_referral");
 	audit(store, "founder_referral_credited", {
 		referrerFounderId: referrer.id,
 		referredFounderId: founder.id
@@ -1138,6 +1173,39 @@ function countCreditedReferrals(store, founderId) {
 		entry.referrerFounderId === founderId &&
 		entry.status === "credited"
 	).length;
+}
+
+function grantReferralRewardCode(store, referrer, referral, source = "beta_referral") {
+	if (!referrer || !referral) return null;
+	const existing = store.referralRewards.find((entry) =>
+		entry.referrerFounderId === referrer.id &&
+		entry.referralId === referral.id &&
+		entry.status !== "revoked"
+	);
+	if (existing) return existing;
+
+	const code = makeUniqueSignupCode(store);
+	const reward = {
+		id: nextId(store, "referralReward"),
+		referrerFounderId: referrer.id,
+		referredFounderId: referral.referredFounderId || null,
+		referralId: referral.id,
+		code,
+		codeNormalized: normalizeSignupCode(code),
+		status: "issued",
+		source,
+		createdAt: now(),
+		syncedAt: null
+	};
+	store.referralRewards.push(reward);
+	referral.rewardCodeId = reward.id;
+	audit(store, "referral_reward_code_minted", {
+		rewardId: reward.id,
+		referrerFounderId: referrer.id,
+		referredFounderId: reward.referredFounderId,
+		referralId: referral.id
+	});
+	return reward;
 }
 
 function createCharacter(store, accountId, name, path) {
@@ -1286,7 +1354,7 @@ async function accountState(store, account, currentSession) {
 			subscription: subscriptionState(account)
 		},
 		auth: authState(store, account),
-		founder: founder ? founderState(founder) : null,
+		founder: founder ? founderState(founder, store) : null,
 		characters: store.characters
 			.filter((character) => character.accountId === account.id)
 			.map((character) => ({
@@ -1451,9 +1519,13 @@ function securityState(store, account, currentSession, founder) {
 }
 
 async function publicState(store) {
+	const foundersWithRewards = new Set(store.referralRewards
+		.filter((reward) => reward.status !== "revoked")
+		.map((reward) => reward.referrerFounderId));
 	const founderUnlocks = store.founders.filter((founder) =>
-		Boolean(founder.starterCardUnlocked) || founder.creditedReferrals >= 2
+		Boolean(founder.starterCardUnlocked) || foundersWithRewards.has(founder.id)
 	).length;
+	const referralCodesIssued = store.referralRewards.filter((reward) => reward.status !== "revoked").length;
 	if (publicMode) {
 		// No fake world stats or download links on the public prelaunch site.
 		return {
@@ -1462,7 +1534,8 @@ async function publicState(store) {
 			rates: xpRates(),
 			founderStats: {
 				reservations: store.founders.length,
-				starterCardsUnlocked: founderUnlocks
+				starterCardsUnlocked: founderUnlocks,
+				referralCodesIssued
 			},
 			downloads: [],
 			news: [],
@@ -1482,7 +1555,8 @@ async function publicState(store) {
 		rates: xpRates(),
 		founderStats: {
 			reservations: store.founders.length,
-			starterCardsUnlocked: founderUnlocks
+			starterCardsUnlocked: founderUnlocks,
+			referralCodesIssued
 		},
 		downloads: (await downloadState()).concat(publicContent.downloads),
 		news: publicContent.news,
@@ -1522,10 +1596,10 @@ function dynamicActivity(store) {
 	const latestFounder = store.founders[store.founders.length - 1];
 	const latestCharacter = store.characters[store.characters.length - 1];
 	if (latestFounder) {
-		const cardReserved = Boolean(latestFounder.starterCardUnlocked) || latestFounder.creditedReferrals >= 2;
+		const rewardCount = referralRewardCodesForFounder(store, latestFounder.id).length;
 		rows.push({
-			type: cardReserved ? "rare" : "title",
-			text: `${latestFounder.username} reserved a founder pass${cardReserved ? " and a Lumbridge subscription card" : ""}.`,
+			type: rewardCount > 0 ? "rare" : "title",
+			text: `${latestFounder.username} reserved a founder pass${rewardCount > 0 ? ` and earned ${rewardCount} referral sub code${rewardCount === 1 ? "" : "s"}` : ""}.`,
 			time: "Now"
 		});
 	}
@@ -1710,9 +1784,9 @@ async function syncStarterCardToOpenRsc(account) {
 	`);
 }
 
-async function syncSignupCodeToOpenRsc(founder) {
-	if (!openRscDbPath || !founder || !founder.signupCode) return false;
-	const key = signupCodeCacheKey(founder.signupCode);
+async function syncSignupCodeValueToOpenRsc(code) {
+	if (!openRscDbPath || !code) return false;
+	const key = signupCodeCacheKey(code);
 	if (!key) return false;
 
 	const current = await sqliteJson(`
@@ -1737,6 +1811,47 @@ async function syncSignupCodeToOpenRsc(founder) {
 	return true;
 }
 
+async function syncSignupCodeToOpenRsc(founder) {
+	if (!founder || !founder.signupCode) return false;
+	return syncSignupCodeValueToOpenRsc(founder.signupCode);
+}
+
+async function syncReferralRewardCodeToOpenRsc(reward) {
+	if (!reward || !reward.code || reward.status === "revoked") return false;
+	return syncSignupCodeValueToOpenRsc(reward.code);
+}
+
+async function syncPendingReferralRewardsToOpenRsc(store) {
+	const result = { synced: 0, skippedRedeemed: 0, failed: 0, noCode: 0 };
+	if (!openRscDbPath) return result;
+	const gameValues = await signupCodeGameValues();
+	for (const reward of store.referralRewards) {
+		if (!reward || reward.status === "revoked") continue;
+		if (!reward.code) {
+			result.noCode += 1;
+			continue;
+		}
+		const gameValue = gameValues.get(signupCodeCacheKey(reward.code));
+		if (gameValue === signupCodeRedeemed) {
+			result.skippedRedeemed += 1;
+			if (!reward.syncedAt) reward.syncedAt = now();
+			continue;
+		}
+		if (reward.syncedAt && gameValue === signupCodeAvailable) {
+			continue;
+		}
+		try {
+			if (await syncReferralRewardCodeToOpenRsc(reward)) {
+				if (!reward.syncedAt) reward.syncedAt = now();
+				result.synced += 1;
+			}
+		} catch (error) {
+			result.failed += 1;
+		}
+	}
+	return result;
+}
+
 async function signupCodeGameValues() {
 	if (!openRscDbPath) return new Map();
 	const rows = await sqliteJson(`
@@ -1753,6 +1868,31 @@ function signupCodeStatus(founder, gameValues) {
 	const value = gameValues.get(signupCodeCacheKey(founder.signupCode));
 	if (value === undefined) return "not_synced";
 	return value === signupCodeRedeemed ? "redeemed" : "issued";
+}
+
+function referralRewardCodeStatus(reward, gameValues) {
+	if (!reward || !reward.code) return "no_code";
+	if (reward.status === "revoked") return "revoked";
+	if (!openRscDbPath || !gameValues) return reward.syncedAt ? "issued" : "not_synced";
+	const value = gameValues.get(signupCodeCacheKey(reward.code));
+	if (value === undefined) return "not_synced";
+	return value === signupCodeRedeemed ? "redeemed" : "issued";
+}
+
+function referralRewardCodesForFounder(store, founderId, gameValues = null) {
+	return store.referralRewards
+		.filter((reward) => reward.referrerFounderId === founderId && reward.status !== "revoked")
+		.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+		.map((reward) => ({
+			id: reward.id,
+			code: reward.code,
+			status: referralRewardCodeStatus(reward, gameValues),
+			syncedToGame: Boolean(reward.syncedAt),
+			referredFounderId: reward.referredFounderId || null,
+			referralId: reward.referralId || null,
+			createdAt: reward.createdAt || null,
+			redeemHint: "Talk to the Void Subscription Vendor in Lumbridge and enter this referral reward code."
+		}));
 }
 
 function csvCell(value) {
@@ -2168,15 +2308,18 @@ function appearanceSummary(player) {
 	].join(", ");
 }
 
-function founderState(founder) {
+function founderState(founder, store) {
 	const creditedReferrals = founder.creditedReferrals || 0;
+	const referralRewardCodes = store ? referralRewardCodesForFounder(store, founder.id) : [];
 	return {
 		username: founder.username,
 		email: founder.emailDisplay,
 		code: founder.code,
 		creditedReferrals,
-		requiredReferrals: 2,
-		starterCardUnlocked: Boolean(founder.starterCardUnlocked) || creditedReferrals >= 2,
+		requiredReferrals: 1,
+		starterCardUnlocked: Boolean(founder.starterCardUnlocked),
+		referralRewardCodeCount: referralRewardCodes.length,
+		referralRewardCodes,
 		referredBy: founder.referredByCode ? {
 			code: founder.referredByCode,
 			username: founder.referredByUsername || ""
@@ -2595,6 +2738,7 @@ function normalizeStore(store) {
 			character: Number(store.nextIds && store.nextIds.character) || 1,
 			founder: Number(store.nextIds && store.nextIds.founder) || 1,
 			referral: Number(store.nextIds && store.nextIds.referral) || 1,
+			referralReward: Number(store.nextIds && store.nextIds.referralReward) || 1,
 			session: Number(store.nextIds && store.nextIds.session) || 1,
 			entitlement: Number(store.nextIds && store.nextIds.entitlement) || 1,
 			linkChallenge: Number(store.nextIds && store.nextIds.linkChallenge) || 1,
@@ -2608,6 +2752,7 @@ function normalizeStore(store) {
 		sessions: Array.isArray(store.sessions) ? store.sessions : [],
 		founders: Array.isArray(store.founders) ? store.founders : [],
 		referrals: Array.isArray(store.referrals) ? store.referrals : [],
+		referralRewards: Array.isArray(store.referralRewards) ? store.referralRewards : [],
 		characters: Array.isArray(store.characters) ? store.characters : [],
 		entitlements: Array.isArray(store.entitlements) ? store.entitlements : [],
 		linkChallenges: Array.isArray(store.linkChallenges) ? store.linkChallenges : [],
@@ -2775,12 +2920,23 @@ function signupCodeCacheKey(code) {
 	return normalized ? `${signupCodeCachePrefix}${normalized}` : "";
 }
 
-function ensureFounderSignupCode(store, founder) {
-	if (founder.signupCode) return founder;
+function signupCodeExists(store, normalizedCode) {
+	if (!normalizedCode) return true;
+	return store.founders.some((entry) => entry.signupCodeNormalized === normalizedCode) ||
+		store.referralRewards.some((entry) => entry.codeNormalized === normalizedCode);
+}
+
+function makeUniqueSignupCode(store) {
 	let code = makeSignupCode();
-	while (store.founders.some((entry) => entry.signupCodeNormalized === normalizeSignupCode(code))) {
+	while (signupCodeExists(store, normalizeSignupCode(code))) {
 		code = makeSignupCode();
 	}
+	return code;
+}
+
+function ensureFounderSignupCode(store, founder) {
+	if (founder.signupCode) return founder;
+	const code = makeUniqueSignupCode(store);
 	founder.signupCode = code;
 	founder.signupCodeNormalized = normalizeSignupCode(code);
 	founder.signupCodeCreatedAt = now();

@@ -11,6 +11,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Prefer the repo-local Windows portable Ant when a system Ant is not on PATH.
+PORTABLE_ANT_BIN="$REPO_ROOT/Portable_Windows/apache-ant-1.10.5/bin"
+if ! command -v ant >/dev/null 2>&1 && [[ -x "$PORTABLE_ANT_BIN/ant" ]]; then
+    export PATH="$PORTABLE_ANT_BIN:$PATH"
+fi
+
 # Sanity checks
 if ! command -v java >/dev/null 2>&1; then
     echo "ERROR: java not found. See docs/DEVELOPMENT.md for JDK 11 install." >&2
@@ -32,7 +38,15 @@ if [[ "$JAVA_MAJOR" -gt 21 ]]; then
 fi
 
 echo "==> Building voidscape (server + plugins + client)"
-make compile
+if command -v make >/dev/null 2>&1; then
+    make compile
+else
+    echo "==> make not found; using Ant compile targets directly"
+    ant -f server/build.xml compile_core
+    ant -f server/build.xml compile_plugins
+    ant -f Client_Base/build.xml compile
+    ant -f PC_Launcher/build.xml compile
+fi
 echo "==> Build complete"
 echo "    server/core.jar"
 echo "    server/plugins.jar"

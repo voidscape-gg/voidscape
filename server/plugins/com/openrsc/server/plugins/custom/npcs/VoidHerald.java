@@ -1,6 +1,7 @@
 package com.openrsc.server.plugins.custom.npcs;
 
 import com.openrsc.server.constants.NpcId;
+import com.openrsc.server.content.BetaOnboardingGuide;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
@@ -52,10 +53,12 @@ public final class VoidHerald implements TalkNpcTrigger {
 			player.message("Your starter kit has been placed in your backpack.");
 		}
 		player.teleport(player.getConfig().RESPAWN_LOCATION_X, player.getConfig().RESPAWN_LOCATION_Y, true);
-		ActionSender.sendBox(player, "@yel@" + VoidPath.name(path) + " chosen.% %"
-			+ "@whi@" + VoidPath.boostLimitSummary() + ": @gre@" + VoidPath.boostedSkillSummary(path) + "@whi@.%"
-			+ "@whi@Starter kit: @cya@" + VoidPath.starterKitSummary(path) + "@whi@.% %"
-			+ "@whi@You have arrived in Lumbridge. Open your backpack, equip anything useful, and start exploring.", true);
+		if (!BetaOnboardingGuide.showFirstTime(player)) {
+			ActionSender.sendBox(player, "@yel@" + VoidPath.name(path) + " chosen.% %"
+				+ "@whi@" + VoidPath.boostLimitSummary() + ": @gre@" + VoidPath.boostedSkillSummary(path) + "@whi@.%"
+				+ "@whi@Starter kit: @cya@" + VoidPath.starterKitSummary(path) + "@whi@.% %"
+				+ "@whi@You have arrived in Lumbridge. Open your backpack, equip anything useful, and start exploring.", true);
+		}
 	}
 
 }

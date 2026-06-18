@@ -28,7 +28,9 @@ Void Island is carved out as a safe zone even though its coordinates sit inside 
 
 ## Herald Flow
 
-`server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` is the interaction point. For unchosen players it explains that each path grants 2x XP until level 50 plus a starter kit, opens the three-option menu, stores the path, grants the starter kit, teleports the player to spawn, and sends a short welcome box with the selected boost and kit summary.
+`server/plugins/com/openrsc/server/plugins/custom/npcs/VoidHerald.java` is the interaction point. For unchosen players it explains that each path grants 2x XP until level 50 plus a starter kit, opens the three-option menu, stores the path, grants the starter kit, and teleports the player to spawn. On beta worlds with `want_beta_onboarding_guide` enabled, the Herald then opens the beta guide menu once and stores `void_beta_guide_seen`; otherwise it sends the short welcome box with the selected boost and kit summary.
+
+The repeatable beta guide command is `::beta` / `::betaguide`. `server/src/com/openrsc/server/content/BetaOnboardingGuide.java` owns the menu text for quickstart commands, coordinates, items, and features to test.
 
 If a player has already chosen a path, the Void Herald delegates to the existing Void Rush dialogue instead of showing the starter choices again.
 

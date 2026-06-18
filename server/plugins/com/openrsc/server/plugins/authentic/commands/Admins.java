@@ -3042,7 +3042,7 @@ public final class Admins implements CommandTrigger {
 
 	private void worldAnnouncementPreview(Player player, String command, String[] args) {
 		if (args.length < 1) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk]");
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
 			return;
 		}
 
@@ -3053,8 +3053,10 @@ public final class Admins implements CommandTrigger {
 			announcer.previewTotalLevelMilestone(player);
 		} else if (args[0].equalsIgnoreCase("pk") || args[0].equalsIgnoreCase("skulledpk")) {
 			announcer.previewSkulledWildernessKill(player);
+		} else if (args[0].equalsIgnoreCase("newplayer") || args[0].equalsIgnoreCase("new")) {
+			announcer.previewNewPlayerJoined(player);
 		} else {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk]");
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
 		}
 	}
 

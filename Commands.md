@@ -214,7 +214,7 @@ Admin Commands
   - Alias: `::resourcestreak`
   - Seeds the current player's transient gathering dry-streak counter for local resource-protection tests.
 - announcepreview
-  - Usage: `::announcepreview [skill|total|pk]`
+  - Usage: `::announcepreview [skill|total|pk|newplayer]`
   - Alias: `::worldannouncepreview`
   - Sends sample Void Herald world-announcement messages for local styling checks.
 - dropwave
@@ -830,6 +830,10 @@ Regular Player Commands
 - gameinfo
   - Usage: `::gameinfo`
   - Shows your coordinates and total time played.
+- beta
+  - Usage: `::beta`
+  - Alias: `::betaguide`
+  - Opens the Voidscape beta guide menu with commands, coordinates, items, and features to test.
 - leave
   - Usage: `::leave`
   - Leaves the PK Catching Simulator early.

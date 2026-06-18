@@ -7,8 +7,9 @@ Voidscape's world-announcement layer sends styled, server-side chat broadcasts f
 - `server/src/com/openrsc/server/content/announcements/WorldAnnouncementService.java` owns formatting, config checks, and milestone duplicate prevention.
 - `server/src/com/openrsc/server/model/world/World.java` creates the service and exposes it through `getWorldAnnouncementService()`.
 - `server/src/com/openrsc/server/model/Skills.java` calls the service when a player's max skill level increases.
+- `server/src/com/openrsc/server/model/world/World.java` calls the service from `registerPlayer(...)` when a first-time account joins the world.
 - `server/plugins/com/openrsc/server/plugins/custom/misc/WorldAnnouncements.java` listens to `PlayerKilledPlayerTrigger` for Wilderness PK broadcasts.
-- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java` provides `::announcepreview [skill|total|pk]` for local visual checks.
+- `server/plugins/com/openrsc/server/plugins/authentic/commands/Admins.java` provides `::announcepreview [skill|total|pk|newplayer]` for local visual checks.
 
 ## Config
 
@@ -17,8 +18,9 @@ The feature is controlled by server-only config keys:
 - `want_world_announcements`
 - `want_world_milestone_announcements`
 - `want_world_skulled_pk_announcements`
+- `want_world_new_player_announcements`
 
-All three must be enabled for both milestone and skulled-PK broadcasts to appear. These keys are intentionally not sent in the server-config packet; no client version bump is required.
+The base `want_world_announcements` key must be enabled, plus the specific announcement-family key. These keys are intentionally not sent in the server-config packet; no client version bump is required.
 
 ## Milestones
 
@@ -27,6 +29,10 @@ Skill announcements fire when a player crosses level `90`, `95`, `99`, or the co
 Total-level announcements fire when a player crosses `500`, `750`, `1000`, `1250`, `1500`, `1750`, or `2000` total level.
 
 Each announcement is persisted through a player cache key such as `void_announce_skill_14_99` or `void_announce_total_1000`, so a player does not repeat the same broadcast after relogging or after a server restart.
+
+## First joins
+
+New-player announcements fire when a character with `login_date = 0` successfully enters the world. Duplicate prevention is stored in global `player_cache` with `new_join_acct:<webAccountId>` for portal-linked accounts or `new_join_char:<playerId>` for unlinked characters. This keeps the beta welcome message once per real portal account when possible, and once per character as the fallback.
 
 ## Wilderness PKs
 

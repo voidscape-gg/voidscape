@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-17 - Beta onboarding, first-join announcements, and referral codes
+
+Added beta launch support for fresh accounts: worlds can now broadcast a one-time global welcome when a brand-new player first joins, the Void Herald opens a one-time beta guide menu after starter-path selection, and players can reopen that guide with `::beta`. The portal referral path now mints one `VOID-XXXX-XXXX` subscription-card reward code for the referrer on every credited beta invite, reusing the existing `signup_code:<CODE>` vendor redemption ledger and admin sync/export path. Files: `WorldAnnouncementService.java`, `World.java`, `ServerConfiguration.java`, `VoidHerald.java`, `BetaOnboardingGuide.java`, `RegularPlayer.java`, `Admins.java`, `server/local.conf`, `Commands.md`, `web/portal/*`, and beta/subscription/announcement docs. No packet, opcode, cache asset, or `CLIENT_VERSION` change; reversibility is disabling the two new config flags and removing the referral reward-code records from the portal store.
+
+### 2026-06-17 - World-map walker snap hardening
+
+Hardened the server-side world-map walker when a map click lands on blocked terrain such as a wall, roof, coast, or F2P-restricted tile. `WorldPathfinder` now collects every walkable snap candidate within the existing 12-tile radius and runs A* to the first reachable candidate, instead of trusting the first walkable tile found by scan order. This avoids false `NO_PATH` results when that first snap tile is isolated but another nearby tile can be reached. Files: `server/src/com/openrsc/server/model/WorldPathfinder.java`. No packet, opcode, schema, cache asset, or `CLIENT_VERSION` change; reversibility is restoring the old single-tile `nearestWalkable` snap helper.
+
+### 2026-06-17 - Skill-specific XP/hour HUD badge
+
+Added a client-side bottom-right training badge that appears while XP is being gained and shows the current trained skill's XP/hour using the existing stat/experience update packets. The tracker records positive per-skill XP deltas regardless of the legacy top XP counter setting, hides after short inactivity, and keeps primary combat skills visible instead of letting paired Hits XP take over the badge. Files: `Client_Base/src/orsc/PacketHandler.java` and `Client_Base/src/orsc/mudclient.java`. No server packet, opcode, schema, cache asset, or `CLIENT_VERSION` change was added; reversibility is removing the badge draw helpers and restoring XP accounting to the old counter-gated path.
+
 ### 2026-06-17 - Bestiary catalog hides bone-only NPCs
 
 Moved the `BEST` sub-tab's searchable NPC list from a client-side "all NPC definitions" scan to a server-authored catalog response. The catalog reuses existing `INTERFACE_OPTIONS` sub-option `16` and `SEND_BESTIARY` packet shape as mode `2`, listing only NPCs with at least one allowed regular drop-table row beyond guaranteed bones or ashes, so bone-only beasts no longer appear in search. The selected NPC detail view and observed `LOOT` snapshot remain on modes `1` and `0` respectively. Files: `ActionSender.java`, `BestiaryStruct.java`, `InterfaceOptionHandler.java`, `EntityHandler.java`, `mudclient.java`, `WorkbenchServer.java`, and protocol docs. Reversibility is returning BEST search to the client definition index and removing the catalog mode branch.

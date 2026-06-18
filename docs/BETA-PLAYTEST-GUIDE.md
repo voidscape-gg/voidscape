@@ -91,8 +91,16 @@ Use admin rank only for trusted testers. The commands below can spawn items, alt
 6. Customize appearance.
 7. On Void Island, talk to the Void Herald at `(24,24)`.
 8. Choose one starter path.
-9. Claim the starter subscription card from the Lumbridge Subscription Vendor, then redeem it when ready.
-10. After the welcome box, play normally or use the test commands below.
+9. Pick a beta-guide topic from the starter menu, or close it and reopen it later with `::beta`.
+10. Claim the starter subscription card from the Lumbridge Subscription Vendor, then redeem it when ready.
+11. Play normally or use the test commands below.
+
+Beta referral rewards:
+
+- Share the invite link shown after reserving a username.
+- When another beta signup uses that invite link, the referrer earns one additional `VOID-XXXX-XXXX` subscription-card code.
+- The referrer can return to the signup page with the same email to view earned referral reward codes.
+- Referral reward codes are redeemed at the Lumbridge Subscription Vendor, the same as the original signup code.
 
 Starter paths:
 
@@ -108,6 +116,7 @@ These do not require admin rank.
 
 | Command | Use |
 |---|---|
+| `::beta` | Reopen the beta guide menu for commands, coords, items, and features to try. |
 | `::g <message>` | Send simplified global chat with your IP country flag beside your name. |
 | `::rested` | Show rested-XP pool and cap status. |
 | `::titles` | Open the title catalogue UI. |
@@ -152,6 +161,7 @@ Use these for fast beta testing with the temporary auto-admin beta accounts.
 | `::announcepreview skill` | Preview a skill milestone world message. |
 | `::announcepreview total` | Preview a total-level world message. |
 | `::announcepreview pk` | Preview a skulled Wilderness PK world message. |
+| `::announcepreview newplayer` | Preview a first-join welcome world message. |
 | `::balancereport` | Show current beta telemetry summary. |
 | `::balancereport xp|players|npcs|drops` | Inspect XP, player, NPC-kill, or drop telemetry. |
 | `::balancereport reset` | Clear the in-memory telemetry window. |

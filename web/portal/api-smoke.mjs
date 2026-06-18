@@ -113,6 +113,16 @@ const firstReferral = await api("/api/founder/reservations", {
 	}
 });
 assert(firstReferral.founder.referredBy.code === founder.founder.code, "referred reservations should remember the referrer code");
+const referrerAfterFirst = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "SmokeHero",
+		email: "smoke@example.com"
+	}
+});
+assert(referrerAfterFirst.founder.referralRewardCodes.length === 1, "one credited referral should mint one reward code for the referrer");
+assert(/^VOID-[A-HJ-NP-TV-Z2-9]{4}-[A-HJ-NP-TV-Z2-9]{4}$/.test(referrerAfterFirst.founder.referralRewardCodes[0].code), "referral rewards should use the public signup-code format");
+assert(referrerAfterFirst.founder.referralRewardCodes[0].syncedToGame === true, "referral reward codes should sync to the configured game DB");
 
 const secondReferral = await api("/api/founder/reservations", {
 	method: "POST",
@@ -123,6 +133,16 @@ const secondReferral = await api("/api/founder/reservations", {
 	}
 });
 assert(secondReferral.founder.referredBy.username === "SmokeHero", "referred reservations should expose the referrer username");
+const referrerAfterSecond = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "SmokeHero",
+		email: "smoke@example.com"
+	}
+});
+const referralRewardCodes = referrerAfterSecond.founder.referralRewardCodes.map((reward) => reward.code);
+assert(referralRewardCodes.length === 2, "two credited referrals should mint two reward codes for the referrer");
+assert(new Set(referralRewardCodes).size === referralRewardCodes.length, "referral reward codes should be unique");
 
 const registered = await api("/api/accounts/register", {
 	method: "POST",

@@ -9,6 +9,7 @@ import com.openrsc.server.util.rsc.Formulae;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 
@@ -96,22 +97,19 @@ public class WorldPathfinder {
 		final boolean endBlocked = endTile == null
 			|| (endTile.traversalMask & CollisionFlag.FULL_BLOCK) != 0
 			|| !isAllowedLocation(end.getX(), end.getY());
-		final Point target;
 		if (endBlocked) {
-			final Point snapped = nearestWalkable(end, DESTINATION_SNAP_RADIUS);
-			if (snapped == null) {
+			final TargetSet snapTargets = nearestWalkableTargets(end, DESTINATION_SNAP_RADIUS);
+			if (snapTargets.isEmpty()) {
 				lastReason = Reason.NO_PATH;
 				return null;
 			}
-			if (start.getX() == snapped.getX() && start.getY() == snapped.getY()) {
-				lastReason = Reason.SAME_TILE;
-				return Collections.emptyList();
-			}
-			target = snapped;
-		} else {
-			target = end;
+			return findPathAStar(start, snapTargets, maxNodes);
 		}
 
+		return findPathToTarget(start, end, maxNodes);
+	}
+
+	private List<Point> findPathToTarget(final Point start, final Point target, final int maxNodes) {
 		final int estimatedDistance = Math.max(
 			Math.abs(start.getX() - target.getX()),
 			Math.abs(start.getY() - target.getY()));
@@ -127,9 +125,11 @@ public class WorldPathfinder {
 	}
 
 	private List<Point> findPathAStar(final Point start, final Point target, final int maxNodes) {
-		final int estimatedDistance = Math.max(
-			Math.abs(start.getX() - target.getX()),
-			Math.abs(start.getY() - target.getY()));
+		return findPathAStar(start, TargetSet.single(target), maxNodes);
+	}
+
+	private List<Point> findPathAStar(final Point start, final TargetSet targets, final int maxNodes) {
+		final int estimatedDistance = targets.chebyshevDistanceFrom(start.getX(), start.getY());
 		final int initialCapacity = Math.min(maxNodes, Math.max(1024, estimatedDistance * 16));
 		final HashMap<Long, Node> visited = new HashMap<>(initialCapacity);
 		final PriorityQueue<Node> open = new PriorityQueue<>(
@@ -137,7 +137,7 @@ public class WorldPathfinder {
 			(a, b) -> Integer.compare(a.fCost, b.fCost));
 
 		final Node startNode = new Node(start.getX(), start.getY(), 0,
-			heuristic(start.getX(), start.getY(), target.getX(), target.getY()), null);
+			targets.heuristicFrom(start.getX(), start.getY()), null);
 		visited.put(key(startNode.x, startNode.y), startNode);
 		open.add(startNode);
 
@@ -149,7 +149,7 @@ public class WorldPathfinder {
 			if (bestKnown != current && current.gCost > bestKnown.gCost) continue;
 			current.closed = true;
 
-			if (current.x == target.getX() && current.y == target.getY()) {
+			if (targets.contains(current.x, current.y)) {
 				found = current;
 				break;
 			}
@@ -160,7 +160,7 @@ public class WorldPathfinder {
 				return null;
 			}
 
-			expand(current, target.getX(), target.getY(), open, visited);
+			expand(current, targets, open, visited);
 		}
 
 		if (found == null) {
@@ -258,16 +258,16 @@ public class WorldPathfinder {
 	}
 
 	/**
-	 * Snap an unwalkable destination to the nearest walkable tile within
-	 * {@code radius} (Chebyshev). Used so a world-map click on a wall, a
-	 * building roof, or a coastline routes to the boundary tile instead of
-	 * silently failing.
+	 * Collect walkable snap destinations within {@code radius} (Chebyshev).
+	 * Used so a world-map click on a wall, a building roof, or a coastline
+	 * routes to a nearby reachable tile instead of silently failing.
 	 *
 	 * Maintains the same floor as {@code end} (y / 944) and respects the F2P
 	 * region filter on F2P worlds, so we never snap a free player across the
 	 * F2P/P2P boundary.
 	 */
-	private Point nearestWalkable(final Point end, final int radius) {
+	private TargetSet nearestWalkableTargets(final Point end, final int radius) {
+		final TargetSet targets = new TargetSet();
 		final int ex = end.getX();
 		final int ey = end.getY();
 		final int floor = Formulae.getHeight(end);
@@ -283,14 +283,14 @@ public class WorldPathfinder {
 					if (t == null) continue;
 					if ((t.traversalMask & CollisionFlag.FULL_BLOCK) != 0) continue;
 					if (!isAllowedLocation(nx, ny)) continue;
-					return Point.location(nx, ny);
+					targets.add(nx, ny);
 				}
 			}
 		}
-		return null;
+		return targets;
 	}
 
-	private void expand(final Node cur, final int ex, final int ey,
+	private void expand(final Node cur, final TargetSet targets,
 	                    final PriorityQueue<Node> open, final HashMap<Long, Node> visited) {
 		for (int dx = -1; dx <= 1; dx++) {
 			for (int dy = -1; dy <= 1; dy++) {
@@ -301,7 +301,7 @@ public class WorldPathfinder {
 				if (!isAllowedLocation(nx, ny)) continue;
 
 				final int stepCost = (dx == 0 || dy == 0) ? BASIC_COST : DIAG_COST;
-				addNeighbor(cur, nx, ny, stepCost, ex, ey, open, visited);
+				addNeighbor(cur, nx, ny, stepCost, targets, open, visited);
 			}
 		}
 
@@ -313,19 +313,19 @@ public class WorldPathfinder {
 				if (!isAllowedLocation(edge.destX, edge.destY)) continue;
 				final TileValue dst = world.getTile(edge.destX, edge.destY);
 				if (dst == null) continue;
-				addNeighbor(cur, edge.destX, edge.destY, BASIC_COST, ex, ey, open, visited);
+				addNeighbor(cur, edge.destX, edge.destY, BASIC_COST, targets, open, visited);
 			}
 		}
 	}
 
 	private void addNeighbor(final Node cur, final int nx, final int ny, final int stepCost,
-	                          final int ex, final int ey,
+	                          final TargetSet targets,
 	                          final PriorityQueue<Node> open, final HashMap<Long, Node> visited) {
 		final int g = cur.gCost + stepCost;
 		final long k = key(nx, ny);
 		final Node existing = visited.get(k);
 		if (existing != null && existing.gCost <= g) return;
-		final Node n = new Node(nx, ny, g, g + heuristic(nx, ny, ex, ey), cur);
+		final Node n = new Node(nx, ny, g, g + targets.heuristicFrom(nx, ny), cur);
 		visited.put(k, n);
 		open.add(n);
 	}
@@ -367,9 +367,7 @@ public class WorldPathfinder {
 		return rev;
 	}
 
-	private static int heuristic(final int ax, final int ay, final int bx, final int by) {
-		final int xd = Math.abs(ax - bx);
-		final int yd = Math.abs(ay - by);
+	private static int heuristicDelta(final int xd, final int yd) {
 		final int s = Math.min(xd, yd);
 		final int l = Math.max(xd, yd);
 		return s * DIAG_COST + (l - s) * BASIC_COST;
@@ -392,6 +390,48 @@ public class WorldPathfinder {
 			this.gCost = gCost;
 			this.fCost = fCost;
 			this.parent = parent;
+		}
+	}
+
+	private static final class TargetSet {
+		private final HashSet<Long> keys = new HashSet<>();
+		private int minX = Integer.MAX_VALUE;
+		private int maxX = Integer.MIN_VALUE;
+		private int minY = Integer.MAX_VALUE;
+		private int maxY = Integer.MIN_VALUE;
+
+		static TargetSet single(final Point target) {
+			final TargetSet targets = new TargetSet();
+			targets.add(target.getX(), target.getY());
+			return targets;
+		}
+
+		void add(final int x, final int y) {
+			keys.add(key(x, y));
+			if (x < minX) minX = x;
+			if (x > maxX) maxX = x;
+			if (y < minY) minY = y;
+			if (y > maxY) maxY = y;
+		}
+
+		boolean isEmpty() {
+			return keys.isEmpty();
+		}
+
+		boolean contains(final int x, final int y) {
+			return keys.contains(key(x, y));
+		}
+
+		int heuristicFrom(final int x, final int y) {
+			final int dx = x < minX ? minX - x : (x > maxX ? x - maxX : 0);
+			final int dy = y < minY ? minY - y : (y > maxY ? y - maxY : 0);
+			return heuristicDelta(dx, dy);
+		}
+
+		int chebyshevDistanceFrom(final int x, final int y) {
+			final int dx = x < minX ? minX - x : (x > maxX ? x - maxX : 0);
+			final int dy = y < minY ? minY - y : (y > maxY ? y - maxY : 0);
+			return Math.max(dx, dy);
 		}
 	}
 }

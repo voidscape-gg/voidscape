@@ -1,12 +1,17 @@
 package com.openrsc.server.content.announcements;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
 
 public final class WorldAnnouncementService {
 	private static final int[] SKILL_LEVEL_MILESTONES = {90, 95, 99};
 	private static final int[] TOTAL_LEVEL_MILESTONES = {500, 750, 1000, 1250, 1500, 1750, 2000};
+	private static final String NEW_PLAYER_ACCOUNT_CACHE_PREFIX = "new_join_acct:";
+	private static final String NEW_PLAYER_CHARACTER_CACHE_PREFIX = "new_join_char:";
+	private static final String NEW_PLAYER_LOCAL_CACHE_KEY = "void_announce_new_player";
+	private static final int NEW_PLAYER_ANNOUNCED = 1;
 
 	private final World world;
 
@@ -56,6 +61,27 @@ public final class WorldAnnouncementService {
 		announce(skulledWildernessKillMessage(killer, killed), false);
 	}
 
+	public void announceNewPlayerJoined(Player player) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (!world.getServer().getConfig().WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS) return;
+		if (player == null || player.getLastLogin() != 0L) return;
+		if (player.getCache().hasKey(NEW_PLAYER_LOCAL_CACHE_KEY)) return;
+
+		String cacheKey = newPlayerAnnouncementCacheKey(player);
+		if (cacheKey.isEmpty()) return;
+
+		try {
+			Integer announced = world.getServer().getDatabase().queryLoadGlobalCacheInt(cacheKey);
+			if (announced != null && announced == NEW_PLAYER_ANNOUNCED) return;
+			world.getServer().getDatabase().querySaveGlobalCacheInt(cacheKey, NEW_PLAYER_ANNOUNCED);
+		} catch (RuntimeException ex) {
+			// Fall back to character cache for dev DB hiccups; normal saves persist it.
+		}
+
+		player.getCache().store(NEW_PLAYER_LOCAL_CACHE_KEY, true);
+		announce(newPlayerJoinedMessage(player), false);
+	}
+
 	public void previewSkillMilestone(Player player) {
 		announce(skillMilestoneMessage(player, Skill.MINING.id(), 99), true);
 	}
@@ -66,6 +92,10 @@ public final class WorldAnnouncementService {
 
 	public void previewSkulledWildernessKill(Player player) {
 		announce(skulledWildernessKillMessage(player, player), true);
+	}
+
+	public void previewNewPlayerJoined(Player player) {
+		announce(newPlayerJoinedMessage(player), true);
 	}
 
 	private void announce(String message, boolean force) {
@@ -88,6 +118,20 @@ public final class WorldAnnouncementService {
 		return "@mag@[Wilderness] @red@A skull has fallen: @whi@" + killer.getUsername()
 			+ " defeated " + killed.getUsername()
 			+ " in level-" + wildernessLevel + " Wilderness.";
+	}
+
+	private String newPlayerJoinedMessage(Player player) {
+		return "@mag@[Void Herald] @gre@Welcome @whi@" + player.getUsername()
+			+ "@gre@ to Voidscape. @whi@This is their first time in the world.";
+	}
+
+	private String newPlayerAnnouncementCacheKey(Player player) {
+		int accountId = VoidSubscription.getAccountId(player);
+		if (accountId > 0) {
+			return NEW_PLAYER_ACCOUNT_CACHE_PREFIX + accountId;
+		}
+		int playerId = player.getDatabaseID();
+		return playerId > 0 ? NEW_PLAYER_CHARACTER_CACHE_PREFIX + playerId : "";
 	}
 
 	private int highestCrossed(int[] milestones, int oldValue, int newValue) {

@@ -213,6 +213,15 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_MAGIC = 1 << 4;
 	private static final int VOIDSCAPE_XP_LOCK_ALLOWED_MASK = (1 << 0) | (1 << 1) | (1 << 2)
 		| (1 << 4) | (1 << 5) | (1 << 6);
+	private static final int SKILL_ATTACK = 0;
+	private static final int SKILL_DEFENSE = 1;
+	private static final int SKILL_STRENGTH = 2;
+	private static final int SKILL_HITS = 3;
+	private static final int SKILL_RANGED = 4;
+	private static final int SKILL_MAGIC = 6;
+	private static final long TRAINING_XP_RATE_IDLE_MILLIS = 90000L;
+	private static final long TRAINING_XP_RATE_REFRESH_MILLIS = 1000L;
+	private static final long TRAINING_XP_RATE_HITS_SUPPRESS_MILLIS = 2500L;
 	private static final int VOIDSCAPE_BESTIARY_PANEL_MAX_ENTRIES = 500;
 	private static final long VOIDSCAPE_BESTIARY_REFRESH_MILLIS = 5000L;
 	private static final int VOIDSCAPE_BESTIARY_HEADER_H = 24;
@@ -768,6 +777,12 @@ public final class mudclient implements Runnable {
 	private int currentFPS = 0;
 	private final long[] m_F = new long[10];
 	private double xpPerHour = 0;
+	private int trainingXpRateSkill = -1;
+	private int trainingXpRateLastPrimaryCombatSkill = -1;
+	private long trainingXpRateLastGainMillis = 0L;
+	private long trainingXpRateLastPrimaryCombatGainMillis = 0L;
+	private long trainingXpRateLastRefreshMillis = 0L;
+	private long trainingXpRateCachedPerHour = 0L;
 	private boolean hasGameCrashed = false;
 	private int gameState = 1;
 	private int m_b = 0;
@@ -7884,6 +7899,7 @@ public final class mudclient implements Runnable {
 					drawVoidscapeHudSkin();
 					this.getSurface().loggedIn = false;
 					this.drawChatMessageTabs(var1 - 8);
+					this.drawTrainingXpRateBadge();
 					drawVoidArenaCountdownOverlay();
 					// this.getSurface().draw(this.graphics, this.screenOffsetX,
 					// 256, this.screenOffsetY);
@@ -12637,6 +12653,101 @@ public final class mudclient implements Runnable {
 			default:
 				return 0xFFFFFF; // White
 		}
+	}
+
+	public void noteSkillExperienceGain(int skill, int receivedXp) {
+		if (receivedXp <= 0 || !isValidSkillIndex(skill)) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (isPrimaryCombatTrainingSkill(skill)) {
+			this.trainingXpRateLastPrimaryCombatSkill = skill;
+			this.trainingXpRateLastPrimaryCombatGainMillis = now;
+			this.trainingXpRateSkill = skill;
+		} else if (skill == SKILL_HITS
+			&& this.trainingXpRateLastPrimaryCombatSkill >= 0
+			&& now - this.trainingXpRateLastPrimaryCombatGainMillis <= TRAINING_XP_RATE_HITS_SUPPRESS_MILLIS) {
+			this.trainingXpRateSkill = this.trainingXpRateLastPrimaryCombatSkill;
+		} else {
+			this.trainingXpRateSkill = skill;
+		}
+		this.trainingXpRateLastGainMillis = now;
+		this.trainingXpRateLastRefreshMillis = 0L;
+	}
+
+	private boolean isValidSkillIndex(int skill) {
+		return skill >= 0 && skill < skillCount
+			&& this.playerStatXpGained != null && skill < this.playerStatXpGained.length
+			&& this.xpGainedStartTime != null && skill < this.xpGainedStartTime.length;
+	}
+
+	private boolean isPrimaryCombatTrainingSkill(int skill) {
+		return skill == SKILL_ATTACK || skill == SKILL_DEFENSE || skill == SKILL_STRENGTH
+			|| skill == SKILL_RANGED || skill == SKILL_MAGIC;
+	}
+
+	private void drawTrainingXpRateBadge() {
+		if (useVoidscapeHudSkin()
+			&& (this.showUiTab != 0 || this.voidscapeAccountMenuOpen || this.voidscapeAccountAddFormOpen)) {
+			return;
+		}
+		if (!isValidSkillIndex(this.trainingXpRateSkill)) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (now - this.trainingXpRateLastGainMillis > TRAINING_XP_RATE_IDLE_MILLIS) {
+			return;
+		}
+		long gained = Math.max(0L, this.playerStatXpGained[this.trainingXpRateSkill]);
+		if (gained <= 0L) {
+			return;
+		}
+		if (this.trainingXpRateLastRefreshMillis == 0L
+			|| now - this.trainingXpRateLastRefreshMillis >= TRAINING_XP_RATE_REFRESH_MILLIS) {
+			long elapsed = Math.max(1000L, now - this.xpGainedStartTime[this.trainingXpRateSkill]);
+			this.trainingXpRateCachedPerHour = (gained * 3600000L) / elapsed;
+			this.trainingXpRateLastRefreshMillis = now;
+		}
+
+		String skillName = skillNameLong != null && this.trainingXpRateSkill < skillNameLong.length
+			? skillNameLong[this.trainingXpRateSkill] : "Skill";
+		int font = 1;
+		String label = skillName + " XP/hr: " + formatCompactLong(this.trainingXpRateCachedPerHour);
+		int maxWidth = Math.max(110, Math.min(190, this.getGameWidth() - 16));
+		int width = this.getSurface().stringWidth(font, label) + 14;
+		if (width > maxWidth) {
+			width = maxWidth;
+			label = fitVoidscapeText(label, width - 12, font);
+		}
+		int height = useVoidscapeHudSkin() ? 22 : 20;
+		int x = trainingXpRateBadgeX(width);
+		int y = trainingXpRateBadgeY(height);
+
+		if (useVoidscapeHudSkin()) {
+			this.getSurface().drawBoxAlpha(x, y, width, height, 0x080510, 188);
+			this.getSurface().drawBoxBorder(x, width, y, height, 0x8C6F3D);
+			this.getSurface().drawLineHoriz(x + 2, y + 1, Math.max(1, width - 4), 0xD9B24D);
+			this.getSurface().drawString(label, x + 7, y + 15, 0xEBDCB0, font);
+		} else {
+			this.getSurface().drawBoxAlpha(x, y, width, height, 0, 130);
+			this.getSurface().drawBoxBorder(x, width, y, height, 0xFFFFFF);
+			this.getSurface().drawString(label, x + 7, y + 14, 0xFFFF00, font);
+		}
+	}
+
+	private int trainingXpRateBadgeX(int width) {
+		int margin = useVoidscapeHudSkin() ? (voidscapeCompactHud() ? 8 : 10) : 8;
+		return Math.max(8, this.getGameWidth() - width - margin);
+	}
+
+	private int trainingXpRateBadgeY(int height) {
+		if (useVoidscapeHudSkin()) {
+			int topClearance = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 4 : 6);
+			int y = voidscapeAccountButtonY() - height - (voidscapeCompactHud() ? 4 : 6);
+			return Math.max(topClearance, y);
+		}
+		int bottomClearance = inWild ? 84 : 44;
+		return Math.max(6, this.getGameHeight() - bottomClearance - height);
 	}
 
 	private void drawExperienceCounter(int skill) {

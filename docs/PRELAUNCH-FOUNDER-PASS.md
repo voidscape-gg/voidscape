@@ -8,9 +8,9 @@ Do not use the prototype to collect real signups until the production flow below
 
 - Let one real person reserve one launch username.
 - Let verified users invite friends before launch.
-- Unlock a free launch subscription after 2 legitimate referred users.
+- Issue one free subscription-card code for each legitimate referred user during beta.
 - Prevent fake invite loops, disposable mass signups, and name squatting.
-- Keep an audit trail for every reservation, referral credit, entitlement, and admin change.
+- Keep an audit trail for every reservation, referral credit, reward code, and admin change.
 
 ## Recommended Stack
 
@@ -83,16 +83,16 @@ clicked -> signup_started -> email_verified -> qualified_pending_age -> credited
 
 For prelaunch, use conservative rules. A referral can wait 12-24 hours before crediting, or be credited immediately only if its risk score is clean.
 
-### 4. Unlock Founder Reward
+### 4. Issue Referral Reward Code
 
-When a user reaches 2 credited referrals:
+When a referral is credited during beta:
 
-1. Insert one `founder_entitlements` row for `free_launch_subscription`.
-2. Mark it `granted`, not consumed.
-3. Show the unlocked state in the founder-pass UI.
-4. Consume the entitlement only after the real billing/subscription system exists.
+1. Insert one `founder_referral_reward_codes` row for that credited referral.
+2. Mint a unique `VOID-XXXX-XXXX` code using the same alphabet as public signup codes.
+3. Sync it into the game DB as `signup_code:<NORMALIZED CODE> = 1` when the OpenRSC DB is available.
+4. Show the earned code in the founder-pass UI.
 
-The unlock status must always come from the backend. The browser only renders it.
+The reward-code state must always come from the backend. The browser only renders it.
 
 ## Data Model
 
@@ -148,19 +148,24 @@ Constraints:
 - unique `(referrer_user_id, referred_user_id)`
 - reject `referrer_user_id = referred_user_id`
 
-### `founder_entitlements`
+### `founder_referral_reward_codes`
 
 - `id`
-- `user_id`
-- `type`: `free_launch_subscription`
-- `status`: `granted`, `consumed`, `revoked`
-- `source`: `referral_2_verified`
+- `referrer_user_id`
+- `referred_user_id`
+- `referral_id`
+- `code`
+- `code_normalized`
+- `status`: `issued`, `redeemed`, `revoked`
+- `source`: `beta_referral`
 - `created_at`
-- `consumed_at`
+- `synced_at`
+- `redeemed_at`
 
 Constraints:
 
-- unique `(user_id, type)` while status is `granted` or `consumed`
+- unique `referral_id`
+- unique `code_normalized`
 
 ### `audit_events`
 
@@ -179,7 +184,7 @@ Audit these events at minimum:
 - reservation verified
 - reservation expired/released
 - referral credited/rejected/reversed
-- entitlement granted/revoked/consumed
+- referral reward code minted/synced/revoked
 - admin override
 
 ### `abuse_signals`
@@ -206,7 +211,7 @@ Minimum endpoints:
   - redirects to the founder-pass page with a short-lived session
 
 - `GET /api/prelaunch/me`
-  - returns current reservation, invite link, referral count, entitlement state
+  - returns current reservation, invite link, referral count, and referral reward codes
 
 - `POST /api/prelaunch/resend-verification`
   - rate-limited resend flow
@@ -269,7 +274,7 @@ Before collecting real signups:
    - duplicate username
    - duplicate email
    - expired pending reservation
-   - valid referral unlock
+   - valid referral reward code issuance
    - self-referral rejection
    - suspicious referral review
 10. Freeze launch username rules and document the cutoff time for changes.
@@ -282,7 +287,7 @@ At launch:
 3. Make game account registration consult the reservation source of truth.
 4. Allow only the verified reservation owner to claim the reserved name.
 5. Create or connect the subscription system.
-6. Convert granted founder entitlements into launch subscription credits.
+6. Keep issued referral reward codes redeemable through the in-game signup-code ledger.
 7. Keep the audit log immutable after launch.
 
 ## Prototype Migration Notes
@@ -309,5 +314,4 @@ The frontend should become a renderer for backend state:
 - `reserved_name`
 - `invite_link`
 - `credited_referrals`
-- `required_referrals`
-- `free_subscription_unlocked`
+- `referral_reward_codes`

@@ -209,6 +209,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_web_founder_referrals_pair
 CREATE INDEX IF NOT EXISTS idx_web_founder_referrals_code
     ON web_founder_referrals (referrer_code, status);
 
+CREATE TABLE IF NOT EXISTS web_founder_referral_reward_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referral_id INTEGER NOT NULL,
+    referrer_reservation_id INTEGER NOT NULL,
+    referred_reservation_id INTEGER,
+    code TEXT NOT NULL,
+    code_normalized TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'issued',
+    source TEXT NOT NULL DEFAULT 'beta_referral',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    synced_at TEXT,
+    redeemed_at TEXT,
+    FOREIGN KEY (referral_id) REFERENCES web_founder_referrals (id) ON DELETE CASCADE,
+    FOREIGN KEY (referrer_reservation_id) REFERENCES web_founder_reservations (id) ON DELETE CASCADE,
+    FOREIGN KEY (referred_reservation_id) REFERENCES web_founder_reservations (id) ON DELETE SET NULL,
+    CHECK (status IN ('issued', 'redeemed', 'revoked'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_founder_referral_reward_referral
+    ON web_founder_referral_reward_codes (referral_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_founder_referral_reward_code
+    ON web_founder_referral_reward_codes (code_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_web_founder_referral_reward_referrer
+    ON web_founder_referral_reward_codes (referrer_reservation_id, status);
+
 CREATE TABLE IF NOT EXISTS web_audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER,

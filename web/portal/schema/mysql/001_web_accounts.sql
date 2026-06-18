@@ -186,6 +186,31 @@ CREATE TABLE IF NOT EXISTS web_founder_referrals (
     CONSTRAINT chk_web_founder_referrals_risk CHECK (risk_score <= 100)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS web_founder_referral_reward_codes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    referral_id BIGINT UNSIGNED NOT NULL,
+    referrer_reservation_id BIGINT UNSIGNED NOT NULL,
+    referred_reservation_id BIGINT UNSIGNED,
+    code VARCHAR(24) NOT NULL,
+    code_normalized VARCHAR(20) NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'issued',
+    source VARCHAR(64) NOT NULL DEFAULT 'beta_referral',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    synced_at DATETIME(3),
+    redeemed_at DATETIME(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_web_founder_referral_reward_referral (referral_id),
+    UNIQUE KEY uq_web_founder_referral_reward_code (code_normalized),
+    KEY idx_web_founder_referral_reward_referrer (referrer_reservation_id, status),
+    CONSTRAINT fk_web_founder_reward_referral
+        FOREIGN KEY (referral_id) REFERENCES web_founder_referrals (id) ON DELETE CASCADE,
+    CONSTRAINT fk_web_founder_reward_referrer
+        FOREIGN KEY (referrer_reservation_id) REFERENCES web_founder_reservations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_web_founder_reward_referred
+        FOREIGN KEY (referred_reservation_id) REFERENCES web_founder_reservations (id) ON DELETE SET NULL,
+    CONSTRAINT chk_web_founder_reward_status CHECK (status IN ('issued', 'redeemed', 'revoked'))
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS web_audit_events (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     account_id BIGINT UNSIGNED,

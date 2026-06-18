@@ -3797,6 +3797,51 @@ body.public-mode .nav-list {
 	color: var(--gold);
 }
 
+.referral-reward-codes {
+	display: grid;
+	gap: 8px;
+	padding: 11px;
+	border: 1px solid rgba(214, 173, 88, 0.32);
+	border-radius: var(--radius);
+	background: rgba(8, 9, 12, 0.58);
+}
+
+.referral-reward-codes[hidden] {
+	display: none;
+}
+
+.referral-reward-codes > span {
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.referral-reward-code-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.referral-reward-code-row strong {
+	min-width: 0;
+	overflow: hidden;
+	color: #ffe9ad;
+	font-family: "Courier New", ui-monospace, monospace;
+	font-size: 14px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.referral-reward-code-row span {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.referral-reward-code-row .ghost-button {
+	min-height: 32px;
+	padding: 0 10px;
+}
+
 body.prelaunch-mode {
 	background: #020203;
 }

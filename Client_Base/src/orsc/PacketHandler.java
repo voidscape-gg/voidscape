@@ -2387,7 +2387,10 @@ public class PacketHandler {
 
 	private void updateIndividualExperience() {
 		int skill = packetsIncoming.getUnsignedByte();
+		int oldXP = mc.getPlayerExperience(skill);
+		int oldLvl = mc.getPlayerStatBase(skill);
 		mc.setPlayerExperience(skill, (int)((packetsIncoming.get32() & 0xffffffffL) / 4));
+		updateExperienceTracker(skill, oldXP, oldLvl);
 	}
 
 	private void closeDuelDialog() {
@@ -2509,7 +2512,7 @@ public class PacketHandler {
 		int receivedXp = mc.getPlayerExperience(skill) - oldXp;
 		receivedXp = Math.max(receivedXp, 0);
 
-		if (Config.S_EXPERIENCE_COUNTER_TOGGLE) {
+		if (receivedXp > 0) {
 			mc.setRecentSkill(skill);
 			mc.setPlayerStatXpGained(skill, mc.getPlayerStatXpGained(skill) + receivedXp);
 			if (mc.getXpGainedStartTime(skill) == 0) {
@@ -2519,6 +2522,9 @@ public class PacketHandler {
 			if (mc.totalXpGainedStartTime == 0) {
 				mc.totalXpGainedStartTime = System.currentTimeMillis();
 			}
+			mc.noteSkillExperienceGain(skill, receivedXp);
+		} else if (Config.S_EXPERIENCE_COUNTER_TOGGLE) {
+			mc.setRecentSkill(skill);
 		}
 
 		if (Config.S_EXPERIENCE_DROPS_TOGGLE && Config.C_EXPERIENCE_DROPS) {

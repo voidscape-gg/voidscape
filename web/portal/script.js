@@ -80,6 +80,8 @@
 	var founderProgressLabel = document.getElementById("founder-progress-label");
 	var founderRewardLabel = document.getElementById("founder-reward-label");
 	var founderProgressFill = document.getElementById("founder-progress-fill");
+	var referralRewardCodes = document.getElementById("referral-reward-codes");
+	var referralRewardCodeList = document.getElementById("referral-reward-code-list");
 	var founderLink = document.getElementById("founder-link");
 	var copyFounderLink = document.getElementById("copy-founder-link");
 	var simulateReferral = document.getElementById("simulate-referral");
@@ -785,7 +787,8 @@
 				username: result.founder.username,
 				email: result.founder.email,
 				code: result.founder.code,
-				invites: result.founder.creditedReferrals || 0
+				invites: result.founder.creditedReferrals || 0,
+				rewardCodes: result.founder.referralRewardCodes || []
 			});
 			showSignupCodeSuccess(result);
 		} catch (error) {
@@ -849,6 +852,18 @@
 		});
 	}
 
+	if (referralRewardCodeList) {
+		referralRewardCodeList.addEventListener("click", function (event) {
+			var button = event.target.closest("[data-copy-referral-reward]");
+			if (!button) return;
+			copyText(button.getAttribute("data-copy-referral-reward") || "");
+			button.textContent = "Copied";
+			window.setTimeout(function () {
+				button.textContent = "Copy";
+			}, 1400);
+		});
+	}
+
 	if (clearReferral) {
 		clearReferral.addEventListener("click", function () {
 			activeReferralCode = "";
@@ -873,18 +888,17 @@
 					}
 				});
 				applyFounderState(state.founder);
-				founderMessage.textContent = state.founder.starterCardUnlocked
-					? "Starter subscription card unlocked through the local API."
+				var rewardCount = state.founder.referralRewardCodeCount || 0;
+				founderMessage.textContent = rewardCount > 0
+					? "Invite credited. Referral sub code earned."
 					: "Invite credited through the local API.";
 				return;
 			} catch (error) {
 				// Static-file mode falls back to localStorage below.
 			}
-			founder.invites = Math.min(2, (founder.invites || 0) + 1);
+			founder.invites = (founder.invites || 0) + 1;
 			saveFounder(founder);
-			founderMessage.textContent = founder.invites >= 2
-				? "Starter subscription card unlocked in this local prototype."
-				: "Invite credited locally. One more verified invite unlocks the card.";
+			founderMessage.textContent = "Invite credited locally. API mode will mint the reward code.";
 			renderFounder();
 		});
 	}
@@ -946,7 +960,11 @@
 			if (dashboardXpRate) dashboardXpRate.textContent = state.rates.subscribedCombat + "x / " + state.rates.subscribedSkill + "x";
 		}
 		if (state.founderStats) {
-			if (landingPrizeState) landingPrizeState.textContent = (state.founderStats.starterCardsUnlocked || 0) + " unlocked";
+			if (landingPrizeState) {
+				landingPrizeState.textContent = state.founderStats.referralCodesIssued
+					? state.founderStats.referralCodesIssued + " referral codes"
+					: (state.founderStats.starterCardsUnlocked || 0) + " unlocked";
+			}
 			if (landingPrizeDetail) landingPrizeDetail.textContent = (state.founderStats.reservations || 0) + " founder reservations";
 		}
 		if (Array.isArray(state.highscores)) {
@@ -1186,6 +1204,7 @@
 			email: apiFounder.email,
 			code: apiFounder.code,
 			invites: apiFounder.creditedReferrals || 0,
+			rewardCodes: apiFounder.referralRewardCodes || [],
 			referredBy: apiFounder.referredBy || null
 		};
 		saveFounder(founder);
@@ -1405,21 +1424,41 @@
 		renderReferralNotice();
 		var founder = loadFounder();
 		if (!founder) {
-			founderProgressLabel.textContent = "0 / 2 invites";
-			founderRewardLabel.textContent = "Reward locked";
+			founderProgressLabel.textContent = "0 invites credited";
+			founderRewardLabel.textContent = "Invite friends for codes";
 			founderProgressFill.style.width = "0%";
 			founderLink.value = "";
+			renderReferralRewardCodes([]);
 			return;
 		}
 		founderName.value = founder.username || "";
 		founderEmail.value = founder.email || "";
 		accountName.textContent = founder.username || "Zamak42";
 		accountEmail.textContent = founder.email || "void@example.com";
-		var invites = Math.min(2, founder.invites || 0);
-		founderProgressLabel.textContent = invites >= 2 ? "Unlocked" : invites + " / 2 invites";
-		founderRewardLabel.textContent = invites >= 2 ? "Starter sub card" : "Reward locked";
-		founderProgressFill.style.width = (invites / 2 * 100) + "%";
+		var invites = founder.invites || 0;
+		var rewardCodes = Array.isArray(founder.rewardCodes) ? founder.rewardCodes : [];
+		founderProgressLabel.textContent = invites + " invite" + (invites === 1 ? "" : "s") + " credited";
+		founderRewardLabel.textContent = rewardCodes.length > 0
+			? rewardCodes.length + " sub code" + (rewardCodes.length === 1 ? "" : "s") + " earned"
+			: "Invite friends for codes";
+		founderProgressFill.style.width = invites > 0 ? "100%" : "0%";
 		founderLink.value = makeInviteLink(founder.code);
+		renderReferralRewardCodes(rewardCodes);
+	}
+
+	function renderReferralRewardCodes(rewardCodes) {
+		if (!referralRewardCodes || !referralRewardCodeList) return;
+		var rows = Array.isArray(rewardCodes) ? rewardCodes : [];
+		referralRewardCodes.hidden = rows.length === 0;
+		referralRewardCodeList.innerHTML = rows.map(function (reward) {
+			return [
+				'<div class="referral-reward-code-row">',
+				'<strong>' + escapeHtml(reward.code || "") + '</strong>',
+				'<span>' + titleCase(reward.status || "issued") + '</span>',
+				'<button class="ghost-button" type="button" data-copy-referral-reward="' + escapeAttr(reward.code || "") + '">Copy</button>',
+				'</div>'
+			].join("");
+		}).join("");
 	}
 
 	function renderReferralNotice() {

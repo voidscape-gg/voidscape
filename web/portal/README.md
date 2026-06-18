@@ -4,7 +4,7 @@ Static click-through prototype for the Voidscape pre-release landing, account-ma
 
 ## Prelaunch signup flow (current landing)
 
-The public landing page is a pure interest-list flow: a visitor enters an email + desired username, the username is reserved, and a one-time `VOID-XXXX-XXXX` signup code is shown on-screen (no Google, no game-account creation). The code is written into the game DB as a global `player_cache` row (`signup_code:<CODE>` = 1) when `PORTAL_OPENRSC_DB` is set. In-game, the player talks to the Void Subscription Vendor in Lumbridge, types the code into the popup he opens (custom client 10087+), and receives one tradable Subscription card. One code per canonical email — re-signing up with the same email shows the same code (codes are bearer tokens; anyone who knows the email can re-view the code — accepted for prelaunch stakes). Codes are minted only on this public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
+The public landing page is a pure interest-list flow: a visitor enters an email + desired username, the username is reserved, and a one-time `VOID-XXXX-XXXX` signup code is shown on-screen (no Google, no game-account creation). The code is written into the game DB as a global `player_cache` row (`signup_code:<CODE>` = 1) when `PORTAL_OPENRSC_DB` is set. In-game, the player talks to the Void Subscription Vendor in Lumbridge, types the code into the popup he opens (custom client 10087+), and receives one tradable Subscription card. One code is minted per canonical email; re-signing up with the same email shows the same code. If the signup credits another founder's invite code during beta, the referrer also receives one additional referral reward code per credited referral. Referral reward codes use the same `signup_code:<CODE>` ledger and vendor redemption path. Codes are bearer tokens; anyone who knows the email can re-view the signup code, which is accepted for prelaunch stakes. Codes are minted only on this public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
 
 Signup-list export (token-gated):
 
@@ -83,7 +83,7 @@ python3 -m http.server 8788 --directory web/portal
 `dev-server.mjs` is a zero-dependency local prototype API plus static file server. It is not production auth, but it exercises the account-management contract with real server-side state:
 
 - reserved username/email flow, including the Google-first pre-release username flow
-- invite-code referrals and one free starter subscription-card unlock, plus a dev-only referral simulation shortcut
+- invite-code referrals that mint one referral reward subscription-card code per credited beta invite, plus a dev-only referral simulation shortcut
 - legacy public status, rates, news, built-artifact download metadata, highscores, market intel, and activity feed payloads for API compatibility; the current UI keeps those surfaces hidden
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
 - launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `Open_RSC_Client.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/pc-client` and `/downloads/cache/...`
@@ -139,7 +139,7 @@ The snapshot endpoint is read-only. It reads safe character fields from `players
 
 When the local API is running with `PORTAL_OPENRSC_DB`, the Characters screen can start a link challenge for an existing saved character. The API returns a one-time `::link <code>` command and stores only the code hash. The prototype's `Simulate verified` button exercises the verification path locally and replaces the starter preview with the saved character state. Production still needs an in-game command or signed game-server callback before real ownership is trusted.
 
-The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/MariaDB variants. It defines web accounts with account-wide subscription expiry, hashed sessions, hashed recovery codes, character links, link challenges, founder reservations/referrals, entitlements, audit events, and abuse-signal buckets. These files are not auto-applied by the OpenRSC server.
+The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/MariaDB variants. It defines web accounts with account-wide subscription expiry, hashed sessions, hashed recovery codes, character links, link challenges, founder reservations/referrals, referral reward codes, entitlements, audit events, and abuse-signal buckets. These files are not auto-applied by the OpenRSC server.
 
 ## Scope
 

@@ -1,6 +1,7 @@
 package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.BetaOnboardingGuide;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
@@ -134,6 +135,8 @@ public final class RegularPlayer implements CommandTrigger {
 			sendMessageDiscord(player, args);
 		} else if (command.equalsIgnoreCase("commands")) {
 			queryCommands(player, 0);
+		} else if (command.equalsIgnoreCase("beta") || command.equalsIgnoreCase("betaguide")) {
+			BetaOnboardingGuide.show(player);
 		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
 			handleLootBeamCommand(player, args);
 		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {
@@ -1998,6 +2001,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::online - shows players currently online %",
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",
+		"@whi@::beta - opens the Voidscape beta guide menu %",
 		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",

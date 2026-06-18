@@ -100,6 +100,8 @@ public class ServerConfiguration {
 	public boolean WANT_WORLD_ANNOUNCEMENTS;
 	public boolean WANT_WORLD_MILESTONE_ANNOUNCEMENTS;
 	public boolean WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS;
+	public boolean WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS;
+	public boolean WANT_BETA_ONBOARDING_GUIDE;
 	public boolean FOG_TOGGLE;
 	public boolean GROUND_ITEM_TOGGLE;
 	public boolean GROUND_ITEM_NAMES;
@@ -600,6 +602,8 @@ public class ServerConfiguration {
 		WANT_WORLD_ANNOUNCEMENTS = tryReadBool("want_world_announcements").orElse(false);
 		WANT_WORLD_MILESTONE_ANNOUNCEMENTS = tryReadBool("want_world_milestone_announcements").orElse(false);
 		WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS = tryReadBool("want_world_skulled_pk_announcements").orElse(false);
+		WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS = tryReadBool("want_world_new_player_announcements").orElse(false);
+		WANT_BETA_ONBOARDING_GUIDE = tryReadBool("want_beta_onboarding_guide").orElse(false);
 		SIDE_MENU_TOGGLE = tryReadBool("side_menu_toggle").orElse(false);
 		INVENTORY_COUNT_TOGGLE = tryReadBool("inventory_count_toggle").orElse(false);
 		AUTO_MESSAGE_SWITCH_TOGGLE = tryReadBool("auto_message_switch_toggle").orElse(false);

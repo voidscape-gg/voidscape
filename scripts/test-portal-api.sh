@@ -344,17 +344,16 @@ if ! grep -q '"issued"' <<<"$signups_json"; then
 fi
 
 csv_header="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups?format=csv" | head -1)"
-if [[ "$csv_header" != "id,username,email,code,status,createdAt" ]]; then
+if [[ "$csv_header" != "id,username,email,code,status,referralRewardCodeCount,referralRewardCodes,createdAt" ]]; then
 	echo "admin signup CSV export should include the expected header, got: $csv_header"
 	exit 1
 fi
 
 sync_result="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
-if ! python3 -c "
-import json, sys
-result = json.loads(sys.argv[1])
-assert result['skippedRedeemed'] >= 1, 'sync should skip the redeemed code'
-assert result['failed'] == 0, 'sync should not fail against the fixture DB'
+if ! node -e "
+const result = JSON.parse(process.argv[1]);
+if (result.skippedRedeemed < 1) throw new Error('sync should skip the redeemed code');
+if (result.failed !== 0) throw new Error('sync should not fail against the fixture DB');
 " "$sync_result"; then
 	echo "admin signup sync failed: $sync_result"
 	exit 1

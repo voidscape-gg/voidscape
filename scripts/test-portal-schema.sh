@@ -39,8 +39,12 @@ INSERT INTO web_founder_reservations (
 INSERT INTO web_founder_referrals (referrer_reservation_id, referred_reservation_id, referrer_code, status, risk_score)
 VALUES (1, 2, 'SCHEMA-A1', 'credited', 3);
 
+INSERT INTO web_founder_referral_reward_codes (
+	referral_id, referrer_reservation_id, referred_reservation_id, code, code_normalized, status
+) VALUES (1, 1, 2, 'VOID-SCHM-AA22', 'VOIDSCHMAA22', 'issued');
+
 INSERT INTO web_entitlements (account_id, type, status, source, code_hint, starts_at, expires_at)
-VALUES (1, 'starter_free_subscription', 'granted', 'referral_2_verified', 'SCHEMA', 1780539000000, 1781143800000);
+VALUES (1, 'starter_free_subscription', 'granted', 'prelaunch_signup', 'SCHEMA', 1780539000000, 1781143800000);
 
 INSERT INTO web_account_characters (
 	account_id, player_id, display_username, normalized_username, slot, is_primary
@@ -90,6 +94,16 @@ if sqlite3 "$db_path" "INSERT INTO web_founder_referrals (referrer_reservation_i
 	exit 1
 fi
 
+if sqlite3 "$db_path" "INSERT INTO web_founder_referral_reward_codes (referral_id, referrer_reservation_id, referred_reservation_id, code, code_normalized, status) VALUES (1, 1, 2, 'VOID-DUPE-AA22', 'VOIDDUPEAA22', 'issued');" >/dev/null 2>&1; then
+	echo "expected duplicate referral reward referral_id to violate reward uniqueness"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_founder_referral_reward_codes (referral_id, referrer_reservation_id, referred_reservation_id, code, code_normalized, status) VALUES (999, 1, 2, 'VOID-SCHM-AA22', 'VOIDSCHMAA22', 'issued');" >/dev/null 2>&1; then
+	echo "expected duplicate referral reward code to violate code uniqueness"
+	exit 1
+fi
+
 if sqlite3 "$db_path" "INSERT INTO web_account_identities (account_id, provider, provider_subject, email_canonical, email_display) VALUES (1, 'google', 'another-google-subject', 'schema@example.com', 'schema@example.com');" >/dev/null 2>&1; then
 	echo "expected duplicate provider per account to violate identity uniqueness"
 	exit 1
@@ -110,6 +124,7 @@ SELECT
 	(SELECT COUNT(*) FROM web_account_characters) AS character_links,
 	(SELECT COUNT(*) FROM web_founder_reservations) AS founder_reservations,
 	(SELECT COUNT(*) FROM web_founder_referrals) AS founder_referrals,
+	(SELECT COUNT(*) FROM web_founder_referral_reward_codes) AS referral_reward_codes,
 	(SELECT COUNT(*) FROM web_entitlements) AS entitlements,
 	(SELECT COUNT(*) FROM web_audit_events) AS audit_events,
 	(SELECT COUNT(*) FROM web_abuse_signals) AS abuse_signals;

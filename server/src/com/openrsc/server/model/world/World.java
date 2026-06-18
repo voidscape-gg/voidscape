@@ -733,6 +733,8 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				player.setChargeTimer(player.getCache().getLong("charge_remaining"));
 			}
 
+			worldAnnouncementService.announceNewPlayerJoined(player);
+
 			return true;
 		}
 		return false;
