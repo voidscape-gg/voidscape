@@ -3986,3 +3986,7 @@ Added an administrator-only ranked reset flow for the current Void Arena season.
 ### 2026-06-14 - Voidscape Discord rich presence branding
 
 Removed the PC client's hardcoded OpenRSC Discord application id, default status copy, and `openrsc_logo` image reference from Discord rich presence. The client now reads `voidscape.discordApplicationId` / `VOIDSCAPE_DISCORD_APPLICATION_ID` and disables RPC when no Voidscape application id is configured, preventing players from advertising the inherited Open RuneScape Classic application. The launcher passes the same Discord branding properties from packaged settings, system properties, or environment variables, and friend-beta packaging can embed them for testers. No packet shape, schema, cache, or client version changed.
+
+### 2026-06-18 - PC client frame pacing Phase 1
+
+Reduced desktop-client frame-pacing hitches without changing server tick rate, opcodes, or gameplay timing. The PC scaled-window handoff no longer blocks the game loop on `SwingUtilities.invokeAndWait`, the interpolation scaler now draws into a reusable buffer instead of allocating stitched scaled images every paint, and live-game roof/wall visibility now updates from cached scene state instead of removing and re-adding roof grid models every frame. Added an opt-in `FramePacingMonitor` controlled by `-Dvoidscape.framePacing=true` so future smoothness work can compare FPS and frame-time consistency in the same scene.

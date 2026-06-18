@@ -873,6 +873,12 @@ public final class mudclient implements Runnable {
 	private boolean isSleeping = false;
 	private int knownPlayerCount = 0;
 	private int lastHeightOffset = -1;
+	private final boolean[][] roofGridVisible = new boolean[4][64];
+	private final boolean[][] wallGridVisible = new boolean[4][64];
+	private boolean roofVisibilityDirty = true;
+	private int roofVisibilityLastPlane = Integer.MIN_VALUE;
+	private boolean roofVisibilityLastHideRoofs = C_HIDE_ROOFS;
+	private boolean roofVisibilityLastShowCover = false;
 	private int lastObjectAnimationNumberFireLightningSpell = -1;
 	private int lastObjectAnimationNumberTorch = -1;
 	private int lastObjectAnimatonNumberClaw = -1;
@@ -1651,7 +1657,9 @@ public final class mudclient implements Runnable {
 						}
 						continue;
 					}
+					long framePacingStartNs = FramePacingMonitor.now();
 					this.draw();
+					FramePacingMonitor.recordFrame("client.draw", framePacingStartNs, FramePacingMonitor.now());
 					currentFPS++;
 					long time = System.currentTimeMillis();
 					if (time - lastFPSUpdate >= 1000) {
@@ -7012,6 +7020,121 @@ public final class mudclient implements Runnable {
 		this.packetHandler.getClientStream().finishPacket();
 	}
 
+	private void markRoofVisibilitySceneModelsLoaded() {
+		for (int plane = 0; plane < 4; plane++) {
+			for (int index = 0; index < 64; index++) {
+				this.roofGridVisible[plane][index] = this.world != null && this.world.modelRoofGrid[plane][index] != null;
+				this.wallGridVisible[plane][index] = this.world != null && this.world.modelWallGrid[plane][index] != null;
+			}
+		}
+		this.roofVisibilityDirty = true;
+		this.roofVisibilityLastPlane = Integer.MIN_VALUE;
+	}
+
+	private void updateRoofVisibilityForCurrentFrame() {
+		if (this.world == null || this.scene == null || this.localPlayer == null || this.lastHeightOffset < 0) {
+			return;
+		}
+
+		cameraZoom = minCameraZoom + (osConfig.C_LAST_ZOOM * 2);
+		boolean showRoofCover = shouldShowRoofCover();
+		updateRoofCameraZoom(showRoofCover);
+
+		if (!this.roofVisibilityDirty
+			&& this.roofVisibilityLastPlane == this.lastHeightOffset
+			&& this.roofVisibilityLastHideRoofs == C_HIDE_ROOFS
+			&& this.roofVisibilityLastShowCover == showRoofCover) {
+			return;
+		}
+
+		for (int index = 0; index < 64; index++) {
+			setRoofGridVisible(this.lastHeightOffset, index, false);
+			if (this.lastHeightOffset == 0) {
+				setWallGridVisible(1, index, false);
+				setRoofGridVisible(1, index, false);
+				setWallGridVisible(2, index, false);
+				setRoofGridVisible(2, index, false);
+				if (showRoofCover) {
+					setRoofGridVisible(0, index, true);
+					setWallGridVisible(1, index, true);
+					setRoofGridVisible(1, index, true);
+					setWallGridVisible(2, index, true);
+					setRoofGridVisible(2, index, true);
+				}
+			}
+		}
+
+		this.roofVisibilityDirty = false;
+		this.roofVisibilityLastPlane = this.lastHeightOffset;
+		this.roofVisibilityLastHideRoofs = C_HIDE_ROOFS;
+		this.roofVisibilityLastShowCover = showRoofCover;
+	}
+
+	private boolean shouldShowRoofCover() {
+		return !C_HIDE_ROOFS && this.lastHeightOffset == 0 && !isLocalPlayerUnderRoofCover();
+	}
+
+	private boolean isLocalPlayerUnderRoofCover() {
+		int tileX = this.localPlayer.currentX / 128;
+		int tileZ = this.localPlayer.currentZ / 128;
+		return tileX >= 0 && tileZ >= 0
+			&& tileX < this.world.collisionFlags.length
+			&& tileZ < this.world.collisionFlags[tileX].length
+			&& (this.world.collisionFlags[tileX][tileZ] & 0x80) != 0;
+	}
+
+	private void updateRoofCameraZoom(boolean showRoofCover) {
+		if (!C_HIDE_ROOFS) {
+			if (!showRoofCover && !this.doCameraZoom) {
+				amountToZoom -= 50;
+				this.doCameraZoom = true;
+			} else if (showRoofCover && this.doCameraZoom) {
+				amountToZoom += 50;
+				this.doCameraZoom = false;
+			}
+		}
+	}
+
+	private void setRoofGridVisible(int plane, int index, boolean visible) {
+		if (plane < 0 || plane >= this.roofGridVisible.length || index < 0 || index >= this.roofGridVisible[plane].length) {
+			return;
+		}
+		RSModel model = this.world.modelRoofGrid[plane][index];
+		if (model == null) {
+			this.roofGridVisible[plane][index] = false;
+			return;
+		}
+		if (this.roofGridVisible[plane][index] == visible) {
+			return;
+		}
+		if (visible) {
+			this.scene.addModel(model);
+		} else {
+			this.scene.removeModel(model);
+		}
+		this.roofGridVisible[plane][index] = visible;
+	}
+
+	private void setWallGridVisible(int plane, int index, boolean visible) {
+		if (plane < 0 || plane >= this.wallGridVisible.length || index < 0 || index >= this.wallGridVisible[plane].length) {
+			return;
+		}
+		RSModel model = this.world.modelWallGrid[plane][index];
+		if (model == null) {
+			this.wallGridVisible[plane][index] = false;
+			return;
+		}
+		if (this.wallGridVisible[plane][index] == visible) {
+			return;
+		}
+		if (visible) {
+			this.scene.addModel(model);
+		} else {
+			this.scene.removeModel(model);
+		}
+		this.wallGridVisible[plane][index] = visible;
+	}
+
 	private void drawGame(int var1) {
 		try {
 
@@ -7082,44 +7205,7 @@ public final class mudclient implements Runnable {
 				} else if (this.world.playerAlive) {
 
 					int centerX;
-					for (centerX = 0; centerX < 64; ++centerX) {
-						this.scene.removeModel(this.world.modelRoofGrid[this.lastHeightOffset][centerX]);
-						if (this.lastHeightOffset == 0) {
-							this.scene.removeModel(this.world.modelWallGrid[1][centerX]);
-							this.scene.removeModel(this.world.modelRoofGrid[1][centerX]);
-							this.scene.removeModel(this.world.modelWallGrid[2][centerX]);
-							this.scene.removeModel(this.world.modelRoofGrid[2][centerX]);
-						}
-
-						// If the player is hiding roofs, we want to skip the camera zoom
-						if (!C_HIDE_ROOFS && !this.doCameraZoom) {
-							amountToZoom -= 50;
-							this.doCameraZoom = true;
-						}
-
-						// Sets camera zoom distance based on last saved value in the player cache
-						cameraZoom = minCameraZoom + (osConfig.C_LAST_ZOOM * 2);
-
-						if ((this.lastHeightOffset == 0
-							&& (world.collisionFlags[this.localPlayer.currentX / 128][this.localPlayer.currentZ
-							/ 128] & 0x80) == 0)) {
-
-							if (!C_HIDE_ROOFS) {
-								this.scene.addModel(this.world.modelRoofGrid[this.lastHeightOffset][centerX]);
-								if (this.lastHeightOffset == 0) {
-									this.scene.addModel(this.world.modelWallGrid[1][centerX]);
-									this.scene.addModel(this.world.modelRoofGrid[1][centerX]);
-									this.scene.addModel(this.world.modelWallGrid[2][centerX]);
-									this.scene.addModel(this.world.modelRoofGrid[2][centerX]);
-								}
-							}
-
-							if (this.doCameraZoom) {
-								amountToZoom += 50;
-								this.doCameraZoom = false;
-							}
-						}
-					}
+					updateRoofVisibilityForCurrentFrame();
 
 					if (this.objectAnimationNumberFireLightningSpell != this.lastObjectAnimationNumberFireLightningSpell) {
 						this.lastObjectAnimationNumberFireLightningSpell = this.objectAnimationNumberFireLightningSpell;
@@ -8352,6 +8438,7 @@ public final class mudclient implements Runnable {
 		final int wantX = this.playerLocalX + this.midRegionBaseX + this.worldOffsetX;
 		final int wantZ = this.playerLocalZ + this.midRegionBaseZ + this.worldOffsetZ;
 		this.world.loadSections(wantX, wantZ, this.lastHeightOffset);
+		markRoofVisibilitySceneModelsLoaded();
 		readdTerrainEditorSceneModels();
 		this.world.playerAlive = true;
 	}
@@ -24027,6 +24114,7 @@ public final class mudclient implements Runnable {
 					this.midRegionBaseZ = midRegionZ * 48 - 48;
 					this.currentRegionMinX = midRegionX * 48 - 32;
 					this.world.loadSections(wantX, wantZ, this.lastHeightOffset);
+					markRoofVisibilitySceneModelsLoaded();
 					this.midRegionBaseZ -= this.worldOffsetZ;
 					this.midRegionBaseX -= this.worldOffsetX;
 					int baseDX = this.midRegionBaseX - oldBaseX;
