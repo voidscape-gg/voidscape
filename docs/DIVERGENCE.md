@@ -27,6 +27,18 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Admin receipt lookup command
+
+Added a private read-only `::receipts` admin command over the item provenance ledger. Admins can inspect recent rows or filter by player, item instance id, catalog id, or provenance command, with compact in-game output showing time, item, source/destination, actor/target, and stored receipt metadata. This keeps the public transparency page aggregate-only while giving trusted operators a fast way to answer "where did this item/card/value come from?" without SSHing into SQLite. No packet, schema, cache, client-version, or gameplay behavior changed; reversibility is removing the command plugin and its command reference.
+
+### 2026-06-19 - Reward and auction provenance coverage
+
+Closed two high-trust item provenance gaps. The Lumbridge Subscription Vendor now writes `item_origin` receipts when starter/signup subscription cards are granted, subscription-card redemption writes a `player_inventory` to `subscription_ledger` transfer after the subscription ledger is extended, and moderator auction deletion writes an `auction_mod_delete` transfer from active listing to the seller's auction collectible queue. Signup-code receipts store only a short code suffix for correlation rather than raw bearer codes. No packet, cache-schema, client-version, or gameplay balance behavior changed; reversibility is removing the receipt calls from the vendor/card/auction paths.
+
+### 2026-06-19 - Automated transparency integrity exports
+
+Documented and reproducibly packaged the live transparency snapshot exporter. `scripts/export-integrity-summary.mjs` now supports `--quiet`/`PORTAL_INTEGRITY_QUIET=1` for timer-friendly one-line journald output, and `Deployment_Scripts/systemd/voidscape-integrity-export.{service,timer}` runs the readonly SQLite scan every five minutes to refresh `/var/lib/voidscape-portal/integrity-summary.json` plus staff-only `integrity-findings.json`. The portal continues to serve only the public-safe summary through `/api/public` and `/api/integrity`; no packet, gameplay, schema, cache, or client-version behavior changed.
+
 ### 2026-06-19 - Project-owned public source mirror
 
 Published a clean public AGPL source mirror under `https://github.com/voidscape-gg/voidscape` and pointed the portal Source tab/build metadata at that project-owned account instead of a personal GitHub. The mirror is a fresh public-source commit with runtime DBs/logs/backups/developer memory and private deploy metadata excluded; the portal trusts deploy build metadata when it explicitly says the mirror commit is clean so the Source tab can report the recorded public baseline. Files: `PUBLIC_SOURCE.md`, `web/portal/dev-server.mjs`, `web/portal/script.js`, `web/portal/transparency.html`, `web/portal/transparency.js`, and `web/portal/build-meta.json`. No gameplay, packet, schema, cache, or client-version behavior changed; reversibility is pointing the metadata/link copy back to another AGPL source host.

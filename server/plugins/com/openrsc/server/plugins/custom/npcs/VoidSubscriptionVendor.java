@@ -2,17 +2,22 @@ package com.openrsc.server.plugins.custom.npcs;
 
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.content.VoidSubscription;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.model.container.Item;
+import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.triggers.OpNpcTrigger;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import static com.openrsc.server.plugins.Functions.inputBox;
 
 public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigger {
+	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int NPC_ID = NpcId.VOID_SUBSCRIPTION_VENDOR.id();
 	private static final String SUBSCRIBE_COMMAND = "Subscribe";
 	private static final Object CLAIM_LOCK = new Object();
@@ -89,7 +94,10 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 			return true;
 		}
 
-		player.getCarriedItems().getInventory().add(new Item(VoidSubscription.CARD_ITEM_ID));
+		if (!grantSubscriptionCard(player, "subscription_vendor", "grant=starter_card")) {
+			player.message("@or1@The vendor could not hand over the card. Try again shortly.");
+			return true;
+		}
 		player.getWorld().getServer().getDatabase()
 			.querySaveGlobalCacheInt(cacheKey, VoidSubscription.STARTER_CARD_CLAIMED);
 		ActionSender.sendInventory(player);
@@ -161,7 +169,10 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 			player.message("@or1@The vendor can't update the void ledger right now. Try again shortly.");
 			return;
 		}
-		player.getCarriedItems().getInventory().add(new Item(VoidSubscription.CARD_ITEM_ID));
+		if (!grantSubscriptionCard(player, "subscription_signup_code", "grant=signup_code code_suffix=" + codeSuffix(code))) {
+			player.message("@or1@The vendor could not hand over the card. Ask staff to check your redeemed code.");
+			return;
+		}
 		ActionSender.sendInventory(player);
 		player.message("@mag@The vendor accepts your signup code and hands you a subscription card.");
 		player.message("@whi@Redeem it when you're ready to start your 7 days of subscription time.");
@@ -172,6 +183,43 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 	private void log(Player player, String message) {
 		player.getWorld().getServer().getGameLogger().addQuery(
 			new GenericLog(player.getWorld(), player.getUsername() + message));
+	}
+
+	private boolean grantSubscriptionCard(final Player player, final String source, final String extra) {
+		final Inventory inventory = player.getCarriedItems().getInventory();
+		if (!inventory.add(new Item(VoidSubscription.CARD_ITEM_ID))) {
+			return false;
+		}
+		recordSubscriptionCardGrant(player, source, newestSubscriptionCardItemID(inventory), extra);
+		return true;
+	}
+
+	private long newestSubscriptionCardItemID(final Inventory inventory) {
+		final int index = inventory.getLastIndexById(VoidSubscription.CARD_ITEM_ID);
+		final Item item = inventory.get(index);
+		return item == null ? 0 : item.getItemId();
+	}
+
+	private void recordSubscriptionCardGrant(final Player player, final String source, final long itemID,
+											 final String extra) {
+		final int x = player.getX();
+		final int y = player.getY();
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, player, "item_origin",
+					source, "player_inventory", "subscription_card_grant", VoidSubscription.CARD_ITEM_ID, 1,
+					false, itemID, x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+	}
+
+	private String codeSuffix(final String code) {
+		if (code == null || code.length() <= 4) {
+			return "";
+		}
+		return code.substring(code.length() - 4);
 	}
 
 	private boolean isVendor(Npc npc) {

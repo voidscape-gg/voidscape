@@ -30,6 +30,9 @@ Admin Commands
 - integrity
   - Usage: `::integrity [summary|recent [limit]|player <name> [limit]]`
   - Shows the latest private economy integrity scan summary and findings for admins.
+- receipts
+  - Usage: `::receipts [recent|player <name>|item <itemID>|catalog <catalogID>|command <name>] [limit]`
+  - Shows private item-provenance receipt rows for admins.
 - winterholidayevent
   - Usage: `::winterholidayevent`
   - Turns on the winter holiday event (spawns tree objects). Note: this is only functional on custom feature worlds, such as Cabbage and Coleslaw.	

@@ -666,6 +666,9 @@ class Daemon:
             if cmd == "bank-close":
                 self.send("BANK_CLOSE")
                 return {"ok": True}
+            if cmd == "auction-delete":
+                self.send("INTERFACE_OPTIONS", P.BitWriter().u8(10).u8(5).u32(int(a["id"])).b)
+                return {"ok": True, "auction_id": int(a["id"])}
             if cmd == "logout":
                 self.send("LOGOUT")
                 return {"ok": True}

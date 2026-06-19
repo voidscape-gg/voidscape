@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Voidscape public integrity summary
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

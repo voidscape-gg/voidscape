@@ -20,6 +20,7 @@ const limit = nonNegativeInteger(args.limit || process.env.PORTAL_INTEGRITY_LIMI
 const maxLevel = positiveInteger(args.maxLevel || process.env.PORTAL_INTEGRITY_MAX_LEVEL || 99, 99);
 const maxXp = positiveInteger(args.maxXp || process.env.PORTAL_INTEGRITY_MAX_XP || 200000000, 200000000);
 const maxStack = positiveInteger(args.maxStack || process.env.PORTAL_INTEGRITY_MAX_STACK || 2147483647, 2147483647);
+const quiet = truthy(args.quiet || process.env.PORTAL_INTEGRITY_QUIET || "");
 
 if (!dbPath || !outputPath) {
 	console.error("Usage: node scripts/export-integrity-summary.mjs --db /path/to/voidscape.db --out /path/to/integrity-summary.json");
@@ -32,14 +33,28 @@ await writeSnapshot(resolve(outputPath), result.snapshot);
 if (findingsPath) {
 	await writeSnapshot(resolve(findingsPath), result.findings);
 }
-console.log(JSON.stringify({
+const output = {
 	ok: true,
 	outputPath: resolve(outputPath),
 	findingsPath: findingsPath ? resolve(findingsPath) : null,
 	staffCommands: result.snapshot.staffCommands,
 	itemProvenance: result.snapshot.itemProvenance,
 	economyScans: result.snapshot.economyScans
-}, null, 2));
+};
+if (quiet) {
+	console.log(JSON.stringify({
+		ok: true,
+		generatedAt: result.snapshot.generatedAt,
+		staffCommands: result.snapshot.staffCommands.status,
+		itemProvenance: result.snapshot.itemProvenance.status,
+		economyScans: result.snapshot.economyScans.status,
+		flagged: result.snapshot.economyScans.flagged || 0,
+		outputPath: resolve(outputPath),
+		findingsPath: findingsPath ? resolve(findingsPath) : null
+	}));
+} else {
+	console.log(JSON.stringify(output, null, 2));
+}
 
 async function buildSnapshot(sqliteDbPath) {
 	const staffCommands = await staffCommandSummary(sqliteDbPath);
@@ -613,6 +628,10 @@ function nonNegativeInteger(value, fallback) {
 function positiveInteger(value, fallback) {
 	const number = Number(value);
 	return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+
+function truthy(value) {
+	return /^(1|true|yes|on)$/i.test(String(value || ""));
 }
 
 function safeInteger(value) {

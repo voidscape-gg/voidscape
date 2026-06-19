@@ -9967,10 +9967,23 @@ body.prelaunch-mode .prelaunch-page.landing-redesign .landing-trust-teaser p:not
 body.transparency-mode .prelaunch-page.landing-redesign .transparency-page-inner {
 	min-height: 100vh;
 	padding-bottom: 18px;
+	overflow-x: hidden;
+	overflow-y: visible;
 	background:
 		linear-gradient(180deg, rgba(3, 3, 6, 0.12), rgba(3, 3, 6, 0.42) 36%, #030305 70%),
 		url("assets/generated/hero-rsc-skeleton-void.jpg") top center / 100% auto no-repeat,
 		#030305;
+}
+
+body.transparency-mode {
+	overflow-x: hidden;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
+body.transparency-mode .prelaunch-page.landing-redesign {
+	overflow-x: hidden;
+	overflow-y: visible;
 }
 
 body.transparency-mode .prelaunch-page.landing-redesign .transparency-hub {

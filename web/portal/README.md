@@ -56,6 +56,18 @@ Notes:
 - Export the public-safe integrity snapshot and private economy findings from the game machine, then copy/sync the public snapshot to the portal host:
   `PORTAL_OPENRSC_DB=/path/to/voidscape.db PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json node scripts/export-integrity-summary.mjs`
 - `integrity-summary.json` is safe for the website. `integrity-findings.json` is staff-only and powers `::integrity` on the game server.
+- On the single-host beta VPS, install `Deployment_Scripts/systemd/voidscape-integrity-export.{service,timer}` into `/etc/systemd/system/` to refresh those files every five minutes:
+
+```bash
+sudo cp Deployment_Scripts/systemd/voidscape-integrity-export.service /etc/systemd/system/
+sudo cp Deployment_Scripts/systemd/voidscape-integrity-export.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now voidscape-integrity-export.timer
+sudo systemctl start voidscape-integrity-export.service
+systemctl list-timers 'voidscape-integrity-export.timer'
+journalctl -u voidscape-integrity-export.service -n 20 --no-pager
+```
+
 - Back up the signup list: it is one file, `$PORTAL_DATA_DIR/dev-store.json` (atomic writes). A cron copy or the CSV export both work as backups.
 - Pull the list any time: `curl -H "x-portal-admin-token: $TOKEN" "https://yourdomain.com/api/admin/signups?format=csv"`.
 - Launch day, to make codes redeemable in-game: copy `dev-store.json` from the public host into a `PORTAL_DATA_DIR` on the game machine, run the portal there with `PORTAL_OPENRSC_DB=/path/to/voidscape.db` (loopback is fine, no public mode needed), and `curl -X POST -H "x-portal-admin-token: $TOKEN" http://127.0.0.1:8788/api/admin/signups/sync`. Already-redeemed codes are skipped; the endpoint is idempotent.
