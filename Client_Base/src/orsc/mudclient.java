@@ -274,6 +274,8 @@ public final class mudclient implements Runnable {
 		{20, 35}, {28, 35}, {22, 40}, {26, 40}, {24, 33}
 	};
 	private static final int VOID_COLOSSUS_NPC_ID = 852;
+	private static final int DM_KING_NPC_ID = 862;
+	private static final int DM_KING_ARENA_NPC_ID = 863;
 	private static final int VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET = 420;
 	private static final int VOID_COLOSSUS_COMBAT_LEVEL = 350;
 	private static final int STANDARD_PLAYER_PROJECTILE_Y_OFFSET = 110;
@@ -1039,6 +1041,8 @@ public final class mudclient implements Runnable {
 	private final Map<String, Sprite> voidscapeUiSkinSlices = new HashMap<>();
 	private final Map<String, Integer> voidArenaRatingsByName = new HashMap<>();
 	private final Map<String, Boolean> voidArenaRankedEligibleByName = new HashMap<>();
+	private int voidArenaDmKingWins = -1;
+	private int voidArenaDmKingLosses = -1;
 	private final ArrayList<VoidscapeSavedAccount> voidscapeSavedAccounts = new ArrayList<>();
 	private boolean voidscapeLoginAssetLoadAttempted = false;
 	private boolean settingsGearIconLoadAttempted = false;
@@ -1979,6 +1983,20 @@ public final class mudclient implements Runnable {
 			return fallbackName;
 		}
 		return fallbackName + " @yel@(" + (rating >= 0 ? Integer.toString(rating) : "unranked") + ")";
+	}
+
+	private String voidArenaNpcMenuName(int npcId, String fallbackName) {
+		if (!isDmKingNpc(npcId) || !isLocalPlayerInsideVoidArena()) {
+			return fallbackName;
+		}
+		if (this.voidArenaDmKingWins < 0 || this.voidArenaDmKingLosses < 0) {
+			return fallbackName;
+		}
+		return fallbackName + " @yel@(" + this.voidArenaDmKingWins + "-" + this.voidArenaDmKingLosses + ")";
+	}
+
+	private boolean isDmKingNpc(int npcId) {
+		return npcId == DM_KING_NPC_ID || npcId == DM_KING_ARENA_NPC_ID;
 	}
 
 	private void addPlayerToMenu(int index) {
@@ -11411,6 +11429,8 @@ public final class mudclient implements Runnable {
 		if ("clear".equals(payload)) {
 			this.voidArenaRatingsByName.clear();
 			this.voidArenaRankedEligibleByName.clear();
+			this.voidArenaDmKingWins = -1;
+			this.voidArenaDmKingLosses = -1;
 			this.showDialogVoidArenaDeathMatch = false;
 			this.voidArenaCountdownEndMillis = 0L;
 			return true;
@@ -11445,6 +11465,15 @@ public final class mudclient implements Runnable {
 			this.voidArenaDeathMatchRankedAvailable = "1".equals(parts[9]);
 			this.showDialogVoidArenaDeathMatch = true;
 			this.mouseButtonClick = 0;
+			return true;
+		}
+		if (parts.length >= 3 && "dmking".equals(parts[0])) {
+			int wins = parseIntOrDefault(parts[1], -1);
+			int losses = parseIntOrDefault(parts[2], -1);
+			if (wins >= 0 && losses >= 0) {
+				this.voidArenaDmKingWins = wins;
+				this.voidArenaDmKingLosses = losses;
+			}
 			return true;
 		}
 		if (parts.length < 5 || !"rating".equals(parts[0])) {
@@ -13523,6 +13552,8 @@ public final class mudclient implements Runnable {
 								String var11 = "";
 								int levelDifference = 0;
 								int var13 = this.npcs[var9].npcId;
+								String npcName = EntityHandler.getNpcDef(var13).getName();
+								String voidArenaChallengeNpcName = voidArenaNpcMenuName(var13, npcName);
 								boolean attackOnlyVoidKnight = isVoidKnightAttackOnlyNpc(var13);
 								if (EntityHandler.getNpcDef(var13).isAttackable()) {
 									int npcLevel = (EntityHandler.getNpcDef(var13).getStr()
@@ -13578,7 +13609,7 @@ public final class mudclient implements Runnable {
 								if (this.selectedSpell >= 0) {
 									if (EntityHandler.getSpellDef(selectedSpell).getSpellType() == 2) {
 										this.menuCommon.addCharacterItem_WithID(this.npcs[var9].serverIndex,
-											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName(),
+											"@yel@" + npcName,
 											MenuItemAction.NPC_CAST_SPELL,
 											"Cast " + EntityHandler.getSpellDef(selectedSpell).getName() + " on",
 											this.selectedSpell);
@@ -13589,13 +13620,13 @@ public final class mudclient implements Runnable {
 											if (levelDifference >= -1 && inWild) {
 												this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex, MenuItemAction.NPC_ATTACK1,
 													"Attack",
-													"@whi@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName()
+													"@whi@" + npcName
 														+ var11);
 											} else {
 												this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 													levelDifference >= 0 ? MenuItemAction.NPC_ATTACK1 : MenuItemAction.NPC_ATTACK2,
 													"Attack",
-													"@whi@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName()
+													"@whi@" + npcName
 														+ var11);
 											}
 										} else {
@@ -13605,42 +13636,42 @@ public final class mudclient implements Runnable {
 											this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 												npcAttackAction,
 												"Attack",
-												"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName()
+												"@yel@" + npcName
 													+ var11);
 										}
 									}
 									if (developerMenu) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.DEV_REMOVE_NPC, "@gr2@Remove NPC",
-											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+											"@yel@" + npcName);
 									}
 
 									if (!attackOnlyVoidKnight && this.npcs[var9].npcId != VOID_COLOSSUS_NPC_ID) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_TALK_TO, "Talk-to",
-											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+											"@yel@" + npcName);
 									}
 
 									if (!attackOnlyVoidKnight && !EntityHandler.getNpcDef(var13).getCommand1().equals("")) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_COMMAND1, EntityHandler.getNpcDef(var13).getCommand1(),
-											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+											"@yel@" + voidArenaChallengeNpcName);
 									}
 									if (!attackOnlyVoidKnight
 										&& EntityHandler.getNpcDef(var13).getCommand2() != null
 										&& !EntityHandler.getNpcDef(var13).getCommand2().equals("")) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_COMMAND2, EntityHandler.getNpcDef(var13).getCommand2(),
-											"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName());
+											"@yel@" + npcName);
 									}
 
 									this.menuCommon.addCharacterItem(this.npcs[var9].npcId, MenuItemAction.NPC_EXAMINE,
 										"Examine",
-										"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName()
+										"@yel@" + npcName
 											+ (localPlayer.isDev() ? " @or1@(" + this.npcs[var9].npcId + ")" : ""));
 								} else {
 									this.menuCommon.addCharacterItem_WithID(this.npcs[var9].serverIndex,
-										"@yel@" + EntityHandler.getNpcDef(this.npcs[var9].npcId).getName(),
+										"@yel@" + npcName,
 										MenuItemAction.NPC_USE_ITEM, "Use " + this.m_ig + " with",
 										this.selectedItemInventoryIndex);
 								}

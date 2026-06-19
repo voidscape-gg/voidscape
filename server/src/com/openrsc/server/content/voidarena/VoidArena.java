@@ -66,6 +66,10 @@ public final class VoidArena {
 	private static final int DM_KING_PRAYER_POINTS = 1;
 	private static final String DM_KING_KIT_CACHE = "void_arena_dmking_kit_snapshot";
 	private static final String DM_KING_BROADCAST_CACHE = "void_arena_dmking_broadcast";
+	private static final String DM_KING_WINS_CACHE = "void_arena_dmking_wins";
+	private static final String DM_KING_LOSSES_CACHE = "void_arena_dmking_losses";
+	private static final int DM_KING_INITIAL_WINS = 300;
+	private static final int DM_KING_INITIAL_LOSSES = 0;
 	public static final String DM_KING_DYNAMIC_ATTRIBUTE = "void_arena_dm_king_dynamic";
 	public static final String DM_KING_OWNER_ATTRIBUTE = "void_arena_dm_king_owner";
 	private static final long SEASON_RESET_CONFIRM_MS = 2 * 60 * 1000;
@@ -157,7 +161,7 @@ public final class VoidArena {
 	public Point handlePlayerDeath(Player loser, Mob killer) {
 		DmKingChallenge dmKingChallenge = activeDmKingChallenges.get(loser.getUsernameHash());
 		if (dmKingChallenge != null && dmKingChallenge.king == killer) {
-			resolveDmKingLoss(dmKingChallenge, loser, "DM King defeated you.", false);
+			resolveDmKingLoss(dmKingChallenge, loser, "DM King defeated you.", false, true);
 			loser.setInstanceId(0);
 			return VoidArenaConfig.lobbyTile();
 		}
@@ -178,7 +182,7 @@ public final class VoidArena {
 		removeChallenges(player);
 		DmKingChallenge dmKingChallenge = activeDmKingChallenges.get(player.getUsernameHash());
 		if (dmKingChallenge != null) {
-			resolveDmKingLoss(dmKingChallenge, player, "", true);
+			resolveDmKingLoss(dmKingChallenge, player, "", true, true);
 			sendRatingClear(player);
 			player.setInstanceId(0);
 			player.setLocation(VoidArenaConfig.exitTile(), true);
@@ -199,6 +203,17 @@ public final class VoidArena {
 		sendRatingClear(player);
 		player.setInstanceId(0);
 		player.setLocation(VoidArenaConfig.exitTile(), true);
+	}
+
+	public void handleLogin(Player player) {
+		recoverDmKingKit(player);
+		if (player == null || !VoidArenaConfig.isInsideVoidArena(player.getLocation())) {
+			return;
+		}
+		sendLobbyRatings(player);
+		if (VoidArenaConfig.isInsideLobby(player.getLocation())) {
+			broadcastLobbyRating(player);
+		}
 	}
 
 	public void handleInterfaceOption(Player player, int action, int targetServerIndex, int ruleMask) {
@@ -477,6 +492,31 @@ public final class VoidArena {
 				+ (isRankedEligible(subject) ? "1" : "0"));
 	}
 
+	private boolean supportsDmKingRecordDisplay(Player player) {
+		return player != null && player.isUsingCustomClient()
+			&& player.getClientVersion() >= DM_KING_CLIENT_VERSION;
+	}
+
+	private void sendDmKingRecordPayload(Player viewer) {
+		sendDmKingRecordPayload(viewer, loadDmKingRecord());
+	}
+
+	private void sendDmKingRecordPayload(Player viewer, DmKingRecord record) {
+		if (!supportsDmKingRecordDisplay(viewer) || record == null) {
+			return;
+		}
+		ActionSender.sendMessage(viewer,
+			"@vsarena@dmking|" + record.wins + "|" + record.losses);
+	}
+
+	private void broadcastDmKingRecord(DmKingRecord record) {
+		for (Player viewer : world.getPlayers()) {
+			if (VoidArenaConfig.isInsideVoidArena(viewer.getLocation())) {
+				sendDmKingRecordPayload(viewer, record);
+			}
+		}
+	}
+
 	private void sendLobbyRatings(Player viewer) {
 		if (!supportsRatingDisplay(viewer)) {
 			return;
@@ -486,6 +526,7 @@ public final class VoidArena {
 				sendRatingPayload(viewer, subject);
 			}
 		}
+		sendDmKingRecordPayload(viewer);
 	}
 
 	private void broadcastLobbyRating(Player subject) {
@@ -967,10 +1008,13 @@ public final class VoidArena {
 		challenge.finished = true;
 		challenge.event.stop();
 		cleanupDmKingNpc(challenge.king);
+		DmKingRecord record = recordDmKingResult(false);
 		finishDmKingSession(player, true);
 		player.playerServerMessage(MessageType.QUEST,
 			"@mag@DM King defeated: @whi@You beat the perfect death matcher.");
 		sendDmKingSummary(player, summary);
+		sendDmKingRecordPayload(player, record);
+		broadcastDmKingRecord(record);
 		PlayerTitle.unlock(player, PlayerTitle.DM_KINGSLAYER);
 		if (!player.getCache().hasKey(DM_KING_BROADCAST_CACHE)) {
 			player.getCache().store(DM_KING_BROADCAST_CACHE, true);
@@ -979,16 +1023,22 @@ public final class VoidArena {
 		}
 	}
 
-	private void resolveDmKingLoss(DmKingChallenge challenge, Player player, String message, boolean disconnectLoss) {
+	private void resolveDmKingLoss(DmKingChallenge challenge, Player player, String message, boolean disconnectLoss,
+								   boolean recordDmKingWin) {
 		DmKingSummary summary = captureDmKingSummary(challenge, player);
 		activeDmKingChallenges.remove(challenge.playerHash, challenge);
 		challenge.finished = true;
 		challenge.event.stop();
 		cleanupDmKingNpc(challenge.king);
+		DmKingRecord record = recordDmKingWin ? recordDmKingResult(true) : null;
 		finishDmKingSession(player, !disconnectLoss);
 		if (message != null && !message.isEmpty() && player != null && player.loggedIn()) {
 			player.playerServerMessage(MessageType.QUEST, "@mag@DM King challenge ended: @whi@" + message);
 			sendDmKingSummary(player, summary);
+			sendDmKingRecordPayload(player, record);
+		}
+		if (record != null) {
+			broadcastDmKingRecord(record);
 		}
 	}
 
@@ -997,7 +1047,7 @@ public final class VoidArena {
 			return;
 		}
 		Player player = world.getPlayer(challenge.playerHash);
-		resolveDmKingLoss(challenge, player, "time limit reached.", false);
+		resolveDmKingLoss(challenge, player, "time limit reached.", false, true);
 	}
 
 	private void finishDmKingSession(Player player, boolean moveToLobby) {
@@ -1084,6 +1134,40 @@ public final class VoidArena {
 		}
 		Long ownerHash = king.getAttribute(DM_KING_OWNER_ATTRIBUTE, null);
 		return ownerHash == null ? null : activeDmKingChallenges.get(ownerHash);
+	}
+
+	private synchronized DmKingRecord recordDmKingResult(boolean dmKingWon) {
+		DmKingRecord current = loadDmKingRecord();
+		DmKingRecord next = dmKingWon
+			? new DmKingRecord(current.wins + 1, current.losses)
+			: new DmKingRecord(current.wins, current.losses + 1);
+		saveDmKingRecord(next);
+		return next;
+	}
+
+	private DmKingRecord loadDmKingRecord() {
+		return new DmKingRecord(
+			loadGlobalCacheInt(DM_KING_WINS_CACHE, DM_KING_INITIAL_WINS),
+			loadGlobalCacheInt(DM_KING_LOSSES_CACHE, DM_KING_INITIAL_LOSSES));
+	}
+
+	private int loadGlobalCacheInt(String cacheKey, int defaultValue) {
+		try {
+			Integer value = world.getServer().getDatabase().queryLoadGlobalCacheInt(cacheKey);
+			return value == null ? defaultValue : Math.max(0, value);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to load Void Arena global cache key {}", cacheKey, e);
+			return defaultValue;
+		}
+	}
+
+	private void saveDmKingRecord(DmKingRecord record) {
+		try {
+			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_WINS_CACHE, record.wins);
+			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_LOSSES_CACHE, record.losses);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to save DM King record", e);
+		}
 	}
 
 	private boolean supportsDeathMatchSetup(Player player) {
@@ -1993,7 +2077,7 @@ public final class VoidArena {
 				return;
 			}
 			if (king == null || king.isRemoved()) {
-				resolveDmKingLoss(this, player, "DM King vanished from the arena.", false);
+				resolveDmKingLoss(this, player, "DM King vanished from the arena.", false, false);
 				event.stop();
 				return;
 			}
@@ -2150,6 +2234,16 @@ public final class VoidArena {
 			this.castDelayTicks = castDelayTicks;
 			this.castDelayMs = castDelayMs;
 			this.castsUsed = castsUsed;
+		}
+	}
+
+	private static final class DmKingRecord {
+		private final int wins;
+		private final int losses;
+
+		private DmKingRecord(int wins, int losses) {
+			this.wins = wins;
+			this.losses = losses;
 		}
 	}
 

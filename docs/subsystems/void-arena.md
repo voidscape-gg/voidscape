@@ -58,3 +58,5 @@ There are no hidden boss heals, forced damage, infinite supplies, ranged attacks
 The first victory unlocks the reusable manual `DM Kingslayer` player title and sends a one-time global broadcast for that player. Repeat victories send personal completion feedback only.
 
 Each completed win, loss, or timeout also reports the leftover swordfish counts for the player and DM King against their actual starting capacities plus DM King's effective Fire Blast cadence in milliseconds and game ticks.
+
+The DM King lobby right-click `Challenge` row also shows his global W/L record. It defaults to `300-0` when no persisted cache exists, stores counters in global cache keys `void_arena_dmking_wins` and `void_arena_dmking_losses`, increments wins when DM King defeats/times out/logouts a challenger, and increments losses when a player beats him. Talking to DM King uses a 256-combination taunt pool and avoids immediately repeating the same line to the same player.
