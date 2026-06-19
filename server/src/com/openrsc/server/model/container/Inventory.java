@@ -2,6 +2,7 @@ package com.openrsc.server.model.container;
 
 import com.openrsc.server.constants.IronmanMode;
 import com.openrsc.server.constants.Quests;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.DeathLog;
 import com.openrsc.server.database.struct.PlayerInventory;
 import com.openrsc.server.external.Gauntlets;
@@ -492,8 +493,9 @@ public class Inventory {
 
 		// Remove items from inventory and drop them to either: the player, the mob, or the world
 		while (iterator.hasNext()) {
-			Item item = iterator.next();
-			item = new Item(item.getCatalogId(), item.getAmount(), item.getNoted());
+			Item deathItem = iterator.next();
+			final long itemID = deathItem.getItemId();
+			Item item = new Item(deathItem.getCatalogId(), deathItem.getAmount(), deathItem.getNoted());
 
 			// Try to remove the item from the player's inventory
 			if (player.getCarriedItems().remove(item, false) == -1) continue;
@@ -506,6 +508,7 @@ public class Inventory {
 				final GroundItem groundItem = new GroundItem(player.getWorld(), item.getCatalogId(), player.getX(),
 					player.getY(), item.getAmount(), player, item.getNoted());
 				player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
+				recordDeathDrop(item, itemID, mob, "death_untradable", "ground_owner", player);
 				continue;
 			}
 
@@ -516,6 +519,7 @@ public class Inventory {
 				player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
 
 				groundItem.setAttribute("killedByMob", player.getUsernameHash());
+				recordDeathDrop(item, itemID, mob, mob == null ? "death_unknown" : "death_pve", "ground_public", null);
 
 				continue;
 			}
@@ -532,6 +536,8 @@ public class Inventory {
 			groundItem.setAttribute("killerHash", playerMob.getUsernameHash());
 
 			player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
+			recordDeathDrop(item, itemID, mob, dropOwner == player ? "death_pvp_ironman" : "death_pvp",
+				dropOwner == player ? "ground_owner" : "ground_killer", dropOwner);
 		}
 
 		deathLog.build();
@@ -555,6 +561,37 @@ public class Inventory {
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipmentStats(player);
 		player.getUpdateFlags().setAppearanceChanged(true);
+	}
+
+	private void recordDeathDrop(final Item item, final long itemID, final Mob killer, final String source,
+								 final String destination, final Player target) {
+		final int catalogID = item.getCatalogId();
+		final int amount = item.getAmount();
+		final boolean noted = item.getNoted();
+		final int x = player.getX();
+		final int y = player.getY();
+		final String extra = deathDropExtra(killer);
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, target, "item_transfer",
+					source, destination, "death_drop", catalogID, amount, noted, itemID, x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+	}
+
+	private String deathDropExtra(final Mob killer) {
+		if (killer == null) {
+			return "killer=none";
+		}
+		if (killer.isNpc()) {
+			return "killer=npc:" + killer.getID();
+		}
+		if (killer.isPlayer()) {
+			return "killer=player";
+		}
+		return "killer=mob";
 	}
 
 	//----------------------------------------------------------------

@@ -2,6 +2,7 @@ package com.openrsc.server.net;
 
 import com.google.common.base.Objects;
 import com.openrsc.server.Server;
+import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.model.entity.UnregisterForcefulness;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -20,6 +21,7 @@ import java.net.InetSocketAddress;
 
 public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implements AttributeMap {
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int CHANNEL_CLOSED_RECONNECT_GRACE_MS = 5000;
 
 	public static final AttributeKey<ConnectionAttachment> attachment = AttributeKey.valueOf("conn-attachment");
 
@@ -147,7 +149,27 @@ public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implement
 		}
 		if (player != null) {
 			if (player.getChannel() == channel) {
-				player.unregister(UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Channel closed");
+				final Player disconnectingPlayer = player;
+				final Channel closedChannel = channel;
+				getServer().getGameEventHandler().add(
+					new DelayedEvent(disconnectingPlayer.getWorld(), disconnectingPlayer,
+						CHANNEL_CLOSED_RECONNECT_GRACE_MS, "Channel closed reconnect grace") {
+						public void run() {
+							try {
+								Channel currentChannel = disconnectingPlayer.getChannel();
+								if ((currentChannel == null || currentChannel == closedChannel)
+									&& disconnectingPlayer.loggedIn()) {
+									disconnectingPlayer.unregister(
+										UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Channel closed");
+								} else {
+									LOGGER.info("Player " + disconnectingPlayer.getUsername()
+										+ " resumed before channel-closed unregister.");
+								}
+							} finally {
+								stop();
+							}
+						}
+					});
 			} else {
 				LOGGER.info("Ignoring stale channel unregister for player " + player.getUsername());
 			}

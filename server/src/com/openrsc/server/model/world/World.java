@@ -219,7 +219,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				registerGameObject(new GameObject(getWorld(), loc));
 				if (forceFullBlock) {
 					getTile(loc.getX(), loc.getY()).traversalMask |= 64;
-				}
+			}
 			}
 		});
 	}
@@ -253,7 +253,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				&& npc.getY() <= maxY) {
 				if (!npc.inCombat()) {
 					return npc;
-				}
+			}
 			}
 		}
 		return null;
@@ -368,7 +368,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				int pidSearchMod = pidSearch % getServer().getConfig().MAX_PLAYERS;
 				if (indices.contains(pidSearchMod) && pidSearchMod != excludePid) {
 					return players.get(pidSearchMod);
-				}
+			}
 			}
 		}
 		return null;
@@ -546,15 +546,15 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			case SCENERY:
 				if (o.getGameObjectDef().getType() != 1 && o.getGameObjectDef().getType() != 2) {
 					return;
-				}
+			}
 				int width, height;
 				if (dir == 0 || dir == 4) {
 					width = o.getGameObjectDef().getWidth();
 					height = o.getGameObjectDef().getHeight();
-				} else {
+			} else {
 					height = o.getGameObjectDef().getWidth();
 					width = o.getGameObjectDef().getHeight();
-				}
+			}
 				for (int x = o.getX(); x < o.getX() + width; ++x) {
 					for (int y = o.getY(); y < o.getY() + height; ++y) {
 						if (isProjectileClipAllowed(o)) {
@@ -580,31 +580,31 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 								getTile(x, y - 1).traversalMask |= CollisionFlag.WALL_SOUTH;
 						}
 					}
-				}
+			}
 				break;
 
 			case BOUNDARY:
 				if (o.getDoorDef().getDoorType() != 1) {
 					return;
-				}
+			}
 				int x = o.getX(), y = o.getY();
 				if (isProjectileClipAllowed(o)) {
 					handleProjectileClipAllowance(x, y, dir, o.getType(), -1, o.getDoorDef().getDoorType());
-				}
+			}
 				if (dir == 0) {
 
 					getTile(x, y).traversalMask |= CollisionFlag.WALL_NORTH;
 					if (getTile(x, y - 1) != null)
 						getTile(x, y - 1).traversalMask |= CollisionFlag.WALL_SOUTH;
-				} else if (dir == 1) {
+			} else if (dir == 1) {
 					getTile(x, y).traversalMask |= CollisionFlag.WALL_EAST;
 					if (getTile(x - 1, y) != null)
 						getTile(x - 1, y).traversalMask |= CollisionFlag.WALL_WEST;
-				} else if (dir == 2) {
+			} else if (dir == 2) {
 					getTile(x, y).traversalMask |= CollisionFlag.FULL_BLOCK_A;
-				} else if (dir == 3) {
+			} else if (dir == 3) {
 					getTile(x, y).traversalMask |= CollisionFlag.FULL_BLOCK_B;
-				}
+			}
 				break;
 		}
 	}
@@ -617,14 +617,14 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				if (!o.getGameObjectDef().getName().equalsIgnoreCase("tree")) {
 					if (o.getGameObjectDef().getHeight() == 1 && o.getGameObjectDef().getWidth() == 1 && !o.getGameObjectDef().getName().toLowerCase().equalsIgnoreCase("chest"))
 						return true;
-				}
+			}
 				if (o.getGameObjectDef().getName().toLowerCase().equalsIgnoreCase(s)) {
 					return true;
-				}
+			}
 			} else if (o.getType() == 1) {
 				if (o.getDoorDef().getName().toLowerCase().equalsIgnoreCase(s)) {
 					return true;
-				}
+			}
 			}
 		}
 		return false;
@@ -689,7 +689,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 					public void action() {
 						unregisterItem(i);
 					}
-				});
+			});
 			}
 		} catch (Exception e) {
 			i.remove();
@@ -817,15 +817,15 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			case SCENERY:
 				if (o.getGameObjectDef().getType() != 1 && o.getGameObjectDef().getType() != 2) {
 					return;
-				}
+			}
 				int width, height;
 				if (dir == 0 || dir == 4) {
 					width = o.getGameObjectDef().getWidth();
 					height = o.getGameObjectDef().getHeight();
-				} else {
+			} else {
 					height = o.getGameObjectDef().getWidth();
 					width = o.getGameObjectDef().getHeight();
-				}
+			}
 				for (int x = o.getX(); x < o.getX() + width; ++x) {
 					for (int y = o.getY(); y < o.getY() + height; ++y) {
 						if (isProjectileClipAllowed(o)) {
@@ -847,29 +847,29 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 							getTile(x, y - 1).traversalMask &= 65535 - 4;
 						}
 					}
-				}
+			}
 				break;
 			case BOUNDARY:
 				if (o.getDoorDef().getDoorType() != 1) {
 					return;
-				}
+			}
 				int x = o.getX(), y = o.getY();
 
 				if (isProjectileClipAllowed(o)) {
 					resetProjectileAllowance(x, y, dir, o.getType(), -1, o.getDoorDef().getDoorType());
-				}
+			}
 
 				if (dir == 0) {
 					getTile(x, y).traversalMask &= 0xfffe;
 					getTile(x, y - 1).traversalMask &= 65535 - 4;
-				} else if (dir == 1) {
+			} else if (dir == 1) {
 					getTile(x, y).traversalMask &= 0xfffd;
 					getTile(x - 1, y).traversalMask &= 65535 - 8;
-				} else if (dir == 2) {
+			} else if (dir == 2) {
 					getTile(x, y).traversalMask &= 0xffef;
-				} else if (dir == 3) {
+			} else if (dir == 3) {
 					getTile(x, y).traversalMask &= 0xffdf;
-				}
+			}
 				break;
 		}
 	}
@@ -911,9 +911,9 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 					if (avatarGenerator != null) {
 						avatarGenerator.generateAvatar(player.getDatabaseID(), player.getSettings().getAppearance(), player.getWornItems());
 					}
-				} catch (final Exception e){
+			} catch (final Exception e){
 					LOGGER.error("Error generating avatar: ", e);
-				}
+			}
 			}
 			getServer().getPluginHandler().handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player});
 			player.resetSceneryMorph();
@@ -932,7 +932,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 					getServer().getPcapLogger().addJob(pcap::exportPCAP);
 					LOGGER.info("Wrote out pcap for " + player.getUsername() + " at " + pcap.fname);
-				}
+			}
 			}
 
 			getServer().getPacketFilter().removeLoggedInPlayer(player.getCurrentIP(), player.getUsernameHash());
@@ -947,7 +947,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 						if (playerChannel != null) {
 							if (playerChannel.hasAttr(attachment)) {
 								playerChannel.attr(attachment).set(null);
-							}
+						}
 							player.close();
 							getServer().getPacketFilter().removePlayerConnPacket(playerChannel);
 						}
@@ -957,7 +957,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 						player.unsetChannel();
 						stop();
 					}
-				}
+			}
 			});
 		} catch (final Exception e) {
 			LOGGER.error("Exception in unregisterPlayer", e);
@@ -1089,7 +1089,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				if (local == null) {
 					local = new com.openrsc.server.model.TelePointGraph(this);
 					telePointGraph = local;
-				}
+			}
 			}
 		}
 		return local;
@@ -1149,22 +1149,25 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		return getServer().bench(() -> {
 			GlobalMessage gm;
 			while ((gm = getServer().getWorld().getNextGlobalMessage()) != null) {
+				if (getServer().getDiscordService() != null) {
+					getServer().getDiscordService().globalChatRelay(gm.getPlayer(), gm.getMessage());
+				}
 				for (final Player player : getPlayers()) {
-						if (player == gm.getPlayer()) {
-							player.getWorld().getServer().getGameLogger().addQuery(new PMLog(player.getWorld(), player.getUsername(), gm.getMessage(),
-								"Global$"));
-							ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
-						} else {
-							if (!player.getBlockGlobalFriend()) {
-								boolean blockNone = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
-									== PlayerSettings.BlockingMode.None.id();
-								boolean blockNonFriend = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
-									== PlayerSettings.BlockingMode.NonFriends.id();
-								if ((blockNone || blockNonFriend) && !player.getSocial().isIgnoring(gm.getPlayer().getUsernameHash()) || gm.getPlayer().isMod()) {
-									ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
-								}
+					if (player == gm.getPlayer()) {
+						player.getWorld().getServer().getGameLogger().addQuery(new PMLog(player.getWorld(), player.getUsername(), gm.getMessage(),
+							"Global$"));
+						ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
+					} else {
+						if (!player.getBlockGlobalFriend()) {
+							boolean blockNone = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
+								== PlayerSettings.BlockingMode.None.id();
+							boolean blockNonFriend = player.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, player.isUsingCustomClient())
+								== PlayerSettings.BlockingMode.NonFriends.id();
+							if ((blockNone || blockNonFriend) && !player.getSocial().isIgnoring(gm.getPlayer().getUsernameHash()) || gm.getPlayer().isMod()) {
+								ActionSender.sendMessage(player, null, MessageType.GLOBAL_CHAT, formatGlobalQuestMessage(gm), 0, null);
 							}
 						}
+					}
 				}
 			}
 		});

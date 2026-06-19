@@ -33,6 +33,8 @@ import java.sql.SQLException;
  * 20 - ban (permanent)
  * 21 - globaldrop
  * 22 - wipeitems
+ * 23 - stat change
+ * 24 - command audit
  */
 
 public final class StaffLog extends Query {

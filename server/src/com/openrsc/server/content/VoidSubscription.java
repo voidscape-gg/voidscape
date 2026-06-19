@@ -7,6 +7,7 @@ import com.openrsc.server.model.entity.player.Player;
 public final class VoidSubscription {
 	public static final String ACCOUNT_ID_CACHE_KEY = "web_account_id";
 	public static final String ACCOUNT_SUBSCRIPTION_CACHE_PREFIX = "acct_sub:";
+	public static final String PLAYER_SUBSCRIPTION_CACHE_PREFIX = "char_sub:";
 	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
 	public static final int STARTER_CARD_AVAILABLE = 1;
 	public static final int STARTER_CARD_CLAIMED = 2;
@@ -40,16 +41,16 @@ public final class VoidSubscription {
 		if (player == null) {
 			return 0L;
 		}
-		int accountId = getAccountId(player);
-		if (accountId <= 0) {
+		String cacheKey = subscriptionCacheKey(player);
+		if (cacheKey.isEmpty()) {
 			return 0L;
 		}
 		long now = System.currentTimeMillis();
-		long base = Math.max(now, getAccountExpiresAt(player, true));
+		long base = Math.max(now, getSubscriptionExpiresAt(player, true));
 		long expiresAt = Long.MAX_VALUE - base < DURATION_MILLIS ? Long.MAX_VALUE : base + DURATION_MILLIS;
 		try {
 			player.getWorld().getServer().getDatabase()
-				.querySaveGlobalCacheLong(accountSubscriptionCacheKey(accountId), expiresAt);
+				.querySaveGlobalCacheLong(cacheKey, expiresAt);
 			cacheAccountExpiresAt(player, expiresAt);
 		} catch (Exception ex) {
 			return 0L;
@@ -61,7 +62,7 @@ public final class VoidSubscription {
 		if (player == null) {
 			return 0L;
 		}
-		return getAccountExpiresAt(player, false);
+		return getSubscriptionExpiresAt(player, false);
 	}
 
 	public static String formatRemaining(long remainingMillis) {
@@ -157,7 +158,7 @@ public final class VoidSubscription {
 	}
 
 	public static void refreshAccountSubscription(Player player) {
-		getAccountExpiresAt(player, true);
+		getSubscriptionExpiresAt(player, true);
 	}
 
 	private static String accountSubscriptionCacheKey(int accountId) {
@@ -167,9 +168,24 @@ public final class VoidSubscription {
 		return ACCOUNT_SUBSCRIPTION_CACHE_PREFIX + accountId;
 	}
 
-	private static long getAccountExpiresAt(Player player, boolean force) {
+	private static String playerSubscriptionCacheKey(int playerId) {
+		if (playerId <= 0) {
+			return "";
+		}
+		return PLAYER_SUBSCRIPTION_CACHE_PREFIX + playerId;
+	}
+
+	private static String subscriptionCacheKey(Player player) {
 		int accountId = getAccountId(player);
-		if (accountId <= 0) {
+		if (accountId > 0) {
+			return accountSubscriptionCacheKey(accountId);
+		}
+		return player == null ? "" : playerSubscriptionCacheKey(player.getDatabaseID());
+	}
+
+	private static long getSubscriptionExpiresAt(Player player, boolean force) {
+		String cacheKey = subscriptionCacheKey(player);
+		if (cacheKey.isEmpty()) {
 			return 0L;
 		}
 		long now = System.currentTimeMillis();
@@ -181,7 +197,7 @@ public final class VoidSubscription {
 
 		try {
 			Long expiresAt = player.getWorld().getServer().getDatabase()
-				.queryLoadGlobalCacheLong(accountSubscriptionCacheKey(accountId));
+				.queryLoadGlobalCacheLong(cacheKey);
 			long value = expiresAt == null ? 0L : expiresAt;
 			cacheAccountExpiresAt(player, value);
 			return value;

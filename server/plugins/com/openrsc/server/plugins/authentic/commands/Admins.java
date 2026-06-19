@@ -873,6 +873,7 @@ public final class Admins implements CommandTrigger {
 		}
 
 		player.getWorld().registerItem(new GroundItem(player.getWorld(), item));
+		recordStaffItemMint(player, null, command, "ground_spawn", id, amount, false, "respawn=" + respawnTime);
 		player.message(messagePrefix + "Added ground item to database: " + player.getWorld().getServer().getEntityHandler().getItemDef(item.getId()).getName() + " with item ID " + item.getId() + " at " + itemLocation);
 	}
 
@@ -1131,10 +1132,17 @@ public final class Admins implements CommandTrigger {
 		}
 
 		boolean successAddingItem = false;
+		int addedAmount = 0;
 		if (p.getWorld().getServer().getEntityHandler().getItemDef(id).isStackable()) {
 			successAddingItem = p.getCarriedItems().getInventory().add(new Item(id, amount));
+			if (successAddingItem) {
+				addedAmount = amount;
+			}
 		} else if (noted && p.getWorld().getServer().getEntityHandler().getItemDef(id).isNoteable()) {
 			successAddingItem = p.getCarriedItems().getInventory().add(new Item(id, amount, true));
+			if (successAddingItem) {
+				addedAmount = amount;
+			}
 		} else {
 			for (int i = 0; i < amount; i++) {
 				if (!p.getWorld().getServer().getEntityHandler().getItemDef(id).isStackable()) {
@@ -1143,11 +1151,15 @@ public final class Admins implements CommandTrigger {
 						return;
 					}
 				}
-				successAddingItem = p.getCarriedItems().getInventory().add(new Item(id, 1));
+				if (p.getCarriedItems().getInventory().add(new Item(id, 1))) {
+					successAddingItem = true;
+					addedAmount++;
+				}
 			}
 		}
 
 		if (successAddingItem) {
+			recordStaffItemMint(player, p, command, "inventory", id, addedAmount, noted, "");
 			player.message(messagePrefix + "You have spawned " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername());
 			if (player.getUsernameHash() != p.getUsernameHash() && !player.isInvisibleTo(p)) {
 				p.message(messagePrefix + "A staff member has given you " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName());
@@ -1243,19 +1255,55 @@ public final class Admins implements CommandTrigger {
 			return;
 		}
 
-		p.getBank().add(new Item(id, amount));
-
-		player.message(messagePrefix + "You have spawned to bank " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername());
-		if (player.getUsernameHash() != p.getUsernameHash() && !player.isInvisibleTo(p)) {
-			p.message(messagePrefix + "A staff member has added to your bank " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName());
+		if (p.getBank().add(new Item(id, amount))) {
+			recordStaffItemMint(player, p, command, "bank", id, amount, false, "");
+			player.message(messagePrefix + "You have spawned to bank " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername());
+			if (player.getUsernameHash() != p.getUsernameHash() && !player.isInvisibleTo(p)) {
+				p.message(messagePrefix + "A staff member has added to your bank " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName());
+			}
+		} else {
+			player.message(messagePrefix + "Something went wrong spawning " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername() + "'s bank");
 		}
 	}
 
 	private void spawnItemBankFill(Player player) {
+		int added = 0;
 		for (int i = 0; i < (player.getWorld().getServer().getConfig().WANT_CUSTOM_BANKS ? ItemId.maxCustom : 192); i++) {
-			player.getBank().add(new Item(i, 50), false);
+			if (player.getBank().add(new Item(i, 50), false)) {
+				added++;
+			}
+		}
+		if (added > 0) {
+			recordStaffItemMint(player, player, "fillbank", "bank_fill", 0, added, false, "amount_each=50");
 		}
 		player.message("Added bank items.");
+	}
+
+	private void recordStaffItemMint(final Player actor, final Player target, final String command,
+									 final String destination, final int catalogID, final int amount,
+									 final boolean noted, final String extra) {
+		if (actor == null || amount <= 0) {
+			return;
+		}
+
+		final String provenanceCommand = limitProvenanceValue(command == null ? "" : command.toLowerCase(), 32);
+		final String provenanceDestination = limitProvenanceValue(destination, 32);
+		final String provenanceExtra = limitProvenanceValue(extra, 255);
+		actor.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				actor.getWorld().getServer().getDatabase().addStaffItemProvenanceEvent(
+					actor, target, provenanceCommand, provenanceDestination, catalogID, amount, noted, 0, provenanceExtra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+	}
+
+	private String limitProvenanceValue(final String value, final int limit) {
+		if (value == null) {
+			return "";
+		}
+		return value.length() <= limit ? value : value.substring(0, limit);
 	}
 
 	private void removeItemBankAll(Player player, String targetPlayerName) {
@@ -1514,6 +1562,7 @@ public final class Admins implements CommandTrigger {
 			}
 			for (Item item : bisList) {
 				player.getCarriedItems().getInventory().add(item);
+				recordStaffItemMint(player, player, "bestinslot", "best_in_slot", item.getCatalogId(), item.getAmount(), item.getNoted(), "");
 				Item getItem = player.getCarriedItems().getInventory().get(
 					player.getCarriedItems().getInventory().getLastIndexById(item.getCatalogId())
 				);

@@ -1,20 +1,24 @@
 package com.openrsc.server.plugins.shared;
 
 import com.openrsc.server.constants.AppearanceId;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
-import com.openrsc.server.plugins.triggers.DropObjTrigger;
 import com.openrsc.server.util.rsc.DataConversions;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Optional;
 
 import static com.openrsc.server.plugins.Functions.*;
 
 public class DropObject {
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	public static void batchDrop(Player player, Item item, Boolean fromInventory, int amountToDrop, int totalToDrop, int invIndex) {
 		Item searchItem;
 		boolean found = false;
@@ -91,6 +95,7 @@ public class DropObject {
 		player.getWorld().registerItem(groundItem, config().GAME_TICK * 300);
 		player.getWorld().getServer().getGameLogger().addQuery(new GenericLog(player.getWorld(), player.getUsername() + " dropped " + item.getDef(player.getWorld()).getName() + " x"
 			+ DataConversions.numberFormat(groundItem.getAmount()) + " at " + player.getLocation().toString()));
+		recordPlayerDrop(player, item, removingThisIteration, fromInventory);
 
 		// Display the Dropping x/y message only if we want batching,
 		// we're dropping more than one item, and the item isn't a stack.
@@ -104,5 +109,22 @@ public class DropObject {
 			delay();
 			batchDrop(player, item, fromInventory, amountToDrop, totalToDrop, -1);
 		}
+	}
+
+	private static void recordPlayerDrop(Player player, Item item, int amount, boolean fromInventory) {
+		final String source = fromInventory ? "player_inventory" : "player_equipment";
+		final long itemID = item.getItemId();
+		final int catalogID = item.getCatalogId();
+		final boolean noted = item.getNoted();
+		final int x = player.getX();
+		final int y = player.getY();
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, player, "item_transfer",
+					source, "ground_player_drop", "drop", catalogID, amount, noted, itemID, x, y, "manual_drop=true");
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
 	}
 }

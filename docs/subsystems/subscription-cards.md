@@ -15,10 +15,10 @@ Voidscape subscription is an account-level timed XP boost unlocked by redeeming 
 - Right-click command: `Redeem`.
 - Client sprite id `617`, packed into `Client_Base/Cache/video/Authentic_Sprites.orsc` at archive entry `2767`.
 - Cards are tradable. The free starter card and any later paid/earned cards are the same item.
-- Redeeming consumes the clicked card and stores/extends the account-wide `acct_sub:<webAccountId>` timestamp in the global `player_cache` row (`playerID = 0`).
-- Characters must carry a `web_account_id` cache entry before redeeming, which portal-created characters receive automatically.
+- Redeeming consumes the clicked card and stores/extends the account-wide `acct_sub:<webAccountId>` timestamp in the global `player_cache` row (`playerID = 0`) when the character is linked to a portal account.
+- Unlinked beta characters can redeem physical cards too. Their fallback timestamp is `char_sub:<playerId>` in the same global `player_cache` ledger, so tradable public-beta cards still work before portal linking exists for that character.
 - If the account is already subscribed, redeeming another card extends the expiry by 7 days from the current account expiry.
-- Unlinked characters are unsubscribed; the server does not read character-scoped subscription flags.
+- Unlinked character-scoped time does not transfer to other characters. Linking later resumes the account-wide `acct_sub:<webAccountId>` ledger.
 
 ## Lumbridge Vendor
 
@@ -42,6 +42,7 @@ The public prelaunch landing page (email + username, no account) hands out one-t
 
 - The portal mints `VOID-XXXX-XXXX` (alphabet excludes 0/O/1/I/L/U), one per canonical email; re-signing up with the same email returns the same code.
 - During beta, each credited founder invite also mints one referral reward `VOID-XXXX-XXXX` code for the referrer. These reward codes are not account-bound; they use the same global cache ledger and the same vendor input flow as public signup codes.
+- During in-game beta character creation, a new player can enter the inviter's in-game name on the appearance screen. The server validates the IGN, rejects self-referrals and obvious same-connection alt referrals using the inviter's saved login/creation IPs, stores one `refcode:<newPlayerId>` reward entry on the inviter, mints a real `VOID-XXXX-XXXX` code into the same signup-code ledger, and lets the inviter review earned codes with `::codes`.
 - Issued codes are reserved as global cache rows: `playerID = 0`, `key = signup_code:<NORMALIZED CODE>`, `value = 1` (issued) / `2` (redeemed). Normalization uppercases and strips non-alphanumerics, so `void-abcd-2345` and `VOID ABCD 2345` both work.
 - Redemption is part of the vendor dialogue: talking to the Void Subscription Vendor (NPC 848) with no account-reserved card pops the custom client's text input box ("Got a signup code from the website?"). The plugin blocks in `Functions.inputBox` (mirrors `multi()`: 60s timeout; cancel sends nothing and surfaces as timeout; the reply arrives via `INTERFACE_OPTIONS` sub-option 9 and is ignored unless `input_box_pending` is set). On a valid code it marks the row redeemed *before* granting one Subscription card 1602, so a partial failure can never mint two cards. Full inventory refuses without consuming the code. Requires custom client `10087+` (`ActionSender.supportsInputBox`); older clients are told to update.
 - The vendor is non-exclusive during the prompt: the plugin clears the NPC's busy/interaction state before showing the popup, so multiple players can enter codes simultaneously instead of queueing behind "the vendor is busy". Single-use correctness comes from the redeem lock plus the ledger value, not NPC exclusivity.
@@ -63,7 +64,7 @@ curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-vendor-claim
 curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-card-redeem
 ```
 
-The claim scenario uses the real client NPC command packet against NPC `848`, verifies the vendor does not open a shop, and saves before/after screenshots under `tmp/workbench/screenshots/`. A successful starter-card claim should change `starter_card:<webAccountId>` from `1` to `2` and add exactly one `1602` inventory item. The redeem scenario then sends the real inventory item command packet, consumes item `1602`, and writes `acct_sub:<webAccountId>` with a future expiry. Logging another character linked to the same `web_account_id` should show the same active subscription in the portal. Running the claim scenario again without resetting the marker should not add a second free card. If the inventory is full, the marker should remain `1`, no extra `1602` should be saved, and the chat warning should tell the player to free one inventory slot.
+The claim scenario uses the real client NPC command packet against NPC `848`, verifies the vendor does not open a shop, and saves before/after screenshots under `tmp/workbench/screenshots/`. A successful starter-card claim should change `starter_card:<webAccountId>` from `1` to `2` and add exactly one `1602` inventory item. The redeem scenario then sends the real inventory item command packet, consumes item `1602`, and writes `acct_sub:<webAccountId>` with a future expiry for linked characters or `char_sub:<playerId>` for unlinked beta characters. Logging another character linked to the same `web_account_id` should show the same active subscription in the portal. Running the claim scenario again without resetting the marker should not add a second free card. If the inventory is full, the marker should remain `1`, no extra `1602` should be saved, and the chat warning should tell the player to free one inventory slot.
 
 ## Client Definitions
 

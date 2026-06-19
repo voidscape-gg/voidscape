@@ -235,6 +235,7 @@ public abstract class GameDatabase {
 	public abstract AuctionItemSummary[] queryHotAuctionItems(final long since, final int limit) throws GameDatabaseException;
 	public abstract AuctionSale[] queryRecentAuctionSales(final int limit) throws GameDatabaseException;
 	public abstract void queryClearAuctionWorkbenchFixture(final String marker, final String sellerUsername, final String buyerUsername) throws GameDatabaseException;
+	public abstract void queryInsertItemProvenanceEvent(final ItemProvenanceEvent event) throws GameDatabaseException;
 
 	public abstract void querySavePlayerData(int playerId, PlayerData playerData) throws GameDatabaseException;
 
@@ -755,7 +756,7 @@ public abstract class GameDatabase {
 	}
 
 	public void addAuctionSale(final MarketItem item, final int amount, final int unitPrice, final int totalPrice,
-							   final int tax, final Player buyer) throws GameDatabaseException {
+								   final int tax, final Player buyer) throws GameDatabaseException {
 		final AuctionSale sale = new AuctionSale();
 		sale.auctionID = item.getAuctionID();
 		sale.itemID = item.getCatalogID();
@@ -769,6 +770,62 @@ public abstract class GameDatabase {
 		sale.buyerUsername = buyer.getUsername();
 		sale.soldAt = System.currentTimeMillis() / 1000;
 		queryInsertAuctionSale(sale);
+	}
+
+	public void addStaffItemProvenanceEvent(final Player actor, final Player target, final String command,
+											final String destination, final int catalogID, final int amount,
+											final boolean noted, final long itemID, final String extra)
+		throws GameDatabaseException {
+		addItemProvenanceEvent(actor, target, "staff_mint", "staff_command", destination, command, catalogID, amount,
+			noted, itemID, actor == null ? 0 : actor.getX(), actor == null ? 0 : actor.getY(), extra);
+	}
+
+	public void addItemProvenanceEvent(final Player actor, final Player target, final String eventType,
+									   final String source, final String destination, final String command,
+									   final int catalogID, final int amount, final boolean noted,
+									   final long itemID, final int x, final int y, final String extra)
+		throws GameDatabaseException {
+		final ItemProvenanceEvent event = new ItemProvenanceEvent();
+		event.itemID = itemID;
+		event.catalogID = catalogID;
+		event.amount = amount;
+		event.noted = noted;
+		event.actorID = actor == null ? 0 : actor.getDatabaseID();
+		event.actorUsername = actor == null ? "" : actor.getUsername();
+		event.targetID = target == null ? 0 : target.getDatabaseID();
+		event.targetUsername = target == null ? "" : target.getUsername();
+		event.eventType = eventType;
+		event.source = source;
+		event.destination = destination;
+		event.command = command;
+		event.x = x;
+		event.y = y;
+		event.time = System.currentTimeMillis() / 1000;
+		event.extra = extra;
+		addItemProvenanceEvent(event);
+	}
+
+	public void addItemProvenanceEvent(final ItemProvenanceEvent event) throws GameDatabaseException {
+		event.itemID = Math.max(0, event.itemID);
+		event.catalogID = Math.max(0, event.catalogID);
+		event.amount = Math.max(1, event.amount);
+		event.actorID = Math.max(0, event.actorID);
+		event.actorUsername = limitProvenanceText(event.actorUsername, 12);
+		event.targetID = Math.max(0, event.targetID);
+		event.targetUsername = limitProvenanceText(event.targetUsername, 12);
+		event.eventType = limitProvenanceText(event.eventType, 32);
+		event.source = limitProvenanceText(event.source, 32);
+		event.destination = limitProvenanceText(event.destination, 32);
+		event.command = limitProvenanceText(event.command, 32);
+		if (event.time <= 0) event.time = System.currentTimeMillis() / 1000;
+		event.extra = limitProvenanceText(event.extra, 255);
+		queryInsertItemProvenanceEvent(event);
+	}
+
+	private static String limitProvenanceText(final String value, final int maxLength) {
+		if (value == null) return "";
+		if (value.length() <= maxLength) return value;
+		return value.substring(0, maxLength);
 	}
 
 	public AuctionItemSummary[] getAuctionItemSummaries(final long since) throws GameDatabaseException {

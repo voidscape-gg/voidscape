@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.parsers.impl;
 
 import com.openrsc.server.constants.Constants;
 import com.openrsc.server.constants.custom.*;
+import com.openrsc.server.content.BetaReferralReward;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.Packet;
@@ -358,7 +359,11 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case COMBAT_STYLE_CHANGED:
 				return packet.getLength() == 1;
 			case PLAYER_APPEARANCE_CHANGE:
-				return packet.getLength() == 10 || packet.getLength() == 11;
+				return packet.getLength() == 10 || packet.getLength() == 11
+					|| (player != null
+						&& player.getClientVersion() >= BetaReferralReward.CLIENT_VERSION
+						&& packet.getLength() >= 12
+						&& packet.getLength() <= 24);
 			case QUESTION_DIALOG_ANSWER:
 				return packet.getLength() == 1;
 			case BANK_SAVE_PRESET:
@@ -514,6 +519,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				pl.isOneXp = packet.readByte();
 				if (packet.getLength() >= 11) {
 					pl.hairStyle = packet.readUnsignedByte();
+				}
+				if (packet.getReadableBytes() > 0 && player.getClientVersion() >= BetaReferralReward.CLIENT_VERSION) {
+					pl.referralName = packet.readString().trim();
 				}
 				result = pl;
 				break;

@@ -1741,6 +1741,32 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public void queryInsertItemProvenanceEvent(final ItemProvenanceEvent event) throws GameDatabaseException {
+		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().insertItemProvenanceEvent)) {
+			statement.setLong(1, event.itemID);
+			statement.setInt(2, event.catalogID);
+			statement.setInt(3, event.amount);
+			statement.setInt(4, event.noted ? 1 : 0);
+			statement.setInt(5, event.actorID);
+			statement.setString(6, event.actorUsername);
+			statement.setInt(7, event.targetID);
+			statement.setString(8, event.targetUsername);
+			statement.setString(9, event.eventType);
+			statement.setString(10, event.source);
+			statement.setString(11, event.destination);
+			statement.setString(12, event.command);
+			statement.setInt(13, event.x);
+			statement.setInt(14, event.y);
+			statement.setLong(15, event.time);
+			statement.setString(16, event.extra);
+
+			statement.executeUpdate();
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+	}
+
+	@Override
 	public AuctionItemSummary[] queryAuctionItemSummaries(final long since) throws GameDatabaseException {
 		final ArrayList<AuctionItemSummary> summaries = new ArrayList<>();
 		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().auctionItemSummaries)) {

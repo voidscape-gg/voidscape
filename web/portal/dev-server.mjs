@@ -17,11 +17,21 @@ const bindHost = process.env.PORTAL_BIND_HOST || "127.0.0.1";
 const trustProxyHeader = process.env.PORTAL_TRUST_PROXY === "1";
 // Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
 const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
+const betaMode = process.env.PORTAL_BETA_MODE === "1" || process.env.PORTAL_PUBLIC_BETA === "1";
+const betaOpenAtIso = configuredIsoTimestamp("PORTAL_BETA_OPEN_AT", process.env.PORTAL_BETA_OPEN_AT || "");
+const betaSignupCounterBase = configuredNonNegativeInteger("PORTAL_BETA_COUNTER_BASE", process.env.PORTAL_BETA_COUNTER_BASE || "132");
+const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
+const betaSignupCounterSeed = process.env.PORTAL_BETA_COUNTER_SEED || "voidscape-public-beta";
 const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
 const storePath = join(dataDir, "dev-store.json");
+const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(dataDir, "integrity-summary.json");
+const buildMetadataPath = process.env.PORTAL_BUILD_META || join(rootDir, "build-meta.json");
+const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "https://github.com/voidscape-gg/voidscape";
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
+const portalSessionStorageKey = "voidscape.portal.sessionToken";
 const maxCharacters = 10;
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
+const oauthStateTtlMs = 1000 * 60 * 10;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const openRscAccountIdCacheKey = "web_account_id";
@@ -35,24 +45,47 @@ const signupCodeRedeemed = 2;
 const starterFreeSubscriptionType = "starter_free_subscription";
 const baseCombatXpRate = 10;
 const baseSkillXpRate = 2;
+const sha256Cache = new Map();
 const subscriptionXpBonus = 1;
 const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || 5));
 const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
 const abuseHashSalt = process.env.PORTAL_ABUSE_HASH_SALT || "voidscape-portal-dev";
 const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
+const discordApiBase = process.env.PORTAL_DISCORD_API_BASE || "https://discord.com/api/v10";
+const discordClientId = process.env.PORTAL_DISCORD_CLIENT_ID || "";
+const discordClientSecret = process.env.PORTAL_DISCORD_CLIENT_SECRET || "";
+const discordRedirectUri = process.env.PORTAL_DISCORD_REDIRECT_URI || "";
+const discordGuildId = process.env.PORTAL_DISCORD_GUILD_ID || "";
+const discordBotToken = process.env.PORTAL_DISCORD_BOT_TOKEN || "";
+const discordMemberRoleId = process.env.PORTAL_DISCORD_MEMBER_ROLE_ID || "";
+const discordBetaRoleId = process.env.PORTAL_DISCORD_BETA_ROLE_ID || "";
+const discordOauthScopes = (process.env.PORTAL_DISCORD_SCOPES || "identify guilds.join")
+	.split(/[,\s]+/)
+	.map((scope) => scope.trim())
+	.filter(Boolean);
 const downloadArtifacts = [
 	{
-		slug: "pc-client",
-		label: "PC client",
-		filename: "Open_RSC_Client.jar",
-		path: join(repoRoot, "Client_Base/Open_RSC_Client.jar")
+		slug: "client-runtime",
+		label: "Voidscape client runtime",
+		filename: "VoidscapeClient.jar",
+		path: configuredDownloadPath("PORTAL_PC_CLIENT_JAR", join(repoRoot, "Client_Base/Open_RSC_Client.jar")),
+		contentType: "application/java-archive",
+		publicDownload: false
 	},
 	{
 		slug: "launcher",
-		label: "Launcher",
-		filename: "OpenRSC.jar",
-		path: join(repoRoot, "PC_Launcher/OpenRSC.jar")
+		label: "Voidscape launcher",
+		filename: "VoidscapeLauncher.jar",
+		path: configuredDownloadPath("PORTAL_LAUNCHER_JAR", join(repoRoot, "PC_Launcher/OpenRSC.jar")),
+		contentType: "application/java-archive"
+	},
+	{
+		slug: "android-apk",
+		label: "Android APK",
+		filename: "Voidscape-Android-Beta.apk",
+		path: configuredDownloadPath("PORTAL_ANDROID_APK", join(repoRoot, "Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk")),
+		contentType: "application/vnd.android.package-archive"
 	}
 ];
 const clientCacheDir = join(repoRoot, "Client_Base/Cache");
@@ -68,6 +101,37 @@ const launcherRuntimeFiles = new Set([
 	"launchersettings.conf",
 	"voidscapelauncher.properties"
 ]);
+
+function configuredDownloadPath(envName, fallbackPath) {
+	const configuredPath = process.env[envName];
+	return configuredPath ? resolve(repoRoot, configuredPath) : fallbackPath;
+}
+
+function configuredIsoTimestamp(envName, value) {
+	if (!value) return "";
+	const timestamp = Date.parse(value);
+	if (!Number.isFinite(timestamp)) {
+		throw new Error(`${envName} must be an ISO-8601 date/time`);
+	}
+	return new Date(timestamp).toISOString();
+}
+
+function configuredNonNegativeInteger(envName, value) {
+	const number = Number(value);
+	if (!Number.isInteger(number) || number < 0) {
+		throw new Error(`${envName} must be a non-negative integer`);
+	}
+	return number;
+}
+
+function configuredBetaSignupCounterStartedAt() {
+	const explicit = configuredIsoTimestamp("PORTAL_BETA_COUNTER_STARTED_AT", process.env.PORTAL_BETA_COUNTER_STARTED_AT || "");
+	if (explicit) return explicit;
+	if (betaOpenAtIso) {
+		return new Date(Date.parse(betaOpenAtIso) - 72 * 60 * 60 * 1000).toISOString();
+	}
+	return "2026-06-15T00:00:00.000Z";
+}
 
 const kits = {
 	warrior: {
@@ -132,6 +196,174 @@ const publicContent = {
 	]
 };
 
+const betaContent = {
+	commands: [
+		{ group: "Report", access: "All testers", command: "::bug <what happened>", note: "Sends your name, location, and report to the Discord bug feed. One report per minute." },
+		{ group: "Chat", access: "All testers", command: "::g <message>", note: "Global chat with country flag styling. Alias: ::pk." },
+		{ group: "Chat", access: "All testers", command: "::p <message>", note: "Party chat when testing group flows." },
+		{ group: "Info", access: "All testers", command: "::gameinfo", note: "Shows account/player/server details useful for support screenshots." },
+		{ group: "Info", access: "All testers", command: "::commands", note: "Shows the built-in player command help pages." },
+		{ group: "Info", access: "All testers", command: "::coords", note: "Shows your current world coordinates for repro notes." },
+		{ group: "Info", access: "All testers", command: "::online", note: "Shows the current online count." },
+		{ group: "Info", access: "All testers", command: "::onlinelist", note: "Lists online testers for repro groups." },
+		{ group: "Info", access: "All testers", command: "::onlinelistlocs", note: "Lists online testers with locations when location visibility is enabled." },
+		{ group: "Info", access: "All testers", command: "::uniqueonline", note: "Shows unique online player count." },
+		{ group: "Info", access: "All testers", command: "::time", note: "Prints server date/time." },
+		{ group: "Void Arena", access: "All testers", command: "::arena help", note: "Shows Void Arena command help. Alias: ::voidarena." },
+		{ group: "Void Arena", access: "All testers", command: "::arena enter", note: "Teleport to the ranked Death Match lobby at 600, 2914." },
+		{ group: "Void Arena", access: "All testers", command: "::arena challenge <player>", note: "Challenge an online player. Alias: ::arena fight <player>. Ranked fights expect maxed melee stats." },
+		{ group: "Void Arena", access: "All testers", command: "::arena stats", note: "Shows your rating, wins, and losses after 5 placement matches." },
+		{ group: "Void Arena", access: "All testers", command: "::arena top", note: "Shows the ranked leaderboard." },
+		{ group: "Void Arena", access: "All testers", command: "::arena leave", note: "Leave the Void Arena lobby." },
+		{ group: "Progression", access: "All testers", command: "::rested", note: "Shows rested-XP pool and cap status." },
+		{ group: "Progression", access: "All testers", command: "::titles", note: "Open the title catalogue UI." },
+		{ group: "Progression", access: "All testers", command: "::titles unlocked", note: "Show unlocked title count and choices." },
+		{ group: "Progression", access: "All testers", command: "::titles unique", note: "Show unique one-owner titles." },
+		{ group: "Progression", access: "All testers", command: "::titles rarest", note: "Show rare title page." },
+		{ group: "Progression", access: "All testers", command: "::title <id or name>", note: "Equip an unlocked title." },
+		{ group: "Progression", access: "All testers", command: "::title clear", note: "Remove your active title." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam list", note: "Show current rare-drop beam settings." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam defaults", note: "Show default beam-worthy items." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam add <item id/name>", note: "Add a custom item to your loot beam list." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam remove <item id/name>", note: "Remove or hide an item from beam settings." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam mode default|custom", note: "Choose default-plus-custom or custom-only beams." },
+		{ group: "Loot beams", access: "All testers", command: "::lootbeam reset", note: "Restore default rare-drop beam behavior." },
+		{ group: "Minigames", access: "All testers", command: "::leave", note: "Exit PK Catching Simulator early." },
+		{ group: "Settings", access: "All testers", command: "::togglereceipts", note: "Toggle shop receipt messages." },
+		{ group: "Settings", access: "All testers", command: "::toggleglobalchat", note: "Toggle global chat display." },
+		{ group: "Settings", access: "All testers", command: "::toggleblockchat", note: "Toggle local chat blocking." },
+		{ group: "Settings", access: "All testers", command: "::toggleblockprivate", note: "Toggle private message blocking while testing social flows." },
+		{ group: "Settings", access: "All testers", command: "::toggleblocktrade", note: "Toggle trade request blocking." },
+		{ group: "Settings", access: "All testers", command: "::toggleblockduel", note: "Toggle duel request blocking." },
+		{ group: "Movement", access: "Beta admin", command: "::goto <x> <y>", note: "Teleport to exact test coordinates." },
+		{ group: "Movement", access: "Beta admin", command: "::goto <town>", note: "Teleport to a named town if configured." },
+		{ group: "Movement", access: "Beta admin", command: "::return", note: "Return after teleport/summon flows when available." },
+		{ group: "Movement", access: "Beta admin", command: "::pf <x> <y>", note: "Check whether world pathfinding can route there." },
+		{ group: "Movement", access: "Beta admin", command: "::pathto <x> <y>", note: "Autowalk to coordinates using server pathfinding." },
+		{ group: "Utility", access: "Beta admin", command: "::quickbank", note: "Open your bank immediately." },
+		{ group: "Utility", access: "Beta admin", command: "::quickauction", note: "Open the Auction House immediately." },
+		{ group: "Utility", access: "Beta admin", command: "::workbenchahfixture", note: "Seed deterministic Auction House listings and market intel rows." },
+		{ group: "Inventory", access: "Beta admin", command: "::item <id/name> <amount>", note: "Spawn an item into your inventory. Use sparingly around economy tests." },
+		{ group: "Inventory", access: "Beta admin", command: "::item <id/name> <amount> <player>", note: "Spawn an item for an online tester." },
+		{ group: "Inventory", access: "Beta admin", command: "::certeditem <id/name> <amount>", note: "Spawn a noted/certed item when noteable." },
+		{ group: "Stats", access: "Beta admin", command: "::setstat <level>", note: "Set all your levels for gate testing." },
+		{ group: "Stats", access: "Beta admin", command: "::setstat <level> <skill>", note: "Set one level, such as ::setstat 60 attack." },
+		{ group: "Stats", access: "Beta admin", command: "::setxp <experience> <skill>", note: "Set one skill's XP for progression edge cases." },
+		{ group: "Combat", access: "Beta admin", command: "::heal", note: "Restore hits." },
+		{ group: "Combat", access: "Beta admin", command: "::recharge", note: "Restore prayer." },
+		{ group: "Combat", access: "Beta admin", command: "::beastmode", note: "Equip a high-power admin combat kit for boss/combat testing." },
+		{ group: "Combat", access: "Beta admin", command: "::skull <player>", note: "Skull a player for Wilderness PK announcement tests." },
+		{ group: "Combat", access: "Beta admin", command: "::unskull <player>", note: "Remove a player's skull." },
+		{ group: "Telemetry", access: "Beta admin", command: "::announcepreview skill|total|pk", note: "Preview milestone and PK world messages." },
+		{ group: "Telemetry", access: "Beta admin", command: "::balancereport", note: "Show beta telemetry summary." },
+		{ group: "Telemetry", access: "Beta admin", command: "::balancereport xp|players|npcs|drops", note: "Inspect XP, player, NPC-kill, or drop telemetry." },
+		{ group: "Telemetry", access: "Beta admin", command: "::balancereport reset", note: "Clear the in-memory telemetry window." },
+		{ group: "Telemetry", access: "Beta admin", command: "::gatherstreak <skill> <resource-key> [failures]", note: "Seed gathering dry-streak protection for local testing." },
+		{ group: "World load", access: "Beta admin", command: "::wildhobdebug status", note: "Show adaptive Wilderness hobgoblin spawn state." },
+		{ group: "World load", access: "Beta admin", command: "::wildhobdebug <0-20>", note: "Simulate unique-IP pressure for dynamic hobgoblins." },
+		{ group: "World load", access: "Beta admin", command: "::wildhobdebug off", note: "Clear simulated hobgoblin pressure." },
+		{ group: "World load", access: "Beta admin", command: "::dropwave <npc_id> <count> <radius>", note: "Credit-kill NPCs using their normal drop tables. Example: ::dropwave 67 10 3." },
+		{ group: "World load", access: "Beta admin", command: "::loadbots start <count> <radius> <intervalTicks>", note: "Spawn synthetic players for local crowd/path testing." },
+		{ group: "World load", access: "Beta admin", command: "::loadbots status", note: "Show synthetic load-bot state." },
+		{ group: "World load", access: "Beta admin", command: "::loadbots stop", note: "Remove synthetic load-test players." },
+		{ group: "World load", access: "Beta admin", command: "::voidrushbots <count>", note: "Queue a Void Rush run with bots." },
+		{ group: "World load", access: "Beta admin", command: "::cinematic bossfight <actors> <bossNpcId> <radius>", note: "Spawn a staged cinematic boss scene." },
+		{ group: "World load", access: "Beta admin", command: "::cinematic stop", note: "Clean up the cinematic scene." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::atnpc <npcId>", note: "Walk to and attack nearest visible NPC of that id through the real action path." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::atobject <objId> [2]", note: "Walk to and operate nearest scenery object; 2 uses the alternate command." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::talknpc <npcId>", note: "Walk to and talk to nearest visible NPC." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::opnpc <npcId> [cmd|2]", note: "Operate the nearest NPC menu command." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::grounditems [radius]", note: "List nearby ground item ids, amounts, owners, and coordinates." },
+		{ group: "Dev automation", access: "Staff dev only", command: "::colossus", note: "Enter a fresh Void Colossus solo instance." }
+	],
+	checklist: [
+		"Create a fresh character from New User, finish appearance, and choose a Void Island starter path.",
+		"Confirm the starter kit appears once, survives relog, and does not repeat on relog.",
+		"Claim the free subscription card from the Lumbridge Subscription Vendor with your beta code.",
+		"Redeem the Subscription card and confirm wrench/profile XP rates change to subscribed rates.",
+		"Use Edgeville Auction House or ::quickauction: browse, list, buy, and inspect market intel.",
+		"Open ::titles, page the catalogue, inspect requirements, equip a title, then clear it.",
+		"Customize rare drop beams with ::lootbeam and confirm ground-item visuals work.",
+		"Send ::g test and toggle country flag/global chat settings from the client.",
+		"Run a Void Arena lobby/challenge/stats/top test with another online player.",
+		"Use ::setstat, ::item, and ::goto only to reach test states quickly; report which shortcuts you used.",
+		"Visit Void Enclave, Void Dungeon, Void Knight chamber, Wilderness hobgoblins, and PK Catching Trainer.",
+		"Try desktop launcher update/play states and Android APK on a safe test device if available.",
+		"Report blockers with ::bug first, then add screenshots, client/platform, and repro steps in Discord."
+	],
+	coords: [
+		{ group: "Onboarding", label: "Void Council intro", value: "24, 37", note: "Fresh-character intro clearing." },
+		{ group: "Onboarding", label: "Void Island Herald", value: "24, 24", note: "Choose starter path; later routes to Void Rush." },
+		{ group: "Home", label: "Lumbridge home", value: "120, 648", note: "Respawn/home flow." },
+		{ group: "Home", label: "Subscription Vendor", value: "126, 649", note: "Claim release-valid beta card code." },
+		{ group: "Market", label: "Edgeville bank", value: "217, 449", note: "Bank, PvP access, nearby Auction House." },
+		{ group: "Market", label: "Void Auctioneer", value: "217, 460", note: "Auction House UI, listings, market intel." },
+		{ group: "Travel", label: "City Void Rift", value: "139, 636", note: "Rift menu to Varrock, Falador, Draynor, Lumbridge, and Edgeville." },
+		{ group: "Void", label: "Void Rift", value: "192, 443", note: "Enter prompt to Void Enclave." },
+		{ group: "Void", label: "Void Enclave", value: "113, 314", note: "Safe hub, amenities, waystones, boss entry." },
+		{ group: "Void", label: "Enclave bank", value: "103, 313", note: "Hub banking." },
+		{ group: "Void", label: "Enclave altar", value: "112, 305", note: "Prayer restore." },
+		{ group: "Void", label: "Enclave pool", value: "122, 315", note: "Healing/restoration check." },
+		{ group: "Void", label: "Void Quartermaster", value: "105, 315", note: "Hub NPC/shop check." },
+		{ group: "Void", label: "Void chest", value: "105, 316", note: "Void Key reward testing." },
+		{ group: "Void", label: "Void Dungeon entrance", value: "112, 296", note: "Unsafe Wilderness rift; coin-gated entry." },
+		{ group: "Void", label: "Void Dungeon", value: "72, 3252", note: "Shared underground Wilderness cave." },
+		{ group: "Void", label: "Void Dungeon exit", value: "72, 3250", note: "Returns to 112, 297." },
+		{ group: "Boss", label: "Void Knight boss ladder", value: "122, 313", note: "Climb down from Enclave." },
+		{ group: "Boss", label: "Void Knight chamber", value: "984, 667", note: "Attack the Void Knight to start solo fight." },
+		{ group: "Void Arena", label: "Death Match lobby", value: "600, 2914", note: "Arrive with ::arena enter." },
+		{ group: "Void Arena", label: "Arena Herald", value: "600, 2915", note: "Lobby NPC." },
+		{ group: "Void Arena", label: "Arena bank chest", value: "596, 2915", note: "Gear prep before challenges." },
+		{ group: "Wilderness", label: "Wilderness hobgoblins", value: "217, 255", note: "Dynamic spawns and faster respawns." },
+		{ group: "PvP", label: "PK Catching Trainer", value: "214, 437", note: "Five-minute catching drill and highscores." },
+		{ group: "Smoke routes", label: "Varrock area", value: "122, 509", note: "Code-backed ::goto varrock target." },
+		{ group: "Smoke routes", label: "Draynor area", value: "214, 632", note: "Code-backed ::goto draynor target." },
+		{ group: "Smoke routes", label: "Falador area", value: "304, 542", note: "Code-backed ::goto falador target." }
+	],
+	items: [
+		{ group: "Currency", id: 10, name: "Coins", note: "Use for vendor/rift/economy smoke tests." },
+		{ group: "Runes", id: 31, name: "Fire-Rune", note: "Arcanist starter and magic tests." },
+		{ group: "Runes", id: 33, name: "Air-Rune", note: "Arcanist starter and magic tests." },
+		{ group: "Runes", id: 35, name: "Mind-Rune", note: "Arcanist starter and magic tests." },
+		{ group: "Runes", id: 42, name: "Law-Rune", note: "Teleport/magic supply checks." },
+		{ group: "Melee", id: 77, name: "Iron 2-handed Sword", note: "Warrior starter weapon." },
+		{ group: "Melee", id: 81, name: "Rune 2-handed Sword", note: "High-risk melee/PvP smoke tests." },
+		{ group: "Melee", id: 93, name: "Rune battle Axe", note: "High-tier melee baseline." },
+		{ group: "Armor", id: 104, name: "Medium Bronze Helmet", note: "Warrior starter armor." },
+		{ group: "Armor", id: 117, name: "Bronze Plate Mail Body", note: "Warrior starter armor." },
+		{ group: "Armor", id: 206, name: "Bronze Plate Mail Legs", note: "Warrior starter armor." },
+		{ group: "Food", id: 138, name: "Bread", note: "Starter kit food." },
+		{ group: "Skilling", id: 156, name: "Bronze Pickaxe", note: "Forager starter tool." },
+		{ group: "Skilling", id: 166, name: "Tinderbox", note: "Forager starter utility." },
+		{ group: "Magic", id: 184, name: "Wizards robe", note: "Arcanist starter robe." },
+		{ group: "Magic", id: 185, name: "wizardshat", note: "Arcanist starter hat." },
+		{ group: "Ranged", id: 189, name: "Shortbow", note: "Arcanist starter weapon." },
+		{ group: "Food", id: 373, name: "Lobster", note: "Common PvP/PvM food." },
+		{ group: "Skilling", id: 376, name: "Net", note: "Forager starter fishing tool." },
+		{ group: "Skilling", id: 377, name: "Fishing rod", note: "Forager starter fishing tool." },
+		{ group: "Skilling", id: 380, name: "Fishing bait", note: "Forager starter supply." },
+		{ group: "Voidscape", id: 1593, name: "Void Scimitar", note: "Custom void melee weapon." },
+		{ group: "Voidscape", id: 1594, name: "Void Shortbow", note: "Custom void ranged weapon." },
+		{ group: "Voidscape", id: 1595, name: "Void Amulet", note: "Void drop/stackable utility." },
+		{ group: "Voidscape", id: 1596, name: "Void Mace", note: "Custom void crush weapon." },
+		{ group: "Voidscape", id: 1598, name: "Dragon sword hilt", note: "Dragon Sword smithing part." },
+		{ group: "Voidscape", id: 1599, name: "Dragon sword blade", note: "Dragon Sword smithing part." },
+		{ group: "Voidscape", id: 1600, name: "Dragon sword tip", note: "Dragon Sword smithing part." },
+		{ group: "Voidscape", id: 1601, name: "Void Key", note: "Void reward/chest testing." },
+		{ group: "Release reward", id: 1602, name: "Subscription card", note: "One-week account subscription reward. Beta code remains valid for release." },
+		{ group: "Voidscape", id: 1603, name: "Void Sparrow", note: "Wilderness scouting/custom item smoke tests." },
+		{ group: "Ash offerings", id: 1604, name: "Warm ashes", note: "Prayer offering item." },
+		{ group: "Ash offerings", id: 1605, name: "Bright ashes", note: "Prayer offering item." },
+		{ group: "Ash offerings", id: 1606, name: "Sacred ashes", note: "Prayer offering item." },
+		{ group: "Ash offerings", id: 1607, name: "Blessed ashes", note: "Prayer offering item." },
+		{ group: "Voidscape", id: 1608, name: "Void ashes", note: "Void resource/drop checks." }
+	],
+	policies: {
+		progress: "Public beta character/world progress may be wiped before launch.",
+		codes: "Discord beta codes are release-valid and must be preserved in the portal ledger, then resynced to the release game database."
+	}
+};
+
 let writeQueue = Promise.resolve();
 let itemDefinitionsPromise = null;
 let titleDefinitionsPromise = null;
@@ -165,16 +397,15 @@ if (!loopbackBind && !process.env.PORTAL_DATA_DIR && process.env.PORTAL_ALLOW_TM
 }
 
 server.listen(port, bindHost, () => {
-	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${publicMode ? " (PUBLIC PRELAUNCH MODE)" : ""}`);
+	const modeLabel = betaMode ? " (PUBLIC BETA MODE)" : publicMode ? " (PUBLIC PRELAUNCH MODE)" : "";
+	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${modeLabel}`);
 	console.log(`Portal API data: ${storePath}`);
 });
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
-	if (publicMode && (
-		url.pathname === "/api/launcher/manifest.properties"
-		|| url.pathname.startsWith("/downloads/")
-		|| url.pathname.startsWith("/openrsc/avatar/")
+	if (publicMode && !betaMode && (
+		url.pathname.startsWith("/openrsc/avatar/")
 	)) {
 		throw new HttpError(404, "not_available_during_prelaunch");
 	}
@@ -207,7 +438,11 @@ async function handleApi(request, response, url) {
 		const allowed =
 			(method === "GET" && url.pathname === "/api/health")
 			|| (method === "GET" && url.pathname === "/api/public")
-			|| (method === "POST" && url.pathname === "/api/founder/reservations")
+			|| (method === "GET" && url.pathname === "/api/integrity")
+			|| (!betaMode && method === "POST" && url.pathname === "/api/founder/reservations")
+			|| (betaMode && method === "GET" && url.pathname === "/api/account")
+			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/start")
+			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/callback")
 			|| url.pathname.startsWith("/api/admin/");
 		if (!allowed) {
 			throw new HttpError(404, "not_available_during_prelaunch");
@@ -225,6 +460,12 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "GET" && url.pathname === "/api/integrity") {
+		const store = await loadStore();
+		json(response, 200, await integrityState(store));
+		return;
+	}
+
 	if (method === "GET" && url.pathname === "/api/oauth/google/start") {
 		throw new HttpError(501, "google_oauth_not_configured");
 		return;
@@ -232,6 +473,16 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/oauth/google/callback") {
 		throw new HttpError(501, "google_oauth_not_configured");
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/oauth/discord/start") {
+		await startDiscordOAuth(request, response, url);
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/oauth/discord/callback") {
+		await completeDiscordOAuth(request, response, url);
 		return;
 	}
 
@@ -255,6 +506,9 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/founder/reservations") {
+		if (betaMode) {
+			throw new HttpError(404, "discord_beta_required");
+		}
 		const payload = await readJson(request);
 		const ip = clientIp(request);
 		const result = await updateStore(async (store) => {
@@ -281,15 +535,18 @@ async function handleApi(request, response, url) {
 			} catch (error) {
 				audit(store, "signup_code_sync_failed", { founderId: founder.id, error: String(error && error.message || error) });
 			}
+			const rewardReferrer = founder.referredByCode
+				? store.founders.find((entry) => entry.code === founder.referredByCode)
+				: null;
 			try {
-				const rewardSync = await syncPendingReferralRewardsToOpenRsc(store);
-				if (rewardSync.failed > 0) {
-					audit(store, "referral_reward_code_sync_failed", rewardSync);
-				}
+				await syncReferralRewardCodesToOpenRsc(rewardReferrer);
 			} catch (error) {
-				audit(store, "referral_reward_code_sync_failed", { error: String(error && error.message || error) });
+				audit(store, "referral_reward_code_sync_failed", {
+					founderId: rewardReferrer && rewardReferrer.id,
+					error: String(error && error.message || error)
+				});
 			}
-			return { founder: founderState(founder, store), signup: signupState(founder) };
+			return { founder: founderState(founder), signup: signupState(founder) };
 		});
 		json(response, 200, result);
 		return;
@@ -297,32 +554,17 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/founder/simulate-referral") {
 		const payload = await readJson(request);
-		const result = await updateStore(async (store) => {
+		const result = await updateStore((store) => {
 			const code = normalizeCode(payload.code || "");
 			const founder = store.founders.find((entry) => entry.code === code);
 			if (!founder) throw new HttpError(404, "founder_not_found");
-			const referral = {
-				id: nextId(store, "referral"),
-				referrerFounderId: founder.id,
-				referredFounderId: 0,
-				referrerCode: founder.code,
-				status: "credited",
-				riskScore: 0,
-				simulated: true,
-				createdAt: now(),
-				creditedAt: now()
-			};
-			store.referrals.push(referral);
-			founder.creditedReferrals = countCreditedReferrals(store, founder.id);
+			founder.creditedReferrals = Math.min(2, (founder.creditedReferrals || 0) + 1);
 			founder.updatedAt = now();
-			grantReferralRewardCode(store, founder, referral, "referral_simulated_dev");
-			audit(store, "founder_referral_simulated", { founderId: founder.id });
-			try {
-				await syncPendingReferralRewardsToOpenRsc(store);
-			} catch (error) {
-				audit(store, "referral_reward_code_sync_failed", { founderId: founder.id, error: String(error && error.message || error) });
+			if (founder.creditedReferrals >= 2) {
+				grantStarterCardEntitlement(store, founder, "referral_simulated_dev");
 			}
-			return { founder: founderState(founder, store) };
+			audit(store, "founder_referral_simulated", { founderId: founder.id });
+			return { founder: founderState(founder) };
 		});
 		json(response, 200, result);
 		return;
@@ -617,26 +859,38 @@ async function handleApi(request, response, url) {
 		requireAdmin(request);
 		const store = await loadStore();
 		const gameValues = await signupCodeGameValues();
-		const rows = store.founders.map((founder) => ({
-			id: founder.id,
-			username: founder.username,
-			email: founder.emailDisplay || founder.emailCanonical,
-			code: founder.signupCode || "",
-			status: signupCodeStatus(founder, gameValues),
-			referralRewardCodes: referralRewardCodesForFounder(store, founder.id, gameValues),
-			createdAt: founder.createdAt
-		}));
+		const rows = store.founders.map((founder) => {
+			const rewardCodes = Array.isArray(founder.referralRewardCodes)
+				? founder.referralRewardCodes.filter((reward) => reward && reward.code).map((reward) => reward.code)
+				: [];
+			return {
+				id: founder.id,
+				username: founder.username,
+				email: founder.emailDisplay || founder.emailCanonical,
+				betaTester: Boolean(founder.betaTester),
+				discordUserId: founder.discordUserId || "",
+				discordDisplayName: founder.discordDisplayName || "",
+				code: founder.signupCode || "",
+				status: signupCodeStatus(founder, gameValues),
+				referralRewardCodeCount: rewardCodes.length,
+				referralRewardCodes: rewardCodes.join("|"),
+				createdAt: founder.createdAt
+			};
+		});
 		if ((url.searchParams.get("format") || "").toLowerCase() === "csv") {
-			const header = "id,username,email,code,status,referralRewardCodeCount,referralRewardCodes,createdAt";
+			const header = "id,username,email,betaTester,discordUserId,discordDisplayName,code,status,referralRewardCodeCount,referralRewardCodes,createdAt";
 			const lines = rows.map((row) =>
 				[
 					row.id,
 					row.username,
 					row.email,
+					row.betaTester,
+					row.discordUserId,
+					row.discordDisplayName,
 					row.code,
 					row.status,
-					row.referralRewardCodes.length,
-					row.referralRewardCodes.map((reward) => reward.code).join(" "),
+					row.referralRewardCodeCount,
+					row.referralRewardCodes,
 					row.createdAt
 				].map(csvCell).join(","));
 			response.writeHead(200, {
@@ -677,9 +931,8 @@ async function handleApi(request, response, url) {
 					failed += 1;
 				}
 			}
-			const referralRewards = await syncPendingReferralRewardsToOpenRsc(store);
-			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode, referralRewards });
-			return { synced, skippedRedeemed, failed, noCode, referralRewards };
+			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode });
+			return { synced, skippedRedeemed, failed, noCode };
 		});
 		json(response, 200, result);
 		return;
@@ -801,8 +1054,417 @@ async function handleApi(request, response, url) {
 	throw new HttpError(404, "not_found");
 }
 
+async function startDiscordOAuth(request, response, url) {
+	requireDiscordOAuthConfig();
+	requireDiscordBetaGuildConfig();
+	const state = randomBytes(24).toString("base64url");
+	const returnTo = safeReturnTo(url.searchParams.get("returnTo") || "/#account");
+	const authorizeUrl = new URL(`${discordApiBase}/oauth2/authorize`);
+	authorizeUrl.searchParams.set("client_id", discordClientId);
+	authorizeUrl.searchParams.set("redirect_uri", discordCallbackUri(request));
+	authorizeUrl.searchParams.set("response_type", "code");
+	authorizeUrl.searchParams.set("scope", discordOauthScopes.join(" "));
+	authorizeUrl.searchParams.set("state", state);
+	const browserAuthorizeUrl = authorizeUrl.toString();
+	const appAuthorizeUrl = discordAppAuthorizeUrl(authorizeUrl);
+
+	await updateStore((store) => {
+		pruneOauthStates(store);
+		store.oauthStates.push({
+			provider: "discord",
+			stateHash: hashToken(state),
+			returnTo,
+			ipHash: abuseHash(clientIp(request)),
+			createdAt: now(),
+			expiresAt: Date.now() + oauthStateTtlMs
+		});
+		audit(store, "discord_oauth_started", { returnTo });
+	});
+
+	if (url.searchParams.get("response") === "json") {
+		json(response, 200, {
+			authorizeUrl: browserAuthorizeUrl,
+			appAuthorizeUrl,
+			fallbackUrl: `/api/oauth/discord/start?returnTo=${encodeURIComponent(returnTo)}`
+		});
+		return;
+	}
+
+	response.writeHead(302, {
+		location: browserAuthorizeUrl,
+		"cache-control": "no-store"
+	});
+	response.end();
+}
+
+function discordAppAuthorizeUrl(authorizeUrl) {
+	const query = authorizeUrl.searchParams.toString();
+	return `discord://-/oauth2/authorize${query ? `?${query}` : ""}`;
+}
+
+async function completeDiscordOAuth(request, response, url) {
+	try {
+		requireDiscordOAuthConfig();
+		requireDiscordBetaGuildConfig();
+		const error = String(url.searchParams.get("error") || "");
+		if (error) {
+			throw new HttpError(400, `discord_${error}`);
+		}
+		const code = String(url.searchParams.get("code") || "").trim();
+		const state = String(url.searchParams.get("state") || "").trim();
+		if (!code || !state) throw new HttpError(400, "discord_oauth_missing_code");
+
+		const oauthState = await updateStore((store) => consumeOauthState(store, "discord", state, request));
+		const token = await exchangeDiscordCode(request, code);
+		const profile = await fetchDiscordProfile(token.access_token);
+		const membership = await ensureDiscordBetaMembership(profile.id, token.access_token);
+		const result = await updateStore(async (store) => {
+			const account = await upsertDiscordBetaAccount(store, profile, membership, request);
+			const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical);
+			if (founder) {
+				ensureFounderSignupCode(store, founder);
+				try {
+					if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
+						founder.signupCodeSyncedAt = now();
+					}
+				} catch (syncError) {
+					audit(store, "discord_beta_code_sync_failed", {
+						accountId: account.id,
+						error: String(syncError && syncError.message || syncError)
+					});
+				}
+			}
+			const sessionToken = createSession(store, account.id);
+			audit(store, "discord_beta_login", {
+				accountId: account.id,
+				discordUserId: profile.id,
+				guildJoined: membership.guildJoined,
+				roleIds: membership.roleIds
+			});
+			return {
+				token: sessionToken,
+				state: await accountState(store, account)
+			};
+		});
+		sendDiscordOAuthPage(response, {
+			token: result.token,
+			returnTo: oauthState.returnTo,
+			state: result.state
+		});
+	} catch (error) {
+		const code = error instanceof HttpError ? error.message : "discord_oauth_failed";
+		sendDiscordOAuthPage(response, {
+			error: code,
+			returnTo: "/#account"
+		});
+		if (!(error instanceof HttpError)) {
+			console.error(error);
+		}
+	}
+}
+
+function requireDiscordOAuthConfig() {
+	if (!discordClientId || !discordClientSecret) {
+		throw new HttpError(503, "discord_oauth_not_configured");
+	}
+}
+
+function requireDiscordBetaGuildConfig() {
+	if (!discordGuildId || !discordBotToken || !discordBetaRoleId) {
+		throw new HttpError(503, "discord_beta_guild_not_configured");
+	}
+}
+
+function discordCallbackUri(request) {
+	return discordRedirectUri || `${publicOrigin(request)}/api/oauth/discord/callback`;
+}
+
+function consumeOauthState(store, provider, state, request) {
+	pruneOauthStates(store);
+	const stateHash = hashToken(state);
+	const index = store.oauthStates.findIndex((entry) =>
+		entry.provider === provider &&
+		entry.stateHash === stateHash &&
+		entry.expiresAt > Date.now()
+	);
+	if (index === -1) throw new HttpError(400, "discord_oauth_state_invalid");
+	const [entry] = store.oauthStates.splice(index, 1);
+	if (entry.ipHash && entry.ipHash !== abuseHash(clientIp(request))) {
+		audit(store, "discord_oauth_ip_changed", { provider });
+	}
+	return entry;
+}
+
+function pruneOauthStates(store) {
+	const cutoff = Date.now();
+	store.oauthStates = store.oauthStates.filter((entry) => entry.expiresAt > cutoff);
+}
+
+async function exchangeDiscordCode(request, code) {
+	const body = new URLSearchParams({
+		client_id: discordClientId,
+		client_secret: discordClientSecret,
+		grant_type: "authorization_code",
+		code,
+		redirect_uri: discordCallbackUri(request)
+	});
+	const response = await fetch(`${discordApiBase}/oauth2/token`, {
+		method: "POST",
+		headers: { "content-type": "application/x-www-form-urlencoded" },
+		body
+	});
+	const payload = await response.json().catch(() => ({}));
+	if (!response.ok || !payload.access_token) {
+		throw new HttpError(502, "discord_token_exchange_failed");
+	}
+	return payload;
+}
+
+async function fetchDiscordProfile(accessToken) {
+	const response = await fetch(`${discordApiBase}/users/@me`, {
+		headers: { authorization: `Bearer ${accessToken}` }
+	});
+	const profile = await response.json().catch(() => ({}));
+	if (!response.ok || !profile.id) {
+		throw new HttpError(502, "discord_profile_failed");
+	}
+	return profile;
+}
+
+async function ensureDiscordBetaMembership(discordUserId, accessToken) {
+	const membership = {
+		guildJoined: false,
+		roleIds: [],
+		updatedAt: now()
+	};
+	const authHeader = { authorization: `Bot ${discordBotToken}` };
+	const memberUrl = `${discordApiBase}/guilds/${encodeURIComponent(discordGuildId)}/members/${encodeURIComponent(discordUserId)}`;
+	const memberResponse = await fetch(memberUrl, {
+		method: "PUT",
+		headers: {
+			...authHeader,
+			"content-type": "application/json"
+		},
+		body: JSON.stringify({ access_token: accessToken })
+	});
+	if (![200, 201, 204].includes(memberResponse.status)) {
+		throw new HttpError(502, "discord_guild_join_failed");
+	}
+	membership.guildJoined = true;
+
+	const roleIds = [discordMemberRoleId, discordBetaRoleId].filter(Boolean);
+	for (const roleId of roleIds) {
+		const roleUrl = `${memberUrl}/roles/${encodeURIComponent(roleId)}`;
+		const roleResponse = await fetch(roleUrl, {
+			method: "PUT",
+			headers: authHeader
+		});
+		if (![200, 201, 204].includes(roleResponse.status)) {
+			throw new HttpError(502, "discord_role_grant_failed");
+		}
+		membership.roleIds.push(roleId);
+	}
+	return membership;
+}
+
+async function upsertDiscordBetaAccount(store, profile, membership, request) {
+	const providerSubject = String(profile.id || "").trim();
+	if (!providerSubject) throw new HttpError(400, "invalid_discord_profile");
+	const emailCanonical = discordSyntheticEmail(providerSubject);
+	const displayName = discordDisplayName(profile);
+	const username = uniqueDiscordBetaUsername(store, providerSubject, emailCanonical);
+	let identity = store.identities.find((entry) =>
+		entry.provider === "discord" &&
+		entry.providerSubject === providerSubject
+	);
+	let account = identity ? store.accounts.find((entry) => entry.id === identity.accountId) : null;
+	if (!account) {
+		account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical) || null;
+	}
+
+	const founder = reserveFounder(store, {
+		username,
+		email: emailCanonical
+	});
+	founder.betaTester = true;
+	founder.betaCodeReleaseValid = true;
+	founder.betaProgressPolicy = "wipe_progress_preserve_code";
+	founder.discordUserId = providerSubject;
+	founder.discordDisplayName = displayName;
+	founder.discordUsername = String(profile.username || "").trim();
+	founder.discordAvatarUrl = discordAvatarUrl(profile);
+	founder.updatedAt = now();
+	ensureFounderSignupCode(store, founder);
+
+	if (!account) {
+		account = {
+			id: nextId(store, "account"),
+			emailCanonical,
+			emailDisplay: emailCanonical,
+			displayName,
+			passwordHash: null,
+			status: "active",
+			subscriptionExpiresAt: 0,
+			betaTester: true,
+			createdAt: now(),
+			updatedAt: now()
+		};
+		store.accounts.push(account);
+		recordSignupSignals(store, account, request, {
+			emailCanonical,
+			provider: "discord",
+			providerSubject
+		});
+		audit(store, "account_discord_beta_registered", {
+			accountId: account.id,
+			discordUserId: providerSubject
+		});
+	}
+
+	const accountDiscordIdentity = store.identities.find((entry) =>
+		entry.accountId === account.id &&
+		entry.provider === "discord"
+	);
+	if (accountDiscordIdentity && accountDiscordIdentity.providerSubject !== providerSubject) {
+		throw new HttpError(409, "discord_identity_conflict");
+	}
+
+	if (!identity) {
+		identity = {
+			id: nextId(store, "identity"),
+			accountId: account.id,
+			provider: "discord",
+			providerSubject,
+			emailCanonical,
+			emailDisplay: String(profile.email || emailCanonical).trim(),
+			displayName,
+			avatarUrl: discordAvatarUrl(profile),
+			emailVerified: Boolean(profile.verified),
+			guildJoined: Boolean(membership.guildJoined),
+			roleIds: membership.roleIds.slice(),
+			createdAt: now(),
+			updatedAt: now(),
+			lastLoginAt: now()
+		};
+		store.identities.push(identity);
+		audit(store, "account_discord_identity_linked", { accountId: account.id });
+	} else {
+		identity.emailCanonical = emailCanonical;
+		identity.emailDisplay = String(profile.email || emailCanonical).trim();
+		identity.displayName = displayName;
+		identity.avatarUrl = discordAvatarUrl(profile);
+		identity.emailVerified = Boolean(profile.verified);
+		identity.guildJoined = Boolean(membership.guildJoined);
+		identity.roleIds = membership.roleIds.slice();
+		identity.updatedAt = now();
+		identity.lastLoginAt = now();
+	}
+
+	account.displayName = displayName;
+	account.emailDisplay = account.emailDisplay || emailCanonical;
+	account.betaTester = true;
+	account.discordUserId = providerSubject;
+	account.discordDisplayName = displayName;
+	account.updatedAt = now();
+	return account;
+}
+
+function sendDiscordOAuthPage(response, result) {
+	const token = result.token || "";
+	const returnTo = safeReturnTo(result.returnTo || "/#account");
+	const state = result.state || null;
+	const error = result.error || "";
+	const body = `<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape Discord Login</title>
+	<style>
+		body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #090d13; color: #f4ead5; font: 16px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+		main { max-width: 34rem; padding: 2rem; text-align: center; }
+		strong { color: #f4c969; }
+	</style>
+</head>
+<body>
+	<main>
+		<h1>${error ? "Discord login failed" : "Discord connected"}</h1>
+		<p>${error ? `Return to Voidscape and try again. Error: <strong>${escapeHtml(error)}</strong>.` : "Your beta tester pass is ready. Returning to the portal..."}</p>
+	</main>
+	<script>
+		(function () {
+			var token = ${jsonScript(token)};
+			var state = ${jsonScript(state)};
+			var error = ${jsonScript(error)};
+			if (token) {
+				localStorage.setItem(${JSON.stringify(portalSessionStorageKey)}, token);
+			}
+			if (state) {
+				sessionStorage.setItem("voidscape.portal.lastAccountState", JSON.stringify(state));
+			}
+			var target = ${jsonScript(returnTo)};
+			if (error) {
+				target = "/?discord_error=" + encodeURIComponent(error) + "#account";
+			}
+			window.location.replace(target);
+		})();
+	</script>
+</body>
+</html>`;
+	response.writeHead(error ? 400 : 200, {
+		"content-type": "text/html; charset=utf-8",
+		"content-length": Buffer.byteLength(body),
+		"cache-control": "no-store"
+	});
+	response.end(body);
+}
+
+function discordDisplayName(profile) {
+	return cleanUsername(profile.global_name || profile.username || "Discord tester").slice(0, 40) || "Discord tester";
+}
+
+function discordSyntheticEmail(discordUserId) {
+	return `discord-${String(discordUserId).replace(/[^0-9]/g, "")}@discord.voidscape.invalid`;
+}
+
+function discordAvatarUrl(profile) {
+	if (!profile || !profile.id || !profile.avatar) return "";
+	const ext = String(profile.avatar).startsWith("a_") ? "gif" : "png";
+	return `https://cdn.discordapp.com/avatars/${encodeURIComponent(profile.id)}/${encodeURIComponent(profile.avatar)}.${ext}`;
+}
+
+function uniqueDiscordBetaUsername(store, discordUserId, emailCanonical) {
+	const base36 = BigInt(String(discordUserId).replace(/[^0-9]/g, "") || "0").toString(36).toUpperCase();
+	const base = cleanUsername(`B${base36.slice(-11)}`).slice(0, 12) || "BetaTester";
+	let candidate = base;
+	let suffix = 1;
+	while (store.founders.some((entry) =>
+		entry.normalizedName === normalizeUsername(candidate) &&
+		entry.emailCanonical !== emailCanonical
+	)) {
+		const tail = String(suffix);
+		candidate = `${base.slice(0, Math.max(2, 12 - tail.length))}${tail}`;
+		suffix += 1;
+	}
+	return candidate;
+}
+
+function safeReturnTo(value) {
+	const text = String(value || "").trim();
+	if (!text || text.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(text)) return "/#account";
+	return text.startsWith("/") ? text : "/#account";
+}
+
 async function serveStatic(request, response, pathname) {
-	const targetPath = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+	const targetPath = pathname === "/"
+		? "/index.html"
+		: pathname === "/privacy"
+			? "/privacy.html"
+			: pathname === "/data-deletion"
+				? "/data-deletion.html"
+				: pathname === "/transparency"
+					? "/transparency.html"
+					: decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
@@ -878,7 +1540,7 @@ async function serveDownload(request, response, pathname) {
 	const artifact = downloadArtifacts.find((entry) => entry.slug === slug);
 	if (!artifact) throw new HttpError(404, "download_not_found");
 	await sendFile(request, response, artifact.path, {
-		contentType: "application/java-archive",
+		contentType: artifact.contentType || "application/octet-stream",
 		contentDisposition: `attachment; filename="${artifact.filename}"`,
 		notFound: "download_not_built"
 	});
@@ -921,7 +1583,7 @@ async function serveLauncherManifest(request, response) {
 
 async function launcherManifest(request) {
 	const origin = publicOrigin(request);
-	const clientArtifact = downloadArtifacts.find((entry) => entry.slug === "pc-client");
+	const clientArtifact = downloadArtifacts.find((entry) => entry.slug === "client-runtime");
 	let clientStat;
 	try {
 		clientStat = await stat(clientArtifact.path);
@@ -1018,9 +1680,16 @@ async function sendFile(request, response, filePath, options = {}) {
 	createReadStream(filePath).pipe(response);
 }
 
-async function sha256File(filePath) {
+async function sha256File(filePath, knownStat) {
+	const fileStat = knownStat || await stat(filePath);
+	const cacheKey = `${resolve(filePath)}:${fileStat.size}:${fileStat.mtimeMs}`;
+	if (sha256Cache.has(cacheKey)) {
+		return sha256Cache.get(cacheKey);
+	}
 	const body = await readFile(filePath);
-	return createHash("sha256").update(body).digest("hex");
+	const digest = createHash("sha256").update(body).digest("hex");
+	sha256Cache.set(cacheKey, digest);
+	return digest;
 }
 
 function publicOrigin(request) {
@@ -1132,10 +1801,7 @@ function creditFounderReferral(store, founder, codeInput) {
 		entry.referredFounderId === founder.id &&
 		entry.status === "credited"
 	);
-	if (existing) {
-		grantReferralRewardCode(store, referrer, existing, "beta_referral_backfill");
-		return existing;
-	}
+	if (existing) return existing;
 
 	const alreadyReferred = store.referrals.find((entry) =>
 		entry.referredFounderId === founder.id &&
@@ -1160,7 +1826,10 @@ function creditFounderReferral(store, founder, codeInput) {
 	founder.updatedAt = now();
 	referrer.creditedReferrals = Math.max(referrer.creditedReferrals || 0, countCreditedReferrals(store, referrer.id));
 	referrer.updatedAt = now();
-	grantReferralRewardCode(store, referrer, referral, "beta_referral");
+	ensureReferralRewardCode(store, referrer, referral);
+	if (referrer.creditedReferrals >= 2) {
+		grantStarterCardEntitlement(store, referrer, "referral_2_verified_dev");
+	}
 	audit(store, "founder_referral_credited", {
 		referrerFounderId: referrer.id,
 		referredFounderId: founder.id
@@ -1173,39 +1842,6 @@ function countCreditedReferrals(store, founderId) {
 		entry.referrerFounderId === founderId &&
 		entry.status === "credited"
 	).length;
-}
-
-function grantReferralRewardCode(store, referrer, referral, source = "beta_referral") {
-	if (!referrer || !referral) return null;
-	const existing = store.referralRewards.find((entry) =>
-		entry.referrerFounderId === referrer.id &&
-		entry.referralId === referral.id &&
-		entry.status !== "revoked"
-	);
-	if (existing) return existing;
-
-	const code = makeUniqueSignupCode(store);
-	const reward = {
-		id: nextId(store, "referralReward"),
-		referrerFounderId: referrer.id,
-		referredFounderId: referral.referredFounderId || null,
-		referralId: referral.id,
-		code,
-		codeNormalized: normalizeSignupCode(code),
-		status: "issued",
-		source,
-		createdAt: now(),
-		syncedAt: null
-	};
-	store.referralRewards.push(reward);
-	referral.rewardCodeId = reward.id;
-	audit(store, "referral_reward_code_minted", {
-		rewardId: reward.id,
-		referrerFounderId: referrer.id,
-		referredFounderId: reward.referredFounderId,
-		referralId: referral.id
-	});
-	return reward;
 }
 
 function createCharacter(store, accountId, name, path) {
@@ -1345,16 +1981,22 @@ async function accountState(store, account, currentSession) {
 	await syncAccountSubscriptionFromOpenRsc(account);
 	await refreshAccountCharactersFromOpenRsc(store, account);
 	const founder = store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null;
+	const auth = authState(store, account);
+	const displayName = account.displayName || (auth.discord && auth.discord.displayName) || (founder ? founder.username : account.emailDisplay);
+	const downloads = auth.discordConnected ? await downloadState() : [];
 	return {
 		account: {
 			id: account.id,
 			email: account.emailDisplay,
-			displayName: founder ? founder.username : account.emailDisplay,
+			displayName,
 			status: account.status,
 			subscription: subscriptionState(account)
 		},
-		auth: authState(store, account),
-		founder: founder ? founderState(founder, store) : null,
+		auth,
+		founder: founder ? founderState(founder) : null,
+		signup: founder ? signupState(founder) : null,
+		beta: betaAccountState(founder, auth),
+		downloads,
 		characters: store.characters
 			.filter((character) => character.accountId === account.id)
 			.map((character) => ({
@@ -1437,12 +2079,58 @@ function authState(store, account) {
 			displayName: identity.displayName || "",
 			avatarUrl: identity.avatarUrl || "",
 			emailVerified: Boolean(identity.emailVerified),
+			guildJoined: Boolean(identity.guildJoined),
+			roleIds: Array.isArray(identity.roleIds) ? identity.roleIds : [],
 			lastLoginAt: identity.lastLoginAt || null
 		}));
+	const discord = identities.find((identity) => identity.provider === "discord") || null;
 	return {
 		passwordEnabled: Boolean(account.passwordHash),
 		googleConnected: identities.some((identity) => identity.provider === "google"),
+		discordConnected: Boolean(discord),
+		discord: discord ? {
+			displayName: discord.displayName || "",
+			avatarUrl: discord.avatarUrl || "",
+			guildJoined: Boolean(discord.guildJoined),
+			roleIds: Array.isArray(discord.roleIds) ? discord.roleIds : []
+		} : null,
 		providers: identities
+	};
+}
+
+function betaAccountState(founder, auth) {
+	const isBetaTester = Boolean(founder && founder.betaTester) || Boolean(auth && auth.discordConnected);
+	if (!isBetaTester) return null;
+	const resources = betaResourceState();
+	return {
+		tester: true,
+		progressPolicy: betaContent.policies.progress,
+		codePolicy: betaContent.policies.codes,
+		schedule: resources.schedule || null,
+		resources,
+		discord: auth && auth.discord ? auth.discord : null
+	};
+}
+
+function betaResourceState() {
+	const schedule = betaScheduleState();
+	if (!schedule) return betaContent;
+	return {
+		...betaContent,
+		schedule
+	};
+}
+
+function betaScheduleState() {
+	if (!betaOpenAtIso) return null;
+	const openAtMs = Date.parse(betaOpenAtIso);
+	const remainingMs = Math.max(0, openAtMs - Date.now());
+	return {
+		openAt: betaOpenAtIso,
+		now: new Date().toISOString(),
+		remainingMs,
+		locked: remainingMs > 0,
+		manualOpen: true
 	};
 }
 
@@ -1491,15 +2179,15 @@ function securityState(store, account, currentSession, founder) {
 	const passwordChanged = Boolean(account.passwordChangedAt);
 	const score = Math.min(100,
 		40 +
-		(emailVerified || auth.googleConnected ? 20 : 0) +
+		(emailVerified || auth.googleConnected || auth.discordConnected ? 20 : 0) +
 		(hasRecoveryCodes ? 20 : 0) +
-		(passwordChanged || auth.googleConnected ? 10 : 0) +
+		(passwordChanged || auth.googleConnected || auth.discordConnected ? 10 : 0) +
 		(activeSessions.length <= 2 ? 10 : 5)
 	);
 
 	return {
 		score,
-		emailVerified: emailVerified || auth.googleConnected,
+		emailVerified: emailVerified || auth.googleConnected || auth.discordConnected,
 		auth,
 		recoveryCodes: {
 			activeCount: activeRecoveryCodes.length,
@@ -1519,25 +2207,56 @@ function securityState(store, account, currentSession, founder) {
 }
 
 async function publicState(store) {
-	const foundersWithRewards = new Set(store.referralRewards
-		.filter((reward) => reward.status !== "revoked")
-		.map((reward) => reward.referrerFounderId));
 	const founderUnlocks = store.founders.filter((founder) =>
-		Boolean(founder.starterCardUnlocked) || foundersWithRewards.has(founder.id)
+		Boolean(founder.starterCardUnlocked) || founder.creditedReferrals >= 2
 	).length;
-	const referralCodesIssued = store.referralRewards.filter((reward) => reward.status !== "revoked").length;
+	const betaTesterCount = store.founders.filter((founder) => founder.betaTester).length;
+	const integrity = await integrityState(store);
+	if (betaMode) {
+		const betaResources = betaResourceState();
+		const betaSchedule = betaResources.schedule || null;
+		const betaSignupCounter = betaSignupCounterState(betaTesterCount);
+		return {
+			publicMode: Boolean(publicMode),
+			betaMode: true,
+			status: {
+				world: betaSchedule && betaSchedule.locked ? "Beta Countdown" : "Public Beta",
+				online: !(betaSchedule && betaSchedule.locked),
+				playersOnline: 0,
+				patch: betaSchedule && betaSchedule.locked ? "countdown" : "beta",
+				lastSave: ""
+			},
+			rates: xpRates(),
+			founderStats: {
+				reservations: store.founders.length,
+				starterCardsUnlocked: founderUnlocks,
+				betaTesters: betaTesterCount,
+				betaSignupCounter: betaSignupCounter.count
+			},
+			downloads: await downloadState({ includePrivate: false }),
+			integrity,
+			beta: {
+				...betaResources,
+				signupCounter: betaSignupCounter
+			},
+			news: [],
+			highscores: [],
+			market: [],
+			activity: []
+		};
+	}
 	if (publicMode) {
-		// No fake world stats or download links on the public prelaunch site.
+		// No fake world stats on the public site; downloads stay open without auth.
 		return {
 			publicMode: true,
 			status: { world: "Voidscape", online: false, playersOnline: 0, patch: "prelaunch", lastSave: "" },
 			rates: xpRates(),
 			founderStats: {
 				reservations: store.founders.length,
-				starterCardsUnlocked: founderUnlocks,
-				referralCodesIssued
+				starterCardsUnlocked: founderUnlocks
 			},
-			downloads: [],
+			downloads: await downloadState({ includePrivate: false }),
+			integrity,
 			news: [],
 			highscores: [],
 			market: [],
@@ -1555,10 +2274,10 @@ async function publicState(store) {
 		rates: xpRates(),
 		founderStats: {
 			reservations: store.founders.length,
-			starterCardsUnlocked: founderUnlocks,
-			referralCodesIssued
+			starterCardsUnlocked: founderUnlocks
 		},
 		downloads: (await downloadState()).concat(publicContent.downloads),
+		integrity,
 		news: publicContent.news,
 		highscores: publicContent.highscores,
 		market: publicContent.market,
@@ -1566,29 +2285,702 @@ async function publicState(store) {
 	};
 }
 
-async function downloadState() {
+async function integrityState(store) {
+	const snapshot = await readIntegritySnapshot();
+	if (snapshot) {
+		const normalized = normalizeIntegritySnapshot(snapshot, "snapshot");
+		normalized.build = await buildIntegrity(normalized.build);
+		return normalized;
+	}
+
+	let staffCommands = null;
+	let itemProvenance = null;
+	if (openRscDbPath) {
+		try {
+			staffCommands = await openRscIntegrityStaffCommands();
+			itemProvenance = await openRscIntegrityItemProvenance();
+		} catch (error) {
+			staffCommands = emptyStaffCommandIntegrity("openrsc_unavailable", "openrsc-sqlite");
+			itemProvenance = emptyItemProvenanceIntegrity("openrsc_unavailable", "openrsc-sqlite", "openrsc_query_failed");
+		}
+	}
+
+	if (!staffCommands) {
+		staffCommands = emptyStaffCommandIntegrity("waiting_for_game_snapshot", "portal-store");
+	}
+	if (!itemProvenance) {
+		itemProvenance = emptyItemProvenanceIntegrity("not_recording", "portal-store", "waiting_for_game_snapshot");
+	}
+
+	return {
+		generatedAt: now(),
+		source: staffCommands.source,
+		privacy: "Public integrity data excludes IP addresses, raw player identifiers, and full staff command arguments.",
+		staffCommands,
+		portalAudit: portalAuditIntegrity(store),
+		build: await buildIntegrity(),
+			itemProvenance,
+		economyScans: {
+			status: "planned",
+			lastScanAt: null,
+			flagged: 0,
+			fixed: 0
+		}
+	};
+}
+
+async function readIntegritySnapshot() {
+	try {
+		return JSON.parse(await readFile(integritySnapshotPath, "utf8"));
+	} catch (error) {
+		return null;
+	}
+}
+
+function normalizeIntegritySnapshot(snapshot, fallbackSource) {
+	const staffCommands = normalizeStaffCommandIntegrity(
+		snapshot && snapshot.staffCommands,
+		fallbackSource || "snapshot"
+	);
+	return {
+		generatedAt: validIsoTimestamp(snapshot && snapshot.generatedAt) || now(),
+		source: sanitizeIntegrityLabel(snapshot && snapshot.source, fallbackSource || "snapshot"),
+		privacy: "Public integrity data excludes IP addresses, raw player identifiers, and full staff command arguments.",
+		staffCommands,
+		portalAudit: normalizePortalAuditIntegrity(snapshot && snapshot.portalAudit),
+		build: normalizeBuildIntegrity(snapshot && snapshot.build),
+		itemProvenance: normalizeItemProvenanceIntegrity(snapshot && snapshot.itemProvenance, fallbackSource || "snapshot"),
+		economyScans: normalizeSimpleIntegrityBucket(snapshot && snapshot.economyScans, "planned")
+	};
+}
+
+async function openRscIntegrityStaffCommands() {
+	const tableRows = await sqliteJson("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'staff_logs'");
+	if (!tableRows.length) {
+		return emptyStaffCommandIntegrity("missing_staff_log_table", "openrsc-sqlite");
+	}
+	const since = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+	const rows = await sqliteJson(`
+		SELECT time, extra
+		FROM staff_logs
+		WHERE action = 24
+			AND extra LIKE 'integrity %'
+			AND time >= ${since}
+		ORDER BY time DESC
+		LIMIT 250
+	`);
+	return staffCommandIntegrityFromRows(rows, "openrsc-sqlite");
+}
+
+async function openRscIntegrityItemProvenance() {
+	const tableRows = await sqliteJson("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'item_provenance_events'");
+	if (!tableRows.length) {
+		return emptyItemProvenanceIntegrity("not_recording", "openrsc-sqlite", "missing_item_provenance_table");
+	}
+	const since24 = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+	const since7d = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+	const totals = await sqliteJson(`
+		SELECT
+			COUNT(*) AS total_events,
+			SUM(CASE WHEN time >= ${since24} THEN 1 ELSE 0 END) AS total_24h,
+			SUM(CASE WHEN time >= ${since7d} THEN 1 ELSE 0 END) AS total_7d,
+				SUM(CASE WHEN event_type = 'staff_mint' AND time >= ${since24} THEN 1 ELSE 0 END) AS staff_mints_24h,
+				SUM(CASE WHEN event_type = 'staff_mint' AND time >= ${since7d} THEN 1 ELSE 0 END) AS staff_mints_7d,
+				SUM(CASE WHEN event_type = 'item_origin' AND time >= ${since24} THEN 1 ELSE 0 END) AS origins_24h,
+				SUM(CASE WHEN event_type = 'item_origin' AND time >= ${since7d} THEN 1 ELSE 0 END) AS origins_7d,
+				SUM(CASE WHEN event_type = 'item_origin' AND source = 'npc_drop' AND time >= ${since24} THEN 1 ELSE 0 END) AS npc_drops_24h,
+				SUM(CASE WHEN event_type = 'item_origin' AND source = 'npc_drop' AND time >= ${since7d} THEN 1 ELSE 0 END) AS npc_drops_7d,
+				SUM(CASE WHEN event_type = 'item_origin' AND time >= ${since24} THEN amount ELSE 0 END) AS origin_amount_24h,
+				SUM(CASE WHEN event_type = 'item_transfer' AND time >= ${since24} THEN 1 ELSE 0 END) AS transfers_24h,
+				SUM(CASE WHEN event_type = 'item_transfer' AND time >= ${since7d} THEN 1 ELSE 0 END) AS transfers_7d,
+				SUM(CASE WHEN event_type = 'staff_mint' AND time >= ${since24} THEN amount ELSE 0 END) AS amount_24h,
+				COUNT(DISTINCT CASE WHEN event_type = 'staff_mint' AND time >= ${since24} THEN catalogID END) AS catalogs_24h
+			FROM item_provenance_events
+	`);
+	const rows = await sqliteJson(`
+		SELECT time, event_type, source, destination, command, catalogID, amount, noted
+		FROM item_provenance_events
+		WHERE time >= ${since7d}
+		ORDER BY time DESC, eventID DESC
+		LIMIT 250
+	`);
+	return itemProvenanceIntegrityFromRows(rows, totals[0] || {}, "openrsc-sqlite");
+}
+
+function itemProvenanceIntegrityFromRows(rows, totals, source) {
+	const destinations = new Map();
+	const sources = new Map();
+	const recent = [];
+	for (const row of rows) {
+		const eventType = sanitizeIntegrityLabel(row.event_type, "event");
+		const provenanceSource = sanitizeIntegrityLabel(row.source, "unknown");
+		const destination = sanitizeIntegrityLabel(row.destination, "unknown");
+		sources.set(provenanceSource, (sources.get(provenanceSource) || 0) + 1);
+		destinations.set(destination, (destinations.get(destination) || 0) + 1);
+		if (recent.length < 8) {
+			recent.push({
+				at: unixSecondsToIso(row.time),
+				eventType,
+				source: provenanceSource,
+				destination,
+				command: sanitizeIntegrityLabel(row.command, "staff"),
+				catalogId: nonNegativeInteger(row.catalogID),
+				amount: nonNegativeInteger(row.amount),
+				noted: Number(row.noted || 0) === 1
+			});
+		}
+	}
+	const totalEvents = nonNegativeInteger(totals.total_events);
+	const staffMints24h = nonNegativeInteger(totals.staff_mints_24h);
+	let status = "recording_no_staff_mints";
+	if (staffMints24h > 0) status = "recording";
+	else if (totalEvents > 0) status = "recording_no_recent_staff_mints";
+	return {
+		status,
+		source,
+		trackedItems: totalEvents,
+		totalEvents,
+		total24h: nonNegativeInteger(totals.total_24h),
+		total7d: nonNegativeInteger(totals.total_7d),
+		staffMints24h,
+		staffMints7d: nonNegativeInteger(totals.staff_mints_7d),
+		origins24h: nonNegativeInteger(totals.origins_24h),
+		origins7d: nonNegativeInteger(totals.origins_7d),
+		npcDrops24h: nonNegativeInteger(totals.npc_drops_24h),
+		npcDrops7d: nonNegativeInteger(totals.npc_drops_7d),
+		originAmount24h: nonNegativeInteger(totals.origin_amount_24h),
+		transfers24h: nonNegativeInteger(totals.transfers_24h),
+		transfers7d: nonNegativeInteger(totals.transfers_7d),
+		amount24h: nonNegativeInteger(totals.amount_24h),
+		catalogs24h: nonNegativeInteger(totals.catalogs_24h),
+		sources: categoryCounts(sources),
+		destinations: categoryCounts(destinations),
+		recent
+	};
+}
+
+function staffCommandIntegrityFromRows(rows, source) {
+	const counts = new Map();
+	const recent = [];
+	let allowed24h = 0;
+	let blocked24h = 0;
+	for (const row of rows) {
+		const fields = parseStaffAuditExtra(row.extra);
+		const category = sanitizeIntegrityLabel(fields.category, "staff");
+		const status = fields.status === "blocked" ? "blocked" : "allowed";
+		if (status === "blocked") blocked24h += 1;
+		else allowed24h += 1;
+		counts.set(category, (counts.get(category) || 0) + 1);
+		if (recent.length < 8) {
+			recent.push({
+				at: unixSecondsToIso(row.time),
+				status,
+				category
+			});
+		}
+	}
+	const total24h = allowed24h + blocked24h;
+	return {
+		status: total24h > 0 ? "active" : "no_recent_staff_commands",
+		source,
+		total24h,
+		allowed24h,
+		blocked24h,
+		categories: categoryCounts(counts),
+		recent
+	};
+}
+
+function parseStaffAuditExtra(extra) {
+	const fields = {};
+	String(extra || "").split(/\s+/).forEach((part) => {
+		const separator = part.indexOf("=");
+		if (separator <= 0) return;
+		fields[part.slice(0, separator)] = part.slice(separator + 1);
+	});
+	return fields;
+}
+
+function normalizeStaffCommandIntegrity(input, source) {
+	if (!input || typeof input !== "object") {
+		return emptyStaffCommandIntegrity("waiting_for_game_snapshot", source);
+	}
+	return {
+		status: sanitizeIntegrityLabel(input.status, "active"),
+		source: sanitizeIntegrityLabel(input.source, source || "snapshot"),
+		total24h: nonNegativeInteger(input.total24h),
+		allowed24h: nonNegativeInteger(input.allowed24h),
+		blocked24h: nonNegativeInteger(input.blocked24h),
+		categories: normalizeIntegrityCategories(input.categories),
+		recent: normalizeIntegrityRecent(input.recent)
+	};
+}
+
+function emptyStaffCommandIntegrity(status, source) {
+	return {
+		status,
+		source,
+		total24h: 0,
+		allowed24h: 0,
+		blocked24h: 0,
+		categories: [],
+		recent: []
+	};
+}
+
+function portalAuditIntegrity(store) {
+	const since = Date.now() - 24 * 60 * 60 * 1000;
+	const counts = new Map();
+	for (const entry of store.audit) {
+		const createdAt = Date.parse(entry.createdAt || "");
+		if (!Number.isFinite(createdAt) || createdAt < since) continue;
+		const category = sanitizeIntegrityLabel(entry.type, "portal");
+		counts.set(category, (counts.get(category) || 0) + 1);
+	}
+	return {
+		total24h: Array.from(counts.values()).reduce((sum, count) => sum + count, 0),
+		categories: categoryCounts(counts).slice(0, 8)
+	};
+}
+
+function normalizePortalAuditIntegrity(input) {
+	if (!input || typeof input !== "object") {
+		return { total24h: 0, categories: [] };
+	}
+	return {
+		total24h: nonNegativeInteger(input.total24h),
+		categories: normalizeIntegrityCategories(input.categories).slice(0, 8)
+	};
+}
+
+function normalizeBuildIntegrity(input) {
+	if (!input || typeof input !== "object") {
+		return {
+			status: "available",
+			evidence: "Launcher manifests publish SHA-256 hashes for downloadable client artifacts."
+		};
+	}
+	return {
+		status: sanitizeIntegrityLabel(input.status, "available"),
+		evidence: String(input.evidence || "").slice(0, 160),
+		artifacts: normalizeBuildArtifacts(input.artifacts),
+		manifest: normalizeBuildManifest(input.manifest),
+		source: normalizeBuildSource(input.source)
+	};
+}
+
+function normalizeBuildArtifacts(input) {
+	if (!Array.isArray(input)) return [];
+	return input.slice(0, 6).map((row) => ({
+		slug: sanitizeIntegrityLabel(row.slug, "artifact"),
+		label: String(row.label || "Build artifact").slice(0, 80),
+		url: safeRelativeUrl(row.url),
+		available: row.available === true,
+		publicDownload: row.publicDownload !== false,
+		sizeBytes: nonNegativeInteger(row.sizeBytes),
+		updatedAt: validIsoTimestamp(row.updatedAt) || "",
+		sha256: safeSha256(row.sha256)
+	}));
+}
+
+function normalizeBuildManifest(input) {
+	if (!input || typeof input !== "object") {
+		return { status: "unknown", url: "/api/launcher/manifest.properties", fileCount: 0, clientSha256: "" };
+	}
+	return {
+		status: sanitizeIntegrityLabel(input.status, "unknown"),
+		url: safeRelativeUrl(input.url) || "/api/launcher/manifest.properties",
+		version: String(input.version || "").slice(0, 40),
+		fileCount: nonNegativeInteger(input.fileCount),
+		clientSha256: safeSha256(input.clientSha256),
+		updatedAt: validIsoTimestamp(input.updatedAt) || ""
+	};
+}
+
+function normalizeBuildSource(input) {
+	if (!input || typeof input !== "object") {
+		return { status: "source_pending", repositoryUrl: sourceRepositoryUrl, commit: "", shortCommit: "", branch: "", dirty: false };
+	}
+	const commit = safeCommitHash(input.commit);
+	return {
+		status: sanitizeIntegrityLabel(input.status, "source_pending"),
+		repositoryUrl: safeHttpUrl(input.repositoryUrl) || sourceRepositoryUrl,
+		commit,
+		shortCommit: String(input.shortCommit || commit.slice(0, 12)).slice(0, 16),
+		branch: sanitizeSourceText(input.branch, 64),
+		dirty: input.dirty === true,
+		generatedAt: validIsoTimestamp(input.generatedAt) || ""
+	};
+}
+
+async function buildIntegrity(input) {
+	const normalized = normalizeBuildIntegrity(input);
+	const proof = await buildProofState();
+	return {
+		...normalized,
+		status: proof.status,
+		evidence: proof.evidence,
+		artifacts: proof.artifacts.length ? proof.artifacts : normalized.artifacts,
+		manifest: proof.manifest.status !== "unknown" ? proof.manifest : normalized.manifest,
+		source: proof.source.status !== "source_pending" ? proof.source : normalized.source
+	};
+}
+
+function normalizeItemProvenanceIntegrity(input, source) {
+	if (!input || typeof input !== "object") {
+		return emptyItemProvenanceIntegrity("not_recording", source || "snapshot", "missing_item_provenance");
+	}
+	return {
+		status: sanitizeIntegrityLabel(input.status, "recording_no_staff_mints"),
+		source: sanitizeIntegrityLabel(input.source, source || "snapshot"),
+		reason: input.reason ? sanitizeIntegrityLabel(input.reason, "") : "",
+		trackedItems: nonNegativeInteger(input.trackedItems),
+		totalEvents: nonNegativeInteger(input.totalEvents),
+		total24h: nonNegativeInteger(input.total24h),
+		total7d: nonNegativeInteger(input.total7d),
+		staffMints24h: nonNegativeInteger(input.staffMints24h),
+		staffMints7d: nonNegativeInteger(input.staffMints7d),
+		origins24h: nonNegativeInteger(input.origins24h),
+		origins7d: nonNegativeInteger(input.origins7d),
+		npcDrops24h: nonNegativeInteger(input.npcDrops24h),
+		npcDrops7d: nonNegativeInteger(input.npcDrops7d),
+		originAmount24h: nonNegativeInteger(input.originAmount24h),
+		transfers24h: nonNegativeInteger(input.transfers24h),
+		transfers7d: nonNegativeInteger(input.transfers7d),
+		amount24h: nonNegativeInteger(input.amount24h),
+		catalogs24h: nonNegativeInteger(input.catalogs24h),
+		sources: normalizeIntegrityCategories(input.sources),
+		destinations: normalizeIntegrityCategories(input.destinations),
+		recent: normalizeItemProvenanceRecent(input.recent)
+	};
+}
+
+function emptyItemProvenanceIntegrity(status, source, reason) {
+	return {
+		status,
+		source,
+		reason: reason || "",
+		trackedItems: 0,
+		totalEvents: 0,
+		total24h: 0,
+		total7d: 0,
+		staffMints24h: 0,
+		staffMints7d: 0,
+		origins24h: 0,
+		origins7d: 0,
+		npcDrops24h: 0,
+		npcDrops7d: 0,
+		originAmount24h: 0,
+		transfers24h: 0,
+		transfers7d: 0,
+		amount24h: 0,
+		catalogs24h: 0,
+		sources: [],
+		destinations: [],
+		recent: []
+	};
+}
+
+function normalizeSimpleIntegrityBucket(input, fallbackStatus) {
+	if (!input || typeof input !== "object") {
+		return { status: fallbackStatus };
+	}
+	const normalized = { status: sanitizeIntegrityLabel(input.status, fallbackStatus) };
+	if (input.source !== undefined) normalized.source = sanitizeIntegrityLabel(input.source, "snapshot");
+	if (input.trackedItems !== undefined) normalized.trackedItems = nonNegativeInteger(input.trackedItems);
+	if (input.checkedPlayers !== undefined) normalized.checkedPlayers = nonNegativeInteger(input.checkedPlayers);
+	if (input.lastScanAt !== undefined) normalized.lastScanAt = validIsoTimestamp(input.lastScanAt) || null;
+	if (input.flagged !== undefined) normalized.flagged = nonNegativeInteger(input.flagged);
+	if (input.fixed !== undefined) normalized.fixed = nonNegativeInteger(input.fixed);
+	if (input.highSeverity !== undefined) normalized.highSeverity = nonNegativeInteger(input.highSeverity);
+	if (input.staffMints24h !== undefined) normalized.staffMints24h = nonNegativeInteger(input.staffMints24h);
+	if (input.staffMintAmount24h !== undefined) normalized.staffMintAmount24h = nonNegativeInteger(input.staffMintAmount24h);
+	if (input.categories !== undefined) normalized.categories = normalizeIntegrityCategories(input.categories);
+	if (input.privacy !== undefined) normalized.privacy = String(input.privacy || "").slice(0, 180);
+	return normalized;
+}
+
+function normalizeIntegrityCategories(input) {
+	if (!input) return [];
+	const rows = Array.isArray(input)
+		? input
+		: Object.entries(input).map(([category, count]) => ({ category, count }));
+	return rows
+		.map((row) => ({
+			category: sanitizeIntegrityLabel(row.category, "staff"),
+			count: nonNegativeInteger(row.count)
+		}))
+		.filter((row) => row.count > 0)
+		.sort((a, b) => b.count - a.count || a.category.localeCompare(b.category))
+		.slice(0, 12);
+}
+
+function normalizeItemProvenanceRecent(input) {
+	if (!Array.isArray(input)) return [];
+	return input.slice(0, 8).map((row) => ({
+		at: validIsoTimestamp(row.at) || now(),
+		eventType: sanitizeIntegrityLabel(row.eventType, "event"),
+		source: sanitizeIntegrityLabel(row.source, "unknown"),
+		destination: sanitizeIntegrityLabel(row.destination, "unknown"),
+		command: sanitizeIntegrityLabel(row.command, "staff"),
+		catalogId: nonNegativeInteger(row.catalogId),
+		amount: nonNegativeInteger(row.amount),
+		noted: row.noted === true
+	}));
+}
+
+function normalizeIntegrityRecent(input) {
+	if (!Array.isArray(input)) return [];
+	return input.slice(0, 8).map((row) => ({
+		at: validIsoTimestamp(row.at) || now(),
+		status: row.status === "blocked" ? "blocked" : "allowed",
+		category: sanitizeIntegrityLabel(row.category, "staff")
+	}));
+}
+
+function categoryCounts(counts) {
+	return Array.from(counts.entries())
+		.map(([category, count]) => ({ category, count }))
+		.sort((a, b) => b.count - a.count || a.category.localeCompare(b.category))
+		.slice(0, 12);
+}
+
+function sanitizeIntegrityLabel(value, fallback) {
+	const label = String(value || fallback || "unknown")
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+		.slice(0, 32);
+	return label || fallback || "unknown";
+}
+
+function safeSha256(value) {
+	const digest = String(value || "").trim().toLowerCase();
+	return /^[a-f0-9]{64}$/.test(digest) ? digest : "";
+}
+
+function safeCommitHash(value) {
+	const commit = String(value || "").trim().toLowerCase();
+	return /^[a-f0-9]{7,64}$/.test(commit) ? commit : "";
+}
+
+function sanitizeSourceText(value, limit) {
+	return String(value || "")
+		.replace(/[^a-zA-Z0-9._/-]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.slice(0, limit || 64);
+}
+
+function safeRelativeUrl(value) {
+	const url = String(value || "").trim();
+	if (!url || url[0] !== "/" || url.startsWith("//") || /[\s<>]/.test(url)) return "";
+	return url.slice(0, 180);
+}
+
+function safeHttpUrl(value) {
+	const url = String(value || "").trim();
+	if (!/^https:\/\/[a-z0-9.-]+(?:\/[^\s<>]*)?$/i.test(url)) return "";
+	return url.slice(0, 220);
+}
+
+function nonNegativeInteger(value) {
+	const number = Number(value);
+	return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+}
+
+function validIsoTimestamp(value) {
+	const timestamp = Date.parse(value || "");
+	if (!Number.isFinite(timestamp)) return "";
+	return new Date(timestamp).toISOString();
+}
+
+function unixSecondsToIso(value) {
+	const seconds = Number(value);
+	if (!Number.isFinite(seconds) || seconds <= 0) return now();
+	return new Date(seconds * 1000).toISOString();
+}
+
+function betaSignupCounterState(realBetaTesterCount) {
+	const startMs = Date.parse(betaSignupCounterStartedAtIso);
+	const elapsedHours = Math.max(0, Math.floor((Date.now() - startMs) / (60 * 60 * 1000)));
+	let hourlyLift = 0;
+	for (let hour = 0; hour < elapsedHours; hour += 1) {
+		hourlyLift += betaSignupHourlyIncrement(hour);
+	}
+	const displayCount = Math.max(
+		Number(realBetaTesterCount || 0),
+		betaSignupCounterBase + hourlyLift
+	);
+	return {
+		count: displayCount,
+		realCount: Number(realBetaTesterCount || 0),
+		nextUpdateAt: new Date(startMs + (elapsedHours + 1) * 60 * 60 * 1000).toISOString()
+	};
+}
+
+function betaSignupHourlyIncrement(hourIndex) {
+	const digest = createHash("sha256")
+		.update(`${betaSignupCounterSeed}:${hourIndex}`)
+		.digest();
+	return 1 + (digest[0] % 3);
+}
+
+async function downloadState(options = {}) {
+	const includePrivate = options.includePrivate !== false;
 	const rows = [];
 	for (const artifact of downloadArtifacts) {
+		if (!includePrivate && artifact.publicDownload === false) {
+			continue;
+		}
 		try {
 			const fileStat = await stat(artifact.path);
+			const sha256 = await sha256File(artifact.path, fileStat);
 			rows.push({
+				slug: artifact.slug,
 				label: artifact.label,
 				state: `Built ${formatBytes(fileStat.size)}`,
 				url: `/downloads/${artifact.slug}`,
 				available: true,
+				publicDownload: artifact.publicDownload !== false,
 				sizeBytes: fileStat.size,
-				updatedAt: fileStat.mtime.toISOString()
+				updatedAt: fileStat.mtime.toISOString(),
+				sha256
 			});
 		} catch (error) {
 			rows.push({
+				slug: artifact.slug,
 				label: artifact.label,
 				state: "Run scripts/build.sh",
 				url: "#",
-				available: false
+				available: false,
+				publicDownload: artifact.publicDownload !== false
 			});
 		}
 	}
 	return rows;
+}
+
+async function buildProofState() {
+	const artifacts = await downloadState({ includePrivate: true });
+	const publicArtifacts = artifacts
+		.filter((artifact) => artifact.publicDownload !== false)
+		.map((artifact) => ({
+			slug: artifact.slug,
+			label: artifact.label,
+			url: artifact.url,
+			available: artifact.available === true,
+			publicDownload: true,
+			sizeBytes: nonNegativeInteger(artifact.sizeBytes),
+			updatedAt: validIsoTimestamp(artifact.updatedAt) || "",
+			sha256: safeSha256(artifact.sha256)
+		}));
+	const manifest = await launcherManifestProof();
+	const source = await sourceProofState();
+	const availableArtifacts = publicArtifacts.filter((artifact) => artifact.available).length;
+	const status = availableArtifacts > 0 || manifest.status === "available" ? "available" : "waiting_for_artifacts";
+	return {
+		status,
+		evidence: "Download and launcher-manifest hashes are generated from the files being served.",
+		artifacts: publicArtifacts,
+		manifest,
+		source
+	};
+}
+
+async function launcherManifestProof() {
+	const clientArtifact = downloadArtifacts.find((entry) => entry.slug === "client-runtime");
+	try {
+		const fileStat = await stat(clientArtifact.path);
+		if (!fileStat.isFile()) throw new Error("not_file");
+		const cacheFileCount = await countClientCacheManifestFiles();
+		const latestMtimeMs = Math.max(fileStat.mtimeMs, await latestClientCacheManifestMtime());
+		return {
+			status: "available",
+			url: "/api/launcher/manifest.properties",
+			version: new Date(latestMtimeMs).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"),
+			fileCount: 1 + cacheFileCount,
+			clientSha256: await sha256File(clientArtifact.path, fileStat),
+			updatedAt: new Date(latestMtimeMs).toISOString()
+		};
+	} catch (error) {
+		return {
+			status: "waiting_for_artifacts",
+			url: "/api/launcher/manifest.properties",
+			fileCount: 0,
+			clientSha256: ""
+		};
+	}
+}
+
+async function countClientCacheManifestFiles() {
+	try {
+		const files = await listClientCacheFiles(clientCacheDir);
+		return files.filter((filePath) => {
+			const relativePath = relative(clientCacheDir, filePath).replace(/\\/g, "/");
+			return !isRuntimeCachePath(relativePath);
+		}).length;
+	} catch (error) {
+		return 0;
+	}
+}
+
+async function latestClientCacheManifestMtime() {
+	try {
+		const files = await listClientCacheFiles(clientCacheDir);
+		let latest = 0;
+		for (const filePath of files) {
+			const relativePath = relative(clientCacheDir, filePath).replace(/\\/g, "/");
+			if (isRuntimeCachePath(relativePath)) continue;
+			const fileStat = await stat(filePath);
+			if (fileStat.isFile()) latest = Math.max(latest, fileStat.mtimeMs);
+		}
+		return latest;
+	} catch (error) {
+		return 0;
+	}
+}
+
+async function sourceProofState() {
+	const metadata = await readBuildMetadata();
+	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.commit || await gitValue(["rev-parse", "HEAD"]));
+	const branch = sanitizeSourceText(process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.branch || await gitValue(["branch", "--show-current"]), 64);
+	const dirty = metadata.dirty === true || (metadata.dirty !== false && await gitDirty());
+	return normalizeBuildSource({
+		status: commit ? (dirty ? "publish_pending" : "commit_recorded") : "source_pending",
+		repositoryUrl: process.env.PORTAL_SOURCE_URL || metadata.repositoryUrl || sourceRepositoryUrl,
+		commit,
+		shortCommit: commit.slice(0, 12),
+		branch,
+		dirty,
+		generatedAt: metadata.generatedAt || ""
+	});
+}
+
+async function readBuildMetadata() {
+	try {
+		const metadata = JSON.parse(await readFile(buildMetadataPath, "utf8"));
+		return metadata && typeof metadata === "object" ? metadata : {};
+	} catch (error) {
+		return {};
+	}
+}
+
+async function gitValue(args) {
+	try {
+		const result = await execFile("git", ["-C", repoRoot, ...args], { timeout: 1500 });
+		return String(result.stdout || "").trim();
+	} catch (error) {
+		return "";
+	}
+}
+
+async function gitDirty() {
+	try {
+		const result = await execFile("git", ["-C", repoRoot, "status", "--porcelain"], { timeout: 1500 });
+		return String(result.stdout || "").trim().length > 0;
+	} catch (error) {
+		return false;
+	}
 }
 
 function dynamicActivity(store) {
@@ -1596,10 +2988,10 @@ function dynamicActivity(store) {
 	const latestFounder = store.founders[store.founders.length - 1];
 	const latestCharacter = store.characters[store.characters.length - 1];
 	if (latestFounder) {
-		const rewardCount = referralRewardCodesForFounder(store, latestFounder.id).length;
+		const cardReserved = Boolean(latestFounder.starterCardUnlocked) || latestFounder.creditedReferrals >= 2;
 		rows.push({
-			type: rewardCount > 0 ? "rare" : "title",
-			text: `${latestFounder.username} reserved a founder pass${rewardCount > 0 ? ` and earned ${rewardCount} referral sub code${rewardCount === 1 ? "" : "s"}` : ""}.`,
+			type: cardReserved ? "rare" : "title",
+			text: `${latestFounder.username} reserved a founder pass${cardReserved ? " and a Lumbridge subscription card" : ""}.`,
 			time: "Now"
 		});
 	}
@@ -1784,6 +3176,11 @@ async function syncStarterCardToOpenRsc(account) {
 	`);
 }
 
+async function syncSignupCodeToOpenRsc(founder) {
+	if (!openRscDbPath || !founder || !founder.signupCode) return false;
+	return syncSignupCodeValueToOpenRsc(founder.signupCode);
+}
+
 async function syncSignupCodeValueToOpenRsc(code) {
 	if (!openRscDbPath || !code) return false;
 	const key = signupCodeCacheKey(code);
@@ -1811,45 +3208,17 @@ async function syncSignupCodeValueToOpenRsc(code) {
 	return true;
 }
 
-async function syncSignupCodeToOpenRsc(founder) {
-	if (!founder || !founder.signupCode) return false;
-	return syncSignupCodeValueToOpenRsc(founder.signupCode);
-}
-
-async function syncReferralRewardCodeToOpenRsc(reward) {
-	if (!reward || !reward.code || reward.status === "revoked") return false;
-	return syncSignupCodeValueToOpenRsc(reward.code);
-}
-
-async function syncPendingReferralRewardsToOpenRsc(store) {
-	const result = { synced: 0, skippedRedeemed: 0, failed: 0, noCode: 0 };
-	if (!openRscDbPath) return result;
-	const gameValues = await signupCodeGameValues();
-	for (const reward of store.referralRewards) {
-		if (!reward || reward.status === "revoked") continue;
-		if (!reward.code) {
-			result.noCode += 1;
-			continue;
-		}
-		const gameValue = gameValues.get(signupCodeCacheKey(reward.code));
-		if (gameValue === signupCodeRedeemed) {
-			result.skippedRedeemed += 1;
-			if (!reward.syncedAt) reward.syncedAt = now();
-			continue;
-		}
-		if (reward.syncedAt && gameValue === signupCodeAvailable) {
-			continue;
-		}
-		try {
-			if (await syncReferralRewardCodeToOpenRsc(reward)) {
-				if (!reward.syncedAt) reward.syncedAt = now();
-				result.synced += 1;
-			}
-		} catch (error) {
-			result.failed += 1;
+async function syncReferralRewardCodesToOpenRsc(founder) {
+	if (!openRscDbPath || !founder || !Array.isArray(founder.referralRewardCodes)) return 0;
+	let synced = 0;
+	for (const reward of founder.referralRewardCodes) {
+		if (!reward || reward.syncedAt) continue;
+		if (await syncSignupCodeValueToOpenRsc(reward.code)) {
+			reward.syncedAt = now();
+			synced += 1;
 		}
 	}
-	return result;
+	return synced;
 }
 
 async function signupCodeGameValues() {
@@ -1870,34 +3239,25 @@ function signupCodeStatus(founder, gameValues) {
 	return value === signupCodeRedeemed ? "redeemed" : "issued";
 }
 
-function referralRewardCodeStatus(reward, gameValues) {
-	if (!reward || !reward.code) return "no_code";
-	if (reward.status === "revoked") return "revoked";
-	if (!openRscDbPath || !gameValues) return reward.syncedAt ? "issued" : "not_synced";
-	const value = gameValues.get(signupCodeCacheKey(reward.code));
-	if (value === undefined) return "not_synced";
-	return value === signupCodeRedeemed ? "redeemed" : "issued";
-}
-
-function referralRewardCodesForFounder(store, founderId, gameValues = null) {
-	return store.referralRewards
-		.filter((reward) => reward.referrerFounderId === founderId && reward.status !== "revoked")
-		.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
-		.map((reward) => ({
-			id: reward.id,
-			code: reward.code,
-			status: referralRewardCodeStatus(reward, gameValues),
-			syncedToGame: Boolean(reward.syncedAt),
-			referredFounderId: reward.referredFounderId || null,
-			referralId: reward.referralId || null,
-			createdAt: reward.createdAt || null,
-			redeemHint: "Talk to the Void Subscription Vendor in Lumbridge and enter this referral reward code."
-		}));
-}
-
 function csvCell(value) {
 	const text = String(value == null ? "" : value);
 	return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
+function escapeHtml(value) {
+	return String(value == null ? "" : value)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+function jsonScript(value) {
+	return JSON.stringify(value).replace(/[<>&]/g, (character) => ({
+		"<": "\\u003c",
+		">": "\\u003e",
+		"&": "\\u0026"
+	}[character]));
 }
 
 function starterCardCacheKey(accountId) {
@@ -2274,13 +3634,19 @@ function locationState(x, y) {
 	return { x, y, floor, localY, label };
 }
 
-function locationLabel(x, y, floor) {
-	if (x >= 115 && x <= 145 && y >= 495 && y <= 535) return "Lumbridge";
-	if (x >= 190 && x <= 235 && y >= 430 && y <= 470) return "Void Island";
-	if (x >= 85 && x <= 115 && y >= 505 && y <= 535) return "Draynor";
-	if (x >= 115 && x <= 155 && y >= 465 && y <= 495) return "Al Kharid";
-	if (x >= 120 && x <= 170 && y >= 330 && y <= 390) return "Varrock";
-	if (x >= 185 && x <= 230 && y >= 300 && y <= 350) return "Edgeville";
+	function locationLabel(x, y, floor) {
+	if (x >= 16 && x <= 35 && y >= 18 && y <= 45) return "Void Island";
+	if (x >= 108 && x <= 147 && y >= 620 && y <= 670) return "Lumbridge";
+	if (x >= 78 && x <= 175 && y >= 490 && y <= 537) return "Varrock";
+	if (x >= 92 && x <= 150 && y >= 444 && y <= 490) return "Varrock";
+	if (x >= 210 && x <= 233 && y >= 608 && y <= 659) return "Draynor";
+	if (x >= 245 && x <= 341 && y >= 531 && y <= 583) return "Falador";
+	if (x >= 48 && x <= 96 && y >= 659 && y <= 703) return "Al Kharid";
+	if (x >= 198 && x <= 229 && y >= 427 && y <= 450) return "Edgeville";
+	if (x >= 208 && x <= 227 && y >= 451 && y <= 472) return "Edgeville";
+	if (x >= 100 && x <= 130 && y >= 290 && y <= 325) return "Void Enclave";
+	if (x >= 70 && x <= 90 && y >= 3240 && y <= 3265) return "Void Dungeon";
+	if (x >= 582 && x <= 616 && y >= 2910 && y <= 2916) return "Void Arena";
 	if (x >= 180 && y <= 300) return "Wilderness";
 	return floor ? `Floor ${floor} at ${x}, ${y}` : `${x}, ${y}`;
 }
@@ -2308,18 +3674,29 @@ function appearanceSummary(player) {
 	].join(", ");
 }
 
-function founderState(founder, store) {
+function founderState(founder) {
 	const creditedReferrals = founder.creditedReferrals || 0;
-	const referralRewardCodes = store ? referralRewardCodesForFounder(store, founder.id) : [];
+	const referralRewardCodes = Array.isArray(founder.referralRewardCodes)
+		? founder.referralRewardCodes
+			.filter((reward) => reward && reward.code)
+			.map((reward) => ({
+				code: reward.code,
+				referralId: reward.referralId || null,
+				referredFounderId: reward.referredFounderId || null,
+				releaseValid: true,
+				syncedToGame: Boolean(reward.syncedAt),
+				createdAt: reward.createdAt || null
+			}))
+		: [];
 	return {
 		username: founder.username,
 		email: founder.emailDisplay,
 		code: founder.code,
 		creditedReferrals,
-		requiredReferrals: 1,
-		starterCardUnlocked: Boolean(founder.starterCardUnlocked),
+		requiredReferrals: 2,
 		referralRewardCodeCount: referralRewardCodes.length,
 		referralRewardCodes,
+		starterCardUnlocked: Boolean(founder.starterCardUnlocked) || creditedReferrals >= 2,
 		referredBy: founder.referredByCode ? {
 			code: founder.referredByCode,
 			username: founder.referredByUsername || ""
@@ -2738,7 +4115,6 @@ function normalizeStore(store) {
 			character: Number(store.nextIds && store.nextIds.character) || 1,
 			founder: Number(store.nextIds && store.nextIds.founder) || 1,
 			referral: Number(store.nextIds && store.nextIds.referral) || 1,
-			referralReward: Number(store.nextIds && store.nextIds.referralReward) || 1,
 			session: Number(store.nextIds && store.nextIds.session) || 1,
 			entitlement: Number(store.nextIds && store.nextIds.entitlement) || 1,
 			linkChallenge: Number(store.nextIds && store.nextIds.linkChallenge) || 1,
@@ -2752,11 +4128,11 @@ function normalizeStore(store) {
 		sessions: Array.isArray(store.sessions) ? store.sessions : [],
 		founders: Array.isArray(store.founders) ? store.founders : [],
 		referrals: Array.isArray(store.referrals) ? store.referrals : [],
-		referralRewards: Array.isArray(store.referralRewards) ? store.referralRewards : [],
 		characters: Array.isArray(store.characters) ? store.characters : [],
 		entitlements: Array.isArray(store.entitlements) ? store.entitlements : [],
 		linkChallenges: Array.isArray(store.linkChallenges) ? store.linkChallenges : [],
 		recoveryCodes: Array.isArray(store.recoveryCodes) ? store.recoveryCodes : [],
+		oauthStates: Array.isArray(store.oauthStates) ? store.oauthStates : [],
 		audit: Array.isArray(store.audit) ? store.audit : [],
 		abuseSignals: Array.isArray(store.abuseSignals) ? store.abuseSignals : []
 	};
@@ -2920,23 +4296,22 @@ function signupCodeCacheKey(code) {
 	return normalized ? `${signupCodeCachePrefix}${normalized}` : "";
 }
 
-function signupCodeExists(store, normalizedCode) {
-	if (!normalizedCode) return true;
-	return store.founders.some((entry) => entry.signupCodeNormalized === normalizedCode) ||
-		store.referralRewards.some((entry) => entry.codeNormalized === normalizedCode);
-}
-
-function makeUniqueSignupCode(store) {
-	let code = makeSignupCode();
-	while (signupCodeExists(store, normalizeSignupCode(code))) {
-		code = makeSignupCode();
-	}
-	return code;
+function signupCodeInUse(store, code) {
+	const normalized = normalizeSignupCode(code);
+	return store.founders.some((entry) => {
+		if (entry.signupCodeNormalized === normalized) return true;
+		return Array.isArray(entry.referralRewardCodes) && entry.referralRewardCodes.some((reward) =>
+			normalizeSignupCode(reward && reward.code) === normalized
+		);
+	});
 }
 
 function ensureFounderSignupCode(store, founder) {
 	if (founder.signupCode) return founder;
-	const code = makeUniqueSignupCode(store);
+	let code = makeSignupCode();
+	while (signupCodeInUse(store, code)) {
+		code = makeSignupCode();
+	}
 	founder.signupCode = code;
 	founder.signupCodeNormalized = normalizeSignupCode(code);
 	founder.signupCodeCreatedAt = now();
@@ -2945,11 +4320,36 @@ function ensureFounderSignupCode(store, founder) {
 	return founder;
 }
 
+function ensureReferralRewardCode(store, referrer, referral) {
+	if (!referrer || !referral) return null;
+	if (!Array.isArray(referrer.referralRewardCodes)) referrer.referralRewardCodes = [];
+	const existing = referrer.referralRewardCodes.find((reward) => reward.referralId === referral.id);
+	if (existing) return existing;
+	let code = makeSignupCode();
+	while (signupCodeInUse(store, code)) {
+		code = makeSignupCode();
+	}
+	const reward = {
+		code,
+		referralId: referral.id,
+		referredFounderId: referral.referredFounderId,
+		createdAt: now(),
+		syncedAt: null
+	};
+	referrer.referralRewardCodes.push(reward);
+	audit(store, "referral_reward_code_minted", {
+		referrerFounderId: referrer.id,
+		referredFounderId: referral.referredFounderId
+	});
+	return reward;
+}
+
 function signupState(founder) {
 	if (!founder || !founder.signupCode) return null;
 	return {
 		code: founder.signupCode,
 		redeemHint: "Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.",
+		releaseValid: true,
 		syncedToGame: Boolean(founder.signupCodeSyncedAt),
 		createdAt: founder.signupCodeCreatedAt || null
 	};

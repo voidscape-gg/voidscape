@@ -42,9 +42,12 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	private final int client_width = 512;
 	private final int client_height = 334;
+	private static final int CLIENT_FULL_HEIGHT = 334 + 12;
+	private static final int MAX_PORTRAIT_FULL_HEIGHT = 1152;
 
 	protected final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
-	private final Bitmap currentFrame = Bitmap.createBitmap(512, 334 + 12, Bitmap.Config.RGB_565);
+	private final Object frameLock = new Object();
+	private Bitmap currentFrame = Bitmap.createBitmap(512, CLIENT_FULL_HEIGHT, Bitmap.Config.RGB_565);
 
 	private final GameActivity gameActivity;
 	private boolean m_hb;
@@ -82,7 +85,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-
+		requestClientResize(width, height);
 	}
 
 	@Override
@@ -135,47 +138,49 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 			Paint paint = new Paint();
 			paint.setTextSize(15);
 			paint.setTextAlign(Align.CENTER);
-			Canvas canvas = new Canvas(currentFrame);
-			canvas.drawColor(0, Mode.CLEAR);
+			synchronized (frameLock) {
+				Canvas canvas = new Canvas(currentFrame);
+				canvas.drawColor(0, Mode.CLEAR);
 
-			paint.setStyle(Paint.Style.FILL);
-			canvas.drawRect(0, 0, client_width, client_height, paint);
-			paint.setStyle(Paint.Style.STROKE);
+				paint.setStyle(Paint.Style.FILL);
+				canvas.drawRect(0, 0, currentFrame.getWidth(), currentFrame.getHeight(), paint);
+				paint.setStyle(Paint.Style.STROKE);
 
-			// if (!this.m_hb) {
-			// canvas.drawBitmap(this.loadingJagLogo, (float) x, (float) y,
-			// null);
-			// }
+				// if (!this.m_hb) {
+				// canvas.drawBitmap(this.loadingJagLogo, (float) x, (float) y,
+				// null);
+				// }
 
-			x += 2;
-			y += 90;
+				x += 2;
+				y += 90;
 
-			paint.setColor(Color.rgb(132, 132, 132));
-			if (this.m_hb) {
-				paint.setColor(Color.rgb(220, 0, 0));
-			}
+				paint.setColor(Color.rgb(132, 132, 132));
+				if (this.m_hb) {
+					paint.setColor(Color.rgb(220, 0, 0));
+				}
 
-			paint.setStyle(Paint.Style.STROKE);
-			canvas.drawRect(x - 2, y - 2, x + 280, y + 23, paint);
+				paint.setStyle(Paint.Style.STROKE);
+				canvas.drawRect(x - 2, y - 2, x + 280, y + 23, paint);
 
-			paint.setStyle(Paint.Style.FILL);
-			canvas.drawRect(x, y, x + ((percent * 277) / 100), y + 20, paint);
+				paint.setStyle(Paint.Style.FILL);
+				canvas.drawRect(x, y, x + ((percent * 277) / 100), y + 20, paint);
 
-			paint.setStyle(Paint.Style.STROKE);
+				paint.setStyle(Paint.Style.STROKE);
 
-			paint.setColor(Color.rgb(198, 198, 198));
-			if (this.m_hb) {
-				paint.setColor(Color.rgb(255, 255, 255));
-			}
+				paint.setColor(Color.rgb(198, 198, 198));
+				if (this.m_hb) {
+					paint.setColor(Color.rgb(255, 255, 255));
+				}
 
-			canvas.drawText(state, x + 138, y + 10, paint);
+				canvas.drawText(state, x + 138, y + 10, paint);
 
-			if (!this.m_hb) {
-				canvas.drawText("Voidscape", x + 138, y + 30, paint);
-				canvas.drawText("Classic adventure, rebuilt", x + 138, y + 44, paint);
-			} else {
-				paint.setColor(Color.rgb(132, 132, 152));
-				canvas.drawText("Voidscape", x + 138, client_height - 20, paint);
+				if (!this.m_hb) {
+					canvas.drawText("Voidscape", x + 138, y + 30, paint);
+					canvas.drawText("Classic adventure, rebuilt", x + 138, y + 44, paint);
+				} else {
+					paint.setColor(Color.rgb(132, 132, 152));
+					canvas.drawText("Voidscape", x + 138, client_height - 20, paint);
+				}
 			}
 		} catch (Exception var6) {
 			var6.printStackTrace();
@@ -191,27 +196,29 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		y += 90;
 		int progress = percentage * 277 / 100;
 
-		Canvas canvas = new Canvas(currentFrame);
-		Paint paint = new Paint();
-		paint.setColor(Color.rgb(132, 132, 132));
-		if (this.m_hb) {
-			paint.setColor(Color.rgb(220, 0, 0));
+		synchronized (frameLock) {
+			Canvas canvas = new Canvas(currentFrame);
+			Paint paint = new Paint();
+			paint.setColor(Color.rgb(132, 132, 132));
+			if (this.m_hb) {
+				paint.setColor(Color.rgb(220, 0, 0));
+			}
+
+			paint.setStyle(Paint.Style.FILL);
+			canvas.drawRect(x, y, x + progress, y + 20, paint);
+
+			paint.setColor(Color.BLACK);
+
+			canvas.drawRect(progress + x, y, x + 277 - progress, y + 20, paint);
+
+			paint.setColor(Color.rgb(198, 198, 198));
+			if (this.m_hb) {
+				paint.setColor(Color.rgb(255, 255, 255));
+			}
+
+			paint.setTextAlign(Align.CENTER);
+			canvas.drawText(status, x + 138, y + 10, paint);
 		}
-
-		paint.setStyle(Paint.Style.FILL);
-		canvas.drawRect(x, y, x + progress, y + 20, paint);
-
-		paint.setColor(Color.BLACK);
-
-		canvas.drawRect(progress + x, y, x + 277 - progress, y + 20, paint);
-
-		paint.setColor(Color.rgb(198, 198, 198));
-		if (this.m_hb) {
-			paint.setColor(Color.rgb(255, 255, 255));
-		}
-
-		paint.setTextAlign(Align.CENTER);
-		canvas.drawText(status, x + 138, y + 10, paint);
 	}
 
 	@Override
@@ -232,12 +239,14 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		x += 2;
 		y += 90;
 
-		Canvas canvas = new Canvas(currentFrame);
-		Paint paint = new Paint();
-		paint.setColor(Color.rgb(198, 198, 198));
-		paint.setTextSize(15);
-		paint.setTextAlign(Align.CENTER);
-		canvas.drawText("Open app again and choose Public.", x + 138, y + 62, paint);
+		synchronized (frameLock) {
+			Canvas canvas = new Canvas(currentFrame);
+			Paint paint = new Paint();
+			paint.setColor(Color.rgb(198, 198, 198));
+			paint.setTextSize(15);
+			paint.setTextAlign(Align.CENTER);
+			canvas.drawText("Open app again and choose Public.", x + 138, y + 62, paint);
+		}
 	}
 
 	@Override
@@ -252,27 +261,29 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public void drawTextBox(String line2, byte var2, String line1) {
-		Canvas canvas = new Canvas(currentFrame);
+		synchronized (frameLock) {
+			Canvas canvas = new Canvas(currentFrame);
 
-		Paint paint = new Paint();
+			Paint paint = new Paint();
 
-		paint.setColor(Color.rgb(132, 132, 132));
-		if (this.m_hb) {
-			paint.setColor(Color.rgb(220, 0, 0));
+			paint.setColor(Color.rgb(132, 132, 132));
+			if (this.m_hb) {
+				paint.setColor(Color.rgb(220, 0, 0));
+			}
+
+			int x = 512 / 2 - 140;
+			int y = 334 / 2 - 25;
+			paint.setStyle(Paint.Style.FILL);
+			canvas.drawRect(x, y, x + 280, y + 50, paint);
+			paint.setStyle(Paint.Style.STROKE);
+			paint.setColor(Color.WHITE);
+			canvas.drawRect(x, y, x + 280, y + 50, paint);
+
+			paint.setTextAlign(Align.CENTER);
+			canvas.drawText(line1, client_width >> 1, (client_height >> 1) - 10, paint);
+			canvas.drawText(line2, client_width >> 1, 10 + (client_height >> 1), paint);
+			paint.setColor(Color.BLACK);
 		}
-
-		int x = 512 / 2 - 140;
-		int y = 334 / 2 - 25;
-		paint.setStyle(Paint.Style.FILL);
-		canvas.drawRect(x, y, x + 280, y + 50, paint);
-		paint.setStyle(Paint.Style.STROKE);
-		paint.setColor(Color.WHITE);
-		canvas.drawRect(x, y, x + 280, y + 50, paint);
-
-		paint.setTextAlign(Align.CENTER);
-		canvas.drawText(line1, client_width >> 1, (client_height >> 1) - 10, paint);
-		canvas.drawText(line2, client_width >> 1, 10 + (client_height >> 1), paint);
-		paint.setColor(Color.BLACK);
 	}
 
 	@Override
@@ -297,14 +308,17 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 			return;
 		}
 
-		int copyWidth = Math.min(gameWidth, currentFrame.getWidth());
-		int copyHeight = Math.min(gameHeight, currentFrame.getHeight());
-		int requiredPixels = ((copyHeight - 1) * gameWidth) + copyWidth;
-		if (copyWidth <= 0 || copyHeight <= 0 || surface.pixelData.length < requiredPixels) {
-			return;
-		}
+		synchronized (frameLock) {
+			ensureFrameBitmap(gameWidth, gameHeight);
+			int copyWidth = Math.min(gameWidth, currentFrame.getWidth());
+			int copyHeight = Math.min(gameHeight, currentFrame.getHeight());
+			int requiredPixels = ((copyHeight - 1) * gameWidth) + copyWidth;
+			if (copyWidth <= 0 || copyHeight <= 0 || surface.pixelData.length < requiredPixels) {
+				return;
+			}
 
-		currentFrame.setPixels(surface.pixelData, 0, gameWidth, 0, 0, copyWidth, copyHeight);
+			currentFrame.setPixels(surface.pixelData, 0, gameWidth, 0, 0, copyWidth, copyHeight);
+		}
 		postInvalidate();
 	}
 
@@ -326,7 +340,9 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		float top = (resizedHeight - gameHeight * scale) / 2.0f;
 		c.translate(left, top);
 		c.scale(scale, scale);
-		c.drawBitmap(currentFrame, 0, 0, bitmapPaint);
+		synchronized (frameLock) {
+			c.drawBitmap(currentFrame, 0, 0, bitmapPaint);
+		}
 	}
 
 	@Override
@@ -347,6 +363,45 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void resized() {
 
+	}
+
+	private void requestClientResize(int surfaceWidth, int surfaceHeight) {
+		if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+			return;
+		}
+		int targetWidth = client_width;
+		int targetFullHeight = CLIENT_FULL_HEIGHT;
+		if (surfaceHeight > surfaceWidth) {
+			float aspect = (float) surfaceHeight / (float) surfaceWidth;
+			targetFullHeight = clamp(Math.round(targetWidth * aspect), CLIENT_FULL_HEIGHT, MAX_PORTRAIT_FULL_HEIGHT);
+		}
+
+		mudclient client = gameActivity.getMudclient();
+		if (client != null) {
+			int currentFullHeight = client.getGameHeight() + 12;
+			if (client.getGameWidth() != targetWidth || currentFullHeight != targetFullHeight) {
+				client.resizeWidth = targetWidth;
+				client.resizeHeight = targetFullHeight;
+			}
+		}
+		synchronized (frameLock) {
+			ensureFrameBitmap(targetWidth, targetFullHeight);
+		}
+		postInvalidate();
+	}
+
+	private void ensureFrameBitmap(int width, int height) {
+		if (width <= 0 || height <= 0) {
+			return;
+		}
+		if (currentFrame != null && currentFrame.getWidth() == width && currentFrame.getHeight() == height) {
+			return;
+		}
+		currentFrame = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
+	}
+
+	private int clamp(int value, int min, int max) {
+		return Math.max(min, Math.min(max, value));
 	}
 
 	@Override

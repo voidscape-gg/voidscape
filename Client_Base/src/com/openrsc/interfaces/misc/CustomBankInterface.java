@@ -526,13 +526,9 @@ public final class CustomBankInterface extends BankInterface {
 			for (int i = 0; i < bankCount + 1; i++) {
 				bank.setListEntry(bankScroll, i, "", 0, (String) null, (String) null);
 			}
-			bankSlotStart = bank.getScrollPosition(bankScroll) * BANK_COLUMNS;
-			if (bank.controlListCurrentSize[bankScroll] > 0
-				&& (int)(bankSlotStart / (double)BANK_COLUMNS) > (bank.controlListCurrentSize[bankScroll] - 4)) {
-				bank.resetListToIndex(bankScroll, (int)(bankSlotStart / (double)BANK_COLUMNS) - 1);
-			}
+			bankSlotStart = clampedBankScrollRow() * BANK_COLUMNS;
 			handleAndroidBankSwipeScroll();
-			bankSlotStart = bank.getScrollPosition(bankScroll) * BANK_COLUMNS;
+			bankSlotStart = clampedBankScrollRow() * BANK_COLUMNS;
 		} else {
 			bank.hide(bankScroll);
 			resetAndroidBankSwipeScroll();
@@ -1085,6 +1081,15 @@ public final class CustomBankInterface extends BankInterface {
 		androidBankSwipeLastY = Integer.MIN_VALUE;
 		androidBankSwipeRemainder = 0;
 		androidBankSwipeScrolling = false;
+	}
+
+	private int clampedBankScrollRow() {
+		int maxScrollRow = Math.max(0, bank.controlListCurrentSize[bankScroll] - BANK_ROWS);
+		int scrollRow = Math.max(0, Math.min(maxScrollRow, bank.getScrollPosition(bankScroll)));
+		if (scrollRow != bank.getScrollPosition(bankScroll)) {
+			bank.resetListToIndex(bankScroll, scrollRow);
+		}
+		return scrollRow;
 	}
 
 	private void handleAndroidBankSwipeScroll() {

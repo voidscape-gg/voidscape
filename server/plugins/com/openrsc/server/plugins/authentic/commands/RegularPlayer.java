@@ -10,6 +10,7 @@ import com.openrsc.server.content.clan.ClanInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
 import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.JDBCDatabase;
 import com.openrsc.server.database.impl.mysql.queries.logging.ChatLog;
 import com.openrsc.server.event.custom.HolidayDropEvent;
 import com.openrsc.server.event.rsc.GameTickEvent;
@@ -27,6 +28,7 @@ import com.openrsc.server.plugins.triggers.CommandTrigger;
 import com.openrsc.server.util.MessageFilter;
 import com.openrsc.server.util.languages.PreferredLanguage;
 import com.openrsc.server.util.rsc.DataConversions;
+import com.openrsc.server.util.rsc.Formulae;
 import com.openrsc.server.util.rsc.MessageType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.WordUtils;
@@ -41,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 
 import static com.openrsc.server.plugins.Functions.*;
 import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isBlackArmGang;
@@ -135,6 +138,8 @@ public final class RegularPlayer implements CommandTrigger {
 			sendMessageDiscord(player, args);
 		} else if (command.equalsIgnoreCase("commands")) {
 			queryCommands(player, 0);
+		} else if (command.equalsIgnoreCase("bug") || command.equalsIgnoreCase("reportbug")) {
+			reportBetaBug(player, args);
 		} else if (command.equalsIgnoreCase("beta") || command.equalsIgnoreCase("betaguide")) {
 			BetaOnboardingGuide.show(player);
 		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
@@ -1102,6 +1107,9 @@ public final class RegularPlayer implements CommandTrigger {
 			if (command.equalsIgnoreCase("g")) {
 				player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(Global) " + message));
 				player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + message));
+				if (player.getWorld().getServer().getDiscordService() != null) {
+					player.getWorld().getServer().getDiscordService().globalChatRelay(player, message);
+				}
 			} else {
 				player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(PKing) " + message));
 				player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(PKing) " + message));
@@ -1191,8 +1199,7 @@ public final class RegularPlayer implements CommandTrigger {
 	private void queryOnlinePlayerCount(Player player) {
 		int players = 0;
 		for (Player targetPlayer : player.getWorld().getPlayers()) {
-			boolean elevated = targetPlayer.hasElevatedPriveledges();
-			if (targetPlayer.isDefaultUser() && !elevated) {
+			if (appearsInOnlineList(player, targetPlayer)) {
 				players++;
 			}
 		}
@@ -1202,11 +1209,28 @@ public final class RegularPlayer implements CommandTrigger {
 	private void queryUniqueOnlinePlayerCount(Player player) {
 		ArrayList<String> IP_ADDRESSES = new ArrayList<>();
 		for (Player targetPlayer : player.getWorld().getPlayers()) {
-			boolean elevated = targetPlayer.hasElevatedPriveledges();
-			if (!IP_ADDRESSES.contains(targetPlayer.getCurrentIP()) && !elevated)
-				IP_ADDRESSES.add(targetPlayer.getCurrentIP());
+			String currentIp = targetPlayer.getCurrentIP();
+			if (appearsInOnlineList(player, targetPlayer) && currentIp != null && !IP_ADDRESSES.contains(currentIp)) {
+				IP_ADDRESSES.add(currentIp);
+			}
 		}
 		player.message(messagePrefix + "There are " + IP_ADDRESSES.size() + " unique players online");
+	}
+
+	private static boolean appearsInOnlineList(Player player, Player targetPlayer) {
+		if (targetPlayer == null) return false;
+		if (targetPlayer.getUsernameHash() == player.getUsernameHash()) return true;
+		if (player.isMod()) return true;
+		if (targetPlayer.isInvisibleTo(player)) return false;
+
+		byte privacy = targetPlayer.getSettings().getPrivacySetting(
+			PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES,
+			targetPlayer.isUsingCustomClient()
+		);
+
+		if (privacy == PlayerSettings.BlockingMode.None.id()) return true;
+		return privacy == PlayerSettings.BlockingMode.NonFriends.id()
+			&& targetPlayer.getSocial().isFriendsWith(player.getUsernameHash());
 	}
 
 	private void sendClanRequest(Player player, String[] args) {
@@ -1708,6 +1732,7 @@ public final class RegularPlayer implements CommandTrigger {
 		}
 		if (action.equals("reset")) {
 			LootBeamSettings.reset(player);
+			saveLootBeamSettings(player);
 			player.playerServerMessage(MessageType.QUEST, "@mag@Loot beams restored to the default rare-item list.");
 			return;
 		}
@@ -1722,10 +1747,12 @@ public final class RegularPlayer implements CommandTrigger {
 			}
 			if (action.equals("add")) {
 				LootBeamSettings.addItem(player, itemId);
+				saveLootBeamSettings(player);
 				player.playerServerMessage(MessageType.QUEST,
 					"@mag@Loot beam added for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
 			} else {
 				LootBeamSettings.removeItem(player, itemId);
+				saveLootBeamSettings(player);
 				player.playerServerMessage(MessageType.QUEST,
 					"@mag@Loot beam removed for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
 			}
@@ -1746,12 +1773,23 @@ public final class RegularPlayer implements CommandTrigger {
 			? LootBeamSettings.MODE_CUSTOM
 			: LootBeamSettings.MODE_DEFAULT;
 		LootBeamSettings.setMode(player, mode);
+		saveLootBeamSettings(player);
 		if (LootBeamSettings.MODE_CUSTOM.equals(mode)) {
 			player.playerServerMessage(MessageType.QUEST,
 				"@mag@Loot beams now use only the items you add with ::lootbeam add.");
 		} else {
 			player.playerServerMessage(MessageType.QUEST,
 				"@mag@Loot beams now use the default rare-item list plus your added items.");
+		}
+	}
+
+	private void saveLootBeamSettings(Player player) {
+		try {
+			player.getWorld().getServer().getPlayerService().savePlayerCache(player);
+		} catch (final GameDatabaseException ex) {
+			LOGGER.catching(ex);
+			player.playerServerMessage(MessageType.QUEST,
+				"@or1@Loot beam settings changed for this session, but could not be saved yet.");
 		}
 	}
 
@@ -1901,6 +1939,88 @@ public final class RegularPlayer implements CommandTrigger {
 		return joined.toString().trim();
 	}
 
+	private void reportBetaBug(Player player, String[] args) {
+		String message = joinArgs(args, 0);
+		if (message.length() == 0) {
+			player.message(badSyntaxPrefix + "bug <what happened>");
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Example: @whi@::bug Void Knight door stuck after teleporting from ::beta");
+			return;
+		}
+		if (message.length() < 8) {
+			player.message(messagePrefix + "Please include a few more details so we can reproduce it.");
+			return;
+		}
+		if (message.length() > 600) {
+			message = message.substring(0, 600);
+		}
+
+		String reportId = "BUG-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+		long now = System.currentTimeMillis();
+		String safeMessage = message.replace('\n', ' ').replace('\r', ' ').trim();
+		persistBetaBugReport(player, reportId, now, safeMessage);
+		sendBetaBugReportToDiscord(player, reportId, safeMessage);
+		LOGGER.info("[{}] {} reported bug at {},{} client {}: {}",
+			reportId,
+			player.getUsername(),
+			player.getX(),
+			player.getY(),
+			player.getClientVersion(),
+			safeMessage);
+		player.playerServerMessage(MessageType.QUEST,
+			"@gre@Bug report sent. @whi@" + reportId + " @mag@Thank you.");
+	}
+
+	private void persistBetaBugReport(Player player, String reportId, long now, String message) {
+		if (!(player.getWorld().getServer().getDatabase() instanceof JDBCDatabase)) {
+			return;
+		}
+		JDBCDatabase database = (JDBCDatabase) player.getWorld().getServer().getDatabase();
+		try {
+			database.withPreparedStatement(
+				"INSERT INTO bug_reports "
+					+ "(report_id, time, reporter_id, reporter, server_name, x, y, floor, client_version, category, private_report, status, message) "
+					+ "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				statement -> {
+					statement.setString(1, reportId);
+					statement.setLong(2, now);
+					statement.setInt(3, player.getDatabaseID());
+					statement.setString(4, player.getUsername());
+					statement.setString(5, player.getWorld().getServer().getConfig().SERVER_NAME);
+					statement.setInt(6, player.getX());
+					statement.setInt(7, player.getY());
+					statement.setInt(8, Formulae.getHeight(player.getLocation()));
+					statement.setInt(9, player.getClientVersion());
+					statement.setString(10, "bug");
+					statement.setInt(11, 0);
+					statement.setString(12, "new");
+					statement.setString(13, message);
+					statement.executeUpdate();
+				}
+			);
+		} catch (GameDatabaseException ex) {
+			LOGGER.warn("Could not persist beta bug report {} from {}", reportId, player.getUsername(), ex);
+		}
+	}
+
+	private void sendBetaBugReportToDiscord(Player player, String reportId, String message) {
+		if (player.getWorld().getServer().getDiscordService() == null) {
+			return;
+		}
+		String discordMessage = String.format(
+			"**%s** `%s` reported a bug in `%s` at `%d,%d` floor `%d` client `%d`:%n%s",
+			reportId,
+			player.getUsername(),
+			player.getWorld().getServer().getConfig().SERVER_NAME,
+			player.getX(),
+			player.getY(),
+			Formulae.getHeight(player.getLocation()),
+			player.getClientVersion(),
+			message
+		);
+		player.getWorld().getServer().getDiscordService().bugReportLog(discordMessage);
+	}
+
 	private String normalizeLootBeamItemName(String name) {
 		return name.toLowerCase().replaceAll("[^a-z0-9]+", "");
 	}
@@ -2002,6 +2122,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",
 		"@whi@::beta - opens the Voidscape beta guide menu %",
+		"@whi@::bug <message> - sends a beta bug report %",
 		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",

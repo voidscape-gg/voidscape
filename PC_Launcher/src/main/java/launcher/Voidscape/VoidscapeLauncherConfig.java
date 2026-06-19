@@ -60,7 +60,7 @@ public final class VoidscapeLauncherConfig {
   }
 
   public static String portalAccountUrl() {
-    return portalRoute("dashboard");
+    return portalRoute("account");
   }
 
   public static String portalCharactersUrl() {

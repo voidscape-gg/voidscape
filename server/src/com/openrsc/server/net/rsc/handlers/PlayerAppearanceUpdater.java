@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.content.PlayerClass;
+import com.openrsc.server.content.BetaReferralReward;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidStarterIntro;
 import com.openrsc.server.model.Point;
@@ -119,6 +120,11 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 			if (player.getConfig().CHARACTER_CREATION_MODE == 1) {
 				player.setIronMan(ironmanMode);
 				player.setOneXp(isOneXp == 1);
+			}
+
+			if (player.getLastLogin() == 0L) {
+				BetaReferralReward.creditFromAppearance(player, payload.referralName);
+				player.getWorld().getWorldAnnouncementService().announceNewPlayerJoined(player);
 			}
 
 			if (!VoidPath.hasChosen(player)) {

@@ -124,15 +124,16 @@ public class BuyMarketItemTask extends MarketTask {
 					playerBuyer.getWorld().getServer().getDatabase().savePlayerBank(playerBuyer);
 				}
 			});
-			if (!dbOk) {
-				rollbackDelivery(deliveryItem, toInventory, amount);
-				playerBuyer.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), auctionPrice));
-				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
-				return;
-			}
+				if (!dbOk) {
+					rollbackDelivery(deliveryItem, toInventory, amount);
+					playerBuyer.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), auctionPrice));
+					ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
+					return;
+				}
+				recordAuctionBuyReceipt(finalItem, deliveryItem, finalAmount, toInventory, finalAuctionPrice, finalTax);
 
-			if (toInventory) {
-				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
+				if (toInventory) {
+					ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
 			} else {
 				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your bank.", false);
 			}
@@ -163,7 +164,25 @@ public class BuyMarketItemTask extends MarketTask {
 			ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ There was a problem accessing the database % Please try again.", false);
 			LOGGER.catching(e);
 			return;
+			}
 		}
+
+	private void recordAuctionBuyReceipt(final MarketItem marketItem, final Item deliveryItem, final int amount,
+										 final boolean toInventory, final int totalPrice, final int tax) {
+		final int x = playerBuyer.getX();
+		final int y = playerBuyer.getY();
+		final String destination = toInventory ? "player_inventory" : "player_bank";
+		final String extra = "auction_id=" + marketItem.getAuctionID() + " price=" + totalPrice + " tax=" + tax
+			+ " seller=" + marketItem.getSeller();
+		playerBuyer.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				playerBuyer.getWorld().getServer().getDatabase().addItemProvenanceEvent(playerBuyer, playerBuyer,
+					"item_transfer", "auction_listing", destination, "auction_buy", deliveryItem.getCatalogId(),
+					amount, deliveryItem.getNoted(), deliveryItem.getItemId(), x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
 	}
 
 	private Item createInventoryDeliveryItem(ItemDefinition def, int catalogID, int amount) {

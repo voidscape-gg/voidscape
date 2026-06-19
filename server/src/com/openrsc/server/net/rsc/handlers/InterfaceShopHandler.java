@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.IronmanMode;
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.Shop;
@@ -13,10 +14,13 @@ import com.openrsc.server.net.rsc.struct.incoming.ShopStruct;
 import com.openrsc.server.plugins.PriceMismatchException;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.MessageType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Optional;
 
 public final class InterfaceShopHandler implements PayloadProcessor<ShopStruct, OpcodeIn> {
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	public void process(ShopStruct payload, Player player) throws Exception {
 		if (player.inCombat()) {
@@ -191,15 +195,17 @@ public final class InterfaceShopHandler implements PayloadProcessor<ShopStruct, 
 		// attempted to buy more
 		if (originalAmount > totalBought && totalBought < shopStock) {
 			player.message("You can't hold the objects you are trying to buy!");
+			}
+
+			player.playSound("coins");
+			player.getWorld().getServer().getGameLogger().addQuery(
+				new GenericLog(player.getWorld(),
+					player.getUsername() + " bought " + def.getName() + " x" + totalBought
+						+ " for " + totalMoneySpent + "gp" + " at " + player.getLocation().toString()));
+			recordShopReceipt(player, "shop_stock", "player_inventory", "shop_buy", catalogID, totalBought,
+				tempItem.getNoted(), "coins=" + totalMoneySpent);
+
 		}
-
-		player.playSound("coins");
-		player.getWorld().getServer().getGameLogger().addQuery(
-			new GenericLog(player.getWorld(),
-				player.getUsername() + " bought " + def.getName() + " x" + totalBought
-					+ " for " + totalMoneySpent + "gp" + " at " + player.getLocation().toString()));
-
-	}
 
 	private boolean checkPurchaseValidity(Player player, Shop shop, ItemDefinition def, int catalogID, int totalBought, int totalMoneySpent, int buyingNow) {
 		if ((player.isIronMan(IronmanMode.Ironman.id()) || player.isIronMan(IronmanMode.Ultimate.id())
@@ -355,5 +361,22 @@ public final class InterfaceShopHandler implements PayloadProcessor<ShopStruct, 
 		player.playSound("coins");
 		player.getWorld().getServer().getGameLogger().addQuery(new GenericLog(player.getWorld(), player.getUsername() + " sold " + def.getName() + " x" + totalSold
 			+ " for " + totalMoney + "gp" + " at " + player.getLocation().toString()));
+		recordShopReceipt(player, "player_inventory", "shop_stock", "shop_sell", catalogID, totalSold,
+			tempItem.getNoted(), "coins=" + totalMoney);
+	}
+
+	private void recordShopReceipt(final Player player, final String source, final String destination,
+								   final String command, final int catalogID, final int amount,
+								   final boolean noted, final String extra) {
+		final int x = player.getX();
+		final int y = player.getY();
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, player, "item_transfer",
+					source, destination, command, catalogID, amount, noted, 0, x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
 	}
 }

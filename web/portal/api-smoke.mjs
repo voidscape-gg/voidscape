@@ -12,23 +12,55 @@ assert(Array.isArray(initialPublic.news) && initialPublic.news.length >= 3, "pub
 assert(Array.isArray(initialPublic.market) && initialPublic.market.length >= 6, "public endpoint should expose market rows");
 assert(Array.isArray(initialPublic.highscores) && initialPublic.highscores.length >= 6, "public endpoint should expose highscores");
 assert(Array.isArray(initialPublic.activity) && initialPublic.activity.length >= 6, "public endpoint should expose activity");
-const pcDownload = initialPublic.downloads.find((row) => row.label === "PC client");
-assert(pcDownload && typeof pcDownload.available === "boolean", "public endpoint should expose PC client download availability");
-if (pcDownload.available) {
-	const downloadResponse = await fetch(`${baseUrl}${pcDownload.url}`);
-	assert(downloadResponse.ok, "available PC client download should be served");
-	assert((downloadResponse.headers.get("content-disposition") || "").includes(".jar"), "download should include jar attachment disposition");
-	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "download should include a non-empty artifact");
+assert(initialPublic.integrity && initialPublic.integrity.staffCommands, "public endpoint should expose integrity summary");
+assert(typeof initialPublic.integrity.staffCommands.total24h === "number", "integrity summary should expose staff command totals");
+assert(initialPublic.integrity.staffCommands.total24h >= 2, "integrity summary should count fixture staff commands");
+assert(initialPublic.integrity.staffCommands.blocked24h >= 1, "integrity summary should count blocked fixture staff commands");
+assert(initialPublic.integrity.itemProvenance && initialPublic.integrity.itemProvenance.staffMints24h >= 2, "integrity summary should count staff item mint receipts");
+assert(initialPublic.integrity.itemProvenance.npcDrops24h >= 1, "integrity summary should count npc drop origin receipts");
+assert(initialPublic.integrity.itemProvenance.transfers24h >= 1, "integrity summary should count movement receipts");
+assert(initialPublic.integrity.itemProvenance.amount24h >= 6, "integrity summary should sum staff item mint amounts");
+assert(initialPublic.integrity.economyScans && initialPublic.integrity.economyScans.flagged >= 1, "integrity summary should expose economy scan findings");
+assert(initialPublic.integrity.privacy.includes("excludes IP addresses"), "integrity summary should describe public privacy limits");
+assert(Array.isArray(initialPublic.integrity.build.artifacts), "integrity summary should expose build artifact proof");
+assert(initialPublic.integrity.build.manifest && initialPublic.integrity.build.manifest.url === "/api/launcher/manifest.properties", "integrity summary should expose launcher manifest proof");
+const launcherDownload = initialPublic.downloads.find((row) => row.slug === "launcher");
+assert(launcherDownload && typeof launcherDownload.available === "boolean", "public endpoint should expose launcher download availability");
+if (launcherDownload.available) {
+	assert(/^[0-9a-f]{64}$/.test(launcherDownload.sha256 || ""), "available launcher download should expose a SHA-256 hash");
+	const downloadResponse = await fetch(`${baseUrl}${launcherDownload.url}`);
+	assert(downloadResponse.ok, "available launcher download should be served");
+	assert((downloadResponse.headers.get("content-disposition") || "").includes(".jar"), "launcher download should include jar attachment disposition");
+	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "launcher download should include a non-empty artifact");
+}
 
+const androidDownload = initialPublic.downloads.find((row) => row.slug === "android-apk");
+assert(androidDownload && typeof androidDownload.available === "boolean", "public endpoint should expose Android APK download availability");
+if (androidDownload.available) {
+	assert(/^[0-9a-f]{64}$/.test(androidDownload.sha256 || ""), "available Android download should expose a SHA-256 hash");
+	const downloadResponse = await fetch(`${baseUrl}${androidDownload.url}`);
+	assert(downloadResponse.ok, "available Android APK download should be served");
+	assert((downloadResponse.headers.get("content-disposition") || "").includes(".apk"), "Android download should include APK attachment disposition");
+	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "Android download should include a non-empty artifact");
+}
+
+const clientRuntimeDownload = initialPublic.downloads.find((row) => row.slug === "client-runtime");
+assert(clientRuntimeDownload && clientRuntimeDownload.publicDownload === false, "local public payload should expose private launcher runtime metadata");
+if (clientRuntimeDownload.available) {
+	assert(/^[0-9a-f]{64}$/.test(clientRuntimeDownload.sha256 || ""), "available client runtime should expose a SHA-256 hash");
+	const downloadResponse = await fetch(`${baseUrl}${clientRuntimeDownload.url}`);
+	assert(downloadResponse.ok, "available client runtime download should be served");
+	assert((downloadResponse.headers.get("content-disposition") || "").includes(".jar"), "client runtime should include jar attachment disposition");
+	assert(Number(downloadResponse.headers.get("content-length") || 0) > 1024, "client runtime should include a non-empty artifact");
 	const manifestHead = await fetch(`${baseUrl}/api/launcher/manifest.properties`, { method: "HEAD" });
-	assert(manifestHead.ok, "available PC client should expose launcher manifest HEAD");
+	assert(manifestHead.ok, "available client runtime should expose launcher manifest HEAD");
 	const manifestResponse = await fetch(`${baseUrl}/api/launcher/manifest.properties`);
-	assert(manifestResponse.ok, "available PC client should expose launcher manifest");
+	assert(manifestResponse.ok, "available client runtime should expose launcher manifest");
 	const manifest = await manifestResponse.text();
 	assert(/^version=.+$/m.test(manifest), "launcher manifest should include a version");
-	assert(/^file\.\d+\.path=Open_RSC_Client\.jar$/m.test(manifest), "launcher manifest should include the PC client jar path");
+	assert(/^file\.\d+\.path=VoidscapeClient\.jar$/m.test(manifest), "launcher manifest should include the client runtime jar path");
 	assert(/^file\.\d+\.sha256=[0-9a-f]{64}$/m.test(manifest), "launcher manifest should include SHA-256 hashes");
-	assert(manifest.includes(`${baseUrl}/downloads/pc-client`), "launcher manifest should point at the PC client download");
+	assert(manifest.includes(`${baseUrl}/downloads/client-runtime`), "launcher manifest should point at the client runtime download");
 }
 
 const googleOauthStub = await api("/api/oauth/google/start", { expectStatus: 501 });
@@ -39,12 +71,27 @@ const paymentStub = await api("/api/payments/subscription-cards/checkout", {
 });
 assert(paymentStub.error === "payments_not_configured", "production payment stub should be explicit");
 
+const integrity = await api("/api/integrity");
+assert(integrity.staffCommands && typeof integrity.staffCommands.total24h === "number", "integrity endpoint should expose staff command totals");
+assert(integrity.staffCommands.total24h >= 2, "integrity endpoint should count fixture staff commands");
+assert(integrity.staffCommands.blocked24h >= 1, "integrity endpoint should count blocked fixture staff commands");
+assert(Array.isArray(integrity.staffCommands.categories), "integrity endpoint should expose staff command categories");
+assert(Array.isArray(integrity.staffCommands.recent), "integrity endpoint should expose a sanitized recent list");
+assert(integrity.itemProvenance && integrity.itemProvenance.staffMints24h >= 2, "integrity endpoint should expose staff item mint receipts");
+assert(integrity.itemProvenance.npcDrops24h >= 1, "integrity endpoint should expose npc drop origin receipts");
+assert(integrity.itemProvenance.transfers24h >= 1, "integrity endpoint should expose movement receipts");
+assert(Array.isArray(integrity.itemProvenance.recent), "integrity endpoint should expose sanitized item receipt rows");
+assert(integrity.economyScans && integrity.economyScans.flagged >= 1, "integrity endpoint should expose economy scan findings");
+assert(integrity.build.status, "integrity endpoint should expose build evidence status");
+assert(Array.isArray(integrity.build.artifacts), "integrity endpoint should expose build artifact hashes");
+assert(integrity.build.source && integrity.build.source.repositoryUrl, "integrity endpoint should expose source metadata");
+
 const snapshot = await api("/api/openrsc/characters/SmokeHero");
 assert(snapshot.character.source === "openrsc-sqlite", "snapshot endpoint should report the OpenRSC source");
 assert(snapshot.character.name === "SmokeHero", "snapshot endpoint should return the player username");
 assert(snapshot.character.combat === 87, "snapshot endpoint should return combat level");
 assert(snapshot.character.total === "1194", "snapshot endpoint should return total level");
-assert(snapshot.character.status === "Lumbridge", "snapshot endpoint should summarize location");
+assert(snapshot.character.status === "Varrock", "snapshot endpoint should summarize location");
 assert(snapshot.character.title === "Crownless Conqueror", "snapshot endpoint should resolve the active title");
 assert(snapshot.character.subscriptionState.active === false, "unlinked snapshot should not inherit subscription state");
 assert(snapshot.character.subscriptionState.combatXpRate === 10, "unlinked snapshot should use base combat XP rate");

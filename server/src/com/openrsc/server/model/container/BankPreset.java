@@ -3,6 +3,7 @@ package com.openrsc.server.model.container;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.struct.EquipRequest;
 import com.openrsc.server.net.rsc.ActionSender;
 
 import java.nio.ByteBuffer;
@@ -138,6 +139,8 @@ public class BankPreset {
 			player.getBank().withdrawItemToInventory(itemNeeded.getCatalogId(), itemNeeded.getAmount(), itemNeeded.getNoted(), false);
 		}
 
+		restoreClassicWieldedItems();
+
 		ActionSender.sendInventory(player);
 		// voidscape: was player.resetBank() (which calls hideBank → closes the bank UI).
 		// We want the bank to stay open after a loadout load; re-send the bank contents so
@@ -145,4 +148,39 @@ public class BankPreset {
 		ActionSender.showBank(player);
 		player.save();
  	}
+
+	private void restoreClassicWieldedItems() {
+		if (player.getConfig().WANT_EQUIPMENT_TAB) {
+			return;
+		}
+		for (Item equipmentItem : equipment) {
+			if (equipmentItem == null || equipmentItem.getCatalogId() == ItemId.NOTHING.id()
+				|| equipmentItem.getDef(player.getWorld()) == null) {
+				continue;
+			}
+			Item inventoryItem = findUnwieldedInventoryItem(equipmentItem);
+			if (inventoryItem == null) {
+				player.message("Could not wield item: " + equipmentItem.getDef(player.getWorld()).getName());
+				continue;
+			}
+			player.getCarriedItems().getEquipment().equipItem(
+				new EquipRequest(player, inventoryItem, EquipRequest.RequestType.FROM_INVENTORY, false)
+			);
+		}
+	}
+
+	private Item findUnwieldedInventoryItem(Item target) {
+		List<Item> items = player.getCarriedItems().getInventory().getItems();
+		synchronized (items) {
+			for (int i = items.size() - 1; i >= 0; i--) {
+				Item item = items.get(i);
+				if (item.getCatalogId() == target.getCatalogId()
+					&& item.getNoted() == target.getNoted()
+					&& !item.isWielded()) {
+					return item;
+				}
+			}
+		}
+		return null;
+	}
 }

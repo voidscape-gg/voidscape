@@ -64,10 +64,11 @@ public class CancelMarketItemTask extends MarketTask {
 						rollbackDelivery(deliveryItem, true, amount);
 						ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Unable to cancel auction.", false);
 						return;
-					}
-					ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ The item has been canceled and returned to your inventory.", false);
-					updateDiscord = true;
-				} else if (toBank) {
+						}
+						ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ The item has been canceled and returned to your inventory.", false);
+						recordAuctionCancelReceipt(item, deliveryItem, true);
+						updateDiscord = true;
+					} else if (toBank) {
 					if (!owner.getBank().add(new Item(itemIndex, amount), false)) {
 						ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Unable to return item to your bank.", false);
 						return;
@@ -80,10 +81,11 @@ public class CancelMarketItemTask extends MarketTask {
 						rollbackDelivery(deliveryItem, false, amount);
 						ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Unable to cancel auction.", false);
 						return;
-					}
-					ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ The item has been canceled and returned to your bank. % Talk with a Banker to collect your item(s).", false);
-					updateDiscord = true;
-				} else
+						}
+						ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ The item has been canceled and returned to your bank. % Talk with a Banker to collect your item(s).", false);
+						recordAuctionCancelReceipt(item, deliveryItem, false);
+						updateDiscord = true;
+					} else
 					ActionSender.sendBox(owner, "@red@[Auction House - Error] % @whi@ Unable to cancel auction! % % @red@Reason: @whi@No space left in your bank or inventory.", false);
 
 			}
@@ -99,6 +101,22 @@ public class CancelMarketItemTask extends MarketTask {
 			LOGGER.catching(e);
 			return;
 		}
+	}
+
+	private void recordAuctionCancelReceipt(final MarketItem marketItem, final Item deliveryItem, final boolean toInventory) {
+		final int x = owner.getX();
+		final int y = owner.getY();
+		final String destination = toInventory ? "player_inventory" : "player_bank";
+		final String extra = "auction_id=" + marketItem.getAuctionID();
+		owner.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				owner.getWorld().getServer().getDatabase().addItemProvenanceEvent(owner, owner, "item_transfer",
+					"auction_listing", destination, "auction_cancel", deliveryItem.getCatalogId(),
+					deliveryItem.getAmount(), deliveryItem.getNoted(), deliveryItem.getItemId(), x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
 	}
 
 	private Item createInventoryDeliveryItem(ItemDefinition def, int catalogID, int amount) {

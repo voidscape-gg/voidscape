@@ -39,6 +39,8 @@ Cache keys:
 
 Default mode shows the default list plus explicit adds minus hidden defaults. Custom mode shows only explicit adds.
 
+Each mutating `::lootbeam` command flushes the player cache immediately through `PlayerService.savePlayerCache(...)`. Normal autosave/logout still saves the same keys, but the explicit flush keeps quick logout/reconnects from dropping recent beam preferences.
+
 ## Client toggle
 
 The existing Advanced Settings `Loot beams` row remains the client-side master toggle. It stores `setting_rare_drop_beams` through game-setting byte `48`; the renderer checks that local flag before drawing. The per-item list is server-side so each player can receive a different beam byte for the same ground item without changing the packet shape.

@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.IronmanMode;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.TradeLog;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.external.ItemDefinition;
@@ -16,11 +17,15 @@ import com.openrsc.server.net.rsc.struct.incoming.PlayerTradeStruct;
 import com.openrsc.server.util.rsc.CertUtil;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.MessageType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, OpcodeIn> {
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private boolean busy(Player player) {
 		return player.isBusy() || player.isRanging() || player.accessingBank() || player.getDuel().isDuelActive() || player.inCombat();
@@ -499,17 +504,40 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 					player.getCarriedItems().getInventory().add(item);
 				}
 
-				player.getWorld().getServer().getGameLogger().addQuery(
-					new TradeLog(player.getWorld(), player.getUsername(), affectedPlayer.getUsername(), myOffer, theirOffer, player.getCurrentIP(), affectedPlayer.getCurrentIP()).build());
-				player.save();
-				affectedPlayer.save();
-				player.message("Trade completed successfully");
+					player.getWorld().getServer().getGameLogger().addQuery(
+						new TradeLog(player.getWorld(), player.getUsername(), affectedPlayer.getUsername(), myOffer, theirOffer, player.getCurrentIP(), affectedPlayer.getCurrentIP()).build());
+					player.save();
+					affectedPlayer.save();
+					recordTradeReceipts(player, affectedPlayer, myOffer);
+					recordTradeReceipts(affectedPlayer, player, theirOffer);
+					player.message("Trade completed successfully");
 
 				affectedPlayer.message("Trade completed successfully");
 				player.getTrade().resetAll();
 				affectedPlayer.getTrade().resetAll();
 			}
 		}
+	}
+
+	private void recordTradeReceipts(final Player sender, final Player receiver, final List<Item> offeredItems) {
+		if (offeredItems == null || offeredItems.isEmpty()) return;
+		final List<Item> receiptItems = new ArrayList<>();
+		for (Item item : offeredItems) {
+			receiptItems.add(new Item(item.getCatalogId(), item.getAmount(), item.getNoted(), item.getItemId()));
+		}
+		final int x = sender.getX();
+		final int y = sender.getY();
+		sender.getWorld().getServer().submitSqlLogging(() -> {
+			for (Item item : receiptItems) {
+				try {
+					sender.getWorld().getServer().getDatabase().addItemProvenanceEvent(sender, receiver, "item_transfer",
+						"trade_offer", "trade_receive", "trade", item.getCatalogId(), item.getAmount(),
+						item.getNoted(), item.getItemId(), x, y, "trade=true");
+				} catch (final GameDatabaseException ex) {
+					LOGGER.catching(ex);
+				}
+			}
+		});
 	}
 
 }

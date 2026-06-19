@@ -52,6 +52,8 @@ public class DiscordService implements Runnable{
 
 	private final Queue<String> staffCommandRequests = new ConcurrentLinkedQueue<String>();
 	private final Queue<String> generalLogs = new ConcurrentLinkedQueue<String>();
+	private final Queue<String> bugReportRequests = new ConcurrentLinkedQueue<String>();
+	private final Queue<String> globalChatRelayRequests = new ConcurrentLinkedQueue<String>();
 	private final Queue<String> auctionRequests = new ConcurrentLinkedQueue<String>();
 	private final Queue<String> monitoringRequests = new ConcurrentLinkedQueue<String>();
 	private final Queue<DiscordEmbed> reportAbuseRequests = new ConcurrentLinkedQueue<DiscordEmbed>();
@@ -77,9 +79,9 @@ public class DiscordService implements Runnable{
 				{
 					final byte[] encoded = Files.readAllBytes(Paths.get(tokenFile.getPath()));
 					startPlayerBot(new String(encoded, StandardCharsets.UTF_8));
-				} catch (final IOException a) {
+			} catch (final IOException a) {
 					a.printStackTrace();
-				}
+			}
 			} else {
 				LOGGER.info(server.getConfig().SERVER_NAME + ".tok not found. Cannot start bot.");
 			}
@@ -90,9 +92,9 @@ public class DiscordService implements Runnable{
 				{
 					byte[] encoded = Files.readAllBytes(Paths.get(tokenFile.getPath()));
 					//gitLabApi = new GitLabApi("http://gitlab.openrsc.com", new String(encoded, StandardCharsets.UTF_8));
-				} catch (final IOException a) {
+			} catch (final IOException a) {
 					a.printStackTrace();
-				}
+			}
 			} else {
 				LOGGER.info("gitlab.pat not found. Cannot start gitlab API.");
 			}
@@ -123,9 +125,9 @@ public class DiscordService implements Runnable{
 				if (message.getContentRaw().startsWith("!help"))
 				{
 					reply = "To see the commands that are available, type !commands. Some commands require you to pair your discord account to your openrsc account. To do this, type ::pair in game to get your pairing token, then return to this DM and type !pair TOKEN";
-				} else if (message.getContentRaw().startsWith("!commands")) {
+			} else if (message.getContentRaw().startsWith("!commands")) {
 					reply = "!auctions\n!stats\n!watch\n!pair\n!help";
-				} else if (message.getContentRaw().startsWith("!pair")) {
+			} else if (message.getContentRaw().startsWith("!pair")) {
 					if (args.length != 2) {
 						reply = "Usage: !pair TOKEN";
 					} else {
@@ -147,14 +149,14 @@ public class DiscordService implements Runnable{
 									reply = "[Error 1580] Please contact an administrator.";
 								}
 
-							} else {
+						} else {
 								reply = "Invalid pair token.";
-							}
+						}
 						} catch (GameDatabaseException a) {
 							a.printStackTrace();
 						}
 					}
-				} else if (message.getContentRaw().startsWith("!auctions")) {
+			} else if (message.getContentRaw().startsWith("!auctions")) {
 					final ArrayList<MarketItem> auctionList = (ArrayList<MarketItem>)this.server.getWorld().getMarket().getAuctionItems().clone();
 					final Iterator<MarketItem> e = auctionList.iterator();
 					if (e.hasNext()) {
@@ -165,13 +167,13 @@ public class DiscordService implements Runnable{
 									if (a.getSeller() == dbID)
 										reply = reply + server.getEntityHandler().getItemDef(a.getCatalogID()).getName() + " (" + a.getAmountLeft() + ") @ " + a.getPrice() + "gp ea. (" + a.getHoursLeft() + "hrs)\n";
 								}
-							} else
+						} else
 								reply = "You have not paired an account yet. Type !help for more information";
 					}
 					if (reply.isEmpty())
 						reply = "You have no active auctions.";
 					reply = "`" + reply + "`";
-				} else if (message.getContentRaw().startsWith("!stats")
+			} else if (message.getContentRaw().startsWith("!stats")
 							|| message.getContentRaw().startsWith("!skills")) {
 					int dbID = 0;
 					if ((dbID = discordToDBId(message.getAuthor().getIdLong())) != 0) {
@@ -195,9 +197,9 @@ public class DiscordService implements Runnable{
 								}
 								rep.append("`");
 								reply = rep.toString();
-							} else {
+						} else {
 								reply = "Error 2250";
-							}
+						}
 						} catch (GameDatabaseException a) {
 							a.printStackTrace();
 						}
@@ -206,7 +208,7 @@ public class DiscordService implements Runnable{
 					} else {
 						reply = "You have not paired an account yet. Type !help for more information";
 					}
-				} else if (message.getContentRaw().startsWith("!bug ")) {
+			} else if (message.getContentRaw().startsWith("!bug ")) {
 					if (gitLabApi != null) {
 						final int hasTitle = message.getContentRaw().indexOf(" -t ");
 						final int hasDesc = message.getContentRaw().indexOf(" -d ");
@@ -218,14 +220,14 @@ public class DiscordService implements Runnable{
 							desc = "Submitted by: " + message.getAuthor().getName() + "\n" + "Discord Bot Submission (" + this.server.getName() + ")\n---------------------------------\n\n" + desc;
 							try {
 								gitLabApi.getIssuesApi().createIssue(2, title, desc);
-							} catch (GitLabApiException a) {
+						} catch (GitLabApiException a) {
 								a.printStackTrace();
-							}
+						}
 						} else
 							reply = "Usage: !bug -t TITLE -d DESCRIPTION";
 					} else
 						reply = "The bug submission service has malfunctioned. Please report this to an admin.";
-				} else if (message.getContentRaw().startsWith("!watch")) {
+			} else if (message.getContentRaw().startsWith("!watch")) {
 					if (args.length > 1) {
 						try {
 							final String dbWatchlist = getServer().getDatabase().getWatchlist(message.getAuthor().getIdLong());
@@ -248,7 +250,7 @@ public class DiscordService implements Runnable{
 									reply = reply + "`";
 								} else
 									reply = "You have nothing on your watchlist.";
-							} else if (args[1].equalsIgnoreCase("add")) {
+						} else if (args[1].equalsIgnoreCase("add")) {
 								if (args.length > 2) {
 									int toAdd = 0;
 									try {
@@ -277,7 +279,7 @@ public class DiscordService implements Runnable{
 									}
 								} else
 									reply = "Usage: !watch add ITEMID";
-							} else if (args[1].equalsIgnoreCase("del")
+						} else if (args[1].equalsIgnoreCase("del")
 								|| args[1].equalsIgnoreCase("rem")) {
 								if (args.length > 2) {
 									int itemID = 0;
@@ -315,9 +317,9 @@ public class DiscordService implements Runnable{
 
 								} else
 									reply = "Usage: !watch del ITEMID";
-							} else if (args[1].equalsIgnoreCase("help")) {
+						} else if (args[1].equalsIgnoreCase("help")) {
 								reply = "The auction watchlist feature will notify you when an item of your interest is placed on the auction house. To use it, use !watch [list add del] [item id]. To get an items ID, use https://openrsc.com/items. The number in () after the items name is its ID. You may have up to 10 items on your watchlist.";
-							}
+						}
 							else
 								reply = "Usage: !watch [list add del help]";
 
@@ -327,18 +329,18 @@ public class DiscordService implements Runnable{
 					} else
 						reply = "Usage: !watch [list add del help]";
 
-				}
+			}
 			} else if (message.getChannel().getIdLong() == this.server.getConfig().CROSS_CHAT_CHANNEL
 						&& !message.getContentRaw().isEmpty()) {
 				final String strMessage = EmojiParser.parseToAliases(message.getContentRaw());
 
 				for (Player p : this.server.getWorld().getPlayers()) {
 					ActionSender.sendMessage(p, null, MessageType.GLOBAL_CHAT, "@whi@[@gr2@D>G@whi@] @or1@" + message.getAuthor().getName() + "@yel@: " + strMessage, 0, null);
-				}
+			}
 			} else {
 				if (message.getContentRaw().startsWith("!help")) {
 					reply = "Please use !help in a DM to me for more information.";
-				}
+			}
 			}
 
 			if (!reply.isEmpty()) {
@@ -403,7 +405,7 @@ public class DiscordService implements Runnable{
 					} catch (final NumberFormatException a) {
 						a.printStackTrace();
 					}
-				}
+			}
 			}
 		} catch (final GameDatabaseException a) {
 			a.printStackTrace();
@@ -512,6 +514,39 @@ public class DiscordService implements Runnable{
 		}
 	}
 
+	public void bugReportLog(final String message) {
+		if (getServer().getConfig().WANT_DISCORD_BUG_REPORTS) {
+			bugReportRequests.add(message);
+		} else {
+			generalLog(message);
+		}
+	}
+
+	public void globalChatRelay(final Player player, final String message) {
+		if (!getServer().getConfig().WANT_DISCORD_GLOBAL_CHAT_RELAY || player == null || message == null) {
+			return;
+		}
+
+		final String cleanMessage = cleanGlobalChatRelayText(message);
+		if (cleanMessage.isEmpty()) {
+			return;
+		}
+
+		globalChatRelayRequests.add(String.format("**%s:** %s",
+			cleanGlobalChatRelayText(player.getUsername()),
+			cleanMessage
+		));
+	}
+
+	private String cleanGlobalChatRelayText(final String text) {
+		return text
+			.replaceAll("@[A-Za-z0-9]{3}@", "")
+			.replaceAll("~...~", "")
+			.replace('\r', ' ')
+			.replace('\n', ' ')
+			.trim();
+	}
+
 	public void monitoringSendServerBehind(final String message, final boolean showEventData) {
 		monitoringSendToDiscord(message + (showEventData ? "\r\n" + getServer().getGameEventHandler().buildProfilingDebugInformation(false) : ""));
 	}
@@ -601,10 +636,40 @@ public class DiscordService implements Runnable{
 				line = br.readLine();
 				if (line != null) {
 					System.out.println(line);
-				}
+			}
 			}
 			*/
 
+		} catch (Exception e) {
+			LOGGER.error(e);
+		}
+	}
+
+	private static void sendToDiscordWithoutMentions(final String webhookUrl, final String message) throws Exception {
+		final StringBuilder sb = new StringBuilder();
+		JsonUtils.quoteAsString(message, sb);
+
+		final String jsonPostBody = String.format("{\"content\": \"%s\", \"allowed_mentions\": {\"parse\": []}}", sb);
+
+		final java.net.URL url = new java.net.URL(webhookUrl);
+
+		final URLConnection con = url.openConnection();
+		final HttpURLConnection http = (HttpURLConnection) con;
+		con.addRequestProperty("User-Agent", "openrsc");
+		http.setRequestMethod("POST");
+		http.setDoOutput(true);
+		http.setUseCaches(false);
+
+		final byte[] out = jsonPostBody.getBytes(StandardCharsets.UTF_8);
+		final int length = out.length;
+
+		http.setFixedLengthStreamingMode(length);
+		http.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+		try {
+			http.connect();
+			try (OutputStream os = http.getOutputStream()) {
+				os.write(out);
+			}
 		} catch (Exception e) {
 			LOGGER.error(e);
 		}
@@ -643,7 +708,7 @@ public class DiscordService implements Runnable{
 				line = br.readLine();
 				if (line != null) {
 					System.out.println(line);
-				}
+			}
 			}
 			/**/
 
@@ -690,6 +755,12 @@ public class DiscordService implements Runnable{
 			}
 			while ((embed = naughtyWordsRequests.poll()) != null) {
 				sendEmbedToDiscord(getServer().getConfig().DISCORD_NAUGHTY_WORDS_WEBHOOK_URL, embed);
+			}
+			while ((message = bugReportRequests.poll()) != null) {
+				sendToDiscord(getServer().getConfig().DISCORD_BUG_REPORTS_WEBHOOK_URL, message);
+			}
+			while ((message = globalChatRelayRequests.poll()) != null) {
+				sendToDiscordWithoutMentions(getServer().getConfig().DISCORD_GLOBAL_CHAT_WEBHOOK_URL, message);
 			}
 			while ((message = generalLogs.poll()) != null) {
 				sendToDiscord(getServer().getConfig().DISCORD_GENERAL_WEBHOOK_URL, message);
@@ -738,6 +809,8 @@ public class DiscordService implements Runnable{
 		staffCommandRequests.clear();
 		reportAbuseRequests.clear();
 		naughtyWordsRequests.clear();
+		bugReportRequests.clear();
+		globalChatRelayRequests.clear();
 		generalLogs.clear();
 	}
 

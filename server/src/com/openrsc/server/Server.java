@@ -186,7 +186,7 @@ public class Server implements Runnable {
 							playerToUpdate.playerServerMessage(MessageType.QUEST, msg);
 						}
 					}
-				}
+			}
 			}
 			LOGGER.info("Server shutdown requested by closeProcess");
 			server.shutdown(seconds);
@@ -215,10 +215,10 @@ public class Server implements Runnable {
 
 				try {
 					startServer(getDefaultConfigFileName());
-				} catch (final Throwable t) {
+			} catch (final Throwable t) {
 					LOGGER.error("Exception starting server with default config", t);
 					SystemUtil.exit(1);
-				}
+			}
 			} else {
 				for (String configuration : configurationFiles) {
 					try {
@@ -227,19 +227,19 @@ public class Server implements Runnable {
 						LOGGER.error("Exception starting server with a configuration file", t);
 						SystemUtil.exit(1);
 					}
-				}
+			}
 			}
 
 			while (serversList.size() > 0) {
 				try {
 					Thread.sleep(1000);
-				} catch (final InterruptedException e) {
+			} catch (final InterruptedException e) {
 					e.printStackTrace();
-				}
+			}
 
 				for (final Server server : serversList.values()) {
 					server.checkShutdown();
-				}
+			}
 			}
 		} catch(Exception ex) {
 			LOGGER.error("Exception starting server: ", ex);
@@ -284,7 +284,9 @@ public class Server implements Runnable {
 		final boolean wantDiscordNaughtyWordsUpdates = getConfig().WANT_DISCORD_NAUGHTY_WORDS_UPDATES;
 		final boolean wantDiscordDowntimeReports = getConfig().WANT_DISCORD_DOWNTIME_REPORTS;
 		final boolean wantDiscordGeneralLogs = getConfig().WANT_DISCORD_GENERAL_LOGGING;
-		discordService = wantDiscordBot || wantDiscordAuctionUpdates || wantDiscordMonitoringUpdates || wantDiscordReportAbuseUpdates || wantDiscordStaffCommands || wantDiscordNaughtyWordsUpdates || wantDiscordDowntimeReports || wantDiscordGeneralLogs ? new DiscordService(this) : null;
+		final boolean wantDiscordBugReports = getConfig().WANT_DISCORD_BUG_REPORTS;
+		final boolean wantDiscordGlobalChatRelay = getConfig().WANT_DISCORD_GLOBAL_CHAT_RELAY;
+		discordService = wantDiscordBot || wantDiscordAuctionUpdates || wantDiscordMonitoringUpdates || wantDiscordReportAbuseUpdates || wantDiscordStaffCommands || wantDiscordNaughtyWordsUpdates || wantDiscordDowntimeReports || wantDiscordGeneralLogs || wantDiscordBugReports || wantDiscordGlobalChatRelay ? new DiscordService(this) : null;
 		loginExecutor = new LoginExecutor(this);
 		world = new World(this);
 		gameEventHandler = new GameEventHandler(this);
@@ -337,7 +339,7 @@ public class Server implements Runnable {
 			try {
 				if (isRunning()) {
 					return;
-				}
+			}
 
 				scheduledExecutor = Executors.newSingleThreadScheduledExecutor(
 						new ServerAwareThreadFactory(
@@ -351,15 +353,15 @@ public class Server implements Runnable {
 				// We will bypass that if we are restarting because we never removed this server from the list.
 				if (!isRestarting() && serversList.get(this.getName()) != null) {
 					throw new IllegalArgumentException("Can not initialize. Server " + this.getName() + " already exists.");
-				}
+			}
 
 				LOGGER.info("Connecting to Database...");
 				try {
 					getDatabase().open();
-				} catch (final Exception ex) {
+			} catch (final Exception ex) {
 					LOGGER.error("Exception opening database", ex);
 					SystemUtil.exit(1);
-				}
+			}
 				LOGGER.info("Database Connection Completed");
 
 				LOGGER.info("Checking For Database Structure Changes...");
@@ -370,7 +372,7 @@ public class Server implements Runnable {
 				if (!patchApplier.applyPatches()) {
 					LOGGER.error("Unable to apply database patches");
 					SystemUtil.exit(1);
-				}
+			}
 
 				PidShuffler.init();
 
@@ -378,13 +380,13 @@ public class Server implements Runnable {
 					LOGGER.info("Loading Prerendered Sleepword Images...");
 					CaptchaGenerator.loadPrerenderedCaptchas();
 					LOGGER.info("Loaded " + CaptchaGenerator.prerenderedSleepwordsSize + " Prerendered Sleepword Images");
-				}
+			}
 
 				if (getConfig().LOAD_SPECIAL_PRERENDERED_SLEEPWORDS) {
 					LOGGER.info("Loading Special Prerendered Sleepword Images...");
 					CaptchaGenerator.loadSpecialPrerenderedCaptchas();
 					LOGGER.info("Loaded " + CaptchaGenerator.prerenderedSleepwordsSpecialSize + " Special Prerendered Sleepword Images");
-				}
+			}
 
 				LOGGER.info("Loading Game Definitions...");
 				getEntityHandler().load();
@@ -422,7 +424,7 @@ public class Server implements Runnable {
 					LOGGER.info("Loading DiscordService...");
 					getDiscordService().start();
 					LOGGER.info("DiscordService Completed");
-				}
+			}
 
 				LOGGER.info("Loading GameLogger...");
 				getGameLogger().start();
@@ -479,7 +481,7 @@ public class Server implements Runnable {
 					} else {
 						LOGGER.warn("No SSL certificate configured for WebSocket connections...!");
 					}
-				}
+			}
 
 				if (!getConfig().WANT_FEATURE_WEBSOCKETS) {
 					bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class).childHandler(
@@ -489,7 +491,7 @@ public class Server implements Runnable {
 								final ChannelPipeline pipeline = channel.pipeline();
 								pipeline.addLast("decoder", new RSCMultiPortDecoder(RSCMultiPortDecoder.DecoderMode.TCP, serverOwner));
 								pipeline.addLast(rscConnectionHandlerId, new RSCConnectionHandler(serverOwner));
-							}
+						}
 						}
 					);
 
@@ -506,7 +508,7 @@ public class Server implements Runnable {
 					} catch (final InterruptedException e) {
 						LOGGER.error(e);
 					}
-				} else {
+			} else {
 					final ServerBootstrap bootstrapWs = new ServerBootstrap();
 
 					bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class).childHandler(
@@ -516,7 +518,7 @@ public class Server implements Runnable {
 								final ChannelPipeline pipeline = channel.pipeline();
 								pipeline.addLast("decoder_tcp", new RSCMultiPortDecoder(RSCMultiPortDecoder.DecoderMode.TCP, serverOwner));
 								pipeline.addLast(rscConnectionHandlerId, new RSCConnectionHandler(serverOwner));
-							}
+						}
 						}
 					);
 
@@ -532,7 +534,7 @@ public class Server implements Runnable {
 								final ChannelPipeline pipeline = channel.pipeline();
 								pipeline.addLast("decoder_ws", new RSCMultiPortDecoder(RSCMultiPortDecoder.DecoderMode.WS, serverOwner));
 								pipeline.addLast(rscConnectionHandlerId, new RSCConnectionHandler(serverOwner));
-							}
+						}
 						}
 					);
 
@@ -552,12 +554,12 @@ public class Server implements Runnable {
 					} catch (final InterruptedException e) {
 						LOGGER.error(e);
 					}
-				}
+			}
 
 				// Only add this server to the active servers list if it's not already there
 				if (!isRestarting()) {
 					serversList.put(this.getName(), this);
-				}
+			}
 
 				lastTickTimestamp = serverStartedTime = System.nanoTime();
 				running.set(true);
@@ -573,7 +575,7 @@ public class Server implements Runnable {
 			try {
 				if (!isRunning()) {
 					return;
-				}
+			}
 				LOGGER.info("Server stop requested");
 				getWorld().unloadPlayers();
 
@@ -585,13 +587,13 @@ public class Server implements Runnable {
 						List<Runnable> skippedTasks = scheduledExecutor.shutdownNow();
 						LOGGER.error("{} task(s) never commenced execution, forcing shutdown", skippedTasks.size());
 					}
-				} catch (final InterruptedException e) {
+			} catch (final InterruptedException e) {
 					LOGGER.error("Exception during task shutdown", e);
-				}
+			}
 				getLoginExecutor().stop();
 				if (getDiscordService() != null) {
 					getDiscordService().stop();
-				}
+			}
 				getGameLogger().stop();
 				getGameUpdater().unload();
 				getGameEventHandler().unload();
@@ -635,7 +637,7 @@ public class Server implements Runnable {
 				// Don't remove this server from the active servers list if we are just restarting.
 				if (!isRestarting()) {
 					serversList.remove(this.getName());
-				}
+			}
 
 				running.set(false);
 
@@ -680,11 +682,11 @@ public class Server implements Runnable {
 								if (getCurrentTick() % config.SHUFFLE_PID_ORDER_INTERVAL == 0) {
 									PidShuffler.shuffle();
 								}
-							} else {
+						} else {
 								for (final Player player : getWorld().getPlayers()) {
 									player.processTick();
 								}
-							}
+						}
 
 							incrementLastExecuteWalkToActionsDuration(getGameUpdater().executePidlessCatching());
 							incrementLastProcessMessageQueuesDuration(getWorld().processGlobalMessageQueue());
@@ -693,10 +695,10 @@ public class Server implements Runnable {
 
 							for (final Player player : getWorld().getPlayers()) {
 								player.processLogout();
-							}
+						}
 							for (final Player player : getWorld().getPlayers()) {
 								player.sendUpdates();
-							}
+						}
 
 							incrementLastDoCleanupDuration(getGameUpdater().doCleanup());
 							getGameEventHandler().cleanupEvents();
@@ -715,7 +717,7 @@ public class Server implements Runnable {
 										npc.resetCombatEvent();
 									}
 								}
-							}
+						}
 							// TODO: end remove section
 
 						} catch (final Throwable t) {
@@ -742,7 +744,7 @@ public class Server implements Runnable {
 					outgoingCountPerPacketOpcode.clear();
 
 					//LOGGER.info("Tick " + getCurrentTick() + " processed.");
-				} else {
+			} else {
 					if (getConfig().WANT_CUSTOM_WALK_SPEED) {
 						World world = getWorld();
 						for (final Player p : getWorld().getPlayers()) {
@@ -752,7 +754,7 @@ public class Server implements Runnable {
 
 						world.getNpcs().forEach(Npc::updatePosition);
 					}
-				}
+			}
 			} catch (final Throwable t) {
 				LOGGER.error("Exception in Server run()", t);
 			}
@@ -770,10 +772,10 @@ public class Server implements Runnable {
 					LOGGER.info("Checking monitor IP " + getConfig().MONITOR_IP);
 					InetAddress address = InetAddress.getByName(getConfig().MONITOR_IP);
 					this.onlineReachable = address.isReachable(getConfig().MONITOR_IP_TIMEOUT);
-				} catch (IOException ex) {
+			} catch (IOException ex) {
 					LOGGER.catching(ex);
 					onlineReachable = false;
-				}
+			}
 			});
 
 			boolean unloadedPlayers = false;
@@ -784,7 +786,7 @@ public class Server implements Runnable {
 				// calculate number of affected users
 				for (Player p : getWorld().getPlayers()) {
 					playersOnline++;
-				}
+			}
 			}
 			while (!onlineReachable) {
 				LOGGER.info(getConfig().SERVER_NAME + " has been offline from " + getConfig().MONITOR_IP +  " for " + (System.currentTimeMillis() - timeOffline) + " millis!");
@@ -794,7 +796,7 @@ public class Server implements Runnable {
 					getWorld().unloadPlayers();
 					LOGGER.info("unloaded all players on " + getConfig().SERVER_NAME + " as a result of being offline for over 10 seconds.");
 					unloadedPlayers = true;
-				}
+			}
 				onlineReachable =  InetAddress.getByName(getConfig().MONITOR_IP).isReachable(getConfig().MONITOR_IP_TIMEOUT);
 			}
 
@@ -804,7 +806,7 @@ public class Server implements Runnable {
 				// tell discord we were offline, for how long, and that we are now back online.
 				if (getDiscordService() != null) {
 					getDiscordService().reportDowntimeToDiscord(timeOffline, System.currentTimeMillis(), unloadedPlayers, playersOnline);
-				}
+			}
 
 				if (getConfig().MONITOR_AUTOMATIC_SHUTDOWN) {
 					LOGGER.info("Online connection restored, shutting down now...");
@@ -819,7 +821,7 @@ public class Server implements Runnable {
 					} catch (IOException e) {
 						LOGGER.fatal("Failed to create shutdown file after automatic shutdown: " + e.getMessage());
 					}
-				}
+			}
 			}
 		} catch(IOException ex) {
 			ex.printStackTrace();
@@ -871,7 +873,7 @@ public class Server implements Runnable {
 					// There is already a daily shutdown running!;
 					// do nothing!
 					return;
-				}
+			}
 				getWorld().getServer().getGameEventHandler().add(new DailyShutdownEvent(getWorld(), 1, getConfig().RESTART_HOUR));
 				/*int hour = LocalDateTime.now().getHour();
 				int minute = LocalDateTime.now().getMinute();
@@ -975,10 +977,10 @@ public class Server implements Runnable {
 							ActionSender.sendSystemMessage(playerToUpdate, "System update in " + StringUtil.formatTime(secs));
 						}
 					}
-				}
+			}
 				if (ticksElapsed >= getNumIterations()) {
 					shuttingDown = true;
-				}
+			}
 				ticksElapsed++;
 			}
 		};
@@ -1006,11 +1008,11 @@ public class Server implements Runnable {
 							ActionSender.sendSystemMessage(playerToUpdate, "System update in: " + StringUtil.formatTime(secs));
 						}
 					}
-				}
+			}
 				if (ticksElapsed >= getNumIterations()) {
 					shuttingDown = true;
 					restarting = true;
-				}
+			}
 				ticksElapsed++;
 			}
 		};

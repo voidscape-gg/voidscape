@@ -150,14 +150,52 @@ CREATE TABLE invitems (
 	slot int(5) NOT NULL,
 	PRIMARY KEY (playerID, slot)
 );
-CREATE TABLE itemstatuses (
-	itemID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-	catalogID int(10) NOT NULL,
-	amount int(10) NOT NULL DEFAULT 1,
+CREATE TABLE equipped (
+	playerID int(10) NOT NULL,
+	itemID int(10) NOT NULL,
+	PRIMARY KEY (playerID, itemID)
+);
+	CREATE TABLE itemstatuses (
+		itemID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+		catalogID int(10) NOT NULL,
+		amount int(10) NOT NULL DEFAULT 1,
 	noted tinyint(1) NOT NULL DEFAULT 0,
 	wielded tinyint(1) NOT NULL DEFAULT 0,
-	durability int(5) NOT NULL DEFAULT 0,
-	kill_log TEXT DEFAULT NULL
+		durability int(5) NOT NULL DEFAULT 0,
+		kill_log TEXT DEFAULT NULL
+	);
+	CREATE TABLE item_provenance_events (
+		eventID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+		itemID INTEGER NOT NULL DEFAULT 0,
+		catalogID INTEGER NOT NULL,
+		amount INTEGER NOT NULL DEFAULT 1,
+		noted INTEGER NOT NULL DEFAULT 0,
+		actorID INTEGER NOT NULL DEFAULT 0,
+		actor_username TEXT NOT NULL DEFAULT '',
+		targetID INTEGER NOT NULL DEFAULT 0,
+		target_username TEXT NOT NULL DEFAULT '',
+		event_type TEXT NOT NULL,
+		source TEXT NOT NULL,
+		destination TEXT NOT NULL DEFAULT '',
+		command TEXT NOT NULL DEFAULT '',
+		x INTEGER NOT NULL DEFAULT 0,
+		y INTEGER NOT NULL DEFAULT 0,
+		time INTEGER NOT NULL,
+		extra TEXT NOT NULL DEFAULT ''
+	);
+	CREATE TABLE staff_logs (
+		id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+		staff_username varchar(12) DEFAULT NULL,
+	action tinyint(2) DEFAULT NULL,
+	affected_player varchar(12) DEFAULT NULL,
+	time int(10) NOT NULL,
+	staff_x int(5) NOT NULL DEFAULT 0,
+	staff_y int(5) DEFAULT 0,
+	affected_x int(5) DEFAULT 0,
+	affected_y int(5) DEFAULT 0,
+	staff_ip varchar(15) DEFAULT '0.0.0.0',
+	affected_ip varchar(15) DEFAULT '0.0.0.0',
+	extra varchar(255) DEFAULT NULL
 );
 INSERT INTO players (
 	id, username, group_id, email, pass, salt, combat, skill_total, x, y, kills, npc_kills, deaths,
@@ -172,11 +210,45 @@ INSERT INTO player_cache (playerID, type, key, value) VALUES
 	(77, 0, 'void_path', '1');
 INSERT INTO itemstatuses (itemID, catalogID, amount, noted, wielded, durability, kill_log) VALUES
 	(9001, 77, 1, 0, 1, 100, NULL),
-	(9002, 117, 1, 0, 1, 100, NULL);
+	(9002, 117, 1, 0, 1, 100, NULL),
+	(9003, 77, 0, 0, 0, 100, NULL);
 INSERT INTO invitems (playerID, itemID, slot) VALUES
 	(77, 9001, 0),
 	(77, 9002, 1);
+INSERT INTO staff_logs (
+	staff_username, action, affected_player, time, staff_x, staff_y, affected_x, affected_y,
+	staff_ip, affected_ip, extra
+	) VALUES
+		('Owner', 24, '', strftime('%s', 'now'), 122, 509, 0, 0, '127.0.0.1', '0.0.0.0', 'integrity command=item status=blocked category=item argc=2'),
+		('Owner', 24, '', strftime('%s', 'now', '-5 minutes'), 123, 509, 0, 0, '127.0.0.1', '0.0.0.0', 'integrity command=teleport status=allowed category=movement argc=2');
+	INSERT INTO item_provenance_events (
+		itemID, catalogID, amount, noted, actorID, actor_username, targetID, target_username,
+		event_type, source, destination, command, x, y, time, extra
+		) VALUES
+			(0, 77, 1, 0, 1, 'Owner', 77, 'SmokeHero', 'staff_mint', 'staff_command', 'inventory', 'item', 122, 509, strftime('%s', 'now'), ''),
+			(0, 117, 5, 0, 1, 'Owner', 77, 'SmokeHero', 'staff_mint', 'staff_command', 'bank', 'bankitem', 122, 509, strftime('%s', 'now', '-10 minutes'), ''),
+			(0, 10, 3, 0, 0, '', 77, 'SmokeHero', 'item_origin', 'npc_drop', 'ground', 'npc_drop', 123, 510, strftime('%s', 'now', '-2 minutes'), 'npc_id=1 npc=rat rare=false'),
+			(9001, 77, 1, 0, 77, 'SmokeHero', 77, 'SmokeHero', 'item_transfer', 'player_inventory', 'ground_player_drop', 'drop', 123, 510, strftime('%s', 'now', '-1 minutes'), 'manual_drop=true');
 SQL
+
+PORTAL_OPENRSC_DB="$fixture_db" \
+	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+	node scripts/export-integrity-summary.mjs >/tmp/voidscape-integrity-export-smoke.log
+
+	grep -q '"total24h": 2' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include two staff command rows"; exit 1; }
+	grep -q '"blocked24h": 1' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include one blocked staff command"; exit 1; }
+		grep -q '"staffMints24h": 2' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include two staff item mint rows"; exit 1; }
+		grep -q '"origins24h": 1' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include one item origin row"; exit 1; }
+		grep -q '"npcDrops24h": 1' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include one npc drop origin row"; exit 1; }
+		grep -q '"originAmount24h": 3' "$tmp_dir/integrity-summary.json" || { echo "integrity export should sum item origin amounts"; exit 1; }
+		grep -q '"transfers24h": 1' "$tmp_dir/integrity-summary.json" || { echo "integrity export should include one movement receipt row"; exit 1; }
+		grep -q '"amount24h": 6' "$tmp_dir/integrity-summary.json" || { echo "integrity export should sum staff item mint amounts"; exit 1; }
+	node -e "
+const summary = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+const findings = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+if (!summary.economyScans || summary.economyScans.flagged < 1) throw new Error('integrity export should flag fixture economy anomalies');
+if (!Array.isArray(findings.findings) || findings.findings.length < 1) throw new Error('integrity export should write private economy findings');
+" "$tmp_dir/integrity-summary.json" "$tmp_dir/integrity-findings.json"
 
 PORT="$PORT" \
 	PORTAL_DATA_DIR="$tmp_dir" \
@@ -276,6 +348,7 @@ fi
 public_port=$((PORT + 1))
 PORT="$public_port" \
 	PORTAL_DATA_DIR="$tmp_dir/public-store" \
+	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
 	PORTAL_ADMIN_TOKEN="dev-admin" \
 	PORTAL_PUBLIC_MODE=1 \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-public-smoke.log 2>&1 &
@@ -312,14 +385,55 @@ expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/subscriptions/red
 expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/characters" -H 'content-type: application/json' -d '{}'
 expect_status 404 -X POST "http://127.0.0.1:${public_port}/api/character-links/simulate-verify" -H 'content-type: application/json' -d '{}'
 expect_status 404 "http://127.0.0.1:${public_port}/api/openrsc/characters/SmokeHero"
-expect_status 404 "http://127.0.0.1:${public_port}/api/launcher/manifest.properties"
-expect_status 404 "http://127.0.0.1:${public_port}/downloads/pc-client"
-expect_status 404 "http://127.0.0.1:${public_port}/downloads/launcher"
+
+# launch-day public downloads stay open without requiring Discord or portal login
+if [[ -f "Client_Base/Open_RSC_Client.jar" ]]; then
+	expect_status 200 "http://127.0.0.1:${public_port}/api/launcher/manifest.properties"
+	expect_status 200 "http://127.0.0.1:${public_port}/downloads/client-runtime"
+fi
+if [[ -f "PC_Launcher/OpenRSC.jar" ]]; then
+	expect_status 200 "http://127.0.0.1:${public_port}/downloads/launcher"
+fi
+if [[ -f "Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk" ]]; then
+	expect_status 200 "http://127.0.0.1:${public_port}/downloads/android-apk"
+fi
 
 # /api/public is sanitized: no fake live-world stats, flagged for the UI
 public_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/public")"
 grep -q '"publicMode": true' <<<"$public_payload" || { echo "public-mode /api/public should be flagged"; exit 1; }
 grep -q '"playersOnline": 0' <<<"$public_payload" || { echo "public-mode /api/public should not report fake players online"; exit 1; }
+grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
+grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
+	grep -q '"blocked24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized integrity counts"; exit 1; }
+	grep -q '"staffMints24h": 2' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized item receipt counts"; exit 1; }
+	grep -q '"npcDrops24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized npc drop receipt counts"; exit 1; }
+	grep -q '"transfers24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized movement receipt counts"; exit 1; }
+	grep -q '"economyScans"' <<<"$public_payload" || { echo "public-mode /api/public should expose economy scan summary"; exit 1; }
+	grep -q '"artifacts"' <<<"$public_payload" || { echo "public-mode /api/public should expose build artifact proof"; exit 1; }
+	grep -q '"manifest"' <<<"$public_payload" || { echo "public-mode /api/public should expose launcher manifest proof"; exit 1; }
+	if grep -q '"PC client"' <<<"$public_payload"; then
+		echo "public-mode /api/public should not promote the raw PC client jar"
+		exit 1
+	fi
+
+	landing_html="$(curl -fsS "http://127.0.0.1:${public_port}/")"
+	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
+	if grep -q 'class="landing-integrity' <<<"$landing_html"; then
+		echo "landing page should not embed the full transparency dashboard"
+		exit 1
+	fi
+	transparency_html="$(curl -fsS "http://127.0.0.1:${public_port}/transparency")"
+	grep -q 'transparency.js' <<<"$transparency_html" || { echo "/transparency should load the standalone transparency script"; exit 1; }
+	grep -q 'trust-staff-board' <<<"$transparency_html" || { echo "/transparency should include the staff ledger board"; exit 1; }
+	grep -q 'trust-source-board' <<<"$transparency_html" || { echo "/transparency should include the build proof board"; exit 1; }
+
+	integrity_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/integrity")"
+	grep -q '"total24h": 2' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported staff command totals"; exit 1; }
+	grep -q '"staffMints24h": 2' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported item receipt totals"; exit 1; }
+	grep -q '"origins24h": 1' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported item origin totals"; exit 1; }
+	grep -q '"transfers24h": 1' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported movement receipt totals"; exit 1; }
+	grep -q '"flagged":' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported scan totals"; exit 1; }
+	grep -q '"sha256"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose build hashes"; exit 1; }
 
 # admin stays available with the token, refused without
 expect_status 403 "http://127.0.0.1:${public_port}/api/admin/signups"
@@ -344,7 +458,7 @@ if ! grep -q '"issued"' <<<"$signups_json"; then
 fi
 
 csv_header="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups?format=csv" | head -1)"
-if [[ "$csv_header" != "id,username,email,code,status,referralRewardCodeCount,referralRewardCodes,createdAt" ]]; then
+if [[ "$csv_header" != "id,username,email,betaTester,discordUserId,discordDisplayName,code,status,referralRewardCodeCount,referralRewardCodes,createdAt" ]]; then
 	echo "admin signup CSV export should include the expected header, got: $csv_header"
 	exit 1
 fi

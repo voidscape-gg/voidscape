@@ -19,4 +19,5 @@ public class PlayerAppearanceStruct extends AbstractStruct<OpcodeIn> {
 	public int pkMode;
 	public int ironmanMode = -1;
 	public int isOneXp = -1;
+	public String referralName = "";
 }

@@ -49,4 +49,4 @@ OpenRSC application in their status.
 
 The portal API can also host a live manifest at `/api/launcher/manifest.properties`. That manifest points at `/downloads/pc-client` and `/downloads/cache/...`, hashes every file with SHA-256, and is checked automatically when the player clicks Play. Static beta packaging still works for a tiny no-portal deployment; portal-hosted updates are the normal path once the account site is deployed.
 
-The Account launcher icon opens the configured portal at `#dashboard`, leaving Google sign-in, account recovery, and the 10-character manager in the browser. The Play button still launches the classic client directly; browser-session-to-game-login handoff is intentionally deferred until the portal account model is production-ready.
+The Account launcher icon opens the configured portal at `#account`, which is safe for the public beta landing mode and still lands on the account surface when private portal routes are enabled. The Play button still launches the classic client directly; browser-session-to-game-login handoff is intentionally deferred until the portal account model is production-ready.

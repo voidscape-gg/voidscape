@@ -16,6 +16,7 @@ import com.openrsc.server.content.minigame.fishingtrawler.FishingTrawler;
 import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyInvite;
 import com.openrsc.server.content.party.PartyPlayer;
+import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerInventory;
@@ -4512,8 +4513,44 @@ public final class Player extends Mob {
 		getCarriedItems().getInventory().add(itemFinal);
 		getWorld().getServer().getGameLogger().addQuery(new GenericLog(this.getWorld(), this.getUsername() + " picked up " + item.getDef().getName() + " x"
 			+ item.getAmount() + " at " + this.getLocation().toString()));
+		recordGroundItemPickup(item, itemFinal);
 
 		return true;
+	}
+
+	private void recordGroundItemPickup(final GroundItem groundItem, final Item pickedUpItem) {
+		final Player player = this;
+		final String source = groundItemProvenanceSource(groundItem);
+		final int catalogID = pickedUpItem.getCatalogId();
+		final int amount = pickedUpItem.getAmount();
+		final boolean noted = pickedUpItem.getNoted();
+		final int x = groundItem.getX();
+		final int y = groundItem.getY();
+		final String extra = "owned=" + (groundItem.getOwnerUsernameHash() != 0);
+		getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				getWorld().getServer().getDatabase().addItemProvenanceEvent(player, player, "item_transfer",
+					source, "inventory_pickup", "pickup", catalogID, amount, noted, 0, x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+	}
+
+	private String groundItemProvenanceSource(final GroundItem groundItem) {
+		if (groundItem.getAttribute("npcdrop", false)) {
+			return "ground_npc_drop";
+		}
+		if (groundItem.getAttribute("playerKill", false)) {
+			return "ground_pvp_death";
+		}
+		if (groundItem.getAttribute("killedByMob", -1L) != -1L) {
+			return "ground_pve_death";
+		}
+		if (groundItem.getOwnerUsernameHash() != 0) {
+			return "ground_player_drop";
+		}
+		return "ground_public";
 	}
 
 	public boolean checkRingOfLife(final Mob hitter) {

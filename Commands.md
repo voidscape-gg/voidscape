@@ -27,6 +27,9 @@ Admin Commands
 - saveall
   - Usage: `::saveall`
   - Saves all users currently logged in.
+- integrity
+  - Usage: `::integrity [summary|recent [limit]|player <name> [limit]]`
+  - Shows the latest private economy integrity scan summary and findings for admins.
 - winterholidayevent
   - Usage: `::winterholidayevent`
   - Turns on the winter holiday event (spawns tree objects). Note: this is only functional on custom feature worlds, such as Cabbage and Coleslaw.	
@@ -833,7 +836,16 @@ Regular Player Commands
 - beta
   - Usage: `::beta`
   - Alias: `::betaguide`
-  - Opens the Voidscape beta guide menu with commands, coordinates, items, and features to test.
+  - Opens the Voidscape beta tester toolkit.
+  - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, test checklist, common coordinates, and item IDs.
+- bug
+  - Usage: `::bug <what happened>`
+  - Alias: `::reportbug`
+  - Sends a beta bug report with your current location and client version to the server bug ledger and Discord bug queue.
+- codes
+  - Usage: `::codes`
+  - Alias: `::refcodes`
+  - Shows beta referral reward codes earned when invited players entered your in-game name during character creation.
 - leave
   - Usage: `::leave`
   - Leaves the PK Catching Simulator early.

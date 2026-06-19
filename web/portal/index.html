@@ -3,11 +3,15 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Voidscape Pre-Release Signup</title>
-	<meta name="description" content="Reserve your Voidscape username, claim your launch-week subscription card, and read the Voidscape whitepaper.">
-	<link rel="icon" href="assets/favicon.png">
-	<link rel="preload" as="image" href="assets/voidscape-wordmark.png">
-	<link rel="stylesheet" href="styles.css">
+	<title>Play the Voidscape Beta</title>
+		<meta name="description" content="Download the Voidscape desktop launcher or Android APK and play the public beta. Join Discord only if you want beta rewards, roles, and community updates.">
+		<link rel="icon" href="assets/favicon.png">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap" rel="stylesheet">
+		<link rel="preload" as="image" href="assets/generated/hero-rsc-skeleton-void.jpg">
+		<link rel="preload" as="image" href="assets/prelaunch/voidscape-launcher-logo.png">
+		<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 	<div class="portal-shell">
@@ -73,316 +77,352 @@
 		</header>
 
 		<main class="workspace">
-			<section id="account" class="view is-active prelaunch-view" data-title="Pre-release Access">
-				<div class="prelaunch-page" aria-label="Voidscape pre-release access">
-					<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
-					<div class="prelaunch-vignette" aria-hidden="true"></div>
+				<section id="account" class="view is-active prelaunch-view" data-title="Public Beta">
+					<div class="prelaunch-page landing-redesign" aria-label="Voidscape public beta access">
+						<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
+						<div class="prelaunch-vignette" aria-hidden="true"></div>
 
-					<img class="prelaunch-character prelaunch-knight" src="assets/prelaunch/knight.png" alt="" aria-hidden="true">
-					<img class="prelaunch-character prelaunch-mage" src="assets/prelaunch/mage.png" alt="" aria-hidden="true">
-					<img class="prelaunch-character prelaunch-ranger" src="assets/prelaunch/ranger.png" alt="" aria-hidden="true">
+						<div class="prelaunch-content landing-page-inner">
+							<header class="landing-nav" id="home">
+								<a class="landing-brand" href="#home" data-landing-scroll="home" aria-label="Voidscape home">
+									<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+								</a>
+								<nav class="landing-nav-links" aria-label="Landing sections">
+									<button type="button" data-landing-scroll="beta-access">Download</button>
+									<button type="button" data-landing-scroll="gameplay">Screenshots</button>
+									<a href="/transparency">Trust</a>
+									<button type="button" data-landing-scroll="rewards">Rewards</button>
+									<button type="button" data-discord-login>Discord rewards</button>
+								</nav>
+								<a class="landing-nav-cta" href="/downloads/launcher" download>Download</a>
+							</header>
 
-					<div class="prelaunch-content">
-						<img class="prelaunch-logo" src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
-						<p class="prelaunch-prize">Claim Your Free 1-Week Subscription Card</p>
-
-						<img class="prelaunch-card" src="assets/prelaunch/subscription-card-large.png" alt="Voidscape 1-week subscription card">
-						<button class="prelaunch-whitepaper-link" type="button" data-landing-scroll="whitepaper">Read the Voidscape whitepaper</button>
-
-						<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
-							<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
-							<div class="prelaunch-signup-content">
-								<h2 id="founder-title">Reserve your username</h2>
-								<div class="account-mode sr-only" role="tablist" aria-label="Portal account mode">
-									<button class="is-active" type="button" data-account-mode="reserve">Create</button>
-									<button type="button" data-account-mode="signin">Sign in</button>
-								</div>
-								<div class="prelaunch-fields">
-									<label class="prelaunch-field" id="founder-name-row">
-										<span>Username to reserve</span>
-										<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
-									</label>
-									<label class="prelaunch-field" id="founder-email-row">
-										<span>Email</span>
-										<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
-									</label>
-									<input id="founder-password" type="hidden" autocomplete="new-password">
-									<button class="prelaunch-manage prelaunch-submit" type="submit" id="founder-submit">Reserve &amp; get my code</button>
-								</div>
-								<p class="prelaunch-state" id="founder-message">Enter your email and the username you want. You'll get a code for a free 1-week subscription card.</p>
-								<div class="prelaunch-success" id="prelaunch-success" hidden>
-									<h2>Your username is reserved</h2>
-									<p>Log in and speak to the Subscription Vendor in Lumbridge to claim your free 1-week subscription card.</p>
-									<div class="prelaunch-success-meta" aria-label="Reserved card details">
-										<span>Email <strong id="prelaunch-success-account">-</strong></span>
-										<span>Reserved <strong id="prelaunch-success-name">-</strong></span>
-										<span>Status <strong id="prelaunch-success-status">Password needed</strong></span>
-									</div>
-									<div class="signup-code-block" id="signup-code-block" hidden>
-										<span class="signup-code-label">Your subscription card code</span>
-										<div class="copy-row">
-											<strong class="signup-code" id="prelaunch-success-code">-</strong>
-											<button class="ghost-button" type="button" id="copy-signup-code">Copy</button>
-										</div>
-										<p class="signup-code-help" id="signup-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.</p>
-									</div>
-									<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
-										<label class="prelaunch-field">
-											<span>Game password</span>
-											<input id="prelaunch-game-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
-										</label>
-										<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
-									</div>
-									<div class="prelaunch-success-actions" id="prelaunch-success-actions">
-										<a class="prelaunch-download" id="prelaunch-download" href="/downloads/launcher" download>Download launcher</a>
-										<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
+							<section class="landing-hero" aria-labelledby="landing-hero-title">
+								<div class="landing-hero-copy">
+									<p class="landing-kicker">Public beta</p>
+									<h1 id="landing-hero-title">Play the <span>Voidscape</span> beta.</h1>
+									<p class="landing-hero-proof">
+										<span>Download instantly.</span>
+										<span>Play on desktop or Android.</span>
+										<span>Discord rewards are optional.</span>
+									</p>
+									<div class="landing-hero-actions">
+										<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
+										<a class="landing-button landing-button-primary landing-button-android" href="/downloads/android-apk" download>Android APK</a>
 									</div>
 								</div>
-								<div class="referral-notice prelaunch-referral" id="referral-notice" hidden>
-									<span>Invite code active</span>
-									<strong id="referral-code"></strong>
-									<button class="ghost-button" type="button" id="clear-referral">Clear</button>
+							</section>
+
+							<section class="landing-gameplay whitepaper-remix" id="gameplay" aria-labelledby="landing-gameplay-title">
+								<p class="landing-kicker">Current build</p>
+								<h2 id="landing-gameplay-title">See the game first.</h2>
+								<div class="landing-gameplay-grid">
+									<figure>
+										<img src="assets/whitepaper/feature-void-enclave-current.png" loading="lazy" decoding="async" alt="Void Enclave hub in the current Voidscape client.">
+										<figcaption><strong>Explore Void Island</strong><span>Start in the current beta hub and branch into the world.</span></figcaption>
+									</figure>
+									<figure>
+										<img src="assets/whitepaper/feature-void-colossus-current.png" loading="lazy" decoding="async" alt="Void Colossus fight in the current Voidscape client.">
+										<figcaption><strong>Fight bosses</strong><span>Test PvM, drops, combat pacing, and group pressure.</span></figcaption>
+									</figure>
+									<figure>
+										<img src="assets/whitepaper/feature-auction-house-current.png" loading="lazy" decoding="async" alt="Auction House in the current Voidscape client.">
+										<figcaption><strong>Build your account</strong><span>Train, trade, gear up, and help tune the economy.</span></figcaption>
+									</figure>
 								</div>
-								<div class="founder-progress prelaunch-progress" hidden>
+							</section>
+
+							<section class="landing-access-band" id="beta-access" aria-label="Download Voidscape">
+								<div class="beta-countdown" id="beta-countdown" hidden aria-live="polite">
+									<span>Beta begins in</span>
+									<div class="beta-countdown-grid" aria-label="Countdown until beta testing opens">
+										<div><strong id="beta-countdown-days">--</strong><em>Days</em></div>
+										<div><strong id="beta-countdown-hours">--</strong><em>Hours</em></div>
+										<div><strong id="beta-countdown-minutes">--</strong><em>Minutes</em></div>
+										<div><strong id="beta-countdown-seconds">--</strong><em>Seconds</em></div>
+									</div>
+									<p class="beta-signup-counter" id="beta-signup-counter" hidden>
+										<strong id="beta-signup-count">132</strong>
+										<span>accounts signed up for beta</span>
+									</p>
+									<p id="beta-countdown-note">Discord is only needed for rewards and community access.</p>
+								</div>
+
+								<div class="landing-card-promo">
 									<div>
-										<span id="founder-progress-label">0 invites credited</span>
-										<strong id="founder-reward-label">Invite friends for codes</strong>
-									</div>
-									<div class="meter-track"><span id="founder-progress-fill"></span></div>
-								</div>
-								<div class="referral-reward-codes" id="referral-reward-codes" hidden>
-									<span>Referral reward codes</span>
-									<div id="referral-reward-code-list"></div>
-								</div>
-								<label class="prelaunch-invite-link" hidden>
-									<span>Invite link</span>
-									<div class="copy-row">
-										<input id="founder-link" readonly>
-										<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
-									</div>
-								</label>
-								<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
-							</div>
-						</form>
-
-						<div class="prelaunch-benefits" aria-label="Why join Voidscape" hidden>
-							<img src="assets/prelaunch/benefit-subscription.png" alt="Claim a free 1-week subscription card. Play early with a free 1-week subscription when you sign up.">
-							<img src="assets/prelaunch/benefit-reserve.png" alt="Reserve your account early. Secure your username and be ready for launch day.">
-							<img src="assets/prelaunch/benefit-invite.png" alt="Invite a friend, earn more. You and your friend get extra rewards when they join.">
-						</div>
-
-						<div class="prelaunch-hidden-state" hidden>
-							<strong id="landing-world-state">Online</strong>
-							<small id="landing-world-detail">247 players online</small>
-							<strong id="landing-xp-rates">10x / 2x</strong>
-							<small id="landing-sub-rates">11x / 3x subscribed</small>
-							<strong id="landing-prize-state">Free sub card</strong>
-							<small id="landing-prize-detail">One code per credited invite</small>
-							<div id="landing-news-list"></div>
-							<div id="download-actions"></div>
-						</div>
-					</div>
-
-					<section id="whitepaper" class="landing-whitepaper whitepaper-remix whitepaper-view" aria-label="Voidscape whitepaper">
-						<div class="whitepaper-remix-shell">
-							<section class="whitepaper-remix-hero" id="whitepaper-promise" aria-labelledby="whitepaper-title">
-								<div class="whitepaper-remix-copy">
-									<p class="whitepaper-kicker">Voidscape whitepaper</p>
-									<h2 id="whitepaper-title">We love Classic. We are finishing what it started.</h2>
-									<p>
-										RuneScape Classic had the rhythm: slow walks, harsh choices, tiny inventories, real danger, and names you remembered.
-										Voidscape keeps that feeling and gives the missing loops a spine.
-									</p>
-									<div class="whitepaper-remix-actions">
-										<button class="primary-button" type="button" data-landing-scroll="founder-form">Reserve username</button>
-										<button class="ghost-button" type="button" data-whitepaper-jump="whitepaper-proof">Show me proof</button>
+										<p class="landing-kicker">Free</p>
+										<strong>1-week subscription card</strong>
+										<span>All beta testers get a code that remains valid for the real release.</span>
 									</div>
 								</div>
-								<div class="whitepaper-remix-stage" aria-label="Voidscape game interface preview">
-									<figure class="stage-shot stage-shot-large">
-										<img src="assets/whitepaper/feature-custom-hud-current.png" loading="eager" decoding="async" alt="Voidscape client HUD with custom icons, location plaque, and chat controls.">
-									</figure>
-									<figure class="stage-shot stage-shot-small">
-										<img src="assets/whitepaper/feature-void-enclave-current.png" loading="eager" decoding="async" alt="Void Enclave hub with the Voidscape interface.">
-									</figure>
-									<figure class="stage-shot stage-shot-small">
-										<img src="assets/whitepaper/feature-void-colossus-current.png" loading="eager" decoding="async" alt="Void Colossus boss fight.">
-									</figure>
+
+								<div class="landing-public-downloads" aria-label="Download Voidscape without Discord login">
+									<span>No Discord login required</span>
+									<strong>Download Voidscape</strong>
+									<p>Grab the desktop launcher or Android APK first. Join Discord after that for your beta role, reward code, patch notes, and bug reports.</p>
+									<div class="landing-public-download-grid" id="download-actions">
+										<a class="ghost-button download-action is-ready" href="/downloads/launcher" download>
+											<strong>Voidscape launcher</strong>
+											<span>Desktop download</span>
+										</a>
+										<a class="ghost-button download-action is-ready" href="/downloads/android-apk" download>
+											<strong>Android APK</strong>
+											<span>Android download</span>
+										</a>
+									</div>
+									<div class="landing-reward-prompt">
+										<span>Optional</span>
+										<button class="ghost-button" type="button" data-discord-login>Claim rewards with Discord</button>
+									</div>
+								</div>
+
+								<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
+									<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
+									<div class="prelaunch-signup-content">
+										<h2 id="founder-title">Join the public beta</h2>
+										<div class="account-mode sr-only" role="tablist" aria-label="Portal account mode">
+											<button class="is-active" type="button" data-account-mode="reserve">Create</button>
+											<button type="button" data-account-mode="signin">Sign in</button>
+										</div>
+										<div class="prelaunch-fields">
+											<label class="prelaunch-field" id="founder-name-row">
+												<span>Username to reserve</span>
+												<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
+											</label>
+											<label class="prelaunch-field" id="founder-email-row">
+												<span>Email</span>
+												<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
+											</label>
+											<input id="founder-password" type="hidden" autocomplete="new-password">
+											<button class="prelaunch-manage prelaunch-submit" type="submit" id="founder-submit">Reserve &amp; get my code</button>
+										</div>
+										<p class="prelaunch-state" id="founder-message">Downloads are instant. Connect Discord only to get your beta role and release-valid free 1-week subscription card code.</p>
+										<div class="prelaunch-success" id="prelaunch-success" hidden>
+											<h2>Your username is reserved</h2>
+											<p>Log in and speak to the Subscription Vendor in Lumbridge to claim your free 1-week subscription card.</p>
+											<div class="prelaunch-success-meta" aria-label="Reserved card details">
+												<span>Email <strong id="prelaunch-success-account">-</strong></span>
+												<span>Reserved <strong id="prelaunch-success-name">-</strong></span>
+												<span>Status <strong id="prelaunch-success-status">Password needed</strong></span>
+											</div>
+											<div class="signup-code-block" id="signup-code-block" hidden>
+												<span class="signup-code-label">Your subscription card code</span>
+												<div class="copy-row">
+													<strong class="signup-code" id="prelaunch-success-code">-</strong>
+													<button class="ghost-button" type="button" id="copy-signup-code">Copy</button>
+												</div>
+												<p class="signup-code-help" id="signup-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.</p>
+											</div>
+											<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
+												<label class="prelaunch-field">
+													<span>Game password</span>
+													<input id="prelaunch-game-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
+												</label>
+												<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
+											</div>
+											<div class="prelaunch-success-actions" id="prelaunch-success-actions">
+												<a class="prelaunch-download" id="prelaunch-download" href="/downloads/launcher" download>Download launcher</a>
+												<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
+											</div>
+										</div>
+										<div class="referral-notice prelaunch-referral" id="referral-notice" hidden>
+											<span>Invite code active</span>
+											<strong id="referral-code"></strong>
+											<button class="ghost-button" type="button" id="clear-referral">Clear</button>
+										</div>
+										<div class="founder-progress prelaunch-progress" hidden>
+											<div>
+												<span id="founder-progress-label">0 / 2 invites</span>
+												<strong id="founder-reward-label">Reward locked</strong>
+											</div>
+											<div class="meter-track"><span id="founder-progress-fill"></span></div>
+										</div>
+										<label class="prelaunch-invite-link" hidden>
+											<span>Invite link</span>
+											<div class="copy-row">
+												<input id="founder-link" readonly>
+												<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
+											</div>
+										</label>
+										<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
+									</div>
+								</form>
+							</section>
+
+							<section class="landing-trust-teaser" id="trust" aria-labelledby="landing-trust-title">
+								<div>
+									<p class="landing-kicker">Community trust</p>
+									<h2 id="landing-trust-title">Transparency without making the ad page heavy.</h2>
+									<p>Build hashes, staff command summaries, item receipts, and economy scans live on a dedicated public page.</p>
+								</div>
+								<a class="landing-button landing-button-secondary" href="/transparency">View Transparency</a>
+							</section>
+
+							<section class="landing-feature-strip" id="features" aria-labelledby="landing-features-title">
+								<h2 id="landing-features-title">Why join the Discord?</h2>
+									<div class="landing-feature-grid">
+										<article>
+											<img src="assets/prelaunch/benefit-subscription.png" alt="" aria-hidden="true">
+											<strong>Free beta reward</strong>
+											<span>Claim a release-valid 1-week subscription card.</span>
+										</article>
+										<article>
+											<img src="assets/prelaunch/benefit-reserve.png" alt="" aria-hidden="true">
+											<strong>Beta tester role</strong>
+											<span>Get community access and beta patch updates.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/feature-void-herald-current.png" alt="" aria-hidden="true">
+											<strong>Bug reports</strong>
+											<span>Send feedback where the team is watching.</span>
+										</article>
+										<article>
+											<img src="assets/prelaunch/benefit-invite.png" alt="" aria-hidden="true">
+											<strong>Referral rewards</strong>
+											<span>Bring friends and earn extra tester codes.</span>
+										</article>
 								</div>
 							</section>
 
-							<nav class="whitepaper-remix-nav" aria-label="Whitepaper flow">
-								<button type="button" data-whitepaper-jump="whitepaper-unfinished">Unfinished</button>
-								<button type="button" data-whitepaper-jump="whitepaper-loop">The Loop</button>
-								<button type="button" data-whitepaper-jump="whitepaper-vision">Vision</button>
-								<button type="button" data-whitepaper-jump="whitepaper-proof">Proof</button>
-							</nav>
-
-							<section class="whitepaper-manifesto" id="whitepaper-unfinished">
-								<div class="whitepaper-section-lede">
-									<p class="whitepaper-kicker">The premise</p>
-									<h2>Classic was brilliant because it was dangerous, awkward, and social.</h2>
-									<p>
-										It also stopped short. Skilling did not always feed the war machine. PvP had no clean place to practice.
-										PvM had too few meaningful risks. The client made repeated play harder than it needed to be.
-									</p>
+							<section id="whitepaper" class="landing-whitepaper landing-whitepaper-compact whitepaper-remix whitepaper-view" aria-label="Voidscape whitepaper">
+								<div class="landing-section-head">
+									<p class="landing-kicker">Whitepaper</p>
+									<h2>Keep the Classic. Finish the loop.</h2>
+									<p>Voidscape is a focused public beta for the systems that make Classic feel social again: risk, supply, markets, status, and friction that earns its place.</p>
 								</div>
-								<div class="unfinished-grid">
-									<article>
+								<nav class="whitepaper-remix-nav landing-paper-nav" aria-label="Whitepaper flow">
+									<button type="button" data-whitepaper-jump="whitepaper-unfinished">Classic</button>
+									<button type="button" data-whitepaper-jump="whitepaper-loop">Loop</button>
+									<button type="button" data-whitepaper-jump="whitepaper-blueprint">Beta</button>
+									<button type="button" data-whitepaper-jump="whitepaper-vision">Vision</button>
+									<button type="button" data-whitepaper-jump="whitepaper-proof">Proof</button>
+								</nav>
+								<div class="landing-paper-grid">
+									<article id="whitepaper-unfinished">
 										<span>01</span>
-										<strong>The first hour drifted.</strong>
-										<p>New players could log in, wander, and miss the shape of the server.</p>
+										<strong>Classic stayed dangerous.</strong>
+										<p>We keep the old rhythm: distance, inventory pressure, social memory, and risk that changes how people act.</p>
 									</article>
-									<article>
+									<article id="whitepaper-loop">
 										<span>02</span>
-										<strong>Risk needed more homes.</strong>
-										<p>The Wilderness mattered. The rest of the world needed sharper pressure.</p>
+										<strong>The loop needed gravity.</strong>
+										<p>Skillers supply combat. Combat consumes supplies. PvM, PvP, and trade pull value back through the world.</p>
 									</article>
-									<article>
+									<article id="whitepaper-blueprint">
 										<span>03</span>
-										<strong>Markets needed signals.</strong>
-										<p>Goods had value, but players needed better ways to see demand and move supply.</p>
+										<strong>The beta is connected.</strong>
+										<p>Discord login grants the beta role, reward code, tester references, and release-valid code history. Downloads stay open to everyone.</p>
 									</article>
-									<article>
+									<article id="whitepaper-vision">
 										<span>04</span>
-										<strong>The client fought repetition.</strong>
-										<p>Banking, routing, menus, accounts, and chat could respect the old game without staying crude.</p>
+										<strong>The world grows by pressure.</strong>
+										<p>New content has to strengthen the cycle: prepare, risk, recover, trade, flex, repeat.</p>
 									</article>
 								</div>
-							</section>
-
-							<section class="whitepaper-loop-story" id="whitepaper-loop">
-								<div class="whitepaper-section-lede">
-									<p class="whitepaper-kicker">The loop</p>
-									<h2>Every major system should push players back toward each other.</h2>
-								</div>
-								<div class="loop-ribbon" aria-label="Voidscape economy and combat loop">
-									<article><strong>Start</strong><span>Void Island, Council, starter path, kit.</span></article>
-									<article><strong>Train</strong><span>Fast combat, slower skilling, build locks.</span></article>
-									<article><strong>Risk</strong><span>Death Match, Void Dungeon, bosses, beams.</span></article>
-									<article><strong>Supply</strong><span>Food, arrows, ashes, bars, runes, keys.</span></article>
-									<article><strong>Trade</strong><span>Auction House, Market Intel, bank loadouts.</span></article>
-									<article><strong>Status</strong><span>Titles, Herald calls, loot logs, rare drops.</span></article>
-								</div>
-							</section>
-
-							<section class="whitepaper-vision" id="whitepaper-vision">
-								<div class="whitepaper-section-lede">
-									<p class="whitepaper-kicker">The vision</p>
-									<h2>Not more content. Better gravity.</h2>
-									<p>
-										Each feature exists to pull players into a stronger version of the same classic cycle:
-										prepare, risk, recover, trade, flex, repeat.
-									</p>
-								</div>
-								<div class="vision-grid">
-									<article class="vision-card vision-card-wide">
-										<img src="assets/whitepaper/feature-void-island-intro-current.png" loading="lazy" decoding="async" alt="Void Island intro with Council staging.">
-										<div>
-											<p>First hour</p>
-											<h3>A beginning with direction.</h3>
-											<span>Void Island, the Council, starter paths, kits, and path boosts turn account creation into a real entry ritual.</span>
-										</div>
-									</article>
-									<article class="vision-card">
-										<img src="assets/whitepaper/feature-void-rift-current.png" loading="lazy" decoding="async" alt="Void Rift travel hub.">
-										<div>
-											<p>World</p>
-											<h3>A hub that feels owned.</h3>
-											<span>Void Enclave, rifts, waystones, route overlays, and location plaques give the custom world a clear shape.</span>
-										</div>
-									</article>
-									<article class="vision-card">
-										<img src="assets/whitepaper/feature-pk-catching-current.png" loading="lazy" decoding="async" alt="PK Catching Simulator.">
-										<div>
-											<p>PvP</p>
-											<h3>Practice, then prove it.</h3>
-											<span>PK catching drills build skill. Void Arena turns 1v1 combat into agreed, ranked or unranked fights.</span>
-										</div>
-									</article>
-									<article class="vision-card">
-										<img src="assets/whitepaper/feature-void-dungeon-current.png" loading="lazy" decoding="async" alt="Void Dungeon risky PvM.">
-										<div>
-											<p>PvM</p>
-											<h3>Risk outside the Wilderness.</h3>
-											<span>Void Dungeon, Void Rush, Void Colossus, keys, chest rewards, and rare beams make PvM carry tension.</span>
-										</div>
-									</article>
-									<article class="vision-card">
-										<img src="assets/whitepaper/feature-auction-house-current.png" loading="lazy" decoding="async" alt="Auction House browse screen.">
-										<div>
-											<p>Economy</p>
-											<h3>Supply can finally see demand.</h3>
-											<span>Auction House, Market Intel, loadouts, notes, certs, rested XP, and make-all tools keep goods moving.</span>
-										</div>
-									</article>
-									<article class="vision-card vision-card-wide">
-										<img src="assets/whitepaper/feature-custom-hud-current.png" loading="lazy" decoding="async" alt="Voidscape custom HUD.">
-										<div>
-											<p>Client</p>
-											<h3>The old game, easier to live in.</h3>
-											<span>Clear-glass panels, compact menus, account switching, LOOT tracking, Android parity, and launcher flow reduce friction without hiding the world.</span>
-										</div>
-									</article>
-								</div>
-							</section>
-
-							<section class="whitepaper-proof-remix" id="whitepaper-proof">
-								<div class="whitepaper-section-lede">
-									<p class="whitepaper-kicker">Build proof</p>
-									<h2>This is already in the client.</h2>
-									<p>Not a wishlist. Screens from the local beta build.</p>
-								</div>
-								<div class="proof-remix-grid">
-									<figure class="proof-remix-card proof-remix-card-large">
-										<img src="assets/whitepaper/feature-void-colossus-current.png" loading="lazy" decoding="async" alt="Void Colossus boss fight.">
-										<figcaption><strong>Void Colossus</strong><span>Custom solo boss, HP panel, summons, projectiles.</span></figcaption>
+								<div class="landing-proof-row" id="whitepaper-proof">
+									<figure>
+										<img src="assets/whitepaper/feature-bank-loadouts-current.png" loading="lazy" decoding="async" alt="Bank loadouts screen in the current Voidscape client.">
+										<figcaption><strong>Bank loadouts</strong><span>Prepare faster without removing the old stakes.</span></figcaption>
 									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-market-intel-current.png" loading="lazy" decoding="async" alt="Market Intel screen.">
-										<figcaption><strong>Market Intel</strong><span>Prices and hot items.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-bank-loadouts-current.png" loading="lazy" decoding="async" alt="Bank loadouts screen.">
-										<figcaption><strong>Bank loadouts</strong><span>Fast prep without killing friction.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-rare-drop-beam-current.png" loading="lazy" decoding="async" alt="Rare drop beam.">
-										<figcaption><strong>Drop beams</strong><span>Rare drops feel public.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-loot-tab-current.png" loading="lazy" decoding="async" alt="LOOT tracker tab.">
-										<figcaption><strong>LOOT tab</strong><span>Kill counts and drops.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-player-titles-current.png" loading="lazy" decoding="async" alt="Player titles menu.">
-										<figcaption><strong>Titles</strong><span>Status above your head.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-world-map-route-current.png" loading="lazy" decoding="async" alt="World map route overlay.">
-										<figcaption><strong>World map</strong><span>Routes you can inspect.</span></figcaption>
-									</figure>
-									<figure class="proof-remix-card">
-										<img src="assets/whitepaper/feature-account-switcher-current.png" loading="lazy" decoding="async" alt="Account switcher menu.">
-										<figcaption><strong>Accounts</strong><span>Switcher built into the HUD.</span></figcaption>
+									<figure>
+										<img src="assets/whitepaper/feature-player-titles-current.png" loading="lazy" decoding="async" alt="Player titles screen in the current Voidscape client.">
+										<figcaption><strong>Player titles</strong><span>Status and achievements that show in the world.</span></figcaption>
 									</figure>
 								</div>
 							</section>
 
-							<section class="whitepaper-close">
-								<p>The promise is simple.</p>
-								<h2>Keep the Classic. Finish the loop.</h2>
-								<button class="primary-button" type="button" data-landing-scroll="founder-form">Reserve your name</button>
+							<section class="landing-final" id="rewards" aria-label="Claim Voidscape beta rewards">
+								<div>
+									<p class="landing-kicker">Optional rewards</p>
+									<h2>Play first. Claim rewards when you are ready.</h2>
+								</div>
+								<div class="landing-final-actions">
+									<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
+									<button class="landing-button landing-button-secondary" type="button" data-discord-login>Claim Rewards</button>
+								</div>
 							</section>
+
+							<section class="beta-hub" id="beta-hub" hidden aria-label="Beta tester hub">
+								<div class="beta-hub-head">
+									<div>
+										<p class="whitepaper-kicker">Beta tester pass</p>
+										<h2 id="beta-discord-name">Discord connected</h2>
+									</div>
+									<div class="beta-code-card">
+										<span>Your release-valid code</span>
+										<div class="copy-row">
+											<strong class="signup-code" id="beta-code">-</strong>
+											<button class="ghost-button" type="button" id="copy-beta-code">Copy</button>
+										</div>
+										<p id="beta-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code.</p>
+									</div>
+								</div>
+								<div class="beta-downloads" id="beta-downloads"></div>
+								<div class="beta-reference-tools">
+									<label>
+										<span>Search beta reference</span>
+										<input id="beta-reference-search" autocomplete="off" placeholder="command, item, coord, feature">
+									</label>
+									<small id="beta-reference-count">0 entries</small>
+								</div>
+								<div class="beta-resource-grid">
+									<div class="beta-resource-panel beta-command-panel">
+										<h3>Command Suite</h3>
+										<ul id="beta-command-list"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Flow Checklist</h3>
+										<ul id="beta-checklist"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Locations</h3>
+										<ul id="beta-coords"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Useful Item IDs</h3>
+										<ul id="beta-items"></ul>
+									</div>
+								</div>
+								<p class="beta-policy" id="beta-policy">Beta progress may wipe before launch. Your beta code stays valid for release.</p>
+							</section>
+
+							<footer class="landing-footer">
+								<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+								<div>
+									<button type="button" data-landing-scroll="home">Home</button>
+									<a href="/transparency">Trust</a>
+									<button type="button" data-landing-scroll="features">Features</button>
+									<button type="button" data-landing-scroll="whitepaper">Whitepaper</button>
+									<button type="button" data-discord-login>Discord</button>
+									<a href="/privacy">Privacy</a>
+									<a href="https://github.com/Open-RSC/Core-Framework" rel="noopener">AGPL Source</a>
+								</div>
+							</footer>
+
+							<div class="prelaunch-benefits" aria-label="Why join Voidscape" hidden>
+								<img src="assets/prelaunch/benefit-subscription.png" alt="Claim a free 1-week subscription card. Play early with a free 1-week subscription when you sign up.">
+								<img src="assets/prelaunch/benefit-reserve.png" alt="Reserve your account early. Secure your username and be ready for launch day.">
+								<img src="assets/prelaunch/benefit-invite.png" alt="Invite a friend, earn more. You and your friend get extra rewards when they join.">
+							</div>
+
+							<div class="prelaunch-hidden-state" hidden>
+								<strong id="landing-world-state">Online</strong>
+								<small id="landing-world-detail">247 players online</small>
+								<strong id="landing-xp-rates">10x / 2x</strong>
+								<small id="landing-sub-rates">11x / 3x subscribed</small>
+								<strong id="landing-prize-state">Free sub card</strong>
+								<small id="landing-prize-detail">Unlocked at 2 invites</small>
+								<div id="landing-news-list"></div>
+							</div>
 						</div>
-					</section>
-					<div class="whitepaper-lightbox" id="whitepaper-lightbox" hidden aria-hidden="true">
-						<button class="whitepaper-lightbox-close" id="whitepaper-lightbox-close" type="button" aria-label="Close expanded image">Close</button>
-						<img id="whitepaper-lightbox-image" alt="">
-						<p id="whitepaper-lightbox-caption"></p>
+
+						<div class="whitepaper-lightbox" id="whitepaper-lightbox" hidden aria-hidden="true">
+							<button class="whitepaper-lightbox-close" id="whitepaper-lightbox-close" type="button" aria-label="Close expanded image">Close</button>
+							<img id="whitepaper-lightbox-image" alt="">
+							<p id="whitepaper-lightbox-caption"></p>
+						</div>
 					</div>
-				</div>
-			</section>
+				</section>
 
 			<section id="dashboard" class="view" data-title="Account">
 				<div class="dashboard-home">

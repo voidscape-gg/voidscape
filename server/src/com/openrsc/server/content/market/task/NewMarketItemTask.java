@@ -149,6 +149,7 @@ public class NewMarketItemTask extends MarketTask {
 		if (dbOk) {
 			//ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp % @whi@Completed auction fee: @gre@" + feeCost + "gp", false);
 			ActionSender.sendBox(owner, "@gre@[Auction House - Success] % @whi@ Auction has been listed % " + newItem.getAmount() + "x @yel@" + def.getName() + " @whi@for @yel@" + newItem.getPrice() + "gp", false);
+			recordAuctionListReceipts(removedItems);
 			updateDiscord = true;
 		} else {
 			rollbackRemovedItems(removedItems);
@@ -168,5 +169,27 @@ public class NewMarketItemTask extends MarketTask {
 		for (Item item : removedItems) {
 			owner.getCarriedItems().getInventory().add(new Item(item.getCatalogId(), item.getAmount(), item.getNoted()));
 		}
+	}
+
+	private void recordAuctionListReceipts(final ArrayList<Item> removedItems) {
+		if (removedItems == null || removedItems.isEmpty()) return;
+		final ArrayList<Item> receiptItems = new ArrayList<>();
+		for (Item item : removedItems) {
+			receiptItems.add(new Item(item.getCatalogId(), item.getAmount(), item.getNoted(), item.getItemId()));
+		}
+		final int x = owner.getX();
+		final int y = owner.getY();
+		final String extra = "auction_id=" + newItem.getAuctionID() + " price=" + newItem.getPrice();
+		owner.getWorld().getServer().submitSqlLogging(() -> {
+			for (Item item : receiptItems) {
+				try {
+					owner.getWorld().getServer().getDatabase().addItemProvenanceEvent(owner, owner, "item_transfer",
+						"player_inventory", "auction_listing", "auction_list", item.getCatalogId(), item.getAmount(),
+						item.getNoted(), item.getItemId(), x, y, extra);
+				} catch (final GameDatabaseException ex) {
+					LOGGER.catching(ex);
+				}
+			}
+		});
 	}
 }

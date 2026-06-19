@@ -23,9 +23,9 @@
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name="com.openrsc.android.updater.ApplicationUpdater"
-            android:configChanges="orientation"
+            android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true"
-            android:screenOrientation="landscape"
+            android:screenOrientation="fullSensor"
             android:theme="@style/VoidscapeLaunchTheme">
             <intent-filter>
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -40,10 +40,10 @@
             android:screenOrientation="fullSensor" />
         <activity
             android:name="com.openrsc.client.android.GameActivity"
-            android:configChanges="orientation"
+            android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="false"
             android:largeHeap="true"
-            android:screenOrientation="sensorLandscape" />
+            android:screenOrientation="fullSensor" />
     </application>
 
 </manifest>

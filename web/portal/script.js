@@ -8,7 +8,38 @@
 	var views = Array.prototype.slice.call(document.querySelectorAll(".view"));
 	var viewLinks = Array.prototype.slice.call(document.querySelectorAll("[data-view-link]"));
 	var landingScrollButtons = Array.prototype.slice.call(document.querySelectorAll("[data-landing-scroll]"));
+	var discordLoginButtons = Array.prototype.slice.call(document.querySelectorAll("[data-discord-login]"));
 	var whitepaperJumpButtons = Array.prototype.slice.call(document.querySelectorAll("[data-whitepaper-jump]"));
+	var trustTabs = Array.prototype.slice.call(document.querySelectorAll("[data-trust-tab]"));
+	var trustPanels = Array.prototype.slice.call(document.querySelectorAll("[data-trust-panel]"));
+	var integrityUpdated = document.getElementById("integrity-updated");
+	var integrityStaffTotal = document.getElementById("integrity-staff-total");
+	var integrityStaffDetail = document.getElementById("integrity-staff-detail");
+	var integrityBlockedTotal = document.getElementById("integrity-blocked-total");
+	var integrityBlockedDetail = document.getElementById("integrity-blocked-detail");
+	var integrityBuildStatus = document.getElementById("integrity-build-status");
+	var integrityBuildDetail = document.getElementById("integrity-build-detail");
+	var integrityItemsStatus = document.getElementById("integrity-items-status");
+	var integrityItemsDetail = document.getElementById("integrity-items-detail");
+	var trustPasswordsStatus = document.getElementById("trust-passwords-status");
+	var trustPasswordsList = document.getElementById("trust-passwords-list");
+	var trustSourceStatus = document.getElementById("trust-source-status");
+	var trustSourceList = document.getElementById("trust-source-list");
+	var trustSourceBoard = document.getElementById("trust-source-board");
+	var trustSourceRepo = document.getElementById("trust-source-repo");
+	var trustSourceCommit = document.getElementById("trust-source-commit");
+	var trustSourceManifest = document.getElementById("trust-source-manifest");
+	var trustBuildArtifacts = document.getElementById("trust-build-artifacts");
+	var trustStaffStatus = document.getElementById("trust-staff-status");
+	var trustStaffList = document.getElementById("trust-staff-list");
+	var trustItemsStatus = document.getElementById("trust-items-status");
+	var trustItemsList = document.getElementById("trust-items-list");
+	var trustItemsBoard = document.getElementById("trust-items-board");
+	var trustItemsBoardTotal = document.getElementById("trust-items-board-total");
+	var trustItemsSources = document.getElementById("trust-items-sources");
+	var trustItemsRecent = document.getElementById("trust-items-recent");
+	var trustScansStatus = document.getElementById("trust-scans-status");
+	var trustScansList = document.getElementById("trust-scans-list");
 	var whitepaperLightbox = document.getElementById("whitepaper-lightbox");
 	var whitepaperLightboxImage = document.getElementById("whitepaper-lightbox-image");
 	var whitepaperLightboxCaption = document.getElementById("whitepaper-lightbox-caption");
@@ -152,6 +183,19 @@
 	var adminCharacterTable = document.getElementById("admin-character-table");
 	var adminSignalTable = document.getElementById("admin-signal-table");
 	var adminAuditTable = document.getElementById("admin-audit-table");
+	var betaHub = document.getElementById("beta-hub");
+	var betaDiscordName = document.getElementById("beta-discord-name");
+	var betaCode = document.getElementById("beta-code");
+	var copyBetaCode = document.getElementById("copy-beta-code");
+	var betaCodeHelp = document.getElementById("beta-code-help");
+	var betaDownloads = document.getElementById("beta-downloads");
+	var betaReferenceSearch = document.getElementById("beta-reference-search");
+	var betaReferenceCount = document.getElementById("beta-reference-count");
+	var betaCommandList = document.getElementById("beta-command-list");
+	var betaChecklist = document.getElementById("beta-checklist");
+	var betaCoords = document.getElementById("beta-coords");
+	var betaItems = document.getElementById("beta-items");
+	var betaPolicy = document.getElementById("beta-policy");
 
 	var maxCharacters = 10;
 	var rosterKey = "voidscape.portal.roster";
@@ -171,6 +215,9 @@
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
 	var adminAccount = null;
+	var betaResources = null;
+	var betaAccount = null;
+	var betaDownloadRows = [];
 	var retiredViews = {
 		landing: "account",
 		highscores: "account",
@@ -241,12 +288,26 @@
 		});
 	});
 
+	discordLoginButtons.forEach(function (button) {
+		button.addEventListener("click", function (event) {
+			event.preventDefault();
+			startDiscordRewardFlow(button);
+		});
+	});
+
 	whitepaperJumpButtons.forEach(function (button) {
 		button.addEventListener("click", function (event) {
 			event.preventDefault();
 			scrollToLandingTarget(button.getAttribute("data-whitepaper-jump"));
 		});
 	});
+
+	trustTabs.forEach(function (button) {
+		button.addEventListener("click", function () {
+			setTrustPanel(button.getAttribute("data-trust-tab"));
+		});
+	});
+	if (trustTabs.length) setTrustPanel(trustTabs[0].getAttribute("data-trust-tab"));
 
 	setupWhitepaperLightbox();
 
@@ -619,6 +680,21 @@
 		});
 	}
 
+	if (copyBetaCode) {
+		copyBetaCode.addEventListener("click", function () {
+			if (!betaCode || !betaCode.textContent || betaCode.textContent === "-") return;
+			copyText(betaCode.textContent);
+			copyBetaCode.textContent = "Copied";
+			setTimeout(function () { copyBetaCode.textContent = "Copy"; }, 1500);
+		});
+	}
+
+	if (betaReferenceSearch) {
+		betaReferenceSearch.addEventListener("input", function () {
+			renderBetaHub();
+		});
+	}
+
 	if (prelaunchCreateGameLogin) {
 		prelaunchCreateGameLogin.addEventListener("click", createPrelaunchGameLogin);
 	}
@@ -647,7 +723,7 @@
 		if (founderSubmit) founderSubmit.textContent = "Reserve & get my code";
 		if (founderPassword) founderPassword.setAttribute("autocomplete", "new-password");
 		if (founderMessage) {
-			founderMessage.textContent = "Enter your email and the username you want. You'll get a code for a free 1-week subscription card.";
+			founderMessage.textContent = "Downloads are instant. Connect Discord only if you want the beta role and reward code.";
 		}
 	}
 
@@ -919,15 +995,21 @@
 		renderRankTable();
 		renderMarketTable();
 		renderWorldFeed();
+		renderBetaHub();
 	}
 
 	async function hydrateFromApi() {
 		try {
+			var returnedState = consumeDiscordReturnState();
+			if (returnedState) {
+				applyAccountState(returnedState);
+				if (founderMessage) founderMessage.textContent = "Discord connected. Your beta reward code is ready.";
+			}
 			await apiRequest("/api/health");
 			var publicState = await apiRequest("/api/public");
 			applyPublicState(publicState);
 			if (!sessionToken) {
-				founderMessage.textContent = "Enter your email and the username you want. You'll get a code for a free 1-week subscription card.";
+				founderMessage.textContent = "Downloads are instant. Connect Discord only if you want the beta role and reward code.";
 				return;
 			}
 			var state = await apiRequest("/api/account");
@@ -990,7 +1072,16 @@
 			renderNews(publicNewsList, state.news);
 		}
 		if (Array.isArray(state.downloads)) {
+			betaDownloadRows = state.downloads.slice();
 			renderDownloads(state.downloads);
+			renderBetaHub();
+		}
+		if (state.integrity) {
+			renderIntegrity(state.integrity);
+		}
+		if (state.beta) {
+			betaResources = normalizeBetaResources(state.beta);
+			renderBetaHub();
 		}
 	}
 
@@ -1113,6 +1204,7 @@
 			localStorage.setItem(sessionKey, sessionToken);
 		}
 		if (state.account) {
+			betaAccount = state;
 			accountName.textContent = state.account.displayName || "Voidscape";
 			accountEmail.textContent = state.account.email || "";
 			if (dashboardAccountName) dashboardAccountName.textContent = state.account.displayName || "Voidscape account";
@@ -1134,6 +1226,12 @@
 		if (state.founder) {
 			applyFounderState(state.founder);
 		}
+		if (state.beta) {
+			betaResources = normalizeBetaResources(state.beta);
+		}
+		if (Array.isArray(state.downloads)) {
+			betaDownloadRows = state.downloads.slice();
+		}
 		if (Array.isArray(state.characters) && state.characters.length) {
 			characters = state.characters.slice(0, maxCharacters);
 			if (!characters.some(function (character) { return character.name === selectedCharacter; })) {
@@ -1152,6 +1250,142 @@
 		}
 		renderRewards(state.rewards || null);
 		updateDashboardHome(state);
+		renderBetaHub();
+	}
+
+	function normalizeBetaResources(beta) {
+		if (!beta) return null;
+		if (beta.resources) return beta.resources;
+		return beta;
+	}
+
+	function renderBetaHub() {
+		if (!betaHub) return;
+		var resources = betaResources || {};
+		var hasResources = Array.isArray(resources.commands) || Array.isArray(resources.checklist) || Array.isArray(resources.coords) || Array.isArray(resources.items);
+		var isTester = Boolean(betaAccount && betaAccount.beta && betaAccount.beta.tester);
+		betaHub.hidden = !hasResources && !isTester;
+		if (betaHub.hidden) return;
+
+		var query = betaReferenceSearch ? betaReferenceSearch.value.trim().toLowerCase() : "";
+		var account = betaAccount && betaAccount.account ? betaAccount.account : null;
+		var signup = betaAccount && betaAccount.signup ? betaAccount.signup : null;
+		var beta = betaAccount && betaAccount.beta ? betaAccount.beta : null;
+		var discord = beta && beta.discord ? beta.discord : null;
+		var displayName = (discord && discord.displayName) || (account && account.displayName) || "Beta resources";
+		if (betaDiscordName) betaDiscordName.textContent = isTester ? displayName : "Beta resources";
+
+		if (betaCode) betaCode.textContent = signup && signup.code ? signup.code : "-";
+		if (copyBetaCode) copyBetaCode.disabled = !(signup && signup.code);
+		if (betaCodeHelp) {
+			betaCodeHelp.textContent = signup && signup.code
+				? (signup.redeemHint || "Talk to the Void Subscription Vendor in Lumbridge and enter this code.")
+				: "Sign in with Discord to see your release-valid subscription card code.";
+		}
+
+		renderBetaDownloads(betaDownloadRows);
+		renderBetaList(betaCommandList, filteredBetaRows(resources.commands || [], query), betaCommandHtml);
+		renderBetaList(betaChecklist, filteredBetaRows(resources.checklist || [], query), betaChecklistHtml);
+		renderBetaList(betaCoords, filteredBetaRows(resources.coords || [], query), betaCoordHtml);
+		renderBetaList(betaItems, filteredBetaRows(resources.items || [], query), betaItemHtml);
+		updateBetaReferenceCount(resources, query);
+
+		if (betaPolicy) {
+			var policies = resources.policies || {};
+			var progress = (beta && beta.progressPolicy) || policies.progress || "Public beta character/world progress may be wiped before launch.";
+			var codes = (beta && beta.codePolicy) || policies.codes || "Discord beta codes are release-valid and preserved for release.";
+			betaPolicy.textContent = progress + " " + codes;
+		}
+	}
+
+	function renderBetaDownloads(rows) {
+		if (!betaDownloads) return;
+		var displayRows = (Array.isArray(rows) ? rows : []).filter(function (row) {
+			return isPublicDownloadRow(row);
+		});
+		if (!displayRows.length) displayRows = Array.isArray(rows) ? rows : [];
+		if (!displayRows.length) {
+			betaDownloads.innerHTML = '<div class="beta-empty">Downloads are updating. Use the launcher link above if you already have it.</div>';
+			return;
+		}
+		betaDownloads.innerHTML = displayRows.map(function (row) {
+			var available = Boolean(row.available && row.url && row.url !== "#");
+			var tag = available ? "a" : "button";
+			var attrs = available ? ' href="' + escapeAttr(row.url) + '" download' : ' type="button" disabled';
+			return [
+				"<" + tag + ' class="ghost-button download-action' + (available ? " is-ready" : "") + '"' + attrs + ">",
+				"<strong>" + escapeHtml(row.label || "") + "</strong>",
+				"<span>" + escapeHtml(row.state || "") + "</span>",
+				"</" + tag + ">"
+			].join("");
+		}).join("");
+	}
+
+	function renderBetaList(target, rows, formatter) {
+		if (!target) return;
+		target.innerHTML = rows.length
+			? rows.map(formatter).join("")
+			: '<li class="beta-empty">No matching entries.</li>';
+	}
+
+	function filteredBetaRows(rows, query) {
+		if (!query) return rows;
+		return rows.filter(function (row) {
+			return betaSearchText(row).indexOf(query) !== -1;
+		});
+	}
+
+	function betaSearchText(row) {
+		if (typeof row === "string") return row.toLowerCase();
+		return Object.keys(row || {}).map(function (key) {
+			return String(row[key] || "");
+		}).join(" ").toLowerCase();
+	}
+
+	function updateBetaReferenceCount(resources, query) {
+		if (!betaReferenceCount) return;
+		var rows = []
+			.concat(resources.commands || [])
+			.concat(resources.checklist || [])
+			.concat(resources.coords || [])
+			.concat(resources.items || []);
+		var count = filteredBetaRows(rows, query).length;
+		betaReferenceCount.textContent = count + " entr" + (count === 1 ? "y" : "ies");
+	}
+
+	function betaCommandHtml(row) {
+		return [
+			"<li>",
+			'<div class="beta-row-title"><strong>' + escapeHtml(row.command || "") + "</strong>" + betaBadge(row.group) + betaBadge(row.access) + "</div>",
+			"<span>" + escapeHtml(row.note || "") + "</span>",
+			"</li>"
+		].join("");
+	}
+
+	function betaChecklistHtml(row) {
+		return "<li><strong>Test</strong><span>" + escapeHtml(row || "") + "</span></li>";
+	}
+
+	function betaCoordHtml(row) {
+		return [
+			"<li>",
+			'<div class="beta-row-title"><strong>' + escapeHtml(row.label || "") + "</strong>" + betaBadge(row.group) + "</div>",
+			'<span><code>::goto ' + escapeHtml(row.value || "") + "</code> - " + escapeHtml(row.note || "") + "</span>",
+			"</li>"
+		].join("");
+	}
+
+	function betaItemHtml(row) {
+		return [
+			"<li>",
+			'<div class="beta-row-title"><strong>' + escapeHtml(row.name || "") + "</strong>" + betaBadge(row.group) + "</div>",
+			'<span><code>::item ' + escapeHtml(row.id || "") + "</code> - " + escapeHtml(row.note || "") + "</span>",
+			"</li>"
+		].join("");
+	}
+
+	function betaBadge(value) {
+		return value ? '<em class="beta-ref-badge">' + escapeHtml(value) + "</em>" : "";
 	}
 
 	function renderRewards(rewards) {
@@ -1343,6 +1577,43 @@
 			target.scrollIntoView({ behavior: "smooth", block: "start" });
 			window.history.replaceState(null, "", "#" + target.id);
 		}, 40);
+	}
+
+	function setTrustPanel(key) {
+		if (!key) return;
+		trustTabs.forEach(function (button) {
+			var active = button.getAttribute("data-trust-tab") === key;
+			button.classList.toggle("is-active", active);
+			button.setAttribute("aria-selected", active ? "true" : "false");
+		});
+		trustPanels.forEach(function (panel) {
+			var active = panel.getAttribute("data-trust-panel") === key;
+			panel.classList.toggle("is-active", active);
+			panel.hidden = !active;
+		});
+	}
+
+	function startDiscordRewardFlow(button) {
+		if (window.location.protocol === "file:") {
+			if (founderMessage) founderMessage.textContent = "Run scripts/run-portal.sh before claiming Discord beta rewards.";
+			return;
+		}
+		if (button) {
+			button.disabled = true;
+			button.setAttribute("aria-busy", "true");
+		}
+		window.location.assign("/api/oauth/discord/start?returnTo=" + encodeURIComponent("/#account"));
+	}
+
+	function consumeDiscordReturnState() {
+		try {
+			var text = sessionStorage.getItem("voidscape.portal.lastAccountState");
+			if (!text) return null;
+			sessionStorage.removeItem("voidscape.portal.lastAccountState");
+			return JSON.parse(text);
+		} catch (error) {
+			return null;
+		}
 	}
 
 	function setupWhitepaperLightbox() {
@@ -1936,9 +2207,307 @@
 		}).join("");
 	}
 
+	function renderIntegrity(integrity) {
+		if (!integrity) return;
+		var staff = integrity.staffCommands || {};
+		var build = integrity.build || {};
+		var items = integrity.itemProvenance || {};
+		var scans = integrity.economyScans || {};
+		var categories = Array.isArray(staff.categories) ? staff.categories : [];
+		var topCategory = categories.length ? categories[0] : null;
+		var total = Number(staff.total24h || 0);
+		var blocked = Number(staff.blocked24h || 0);
+		var itemReceipts = Number(items.total24h || 0);
+		var generatedAt = integrity.generatedAt || "";
+
+		setText(integrityUpdated, generatedAt ? "Updated " + relativeTime(generatedAt) : "Waiting for snapshot");
+		setText(integrityStaffTotal, formatCompactNumber(total));
+		setText(integrityStaffDetail, staffStatusDetail(staff.status, total));
+		setText(integrityBlockedTotal, formatCompactNumber(blocked));
+		setText(integrityBlockedDetail, blocked === 1 ? "attempt stopped" : "attempts stopped");
+		setText(integrityBuildStatus, titleStatus(build.status || "available"));
+		setText(integrityBuildDetail, build.evidence || "Launcher manifest hashes");
+		setText(integrityItemsStatus, formatCompactNumber(itemReceipts));
+		setText(integrityItemsDetail, itemReceipts === 1 ? "receipt 24h" : "receipts 24h");
+
+		setText(trustPasswordsStatus, "Now");
+		renderTrustList(trustPasswordsList, [
+			"Download first. Discord stays optional.",
+			"Use a fresh game password.",
+			"Public pages do not expose private account data."
+		]);
+
+		setText(trustSourceStatus, titleStatus(build.status || "available"));
+		renderTrustList(trustSourceList, sourceListItems(build, integrity, staff));
+		renderSourceBuildBoard(build);
+
+		setText(trustStaffStatus, titleStatus(staff.status || "waiting_for_game_snapshot"));
+		renderTrustList(trustStaffList, staffListItems(staff, topCategory));
+
+		setText(trustItemsStatus, titleStatus(itemTrustStatus(items)));
+		renderTrustList(trustItemsList, itemReceiptListItems(items));
+		renderItemReceiptBoard(items);
+
+		setText(trustScansStatus, titleStatus(scans.status || "planned"));
+		renderTrustList(trustScansList, scanListItems(scans));
+	}
+
+	function scanListItems(scans) {
+		var status = titleStatus(scans.status || "planned").toLowerCase();
+		var flagged = Number(scans.flagged || 0);
+		var high = Number(scans.highSeverity || 0);
+		var trackedItems = Number(scans.trackedItems || 0);
+		var checkedPlayers = Number(scans.checkedPlayers || 0);
+		var rows = [
+			scans.lastScanAt ? "Last scan " + relativeTime(scans.lastScanAt) + "." : "Nightly checks are waiting for the first snapshot.",
+			"Checked " + formatCompactNumber(trackedItems) + " item rows across " + formatCompactNumber(checkedPlayers) + " players.",
+			"Flagged: " + formatCompactNumber(flagged) + ". High priority: " + formatCompactNumber(high) + "."
+		];
+		if (flagged > 0) {
+			var categories = Array.isArray(scans.categories) ? scans.categories : [];
+			var top = categories.length ? categories[0] : null;
+			rows.push(top ? "Top finding: " + titleStatus(top.category) + " (" + formatCompactNumber(top.count) + ")." : "Private findings are available to staff.");
+		} else if (scans.lastScanAt) {
+			rows.push("No impossible stats, broken item refs, or impossible stacks found.");
+		} else {
+			rows.push("Scanner status: " + status + ".");
+		}
+		return rows;
+	}
+
+	function itemReceiptListItems(items) {
+		var status = titleStatus(items.status || "not_recording").toLowerCase();
+		var staffMints = Number(items.staffMints24h || 0);
+		var npcDrops = Number(items.npcDrops24h || 0);
+		var transfers = Number(items.transfers24h || 0);
+		var tracked = Number(items.trackedItems || items.totalEvents || 0);
+		var lines = [
+			"Item receipts are " + status + ".",
+			"24h: " + formatCompactNumber(npcDrops) + " NPC drops, " + formatCompactNumber(transfers) + " player moves, " + formatCompactNumber(staffMints) + " staff mints.",
+			"Tracked receipts: " + formatCompactNumber(tracked) + "."
+		];
+		if (items.reason === "missing_item_provenance_table") {
+			lines.push("The game database is waiting for the item provenance migration.");
+		} else {
+			lines.push("Covered: drops, pickups, deaths, trades, shops, and auction-house moves.");
+		}
+		return lines;
+	}
+
+	function renderSourceBuildBoard(build) {
+		if (!trustSourceBoard || !trustBuildArtifacts) return;
+		var artifacts = Array.isArray(build.artifacts) ? build.artifacts.filter(function (artifact) {
+			return artifact.publicDownload !== false;
+		}).slice(0, 4) : [];
+		var manifest = build.manifest || {};
+		var source = build.source || {};
+		var hasProof = artifacts.length > 0 || source.repositoryUrl || manifest.url;
+		trustSourceBoard.hidden = !hasProof;
+		if (!hasProof) {
+			trustBuildArtifacts.innerHTML = "";
+			return;
+		}
+		if (trustSourceRepo) {
+			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
+			trustSourceRepo.textContent = source.repositoryUrl ? "View AGPL source" : titleStatus(source.status || "Source pending");
+		}
+		if (trustSourceCommit) {
+			var commitText = source.shortCommit
+				? (source.dirty ? "Baseline " : "Commit ") + source.shortCommit + (source.dirty ? " - live patch pending" : "")
+				: "Commit pending";
+			trustSourceCommit.textContent = commitText;
+			trustSourceCommit.title = source.commit || commitText;
+		}
+		if (trustSourceManifest) {
+			var manifestText = manifest.status === "available"
+				? formatCompactNumber(manifest.fileCount || 0) + " manifest hashes"
+				: titleStatus(manifest.status || "manifest pending");
+			trustSourceManifest.textContent = manifestText;
+			trustSourceManifest.title = manifest.clientSha256 || manifestText;
+		}
+		trustBuildArtifacts.innerHTML = artifacts.map(function (artifact) {
+			var available = artifact.available === true && artifact.sha256;
+			var hash = available ? shortHash(artifact.sha256) : "Not built";
+			var updated = artifact.updatedAt ? relativeTime(artifact.updatedAt) : "";
+			return [
+				'<a class="build-proof-tile' + (available ? " is-ready" : "") + '" href="' + escapeAttr(artifact.url || "#") + '" title="' + escapeAttr(artifact.sha256 || "Hash pending") + '"' + (available ? " download" : ' aria-disabled="true"') + ">",
+				"<b>" + escapeHtml(artifact.label || "Download") + "</b>",
+				"<code>" + escapeHtml(hash) + "</code>",
+				"<span>" + escapeHtml(available ? ((artifact.state || formatBytesLabel(artifact.sizeBytes)) + (updated ? " - " + updated : "")) : "Hash pending") + "</span>",
+				"</a>"
+			].join("");
+		}).join("");
+	}
+
+	function sourceListItems(build, integrity, staff) {
+		var source = build.source || {};
+		var manifest = build.manifest || {};
+		var rows = ["Voidscape stays AGPL source-available."];
+		if (source.shortCommit && source.dirty) {
+			rows.push("Live files are based on commit " + source.shortCommit + "; newer deployed patches are marked until published.");
+		} else if (source.shortCommit) {
+			rows.push("Live source commit: " + source.shortCommit + ".");
+		} else {
+			rows.push("Source commit metadata is waiting for the next publish.");
+		}
+		rows.push(build.evidence || "Download hashes are generated from served files.");
+		if (manifest.status === "available") {
+			rows.push("Launcher manifest lists " + formatCompactNumber(manifest.fileCount || 0) + " hashed files.");
+		} else {
+			rows.push("Integrity source: " + sourceLabel(integrity.source || staff.source || "snapshot") + ".");
+		}
+		return rows;
+	}
+
+	function shortHash(value) {
+		var hash = String(value || "");
+		if (hash.length <= 24) return hash || "Hash pending";
+		return hash.slice(0, 12) + "..." + hash.slice(-8);
+	}
+
+	function formatBytesLabel(value) {
+		var bytes = Number(value || 0);
+		if (!Number.isFinite(bytes) || bytes <= 0) return "Built artifact";
+		var mb = bytes / (1024 * 1024);
+		return "Built " + (mb >= 10 ? mb.toFixed(1) : mb.toFixed(2)) + " MB";
+	}
+
+	function itemTrustStatus(items) {
+		var status = String(items.status || "designing");
+		var tracked = Number(items.trackedItems || items.totalEvents || 0);
+		if (tracked > 0 && status.indexOf("recording") === 0) return "recording";
+		return status;
+	}
+
+	function renderItemReceiptBoard(items) {
+		if (!trustItemsBoard || !trustItemsSources || !trustItemsRecent) return;
+		var sources = Array.isArray(items.sources) ? items.sources.slice(0, 5) : [];
+		var recent = Array.isArray(items.recent) ? items.recent.slice(0, 4) : [];
+		var total = Number(items.total7d || items.totalEvents || items.trackedItems || 0);
+		var maxCount = sources.reduce(function (max, row) {
+			return Math.max(max, Number(row.count || 0));
+		}, 0);
+		var hasReceipts = sources.length > 0 || recent.length > 0;
+		trustItemsBoard.hidden = !hasReceipts;
+		setText(trustItemsBoardTotal, formatCompactNumber(total) + (total === 1 ? " receipt" : " receipts"));
+		if (!hasReceipts) {
+			trustItemsSources.innerHTML = "";
+			trustItemsRecent.innerHTML = "";
+			return;
+		}
+		trustItemsSources.innerHTML = sources.map(function (row) {
+			var count = Number(row.count || 0);
+			var width = maxCount > 0 ? Math.max(8, Math.round((count / maxCount) * 100)) : 0;
+			return [
+				'<div class="receipt-source-row" style="--receipt-width: ' + width + '%">',
+				"<b>" + escapeHtml(sourceLabel(row.category || "unknown")) + "</b>",
+				'<div class="receipt-source-meter"><i></i></div>',
+				"<em>" + escapeHtml(formatCompactNumber(count)) + "</em>",
+				"</div>"
+			].join("");
+		}).join("");
+		trustItemsRecent.innerHTML = recent.map(function (row) {
+			var amount = Number(row.amount || 0);
+			var itemLabel = "Item " + formatCompactNumber(row.catalogId || 0);
+			if (amount > 1) itemLabel += " x" + formatCompactNumber(amount);
+			return [
+				'<div class="receipt-event">',
+				"<b>" + escapeHtml(titleStatus(row.eventType || "item_event")) + "</b>",
+				"<small>" + escapeHtml(relativeTime(row.at)) + "</small>",
+				"<em>" + escapeHtml(sourceLabel(row.source || "unknown") + " -> " + sourceLabel(row.destination || "unknown")) + "</em>",
+				"<strong>" + escapeHtml(itemLabel) + "</strong>",
+				"</div>"
+			].join("");
+		}).join("");
+	}
+
+	function staffListItems(staff, topCategory) {
+		var total = Number(staff.total24h || 0);
+		var blocked = Number(staff.blocked24h || 0);
+		if (!total) {
+			return [
+				staff.status === "waiting_for_game_snapshot" ? "Waiting for the live game snapshot." : "No recent staff command attempts recorded.",
+				"Public summaries hide staff names, IPs, player names, and raw command args.",
+				"Blocked beta-admin attempts will appear here after the exporter runs."
+			];
+		}
+		var rows = [
+			formatCompactNumber(total) + " staff command attempts tracked in the last 24 hours.",
+			formatCompactNumber(blocked) + " beta-guard block" + (blocked === 1 ? "" : "s") + " recorded."
+		];
+		if (topCategory) {
+			rows.push("Top category: " + titleStatus(topCategory.category) + " (" + formatCompactNumber(topCategory.count) + ").");
+		}
+		rows.push("Public summaries hide staff names, IPs, player names, and raw command args.");
+		return rows;
+	}
+
+	function renderTrustList(target, rows) {
+		if (!target) return;
+		target.innerHTML = rows.map(function (row) {
+			return "<li>" + escapeHtml(row) + "</li>";
+		}).join("");
+	}
+
+	function setText(target, value) {
+		if (target) target.textContent = value;
+	}
+
+	function staffStatusDetail(status, total) {
+		if (status === "waiting_for_game_snapshot") return "Waiting for snapshot";
+		if (status === "missing_staff_log_table") return "No staff log table";
+		if (status === "openrsc_unavailable") return "Game DB unavailable";
+		if (!total) return "Quiet last 24h";
+		return "last 24h";
+	}
+
+	function scanDetail(scans) {
+		if (scans.lastScanAt) return "Last scan " + relativeTime(scans.lastScanAt);
+		return "Economy checks";
+	}
+
+	function sourceLabel(value) {
+		return String(value || "snapshot").replace(/[_-]+/g, " ");
+	}
+
+	function titleStatus(value) {
+		return String(value || "unknown").replace(/[_-]+/g, " ").replace(/\b\w/g, function (letter) {
+			return letter.toUpperCase();
+		});
+	}
+
+	function formatCompactNumber(value) {
+		var number = Number(value || 0);
+		if (!Number.isFinite(number)) number = 0;
+		return Math.floor(number).toLocaleString();
+	}
+
+	function relativeTime(value) {
+		var timestamp = Date.parse(value || "");
+		if (!Number.isFinite(timestamp)) return "soon";
+		var seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+		if (seconds < 60) return "just now";
+		var minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return minutes + "m ago";
+		var hours = Math.floor(minutes / 60);
+		if (hours < 48) return hours + "h ago";
+		var days = Math.floor(hours / 24);
+		return days + "d ago";
+	}
+
 	function renderDownloads(rows) {
 		if (!downloadActions) return;
-		downloadActions.innerHTML = rows.map(function (row) {
+		var publicRows = rows.filter(function (row) {
+			return isPublicDownloadRow(row);
+		});
+		var displayRows = publicRows.length ? publicRows : rows;
+		var launcherRow = rows.find(function (row) {
+			return isLauncherDownloadRow(row) && row.available && row.url && row.url !== "#";
+		});
+		if (launcherRow && prelaunchDownload) {
+			prelaunchDownload.href = launcherRow.url;
+		}
+		downloadActions.innerHTML = displayRows.map(function (row) {
 			var available = Boolean(row.available && row.url && row.url !== "#");
 			var tag = available ? "a" : "button";
 			var attrs = available
@@ -1951,6 +2520,23 @@
 				"</" + tag + ">"
 			].join("");
 		}).join("");
+	}
+
+	function isPublicDownloadRow(row) {
+		if (!row) return false;
+		var url = String(row.url || "").toLowerCase();
+		return row.publicDownload === true
+			|| row.slug === "launcher"
+			|| row.slug === "android-apk"
+			|| url.indexOf("/downloads/launcher") !== -1
+			|| url.indexOf("/downloads/android-apk") !== -1;
+	}
+
+	function isLauncherDownloadRow(row) {
+		if (!row) return false;
+		var label = String(row.label || "").toLowerCase();
+		var url = String(row.url || "").toLowerCase();
+		return row.slug === "launcher" || url.indexOf("/downloads/launcher") !== -1 || label.indexOf("launcher") !== -1;
 	}
 
 	function defaultCharacters() {

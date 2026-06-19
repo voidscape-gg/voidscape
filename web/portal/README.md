@@ -16,7 +16,7 @@ curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:878
 
 ## Launching the public prelaunch site
 
-Set `PORTAL_PUBLIC_MODE=1` for any internet-facing deployment. It locks the server down to exactly: static files, `GET /api/health`, `GET /api/public` (sanitized — no fake world stats, no downloads), `POST /api/founder/reservations`, and the token-gated `/api/admin/*`. Everything else — registration, login, dev Google sign-in, character creation, link simulation, subscription redeem, snapshots, downloads, the launcher manifest — returns 404. The UI pins itself to the landing view (deep links like `#admin` or `#dashboard` land on the signup page).
+Set `PORTAL_PUBLIC_MODE=1` for any internet-facing deployment. It locks the server down to exactly: static files, `GET /api/health`, `GET /api/public` (sanitized — no fake world stats, but with launcher/APK availability), `GET /api/integrity` (public-safe transparency aggregates), public launcher/APK downloads plus `GET /api/launcher/manifest.properties`, `POST /api/founder/reservations`, and the token-gated `/api/admin/*`. Everything else — registration, login, dev Google sign-in, character creation, link simulation, subscription redeem, snapshots, and avatars — returns 404. The UI pins itself to the landing view (deep links like `#admin` or `#dashboard` land on the signup page).
 
 Recommended shape: the portal bound to loopback on the host, with Caddy (or nginx/Cloudflare) in front doing TLS. A same-host proxy is auto-trusted for `x-forwarded-for`, so the per-IP signup limit sees real visitor IPs with no extra config.
 
@@ -32,6 +32,7 @@ WorkingDirectory=/opt/voidscape
 Environment=PORT=8788
 Environment=PORTAL_PUBLIC_MODE=1
 Environment=PORTAL_DATA_DIR=/var/lib/voidscape-portal
+Environment=PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
 Environment=PORTAL_ADMIN_TOKEN=<long random secret>
 Environment=PORTAL_ABUSE_HASH_SALT=<long random secret, set once, never change>
 Environment=PORTAL_SIGNUP_IP_DAILY_LIMIT=10
@@ -51,6 +52,10 @@ yourdomain.com {
 
 Notes:
 - The deployment needs `web/portal/` from this repo plus Node 18+. No game DB on the public host: codes mint with `syncedToGame: false` and are honored later (below).
+- Transparency data is public-safe by construction. `GET /api/integrity` reads `$PORTAL_INTEGRITY_SNAPSHOT` when present, otherwise it can aggregate local SQLite `staff_logs` and `item_provenance_events` from `PORTAL_OPENRSC_DB` in dev, otherwise it reports `waiting_for_game_snapshot`.
+- Export the public-safe integrity snapshot and private economy findings from the game machine, then copy/sync the public snapshot to the portal host:
+  `PORTAL_OPENRSC_DB=/path/to/voidscape.db PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json node scripts/export-integrity-summary.mjs`
+- `integrity-summary.json` is safe for the website. `integrity-findings.json` is staff-only and powers `::integrity` on the game server.
 - Back up the signup list: it is one file, `$PORTAL_DATA_DIR/dev-store.json` (atomic writes). A cron copy or the CSV export both work as backups.
 - Pull the list any time: `curl -H "x-portal-admin-token: $TOKEN" "https://yourdomain.com/api/admin/signups?format=csv"`.
 - Launch day, to make codes redeemable in-game: copy `dev-store.json` from the public host into a `PORTAL_DATA_DIR` on the game machine, run the portal there with `PORTAL_OPENRSC_DB=/path/to/voidscape.db` (loopback is fine, no public mode needed), and `curl -X POST -H "x-portal-admin-token: $TOKEN" http://127.0.0.1:8788/api/admin/signups/sync`. Already-redeemed codes are skipped; the endpoint is idempotent.
@@ -84,9 +89,9 @@ python3 -m http.server 8788 --directory web/portal
 
 - reserved username/email flow, including the Google-first pre-release username flow
 - invite-code referrals that mint one referral reward subscription-card code per credited beta invite, plus a dev-only referral simulation shortcut
-- legacy public status, rates, news, built-artifact download metadata, highscores, market intel, and activity feed payloads for API compatibility; the current UI keeps those surfaces hidden
+- legacy public status, rates, news, highscores, market intel, and activity feed payloads for API compatibility; the current landing uses built-artifact launcher/APK metadata for its public download CTAs
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
-- launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `Open_RSC_Client.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/pc-client` and `/downloads/cache/...`
+- launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `VoidscapeClient.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/client-runtime` and `/downloads/cache/...`
 - web account registration/login with `scrypt` password hashing
 - local dev Google sign-in through `POST /api/accounts/google/dev`, backed by `web_account_identities` in the schema
 - bearer sessions stored as token hashes

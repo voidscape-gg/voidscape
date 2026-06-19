@@ -213,6 +213,7 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_VOID_ARENA_RULE_ALLOW_MAGIC = 1 << 4;
 	private static final int VOIDSCAPE_XP_LOCK_ALLOWED_MASK = (1 << 0) | (1 << 1) | (1 << 2)
 		| (1 << 4) | (1 << 5) | (1 << 6);
+	private static final long COMBAT_STYLE_SYNC_GRACE_MILLIS = 2000L;
 	private static final int SKILL_ATTACK = 0;
 	private static final int SKILL_DEFENSE = 1;
 	private static final int SKILL_STRENGTH = 2;
@@ -826,6 +827,7 @@ public final class mudclient implements Runnable {
 	private int controlButtonAppearanceHeadPlus;
 	private int controlButtonAppearanceHairStyle1 = -1;
 	private int controlButtonAppearanceHairStyle2 = -1;
+	private int controlAppearanceReferralName = -1;
 	private int controlLoginPass;
 	private int controlLoginStatus1;
 	private int controlLoginStatus2;
@@ -1129,6 +1131,8 @@ public final class mudclient implements Runnable {
 	private int lastAndroidSmokeShopSelectedIndex = -2;
 	private int lastAndroidSmokeShopItemCount = -1;
 	private boolean showAppearanceChange = false;
+	private boolean showVoidscapeReferralPrompt = false;
+	private boolean voidscapeReferralPromptSeen = false;
 	private boolean showSetRecoveryQuestion = false;
 	private boolean showSetContactDetails = false;
 	private boolean showDialogBank = false;
@@ -1285,6 +1289,7 @@ public final class mudclient implements Runnable {
 
 	public int proposedStyle = 0;
 	public long timeOfLastCombatStylePacket = 0;
+	private long timeOfLastLocalCombatStyleChange = 0;
 
 	/**
 	 * Newest RSC cache: SAME VALUES.
@@ -2701,6 +2706,7 @@ public final class mudclient implements Runnable {
 			this.panelAppearance = new Panel(this.getSurface(), 100);
 			this.controlButtonAppearanceHairStyle1 = -1;
 			this.controlButtonAppearanceHairStyle2 = -1;
+			this.controlAppearanceReferralName = -1;
 			this.syncAppearanceHairStyleFromLocalPlayer();
 			this.ensureVoidscapeAppearanceColoursSelected();
 
@@ -2805,6 +2811,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private void createVoidscapeAppearancePanel(int var1) {
+		String referralName = this.currentAppearanceReferralName();
 		this.panelAppearance = new Panel(this.getSurface(), 100);
 		this.controlButtonAppearanceHairStyle1 = -1;
 		this.controlButtonAppearanceHairStyle2 = -1;
@@ -2841,6 +2848,12 @@ public final class mudclient implements Runnable {
 
 		this.controlButtonAppearanceHairStyle1 = -1;
 		this.controlButtonAppearanceHairStyle2 = -1;
+
+		this.controlAppearanceReferralName = this.panelAppearance.addCenteredTextEntry(panelX + 382,
+			274, 200, 12, 20, 0, false, true);
+		if (referralName.length() > 0) {
+			this.panelAppearance.setText(this.controlAppearanceReferralName, referralName);
+		}
 
 		this.controlButtonAppearanceAccept = this.panelAppearance.addButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30);
 	}
@@ -3658,7 +3671,7 @@ public final class mudclient implements Runnable {
 			this.getSurface().interlace = false;
 			if (this.useVoidscapeLogin() && type == 0) {
 				this.drawVoidscapeAppearancePanel();
-				this.panelAppearance.drawPanel();
+				drawVoidscapePanelSkippingControls(this.panelAppearance, this.controlAppearanceReferralName);
 			} else {
 				this.getSurface().blackScreen(true);
 				this.panelAppearance.drawPanel();
@@ -3714,6 +3727,9 @@ public final class mudclient implements Runnable {
 				spriteSelect(EntityHandler.getAnimationDef(this.appearanceHeadType), 12), var5 + 55 - 32, y, 64, 102,
 				this.getPlayerHairColors()[this.appearanceHairColour], this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, 1);
 			this.drawAppearanceHairOverlay(var5 + 55 - 32, y, 64, 102, 12, false);
+			if (voidscapeAppearance) {
+				drawVoidscapeAppearanceReferralField();
+			}
 			this.getSurface().drawSprite(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, this.getGameHeight());
 			// this.getSurface().draw(this.graphics, this.screenOffsetX, 256,
 			// this.screenOffsetY);
@@ -3785,6 +3801,120 @@ public final class mudclient implements Runnable {
 		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", this.skinColorLabel(this.appearanceSkinColour));
 		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
 		drawVoidscapeButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30, "Accept", true);
+	}
+
+	private void drawVoidscapeAppearanceReferralField() {
+		int cx = voidscapeAppearanceReferralFieldCenterX();
+		int cy = voidscapeAppearanceReferralFieldCenterY();
+		int width = voidscapeAppearanceReferralFieldWidth();
+		int height = voidscapeAppearanceReferralFieldHeight();
+		drawVoidscapeField(cx, cy, width, height, "Invited by (optional)",
+			this.panelAppearance.focusOn(this.controlAppearanceReferralName));
+		drawVoidscapeFieldValue(this.panelAppearance, this.controlAppearanceReferralName, cx, cy, width, 0, false);
+	}
+
+	private int voidscapeAppearanceReferralFieldCenterX() {
+		int panelWidth = Math.min(500, this.getGameWidth() - 12);
+		int panelX = halfGameWidth() - panelWidth / 2;
+		return panelX + 382;
+	}
+
+	private int voidscapeAppearanceReferralFieldCenterY() {
+		return 274;
+	}
+
+	private int voidscapeAppearanceReferralFieldWidth() {
+		return 200;
+	}
+
+	private int voidscapeAppearanceReferralFieldHeight() {
+		return 20;
+	}
+
+	private boolean isVoidscapeAppearanceReferralFieldHit() {
+		int width = voidscapeAppearanceReferralFieldWidth();
+		int height = voidscapeAppearanceReferralFieldHeight();
+		int x = voidscapeAppearanceReferralFieldCenterX() - width / 2;
+		int y = voidscapeAppearanceReferralFieldCenterY() - height / 2;
+		return this.mouseX >= x && this.mouseX <= x + width
+			&& this.mouseY >= y && this.mouseY <= y + height;
+	}
+
+	private void handleVoidscapeAppearanceReferralFieldFocus() {
+		if (!this.useVoidscapeLogin() || this.controlAppearanceReferralName < 0) {
+			return;
+		}
+		if (this.lastMouseButtonDown == 1 && isVoidscapeAppearanceReferralFieldHit()) {
+			this.panelAppearance.setFocus(this.controlAppearanceReferralName);
+			this.enterPressed = false;
+			this.mouseButtonClick = 0;
+		}
+	}
+
+	private void drawVoidscapeReferralPrompt() {
+		int cx = halfGameWidth();
+		int panelWidth = Math.min(430, this.getGameWidth() - 20);
+		int panelHeight = Math.min(300, this.getGameHeight() - 20);
+		int panelX = cx - panelWidth / 2;
+		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
+		int artW = Math.min(150, panelWidth - 80);
+		int artH = 92;
+		int artX = cx - artW / 2;
+		int artY = panelY + 54;
+
+		drawVoidscapeLoginBackground();
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 82);
+		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "INVITE FRIENDS", 0xf3d46b, 1, panelY + 27);
+		drawVoidscapeCenteredText(cx, "Earn a 1-week subscription card", 0xe6e3d8, 1, panelY + 45);
+
+		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, 0x05070a, 214);
+		this.getSurface().drawBoxBorder(artX, artW, artY, artH, 0x0b0d10);
+		this.getSurface().drawBoxBorder(artX + 1, artW - 2, artY + 1, artH - 2, 0x8f63ff);
+		drawVoidscapePathItemIcon(1602, artX, artY, artW, artH, 0x8f63ff);
+
+		int textY = artY + artH + 24;
+		drawVoidscapeCenteredText(cx, "Your in-game name is your invite code.", 0xffd98a, 0, textY);
+		drawVoidscapeCenteredText(cx, "When friends make a character,", 0xe6e3d8, 0, textY + 16);
+		drawVoidscapeCenteredText(cx, "they enter your name on the next screen.", 0xe6e3d8, 0, textY + 30);
+		drawVoidscapeCenteredText(cx, "You get a real redeemable code.", 0xb68aff, 0, textY + 48);
+		drawVoidscapeButton(cx, panelY + panelHeight - 31, 190, 30, "Continue", true);
+		clientPort.draw();
+	}
+
+	private void handleVoidscapeReferralPromptInput() {
+		if (this.lastMouseButtonDown == 1 && isVoidscapeReferralPromptContinueHit()) {
+			closeVoidscapeReferralPrompt();
+		}
+	}
+
+	private boolean isVoidscapeReferralPromptContinueHit() {
+		int panelHeight = Math.min(300, this.getGameHeight() - 20);
+		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
+		int buttonCx = halfGameWidth();
+		int buttonCy = panelY + panelHeight - 31;
+		int x = buttonCx - 95;
+		int y = buttonCy - 15;
+		return this.mouseX >= x && this.mouseX <= x + 190
+			&& this.mouseY >= y && this.mouseY <= y + 30;
+	}
+
+	private void closeVoidscapeReferralPrompt() {
+		this.showVoidscapeReferralPrompt = false;
+		this.voidscapeReferralPromptSeen = true;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+	}
+
+	private String currentAppearanceReferralName() {
+		if (this.panelAppearance == null || this.controlAppearanceReferralName < 0) {
+			return "";
+		}
+		String referralName = this.panelAppearance.getControlText(this.controlAppearanceReferralName);
+		if (referralName == null || "null".equals(referralName)) {
+			return "";
+		}
+		return referralName.trim();
 	}
 
 	private String modernHairStyleLabel() {
@@ -4231,8 +4361,7 @@ public final class mudclient implements Runnable {
 					if (sx < this.mouseX && this.mouseX < width + sx && this.mouseY > row * rowHeight + sy
 						&& row * rowHeight + sy + rowHeight > this.mouseY) {
 						this.mouseButtonClick = 0;
-						this.combatStyle = row - 1;
-						this.proposedStyle = this.combatStyle;
+						this.selectCombatStyle(row - 1);
 						this.packetHandler.getClientStream().newPacket(29);
 						this.packetHandler.getClientStream().bufferBits.putByte(this.combatStyle);
 						this.packetHandler.getClientStream().finishPacket();
@@ -7182,7 +7311,11 @@ public final class mudclient implements Runnable {
 					// 256, this.screenOffsetY);
 					clientPort.draw();
 				} else if (this.showAppearanceChange) {
-					this.drawAppearancePanelCharacterSprites(-13759, Config.S_CHARACTER_CREATION_MODE);
+					if (this.showVoidscapeReferralPrompt) {
+						this.drawVoidscapeReferralPrompt();
+					} else {
+						this.drawAppearancePanelCharacterSprites(-13759, Config.S_CHARACTER_CREATION_MODE);
+					}
 				} else if (this.showSetRecoveryQuestion) {
 					this.method_182();
 				} else if (this.showSetContactDetails) {
@@ -13548,7 +13681,7 @@ public final class mudclient implements Runnable {
 										"@lre@" + EntityHandler.getItemDef(this.groundItemID[var9]).getName(),
 										"Use " + this.m_ig + " with");
 								}
-							} else if (id == 3) { // NPC Right Click Menu
+			} else if (id == 3) { // NPC Right Click Menu
 								String var11 = "";
 								int levelDifference = 0;
 								int var13 = this.npcs[var9].npcId;
@@ -14227,7 +14360,7 @@ public final class mudclient implements Runnable {
 					}
 
 					this.panelSocial.setListEntry(this.controlSocialPanel, visibleFriendIndex,
-						colorKey + var11 + "~" + (var3 + 126) + "~" + "@whi@Remove         WWWWWWWWWW", 0,
+						colorKey + var11 + "~" + (var3 + 126) + "~" + "@whi@Remove", 0,
 						null, null);
 					visibleFriendIndex++;
 				}
@@ -14247,7 +14380,7 @@ public final class mudclient implements Runnable {
 					}
 
 					this.panelSocial.setListEntry(this.controlSocialPanel, index,
-						"@yel@" + colorKey + "~" + (var3 + 126) + "~" + "@whi@Remove         WWWWWWWWWW",
+						"@yel@" + colorKey + "~" + (var3 + 126) + "~" + "@whi@Remove",
 						0, null, null);
 				}
 
@@ -19303,10 +19436,7 @@ public final class mudclient implements Runnable {
 
 		// combat style
 		if (settingIndex == 12 && this.mouseButtonClick == 1 && S_MENU_COMBAT_STYLE_TOGGLE) {
-			this.combatStyle++;
-			if (this.combatStyle == 4)
-				this.combatStyle = 0;
-			this.proposedStyle = this.combatStyle;
+			this.selectCombatStyle((this.combatStyle + 1) % 4);
 			this.packetHandler.getClientStream().newPacket(29);
 			this.packetHandler.getClientStream().bufferBits.putByte(this.combatStyle);
 			this.packetHandler.getClientStream().finishPacket();
@@ -20753,6 +20883,12 @@ public final class mudclient implements Runnable {
 		try {
 			this.panelAppearance.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
 				this.lastMouseButtonDown);
+			handleVoidscapeAppearanceReferralFieldFocus();
+
+			if (this.controlAppearanceReferralName >= 0 && this.panelAppearance.isClicked(this.controlAppearanceReferralName)) {
+				this.panelAppearance.setFocus(this.controlAppearanceReferralName);
+				this.enterPressed = false;
+			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHeadMinus)) {
 				do {
@@ -20857,6 +20993,9 @@ public final class mudclient implements Runnable {
 				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode1));
 				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
 				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
+				if (this.useVoidscapeLogin()) {
+					this.packetHandler.getClientStream().bufferBits.putString(this.currentAppearanceReferralName());
+				}
 				this.packetHandler.getClientStream().finishPacket();
 				this.getSurface().blackScreen(true);
 				this.showAppearanceChange = false;
@@ -20919,7 +21058,11 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.showAppearanceChange) {
-				this.handleAppearancePanelControls(86);
+				if (this.showVoidscapeReferralPrompt) {
+					this.handleVoidscapeReferralPromptInput();
+				} else {
+					this.handleAppearancePanelControls(86);
+				}
 			} else if (this.showSetRecoveryQuestion) {
 				this.method_181();
 			} else if (this.showSetContactDetails) {
@@ -21679,6 +21822,12 @@ public final class mudclient implements Runnable {
 							return;
 						}
 						this.voidscapeAccountAddPanel.keyPress(key);
+						return;
+					}
+					if (this.showAppearanceChange && this.showVoidscapeReferralPrompt) {
+						if (key == '\n' || key == '\r' || key == 27 || key == ' ') {
+							closeVoidscapeReferralPrompt();
+						}
 						return;
 					}
 					if (this.showAppearanceChange) {
@@ -24138,11 +24287,13 @@ public final class mudclient implements Runnable {
 					this.world.playerAlive = true;
 					return false;
 				} else {
-					this.getSurface().drawColoredStringCentered(256, "Loading... Please wait", 0xFFFFFF, 0, 1, 192);
-					this.drawChatMessageTabs(5);
-					// this.getSurface().draw(this.graphics, this.screenOffsetX,
-					// 256, this.screenOffsetY);
-					clientPort.draw();
+					if (!this.showAppearanceChange) {
+						this.getSurface().drawColoredStringCentered(256, "Loading... Please wait", 0xFFFFFF, 0, 1, 192);
+						this.drawChatMessageTabs(5);
+						// this.getSurface().draw(this.graphics, this.screenOffsetX,
+						// 256, this.screenOffsetY);
+						clientPort.draw();
+					}
 					int oldBaseX = this.midRegionBaseX;
 					int oldBaseZ = this.midRegionBaseZ;
 					int midRegionX = (wantX + 24) / 48;
@@ -26148,11 +26299,14 @@ public final class mudclient implements Runnable {
 	public void setShowAppearanceChange(boolean show) {
 		this.showAppearanceChange = show;
 		if (show) {
+			this.showVoidscapeReferralPrompt = this.useVoidscapeLogin() && !this.voidscapeReferralPromptSeen;
 			// Rebuild the panel at the CURRENT window width so the clickable arrow
 			// hit-boxes line up with the arrows drawn this frame. They diverge if the
 			// window was resized since the panel was first built at startup.
 			// -24595 skips the login-screen viewport side-effect (we're in-game here).
 			this.createAppearancePanel(-24595, Config.S_CHARACTER_CREATION_MODE);
+		} else {
+			this.showVoidscapeReferralPrompt = false;
 		}
 	}
 
@@ -26184,8 +26338,30 @@ public final class mudclient implements Runnable {
 		optionSoundDisabled = disabled;
 	}
 
+	public void selectCombatStyle(int style) {
+		setCombatStyle(style);
+		this.timeOfLastLocalCombatStyleChange = System.currentTimeMillis();
+	}
+
+	public void applyServerCombatStyle(int style) {
+		if (style < 0 || style > 3) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (style != this.combatStyle
+			&& now - this.timeOfLastLocalCombatStyleChange < COMBAT_STYLE_SYNC_GRACE_MILLIS) {
+			return;
+		}
+		this.timeOfLastCombatStylePacket = now;
+		setCombatStyle(style);
+	}
+
 	public void setCombatStyle(int style) {
+		if (style < 0 || style > 3) {
+			return;
+		}
 		this.combatStyle = style;
+		this.proposedStyle = style;
 	}
 
 	public int getCombatStyle() { return this.combatStyle; }

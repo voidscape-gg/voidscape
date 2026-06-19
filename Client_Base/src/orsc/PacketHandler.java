@@ -1691,8 +1691,7 @@ public class PacketHandler {
 
 
 	private void gotCombatStylePacket() {
-		mc.timeOfLastCombatStylePacket = System.currentTimeMillis();
-		mc.proposedStyle = packetsIncoming.getByte();
+		mc.applyServerCombatStyle(packetsIncoming.getUnsignedByte());
 	}
 
 	private void gotUnlockedPlayerAppearancesPacket() {

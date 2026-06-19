@@ -27,7 +27,7 @@ public class MySqlQueries {
 	public final String objects, npcLocs, groundItems, inUseItemIds;
 	public final String clans, clanMembers, newClan, saveClanMember, deleteClan, deleteClanMembers, updateClan, updateClanMember;
 	public final String expiredAuction, collectibleItems, collectItem, newAuction, cancelAuction, auctionCount, playerAuctionCount, auctionItem, auctionItems, auctionSellOut, updateAuction;
-	public final String insertAuctionSale, auctionItemSummaries, hotAuctionItems, recentAuctionSales;
+	public final String insertAuctionSale, auctionItemSummaries, hotAuctionItems, recentAuctionSales, insertItemProvenanceEvent;
 	public final String discordIdToPlayerId, playerIdFromPairToken, pairDiscord, deleteTokenFromCache, watchlist, watchlists, updateWatchlist, deleteWatchlist;
 	public final String save_IronMan, checkMute, updateMute, updatePlayerLocation;
 	public final String selectFriendNameUsername, fixFriendNameCapitalization, insertFormerName, insertLoginAttempt, playerGetFormerNameInvoluntaryChange;
@@ -247,10 +247,13 @@ public class MySqlQueries {
 			+ "SUM(`total_price`) AS `total_value`, MAX(`sold_at`) AS `last_sold_at` "
 			+ "FROM `" + PREFIX + "auction_sales` WHERE `sold_at` >= ? GROUP BY `item_id` "
 			+ "ORDER BY `volume_sold` DESC, `total_value` DESC, `last_sold_at` DESC LIMIT ?";
-		recentAuctionSales = "SELECT `sale_id`, `auction_id`, `item_id`, `amount`, `unit_price`, `total_price`, `tax`, "
-			+ "`seller`, `seller_username`, `buyer`, `buyer_username`, `sold_at` FROM `" + PREFIX
-			+ "auction_sales` ORDER BY `sold_at` DESC, `sale_id` DESC LIMIT ?";
-		checkMute = "SELECT `value` FROM `" + PREFIX + "player_cache` WHERE `key` = ? AND `playerID` = ?";
+			recentAuctionSales = "SELECT `sale_id`, `auction_id`, `item_id`, `amount`, `unit_price`, `total_price`, `tax`, "
+				+ "`seller`, `seller_username`, `buyer`, `buyer_username`, `sold_at` FROM `" + PREFIX
+				+ "auction_sales` ORDER BY `sold_at` DESC, `sale_id` DESC LIMIT ?";
+			insertItemProvenanceEvent = "INSERT INTO `" + PREFIX
+				+ "item_provenance_events`(`itemID`, `catalogID`, `amount`, `noted`, `actorID`, `actor_username`, `targetID`, `target_username`, `event_type`, `source`, `destination`, `command`, `x`, `y`, `time`, `extra`) "
+				+ "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+			checkMute = "SELECT `value` FROM `" + PREFIX + "player_cache` WHERE `key` = ? AND `playerID` = ?";
 		updateMute = "UPDATE `" + PREFIX + "player_cache` SET `value` = ? WHERE `key` = ? AND `playerID` = ?";
 		updatePlayerLocation = "UPDATE `" + PREFIX + "players` SET `x` = ?, `y` = ? WHERE `id` = ?";
 

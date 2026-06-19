@@ -7,6 +7,7 @@ import com.openrsc.server.model.container.Equipment;
 import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.BankStruct;
@@ -159,10 +160,30 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				for (int k = 0; k < Equipment.SLOT_COUNT; k++) {
 					player.getBank().getBankPreset(presetSlot).getEquipment()[k] = new Item(ItemId.NOTHING.id(),0);
 				}
+				saveClassicWieldedItems(player, player.getBank().getBankPreset(presetSlot));
+				ActionSender.sendBankPreset(player, presetSlot);
 				player.message("Saved current loadout to slot " + (presetSlot + 1) + ".");
 				break;
 			default:
 				return;
+		}
+	}
+
+	private void saveClassicWieldedItems(Player player, BankPreset preset) {
+		if (player.getConfig().WANT_EQUIPMENT_TAB) {
+			return;
+		}
+		for (Item inventoryItem : player.getCarriedItems().getInventory().getItems()) {
+			if (inventoryItem == null || !inventoryItem.isWielded() || inventoryItem.getDef(player.getWorld()) == null) {
+				continue;
+			}
+			int slot = inventoryItem.getDef(player.getWorld()).getWieldPosition();
+			if (slot < 0 || slot >= Equipment.SLOT_COUNT) {
+				continue;
+			}
+			preset.getEquipment()[slot] = new Item(
+				inventoryItem.getCatalogId(), inventoryItem.getAmount(), inventoryItem.getNoted()
+			);
 		}
 	}
 }

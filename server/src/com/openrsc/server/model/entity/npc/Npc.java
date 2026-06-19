@@ -6,6 +6,7 @@ import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.struct.ItemProvenanceEvent;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.event.custom.NpcLootEvent;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
@@ -447,7 +448,7 @@ public class Npc extends Mob {
 				);
 				groundItem.setAttribute("npcdrop", true);
 				getWorld().registerItem(groundItem);
-				recordNpcDrop(owner, bones, 1, false);
+				recordNpcDrop(owner, bones, 1, false, false, "ground");
 			} else {
 				EnchantedCrowns.giveBonesExperience(owner, new Item(bones));
 				owner.playerServerMessage(MessageType.QUEST, "Your crown shines and the bone gets destroyed");
@@ -486,7 +487,7 @@ public class Npc extends Mob {
 			groundItem.setAttribute("npcdrop", true);
 			markRareDropBeam(groundItem, item);
 			owner.getWorld().registerItem(groundItem);
-			recordNpcDrop(owner, item.getCatalogId(), amount, isRareDrop(item));
+			recordNpcDrop(owner, item.getCatalogId(), amount, item.getNoted(), isRareDrop(item), "ground");
 		}
 
 		/* 6. Roll for drops. */
@@ -533,7 +534,7 @@ public class Npc extends Mob {
 		groundItem.setAttribute("npcdrop", true);
 		markRareDropBeam(groundItem, item);
 		getWorld().registerItem(groundItem);
-		recordNpcDrop(owner, item.getCatalogId(), item.getAmount(), isRareDrop(item));
+		recordNpcDrop(owner, item.getCatalogId(), item.getAmount(), item.getNoted(), isRareDrop(item), "ground");
 		getWorld().getServer().submitSqlLogging(() -> {
 			try {
 				getWorld().getServer().getDatabase().addDropLog(owner, this, item.getCatalogId(), item.getAmount());
@@ -608,7 +609,7 @@ public class Npc extends Mob {
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
-					recordNpcDrop(owner, item.getCatalogId(), item.getAmount(), isRareDrop(item));
+					recordNpcDrop(owner, item.getCatalogId(), item.getAmount(), item.getNoted(), isRareDrop(item), "ground");
 					getWorld().getServer().submitSqlLogging(() -> {
 						try {
 							getWorld().getServer().getDatabase().addDropLog(
@@ -693,7 +694,6 @@ public class Npc extends Mob {
 		if (hasVoidAmuletDropBoost(owner)) {
 			amount = (int) (amount * VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER);
 		}
-		recordNpcDrop(owner, dropID, amount, isRareDrop(item));
 		final int finalAmount = amount;
 		getWorld().getServer().submitSqlLogging(() -> {
 			try {
@@ -703,12 +703,16 @@ public class Npc extends Mob {
 			}
 		});
 
-		if (!DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
-			GroundItem groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner);
-			groundItem.setAttribute("npcdrop", true);
-			markRareDropBeam(groundItem, item);
-			getWorld().registerItem(groundItem);
+		if (DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
+			recordNpcDrop(owner, dropID, amount, item.getNoted(), isRareDrop(item), "inventory_avarice");
+			return;
 		}
+
+		GroundItem groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner);
+		groundItem.setAttribute("npcdrop", true);
+		markRareDropBeam(groundItem, item);
+		getWorld().registerItem(groundItem);
+		recordNpcDrop(owner, dropID, amount, item.getNoted(), isRareDrop(item), "ground");
 	}
 
 	private void dropStandardItem(Item item, Player owner) {
@@ -747,7 +751,7 @@ public class Npc extends Mob {
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
-					recordNpcDrop(owner, dropID, amount, isRareDrop(item));
+					recordNpcDrop(owner, dropID, amount, item.getNoted(), isRareDrop(item), "ground");
 				} else {
 					EnchantedCrowns.giveHerbExperience(owner, new Item(item.getCatalogId()));
 					owner.playerServerMessage(MessageType.QUEST, "Your crown shines and the herb gets destroyed");
@@ -774,9 +778,35 @@ public class Npc extends Mob {
 			|| getWorld().getNpcDrops().isRareDropItem(item.getCatalogId());
 	}
 
-	private void recordNpcDrop(Player owner, int itemId, int amount, boolean rare) {
+	private void recordNpcDrop(Player owner, int itemId, int amount, boolean noted, boolean rare, String destination) {
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
 		owner.addBestiaryDrop(getID(), itemId, amount);
+		final ItemProvenanceEvent event = new ItemProvenanceEvent();
+		event.catalogID = itemId;
+		event.amount = amount;
+		event.noted = noted;
+		event.targetID = owner == null ? 0 : owner.getDatabaseID();
+		event.targetUsername = owner == null ? "" : owner.getUsername();
+		event.eventType = "item_origin";
+		event.source = "npc_drop";
+		event.destination = destination;
+		event.command = "npc_drop";
+		event.x = getX();
+		event.y = getY();
+		event.time = System.currentTimeMillis() / 1000;
+		event.extra = npcDropProvenanceExtra(rare);
+		getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				getWorld().getServer().getDatabase().addItemProvenanceEvent(event);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
+	}
+
+	private String npcDropProvenanceExtra(boolean rare) {
+		final String npcName = getDef() == null ? "" : getDef().getName();
+		return "npc_id=" + getID() + " npc=" + npcName.replace(" ", "_") + " rare=" + rare;
 	}
 
 	/**

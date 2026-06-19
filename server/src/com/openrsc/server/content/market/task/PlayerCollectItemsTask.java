@@ -60,18 +60,40 @@ public class PlayerCollectItemsTask extends MarketTask {
 						.collectItems(dbCollectibleItems.toArray(new ExpiredAuction[dbCollectibleItems.size()]));
 					player.getWorld().getServer().getDatabase().savePlayerBank(player);
 				});
-				if (!dbOk) {
-					for (Item item : addedItems) {
-						player.getBank().remove(item, false);
+					if (!dbOk) {
+						for (Item item : addedItems) {
+							player.getBank().remove(item, false);
+						}
+						ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ Unable to collect your items. Please try again.", false);
+						return;
 					}
-					ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ Unable to collect your items. Please try again.", false);
-					return;
+					recordAuctionCollectReceipts(addedItems);
 				}
-			}
 
-			ActionSender.sendBox(player, items.toString(), true);
+				ActionSender.sendBox(player, items.toString(), true);
 		} catch (GameDatabaseException e) {
 			LOGGER.catching(e);
 		}
+	}
+
+	private void recordAuctionCollectReceipts(final ArrayList<Item> addedItems) {
+		if (addedItems == null || addedItems.isEmpty()) return;
+		final ArrayList<Item> receiptItems = new ArrayList<>();
+		for (Item item : addedItems) {
+			receiptItems.add(new Item(item.getCatalogId(), item.getAmount(), item.getNoted(), item.getItemId()));
+		}
+		final int x = player.getX();
+		final int y = player.getY();
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			for (Item item : receiptItems) {
+				try {
+					player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, player, "item_transfer",
+						"auction_collectible", "player_bank", "auction_collect", item.getCatalogId(), item.getAmount(),
+						item.getNoted(), item.getItemId(), x, y, "collect=true");
+				} catch (final GameDatabaseException ex) {
+					LOGGER.catching(ex);
+				}
+			}
+		});
 	}
 }
