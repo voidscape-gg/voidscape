@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "settings value row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\options-profile\\settings-value-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\options-profile\\settings-value-row\\asset-green.png"
+  },
+  {
+    "asset": "logout row button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\options-profile\\logout-row-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\options-profile\\logout-row-button\\asset-green.png"
+  }
+]

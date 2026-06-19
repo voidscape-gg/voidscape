@@ -1,0 +1,24 @@
+Generate a brand-new "Voidling" creature sprite for a RuneScape Classic-style game. The reference image (a rat) is ONLY for size reference and pixel-art STYLE — your output is a completely different creature shape. DO NOT keep any rat anatomy: no rat ears, no rat tail, no four-legged stance, no fur, no muzzle, no whiskers.
+
+CRITICAL — BACKGROUND: PURE MAGENTA RGB(255, 0, 255) — the entire background must be a flat solid block of pure magenta with NO other colors. Do NOT use white, do NOT use transparent, do NOT use checkerboard. Magenta only. The magenta will be chroma-keyed to alpha post-generation, so any non-magenta pixel becomes part of the creature.
+
+CRITICAL — CANVAS FILL: the voidling silhouette must FILL the canvas EDGE TO EDGE. Top of the head/body should touch (or come within 5%) of the top edge of the canvas; bottom of the trailing tendrils should touch (or come within 5%) of the bottom edge. Width should fill at least 70-80% of the canvas. The creature must read clearly at very small sizes (the final sprite gets downscaled to ~21×37 pixels — same scale as a level-13 rat in this game). NO empty padding around the creature.
+
+CRITICAL — STYLE: FULLY FILLED PIXEL ART, not a line drawing. Every interior pixel of the creature must be a solid color block. Think 16-bit RPG sprite art (classic RuneScape, Castlevania, RPG Maker) with chunky 1×1 to 3×3 blocks. NO smooth gradients, NO anti-aliasing, NO 3D shading, NO sparkles, NO particle effects. Each region of the creature should be one or two flat tones at most. Imagine each pixel hand-placed in MS Paint with a tiny palette.
+
+SHAPE — small floating void imp / wisp creature:
+- Bulbous teardrop / ovoid main body in the upper 60-65% of the canvas, slightly wider at the bottom and narrower at the top, like a small ghost or jellyfish bell. Body must be CHUNKY, not thin — at least 60-70% of canvas width at its widest point.
+- Two large round glowing CYAN eyes on the upper-front of the body — solid cyan circles, each at least 8% of canvas width (visible after downscale to 21px wide). NO mouth, NO nose, NO other facial features.
+- Lower 35-40% of the canvas: 2 or 3 dangling void TENDRILS (NOT legs, NOT a rat tail) — wide near the body, tapering as they hang down to the bottom edge. Tendrils are continuous extensions of the body's deep void purple, not a separate detail.
+- Two stubby arm-nubs protruding from the upper sides of the body, arms-akimbo. Each arm-nub should be 3-5 pixels chunky at the working size.
+- Overall vibe: a malevolent floating void wisp, like a corrupted spirit. NOT cute. NOT mammalian. NOT insectoid. Closest references: classic-RPG-game ghost / shade / shadow-imp sprites.
+
+Color palette (KEEP IT TIGHT — flat, no gradients, only these colors PLUS magenta BG):
+- Main body fill: solid deep void purple RGB(74, 20, 140) — this is the dominant body color
+- Body shadow / tendril tips: solid darker void RGB(26, 0, 51)
+- Body highlight (1-2 pixel rim on upper-left of body): solid amethyst RGB(126, 58, 204)
+- Eyes: solid bright cyan RGB(0, 230, 255), with a single 1-pixel darker cyan core RGB(0, 153, 204) for pupil
+
+NO text, NO speech bubbles, NO ground shadow, NO glow halos beyond what the palette describes. ABSOLUTELY NO purple bleeding into the magenta background — keep purple-magenta boundaries CRISP and CHUNKY.
+
+The output canvas must be exactly the input reference's aspect ratio (taller than wide, ~9:16), filled with the voidling against pure magenta.

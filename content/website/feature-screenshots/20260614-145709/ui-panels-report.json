@@ -1,0 +1,245 @@
+{
+    "ok":  true,
+    "scenario":  "ui-panels",
+    "generatedAt":  "2026-06-14T14:57:49.507-06:00",
+    "state":  {
+                  "generatedAt":  "2026-06-14T14:57:49.507-06:00",
+                  "clientVersion":  10109,
+                  "serverIp":  null,
+                  "serverPort":  43598,
+                  "screenshot":  null,
+                  "game":  {
+                               "available":  true,
+                               "state":  0,
+                               "width":  720,
+                               "height":  528,
+                               "inputXAction":  "ACT_0",
+                               "inputTextCurrent":  ""
+                           },
+                  "mouse":  {
+                                "available":  true,
+                                "x":  580,
+                                "y":  258,
+                                "click":  0,
+                                "down":  0
+                            },
+                  "player":  {
+                                 "displayName":  "android",
+                                 "accountName":  "android",
+                                 "x":  8384,
+                                 "z":  3904,
+                                 "level":  6,
+                                 "healthCurrent":  0,
+                                 "healthMax":  0,
+                                 "groupId":  1,
+                                 "admin":  true,
+                                 "dev":  true,
+                                 "mod":  true
+                             },
+                  "interfaces":  {
+                                     "auctionHouse":  {
+                                                          "visible":  false,
+                                                          "activeInterface":  0,
+                                                          "activeInterfaceName":  "browse"
+                                                      },
+                                     "worldMap":  {
+                                                      "visible":  false,
+                                                      "floor":  0
+                                                  },
+                                     "shop":  {
+                                                  "visible":  false,
+                                                  "containsSubscriptionCard":  false,
+                                                  "selectedItemIndex":  -1,
+                                                  "selectedItemType":  -2
+                                              },
+                                     "bank":  {
+                                                  "visible":  false,
+                                                  "page":  0,
+                                                  "maxItems":  50,
+                                                  "count":  0,
+                                                  "matches":  0,
+                                                  "scrollRow":  0,
+                                                  "search":  "",
+                                                  "searchFocused":  false,
+                                                  "noteMode":  false,
+                                                  "certMode":  false,
+                                                  "organizeMode":  0,
+                                                  "arrangeMenuOpen":  false,
+                                                  "loadoutsOpen":  false,
+                                                  "contextMenuOpen":  false,
+                                                  "selectedBankSlot":  -1,
+                                                  "selectedInventorySlot":  -1,
+                                                  "contextMenuX":  0,
+                                                  "contextMenuY":  0,
+                                                  "contextRowTopOffset":  23,
+                                                  "contextRowHeight":  17,
+                                                  "pendingSavePresetSlot":  -1,
+                                                  "pendingClearPresetSlot":  -1,
+                                                  "layout":  {
+                                                                 "panelX":  16,
+                                                                 "panelY":  55,
+                                                                 "panelWidth":  688,
+                                                                 "panelHeight":  450,
+                                                                 "bankGridX":  50,
+                                                                 "bankGridY":  151,
+                                                                 "inventoryGridY":  367,
+                                                                 "slotWidth":  62,
+                                                                 "slotHeight":  40,
+                                                                 "search":  {
+                                                                                "x":  583,
+                                                                                "y":  126
+                                                                            },
+                                                                 "searchClear":  {
+                                                                                     "x":  670,
+                                                                                     "y":  126
+                                                                                 },
+                                                                 "depositInventory":  {
+                                                                                          "x":  293,
+                                                                                          "y":  341
+                                                                                      },
+                                                                 "arrange":  {
+                                                                                 "x":  437,
+                                                                                 "y":  341
+                                                                             },
+                                                                 "loadouts":  {
+                                                                                  "x":  427,
+                                                                                  "y":  126
+                                                                              },
+                                                                 "itemMode":  {
+                                                                                  "x":  585,
+                                                                                  "y":  341
+                                                                              },
+                                                                 "noteMode":  {
+                                                                                  "x":  643,
+                                                                                  "y":  341
+                                                                              },
+                                                                 "close":  {
+                                                                               "x":  680,
+                                                                               "y":  81
+                                                                           },
+                                                                 "bankSlot0":  {
+                                                                                   "x":  81,
+                                                                                   "y":  171
+                                                                               },
+                                                                 "inventorySlot0":  {
+                                                                                        "x":  81,
+                                                                                        "y":  387
+                                                                                    }
+                                                             },
+                                                  "items":  [
+
+                                                            ],
+                                                  "inventory":  [
+
+                                                                ],
+                                                  "presets":  [
+                                                                  {
+                                                                      "slot":  0,
+                                                                      "empty":  true
+                                                                  },
+                                                                  {
+                                                                      "slot":  1,
+                                                                      "empty":  true
+                                                                  },
+                                                                  {
+                                                                      "slot":  2,
+                                                                      "empty":  true
+                                                                  }
+                                                              ]
+                                              }
+                                 }
+              },
+    "captures":  [
+                     {
+                         "reason":  "ui-panel-hud",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145741-323-ui-panel-hud.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145741-323-ui-panel-hud.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-options-profile",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145741-928-ui-panel-options-profile.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145741-928-ui-panel-options-profile.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-options-settings",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145742-415-ui-panel-options-settings.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145742-415-ui-panel-options-settings.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-friends",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145742-960-ui-panel-friends.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145742-960-ui-panel-friends.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-ignore",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145743-498-ui-panel-ignore.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145743-498-ui-panel-ignore.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-magic",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145744-267-ui-panel-magic.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145744-267-ui-panel-magic.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-prayers",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145744-986-ui-panel-prayers.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145744-986-ui-panel-prayers.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-skills",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145745-832-ui-panel-skills.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145745-832-ui-panel-skills.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-quests",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145746-463-ui-panel-quests.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145746-463-ui-panel-quests.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-loot",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145747-643-ui-panel-loot.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145747-643-ui-panel-loot.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-minimap",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145748-165-ui-panel-minimap.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145748-165-ui-panel-minimap.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-inventory",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145748-683-ui-panel-inventory.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145748-683-ui-panel-inventory.json",
+                         "width":  720,
+                         "height":  540
+                     },
+                     {
+                         "reason":  "ui-panel-account",
+                         "pngPath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145749-259-ui-panel-account.png",
+                         "statePath":  "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench-website-20260614-145709\\screenshots\\20260614-145749-259-ui-panel-account.json",
+                         "width":  720,
+                         "height":  540
+                     }
+                 ]
+}

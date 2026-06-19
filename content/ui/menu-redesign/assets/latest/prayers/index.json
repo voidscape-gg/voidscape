@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "prayer list row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\prayer-list-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\prayer-list-row\\asset-green.png"
+  },
+  {
+    "asset": "prayer detail footer",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\prayer-detail-footer\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\prayer-detail-footer\\asset-green.png"
+  },
+  {
+    "asset": "active prayer row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\active-prayer-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\prayers\\active-prayer-row\\asset-green.png"
+  }
+]

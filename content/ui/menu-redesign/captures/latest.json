@@ -1,0 +1,263 @@
+{
+  "ok": true,
+  "scenario": "ui-panels",
+  "generatedAt": "2026-06-13T12:45:00.944-06:00",
+  "state": {
+    "generatedAt": "2026-06-13T12:45:00.945-06:00",
+    "clientVersion": 10104,
+    "serverIp": null,
+    "serverPort": 43598,
+    "screenshot": null,
+    "game": {
+      "available": true,
+      "state": 0,
+      "width": 640,
+      "height": 468,
+      "inputXAction": "ACT_0",
+      "inputTextCurrent": ""
+    },
+    "mouse": {
+      "available": true,
+      "x": 509,
+      "y": 240,
+      "click": 0,
+      "down": 0
+    },
+    "player": {
+      "displayName": "test",
+      "accountName": "test",
+      "x": 8384,
+      "z": 6976,
+      "level": 78,
+      "healthCurrent": 0,
+      "healthMax": 0,
+      "groupId": 1,
+      "admin": true,
+      "dev": true,
+      "mod": true
+    },
+    "interfaces": {
+      "auctionHouse": {
+        "visible": false,
+        "activeInterface": 0,
+        "activeInterfaceName": "browse"
+      },
+      "worldMap": {
+        "visible": false,
+        "floor": 0
+      },
+      "shop": {
+        "visible": false,
+        "containsSubscriptionCard": false,
+        "selectedItemIndex": -1,
+        "selectedItemType": -2
+      },
+      "bank": {
+        "visible": false,
+        "page": 0,
+        "maxItems": 50,
+        "count": 0,
+        "matches": 0,
+        "scrollRow": 0,
+        "search": "",
+        "searchFocused": false,
+        "noteMode": false,
+        "certMode": false,
+        "organizeMode": 0,
+        "arrangeMenuOpen": false,
+        "loadoutsOpen": false,
+        "contextMenuOpen": false,
+        "selectedBankSlot": -1,
+        "selectedInventorySlot": -1,
+        "contextMenuX": 0,
+        "contextMenuY": 0,
+        "contextRowTopOffset": 23,
+        "contextRowHeight": 17,
+        "pendingSavePresetSlot": -1,
+        "pendingClearPresetSlot": -1,
+        "layout": {
+          "panelX": 15,
+          "panelY": 55,
+          "panelWidth": 610,
+          "panelHeight": 376,
+          "bankGridX": 40,
+          "bankGridY": 137,
+          "inventoryGridY": 311,
+          "slotWidth": 56,
+          "slotHeight": 34,
+          "search": {
+            "x": 521,
+            "y": 120
+          },
+          "searchClear": {
+            "x": 591,
+            "y": 120
+          },
+          "depositInventory": {
+            "x": 246,
+            "y": 292
+          },
+          "arrange": {
+            "x": 365,
+            "y": 292
+          },
+          "loadouts": {
+            "x": 389,
+            "y": 120
+          },
+          "itemMode": {
+            "x": 528,
+            "y": 292
+          },
+          "noteMode": {
+            "x": 577,
+            "y": 292
+          },
+          "close": {
+            "x": 601,
+            "y": 81
+          },
+          "bankSlot0": {
+            "x": 68,
+            "y": 154
+          },
+          "inventorySlot0": {
+            "x": 68,
+            "y": 328
+          }
+        },
+        "items": [],
+        "inventory": [
+          {
+            "slot": 0,
+            "id": 81,
+            "amount": 1,
+            "noted": false,
+            "name": "rune 2-handed Sword"
+          },
+          {
+            "slot": 1,
+            "id": 10,
+            "amount": 2,
+            "noted": false,
+            "name": "Coins"
+          },
+          {
+            "slot": 2,
+            "id": 104,
+            "amount": 1,
+            "noted": false,
+            "name": "Medium Bronze Helmet"
+          }
+        ],
+        "presets": [
+          {
+            "slot": 0,
+            "empty": true
+          },
+          {
+            "slot": 1,
+            "empty": true
+          },
+          {
+            "slot": 2,
+            "empty": true
+          }
+        ]
+      }
+    }
+  },
+  "captures": [
+    {
+      "reason": "ui-panel-hud",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124456-936-ui-panel-hud.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124456-936-ui-panel-hud.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-options-profile",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-281-ui-panel-options-profile.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-281-ui-panel-options-profile.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-options-settings",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-615-ui-panel-options-settings.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-615-ui-panel-options-settings.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-friends",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-941-ui-panel-friends.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124457-941-ui-panel-friends.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-ignore",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-269-ui-panel-ignore.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-269-ui-panel-ignore.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-magic",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-596-ui-panel-magic.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-596-ui-panel-magic.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-prayers",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-927-ui-panel-prayers.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124458-927-ui-panel-prayers.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-skills",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-262-ui-panel-skills.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-262-ui-panel-skills.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-quests",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-597-ui-panel-quests.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-597-ui-panel-quests.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-loot",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-927-ui-panel-loot.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124459-927-ui-panel-loot.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-minimap",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-265-ui-panel-minimap.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-265-ui-panel-minimap.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-inventory",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-590-ui-panel-inventory.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-590-ui-panel-inventory.json",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "reason": "ui-panel-account",
+      "pngPath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-919-ui-panel-account.png",
+      "statePath": "C:\\Users\\ryanr\\Desktop\\voidscape-latest-run\\tmp\\workbench\\screenshots\\20260613-124500-919-ui-panel-account.json",
+      "width": 640,
+      "height": 480
+    }
+  ]
+}

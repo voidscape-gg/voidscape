@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "spell list row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\magic\\spell-list-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\magic\\spell-list-row\\asset-green.png"
+  },
+  {
+    "asset": "spell detail footer",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\magic\\spell-detail-footer\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\magic\\spell-detail-footer\\asset-green.png"
+  },
+  {
+    "asset": "rune requirement chip",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\magic\\rune-requirement-chip\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\magic\\rune-requirement-chip\\asset-green.png"
+  }
+]

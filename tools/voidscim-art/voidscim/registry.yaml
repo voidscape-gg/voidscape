@@ -1,0 +1,37 @@
+schema_version: 1
+entries:
+  rune_2h_sword:
+    item_key: rune_2h_sword
+    appearance_id: 82
+    archive_index: 2232
+    name: rune 2-handed Sword
+    is_stackable: false
+    linked_item_ids:
+    - 76
+    - 77
+    - 78
+    - 79
+    - 80
+    - 81
+    - 426
+    palette_anchors:
+    - '#A8B5C0'   # steel blade base
+    - '#D4AF37'   # gold crossguard
+    - '#2A2018'   # dark grip
+    palette_tol: 36
+    silhouette_iou_min: 0.95
+    target_size:
+    - 45
+    - 25
+    sidecar:
+      width: 45
+      height: 25
+      requiresShift: true
+      xShift: 1
+      yShift: 5
+      something1: 48
+      something2: 32
+    approved_variant: null
+    last_pack_timestamp: null
+    last_pack_sha256: null
+    pre_pack_backup_path: null

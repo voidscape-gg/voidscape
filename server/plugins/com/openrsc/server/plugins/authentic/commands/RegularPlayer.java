@@ -1,0 +1,2155 @@
+package com.openrsc.server.plugins.authentic.commands;
+
+import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.BetaOnboardingGuide;
+import com.openrsc.server.content.LootBeamSettings;
+import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.RestedExperience;
+import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.clan.ClanInvite;
+import com.openrsc.server.content.party.PartyPlayer;
+import com.openrsc.server.content.party.PartyRank;
+import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.JDBCDatabase;
+import com.openrsc.server.database.impl.mysql.queries.logging.ChatLog;
+import com.openrsc.server.event.custom.HolidayDropEvent;
+import com.openrsc.server.event.rsc.GameTickEvent;
+import com.openrsc.server.external.ItemDefinition;
+import com.openrsc.server.external.NPCDef;
+import com.openrsc.server.model.GlobalMessage;
+import com.openrsc.server.model.container.Item;
+import com.openrsc.server.model.entity.player.Group;
+import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.PlayerSettings;
+import com.openrsc.server.model.snapshot.Chatlog;
+import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.custom.minigames.CombatOdyssey;
+import com.openrsc.server.plugins.triggers.CommandTrigger;
+import com.openrsc.server.util.MessageFilter;
+import com.openrsc.server.util.languages.PreferredLanguage;
+import com.openrsc.server.util.rsc.DataConversions;
+import com.openrsc.server.util.rsc.Formulae;
+import com.openrsc.server.util.rsc.MessageType;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.WordUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+
+import static com.openrsc.server.plugins.Functions.*;
+import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isBlackArmGang;
+import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isPhoenixGang;
+
+public final class RegularPlayer implements CommandTrigger {
+	private static final Logger LOGGER = LogManager.getLogger(RegularPlayer.class);
+	private static final int TITLE_CATALOG_PAGE_SIZE = 10;
+
+	private enum TitleCatalogView {
+		ALL("All titles"),
+		UNLOCKED("Unlocked titles"),
+		UNIQUE("Unique titles"),
+		COMMON("Common titles"),
+		RAREST("Rarest titles");
+
+		private final String label;
+
+		TitleCatalogView(String label) {
+			this.label = label;
+		}
+
+		private String label() {
+			return label;
+		}
+	}
+
+	public static String messagePrefix = null;
+	public static String badSyntaxPrefix = null;
+
+	public boolean blockCommand(Player player, String command, String[] args) {
+		return player.getConfig().PLAYER_COMMANDS || player.isMod();
+	}
+
+	public void onCommand(Player player, String command, String[] args) {
+		if(messagePrefix == null) {
+			messagePrefix = config().MESSAGE_PREFIX;
+		}
+		if(badSyntaxPrefix == null) {
+			badSyntaxPrefix = config().BAD_SYNTAX_PREFIX;
+		}
+
+		if (command.equalsIgnoreCase("gang")) {
+			queryGang(player);
+		} else if (command.equalsIgnoreCase("c") && config().WANT_CLANS) {
+			sendMessageClan(player, args);
+		} else if (command.equalsIgnoreCase("clanaccept") && config().WANT_CLANS) {
+			acceptClanInvitation(player);
+		} else if (command.equalsIgnoreCase("partyaccept")) {
+			acceptPartyInvitation(player);
+		} else if (command.equalsIgnoreCase("claninvite") && config().WANT_CLANS) {
+			sendClanInvitation(player, command, args);
+		} else if (command.equalsIgnoreCase("clankick") && config().WANT_CLANS) {
+			removePlayerFromClan(player, command, args);
+		} else if (command.equalsIgnoreCase("gameinfo")) {
+			queryPlayerInfo(player);
+		} else if (command.equalsIgnoreCase("bounty")) {
+			player.getWorld().getBountyHunter().sendStatus(player);
+		} else if (command.equalsIgnoreCase("arena") || command.equalsIgnoreCase("voidarena")) {
+			player.getWorld().getVoidArena().handleCommand(player, args);
+		} else if (command.equalsIgnoreCase("event")) {
+			queryEvents(player);
+		} else if (command.equalsIgnoreCase("g") || command.equalsIgnoreCase("pk")) {
+			sendMessageGlobal(player, command, args);
+		} else if (command.equalsIgnoreCase("p")) {
+			sendMessageParty(player, command, args);
+		} else if (command.equalsIgnoreCase("online")) {
+			queryOnlinePlayerCount(player);
+		} else if (command.equalsIgnoreCase("uniqueonline")) {
+			queryUniqueOnlinePlayerCount(player);
+		} else if (command.equalsIgnoreCase("leaveparty")) {
+			player.getParty().removePlayer(player.getUsername());
+		} else if (command.equalsIgnoreCase("joinclan")) {
+			sendClanRequest(player, args);
+		} else if (command.equalsIgnoreCase("shareloot")) {
+			toggleLootShare(player);
+		} else if (command.equalsIgnoreCase("shareexp")) {
+			toggleExperienceShare(player);
+		} else if (command.equalsIgnoreCase("onlinelist")) {
+			queryOnlinePlayers(player, args, false);
+		} else if (command.equalsIgnoreCase("onlinelistlocs")) {
+			queryOnlinePlayers(player, args, true);
+		} else if (command.equalsIgnoreCase("groups") || command.equalsIgnoreCase("ranks")) {
+			queryGroupIDs(player);
+		} else if (command.equalsIgnoreCase("time") || command.equalsIgnoreCase("date") || command.equalsIgnoreCase("datetime")) {
+			player.message(messagePrefix + " the current time/date is:@gre@ " + new java.util.Date().toString());
+		} else if (config().NPC_KILL_LIST && (command.equalsIgnoreCase("kills") || command.equalsIgnoreCase("kc"))) {
+			queryKillList(player, command, args);
+		} else if (command.equalsIgnoreCase("pair")) {
+			pairDiscordID(player);
+		} else if (command.equalsIgnoreCase("d")) {
+			sendMessageDiscord(player, args);
+		} else if (command.equalsIgnoreCase("commands")) {
+			queryCommands(player, 0);
+		} else if (command.equalsIgnoreCase("bug") || command.equalsIgnoreCase("reportbug")) {
+			reportBetaBug(player, args);
+		} else if (command.equalsIgnoreCase("beta") || command.equalsIgnoreCase("betaguide")) {
+			BetaOnboardingGuide.show(player);
+		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
+			handleLootBeamCommand(player, args);
+		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {
+			player.message(RestedExperience.status(player));
+		} else if (command.equalsIgnoreCase("titles") || command.equalsIgnoreCase("title")) {
+			handleTitleCommand(player, args);
+		} else if (command.equalsIgnoreCase("b") && config().RIGHT_CLICK_BANK) {
+			if (!player.getQolOptOut()) {
+				if (player.getLocation().isInBank(config().BASED_MAP_DATA)) {
+					player.getBank().quickFeature(null, player, false);
+				} else {
+					player.playerServerMessage(MessageType.QUEST, "You are not inside a bank.");
+				}
+			} else {
+				player.playerServerMessage(MessageType.QUEST, "Quick banking is a QoL feature which you are opted out of.");
+			}
+		} else if (command.equalsIgnoreCase("qoloptout")) {
+			handleQOLOptOut(player);
+		} else if (command.equalsIgnoreCase("qoloptoutconfirm")) {
+			confirmQOLOptOut(player);
+		} else if (command.equalsIgnoreCase("certoptout")) {
+			handleCertOptOut(player);
+		} else if (command.equalsIgnoreCase("certoptoutconfirm")) {
+			confirmCertOptOut(player);
+		} else if (command.equalsIgnoreCase("toggleglobalchat")) {
+			player.getSocial().toggleGlobalFriend(player);
+		} else if (command.equalsIgnoreCase("getholidaydrop") ||
+			command.equalsIgnoreCase("checkholidaydrop") ||
+			command.equalsIgnoreCase("checkholidayevent") ||
+		    command.equalsIgnoreCase("drop")) {
+			checkHolidayDrop(player);
+		} else if (command.equalsIgnoreCase("toggleblockchat")) {
+			player.getSettings().toggleBlockChat(player);
+		} else if (command.equalsIgnoreCase("toggleblockprivate")) {
+			player.getSettings().toggleBlockPrivate(player);
+		} else if (command.equalsIgnoreCase("toggleblocktrade")) {
+			player.getSettings().toggleBlockTrade(player);
+		} else if (command.equalsIgnoreCase("toggleblockduel")) {
+			player.getSettings().toggleBlockDuel(player);
+		} else if (command.equalsIgnoreCase("clientlimitations")) {
+			ActionSender.sendBox(player, player.getClientLimitations().toString(), true);
+		} else if (command.equalsIgnoreCase("setversion")) {
+			setClientVersion(player, args);
+		} else if (command.equalsIgnoreCase("skiptutorial")) {
+			skipTutorial(player);
+		} else if (command.equalsIgnoreCase("oldtrade")
+			|| command.equalsIgnoreCase("notradeconfirm")) {
+			setOldTrade(player);
+		} else if (command.equalsIgnoreCase("coords")) {
+			tellCoordinates(player);
+		} else if (command.equalsIgnoreCase("setlanguage")) {
+			setLanguage(command, player, args);
+		} else if (command.equalsIgnoreCase("language")) {
+			getLanguage(command, player, args);
+		} else if (command.equalsIgnoreCase("togglereceipts")) {
+			toggleReceipts(player);
+		} else if (command.equalsIgnoreCase("getpidlesscatching") || command.equalsIgnoreCase("tellpidlesscatching") || command.equalsIgnoreCase("pidless")) {
+			tellPidlessCatching(player);
+		} else if (command.equalsIgnoreCase("maxplayersperip") || command.equalsIgnoreCase("mppi")) {
+			queryMaxPlayersPerIp(player);
+		} else if (command.equalsIgnoreCase("setglobalmessagecolor")) {
+			setGlobalMessageColor(player, args);
+		} else if (command.equalsIgnoreCase("globalquest") || command.equalsIgnoreCase("gq")) {
+			setGlobalOutput(player, MessageType.QUEST);
+		} else if (command.equalsIgnoreCase("globalprivate") || command.equalsIgnoreCase("gp")) {
+			setGlobalOutput(player, MessageType.PRIVATE_RECIEVE);
+		} else if (command.equalsIgnoreCase("globalrules")) {
+			displayGlobalRules(player);
+		} else if (command.equalsIgnoreCase("i_have_read_and_agree_to_the_global_chat_rules")
+			|| command.equalsIgnoreCase("i_have_read_and_agreed_to_the_global_chat_rules")
+			|| command.equalsIgnoreCase("ihavereadandagreetotheglobalchatrules")
+			|| command.equalsIgnoreCase("ihavereadandagreedtotheglobalchatrules")) {
+			acceptGlobalChatRules(player);
+		} else if (command.equalsIgnoreCase("minigamelog")) {
+			queryMinigameLog(player, args);
+		} else if (command.equalsIgnoreCase("togglenpckcmessages")) {
+			toggleNpcKcMessages(player);
+		} else if (command.equalsIgnoreCase("bankpinoptin") || command.equalsIgnoreCase("bankpin_optin") || command.equalsIgnoreCase("bank_pin_opt_in")) {
+			bankPinOptIn(player);
+		} else if (command.equalsIgnoreCase("bankpinoptout") || command.equalsIgnoreCase("bankpin_optout") || command.equalsIgnoreCase("bank_pin_opt_out")) {
+			bankPinOptOut(player);
+		} else if (command.equalsIgnoreCase("rename")) {
+			renameSelf(player, args);
+		} else if (command.equalsIgnoreCase("globalchat") || command.equalsIgnoreCase("gc")) {
+			globalChatInfo(player);
+		}
+	}
+
+	private void handleTitleCommand(Player player, String[] args) {
+		PlayerTitle.refreshAutomaticUnlocks(player);
+		if (args.length == 0) {
+			openTitleMenu(player);
+			return;
+		}
+
+		String action = args[0].toLowerCase();
+		if (action.equals("list") || action.equals("all") || action.equals("catalog")) {
+			showTitleCatalogFromArgs(player, TitleCatalogView.ALL, args, 1);
+			return;
+		}
+		TitleCatalogView view = parseTitleCatalogView(action);
+		if (view != null) {
+			showTitleCatalogFromArgs(player, view, args, 1);
+			return;
+		}
+		if (action.equals("clear") || action.equals("off") || action.equals("none")) {
+			PlayerTitle.setActive(player, null);
+			player.message("Your active title has been cleared.");
+			return;
+		}
+		if (action.equals("count")) {
+			player.message("You have unlocked @gre@" + PlayerTitle.unlockedCount(player) + "@whi@/" + PlayerTitle.values().length + " titles.");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinArgs(args, 0));
+		if (title == null) {
+			player.message("Unknown title. Use ::titles to browse the title menu.");
+			return;
+		}
+		if (!title.isUnlocked(player)) {
+			player.message("You have not unlocked @red@" + title.displayName() + "@whi@ yet.");
+			if (title.unique()) {
+				PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
+				if (uniqueClaim != null && uniqueClaim != title) {
+					player.message("You already hold the unique title @red@" + uniqueClaim.displayName() + "@whi@.");
+					player.message("Each account can hold only one unique title.");
+					return;
+				}
+				String owner = PlayerTitle.ownerName(player, title);
+				if (owner != null) {
+					player.message("That unique title is already held by @yel@" + owner + "@whi@.");
+				} else {
+					player.message("@red@Unique title@whi@ - first player to meet this requirement claims it.");
+					player.message(title.unlockHint());
+				}
+			} else {
+				player.message("@cya@Reusable title@whi@ - anyone who meets this requirement can unlock it.");
+				player.message(title.unlockHint());
+			}
+			return;
+		}
+
+		PlayerTitle.setActive(player, title);
+		player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+	}
+
+	private void openTitleMenu(Player player) {
+		PlayerTitle activeTitle = PlayerTitle.active(player);
+		List<String> options = new ArrayList<>();
+		options.add(activeTitle == null ? "Active title: none" : "Active: " + activeTitle.displayName());
+
+		int unlockedOption = options.size();
+		options.add("Unlocked titles (" + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length + ")");
+		int allOption = options.size();
+		options.add("All titles");
+		int uniqueOption = options.size();
+		options.add("Unique titles");
+		int commonOption = options.size();
+		options.add("Common titles");
+		int rarestOption = options.size();
+		options.add("Rarest titles");
+
+		int clearOption = -1;
+		if (activeTitle != null) {
+			clearOption = options.size();
+			options.add("Clear active title");
+		}
+		int closeOption = options.size();
+		options.add("Close");
+
+		int option = multi(player, null, false, options.toArray(new String[0]));
+		if (option < 0 || option == closeOption) {
+			return;
+		}
+		if (option == 0) {
+			openTitleMenu(player);
+			return;
+		}
+		if (option == clearOption) {
+			PlayerTitle.setActive(player, null);
+			player.message("Your active title has been cleared.");
+			return;
+		}
+		if (option == unlockedOption) {
+			showTitleCatalog(player, TitleCatalogView.UNLOCKED, 0);
+			return;
+		}
+		if (option == allOption) {
+			showTitleCatalog(player, TitleCatalogView.ALL, 0);
+			return;
+		}
+		if (option == uniqueOption) {
+			showTitleCatalog(player, TitleCatalogView.UNIQUE, 0);
+			return;
+		}
+		if (option == commonOption) {
+			showTitleCatalog(player, TitleCatalogView.COMMON, 0);
+			return;
+		}
+		if (option == rarestOption) {
+			showTitleCatalog(player, TitleCatalogView.RAREST, 0);
+		}
+	}
+
+	private void showTitleCatalog(Player player, TitleCatalogView view, int page) {
+		List<PlayerTitle> titles = titleCatalogTitles(player, view);
+		int totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+		page = Math.max(0, Math.min(page, totalPages - 1));
+
+		while (true) {
+			PlayerTitle activeTitle = PlayerTitle.active(player);
+			List<String> options = new ArrayList<>();
+			options.add(view.label() + " - page " + (page + 1) + "/" + totalPages
+				+ " - unlocked " + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length);
+
+			int allViewOption = -1;
+			int unlockedViewOption = -1;
+			int uniqueViewOption = -1;
+			int commonViewOption = -1;
+			int rarestViewOption = -1;
+			if (player.isUsingCustomClient()) {
+				allViewOption = options.size();
+				options.add("View all titles");
+				unlockedViewOption = options.size();
+				options.add("View unlocked titles");
+				uniqueViewOption = options.size();
+				options.add("View unique titles");
+				commonViewOption = options.size();
+				options.add("View common titles");
+				rarestViewOption = options.size();
+				options.add("View rarest titles");
+			}
+
+			int start = page * TITLE_CATALOG_PAGE_SIZE;
+			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
+			int firstTitleOption = options.size();
+			for (int i = start; i < end; i++) {
+				options.add(titleCatalogOption(player, titles.get(i), activeTitle));
+			}
+			if (titles.isEmpty()) {
+				options.add("No titles in this category yet");
+			}
+
+			int previousOption = -1;
+			int nextOption = -1;
+			if (page > 0) {
+				previousOption = options.size();
+				options.add("< Previous page");
+			}
+			if (page + 1 < totalPages) {
+				nextOption = options.size();
+				options.add("Next page >");
+			}
+			int categoriesOption = options.size();
+			options.add("Change category");
+			int closeOption = options.size();
+			options.add("Close");
+
+			int option = multi(player, null, false, options.toArray(new String[0]));
+			if (option < 0 || option == closeOption) {
+				return;
+			}
+			if (option == 0) {
+				continue;
+			}
+			if (option == allViewOption) {
+				view = TitleCatalogView.ALL;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == unlockedViewOption) {
+				view = TitleCatalogView.UNLOCKED;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == uniqueViewOption) {
+				view = TitleCatalogView.UNIQUE;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == commonViewOption) {
+				view = TitleCatalogView.COMMON;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == rarestViewOption) {
+				view = TitleCatalogView.RAREST;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == previousOption) {
+				page = Math.max(0, page - 1);
+				continue;
+			}
+			if (option == nextOption) {
+				page = Math.min(totalPages - 1, page + 1);
+				continue;
+			}
+			if (option == categoriesOption) {
+				openTitleMenu(player);
+				return;
+			}
+
+			int titleIndex = start + option - firstTitleOption;
+			if (titleIndex >= start && titleIndex < end) {
+				if (!showTitleDetail(player, titles.get(titleIndex), view, page)) {
+					return;
+				}
+			}
+		}
+	}
+
+	private String titleCatalogOption(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		String prefix = title == activeTitle ? "* " : "";
+		return prefix + title.displayName() + " - " + titleCatalogStatus(player, title) + " - " + titleCatalogState(player, title, activeTitle);
+	}
+
+	private String titleCatalogStatus(Player player, PlayerTitle title) {
+		if (title.unique()) {
+			String owner = PlayerTitle.ownerName(player, title);
+			if (owner == null) {
+				return "@red@unique@whi@ open";
+			}
+			return "@red@unique@whi@ " + owner;
+		}
+
+		String rarity = title.rarityLabel();
+		if (rarity.equals("rare")) {
+			return "@mag@rare@whi@";
+		}
+		if (rarity.equals("uncommon")) {
+			return "@yel@uncommon@whi@";
+		}
+		return "@cya@common@whi@";
+	}
+
+	private String titleCatalogState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "@gre@active@whi@";
+		}
+		return title.isUnlocked(player) ? "@gre@unlocked@whi@" : "locked";
+	}
+
+	private boolean showTitleDetail(Player player, PlayerTitle title, TitleCatalogView returnView, int returnPage) {
+		while (true) {
+			PlayerTitle activeTitle = PlayerTitle.active(player);
+			List<String> options = new ArrayList<>();
+			options.add("Title details: " + title.displayName());
+			options.add("Requirement - " + title.unlockHint());
+			options.add(title.requirementProgress(player));
+			options.add(titleDetailScope(player, title));
+			options.add("Rarity: " + title.rarityLabel());
+			options.add("Status: " + titleDetailState(player, title, activeTitle));
+
+			int equipOption = -1;
+			if (title.isUnlocked(player) && title != activeTitle) {
+				equipOption = options.size();
+				options.add("Equip title");
+			}
+			int backOption = options.size();
+			options.add("Back to " + returnView.label() + " page " + (returnPage + 1));
+			int closeOption = options.size();
+			options.add("Close");
+
+			int option = multi(player, null, false, options.toArray(new String[0]));
+			if (option < 0 || option == closeOption) {
+				return false;
+			}
+			if (option == backOption) {
+				return true;
+			}
+			if (option == equipOption) {
+				PlayerTitle.setActive(player, title);
+				player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+				return true;
+			}
+		}
+	}
+
+	private String titleDetailScope(Player player, PlayerTitle title) {
+		if (!title.unique()) {
+			return "Scope: reusable - anyone can earn it.";
+		}
+
+		String owner = PlayerTitle.ownerName(player, title);
+		if (owner == null) {
+			return "Scope: unique - open first claim.";
+		}
+		if (owner.equalsIgnoreCase(player.getUsername())) {
+			return "Scope: unique - held by you.";
+		}
+		return "Scope: unique - held by " + owner + ".";
+	}
+
+	private String titleDetailState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "active";
+		}
+		if (title.isUnlocked(player)) {
+			return "unlocked";
+		}
+		if (title.unique()) {
+			PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
+			if (uniqueClaim != null && uniqueClaim != title) {
+				return "locked - you already hold " + uniqueClaim.displayName() + ".";
+			}
+			String owner = PlayerTitle.ownerName(player, title);
+			if (owner != null) {
+				return "locked - held by " + owner + ".";
+			}
+		}
+		return "locked";
+	}
+
+	private List<PlayerTitle> titleCatalogTitles(Player player, TitleCatalogView view) {
+		List<PlayerTitle> titles = new ArrayList<>();
+		for (PlayerTitle title : PlayerTitle.values()) {
+			if (view == TitleCatalogView.UNLOCKED && !title.isUnlocked(player)) {
+				continue;
+			}
+			if (view == TitleCatalogView.UNIQUE && !title.unique()) {
+				continue;
+			}
+			if (view == TitleCatalogView.COMMON && title.unique()) {
+				continue;
+			}
+			titles.add(title);
+		}
+		if (view == TitleCatalogView.RAREST) {
+			Collections.sort(titles, new Comparator<PlayerTitle>() {
+				public int compare(PlayerTitle left, PlayerTitle right) {
+					int rarity = Integer.compare(right.rarityScore(), left.rarityScore());
+					if (rarity != 0) {
+						return rarity;
+					}
+					return left.displayName().compareTo(right.displayName());
+				}
+			});
+		}
+		return titles;
+	}
+
+	private void showTitleCatalogFromArgs(Player player, TitleCatalogView defaultView, String[] args, int startArg) {
+		TitleCatalogView view = defaultView;
+		int pageArg = startArg;
+		if (args.length > startArg) {
+			TitleCatalogView parsedView = parseTitleCatalogView(args[startArg].toLowerCase());
+			if (parsedView != null) {
+				view = parsedView;
+				pageArg = startArg + 1;
+			}
+		}
+		showTitleCatalog(player, view, parseTitleCatalogPage(args, pageArg));
+	}
+
+	private TitleCatalogView parseTitleCatalogView(String action) {
+		if (action.equals("all") || action.equals("catalog") || action.equals("list")) {
+			return TitleCatalogView.ALL;
+		}
+		if (action.equals("unlocked") || action.equals("owned") || action.equals("mine")) {
+			return TitleCatalogView.UNLOCKED;
+		}
+		if (action.equals("unique") || action.equals("uniques")) {
+			return TitleCatalogView.UNIQUE;
+		}
+		if (action.equals("common") || action.equals("commons") || action.equals("reusable") || action.equals("reusables")) {
+			return TitleCatalogView.COMMON;
+		}
+		if (action.equals("rarest") || action.equals("rare")) {
+			return TitleCatalogView.RAREST;
+		}
+		return null;
+	}
+
+	private int parseTitleCatalogPage(String[] args, int pageArg) {
+		if (args.length <= pageArg) {
+			return 0;
+		}
+		try {
+			return Math.max(0, Integer.parseInt(args[pageArg]) - 1);
+		} catch (NumberFormatException ignored) {
+			return 0;
+		}
+	}
+
+	private void globalChatInfo(Player player) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) {
+			player.message("Global chat is disabled on this world.");
+			return;
+		}
+
+		StringBuilder globalChatInfo = new StringBuilder();
+		globalChatInfo.append("@yel@Global Chat %");
+		globalChatInfo.append("@whi@Global Chat allows anyone participating to broadcast a message to everyone else on the server. % %");
+		if (config().WANT_GLOBAL_FRIEND) {
+			globalChatInfo.append("@whi@It is possible to opt-out of this feature by removing the @cya@Global@whi@ friend from your friends list, and to opt back in by adding @cya@Global@whi@ to your friends list. % %");
+		}
+		if (config().GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ > 0) {
+			globalChatInfo.append("@whi@To read global chat, players must reach a skill total of at least " + config().GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ + ". ");
+		}
+		if (config().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ > 0) {
+			globalChatInfo.append("@whi@To send a message to global chat, players must reach a skill total of at least " + config().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ + ". ");
+		}
+		if (config().GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ > 0 || config().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ > 0) {
+			globalChatInfo.append("@whi@Your skill total is currently " + player.getTotalLevel() + ", ");
+			if (player.getTotalLevel() >= config().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ) {
+				globalChatInfo.append("so you meet the requirements to both send & receive messages.");
+			} else if (player.getTotalLevel() >= config().GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ) {
+				globalChatInfo.append("so you can @yel@see@whi@ global chat messages, but can't yet @yel@send@whi@ them.");
+			} else {
+				globalChatInfo.append("so you aren't yet able to participate in global chat.");
+			}
+			globalChatInfo.append(" % %");
+		}
+		globalChatInfo.append("@whi@If you are muted, ");
+		if (player.isMuted() || player.isGlobalMuted()) {
+			globalChatInfo.append("@red@(which you @dre@are@red@)@whi@");
+		}
+		globalChatInfo.append("you will no longer be able to participate in global chat.");
+		if (config().WANT_GLOBAL_RULES_AGREEMENT) {
+			globalChatInfo.append(" Make sure to read the rules by typing @cya@::globalrules@whi@ at any time. % %");
+		}
+		globalChatInfo.append("Also, it is possible to change where global chat messages appear with the @cya@::gq@whi@ or @cya@::gp@whi@ commands. % %");
+		globalChatInfo.append("You can send a global chat message by sending a private message to @cya@Global$@whi@ or by typing @cya@::g@whi@ with your message.");
+
+		if (player.getClientLimitations().supportsMessageBox) {
+			ActionSender.sendBox(player, globalChatInfo.toString(), true);
+		} else {
+			for (String info : globalChatInfo.toString().split(" %")) {
+				noMessageBoxPrintLine(player, info);
+			}
+		}
+	}
+
+	private void renameSelf(Player player, String[] args) {
+		if (player.isMod()) return;
+		// Not yet implemented
+		player.message("Not yet implemented to rename self.");
+		player.message("Message a moderator in game, on Discord, or through the forums, to request a name change.");
+	}
+
+	private void bankPinOptIn(Player player) {
+		if (!config().WANT_BANK_PINS && !config().TOLERATE_BANK_PINS) {
+			return;
+		}
+		if (config().TOLERATE_BANK_PINS) {
+			if (player.getBankPinOptIn()) {
+				player.playerServerMessage(MessageType.QUEST, "You already have opted into bank pins!");
+			} else {
+				player.getCache().store("bankpin_optin", true);
+				player.playerServerMessage(MessageType.QUEST, "You have successfully opted into bank pins!");
+			}
+			player.playerServerMessage(MessageType.QUEST, "Talk to a banker to get started.");
+		} else if (config().WANT_BANK_PINS) {
+			if (player.getBankPinOptOut()) {
+				player.getCache().remove("bankpin_optout");
+				if (!player.getBankPinOptOut()) {
+					player.playerServerMessage(MessageType.QUEST, "You can now talk to the banker about bank pins again!");
+				} else {
+					player.playerServerMessage(MessageType.QUEST, "Something went wrong opting-in to bankpins.");
+					player.playerServerMessage(MessageType.QUEST, "Please try opting-in again.");
+				}
+			} else {
+				player.playerServerMessage(MessageType.QUEST, "This server has bank pins enabled by default.");
+				player.playerServerMessage(MessageType.QUEST, "Talk to a banker to get started.");
+			}
+		}
+	}
+
+	private void bankPinOptOut(Player player) {
+		if (!config().WANT_BANK_PINS && !config().TOLERATE_BANK_PINS) {
+			return;
+		}
+		if (player.getCache().hasKey("bank_pin")) {
+			player.playerServerMessage(MessageType.QUEST, "You must first remove your bank pin to do that!");
+			return;
+		}
+		if (config().TOLERATE_BANK_PINS) {
+			if (!player.getCache().hasKey("bankpin_optin")) {
+				player.playerServerMessage(MessageType.QUEST, "You are already opted out of bank pins!");
+				return;
+			}
+			player.playerServerMessage(MessageType.QUEST, "You have successfully opted out of bank pins!");
+			player.getCache().remove("bankpin_optin");
+		} else if (config().WANT_BANK_PINS) {
+			if (player.getCache().hasKey("bankpin_optout")) {
+				player.playerServerMessage(MessageType.QUEST, "You are already opted out of bank pins!");
+				return;
+			}
+			player.playerServerMessage(MessageType.QUEST, "You have successfully opted out of bank pins!");
+			player.getCache().store("bankpin_optout", 3);
+		}
+	}
+
+	private void toggleNpcKcMessages(Player player) {
+		if (config().NPC_KILL_MESSAGES) {
+			if (player.getCache().hasKey("npc_kc_messages")) {
+				boolean currentValue = player.getCache().getBoolean("npc_kc_messages");
+				player.getCache().store("npc_kc_messages", !currentValue);
+				if (currentValue) {
+					// Switching them off
+					player.message(config().MESSAGE_PREFIX + "You have turned @red@off @whi@NPC kill count messages");
+				} else {
+					player.message(config().MESSAGE_PREFIX + "You have turned @gre@on @whi@NPC kill count messages");
+				}
+			} else {
+				player.getCache().store("npc_kc_messages", true);
+				player.message(config().MESSAGE_PREFIX + "You have turned @gre@on @whi@NPC kill count messages");
+			}
+		}
+	}
+
+	private void acceptGlobalChatRules(Player player) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
+		if (!config().WANT_GLOBAL_RULES_AGREEMENT) return;
+		if (player.getCache().hasKey("accepted_global_rules")) {
+			player.message(messagePrefix + "You have already agreed to the global chat rules");
+			if (config().WANT_GLOBAL_FRIEND) {
+				player.message("You can use ::g or the Global$ friend to speak in global chat");
+			} else {
+				player.message("You can use ::g to speak in global chat");
+			}
+			player.message("If you wish to view the global chat rules again, you can use the @cya@::globalrules @whi@command");
+		} else {
+			player.getCache().store("accepted_global_rules", true);
+			player.playerServerMessage(MessageType.QUEST, "Thank you for agreeing to the Global chat rules!");
+			if (config().WANT_GLOBAL_FRIEND) {
+				player.message("You can now use ::g or the Global$ friend to speak in global chat");
+			} else {
+				player.message("You can now use ::g to speak in global chat");
+			}
+		}
+	}
+
+	private void displayGlobalRules(Player player) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
+		if (!config().WANT_GLOBAL_RULES_AGREEMENT) return;
+
+		if (player.getClientLimitations().supportsMessageBox) {
+			StringBuilder rulesBuilder = new StringBuilder();
+			for (String rule : config().GLOBAL_RULES) {
+				rulesBuilder.append(rule);
+				rulesBuilder.append(" %");
+			}
+			ActionSender.sendBox(player, rulesBuilder.toString(), true);
+		} else {
+			for (String rule : config().GLOBAL_RULES) {
+				noMessageBoxPrintLine(player, rule);
+			}
+		}
+	}
+
+	private void noMessageBoxPrintLine(Player player, String line) {
+		// Skip whitespace-only lines
+		if (line.trim().equals("")) {
+			return;
+		}
+		// We need to keep track of how many characters we've printed to the screen
+		int charCount = 0;
+		StringBuilder lineBuilder = new StringBuilder();
+		for (String word : line.split(" ")) {
+			// See how many characters will be on the screen if we were to add this word
+			// Don't forget to add 1 for the space
+			charCount += word.length() + 1;
+			// If it will be more than 85, then we will empty the buffer to the screen and move on to the next line
+			if (charCount >= 85) {
+				player.playerServerMessage(MessageType.QUEST, lineBuilder.toString());
+				charCount = word.length() + 1;
+				lineBuilder.setLength(0);
+			}
+			lineBuilder.append(word);
+			lineBuilder.append(" ");
+		}
+		// If there is anything left afterwards, dump it to the screen
+		if (lineBuilder.length() > 0) {
+			player.playerServerMessage(MessageType.QUEST, lineBuilder.toString());
+		}
+	}
+
+	private void setGlobalOutput(Player player, MessageType questOrPrivate) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
+		if (questOrPrivate.equals(MessageType.QUEST)) {
+			if (player.getCache().hasKey("private_message_global")) {
+				player.getCache().remove("private_message_global");
+				player.message("@cya@Global messages now are received on the @whi@Quest history@cya@ tab.");
+			} else {
+				player.message("@cya@Global messages were already received on the @whi@Quest history@cya@ tab.");
+				player.message("@cya@Type @whi@::gp@cya@ to change this.");
+			}
+		} else if (questOrPrivate.equals(MessageType.PRIVATE_RECIEVE)) {
+			if (!player.getCache().hasKey("private_message_global")) {
+				player.getCache().store("private_message_global", true);
+				player.message("@cya@Global messages now are received on the @whi@Private history@cya@ tab.");
+			} else {
+				player.message("@cya@Global messages were already received on the @whi@Private history@cya@ tab.");
+				player.message("@cya@Type @whi@::gq@cya@ to change this.");
+			}
+		}
+	}
+
+	private void setGlobalMessageColor(Player player, String[] args) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
+		if (args.length >= 1) {
+			player.getCache().store("global_message_color", args[0]);
+			player.message("@cya@Global message color set to " + args[0] + "This color.");
+		} else {
+			if (player.getCache().hasKey("global_message_color")) {
+				player.getCache().remove("global_message_color");
+				player.message("@cya@Global message color reset.");
+			}
+		}
+	}
+
+	private void queryMaxPlayersPerIp(final Player player) {
+		player.playerServerMessage(MessageType.QUEST, String.format("%sMax players per ip: %d", messagePrefix, player.getConfig().MAX_PLAYERS_PER_IP));
+		player.playerServerMessage(MessageType.QUEST, String.format("%sYou have %d player(s) logged in.", messagePrefix, player.getWorld().getServer().getPacketFilter().getPlayersCount(player.getCurrentIP())));
+	}
+
+	private void tellPidlessCatching(Player player) {
+		player.playerServerMessage(MessageType.QUEST, "@ora@Pidless catching is currently @gre@" +
+			(player.getConfig().PIDLESS_CATCHING ? "Enabled" : "Disabled"));
+	}
+
+	private void setLanguage(String command, Player player, String[] args) {
+		if (args.length < 1) {
+			setLanguageBadSyntax(command, player);
+			return;
+		}
+		PreferredLanguage lang = PreferredLanguage.getByLocaleName(args[0]);
+		if (lang == PreferredLanguage.NONE_SET) {
+			setLanguageBadSyntax(command, player);
+			return;
+		}
+
+		if (player.isMod() && args.length >= 2) {
+			Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[1]));
+
+			if (targetPlayer == null) {
+				player.message(messagePrefix + "Invalid name or player is not online");
+				return;
+			}
+
+			if (!targetPlayer.isDefaultUser() && targetPlayer.getUsernameHash() != player.getUsernameHash() && player.getGroupID() >= targetPlayer.getGroupID()) {
+				player.message(messagePrefix + "You can not change the language of a staff member of equal or greater rank.");
+				return;
+			}
+
+			targetPlayer.setPreferredLanguage(lang);
+			targetPlayer.playerServerMessage(MessageType.QUEST, "Your language has been set to " + lang.getLocaleName());
+			player.playerServerMessage(MessageType.QUEST, targetPlayer.getUsername() + " had their language set to @cya@" + lang.getLocaleName());
+		} else {
+			player.setPreferredLanguage(lang);
+			player.playerServerMessage(MessageType.QUEST, "Your language has been set to @cya@" + lang.getLocaleName());
+		}
+	}
+
+	private void setLanguageBadSyntax(String command, Player player) {
+		player.playerServerMessage(MessageType.QUEST, badSyntaxPrefix + command.toUpperCase() + " [language name]");
+		player.playerServerMessage(MessageType.QUEST, "Available language names are:");
+		player.playerServerMessage(MessageType.QUEST, "@yel@\"@cya@en_UK_male@yel@\", \"@cya@en_UK_female@yel@\", \"@cya@en_UK_female_no_misgender@yel@\", and \"@cya@en_UK_gender_neutral@yel@\"");
+	}
+
+	private void getLanguage(String command, Player player, String[] args) {
+		if (player.isMod() && args.length >= 1) {
+			Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[1]));
+
+			if (targetPlayer == null) {
+				player.message(messagePrefix + "Invalid name or player is not online");
+				return;
+			}
+			PreferredLanguage lang = targetPlayer.getPreferredLanguage();
+			if (lang == PreferredLanguage.NONE_SET) {
+				player.playerServerMessage(MessageType.QUEST, targetPlayer.getUsername() + "has not set any custom language settings.");
+			} else {
+				player.playerServerMessage(MessageType.QUEST, targetPlayer.getUsername() + " has their language set to @cya@" + lang.getLocaleName());
+			}
+		} else {
+			PreferredLanguage lang = player.getPreferredLanguage();
+			if (lang == PreferredLanguage.NONE_SET) {
+				player.playerServerMessage(MessageType.QUEST, "You have not set any custom language settings.");
+			} else {
+				player.playerServerMessage(MessageType.QUEST, "Your language set to @cya@" + lang.getLocaleName());
+			}
+		}
+	}
+
+	private void queryGang(Player player) {
+		if (isBlackArmGang(player)) {
+			player.message(messagePrefix + "You are a member of the Black Arm Gang");
+		} else if (isPhoenixGang(player)) {
+			player.message(messagePrefix + "You are a member of the Phoenix Gang");
+		} else {
+			player.message(messagePrefix + "You are not in a gang - you need to start the shield of arrav quest");
+		}
+	}
+
+	private void sendMessageClan(Player player, String[] args) {
+		if (player.getClan() == null) {
+			player.message(messagePrefix + "You are not in a clan.");
+			return;
+		}
+		String message = "";
+		for (String arg : args) {
+			message = message + arg + " ";
+		}
+		player.getClan().messageChat(player, "@cya@" + player.getStaffName() + ":@whi@ " + message);
+	}
+
+	private void acceptClanInvitation(Player player) {
+		if (player.getActiveClanInvite() == null) {
+			player.message(messagePrefix + "You have not been invited to a clan.");
+			return;
+		}
+		player.getActiveClanInvite().accept();
+		player.message(messagePrefix + "You have joined clan " + player.getClan().getClanName());
+	}
+
+	private void acceptPartyInvitation(Player player) {
+		if (player.getActivePartyInvite() == null) {
+			//player.message(messagePrefix + "You have not been invited to a party.");
+			return;
+		}
+		player.getActivePartyInvite().accept();
+		player.message(messagePrefix + "You have joined the party");
+	}
+
+	private void sendClanInvitation(Player player, String command, String[] args) {
+		if (args.length < 1) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [name]");
+			return;
+		}
+
+		long invitePlayer = DataConversions.usernameToHash(args[0]);
+		Player invited = player.getWorld().getPlayer(invitePlayer);
+		if (!player.getClan().isAllowed(1, player)) {
+			player.message(messagePrefix + "You are not allowed to invite into clan " + player.getClan().getClanName());
+			return;
+		}
+
+		if (invited == null) {
+			player.message(messagePrefix + "Invalid name or player is not online");
+			return;
+		}
+
+		ClanInvite.createClanInvite(player, invited);
+		player.message(messagePrefix + invited.getUsername() + " has been invited into clan " + player.getClan().getClanName());
+	}
+
+	private void removePlayerFromClan(Player player, String command, String[] args) {
+		if (args.length < 1) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [name]");
+			return;
+		}
+
+		if (player.getClan() == null) {
+			player.message(messagePrefix + "You are not in a clan.");
+			return;
+		}
+
+		String playerToKick = args[0].replace("_", " ");
+		long kickedHash = DataConversions.usernameToHash(args[0]);
+		Player kicked = player.getWorld().getPlayer(kickedHash);
+		if (!player.getClan().isAllowed(3, player)) {
+			player.message(messagePrefix + "You are not allowed to kick that player.");
+			return;
+		}
+
+		if (player.getClan().getLeader().getUsername().equals(playerToKick)) {
+			player.message(messagePrefix + "You can't kick the leader.");
+			return;
+		}
+
+		player.getClan().removePlayer(playerToKick);
+		player.message(messagePrefix + playerToKick + " has been kicked from clan " + player.getClan().getClanName());
+
+		if (kicked != null)
+			kicked.message(messagePrefix + "You have been kicked from clan " + player.getClan().getClanName());
+	}
+
+	private void queryPlayerInfo(Player player) {
+		long sessionPlay = player.getSessionPlay();
+		long timePlayed = (player.getCache().hasKey("total_played") ?
+			player.getCache().getLong("total_played") : 0) + sessionPlay;
+		long creationDate = player.getWorld().getServer().getDatabase().queryLoadPlayerData(player).creationDate * 1000;
+
+		if (player.getClientLimitations().supportsMessageBox) {
+			ActionSender.sendBox(player,
+				"@lre@Player Information: %"
+					+ " %"
+					+ "@gre@Coordinates:@whi@ " + player.getLocation().toString() + " %"
+					+ "@gre@Creation Date:@whi@ " + DataConversions.dateFormat(creationDate) + " %"
+					+ "@gre@Total Time Played:@whi@ " + DataConversions.getDateFromMsec(timePlayed) + " %"
+				, true);
+		} else {
+			player.playerServerMessage(MessageType.QUEST,"@lre@Player Information:");
+			player.playerServerMessage(MessageType.QUEST,"@gre@Coordinates:@whi@ " + player.getLocation().toString());
+			player.playerServerMessage(MessageType.QUEST,"@gre@Creation Date:@whi@ " + DataConversions.dateFormat(creationDate));
+			player.playerServerMessage(MessageType.QUEST,"@gre@Total Time Played:@whi@ " + DataConversions.getDateFromMsec(timePlayed));
+		}
+	}
+
+	private void queryEvents(Player player) {
+		if (!player.getWorld().EVENT) {
+			player.message(messagePrefix + "There is no event running at the moment");
+			return;
+		}
+		if (player.getLocation().inWilderness()) {
+			player.message(messagePrefix + "Please move out of wilderness first");
+			return;
+		} else if (player.isJailed()) {
+			player.message(messagePrefix + "You can't participate in events while you are jailed.");
+			return;
+		}
+		if (player.getCombatLevel() > player.getWorld().EVENT_COMBAT_MAX || player.getCombatLevel() < player.getWorld().EVENT_COMBAT_MIN) {
+			player.message(messagePrefix + "This event is only for combat level range: " + player.getWorld().EVENT_COMBAT_MIN + " - "
+				+ player.getWorld().EVENT_COMBAT_MAX);
+			return;
+		}
+		player.teleport(player.getWorld().EVENT_X, player.getWorld().EVENT_Y);
+	}
+
+	private void sendMessageGlobal(Player player, String command, String[] args) {
+		if (!config().WANT_GLOBAL_CHAT && !config().WANT_GLOBAL_FRIEND) return;
+
+		String rawMessage = String.join(" ", args).trim();
+		if (rawMessage.isEmpty()) {
+			player.message(badSyntaxPrefix + command + " <message>");
+			return;
+		}
+
+		if (!player.isElligibleToGlobalChat()) return;
+
+		if (config().WANT_GLOBAL_CHAT) {
+			String message = MessageFilter.filter(player, rawMessage, "global chat").trim();
+
+			int channel = command.equalsIgnoreCase("g") ? 1 : 2;
+			String chatLine = formatGlobalChatLine(player, message);
+			for (Player p : player.getWorld().getPlayers()) {
+				if (p.getSocial().isIgnoring(player.getUsernameHash()))
+					continue;
+				if (p.getGlobalBlock() == 3 && channel == 2) {
+					continue;
+				}
+				if (p.getGlobalBlock() == 4 && channel == 1) {
+					continue;
+				}
+				if (p.getGlobalBlock() != 2) {
+					ActionSender.sendMessage(p, null, MessageType.GLOBAL_CHAT, chatLine, 0, null);
+				}
+			}
+
+			if (command.equalsIgnoreCase("g")) {
+				player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(Global) " + message));
+				player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + message));
+				if (player.getWorld().getServer().getDiscordService() != null) {
+					player.getWorld().getServer().getDiscordService().globalChatRelay(player, message);
+				}
+			} else {
+				player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(PKing) " + message));
+				player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(PKing) " + message));
+			}
+		} else if (config().WANT_GLOBAL_FRIEND && command.equalsIgnoreCase("g")) {
+			String message = DataConversions.upperCaseAllFirst(DataConversions.stripBadCharacters(rawMessage));
+			message = MessageFilter.filter(player, message, "global chat");
+
+			player.getWorld().addGlobalMessage(new GlobalMessage(player, message));
+			player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + rawMessage));
+		}
+	}
+
+	private String formatGlobalChatLine(Player player, String message) {
+		return GlobalChatIpFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
+	}
+
+	private void sendMessageParty(Player player, String command, String[] args) {
+		if (player.isMuted()) {
+			if (!player.isShadowMuted()) {
+				player.message(messagePrefix + "You are " + (player.getMuteExpires() == -1 ? "permanently" : "temporarily") + " muted, you cannot send messages");
+				if (player.getMuteExpires() != -1) {
+					player.message("Your mute will expire in " + player.getMinutesMuteLeft() + " minutes.");
+				}
+			}
+			return;
+		}
+		if (player.getCache().hasKey("global_mute") && (player.getCache().getLong("global_mute") - System.currentTimeMillis() > 0 || player.getCache().getLong("global_mute") == -1) && command.equals("g")) {
+			long globalMuteDelay = player.getCache().getLong("global_mute");
+			player.message(messagePrefix + "You are " + (globalMuteDelay == -1 ? "permanently muted" : "temporary muted for " + (int) ((player.getCache().getLong("global_mute") - System.currentTimeMillis()) / 1000 / 60) + " minutes") + " from the ::g chat.");
+			return;
+		}
+		long sayDelay = 0;
+		if (player.getCache().hasKey("say_delay")) {
+			sayDelay = player.getCache().getLong("say_delay");
+		}
+
+		long waitTime = config().GAME_TICK * 2;
+
+		if (player.isPlayerMod()) {
+			waitTime = 0;
+		}
+
+		if (System.currentTimeMillis() - sayDelay < waitTime) {
+			player.message(messagePrefix + "You can only use this command every " + (waitTime / 1000) + " seconds");
+			return;
+		}
+
+		if (player.getLocation().onTutorialIsland() && !player.isMod()) {
+			return;
+		}
+		if (player.getParty() == null) {
+			return;
+		}
+
+		player.getCache().store("say_delay", System.currentTimeMillis());
+
+		StringBuilder newStr = new StringBuilder();
+		for (String arg : args) {
+			newStr.append(arg).append(" ");
+		}
+		newStr = new StringBuilder(newStr.toString().replace('~', ' '));
+		newStr = new StringBuilder(newStr.toString().replace('@', ' '));
+
+		String message = MessageFilter.filter(player, newStr.toString(), "send party with command " + command);
+
+		String channelPrefix = "@whi@[@or1@Party@whi@] ";
+		int channel = command.equalsIgnoreCase("p") ? 1 : 2;
+		for (Player p : player.getWorld().getPlayers()) {
+			if (p.getSocial().isIgnoring(player.getUsernameHash()))
+				continue;
+			if (p.getParty() == player.getParty()) {
+				ActionSender.sendMessage(p, player, MessageType.CLAN_CHAT, channelPrefix + "" + player.getUsername() + ": @or1@" + message, player.getIcon(), null);
+			}
+		}
+
+
+		if (command.equalsIgnoreCase("g")) {
+			player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(Global) " + message));
+			player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(Global) " + message));
+		} else {
+			player.getWorld().getServer().getGameLogger().addQuery(new ChatLog(player.getWorld(), player.getUsername(), "(PKing) " + message));
+			player.getWorld().addEntryToSnapshots(new Chatlog(player.getUsername(), "(PKing) " + message));
+		}
+	}
+
+	private void queryOnlinePlayerCount(Player player) {
+		int players = 0;
+		for (Player targetPlayer : player.getWorld().getPlayers()) {
+			if (appearsInOnlineList(player, targetPlayer)) {
+				players++;
+			}
+		}
+		player.message(messagePrefix + "Players Online: " + players);
+	}
+
+	private void queryUniqueOnlinePlayerCount(Player player) {
+		ArrayList<String> IP_ADDRESSES = new ArrayList<>();
+		for (Player targetPlayer : player.getWorld().getPlayers()) {
+			String currentIp = targetPlayer.getCurrentIP();
+			if (appearsInOnlineList(player, targetPlayer) && currentIp != null && !IP_ADDRESSES.contains(currentIp)) {
+				IP_ADDRESSES.add(currentIp);
+			}
+		}
+		player.message(messagePrefix + "There are " + IP_ADDRESSES.size() + " unique players online");
+	}
+
+	private static boolean appearsInOnlineList(Player player, Player targetPlayer) {
+		if (targetPlayer == null) return false;
+		if (targetPlayer.getUsernameHash() == player.getUsernameHash()) return true;
+		if (player.isMod()) return true;
+		if (targetPlayer.isInvisibleTo(player)) return false;
+
+		byte privacy = targetPlayer.getSettings().getPrivacySetting(
+			PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES,
+			targetPlayer.isUsingCustomClient()
+		);
+
+		if (privacy == PlayerSettings.BlockingMode.None.id()) return true;
+		return privacy == PlayerSettings.BlockingMode.NonFriends.id()
+			&& targetPlayer.getSocial().isFriendsWith(player.getUsernameHash());
+	}
+
+	private void sendClanRequest(Player player, String[] args) {
+		String clanToJoin = args[0].replace("_", " ");
+		if (player.getWorld().getClanManager().getClan(clanToJoin) != null) {
+			if (player.getWorld().getClanManager().getClan(clanToJoin).getAllowSearchJoin() == 0) {
+				ClanInvite.createClanJoinRequest(player.getWorld().getClanManager().getClan(clanToJoin), player);
+			} else {
+				player.message(messagePrefix + "This clan is not accepting join requests");
+			}
+		}
+	}
+
+	private void toggleLootShare(Player player) {
+		if (player.getParty().getPlayer(player.getUsername()).getRank().equals(PartyRank.LEADER)) {
+			for (PartyPlayer m : player.getParty().getPlayers()) {
+				if (m.getShareLoot() > 0) {
+					m.setShareLoot(0);
+					m.getPlayerReference().message("@whi@[@blu@Party@whi@] - @whi@Loot Sharing has been @red@Disabled");
+					ActionSender.sendParty(m.getPlayerReference());
+				} else {
+					m.setShareLoot(1);
+					ActionSender.sendParty(m.getPlayerReference());
+					m.getPlayerReference().message("@whi@[@blu@Party@whi@] - @whi@Loot Sharing has been @gre@Enabled");
+
+				}
+			}
+		}
+	}
+
+	private void toggleExperienceShare(Player player) {
+		if (player.getParty().getPlayer(player.getUsername()).getRank().equals(PartyRank.LEADER)) {
+			for (PartyPlayer m : player.getParty().getPlayers()) {
+				if (m.getShareExp() > 0) {
+					m.setShareExp(0);
+					m.getPlayerReference().message("@whi@[@blu@Party@whi@] - @whi@Exp Sharing has been @red@Disabled");
+					ActionSender.sendParty(m.getPlayerReference());
+				} else {
+					m.setShareExp(1);
+					ActionSender.sendParty(m.getPlayerReference());
+					m.getPlayerReference().message("@whi@[@blu@Party@whi@] - @whi@Exp Sharing has been @gre@Enabled");
+
+				}
+			}
+		}
+	}
+
+	public static void queryOnlinePlayers(Player player, String[] args, boolean wantLocations) {
+		if (args.length > 0) {
+			if (args[0].equalsIgnoreCase("all") || args[0].equalsIgnoreCase("yes") || args[0].equals("1") || args[0].equalsIgnoreCase("true")) {
+				queryOnlinePlayers(player, true, wantLocations);
+				return;
+			}
+		}
+		queryOnlinePlayers(player, false, wantLocations);
+	}
+
+	public static void queryOnlinePlayers(Player player, boolean retroClientListsAll, boolean wantLocations) {
+		int online = 0;
+		ArrayList<Player> players = new ArrayList<>();
+		ArrayList<String> locations = new ArrayList<>();
+		if (player.isMod() && wantLocations) {
+			for (Player targetPlayer : player.getWorld().getPlayers()) {
+				if (targetPlayer.getGroupID() >= player.getGroupID()) {
+					players.add(targetPlayer);
+					locations.add(
+						targetPlayer.getLocation().returnLocationName()
+					);
+					online++;
+				}
+			}
+		} else {
+			for (Player targetPlayer : player.getWorld().getPlayers()) {
+				byte privacy = targetPlayer.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, targetPlayer.isUsingCustomClient());
+
+				boolean privacyAllows = false;
+				if (privacy == PlayerSettings.BlockingMode.None.id()) {
+					privacyAllows = true;
+				} else if (privacy == PlayerSettings.BlockingMode.NonFriends.id() && targetPlayer.getSocial().isFriendsWith(player.getUsernameHash())) {
+					// mods, pmods, admins, may only appear in the online list if their privacy block isn't set to block all
+					if (player.isDefaultUser()) {
+						privacyAllows = true;
+					}
+				}
+				if (targetPlayer.isInvisibleTo(player)) {
+					privacyAllows = false;
+				}
+
+				if (privacyAllows || player.isMod()) {
+					players.add(targetPlayer);
+					locations.add(""); // No locations.
+					online++;
+				}
+			}
+		}
+
+		ActionSender.sendOnlineList(player, players, locations, online, retroClientListsAll);
+	}
+
+	private void confirmQOLOptOut(Player player) {
+		if (player.getQolOptOut()) {
+			player.playerServerMessage(MessageType.QUEST,"You are already opted out of QoL features.");
+			return;
+		}
+
+		if (player.getQolOptOutWarned()) {
+			player.setQolOptOut();
+			player.playerServerMessage(MessageType.QUEST, "@ran@Congratulations! @whi@You have successfully opted out of QoL features.");
+		} else {
+			player.playerServerMessage(MessageType.QUEST, "Please read the warning first with @lre@::qoloptout@whi@.");
+		}
+	}
+
+	private void handleQOLOptOut(Player player) {
+		if (serverHasQOLEnabled()) {
+			StringBuilder qolExplanation = new StringBuilder("@lre@Quality of Life Opt-Out%");
+
+			if (player.getQolOptOut()) {
+				qolExplanation.append(" %@red@ Your account has been opted out of QoL features!% %");
+			}
+			qolExplanation.append("@yel@When opted out of QoL the following applies:%");
+
+			int disablableCount = 0;
+			if (config().RIGHT_CLICK_BANK) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@Accessing the bank more quickly is disabled.%%", disablableCount));
+			}
+			if (config().RIGHT_CLICK_TRADE) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@Right click NPCs to trade with them is disabled.%%", disablableCount));
+			}
+			if (config().WANT_BANK_NOTES) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@Ability to withdraw items as bank notes is disabled.%%", disablableCount));
+			}
+			if (config().FASTER_YOHNUS) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@Yohnus, who owns the shilo furnace, will not be faster.%%", disablableCount));
+			}
+			if (config().WANT_APOTHECARY_QOL) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@The Apothecary will no longer offer to combine vials.%%", disablableCount));
+			}
+			if (config().WANT_BETTER_JEWELRY_CRAFTING) {
+				++disablableCount;
+				qolExplanation.append(String.format("@lre@%d) @whi@Jewelry crafting will always show all options.%%", disablableCount));
+			}
+
+			if (!player.getQolOptOut()) {
+				if (disablableCount <= 5) {
+					// we have room to insert a newline if not every option is enabled.
+					qolExplanation.insert("@lre@Quality of Life Opt-Out%".length(), " %");
+				}
+			}
+
+			// Warning: If more features are added to QoL opt out, you may have to remove some of the following lines to make room.
+			// The entire box height is already filled with text. (6 optout options at time of writing this comment)
+			// Alternatively, you can try to detect how many newlines are in qolExplanation & limit text displayed based off that.
+
+			qolExplanation.append(" %@red@");
+			qolExplanation.append(player.getQolOptOut() ? "Notice:" : "Warning:");
+			qolExplanation.append("@lre@ you will not be able to opt back in%@lre@to QoL features without manual intervention ");
+			qolExplanation.append("from an @or1@administrator@lre@, who may or may not fulfil your request%@lre@to opt back in to QoL features.% %");
+			if (!player.getQolOptOut()) {
+				qolExplanation.append("@whi@If you have read this warning and still wish to opt out,% type @lre@::qoloptoutconfirm @whi@to opt out.% %");
+				qolExplanation.append("@red@If you don't wish to opt out,%@red@ you should @dre@log out now@red@ to avoid accidentally opting out.");
+			}
+
+			ActionSender.sendBox(player, qolExplanation.toString(), true);
+			if (player.getQolOptOut()) {
+				player.playerServerMessage(MessageType.QUEST, "@ran@Congratulations! @whi@Your account is already opted out of QoL features.");
+			} else {
+				player.setQolOptOutWarned(true);
+			}
+
+		} else {
+			player.playerServerMessage(MessageType.QUEST, "@lre@This server doesn't have any QoL features enabled.");
+		}
+	}
+	private boolean serverHasQOLEnabled() {
+		return config().RIGHT_CLICK_BANK
+			|| config().RIGHT_CLICK_TRADE
+			|| config().WANT_BANK_NOTES
+			|| config().FASTER_YOHNUS
+			|| config().WANT_APOTHECARY_QOL
+			|| config().WANT_BETTER_JEWELRY_CRAFTING;
+	}
+
+	private void confirmCertOptOut(Player player) {
+		if (player.getCertOptOut()) {
+			player.playerServerMessage(MessageType.QUEST,"You are already opted out of the traditional 'cert' system");
+			return;
+		}
+
+		if (player.getCertOptOutWarned()) {
+			player.setCertOptOut();
+			player.playerServerMessage(MessageType.QUEST, "@ran@Congratulations! @whi@You have successfully opted out of the traditional 'cert' system");
+		} else {
+			player.playerServerMessage(MessageType.QUEST, "Please read the warning first with @lre@::certoptout@whi@.");
+		}
+	}
+
+	private void handleCertOptOut(Player player) {
+		StringBuilder certExplanation = new StringBuilder("@lre@Traditional 'Cert' System Opt-Out%");
+
+		if (player.getCertOptOut()) {
+			certExplanation.append(" %@red@ Your account has been opted out of the traditional 'cert' system!% %");
+		}
+		certExplanation.append("@yel@When opted out of the traditional 'cert' system %@yel@the following applies:%");
+
+		certExplanation.append(String.format("@lre@0) @whi@Converting items to certificates is disabled.%%"));
+
+		certExplanation.append(String.format("@lre@1) @whi@Trading certificates is disabled.%%"));
+
+		certExplanation.append(String.format("@lre@2) @whi@Picking up certificates dropped by other players is disabled.%%"));
+
+
+		certExplanation.append(" %@red@");
+		certExplanation.append(player.getCertOptOut() ? "Notice:" : "Warning:");
+		certExplanation.append("@lre@ you will not be able to opt back in%@lre@to the traditional 'cert' system without manual intervention ");
+		certExplanation.append("@lre@from an @or1@admin@lre@, who may or may not fulfil your request%@lre@to opt back in to 'cert' system.% %");
+		if (!player.getCertOptOut()) {
+			certExplanation.append("@whi@If you have read this warning and still wish to opt out,% type @lre@::certoptoutconfirm @whi@to opt out.% %");
+			certExplanation.append("@red@If you don't wish to opt out,%@red@ you should @dre@log out now@red@ to avoid accidentally opting out.");
+		}
+
+		ActionSender.sendBox(player, certExplanation.toString(), true);
+		if (player.getCertOptOut()) {
+			player.playerServerMessage(MessageType.QUEST, "@ran@Congratulations! @whi@Your account is already opted out of the traditional 'cert' system.");
+		} else {
+			player.setCertOptOutWarned(true);
+		}
+	}
+
+	private void checkHolidayDrop(Player player) {
+		boolean foundEvent = false;
+		StringBuilder eventDetails = new StringBuilder();
+		List<GameTickEvent> events = player.getWorld().getServer().getGameEventHandler().getEvents();
+		eventDetails.append("% %");
+		for (GameTickEvent event : events) {
+			if (!(event instanceof HolidayDropEvent)) continue;
+
+			foundEvent = true;
+			HolidayDropEvent holidayEvent = (HolidayDropEvent) event;
+
+			eventDetails.append("@yel@There is currently a Holiday Drop Event running:%");
+			eventDetails.append("@lre@Occurs on minute @gre@" + holidayEvent.getMinute() + "@lre@ of each hour%");
+			eventDetails.append("@lre@Total Hours: @gre@" + holidayEvent.getLifeTime() + "@lre@, Elapsed Hours: @gre@" + holidayEvent.getElapsedHours() + "@lre@, Hours Left: @gre@" + Math.abs(holidayEvent.getLifeTimeLeft()));
+
+			StringBuilder itemNamesBuilder = new StringBuilder();
+			for (Integer item : holidayEvent.getItems()) {
+				itemNamesBuilder.append(new Item(item).getDef(player.getWorld()).getName().replaceAll(" ", " @gre@"));
+				itemNamesBuilder.append(" @or3@(");
+				itemNamesBuilder.append(item);
+				itemNamesBuilder.append(")@lre@, @gre@");
+			}
+			String itemNames = itemNamesBuilder.substring(0, itemNamesBuilder.length() - "@lre@, @gre@".length());
+
+			eventDetails.append("%@lre@Items: @gre@" + itemNames);
+			eventDetails.append("% %");
+		}
+		if (foundEvent) {
+			ActionSender.sendBox(player, eventDetails.toString(), true);
+		} else {
+			player.message(messagePrefix + "There is no running Holiday Drop Event");
+		}
+	}
+
+	private void queryGroupIDs(Player player) {
+		ArrayList<String> groups = new ArrayList<>();
+		for (HashMap.Entry<Integer, String> entry : Group.GROUP_NAMES.entrySet()) {
+			groups.add(Group.getStaffPrefix(player.getWorld(), entry.getKey()) + entry.getValue() + (player.isDev() ? " (" + entry.getKey() + ")" : ""));
+		}
+		ActionSender.sendBox(player, "@whi@Server Groups:%" + StringUtils.join(groups, "%"), true);
+	}
+
+	private void queryMinigameLog(Player recipient, String[] args) {
+		Player target;
+		final String noData = "Invalid name or player is not online";
+
+		if (args.length > 0) {
+			target = recipient.getWorld().getPlayer(DataConversions.usernameToHash(args[0]));
+		} else {
+			target = recipient;
+		}
+
+		if (target == null) {
+			recipient.message(noData);
+			return;
+		}
+
+		boolean blockAll = target.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, target.isUsingCustomClient())
+			== PlayerSettings.BlockingMode.All.id();
+		boolean blockNonFriend = target.getSettings().getPrivacySetting(PlayerSettings.PRIVACY_BLOCK_PRIVATE_MESSAGES, target.isUsingCustomClient())
+			== PlayerSettings.BlockingMode.NonFriends.id();
+		if (!recipient.getUsername().equals(target.getUsername())) {
+			if ((blockAll ||
+				(blockNonFriend && !target.getSocial().isFriendsWith(recipient.getUsernameHash())) ||
+				target.getSocial().isIgnoring(recipient.getUsernameHash())) &&
+				!recipient.isMod()) {
+				recipient.message(noData);
+				return;
+			}
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(String.format("@yel@Minigame Log for %s", target.getUsername()));
+		sb.append(" % %@whi@");
+
+		if (target.getWorld().canYield(new Item(ItemId.BAILING_BUCKET.id()))) {
+			int trawlerSuccess = 0, trawlerFailures = 0;
+			if (target.getCache().hasKey("fishing_trawler_success")) {
+				trawlerSuccess = target.getCache().getInt("fishing_trawler_success");
+			}
+			if (target.getCache().hasKey("fishing_trawler_failures")) {
+				trawlerFailures = target.getCache().getInt("fishing_trawler_failures");
+			}
+			sb.append(String.format("Fishing Trawler - successful trips: %d%%", trawlerSuccess));
+			sb.append(String.format("Fishing Trawler - failed trips: %d%%", trawlerFailures));
+			sb.append(" %");
+		}
+
+		if (target.getWorld().canYield(new Item(ItemId.GNOME_BALL.id()))) {
+			int gnomeballGoals = 0;
+			if (target.getCache().hasKey("gnomeball_total_goals")) {
+				gnomeballGoals = target.getCache().getInt("gnomeball_total_goals");
+			}
+			sb.append(String.format("Gnomeball - total goals: %d%%", gnomeballGoals));
+			sb.append(" %");
+		}
+
+		if (target.getWorld().canYield(new Item(ItemId.GIANNE_COOK_BOOK.id()))) {
+			int gnomeRestaurantOrders = 0;
+			if (target.getCache().hasKey("gianne_jobs_completed")) {
+				gnomeRestaurantOrders = target.getCache().getInt("gianne_jobs_completed");
+			}
+			sb.append(String.format("Gnome restaurant - orders delivered: %d%%", gnomeRestaurantOrders));
+			sb.append(" %");
+		}
+
+		if (target.getWorld().canYield(new Item(ItemId.GNOME_COCKTAIL_GUIDE.id()))) {
+			int gnomeBarOrders = 0;
+			if (target.getCache().hasKey("blurberry_jobs_completed")) {
+				gnomeBarOrders = target.getCache().getInt("blurberry_jobs_completed");
+			}
+			sb.append(String.format("Gnome bar - orders delivered: %d%%", gnomeBarOrders));
+			sb.append(" %");
+		}
+
+		if (target.getWorld().canYield(new Item(ItemId.KITTEN.id()))) {
+			int kittensRaised = 0, kittensReleased = 0;
+			if (target.getCache().hasKey("kittens_raised")) {
+				kittensRaised = target.getCache().getInt("kittens_raised");
+			}
+			if (target.getCache().hasKey("kittens_released")) {
+				kittensReleased = target.getCache().getInt("kittens_released");
+			}
+			sb.append(String.format("Kittens - raised to adult cats: %d%%", kittensRaised));
+			sb.append(String.format("Kittens - released to the wild: %d%%", kittensReleased));
+			sb.append(" %");
+		}
+
+		if (target.getConfig().WANT_COMBAT_ODYSSEY) {
+			int odysseyCompletions = CombatOdyssey.getPrestige(target);
+			sb.append(String.format("Odyssey - completions: %d%%", odysseyCompletions));
+			sb.append(" %");
+		}
+
+		ActionSender.sendBox(recipient, sb.toString(), true);
+	}
+
+	private void queryKillList(Player player, String command, String[] args) {
+		if (player.getConfig().NPC_KILL_LIST_LOOKUP_ONLY && args.length == 0) {
+			player.message(config().BAD_SYNTAX_PREFIX + command.toLowerCase() + " [npc name]");
+			return;
+		}
+		if (args.length == 0) {
+			StringBuilder kills = new StringBuilder("NPC Kill List for " + player.getUsername() + " % %");
+			//PreparedStatement statement = player.getWorld().getServer().getDatabaseConnection().prepareStatement(
+			//	"SELECT * FROM `" + config().MYSQL_TABLE_PREFIX + "npckills` WHERE playerID = ? ORDER BY killCount DESC LIMIT 16");
+			//statement.setInt(1, player.getDatabaseID());
+			//ResultSet result = statement.executeQuery();
+			int i=1;
+			for (Map.Entry<Integer, Integer> entry : player.getKillCache().entrySet()) {
+				NPCDef npc = player.getWorld().getServer().getEntityHandler().getNpcDef(entry.getKey());
+				kills.append(npc.getName())
+					.append(" (level ")
+					.append(npc.combatLevel)
+					.append("): ")
+					.append(entry.getValue())
+					.append((i%2==0 ? "%" : ", "));
+				i++;
+			}
+			kills.append("Total Kills: ").append(player.getNpcKills());
+			ActionSender.sendBox(player, kills.substring(0, kills.length()-2).toString(), true);
+		} else {
+			String npcName = StringUtils.replaceChars(String.join(" ", args), '_', ' ');
+			String npcNameLowerCase = npcName.toLowerCase();
+			boolean found = false;
+			for (Map.Entry<Integer, Integer> entry : player.getKillCache().entrySet()) {
+				NPCDef npc = player.getWorld().getServer().getEntityHandler().getNpcDef(entry.getKey());
+				if (npc.getName().toLowerCase().equals(npcNameLowerCase)) {
+					StringBuilder kill = new StringBuilder();
+					kill.append("NPC Kills for ")
+						.append(npc.getName())
+						.append(" (level ")
+						.append(npc.combatLevel)
+						.append("): ")
+						.append(entry.getValue());
+					player.message(kill.toString());
+					found = true;
+				}
+			}
+			if (!found) {
+				StringBuilder kill = new StringBuilder();
+				if (player.getWorld().getServer().getEntityHandler().getNpcNameLowerCase(npcNameLowerCase).equals(npcNameLowerCase)) {
+					 found = true;
+				}
+				if (found) {
+					kill.append("NPC Kills for ")
+						.append(WordUtils.capitalize(npcName))
+						.append(": ")
+						.append(0);
+					player.message(kill.toString());
+				} else {
+					kill.append("The NPC named ")
+						.append(npcName)
+						.append(" could not be found.");
+					player.message(kill.toString());
+				}
+			}
+		}
+	}
+
+	private void pairDiscordID(Player player) {
+		if (player.getCache().hasKey("discordID")) {
+			player.message("Your account is already paired. Please message a mod on discord to unpair.");
+		} else {
+			if (player.getCache().hasKey("pair_token")) {
+				player.message("Your pair token is: " + player.getCache().getString("pair_token"));
+			} else {
+				Random rand = new Random();
+				int tokenLength = 10;
+				StringBuilder builder = new StringBuilder(tokenLength);
+				for (int i = 0; i < tokenLength; i++) {
+					boolean isCharacter = (rand.nextInt(2)) == 1;
+					if (isCharacter) {
+						boolean isCaps = (rand.nextInt(2)) == 1;
+						if (isCaps) {
+							builder.append((char)((rand.nextInt(26)) + 65));
+						} else {
+							builder.append((char)((rand.nextInt(26)) + 97));
+						}
+					} else {
+						builder.append((char)((rand.nextInt(10)) + 48));
+					}
+				}
+
+				player.getCache().store("pair_token", builder.toString());
+
+				try {
+					player.getWorld().getServer().getPlayerService().savePlayerCache(player);
+					player.message("Your pair token is: " + builder.toString());
+				} catch (final GameDatabaseException ex) {
+					LOGGER.catching(ex);
+					player.message("Error while saving token. Please try again or report in Discord.");
+				}
+			}
+		}
+	}
+
+	private void sendMessageDiscord(Player player, String[] args) {
+		if (config().WANT_DISCORD_BOT) {
+			String message = String.join(" ", args);
+			player.getWorld().getServer().getDiscordService().sendMessage("[InGame] " + player.getUsername() + ": " + message);
+
+			for (Player p : player.getWorld().getPlayers()) {
+				ActionSender.sendMessage(p, null, MessageType.GLOBAL_CHAT, "@whi@[@gr2@G>D@whi@] @or1@" + player.getUsername() + "@yel@: " + message, 0, null);
+			}
+		} else {
+			player.message("Discord bot disabled");
+		}
+	}
+
+	private void handleLootBeamCommand(Player player, String[] args) {
+		if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+			showLootBeamHelp(player);
+			return;
+		}
+
+		String action = args[0].toLowerCase();
+		if (action.equals("list")) {
+			showLootBeamList(player);
+			return;
+		}
+		if (action.equals("defaults")) {
+			showLootBeamDefaults(player);
+			return;
+		}
+		if (action.equals("reset")) {
+			LootBeamSettings.reset(player);
+			saveLootBeamSettings(player);
+			player.playerServerMessage(MessageType.QUEST, "@mag@Loot beams restored to the default rare-item list.");
+			return;
+		}
+		if (action.equals("mode")) {
+			handleLootBeamMode(player, args);
+			return;
+		}
+		if (action.equals("add") || action.equals("remove")) {
+			Integer itemId = resolveLootBeamItemId(player, args, 1);
+			if (itemId == null) {
+				return;
+			}
+			if (action.equals("add")) {
+				LootBeamSettings.addItem(player, itemId);
+				saveLootBeamSettings(player);
+				player.playerServerMessage(MessageType.QUEST,
+					"@mag@Loot beam added for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
+			} else {
+				LootBeamSettings.removeItem(player, itemId);
+				saveLootBeamSettings(player);
+				player.playerServerMessage(MessageType.QUEST,
+					"@mag@Loot beam removed for @whi@" + getLootBeamItemLabel(player, itemId) + "@mag@.");
+			}
+			return;
+		}
+
+		showLootBeamHelp(player);
+	}
+
+	private void handleLootBeamMode(Player player, String[] args) {
+		if (args.length < 2
+			|| (!args[1].equalsIgnoreCase(LootBeamSettings.MODE_DEFAULT)
+			&& !args[1].equalsIgnoreCase(LootBeamSettings.MODE_CUSTOM))) {
+			player.message(badSyntaxPrefix + "lootbeam mode default|custom");
+			return;
+		}
+		String mode = args[1].equalsIgnoreCase(LootBeamSettings.MODE_CUSTOM)
+			? LootBeamSettings.MODE_CUSTOM
+			: LootBeamSettings.MODE_DEFAULT;
+		LootBeamSettings.setMode(player, mode);
+		saveLootBeamSettings(player);
+		if (LootBeamSettings.MODE_CUSTOM.equals(mode)) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Loot beams now use only the items you add with ::lootbeam add.");
+		} else {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Loot beams now use the default rare-item list plus your added items.");
+		}
+	}
+
+	private void saveLootBeamSettings(Player player) {
+		try {
+			player.getWorld().getServer().getPlayerService().savePlayerCache(player);
+		} catch (final GameDatabaseException ex) {
+			LOGGER.catching(ex);
+			player.playerServerMessage(MessageType.QUEST,
+				"@or1@Loot beam settings changed for this session, but could not be saved yet.");
+		}
+	}
+
+	private void showLootBeamHelp(Player player) {
+		player.playerServerMessage(MessageType.QUEST, "@mag@Loot beam commands:");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam list@mag@ - show your beam settings");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam add <item>@mag@ - make an item glow");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam remove <item>@mag@ - stop an item glowing");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam mode default|custom@mag@ - choose default or custom-only");
+		player.playerServerMessage(MessageType.QUEST, "@whi@::lootbeam reset@mag@ - restore defaults");
+	}
+
+	private void showLootBeamList(Player player) {
+		StringBuilder box = new StringBuilder();
+		box.append("@yel@Loot beam settings:%");
+		box.append("@whi@Mode: @mag@").append(LootBeamSettings.getMode(player)).append("%");
+		box.append("@whi@Added: @mag@")
+			.append(formatLootBeamItemSet(player, LootBeamSettings.getAddedItemIds(player))).append("%");
+		if (LootBeamSettings.MODE_DEFAULT.equals(LootBeamSettings.getMode(player))) {
+			box.append("@whi@Removed defaults: @mag@")
+				.append(formatLootBeamItemSet(player, LootBeamSettings.getHiddenItemIds(player))).append("%");
+		}
+		box.append("@whi@Use ::lootbeam defaults to see the default rare-item list.%");
+		sendLootBeamBox(player, box.toString());
+	}
+
+	private void showLootBeamDefaults(Player player) {
+		StringBuilder box = new StringBuilder();
+		box.append("@yel@Default loot beam items:%");
+		box.append(formatLootBeamItemSet(player, LootBeamSettings.getDefaultBeamItems())).append("%");
+		sendLootBeamBox(player, box.toString());
+	}
+
+	private void sendLootBeamBox(Player player, String text) {
+		if (player.getClientLimitations().supportsMessageBox) {
+			ActionSender.sendBox(player, text, true);
+			return;
+		}
+		for (String line : text.split("%")) {
+			if (!line.trim().isEmpty()) {
+				player.playerServerMessage(MessageType.QUEST, line);
+			}
+		}
+	}
+
+	private String formatLootBeamItemSet(Player player, Set<Integer> itemIds) {
+		if (itemIds.isEmpty()) {
+			return "none";
+		}
+		List<Integer> sortedItemIds = new ArrayList<>(itemIds);
+		Collections.sort(sortedItemIds);
+		StringBuilder itemList = new StringBuilder();
+		for (int i = 0; i < sortedItemIds.size(); i++) {
+			if (i > 0) {
+				itemList.append(", ");
+			}
+			itemList.append(getLootBeamItemLabel(player, sortedItemIds.get(i)));
+		}
+		return itemList.toString();
+	}
+
+	private String getLootBeamItemLabel(Player player, int itemId) {
+		ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
+		if (itemDef == null) {
+			return "item " + itemId;
+		}
+		return itemDef.getName() + " (" + itemId + ")";
+	}
+
+	private Integer resolveLootBeamItemId(Player player, String[] args, int startIndex) {
+		if (args.length <= startIndex) {
+			player.message(badSyntaxPrefix + "lootbeam add|remove <item id/name>");
+			return null;
+		}
+
+		String query = joinArgs(args, startIndex);
+		Integer numericItemId = parseLootBeamItemId(player, query);
+		if (numericItemId != null) {
+			return numericItemId;
+		}
+
+		String normalizedQuery = normalizeLootBeamItemName(query);
+		List<Integer> partialMatches = new ArrayList<>();
+		for (int itemId = 0; itemId < player.getWorld().getServer().getEntityHandler().items.size(); itemId++) {
+			ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
+			if (itemDef == null || itemDef.getName() == null) {
+				continue;
+			}
+			String normalizedName = normalizeLootBeamItemName(itemDef.getName());
+			if (normalizedName.equals(normalizedQuery)) {
+				return itemId;
+			}
+			if (normalizedName.contains(normalizedQuery)) {
+				partialMatches.add(itemId);
+			}
+		}
+
+		if (partialMatches.size() == 1) {
+			return partialMatches.get(0);
+		}
+		if (partialMatches.size() > 1) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Multiple items matched. Try: @whi@" + formatLootBeamSuggestions(player, partialMatches));
+			return null;
+		}
+
+		player.message(badSyntaxPrefix + "Unknown item: " + query);
+		return null;
+	}
+
+	private Integer parseLootBeamItemId(Player player, String query) {
+		try {
+			int itemId = Integer.parseInt(query);
+			if (player.getWorld().getServer().getEntityHandler().getItemDef(itemId) == null) {
+				player.message(badSyntaxPrefix + "Unknown item ID: " + itemId);
+				return null;
+			}
+			return itemId;
+		} catch (NumberFormatException ignored) {
+			return null;
+		}
+	}
+
+	private String formatLootBeamSuggestions(Player player, List<Integer> itemIds) {
+		int limit = Math.min(5, itemIds.size());
+		StringBuilder suggestions = new StringBuilder();
+		for (int i = 0; i < limit; i++) {
+			if (i > 0) {
+				suggestions.append(", ");
+			}
+			suggestions.append(getLootBeamItemLabel(player, itemIds.get(i)));
+		}
+		if (itemIds.size() > limit) {
+			suggestions.append(", ...");
+		}
+		return suggestions.toString();
+	}
+
+	private String joinArgs(String[] args, int startIndex) {
+		StringBuilder joined = new StringBuilder();
+		for (int i = startIndex; i < args.length; i++) {
+			if (joined.length() > 0) {
+				joined.append(' ');
+			}
+			joined.append(args[i]);
+		}
+		return joined.toString().trim();
+	}
+
+	private void reportBetaBug(Player player, String[] args) {
+		String message = joinArgs(args, 0);
+		if (message.length() == 0) {
+			player.message(badSyntaxPrefix + "bug <what happened>");
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@Example: @whi@::bug Void Knight door stuck after teleporting from ::beta");
+			return;
+		}
+		if (message.length() < 8) {
+			player.message(messagePrefix + "Please include a few more details so we can reproduce it.");
+			return;
+		}
+		if (message.length() > 600) {
+			message = message.substring(0, 600);
+		}
+
+		String reportId = "BUG-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+		long now = System.currentTimeMillis();
+		String safeMessage = message.replace('\n', ' ').replace('\r', ' ').trim();
+		persistBetaBugReport(player, reportId, now, safeMessage);
+		sendBetaBugReportToDiscord(player, reportId, safeMessage);
+		LOGGER.info("[{}] {} reported bug at {},{} client {}: {}",
+			reportId,
+			player.getUsername(),
+			player.getX(),
+			player.getY(),
+			player.getClientVersion(),
+			safeMessage);
+		player.playerServerMessage(MessageType.QUEST,
+			"@gre@Bug report sent. @whi@" + reportId + " @mag@Thank you.");
+	}
+
+	private void persistBetaBugReport(Player player, String reportId, long now, String message) {
+		if (!(player.getWorld().getServer().getDatabase() instanceof JDBCDatabase)) {
+			return;
+		}
+		JDBCDatabase database = (JDBCDatabase) player.getWorld().getServer().getDatabase();
+		try {
+			database.withPreparedStatement(
+				"INSERT INTO bug_reports "
+					+ "(report_id, time, reporter_id, reporter, server_name, x, y, floor, client_version, category, private_report, status, message) "
+					+ "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				statement -> {
+					statement.setString(1, reportId);
+					statement.setLong(2, now);
+					statement.setInt(3, player.getDatabaseID());
+					statement.setString(4, player.getUsername());
+					statement.setString(5, player.getWorld().getServer().getConfig().SERVER_NAME);
+					statement.setInt(6, player.getX());
+					statement.setInt(7, player.getY());
+					statement.setInt(8, Formulae.getHeight(player.getLocation()));
+					statement.setInt(9, player.getClientVersion());
+					statement.setString(10, "bug");
+					statement.setInt(11, 0);
+					statement.setString(12, "new");
+					statement.setString(13, message);
+					statement.executeUpdate();
+				}
+			);
+		} catch (GameDatabaseException ex) {
+			LOGGER.warn("Could not persist beta bug report {} from {}", reportId, player.getUsername(), ex);
+		}
+	}
+
+	private void sendBetaBugReportToDiscord(Player player, String reportId, String message) {
+		if (player.getWorld().getServer().getDiscordService() == null) {
+			return;
+		}
+		String discordMessage = String.format(
+			"**%s** `%s` reported a bug in `%s` at `%d,%d` floor `%d` client `%d`:%n%s",
+			reportId,
+			player.getUsername(),
+			player.getWorld().getServer().getConfig().SERVER_NAME,
+			player.getX(),
+			player.getY(),
+			Formulae.getHeight(player.getLocation()),
+			player.getClientVersion(),
+			message
+		);
+		player.getWorld().getServer().getDiscordService().bugReportLog(discordMessage);
+	}
+
+	private String normalizeLootBeamItemName(String name) {
+		return name.toLowerCase().replaceAll("[^a-z0-9]+", "");
+	}
+
+	private void queryCommands(Player player, int page) {
+		if (page == 0) {
+			if (player.getClientLimitations().supportsMessageBox) {
+				ActionSender.sendBox(player, String.join("", pageZeroCommands), true);
+			} else {
+				for (String command : pageZeroCommands) {
+					player.playerServerMessage(MessageType.QUEST, command.replace("%", ""));
+					delay(2);
+				}
+			}
+			int cont = multi(player, "continue reading", "finished reading");
+			if (cont == 0) {
+				queryCommands(player, 1);
+			}
+		} else if (page == 1) {
+			if (player.getClientLimitations().supportsMessageBox) {
+				ActionSender.sendBox(player, String.join("", pageOneCommands), true);
+			} else {
+				for (String command : pageOneCommands) {
+					player.playerServerMessage(MessageType.QUEST, command.replace("%", ""));
+					delay(2);
+				}
+			}
+		}
+
+	}
+
+	private void setClientVersion(Player player, String[] args) {
+		int currentVersion = player.getClientVersion();
+		int desiredVersion = 0;
+		if (currentVersion > 14 && currentVersion < 93) {
+			if (args.length < 1) {
+				player.message(badSyntaxPrefix + "setversion" + " [clientVersion]");
+				return;
+			}
+
+			try {
+				desiredVersion = Integer.parseInt(args[0]);
+			} catch (NumberFormatException nfe) {
+				player.message(badSyntaxPrefix + "setversion" + " [clientVersion]");
+				return;
+			}
+
+			if (desiredVersion > 14 && desiredVersion < 93) {
+				player.setClientVersion(desiredVersion);
+				player.message("The client version was successfully set to " + desiredVersion + "!");
+				player.message("For best user experience, issue the setversion command when switching versions");
+				player.getCache().set("client_version", desiredVersion);
+			} else {
+				player.message("The requested client version is out of bounds of what we think your client could be.");
+				player.message("Select a protocol version between 14 and 93."); // TODO: can probably restrict this narrower depending on what the detected version was
+			}
+		} else {
+			player.message("Sorry this command is only for old clients");
+		}
+	}
+
+	private void skipTutorial(Player player) {
+		if (player.getLocation().onTutorialIsland()) {
+			player.setBusy(false);
+			if (!player.skipTutorial()) {
+				player.message("Unable to skip tutorial at this time.");
+			}
+		}
+	}
+
+	private void setOldTrade(Player player) {
+		player.getCache().store("last_noconfirm", System.currentTimeMillis());
+		player.message("You have set trading to not require confirm");
+		player.message("This will last for 5 minutes");
+	}
+
+	private void tellCoordinates(Player player) {
+		if (player.isDev()) return;
+		player.tellCoordinates();
+	}
+
+	private void toggleReceipts(Player player) {
+		boolean toggledShow = !player.getShowReceipts();
+		if (toggledShow) {
+			player.playerServerMessage(MessageType.QUEST, "You will now get receipts when selling/buying at the shop");
+		} else {
+			player.playerServerMessage(MessageType.QUEST, "You will no longer get receipts when selling/buying at the shop");
+		}
+		player.setShowReceipts(toggledShow);
+	}
+
+	private static final String[] pageZeroCommands = new String[]{
+		"@yel@Commands available: %",
+		"@lre@Type :: before you enter your command, see the list below. %",
+		" %", // this adds a line of whitespace for readability
+		"@whi@::gameinfo - shows player and server information %",
+		"@whi@::leave - leaves PK catching practice early %",
+		"@whi@::online - shows players currently online %",
+		"@whi@::uniqueonline - shows number of unique IPs logged in %",
+		"@whi@::onlinelist - shows players currently online in a list %",
+		"@whi@::beta - opens the Voidscape beta guide menu %",
+		"@whi@::bug <message> - sends a beta bug report %",
+		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
+		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
+		"@whi@::c <message> - talk in clan chat %",
+		"@whi@::p <message> - talk in party chat %",
+		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
+		"@whi@::wilderness - shows the wilderness activity %",
+		"@whi@::arena - enter ranked Void Arena %",
+		"@whi@::event - to enter an ongoing server event %",
+		"@whi@::kills - shows kill counts of npcs %",
+		"@whi@::qoloptout - opts you out of Quality of Life features %",
+		"@whi@::certoptout - opts you out of the traditional 'cert' system %"
+	};
+
+	private static final String[] pageOneCommands = new String[]{
+		"@yel@Commands available: %",
+		"@lre@Type :: before you enter your command, see the list below. %",
+		" %", // this adds a line of whitespace for readability
+		"@whi@::time - shows the current server time %",
+		"@whi@::toggleglobalchat - toggle receiving global chat %",
+		"@whi@::toggleblockchat - toggle blocking all chat messages %",
+		"@whi@::toggleblockprivate - toggle block all private messages %",
+		"@whi@::toggleblocktrade - toggle blocking all trade requests %",
+		"@whi@::toggleblockduel - toggle blocking all duel requests %",
+		"@whi@::rested - show rested XP status %",
+		"@whi@::titles - view and equip unlocked titles %",
+		"@whi@::lootbeam - customize rare drop loot beams %",
+		"@whi@::groups - shows available ranks on the server %",
+		"@whi@::togglereceipts - toggle showing shop receipts %"
+	};
+}

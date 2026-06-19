@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "friend row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\friends\\friend-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\friends\\friend-row\\asset-green.png"
+  },
+  {
+    "asset": "remove action button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\friends\\remove-action-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\friends\\remove-action-button\\asset-green.png"
+  }
+]

@@ -1,0 +1,12 @@
+Use case: stylized-concept
+Asset type: RuneScape Classic-style topbar account switching button sprite
+Primary request: Generate a complete new replacement account/profile switching topbar button from scratch. Do not reuse, trace, recolor, repaint, or composite the old button art. The entire frame, interior, profile glyph, dropdown arrow, highlights, and shadows must be newly drawn.
+Input images: The reference image shows the live Voidscape top menu icon style and the old account button only for rough proportions and function.
+Subject: A wide horizontal game UI button with a dark obsidian/charcoal fantasy metal frame, gold bevel details, subtle purple highlights, a stylized account/profile glyph on the left, and a small dropdown triangle/chevron on the right.
+Style/medium: crisp pixel-art fantasy UI, matching the new Voidscape topbar icons: dark blue-black metal, worn gold trim, violet gem accents, chunky readable forms, high-contrast pixel edges.
+Composition/framing: single centered 2:1 horizontal button, designed to downscale cleanly to 108x54 and 72x40. Keep the profile glyph clearly separated from the dropdown arrow. Leave transparent/chroma-key space outside the button silhouette.
+Scene/backdrop: perfectly flat solid #00ff00 chroma-key background only outside the button.
+Color palette: charcoal, dark navy, muted violet, antique gold, small bright purple accents; no green anywhere in the button itself.
+Text: none.
+Constraints: exact single button only; no labels; no words; no extra icons; no character portrait outside the button; no UI panels; no screenshot frame; no old purple bust silhouette; no copied old frame corners. The whole visible button should feel like it belongs beside the new wrench, smiley, bars, spellbook, map, and backpack icons.
+Avoid: gradients or shadows in the #00ff00 background, watermark, signature, text, duplicate buttons, cropped button, perspective tilt, photorealism, flat vector art.

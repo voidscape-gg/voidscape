@@ -1,0 +1,9 @@
+Use the Voidscape art brief.
+
+Asset: Void portal arch
+Description: A CC0 low-poly stone arch recolored as a Voidscape portal frame.
+Target: untextured OB3 scenery with a solid open arch silhouette, deep violet
+stone, dark gunmetal shadows, and restrained gold accents.
+
+Source candidate: https://poly.pizza/m/uS8wgBVxOL
+License: Public Domain (CC0)

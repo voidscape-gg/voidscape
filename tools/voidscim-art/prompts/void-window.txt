@@ -1,0 +1,28 @@
+Recreate the reference image as a "Void Stained Glass Window" — a tall stained-glass cathedral window with a glowing pentagram, embedded in a stone wall, for a cult temple in a RuneScape Classic-style game. The reference is a brick wall texture; the new texture should look like the stone wall has a TALL ARCHED WINDOW carved into its center, filled with stained glass.
+
+CRITICAL — NO PURE BLACK: the engine treats RGB(0,0,0) as transparent. Darkest opaque color must be RGB(15, 5, 25), never pure black.
+
+LAYOUT:
+- Outer area (top, bottom, left edges): void brick wall, same palette as the surrounding sanctum walls — dark void purple bricks RGB(50, 25, 80) with slightly brighter highlights and dark indigo mortar.
+- Central window: a TALL ROUND-ARCHED window opening, ~70% of canvas height and ~50% of canvas width, centered horizontally.
+- Inside the window: stained-glass design featuring:
+  • A LARGE GLOWING PENTAGRAM filling the lower half of the window — bright magenta-purple lines RGB(240, 120, 255) with dark void interiors between the lines
+  • Above the pentagram, in the upper half: 3-4 vertical lead-lined glass panels in alternating colors:
+    - Deep amethyst purple RGB(120, 50, 200)
+    - Bright magenta-purple RGB(220, 90, 255)
+    - Pale lavender RGB(220, 180, 255)
+  • Thin black/dark lead lines between panels (use very-dark indigo RGB(15, 8, 30), NOT pure black)
+- Stone window frame: 2-3 pixel thick void-brick border around the entire window opening, slightly lighter than the surrounding wall to look "highlighted"
+
+PALETTE (strict, no other hues):
+- Wall mortar: RGB(20, 8, 38)
+- Wall brick: RGB(50, 25, 80)
+- Wall highlight: RGB(110, 50, 160)
+- Window deep: RGB(120, 50, 200)
+- Window bright: RGB(220, 90, 255)
+- Window pale: RGB(220, 180, 255)
+- Lead lines: RGB(15, 8, 30)
+
+STYLE: FLAT pixel art viewed straight-on. NO 3D, NO smooth gradients, chunky 1x1 to 2x2 blocks. Limited palette ~16-32 colors.
+
+NO TEXT, no other symbols, no figures — just brick wall framing a stained-glass arched window with a pentagram. Whole 1024×1024 canvas filled.

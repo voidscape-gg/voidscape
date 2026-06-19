@@ -1,0 +1,10 @@
+Use case: ui-mockup
+Asset type: isolated game UI asset for the Default HUD
+Primary request: create one reusable asset: bottom chat tab selected state.
+Input images: Image 1 is the approved UI concept. Additional images, if present, are style references.
+Scene/backdrop: perfectly flat solid #00FF00 chroma-key background only.
+Style/medium: crisp pixel-art-inspired dark fantasy UI asset, dark wrought iron/obsidian, pale gold trim, deep violet accents, small purple gems where appropriate.
+Geometry: one empty wide low chat-tab button sized for a short label; no speech bubbles, no text, no full chatbox.
+Composition/framing: centered asset with generous padding, no cast shadow on the background, no text unless the asset name explicitly requires decorative text.
+Constraints: the background must be one uniform #00FF00 with no gradients, no shadows, no texture, no floor plane. Do not use green inside the asset. Do not use pure #000000 or #FF00FF in the asset. Hard readable silhouette at small in-game size.
+Avoid: full screenshots, panels with embedded gameplay, icon rows unless explicitly requested, soft glow spilling into the background, thin ornamental clutter, baked labels.

@@ -1,0 +1,47 @@
+[
+  {
+    "asset": "outer panel frame",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\outer-panel-frame\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\outer-panel-frame\\asset-green.png"
+  },
+  {
+    "asset": "panel title plaque",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\panel-title-plaque\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\panel-title-plaque\\asset-green.png"
+  },
+  {
+    "asset": "sub-tab strip normal state",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\sub-tab-strip-normal-state\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\sub-tab-strip-normal-state\\asset-green.png"
+  },
+  {
+    "asset": "sub-tab strip selected state",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\sub-tab-strip-selected-state\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\sub-tab-strip-selected-state\\asset-green.png"
+  },
+  {
+    "asset": "section header strip",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\section-header-strip\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\section-header-strip\\asset-green.png"
+  },
+  {
+    "asset": "list row background",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\list-row-background\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\list-row-background\\asset-green.png"
+  },
+  {
+    "asset": "thin divider line",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\thin-divider-line\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\thin-divider-line\\asset-green.png"
+  },
+  {
+    "asset": "scrollbar track",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\scrollbar-track\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\scrollbar-track\\asset-green.png"
+  },
+  {
+    "asset": "scrollbar thumb",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\common\\scrollbar-thumb\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\common\\scrollbar-thumb\\asset-green.png"
+  }
+]

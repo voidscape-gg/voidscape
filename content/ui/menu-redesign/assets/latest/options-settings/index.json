@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "modal backdrop frame",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\modal-backdrop-frame\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\modal-backdrop-frame\\asset-green.png"
+  },
+  {
+    "asset": "category rail button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\category-rail-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\category-rail-button\\asset-green.png"
+  },
+  {
+    "asset": "checkbox/toggle glyph",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\checkbox-toggle-glyph\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\options-settings\\checkbox-toggle-glyph\\asset-green.png"
+  }
+]

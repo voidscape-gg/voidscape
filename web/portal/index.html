@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Play the Voidscape Beta</title>
+		<meta name="description" content="Download the Voidscape desktop launcher or Android APK and play the public beta. Join Discord only if you want beta rewards, roles, and community updates.">
+		<link rel="icon" href="assets/favicon.png">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap" rel="stylesheet">
+		<link rel="preload" as="image" href="assets/generated/hero-rsc-skeleton-void.jpg">
+		<link rel="preload" as="image" href="assets/prelaunch/voidscape-launcher-logo.png">
+		<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="portal-shell">
+		<aside class="sidebar" aria-label="Portal navigation">
+			<a class="brand-lockup" href="#dashboard" data-view-link="dashboard" aria-label="Voidscape account portal home">
+				<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+			</a>
+
+			<div class="server-pill" hidden>
+				<span class="status-dot"></span>
+				<span id="server-world-label">World 1</span>
+				<strong id="server-online-count">247 online</strong>
+			</div>
+
+			<nav class="nav-list">
+				<button class="nav-item is-active" type="button" data-view-link="dashboard">
+					<span class="nav-mark account"></span>
+					<span>Account</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="characters">
+					<span class="nav-mark characters"></span>
+					<span>Characters</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="subscription">
+					<span class="nav-mark subscription"></span>
+					<span>Subscription</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="security">
+					<span class="nav-mark security"></span>
+					<span>Security</span>
+				</button>
+				<button class="nav-item" type="button" data-view-link="admin">
+					<span class="nav-mark staff"></span>
+					<span>Staff</span>
+				</button>
+			</nav>
+
+			<div class="sidebar-card">
+				<img src="assets/subscription-card.png" alt="" aria-hidden="true">
+				<p>Member status</p>
+				<strong id="sidebar-sub-time">6 days 21 hours</strong>
+				<button class="mini-button" type="button" data-view-link="subscription">Manage</button>
+			</div>
+		</aside>
+
+		<header class="topbar">
+			<div class="topbar-cluster">
+				<button id="menu-toggle" class="icon-button mobile-only" type="button" aria-label="Toggle navigation"></button>
+				<div>
+					<p class="eyebrow">Account portal</p>
+					<h1 id="view-title">Account</h1>
+				</div>
+			</div>
+			<div class="account-strip">
+				<span class="patch-chip" id="patch-chip" hidden>Patch 0.8.7</span>
+				<span class="rank-chip" hidden>Admin preview</span>
+				<div class="account-avatar" aria-hidden="true">Z</div>
+				<div class="account-copy">
+					<strong id="account-name">Zamak42</strong>
+					<span id="account-email">void@example.com</span>
+				</div>
+			</div>
+		</header>
+
+		<main class="workspace">
+				<section id="account" class="view is-active prelaunch-view" data-title="Public Beta">
+					<div class="prelaunch-page landing-redesign" aria-label="Voidscape public beta access">
+						<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
+						<div class="prelaunch-vignette" aria-hidden="true"></div>
+
+						<div class="prelaunch-content landing-page-inner">
+							<header class="landing-nav" id="home">
+								<a class="landing-brand" href="#home" data-landing-scroll="home" aria-label="Voidscape home">
+									<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+								</a>
+								<nav class="landing-nav-links" aria-label="Landing sections">
+									<button type="button" data-landing-scroll="beta-access">Download</button>
+									<button type="button" data-landing-scroll="gameplay">Screenshots</button>
+									<a href="/transparency">Trust</a>
+									<button type="button" data-landing-scroll="rewards">Rewards</button>
+									<button type="button" data-discord-login>Discord rewards</button>
+								</nav>
+								<a class="landing-nav-cta" href="/downloads/launcher" download>Download</a>
+							</header>
+
+							<section class="landing-hero" aria-labelledby="landing-hero-title">
+								<div class="landing-hero-copy">
+									<p class="landing-kicker">Public beta</p>
+									<h1 id="landing-hero-title">Play the <span>Voidscape</span> beta.</h1>
+									<p class="landing-hero-proof">
+										<span>Download instantly.</span>
+										<span>Play on desktop or Android.</span>
+										<span>Discord rewards are optional.</span>
+									</p>
+									<div class="landing-hero-actions">
+										<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
+										<a class="landing-button landing-button-primary landing-button-android" href="/downloads/android-apk" download>Android APK</a>
+									</div>
+								</div>
+							</section>
+
+							<section class="landing-gameplay whitepaper-remix" id="gameplay" aria-labelledby="landing-gameplay-title">
+								<p class="landing-kicker">Current build</p>
+								<h2 id="landing-gameplay-title">See the game first.</h2>
+								<div class="landing-gameplay-grid">
+									<figure>
+										<img src="assets/whitepaper/feature-void-enclave-current.png" loading="lazy" decoding="async" alt="Void Enclave hub in the current Voidscape client.">
+										<figcaption><strong>Explore Void Island</strong><span>Start in the current beta hub and branch into the world.</span></figcaption>
+									</figure>
+									<figure>
+										<img src="assets/whitepaper/feature-void-colossus-current.png" loading="lazy" decoding="async" alt="Void Colossus fight in the current Voidscape client.">
+										<figcaption><strong>Fight bosses</strong><span>Test PvM, drops, combat pacing, and group pressure.</span></figcaption>
+									</figure>
+									<figure>
+										<img src="assets/whitepaper/feature-auction-house-current.png" loading="lazy" decoding="async" alt="Auction House in the current Voidscape client.">
+										<figcaption><strong>Build your account</strong><span>Train, trade, gear up, and help tune the economy.</span></figcaption>
+									</figure>
+								</div>
+							</section>
+
+							<section class="landing-access-band" id="beta-access" aria-label="Download Voidscape">
+								<div class="beta-countdown" id="beta-countdown" hidden aria-live="polite">
+									<span>Beta begins in</span>
+									<div class="beta-countdown-grid" aria-label="Countdown until beta testing opens">
+										<div><strong id="beta-countdown-days">--</strong><em>Days</em></div>
+										<div><strong id="beta-countdown-hours">--</strong><em>Hours</em></div>
+										<div><strong id="beta-countdown-minutes">--</strong><em>Minutes</em></div>
+										<div><strong id="beta-countdown-seconds">--</strong><em>Seconds</em></div>
+									</div>
+									<p class="beta-signup-counter" id="beta-signup-counter" hidden>
+										<strong id="beta-signup-count">132</strong>
+										<span>accounts signed up for beta</span>
+									</p>
+									<p id="beta-countdown-note">Discord is only needed for rewards and community access.</p>
+								</div>
+
+								<div class="landing-card-promo">
+									<div>
+										<p class="landing-kicker">Free</p>
+										<strong>1-week subscription card</strong>
+										<span>All beta testers get a code that remains valid for the real release.</span>
+									</div>
+								</div>
+
+								<div class="landing-public-downloads" aria-label="Download Voidscape without Discord login">
+									<span>No Discord login required</span>
+									<strong>Download Voidscape</strong>
+									<p>Grab the desktop launcher or Android APK first. Join Discord after that for your beta role, reward code, patch notes, and bug reports.</p>
+									<div class="landing-public-download-grid" id="download-actions">
+										<a class="ghost-button download-action is-ready" href="/downloads/launcher" download>
+											<strong>Voidscape launcher</strong>
+											<span>Desktop download</span>
+										</a>
+										<a class="ghost-button download-action is-ready" href="/downloads/android-apk" download>
+											<strong>Android APK</strong>
+											<span>Android download</span>
+										</a>
+									</div>
+									<div class="landing-reward-prompt">
+										<span>Optional</span>
+										<button class="ghost-button" type="button" data-discord-login>Claim rewards with Discord</button>
+									</div>
+								</div>
+
+								<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
+									<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
+									<div class="prelaunch-signup-content">
+										<h2 id="founder-title">Join the public beta</h2>
+										<div class="account-mode sr-only" role="tablist" aria-label="Portal account mode">
+											<button class="is-active" type="button" data-account-mode="reserve">Create</button>
+											<button type="button" data-account-mode="signin">Sign in</button>
+										</div>
+										<div class="prelaunch-fields">
+											<label class="prelaunch-field" id="founder-name-row">
+												<span>Username to reserve</span>
+												<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
+											</label>
+											<label class="prelaunch-field" id="founder-email-row">
+												<span>Email</span>
+												<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
+											</label>
+											<input id="founder-password" type="hidden" autocomplete="new-password">
+											<button class="prelaunch-manage prelaunch-submit" type="submit" id="founder-submit">Reserve &amp; get my code</button>
+										</div>
+										<p class="prelaunch-state" id="founder-message">Downloads are instant. Connect Discord only to get your beta role and release-valid free 1-week subscription card code.</p>
+										<div class="prelaunch-success" id="prelaunch-success" hidden>
+											<h2>Your username is reserved</h2>
+											<p>Log in and speak to the Subscription Vendor in Lumbridge to claim your free 1-week subscription card.</p>
+											<div class="prelaunch-success-meta" aria-label="Reserved card details">
+												<span>Email <strong id="prelaunch-success-account">-</strong></span>
+												<span>Reserved <strong id="prelaunch-success-name">-</strong></span>
+												<span>Status <strong id="prelaunch-success-status">Password needed</strong></span>
+											</div>
+											<div class="signup-code-block" id="signup-code-block" hidden>
+												<span class="signup-code-label">Your subscription card code</span>
+												<div class="copy-row">
+													<strong class="signup-code" id="prelaunch-success-code">-</strong>
+													<button class="ghost-button" type="button" id="copy-signup-code">Copy</button>
+												</div>
+												<p class="signup-code-help" id="signup-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.</p>
+											</div>
+											<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
+												<label class="prelaunch-field">
+													<span>Game password</span>
+													<input id="prelaunch-game-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
+												</label>
+												<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
+											</div>
+											<div class="prelaunch-success-actions" id="prelaunch-success-actions">
+												<a class="prelaunch-download" id="prelaunch-download" href="/downloads/launcher" download>Download launcher</a>
+												<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
+											</div>
+										</div>
+										<div class="referral-notice prelaunch-referral" id="referral-notice" hidden>
+											<span>Invite code active</span>
+											<strong id="referral-code"></strong>
+											<button class="ghost-button" type="button" id="clear-referral">Clear</button>
+										</div>
+										<div class="founder-progress prelaunch-progress" hidden>
+											<div>
+												<span id="founder-progress-label">0 / 2 invites</span>
+												<strong id="founder-reward-label">Reward locked</strong>
+											</div>
+											<div class="meter-track"><span id="founder-progress-fill"></span></div>
+										</div>
+										<label class="prelaunch-invite-link" hidden>
+											<span>Invite link</span>
+											<div class="copy-row">
+												<input id="founder-link" readonly>
+												<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
+											</div>
+										</label>
+										<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
+									</div>
+								</form>
+							</section>
+
+							<section class="landing-trust-teaser" id="trust" aria-labelledby="landing-trust-title">
+								<div>
+									<p class="landing-kicker">Community trust</p>
+									<h2 id="landing-trust-title">Transparency without making the ad page heavy.</h2>
+									<p>Build hashes, staff command summaries, item receipts, and economy scans live on a dedicated public page.</p>
+								</div>
+								<a class="landing-button landing-button-secondary" href="/transparency">View Transparency</a>
+							</section>
+
+							<section class="landing-feature-strip" id="features" aria-labelledby="landing-features-title">
+								<h2 id="landing-features-title">Why join the Discord?</h2>
+									<div class="landing-feature-grid">
+										<article>
+											<img src="assets/prelaunch/benefit-subscription.png" alt="" aria-hidden="true">
+											<strong>Free beta reward</strong>
+											<span>Claim a release-valid 1-week subscription card.</span>
+										</article>
+										<article>
+											<img src="assets/prelaunch/benefit-reserve.png" alt="" aria-hidden="true">
+											<strong>Beta tester role</strong>
+											<span>Get community access and beta patch updates.</span>
+										</article>
+										<article>
+											<img src="assets/whitepaper/feature-void-herald-current.png" alt="" aria-hidden="true">
+											<strong>Bug reports</strong>
+											<span>Send feedback where the team is watching.</span>
+										</article>
+										<article>
+											<img src="assets/prelaunch/benefit-invite.png" alt="" aria-hidden="true">
+											<strong>Referral rewards</strong>
+											<span>Bring friends and earn extra tester codes.</span>
+										</article>
+								</div>
+							</section>
+
+							<section id="whitepaper" class="landing-whitepaper landing-whitepaper-compact whitepaper-remix whitepaper-view" aria-label="Voidscape whitepaper">
+								<div class="landing-section-head">
+									<p class="landing-kicker">Whitepaper</p>
+									<h2>Keep the Classic. Finish the loop.</h2>
+									<p>Voidscape is a focused public beta for the systems that make Classic feel social again: risk, supply, markets, status, and friction that earns its place.</p>
+								</div>
+								<nav class="whitepaper-remix-nav landing-paper-nav" aria-label="Whitepaper flow">
+									<button type="button" data-whitepaper-jump="whitepaper-unfinished">Classic</button>
+									<button type="button" data-whitepaper-jump="whitepaper-loop">Loop</button>
+									<button type="button" data-whitepaper-jump="whitepaper-blueprint">Beta</button>
+									<button type="button" data-whitepaper-jump="whitepaper-vision">Vision</button>
+									<button type="button" data-whitepaper-jump="whitepaper-proof">Proof</button>
+								</nav>
+								<div class="landing-paper-grid">
+									<article id="whitepaper-unfinished">
+										<span>01</span>
+										<strong>Classic stayed dangerous.</strong>
+										<p>We keep the old rhythm: distance, inventory pressure, social memory, and risk that changes how people act.</p>
+									</article>
+									<article id="whitepaper-loop">
+										<span>02</span>
+										<strong>The loop needed gravity.</strong>
+										<p>Skillers supply combat. Combat consumes supplies. PvM, PvP, and trade pull value back through the world.</p>
+									</article>
+									<article id="whitepaper-blueprint">
+										<span>03</span>
+										<strong>The beta is connected.</strong>
+										<p>Discord login grants the beta role, reward code, tester references, and release-valid code history. Downloads stay open to everyone.</p>
+									</article>
+									<article id="whitepaper-vision">
+										<span>04</span>
+										<strong>The world grows by pressure.</strong>
+										<p>New content has to strengthen the cycle: prepare, risk, recover, trade, flex, repeat.</p>
+									</article>
+								</div>
+								<div class="landing-proof-row" id="whitepaper-proof">
+									<figure>
+										<img src="assets/whitepaper/feature-bank-loadouts-current.png" loading="lazy" decoding="async" alt="Bank loadouts screen in the current Voidscape client.">
+										<figcaption><strong>Bank loadouts</strong><span>Prepare faster without removing the old stakes.</span></figcaption>
+									</figure>
+									<figure>
+										<img src="assets/whitepaper/feature-player-titles-current.png" loading="lazy" decoding="async" alt="Player titles screen in the current Voidscape client.">
+										<figcaption><strong>Player titles</strong><span>Status and achievements that show in the world.</span></figcaption>
+									</figure>
+								</div>
+							</section>
+
+							<section class="landing-final" id="rewards" aria-label="Claim Voidscape beta rewards">
+								<div>
+									<p class="landing-kicker">Optional rewards</p>
+									<h2>Play first. Claim rewards when you are ready.</h2>
+								</div>
+								<div class="landing-final-actions">
+									<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
+									<button class="landing-button landing-button-secondary" type="button" data-discord-login>Claim Rewards</button>
+								</div>
+							</section>
+
+							<section class="beta-hub" id="beta-hub" hidden aria-label="Beta tester hub">
+								<div class="beta-hub-head">
+									<div>
+										<p class="whitepaper-kicker">Beta tester pass</p>
+										<h2 id="beta-discord-name">Discord connected</h2>
+									</div>
+									<div class="beta-code-card">
+										<span>Your release-valid code</span>
+										<div class="copy-row">
+											<strong class="signup-code" id="beta-code">-</strong>
+											<button class="ghost-button" type="button" id="copy-beta-code">Copy</button>
+										</div>
+										<p id="beta-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code.</p>
+									</div>
+								</div>
+								<div class="beta-downloads" id="beta-downloads"></div>
+								<div class="beta-reference-tools">
+									<label>
+										<span>Search beta reference</span>
+										<input id="beta-reference-search" autocomplete="off" placeholder="command, item, coord, feature">
+									</label>
+									<small id="beta-reference-count">0 entries</small>
+								</div>
+								<div class="beta-resource-grid">
+									<div class="beta-resource-panel beta-command-panel">
+										<h3>Command Suite</h3>
+										<ul id="beta-command-list"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Flow Checklist</h3>
+										<ul id="beta-checklist"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Locations</h3>
+										<ul id="beta-coords"></ul>
+									</div>
+									<div class="beta-resource-panel">
+										<h3>Useful Item IDs</h3>
+										<ul id="beta-items"></ul>
+									</div>
+								</div>
+								<p class="beta-policy" id="beta-policy">Beta progress may wipe before launch. Your beta code stays valid for release.</p>
+							</section>
+
+							<footer class="landing-footer">
+								<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+								<div>
+									<button type="button" data-landing-scroll="home">Home</button>
+									<a href="/transparency">Trust</a>
+									<button type="button" data-landing-scroll="features">Features</button>
+									<button type="button" data-landing-scroll="whitepaper">Whitepaper</button>
+									<button type="button" data-discord-login>Discord</button>
+									<a href="/privacy">Privacy</a>
+									<a href="https://github.com/Open-RSC/Core-Framework" rel="noopener">AGPL Source</a>
+								</div>
+							</footer>
+
+							<div class="prelaunch-benefits" aria-label="Why join Voidscape" hidden>
+								<img src="assets/prelaunch/benefit-subscription.png" alt="Claim a free 1-week subscription card. Play early with a free 1-week subscription when you sign up.">
+								<img src="assets/prelaunch/benefit-reserve.png" alt="Reserve your account early. Secure your username and be ready for launch day.">
+								<img src="assets/prelaunch/benefit-invite.png" alt="Invite a friend, earn more. You and your friend get extra rewards when they join.">
+							</div>
+
+							<div class="prelaunch-hidden-state" hidden>
+								<strong id="landing-world-state">Online</strong>
+								<small id="landing-world-detail">247 players online</small>
+								<strong id="landing-xp-rates">10x / 2x</strong>
+								<small id="landing-sub-rates">11x / 3x subscribed</small>
+								<strong id="landing-prize-state">Free sub card</strong>
+								<small id="landing-prize-detail">Unlocked at 2 invites</small>
+								<div id="landing-news-list"></div>
+							</div>
+						</div>
+
+						<div class="whitepaper-lightbox" id="whitepaper-lightbox" hidden aria-hidden="true">
+							<button class="whitepaper-lightbox-close" id="whitepaper-lightbox-close" type="button" aria-label="Close expanded image">Close</button>
+							<img id="whitepaper-lightbox-image" alt="">
+							<p id="whitepaper-lightbox-caption"></p>
+						</div>
+					</div>
+				</section>
+
+			<section id="dashboard" class="view" data-title="Account">
+				<div class="dashboard-home">
+					<section class="panel account-home-panel" aria-labelledby="dashboard-account-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Account</p>
+								<h2 id="dashboard-account-title">Dashboard</h2>
+							</div>
+						</div>
+						<div class="account-home-copy">
+							<strong id="dashboard-account-name">Voidscape account</strong>
+							<span id="dashboard-account-email">Sign in with Google to manage characters.</span>
+						</div>
+						<div class="account-home-grid">
+							<div>
+								<span>Subscription</span>
+								<strong id="dashboard-subscription-state">Unsubscribed</strong>
+							</div>
+							<div>
+								<span>Characters</span>
+								<strong id="dashboard-character-count">0</strong>
+							</div>
+							<div>
+								<span>Sub card</span>
+								<strong id="dashboard-card-state">No card waiting</strong>
+							</div>
+							<div>
+								<span>Security</span>
+								<strong id="dashboard-security-state">Google sign-in</strong>
+							</div>
+						</div>
+					</section>
+
+					<section class="panel account-actions-panel" aria-labelledby="dashboard-actions-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Manage</p>
+								<h2 id="dashboard-actions-title">Account tools</h2>
+							</div>
+						</div>
+						<div class="quick-grid account-quick-grid">
+							<button class="quick-action" type="button" data-view-link="characters">Characters</button>
+							<button class="quick-action" type="button" data-view-link="subscription">Subscription</button>
+							<button class="quick-action" type="button" data-view-link="security">Security</button>
+						</div>
+					</section>
+				</div>
+			</section>
+
+			<section id="characters" class="view" data-title="Characters">
+				<div class="two-column">
+					<section class="panel roster-panel" aria-labelledby="roster-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Characters</p>
+								<h2 id="roster-title">3 characters</h2>
+							</div>
+						</div>
+						<div class="character-cards" id="character-cards"></div>
+					</section>
+
+					<section class="panel create-panel" aria-labelledby="create-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">New character</p>
+								<h2 id="create-title">Create game login</h2>
+							</div>
+						</div>
+						<div class="creation-controls">
+							<label>
+								<span>Username</span>
+								<input id="character-name" maxlength="12" autocomplete="username" placeholder="Character name">
+							</label>
+							<label>
+								<span>Game password</span>
+								<input id="character-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
+							</label>
+							<button class="primary-button" type="button" id="queue-character">Create character</button>
+						</div>
+						<p class="inline-state" id="character-message">Create the login here. Appearance and starter path are chosen in-game.</p>
+					</section>
+				</div>
+			</section>
+
+			<section id="subscription" class="view" data-title="Subscription">
+				<section class="panel subscription-status subscription-simple" aria-labelledby="sub-title">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Subscription</p>
+							<h2 id="sub-title">Unsubscribed</h2>
+						</div>
+						<img class="item-icon" src="assets/subscription-card.png" alt="">
+					</div>
+					<div class="sub-meter">
+						<div>
+							<strong id="sub-days">Unsubscribed</strong>
+							<span>account status</span>
+						</div>
+						<div class="meter-track"><span id="sub-meter-fill"></span></div>
+					</div>
+					<div class="reward-wallet" id="founder-reward-card" hidden>
+						<div>
+							<span>Sub card waiting</span>
+							<strong id="founder-reward-count">No reserved cards</strong>
+						</div>
+						<button class="ghost-button" type="button" id="use-founder-reward" disabled>Claim in Lumbridge</button>
+					</div>
+					<p class="inline-state" id="redeem-state">No subscription card is waiting right now.</p>
+					<div class="subscription-note">
+						<span>How it works</span>
+						<strong>Talk to the Subscription Vendor in Lumbridge to collect a reserved card.</strong>
+					</div>
+				</section>
+			</section>
+
+			<section id="security" class="view" data-title="Security">
+				<div class="security-grid">
+					<section class="panel score-panel" aria-labelledby="security-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Security center</p>
+								<h2 id="security-title">Account score</h2>
+							</div>
+							<strong class="score-badge" id="security-score">92</strong>
+						</div>
+						<div class="security-steps">
+							<label><input id="security-email-check" type="checkbox" checked disabled> Email or Google verified</label>
+							<label><input id="security-recovery-check" type="checkbox" checked disabled> Recovery codes set</label>
+							<label><input id="security-password-check" type="checkbox" disabled> Password or Google login set</label>
+							<label><input id="security-session-check" type="checkbox" checked disabled> Sessions reviewed</label>
+						</div>
+					</section>
+					<section class="panel security-actions" aria-labelledby="security-actions-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Recovery</p>
+								<h2 id="security-actions-title">Account controls</h2>
+							</div>
+							<button class="ghost-button" type="button" id="generate-recovery">New codes</button>
+						</div>
+						<form class="password-form" id="password-form" hidden>
+							<label>
+								<span>Current password</span>
+								<input id="current-password" type="password" autocomplete="current-password">
+							</label>
+							<label>
+								<span>New password</span>
+								<input id="new-password" type="password" autocomplete="new-password" placeholder="8+ characters">
+							</label>
+							<button class="primary-button" type="submit">Update password</button>
+						</form>
+						<div class="recovery-code-list" id="recovery-codes" hidden></div>
+						<p class="inline-state" id="security-message">Local API security state appears after sign in.</p>
+					</section>
+				</div>
+				<section class="panel">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Access log</p>
+							<h2>Recent sessions</h2>
+						</div>
+						<button class="danger-button" type="button" id="end-other-sessions">End other sessions</button>
+					</div>
+					<div class="data-table session-table" id="session-table">
+						<div class="table-row table-head"><span>Date</span><span>IP</span><span>Client</span><span>Result</span></div>
+						<div class="table-row"><span>Jun 3, 2026 4:31 PM</span><span>127.0.0.1</span><span>Workbench</span><span class="good">Active</span></div>
+						<div class="table-row"><span>Jun 2, 2026 9:18 PM</span><span>Local dev</span><span>PC client</span><span>Signed out</span></div>
+						<div class="table-row"><span>Jun 1, 2026 7:04 PM</span><span>Local dev</span><span>Web portal</span><span>Signed out</span></div>
+					</div>
+				</section>
+			</section>
+
+			<section id="highscores" class="view retired-view" data-title="Highscores" hidden>
+				<div class="two-column">
+					<section class="panel" aria-labelledby="highscores-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Rankings</p>
+								<h2 id="highscores-title">Combat highscores</h2>
+							</div>
+							<div class="segmented">
+								<button class="is-active" type="button">Combat</button>
+								<button type="button">Skills</button>
+								<button type="button">Boss</button>
+							</div>
+						</div>
+						<div class="data-table rank-table" id="rank-table"></div>
+					</section>
+					<section class="panel title-panel" aria-labelledby="titles-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Titles</p>
+								<h2 id="titles-title">Collection</h2>
+							</div>
+							<span class="limit-badge">18 / 100</span>
+						</div>
+						<div class="title-list">
+							<button type="button"><strong>The Conqueror</strong><span>Equipped</span></button>
+							<button type="button"><strong>Voidbane</strong><span>Reusable</span></button>
+							<button type="button"><strong>Red Revenant</strong><span>Rare</span></button>
+							<button type="button"><strong>Gatebreaker</strong><span>Unique held by Maeve</span></button>
+						</div>
+						<img class="panel-art-strip" src="assets/generated/highscores-titles.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="market" class="view retired-view" data-title="Market Intel" hidden>
+				<div class="market-layout">
+					<section class="panel market-table" aria-labelledby="market-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Auction House</p>
+								<h2 id="market-title">Market intel</h2>
+							</div>
+							<input class="search-input" value="Rune">
+						</div>
+						<div class="data-table" id="market-table"></div>
+					</section>
+					<section class="panel market-watch" aria-labelledby="watch-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Watch item</p>
+								<h2 id="watch-title">Rune 2h sword</h2>
+							</div>
+							<button class="ghost-button" type="button">Pin</button>
+						</div>
+						<div class="trend-chart" aria-hidden="true">
+							<span style="height: 32%"></span>
+							<span style="height: 48%"></span>
+							<span style="height: 42%"></span>
+							<span style="height: 60%"></span>
+							<span style="height: 76%"></span>
+							<span style="height: 68%"></span>
+							<span style="height: 84%"></span>
+						</div>
+						<img class="panel-art-strip" src="assets/generated/auction-market.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="activity" class="view retired-view" data-title="Activity Feed" hidden>
+				<div class="activity-layout">
+					<section class="panel" aria-labelledby="activity-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">World events</p>
+								<h2 id="activity-title">Live feed</h2>
+							</div>
+							<div class="segmented">
+								<button class="is-active" type="button">All</button>
+								<button type="button">Drops</button>
+								<button type="button">PKs</button>
+							</div>
+						</div>
+						<div class="event-list large" id="world-feed"></div>
+					</section>
+					<section class="panel art-card" aria-label="Wilderness art">
+						<img src="assets/generated/wilderness-activity.png" alt="">
+					</section>
+				</div>
+			</section>
+
+			<section id="admin" class="view" data-title="Staff">
+				<section class="panel staff-console" aria-labelledby="staff-title">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Staff</p>
+							<h2 id="staff-title">Account lookup</h2>
+						</div>
+					</div>
+					<form class="staff-search" id="admin-search-form">
+						<label>
+							<span>Admin token</span>
+							<input id="admin-token" type="password" autocomplete="off" placeholder="Local staff token">
+						</label>
+						<label>
+							<span>Account email</span>
+							<input id="admin-search-email" type="email" autocomplete="off" placeholder="player@example.com">
+						</label>
+						<button class="primary-button" type="submit" id="admin-search-button">Search</button>
+					</form>
+					<p class="inline-state" id="admin-message">Enter the local staff token and account email.</p>
+				</section>
+
+				<div class="summary-grid staff-summary">
+					<article class="stat-tile"><p>Status</p><strong id="admin-status-tile">-</strong><small id="admin-status-note">No account loaded</small></article>
+					<article class="stat-tile"><p>Subscription</p><strong id="admin-subscription-tile">-</strong><small id="admin-subscription-note">Account-wide</small></article>
+					<article class="stat-tile"><p>Characters</p><strong id="admin-character-tile">0</strong><small>Linked roster</small></article>
+					<article class="stat-tile warn"><p>Starter card</p><strong id="admin-starter-tile">-</strong><small id="admin-starter-note">Review state</small></article>
+				</div>
+
+				<div class="admin-layout">
+					<section class="panel" aria-labelledby="admin-account-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Account</p>
+								<h2 id="admin-account-title">No account loaded</h2>
+							</div>
+							<span class="limit-badge" id="admin-account-id">ID -</span>
+						</div>
+						<div class="data-table admin-account-table" id="admin-account-table">
+							<div class="table-row table-head"><span>Field</span><span>Value</span></div>
+							<div class="table-row"><span>Email</span><span>-</span></div>
+							<div class="table-row"><span>Google</span><span>-</span></div>
+							<div class="table-row"><span>Recovery</span><span>-</span></div>
+						</div>
+					</section>
+
+					<section class="panel" aria-labelledby="admin-actions-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Actions</p>
+								<h2 id="admin-actions-title">Account controls</h2>
+							</div>
+						</div>
+						<div class="admin-actions">
+							<div class="admin-action-row">
+								<label>
+									<span>Status</span>
+									<select id="admin-status-select">
+										<option value="active">Active</option>
+										<option value="review">Review</option>
+										<option value="locked">Locked</option>
+									</select>
+								</label>
+								<label>
+									<span>Note</span>
+									<input id="admin-status-note-input" maxlength="240" placeholder="Optional">
+								</label>
+								<button class="ghost-button" type="button" id="admin-apply-status">Apply</button>
+							</div>
+							<div class="admin-action-row compact">
+								<label>
+									<span>Sub days</span>
+									<input id="admin-sub-days" type="number" min="1" max="366" value="7">
+								</label>
+								<button class="ghost-button" type="button" id="admin-grant-sub">Grant</button>
+								<button class="danger-button" type="button" id="admin-clear-sub">Clear</button>
+							</div>
+							<div class="action-stack staff-action-stack">
+								<button class="ghost-button" type="button" id="admin-grant-starter">Grant starter card</button>
+								<button class="danger-button" type="button" id="admin-revoke-starter">Revoke starter card</button>
+								<button class="danger-button" type="button" id="admin-revoke-sessions">Revoke sessions</button>
+							</div>
+						</div>
+					</section>
+				</div>
+
+				<div class="admin-layout">
+					<section class="panel" aria-labelledby="admin-characters-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Roster</p>
+								<h2 id="admin-characters-title">Characters</h2>
+							</div>
+						</div>
+						<div class="data-table admin-character-table" id="admin-character-table">
+							<div class="table-row table-head"><span>Name</span><span>State</span><span>Sub</span></div>
+							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+						</div>
+					</section>
+
+					<section class="panel" aria-labelledby="admin-signals-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Risk</p>
+								<h2 id="admin-signals-title">Abuse signals</h2>
+							</div>
+						</div>
+						<div class="data-table admin-signal-table" id="admin-signal-table">
+							<div class="table-row table-head"><span>Type</span><span>Bucket</span><span>When</span></div>
+							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+						</div>
+					</section>
+				</div>
+
+				<section class="panel" aria-labelledby="admin-audit-title">
+					<div class="panel-head">
+						<div>
+							<p class="eyebrow">Audit</p>
+							<h2 id="admin-audit-title">Recent account events</h2>
+						</div>
+					</div>
+					<div class="data-table admin-audit-table" id="admin-audit-table">
+						<div class="table-row table-head"><span>Event</span><span>Metadata</span><span>When</span></div>
+						<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+					</div>
+				</section>
+			</section>
+
+			<section id="public" class="view retired-view" data-title="News" hidden>
+				<div class="public-layout">
+					<section class="panel public-hero" aria-labelledby="public-title">
+						<div>
+							<p class="eyebrow">Voidscape</p>
+							<h2 id="public-title">Classic RSC, modern account tools</h2>
+							<p>Patch notes, downloads, character access, and account status live in one place.</p>
+							<div class="button-row">
+								<button class="primary-button" type="button">Register</button>
+								<button class="ghost-button" type="button">Download client</button>
+							</div>
+						</div>
+					</section>
+					<section class="panel news-panel" aria-labelledby="news-title">
+						<div class="panel-head">
+							<div>
+								<p class="eyebrow">Updates</p>
+								<h2 id="news-title">Latest news</h2>
+							</div>
+						</div>
+						<div class="event-list" id="public-news-list">
+							<div class="event-row rare"><span></span><p>Void Enclave boss tuning is live.</p><time>Today</time></div>
+							<div class="event-row market"><span></span><p>Subscription cards added near Lumbridge.</p><time>Today</time></div>
+							<div class="event-row title"><span></span><p>Player titles now display overhead.</p><time>Jun 3</time></div>
+						</div>
+					</section>
+				</div>
+			</section>
+		</main>
+	</div>
+
+	<script src="script.js"></script>
+</body>
+</html>

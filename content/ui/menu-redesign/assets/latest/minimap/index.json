@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "minimap ornate frame",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\minimap\\minimap-ornate-frame\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\minimap\\minimap-ornate-frame\\asset-green.png"
+  },
+  {
+    "asset": "world map button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\minimap\\world-map-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\minimap\\world-map-button\\asset-green.png"
+  }
+]

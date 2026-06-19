@@ -1,0 +1,21 @@
+Recolor and restyle the reference image as a "Void Mace" inventory icon for a RuneScape Classic-style game. The reference shows a CHUNKY FLAT pixel-art mace: long handle with a heavy round head at the top, painted in flat blocks of color (no gradients).
+
+CRITICAL: The output must match the reference's STYLE: FLAT pixel art, chunky 2×2 to 3×3 color blocks, NO smooth gradients, NO 3D shading, NO sparkles, NO glow, NO anti-aliasing. Think classic RuneScape Classic / OldSchool RuneScape inventory icons — exactly two or three flat tones per region (one main color + one shadow + maybe one highlight, period). Like 16-bit RPG sprite icons (Castlevania, Final Fantasy 6, RuneScape Classic). Imagine each pixel is hand-placed.
+
+CRITICAL: The output must be FULLY FILLED PIXEL ART, NOT a line drawing or outline. Every interior pixel of the mace head and handle must be a solid color block.
+
+CANVAS FILL: the mace silhouette must fill the canvas EDGE TO EDGE, occupying the full width on a diagonal, head at top, handle running diagonally to the bottom.
+
+SHAPE — heavy spiked morningstar with HEAD-DOMINANT proportions:
+- The mace head is a HUGE CHUNKY round ball that takes up roughly 60-70% of the canvas (think a heavy bowling-ball-sized head, not a tennis ball). Centered in the upper portion of the canvas.
+- The head has 10-14 LONG STOUT SPIKES jutting out from its perimeter in all directions (top, sides, diagonals, top-corners). Each spike is 5-10 pixels long at the working size — clearly visible chunky triangular/wedge blocks. Aim for "menacing morningstar" not "subtle bumps".
+- Handle is SHORT and stout — only the bottom 30-35% of the canvas. Diagonal, thick (3-5 pixels wide at working size), running from the bottom of the head to a bottom corner.
+
+Color palette (KEEP IT TIGHT — flat, no gradients):
+- Main mace head body: flat amethyst purple (think solid block of #7e3acc)
+- Shadow side of the head + the spikes + the entire handle: flat deep void purple (#4a148c)
+- Tiny 1-pixel highlight on the upper-left curve of the head: flat lavender (#c8a8ff)
+
+Match the reference's LINE WEIGHT and pixel chunkiness. Don't smooth anything. The whole image should look like it was drawn pixel-by-pixel in MS Paint with a tiny palette.
+
+Transparent background (no white, no checkerboard). NO text, NO extra elements — just the mace.

@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "skill row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\skills\\skill-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\skills\\skill-row\\asset-green.png"
+  },
+  {
+    "asset": "xp-lock icon button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\skills\\xp-lock-icon-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\skills\\xp-lock-icon-button\\asset-green.png"
+  },
+  {
+    "asset": "equipment status row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\skills\\equipment-status-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\skills\\equipment-status-row\\asset-green.png"
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "ignore row",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\ignore\\ignore-row\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\ignore\\ignore-row\\asset-green.png"
+  },
+  {
+    "asset": "remove action button",
+    "prompt": "content\\ui\\menu-redesign\\assets\\latest\\ignore\\remove-action-button\\asset-prompt.txt",
+    "image": "content\\ui\\menu-redesign\\assets\\latest\\ignore\\remove-action-button\\asset-green.png"
+  }
+]

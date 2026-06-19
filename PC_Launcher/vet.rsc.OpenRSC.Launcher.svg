@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="stone" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0eee8"/>
+      <stop offset="34%" stop-color="#8a8990"/>
+      <stop offset="68%" stop-color="#c9c6be"/>
+      <stop offset="100%" stop-color="#53545d"/>
+    </linearGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="purpleGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0.6 0 0 0 0.35 0 0.1 0 0 0 0.9 0 1 0 0.95 0 0 0 0.8 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="9" y="9" width="238" height="238" rx="34" fill="#0b0e15" stroke="#323944" stroke-width="7"/>
+  <rect x="22" y="22" width="212" height="212" rx="26" fill="#121722" stroke="#242b37" stroke-width="2"/>
+  <ellipse cx="128" cy="164" rx="74" ry="80" fill="#7b20e6" opacity="0.36" filter="url(#softGlow)"/>
+  <path d="M52 48h49l27 118 27-118h49l-56 161h-40L52 48z" fill="#211331" opacity="0.95"/>
+  <path d="M57 50h42l29 121-18 38L57 50z" fill="#bfbcb4" stroke="#1f2128" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M157 50h42l-53 159h-18L157 50z" fill="#c9c5bd" stroke="#1f2128" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M67 59h23l22 88M166 59h24l-36 111" fill="none" stroke="#f0eee8" stroke-width="5" stroke-linecap="round" opacity="0.6"/>
+  <path d="M125 54l-12 34 18 24-17 32 16 36-4 26" fill="none" stroke="#f1c7ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" filter="url(#purpleGlow)"/>
+  <path d="M125 54l-12 34 18 24-17 32 16 36-4 26" fill="none" stroke="#8b24ff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M80 66l24 13-22 13M164 63l-20 29 31 12M104 118l-22 14 31 12M156 126l-25 16 24 16M112 174l-17 15h28" fill="none" stroke="#30333b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.68"/>
+  <path d="M51 197l43-14M164 188l42 12M42 126l35 12M179 119l37-19" fill="none" stroke="#7f2cff" stroke-width="4" stroke-linecap="round" opacity="0.78" filter="url(#purpleGlow)"/>
+</svg>

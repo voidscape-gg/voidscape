@@ -1,0 +1,15 @@
+Recolor and restyle the reference image as a "Void Bow" inventory icon for a RuneScape Classic-style game. The reference shows a recurve bow with a FILLED solid wooden body, a taut bowstring, and a small grip in the middle.
+
+CRITICAL: The output must be FULLY FILLED PIXEL ART, NOT a line drawing or outline. Every interior pixel of the bow stave must be a solid color block, not empty/transparent. Think 16-bit RPG sprite art (e.g. classic RuneScape, Castlevania, RPG Maker), not concept-art line work.
+
+CANVAS FILL: the bow silhouette must fill the canvas EDGE TO EDGE, occupying the full width and most of the height. The stave should be VISUALLY CHUNKY — at least 80–120 pixels thick at the 1024×1024 working size, so the silhouette survives heavy downscaling to ~33×21 and remains readable as a bow. Diagonal orientation (lower-left to upper-right) like the reference, OR a strongly horizontal recurve. Avoid any "thin elegant longbow" look — this needs to read as a bow at tiny sizes.
+
+STYLE: the bow should look CLEAN and SIMPLE — minimal surface detail. No engravings, runes, glyphs, mechanical attachments, sci-fi gadgets, glowing crystals, gem inlays, or fantasy ornamentation. Just a smooth one-piece purple recurve bow with a small black grip wrap and a thin lavender bowstring. Think a classic sturdy wooden bow that happens to be void-purple, not a magical/ornate weapon.
+
+Repaint:
+- Bow stave (the wooden body): solid deep indigo / royal purple, fully filled (matching the reference's solid blue-stave fill but in deep void purple). 1-pixel-wide darker violet edge on the outer curve for definition.
+- Bowstring: solid pale lavender / amethyst, single thin line spanning tip-to-tip.
+- Grip in the middle: solid matte obsidian black, fully filled, with 1-2 pixels of light amethyst as a highlight on the grip wrap.
+- Optional: 1-pixel violet halo around the stave silhouette suggesting void energy.
+
+Transparent background (no white, no checkerboard). Pixel-art aesthetic with chunky 1×1 to 2×2 blocks. No anti-aliased gradients. No text, no extra elements — just the bow. Same orientation and proportions as the reference.

@@ -1,0 +1,81 @@
+apply plugin: 'com.android.application'
+
+def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
+
+tasks.register("syncVoidscapeCache", Sync) {
+    from("${rootDir}/../Client_Base/Cache") {
+        exclude "accounts.txt"
+        exclude "config.txt"
+        exclude "credentials.txt"
+        exclude "hideIp.txt"
+        exclude "ip.txt"
+        exclude "port.txt"
+        exclude "uid.dat"
+    }
+    into(new File(generatedAssetsDir, "cache"))
+}
+
+allprojects {
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+        }
+    }
+}
+
+android {
+    compileSdk 36
+    defaultConfig {
+        applicationId "com.voidscape.client"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+        multiDexEnabled false
+    }
+    buildTypes {
+        release {
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-project.txt'
+            debuggable false
+            jniDebuggable false
+            multiDexEnabled = true
+            minifyEnabled = false
+        }
+        debug {
+            multiDexEnabled = true
+            minifyEnabled = false
+        }
+    }
+    productFlavors {
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    sourceSets {
+        main.java.srcDirs += ['src/main/java', 'src/main/../../../../Client_Base/src']
+        main.java.exclude 'tools/**'
+        main.assets.srcDirs += generatedAssetsDir
+    }
+    dependenciesInfo {
+        includeInApk true
+        includeInBundle true
+    }
+    namespace 'com.openrsc.client'
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "voidscape.apk"
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn syncVoidscapeCache
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.8.2'
+}
+
+task prepareKotlinBuildScriptModel {
+}

@@ -1,0 +1,26 @@
+Repaint this seamless tileable stone wall texture as a CULT MURAL — a brick wall with a large GLOWING PENTAGRAM SIGIL inscribed at its center, for a void temple in a RuneScape Classic-style game. The reference is a 128×128 dark grey mossy brick wall.
+
+NOT tileable this time — this is a SINGLE accent tile placed at specific points on the sanctum walls. The composition CAN have a clear centerpiece (the pentagram).
+
+CRITICAL — NO PURE BLACK: engine treats RGB(0,0,0) as transparent. Darkest color must be RGB(15, 5, 25) or darker indigo, never pure black.
+
+COMPOSITION:
+- Background: same void brick pattern as the surrounding walls — small horizontal blocks of stone with thin mortar gaps. Use the SAME palette as the reference but recolored to deep void purples (mortar = RGB(20,8,38), bricks = RGB(50,25,80), highlights = RGB(110,50,160)).
+- CENTERPIECE: a circular ritual sigil INSCRIBED into the stone, occupying about 70% of the canvas centered. The sigil consists of:
+  • An outer glowing ring (bright magenta-purple, RGB(220,100,255), ~3px thick at 1024 scale)
+  • A five-pointed pentagram (star) inscribed inside the ring, glowing same magenta-purple
+  • An inner small ring at the pentagram's center
+  • Tiny rune marks between the outer ring and pentagram points
+- The sigil should look like it's CARVED INTO the stone and bleeding light — magenta-purple glow at the carving edges, with the carving itself being darker (recessed).
+
+PALETTE (strict):
+- Mortar / cracks: RGB(20, 8, 38)
+- Brick fill: RGB(50, 25, 80)
+- Brick highlights: RGB(110, 50, 160)
+- Glowing sigil lines: RGB(220, 100, 255)
+- Sigil interior glow: RGB(170, 60, 220)
+- NO white, no other hues.
+
+STYLE: FLAT pixel art, viewed straight-on. NO 3D shading, NO smooth gradients, NO drop shadows. Chunky 1x1 to 2x2 pixel blocks. Limited palette ~16-32 colors. Pentagram lines should be clearly readable when downscaled to 128×128.
+
+NO TEXT, no other symbols beyond the central pentagram + tiny runes, no other figures. Just a brick wall with a single glowing sigil mural in the center.
