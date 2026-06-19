@@ -52,7 +52,7 @@
 			var state = await response.json();
 			renderIntegrity(state.integrity || {});
 		} catch (error) {
-			setText(integrityUpdated, "Waiting for snapshot");
+			setText(integrityUpdated, "Waiting for update");
 		}
 	}
 
@@ -69,36 +69,36 @@
 		var itemReceipts = Number(items.total24h || 0);
 		var generatedAt = integrity.generatedAt || "";
 
-		setText(integrityUpdated, generatedAt ? "Updated " + relativeTime(generatedAt) : "Waiting for snapshot");
+		setText(integrityUpdated, generatedAt ? "Updated " + relativeTime(generatedAt) : "Waiting for update");
 		setText(integrityStaffTotal, formatCompactNumber(total));
 		setText(integrityStaffDetail, staffStatusDetail(staff.status, total));
 		setText(integrityBlockedTotal, formatCompactNumber(blocked));
 		setText(integrityBlockedDetail, blocked === 1 ? "attempt stopped" : "attempts stopped");
-		setText(integrityBuildStatus, titleStatus(build.status || "available"));
-		setText(integrityBuildDetail, build.evidence || "Launcher manifest hashes");
+		setText(integrityBuildStatus, simpleStatus(build.status || "available"));
+		setText(integrityBuildDetail, downloadCheckDetail(build));
 		setText(integrityItemsStatus, formatCompactNumber(itemReceipts));
-		setText(integrityItemsDetail, itemReceipts === 1 ? "receipt 24h" : "receipts 24h");
+		setText(integrityItemsDetail, itemReceipts === 1 ? "item move today" : "item moves today");
 
 		setText(trustPasswordsStatus, "Now");
 		renderTrustList(trustPasswordsList, [
 			"Download first. Discord stays optional.",
 			"Use a fresh game password.",
-			"Public pages do not expose private account data."
+			"We do not show private account details on public pages."
 		]);
 
-		setText(trustSourceStatus, titleStatus(build.status || "available"));
+		setText(trustSourceStatus, simpleStatus(build.status || "available"));
 		renderTrustList(trustSourceList, sourceListItems(build, integrity, staff));
 		renderSourceBuildBoard(build);
 
-		setText(trustStaffStatus, titleStatus(staff.status || "waiting_for_game_snapshot"));
+		setText(trustStaffStatus, simpleStatus(staff.status || "waiting_for_game_snapshot"));
 		renderTrustList(trustStaffList, staffListItems(staff, topCategory));
 		renderStaffAuditBoard(staff);
 
-		setText(trustItemsStatus, titleStatus(itemTrustStatus(items)));
+		setText(trustItemsStatus, simpleStatus(itemTrustStatus(items)));
 		renderTrustList(trustItemsList, itemReceiptListItems(items));
 		renderItemReceiptBoard(items);
 
-		setText(trustScansStatus, titleStatus(scanTrustStatus(scans, accounts)));
+		setText(trustScansStatus, simpleStatus(scanTrustStatus(scans, accounts)));
 		renderTrustList(trustScansList, scanListItems(scans, accounts));
 	}
 
@@ -117,31 +117,31 @@
 		}
 		if (trustSourceRepo) {
 			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
-			trustSourceRepo.textContent = source.repositoryUrl ? "View AGPL source" : titleStatus(source.status || "Source pending");
+			trustSourceRepo.textContent = source.repositoryUrl ? "View public code" : simpleStatus(source.status || "source_pending");
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
-				? (source.dirty ? "Baseline " : "Commit ") + source.shortCommit + (source.dirty ? " - live patch pending" : "")
-				: "Commit pending";
+				? (source.dirty ? "Code version " : "Code version ") + source.shortCommit + (source.dirty ? " - live changes pending" : "")
+				: "Code version pending";
 			trustSourceCommit.textContent = commitText;
 			trustSourceCommit.title = source.commit || commitText;
 		}
 		if (trustSourceManifest) {
 			var manifestText = manifest.status === "available"
-				? formatCompactNumber(manifest.fileCount || 0) + " manifest hashes"
-				: titleStatus(manifest.status || "manifest pending");
+				? formatCompactNumber(manifest.fileCount || 0) + " file checks ready"
+				: simpleStatus(manifest.status || "manifest_pending");
 			trustSourceManifest.textContent = manifestText;
 			trustSourceManifest.title = manifest.clientSha256 || manifestText;
 		}
 		trustBuildArtifacts.innerHTML = artifacts.map(function (artifact) {
 			var available = artifact.available === true && artifact.sha256;
-			var hash = available ? shortHash(artifact.sha256) : "Not built";
+			var fileCheck = available ? "File checked" : "Waiting";
 			var updated = artifact.updatedAt ? relativeTime(artifact.updatedAt) : "";
 			return [
-				'<a class="build-proof-tile' + (available ? " is-ready" : "") + '" href="' + escapeAttr(artifact.url || "#") + '" title="' + escapeAttr(artifact.sha256 || "Hash pending") + '"' + (available ? " download" : ' aria-disabled="true"') + ">",
+				'<a class="build-proof-tile' + (available ? " is-ready" : "") + '" href="' + escapeAttr(artifact.url || "#") + '" title="' + escapeAttr(artifact.sha256 || "File check pending") + '"' + (available ? " download" : ' aria-disabled="true"') + ">",
 				"<b>" + escapeHtml(artifact.label || "Download") + "</b>",
-				"<code>" + escapeHtml(hash) + "</code>",
-				"<span>" + escapeHtml(available ? ((artifact.state || formatBytesLabel(artifact.sizeBytes)) + (updated ? " - " + updated : "")) : "Hash pending") + "</span>",
+				"<code>" + escapeHtml(fileCheck) + "</code>",
+				"<span>" + escapeHtml(available ? ((updated ? "Updated " + updated : formatBytesLabel(artifact.sizeBytes))) : "Not ready yet") + "</span>",
 				"</a>"
 			].join("");
 		}).join("");
@@ -150,19 +150,19 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var rows = ["Voidscape stays AGPL source-available."];
+		var rows = ["The game code is public, so people can inspect what is being run."];
 		if (source.shortCommit && source.dirty) {
-			rows.push("Live files are based on commit " + source.shortCommit + "; newer deployed patches are marked until published.");
+			rows.push("The live server is based on public code version " + source.shortCommit + "; live-only changes are marked until published.");
 		} else if (source.shortCommit) {
-			rows.push("Live source commit: " + source.shortCommit + ".");
+			rows.push("Current public code version: " + source.shortCommit + ".");
 		} else {
-			rows.push("Source commit metadata is waiting for the next publish.");
+			rows.push("The public code version is waiting for the next update.");
 		}
-		rows.push(build.evidence || "Download hashes are generated from served files.");
+		rows.push("Downloads are checked when they are served, so replacing a file changes the check.");
 		if (manifest.status === "available") {
-			rows.push("Launcher manifest lists " + formatCompactNumber(manifest.fileCount || 0) + " hashed files.");
+			rows.push("The launcher currently checks " + formatCompactNumber(manifest.fileCount || 0) + " game file" + (Number(manifest.fileCount || 0) === 1 ? "." : "s."));
 		} else {
-			rows.push("Integrity source: " + sourceLabel(integrity.source || staff.source || "snapshot") + ".");
+			rows.push("The next public update will refresh the download check list.");
 		}
 		return rows;
 	}
@@ -178,7 +178,7 @@
 		}, 0);
 		var hasAudit = categories.length > 0 || recent.length > 0 || total > 0;
 		trustStaffBoard.hidden = !hasAudit;
-		setText(trustStaffBoardTotal, formatCompactNumber(total) + " attempts / " + formatCompactNumber(blocked) + " blocked");
+		setText(trustStaffBoardTotal, formatCompactNumber(total) + " actions / " + formatCompactNumber(blocked) + " stopped");
 		if (!hasAudit) {
 			trustStaffCategories.innerHTML = "";
 			trustStaffRecent.innerHTML = "";
@@ -189,7 +189,7 @@
 			var width = maxCount > 0 ? Math.max(8, Math.round((count / maxCount) * 100)) : 0;
 			return [
 				'<div class="audit-source-row" style="--audit-width: ' + width + '%">',
-				"<b>" + escapeHtml(sourceLabel(row.category || "staff")) + "</b>",
+				"<b>" + escapeHtml(staffCategoryLabel(row.category || "staff")) + "</b>",
 				'<div class="audit-source-meter"><i></i></div>',
 				"<em>" + escapeHtml(formatCompactNumber(count)) + "</em>",
 				"</div>"
@@ -201,7 +201,7 @@
 				'<div class="audit-event audit-event-' + escapeAttr(status) + '">',
 				"<b>" + escapeHtml(titleStatus(status)) + "</b>",
 				"<small>" + escapeHtml(relativeTime(row.at)) + "</small>",
-				"<em>" + escapeHtml(sourceLabel(row.category || "staff") + " command") + "</em>",
+				"<em>" + escapeHtml(staffCategoryLabel(row.category || "staff")) + "</em>",
 				"</div>"
 			].join("");
 		}).join("");
@@ -217,7 +217,7 @@
 		}, 0);
 		var hasReceipts = sources.length > 0 || recent.length > 0;
 		trustItemsBoard.hidden = !hasReceipts;
-		setText(trustItemsBoardTotal, formatCompactNumber(total) + (total === 1 ? " receipt" : " receipts"));
+		setText(trustItemsBoardTotal, formatCompactNumber(total) + (total === 1 ? " item move" : " item moves"));
 		if (!hasReceipts) {
 			trustItemsSources.innerHTML = "";
 			trustItemsRecent.innerHTML = "";
@@ -228,7 +228,7 @@
 			var width = maxCount > 0 ? Math.max(8, Math.round((count / maxCount) * 100)) : 0;
 			return [
 				'<div class="receipt-source-row" style="--receipt-width: ' + width + '%">',
-				"<b>" + escapeHtml(sourceLabel(row.category || "unknown")) + "</b>",
+				"<b>" + escapeHtml(itemPlaceLabel(row.category || "unknown")) + "</b>",
 				'<div class="receipt-source-meter"><i></i></div>',
 				"<em>" + escapeHtml(formatCompactNumber(count)) + "</em>",
 				"</div>"
@@ -240,9 +240,9 @@
 			if (amount > 1) itemLabel += " x" + formatCompactNumber(amount);
 			return [
 				'<div class="receipt-event">',
-				"<b>" + escapeHtml(titleStatus(row.eventType || "item_event")) + "</b>",
+				"<b>" + escapeHtml(itemEventLabel(row.eventType || "item_event")) + "</b>",
 				"<small>" + escapeHtml(relativeTime(row.at)) + "</small>",
-				"<em>" + escapeHtml(sourceLabel(row.source || "unknown") + " -> " + sourceLabel(row.destination || "unknown")) + "</em>",
+				"<em>" + escapeHtml(itemPathLabel(row.source || "unknown", row.destination || "unknown")) + "</em>",
 				"<strong>" + escapeHtml(itemLabel) + "</strong>",
 				"</div>"
 			].join("");
@@ -254,43 +254,43 @@
 		var blocked = Number(staff.blocked24h || 0);
 		if (!total) {
 			return [
-				staff.status === "waiting_for_game_snapshot" ? "Waiting for the live game snapshot." : "No recent staff command attempts recorded.",
-				"Public summaries hide staff names, IPs, player names, and raw command args.",
-				"Blocked beta-admin attempts will appear here after the exporter runs."
+				staff.status === "waiting_for_game_snapshot" ? "Waiting for the next live update." : "No recent staff tool use recorded.",
+				"We show counts here, not staff names, player names, or private details.",
+				"Stopped staff actions will appear here too."
 			];
 		}
 		var rows = [
-			formatCompactNumber(total) + " staff command attempts tracked in the last 24 hours.",
-			formatCompactNumber(blocked) + " beta-guard block" + (blocked === 1 ? "" : "s") + " recorded."
+			formatCompactNumber(total) + " staff action" + (total === 1 ? "" : "s") + " counted in the last 24 hours.",
+			formatCompactNumber(blocked) + " staff action" + (blocked === 1 ? " was" : "s were") + " stopped by safety rules."
 		];
 		if (topCategory) {
-			rows.push("Top category: " + titleStatus(topCategory.category) + " (" + formatCompactNumber(topCategory.count) + ").");
+			rows.push("Most common type: " + staffCategoryLabel(topCategory.category) + " (" + formatCompactNumber(topCategory.count) + ").");
 		}
-		rows.push("Public summaries hide staff names, IPs, player names, and raw command args.");
+		rows.push("We show counts here, not staff names, player names, or private details.");
 		return rows;
 	}
 
 	function itemReceiptListItems(items) {
-		var status = titleStatus(items.status || "not_recording").toLowerCase();
+		var status = simpleStatus(items.status || "not_recording").toLowerCase();
 		var staffMints = Number(items.staffMints24h || 0);
 		var npcDrops = Number(items.npcDrops24h || 0);
 		var transfers = Number(items.transfers24h || 0);
 		var tracked = Number(items.trackedItems || items.totalEvents || 0);
 		var lines = [
-			"Item receipts are " + status + ".",
-			"24h: " + formatCompactNumber(npcDrops) + " NPC drops, " + formatCompactNumber(transfers) + " player moves, " + formatCompactNumber(staffMints) + " staff mints.",
-			"Tracked receipts: " + formatCompactNumber(tracked) + "."
+			"Item history is " + status + ".",
+			"Today: " + formatCompactNumber(npcDrops) + " monster drops, " + formatCompactNumber(transfers) + " player item moves, " + formatCompactNumber(staffMints) + " staff-created items.",
+			formatCompactNumber(tracked) + " item move" + (tracked === 1 ? "" : "s") + " counted so far."
 		];
 		if (items.reason === "missing_item_provenance_table") {
-			lines.push("The game database is waiting for the item provenance migration.");
+			lines.push("The game is waiting for item history to be turned on.");
 		} else {
-			lines.push("Covered: drops, pickups, deaths, trades, shops, and auction-house moves.");
+			lines.push("Covered: drops, pickups, deaths, trades, shops, and auction-house sales.");
 		}
 		return lines;
 	}
 
 	function scanListItems(scans, accounts) {
-		var status = titleStatus(scanTrustStatus(scans, accounts)).toLowerCase();
+		var status = simpleStatus(scanTrustStatus(scans, accounts)).toLowerCase();
 		var economyFlagged = Number(scans.flagged || 0);
 		var accountFlagged = Number(accounts.flagged || 0);
 		var flagged = economyFlagged + accountFlagged;
@@ -303,20 +303,20 @@
 		var sensitive = Number(accounts.recentSensitiveCommands24h || 0);
 		var lastScanAt = scans.lastScanAt || accounts.lastScanAt || "";
 		var rows = [
-			lastScanAt ? "Last scan " + relativeTime(lastScanAt) + "." : "Nightly checks are waiting for the first snapshot.",
-			"Checked " + formatCompactNumber(trackedItems) + " item rows across " + formatCompactNumber(checkedPlayers) + " players.",
-			"Account review: " + formatCompactNumber(privileged) + " privileged, " + formatCompactNumber(watchedCacheRows) + " watched cache rows, " + formatCompactNumber(sensitive) + " sensitive staff commands 24h.",
-			"Flagged: " + formatCompactNumber(flagged) + ". High priority: " + formatCompactNumber(high) + ". Review: " + formatCompactNumber(review) + "."
+			lastScanAt ? "Last check " + relativeTime(lastScanAt) + "." : "Daily checks are waiting for the first update.",
+			"We checked " + formatCompactNumber(trackedItems) + " item records across " + formatCompactNumber(checkedPlayers) + " players.",
+			"Staff review: " + formatCompactNumber(privileged) + " staff accounts, " + formatCompactNumber(sensitive) + " powerful staff action" + (sensitive === 1 ? "" : "s") + " today.",
+			formatCompactNumber(flagged) + " problem" + (flagged === 1 ? "" : "s") + " found. " + formatCompactNumber(review) + " normal staff review item" + (review === 1 ? "" : "s") + "."
 		];
 		if (flagged > 0) {
 			var categories = (Array.isArray(scans.categories) ? scans.categories : [])
 				.concat(Array.isArray(accounts.categories) ? accounts.categories : []);
 			var top = categories.length ? categories[0] : null;
-			rows.push(top ? "Top finding: " + titleStatus(top.category) + " (" + formatCompactNumber(top.count) + ")." : "Private findings are available to staff.");
+			rows.push(top ? "Most common problem: " + plainFindingLabel(top.category) + " (" + formatCompactNumber(top.count) + ")." : "Staff can see the private details.");
 		} else if (lastScanAt) {
-			rows.push("No impossible stats, broken item refs, invalid account flags, or impossible stacks found.");
+			rows.push("No impossible stats, broken item ownership, bad account settings, or impossible item stacks found.");
 		} else {
-			rows.push("Scanner status: " + status + ".");
+			rows.push("Check status: " + status + ".");
 		}
 		return rows;
 	}
@@ -337,11 +337,11 @@
 	}
 
 	function staffStatusDetail(status, total) {
-		if (status === "waiting_for_game_snapshot") return "Waiting for snapshot";
-		if (status === "missing_staff_log_table") return "No staff log table";
-		if (status === "openrsc_unavailable") return "Game DB unavailable";
-		if (!total) return "Quiet last 24h";
-		return "last 24h";
+		if (status === "waiting_for_game_snapshot") return "Waiting for update";
+		if (status === "missing_staff_log_table") return "Not connected yet";
+		if (status === "openrsc_unavailable") return "Game data unavailable";
+		if (!total) return "Quiet today";
+		return "today";
 	}
 
 	function renderTrustList(target, rows) {
@@ -369,21 +369,127 @@
 		if (target) target.textContent = value;
 	}
 
-	function shortHash(value) {
-		var hash = String(value || "");
-		if (hash.length <= 24) return hash || "Hash pending";
-		return hash.slice(0, 12) + "..." + hash.slice(-8);
-	}
-
 	function formatBytesLabel(value) {
 		var bytes = Number(value || 0);
-		if (!Number.isFinite(bytes) || bytes <= 0) return "Built artifact";
+		if (!Number.isFinite(bytes) || bytes <= 0) return "Built file";
 		var mb = bytes / (1024 * 1024);
 		return "Built " + (mb >= 10 ? mb.toFixed(1) : mb.toFixed(2)) + " MB";
 	}
 
 	function sourceLabel(value) {
 		return String(value || "snapshot").replace(/[_-]+/g, " ");
+	}
+
+	function simpleStatus(value) {
+		var key = String(value || "unknown").toLowerCase();
+		var labels = {
+			active: "Recent",
+			allowed: "Allowed",
+			available: "Ready",
+			blocked: "Stopped",
+			clean: "Clean",
+			click: "Click",
+			designing: "Planned",
+			flagged: "Needs Review",
+			manifest_pending: "Waiting",
+			missing_staff_log_table: "Waiting",
+			no_recent_staff_commands: "Quiet",
+			not_recording: "Waiting",
+			openrsc_unavailable: "Waiting",
+			planned: "Planned",
+			recording: "Tracking",
+			recording_no_recent_staff_mints: "Tracking",
+			recording_no_staff_mints: "Tracking",
+			source_pending: "Waiting",
+			waiting_for_game_snapshot: "Waiting"
+		};
+		return labels[key] || titleStatus(key);
+	}
+
+	function downloadCheckDetail(build) {
+		var manifest = build && build.manifest || {};
+		if (manifest.status === "available") {
+			return formatCompactNumber(manifest.fileCount || 0) + " files checked";
+		}
+		return "Launcher ready";
+	}
+
+	function staffCategoryLabel(value) {
+		var key = String(value || "staff").toLowerCase();
+		var labels = {
+			account: "Account tools",
+			item: "Item tools",
+			moderation: "Moderation",
+			movement: "Movement tools",
+			quest: "Quest tools",
+			server: "Server tools",
+			staff: "Staff tools",
+			teleport: "Movement tools"
+		};
+		return labels[key] || titleStatus(key);
+	}
+
+	function itemEventLabel(value) {
+		var key = String(value || "item_event").toLowerCase();
+		var labels = {
+			item_origin: "Item created",
+			item_transfer: "Item moved",
+			staff_mint: "Staff-created item"
+		};
+		return labels[key] || "Item update";
+	}
+
+	function itemPathLabel(source, destination) {
+		return itemPlaceLabel(source) + " -> " + itemPlaceLabel(destination);
+	}
+
+	function itemPlaceLabel(value) {
+		var key = String(value || "unknown").toLowerCase();
+		var labels = {
+			auction_buyer: "auction buyer",
+			auction_collectible: "auction pickup",
+			auction_listing: "auction listing",
+			auction_mod_delete: "staff auction delete",
+			bank: "bank",
+			death_drop: "death drop",
+			ground: "ground",
+			ground_player_drop: "ground",
+			inventory: "inventory",
+			item_drop: "drop",
+			npc_drop: "monster drop",
+			player_bank: "bank",
+			player_inventory: "inventory",
+			player_trade: "trade",
+			shop: "shop",
+			staff_command: "staff tool",
+			subscription_ledger: "subscription card",
+			unknown: "unknown"
+		};
+		return labels[key] || sourceLabel(key);
+	}
+
+	function plainFindingLabel(value) {
+		var key = String(value || "problem").toLowerCase();
+		var labels = {
+			broken_item_reference: "item without a valid owner",
+			duplicate_item_owner: "item owned in more than one place",
+			invalid_account_flag: "bad account setting",
+			invalid_bank_slot: "bad bank slot",
+			invalid_current_stat: "impossible current stat",
+			invalid_experience: "impossible XP",
+			invalid_inventory_slot: "bad inventory slot",
+			invalid_item_amount: "impossible item stack",
+			invalid_item_catalog: "unknown item",
+			invalid_subscription_expiry: "bad subscription date",
+			invalid_subscription_key: "bad subscription record",
+			missing_skill_row: "missing stats",
+			orphan_account_cache: "account note without a player",
+			orphan_item_status: "item record without an owner",
+			skill_total_mismatch: "wrong total level",
+			subscription_cache_scope: "subscription record in the wrong place",
+			unknown_group: "unknown account rank"
+		};
+		return labels[key] || titleStatus(key);
 	}
 
 	function titleStatus(value) {

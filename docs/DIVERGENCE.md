@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Plain-language transparency page
+
+Rewrote the standalone transparency page for average players instead of technical readers. Visible copy now explains the same trust systems as safer downloads, watched staff tools, item history, and daily checks, while hiding terms like manifest, hash, ledger, provenance, and audit from the main reading path. The existing public API shape and deeper proof links remain unchanged; no game packet, schema, cache, client-version, or gameplay behavior changed.
+
 ### 2026-06-19 - Landing install help and funnel tracking
 
 Added a compact public-beta install help strip, live basics counters, and same-origin ad-funnel click tracking to the public landing page. The page now gives quick Windows/APK/`::bug` guidance near the download buttons, surfaces server/build/update basics from `/api/public`, and tags launcher, Android, Discord rewards, and transparency clicks through a public `/api/funnel/click` endpoint with an admin-only `/api/admin/funnel` count summary. Tracking stores sanitized click metadata and UTM fields in the existing portal audit store; no raw IPs are exposed, and no game packet, schema, cache, client-version, or gameplay behavior changed.

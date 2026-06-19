@@ -4,7 +4,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Voidscape Transparency</title>
-	<meta name="description" content="Voidscape public transparency dashboard: build hashes, staff command summaries, item receipts, and account integrity checks.">
+	<meta name="description" content="Voidscape transparency page: safer downloads, watched staff tools, item history, and daily account checks.">
 	<link rel="icon" href="assets/favicon.png">
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,100 +35,100 @@
 				<div class="landing-integrity-head">
 					<div>
 						<p class="landing-kicker">Community trust</p>
-						<h1 id="landing-integrity-title">Private servers earned skepticism.</h1>
-						<p>Stolen passwords, sketchy downloads, spawned items, friend stats, secret gear. Voidscape is being built so power leaves evidence.</p>
+						<h1 id="landing-integrity-title">Private servers have burned players before.</h1>
+						<p>Bad downloads, stolen passwords, spawned items, boosted friends, secret gear. Voidscape is built so those things are harder to hide.</p>
 					</div>
 					<div class="integrity-seal" aria-label="Voidscape integrity promise">
-						<span id="integrity-updated">Plain-English audits</span>
-						<strong>Open code. Tracked power. Visible integrity.</strong>
+						<span id="integrity-updated">Plain-English checks</span>
+						<strong>Download first. Staff tools are watched. Bad data gets noticed.</strong>
 					</div>
 				</div>
 				<div class="trust-flow" aria-label="Voidscape trust loop">
-					<div><span>01</span><strong>Open download</strong><em>Play first</em></div>
-					<div><span>02</span><strong>Known build</strong><em>Source + hashes</em></div>
-					<div><span>03</span><strong>Staff ledger</strong><em>Power leaves logs</em></div>
-					<div><span>04</span><strong>Integrity scans</strong><em>Bad data gets flagged</em></div>
+					<div><span>01</span><strong>Download first</strong><em>No Discord required</em></div>
+					<div><span>02</span><strong>Checked files</strong><em>Downloads are watched</em></div>
+					<div><span>03</span><strong>Watched staff</strong><em>Power leaves a trail</em></div>
+					<div><span>04</span><strong>Daily checks</strong><em>Problems get noticed</em></div>
 				</div>
 				<div class="trust-live-grid" aria-label="Voidscape live integrity counters">
 					<div class="trust-live-metric">
-						<span>Staff ledger</span>
+						<span>Staff actions</span>
 						<strong id="integrity-staff-total">--</strong>
-						<em id="integrity-staff-detail">Waiting for snapshot</em>
+						<em id="integrity-staff-detail">Waiting for update</em>
 					</div>
 					<div class="trust-live-metric">
 						<span>Blocked</span>
 						<strong id="integrity-blocked-total">--</strong>
-						<em id="integrity-blocked-detail">Beta guard</em>
+						<em id="integrity-blocked-detail">Stopped actions</em>
 					</div>
 					<div class="trust-live-metric">
-						<span>Build</span>
-						<strong id="integrity-build-status">Hashes</strong>
-						<em id="integrity-build-detail">Launcher manifest</em>
+						<span>Downloads</span>
+						<strong id="integrity-build-status">Checked</strong>
+						<em id="integrity-build-detail">Launcher ready</em>
 					</div>
 					<div class="trust-live-metric">
-						<span>Item receipts</span>
+						<span>Item history</span>
 						<strong id="integrity-items-status">--</strong>
-						<em id="integrity-items-detail">Receipts 24h</em>
+						<em id="integrity-items-detail">Last 24h</em>
 					</div>
 				</div>
 				<div class="trust-tabs" role="tablist" aria-label="Voidscape integrity topics">
 					<button class="is-active" type="button" role="tab" aria-selected="true" data-trust-tab="passwords">Passwords</button>
-					<button type="button" role="tab" aria-selected="false" data-trust-tab="source">Source</button>
+					<button type="button" role="tab" aria-selected="false" data-trust-tab="source">Downloads</button>
 					<button type="button" role="tab" aria-selected="false" data-trust-tab="staff">Staff</button>
 					<button type="button" role="tab" aria-selected="false" data-trust-tab="items">Items</button>
-					<button type="button" role="tab" aria-selected="false" data-trust-tab="scans">Scans</button>
+					<button type="button" role="tab" aria-selected="false" data-trust-tab="scans">Checks</button>
 				</div>
 				<div class="trust-panels">
 					<article class="trust-panel is-active" data-trust-panel="passwords">
 						<div>
 							<span id="trust-passwords-status">Now</span>
-							<h3>No trust fall at download.</h3>
+							<h3>You can try the game before joining anything.</h3>
 						</div>
 						<ul id="trust-passwords-list">
 							<li>Download first. Discord stays optional.</li>
 							<li>Use a fresh game password.</li>
-							<li>Public pages do not expose private account data.</li>
+							<li>We do not show private account details on public pages.</li>
 						</ul>
 					</article>
 					<article class="trust-panel" data-trust-panel="source" hidden>
 						<div>
 							<span id="trust-source-status">Available</span>
-							<h3>The live build should match visible code.</h3>
+							<h3>You should know what you are downloading.</h3>
 						</div>
 						<ul id="trust-source-list">
-							<li>Voidscape stays AGPL.</li>
-							<li>Download hashes are generated from served files.</li>
-							<li>Integrity source: snapshot.</li>
+							<li>The game code is public.</li>
+							<li>Downloads are checked when they are served.</li>
+							<li>If a file changes, the check changes too.</li>
 						</ul>
 						<div class="build-proof-board" id="trust-source-board" hidden>
 							<div class="build-proof-head">
-								<strong>Build proof</strong>
-								<a id="trust-source-repo" href="https://github.com/voidscape-gg/voidscape" target="_blank" rel="noreferrer">AGPL source</a>
+								<strong>Download checks</strong>
+								<a id="trust-source-repo" href="https://github.com/voidscape-gg/voidscape" target="_blank" rel="noreferrer">Public code</a>
 							</div>
 							<div class="build-proof-meta">
-								<span id="trust-source-commit">Commit pending</span>
-								<span id="trust-source-manifest">Manifest pending</span>
+								<span id="trust-source-commit">Code version pending</span>
+								<span id="trust-source-manifest">Download list pending</span>
 							</div>
-							<div class="build-proof-grid" id="trust-build-artifacts" aria-label="Download artifact hashes"></div>
+							<div class="build-proof-grid" id="trust-build-artifacts" aria-label="Download file checks"></div>
 						</div>
 					</article>
 					<article class="trust-panel" data-trust-panel="staff" hidden>
 						<div>
 							<span id="trust-staff-status">Waiting</span>
-							<h3>Staff power should leave tracks.</h3>
+							<h3>Staff tools should not be invisible.</h3>
 						</div>
 						<ul id="trust-staff-list">
-							<li>Grants, bans, and account edits go to audit logs.</li>
-							<li>Public summaries show volume without staff or player names.</li>
-							<li>Emergency actions get a reason.</li>
+							<li>Important staff actions are counted.</li>
+							<li>The public page shows counts, not private names.</li>
+							<li>Blocked actions show up here too.</li>
 						</ul>
 						<div class="audit-board" id="trust-staff-board" hidden>
 							<div class="audit-board-head">
-								<strong>Command ledger</strong>
+								<strong>Recent staff actions</strong>
 								<em id="trust-staff-board-total">--</em>
 							</div>
-							<div class="audit-source-bars" id="trust-staff-categories" aria-label="Staff command categories"></div>
-							<div class="audit-feed" id="trust-staff-recent" aria-label="Recent staff command audit rows"></div>
+							<div class="audit-source-bars" id="trust-staff-categories" aria-label="Staff action groups"></div>
+							<div class="audit-feed" id="trust-staff-recent" aria-label="Recent staff actions"></div>
 						</div>
 					</article>
 					<article class="trust-panel" data-trust-panel="items" hidden>
@@ -137,28 +137,28 @@
 							<h3>Rare items should have a birthplace.</h3>
 						</div>
 						<ul id="trust-items-list">
-							<li>NPC drops and staff-created items can leave receipts.</li>
-							<li>Public summaries show source counts without naming players.</li>
-							<li>Impossible items get flagged.</li>
+							<li>Important item moves are counted.</li>
+							<li>Public summaries do not name players.</li>
+							<li>Impossible item data gets noticed.</li>
 						</ul>
 						<div class="receipt-board" id="trust-items-board" hidden>
 							<div class="receipt-board-head">
-								<strong>Receipt sources</strong>
+								<strong>Where items came from</strong>
 								<em id="trust-items-board-total">--</em>
 							</div>
-							<div class="receipt-source-bars" id="trust-items-sources" aria-label="Recent item receipt sources"></div>
-							<div class="receipt-feed" id="trust-items-recent" aria-label="Recent item receipts"></div>
+							<div class="receipt-source-bars" id="trust-items-sources" aria-label="Recent item sources"></div>
+							<div class="receipt-feed" id="trust-items-recent" aria-label="Recent item history"></div>
 						</div>
 					</article>
 					<article class="trust-panel" data-trust-panel="scans" hidden>
 						<div>
 							<span id="trust-scans-status">Planned</span>
-							<h3>Quiet checks, visible confidence.</h3>
+							<h3>Quiet checks, simple results.</h3>
 						</div>
 						<ul id="trust-scans-list">
-							<li>Nightly scans for illegal stats, account flags, and impossible stacks.</li>
-							<li>Privileged accounts and sensitive commands go into review.</li>
-							<li>Short reports: clean, flagged, fixed.</li>
+							<li>We check for impossible stats and item stacks.</li>
+							<li>We also watch staff accounts and powerful staff tools.</li>
+							<li>The public result is simple: clean or needs review.</li>
 						</ul>
 					</article>
 				</div>
@@ -181,7 +181,7 @@
 					<a href="/">Play Beta</a>
 					<a href="/#gameplay">Screenshots</a>
 					<a href="/downloads/launcher" download>Download</a>
-					<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">AGPL Source</a>
+					<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">Public Code</a>
 				</div>
 			</footer>
 		</div>
