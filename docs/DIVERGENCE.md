@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Account integrity transparency scan
+
+Extended the readonly transparency exporter and admin-only `::integrity` command beyond economy rows into account/stat integrity checks. The scan now flags unknown account groups, missing stat rows, invalid account flags/cache values, stale or suspicious subscription/reward cache rows, and recent sensitive staff commands, while treating known privileged accounts as review-only visibility rather than public accusations. The portal exposes only aggregate `accountIntegrity` counters on `/api/public` and `/api/integrity`; private names, cache keys, and command details stay in the staff-only findings file. No packet, schema, cache format, client-version, or gameplay behavior changed; the scanner reports findings only and does not auto-fix data.
+
 ### 2026-06-19 - Admin receipt lookup command
 
 Added a private read-only `::receipts` admin command over the item provenance ledger. Admins can inspect recent rows or filter by player, item instance id, catalog id, or provenance command, with compact in-game output showing time, item, source/destination, actor/target, and stored receipt metadata. This keeps the public transparency page aggregate-only while giving trusted operators a fast way to answer "where did this item/card/value come from?" without SSHing into SQLite. No packet, schema, cache, client-version, or gameplay behavior changed; reversibility is removing the command plugin and its command reference.

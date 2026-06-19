@@ -247,6 +247,9 @@ PORTAL_OPENRSC_DB="$fixture_db" \
 const summary = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
 const findings = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
 if (!summary.economyScans || summary.economyScans.flagged < 1) throw new Error('integrity export should flag fixture economy anomalies');
+if (!summary.accountIntegrity || summary.accountIntegrity.flagged < 1) throw new Error('integrity export should flag fixture account anomalies');
+if (!Number.isInteger(summary.accountIntegrity.review)) throw new Error('integrity export should include account review totals');
+if (!findings.sections || !findings.sections.accountIntegrity) throw new Error('private findings should include the account integrity section');
 if (!Array.isArray(findings.findings) || findings.findings.length < 1) throw new Error('integrity export should write private economy findings');
 " "$tmp_dir/integrity-summary.json" "$tmp_dir/integrity-findings.json"
 
@@ -409,6 +412,7 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q '"npcDrops24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized npc drop receipt counts"; exit 1; }
 	grep -q '"transfers24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized movement receipt counts"; exit 1; }
 	grep -q '"economyScans"' <<<"$public_payload" || { echo "public-mode /api/public should expose economy scan summary"; exit 1; }
+	grep -q '"accountIntegrity"' <<<"$public_payload" || { echo "public-mode /api/public should expose account integrity summary"; exit 1; }
 	grep -q '"artifacts"' <<<"$public_payload" || { echo "public-mode /api/public should expose build artifact proof"; exit 1; }
 	grep -q '"manifest"' <<<"$public_payload" || { echo "public-mode /api/public should expose launcher manifest proof"; exit 1; }
 	if grep -q '"PC client"' <<<"$public_payload"; then
@@ -433,6 +437,7 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q '"origins24h": 1' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported item origin totals"; exit 1; }
 	grep -q '"transfers24h": 1' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported movement receipt totals"; exit 1; }
 	grep -q '"flagged":' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported scan totals"; exit 1; }
+	grep -q '"accountIntegrity"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose account integrity totals"; exit 1; }
 	grep -q '"sha256"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose build hashes"; exit 1; }
 
 # admin stays available with the token, refused without

@@ -61,6 +61,7 @@
 		var build = integrity.build || {};
 		var items = integrity.itemProvenance || {};
 		var scans = integrity.economyScans || {};
+		var accounts = integrity.accountIntegrity || {};
 		var categories = Array.isArray(staff.categories) ? staff.categories : [];
 		var topCategory = categories.length ? categories[0] : null;
 		var total = Number(staff.total24h || 0);
@@ -97,8 +98,8 @@
 		renderTrustList(trustItemsList, itemReceiptListItems(items));
 		renderItemReceiptBoard(items);
 
-		setText(trustScansStatus, titleStatus(scans.status || "planned"));
-		renderTrustList(trustScansList, scanListItems(scans));
+		setText(trustScansStatus, titleStatus(scanTrustStatus(scans, accounts)));
+		renderTrustList(trustScansList, scanListItems(scans, accounts));
 	}
 
 	function renderSourceBuildBoard(build) {
@@ -288,27 +289,44 @@
 		return lines;
 	}
 
-	function scanListItems(scans) {
-		var status = titleStatus(scans.status || "planned").toLowerCase();
-		var flagged = Number(scans.flagged || 0);
-		var high = Number(scans.highSeverity || 0);
+	function scanListItems(scans, accounts) {
+		var status = titleStatus(scanTrustStatus(scans, accounts)).toLowerCase();
+		var economyFlagged = Number(scans.flagged || 0);
+		var accountFlagged = Number(accounts.flagged || 0);
+		var flagged = economyFlagged + accountFlagged;
+		var high = Number(scans.highSeverity || 0) + Number(accounts.highSeverity || 0);
+		var review = Number(accounts.review || 0);
 		var trackedItems = Number(scans.trackedItems || 0);
-		var checkedPlayers = Number(scans.checkedPlayers || 0);
+		var checkedPlayers = Math.max(Number(scans.checkedPlayers || 0), Number(accounts.checkedPlayers || 0));
+		var watchedCacheRows = Number(accounts.watchedCacheRows || 0);
+		var privileged = Number(accounts.privilegedAccounts || 0);
+		var sensitive = Number(accounts.recentSensitiveCommands24h || 0);
+		var lastScanAt = scans.lastScanAt || accounts.lastScanAt || "";
 		var rows = [
-			scans.lastScanAt ? "Last scan " + relativeTime(scans.lastScanAt) + "." : "Nightly checks are waiting for the first snapshot.",
+			lastScanAt ? "Last scan " + relativeTime(lastScanAt) + "." : "Nightly checks are waiting for the first snapshot.",
 			"Checked " + formatCompactNumber(trackedItems) + " item rows across " + formatCompactNumber(checkedPlayers) + " players.",
-			"Flagged: " + formatCompactNumber(flagged) + ". High priority: " + formatCompactNumber(high) + "."
+			"Account review: " + formatCompactNumber(privileged) + " privileged, " + formatCompactNumber(watchedCacheRows) + " watched cache rows, " + formatCompactNumber(sensitive) + " sensitive staff commands 24h.",
+			"Flagged: " + formatCompactNumber(flagged) + ". High priority: " + formatCompactNumber(high) + ". Review: " + formatCompactNumber(review) + "."
 		];
 		if (flagged > 0) {
-			var categories = Array.isArray(scans.categories) ? scans.categories : [];
+			var categories = (Array.isArray(scans.categories) ? scans.categories : [])
+				.concat(Array.isArray(accounts.categories) ? accounts.categories : []);
 			var top = categories.length ? categories[0] : null;
 			rows.push(top ? "Top finding: " + titleStatus(top.category) + " (" + formatCompactNumber(top.count) + ")." : "Private findings are available to staff.");
-		} else if (scans.lastScanAt) {
-			rows.push("No impossible stats, broken item refs, or impossible stacks found.");
+		} else if (lastScanAt) {
+			rows.push("No impossible stats, broken item refs, invalid account flags, or impossible stacks found.");
 		} else {
 			rows.push("Scanner status: " + status + ".");
 		}
 		return rows;
+	}
+
+	function scanTrustStatus(scans, accounts) {
+		var scanStatus = String(scans.status || "");
+		var accountStatus = String(accounts.status || "");
+		if (scanStatus === "flagged" || accountStatus === "flagged") return "flagged";
+		if (scans.lastScanAt || accounts.lastScanAt) return "clean";
+		return scanStatus || accountStatus || "planned";
 	}
 
 	function itemTrustStatus(items) {

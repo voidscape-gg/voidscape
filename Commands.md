@@ -29,7 +29,7 @@ Admin Commands
   - Saves all users currently logged in.
 - integrity
   - Usage: `::integrity [summary|recent [limit]|player <name> [limit]]`
-  - Shows the latest private economy integrity scan summary and findings for admins.
+  - Shows the latest private economy/account integrity scan summary and findings for admins.
 - receipts
   - Usage: `::receipts [recent|player <name>|item <itemID>|catalog <catalogID>|command <name>] [limit]`
   - Shows private item-provenance receipt rows for admins.

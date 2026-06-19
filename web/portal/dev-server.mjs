@@ -2319,7 +2319,13 @@ async function integrityState(store) {
 		staffCommands,
 		portalAudit: portalAuditIntegrity(store),
 		build: await buildIntegrity(),
-			itemProvenance,
+		itemProvenance,
+		accountIntegrity: {
+			status: "planned",
+			lastScanAt: null,
+			flagged: 0,
+			review: 0
+		},
 		economyScans: {
 			status: "planned",
 			lastScanAt: null,
@@ -2350,6 +2356,7 @@ function normalizeIntegritySnapshot(snapshot, fallbackSource) {
 		portalAudit: normalizePortalAuditIntegrity(snapshot && snapshot.portalAudit),
 		build: normalizeBuildIntegrity(snapshot && snapshot.build),
 		itemProvenance: normalizeItemProvenanceIntegrity(snapshot && snapshot.itemProvenance, fallbackSource || "snapshot"),
+		accountIntegrity: normalizeSimpleIntegrityBucket(snapshot && snapshot.accountIntegrity, "planned"),
 		economyScans: normalizeSimpleIntegrityBucket(snapshot && snapshot.economyScans, "planned")
 	};
 }
@@ -2691,11 +2698,16 @@ function normalizeSimpleIntegrityBucket(input, fallbackStatus) {
 	if (input.checkedPlayers !== undefined) normalized.checkedPlayers = nonNegativeInteger(input.checkedPlayers);
 	if (input.lastScanAt !== undefined) normalized.lastScanAt = validIsoTimestamp(input.lastScanAt) || null;
 	if (input.flagged !== undefined) normalized.flagged = nonNegativeInteger(input.flagged);
+	if (input.review !== undefined) normalized.review = nonNegativeInteger(input.review);
 	if (input.fixed !== undefined) normalized.fixed = nonNegativeInteger(input.fixed);
 	if (input.highSeverity !== undefined) normalized.highSeverity = nonNegativeInteger(input.highSeverity);
+	if (input.privilegedAccounts !== undefined) normalized.privilegedAccounts = nonNegativeInteger(input.privilegedAccounts);
+	if (input.watchedCacheRows !== undefined) normalized.watchedCacheRows = nonNegativeInteger(input.watchedCacheRows);
+	if (input.recentSensitiveCommands24h !== undefined) normalized.recentSensitiveCommands24h = nonNegativeInteger(input.recentSensitiveCommands24h);
 	if (input.staffMints24h !== undefined) normalized.staffMints24h = nonNegativeInteger(input.staffMints24h);
 	if (input.staffMintAmount24h !== undefined) normalized.staffMintAmount24h = nonNegativeInteger(input.staffMintAmount24h);
 	if (input.categories !== undefined) normalized.categories = normalizeIntegrityCategories(input.categories);
+	if (input.reviewCategories !== undefined) normalized.reviewCategories = normalizeIntegrityCategories(input.reviewCategories);
 	if (input.privacy !== undefined) normalized.privacy = String(input.privacy || "").slice(0, 180);
 	return normalized;
 }
