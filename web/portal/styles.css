@@ -8878,6 +8878,72 @@ body.prelaunch-mode .prelaunch-page.landing-redesign .landing-reward-prompt .gho
 	background: rgba(12, 9, 18, 0.78);
 }
 
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1px;
+	overflow: hidden;
+	border: 1px solid rgba(214, 173, 88, 0.22);
+	background: rgba(214, 173, 88, 0.18);
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help div {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+	padding: 10px 12px;
+	background: rgba(4, 4, 8, 0.72);
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help span,
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics span {
+	color: #b967ff;
+	font-family: var(--font-label);
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help strong,
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics strong {
+	overflow-wrap: anywhere;
+	color: #f7e8c6;
+	font-family: var(--font-title);
+	font-size: 15px;
+	line-height: 1.05;
+	text-transform: uppercase;
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help em,
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics em {
+	color: rgba(244, 230, 205, 0.72);
+	font-style: normal;
+	font-size: 13px;
+	line-height: 1.2;
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1px;
+	width: min(100%, 760px);
+	margin: 12px auto 0;
+	overflow: hidden;
+	border: 1px solid rgba(214, 173, 88, 0.28);
+	background: rgba(214, 173, 88, 0.2);
+	box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+}
+
+body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics div {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+	padding: 13px 14px;
+	background:
+		linear-gradient(180deg, rgba(16, 11, 23, 0.84), rgba(5, 5, 9, 0.9)),
+		radial-gradient(circle at 86% 10%, rgba(139, 58, 220, 0.16), transparent 48%);
+}
+
 body.prelaunch-mode .prelaunch-page.landing-redesign .landing-gameplay {
 	padding: 24px 0 14px;
 }
@@ -9000,6 +9066,11 @@ body.prelaunch-mode .prelaunch-page.landing-redesign .landing-footer a {
 	body.prelaunch-mode .prelaunch-page.landing-redesign .landing-reward-prompt {
 		display: grid;
 		justify-items: stretch;
+	}
+
+	body.prelaunch-mode .prelaunch-page.landing-redesign .landing-install-help,
+	body.prelaunch-mode .prelaunch-page.landing-redesign .landing-live-basics {
+		grid-template-columns: 1fr;
 	}
 
 	body.prelaunch-mode .prelaunch-page.landing-redesign .landing-gameplay h2 {

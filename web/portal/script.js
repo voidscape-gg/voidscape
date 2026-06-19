@@ -126,6 +126,12 @@
 	var patchChip = document.getElementById("patch-chip");
 	var landingWorldState = document.getElementById("landing-world-state");
 	var landingWorldDetail = document.getElementById("landing-world-detail");
+	var landingLiveStatus = document.getElementById("landing-live-status");
+	var landingLivePlayers = document.getElementById("landing-live-players");
+	var landingLiveBuild = document.getElementById("landing-live-build");
+	var landingLiveBuildDetail = document.getElementById("landing-live-build-detail");
+	var landingLiveUpdated = document.getElementById("landing-live-updated");
+	var landingLiveUpdatedDetail = document.getElementById("landing-live-updated-detail");
 	var landingXpRates = document.getElementById("landing-xp-rates");
 	var landingSubRates = document.getElementById("landing-sub-rates");
 	var landingPrizeState = document.getElementById("landing-prize-state");
@@ -310,6 +316,7 @@
 	if (trustTabs.length) setTrustPanel(trustTabs[0].getAttribute("data-trust-tab"));
 
 	setupWhitepaperLightbox();
+	setupFunnelTracking();
 
 	window.addEventListener("hashchange", function () {
 		activateView((window.location.hash || "#account").replace("#", "") || "account");
@@ -1033,6 +1040,8 @@
 			if (patchChip) patchChip.textContent = "Patch " + (state.status.patch || "0.8.7");
 			if (landingWorldState) landingWorldState.textContent = state.status.online ? "Online" : "Offline";
 			if (landingWorldDetail) landingWorldDetail.textContent = (state.status.playersOnline || 0) + " players online";
+			if (landingLiveStatus) landingLiveStatus.textContent = state.status.online ? "Online" : "Offline";
+			if (landingLivePlayers) landingLivePlayers.textContent = (state.status.playersOnline || 0) + " players online";
 			if (dashboardWorldState) dashboardWorldState.textContent = state.status.online ? "Online" : "Offline";
 			if (dashboardWorldSave) dashboardWorldSave.textContent = "Last save " + (state.status.lastSave || "recently");
 		}
@@ -1075,9 +1084,11 @@
 			betaDownloadRows = state.downloads.slice();
 			renderDownloads(state.downloads);
 			renderBetaHub();
+			renderLiveBuildBasics(state);
 		}
 		if (state.integrity) {
 			renderIntegrity(state.integrity);
+			renderLiveBuildBasics(state);
 		}
 		if (state.beta) {
 			betaResources = normalizeBetaResources(state.beta);
@@ -2529,7 +2540,7 @@
 			var available = Boolean(row.available && row.url && row.url !== "#");
 			var tag = available ? "a" : "button";
 			var attrs = available
-				? ' href="' + escapeAttr(row.url) + '" download'
+				? ' href="' + escapeAttr(row.url) + '" download data-funnel-event="' + escapeAttr(downloadFunnelEvent(row)) + '"'
 				: ' type="button" disabled';
 			return [
 				"<" + tag + ' class="ghost-button download-action' + (available ? " is-ready" : "") + '"' + attrs + ">",
@@ -2538,6 +2549,90 @@
 				"</" + tag + ">"
 			].join("");
 		}).join("");
+	}
+
+	function renderLiveBuildBasics(state) {
+		var downloads = Array.isArray(state.downloads) ? state.downloads : [];
+		var launcher = downloads.find(function (row) {
+			return isLauncherDownloadRow(row);
+		}) || downloads[0] || {};
+		var integrityGeneratedAt = state.integrity && state.integrity.generatedAt;
+		var build = state.integrity && state.integrity.build || {};
+		var manifest = build.manifest || {};
+		var patch = state.status && state.status.patch ? String(state.status.patch) : "beta";
+		if (landingLiveBuild) landingLiveBuild.textContent = patch === "beta" ? "Beta build" : "Build " + patch;
+		if (landingLiveBuildDetail) {
+			if (manifest.version) {
+				landingLiveBuildDetail.textContent = "Manifest " + String(manifest.version).slice(0, 12);
+			} else if (launcher.updatedAt) {
+				landingLiveBuildDetail.textContent = "Launcher updated " + relativeTime(launcher.updatedAt);
+			} else {
+				landingLiveBuildDetail.textContent = launcher.available ? "Launcher ready" : "Build waiting";
+			}
+		}
+		if (landingLiveUpdated) {
+			landingLiveUpdated.textContent = integrityGeneratedAt ? relativeTime(integrityGeneratedAt) : "Checking";
+		}
+		if (landingLiveUpdatedDetail) {
+			landingLiveUpdatedDetail.textContent = integrityGeneratedAt ? "Integrity snapshot" : "Status snapshot";
+		}
+	}
+
+	function downloadFunnelEvent(row) {
+		if (!row) return "download";
+		if (row.slug === "android-apk") return "download_android";
+		if (row.slug === "launcher" || isLauncherDownloadRow(row)) return "download_launcher";
+		return "download";
+	}
+
+	function setupFunnelTracking() {
+		document.addEventListener("click", function (event) {
+			var target = event.target && event.target.closest ? event.target.closest("[data-funnel-event]") : null;
+			if (!target) return;
+			trackFunnelEvent(target.getAttribute("data-funnel-event"), target);
+		});
+	}
+
+	function trackFunnelEvent(eventName, target) {
+		if (window.location.protocol === "file:") return;
+		var payload = JSON.stringify({
+			event: eventName || "click",
+			target: targetLabel(target),
+			href: target && target.getAttribute ? target.getAttribute("href") || "" : "",
+			page: window.location.pathname + window.location.search + window.location.hash,
+			referrer: document.referrer || "",
+			utm: utmPayload()
+		});
+		try {
+			if (navigator.sendBeacon) {
+				navigator.sendBeacon("/api/funnel/click", new Blob([payload], { type: "application/json" }));
+				return;
+			}
+		} catch (error) {
+			// Fall through to fetch.
+		}
+		fetch("/api/funnel/click", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: payload,
+			keepalive: true
+		}).catch(function () {});
+	}
+
+	function targetLabel(target) {
+		if (!target) return "";
+		var text = String(target.textContent || "").replace(/\s+/g, " ").trim();
+		return text.slice(0, 80);
+	}
+
+	function utmPayload() {
+		var params = new URLSearchParams(window.location.search || "");
+		var payload = {};
+		["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].forEach(function (key) {
+			var value = params.get(key);
+			if (value) payload[key] = value.slice(0, 80);
+		});
+		return payload;
 	}
 
 	function isPublicDownloadRow(row) {

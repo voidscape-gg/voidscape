@@ -422,6 +422,9 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 
 	landing_html="$(curl -fsS "http://127.0.0.1:${public_port}/")"
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
+	grep -q 'landing-install-help' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
+	grep -q 'landing-live-basics' <<<"$landing_html" || { echo "landing page should include live basics"; exit 1; }
+	grep -q 'data-funnel-event="download_launcher"' <<<"$landing_html" || { echo "landing page should tag download clicks for funnel tracking"; exit 1; }
 	if grep -q 'class="landing-integrity' <<<"$landing_html"; then
 		echo "landing page should not embed the full transparency dashboard"
 		exit 1
@@ -440,8 +443,13 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q '"accountIntegrity"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose account integrity totals"; exit 1; }
 	grep -q '"sha256"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose build hashes"; exit 1; }
 
+	funnel_click="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/funnel/click" -H 'content-type: application/json' -d '{"event":"download_launcher","target":"Download Launcher","href":"/downloads/launcher","page":"/?utm_source=smoke&utm_campaign=portal","utm":{"utm_source":"smoke","utm_campaign":"portal"}}')"
+	grep -q '"event": "download_launcher"' <<<"$funnel_click" || { echo "public-mode funnel click endpoint should accept download events"; exit 1; }
+
 # admin stays available with the token, refused without
 expect_status 403 "http://127.0.0.1:${public_port}/api/admin/signups"
+admin_funnel="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/funnel")"
+grep -q '"event": "download_launcher"' <<<"$admin_funnel" || { echo "admin funnel summary should include tracked download clicks"; exit 1; }
 admin_signups="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/signups")"
 grep -q '"PublicGuy"' <<<"$admin_signups" || { echo "public-mode admin signup list should include the signup"; exit 1; }
 

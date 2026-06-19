@@ -88,6 +88,14 @@ const downloadArtifacts = [
 		contentType: "application/vnd.android.package-archive"
 	}
 ];
+const funnelEvents = new Set([
+	"download_launcher",
+	"download_android",
+	"download",
+	"discord_rewards",
+	"transparency",
+	"click"
+]);
 const clientCacheDir = join(repoRoot, "Client_Base/Cache");
 const launcherRuntimeFiles = new Set([
 	"credentials.txt",
@@ -439,6 +447,7 @@ async function handleApi(request, response, url) {
 			(method === "GET" && url.pathname === "/api/health")
 			|| (method === "GET" && url.pathname === "/api/public")
 			|| (method === "GET" && url.pathname === "/api/integrity")
+			|| (method === "POST" && url.pathname === "/api/funnel/click")
 			|| (!betaMode && method === "POST" && url.pathname === "/api/founder/reservations")
 			|| (betaMode && method === "GET" && url.pathname === "/api/account")
 			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/start")
@@ -463,6 +472,13 @@ async function handleApi(request, response, url) {
 	if (method === "GET" && url.pathname === "/api/integrity") {
 		const store = await loadStore();
 		json(response, 200, await integrityState(store));
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/funnel/click") {
+		const payload = await readJson(request);
+		const result = await recordFunnelClick(request, payload);
+		json(response, 202, result);
 		return;
 	}
 
@@ -855,6 +871,13 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "GET" && url.pathname === "/api/admin/funnel") {
+		requireAdmin(request);
+		const store = await loadStore();
+		json(response, 200, funnelSummary(store));
+		return;
+	}
+
 	if (method === "GET" && url.pathname === "/api/admin/signups") {
 		requireAdmin(request);
 		const store = await loadStore();
@@ -1052,6 +1075,27 @@ async function handleApi(request, response, url) {
 	}
 
 	throw new HttpError(404, "not_found");
+}
+
+async function recordFunnelClick(request, payload) {
+	const event = sanitizeFunnelEvent(payload && payload.event);
+	const metadata = {
+		event,
+		target: sanitizeFunnelText(payload && payload.target, 80),
+		href: sanitizeFunnelHref(payload && payload.href),
+		page: sanitizeFunnelPath(payload && payload.page),
+		referrer: sanitizeFunnelReferrer(payload && payload.referrer),
+		utm: sanitizeFunnelUtm(payload && payload.utm),
+		publicMode: Boolean(publicMode),
+		betaMode: Boolean(betaMode),
+		userAgent: sanitizeFunnelText(request.headers["user-agent"], 120)
+	};
+	await updateStore((store) => {
+		audit(store, "funnel_click", metadata);
+		trimFunnelClicks(store);
+		return null;
+	});
+	return { ok: true, event };
 }
 
 async function startDiscordOAuth(request, response, url) {
@@ -4163,6 +4207,114 @@ function audit(store, type, metadata) {
 		metadata,
 		createdAt: now()
 	});
+}
+
+function funnelSummary(store) {
+	const clicks = store.audit
+		.filter((entry) => entry.type === "funnel_click")
+		.map((entry) => ({
+			...entry,
+			createdAtMs: Date.parse(entry.createdAt || "")
+		}))
+		.filter((entry) => Number.isFinite(entry.createdAtMs));
+	const nowMs = Date.now();
+	return {
+		generatedAt: now(),
+		total: clicks.length,
+		last24h: summarizeFunnelWindow(clicks, nowMs - 24 * 60 * 60 * 1000),
+		last7d: summarizeFunnelWindow(clicks, nowMs - 7 * 24 * 60 * 60 * 1000),
+		last30d: summarizeFunnelWindow(clicks, nowMs - 30 * 24 * 60 * 60 * 1000),
+		recent: clicks
+			.slice(-25)
+			.reverse()
+			.map((entry) => ({
+				event: sanitizeFunnelEvent(entry.metadata && entry.metadata.event),
+				target: sanitizeFunnelText(entry.metadata && entry.metadata.target, 80),
+				page: sanitizeFunnelPath(entry.metadata && entry.metadata.page),
+				referrer: sanitizeFunnelReferrer(entry.metadata && entry.metadata.referrer),
+				utm: sanitizeFunnelUtm(entry.metadata && entry.metadata.utm),
+				createdAt: entry.createdAt
+			}))
+	};
+}
+
+function summarizeFunnelWindow(clicks, sinceMs) {
+	const rows = clicks.filter((entry) => entry.createdAtMs >= sinceMs);
+	const counts = new Map();
+	for (const entry of rows) {
+		const event = sanitizeFunnelEvent(entry.metadata && entry.metadata.event);
+		counts.set(event, (counts.get(event) || 0) + 1);
+	}
+	return {
+		total: rows.length,
+		events: Array.from(counts.entries())
+			.map(([event, count]) => ({ event, count }))
+			.sort((a, b) => b.count - a.count || a.event.localeCompare(b.event))
+	};
+}
+
+function trimFunnelClicks(store) {
+	let remaining = 5000;
+	const keep = new Array(store.audit.length).fill(true);
+	for (let index = store.audit.length - 1; index >= 0; index -= 1) {
+		if (store.audit[index].type !== "funnel_click") continue;
+		if (remaining > 0) {
+			remaining -= 1;
+		} else {
+			keep[index] = false;
+		}
+	}
+	store.audit = store.audit.filter((entry, index) => keep[index]);
+}
+
+function sanitizeFunnelEvent(value) {
+	const event = sanitizeFunnelText(value, 48)
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, "_")
+		.replace(/^_+|_+$/g, "");
+	return funnelEvents.has(event) ? event : "click";
+}
+
+function sanitizeFunnelText(value, limit) {
+	return String(value || "")
+		.replace(/[\u0000-\u001F\u007F]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, limit);
+}
+
+function sanitizeFunnelPath(value) {
+	const text = sanitizeFunnelText(value, 220);
+	return text.startsWith("/") ? text : "";
+}
+
+function sanitizeFunnelHref(value) {
+	const text = sanitizeFunnelText(value, 220);
+	if (!text) return "";
+	if (text.startsWith("/downloads/") || text === "/transparency") return text;
+	return "";
+}
+
+function sanitizeFunnelReferrer(value) {
+	const text = sanitizeFunnelText(value, 220);
+	if (!text) return "";
+	try {
+		const url = new URL(text);
+		return `${url.origin}${url.pathname}`.slice(0, 220);
+	} catch (error) {
+		return "";
+	}
+}
+
+function sanitizeFunnelUtm(input) {
+	const allowed = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+	const output = {};
+	if (!input || typeof input !== "object") return output;
+	for (const key of allowed) {
+		const value = sanitizeFunnelText(input[key], 80);
+		if (value) output[key] = value;
+	}
+	return output;
 }
 
 async function hashPassword(password) {

@@ -90,11 +90,11 @@
 								<nav class="landing-nav-links" aria-label="Landing sections">
 									<button type="button" data-landing-scroll="beta-access">Download</button>
 									<button type="button" data-landing-scroll="gameplay">Screenshots</button>
-									<a href="/transparency">Trust</a>
+									<a href="/transparency" data-funnel-event="transparency">Trust</a>
 									<button type="button" data-landing-scroll="rewards">Rewards</button>
-									<button type="button" data-discord-login>Discord rewards</button>
+									<button type="button" data-discord-login data-funnel-event="discord_rewards">Discord rewards</button>
 								</nav>
-								<a class="landing-nav-cta" href="/downloads/launcher" download>Download</a>
+									<a class="landing-nav-cta" href="/downloads/launcher" download data-funnel-event="download_launcher">Download</a>
 							</header>
 
 							<section class="landing-hero" aria-labelledby="landing-hero-title">
@@ -107,8 +107,8 @@
 										<span>Discord rewards are optional.</span>
 									</p>
 									<div class="landing-hero-actions">
-										<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
-										<a class="landing-button landing-button-primary landing-button-android" href="/downloads/android-apk" download>Android APK</a>
+										<a class="landing-button landing-button-primary" href="/downloads/launcher" download data-funnel-event="download_launcher">Download Launcher</a>
+										<a class="landing-button landing-button-primary landing-button-android" href="/downloads/android-apk" download data-funnel-event="download_android">Android APK</a>
 									</div>
 								</div>
 							</section>
@@ -161,18 +161,53 @@
 									<strong>Download Voidscape</strong>
 									<p>Grab the desktop launcher or Android APK first. Join Discord after that for your beta role, reward code, patch notes, and bug reports.</p>
 									<div class="landing-public-download-grid" id="download-actions">
-										<a class="ghost-button download-action is-ready" href="/downloads/launcher" download>
+										<a class="ghost-button download-action is-ready" href="/downloads/launcher" download data-funnel-event="download_launcher">
 											<strong>Voidscape launcher</strong>
 											<span>Desktop download</span>
 										</a>
-										<a class="ghost-button download-action is-ready" href="/downloads/android-apk" download>
+										<a class="ghost-button download-action is-ready" href="/downloads/android-apk" download data-funnel-event="download_android">
 											<strong>Android APK</strong>
 											<span>Android download</span>
 										</a>
 									</div>
+									<div class="landing-install-help" aria-label="Install help">
+										<div>
+											<span>Windows</span>
+											<strong>Security prompt?</strong>
+											<em>More info -> Run anyway</em>
+										</div>
+										<div>
+											<span>Android</span>
+											<strong>APK warning?</strong>
+											<em>Allow installs for your browser</em>
+										</div>
+										<div>
+											<span>In game</span>
+											<strong>Something break?</strong>
+											<em>Use ::bug and tell us what happened</em>
+										</div>
+									</div>
 									<div class="landing-reward-prompt">
 										<span>Optional</span>
-										<button class="ghost-button" type="button" data-discord-login>Claim rewards with Discord</button>
+										<button class="ghost-button" type="button" data-discord-login data-funnel-event="discord_rewards">Claim rewards with Discord</button>
+									</div>
+								</div>
+
+								<div class="landing-live-basics" aria-label="Live beta basics">
+									<div>
+										<span>Server</span>
+										<strong id="landing-live-status">Checking</strong>
+										<em id="landing-live-players">Players online</em>
+									</div>
+									<div>
+										<span>Build</span>
+										<strong id="landing-live-build">Beta</strong>
+										<em id="landing-live-build-detail">Launcher ready</em>
+									</div>
+									<div>
+										<span>Updated</span>
+										<strong id="landing-live-updated">Just now</strong>
+										<em id="landing-live-updated-detail">Status snapshot</em>
 									</div>
 								</div>
 
@@ -255,7 +290,7 @@
 									<h2 id="landing-trust-title">Transparency</h2>
 									<p>Build hashes, staff command summaries, item receipts, and account integrity scans live on a dedicated public page.</p>
 								</div>
-								<a class="landing-button landing-button-secondary" href="/transparency">View Transparency</a>
+								<a class="landing-button landing-button-secondary" href="/transparency" data-funnel-event="transparency">View Transparency</a>
 							</section>
 
 							<section class="landing-feature-strip" id="features" aria-labelledby="landing-features-title">
@@ -337,8 +372,8 @@
 									<h2>Play first. Claim rewards when you are ready.</h2>
 								</div>
 								<div class="landing-final-actions">
-									<a class="landing-button landing-button-primary" href="/downloads/launcher" download>Download Launcher</a>
-									<button class="landing-button landing-button-secondary" type="button" data-discord-login>Claim Rewards</button>
+									<a class="landing-button landing-button-primary" href="/downloads/launcher" download data-funnel-event="download_launcher">Download Launcher</a>
+									<button class="landing-button landing-button-secondary" type="button" data-discord-login data-funnel-event="discord_rewards">Claim Rewards</button>
 								</div>
 							</section>
 

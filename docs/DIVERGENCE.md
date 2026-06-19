@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Landing install help and funnel tracking
+
+Added a compact public-beta install help strip, live basics counters, and same-origin ad-funnel click tracking to the public landing page. The page now gives quick Windows/APK/`::bug` guidance near the download buttons, surfaces server/build/update basics from `/api/public`, and tags launcher, Android, Discord rewards, and transparency clicks through a public `/api/funnel/click` endpoint with an admin-only `/api/admin/funnel` count summary. Tracking stores sanitized click metadata and UTM fields in the existing portal audit store; no raw IPs are exposed, and no game packet, schema, cache, client-version, or gameplay behavior changed.
+
 ### 2026-06-19 - Account integrity transparency scan
 
 Extended the readonly transparency exporter and admin-only `::integrity` command beyond economy rows into account/stat integrity checks. The scan now flags unknown account groups, missing stat rows, invalid account flags/cache values, stale or suspicious subscription/reward cache rows, and recent sensitive staff commands, while treating known privileged accounts as review-only visibility rather than public accusations. The portal exposes only aggregate `accountIntegrity` counters on `/api/public` and `/api/integrity`; private names, cache keys, and command details stay in the staff-only findings file. No packet, schema, cache format, client-version, or gameplay behavior changed; the scanner reports findings only and does not auto-fix data.
