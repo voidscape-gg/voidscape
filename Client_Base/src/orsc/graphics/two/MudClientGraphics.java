@@ -25,6 +25,9 @@ public final class MudClientGraphics extends GraphicsController {
 					if (index >= 20000) {
 						this.mudClientRef.drawNPC(index - 20000, x, y, width, height, topPixelSkew, 105,
 							overlayMovement);
+					} else if (index >= mudclient.PLAYER_COMPOSITE_NPC_SCENE_INDEX) {
+						this.mudClientRef.drawPlayerCompositeNpc(index - mudclient.PLAYER_COMPOSITE_NPC_SCENE_INDEX,
+							x, y, width, height, topPixelSkew, overlayMovement);
 					} else if (index < 5000) {
 						Sprite projectile = spriteSelect(EntityHandler.projectiles.get(index-mudclient.spriteProjectile));
 						super.drawSprite(projectile, x, y, width, height, 5924);

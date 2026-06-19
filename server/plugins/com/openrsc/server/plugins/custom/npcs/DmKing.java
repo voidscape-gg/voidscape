@@ -19,54 +19,63 @@ public final class DmKing implements TalkNpcTrigger, OpNpcTrigger, AttackNpcTrig
 	KillNpcTrigger, PlayerRangeNpcTrigger, SpellNpcTrigger {
 	private static final String CHALLENGE_COMMAND = "Challenge";
 	private static final String LAST_TAUNT_ATTRIBUTE = "dmking_last_taunt";
-	private static final String[] TAUNT_OPENERS = {
-		"I have ended longer streaks during lag spikes.",
-		"I can hear your food count panicking already.",
-		"You brought hope into my cage. Bold mistake.",
-		"My warmup clicks are cleaner than your best round.",
-		"I do not predict mistakes. I schedule them.",
-		"The arena keeps score because mercy got boring.",
-		"Your rune plate is dressed up for a funeral.",
-		"I have eaten swordfish with better timing than your switches.",
-		"Your prayer book opens slower than my victory lap.",
-		"I cast between your thoughts.",
-		"Every challenger thinks they found the rhythm.",
-		"I have seen panic-eating with more dignity.",
-		"Your best combo is my idle animation.",
-		"I do not need luck. I brought math.",
-		"That rune 2h looks heavier than your confidence.",
-		"I have perfect ticks and a terrible attitude.",
-		"The cage is not locked to keep me in.",
-		"You are not undergeared, just underprepared.",
-		"My Fire Blast has better manners than your footwork.",
-		"You are about to donate another lesson to history.",
-		"Your clicks have a combat level of three.",
-		"I can smell the missed eat from here.",
-		"I have beaten people before their pot boosted.",
-		"The only random part of this fight is your plan.",
-		"I hope your recorder is on.",
-		"My prayers last longer than your confidence.",
-		"I have a 2h and an appointment with your hitpoints.",
-		"You look like a highlight reel in reverse.",
-		"I respect the courage. I do not respect the timing.",
-		"I have seen bank standers with sharper instincts.",
-		"You walked in like a challenger and clicked like a clue scroll.",
-		"Bring your best. I need something to test my boredom."
-	};
-	private static final String[] TAUNT_FINISHES = {
-		"Try not to make my record look padded.",
-		"I will leave you enough time to type excuses.",
-		"Your food will be gone before my hair moves.",
-		"Even the Void Knight thinks this is one-sided.",
-		"I will sip once and still outwork your whole inventory.",
-		"When you panic, do it on tick.",
-		"The spectators deserve cleaner mechanics than yours.",
-		"You may challenge me again after the lesson."
+	private static final String[] TALK_LINES = {
+		"Ah, a challenger. How frightfully quaint.",
+		"You've come to face me? Splendid. I do so enjoy a good laugh.",
+		"Charles. Sir Charles. King of this arena, and shortly, the bane of your afternoon.",
+		"Do come in. Mind the bloodstains, they're mostly from people like you.",
+		"I'd ask your name, but I shan't remember it past the first round.",
+		"You reek of ambition and cheap armour. How charming.",
+		"Welcome, welcome. You're just in time to lose magnificently.",
+		"One does meet the most interesting peasants in this line of work.",
+		"Oh good, fresh meat. I was beginning to tire of winning.",
+		"You may address me as 'Your Grace,' or simply 'sir,' or, more likely, 'mercy.'",
+		"I've been the champion here longer than you've owned proper shoes.",
+		"A duel? With me? How wonderfully optimistic of you.",
+		"Step forward, then. The throne doesn't defend itself. Though frankly, it hardly needs to.",
+		"You've heard of me. Everyone has. I'm rather the point of this place.",
+		"Do try to make this entertaining. I get so bored thrashing amateurs.",
+		"I have never lost. Not once. It's become something of a personality trait.",
+		"They built this arena around me, you know. I'm the main attraction.",
+		"My footwork alone is worth more than your entire estate.",
+		"I duel before breakfast, after breakfast, and occasionally during, for the digestion.",
+		"There are gravestones in this arena that simply read 'challenged Charles.'",
+		"Talent is inherited, darling. And I inherited rather a lot of it.",
+		"I could defeat you blindfolded, but then I couldn't watch your face.",
+		"Modesty is for people with something to be modest about.",
+		"I once won a duel so decisively the loser took up gardening. Far safer.",
+		"My weakest hand still beats your strongest day.",
+		"Skill, breeding, and impeccable cheekbones. I have all three.",
+		"I don't sweat, dear boy. I glisten, victoriously.",
+		"Every champion before me retired the moment I arrived. Wise of them.",
+		"I've forgotten more about combat than you'll ever clumsily attempt.",
+		"The crown isn't a trophy. It's simply a fact, and the fact is me.",
+		"I duel the way other men breathe. Effortlessly, and rather better than you.",
+		"Were I any more gifted, it would frankly be unfair. Oh wait, it is.",
+		"I've slain men twice your size and half your stupidity.",
+		"My reputation precedes me. As will my blade, shortly.",
+		"You'll tell your grandchildren about this. The day a god deigned to thrash you.",
+		"I'm not arrogant. I'm simply correct, loudly and often.",
+		"I've a wall of skulls at home, all beautifully labelled. Yours wants a nice frame.",
+		"Practice? I haven't practised since I was six. I peaked, and stayed there.",
+		"Defeat is a foreign concept to me. Like manual labour, or your tailor.",
+		"I am, quite simply, the finest blade these lands have ever produced. Ask anyone. Ask the gravestones.",
+		"Are you still here? I've quite finished being impressed.",
+		"I do wish the help would announce challengers properly. With trumpets.",
+		"Lovely weather for a thrashing, isn't it?",
+		"I've a portrait being painted, did you know? Three of them. I'm difficult to capture.",
+		"Was there something else, or did you simply wish to bask?",
+		"One grows weary of adoration. Said no one, because one doesn't. Carry on.",
+		"Do mind the throne. People keep wanting to sit in it. The audacity.",
+		"I'm told humility is a virtue. Sounds dreadful. Wouldn't know.",
+		"Run along and train, little one. Come back when you're a marginally better tragedy.",
+		"If you're not here to lose, I haven't the faintest idea what you're for.",
+		"Charles. King. Undefeated. That's the whole story, really. You're just a footnote."
 	};
 
 	@Override
 	public boolean blockTalkNpc(Player player, Npc npc) {
-		return isDmKing(npc);
+		return isStaticDmKing(npc);
 	}
 
 	@Override
@@ -74,8 +83,6 @@ public final class DmKing implements TalkNpcTrigger, OpNpcTrigger, AttackNpcTrig
 		if (isStaticDmKing(npc)) {
 			npcsay(player, npc, nextTaunt(player));
 			player.message("Right-click him and choose Challenge when you are ready.");
-		} else if (isDynamicDmKing(player, npc)) {
-			npcsay(player, npc, nextTaunt(player));
 		}
 	}
 
@@ -144,7 +151,7 @@ public final class DmKing implements TalkNpcTrigger, OpNpcTrigger, AttackNpcTrig
 	}
 
 	private String nextTaunt(Player player) {
-		int total = TAUNT_OPENERS.length * TAUNT_FINISHES.length;
+		int total = TALK_LINES.length;
 		int choice = ThreadLocalRandom.current().nextInt(total);
 		int last = player.getAttribute(LAST_TAUNT_ATTRIBUTE, -1);
 		if (total > 1 && last >= 0) {
@@ -154,8 +161,7 @@ public final class DmKing implements TalkNpcTrigger, OpNpcTrigger, AttackNpcTrig
 			}
 		}
 		player.setAttribute(LAST_TAUNT_ATTRIBUTE, choice);
-		return TAUNT_OPENERS[choice / TAUNT_FINISHES.length]
-			+ " " + TAUNT_FINISHES[choice % TAUNT_FINISHES.length];
+		return TALK_LINES[choice];
 	}
 
 	private boolean isDmKing(Npc npc) {

@@ -380,6 +380,10 @@ public class CombatFormula {
 		return applyPhysicalDamageReduction((maxRoll - 1 + 320) / 640, victim);
 	}
 
+	public static int calculateMeleeMaxHit(final Mob source, final Mob victim) {
+		return getTargetAdjustedMeleeMaxHit(source, victim);
+	}
+
 	private static void clearPvpMeleeMomentum(final Mob source) {
 		source.removeAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE);
 		source.removeAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE);

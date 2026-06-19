@@ -14,12 +14,17 @@ public class NPCDef extends EntityDef {
 	public int defense;
 	public int strength;
 	public boolean attackable;
+	private boolean playerComposite;
 
 	public NPCDef(String name, String description, String command1, int attack, int strength, int hits, int defense, boolean attackable, int[] sprites, int hairColour, int topColour, int bottomColour, int skinColour, int camera1, int camera2, int walkModel, int combatModel, int combatSprite, int id) {
 		this(name, description, command1, null, attack, strength, hits, defense, attackable, sprites, hairColour, topColour, bottomColour, skinColour, camera1, camera2, walkModel, combatModel, combatSprite, id);
 	}
 
 	public NPCDef(String name, String description, String command1, String command2, int attack, int strength, int hits, int defense, boolean attackable, int[] sprites, int hairColour, int topColour, int bottomColour, int skinColour, int camera1, int camera2, int walkModel, int combatModel, int combatSprite, int id) {
+		this(name, description, command1, command2, attack, strength, hits, defense, attackable, sprites, hairColour, topColour, bottomColour, skinColour, camera1, camera2, walkModel, combatModel, combatSprite, id, false);
+	}
+
+	public NPCDef(String name, String description, String command1, String command2, int attack, int strength, int hits, int defense, boolean attackable, int[] sprites, int hairColour, int topColour, int bottomColour, int skinColour, int camera1, int camera2, int walkModel, int combatModel, int combatSprite, int id, boolean playerComposite) {
 		super(name, description, id);
 		this.command1 = command1;
 		this.command2 = command2;
@@ -38,6 +43,7 @@ public class NPCDef extends EntityDef {
 		this.walkModel = walkModel;
 		this.combatModel = combatModel;
 		this.combatSprite = combatSprite;
+		this.playerComposite = playerComposite;
 	}
 
 	public void updateCommand1(String command) {
@@ -118,5 +124,9 @@ public class NPCDef extends EntityDef {
 
 	public boolean isAttackable() {
 		return attackable;
+	}
+
+	public boolean isPlayerComposite() {
+		return playerComposite;
 	}
 }

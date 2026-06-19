@@ -145,6 +145,18 @@ PvP-specific:
 - Wilderness PK check: `pl.getLocation().inWilderness() || player.getConfig().USES_PK_MODE` (`:60`).
 - PvE only: combat scripts, aggression ranges, respawning.
 
+### PvP action constraints
+
+The core PvP restrictions to mirror for player-like custom fights are:
+
+- A player can only retreat from active combat after the opponent has made at least three hits; otherwise `WalkRequest` rejects the walk with "You can't retreat during the first 3 rounds of combat".
+- A legal PvP retreat timestamps both combatants with `setRanAwayTimer()` and resets their combat events. `pvp_reattack_timer` defaults to 5 game ticks, and `Player.canBeReattacked()` allows re-engagement only once `ranAwayTimer + pvp_reattack_timer <= currentTick`.
+- Melee attacks check the target player's reattack timer in `AttackHandler`; PvP spell casts check both the caster and target timers in `SpellHandler`.
+- Inventory actions, including food and potions, are blocked while `player.inCombat()` by the normal item handlers. Food/potions become legal only after combat is broken.
+- Follow and item-on-player actions also respect the target player's reattack timer.
+
+DM King is technically an NPC, so the Void Arena challenge explicitly mirrors these PvP gates around his custom AI: when DM King retreats, both sides are timestamped, and neither DM King's melee/Fire Blast nor the challenger's attack/cast actions can re-engage until the same PvP timer expires.
+
 XP distribution:
 - PvP: `combatExperience()` formula.
 - PvE melee, authentic mode: `Npc.handleXpDistribution()` awards XP after NPC death based on damage tracking.

@@ -27,9 +27,17 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Sir Charles presentation and fight banter
+
+Renamed the visible Void Arena DM King NPC definitions and player-facing challenge text to Sir Charles while keeping the internal DM King class names, ids, cache keys, and metadata channel stable for compatibility. Lobby talk now uses a shorter 256-combination British taunt pool, active fights add rate-limited overhead quips keyed to player food, player hitpoints, probable missed Fire Blast casts, Sir Charles' own low-food state, player-name jabs, and occasional random duel banter, and the client can now opt NPC definitions into player-composite rendering so Sir Charles' rune large helmet and other player equipment layers render from every direction. This is a visible NPC-definition/client-rendering/content change only; no opcode, packet shape, cache archive, Elo/ranked table, economy, or item-loss behavior changed.
+
 ### 2026-06-19 - Plain-language transparency page
 
 Rewrote the standalone transparency page for average players instead of technical readers. Visible copy now explains the same trust systems as safer downloads, watched staff tools, item history, and daily checks, while hiding terms like manifest, hash, ledger, provenance, and audit from the main reading path. The existing public API shape and deeper proof links remain unchanged; no game packet, schema, cache, client-version, or gameplay behavior changed.
+
+### 2026-06-19 - DM King unlimited pressure pass
+
+Adjusted the Void Arena DM King challenge so the NPC no longer loses magic or prayer pressure after its mirrored swordfish count runs out. DM King now keeps scoped high combat prayers active indefinitely, casts unlimited legal Fire Blasts while still respecting spell range/path and PvP reattack timing, re-applies its visible strength-potion boost when Strength decay drops below the boosted level, and prefers magic kiting when out of food and under melee threat. The lobby DM King now roams within a small Void Arena box, the dynamic fight copy idles around the cage before the countdown starts, and the client suppresses generic `Talk-to` on the dynamic fight NPC while keeping lobby talk/challenge intact. No opcode, packet shape, cache asset, Elo/ranked table, economy, or item-loss behavior changed; reversibility is restoring finite virtual casts/prayer, the pinned lobby loc, and the generic NPC talk row.
 
 ### 2026-06-19 - Landing install help and funnel tracking
 
@@ -42,6 +50,14 @@ Extended the readonly transparency exporter and admin-only `::integrity` command
 ### 2026-06-19 - Admin receipt lookup command
 
 Added a private read-only `::receipts` admin command over the item provenance ledger. Admins can inspect recent rows or filter by player, item instance id, catalog id, or provenance command, with compact in-game output showing time, item, source/destination, actor/target, and stored receipt metadata. This keeps the public transparency page aggregate-only while giving trusted operators a fast way to answer "where did this item/card/value come from?" without SSHing into SQLite. No packet, schema, cache, client-version, or gameplay behavior changed; reversibility is removing the command plugin and its command reference.
+
+### 2026-06-19 - DM King altar pressure and mirrored food
+
+Kept the Void Arena cage prayer altars as intentional deathmatch geometry and made DM King handle altar play directly. His custom loop now checks legal Fire Blast casts independently from movement so he can keep casting on cooldown while pathing around the altar, and melee re-engage uses A*-assisted movement toward a legal adjacent pressure tile instead of the generic straight-line NPC chase that could wedge behind the altar. DM King's virtual swordfish count now mirrors the challenger's actual starting swordfish capacity, and his eat message reports the remaining count after each fish. No packet, client-version, scenery definition, schema, economy, Elo, or ranked-table behavior changed; reversibility is restoring the prior generic re-engage and fixed DM King food count.
+
+### 2026-06-19 - DM King legal PvP timing and kite AI
+
+Tightened DM King's Void Arena challenge AI around authentic PvP action limits. DM King can no longer eat while actively locked in melee combat; he must wait for the normal three-round retreat gate, break combat through the same NPC retreat path players see, and then consume finite swordfish one at a time using the normal edible heal table. Retreats now stamp both DM King and the challenger with the configured PvP reattack timer, and both DM King's melee/Fire Blast pressure and the challenger's attack/cast actions are blocked until that timer expires. His food decision now uses the live melee max-hit helper and tops up during a legal food window, while his combat loop can hold spell range, kite for Fire Blast windows, and re-engage with melee when magic is depleted, pathing fails, or the challenger is low. His virtual prayer state now explicitly toggles only Steel Skin, Ultimate Strength, and Incredible Reflexes, drains those three together, and applies only their scoped combat bonuses until prayer is exhausted. No packet, client-version, NPC-definition, economy, Elo, or ranked-table behavior changed; reversibility is restoring the prior threshold eat/cast/re-engage loop.
 
 ### 2026-06-19 - Reward and auction provenance coverage
 

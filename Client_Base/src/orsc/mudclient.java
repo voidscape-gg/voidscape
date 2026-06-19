@@ -277,6 +277,7 @@ public final class mudclient implements Runnable {
 	private static final int VOID_COLOSSUS_NPC_ID = 852;
 	private static final int DM_KING_NPC_ID = 862;
 	private static final int DM_KING_ARENA_NPC_ID = 863;
+	public static final int PLAYER_COMPOSITE_NPC_SCENE_INDEX = 15000;
 	private static final int VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET = 420;
 	private static final int VOID_COLOSSUS_COMBAT_LEVEL = 350;
 	private static final int STANDARD_PLAYER_PROJECTILE_Y_OFFSET = 110;
@@ -7536,12 +7537,15 @@ public final class mudclient implements Runnable {
 
 					for (centerX = 0; this.npcCount > centerX; ++centerX) {
 						ORSCharacter var3 = this.npcs[centerX];
+						NPCDef npcDef = EntityHandler.getNpcDef(var3.npcId);
 						int var4 = var3.currentX;
 						int var5 = var3.currentZ;
 						int var6 = -this.world.getElevation(var4, var5);
-						int var7 = this.scene.drawSprite(20000 + centerX, var5, centerX + 30000, var4, var6,
-							EntityHandler.getNpcDef(var3.npcId).getCamera1(),
-							EntityHandler.getNpcDef(var3.npcId).getCamera2(), (byte) 109);
+						int sceneIndex = npcDef.isPlayerComposite()
+							? PLAYER_COMPOSITE_NPC_SCENE_INDEX + centerX
+							: 20000 + centerX;
+						int var7 = this.scene.drawSprite(sceneIndex, var5, centerX + 30000, var4, var6,
+							npcDef.getCamera1(), npcDef.getCamera2(), (byte) 109);
 						++this.spriteCount;
 						if (var3.direction == ORSCharacterDirection.COMBAT_A) {
 							this.scene.setCombatXOffset(86, var7, -30);
@@ -12080,6 +12084,11 @@ public final class mudclient implements Runnable {
 
 			int var15;
 			int var16;
+			if (def.isPlayerComposite()) {
+				drawPlayerCompositeLayers(def.sprites, var11, var13, var12, var14, npc.stepFrame, x, y, width1, height,
+					topPixelSkew, def.getHairColour(), def.getTopColour(), def.getBottomColour(), def.getSkinColour(),
+					true, 0, false, false);
+			} else {
 			for (var15 = 0; var15 < 12; ++var15) {
 				var16 = this.getAnimDirLayer_To_CharLayer()[var11][var15];
 				if (npc.wield > 0 || npc.wield2 > 0) {
@@ -12212,6 +12221,7 @@ public final class mudclient implements Runnable {
 					}
 				}
 			}
+			}
 
 			if (npc.messageTimeout > 0) {
 				this.characterDialogHalfWidth[this.characterDialogCount] = this.getSurface().stringWidth(1, npc.message)
@@ -12290,6 +12300,276 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	public final void drawPlayerCompositeNpc(int npcIndex, int x, int y, int width, int height, int topPixelSkew,
+											 int overlayMovement) {
+		try {
+			ORSCharacter npc = this.npcs[npcIndex];
+			NPCDef def = EntityHandler.getNpcDef(npc.npcId);
+			if (!def.isPlayerComposite()) {
+				drawNPC(npcIndex, x, y, width, height, topPixelSkew, 105, overlayMovement);
+				return;
+			}
+
+			int wantedAnimDir = (npc.direction.rsDir + ((this.cameraRotation + 16) / 32)) & 7;
+			boolean mirrorX = false;
+			int actualAnimDir = wantedAnimDir;
+			if (wantedAnimDir == 5) {
+				mirrorX = true;
+				actualAnimDir = 3;
+			} else if (wantedAnimDir == 7) {
+				actualAnimDir = 1;
+				mirrorX = true;
+			} else if (wantedAnimDir == 6) {
+				actualAnimDir = 2;
+				mirrorX = true;
+			}
+
+			int spriteOffset = this.animFrameToSprite_Walk[npc.stepFrame / 6 % 4] + actualAnimDir * 3;
+			if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+				wantedAnimDir = 2;
+				actualAnimDir = 5;
+				x += overlayMovement * 5 / 100;
+				mirrorX = true;
+				spriteOffset = this.animFrameToSprite_CombatB[this.getFrameCounter() / 6 % 8] + actualAnimDir * 3;
+			} else if (npc.direction == ORSCharacterDirection.COMBAT_A) {
+				x -= overlayMovement * 5 / 100;
+				actualAnimDir = 5;
+				mirrorX = false;
+				wantedAnimDir = 2;
+				spriteOffset = this.animFrameToSprite_CombatA[this.getFrameCounter() / 5 % 8] + actualAnimDir * 3;
+			}
+
+			drawPlayerCompositeLayers(def.sprites, wantedAnimDir, actualAnimDir, mirrorX, spriteOffset,
+				npc.stepFrame, x, y, width, height, topPixelSkew, def.getHairColour(), def.getTopColour(),
+				def.getBottomColour(), def.getSkinColour(), true, 0, false, false);
+
+			drawNpcOverlay(npc, x, y, width, height, topPixelSkew, overlayMovement);
+		} catch (RuntimeException var28) {
+			throw GenUtil.makeThrowable(var28, "client.PCN(" + y + ',' + topPixelSkew + ',' + height + ','
+				+ overlayMovement + ',' + npcIndex + ',' + width + ',' + x + ')');
+		}
+	}
+
+	private void drawNpcOverlay(ORSCharacter npc, int x, int y, int width, int height, int topPixelSkew,
+								int overlayMovement) {
+		int var15;
+		int var16;
+		if (npc.messageTimeout > 0) {
+			this.characterDialogHalfWidth[this.characterDialogCount] = this.getSurface().stringWidth(1, npc.message)
+				/ 2;
+			if (this.characterDialogHalfWidth[this.characterDialogCount] > 150) {
+				this.characterDialogHalfWidth[this.characterDialogCount] = 150;
+			}
+
+			this.characterDialogHeight[this.characterDialogCount] = this.getSurface().stringWidth(1, npc.message)
+				/ 300 * this.getSurface().fontHeight(1);
+			this.characterDialogX[this.characterDialogCount] = width / 2 + x;
+			this.characterDialogY[this.characterDialogCount] = y;
+			this.characterDialogString[this.characterDialogCount++] = npc.message;
+		}
+
+		int skullX = topPixelSkew + x + width / 2;
+		int destWidth = overlayMovement * 16 / 100;
+		int destHeight = overlayMovement * 16 / 100;
+		if (isDmKingNpc(npc.npcId)) {
+			drawDmKingFlag(skullX, y - overlayMovement * 18 / 100, overlayMovement);
+		}
+		if (npc.skull > 0) {
+			if (npc.direction == ORSCharacterDirection.COMBAT_A) {
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), skullX - destWidth / 2 - 20,
+					y - destHeight / 2 - overlayMovement * 10 / 100, destWidth, destHeight, 5924);
+			} else if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), skullX - destWidth / 2 + 20,
+					y - destHeight / 2 - overlayMovement * 10 / 100, destWidth, destHeight, 5924);
+			} else {
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), skullX - destWidth / 2,
+					y - destHeight / 2 - overlayMovement * 10 / 100, destWidth, destHeight, 5924);
+			}
+		}
+
+		if (npc.direction == ORSCharacterDirection.COMBAT_A || npc.direction == ORSCharacterDirection.COMBAT_B
+			|| npc.combatTimeout != 0) {
+			if (npc.combatTimeout > 0) {
+				var15 = x;
+				if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+					var15 = x + overlayMovement * 20 / 100;
+				} else if (npc.direction == ORSCharacterDirection.COMBAT_A) {
+					var15 = x - overlayMovement * 20 / 100;
+				}
+
+				var16 = npc.healthCurrent * 30 / npc.healthMax;
+				this.characterHealthX[this.characterHealthCount] = width / 2 + var15;
+				this.characterHealthY[this.characterHealthCount] = y;
+				this.characterHealthBar[this.characterHealthCount++] = var16;
+			}
+
+			if (npc.combatTimeout > 150) {
+				var15 = x;
+				if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+					var15 = x + overlayMovement * 10 / 100;
+				} else if (npc.direction == ORSCharacterDirection.COMBAT_A) {
+					var15 = x - overlayMovement * 10 / 100;
+				}
+
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DAMAGETAKEN.getDef()), var15 - (12 - width / 2),
+					y + height / 2 - 12);
+				this.getSurface().drawColoredStringCentered(width / 2 - 1 + var15, "" + npc.damageTaken, 0xFFFFFF,
+					0, 3, 5 + y + height / 2);
+			}
+		}
+
+		if (npc.bubbleTimeout > 0) {
+			this.characterBubbleX[this.characterBubbleCount] = width / 2 + x;
+			this.characterBubbleY[this.characterBubbleCount] = y;
+			this.characterBubbleScale[this.characterBubbleCount] = overlayMovement;
+			this.characterBubbleID[this.characterBubbleCount++] = npc.bubbleItem;
+		}
+	}
+
+	private void drawDmKingFlag(int centerX, int topY, int overlayMovement) {
+		int flagWidth = Math.max(14, overlayMovement * 18 / 100);
+		int flagHeight = Math.max(9, overlayMovement * 11 / 100);
+		int flagX = centerX - flagWidth / 2;
+		int flagY = topY - flagHeight;
+		int poleX = flagX - 2;
+		int midX = flagX + flagWidth / 2;
+		int midY = flagY + flagHeight / 2;
+		int rightX = flagX + flagWidth - 1;
+		int bottomY = flagY + flagHeight - 1;
+
+		this.getSurface().drawLineVert(poleX, flagY - 1, 0xd7b43f, flagHeight + 5);
+		this.getSurface().drawBox(flagX - 1, flagY - 1, flagWidth + 2, flagHeight + 2, 0x0b0b12);
+		this.getSurface().drawBox(flagX, flagY, flagWidth, flagHeight, 0x012169);
+
+		this.getSurface().drawLineAlpha(flagX, flagY, rightX, bottomY, 0xffffff, 255);
+		this.getSurface().drawLineAlpha(flagX, flagY + 1, rightX, bottomY + 1, 0xffffff, 255);
+		this.getSurface().drawLineAlpha(flagX, bottomY, rightX, flagY, 0xffffff, 255);
+		this.getSurface().drawLineAlpha(flagX, bottomY - 1, rightX, flagY - 1, 0xffffff, 255);
+		this.getSurface().drawLineAlpha(flagX, flagY, rightX, bottomY, 0xc8102e, 255);
+		this.getSurface().drawLineAlpha(flagX, bottomY, rightX, flagY, 0xc8102e, 255);
+
+		this.getSurface().drawBox(flagX, midY - 2, flagWidth, 4, 0xffffff);
+		this.getSurface().drawBox(midX - 2, flagY, 4, flagHeight, 0xffffff);
+		this.getSurface().drawBox(flagX, midY - 1, flagWidth, 2, 0xc8102e);
+		this.getSurface().drawBox(midX - 1, flagY, 2, flagHeight, 0xc8102e);
+	}
+
+	private void drawPlayerCompositeLayers(int[] layerAnimation, int wantedAnimDir, int actualAnimDir, boolean mirrorX,
+										   int spriteOffset, int stepFrame, int x, int y, int width, int height,
+										   int topPixelSkew, int hairColour, int topColour, int bottomColour,
+										   int skinColour, boolean usePlayerPalette, int hairStyle, boolean invisible,
+										   boolean invulnerable) {
+		if (layerAnimation == null) {
+			return;
+		}
+
+		for (int lay = 0; lay < 12; ++lay) {
+			int mappedLayer = this.getAnimDirLayer_To_CharLayer()[wantedAnimDir][lay];
+			if (mappedLayer < 0 || mappedLayer >= layerAnimation.length) {
+				continue;
+			}
+
+			int animID = layerAnimation[mappedLayer] - 1;
+			if (animID >= 0) {
+				byte spriteOffsetX = 0;
+				byte spriteOffsetY = 0;
+				int mySpriteOffset = spriteOffset;
+				if (mirrorX && actualAnimDir >= 1 && actualAnimDir <= 3) {
+					if (EntityHandler.getAnimationDef(animID).hasF()) {
+						mySpriteOffset = spriteOffset + 15;
+					} else if (mappedLayer == 4 && actualAnimDir == 1) {
+						mySpriteOffset = actualAnimDir * 3
+							+ this.animFrameToSprite_Walk[(stepFrame / 6 + 2) % 4];
+						spriteOffsetY = -3;
+						spriteOffsetX = -22;
+					} else if (mappedLayer == 4 && actualAnimDir == 2) {
+						spriteOffsetX = 0;
+						spriteOffsetY = -8;
+						mySpriteOffset = this.animFrameToSprite_Walk[(stepFrame / 6 + 2) % 4]
+							+ actualAnimDir * 3;
+					} else if (mappedLayer == 4 && actualAnimDir == 3) {
+						spriteOffsetY = -5;
+						mySpriteOffset = actualAnimDir * 3
+							+ this.animFrameToSprite_Walk[(2 + stepFrame / 6) % 4];
+						spriteOffsetX = 26;
+					} else if (mappedLayer == 3 && actualAnimDir == 1) {
+						mySpriteOffset = actualAnimDir * 3
+							+ this.animFrameToSprite_Walk[(2 + stepFrame / 6) % 4];
+						spriteOffsetX = 22;
+						spriteOffsetY = 3;
+					} else if (mappedLayer == 3 && actualAnimDir == 2) {
+						spriteOffsetY = 8;
+						mySpriteOffset = actualAnimDir * 3
+							+ this.animFrameToSprite_Walk[(stepFrame / 6 + 2) % 4];
+						spriteOffsetX = 0;
+					} else if (mappedLayer == 3 && actualAnimDir == 3) {
+						spriteOffsetX = -26;
+						mySpriteOffset = this.animFrameToSprite_Walk[(2 + stepFrame / 6) % 4]
+							+ actualAnimDir * 3;
+						spriteOffsetY = 5;
+					}
+				}
+
+				if (actualAnimDir != 5 || EntityHandler.getAnimationDef(animID).hasA()) {
+					Sprite sprite = spriteSelect(EntityHandler.getAnimationDef(animID), mySpriteOffset);
+					int something1 = sprite.getSomething1();
+					int something2 = sprite.getSomething2();
+					int something3 = this.spriteSelect(EntityHandler.getAnimationDef(animID), 0).getSomething1();
+					if (something1 != 0 && something2 != 0 && something3 != 0) {
+						int xOffset = (spriteOffsetX * width) / something1;
+						int yOffset = (spriteOffsetY * height) / something2;
+						int spriteWidth = (something1 * width) / something3;
+						xOffset -= (spriteWidth - width) / 2;
+						int animationColour = EntityHandler.getAnimationDef(animID).getCharColour();
+						int colorMask1 = animationColour;
+						int blueScaleColor = EntityHandler.getAnimationDef(animID).getBlueMask();
+						if (colorMask1 == 1) {
+							colorMask1 = usePlayerPalette ? paletteIndexedColor(this.getPlayerHairColors(), hairColour) : hairColour;
+						} else if (colorMask1 == 2) {
+							colorMask1 = usePlayerPalette ? paletteIndexedColor(this.getPlayerClothingColors(), topColour) : topColour;
+						} else if (colorMask1 == 3) {
+							colorMask1 = usePlayerPalette ? paletteIndexedColor(this.getPlayerClothingColors(), bottomColour) : bottomColour;
+						}
+
+						int colorMask2 = usePlayerPalette ? paletteIndexedColor(this.getPlayerSkinColors(), skinColour) : skinColour;
+						int colourTransform = 0xFFFFFFFF;
+
+						if (invisible)
+							colourTransform &= 0x80FFFFFF;
+
+						if (invulnerable)
+							colourTransform &= 0xFF202020;
+
+						this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth, height,
+							colorMask1, colorMask2, blueScaleColor, mirrorX, topPixelSkew, 1, colourTransform);
+						if (usePlayerPalette && mappedLayer == 0 && animationColour == 1 && hairStyle > 0
+							&& isModernHairCompatibleHeadAnimation(animID)) {
+							Sprite hair = VoidscapeHairOverlay.getFrame(hairStyle, mySpriteOffset);
+							if (hair != null) {
+								this.getSurface().drawArgbSpriteClipping(hair, xOffset + x, y + yOffset,
+									spriteWidth, height, mirrorX, topPixelSkew,
+									hairOverlayColourTransform(hairColour, colourTransform));
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private int paletteIndexedColor(int[] palette, int index) {
+		if (palette == null || palette.length == 0) {
+			return 0;
+		}
+		if (index < 0) {
+			return palette[0];
+		}
+		if (index >= palette.length) {
+			return palette[palette.length - 1];
+		}
+		return palette[index];
+	}
+
 	public final void drawPlayer(int index, int x, int y, int width, int height, int topPixelSkew, int var3,
 								 int overlayMovement) {
 		try {
@@ -12329,106 +12609,10 @@ public final class mudclient implements Runnable {
 					spriteOffset = this.animFrameToSprite_CombatA[this.getFrameCounter() / 5 % 8] + actualAnimDir * 3;
 				}
 
-				for (int lay = 0; lay < 12; ++lay) {
-					int mappedLayer = this.getAnimDirLayer_To_CharLayer()[wantedAnimDir][lay];
-					int animID = player.layerAnimation[mappedLayer] - 1;
-					if (animID >= 0) {
-						byte spriteOffsetX = 0;
-						byte spriteOffsetY = 0;
-						int mySpriteOffset = spriteOffset;
-						if (mirrorX && actualAnimDir >= 1 && actualAnimDir <= 3) {
-							if (EntityHandler.getAnimationDef(animID).hasF()) {
-								mySpriteOffset = spriteOffset + 15;
-							} else if (mappedLayer == 4 && actualAnimDir == 1) {
-								mySpriteOffset = actualAnimDir * 3
-									+ this.animFrameToSprite_Walk[(player.stepFrame / 6 + 2) % 4];
-								spriteOffsetY = -3;
-								spriteOffsetX = -22;
-							} else if (mappedLayer == 4 && actualAnimDir == 2) {
-								spriteOffsetX = 0;
-								spriteOffsetY = -8;
-								mySpriteOffset = this.animFrameToSprite_Walk[(player.stepFrame / 6 + 2) % 4]
-									+ actualAnimDir * 3;
-							} else if (mappedLayer == 4 && actualAnimDir == 3) {
-								spriteOffsetY = -5;
-								mySpriteOffset = actualAnimDir * 3
-									+ this.animFrameToSprite_Walk[(2 + player.stepFrame / 6) % 4];
-								spriteOffsetX = 26;
-							} else if (mappedLayer == 3 && actualAnimDir == 1) {
-								mySpriteOffset = actualAnimDir * 3
-									+ this.animFrameToSprite_Walk[(2 + player.stepFrame / 6) % 4];
-								spriteOffsetX = 22;
-								spriteOffsetY = 3;
-							} else if (mappedLayer == 3 && actualAnimDir == 2) {
-								spriteOffsetY = 8;
-								mySpriteOffset = actualAnimDir * 3
-									+ this.animFrameToSprite_Walk[(player.stepFrame / 6 + 2) % 4];
-								spriteOffsetX = 0;
-							} else if (mappedLayer == 3 && actualAnimDir == 3) {
-								spriteOffsetX = -26;
-								mySpriteOffset = this.animFrameToSprite_Walk[(2 + player.stepFrame / 6) % 4]
-									+ actualAnimDir * 3;
-								spriteOffsetY = 5;
-							}
-						}
-
-						if (actualAnimDir != 5 || EntityHandler.getAnimationDef(animID).hasA()) {
-							//int sprite = EntityHandler.getAnimationDef(animID).getNumber() + mySpriteOffset;
-							Sprite sprite = spriteSelect(EntityHandler.getAnimationDef(animID), mySpriteOffset);
-							int something1 = sprite.getSomething1();
-							int something2 = sprite.getSomething2();
-							int something3 = this.spriteSelect(EntityHandler.getAnimationDef(animID), 0).getSomething1();
-							if (something1 != 0 && something2 != 0 && something3 != 0) {
-								int xOffset = (spriteOffsetX * width) / something1;
-								int yOffset = (spriteOffsetY * height) / something2;
-								int spriteWidth = (something1 * width) / something3;
-								xOffset -= (spriteWidth - width) / 2;
-								int animationColour = EntityHandler.getAnimationDef(animID).getCharColour();
-								int colorMask1 = animationColour;
-								int blueScaleColor = EntityHandler.getAnimationDef(animID).getBlueMask();
-								if (colorMask1 == 1) {
-									colorMask1 = this.getPlayerHairColors()[player.colourHair];
-								} else if (colorMask1 == 2) {
-									colorMask1 = this.getPlayerClothingColors()[player.colourTop];
-								} else if (colorMask1 == 3) {
-									colorMask1 = this.getPlayerClothingColors()[player.colourBottom];
-								}
-
-								int colorMask2 = this.getPlayerSkinColors()[player.colourSkin];
-								int colourTransform = 0xFFFFFFFF;
-
-								if (player.isInvisible)
-									colourTransform &= 0x80FFFFFF;
-
-								if (player.isInvulnerable)
-									colourTransform &= 0xFF202020;
-
-								this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth,
-									height, colorMask1, colorMask2, blueScaleColor, mirrorX, topPixelSkew, 1, colourTransform);
-								if (mappedLayer == 0 && animationColour == 1 && player.hairStyle > 0
-									&& isModernHairCompatibleHeadAnimation(animID)) {
-									Sprite hair = VoidscapeHairOverlay.getFrame(player.hairStyle, mySpriteOffset);
-									if (hair != null) {
-										this.getSurface().drawArgbSpriteClipping(hair, xOffset + x, y + yOffset,
-											spriteWidth, height, mirrorX, topPixelSkew,
-											hairOverlayColourTransform(player.colourHair, colourTransform));
-									}
-								}
-
-									/*if(sprite != 1948 && sprite != 1947 && sprite != 1949) {
-										this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth,
-												height, colorMask1, colorMask2, mirrorX, topPixelSkew, 1);
-									}
-									if(sprite == 1948 || sprite == 1947 || sprite == 1949) {
-										this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth,
-												height, colorMask1, colorMask2, mirrorX, topPixelSkew, 1);
-									}*/
-							}
-						}
-
-						//System.out.println("Animation dir: " + (EntityHandler.getAnimationDef(animID).getNumber() + spriteOffset));
-					}
-				}
+				drawPlayerCompositeLayers(player.layerAnimation, wantedAnimDir, actualAnimDir, mirrorX, spriteOffset,
+					player.stepFrame, x, y, width, height, topPixelSkew, player.colourHair, player.colourTop,
+					player.colourBottom, player.colourSkin, true, player.hairStyle, player.isInvisible,
+					player.isInvulnerable);
 
 				if (player.messageTimeout > 0) {
 					this.characterDialogHalfWidth[this.characterDialogCount] = this.getSurface().stringWidth(1,
@@ -13779,7 +13963,9 @@ public final class mudclient implements Runnable {
 											"@yel@" + npcName);
 									}
 
-									if (!attackOnlyVoidKnight && this.npcs[var9].npcId != VOID_COLOSSUS_NPC_ID) {
+									boolean suppressNpcTalk = this.npcs[var9].npcId == VOID_COLOSSUS_NPC_ID
+										|| this.npcs[var9].npcId == DM_KING_ARENA_NPC_ID;
+									if (!attackOnlyVoidKnight && !suppressNpcTalk) {
 										this.menuCommon.addCharacterItem(this.npcs[var9].serverIndex,
 											MenuItemAction.NPC_TALK_TO, "Talk-to",
 											"@yel@" + npcName);

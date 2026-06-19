@@ -10,6 +10,7 @@ import com.openrsc.server.database.struct.VoidArenaStats;
 import com.openrsc.server.event.SingleEvent;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
+import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.PathValidation;
@@ -23,6 +24,7 @@ import com.openrsc.server.model.entity.update.BubbleNpc;
 import com.openrsc.server.model.entity.update.ChatMessage;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.util.rsc.CollisionFlag;
 import com.openrsc.server.util.rsc.MessageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,27 +51,132 @@ public final class VoidArena {
 	private static final int MATCH_COUNTDOWN_MS = 5 * 1000;
 	private static final int DEATH_MATCH_SETUP_CLIENT_VERSION = 10109;
 	private static final int DM_KING_CLIENT_VERSION = 10112;
+	private static final String DM_KING_DISPLAY_NAME = "Sir Charles";
 	private static final int DM_KING_MATCH_TIMEOUT_MS = RANKED_MATCH_TIMEOUT_MS;
-	private static final int DM_KING_FISH = 26;
-	private static final int DM_KING_FISH_HEAL = 14;
 	private static final int DM_KING_FIRE_BLAST_CASTS = 100;
 	private static final int DM_KING_AIR_RUNES = DM_KING_FIRE_BLAST_CASTS * 4;
 	private static final int DM_KING_DEATH_RUNES = DM_KING_FIRE_BLAST_CASTS;
 	private static final int DM_KING_FIRE_RUNES = DM_KING_FIRE_BLAST_CASTS * 5;
-	private static final int DM_KING_MAX_HITS = 99;
-	private static final int DM_KING_EAT_THRESHOLD = 45;
-	private static final int DM_KING_EAT_DELAY_TICKS = 3;
+	private static final int DM_KING_EAT_DELAY_TICKS = 1;
+	private static final int DM_KING_STRENGTH_REPOT_DELAY_TICKS = 1;
+	private static final int DM_KING_IDLE_ROAM_DELAY_TICKS = 2;
 	private static final int DM_KING_REENGAGE_DELAY_TICKS = 2;
+	private static final int DM_KING_KITE_DELAY_TICKS = 1;
+	private static final int DM_KING_KITE_MIN_DISTANCE = 3;
+	private static final int DM_KING_MELEE_COMMIT_HITS = 18;
+	private static final int DM_KING_QUIP_COOLDOWN_TICKS = 12;
+	private static final int DM_KING_RANDOM_QUIP_CHANCE = 18;
 	private static final int DM_KING_FIRE_BLAST_PROJECTILE = 1;
 	private static final double DM_KING_FIRE_BLAST_POWER = 12.0D;
-	private static final int DM_KING_PRAYER_STATE_POINTS = 99 * 120;
-	private static final int DM_KING_PRAYER_POINTS = 1;
+	private static final int[] DM_KING_ACTIVE_PRAYERS = {
+		Prayers.STEEL_SKIN,
+		Prayers.ULTIMATE_STRENGTH,
+		Prayers.INCREDIBLE_REFLEXES
+	};
 	private static final String DM_KING_KIT_CACHE = "void_arena_dmking_kit_snapshot";
 	private static final String DM_KING_BROADCAST_CACHE = "void_arena_dmking_broadcast";
 	private static final String DM_KING_WINS_CACHE = "void_arena_dmking_wins";
 	private static final String DM_KING_LOSSES_CACHE = "void_arena_dmking_losses";
 	private static final int DM_KING_INITIAL_WINS = 300;
 	private static final int DM_KING_INITIAL_LOSSES = 0;
+	private static final String[] DM_KING_PREFIGHT_QUIPS = {
+		"Shall we? I've a dinner engagement and you're the appetiser.",
+		"Do say a prayer first. Several, ideally. They won't help, but it's polite.",
+		"Last chance to flee with your dignity. Going once?",
+		"I'll go easy on you. By which I mean I'll finish quickly, out of pity.",
+		"Try to bleed somewhere tasteful. The carpets are imported.",
+		"Ready your little weapon. This will sting your pride far more than your body.",
+		"I do hope you've written a will. And chosen a flattering portrait.",
+		"Let's get this farce underway, shall we? My patience is aristocratically thin.",
+		"Raise your guard. Not that it matters, but I admire the gesture.",
+		"Come along then. The sooner we begin, the sooner you can lie down.",
+		"I shall count to three. You won't make it to two.",
+		"Brace yourself, peasant. This is the closest you'll come to greatness.",
+		"Oh, you brought a spear. How adorable. I brought four hundred years of breeding.",
+		"Defend the realm, defend your honour, defend yourself, do pick one, you've not the time for all three.",
+		"I'll let you swing first. I find the false hope so very moving.",
+		"Steady now. Wouldn't want you fainting before I've even started.",
+		"This is the part where you discover the difference between us. The lethal part.",
+		"En garde, or whatever it is you common folk shout.",
+		"Mind the throne on your way down. It's a family heirloom.",
+		"Shall I dim the torches? I'd hate for the crowd to see your face when it happens."
+	};
+	private static final String[] DM_KING_RANDOM_FIGHT_QUIPS = {
+		"Oh dear. Was that meant to hurt?",
+		"You're trembling. How delightfully predictable.",
+		"Is that all? I've been bitten by more aggressive teacups.",
+		"Keep swinging, it's wonderful exercise for you.",
+		"You're not winning, you understand. You're simply losing slowly.",
+		"Ha! A valiant effort. Valiant, and entirely pointless.",
+		"I felt that one. Almost. Not really. Do try harder.",
+		"You fight like a man whose mother is watching. Badly, and apologetically.",
+		"Bleeding already? We've only just begun the humiliation.",
+		"I could do this all day. You, evidently, cannot.",
+		"Mind the footwork, dear. Oh, too late. Down you pop.",
+		"Magnificent flailing. Truly. The crowd weeps with laughter.",
+		"You're making this far too easy. I do prefer a challenge. Pity.",
+		"Tired already? Royalty doesn't tire. We have people for that.",
+		"Almost had me there. No, I lie. You didn't. Not even slightly."
+	};
+	private static final String[] DM_KING_WIN_QUIPS = {
+		"And there it is. The crown remains where crowns belong. On me.",
+		"Predictable. Disappointing. Over. Do gather your teeth on the way out.",
+		"Another for the wall of skulls. You'll be in good, dead company.",
+		"Well fought! By my standards, you were almost present.",
+		"Run along now. Tell the others the king sends his regards. And his pity.",
+		"That, dear challenger, is what four centuries of superiority looks like.",
+		"I'd say it was an honour, but we both know it was a slaughter.",
+		"Defeat suits you, actually. Brings out the colour in your bruises.",
+		"Do come again. I collect humiliations, and yours was a fine vintage.",
+		"The throne thanks you for your contribution. Which was losing, beautifully.",
+		"You may weep now. I shan't watch. Actually, I shall. It's the best part.",
+		"And so the natural order is restored. I'm rather good at restoring it.",
+		"Off you pop, then. Mind the puddle. It's you."
+	};
+	private static final String[] DM_KING_RARE_LOSS_QUIPS = {
+		"I... what? No. No, the light was in my eyes. The sun. Indoors.",
+		"This changes nothing. NOTHING. I demand a rematch. And a lawyer.",
+		"You cheated. I don't know how, but breeding tells me you cheated.",
+		"Impossible. Statistically, cosmically, aristocratically impossible.",
+		"Enjoy it. It won't happen again. I refuse to let it happen again.",
+		"...Well played. There. I said it. Now never speak of this. EVER."
+	};
+	private static final String[] DM_KING_LOW_FOOD_QUIPS = {
+		"Counting fish now, are we?",
+		"Pantry looking thin.",
+		"Swordfish discipline, old chap.",
+		"That inventory is getting draughty."
+	};
+	private static final String[] DM_KING_NO_FOOD_QUIPS = {
+		"No fish. Bold policy.",
+		"Dry pockets already?",
+		"That is the end of supper.",
+		"Empty bag, full confidence."
+	};
+	private static final String[] DM_KING_LOW_HITS_QUIPS = {
+		"Careful. Hitpoints are useful.",
+		"Steady now, nearly curtains.",
+		"That health is frightfully small.",
+		"Do breathe between clicks."
+	};
+	private static final String[] DM_KING_MISSED_CAST_QUIPS = {
+		"That spell went to Varrock.",
+		"A scenic Fire Blast.",
+		"Lovely splash. No notes.",
+		"Nearly warmed my boots."
+	};
+	private static final String[] DM_KING_NAME_QUIPS = {
+		"%s, is it? Marvellous optimism.",
+		"Was %s your duelling name or a warning?",
+		"%s. I shall try to remember it.",
+		"Chin up, %s."
+	};
+	private static final String[] DM_KING_OWN_LOW_FOOD_QUIPS = {
+		"My fish are low. How sporting.",
+		"Nearly out of supper myself.",
+		"A proper finish, then.",
+		"Now it gets tidy."
+	};
 	public static final String DM_KING_DYNAMIC_ATTRIBUTE = "void_arena_dm_king_dynamic";
 	public static final String DM_KING_OWNER_ATTRIBUTE = "void_arena_dm_king_owner";
 	private static final long SEASON_RESET_CONFIRM_MS = 2 * 60 * 1000;
@@ -161,7 +268,7 @@ public final class VoidArena {
 	public Point handlePlayerDeath(Player loser, Mob killer) {
 		DmKingChallenge dmKingChallenge = activeDmKingChallenges.get(loser.getUsernameHash());
 		if (dmKingChallenge != null && dmKingChallenge.king == killer) {
-			resolveDmKingLoss(dmKingChallenge, loser, "DM King defeated you.", false, true);
+			resolveDmKingLoss(dmKingChallenge, loser, DM_KING_DISPLAY_NAME + " defeated you.", false, true);
 			loser.setInstanceId(0);
 			return VoidArenaConfig.lobbyTile();
 		}
@@ -331,9 +438,9 @@ public final class VoidArena {
 		world.getServer().getGameEventHandler().add(challenge.event);
 
 		sendArenaControl(player, "countdown|5");
-		player.message("@red@DM King challenge begins in 5 seconds.");
+		player.message("@red@" + DM_KING_DISPLAY_NAME + " challenge begins in 5 seconds.");
 		player.message("Rules: Ranked F2P kit, melee and Fire Blast, finite supplies, no Elo.");
-		player.message("Defeat DM King before the 10 minute limit.");
+		player.message("Defeat " + DM_KING_DISPLAY_NAME + " before the 10 minute limit.");
 	}
 
 	public AttackCheck checkDmKingNpcAction(Player player, Npc npc, boolean missile) {
@@ -341,7 +448,7 @@ public final class VoidArena {
 			return AttackCheck.pass();
 		}
 		if (npc.getID() == NpcId.DM_KING.id()) {
-			return AttackCheck.deny("Challenge DM King from the Void Arena lobby.");
+			return AttackCheck.deny("Challenge " + DM_KING_DISPLAY_NAME + " from the Void Arena lobby.");
 		}
 		if (!isDmKingChallengeNpc(npc)) {
 			return AttackCheck.pass();
@@ -349,16 +456,19 @@ public final class VoidArena {
 
 		DmKingChallenge challenge = activeDmKingChallenges.get(player.getUsernameHash());
 		if (challenge == null || challenge.king != npc) {
-			return AttackCheck.deny("That DM King challenge belongs to another fighter.");
+			return AttackCheck.deny("That " + DM_KING_DISPLAY_NAME + " challenge belongs to another fighter.");
 		}
 		if (!challenge.isInsideAssignedCage(player) || !challenge.isInsideAssignedCage(npc)) {
-			return AttackCheck.deny("Return to your assigned DM King cage.");
+			return AttackCheck.deny("Return to your assigned " + DM_KING_DISPLAY_NAME + " cage.");
 		}
 		if (!challenge.hasStarted()) {
-			return AttackCheck.deny("The DM King challenge has not started yet.");
+			return AttackCheck.deny("The " + DM_KING_DISPLAY_NAME + " challenge has not started yet.");
 		}
 		if (missile) {
-			return AttackCheck.deny("Ranged is not part of the DM King challenge kit.");
+			return AttackCheck.deny("Ranged is not part of the " + DM_KING_DISPLAY_NAME + " challenge kit.");
+		}
+		if (!challenge.canUsePvpOffense(world.getServer().getCurrentTick(), player)) {
+			return AttackCheck.deny("You need to wait before re-attacking after a retreat.");
 		}
 		return AttackCheck.allow();
 	}
@@ -380,7 +490,7 @@ public final class VoidArena {
 		player.setInstanceId(0);
 		player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
 		restoreHits(player);
-		player.message("@mag@Your DM King challenge kit was restored.");
+		player.message("@mag@Your " + DM_KING_DISPLAY_NAME + " challenge kit was restored.");
 	}
 
 	public boolean isDmKingChallengeNpc(Npc npc) {
@@ -398,7 +508,19 @@ public final class VoidArena {
 			return 1.0D;
 		}
 		DmKingChallenge challenge = dmKingChallengeFor((Npc) source);
-		return challenge != null && challenge.hasPrayer() ? 1.15D : 1.0D;
+		if (challenge == null) {
+			return 1.0D;
+		}
+		if (challenge.hasPrayer(prayer3)) {
+			return 1.15D;
+		}
+		if (challenge.hasPrayer(prayer2)) {
+			return 1.1D;
+		}
+		if (challenge.hasPrayer(prayer1)) {
+			return 1.05D;
+		}
+		return 1.0D;
 	}
 
 	public VoidArenaStats getStats(Player player) {
@@ -436,7 +558,7 @@ public final class VoidArena {
 		}
 		DmKingChallenge challenge = activeDmKingChallenges.get(player.getUsernameHash());
 		if (challenge != null) {
-			player.message("You can't teleport during the DM King challenge.");
+			player.message("You can't teleport during the " + DM_KING_DISPLAY_NAME + " challenge.");
 			return true;
 		}
 		return false;
@@ -454,7 +576,7 @@ public final class VoidArena {
 		DmKingChallenge challenge = activeDmKingChallenges.get(player.getUsernameHash());
 		if (challenge != null && !challenge.isInsideAssignedCage(player)) {
 			player.resetPath();
-			player.message("You cannot leave the DM King cage.");
+			player.message("You cannot leave the " + DM_KING_DISPLAY_NAME + " cage.");
 			Point start = VoidArenaConfig.arenaSlot(challenge.slotIndex).startA();
 			player.teleportFromVoidArena(start.getX(), start.getY(), true);
 		}
@@ -872,15 +994,15 @@ public final class VoidArena {
 		}
 		if (player.getCache().hasKey(DM_KING_KIT_CACHE)) {
 			recoverDmKingKit(player);
-			if (message) player.message("Your previous DM King challenge kit was restored. Challenge him again when ready.");
+			if (message) player.message("Your previous " + DM_KING_DISPLAY_NAME + " challenge kit was restored. Challenge him again when ready.");
 			return false;
 		}
 		if (!isInsideLobby(player)) {
-			if (message) player.message("You must be in the Void Arena lobby to challenge DM King.");
+			if (message) player.message("You must be in the Void Arena lobby to challenge " + DM_KING_DISPLAY_NAME + ".");
 			return false;
 		}
 		if (player.inCombat()) {
-			if (message) player.message("You must be out of combat to challenge DM King.");
+			if (message) player.message("You must be out of combat to challenge " + DM_KING_DISPLAY_NAME + ".");
 			return false;
 		}
 		if (activeMatches.containsKey(player.getUsernameHash())
@@ -901,7 +1023,7 @@ public final class VoidArena {
 			return false;
 		}
 		if (!supportsDmKingChallenge(player)) {
-			if (message) player.message("You need the current Voidscape client to challenge DM King.");
+			if (message) player.message("You need the current Voidscape client to challenge " + DM_KING_DISPLAY_NAME + ".");
 			return false;
 		}
 		if (shouldAutoSetDmKingStats(player)) {
@@ -939,7 +1061,7 @@ public final class VoidArena {
 		player.getSkills().sendUpdateAll();
 		ActionSender.sendEquipmentStats(player);
 		if (changed) {
-			player.message("@gre@Beta DM King challenge: all stats set to " + betaLevel + ".");
+			player.message("@gre@Beta " + DM_KING_DISPLAY_NAME + " challenge: all stats set to " + betaLevel + ".");
 		}
 	}
 
@@ -1011,7 +1133,9 @@ public final class VoidArena {
 		DmKingRecord record = recordDmKingResult(false);
 		finishDmKingSession(player, true);
 		player.playerServerMessage(MessageType.QUEST,
-			"@mag@DM King defeated: @whi@You beat the perfect death matcher.");
+			"@mag@" + DM_KING_DISPLAY_NAME + " defeated: @whi@You beat the perfect death matcher.");
+		player.playerServerMessage(MessageType.QUEST,
+			"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_RARE_LOSS_QUIPS));
 		sendDmKingSummary(player, summary);
 		sendDmKingRecordPayload(player, record);
 		broadcastDmKingRecord(record);
@@ -1019,7 +1143,7 @@ public final class VoidArena {
 		if (!player.getCache().hasKey(DM_KING_BROADCAST_CACHE)) {
 			player.getCache().store(DM_KING_BROADCAST_CACHE, true);
 			savePlayerCache(player);
-			world.sendWorldMessage("@mag@" + player.getUsername() + " has defeated DM King in the Void Arena!");
+			world.sendWorldMessage("@mag@" + player.getUsername() + " has defeated " + DM_KING_DISPLAY_NAME + " in the Void Arena!");
 		}
 	}
 
@@ -1033,7 +1157,11 @@ public final class VoidArena {
 		DmKingRecord record = recordDmKingWin ? recordDmKingResult(true) : null;
 		finishDmKingSession(player, !disconnectLoss);
 		if (message != null && !message.isEmpty() && player != null && player.loggedIn()) {
-			player.playerServerMessage(MessageType.QUEST, "@mag@DM King challenge ended: @whi@" + message);
+			player.playerServerMessage(MessageType.QUEST, "@mag@" + DM_KING_DISPLAY_NAME + " challenge ended: @whi@" + message);
+			if (recordDmKingWin) {
+				player.playerServerMessage(MessageType.QUEST,
+					"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_WIN_QUIPS));
+			}
 			sendDmKingSummary(player, summary);
 			sendDmKingRecordPayload(player, record);
 		}
@@ -1073,11 +1201,12 @@ public final class VoidArena {
 		int playerFishCapacity = challenge == null ? playerFish
 			: Math.max(playerFish, challenge.playerFishCapacity);
 		int kingFish = challenge == null ? 0 : Math.max(0, challenge.fishRemaining);
-		int castsUsed = challenge == null ? 0
-			: Math.max(0, Math.min(DM_KING_FIRE_BLAST_CASTS, DM_KING_FIRE_BLAST_CASTS - challenge.castsRemaining));
+		int kingFishCapacity = challenge == null ? kingFish : challenge.fishCapacity;
+		int castsUsed = challenge == null ? 0 : Math.max(0, challenge.castsUsed);
 		long castTicks = challenge == null ? dmKingCastDelayTicks() : challenge.dmKingCastDelayTicks();
 		long castMs = castTicks * Math.max(1, world.getServer().getConfig().GAME_TICK);
-		return new DmKingSummary(playerFish, playerFishCapacity, kingFish, castTicks, castMs, castsUsed);
+		return new DmKingSummary(playerFish, playerFishCapacity, kingFish, kingFishCapacity,
+			castTicks, castMs, castsUsed);
 	}
 
 	private void sendDmKingSummary(Player player, DmKingSummary summary) {
@@ -1086,12 +1215,13 @@ public final class VoidArena {
 		}
 		String tickLabel = summary.castDelayTicks == 1 ? "tick" : "ticks";
 		player.playerServerMessage(MessageType.QUEST,
-			"@mag@DM King supplies: @whi@Food left - you " + summary.playerFishRemaining
-				+ "/" + summary.playerFishCapacity + ", DM King " + summary.kingFishRemaining + "/" + DM_KING_FISH + ".");
+			"@mag@" + DM_KING_DISPLAY_NAME + " supplies: @whi@Food left - you " + summary.playerFishRemaining
+				+ "/" + summary.playerFishCapacity + ", " + DM_KING_DISPLAY_NAME + " " + summary.kingFishRemaining
+				+ "/" + summary.kingFishCapacity + ".");
 		player.playerServerMessage(MessageType.QUEST,
-			"@mag@DM King cast speed: @whi@Fire Blast every " + summary.castDelayMs
+			"@mag@" + DM_KING_DISPLAY_NAME + " cast speed: @whi@Fire Blast every " + summary.castDelayMs
 				+ "ms (" + summary.castDelayTicks + " " + tickLabel + "); casts used "
-				+ summary.castsUsed + "/" + DM_KING_FIRE_BLAST_CASTS + ".");
+				+ summary.castsUsed + " (unlimited).");
 	}
 
 	private long dmKingCastDelayTicks() {
@@ -1100,6 +1230,15 @@ public final class VoidArena {
 			? 0
 			: Math.max(0, world.getServer().getConfig().MILLISECONDS_BETWEEN_CASTS);
 		return Math.max(1, (castDelay + gameTick - 1L) / gameTick);
+	}
+
+	private long pvpReattackDelayTicks() {
+		return Math.max(0, world.getServer().getConfig().PVP_REATTACK_TIMER);
+	}
+
+	private boolean pvpReattackReady(Mob mob, long tick) {
+		return mob == null || mob.getRanAwayTimer() <= 0
+			|| mob.getRanAwayTimer() + pvpReattackDelayTicks() <= tick;
 	}
 
 	private void restoreDmKingKit(Player player) {
@@ -1168,6 +1307,10 @@ public final class VoidArena {
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to save DM King record", e);
 		}
+	}
+
+	private static String randomLine(String[] lines) {
+		return lines[ThreadLocalRandom.current().nextInt(lines.length)];
 	}
 
 	private boolean supportsDeathMatchSetup(Player player) {
@@ -2031,15 +2174,29 @@ public final class VoidArena {
 		private final long startsAt;
 		private final long expiresAt;
 		private final int playerFishCapacity;
-		private int fishRemaining = DM_KING_FISH;
-		private int castsRemaining = DM_KING_FIRE_BLAST_CASTS;
-		private int prayerStatePoints = DM_KING_PRAYER_STATE_POINTS;
+		private final int fishCapacity;
+		private int fishRemaining;
+		private int castsUsed;
+		private int strengthPotionBoostedLevel;
 		private long nextEatTick;
 		private long nextCastTick;
 		private long nextReengageTick;
+		private long nextKiteTick;
+		private long nextStrengthPotionTick;
+		private long nextIdleRoamTick;
+		private long nextQuipTick;
+		private long pendingPlayerCastCheckTick = -1;
+		private int pendingPlayerCastKingHits = -1;
+		private int lastPlayerDeathRunes = -1;
+		private boolean eatingToFull;
 		private boolean prepared;
 		private boolean started;
 		private boolean finished;
+		private boolean quippedPlayerLowFood;
+		private boolean quippedPlayerNoFood;
+		private boolean quippedPlayerLowHits;
+		private boolean quippedPlayerName;
+		private boolean quippedKingLowFood;
 
 		private DmKingChallenge(int slotIndex, long playerHash, Npc king, long startsAt, int playerFishCapacity) {
 			this.slotIndex = slotIndex;
@@ -2048,6 +2205,8 @@ public final class VoidArena {
 			this.startsAt = startsAt;
 			this.expiresAt = startsAt + DM_KING_MATCH_TIMEOUT_MS;
 			this.playerFishCapacity = playerFishCapacity;
+			this.fishCapacity = playerFishCapacity;
+			this.fishRemaining = playerFishCapacity;
 			this.event = new DmKingEvent(world, this);
 		}
 
@@ -2055,8 +2214,13 @@ public final class VoidArena {
 			return System.currentTimeMillis() >= startsAt;
 		}
 
-		private boolean hasPrayer() {
-			return prayerStatePoints > 0;
+		private boolean hasPrayer(int prayerId) {
+			for (int activePrayerId : DM_KING_ACTIVE_PRAYERS) {
+				if (activePrayerId == prayerId) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		private boolean isInsideAssignedCage(Mob mob) {
@@ -2077,7 +2241,7 @@ public final class VoidArena {
 				return;
 			}
 			if (king == null || king.isRemoved()) {
-				resolveDmKingLoss(this, player, "DM King vanished from the arena.", false, false);
+				resolveDmKingLoss(this, player, DM_KING_DISPLAY_NAME + " vanished from the arena.", false, false);
 				event.stop();
 				return;
 			}
@@ -2088,6 +2252,7 @@ public final class VoidArena {
 			}
 			if (!hasStarted()) {
 				prepareIfReady(player);
+				maybeIdleRoam(world.getServer().getCurrentTick(), player);
 				return;
 			}
 			if (!prepared) {
@@ -2096,8 +2261,7 @@ public final class VoidArena {
 			}
 			if (!started) {
 				started = true;
-				king.setChasing(player);
-				player.message("@red@DM King attacks with perfect supplies.");
+				player.message("@red@" + DM_KING_DISPLAY_NAME + " attacks with perfect supplies.");
 			}
 			if (player.getSkills().getLevel(Skill.HITS.id()) <= 0) {
 				return;
@@ -2108,10 +2272,16 @@ public final class VoidArena {
 			}
 
 			long tick = world.getServer().getCurrentTick();
-			drainPrayer();
-			maybeEat(tick, player);
-			maybeCast(tick, player);
-			maybeReengage(tick, player);
+			maybeRepotStrength(tick, player);
+			boolean acted = maybeRetreatToEat(tick, player) || maybeEat(tick, player);
+			if (!acted) {
+				maybeCast(tick, player);
+				acted = maybeKiteForMagic(tick, player);
+			}
+			if (!acted) {
+				maybeReengage(tick, player);
+			}
+			maybeFightQuip(tick, player);
 		}
 
 		private void prepareIfReady(Player player) {
@@ -2127,80 +2297,405 @@ public final class VoidArena {
 			prepared = true;
 			drinkStrengthPotion();
 			king.getUpdateFlags().setChatMessage(new ChatMessage(king,
-				"Strength potion. Steel skin. Ultimate strength.", player));
-			player.message("@red@DM King drinks a strength potion and activates combat prayers.");
+				"Steel skin. Ultimate strength. Incredible reflexes.", player));
+			player.message("@red@" + DM_KING_DISPLAY_NAME + " drinks a strength potion and activates Steel Skin, Ultimate Strength, and Incredible Reflexes.");
+			player.playerServerMessage(MessageType.QUEST,
+				"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_PREFIGHT_QUIPS));
 		}
 
 		private void drinkStrengthPotion() {
 			int maxStrength = king.getSkills().getMaxStat(Skill.STRENGTH.id());
 			int boosted = maxStrength + 3 + ((maxStrength * 10) / 100);
 			king.getSkills().setLevel(Skill.STRENGTH.id(), boosted);
+			strengthPotionBoostedLevel = boosted;
 			king.getUpdateFlags().setActionBubbleNpc(new BubbleNpc(king, ItemId.FULL_STRENGTH_POTION.id()));
 		}
 
-		private void drainPrayer() {
-			if (prayerStatePoints <= 0) {
+		private void maybeRepotStrength(long tick, Player player) {
+			if (tick < nextStrengthPotionTick || strengthPotionBoostedLevel <= 0) {
 				return;
 			}
-			int totalDrainRate = prayerDrainRate(Prayers.STEEL_SKIN)
-				+ prayerDrainRate(Prayers.ULTIMATE_STRENGTH)
-				+ prayerDrainRate(Prayers.INCREDIBLE_REFLEXES);
-			int pointDrain = (int) Math.ceil(totalDrainRate * 120
-				/ (300 * (1 + (DM_KING_PRAYER_POINTS - 1) / 32.0D)));
-			prayerStatePoints = Math.max(0, prayerStatePoints - pointDrain);
-			if (prayerStatePoints == 0) {
-				Player player = world.getPlayer(playerHash);
-				if (player != null) {
-					player.message("@mag@DM King's prayer fades.");
-				}
+			if (king.getSkills().getLevel(Skill.STRENGTH.id()) >= strengthPotionBoostedLevel) {
+				return;
+			}
+			drinkStrengthPotion();
+			nextStrengthPotionTick = tick + DM_KING_STRENGTH_REPOT_DELAY_TICKS;
+			if (player != null && player.loggedIn()) {
+				player.message("@mag@" + DM_KING_DISPLAY_NAME + " drinks a strength potion.");
 			}
 		}
 
-		private int prayerDrainRate(int prayerId) {
-			return world.getServer().getEntityHandler().getPrayerDef(prayerId).getDrainRate();
+		private boolean maybeRetreatToEat(long tick, Player player) {
+			if (!king.inCombat() || tick < nextEatTick || !shouldStartEating(player)) {
+				return false;
+			}
+			Mob opponent = king.getOpponent();
+			if (opponent != player || player.getHitsMade() < 3) {
+				return false;
+			}
+			eatingToFull = true;
+			king.getBehavior().retreat(1);
+			markPvpStyleRetreat(player, tick);
+			nextEatTick = tick + 1;
+			nextReengageTick = Math.max(nextReengageTick, tick + DM_KING_REENGAGE_DELAY_TICKS);
+			return true;
 		}
 
-		private void maybeEat(long tick, Player player) {
+		private boolean maybeEat(long tick, Player player) {
+			if (king.inCombat() || tick < nextEatTick || !shouldContinueEating(player)) {
+				return false;
+			}
 			int hits = king.getSkills().getLevel(Skill.HITS.id());
-			if (fishRemaining <= 0 || hits <= 0 || hits > DM_KING_EAT_THRESHOLD || tick < nextEatTick) {
-				return;
-			}
-			int healed = Math.min(DM_KING_MAX_HITS, hits + DM_KING_FISH_HEAL);
+			int healed = Math.min(dmKingMaxHits(), hits + dmKingSwordfishHeal());
 			if (healed <= hits) {
-				return;
+				return false;
 			}
 			king.getSkills().setLevel(Skill.HITS.id(), healed);
 			fishRemaining--;
+			eatingToFull = fishRemaining > 0 && healed < dmKingMaxHits();
 			nextEatTick = tick + DM_KING_EAT_DELAY_TICKS;
-			player.message("@mag@DM King eats a swordfish.");
+			nextReengageTick = Math.max(nextReengageTick,
+				tick + (eatingToFull ? DM_KING_EAT_DELAY_TICKS : DM_KING_REENGAGE_DELAY_TICKS));
+			player.message("@mag@" + DM_KING_DISPLAY_NAME + " eats a swordfish. " + fishRemaining + " left.");
+			return true;
 		}
 
-		private void maybeCast(long tick, Player player) {
-			if (castsRemaining <= 0 || tick < nextCastTick) {
-				return;
+		private boolean shouldContinueEating(Player player) {
+			return canUseSwordfish() && (eatingToFull || shouldStartEating(player));
+		}
+
+		private boolean shouldStartEating(Player player) {
+			if (!canUseSwordfish()) {
+				return false;
 			}
-			if (!king.withinRange(player, player.getConfig().SPELL_RANGE_DISTANCE)
-				|| !PathValidation.checkPath(world, king.getLocation(), player.getLocation())) {
-				return;
+			int hits = king.getSkills().getLevel(Skill.HITS.id());
+			int maxHits = dmKingMaxHits();
+			int missing = maxHits - hits;
+			int heal = dmKingSwordfishHeal();
+			return missing >= heal || hits <= playerMeleeMaxHit(player) + heal;
+		}
+
+		private boolean canUseSwordfish() {
+			int hits = king.getSkills().getLevel(Skill.HITS.id());
+			return fishRemaining > 0 && hits > 0 && hits < dmKingMaxHits() && dmKingSwordfishHeal() > 0;
+		}
+
+		private int dmKingMaxHits() {
+			return king.getSkills().getMaxStat(Skill.HITS.id());
+		}
+
+		private int dmKingSwordfishHeal() {
+			return world.getServer().getEntityHandler().getItemEdibleHeals(ItemId.SWORDFISH.id());
+		}
+
+		private int playerMeleeMaxHit(Player player) {
+			return CombatFormula.calculateMeleeMaxHit(player, king);
+		}
+
+		private boolean maybeCast(long tick, Player player) {
+			if (tick < nextCastTick) {
+				return false;
 			}
-			int damage = com.openrsc.server.event.rsc.impl.combat.CombatFormula
-				.calculateMagicDamage(DM_KING_FIRE_BLAST_POWER, player);
+			if (!canUsePvpOffense(tick, player)) {
+				return false;
+			}
+			if (!canCastAt(player)) {
+				return false;
+			}
+			int damage = CombatFormula.calculateMagicDamage(DM_KING_FIRE_BLAST_POWER, player);
 			world.getServer().getGameEventHandler().add(new ProjectileEvent(world, king, player,
 				damage, DM_KING_FIRE_BLAST_PROJECTILE, false));
-			castsRemaining--;
+			castsUsed++;
 			nextCastTick = tick + dmKingCastDelayTicks();
+			return true;
 		}
 
 		private long dmKingCastDelayTicks() {
 			return VoidArena.this.dmKingCastDelayTicks();
 		}
 
+		private boolean canCastAt(Player player) {
+			return king.withinRange(player, player.getConfig().SPELL_RANGE_DISTANCE)
+				&& PathValidation.checkPath(world, king.getLocation(), player.getLocation());
+		}
+
+		private boolean maybeKiteForMagic(long tick, Player player) {
+			if (tick < nextKiteTick || !shouldPreferMagicKite(tick, player)) {
+				return false;
+			}
+			if (king.inCombat()) {
+				Mob opponent = king.getOpponent();
+				if (opponent != player || player.getHitsMade() < 3) {
+					return false;
+				}
+				king.getBehavior().retreat(1);
+				markPvpStyleRetreat(player, tick);
+				nextKiteTick = tick + DM_KING_KITE_DELAY_TICKS;
+				nextReengageTick = Math.max(nextReengageTick, tick + DM_KING_REENGAGE_DELAY_TICKS);
+				return true;
+			}
+			if (isGoodMagicKitePosition(player)) {
+				nextKiteTick = tick + DM_KING_KITE_DELAY_TICKS;
+				nextReengageTick = Math.max(nextReengageTick, tick + 1);
+				return true;
+			}
+			Point next = bestMagicKiteStep(player);
+			if (next == null) {
+				return false;
+			}
+			king.walk(next.getX(), next.getY());
+			nextKiteTick = tick + DM_KING_KITE_DELAY_TICKS;
+			nextReengageTick = Math.max(nextReengageTick, tick + DM_KING_REENGAGE_DELAY_TICKS);
+			return true;
+		}
+
+		private boolean shouldPreferMagicKite(long tick, Player player) {
+			if (player.getSkills().getLevel(Skill.HITS.id()) <= 0) {
+				return false;
+			}
+			if (player.getSkills().getLevel(Skill.HITS.id()) <= DM_KING_MELEE_COMMIT_HITS
+				&& tick < nextCastTick) {
+				return false;
+			}
+			if (tick + DM_KING_KITE_DELAY_TICKS >= nextCastTick) {
+				return true;
+			}
+			return shouldStartEating(player) || shouldAvoidMeleeWithoutFood(player);
+		}
+
+		private boolean shouldAvoidMeleeWithoutFood(Player player) {
+			return !canUseSwordfish()
+				&& king.getSkills().getLevel(Skill.HITS.id()) <= Math.max(1, playerMeleeMaxHit(player) * 2);
+		}
+
+		private void maybeIdleRoam(long tick, Player player) {
+			if (tick < nextIdleRoamTick || !king.finishedPath() || king.inCombat()) {
+				return;
+			}
+			VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
+			ThreadLocalRandom random = ThreadLocalRandom.current();
+			Point playerPoint = player.getLocation();
+			for (int attempt = 0; attempt < 12; attempt++) {
+				Point candidate = Point.location(
+					random.nextInt(slot.minX, slot.maxX + 1),
+					random.nextInt(slot.minY, slot.maxY + 1));
+				if (candidate.equals(playerPoint) || candidate.equals(king.getLocation())
+					|| !isWalkablePressureTile(candidate)
+					|| !PathValidation.checkPath(world, king.getLocation(), candidate)) {
+					continue;
+				}
+				king.walk(candidate.getX(), candidate.getY());
+				break;
+			}
+			nextIdleRoamTick = tick + DM_KING_IDLE_ROAM_DELAY_TICKS;
+		}
+
+		private boolean isGoodMagicKitePosition(Player player) {
+			int distance = king.getLocation().getDistancePythagoras(player.getLocation());
+			return distance >= DM_KING_KITE_MIN_DISTANCE
+				&& distance <= player.getConfig().SPELL_RANGE_DISTANCE
+				&& PathValidation.checkPath(world, king.getLocation(), player.getLocation());
+		}
+
+		private Point bestMagicKiteStep(Player player) {
+			Point current = king.getLocation();
+			Point playerPoint = player.getLocation();
+			int spellRange = player.getConfig().SPELL_RANGE_DISTANCE;
+			VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
+			Point best = null;
+			int bestScore = Integer.MIN_VALUE;
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dy = -1; dy <= 1; dy++) {
+					if (dx == 0 && dy == 0) {
+						continue;
+					}
+					Point candidate = Point.location(current.getX() + dx, current.getY() + dy);
+					if (!slot.contains(candidate) || candidate.equals(playerPoint)
+						|| !PathValidation.checkAdjacent(king, current, candidate)
+						|| !PathValidation.checkPath(world, candidate, playerPoint)) {
+						continue;
+					}
+					int distance = candidate.getDistancePythagoras(playerPoint);
+					if (distance > spellRange) {
+						continue;
+					}
+					int score = distance * 100;
+					if (distance >= DM_KING_KITE_MIN_DISTANCE) {
+						score += 50;
+					}
+					if (Math.abs(candidate.getX() - playerPoint.getX())
+						+ Math.abs(candidate.getY() - playerPoint.getY())
+						> Math.abs(current.getX() - playerPoint.getX())
+							+ Math.abs(current.getY() - playerPoint.getY())) {
+						score += 15;
+					}
+					if (score > bestScore) {
+						bestScore = score;
+						best = candidate;
+					}
+				}
+			}
+			return best;
+		}
+
 		private void maybeReengage(long tick, Player player) {
 			if (tick < nextReengageTick || king.inCombat()) {
 				return;
 			}
+			if (!canUsePvpOffense(tick, player)) {
+				return;
+			}
 			nextReengageTick = tick + DM_KING_REENGAGE_DELAY_TICKS;
-			king.setChasing(player);
+			if (canStartMelee(player)) {
+				king.getBehavior().setChasing(player);
+				king.startCombat(player);
+				return;
+			}
+			Point pressureTile = bestMeleePressureTile(player);
+			if (pressureTile != null) {
+				king.walkToEntityAStar(pressureTile.getX(), pressureTile.getY(), 20);
+			} else {
+				king.walkToEntityAStar(player.getX(), player.getY(), 20);
+			}
+		}
+
+		private void maybeFightQuip(long tick, Player player) {
+			observePlayerCasts(tick, player);
+			if (tick < nextQuipTick || king.getUpdateFlags().hasChatMessage()) {
+				return;
+			}
+			int playerFish = player.getCarriedItems().getInventory().countId(ItemId.SWORDFISH.id());
+			int playerHits = player.getSkills().getLevel(Skill.HITS.id());
+			int playerMaxHits = Math.max(1, player.getSkills().getMaxStat(Skill.HITS.id()));
+			if (!quippedPlayerNoFood && playerFish <= 0) {
+				quippedPlayerNoFood = sayFightQuip(player, tick, randomLine(DM_KING_NO_FOOD_QUIPS));
+				return;
+			}
+			if (!quippedPlayerLowFood && playerFish > 0
+				&& playerFish <= Math.max(2, playerFishCapacity / 4)) {
+				quippedPlayerLowFood = sayFightQuip(player, tick, randomLine(DM_KING_LOW_FOOD_QUIPS));
+				return;
+			}
+			if (!quippedPlayerLowHits && playerHits <= Math.max(12, playerMaxHits / 4)) {
+				quippedPlayerLowHits = sayFightQuip(player, tick, randomLine(DM_KING_LOW_HITS_QUIPS));
+				return;
+			}
+			if (!quippedKingLowFood && fishRemaining > 0 && fishRemaining <= Math.max(2, fishCapacity / 4)) {
+				quippedKingLowFood = sayFightQuip(player, tick, randomLine(DM_KING_OWN_LOW_FOOD_QUIPS));
+				return;
+			}
+			if (!quippedPlayerName && ThreadLocalRandom.current().nextInt(28) == 0) {
+				quippedPlayerName = sayFightQuip(player, tick, playerNameLine(player));
+				return;
+			}
+			if (ThreadLocalRandom.current().nextInt(DM_KING_RANDOM_QUIP_CHANCE) == 0) {
+				sayFightQuip(player, tick, randomLine(DM_KING_RANDOM_FIGHT_QUIPS));
+			}
+		}
+
+		private void observePlayerCasts(long tick, Player player) {
+			int deathRunes = player.getCarriedItems().getInventory().countId(ItemId.DEATH_RUNE.id());
+			if (lastPlayerDeathRunes < 0) {
+				lastPlayerDeathRunes = deathRunes;
+				return;
+			}
+			if (deathRunes < lastPlayerDeathRunes) {
+				pendingPlayerCastCheckTick = tick + 2;
+				pendingPlayerCastKingHits = king.getSkills().getLevel(Skill.HITS.id());
+			}
+			lastPlayerDeathRunes = deathRunes;
+			if (pendingPlayerCastCheckTick >= 0 && tick >= pendingPlayerCastCheckTick) {
+				if (pendingPlayerCastKingHits > 0
+					&& king.getSkills().getLevel(Skill.HITS.id()) >= pendingPlayerCastKingHits) {
+					sayFightQuip(player, tick, randomLine(DM_KING_MISSED_CAST_QUIPS));
+				}
+				pendingPlayerCastCheckTick = -1;
+				pendingPlayerCastKingHits = -1;
+			}
+		}
+
+		private boolean sayFightQuip(Player player, long tick, String message) {
+			if (player == null || !player.loggedIn() || message == null || tick < nextQuipTick
+				|| king.getUpdateFlags().hasChatMessage()) {
+				return false;
+			}
+			king.getUpdateFlags().setChatMessage(new ChatMessage(king, message, player));
+			nextQuipTick = tick + DM_KING_QUIP_COOLDOWN_TICKS + ThreadLocalRandom.current().nextInt(4);
+			return true;
+		}
+
+		private String randomLine(String[] lines) {
+			return lines[ThreadLocalRandom.current().nextInt(lines.length)];
+		}
+
+		private String playerNameLine(Player player) {
+			return randomLine(DM_KING_NAME_QUIPS).replace("%s", player.getUsername());
+		}
+
+		private boolean canStartMelee(Player player) {
+			return player != null && !player.inCombat()
+				&& king.withinRange(player, 1)
+				&& PathValidation.checkAdjacentDistance(world, king.getLocation(), player.getLocation(), true, false);
+		}
+
+		private Point bestMeleePressureTile(Player player) {
+			Point playerPoint = player.getLocation();
+			Point current = king.getLocation();
+			VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
+			Point best = null;
+			int bestScore = Integer.MIN_VALUE;
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dy = -1; dy <= 1; dy++) {
+					if (dx == 0 && dy == 0) {
+						continue;
+					}
+					Point candidate = Point.location(playerPoint.getX() + dx, playerPoint.getY() + dy);
+					if (!slot.contains(candidate) || !isWalkablePressureTile(candidate)
+						|| !PathValidation.checkAdjacentDistance(world, candidate, playerPoint, true, false)) {
+						continue;
+					}
+					int distance = candidate.getDistancePythagoras(current);
+					int score = -distance * 100;
+					if (PathValidation.checkPath(world, current, candidate)) {
+						score += 25;
+					}
+					if (score > bestScore) {
+						bestScore = score;
+						best = candidate;
+					}
+				}
+			}
+			return best;
+		}
+
+		private boolean isWalkablePressureTile(Point point) {
+			if (point == null) {
+				return false;
+			}
+			if (point.equals(king.getLocation())) {
+				return true;
+			}
+			if (world.getTile(point.getX(), point.getY()) == null) {
+				return false;
+			}
+			if ((world.getTile(point.getX(), point.getY()).traversalMask & CollisionFlag.FULL_BLOCK) != 0) {
+				return false;
+			}
+			return !PathValidation.isMobBlocking(king, point.getX(), point.getY());
+		}
+
+		private boolean canUsePvpOffense(long tick, Player player) {
+			return VoidArena.this.pvpReattackReady(king, tick)
+				&& VoidArena.this.pvpReattackReady(player, tick);
+		}
+
+		private void markPvpStyleRetreat(Player player, long tick) {
+			if (player != null) {
+				player.setRanAwayTimer();
+			}
+			long readyTick = tick + VoidArena.this.pvpReattackDelayTicks();
+			nextCastTick = Math.max(nextCastTick, readyTick);
+			nextReengageTick = Math.max(nextReengageTick, readyTick);
 		}
 	}
 
@@ -2222,15 +2717,17 @@ public final class VoidArena {
 		private final int playerFishRemaining;
 		private final int playerFishCapacity;
 		private final int kingFishRemaining;
+		private final int kingFishCapacity;
 		private final long castDelayTicks;
 		private final long castDelayMs;
 		private final int castsUsed;
 
 		private DmKingSummary(int playerFishRemaining, int playerFishCapacity, int kingFishRemaining,
-			long castDelayTicks, long castDelayMs, int castsUsed) {
+			int kingFishCapacity, long castDelayTicks, long castDelayMs, int castsUsed) {
 			this.playerFishRemaining = playerFishRemaining;
 			this.playerFishCapacity = playerFishCapacity;
 			this.kingFishRemaining = kingFishRemaining;
+			this.kingFishCapacity = kingFishCapacity;
 			this.castDelayTicks = castDelayTicks;
 			this.castDelayMs = castDelayMs;
 			this.castsUsed = castsUsed;
