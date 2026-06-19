@@ -12116,13 +12116,12 @@ public final class mudclient implements Runnable {
 				}
 
 			}
-			/*if (npc.bubbleItem == 221) {
+			if (npc.bubbleTimeout > 0) {
 				this.characterBubbleX[this.characterBubbleCount] = width1 / 2 + x;
 				this.characterBubbleY[this.characterBubbleCount] = y;
 				this.characterBubbleScale[this.characterBubbleCount] = overlayMovement;
 				this.characterBubbleID[this.characterBubbleCount++] = npc.bubbleItem;
 			}
-			this.bubbleTimeout = npc.bubbleItem;*/ // should there be a strength pot bubble over npcs head
 		} catch (RuntimeException var28) {
 			throw GenUtil.makeThrowable(var28, "client.EC(" + y + ',' + topPixelSkew + ',' + var3 + ',' + height + ','
 				+ overlayMovement + ',' + npcIndex + ',' + width1 + ',' + x + ')');

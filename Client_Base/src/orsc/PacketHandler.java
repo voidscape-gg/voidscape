@@ -2089,7 +2089,7 @@ public class PacketHandler {
 			} else if (updateType == 7) {
 				int itemType = packetsIncoming.getShort();
 				if (null != npc) {
-					//npc.bubbleTimeout = 150;
+					npc.bubbleTimeout = 150;
 					npc.bubbleItem = itemType;
 				}
 			}

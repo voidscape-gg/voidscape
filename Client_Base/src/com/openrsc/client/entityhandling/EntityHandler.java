@@ -2480,6 +2480,13 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Arena Herald", "A robed keeper of the ranked deathmatch ladder.", "Leaderboard", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++)); // 861
 
+		// voidscape: Void Arena solo challenge NPCs (server ids 862/863). Exact Death
+		// Match Arena Void Knight visual copy; only name/stats/behavior differ.
+		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
+		npcs.add(new NPCDef("DM King", "The perfect ranked death matcher.", "Challenge", "", 123, 123, 123, 123, false, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++)); // 862
+		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
+		npcs.add(new NPCDef("DM King", "The perfect ranked death matcher.", "", 123, 123, 123, 123, true, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++)); // 863
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

@@ -105,6 +105,7 @@ public enum PlayerTitle {
 
 	VOIDBANE("voidbane", "Voidbane", "Defeat the Void Knight in the Death Match Arena.", RequirementType.MANUAL),
 	VOID_ARENA_CHAMPION("void_arena_champion", "Void Arena Champion", "Finish first in a Void Arena ranked season.", RequirementType.MANUAL),
+	DM_KINGSLAYER("dm_kingslayer", "DM Kingslayer", "Defeat DM King in the Void Arena.", RequirementType.MANUAL),
 	VOIDWALKER("voidwalker", "Voidwalker", "Complete a major Voidscape encounter.", RequirementType.MANUAL),
 	VOID_TOUCHED("void_touched", "Void-Touched", "Earn a rare void-themed reward.", RequirementType.MANUAL),
 	AUCTIONEER("auctioneer", "Auctioneer", "Earn through auction house activity.", RequirementType.MANUAL),

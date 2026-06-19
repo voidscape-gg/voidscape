@@ -470,6 +470,9 @@ public class CombatFormula {
 	 * @return A multiplier to modify the context mob's relevant stat to the prayers.
 	 */
 	protected static double addPrayers(final Mob source, final int prayer1, final int prayer2, final int prayer3) {
+		if (source.isNpc()) {
+			return source.getWorld().getVoidArena().dmKingPrayerMultiplier(source, prayer1, prayer2, prayer3);
+		}
 		if (source.isPlayer()) {
 			final Player sourcePlayer = (Player) source;
 			if (sourcePlayer.getPrayers().isPrayerActivated(prayer3)) {

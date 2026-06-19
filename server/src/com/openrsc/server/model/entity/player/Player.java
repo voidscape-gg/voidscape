@@ -2607,7 +2607,7 @@ public final class Player extends Mob {
 
 		final Player player = mob instanceof Player ? (Player) mob : null;
 		getWorld().getBountyHunter().onPlayerDeath(this, player);
-		final Point voidArenaRespawn = player == null ? null : getWorld().getVoidArena().handlePlayerDeath(this, player);
+		final Point voidArenaRespawn = getWorld().getVoidArena().handlePlayerDeath(this, mob);
 
 		if (player != null) {
 			player.message(String.format("You have defeated %s!", getUsername()));

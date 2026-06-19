@@ -169,6 +169,7 @@ public class UpdateFlags {
 	public void reset() {
 		projectile.set(null);
 		actionBubble.set(null);
+		actionBubbleNpc.set(null);
 		damage.set(null);
 		skull.set(null);
 		wield.set(null);

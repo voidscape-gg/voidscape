@@ -8,6 +8,7 @@ public class PlayerLogin implements PlayerLoginTrigger {
 	@Override
 	public void onPlayerLogin(Player player) {
 		VoidSubscription.refreshAccountSubscription(player);
+		player.getWorld().getVoidArena().recoverDmKingKit(player);
 	}
 
 	@Override

@@ -13,6 +13,7 @@ import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.KillType;
 import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Projectile;
@@ -157,7 +158,9 @@ public class RangeEvent extends GameTickEvent {
 
 		final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
 
-		if ((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT) && damage > 0) {
+		if ((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
+			&& !(target.isNpc() && target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target))
+			&& damage > 0) {
 			player.incExp(Skill.RANGED.id(), Formulae.rangedHitExperience(target, damage), true);
 		}
 

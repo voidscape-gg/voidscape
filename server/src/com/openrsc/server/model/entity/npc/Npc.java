@@ -57,6 +57,7 @@ public class Npc extends Mob {
 		NpcId.LUCIEN_EDGE.id(),
 		NpcId.BLACK_KNIGHT_TITAN.id(),
 		NpcId.PETER_SKIPPIN.id(),
+		NpcId.DM_KING_ARENA.id(),
 		NpcId.SPOOKIE.id(),
 		NpcId.SCARIE.id()
 	};
@@ -300,14 +301,23 @@ public class Npc extends Mob {
 	}
 
 	public int getArmourPoints() {
+		if (getID() == NpcId.DM_KING_ARENA.id()) {
+			return 165;
+		}
 		return 0;
 	}
 
 	public int getWeaponAimPoints() {
+		if (getID() == NpcId.DM_KING_ARENA.id()) {
+			return 76;
+		}
 		return 0;
 	}
 
 	public int getWeaponPowerPoints() {
+		if (getID() == NpcId.DM_KING_ARENA.id()) {
+			return 76;
+		}
 		return 0;
 	}
 

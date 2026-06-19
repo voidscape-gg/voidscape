@@ -639,6 +639,15 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		SpellHandler.finalizeSpell(player, spell, null);
 	}
 
+	private void finalizeMobSpell(Player player, SpellDef spell, Mob affectedMob, String message) {
+		finalizeSpell(player, spell, message, shouldAwardMobSpellExperience(player, affectedMob));
+	}
+
+	private boolean shouldAwardMobSpellExperience(Player player, Mob affectedMob) {
+		return !(affectedMob instanceof Npc)
+			|| !player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob);
+	}
+
 	public static void finalizeSpell(Player player, SpellDef spell, String message) {
 		finalizeSpell(player, spell, message, true);
 	}
@@ -1517,7 +1526,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							}
 						});
 
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 
 					case CONFUSE_R:
@@ -1549,7 +1558,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 								}
 							}
 						});
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						return;
 
 					/*
@@ -1619,7 +1628,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 								}
 							}
 						});
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						return;
 					case CRUMBLE_UNDEAD:
 						if (affectedMob.isPlayer()) {
@@ -1638,7 +1647,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							return;
 						}
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damaga, 1, setChasing));
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						return;
 
 					case IBAN_BLAST:
@@ -1664,7 +1673,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							getPlayer().getCache().set(spell.getName() + "_casts", casts - 1);
 						}
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateIbanSpellDamage(affectedMob), 4, setChasing));
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 					case CLAWS_OF_GUTHIX:
 						isClaws = true;
@@ -1730,7 +1739,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							godSpellObject(getPlayer(), affectedMob, spellEnum);
 						}
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateGodSpellDamage(getPlayer(), affectedMob), 1, setChasing));
-						finalizeSpell(getPlayer(), spell, DEFAULT, giveExp);
+						finalizeSpell(getPlayer(), spell, DEFAULT, giveExp && shouldAwardMobSpellExperience(getPlayer(), affectedMob));
 						break;
 
 					case CHILL_BOLT:
@@ -1747,7 +1756,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damageR, 1, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 
 					default:
@@ -1818,7 +1827,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, 1, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
-						finalizeSpell(getPlayer(), spell, DEFAULT);
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 				}
 			}
