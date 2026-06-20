@@ -18,9 +18,9 @@ Focused `--only-auth-wilderness-target` coverage verifies wilderness player-targ
 
 The APK should prioritize one-tap entry for beta players:
 
-- After bundled cache install, the visible `Play` button starts `GameActivity` using the saved Android app-private `ip.txt` / `port.txt` endpoint when present. If no endpoint has been saved, real devices default to `5.161.114.251:43596`; Android emulators default to `10.0.2.2:43596` so local smoke tests hit the host server without the advanced picker.
-- Long-press `Play` opens the advanced server picker for developers and testers.
-- Advanced choices are public Voidscape, Android emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, and manual host/port. Manual host/port opens prefilled with the current saved endpoint to avoid accidentally switching a QA device back to the default server.
+- After bundled cache install, the visible `Play` button starts `GameActivity` using the saved Android app-private `ip.txt` / `port.txt` endpoint when present. Release builds always default to `5.161.114.251:43596`, including emulator-like Play review devices; debuggable builds on Android emulators default to `10.0.2.2:43596` so local smoke tests hit the host server without the advanced picker.
+- Long-press `Play` opens the advanced server picker for developers and testers only in debuggable builds.
+- Debug advanced choices are public Voidscape, Android emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, and manual host/port. Manual host/port opens prefilled with the current saved endpoint to avoid accidentally switching a QA device back to the default server.
 - Replace the hardcoded public IP with the final DNS name before broad release so old APKs survive VPS moves.
 
 ## Emulator QA Commands
@@ -73,7 +73,7 @@ For authenticated in-game coverage, run a local server and set `ANDROID_SMOKE_AU
 
 Bank smoke waits for a stable rendered bank-object coordinate before tapping the chest. This avoids racing camera settle or viewport-size changes when the fixture logs multiple object positions during Android smoke setup.
 
-Endpoint note: when iterating against a non-default local port, write `ip.txt` / `port.txt` through the smoke launcher or manual server dialog once; the normal `Play` path preserves that saved endpoint on later launches.
+Endpoint note: when iterating against a non-default local port, write `ip.txt` / `port.txt` through the smoke launcher or manual server dialog once; the normal debug `Play` path preserves that saved endpoint on later launches. Release builds ignore saved developer endpoints such as `10.0.2.2`, `127.0.0.1`, and the LAN placeholder so review installs cannot strand themselves on local-only hosts.
 
 Current emulator quirk: `adb shell wm size` and `dumpsys window displays` can report stale orientation after switching between the portrait wrapper and landscape `GameActivity`. The smoke script sizes tap coordinates from a temporary `screencap` PNG first, then falls back to `dumpsys`/`wm size` only if image probing fails. The native wrapper's `Play` button can land higher on tablet-density layouts than on phone profiles, so smoke taps the UIAutomator text when possible and falls back to the actual button band instead of a bottom-biased percentage. Named screenshots also go through a timeout-backed `screencap` helper; if adb stalls, the smoke logs a warning and keeps action assertions moving instead of hanging indefinitely. The ATD automation image is reliable for log-driven assertions but can return black `screencap` frames in this environment; use it for repeatable input proof, then use `voidscape_api35` or a real device for visual QA screenshots. The Google APIs image can still ANR during credential entry under headless load, so real-device visual screenshots remain the release-grade check. Fresh Google APIs profiles can show Android's OS-owned fullscreen education card (`Viewing full screen` / `Got it`) on first launch; focused authenticated UI smokes close the game welcome panel from logged client coordinates instead of blind center taps.
 
@@ -85,7 +85,7 @@ Android hides last-login host/IP information by default and does not expose the 
 
 Android login status messages dismiss the soft keyboard before drawing on the existing-user/recovery panels. Local validation now reports missing username/password immediately instead of silently returning with the keyboard still open, and the existing-user field labels hide while a status is visible so the compact mobile layout stays readable. If an Android player chooses an unreachable manual server, startup now stops on a clear selected-server error instead of hanging or crashing before login. Backgrounding from the login screen and relaunching from the app icon resumes the existing game task, refreshes fullscreen/network/focus state, and keeps input usable. The Android touch layer maps a single terrain tap into the shared client's normal `LANDSCAPE_WALK_HERE` path; the auth smoke can verify this by comparing the saved DB position before and after a tap/logout. The same tap path reaches shared NPC, scenery, and inventory menu actions: the smoke helper can temporarily enable app-private target logging, tap projected NPC/object/item coordinates, and assert resulting shared `NPC_TALK_TO`/`NPC_ATTACK*`, `OBJECT_COMMAND1`, `OBJECT_USE_ITEM`, `NPC_USE_ITEM`, `ITEM_USE`, and `ITEM_USE_ITEM` actions in logcat. Long-press now explicitly synthesizes the shared right-click path, opens the normal `Choose option` menu, suppresses the release tap so the player can review options, and lets the next tap choose a row. Android also has early touch-close hooks for welcome, server-message, and wilderness-warning dialogs so scaled phone taps do not depend on the classic frame's narrow text hitbox. Logging out from the in-game settings panel returns Android to the branded login home, closes stale game overlays, and leaves the existing-user form/keyboard usable without an app restart.
 
-Android launcher branding uses the modern platform path while keeping old-device fallbacks. Android 8+ reads the adaptive launcher icon from `res/drawable-anydpi-v26/ic_launcher.xml`, with a dark background and the Voidscape cracked-`V` foreground. Android 12+ reads `VoidscapeLaunchTheme` from `res/values-v31/styles.xml`, using `windowSplashScreenAnimatedIcon` for a centered app-owned launch mark and `voidscape_launch_background` for the dark scene preview between the platform splash and the updater layout. Verification screenshots live at `/tmp/voidscape-android-launch-branding-v3/manual` for the cold-start/icon frames and `/tmp/voidscape-android-launch-branding-v3-smoke` for the wrapper/login smoke set. The launch transition is intentional on the baseline AVD: the Android launcher/home screen is portrait with the adaptive icon visible, and the first app-owned frame is already landscape with the Voidscape updater background.
+Android launcher branding uses the modern platform path while keeping old-device fallbacks. Android 8+ reads the adaptive launcher icon from `res/drawable-anydpi-v26/ic_launcher.xml`, with a dark background and the Voidscape cracked-`V` foreground. Android 12+ reads `VoidscapeLaunchTheme` from `res/values-v31/styles.xml`, using `windowSplashScreenAnimatedIcon` for a centered app-owned launch mark and `voidscape_launch_background` for the dark scene preview between the platform splash and the updater layout. Verification screenshots live at `/tmp/voidscape-android-launch-branding-v3/manual` for the cold-start/icon frames and `/tmp/voidscape-android-launch-branding-v3-smoke` for the wrapper/login smoke set. Android portrait is supported player-facing UI, so launcher and in-game QA should verify both portrait and landscape frames instead of forcing a landscape-only handoff.
 
 Android native wrapper screens tolerate system dark mode and a larger Android font scale on the current emulator matrix. Baseline `voidscape_api35` and small `voidscape_small_api35` were both checked with `font_scale=1.3` and `cmd uimode night yes`; ready/play, server picker, manual server, login handoff, and bad-server screenshots remained readable without clipped text. Proof screenshots are `/tmp/voidscape-android-dark-font-v1`, `/tmp/voidscape-android-dark-font-small-v1`, and the small manual-dialog follow-up `/tmp/voidscape-android-dark-font-small-v1/manual-proof`.
 
@@ -105,7 +105,7 @@ Before sharing an APK with players:
 
 - `scripts/build-android.sh` must pass and emit `Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk`.
 - Fresh install on an emulator reaches `Ready to play`, pressing `Play` writes the public endpoint, and the login screen renders.
-- Emulator test matrix: one low-end-ish profile around 2 GB RAM, one modern phone profile, portrait launch prevention/fullscreen behavior, and at least one cold install with app data cleared.
+- Emulator test matrix: one low-end-ish profile around 2 GB RAM, one modern phone profile, portrait and landscape fullscreen behavior, portrait HUD fit/touch targets, and at least one cold install with app data cleared.
 - Input smoke: tap walk, tap NPC/object, long-press/right-click menu, chat keyboard, login text entry, inventory tap, bank scroll, camera rotate, zoom gesture, and logout.
 - Performance smoke: idle in Lumbridge/Edgeville for several minutes, enter a populated/combat area, confirm no sustained skipped frames, ANRs, or runaway battery/CPU warnings in Android Studio Profiler.
 - Network smoke: launch on Wi-Fi, background/resume the app, reconnect after a brief network drop, and verify bad host/port failure is understandable.
@@ -145,7 +145,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Add a true Android adaptive icon foreground/background pair.
 - [x] Add a branded Android splash screen for cold app start.
 - [x] Make fullscreen education overlay acceptable on first boot, or document that it is OS-owned and appears only once.
-- [x] Verify portrait-to-landscape transition feels intentional and not like the app is rotating by accident.
+- [x] Verify portrait and landscape launch flows feel intentional and not like the app is rotating by accident.
 - [x] Make native Android text sizes and spacing look polished at 420 dpi and smaller densities.
 - [x] Ensure all Android native screens look good with system dark mode and font scaling.
 - [x] Decide whether Android should reuse the desktop launcher layered assets or have a phone-specific composition.
@@ -197,7 +197,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 
 - [x] Verify the classic `512x346` framebuffer is aspect-ratio correct on the medium phone AVD.
 - [x] Verify letterboxing is acceptable in landscape and does not waste too much usable area.
-- [ ] Check whether portrait bootstrap followed by landscape game is visually smooth.
+- [ ] Check portrait gameplay on current public APK builds for clipped HUD, context-menu touch targets, and chat-tab reachability.
 - [x] Check login button hitboxes against what the player sees after scaling.
 - [x] Check small RSC fonts on a 1080x2400 phone screenshot.
 - [x] Check UI at reduced emulator resolution/density for lower-end phones. Bank smoke passed at `720x1280 @ 320dpi`.

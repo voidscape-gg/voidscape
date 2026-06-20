@@ -1041,7 +1041,7 @@ public abstract class Mob extends Entity {
 
 	public void setOpponent(final Mob opponent) {
 		combatWith = opponent;
-		if (opponent != null && this.isPlayer()) {
+		if (opponent != null && this.isPlayer() && !opponent.isNpc()) {
 			((com.openrsc.server.model.entity.player.Player) this).cancelAutoWalk();
 		}
 	}

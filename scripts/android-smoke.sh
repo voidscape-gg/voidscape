@@ -11,8 +11,9 @@ EMULATOR="$SDK_ROOT/emulator/emulator"
 AVD_NAME="${AVD_NAME:-voidscape_api35}"
 APK="$REPO_ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
 OUT_DIR="${ANDROID_SCREENSHOT_DIR:-$REPO_ROOT/tmp/android-smoke-$(date +%Y%m%d-%H%M%S)}"
-APP_FILES="/data/user/0/com.voidscape.client/files"
-APP_SMOKE_FILES="/sdcard/Android/data/com.voidscape.client/files"
+APP_ID="${ANDROID_SMOKE_APP_ID:-com.voidscape.gg}"
+APP_FILES="/data/user/0/$APP_ID/files"
+APP_SMOKE_FILES="/sdcard/Android/data/$APP_ID/files"
 SMOKE_NPC_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-npc-targets.flag"
 SMOKE_PLAYER_TARGETS_FLAG="$APP_SMOKE_FILES/android-smoke-player-targets.flag"
 SMOKE_PLAYER_COMMAND_FILE="$APP_SMOKE_FILES/android-smoke-player-command.txt"
@@ -686,7 +687,7 @@ disable_android_smoke_targets
 trap disable_android_smoke_targets EXIT
 
 "$ADB" logcat -c || true
-"$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 
 adb_screencap_to_file() {
     local output="$1"
@@ -882,7 +883,7 @@ tap_resource_id() {
 }
 
 tap_play_button() {
-    tap_resource_id "com.voidscape.client:id/launch_client" last || tap_text "Play" last || tap_pct 50 71
+    tap_resource_id "$APP_ID:id/launch_client" last || tap_text "Play" last || tap_pct 50 71
 }
 
 input_text() {
@@ -998,13 +999,13 @@ write_server_endpoint() {
 	local port="$2"
 	PENDING_SERVER_HOST="$host"
 	PENDING_SERVER_PORT="$port"
-	"$ADB" shell "run-as com.voidscape.client sh -c 'mkdir -p $APP_FILES && printf %s \"$host\" > $APP_FILES/ip.txt && printf %s \"$port\" > $APP_FILES/port.txt'" 2>/dev/null || true
+	"$ADB" shell "run-as $APP_ID sh -c 'mkdir -p $APP_FILES && printf %s \"$host\" > $APP_FILES/ip.txt && printf %s \"$port\" > $APP_FILES/port.txt'" 2>/dev/null || true
 }
 
 launch_game_with_endpoint() {
     local host="$1"
     local port="$2"
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     write_server_endpoint "$host" "$port"
     launch_wrapper
     wait_for_wrapper_ready
@@ -1196,8 +1197,8 @@ assert_no_android_runtime_crash() {
 run_authenticated_login_smoke() {
 	preflight_auth_login_fixture
 
-	"$ADB" shell am force-stop com.voidscape.client || true
-	"$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+	"$ADB" shell am force-stop $APP_ID || true
+	"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 	"$ADB" logcat -c || true
 
 	if [[ "$AUTH_HOST" == "10.0.2.2" && "$AUTH_PORT" == "43596" ]]; then
@@ -1227,7 +1228,7 @@ run_authenticated_login_smoke() {
 	assert_game_activity_for_input "auth login screenshot" "03-auth-login-lost-game-activity" || exit 1
 	screenshot 03-auth-post-login
 
-	"$ADB" shell am force-stop com.voidscape.client || true
+	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline 45 || true
 	echo "Android auth/login smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
@@ -1236,8 +1237,8 @@ run_authenticated_lifecycle_smoke() {
 	preflight_auth_login_fixture
 	wait_auth_offline 45 || true
 
-	"$ADB" shell am force-stop com.voidscape.client || true
-	"$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+	"$ADB" shell am force-stop $APP_ID || true
+	"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 	"$ADB" logcat -c || true
 
 	if [[ "$AUTH_HOST" == "10.0.2.2" && "$AUTH_PORT" == "43596" ]]; then
@@ -1270,7 +1271,7 @@ run_authenticated_lifecycle_smoke() {
 
 	"$ADB" shell input keyevent HOME
 	sleep 2
-	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 	wait_for_resumed_activity "GameActivity" 20 || {
 		assert_resumed_activity "GameActivity" || true
 		screenshot 04-lifecycle-resume-failed || true
@@ -1283,8 +1284,8 @@ run_authenticated_lifecycle_smoke() {
 	}
 	screenshot 04-lifecycle-after-resume
 
-	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
-	"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 	wait_for_resumed_activity "GameActivity" 20 || {
 		assert_resumed_activity "GameActivity" || true
 		screenshot 05-lifecycle-relaunch-failed || true
@@ -1316,7 +1317,7 @@ run_authenticated_lifecycle_smoke() {
 	screenshot 08-lifecycle-after-logout-keyboard
 
 	"$ADB" shell input keyevent BACK || true
-	"$ADB" shell am force-stop com.voidscape.client || true
+	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline 45 || true
 	echo "Android auth/lifecycle smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
@@ -3594,7 +3595,7 @@ run_authenticated_logout_smoke() {
     fi
 
     "$ADB" logcat -c || true
-    "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+    "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
     launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
     screenshot 28-auth-login-home
     tap_pct 50 65
@@ -3654,7 +3655,7 @@ run_authenticated_npc_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
@@ -3673,7 +3674,7 @@ run_authenticated_npc_smoke() {
     ) || status=$?
 
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -3700,7 +3701,7 @@ run_authenticated_object_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_object_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_object_targets
@@ -3719,7 +3720,7 @@ run_authenticated_object_smoke() {
     ) || status=$?
 
     disable_android_smoke_object_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -3752,7 +3753,7 @@ run_authenticated_inventory_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_inventory_targets
@@ -3780,7 +3781,7 @@ run_authenticated_inventory_smoke() {
     ) || status=$?
 
     disable_android_smoke_inventory_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     sleep 1
@@ -3811,7 +3812,7 @@ run_authenticated_item_on_object_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         enable_android_smoke_object_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -3835,7 +3836,7 @@ run_authenticated_item_on_object_smoke() {
 
     disable_android_smoke_inventory_targets
     disable_android_smoke_object_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -3867,7 +3868,7 @@ run_authenticated_item_on_npc_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -3891,7 +3892,7 @@ run_authenticated_item_on_npc_smoke() {
 
     disable_android_smoke_inventory_targets
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -3919,7 +3920,7 @@ run_authenticated_context_menu_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
@@ -3951,7 +3952,7 @@ run_authenticated_context_menu_smoke() {
     ) || status=$?
 
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -3978,7 +3979,7 @@ run_authenticated_edge_context_menu_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
@@ -4011,7 +4012,7 @@ run_authenticated_edge_context_menu_smoke() {
     ) || status=$?
 
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -4036,7 +4037,7 @@ run_authenticated_camera_rotate_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_camera
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4060,7 +4061,7 @@ run_authenticated_camera_rotate_smoke() {
 
     disable_android_smoke_camera
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
@@ -4087,7 +4088,7 @@ run_authenticated_zoom_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_zoom
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4112,7 +4113,7 @@ run_authenticated_zoom_smoke() {
 
     disable_android_smoke_zoom
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
@@ -4139,7 +4140,7 @@ run_authenticated_chat_tab_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_chat_tabs
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4173,7 +4174,7 @@ run_authenticated_chat_tab_smoke() {
 
     disable_android_smoke_chat_tabs
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
@@ -4200,7 +4201,7 @@ run_authenticated_chat_send_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_chat_send
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4231,7 +4232,7 @@ run_authenticated_chat_send_smoke() {
 
     disable_android_smoke_chat_send
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
@@ -4267,7 +4268,7 @@ run_authenticated_bank_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_bank
         enable_android_smoke_object_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4393,14 +4394,14 @@ run_authenticated_bank_smoke() {
         sleep 4
         screenshot 78-auth-bank-loadout-loaded
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1
         wait_for_bank_preset_saved "$player_id" 0 45 || exit 1
     ) || status=$?
 
     disable_android_smoke_bank
     disable_android_smoke_object_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     restore_auth_bank "$player_id" || true
@@ -4433,7 +4434,7 @@ run_authenticated_shop_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_shop
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4498,13 +4499,13 @@ run_authenticated_shop_smoke() {
         sleep 1
         screenshot 84-auth-shop-no-scroll
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1
     ) || status=$?
 
     disable_android_smoke_shop
     disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -4534,7 +4535,7 @@ run_authenticated_equipment_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         enable_android_smoke_equipment
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
@@ -4592,13 +4593,13 @@ run_authenticated_equipment_smoke() {
             screenshot 87-auth-after-inventory-unequip
         fi
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1
     ) || status=$?
 
     disable_android_smoke_inventory_targets
     disable_android_smoke_equipment
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     restore_auth_equipment "$player_id" || true
@@ -4629,7 +4630,7 @@ run_authenticated_magic_prayer_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_magic_prayer
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_magic_prayer
@@ -4658,7 +4659,7 @@ run_authenticated_magic_prayer_smoke() {
         sleep 8
         screenshot 90-auth-after-self-cast
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1
         if [[ "$AUTH_MAGIC_PRAYER_SPELL_ID" == "0" ]]; then
             local post_cast_position post_cast_x post_cast_y post_cast_online
@@ -4672,7 +4673,7 @@ run_authenticated_magic_prayer_smoke() {
         fi
 
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_magic_prayer
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_magic_prayer
@@ -4705,12 +4706,12 @@ run_authenticated_magic_prayer_smoke() {
         sleep 1
         screenshot 93-auth-prayer-deactivated
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1
     ) || status=$?
 
     disable_android_smoke_magic_prayer
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_stats "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -4733,7 +4734,7 @@ run_authenticated_world_map_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_world_map
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_world_map
@@ -4786,12 +4787,12 @@ run_authenticated_world_map_smoke() {
         sleep 1
         screenshot 98-auth-world-map-closed
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || true
     ) || status=$?
 
     disable_android_smoke_world_map
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     sleep 1
     return "$status"
@@ -4816,7 +4817,7 @@ run_authenticated_settings_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_settings
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_settings
@@ -4873,7 +4874,7 @@ run_authenticated_settings_smoke() {
     ) || status=$?
 
     disable_android_smoke_settings
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_settings "$original_camera" "$original_mouse" "$original_sound" || true
     sleep 1
@@ -4908,7 +4909,7 @@ run_authenticated_ground_loot_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_ground_loot
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT" || exit 1
         assert_game_activity_for_input "ground-loot login launch" "ground-loot-lost-after-launch" || exit 1
@@ -4938,12 +4939,12 @@ run_authenticated_ground_loot_smoke() {
         sleep 2
         screenshot 102-auth-ground-loot-readable
 
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || true
     ) || status=$?
 
     disable_android_smoke_ground_loot
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     restore_auth_ground_loot_cache "$player_id" || true
@@ -4991,7 +4992,7 @@ run_authenticated_wilderness_target_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_player_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT" || exit 1
         assert_game_activity_for_input "wilderness target login launch" "wilderness-target-lost-after-launch" || exit 1
@@ -5032,7 +5033,7 @@ run_authenticated_wilderness_target_smoke() {
         "$ADB" shell input keyevent 31 || true
         wait_for_player_command STOP 10 || true
         sleep 2
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || true
     ) || status=$?
 
@@ -5041,7 +5042,7 @@ run_authenticated_wilderness_target_smoke() {
         sleep 2
     fi
     disable_android_smoke_player_targets
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     update_auth_position "$original_x" "$original_y" || true
     update_auth_group "$original_group" || true
@@ -5091,7 +5092,7 @@ run_authenticated_pvp_stress_smoke() {
     (
         set -e
         "$ADB" logcat -c || true
-        "$ADB" shell "run-as com.voidscape.client rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         enable_android_smoke_magic_prayer
         enable_android_smoke_player_targets
@@ -5170,7 +5171,7 @@ run_authenticated_pvp_stress_smoke() {
         "$ADB" shell input keyevent 31 || true
         wait_for_player_command STOP 10 || true
         sleep 1
-        "$ADB" shell am force-stop com.voidscape.client || true
+        "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || true
         wait_for_auth_inventory_slot_not_catalog "$player_id" "$AUTH_PVP_STRESS_FOOD_SLOT" "$AUTH_PVP_STRESS_FOOD_ID" 30 || exit 1
         wait_for_auth_curstat_greater_than "$player_id" strength 20 30 || exit 1
@@ -5185,7 +5186,7 @@ run_authenticated_pvp_stress_smoke() {
     disable_android_smoke_magic_prayer
     disable_android_smoke_player_targets
     disable_android_smoke_walk
-    "$ADB" shell am force-stop com.voidscape.client || true
+    "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline 45 || true
     restore_auth_inventory "$player_id" || true
     restore_auth_stats "$player_id" || true
@@ -5196,16 +5197,16 @@ run_authenticated_pvp_stress_smoke() {
 }
 
 launch_wrapper() {
-    "$ADB" shell am force-stop com.voidscape.client
+    "$ADB" shell am force-stop $APP_ID
     if [[ -n "$PENDING_SERVER_HOST" && -n "$PENDING_SERVER_PORT" ]]; then
-        "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater \
+        "$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater \
             -e voidscape.smoke.endpoint_host "$PENDING_SERVER_HOST" \
             -e voidscape.smoke.endpoint_port "$PENDING_SERVER_PORT" \
             --ez voidscape.smoke.clear_credentials true >/dev/null
         PENDING_SERVER_HOST=""
         PENDING_SERVER_PORT=""
     else
-        "$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater \
+        "$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater \
             --ez voidscape.smoke.clear_credentials true >/dev/null
     fi
 }
@@ -5446,7 +5447,7 @@ launch_to_login_home
 "$ADB" shell input keyevent HOME
 sleep 2
 screenshot 19-background-home
-"$ADB" shell am start -n com.voidscape.client/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 sleep 3
 ensure_game_activity_from_wrapper
 screenshot 20-resume-login-home
@@ -5502,6 +5503,6 @@ sleep 45
 screenshot 114-bad-server-loading-error
 
 write_server_endpoint 5.161.114.251 43596 || true
-"$ADB" shell am force-stop com.voidscape.client || true
+"$ADB" shell am force-stop $APP_ID || true
 
 echo "Android smoke screenshots written to $OUT_DIR"

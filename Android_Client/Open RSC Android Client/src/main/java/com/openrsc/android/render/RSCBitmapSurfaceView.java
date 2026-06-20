@@ -245,7 +245,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 			paint.setColor(Color.rgb(198, 198, 198));
 			paint.setTextSize(15);
 			paint.setTextAlign(Align.CENTER);
-			canvas.drawText("Open app again and choose Public.", x + 138, y + 62, paint);
+			canvas.drawText("Check connection and reopen app.", x + 138, y + 62, paint);
 		}
 	}
 

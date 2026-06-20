@@ -161,33 +161,33 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		if (isHubRift(obj)) {
 			if (!confirmTravel(player, "The rift hums with colossal fury beyond.",
-				"Face the Void Colossus alone?")) {
+				"Face the Void Colossus alone?", "Enter the arena")) {
 				return;
 			}
 			enterInstance(player);
 		} else if (isArenaRift(obj)) {
 			if (!confirmTravel(player, "The rift leads back to the safety of the Void Enclave.",
-				"Leave the arena?")) {
+				"Leave the arena?", "Leave the arena")) {
 				return;
 			}
 			exitInstance(player, true);
 		}
 	}
 
-	private boolean confirmTravel(Player player, String intro, String confirm) {
+	private boolean confirmTravel(Player player, String intro, String confirm, String acceptOption) {
 		if (player.inCombat()) {
-			player.message("You cannot enter the rift while fighting.");
+			player.message("You cannot use the rift while fighting.");
 			return false;
 		}
 		player.message(intro);
 		player.message(confirm);
-		int option = multi(player, "Enter the rift", "Stay here");
+		int option = multi(player, acceptOption, "Stay here");
 		if (option != 0) {
 			player.message("You step away from the rift.");
 			return false;
 		}
 		if (player.inCombat()) {
-			player.message("You cannot enter the rift while fighting.");
+			player.message("You cannot use the rift while fighting.");
 			return false;
 		}
 		return true;

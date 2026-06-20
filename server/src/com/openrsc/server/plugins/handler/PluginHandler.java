@@ -13,10 +13,13 @@ import com.openrsc.server.event.rsc.PluginTask;
 import com.openrsc.server.event.rsc.PluginTickEvent;
 import com.openrsc.server.model.Shop;
 import com.openrsc.server.model.action.WalkToAction;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.plugins.*;
 import com.openrsc.server.plugins.io.PluginJarLoader;
+import com.openrsc.server.plugins.triggers.KillNpcTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 import com.openrsc.server.util.NamedThreadFactory;
 import org.apache.commons.lang3.ClassUtils;
 import org.apache.logging.log4j.LogManager;
@@ -212,7 +215,11 @@ public final class PluginHandler implements IPluginHandler {
                         final boolean shouldBlock = (Boolean) method.invoke(trigger, data);
                         if (shouldBlock) {
                             shouldBlockDefault = true;
-                            invokePluginAction(triggerType, owner, trigger, data, walkToAction);
+                            if (shouldInvokePluginActionImmediately(triggerType, data)) {
+                                invokePluginActionImmediately(triggerType, trigger, data);
+                            } else {
+                                invokePluginAction(triggerType, owner, trigger, data, walkToAction);
+                            }
                         }
                     } catch (final Exception e) {
                         LOGGER.error("Error while handling shouldBlockDefault plugin: " + simpleName, e);
@@ -229,6 +236,33 @@ public final class PluginHandler implements IPluginHandler {
             }
 
             return shouldBlockDefault;
+        }
+    }
+
+    private boolean shouldInvokePluginActionImmediately(Class<?> triggerType, Object[] data) {
+        if (triggerType == PlayerLogoutTrigger.class) {
+            return true;
+        }
+        if (triggerType == KillNpcTrigger.class && data != null && data.length > 1 && data[1] instanceof Npc) {
+            return ((Npc) data[1]).shouldSuppressDefaultDeathRewards();
+        }
+        return false;
+    }
+
+    private void invokePluginActionImmediately(Class<?> triggerType, Object triggerInstance, Object[] data) {
+        if (reloading) {
+            return;
+        }
+
+        final String simpleName = triggerType.getSimpleName();
+        final String triggerName = simpleName.substring(0, simpleName.indexOf("Trigger"));
+        try {
+            final Method method = getTriggerMethod(triggerType, "on" + triggerName, data);
+            method.invoke(triggerInstance, data);
+        } catch (final InvocationTargetException ex) {
+            LOGGER.error("InvocationTargetException while handling plugin " + simpleName, ex);
+        } catch (final Exception ex) {
+            LOGGER.error("Exception while handling plugin " + simpleName, ex);
         }
     }
 

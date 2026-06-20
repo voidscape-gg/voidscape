@@ -1,6 +1,24 @@
 apply plugin: 'com.android.application'
 
 def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
+def uploadKeystorePath = (
+    findProperty("voidscape.android.uploadKeystore.file")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE")
+        ?: "${System.properties['user.home']}/.voidscape/android-signing/voidscape-upload.jks"
+).toString()
+def uploadStorePassword = (
+    findProperty("voidscape.android.uploadKeystore.storePassword")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD")
+)?.toString()
+def uploadKeyPassword = (
+    findProperty("voidscape.android.uploadKeystore.keyPassword")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD")
+)?.toString()
+def uploadSigningReady = file(uploadKeystorePath).isFile()
+    && uploadStorePassword != null
+    && uploadStorePassword.length() > 0
+    && uploadKeyPassword != null
+    && uploadKeyPassword.length() > 0
 
 tasks.register("syncVoidscapeCache", Sync) {
     from("${rootDir}/../Client_Base/Cache") {
@@ -26,12 +44,20 @@ allprojects {
 android {
     compileSdk 36
     defaultConfig {
-        applicationId "com.voidscape.client"
+        applicationId "com.voidscape.gg"
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 4
+        versionName "1.0.3"
         multiDexEnabled false
+    }
+    signingConfigs {
+        voidscapeUpload {
+            storeFile file(uploadKeystorePath)
+            storePassword uploadStorePassword ?: ""
+            keyAlias "voidscape-upload"
+            keyPassword uploadKeyPassword ?: ""
+        }
     }
     buildTypes {
         release {
@@ -40,6 +66,9 @@ android {
             jniDebuggable false
             multiDexEnabled = true
             minifyEnabled = false
+            if (uploadSigningReady) {
+                signingConfig signingConfigs.voidscapeUpload
+            }
         }
         debug {
             multiDexEnabled = true

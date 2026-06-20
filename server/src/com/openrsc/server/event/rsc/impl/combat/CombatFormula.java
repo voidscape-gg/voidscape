@@ -6,6 +6,7 @@ import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -222,7 +223,7 @@ public class CombatFormula {
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return isHit ? damage : 0;
+		return applyPlayerAttackDamageFloor(source, victim, isHit ? damage : 0);
 	}
 
 	private static int rollMeleeDamage(final Mob source, final Mob victim, final boolean hasMomentum) {
@@ -245,7 +246,7 @@ public class CombatFormula {
 	public static int doRangedDamage(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
 		boolean isHit = calculateRangedAccuracy(source, bowId, victim);
 
-		if (!isHit) return 0;
+		if (!isHit) return applyPlayerAttackDamageFloor(source, victim, 0);
 
 		final int damage;
 		if (skillCape) {
@@ -257,7 +258,7 @@ public class CombatFormula {
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return applyPhysicalDamageReduction(damage, victim);
+		return applyPlayerAttackDamageFloor(source, victim, applyPhysicalDamageReduction(damage, victim));
 	}
 
 	/**
@@ -340,6 +341,23 @@ public class CombatFormula {
 			return damage;
 		}
 		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
+	}
+
+	private static int applyPlayerAttackDamageFloor(final Mob source, final Mob victim, final int damage) {
+		if (!(source instanceof Player) || !(victim instanceof Npc)) {
+			return damage;
+		}
+
+		final int floor = ((Npc) victim).getPlayerAttackDamageFloor();
+		if (floor <= 0) {
+			return damage;
+		}
+
+		final int remainingHits = victim.getSkills().getLevel(Skill.HITS.id());
+		if (remainingHits <= 0) {
+			return damage;
+		}
+		return Math.min(remainingHits, Math.max(damage, floor));
 	}
 
 	private static boolean consumePvpMeleeMomentum(final Mob source, final Mob victim) {

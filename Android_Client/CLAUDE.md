@@ -12,7 +12,7 @@ Shared logic lives in `Client_Base/`. Bumping `Client_Base/Config.CLIENT_VERSION
 
 The APK packages a generated asset copy of `Client_Base/Cache` at build time, excluding local mutable files (`accounts.txt`, `config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` seeds that bundled cache into app-private storage first and only uses `orsc.osConfig.CACHE_URL` if a future Voidscape remote cache endpoint is configured.
 
-Default launch is player-focused: once cache is ready, the visible Play button writes `5.161.114.251:43596` and starts the client. Long-press Play to open advanced server choices:
+Default launch is player-focused: once cache is ready, the visible Play button writes `5.161.114.251:43596` and starts the client. Debug builds on Android emulators still default to `10.0.2.2:43596` for local smoke tests. Release builds always default to the public server, even on emulator-like review devices. Long-press Play opens advanced server choices only in debuggable builds:
 - Public Voidscape: `5.161.114.251:43596`
 - Android emulator: `10.0.2.2:43596`
 - LAN placeholder: `192.168.1.100:43596`

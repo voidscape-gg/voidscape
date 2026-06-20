@@ -82,6 +82,9 @@ import static com.openrsc.server.plugins.Functions.inArray;
  * A single player.
  */
 public final class Player extends Mob {
+	public static final String SAFE_DEATH_RESPAWN_ATTRIBUTE = "voidscape_safe_death_respawn";
+	public static final String SAFE_DEATH_CLEANUP_PENDING_ATTRIBUTE = "voidscape_safe_death_cleanup_pending";
+
 	/**
 	 * The asynchronous logger.
 	 */
@@ -2578,14 +2581,31 @@ public final class Player extends Mob {
 		}*/
 	}
 
+	private Point getActiveScopedSafeDeathRespawn(final Mob killer) {
+		Point respawn = getAttribute(SAFE_DEATH_RESPAWN_ATTRIBUTE, null);
+		if (respawn == null) {
+			return null;
+		}
+		if (getInstanceId() == 0 || getLocation().inWilderness() || killer instanceof Player) {
+			removeAttribute(SAFE_DEATH_RESPAWN_ATTRIBUTE);
+			removeAttribute(SAFE_DEATH_CLEANUP_PENDING_ATTRIBUTE);
+			return null;
+		}
+		return respawn;
+	}
+
 	@Override
 	public void killedBy(final Mob mob) {
 		if (!isLoggedIn()) return;
 		if (killed) return;
 		killed = true;
 
-		ActionSender.sendSound(this, "death");
-		ActionSender.sendDied(this);
+		final Point activeScopedSafeDeathRespawn = getActiveScopedSafeDeathRespawn(mob);
+		final boolean scopedSafeDeath = activeScopedSafeDeathRespawn != null;
+		if (!scopedSafeDeath) {
+			ActionSender.sendSound(this, "death");
+			ActionSender.sendDied(this);
+		}
 
 		// Cabbage tutorial skip
 		if (this.getLocation().onTutorialIsland()
@@ -2609,6 +2629,10 @@ public final class Player extends Mob {
 		final Player player = mob instanceof Player ? (Player) mob : null;
 		getWorld().getBountyHunter().onPlayerDeath(this, player);
 		final Point voidArenaRespawn = getWorld().getVoidArena().handlePlayerDeath(this, mob);
+		final Point safeDeathRespawn = voidArenaRespawn == null
+			? activeScopedSafeDeathRespawn
+			: null;
+		final boolean safeDeath = voidArenaRespawn != null || safeDeathRespawn != null;
 
 		if (player != null) {
 			player.message(String.format("You have defeated %s!", getUsername()));
@@ -2663,13 +2687,16 @@ public final class Player extends Mob {
 			}
 		}
 
-		if (voidArenaRespawn == null) {
+		if (!safeDeath) {
 			// Drops to world if player is null
 			getWorld().registerItem(new GroundItem(getWorld(), ItemId.BONES.id(), getX(), getY(), 1, player));
 		}
 
 		if (voidArenaRespawn != null) {
 			// Void Arena is a safe death: score the fight, then skip bones and item loss.
+		} else if (safeDeathRespawn != null) {
+			// Scoped mini-game safe death: plugin cleanup restores temporary state.
+			setAttribute(SAFE_DEATH_CLEANUP_PENDING_ATTRIBUTE, true);
 		} else if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
 				getDuel().dropOnDeath();
 				 // disables duel spam in activity feed
@@ -2678,7 +2705,7 @@ public final class Player extends Mob {
 			getCarriedItems().getInventory().dropOnDeath(mob);
 		}
 
-		if (voidArenaRespawn == null && isIronMan(IronmanMode.Hardcore.id())) {
+		if (!safeDeath && isIronMan(IronmanMode.Hardcore.id())) {
 			updateHCIronman(IronmanMode.Ironman.id());
 			ActionSender.sendIronManMode(this);
 			getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(this, "has died and lost the HC Ironman Rank!"));
@@ -2693,6 +2720,9 @@ public final class Player extends Mob {
 		} else if (voidArenaRespawn != null) {
 			setInstanceId(0);
 			setLocation(voidArenaRespawn, true);
+		} else if (safeDeathRespawn != null) {
+			setInstanceId(0);
+			setLocation(safeDeathRespawn, true);
 		} else {
 			setLocation(Point.location(getConfig().RESPAWN_LOCATION_X, getConfig().RESPAWN_LOCATION_Y), true);
 		}

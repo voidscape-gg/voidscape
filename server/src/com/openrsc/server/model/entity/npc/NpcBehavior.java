@@ -5,6 +5,8 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.event.rsc.impl.combat.AggroEvent;
+import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
+import com.openrsc.server.event.rsc.impl.combat.OSRSCombatFormula;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.action.ActionType;
@@ -13,6 +15,8 @@ import com.openrsc.server.model.action.WalkToMobAction;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.Prayers;
+import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.states.CombatState;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -103,12 +107,12 @@ public class NpcBehavior {
 
 		// Check if NPC will aggro
 		if (checkCombatTimer(npc.getCombatTimer(), 5 * tickFactor)) {
-			if ((npc.getDef().isAggressive() && !draynorManorSkeleton) || npc.getLocation().inWilderness() || (blackKnightsFortress)) {
+			if (npc.shouldForceChaseTarget() || (npc.getDef().isAggressive() && !draynorManorSkeleton) || npc.getLocation().inWilderness() || (blackKnightsFortress)) {
 
 				// We loop through all players in view.
 				for (Player player : npc.getViewArea().getPlayersInView()) {
 
-					if (!player.withinRange(npc, aggroRadius)) continue;
+					if (!npc.shouldForceChaseTarget() && !player.withinRange(npc, aggroRadius)) continue;
 
 					// Player is a new target AND can't aggro.
 					if (!canAggro(player)) {
@@ -116,7 +120,7 @@ public class NpcBehavior {
 					}
 
 					// Remove the opponent if the player has not been engaged in > 10 seconds
-					if (npc.getLastOpponent() != null && npc.getLastOpponent().equals(player) && checkCombatTimer(npc.getLastOpponent().getCombatTimer(), 15 * tickFactor)) {
+					if (!npc.shouldForceChaseTarget() && npc.getLastOpponent() != null && npc.getLastOpponent().equals(player) && checkCombatTimer(npc.getLastOpponent().getCombatTimer(), 15 * tickFactor)) {
 						npc.setLastOpponent(null);
 						setRoaming();
 					}
@@ -179,8 +183,11 @@ public class NpcBehavior {
 	}
 
 	private void handleAggro() {
+		boolean forceChase = npc.shouldForceChaseTarget();
+
 		// There should not be combat or aggro. Let's resume roaming.
-		if (target == null || target.isRemoved() || target.inCombat() || npc.isRespawning() || npc.isRemoved()) {
+		if (target == null || target.isRemoved() || (!forceChase && target.inCombat())
+			|| npc.isRespawning() || npc.isRemoved()) {
 			setRoaming();
 			return;
 		}
@@ -210,9 +217,9 @@ public class NpcBehavior {
 		// If target is not waiting for "run away" timer, send them chasing
 		lastMovement = System.currentTimeMillis();
 		int numTicks = target.getCombatState() == CombatState.RUNNING ? 5 * tickFactor : (int)Math.ceil(640.0 / target.getConfig().GAME_TICK);
-		if (checkCombatTimer(target.getCombatTimer(), numTicks)) {
+		if (forceChase || checkCombatTimer(target.getCombatTimer(), numTicks)) {
 			if (npc.getWorld().getServer().getConfig().WANT_IMPROVED_PATHFINDING)
-				npc.walkToEntityAStar(target.getX(), target.getY());
+				npc.walkToEntityAStar(target.getX(), target.getY(), forceChase ? 48 : 20);
 			else
 				npc.walkToEntity(target.getX(), target.getY());
 
@@ -220,18 +227,64 @@ public class NpcBehavior {
 			// TODO: Further investigation on whether NPCs would ignore diagonal blocks like players. For now, we let them ignore them for consistency.
 			Point checkedPoint = npc.getWalkingQueue().getNextMovement();
 			if (checkedPoint.withinRange(target.getLocation(), 1)
-				&& PathValidation.checkAdjacentDistance(npc.getWorld(), checkedPoint, target.getLocation(), true, false)
-				&& !target.inCombat()) {
-				if (target.isPlayer() && EnchantedCrowns.shouldActivate((Player)target, ItemId.CROWN_OF_MIMICRY)
-					&& ((Player)target).getBatch() != null && !((Player)target).getBatch().isComplete()) {
-					((Player)target).playerServerMessage(MessageType.QUEST, "Your crown shines and you dodge an attack!");
-					npc.setLastCombatState(CombatState.RUNNING);
-					target.setCombatTimer(target.getConfig().GAME_TICK * 5);
-					walk_retreat(-3);
-					EnchantedCrowns.useCharge(((Player)target), ItemId.CROWN_OF_MIMICRY);
-				} else {
-					setFighting(target);
+				&& PathValidation.checkAdjacentDistance(npc.getWorld(), checkedPoint, target.getLocation(), true, false)) {
+				if (npc.shouldUseContactAttack() && target instanceof Player) {
+					tryContactAttack((Player)target);
+				} else if (!target.inCombat()) {
+					if (target.isPlayer() && EnchantedCrowns.shouldActivate((Player)target, ItemId.CROWN_OF_MIMICRY)
+						&& ((Player)target).getBatch() != null && !((Player)target).getBatch().isComplete()) {
+						((Player)target).playerServerMessage(MessageType.QUEST, "Your crown shines and you dodge an attack!");
+						npc.setLastCombatState(CombatState.RUNNING);
+						target.setCombatTimer(target.getConfig().GAME_TICK * 5);
+						walk_retreat(-3);
+						EnchantedCrowns.useCharge(((Player)target), ItemId.CROWN_OF_MIMICRY);
+					} else {
+						setFighting(target);
+					}
 				}
+			}
+		}
+	}
+
+	private void tryContactAttack(final Player targetPlayer) {
+		long currentTick = npc.getWorld().getServer().getCurrentTick();
+		long nextAttackTick = npc.getAttribute(Npc.CONTACT_ATTACK_NEXT_TICK_ATTRIBUTE, 0L);
+		if (currentTick < nextAttackTick) {
+			return;
+		}
+
+		npc.setAttribute(Npc.CONTACT_ATTACK_NEXT_TICK_ATTRIBUTE, currentTick + 3);
+		npc.face(targetPlayer.getX(), targetPlayer.getY());
+		targetPlayer.face(npc.getX(), npc.getY());
+		npc.incHitsMade();
+
+		npc.getWorld().getServer().getCombatScriptLoader().checkAndExecuteCombatSideEffectScript(npc, targetPlayer);
+		if (targetPlayer.getPrayers().isPrayerActivated(Prayers.PARALYZE_MONSTER)) {
+			ActionSender.sendSound(targetPlayer, "combat3a");
+			targetPlayer.getUpdateFlags().setDamage(new Damage(targetPlayer, 0));
+			return;
+		}
+		npc.getWorld().getServer().getCombatScriptLoader().checkAndExecuteCombatScript(npc, targetPlayer);
+
+		int damage = npc.getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
+			? OSRSCombatFormula.Melee.doMeleeDamage(npc, targetPlayer)
+			: CombatFormula.doMeleeDamage(npc, targetPlayer);
+		int minimumDamage = npc.getContactAttackMinDamage();
+		if (minimumDamage > 0 && damage < minimumDamage && DataConversions.random(1, 3) == 1) {
+			damage = minimumDamage;
+		}
+		damage = Math.min(damage, npc.getContactAttackMaxDamage());
+		int previousHits = targetPlayer.getSkills().getLevel(Skill.HITS.id());
+		targetPlayer.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
+		targetPlayer.getUpdateFlags().setDamage(new Damage(targetPlayer, damage));
+		ActionSender.sendStat(targetPlayer, Skill.HITS.id());
+		ActionSender.sendSound(targetPlayer, damage > 0 ? "combat3b" : "combat3a");
+
+		if (previousHits - damage <= 0) {
+			targetPlayer.setOpponent(npc);
+			targetPlayer.killedBy(npc);
+			if (targetPlayer.getSkills().getLevel(Skill.HITS.id()) > 0) {
+				targetPlayer.setOpponent(null);
 			}
 		}
 	}
@@ -388,6 +441,7 @@ public class NpcBehavior {
 			npc.getLoc().maxX + 4, npc.getLoc().maxY + 4);
 
 		boolean targetInCombat = target.inCombat();
+		boolean forceChase = npc.shouldForceChaseTarget();
 
 		boolean isPlayer = target instanceof Player;
 
@@ -402,12 +456,12 @@ public class NpcBehavior {
 		boolean impervious = isPlayer
 			&& (((Player) target).isInvulnerableTo(npc) || ((Player) target).isInvisibleTo(npc));
 
-		return isAggressive
+		return (forceChase || isAggressive)
 			&& !impervious
 			&& !outOfBounds
-			&& !targetInCombat
+			&& (!targetInCombat || forceChase)
 			&& lastLogin
-			&& targetCombatTimeoutExceeded;
+			&& (targetCombatTimeoutExceeded || forceChase);
 	}
 
 	private boolean grandTreeGnome(final Npc npc) {
@@ -466,6 +520,9 @@ public class NpcBehavior {
 	}
 
 	public boolean shouldRetreat(final Npc npc) {
+		if (npc.shouldForceChaseTarget()) {
+			return false;
+		}
 		if (!npc.getConfig().NPC_DONT_RETREAT) {
 			if (npc.getWorld().getServer().getConstants().getRetreats().npcData.containsKey(npc.getID())) {
 				return npc.getSkills().getLevel(Skill.HITS.id()) <= npc.getWorld().getServer().getConstants().getRetreats().npcData.get(npc.getID());

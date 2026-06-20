@@ -247,7 +247,8 @@ public class CombatEvent extends GameTickEvent {
 		if (target.isNpc() && hitter.isPlayer()) {
 			Npc n = (Npc) target;
 			Player player = ((Player) hitter);
-			if (!n.getWorld().getVoidArena().shouldSuppressDmKingNpcXp(n)) {
+			if (!n.getWorld().getVoidArena().shouldSuppressDmKingNpcXp(n)
+				&& !n.shouldSuppressDefaultDeathRewards()) {
 				damage = Math.min(damage, lastHits);
 				n.addCombatDamage(player, damage);
 				n.awardMeleeHitExperience(player, damage);

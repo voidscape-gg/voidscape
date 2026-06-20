@@ -7,9 +7,13 @@ import com.openrsc.server.model.Path.PathType;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.TelePointGraph;
 import com.openrsc.server.model.WorldPathfinder;
+import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.states.CombatState;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.triggers.EscapeNpcTrigger;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -21,8 +25,9 @@ import java.util.List;
  * routinely exceed {@link Path}'s 50-step queue capacity, so we feed it in
  * pieces rather than all at once.
  *
- * Cancellation is delegated to {@link Player#cancelAutoWalk()} — combat,
- * regular walk packets, and the future Stop button all route through that.
+ * Cancellation is delegated to {@link Player#cancelAutoWalk()} — regular walk
+ * packets, explicit player actions, and the future Stop button all route
+ * through that.
  * This event also self-stops if the player drifts off the planned tiles
  * (e.g. NPC pushed them off, teleport, knock-back) and a re-pathfind from
  * the new position fails.
@@ -65,9 +70,10 @@ public class AutoWalkEvent extends GameTickEvent {
 			stop();
 			return;
 		}
-		// Combat / generic-busy abort. cancelAutoWalk() will be called separately
-		// from the relevant hooks; this is a defensive belt-and-suspenders check.
-		if (player.inCombat() || player.isBusy()) {
+		if (player.inCombat() && !retreatFromNpcCombat(player)) {
+			return;
+		}
+		if (player.isBusy()) {
 			player.cancelAutoWalk();
 			return;
 		}
@@ -147,6 +153,33 @@ public class AutoWalkEvent extends GameTickEvent {
 		if (taken == 0) return;
 		path.finish();
 		player.getWalkingQueue().setPath(path);
+	}
+
+	private boolean retreatFromNpcCombat(final Player player) {
+		final Mob opponent = player.getOpponent();
+		if (opponent == null || !opponent.isNpc()) {
+			player.cancelAutoWalk();
+			return false;
+		}
+		if (opponent.getHitsMade() < 3) {
+			return false;
+		}
+
+		opponent.setLastOpponent(opponent.getOpponent());
+		player.setLastOpponent(opponent);
+		player.setCombatTimer();
+		player.setLastCombatState(CombatState.RUNNING);
+		opponent.setLastCombatState(CombatState.WAITING);
+		player.resetCombatEvent();
+		player.setRanAwayTimer();
+		ActionSender.sendSound(player, "retreat");
+
+		if (player.getConfig().WANT_PARTIES && player.getParty() != null) {
+			player.getParty().sendParty();
+		}
+		player.getWorld().getServer().getPluginHandler().handlePlugin(
+			EscapeNpcTrigger.class, player, new Object[]{player, (Npc) opponent});
+		return true;
 	}
 
 	private boolean isAtGoal(final Player player) {

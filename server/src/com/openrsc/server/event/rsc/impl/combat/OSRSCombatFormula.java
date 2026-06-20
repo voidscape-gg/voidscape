@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -169,7 +170,7 @@ public class OSRSCombatFormula {
 				}
 			}
 
-			return isHit ? damage : 0;
+			return applyPlayerAttackDamageFloor(attacker, defender, isHit ? damage : 0);
 		}
 	}
 
@@ -255,7 +256,8 @@ public class OSRSCombatFormula {
 		 */
 		public static int doRangedDamage(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
 			boolean isHit = rollHit(calcHitChance(attacker, defender, bowId));
-			return isHit ? rollDamage(calcMaxHit(attacker, arrowId) * (skillCape ? 2 : 1)) : 0;
+			int damage = isHit ? rollDamage(calcMaxHit(attacker, arrowId) * (skillCape ? 2 : 1)) : 0;
+			return applyPlayerAttackDamageFloor(attacker, defender, damage);
 		}
 
 		/**
@@ -430,5 +432,22 @@ public class OSRSCombatFormula {
 					return 0;
 			}
 		}
+	}
+
+	private static int applyPlayerAttackDamageFloor(final Mob attacker, final Mob defender, final int damage) {
+		if (!(attacker instanceof Player) || !(defender instanceof Npc)) {
+			return damage;
+		}
+
+		final int floor = ((Npc) defender).getPlayerAttackDamageFloor();
+		if (floor <= 0) {
+			return damage;
+		}
+
+		final int remainingHits = defender.getSkills().getLevel(Skill.HITS.id());
+		if (remainingHits <= 0) {
+			return damage;
+		}
+		return Math.min(remainingHits, Math.max(damage, floor));
 	}
 }

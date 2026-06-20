@@ -218,6 +218,39 @@ scripts/discord-access-gate.js --serve
 
 The live listener must be running for the `Enter Voidscape` button to grant the member role. Tokens must come from the environment or keychain, never from committed files.
 
+VoidBot-authored posts:
+
+Use `scripts/post-voidbot-discord.py` for bot-authored Discord messages. Do not type release notes or bug-feed fix summaries through a personal Chrome/Discord session.
+
+One-time local token setup, entered manually by an operator:
+
+```bash
+security add-generic-password -a VoidBot -s voidscape-voidbot-discord-token -w '<bot-token>' -U
+```
+
+Bug-feed fix summary flow:
+
+```bash
+scripts/post-voidbot-discord.py --channel bug-feed --dry-run --stdin < /tmp/fixes.txt
+scripts/post-voidbot-discord.py --channel bug-feed --yes --stdin < /tmp/fixes.txt
+```
+
+Live-host bug-feed posting can use the bug-triage service environment file:
+
+```bash
+/opt/voidscape/scripts/post-voidbot-discord.py --channel bug-feed --env-file /etc/voidscape/discord-bug-triage.env --dry-run --stdin < /tmp/fixes.txt
+/opt/voidscape/scripts/post-voidbot-discord.py --channel bug-feed --env-file /etc/voidscape/discord-bug-triage.env --yes --stdin < /tmp/fixes.txt
+```
+
+The script also accepts `--content "..."` or `--file path/to/message.txt`. It reads the token from `VOIDBOT_DISCORD_TOKEN`, `PORTAL_DISCORD_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, an explicit `--env-file`, or the `voidscape-voidbot-discord-token` keychain service. Mentions are disabled by default; use `--allow-mentions` only when intentionally posting announcements.
+
+To correct a VoidBot-authored post, edit it in place:
+
+```bash
+scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id> --dry-run --stdin < /tmp/fixes.txt
+scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id> --yes --stdin < /tmp/fixes.txt
+```
+
 ## Release procedure
 
 1. Finish and commit the code/content slice.

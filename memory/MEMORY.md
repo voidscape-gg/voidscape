@@ -9,3 +9,4 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Android: emulation QA](android_emulation.md) — AVD roles and current headless screenshot gotchas
 - [Beta deployments](beta_deployments.md) — VPS beta deploy paths, runtime/migration sync, checks
 - [Content pipeline](content_pipeline.md) — custom content/art starts with scripts/content.sh packs and validation
+- [Discord posting](discord_posting.md) — canonical VoidBot command for bug-feed/release-note posts

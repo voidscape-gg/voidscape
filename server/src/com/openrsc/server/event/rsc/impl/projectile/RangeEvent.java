@@ -159,7 +159,8 @@ public class RangeEvent extends GameTickEvent {
 		final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
 
 		if ((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
-			&& !(target.isNpc() && target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target))
+			&& !(target.isNpc() && (target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target)
+				|| ((Npc) target).shouldSuppressDefaultDeathRewards()))
 			&& damage > 0) {
 			player.incExp(Skill.RANGED.id(), Formulae.rangedHitExperience(target, damage), true);
 		}

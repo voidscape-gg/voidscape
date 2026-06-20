@@ -645,7 +645,8 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 	private boolean shouldAwardMobSpellExperience(Player player, Mob affectedMob) {
 		return !(affectedMob instanceof Npc)
-			|| !player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob);
+			|| (!player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob)
+				&& !((Npc) affectedMob).shouldSuppressDefaultDeathRewards());
 	}
 
 	public static void finalizeSpell(Player player, SpellDef spell, String message) {

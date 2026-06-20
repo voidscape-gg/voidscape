@@ -327,6 +327,8 @@ public final class mudclient implements Runnable {
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
 	private static final String VOIDSCAPE_FARMSIM_PREFIX = "@vsfarmsim@";
+	private static final int NORMAL_CHAT_INPUT_MAX = 80;
+	private static final int MESSAGE_COMMAND_INPUT_MAX = 240;
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
 	private static final long ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS = 1000L;
 	private static final int VOIDSCAPE_TOP_TAB_SIZE = 32;
@@ -1964,12 +1966,28 @@ public final class mudclient implements Runnable {
 			|| worldX >= 608 && worldX <= 614 && worldY >= 2897 && worldY <= 2909;
 	}
 
+	private boolean isInsideUndeadSiegeArena(int worldX, int worldY) {
+		return worldX >= 156 && worldX <= 181 && worldY >= 245 && worldY <= 268;
+	}
+
 	private boolean isLocalPlayerInsideVoidArenaLobby() {
 		return isInsideVoidArenaLobby(this.playerLocalX + this.midRegionBaseX, this.playerLocalZ + this.midRegionBaseZ);
 	}
 
 	private boolean isLocalPlayerInsideVoidArena() {
 		return isInsideVoidArena(this.playerLocalX + this.midRegionBaseX, this.playerLocalZ + this.midRegionBaseZ);
+	}
+
+	private boolean isLocalPlayerInsideUndeadSiegeArena() {
+		return isInsideUndeadSiegeArena(this.playerLocalX + this.midRegionBaseX, this.playerLocalZ + this.midRegionBaseZ);
+	}
+
+	private void applyUndeadSiegeFog() {
+		int fogDistance = Math.max(1350, this.cameraZoom * 3);
+		this.scene.fogZFalloff = 1;
+		this.scene.fogLandscapeDistance = fogDistance;
+		this.scene.fogEntityDistance = fogDistance;
+		this.scene.fogSmoothingStartDistance = Math.max(950, fogDistance - 400);
 	}
 
 	private boolean isServerPlayerInsideVoidArenaLobby(ORSCharacter player) {
@@ -3227,7 +3245,8 @@ public final class mudclient implements Runnable {
 		try {
 			this.panelMessageTabs = new Panel(this.getSurface(), 10);
 			this.panelMessageChat = this.panelMessageTabs.addScrollingList2(5, 269, 502, var1, 20, 1, true);
-			this.panelMessageEntry = this.panelMessageTabs.addLeftTextEntry(7, 324, 498, 14, 1, 80, false, true);
+			this.panelMessageEntry = this.panelMessageTabs.addLeftTextEntry(7, 324, 498, 14, 1,
+				MESSAGE_COMMAND_INPUT_MAX, false, true);
 			this.panelMessageQuest = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessagePrivate = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessageClan = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
@@ -3500,9 +3519,15 @@ public final class mudclient implements Runnable {
 						if (this.menuY + var7 > getGameHeight() - 19) {
 							this.menuY = getGameHeight() - 19 - var7;
 						}
+						if (this.menuY < 0) {
+							this.menuY = 0;
+						}
 
 						if (menuWidth + this.menuX > getGameWidth() - 2) {
 							this.menuX = getGameWidth() - 2 - menuWidth;
+						}
+						if (this.menuX < 0) {
+							this.menuX = 0;
 						}
 						logAndroidSmokeContextMenu(var3);
 					}
@@ -6228,8 +6253,13 @@ public final class mudclient implements Runnable {
 		this.mouseButtonClick = 0;
 	}
 
+	private boolean isUndeadSiegePointShop() {
+		return this.shopPriceMultiplier == 255 && this.shopBuyPriceMod == 0 && this.shopSellPriceMod == 0;
+	}
+
 	private void drawDialogShop() {
 		try {
+			boolean pointShop = this.isUndeadSiegePointShop();
 
 			if (this.mouseButtonClick != 0 && this.inputX_Action == InputXAction.ACT_0) {
 				this.mouseButtonClick = 0;
@@ -6268,19 +6298,19 @@ public final class mudclient implements Runnable {
 								btnCount = 1;
 							}
 
-							if (mlx > 333 && mlx < 345) {
+							if (!pointShop && mlx > 333 && mlx < 345) {
 								btnCount = 5;
 							}
 
-							if (mlx > 348 && mlx < 365) {
+							if (!pointShop && mlx > 348 && mlx < 365) {
 								btnCount = 10;
 							}
 
-							if (mlx > 368 && mlx < 385) {
+							if (!pointShop && mlx > 368 && mlx < 385) {
 								btnCount = 50;
 							}
 
-							if (mlx > 388 && mlx < 400) {
+							if (!pointShop && mlx > 388 && mlx < 400) {
 								this.showItemModX(InputXPrompt.shopBuyX, InputXAction.SHOP_BUY, true);
 							}
 
@@ -6297,7 +6327,7 @@ public final class mudclient implements Runnable {
 						}
 
 						int invCount = this.getInventoryCount(id);
-						if (invCount > 0 && mly >= 229 && mly <= 240) {
+						if (!pointShop && invCount > 0 && mly >= 229 && mly <= 240) {
 							byte btnCount = 0;
 							if (mlx > 318 && mlx < 330) {
 								btnCount = 1;
@@ -6342,7 +6372,8 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawBoxAlpha(xr, yr + 29, 8, 170, color, 160);
 			this.getSurface().drawBoxAlpha(xr + 399, 29 + yr, 9, 170, color, 160);
 			this.getSurface().drawBoxAlpha(xr, 199 + yr, 408, 47, color, 160);
-			this.getSurface().drawString("Buying and selling items", xr + 1, yr + 10, 0xFFFFFF, 1);
+			this.getSurface().drawString(pointShop ? "Undead Siege Supplies" : "Buying and selling items",
+				xr + 1, yr + 10, 0xFFFFFF, 1);
 
 			int color2 = 0xFFFFFF;
 			if (this.mouseX > 320 + xr && yr <= this.mouseY && this.mouseX < xr + 408 && this.mouseY < yr + 12) {
@@ -6350,10 +6381,16 @@ public final class mudclient implements Runnable {
 			}
 			this.getSurface().b(xr + 406, "Close window", yr + 10, color2, -92, 1);
 
-			this.getSurface().drawString("Shops stock in green", 2 + xr, 24 + yr, '\uff00', 1);
-			this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
-			this.getSurface().drawString("Your money: " + this.getInventoryCount(10) + "gp",
-				280 + xr, 24 + yr, 0xFFFF00, 1);
+			if (pointShop) {
+				this.getSurface().drawString("Supply stock in green", 2 + xr, 24 + yr, '\uff00', 1);
+				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
+				this.getSurface().drawString("Prices in points", 292 + xr, 24 + yr, 0xFFFF00, 1);
+			} else {
+				this.getSurface().drawString("Shops stock in green", 2 + xr, 24 + yr, '\uff00', 1);
+				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
+				this.getSurface().drawString("Your money: " + this.getInventoryCount(10) + "gp",
+					280 + xr, 24 + yr, 0xFFFF00, 1);
+			}
 			{
 				int slot = 0;
 				for (int row = 0; row < 5; ++row) {
@@ -6417,7 +6454,8 @@ public final class mudclient implements Runnable {
 								this.shopItemPrice[this.shopSelectedItemIndex], this.shopBuyPriceMod, -30910, true, 1,
 								count, this.shopPriceMultiplier);
 						this.getSurface().drawString(
-							EntityHandler.getItemDef(id).getName() + ": buy for " + cost + "gp each", 2 + xr,
+							EntityHandler.getItemDef(id).getName() + ": buy for " + cost
+								+ (pointShop ? " points" : "gp each"), 2 + xr,
 							yr + 214, 0xFFFF00, 1);
 						boolean mouseInRow = 204 + yr <= this.mouseY && yr + 215 >= this.mouseY;
 						this.getSurface().drawString("Buy:", xr + 285, 214 + yr, 0xFFFFFF, 3);
@@ -6428,7 +6466,7 @@ public final class mudclient implements Runnable {
 						}
 						this.getSurface().drawString("1", xr + 320, 214 + yr, color2, 3);
 
-						if (count >= 5) {
+						if (!pointShop && count >= 5) {
 							color2 = 0xFFFFFF;
 							if (mouseInRow && this.mouseX > 333 + xr && this.mouseX < 345 + xr) {
 								color2 = 0xFF0000;
@@ -6436,7 +6474,7 @@ public final class mudclient implements Runnable {
 							this.getSurface().drawString("5", 335 + xr, 214 + yr, color2, 3);
 						}
 
-						if (count >= 10) {
+						if (!pointShop && count >= 10) {
 							color2 = 0xFFFFFF;
 							if (mouseInRow && 348 + xr < this.mouseX && this.mouseX < xr + 365) {
 								color2 = 0xFF0000;
@@ -6444,7 +6482,7 @@ public final class mudclient implements Runnable {
 							this.getSurface().drawString("10", 350 + xr, 214 + yr, color2, 3);
 						}
 
-						if (count >= 50) {
+						if (!pointShop && count >= 50) {
 							color2 = 0xFFFFFF;
 							if (mouseInRow && this.mouseX > 368 + xr && 385 + xr > this.mouseX) {
 								color2 = 0xFF0000;
@@ -6452,15 +6490,20 @@ public final class mudclient implements Runnable {
 							this.getSurface().drawString("50", xr + 370, 214 + yr, color2, 3);
 						}
 
-						color2 = 0xFFFFFF;
-						if (mouseInRow && this.mouseX > xr + 388 && this.mouseX < 400 + xr) {
-							color2 = 0xFF0000;
+						if (!pointShop) {
+							color2 = 0xFFFFFF;
+							if (mouseInRow && this.mouseX > xr + 388 && this.mouseX < 400 + xr) {
+								color2 = 0xFF0000;
+							}
+							this.getSurface().drawString("X", 390 + xr, 214 + yr, color2, 3);
 						}
-						this.getSurface().drawString("X", 390 + xr, 214 + yr, color2, 3);
 					}
 
 					int invCount = this.getInventoryCount(id);
-					if (invCount <= 0) {
+					if (pointShop) {
+						this.getSurface().drawColoredStringCentered(xr + 204,
+							"Close window to save points", 0xFFFF00, 0, 3, 239 + yr);
+					} else if (invCount <= 0) {
 						this.getSurface().drawColoredStringCentered(xr + 204,
 							"You do not have any of this item to sell", 0xFFFF00, 0, 3, 239 + yr);
 					} else {
@@ -6512,7 +6555,8 @@ public final class mudclient implements Runnable {
 					}
 				}
 			} else {
-				this.getSurface().drawColoredStringCentered(204 + xr, "Select an object to buy or sell", 0xFFFF00, 0, 3,
+				this.getSurface().drawColoredStringCentered(204 + xr,
+					pointShop ? "Select a supply to buy" : "Select an object to buy or sell", 0xFFFF00, 0, 3,
 					214 + yr);
 			}
 			logAndroidSmokeShopState(xr, yr);
@@ -7768,6 +7812,9 @@ public final class mudclient implements Runnable {
 						this.scene.fogEntityDistance = 3000;
 						this.scene.fogZFalloff = 1;
 						this.scene.fogSmoothingStartDistance = 2800;
+						if (isLocalPlayerInsideUndeadSiegeArena()) {
+							applyUndeadSiegeFog();
+						}
 
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
 						centerZ = this.cameraPositionZ + this.cameraAutoMoveZ;
@@ -7799,6 +7846,9 @@ public final class mudclient implements Runnable {
 							this.scene.fogLandscapeDistance = cameraZoom * 6;
 							this.scene.fogEntityDistance = cameraZoom * 6;
 							this.scene.fogSmoothingStartDistance = cameraZoom * 6;
+						}
+						if (isLocalPlayerInsideUndeadSiegeArena()) {
+							applyUndeadSiegeFog();
 						}
 
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
@@ -11227,7 +11277,7 @@ public final class mudclient implements Runnable {
 
 	private void showLoginTimedOutStatus() {
 		if (isAndroid()) {
-			showLoginScreenStatus("Server did not reply.", "Try again or choose Public.");
+			showLoginScreenStatus("Server did not reply.", "Try again shortly.");
 		} else {
 			showLoginScreenStatus("Error unable to login.", "Server timed out");
 		}
@@ -11235,7 +11285,7 @@ public final class mudclient implements Runnable {
 
 	private void showConnectionFailureStatus() {
 		if (isAndroid()) {
-			showLoginScreenStatus("Can't reach selected server.", "Open app again and choose Public.");
+			showLoginScreenStatus("Can't reach selected server.", "Check connection and reopen app.");
 		} else {
 			showLoginScreenStatus("Sorry! Unable to connect.",
 				"Check internet settings or try another world");
@@ -16255,7 +16305,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean useVoidscapeHudSkin() {
-		return C_CUSTOM_UI && !isAndroid();
+		return C_CUSTOM_UI;
 	}
 
 	private int voidscapeInventorySlotFillColor() {
@@ -16864,9 +16914,9 @@ public final class mudclient implements Runnable {
 		return voidscapeCompactHud() ? 192 : 250;
 	}
 
-	// Original OpenRSC behavior: minimap is right-aligned under the top tab strip.
+	// Right-align the minimap content while leaving room for the themed frame overhang.
 	private int voidscapeMinimapX() {
-		return this.getSurface().width2 - voidscapeMinimapWidth() - 10;
+		return Math.max(0, this.getSurface().width2 - voidscapeMinimapWidth() - 13);
 	}
 
 	// Per-tab panel height (single source for draw + auto-close bounds). Minimap handled separately.
@@ -17555,6 +17605,33 @@ public final class mudclient implements Runnable {
 			return true;
 		}
 		return this.messageTabSelected != MessageTab.ALL && mouseOverVoidscapeChatList();
+	}
+
+	private int activeMessageListControl() {
+		switch (this.messageTabSelected) {
+			case CHAT:
+				return this.panelMessageChat;
+			case QUEST:
+				return this.panelMessageQuest;
+			case PRIVATE:
+				return this.panelMessagePrivate;
+			case CLAN:
+				return this.panelMessageClan;
+			default:
+				return -1;
+		}
+	}
+
+	private boolean mouseOverActiveMessageScrollbar() {
+		int control = activeMessageListControl();
+		return control >= 0
+			&& this.panelMessageTabs.isMouseOverScrollableListScrollbar(control, this.mouseX, this.mouseY);
+	}
+
+	private void consumeActiveMessageScrollbarClick() {
+		this.mouseButtonClick = 0;
+		this.lastMouseButtonDown = 0;
+		this.currentMouseButtonDown = 0;
 	}
 
 	private boolean mouseOverVoidscapeChatEntry() {
@@ -19278,7 +19355,7 @@ public final class mudclient implements Runnable {
 		}
 
 		// custom UI
-		if (S_WANT_CUSTOM_UI && !isAndroid()) {
+		if (S_WANT_CUSTOM_UI) {
 			if (!C_CUSTOM_UI) {
 				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 					"@whi@Custom UI - @red@Off", 39, null, null);
@@ -19765,7 +19842,7 @@ public final class mudclient implements Runnable {
 		}
 
 		// custom UI - byte index 39
-		if (S_WANT_CUSTOM_UI && !isAndroid()) {
+		if (S_WANT_CUSTOM_UI) {
 			if (settingIndex == 39 && this.mouseButtonClick == 1) {
 				setCustomUI(!C_CUSTOM_UI);
 				this.packetHandler.getClientStream().newPacket(111);
@@ -21839,9 +21916,15 @@ public final class mudclient implements Runnable {
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 						} else {
+							boolean clickedActiveMessageScrollbar = mouseOverActiveMessageScrollbar()
+								&& (this.currentMouseButtonDown == 1 || this.lastMouseButtonDown == 1
+									|| this.mouseButtonClick == 1);
 							if (shouldHandleVoidscapeChatPanelMouse()) {
 								this.panelMessageTabs.handleMouse(this.mouseX, this.mouseY,
 									this.currentMouseButtonDown, this.lastMouseButtonDown);
+								if (clickedActiveMessageScrollbar) {
+									consumeActiveMessageScrollbarClick();
+								}
 							} else {
 								this.panelMessageTabs.handleMouse(-1, -1, 0, 0);
 							}
@@ -21916,11 +21999,12 @@ public final class mudclient implements Runnable {
 										}
 									}
 								} else {
-									this.sendChatMessage(var11);
-									if (messages.size() == 0 || !messages.get(messages.size() - 1).equalsIgnoreCase(var11)) {
-										messages.add(var11);
+									String chatMessage = clampNormalChatMessage(var11);
+									this.sendChatMessage(chatMessage);
+									if (messages.size() == 0 || !messages.get(messages.size() - 1).equalsIgnoreCase(chatMessage)) {
+										messages.add(chatMessage);
 										currentChat = messages.size();
-									} else if (messages.get(messages.size() - 1).equalsIgnoreCase(var11)) {
+									} else if (messages.get(messages.size() - 1).equalsIgnoreCase(chatMessage)) {
 										currentChat = messages.size();
 									}
 								}
@@ -21968,7 +22052,6 @@ public final class mudclient implements Runnable {
 					} else if (this.lastMouseButtonDown == 2) {
 						this.mouseButtonClick = 2;
 					}
-
 					if (this.showDialogFarmSim && this.mouseButtonClick == 1
 						&& isFarmSimCloseHit(this.mouseX, this.mouseY)) {
 						closeFarmSimDialog();
@@ -25692,6 +25775,7 @@ public final class mudclient implements Runnable {
 	// confusing.
 	private void sendChatMessage(String var1) {
 		try {
+			var1 = clampNormalChatMessage(var1);
 			this.packetHandler.getClientStream().newPacket(216);
 			RSBufferUtils.putEncryptedString(this.packetHandler.getClientStream().bufferBits, var1);
 			this.packetHandler.getClientStream().finishPacket();
@@ -25699,6 +25783,13 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.AA(" + (var1 != null ? "{...}" : "null") + ')');
 		}
+	}
+
+	private String clampNormalChatMessage(String message) {
+		if (message == null) {
+			return "";
+		}
+		return message.length() > NORMAL_CHAT_INPUT_MAX ? message.substring(0, NORMAL_CHAT_INPUT_MAX) : message;
 	}
 
 	public final void sendCommandString(String var1) {
@@ -29332,7 +29423,6 @@ public final class mudclient implements Runnable {
 			x += x;
 		else if (x < -1)
 			x -= (-x);
-
 		if (this.showDialogFarmSim) {
 			this.farmSimScrollPixels = Math.max(0, this.farmSimScrollPixels + x * 20);
 			return;
@@ -29567,7 +29657,7 @@ public final class mudclient implements Runnable {
 	}
 
 	public void setCustomUI(boolean b) {
-		C_CUSTOM_UI = b && !isAndroid();
+		C_CUSTOM_UI = b;
 		if (C_CUSTOM_UI) {
 			drawMinimap = false;
 		}

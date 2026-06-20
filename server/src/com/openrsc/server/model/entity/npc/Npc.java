@@ -38,6 +38,14 @@ import java.util.Map;
 import java.util.UUID;
 
 public class Npc extends Mob {
+	public static final String SUPPRESS_DEFAULT_DEATH_ATTRIBUTE = "voidscape_suppress_default_npc_death";
+	public static final String FORCE_CHASE_ATTRIBUTE = "voidscape_force_npc_chase";
+	public static final String CONTACT_ATTACK_ATTRIBUTE = "voidscape_contact_npc_attack";
+	public static final String CONTACT_ATTACK_NEXT_TICK_ATTRIBUTE = "voidscape_contact_npc_next_attack_tick";
+	public static final String CONTACT_ATTACK_MAX_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_max_damage";
+	public static final String CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_min_damage";
+	public static final String PLAYER_ATTACK_DAMAGE_FLOOR_ATTRIBUTE = "voidscape_player_attack_damage_floor";
+
 	/**
 	 * The asynchronous logger.
 	 */
@@ -359,6 +367,12 @@ public class Npc extends Mob {
 		}
 
 		owner.getWorld().getServer().getPluginHandler().handlePlugin(KillNpcTrigger.class, owner, new Object[]{owner, this});
+		if (shouldSuppressDefaultDeathRewards()) {
+			owner.setAttribute("can_range_again", getWorld().getServer().getCurrentTick());
+			deathListeners.clear();
+			getWorld().unregisterNpc(this);
+			return;
+		}
 		for (int npcId : removeHandledInPlugin) {
 			if (this.getID() == npcId) {
 				if (this.getID() == NpcId.RAT_TUTORIAL.id()) {
@@ -514,6 +528,30 @@ public class Npc extends Mob {
 				}
 			}
 		}
+	}
+
+	public boolean shouldSuppressDefaultDeathRewards() {
+		return getAttribute(SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, false);
+	}
+
+	public boolean shouldForceChaseTarget() {
+		return getAttribute(FORCE_CHASE_ATTRIBUTE, false);
+	}
+
+	public boolean shouldUseContactAttack() {
+		return getAttribute(CONTACT_ATTACK_ATTRIBUTE, false);
+	}
+
+	public int getContactAttackMaxDamage() {
+		return getAttribute(CONTACT_ATTACK_MAX_DAMAGE_ATTRIBUTE, Integer.MAX_VALUE);
+	}
+
+	public int getContactAttackMinDamage() {
+		return getAttribute(CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE, 0);
+	}
+
+	public int getPlayerAttackDamageFloor() {
+		return getAttribute(PLAYER_ATTACK_DAMAGE_FLOOR_ATTRIBUTE, 0);
 	}
 
 	private void rollVoidKeyDrop(Player owner) {

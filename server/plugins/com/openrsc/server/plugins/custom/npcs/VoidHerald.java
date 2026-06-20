@@ -6,7 +6,8 @@ import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
-import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushNpcDialogue;
+import com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeNpcDialogue;
+import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushMinigame;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 
 import static com.openrsc.server.plugins.Functions.multi;
@@ -26,7 +27,7 @@ public final class VoidHerald implements TalkNpcTrigger {
 		}
 
 		if (VoidPath.hasChosen(player)) {
-			VoidRushNpcDialogue.handle(player, npc);
+			handleActivityMenu(player, npc);
 			return;
 		}
 
@@ -58,6 +59,23 @@ public final class VoidHerald implements TalkNpcTrigger {
 				+ "@whi@" + VoidPath.boostLimitSummary() + ": @gre@" + VoidPath.boostedSkillSummary(path) + "@whi@.%"
 				+ "@whi@Starter kit: @cya@" + VoidPath.starterKitSummary(path) + "@whi@.% %"
 				+ "@whi@You have arrived in Lumbridge. Open your backpack, equip anything useful, and start exploring.", true);
+		}
+	}
+
+	private void handleActivityMenu(Player player, Npc npc) {
+		npcsay(player, npc, "What do you seek in the Void?");
+		int choice = multi(player, npc,
+			"Enter Void Rush.",
+			"Enter Undead Siege.",
+			"How does Undead Siege work?",
+			"Nevermind.");
+
+		if (choice == 0) {
+			VoidRushMinigame.joinQueue(player);
+		} else if (choice == 1) {
+			UndeadSiegeNpcDialogue.handle(player, npc);
+		} else if (choice == 2) {
+			UndeadSiegeNpcDialogue.explain(player, npc);
 		}
 	}
 

@@ -192,16 +192,16 @@ public class RangeUtils {
             GroundItem arrows = getArrows(arrowId, target, player);
             if (!DropTable.handleRingOfAvarice(player, new Item(arrowId, 1))) {
                 if (arrows == null) {
-                    world.registerItem(
-                            new GroundItem(
-                                    player.getWorld(),
-                                    arrowId,
-                                    target.getX(),
-                                    target.getY(),
-                                    1,
-                                    player
-                            )
+                    GroundItem droppedArrow = new GroundItem(
+                            player.getWorld(),
+                            arrowId,
+                            target.getX(),
+                            target.getY(),
+                            1,
+                            player
                     );
+                    droppedArrow.setInstanceId(target.getInstanceId());
+                    world.registerItem(droppedArrow);
                 } else {
                     arrows.setAmount(arrows.getAmount() + 1);
                 }

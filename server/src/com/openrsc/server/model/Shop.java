@@ -8,7 +8,9 @@ import com.openrsc.server.plugins.PriceMismatchException;
 import com.openrsc.server.util.rsc.MathUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 // TODO: This class should use a thread safe container rather than synchronized blocks
 
@@ -19,6 +21,7 @@ public final class Shop {
 	private final Item[] items;
 	private final ArrayList<Item> shopItems = new ArrayList<Item>();
 	private final ArrayList<Player> players = new ArrayList<Player>();
+	private final Map<Integer, Integer> displayBuyPrices = new HashMap<Integer, Integer>();
 	private int displayBuyPrice = -1;
 	private boolean acceptsPlayerSales = true;
 	private BuyHandler buyHandler = null;
@@ -49,6 +52,7 @@ public final class Shop {
 		this.priceModifier = oldShop.priceModifier;
 		this.items = oldShop.items;
 		this.displayBuyPrice = oldShop.displayBuyPrice;
+		this.displayBuyPrices.putAll(oldShop.displayBuyPrices);
 		this.acceptsPlayerSales = oldShop.acceptsPlayerSales;
 		this.buyHandler = oldShop.buyHandler;
 		this.area = name;
@@ -64,8 +68,14 @@ public final class Shop {
 		return this;
 	}
 
+	public Shop withDisplayBuyPrice(int itemID, int displayBuyPrice) {
+		this.displayBuyPrices.put(itemID, displayBuyPrice);
+		return this;
+	}
+
 	public int getDisplayBuyPrice(int itemID) {
-		return displayBuyPrice;
+		Integer price = displayBuyPrices.get(itemID);
+		return price != null ? price : displayBuyPrice;
 	}
 
 	public Shop withoutPlayerSales() {

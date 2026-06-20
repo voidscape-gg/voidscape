@@ -63,6 +63,7 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			return;
 		}
 
+		player.cancelAutoWalk();
 		player.resetAll();
 
 		if (affectedMob.isPlayer()) {

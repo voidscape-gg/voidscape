@@ -77,6 +77,10 @@ public class CacheUpdater extends Activity {
 		});
 		launchButton.setOnLongClickListener(v -> {
 			if (completed) {
+				if (!isDebuggable()) {
+					Toast.makeText(this, "Public server selected", Toast.LENGTH_SHORT).show();
+					return true;
+				}
 				showGameSelectionDialog();
 				return true;
 			}
@@ -187,7 +191,9 @@ public class CacheUpdater extends Activity {
 	}
 
 	private String getDefaultServerHost() {
-		return isProbablyEmulator() ? osConfig.VOIDSCAPE_EMULATOR_HOST : osConfig.VOIDSCAPE_PUBLIC_HOST;
+		return isDebuggable() && isProbablyEmulator()
+			? osConfig.VOIDSCAPE_EMULATOR_HOST
+			: osConfig.VOIDSCAPE_PUBLIC_HOST;
 	}
 
 	private boolean isProbablyEmulator() {
@@ -515,7 +521,11 @@ public class CacheUpdater extends Activity {
 	}
 
 	private String getSavedServerHost() {
-		return readSavedServerValue("ip.txt", getDefaultServerHost());
+		String savedHost = readSavedServerValue("ip.txt", getDefaultServerHost());
+		if (!isDebuggable() && isDeveloperServerHost(savedHost)) {
+			return osConfig.VOIDSCAPE_PUBLIC_HOST;
+		}
+		return savedHost;
 	}
 
 	private String getSavedServerPort() {
@@ -537,6 +547,14 @@ public class CacheUpdater extends Activity {
 		} catch (IOException e) {
 			return fallback;
 		}
+	}
+
+	private boolean isDeveloperServerHost(String host) {
+		return osConfig.VOIDSCAPE_EMULATOR_HOST.equals(host)
+			|| osConfig.VOIDSCAPE_LAN_HOST.equals(host)
+			|| "localhost".equalsIgnoreCase(host)
+			|| "127.0.0.1".equals(host)
+			|| "::1".equals(host);
 	}
 
 	private String getDescription(File ref) {

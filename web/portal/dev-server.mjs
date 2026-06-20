@@ -2256,6 +2256,7 @@ async function publicState(store) {
 	).length;
 	const betaTesterCount = store.founders.filter((founder) => founder.betaTester).length;
 	const integrity = await integrityState(store);
+	const playersOnline = await openRscPlayersOnlineCount();
 	if (betaMode) {
 		const betaResources = betaResourceState();
 		const betaSchedule = betaResources.schedule || null;
@@ -2266,7 +2267,7 @@ async function publicState(store) {
 			status: {
 				world: betaSchedule && betaSchedule.locked ? "Beta Countdown" : "Public Beta",
 				online: !(betaSchedule && betaSchedule.locked),
-				playersOnline: 0,
+				playersOnline,
 				patch: betaSchedule && betaSchedule.locked ? "countdown" : "beta",
 				lastSave: ""
 			},
@@ -2311,7 +2312,7 @@ async function publicState(store) {
 		status: {
 			world: "World 1",
 			online: true,
-			playersOnline: 247,
+			playersOnline: openRscDbPath ? playersOnline : 247,
 			patch: "0.8.7",
 			lastSave: "2 min ago"
 		},
@@ -2327,6 +2328,18 @@ async function publicState(store) {
 		market: publicContent.market,
 		activity: dynamicActivity(store).concat(publicContent.activity).slice(0, 8)
 	};
+}
+
+async function openRscPlayersOnlineCount() {
+	if (!openRscDbPath) return 0;
+	try {
+		const rows = await sqliteJson("SELECT COUNT(*) AS playersOnline FROM players WHERE online = 1");
+		const count = Number(rows[0] && rows[0].playersOnline);
+		return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+	} catch (error) {
+		console.warn(`Unable to read OpenRSC online count: ${error.message || error}`);
+		return 0;
+	}
 }
 
 async function integrityState(store) {

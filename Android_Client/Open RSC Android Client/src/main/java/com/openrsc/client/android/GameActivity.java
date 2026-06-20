@@ -36,6 +36,8 @@ import orsc.osConfig;
 
 public class GameActivity extends Activity implements ClientPort {
 
+	private static mudclient retainedClient;
+
     private InputImpl inputImpl;
     private mudclient mudclient;
     private RSCBitmapSurfaceView gameView;
@@ -99,18 +101,26 @@ public class GameActivity extends Activity implements ClientPort {
 
             }
         };
-        setMudclient(new mudclient(this));
         setContentView(gameView);
-
-        mudclient.packetHandler = new PacketHandler(mudclient);
-
-        if (mudclient.threadState >= 0) mudclient.threadState = 0;
 
         osConfig.F_ANDROID_BUILD = true;
         File externalSmokeDir = getExternalFilesDir(null);
         Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
 
-        mudclient.startMainThread();
+		mudclient existingClient = retainedClient;
+		if (existingClient != null && existingClient.threadState >= 0 && existingClient.clientBaseThread != null
+			&& existingClient.clientBaseThread.isAlive()) {
+			setMudclient(existingClient);
+			mudclient.clientPort = this;
+		} else {
+			setMudclient(new mudclient(this));
+			mudclient.packetHandler = new PacketHandler(mudclient);
+
+			if (mudclient.threadState >= 0) mudclient.threadState = 0;
+
+			mudclient.startMainThread();
+			retainedClient = mudclient;
+		}
 
         setInputImpl(new InputImpl(mudclient, gameView));
 
@@ -126,7 +136,9 @@ public class GameActivity extends Activity implements ClientPort {
 	protected void onDestroy() {
 		unsetReceivers();
 		unregisterBackHandler();
-		shutdownClientThread();
+		if (isFinishing() && !isChangingConfigurations()) {
+			shutdownClientThread();
+		}
 		inputImpl = null;
 		gameView = null;
 		super.onDestroy();
@@ -152,6 +164,9 @@ public class GameActivity extends Activity implements ClientPort {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
+		}
+		if (retainedClient == client) {
+			retainedClient = null;
 		}
 		mudclient = null;
 	}

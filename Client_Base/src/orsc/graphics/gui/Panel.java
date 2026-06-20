@@ -1305,6 +1305,23 @@ public final class Panel {
 		}
 	}
 
+	public boolean isMouseOverScrollableListScrollbar(int control, int mouseX, int mouseY) {
+		if (control < 0 || control >= this.controlCount || !this.controlVisible[control]) {
+			return false;
+		}
+		int fontHeight = this.graphics.fontHeight(this.controlArgInt[control]);
+		if (fontHeight <= 0) {
+			return false;
+		}
+		int maxLines = this.controlHeight[control] / fontHeight;
+		if (this.controlListCurrentSize[control] <= maxLines) {
+			return false;
+		}
+		int scrollbarX = this.controlX[control] + this.controlWidth[control] - 12;
+		return mouseX >= scrollbarX && mouseX <= scrollbarX + 12
+			&& mouseY >= this.controlY[control] && mouseY <= this.controlY[control] + this.controlHeight[control];
+	}
+
 	public int getScrollPosition(int index) {
 		return controlScrollAmount[index];
 	}

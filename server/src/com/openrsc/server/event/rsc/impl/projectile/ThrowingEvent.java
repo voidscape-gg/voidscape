@@ -183,7 +183,8 @@ public class ThrowingEvent extends GameTickEvent {
 
 		RangeUtils.applyDragonFireBreath(player, target, deliveredFirstProjectile);
 		if((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
-			&& !(target.isNpc() && target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target))
+			&& !(target.isNpc() && (target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target)
+				|| ((Npc) target).shouldSuppressDefaultDeathRewards()))
 			&& damage > 0) {
 			player.incExp(Skill.RANGED.id(), Formulae.rangedHitExperience(target, damage), true);
 		}
@@ -195,7 +196,9 @@ public class ThrowingEvent extends GameTickEvent {
 
 			if (!DropTable.handleRingOfAvarice(player, new Item(throwingID, 1))) {
 				if (thrownItemOnGround == null || !thrownItemOnGround.getDef().isStackable()) {
-					getWorld().registerItem(new GroundItem(player.getWorld(), throwingID, target.getX(), target.getY(), 1, player));
+					GroundItem droppedThrowingItem = new GroundItem(player.getWorld(), throwingID, target.getX(), target.getY(), 1, player);
+					droppedThrowingItem.setInstanceId(target.getInstanceId());
+					getWorld().registerItem(droppedThrowingItem);
 				} else {
 					thrownItemOnGround.setAmount(thrownItemOnGround.getAmount() + 1);
 				}
