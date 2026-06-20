@@ -164,7 +164,8 @@ public class RangeEvent extends GameTickEvent {
 			delay = 1;
 		}
 
-		final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
+			final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
+			final int attackerMaxHit = RangeUtils.calculateRangedMaxHit(player, weaponId, ammoId, target, skillCape);
 
 		if ((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
 			&& !(target.isNpc() && (target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target)
@@ -184,8 +185,9 @@ public class RangeEvent extends GameTickEvent {
 
 		player.setAttribute("can_range_again", getWorld().getServer().getCurrentTick() + delay);
 		ActionSender.sendSound(player, "shoot");
-		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2));
-	}
+			getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2,
+				true, DuplicationStrategy.ONE_PER_MOB, attackerMaxHit));
+		}
 
 	private int takeAmmoFromInventory(final int weaponId, final boolean isCrossbow) {
 		final int[] ammoIds = isCrossbow ? Formulae.boltIDs : Formulae.arrowIDs;

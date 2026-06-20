@@ -157,9 +157,10 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10115`. Server's `client_version` config key (e.g. `10115`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes, client-visible cache files change, or a client binary update must be forced.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10116`. Server's `client_version` config key (e.g. `10116`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes, client-visible cache files change, or a client binary update must be forced.
 
 Voidscape custom-client packet notes:
+- `10116`: custom clients receive extended damage update type `10` inside existing `SEND_UPDATE_NPC` / `SEND_UPDATE_PLAYERS` appearance payloads when hit-feedback metadata is available. Type `10` starts with the old type `2` damage/current-hits/max-hits bytes, then appends attacker type byte (`0 unknown`, `1 player`, `2 NPC`), attacker server-index short, and attacker max-hit short. Server sends type `10` only to custom clients `>= 10116`; old type `2` remains unchanged and old-style/scripted damage renders as a plain hit-splat.
 - `10051`: Auction House market-intel payload was added to the existing custom Auction House packet.
 - `10052`: custom `SEND_UPDATE_PLAYERS` appearance type `5` appends the active player-title string after the icon field. Authentic/retro clients are not sent this field.
 - `10053`: client-visible definition bump for the Subscription card and Lumbridge Void Subscription Vendor. No packet shape changed.

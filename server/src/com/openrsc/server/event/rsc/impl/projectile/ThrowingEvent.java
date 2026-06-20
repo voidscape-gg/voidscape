@@ -179,7 +179,8 @@ public class ThrowingEvent extends GameTickEvent {
 			delay = 1;
 		}
 
-		int damage = RangeUtils.doRangedDamage(player, throwingID, throwingID, target, skillCape);
+			int damage = RangeUtils.doRangedDamage(player, throwingID, throwingID, target, skillCape);
+			int attackerMaxHit = RangeUtils.calculateRangedMaxHit(player, throwingID, throwingID, target, skillCape);
 
 		RangeUtils.applyDragonFireBreath(player, target, deliveredFirstProjectile);
 		if((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
@@ -224,7 +225,8 @@ public class ThrowingEvent extends GameTickEvent {
 
 		player.setAttribute("can_range_again", getWorld().getServer().getCurrentTick() + delay);
 		getOwner().setKillType(KillType.RANGED);
-		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2));
-		deliveredFirstProjectile = true;
+			getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2,
+				true, DuplicationStrategy.ONE_PER_MOB, attackerMaxHit));
+			deliveredFirstProjectile = true;
+		}
 	}
-}

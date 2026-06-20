@@ -87,7 +87,7 @@ public class FireCannonEvent extends GameTickEvent {
 		// Authentically npcs are shot a second time on-death
 		// TODO: replicate this bug somehow?
 		final ProjectileEvent pjEvent = new ProjectileEvent(this.world, this.player, this.targetNpc, damage, 5,
-			false, DuplicationStrategy.ALLOW_MULTIPLE);
+			false, DuplicationStrategy.ALLOW_MULTIPLE, maxHit);
 
 		this.world.getServer().getGameEventHandler().add(pjEvent);
 		this.player.playSound("shoot");

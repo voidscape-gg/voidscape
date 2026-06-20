@@ -245,10 +245,18 @@ public class RangeUtils {
     }
 
     public static int doRangedDamage(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
+			if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
+				return OSRSCombatFormula.Ranged.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			} else {
+				return CombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			}
+		}
+
+	public static int calculateRangedMaxHit(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
 		if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
-			return OSRSCombatFormula.Ranged.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			return OSRSCombatFormula.Ranged.calculateMaxHit(attacker, arrowId, defender, skillCape);
 		} else {
-			return CombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			return CombatFormula.calculateRangedMaxHit(attacker, bowId, arrowId, defender, skillCape);
 		}
 	}
 

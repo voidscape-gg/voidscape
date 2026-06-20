@@ -224,6 +224,20 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_XP_LOCK_ALLOWED_MASK = (1 << 0) | (1 << 1) | (1 << 2)
 		| (1 << 4) | (1 << 5) | (1 << 6);
 	private static final long COMBAT_STYLE_SYNC_GRACE_MILLIS = 2000L;
+	private static final int HIT_FEEDBACK_TIER_NORMAL = 0;
+	private static final int HIT_FEEDBACK_TIER_HIGH = 1;
+	private static final int HIT_FEEDBACK_TIER_HUGE = 2;
+	private static final int HIT_FEEDBACK_HIGH_PERCENT = 75;
+	private static final int HIT_FEEDBACK_HUGE_PERCENT = 90;
+	private static final int HIT_FEEDBACK_STREAK_SHINY = 2;
+	private static final int HIT_FEEDBACK_BASE_SPLAT_SIZE = 24;
+	private static final int HIT_FEEDBACK_ART_SPLAT_SIZE = 34;
+	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_SINGLE_DIGIT = 2;
+	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_DEFAULT = 1;
+	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_LEADING_ONE = 0;
+	private static final int HIT_FEEDBACK_TEXT_Y_OFFSET = 0;
+	private static final String HIT_FEEDBACK_HIGH_SPLAT_ASSET = "hit-splat-high.png";
+	private static final String HIT_FEEDBACK_STREAK_SPLAT_ASSET = "hit-splat-streak.png";
 	private static final int SKILL_ATTACK = 0;
 	private static final int SKILL_DEFENSE = 1;
 	private static final int SKILL_STRENGTH = 2;
@@ -1227,6 +1241,7 @@ public final class mudclient implements Runnable {
 	private int statKills3 = 0;
 	private final ArrayList<BestiaryEntry> bestiaryEntries = new ArrayList<>();
 	private final HashMap<Integer, BestiaryEntry> bestiaryEntriesByNpcId = new HashMap<>();
+	private final HashMap<Long, Integer> hitFeedbackStreakByAttacker = new HashMap<>();
 	private int bestiarySelectedNpcId = -1;
 	private int bestiaryMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
 	private int bestiarySnapshotMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
@@ -12729,18 +12744,17 @@ public final class mudclient implements Runnable {
 					this.characterHealthBar[this.characterHealthCount++] = var16;
 				}
 
-				if (npc.combatTimeout > 150) {
-					var15 = x;
-					if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+					if (npc.combatTimeout > 150) {
+						var15 = x;
+						if (npc.direction == ORSCharacterDirection.COMBAT_B) {
 						var15 = x + overlayMovement * 10 / 100;
 					} else if (npc.direction == ORSCharacterDirection.COMBAT_A) {
-						var15 = x - overlayMovement * 10 / 100;
-					}
+							var15 = x - overlayMovement * 10 / 100;
+						}
 
-					this.getSurface().drawSprite(spriteSelect(GUIPARTS.DAMAGETAKEN.getDef()), var15 - (12 - width1 / 2),
-						y + height / 2 - 12);
-					this.getSurface().drawColoredStringCentered(width1 / 2 - 1 + var15, "" + npc.damageTaken, 0xFFFFFF,
-						0, 3, 5 + y + height / 2);
+						drawHitSplat("npc", npc, GUIPARTS.DAMAGETAKEN.getDef(),
+							var15 - (12 - width1 / 2), y + height / 2 - 12,
+							width1 / 2 - 1 + var15, 5 + y + height / 2);
 				}
 
 			}
@@ -12859,18 +12873,17 @@ public final class mudclient implements Runnable {
 				this.characterHealthBar[this.characterHealthCount++] = var16;
 			}
 
-			if (npc.combatTimeout > 150) {
-				var15 = x;
-				if (npc.direction == ORSCharacterDirection.COMBAT_B) {
+				if (npc.combatTimeout > 150) {
+					var15 = x;
+					if (npc.direction == ORSCharacterDirection.COMBAT_B) {
 					var15 = x + overlayMovement * 10 / 100;
 				} else if (npc.direction == ORSCharacterDirection.COMBAT_A) {
-					var15 = x - overlayMovement * 10 / 100;
-				}
+						var15 = x - overlayMovement * 10 / 100;
+					}
 
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DAMAGETAKEN.getDef()), var15 - (12 - width / 2),
-					y + height / 2 - 12);
-				this.getSurface().drawColoredStringCentered(width / 2 - 1 + var15, "" + npc.damageTaken, 0xFFFFFF,
-					0, 3, 5 + y + height / 2);
+					drawHitSplat("npc", npc, GUIPARTS.DAMAGETAKEN.getDef(),
+						var15 - (12 - width / 2), y + height / 2 - 12,
+						width / 2 - 1 + var15, 5 + y + height / 2);
 			}
 		}
 
@@ -13133,10 +13146,9 @@ public final class mudclient implements Runnable {
 							var14 = x - overlayMovement * 10 / 100;
 						}
 
-						this.getSurface().drawSprite(spriteSelect(GUIPARTS.DAMAGEGIVEN.getDef()), width / 2 + var14 - 12,
-							height / 2 + (y - 12));
-						this.getSurface().drawColoredStringCentered(width / 2 + (var14 - 1), "" + player.damageTaken,
-							0xFFFFFF, 0, 3, height / 2 + y + 5);
+						drawHitSplat("player", player, GUIPARTS.DAMAGEGIVEN.getDef(),
+							width / 2 + var14 - 12, height / 2 + (y - 12),
+							width / 2 + (var14 - 1), height / 2 + y + 5);
 					}
 				}
 				if (player.skullVisible == 1 && player.bubbleTimeout == 0) {
@@ -13177,6 +13189,112 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var27, "client.OB(" + topPixelSkew + ',' + width + ',' + var3 + ','
 				+ overlayMovement + ',' + x + ',' + y + ',' + height + ',' + index + ')');
 		}
+	}
+
+	private int hitFeedbackTier(ORSCharacter target) {
+		if (target == null || !target.hasHitFeedback() || target.damageTaken <= 0
+			|| target.hitFeedbackAttackerMaxHit <= 0) {
+			return HIT_FEEDBACK_TIER_NORMAL;
+		}
+		long scaledDamage = (long) target.damageTaken * 100L;
+		long scaledMax = (long) target.hitFeedbackAttackerMaxHit;
+		if (scaledDamage >= scaledMax * HIT_FEEDBACK_HUGE_PERCENT) {
+			return HIT_FEEDBACK_TIER_HUGE;
+		}
+		if (scaledDamage >= scaledMax * HIT_FEEDBACK_HIGH_PERCENT) {
+			return HIT_FEEDBACK_TIER_HIGH;
+		}
+		return HIT_FEEDBACK_TIER_NORMAL;
+	}
+
+	public void recordHitFeedback(ORSCharacter target) {
+		if (target == null || !target.hasHitFeedback()) {
+			return;
+		}
+		long attackerKey = hitFeedbackAttackerKey(target);
+		int tier = hitFeedbackTier(target);
+		if (tier == HIT_FEEDBACK_TIER_NORMAL) {
+			this.hitFeedbackStreakByAttacker.remove(attackerKey);
+			target.hitFeedbackStreak = 0;
+			return;
+		}
+
+		int streak = this.hitFeedbackStreakByAttacker.containsKey(attackerKey)
+			? this.hitFeedbackStreakByAttacker.get(attackerKey) + 1
+			: 1;
+		this.hitFeedbackStreakByAttacker.put(attackerKey, streak);
+		target.hitFeedbackStreak = streak;
+	}
+
+	private long hitFeedbackAttackerKey(ORSCharacter target) {
+		return ((long) target.hitFeedbackAttackerType << 32)
+			| (target.hitFeedbackAttackerServerIndex & 0xFFFFFFFFL);
+	}
+
+	private String hitFeedbackTierName(int tier) {
+		switch (tier) {
+			case HIT_FEEDBACK_TIER_HUGE:
+				return "HUGE";
+			case HIT_FEEDBACK_TIER_HIGH:
+				return "HIGH";
+			default:
+				return "NORMAL";
+		}
+	}
+
+	private void drawHitSplat(String targetKind, ORSCharacter target, SpriteDef spriteDef,
+							  int spriteX, int spriteY, int textX, int textY) {
+		int tier = hitFeedbackTier(target);
+		debugHitFeedbackRender(targetKind, target, tier);
+		if (tier == HIT_FEEDBACK_TIER_NORMAL) {
+			this.getSurface().drawSprite(spriteSelect(spriteDef), spriteX, spriteY);
+			this.getSurface().drawColoredStringCentered(textX, "" + target.damageTaken, 0xFFFFFF, 0, 3, textY);
+			return;
+		}
+
+		Sprite hitSplatSprite = hitFeedbackSplatSprite(target.hitFeedbackStreak);
+		if (hitSplatSprite != null) {
+			int splatOffset = (HIT_FEEDBACK_ART_SPLAT_SIZE - HIT_FEEDBACK_BASE_SPLAT_SIZE) / 2;
+			this.getSurface().drawArgbSpriteClipping(hitSplatSprite, spriteX - splatOffset, spriteY - splatOffset,
+				HIT_FEEDBACK_ART_SPLAT_SIZE, HIT_FEEDBACK_ART_SPLAT_SIZE, false, 0, 0xFFFFFFFF);
+		} else {
+			this.getSurface().drawSprite(spriteSelect(spriteDef), spriteX, spriteY);
+		}
+		String damageText = "" + target.damageTaken;
+		this.getSurface().drawColoredStringCentered(textX + hitFeedbackTextXOffset(damageText), damageText,
+			0xFFFFFF, 0, 3, textY + HIT_FEEDBACK_TEXT_Y_OFFSET);
+	}
+
+	private int hitFeedbackTextXOffset(String damageText) {
+		if (damageText.length() == 1) {
+			return HIT_FEEDBACK_TEXT_X_OFFSET_SINGLE_DIGIT;
+		}
+		if (damageText.charAt(0) == '1') {
+			return HIT_FEEDBACK_TEXT_X_OFFSET_LEADING_ONE;
+		}
+		return HIT_FEEDBACK_TEXT_X_OFFSET_DEFAULT;
+	}
+
+	private Sprite hitFeedbackSplatSprite(int streak) {
+		return getVoidscapeSkinSprite(streak >= HIT_FEEDBACK_STREAK_SHINY
+			? HIT_FEEDBACK_STREAK_SPLAT_ASSET
+			: HIT_FEEDBACK_HIGH_SPLAT_ASSET);
+	}
+
+	private void debugHitFeedbackRender(String targetKind, ORSCharacter target, int tier) {
+		if (!Boolean.getBoolean("voidscape.hitFeedbackDebug") || target == null || target.hitFeedbackDebugLogged
+			|| !target.hasHitFeedback()) {
+			return;
+		}
+		target.hitFeedbackDebugLogged = true;
+		System.out.println("hit-feedback render target=" + targetKind
+			+ " targetIndex=" + target.serverIndex
+			+ " damage=" + target.damageTaken
+			+ " attackerType=" + target.hitFeedbackAttackerType
+			+ " attackerIndex=" + target.hitFeedbackAttackerServerIndex
+			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit
+			+ " tier=" + hitFeedbackTierName(tier)
+			+ " streak=" + target.hitFeedbackStreak);
 	}
 
 	private void drawPopupReport(boolean var1) {
@@ -21800,39 +21918,37 @@ public final class mudclient implements Runnable {
 				for (updateIndex = 0; updateIndex < this.playerCount; ++updateIndex) {
 					updateEntity = this.players[updateIndex];
 					boolean isLocalPlayer = updateEntity == this.localPlayer;
-					boolean correctionMovingLocalPlayer = applyLocalWalkCorrection(updateEntity);
-					if (!correctionMovingLocalPlayer) {
-						waypointIndexCurrent = (1 + updateEntity.waypointIndexCurrent) % 10;
-						if (updateEntity.waypointIndexNext == waypointIndexCurrent) {
-							updateEntity.direction = ORSCharacterDirection.lookup(updateEntity.animationNext);
+					waypointIndexCurrent = (1 + updateEntity.waypointIndexCurrent) % 10;
+					if (updateEntity.waypointIndexNext == waypointIndexCurrent) {
+						updateEntity.direction = ORSCharacterDirection.lookup(updateEntity.animationNext);
+					} else {
+						ORSCharacterDirection characterDirection = null;
+						waypointIndexNext = updateEntity.waypointIndexNext;
+						if (waypointIndexNext < waypointIndexCurrent) {
+							stepsToMove = waypointIndexCurrent - waypointIndexNext;
 						} else {
-							ORSCharacterDirection characterDirection = null;
-							waypointIndexNext = updateEntity.waypointIndexNext;
-							if (waypointIndexNext < waypointIndexCurrent) {
-								stepsToMove = waypointIndexCurrent - waypointIndexNext;
-							} else {
-								stepsToMove = 10 + waypointIndexCurrent - waypointIndexNext;
-							}
+							stepsToMove = 10 + waypointIndexCurrent - waypointIndexNext;
+						}
 
-							amountToMove = isLocalPlayer ? Config.C_MOVE_PER_FRAME : remoteEntityMovePixels;
-							if (stepsToMove > 2) {
-								amountToMove = stepsToMove * amountToMove - amountToMove;
-							}
+						amountToMove = isLocalPlayer ? Config.C_MOVE_PER_FRAME : remoteEntityMovePixels;
+						if (stepsToMove > 2) {
+							amountToMove = stepsToMove * amountToMove - amountToMove;
+						}
 
-							if (amountToMove > 0
-								&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX <= this.tileSize * 3
-								&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ <= this.tileSize * 3
-								&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX >= -this.tileSize * 3
-								&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ >= -this.tileSize * 3 && stepsToMove <= 8 * S_MAX_WALKING_SPEED) {
-								if (updateEntity.waypointsX[waypointIndexNext] > updateEntity.currentX) {
-									characterDirection = ORSCharacterDirection.WEST;
-									updateEntity.currentX += amountToMove;
-									++updateEntity.stepFrame;
-								} else if (updateEntity.waypointsX[waypointIndexNext] < updateEntity.currentX) {
-									++updateEntity.stepFrame;
-									characterDirection = ORSCharacterDirection.EAST;
-									updateEntity.currentX -= amountToMove;
-								}
+						if (amountToMove > 0
+							&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX <= this.tileSize * 3
+							&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ <= this.tileSize * 3
+							&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX >= -this.tileSize * 3
+							&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ >= -this.tileSize * 3 && stepsToMove <= 8 * S_MAX_WALKING_SPEED) {
+							if (updateEntity.waypointsX[waypointIndexNext] > updateEntity.currentX) {
+								characterDirection = ORSCharacterDirection.WEST;
+								updateEntity.currentX += amountToMove;
+								++updateEntity.stepFrame;
+							} else if (updateEntity.waypointsX[waypointIndexNext] < updateEntity.currentX) {
+								++updateEntity.stepFrame;
+								characterDirection = ORSCharacterDirection.EAST;
+								updateEntity.currentX -= amountToMove;
+							}
 
 								if (updateEntity.currentX - updateEntity.waypointsX[waypointIndexNext] < amountToMove
 									&& updateEntity.currentX - updateEntity.waypointsX[waypointIndexNext] > -amountToMove) {

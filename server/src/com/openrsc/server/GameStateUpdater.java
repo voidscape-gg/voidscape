@@ -44,6 +44,8 @@ public final class GameStateUpdater {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
+	private static final byte HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
 	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
 	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
 
@@ -565,7 +567,8 @@ public final class GameStateUpdater {
 			Damage npcNeedingHitsUpdate;
 			while ((npcNeedingHitsUpdate = npcsNeedingHitsUpdate.poll()) != null) {
 				updates.add((short) safeNPCIndex(player, npcNeedingHitsUpdate.getIndex()));
-				updates.add((byte) 2);
+				boolean sendHitFeedback = supportsHitFeedback(player) && npcNeedingHitsUpdate.hasHitFeedback();
+				updates.add(sendHitFeedback ? HIT_FEEDBACK_DAMAGE_UPDATE_TYPE : (byte) 2);
 				updates.add((byte) npcNeedingHitsUpdate.getDamage());
 				// The hit-bar fields are single unsigned bytes; raid bosses (e.g. Void Colossus,
 				// 5000 HP) would wrap past 255. Scale cur/max into a 0-100 range when max > 255 —
@@ -580,6 +583,11 @@ public final class GameStateUpdater {
 				} else {
 					updates.add((byte) colossusCurHits);
 					updates.add((byte) colossusMaxHits);
+				}
+				if (sendHitFeedback) {
+					updates.add((byte) npcNeedingHitsUpdate.getHitFeedbackAttackerType());
+					updates.add((short) npcNeedingHitsUpdate.getHitFeedbackAttackerIndex());
+					updates.add((short) npcNeedingHitsUpdate.getHitFeedbackAttackerMaxHit());
 				}
 			}
 			if (player.isUsingCustomClient()) {
@@ -857,10 +865,16 @@ public final class GameStateUpdater {
 				Damage playerNeedingHitsUpdate;
 				while ((playerNeedingHitsUpdate = playersNeedingDamageUpdate.poll()) != null) {
 					updatesMain.add((short) playerNeedingHitsUpdate.getIndex());
-					updatesMain.add((byte) 2);
+					boolean sendHitFeedback = supportsHitFeedback(player) && playerNeedingHitsUpdate.hasHitFeedback();
+					updatesMain.add(sendHitFeedback ? HIT_FEEDBACK_DAMAGE_UPDATE_TYPE : (byte) 2);
 					updatesMain.add((byte) playerNeedingHitsUpdate.getDamage());
 					updatesMain.add((byte) playerNeedingHitsUpdate.getCurHits());
 					updatesMain.add((byte) playerNeedingHitsUpdate.getMaxHits());
+					if (sendHitFeedback) {
+						updatesMain.add((byte) playerNeedingHitsUpdate.getHitFeedbackAttackerType());
+						updatesMain.add((short) playerNeedingHitsUpdate.getHitFeedbackAttackerIndex());
+						updatesMain.add((short) playerNeedingHitsUpdate.getHitFeedbackAttackerMaxHit());
+					}
 				}
 
 				// Update Types 3 & 4: Projectile Update (draws the projectile)
@@ -1101,6 +1115,10 @@ public final class GameStateUpdater {
 				}
 			}
 		}
+	}
+
+	private boolean supportsHitFeedback(final Player player) {
+		return player.isUsingCustomClient() && player.getClientVersion() >= HIT_FEEDBACK_CLIENT_VERSION;
 	}
 
 	protected void updateGameObjects(final Player playerToUpdate) {

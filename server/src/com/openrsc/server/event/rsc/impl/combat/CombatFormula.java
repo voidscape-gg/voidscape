@@ -399,7 +399,22 @@ public class CombatFormula {
 	}
 
 	public static int calculateMeleeMaxHit(final Mob source, final Mob victim) {
-		return getTargetAdjustedMeleeMaxHit(source, victim);
+		return applyPlayerAttackDamageFloor(source, victim, getTargetAdjustedMeleeMaxHit(source, victim));
+	}
+
+	public static int calculateRangedMaxHit(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
+		final int maxRoll = getRangedDamage(source, bowId, arrowId, victim);
+		if (maxRoll <= 0) {
+			return 0;
+		}
+		final int maxHit = skillCape
+			? Math.max(0, (((maxRoll + 320) / 640) * 2) - 1)
+			: (maxRoll - 1 + 320) / 640;
+		return applyPlayerAttackDamageFloor(source, victim, applyPhysicalDamageReduction(maxHit, victim));
+	}
+
+	public static int calculateMagicMaxHit(final double spellPower, final Mob victim) {
+		return applyMagicDamageReduction((int)Math.floor(spellPower), victim);
 	}
 
 	private static void clearPvpMeleeMomentum(final Mob source) {

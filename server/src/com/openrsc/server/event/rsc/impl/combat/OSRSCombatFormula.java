@@ -64,6 +64,10 @@ public class OSRSCombatFormula {
 			return (calcEffectiveStrength(attacker) * (attacker.getWeaponPowerPoints() + 64) + 320) / 640;
 		}
 
+		public static int calculateMaxHit(final Mob attacker, final Mob defender) {
+			return applyPlayerAttackDamageFloor(attacker, defender, calcMaxHit(attacker));
+		}
+
 		/**
 		 * 1. Attack level * prayer bonus
 		 * 2. Round down to the nearest integer
@@ -258,6 +262,10 @@ public class OSRSCombatFormula {
 			boolean isHit = rollHit(calcHitChance(attacker, defender, bowId));
 			int damage = isHit ? rollDamage(calcMaxHit(attacker, arrowId) * (skillCape ? 2 : 1)) : 0;
 			return applyPlayerAttackDamageFloor(attacker, defender, damage);
+		}
+
+		public static int calculateMaxHit(final Mob attacker, final int arrowId, final Mob defender, final boolean skillCape) {
+			return applyPlayerAttackDamageFloor(attacker, defender, calcMaxHit(attacker, arrowId) * (skillCape ? 2 : 1));
 		}
 
 		/**

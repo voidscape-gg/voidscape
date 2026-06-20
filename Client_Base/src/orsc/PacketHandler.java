@@ -31,6 +31,9 @@ import static orsc.Config.isAndroid;
 
 public class PacketHandler {
 
+	private static final int HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
+	private static final boolean HIT_FEEDBACK_DEBUG = Boolean.getBoolean("voidscape.hitFeedbackDebug");
+
 	private final RSBuffer_Bits packetsIncoming = new RSBuffer_Bits(30000);
 	private Network_Socket clientStream;
 	private mudclient mc;
@@ -1513,17 +1516,10 @@ public class PacketHandler {
 			mc.getLocalPlayer().currentZ = mc.getLocalPlayer().waypointsZ[0] = currentZ;
 		}
 
-		ORSCharacterDirection localDirection = ORSCharacterDirection.lookup(direction);
-		if (mc.reconcileLocalPlayerPrediction(serverLocalPlayerX, serverLocalPlayerZ, currentX, currentZ,
-			localDirection, needNextRegion)) {
-			mc.setLocalPlayer(mc.getLocalPlayer());
-			mc.setPlayer(mc.getPlayerCount(), mc.getLocalPlayer());
-			mc.setPlayerCount(mc.getPlayerCount() + 1);
-		} else {
-			mc.setLocalPlayer(
-				mc.createPlayer(currentZ, mc.getLocalPlayerServerIndex(), currentX, 1, localDirection)
-			);
-		}
+		mc.setLocalPlayer(
+			mc.createPlayer(currentZ, mc.getLocalPlayerServerIndex(), currentX, 1,
+				ORSCharacterDirection.lookup(direction))
+		);
 
 		int dir = packetsIncoming.getBitMask(8);
 
@@ -2054,18 +2050,33 @@ public class PacketHandler {
 					}
 				}
 
-			} else if (updateType == 2) { // NPC Hitpoints
-				int damage = packetsIncoming.getUnsignedByte();
-				int currentHits = packetsIncoming.getUnsignedByte();
-				int maximumHits = packetsIncoming.getUnsignedByte();
+				} else if (updateType == 2 || updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) { // NPC Hitpoints
+					int damage = packetsIncoming.getUnsignedByte();
+					int currentHits = packetsIncoming.getUnsignedByte();
+					int maximumHits = packetsIncoming.getUnsignedByte();
+					int attackerType = ORSCharacter.HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+					int attackerServerIndex = -1;
+					int attackerMaxHit = 0;
+					if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+						attackerType = packetsIncoming.getUnsignedByte();
+						attackerServerIndex = packetsIncoming.getShort();
+						attackerMaxHit = packetsIncoming.getShort();
+					}
 
-				if (null != npc) {
-					npc.damageTaken = damage;
-					npc.healthMax = maximumHits;
-					npc.combatTimeout = 200;
-					npc.healthCurrent = currentHits;
-				}
-			} else if (updateType == 3) {
+					if (null != npc) {
+						npc.damageTaken = damage;
+						npc.healthMax = maximumHits;
+						npc.combatTimeout = 200;
+						npc.healthCurrent = currentHits;
+						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+							npc.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
+							mc.recordHitFeedback(npc);
+							debugHitFeedbackPacket("npc", npc, damage);
+						} else {
+							npc.clearHitFeedback();
+						}
+					}
+				} else if (updateType == 3) {
 				int sprite = packetsIncoming.getShort();
 				int shooterServerIndex = packetsIncoming.getShort();
 				if (null != npc) {
@@ -2869,16 +2880,31 @@ public class PacketHandler {
 						}
 					}
 				}
-			} else if (updateType == 2) {
-				int damage = packetsIncoming.getUnsignedByte();
-				int curhp = packetsIncoming.getUnsignedByte();
-				int maxhp = packetsIncoming.getUnsignedByte();
-				if (player != null) {
-					player.healthMax = maxhp;
-					player.healthCurrent = curhp;
-					player.damageTaken = damage;
-					if (mc.getLocalPlayer() == player) {
-						mc.setPlayerStatCurrent(3, curhp);
+				} else if (updateType == 2 || updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+					int damage = packetsIncoming.getUnsignedByte();
+					int curhp = packetsIncoming.getUnsignedByte();
+					int maxhp = packetsIncoming.getUnsignedByte();
+					int attackerType = ORSCharacter.HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+					int attackerServerIndex = -1;
+					int attackerMaxHit = 0;
+					if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+						attackerType = packetsIncoming.getUnsignedByte();
+						attackerServerIndex = packetsIncoming.getShort();
+						attackerMaxHit = packetsIncoming.getShort();
+					}
+					if (player != null) {
+						player.healthMax = maxhp;
+						player.healthCurrent = curhp;
+						player.damageTaken = damage;
+						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+							player.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
+							mc.recordHitFeedback(player);
+							debugHitFeedbackPacket("player", player, damage);
+						} else {
+							player.clearHitFeedback();
+						}
+						if (mc.getLocalPlayer() == player) {
+							mc.setPlayerStatCurrent(3, curhp);
 						mc.setPlayerStatBase(3, maxhp);
 						mc.setShowDialogServerMessage(false);
 						mc.setShowDialogMessage(false);
@@ -3006,8 +3032,21 @@ public class PacketHandler {
 						mc.setShowDialogMessage(false);
 					}
 				}
+				}
 			}
 		}
+
+	private void debugHitFeedbackPacket(String targetKind, ORSCharacter target, int damage) {
+		if (!HIT_FEEDBACK_DEBUG || target == null || !target.hasHitFeedback()) {
+			return;
+		}
+		System.out.println("hit-feedback packet target=" + targetKind
+			+ " targetIndex=" + target.serverIndex
+			+ " damage=" + damage
+			+ " attackerType=" + target.hitFeedbackAttackerType
+			+ " attackerIndex=" + target.hitFeedbackAttackerServerIndex
+			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit
+			+ " streak=" + target.hitFeedbackStreak);
 	}
 
 	private void drawGroundItems(int length) {

@@ -5,6 +5,10 @@ import com.openrsc.client.entityhandling.defs.SpriteDef;
 import orsc.enumerations.ORSCharacterDirection;
 
 public final class ORSCharacter {
+	public static final int HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN = 0;
+	public static final int HIT_FEEDBACK_ATTACKER_TYPE_PLAYER = 1;
+	public static final int HIT_FEEDBACK_ATTACKER_TYPE_NPC = 2;
+
 	public String accountName;
 	public int animationNext;
 	public int attackingNpcServerIndex = 0;
@@ -21,6 +25,11 @@ public final class ORSCharacter {
 	public int currentX;
 	public int currentZ;
 	public int damageTaken = 0;
+	public int hitFeedbackAttackerType = HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+	public int hitFeedbackAttackerServerIndex = -1;
+	public int hitFeedbackAttackerMaxHit = 0;
+	public int hitFeedbackStreak = 0;
+	public boolean hitFeedbackDebugLogged = false;
 	public int skull = 0;
 	public int wield = 0;
 	public int wield2 = 0;
@@ -50,6 +59,31 @@ public final class ORSCharacter {
 	int icon = 0;
 	public int groupID = Group.DEFAULT_GROUP;
 	ORSCharacterDirection direction = ORSCharacterDirection.NORTH;
+
+	public void clearHitFeedback() {
+		hitFeedbackAttackerType = HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+		hitFeedbackAttackerServerIndex = -1;
+		hitFeedbackAttackerMaxHit = 0;
+		hitFeedbackStreak = 0;
+		hitFeedbackDebugLogged = false;
+	}
+
+	public void setHitFeedback(int attackerType, int attackerServerIndex, int attackerMaxHit) {
+		if (attackerType == HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN || attackerServerIndex < 0 || attackerMaxHit <= 0) {
+			clearHitFeedback();
+			return;
+		}
+		hitFeedbackAttackerType = attackerType;
+		hitFeedbackAttackerServerIndex = attackerServerIndex;
+		hitFeedbackAttackerMaxHit = attackerMaxHit;
+		hitFeedbackDebugLogged = false;
+	}
+
+	public boolean hasHitFeedback() {
+		return hitFeedbackAttackerType != HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN
+			&& hitFeedbackAttackerServerIndex >= 0
+			&& hitFeedbackAttackerMaxHit > 0;
+	}
 
 	// from com.openrsc.server.model.entity.player.Group.java
 

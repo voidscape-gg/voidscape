@@ -18,6 +18,7 @@ public class ProjectileEvent extends SingleTickEvent {
 
 	Mob caster, opponent;
 	protected int damage;
+	protected int attackerMaxHit;
 	protected int type;
 	boolean canceled;
 	boolean shouldChase;
@@ -31,7 +32,13 @@ public class ProjectileEvent extends SingleTickEvent {
 	}
 
 	public ProjectileEvent(final World world, final Mob caster, final Mob opponent, final int damage, final int type,
-						   final boolean setChasing, final DuplicationStrategy duplicationStrategy)
+							   final boolean setChasing, final DuplicationStrategy duplicationStrategy)
+	{
+		this(world, caster, opponent, damage, type, setChasing, duplicationStrategy, 0);
+	}
+
+	public ProjectileEvent(final World world, final Mob caster, final Mob opponent, final int damage, final int type,
+							   final boolean setChasing, final DuplicationStrategy duplicationStrategy, final int attackerMaxHit)
 	{
 		super(world, caster, 1, "Projectile Event", duplicationStrategy);
 		this.caster = caster;
@@ -39,6 +46,7 @@ public class ProjectileEvent extends SingleTickEvent {
 		this.damage = damage;
 		this.type = type;
 		this.shouldChase = setChasing;
+		this.attackerMaxHit = attackerMaxHit;
 
 		sendProjectile(caster, opponent);
 		if (caster.isPlayer() && opponent.isPlayer()) {
@@ -118,7 +126,7 @@ public class ProjectileEvent extends SingleTickEvent {
 
 		int lastHits = opponent.getLevel(Skill.HITS.id());
 		opponent.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
-		opponent.getUpdateFlags().setDamage(new Damage(opponent, damage));
+		opponent.getUpdateFlags().setDamage(new Damage(opponent, damage).withHitFeedback(caster, attackerMaxHit));
 
 
 		if (caster.isPlayer()) {

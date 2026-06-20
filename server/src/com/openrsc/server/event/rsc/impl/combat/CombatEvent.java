@@ -179,13 +179,16 @@ public class CombatEvent extends GameTickEvent {
 
 			//if(hitter.isNpc() && target.isPlayer() || target.isNpc() && hitter.isPlayer()) {
 			int damage;
+			int attackerMaxHit;
 			if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
 				damage = OSRSCombatFormula.Melee.doMeleeDamage(hitter, target);
+				attackerMaxHit = OSRSCombatFormula.Melee.calculateMaxHit(hitter, target);
 			} else {
 				damage = CombatFormula.doMeleeDamage(hitter, target);
+				attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
 			}
 
-			inflictDamage(hitter, target, damage);
+			inflictDamage(hitter, target, damage, attackerMaxHit);
 			if (target.isPlayer()) {
 				if (((Player)target).getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_RECOIL.id())) {
 					int reflectedDamage = damage/10 + ((damage > 0) ? 1 : 0);
@@ -221,6 +224,10 @@ public class CombatEvent extends GameTickEvent {
 	}
 
 	private void inflictDamage(final Mob hitter, final Mob target, int damage) {
+		inflictDamage(hitter, target, damage, 0);
+	}
+
+	private void inflictDamage(final Mob hitter, final Mob target, int damage, int attackerMaxHit) {
 		hitter.incHitsMade();
 
 		if (target.isPlayer()) {
@@ -243,7 +250,7 @@ public class CombatEvent extends GameTickEvent {
 		// Reduce targets hits by supplied damage amount.
 		int lastHits = target.getLevel(Skill.HITS.id());
 		target.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
-		target.getUpdateFlags().setDamage(new Damage(target, damage));
+		target.getUpdateFlags().setDamage(new Damage(target, damage).withHitFeedback(hitter, attackerMaxHit));
 		if (target.isNpc() && hitter.isPlayer()) {
 			Npc n = (Npc) target;
 			Player player = ((Player) hitter);
