@@ -1492,8 +1492,10 @@ public class PacketHandler {
 
 		packetsIncoming.startBitAccess();
 
-		mc.setLocalPlayerX(packetsIncoming.getBitMask(11));
-		mc.setLocalPlayerZ(packetsIncoming.getBitMask(13));
+		int serverLocalPlayerX = packetsIncoming.getBitMask(11);
+		int serverLocalPlayerZ = packetsIncoming.getBitMask(13);
+		mc.setLocalPlayerX(serverLocalPlayerX);
+		mc.setLocalPlayerZ(serverLocalPlayerZ);
 
 		int direction = packetsIncoming.getBitMask(4);
 		boolean needNextRegion = mc.loadNextRegion(mc.getLocalPlayerZ(), mc.getLocalPlayerX(), false);
@@ -1511,11 +1513,17 @@ public class PacketHandler {
 			mc.getLocalPlayer().currentZ = mc.getLocalPlayer().waypointsZ[0] = currentZ;
 		}
 
-		mc.setLocalPlayer(
-			mc.createPlayer(currentZ, mc.getLocalPlayerServerIndex(), currentX, 1,
-				ORSCharacterDirection.lookup(direction)
-			)
-		);
+		ORSCharacterDirection localDirection = ORSCharacterDirection.lookup(direction);
+		if (mc.reconcileLocalPlayerPrediction(serverLocalPlayerX, serverLocalPlayerZ, currentX, currentZ,
+			localDirection, needNextRegion)) {
+			mc.setLocalPlayer(mc.getLocalPlayer());
+			mc.setPlayer(mc.getPlayerCount(), mc.getLocalPlayer());
+			mc.setPlayerCount(mc.getPlayerCount() + 1);
+		} else {
+			mc.setLocalPlayer(
+				mc.createPlayer(currentZ, mc.getLocalPlayerServerIndex(), currentX, 1, localDirection)
+			);
+		}
 
 		int dir = packetsIncoming.getBitMask(8);
 

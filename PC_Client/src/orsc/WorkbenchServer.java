@@ -528,13 +528,24 @@ final class WorkbenchServer {
 		appendString(json, "accountName", player.accountName).append(",");
 		json.append("\"x\":").append(player.currentX).append(",");
 		json.append("\"z\":").append(player.currentZ).append(",");
+		json.append("\"tileX\":").append(client.getLocalPlayerX()).append(",");
+		json.append("\"tileZ\":").append(client.getLocalPlayerZ()).append(",");
+		json.append("\"worldX\":").append(client.getMidRegionBaseX() + client.getLocalPlayerX()).append(",");
+		json.append("\"worldZ\":").append(client.getMidRegionBaseZ() + client.getLocalPlayerZ()).append(",");
 		json.append("\"level\":").append(player.level).append(",");
 		json.append("\"healthCurrent\":").append(player.healthCurrent).append(",");
 		json.append("\"healthMax\":").append(player.healthMax).append(",");
 		json.append("\"groupId\":").append(player.groupID).append(",");
 		json.append("\"admin\":").append(player.isAdmin()).append(",");
 		json.append("\"dev\":").append(player.isDev()).append(",");
-		json.append("\"mod\":").append(player.isMod());
+		json.append("\"mod\":").append(player.isMod()).append(",");
+		json.append("\"movement\":{");
+		json.append("\"predictionActive\":").append(client.workbenchLocalWalkPredictionActive()).append(",");
+		json.append("\"correctionActive\":").append(client.workbenchLocalWalkCorrectionActive()).append(",");
+		json.append("\"predictionCount\":").append(client.workbenchLocalWalkPredictionCount()).append(",");
+		json.append("\"confirmedIndex\":").append(client.workbenchLocalWalkPredictionConfirmedIndex()).append(",");
+		json.append("\"queuedLastIndex\":").append(client.workbenchLocalWalkPredictionQueuedLastIndex());
+		json.append("}");
 		json.append("}");
 	}
 
