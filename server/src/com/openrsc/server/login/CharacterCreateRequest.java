@@ -237,16 +237,8 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 				return (byte) RegisterLoginResponse.ACCOUNT_TEMP_DISABLED;
 			}
 
-			if (getClientVersion() != getServer().getConfig().CLIENT_VERSION && !isAdmin) {
-				if (getClientVersion() > 10000) {
-					if (getServer().getConfig().ENFORCE_CUSTOM_CLIENT_VERSION) {
-						return (byte) RegisterLoginResponse.CLIENT_UPDATED;
-					}
-				} else {
-					if (getServer().getConfig().WANT_CUSTOM_SPRITES) {
-						return (byte) RegisterLoginResponse.CLIENT_UPDATED;
-					}
-				}
+			if (getServer().getConfig().requiresClientUpdate(getClientVersion())) {
+				return (byte) RegisterLoginResponse.CLIENT_UPDATED;
 			}
 
 			if (getServer().getWorld().getPlayers().size() >= getServer().getConfig().MAX_PLAYERS && !isAdmin) {

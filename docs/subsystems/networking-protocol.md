@@ -157,7 +157,7 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10114`. Server's `client_version` config key (e.g. `10114`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes or client-visible cache files change.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10115`. Server's `client_version` config key (e.g. `10115`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes, client-visible cache files change, or a client binary update must be forced.
 
 Voidscape custom-client packet notes:
 - `10051`: Auction House market-intel payload was added to the existing custom Auction House packet.

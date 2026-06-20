@@ -6,6 +6,7 @@ import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
+import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
 import com.openrsc.server.model.PlayerAppearance;
@@ -43,6 +44,8 @@ public final class GameStateUpdater {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
+	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
 
 	private final Server server;
 	public final Server getServer() {
@@ -104,6 +107,9 @@ public final class GameStateUpdater {
 		if (player.isRemoved() || player.getAttribute("dummyplayer", false)) {
 			return;
 		}
+		if (enforceCurrentClientVersion(player)) {
+			return;
+		}
 		if (curTime - player.getLastSaveTime() >= (autoSave) && player.loggedIn()) {
 			player.timeIncrementActivity();
 			player.save();
@@ -138,6 +144,32 @@ public final class GameStateUpdater {
 				+ " mins! Please move to a new area");
 			player.setWarnedToMove(true);
 		}
+	}
+
+	private boolean enforceCurrentClientVersion(final Player player) {
+		if (!player.loggedIn() || !getServer().getConfig().requiresClientUpdate(player.getClientVersion())) {
+			return false;
+		}
+		if (!player.getAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, false)) {
+			player.setAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, true);
+			ActionSender.sendSystemMessage(player, "Voidscape has been updated. Relaunch the launcher to download the new client.");
+			if (player.getClientLimitations().supportsSystemUpdateTimer) {
+				ActionSender.sendSystemUpdateTimer(player, (int) (OUTDATED_CLIENT_KICK_DELAY_MS / 1000L));
+			}
+			player.getWorld().getServer().getGameEventHandler().add(
+				new DelayedEvent(player.getWorld(), player, OUTDATED_CLIENT_KICK_DELAY_MS, "Outdated client disconnect") {
+					@Override
+					public void run() {
+						final Player owner = getOwner();
+						if (owner != null && owner.loggedIn() && !owner.isRemoved()) {
+							owner.unregister(UnregisterForcefulness.FORCED, "Outdated client version " + owner.getClientVersion()
+								+ ", required " + owner.getConfig().CLIENT_VERSION);
+						}
+						stop();
+					}
+				});
+		}
+		return true;
 	}
 
 	private int safeNPCIndex(final Player player, final int npcIndex) {

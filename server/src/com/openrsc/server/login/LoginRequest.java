@@ -223,16 +223,8 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 			}
 
 
-			if (getClientVersion() != getServer().getConfig().CLIENT_VERSION && !isAdmin) {
-				if (getClientVersion() > 10000) {
-					if (getServer().getConfig().ENFORCE_CUSTOM_CLIENT_VERSION) {
-						return new ValidatedLogin(LoginResponse.CLIENT_UPDATED);
-					}
-				} else {
-					if (getServer().getConfig().WANT_CUSTOM_SPRITES) {
-						return new ValidatedLogin(LoginResponse.CLIENT_UPDATED);
-					}
-				}
+			if (getServer().getConfig().requiresClientUpdate(getClientVersion())) {
+				return new ValidatedLogin(LoginResponse.CLIENT_UPDATED);
 			}
 
 			final long i = getServer().getTimeUntilShutdown();

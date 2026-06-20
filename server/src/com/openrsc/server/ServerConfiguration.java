@@ -809,6 +809,16 @@ public class ServerConfiguration {
 		// adminIp = Arrays.asList(ADMIN_IP.split(","));
 	}
 
+	public boolean requiresClientUpdate(final int clientVersion) {
+		if (clientVersion == CLIENT_VERSION) {
+			return false;
+		}
+		if (clientVersion > 10000) {
+			return ENFORCE_CUSTOM_CLIENT_VERSION;
+		}
+		return WANT_CUSTOM_SPRITES;
+	}
+
 	protected static String loadServerProps(YMLReader reader, String defaultFile) {
 		// Always try to load from local.conf first.
 		try {

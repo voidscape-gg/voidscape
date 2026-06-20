@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-20 - Forced launcher refresh for stale beta clients
+
+Tightened hosted beta client-version enforcement after temporary beta-admin accounts could bypass `enforce_custom_client_version` and keep logging in with stale custom clients. The server now uses one shared `requiresClientUpdate` check for login, registration, and live player ticks, so any connected stale client receives a clear launcher-relaunch message, a short system-update timer when supported, and then a forced disconnect. The desktop client now treats login response `CLIENT_UPDATED` as a hard update stop: it shows the update notice briefly and closes so relaunching through the Voidscape launcher redownloads the current manifest payload. `CLIENT_VERSION` and voidbot moved to `10115` to force this binary behavior into the hosted update path. No new packets, opcodes, schema, cache archive, or gameplay rules changed; reversibility is restoring admin bypass semantics, dropping the live tick kick, and returning the version to `10114`.
+
 ### 2026-06-19 - Undead Siege Crumble and PvM projectile kiting tuning
 
 Raised Undead Siege's normalized temporary Magic level independently from the shared combat stat level so Crumble Undead is reliable while preserving equalized run stats. PvM projectile targeting now has a one-tick edge grace for ranged and cast-on-mob magic: when an NPC is exactly one projectile range unit away and its next queued step would enter clear line-of-sight range, the player holds position instead of immediately walking forward. The Siege supply shop also consumes a hidden Voidscape server-message token to draw the player's current run points in the existing point-shop UI and refresh that value after buys. The grace is NPC-only, projectile-radius-only, and consumed once per targeting/firing attempt; PvP, melee catching, packet/opcode shape, client assets, schema, and normal item/economy behavior are unchanged. Reversibility is restoring the single Siege combat level, removing the `PathValidation.shouldHoldProjectileKiteLine` call sites, and dropping the hidden shop-balance UI token.

@@ -1483,6 +1483,19 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private void closeForClientUpdate() {
+		this.showLoginScreenStatus("Voidscape has been updated.", "Relaunch the launcher to update.");
+		Thread closeThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				GenUtil.sleepShadow(2500L);
+				closeProgram();
+			}
+		});
+		closeThread.setDaemon(true);
+		closeThread.start();
+	}
+
 	private boolean loadLogo() {
 		try {
 
@@ -25348,7 +25361,7 @@ public final class mudclient implements Runnable {
 											"Try again, or create a new account");
 									} else if (loginResponse != 4) {
 										if (loginResponse == 5) {
-											this.showLoginScreenStatus("The client has been updated.", "Please reload this page");
+											this.closeForClientUpdate();
 										} else if (loginResponse == 6) {
 											this.showLoginScreenStatus("You may only use 1 character at once.",
 												"Your ip-address is already in use");
