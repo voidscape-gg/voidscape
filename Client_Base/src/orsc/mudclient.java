@@ -466,30 +466,9 @@ public final class mudclient implements Runnable {
 	private final ORSCharacter[] npcsServer = new ORSCharacter[5000];
 	private final int[] pathX = new int[8000];
 	private final int[] pathZ = new int[8000];
-	private static final int LOCAL_WALK_PREDICTION_TRACK_STEPS = 32;
-	private static final int LOCAL_WALK_PREDICTION_QUEUE_STEPS = 1;
-	private static final long LOCAL_WALK_PREDICTION_START_GRACE_MS = 1150L;
-	private static final long LOCAL_WALK_PREDICTION_STALL_CLEAR_MS = 1300L;
-	private static final int LOCAL_WALK_CORRECTION_STEP_PIXELS = 8;
-	private static final boolean LOCAL_WALK_PREDICTION_ENABLED = Boolean.getBoolean("voidscape.localWalkPrediction");
 	private static final double REMOTE_ENTITY_MOVEMENT_FRAME_MILLIS = 20.0D;
 	private static final double REMOTE_ENTITY_MOVEMENT_MAX_ELAPSED_MILLIS = 80.0D;
 	private static final long PENDING_INPUT_MARKER_MILLIS = 1000L;
-	private final int[] localWalkPredictionWorldX = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
-	private final int[] localWalkPredictionWorldZ = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
-	private int localWalkPredictionCount = 0;
-	private int localWalkPredictionConfirmedIndex = -1;
-	private int localWalkPredictionQueuedLastIndex = -1;
-	private int localWalkPredictionStartWorldX = 0;
-	private int localWalkPredictionStartWorldZ = 0;
-	private int localWalkPredictionLastServerWorldX = 0;
-	private int localWalkPredictionLastServerWorldZ = 0;
-	private long localWalkPredictionLastServerMillis = 0L;
-	private long localWalkPredictionStartMillis = 0L;
-	private boolean localWalkPredictionActive = false;
-	private boolean localWalkCorrectionActive = false;
-	private int localWalkCorrectionTargetX = 0;
-	private int localWalkCorrectionTargetZ = 0;
 	private long remoteEntityMoveLastNs = 0L;
 	private double remoteEntityMoveCarryPixels = 0.0D;
 	private boolean pendingInputMarkerActive = false;
@@ -21999,7 +21978,6 @@ public final class mudclient implements Runnable {
 								updateEntity.waypointIndexNext = (1 + waypointIndexNext) % 10;
 							}
 						}
-					}
 
 					if (updateEntity.bubbleTimeout > 0) {
 						--updateEntity.bubbleTimeout;
@@ -28580,9 +28558,6 @@ public final class mudclient implements Runnable {
 
 			int pendingMarkerLocalX = this.pathX[0];
 			int pendingMarkerLocalZ = this.pathZ[0];
-			int predictionStartX = startX;
-			int predictionStartZ = startZ;
-			int predictionPathCount = count;
 			--count;
 			startZ = this.pathZ[count];
 			startX = this.pathX[count];
@@ -28616,9 +28591,6 @@ public final class mudclient implements Runnable {
 			this.mouseWalkX = this.mouseX;
 			this.mouseClickXStep = -24;
 			beginPendingInputFeedback(pendingMarkerLocalX, pendingMarkerLocalZ);
-			if (!walkToEntity && !reachBorder) {
-				beginLocalWalkPrediction(predictionStartX, predictionStartZ, predictionPathCount);
-			}
 		} catch (RuntimeException var13) {
 			throw GenUtil.makeThrowable(var13, "client.DD(" + x1 + ',' + walkToEntity + ',' + startX + ',' + z1 + ',' + startZ
 				+ ',' + x2 + ',' + reachBorder + ',' + z2 + ',' + "dummy" + ')');
@@ -28672,260 +28644,6 @@ public final class mudclient implements Runnable {
 		int wholePixels = (int) movePixels;
 		this.remoteEntityMoveCarryPixels = movePixels - wholePixels;
 		return wholePixels;
-	}
-
-	private void beginLocalWalkPrediction(int startX, int startZ, int pathCount) {
-		if (!canPredictLocalGroundWalk(pathCount)) {
-			clearLocalWalkPrediction();
-			return;
-		}
-
-		int[] expandedX = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
-		int[] expandedZ = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
-		int expandedCount = 0;
-		int currentX = startX;
-		int currentZ = startZ;
-		int index = pathCount - 1;
-		expandedCount = appendPredictedSegment(expandedX, expandedZ, expandedCount, currentX, currentZ,
-			this.pathX[index], this.pathZ[index]);
-		currentX = this.pathX[index];
-		currentZ = this.pathZ[index];
-
-		for (index = pathCount - 2; index >= 0 && index > pathCount - 27
-			&& expandedCount < LOCAL_WALK_PREDICTION_TRACK_STEPS; --index) {
-			expandedCount = appendPredictedSegment(expandedX, expandedZ, expandedCount, currentX, currentZ,
-				this.pathX[index], this.pathZ[index]);
-			currentX = this.pathX[index];
-			currentZ = this.pathZ[index];
-		}
-
-		if (expandedCount == 0) {
-			clearLocalWalkPrediction();
-			return;
-		}
-
-		this.localWalkCorrectionActive = false;
-		this.localWalkPredictionActive = true;
-		this.localWalkPredictionCount = expandedCount;
-		this.localWalkPredictionConfirmedIndex = -1;
-		this.localWalkPredictionQueuedLastIndex = -1;
-		this.localWalkPredictionStartWorldX = this.midRegionBaseX + startX;
-		this.localWalkPredictionStartWorldZ = this.midRegionBaseZ + startZ;
-		this.localWalkPredictionStartMillis = System.currentTimeMillis();
-		this.localWalkPredictionLastServerWorldX = this.localWalkPredictionStartWorldX;
-		this.localWalkPredictionLastServerWorldZ = this.localWalkPredictionStartWorldZ;
-		this.localWalkPredictionLastServerMillis = this.localWalkPredictionStartMillis;
-
-		for (int i = 0; i < expandedCount; i++) {
-			this.localWalkPredictionWorldX[i] = this.midRegionBaseX + expandedX[i];
-			this.localWalkPredictionWorldZ[i] = this.midRegionBaseZ + expandedZ[i];
-		}
-
-		queueLocalPredictedWaypoints(expandedX, expandedZ, expandedCount);
-	}
-
-	private boolean canPredictLocalGroundWalk(int pathCount) {
-		return LOCAL_WALK_PREDICTION_ENABLED
-			&& this.currentViewMode == GameMode.GAME
-			&& this.localPlayer != null
-			&& this.world != null
-			&& this.world.playerAlive
-			&& pathCount > 0
-			&& this.combatTimeout <= 0
-			&& this.localPlayer.direction != ORSCharacterDirection.COMBAT_A
-			&& this.localPlayer.direction != ORSCharacterDirection.COMBAT_B;
-	}
-
-	private int appendPredictedSegment(int[] expandedX, int[] expandedZ, int expandedCount,
-									   int fromX, int fromZ, int toX, int toZ) {
-		int x = fromX;
-		int z = fromZ;
-		while ((x != toX || z != toZ) && expandedCount < LOCAL_WALK_PREDICTION_TRACK_STEPS) {
-			x += Integer.compare(toX, x);
-			z += Integer.compare(toZ, z);
-			expandedX[expandedCount] = x;
-			expandedZ[expandedCount] = z;
-			expandedCount++;
-		}
-		return expandedCount;
-	}
-
-	private void queueLocalPredictedWaypoints(int[] expandedX, int[] expandedZ, int expandedCount) {
-		ORSCharacter player = this.localPlayer;
-		player.waypointIndexCurrent = 0;
-		player.waypointIndexNext = 0;
-		player.waypointsX[0] = player.currentX;
-		player.waypointsZ[0] = player.currentZ;
-
-		int first = nearestPredictedStep(expandedX, expandedZ, expandedCount, player.currentX, player.currentZ);
-		int queued = 0;
-		for (int i = first; i < expandedCount && queued < LOCAL_WALK_PREDICTION_QUEUE_STEPS; i++) {
-			appendLocalPlayerWaypoint(expandedX[i] * this.tileSize + 64, expandedZ[i] * this.tileSize + 64);
-			queued++;
-		}
-		this.localWalkPredictionQueuedLastIndex = queued == 0 ? -1 : first + queued - 1;
-	}
-
-	private int nearestPredictedStep(int[] expandedX, int[] expandedZ, int expandedCount, int pixelX, int pixelZ) {
-		int tileX = Math.max(0, Math.min(95, (pixelX - 64 + this.tileSize / 2) / this.tileSize));
-		int tileZ = Math.max(0, Math.min(95, (pixelZ - 64 + this.tileSize / 2) / this.tileSize));
-		int best = 0;
-		int bestDistance = Integer.MAX_VALUE;
-		for (int i = 0; i < expandedCount; i++) {
-			int distance = Math.abs(expandedX[i] - tileX) + Math.abs(expandedZ[i] - tileZ);
-			if (distance < bestDistance) {
-				best = i;
-				bestDistance = distance;
-			}
-		}
-		return best;
-	}
-
-	private void appendLocalPlayerWaypoint(int pixelX, int pixelZ) {
-		ORSCharacter player = this.localPlayer;
-		int index = player.waypointIndexCurrent;
-		if (player.waypointsX[index] == pixelX && player.waypointsZ[index] == pixelZ) {
-			return;
-		}
-		index = (index + 1) % player.waypointsX.length;
-		player.waypointIndexCurrent = index;
-		player.waypointsX[index] = pixelX;
-		player.waypointsZ[index] = pixelZ;
-	}
-
-	private void clearLocalWalkPrediction() {
-		this.localWalkPredictionActive = false;
-		this.localWalkPredictionCount = 0;
-		this.localWalkPredictionConfirmedIndex = -1;
-		this.localWalkPredictionQueuedLastIndex = -1;
-		this.localWalkPredictionStartMillis = 0L;
-		this.localWalkPredictionLastServerMillis = 0L;
-	}
-
-	public boolean reconcileLocalPlayerPrediction(int serverWorldX, int serverWorldZ, int serverPixelX,
-												  int serverPixelZ, ORSCharacterDirection direction,
-												  boolean regionChanged) {
-		if (regionChanged || this.localPlayer == null) {
-			clearLocalWalkPrediction();
-			this.localWalkCorrectionActive = false;
-			return false;
-		}
-
-		if (this.localWalkPredictionActive) {
-			int matchedIndex = findPredictedWorldStep(serverWorldX, serverWorldZ);
-			if (matchedIndex >= 0) {
-				long now = System.currentTimeMillis();
-				boolean repeatedAuthoritativeTile = matchedIndex == this.localWalkPredictionConfirmedIndex
-					&& serverWorldX == this.localWalkPredictionLastServerWorldX
-					&& serverWorldZ == this.localWalkPredictionLastServerWorldZ;
-				if (repeatedAuthoritativeTile
-					&& now - this.localWalkPredictionLastServerMillis >= LOCAL_WALK_PREDICTION_STALL_CLEAR_MS) {
-					startLocalWalkCorrection(serverPixelX, serverPixelZ, direction);
-					clearLocalWalkPrediction();
-					return true;
-				}
-				if (!repeatedAuthoritativeTile) {
-					this.localWalkPredictionLastServerWorldX = serverWorldX;
-					this.localWalkPredictionLastServerWorldZ = serverWorldZ;
-					this.localWalkPredictionLastServerMillis = now;
-				}
-				this.localWalkPredictionConfirmedIndex = Math.max(this.localWalkPredictionConfirmedIndex, matchedIndex);
-				this.localPlayer.animationNext = direction.rsDir;
-				if (this.localWalkPredictionConfirmedIndex >= this.localWalkPredictionCount - 1
-					|| (this.localWalkPredictionQueuedLastIndex >= 0
-						&& this.localWalkPredictionConfirmedIndex >= this.localWalkPredictionQueuedLastIndex)) {
-					clearLocalWalkPrediction();
-				}
-				return true;
-			}
-
-			if (serverWorldX == this.localWalkPredictionStartWorldX
-				&& serverWorldZ == this.localWalkPredictionStartWorldZ
-				&& System.currentTimeMillis() - this.localWalkPredictionStartMillis < LOCAL_WALK_PREDICTION_START_GRACE_MS) {
-				this.localPlayer.animationNext = direction.rsDir;
-				return true;
-			}
-
-			startLocalWalkCorrection(serverPixelX, serverPixelZ, direction);
-			clearLocalWalkPrediction();
-			return true;
-		}
-
-		if (this.localWalkCorrectionActive) {
-			this.localWalkCorrectionTargetX = serverPixelX;
-			this.localWalkCorrectionTargetZ = serverPixelZ;
-			this.localPlayer.animationNext = direction.rsDir;
-			return true;
-		}
-
-		return false;
-	}
-
-	private int findPredictedWorldStep(int worldX, int worldZ) {
-		for (int i = Math.max(0, this.localWalkPredictionConfirmedIndex); i < this.localWalkPredictionCount; i++) {
-			if (this.localWalkPredictionWorldX[i] == worldX && this.localWalkPredictionWorldZ[i] == worldZ) {
-				return i;
-			}
-		}
-		return -1;
-	}
-
-	private void startLocalWalkCorrection(int targetX, int targetZ, ORSCharacterDirection direction) {
-		this.localWalkCorrectionActive = true;
-		this.localWalkCorrectionTargetX = targetX;
-		this.localWalkCorrectionTargetZ = targetZ;
-		this.localPlayer.animationNext = direction.rsDir;
-		this.localPlayer.waypointIndexCurrent = 0;
-		this.localPlayer.waypointIndexNext = 0;
-		this.localPlayer.waypointsX[0] = targetX;
-		this.localPlayer.waypointsZ[0] = targetZ;
-	}
-
-	private boolean applyLocalWalkCorrection(ORSCharacter player) {
-		if (!this.localWalkCorrectionActive || player != this.localPlayer) {
-			return false;
-		}
-
-		int dx = this.localWalkCorrectionTargetX - player.currentX;
-		int dz = this.localWalkCorrectionTargetZ - player.currentZ;
-		if (Math.abs(dx) <= LOCAL_WALK_CORRECTION_STEP_PIXELS && Math.abs(dz) <= LOCAL_WALK_CORRECTION_STEP_PIXELS) {
-			player.currentX = this.localWalkCorrectionTargetX;
-			player.currentZ = this.localWalkCorrectionTargetZ;
-			player.waypointIndexCurrent = 0;
-			player.waypointIndexNext = 0;
-			player.waypointsX[0] = player.currentX;
-			player.waypointsZ[0] = player.currentZ;
-			this.localWalkCorrectionActive = false;
-			return true;
-		}
-
-		player.currentX += clampInt(dx, -LOCAL_WALK_CORRECTION_STEP_PIXELS, LOCAL_WALK_CORRECTION_STEP_PIXELS);
-		player.currentZ += clampInt(dz, -LOCAL_WALK_CORRECTION_STEP_PIXELS, LOCAL_WALK_CORRECTION_STEP_PIXELS);
-		ORSCharacterDirection correctionDirection = directionForDelta(dx, dz);
-		if (correctionDirection != null) {
-			player.direction = correctionDirection;
-			player.animationNext = correctionDirection.rsDir;
-		}
-		++player.stepFrame;
-		return true;
-	}
-
-	private ORSCharacterDirection directionForDelta(int dx, int dz) {
-		int stepX = Integer.compare(dx, 0);
-		int stepZ = Integer.compare(dz, 0);
-		if (stepX > 0) {
-			if (stepZ > 0) return ORSCharacterDirection.SOUTH_WEST;
-			if (stepZ < 0) return ORSCharacterDirection.NORTH_WEST;
-			return ORSCharacterDirection.WEST;
-		}
-		if (stepX < 0) {
-			if (stepZ > 0) return ORSCharacterDirection.SOUTH_EAST;
-			if (stepZ < 0) return ORSCharacterDirection.NORTH_EAST;
-			return ORSCharacterDirection.EAST;
-		}
-		if (stepZ > 0) return ORSCharacterDirection.SOUTH;
-		if (stepZ < 0) return ORSCharacterDirection.NORTH;
-		return null;
 	}
 
 	/**
@@ -29250,26 +28968,6 @@ public final class mudclient implements Runnable {
 
 	public void setLocalPlayer(ORSCharacter p) {
 		this.localPlayer = p;
-	}
-
-	public boolean workbenchLocalWalkPredictionActive() {
-		return this.localWalkPredictionActive;
-	}
-
-	public boolean workbenchLocalWalkCorrectionActive() {
-		return this.localWalkCorrectionActive;
-	}
-
-	public int workbenchLocalWalkPredictionCount() {
-		return this.localWalkPredictionCount;
-	}
-
-	public int workbenchLocalWalkPredictionConfirmedIndex() {
-		return this.localWalkPredictionConfirmedIndex;
-	}
-
-	public int workbenchLocalWalkPredictionQueuedLastIndex() {
-		return this.localWalkPredictionQueuedLastIndex;
 	}
 
 	public int getMouseX() {

@@ -27,13 +27,17 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-20 - Removed local walk prediction experiment
+
+Removed the PC client's Phase 3 local walk prediction and reconciliation experiment after playtesting showed it made movement feel unnatural. Local-player movement again renders only from authoritative server `PLAYER_COORDS` updates, while the retained responsiveness work is limited to frame pacing, smooth camera, remote/NPC render interpolation, the optional client-only click marker, and the FPS overlay. No server tick rate, opcode shape, pathfinding, movement speed, combat timing, schema, or cache asset changed. Files: `mudclient.java`, `WorkbenchServer.java`. Reversibility is restoring the removed prediction helpers and workbench telemetry from the prior checkpoint.
+
 ### 2026-06-20 - Instant input feedback and FPS overlay
 
 Added client-only feedback for accepted local walk/action path sends: when enabled in Advanced Settings > Interface, the client shows a short-lived projected ground marker on the resolved path destination while waiting for the server-authoritative result. The marker is off by default, persists in local `clientSettings.conf`, and clears on arrival, timeout, region rebase, or disabling the setting; inventory, combat, dialogue, trading, pathfinding, movement speed, packets/opcodes, server ticks, and game state remain server-confirmed. Also made a small in-game FPS readout always visible for responsiveness testing, positioned below the location plaque. Files: `mudclient.java`. Reversibility is removing the pending marker helpers/settings action and FPS overlay call.
 
 ### 2026-06-20 - Remote entity movement interpolation
 
-Changed desktop/client presentation for non-local player and NPC movement from a fixed `C_MOVE_PER_FRAME` pixel step to an elapsed-time pixel budget with fractional carry, so remote entities keep the same server-authoritative waypoint targets while gliding at a steadier visual speed across variable client frame pacing. The local player remains on the existing authoritative movement path, local speculative walk prediction stays opt-in, and no server tick rate, packet/opcode shape, combat timing, pathfinding, schema, or cache asset changed. Files: `mudclient.java`. Reversibility is restoring the remote player/NPC loops to use `Config.C_MOVE_PER_FRAME` directly.
+Changed desktop/client presentation for non-local player and NPC movement from a fixed `C_MOVE_PER_FRAME` pixel step to an elapsed-time pixel budget with fractional carry, so remote entities keep the same server-authoritative waypoint targets while gliding at a steadier visual speed across variable client frame pacing. The local player remains on the existing authoritative movement path, and no server tick rate, packet/opcode shape, combat timing, pathfinding, schema, or cache asset changed. Files: `mudclient.java`. Reversibility is restoring the remote player/NPC loops to use `Config.C_MOVE_PER_FRAME` directly.
 
 ### 2026-06-20 - Tiered hit-splat feedback
 

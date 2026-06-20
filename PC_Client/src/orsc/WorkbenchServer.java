@@ -538,14 +538,7 @@ final class WorkbenchServer {
 		json.append("\"groupId\":").append(player.groupID).append(",");
 		json.append("\"admin\":").append(player.isAdmin()).append(",");
 		json.append("\"dev\":").append(player.isDev()).append(",");
-		json.append("\"mod\":").append(player.isMod()).append(",");
-		json.append("\"movement\":{");
-		json.append("\"predictionActive\":").append(client.workbenchLocalWalkPredictionActive()).append(",");
-		json.append("\"correctionActive\":").append(client.workbenchLocalWalkCorrectionActive()).append(",");
-		json.append("\"predictionCount\":").append(client.workbenchLocalWalkPredictionCount()).append(",");
-		json.append("\"confirmedIndex\":").append(client.workbenchLocalWalkPredictionConfirmedIndex()).append(",");
-		json.append("\"queuedLastIndex\":").append(client.workbenchLocalWalkPredictionQueuedLastIndex());
-		json.append("}");
+		json.append("\"mod\":").append(player.isMod());
 		json.append("}");
 	}
 
