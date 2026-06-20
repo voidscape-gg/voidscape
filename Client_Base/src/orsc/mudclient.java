@@ -451,7 +451,7 @@ public final class mudclient implements Runnable {
 	private final int[] pathX = new int[8000];
 	private final int[] pathZ = new int[8000];
 	private static final int LOCAL_WALK_PREDICTION_TRACK_STEPS = 32;
-	private static final int LOCAL_WALK_PREDICTION_QUEUE_STEPS = 7;
+	private static final int LOCAL_WALK_PREDICTION_QUEUE_STEPS = 1;
 	private static final long LOCAL_WALK_PREDICTION_START_GRACE_MS = 1150L;
 	private static final long LOCAL_WALK_PREDICTION_STALL_CLEAR_MS = 1300L;
 	private static final int LOCAL_WALK_CORRECTION_STEP_PIXELS = 8;
