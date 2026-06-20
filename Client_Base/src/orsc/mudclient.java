@@ -455,6 +455,7 @@ public final class mudclient implements Runnable {
 	private static final long LOCAL_WALK_PREDICTION_START_GRACE_MS = 1150L;
 	private static final long LOCAL_WALK_PREDICTION_STALL_CLEAR_MS = 1300L;
 	private static final int LOCAL_WALK_CORRECTION_STEP_PIXELS = 8;
+	private static final boolean LOCAL_WALK_PREDICTION_ENABLED = Boolean.getBoolean("voidscape.localWalkPrediction");
 	private final int[] localWalkPredictionWorldX = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private final int[] localWalkPredictionWorldZ = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private int localWalkPredictionCount = 0;
@@ -28432,7 +28433,8 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean canPredictLocalGroundWalk(int pathCount) {
-		return this.currentViewMode == GameMode.GAME
+		return LOCAL_WALK_PREDICTION_ENABLED
+			&& this.currentViewMode == GameMode.GAME
 			&& this.localPlayer != null
 			&& this.world != null
 			&& this.world.playerAlive
