@@ -456,6 +456,8 @@ public final class mudclient implements Runnable {
 	private static final long LOCAL_WALK_PREDICTION_STALL_CLEAR_MS = 1300L;
 	private static final int LOCAL_WALK_CORRECTION_STEP_PIXELS = 8;
 	private static final boolean LOCAL_WALK_PREDICTION_ENABLED = Boolean.getBoolean("voidscape.localWalkPrediction");
+	private static final double REMOTE_ENTITY_MOVEMENT_FRAME_MILLIS = 20.0D;
+	private static final double REMOTE_ENTITY_MOVEMENT_MAX_ELAPSED_MILLIS = 80.0D;
 	private final int[] localWalkPredictionWorldX = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private final int[] localWalkPredictionWorldZ = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private int localWalkPredictionCount = 0;
@@ -471,6 +473,8 @@ public final class mudclient implements Runnable {
 	private boolean localWalkCorrectionActive = false;
 	private int localWalkCorrectionTargetX = 0;
 	private int localWalkCorrectionTargetZ = 0;
+	private long remoteEntityMoveLastNs = 0L;
+	private double remoteEntityMoveCarryPixels = 0.0D;
 
 	// World-map auto-walker route (slice 2). Populated by SEND_WORLD_WALK_ROUTE.
 	// Slice 5 renders this as a polyline overlay on the world map panel.
@@ -21677,8 +21681,10 @@ public final class mudclient implements Runnable {
 				int waypointIndexNext;
 				int stepsToMove;
 				int amountToMove;
+				int remoteEntityMovePixels = nextRemoteEntityMovePixels();
 				for (updateIndex = 0; updateIndex < this.playerCount; ++updateIndex) {
 					updateEntity = this.players[updateIndex];
+					boolean isLocalPlayer = updateEntity == this.localPlayer;
 					boolean correctionMovingLocalPlayer = applyLocalWalkCorrection(updateEntity);
 					if (!correctionMovingLocalPlayer) {
 						waypointIndexCurrent = (1 + updateEntity.waypointIndexCurrent) % 10;
@@ -21693,12 +21699,13 @@ public final class mudclient implements Runnable {
 								stepsToMove = 10 + waypointIndexCurrent - waypointIndexNext;
 							}
 
-							amountToMove = Config.C_MOVE_PER_FRAME;
+							amountToMove = isLocalPlayer ? Config.C_MOVE_PER_FRAME : remoteEntityMovePixels;
 							if (stepsToMove > 2) {
 								amountToMove = stepsToMove * amountToMove - amountToMove;
 							}
 
-							if (updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX <= this.tileSize * 3
+							if (amountToMove > 0
+								&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX <= this.tileSize * 3
 								&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ <= this.tileSize * 3
 								&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX >= -this.tileSize * 3
 								&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ >= -this.tileSize * 3 && stepsToMove <= 8 * S_MAX_WALKING_SPEED) {
@@ -21748,7 +21755,7 @@ public final class mudclient implements Runnable {
 									&& updateEntity.currentZ - updateEntity.waypointsZ[waypointIndexNext] > -amountToMove) {
 									updateEntity.currentZ = updateEntity.waypointsZ[waypointIndexNext];
 								}
-							} else {
+							} else if (amountToMove > 0) {
 								updateEntity.currentX = updateEntity.waypointsX[waypointIndexNext];
 								updateEntity.currentZ = updateEntity.waypointsZ[waypointIndexNext];
 							}
@@ -21809,12 +21816,13 @@ public final class mudclient implements Runnable {
 							stepsToMove = waypointIndexCurrent - waypointIndexNext;
 						}
 
-						amountToMove = Config.C_MOVE_PER_FRAME;
+						amountToMove = remoteEntityMovePixels;
 						if (stepsToMove > 2) {
 							amountToMove = (stepsToMove - 1) * amountToMove;
 						}
 
-						if (this.tileSize * 3 >= updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX
+						if (amountToMove > 0
+							&& this.tileSize * 3 >= updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX
 							&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ <= this.tileSize * 3
 							&& updateEntity.waypointsX[waypointIndexNext] - updateEntity.currentX >= -this.tileSize * 3
 							&& updateEntity.waypointsZ[waypointIndexNext] - updateEntity.currentZ >= -this.tileSize * 3 && stepsToMove <= 8) {
@@ -21863,7 +21871,7 @@ public final class mudclient implements Runnable {
 								&& -amountToMove < updateEntity.currentZ - updateEntity.waypointsZ[waypointIndexNext]) {
 								updateEntity.currentZ = updateEntity.waypointsZ[waypointIndexNext];
 							}
-						} else {
+						} else if (amountToMove > 0) {
 							updateEntity.currentX = updateEntity.waypointsX[waypointIndexNext];
 							updateEntity.currentZ = updateEntity.waypointsZ[waypointIndexNext];
 						}
@@ -28380,6 +28388,23 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var13, "client.DD(" + x1 + ',' + walkToEntity + ',' + startX + ',' + z1 + ',' + startZ
 				+ ',' + x2 + ',' + reachBorder + ',' + z2 + ',' + "dummy" + ')');
 		}
+	}
+
+	private int nextRemoteEntityMovePixels() {
+		long nowNs = System.nanoTime();
+		if (this.remoteEntityMoveLastNs == 0L) {
+			this.remoteEntityMoveLastNs = nowNs;
+			return Config.C_MOVE_PER_FRAME;
+		}
+
+		double elapsedMillis = (nowNs - this.remoteEntityMoveLastNs) / 1000000.0D;
+		this.remoteEntityMoveLastNs = nowNs;
+		elapsedMillis = Math.max(0.0D, Math.min(REMOTE_ENTITY_MOVEMENT_MAX_ELAPSED_MILLIS, elapsedMillis));
+		double movePixels = this.remoteEntityMoveCarryPixels
+			+ Config.C_MOVE_PER_FRAME * elapsedMillis / REMOTE_ENTITY_MOVEMENT_FRAME_MILLIS;
+		int wholePixels = (int) movePixels;
+		this.remoteEntityMoveCarryPixels = movePixels - wholePixels;
+		return wholePixels;
 	}
 
 	private void beginLocalWalkPrediction(int startX, int startZ, int pathCount) {

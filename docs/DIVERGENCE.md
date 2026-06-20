@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-20 - Remote entity movement interpolation
+
+Changed desktop/client presentation for non-local player and NPC movement from a fixed `C_MOVE_PER_FRAME` pixel step to an elapsed-time pixel budget with fractional carry, so remote entities keep the same server-authoritative waypoint targets while gliding at a steadier visual speed across variable client frame pacing. The local player remains on the existing authoritative movement path, local speculative walk prediction stays opt-in, and no server tick rate, packet/opcode shape, combat timing, pathfinding, schema, or cache asset changed. Files: `mudclient.java`. Reversibility is restoring the remote player/NPC loops to use `Config.C_MOVE_PER_FRAME` directly.
+
 ### 2026-06-20 - Forced launcher refresh for stale beta clients
 
 Tightened hosted beta client-version enforcement after temporary beta-admin accounts could bypass `enforce_custom_client_version` and keep logging in with stale custom clients. The server now uses one shared `requiresClientUpdate` check for login, registration, and live player ticks, so any connected stale client receives a clear launcher-relaunch message, a short system-update timer when supported, and then a forced disconnect. The desktop client now treats login response `CLIENT_UPDATED` as a hard update stop: it shows the update notice briefly and closes so relaunching through the Voidscape launcher redownloads the current manifest payload. `CLIENT_VERSION` and voidbot moved to `10115` to force this binary behavior into the hosted update path. No new packets, opcodes, schema, cache archive, or gameplay rules changed; reversibility is restoring admin bypass semantics, dropping the live tick kick, and returning the version to `10114`.
