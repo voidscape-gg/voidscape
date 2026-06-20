@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-19 - Beta FarmSim loot projections
+
+Added a beta-only FarmSim workflow for NPC drop-rate tuning. Testers can apply melee-only `::farmkit` presets at flat 40/60/80/99 Attack/Strength/Defense/Hits, with ranged/prayer/magic reset to 1 and the agreed addy/rune/ruby-ammy gear, kill a representative cluster of NPCs, then run `::farmsim` to project their observed kill pace into a one-hour expected-loot popup with item sprites and quantities. The server samples real NPC kills, uses the authoritative drop tables plus bones/ashes and existing stackable-drop boosts, and sends the client UI through a hidden `@vsfarmsim@` server-message token consumed before chat display. Files: `FarmSim.java`, `Npc.java`, `RegularPlayer.java`, `BetaOnboardingGuide.java`, `mudclient.java`, `PacketHandler.java`, `Commands.md`, beta guide, and networking docs. No opcode, packet shape, cache asset, schema, economy persistence, or client-version bump changed; reversibility is removing the commands/sample hook and client hidden-message modal.
+
 ### 2026-06-19 - Sir Charles presentation and fight banter
 
 Renamed the visible Void Arena DM King NPC definitions and player-facing challenge text to Sir Charles while keeping the internal DM King class names, ids, cache keys, and metadata channel stable for compatibility. Lobby talk now uses a shorter 256-combination British taunt pool, active fights add rate-limited overhead quips keyed to player food, player hitpoints, probable missed Fire Blast casts, Sir Charles' own low-food state, player-name jabs, and occasional random duel banter, and the client can now opt NPC definitions into player-composite rendering so Sir Charles' rune large helmet and other player equipment layers render from every direction. This is a visible NPC-definition/client-rendering/content change only; no opcode, packet shape, cache archive, Elo/ranked table, economy, or item-loss behavior changed.

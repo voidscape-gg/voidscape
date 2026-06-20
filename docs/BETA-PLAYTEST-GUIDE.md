@@ -117,6 +117,14 @@ These do not require admin rank.
 | Command | Use |
 |---|---|
 | `::beta` | Reopen the beta guide menu for commands, coords, items, and features to try. |
+| `::farmkit 40` | Apply flat 40 Attack/Strength/Defense/Hits, reset ranged/prayer/magic to 1, and equip full adamant, adamant battle axe, and ruby strength amulet. |
+| `::farmkit 60` | Apply flat 60 melee stats, reset ranged/prayer/magic to 1, and equip full adamant, adamant 2H, and ruby strength amulet. |
+| `::farmkit 80` | Apply flat 80 melee stats, reset ranged/prayer/magic to 1, and equip full adamant, rune battle axe, and ruby strength amulet. |
+| `::farmkit 99` | Apply flat 99 melee stats, reset ranged/prayer/magic to 1, and equip full rune, rune 2H, and ruby strength amulet. |
+| `::farmsim start` | Reset your FarmSim sample before testing one area or NPC group. |
+| `::farmsim` | Project your sampled NPC kills into a one-hour expected-loot popup with item sprites and quantities. |
+| `::farmsim 30m` | Project the same sample over another duration from 5 minutes to 4 hours. |
+| `::farmsim status` | Show what NPCs are currently in your FarmSim sample. |
 | `::g <message>` | Send simplified global chat with your IP country flag beside your name. |
 | `::rested` | Show rested-XP pool and cap status. |
 | `::titles` | Open the title catalogue UI. |
@@ -195,6 +203,45 @@ Useful drop test example:
 ::dropwave 67 10 3   # level-32 hobgoblins
 ```
 
+## FarmSim Drop-Rate Testing
+
+Use this when tuning whether an NPC group feels worth farming for one hour. The projection uses your real sampled kill pace, so walking, spawn spacing, competition, missed hits, defense, and weapon speed all matter.
+
+1. Pick one area or one NPC group to test.
+2. Apply one melee kit: `::farmkit 40`, `::farmkit 60`, `::farmkit 80`, or `::farmkit 99`.
+3. Stand where a normal player would farm that group.
+4. Use `::farmsim start` if you want to reset without changing kits.
+5. Kill a small representative sample. Aim for at least 5-10 low-level kills or 3-5 slower kills.
+6. Run `::farmsim`.
+7. Screenshot the popup and include the kit, location, NPCs, sample size, and whether the area felt too slow, too crowded, or too rewarding.
+
+Good starter FarmSim routes:
+
+| Kit | Suggested NPCs | Coordinates / area | What this checks |
+|---|---|---:|---|
+| 40 | Goblins | Varrock/Lumbridge outskirts | Low-level money, runes, arrows, and visible junk drops. |
+| 40 | Cows or men | Lumbridge / nearby towns | Very early bones, hides, food pacing, and baseline starter farming. |
+| 60 | Hobgoblins | Wilderness hobgoblins `(217,255)` | Midgame combat drops, spawn pressure, and Wilderness crowd tuning. |
+| 60 | Skeletons | Edgeville dungeon-style routes | Bone drops plus rune/coin pacing for slower low-mid NPCs. |
+| 80 | Lesser demons | Karamja / demon spots | Rare-table feel, rune/coin value, and longer kill samples. |
+| 80 | Void dungeon NPCs | Void Dungeon `72,3252` | Custom route value and unsafe-area reward pressure. |
+| 99 | Dragons or high demons | Existing boss/high-combat routes | High-stat hourly loot ceiling and long-respawn pain points. |
+| 99 | Void Knight / custom boss routes | Void Enclave boss paths | Boss-adjacent pacing, supply friction, and reward expectations. |
+
+Report FarmSim findings like this:
+
+```text
+FarmSim:
+Kit:
+Area/coords:
+NPCs:
+Sample kills:
+Projection duration:
+Screenshot:
+Felt too low/fair/too high:
+Notes on spawns, walking, banking, competition:
+```
+
 ## Coordinates
 
 Use exact coordinates with `::goto <x> <y>`.
@@ -230,6 +277,7 @@ Ask each tester to try a few of these instead of everyone doing the same route.
 | Auction House UI | Use the Edgeville auctioneer or `::quickauction`; browse categories, inspect item cards, seed fixture data if needed. |
 | Titles | Open `::titles`, page through categories, click a title for requirements, equip one, and confirm overhead name stays one line. |
 | Rare drop beam | Toggle client loot beams, add/remove items with `::lootbeam`, and spawn/drop beam-worthy items for visuals. |
+| FarmSim projections | Use `::farmkit`, kill a few NPCs in one area, run `::farmsim`, screenshot the item-sprite popup, and report whether the projected hour feels fair. |
 | Appearance colors | Create or change appearance; verify only Voidscape hair colors appear, classic clothing colors remain, muted Voidscape clothing colors are appended, and grounded skin tones render cleanly. |
 | Global chat flags | Send `::g test`, confirm the flag icon appears beside the username, then use the wrench settings panel to toggle Country flag off/on. |
 | Dynamic wilderness spawns | Stand at `(217,255)`, use `::wildhobdebug 4` or real unique IPs, and watch for the purple area message. |

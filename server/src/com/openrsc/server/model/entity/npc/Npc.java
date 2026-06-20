@@ -4,6 +4,7 @@ import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.ItemProvenanceEvent;
@@ -394,6 +395,7 @@ public class Npc extends Mob {
 		owner.getWorld().getServer().getAchievementSystem().checkAndIncSlayNpcTasks(owner, this);
 		owner.incNpcKills();
 		BalanceTelemetry.recordNpcKill(owner, this);
+		FarmSim.recordNpcKill(owner, this);
 
 		//If NPC kill messages are enabled and the filter is enabled and the NPC is in the list of NPCs, display the messages,
 		//otherwise we will display the message for all NPCs if NPC kill messages are enabled if there is no filter.

@@ -82,6 +82,16 @@ public final class mudclient implements Runnable {
 		long denominator;
 	}
 
+	private static final class FarmSimItem {
+		final int itemId;
+		final long amount;
+
+		FarmSimItem(int itemId, long amount) {
+			this.itemId = itemId;
+			this.amount = amount;
+		}
+	}
+
 	private static final class BestiaryNpcSearchEntry {
 		final int npcId;
 		final String name;
@@ -316,6 +326,7 @@ public final class mudclient implements Runnable {
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
+	private static final String VOIDSCAPE_FARMSIM_PREFIX = "@vsfarmsim@";
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
 	private static final long ANDROID_SMOKE_SHOP_STATE_LOG_INTERVAL_MS = 1000L;
 	private static final int VOIDSCAPE_TOP_TAB_SIZE = 32;
@@ -1144,6 +1155,7 @@ public final class mudclient implements Runnable {
 	private boolean showDialogShop = false;
 	private boolean showDialogTrade = false;
 	private boolean showDialogTradeConfirm = false;
+	private boolean showDialogFarmSim = false;
 	private boolean showDialogVoidArenaDeathMatch = false;
 	private int voidArenaDeathMatchTargetIndex = -1;
 	private String voidArenaDeathMatchTargetName = "";
@@ -1199,6 +1211,11 @@ public final class mudclient implements Runnable {
 	private int bestiaryCachedNpcCount = -1;
 	private int bestiarySearchIndexCatalogVersion = -1;
 	private int bestiaryCachedSearchCatalogVersion = -1;
+	private String farmSimTitle = "";
+	private String farmSimSubtitle = "";
+	private String farmSimDetails = "";
+	private final ArrayList<FarmSimItem> farmSimItems = new ArrayList<>();
+	private int farmSimScrollPixels = 0;
 	private int expShared = 0;
 	private int petFatigue = 0;
 	private long openPkPoints = 0;
@@ -6079,6 +6096,136 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException var6) {
 			throw GenUtil.makeThrowable(var6, "client.V(" + var1 + ')');
 		}
+	}
+
+	private int farmSimDialogWidth() {
+		return Math.min(520, Math.max(320, getGameWidth() - 24));
+	}
+
+	private int farmSimDialogHeight() {
+		return Math.min(360, Math.max(250, getGameHeight() - 96));
+	}
+
+	private int farmSimDialogX() {
+		return (getGameWidth() - farmSimDialogWidth()) / 2;
+	}
+
+	private int farmSimDialogY() {
+		int height = farmSimDialogHeight();
+		int y = Math.max(64, (getGameHeight() - height) / 2);
+		if (y + height > getGameHeight() - 12) {
+			y = Math.max(8, getGameHeight() - height - 12);
+		}
+		return y;
+	}
+
+	private int farmSimCloseSize() {
+		return 22;
+	}
+
+	private int farmSimCloseX() {
+		return farmSimDialogX() + farmSimDialogWidth() - farmSimCloseSize() - 14;
+	}
+
+	private int farmSimCloseY() {
+		return farmSimDialogY() + 8;
+	}
+
+	private boolean isFarmSimCloseHit(int x, int y) {
+		int dialogX = farmSimDialogX();
+		int dialogY = farmSimDialogY();
+		int dialogWidth = farmSimDialogWidth();
+		return x >= dialogX + dialogWidth - 58 && x <= dialogX + dialogWidth
+			&& y >= dialogY && y <= dialogY + 56;
+	}
+
+	private void closeFarmSimDialog() {
+		this.showDialogFarmSim = false;
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+	}
+
+	private void drawDialogFarmSim() {
+		int width = farmSimDialogWidth();
+		int height = farmSimDialogHeight();
+		int x = farmSimDialogX();
+		int y = farmSimDialogY();
+		int closeX = farmSimCloseX();
+		int closeY = farmSimCloseY();
+		int closeSize = farmSimCloseSize();
+		boolean closeHover = isFarmSimCloseHit(this.mouseX, this.mouseY);
+
+		this.getSurface().drawBoxAlpha(x, y, width, height, 0x08080A, 235);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0xD8C27A);
+		this.getSurface().drawLineHoriz(x, y + 56, width, 0x3B3148);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimTitle, width - 58, 1), x + 12, y + 20, 0xF3D46B, 1);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimSubtitle, width - 24, 0), x + 12, y + 36, 0xD9D5CB, 0);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimDetails, width - 24, 0), x + 12, y + 51, 0x9FD7FF, 0);
+		this.getSurface().drawBoxAlpha(closeX, closeY, closeSize, closeSize, closeHover ? 0x6E1E1E : 0x221A24, 220);
+		this.getSurface().drawBoxBorder(closeX, closeSize, closeY, closeSize, closeHover ? 0xFF7070 : 0x7D6F8B);
+		this.getSurface().drawColoredStringCentered(closeX + closeSize / 2, "X", closeHover ? 0xFF7070 : 0xFFFFFF,
+			0, 1, closeY + closeSize / 2 + 4);
+
+		if (this.mouseButtonClick == 1 && closeHover) {
+			closeFarmSimDialog();
+			return;
+		}
+
+		int pad = 12;
+		int gridX = x + pad;
+		int gridY = y + 66;
+		int gridW = width - pad * 2;
+		int footerH = 24;
+		int gridH = Math.max(1, height - (gridY - y) - footerH);
+		if (this.farmSimItems.isEmpty()) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "No projected item quantities", 0xC96B6B, 0, 1,
+				gridY + gridH / 2);
+		} else {
+			int cell = 52;
+			int columns = Math.max(4, gridW / cell);
+			cell = Math.max(42, Math.min(58, gridW / columns));
+			int rows = (this.farmSimItems.size() + columns - 1) / columns;
+			int contentH = rows * cell;
+			int maxScroll = Math.max(0, contentH - gridH);
+			this.farmSimScrollPixels = Math.max(0, Math.min(this.farmSimScrollPixels, maxScroll));
+			int fullGridW = columns * cell;
+			int drawX = gridX + Math.max(0, (gridW - fullGridW) / 2);
+			int drawY = gridY - this.farmSimScrollPixels;
+			String hoverText = "";
+
+			this.getSurface().setClip(gridX, gridX + gridW, gridY + gridH, gridY);
+			for (int i = 0; i < this.farmSimItems.size(); i++) {
+				FarmSimItem item = this.farmSimItems.get(i);
+				int col = i % columns;
+				int row = i / columns;
+				int cellX = drawX + col * cell;
+				int cellY = drawY + row * cell;
+				if (cellY + cell < gridY || cellY > gridY + gridH) {
+					continue;
+				}
+				boolean hover = this.mouseX >= cellX && this.mouseX < cellX + cell
+					&& this.mouseY >= cellY && this.mouseY < cellY + cell;
+				this.getSurface().drawBoxAlpha(cellX + 2, cellY + 2, cell - 4, cell - 4,
+					hover ? 0x2D2636 : 0x111116, hover ? 210 : 150);
+				drawVoidscapeBestiaryItemCell(item.itemId, item.amount, cellX, cellY, cell);
+				if (hover) {
+					hoverText = bestiaryItemName(item.itemId) + " x " + formatExactLong(item.amount);
+				}
+			}
+			this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
+			if (maxScroll > 0) {
+				drawVoidscapeBestiaryScrollbar(x + width - 10, gridY, 6, gridH, contentH, this.farmSimScrollPixels);
+			}
+			if (hoverText.length() > 0) {
+				this.getSurface().drawColoredStringCentered(x + width / 2, bestiaryFitText(hoverText, width - 30, 0),
+					0xFFFFFF, 0, 0, y + height - 9);
+			} else {
+				this.getSurface().drawColoredStringCentered(x + width / 2, "Scroll for more drops. Esc or X closes.",
+					0x9F8DB7, 0, 0, y + height - 9);
+			}
+		}
+		this.mouseButtonClick = 0;
 	}
 
 	private void drawDialogShop() {
@@ -11558,6 +11705,39 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
+	final boolean handleVoidscapeFarmSimMessage(String message) {
+		if (message == null || !message.startsWith(VOIDSCAPE_FARMSIM_PREFIX)) {
+			return false;
+		}
+		String payload = message.substring(VOIDSCAPE_FARMSIM_PREFIX.length());
+		String[] parts = payload.split("\\|", 5);
+		if (parts.length < 5 || !"v1".equals(parts[0])) {
+			return true;
+		}
+		this.farmSimTitle = parts[1];
+		this.farmSimSubtitle = parts[2];
+		this.farmSimDetails = parts[3];
+		this.farmSimItems.clear();
+		if (parts[4] != null && parts[4].length() > 0) {
+			String[] items = parts[4].split(";");
+			for (String item : items) {
+				String[] pair = item.split(",", 2);
+				if (pair.length != 2) {
+					continue;
+				}
+				int itemId = parseIntOrDefault(pair[0], -1);
+				long amount = parseLongOrDefault(pair[1], 0L);
+				if (itemId >= 0 && itemId < EntityHandler.itemCount() && amount > 0L) {
+					this.farmSimItems.add(new FarmSimItem(itemId, amount));
+				}
+			}
+		}
+		this.farmSimScrollPixels = 0;
+		this.showDialogFarmSim = true;
+		this.mouseButtonClick = 0;
+		return true;
+	}
+
 	final boolean handleVoidArenaRatingMessage(String message) {
 		if (message == null || !message.startsWith(VOIDSCAPE_ARENA_PREFIX)) {
 			return false;
@@ -13388,6 +13568,8 @@ public final class mudclient implements Runnable {
 				this.setInitLoginCleared(false);
 			} else if (this.showDialogServerMessage) {
 				this.drawDialogServerMessage((byte) -115);
+			} else if (this.showDialogFarmSim) {
+				this.drawDialogFarmSim();
 			} else if (this.showUiWildWarn != 1) {
 				if (this.isShowDialogBank() && this.combatTimeout == 0 && !C_CUSTOM_UI) {
 					this.drawDialogBank();
@@ -18225,10 +18407,53 @@ public final class mudclient implements Runnable {
 	}
 
 	private String bestiaryItemName(int itemId) {
+		String herbName = unidentifiedHerbDisplayName(itemId);
+		if (herbName != null) {
+			return herbName;
+		}
 		if (itemId >= 0 && itemId < EntityHandler.itemCount()) {
 			return EntityHandler.getItemDef(itemId).getName();
 		}
 		return "Item #" + itemId;
+	}
+
+	private String unidentifiedHerbDisplayName(int itemId) {
+		switch (itemId) {
+			case 165:
+				return "Unidentified Guam leaf";
+			case 435:
+				return "Unidentified Marrentill";
+			case 436:
+				return "Unidentified Tarromin";
+			case 437:
+				return "Unidentified Harralander";
+			case 438:
+				return "Unidentified Ranarr Weed";
+			case 439:
+				return "Unidentified Irit Leaf";
+			case 440:
+				return "Unidentified Avantoe";
+			case 441:
+				return "Unidentified Kwuarm";
+			case 442:
+				return "Unidentified Cadantine";
+			case 443:
+				return "Unidentified Dwarf Weed";
+			case 815:
+				return "Unidentified Snake Weed";
+			case 817:
+				return "Unidentified Ardrigal";
+			case 819:
+				return "Unidentified Sito Foil";
+			case 821:
+				return "Unidentified Volencia Moss";
+			case 823:
+				return "Unidentified Rogues Purse";
+			case 933:
+				return "Unidentified Torstol";
+			default:
+				return null;
+		}
 	}
 
 	private int bestiaryContentHeight(int width) {
@@ -21562,11 +21787,13 @@ public final class mudclient implements Runnable {
 				}
 
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
+						&& !this.showDialogFarmSim
 						&& this.showDialogVoidArenaDeathMatch) {
 						handleVoidArenaDeathMatchInput();
 					}
 
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
+						&& !this.showDialogFarmSim
 						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin()) {
 							handleVoidscapeChatTabClick();
@@ -21741,8 +21968,14 @@ public final class mudclient implements Runnable {
 					} else if (this.lastMouseButtonDown == 2) {
 						this.mouseButtonClick = 2;
 					}
+
+					if (this.showDialogFarmSim && this.mouseButtonClick == 1
+						&& isFarmSimCloseHit(this.mouseX, this.mouseY)) {
+						closeFarmSimDialog();
+					}
 					if (!this.showDialogMessage
 						&& !this.showDialogServerMessage
+						&& !this.showDialogFarmSim
 						&& !this.showDialogVoidArenaDeathMatch
 						&& mainComponent.checkMouseInput(getMouseX(), getMouseY(), getMouseButtonDown(),
 						getMouseClick()) && !this.isShowDialogBank()) {
@@ -21977,6 +22210,11 @@ public final class mudclient implements Runnable {
 
 			if (this.currentViewMode == GameMode.GAME && this.voidScoutActive && key == 27) {
 				sendVoidScoutCancel();
+				return;
+			}
+
+			if (this.currentViewMode == GameMode.GAME && this.showDialogFarmSim && key == 27) {
+				closeFarmSimDialog();
 				return;
 			}
 
@@ -26954,6 +27192,17 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
+	public boolean closeFarmSimDialogAt(int x, int y) {
+		if (!this.showDialogFarmSim) {
+			return false;
+		}
+		if (isFarmSimCloseHit(x, y)) {
+			closeFarmSimDialog();
+			return true;
+		}
+		return false;
+	}
+
 	public void setServerMessageBoxTop(boolean boxTop) {
 		this.serverMessageBoxTop = boxTop;
 	}
@@ -29083,6 +29332,11 @@ public final class mudclient implements Runnable {
 			x += x;
 		else if (x < -1)
 			x -= (-x);
+
+		if (this.showDialogFarmSim) {
+			this.farmSimScrollPixels = Math.max(0, this.farmSimScrollPixels + x * 20);
+			return;
+		}
 		// World-map auto-walker (slice 5): scroll wheel zooms about the cursor.
 		if (this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 			this.worldMapPanel.adjustZoom(x, this.mouseX, this.mouseY);

@@ -114,6 +114,7 @@ public final class BetaOnboardingGuide {
 				"Teleports: hubs, bosses, and test areas",
 				"Stats: set levels and restore",
 				"Items: spawn beta kits",
+				"FarmSim: melee kits and loot projections",
 				"Checklist: what to test",
 				"Reference: commands, coords, item IDs",
 				"Close beta toolkit");
@@ -129,9 +130,12 @@ public final class BetaOnboardingGuide {
 					showItems(player);
 					break;
 				case 3:
-					ActionSender.sendBox(player, checklistText(), true);
+					FarmSim.showMenu(player);
 					break;
 				case 4:
+					ActionSender.sendBox(player, checklistText(), true);
+					break;
+				case 5:
 					ActionSender.sendBox(player, referenceText(), true);
 					break;
 				default:
@@ -417,7 +421,8 @@ public final class BetaOnboardingGuide {
 
 	private static String referenceText() {
 		return "@yel@Beta reference% %"
-			+ "@whi@Commands: @gre@::beta@whi@, @gre@::coords@whi@, @gre@::rested@whi@, @gre@::titles@whi@, @gre@::codes@whi@.%"
+			+ "@whi@Commands: @gre@::beta@whi@, @gre@::farmkit 40@whi@, @gre@::farmsim@whi@, @gre@::bug <message>@whi@.%"
+			+ "@whi@Commands: @gre@::coords@whi@, @gre@::rested@whi@, @gre@::titles@whi@, @gre@::codes@whi@.%"
 			+ "@whi@Coords: Lumbridge @gre@120 648@whi@, Vendor @gre@126 649@whi@, Edgeville @gre@217 449@whi@.%"
 			+ "@whi@Coords: Enclave @gre@113 314@whi@, Dungeon @gre@112 296@whi@, Arena @gre@600 2914@whi@.%"
 			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Colossus rift @gre@113 321@whi@.% %"

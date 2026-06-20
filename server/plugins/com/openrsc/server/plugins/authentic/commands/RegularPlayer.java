@@ -2,6 +2,7 @@ package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.content.BetaOnboardingGuide;
+import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
@@ -142,6 +143,10 @@ public final class RegularPlayer implements CommandTrigger {
 			reportBetaBug(player, args);
 		} else if (command.equalsIgnoreCase("beta") || command.equalsIgnoreCase("betaguide")) {
 			BetaOnboardingGuide.show(player);
+		} else if (command.equalsIgnoreCase("farmkit")) {
+			FarmSim.handleFarmKitCommand(player, args);
+		} else if (command.equalsIgnoreCase("farmsim") || command.equalsIgnoreCase("farmcal")) {
+			FarmSim.handleFarmSimCommand(player, args);
 		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
 			handleLootBeamCommand(player, args);
 		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {

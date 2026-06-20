@@ -657,7 +657,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 				if (!SwingUtilities.isRightMouseButton(var1)
 					&& (mudclient.closeWelcomeDialogAt(mudclient.mouseX, mudclient.mouseY)
-					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY))) {
+					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY)
+					|| mudclient.closeFarmSimDialogAt(mudclient.mouseX, mudclient.mouseY))) {
 					return;
 				}
 

@@ -840,7 +840,20 @@ Regular Player Commands
   - Usage: `::beta`
   - Alias: `::betaguide`
   - Opens the Voidscape beta tester toolkit.
-  - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, test checklist, common coordinates, and item IDs.
+  - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, FarmSim, test checklist, common coordinates, and item IDs.
+- farmkit
+  - Usage: `::farmkit 40`
+  - Usage: `::farmkit 60`
+  - Usage: `::farmkit 80`
+  - Usage: `::farmkit 99`
+  - Applies beta-only melee stat/gear kits for drop-rate testing, resets ranged/prayer/magic to 1, and resets the FarmSim sample.
+- farmsim
+  - Usage: `::farmsim`
+  - Usage: `::farmsim start`
+  - Usage: `::farmsim status`
+  - Usage: `::farmsim [minutes|30m|1h]`
+  - Alias: `::farmcal`
+  - Projects the current NPC-kill sample into an expected-loot popup using real observed kill pace and server drop tables.
 - bug
   - Usage: `::bug <what happened>`
   - Alias: `::reportbug`
