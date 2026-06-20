@@ -29,7 +29,7 @@ Keep entries terse. The git log has the details.
 
 ### 2026-06-20 - Instant input feedback and FPS overlay
 
-Added client-only feedback for accepted local walk/action path sends: the client now immediately turns the local sprite toward the target tile and shows a short-lived projected ground marker while waiting for the server-authoritative result. The marker clears on arrival, timeout, or region rebase; inventory, combat, dialogue, trading, pathfinding, movement speed, packets/opcodes, server ticks, and game state remain server-confirmed. Also made a small in-game FPS readout always visible for responsiveness testing. Files: `mudclient.java`. Reversibility is removing the pending marker/facing helpers and FPS overlay call.
+Added client-only feedback for accepted local walk/action path sends: when enabled in Advanced Settings > Interface, the client shows a short-lived projected ground marker on the resolved path destination while waiting for the server-authoritative result. The marker is off by default, persists in local `clientSettings.conf`, and clears on arrival, timeout, region rebase, or disabling the setting; inventory, combat, dialogue, trading, pathfinding, movement speed, packets/opcodes, server ticks, and game state remain server-confirmed. Also made a small in-game FPS readout always visible for responsiveness testing, positioned below the location plaque. Files: `mudclient.java`. Reversibility is removing the pending marker helpers/settings action and FPS overlay call.
 
 ### 2026-06-20 - Remote entity movement interpolation
 

@@ -323,6 +323,7 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
 	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
+	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
@@ -376,6 +377,7 @@ public final class mudclient implements Runnable {
 	public static int skillCount;
 	public static HashMap<String, File> soundCache = new HashMap<String, File>();
 	public static boolean optionSoundDisabled = true;
+	private static boolean optionPendingInputMarker = false;
 	static byte[][] s_kb = new byte[250][];
 	static int[] s_wb;
 	private static int FPS = 0;
@@ -1000,6 +1002,7 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_ACTION_HIDE_BONES = 1001;
 	private static final int ADVANCED_ACTION_EXPERIENCE_COUNTER = 1002;
 	private static final int ADVANCED_ACTION_CHAT_OVERLAY = 1003;
+	private static final int ADVANCED_ACTION_PENDING_INPUT_MARKER = 1004;
 	private int settingTab = SETTINGS_PROFILE_TAB;
 	private boolean settingsAdvancedMode = false;
 	private boolean showAdvancedSettingsWindow = false;
@@ -1435,10 +1438,18 @@ public final class mudclient implements Runnable {
 		if (chatOverlay != null && !chatOverlay.trim().isEmpty()) {
 			C_CHAT_OVERLAY = Boolean.parseBoolean(chatOverlay);
 		}
+		String pendingInputMarker = props.getProperty(CLIENT_SETTING_PENDING_INPUT_MARKER);
+		if (pendingInputMarker != null && !pendingInputMarker.trim().isEmpty()) {
+			optionPendingInputMarker = Boolean.parseBoolean(pendingInputMarker);
+		}
 	}
 
 	private static void saveChatOverlaySetting() {
 		saveClientSetting(CLIENT_SETTING_CHAT_OVERLAY, Boolean.toString(C_CHAT_OVERLAY));
+	}
+
+	private static void savePendingInputMarkerSetting() {
+		saveClientSetting(CLIENT_SETTING_PENDING_INPUT_MARKER, Boolean.toString(optionPendingInputMarker));
 	}
 
 	private static boolean isValidEmailAddress(String email) {
@@ -8598,7 +8609,9 @@ public final class mudclient implements Runnable {
 
 		String label = "FPS " + FPS;
 		int x = 7;
-		int y = 22;
+		int y = useVoidscapeHudSkin()
+			? voidscapeLocationPlaqueY() + voidscapeLocationPlaqueHeight() + 8
+			: 42;
 		int width = this.getSurface().stringWidth(1, label) + 12;
 		this.getSurface().drawBoxAlpha(x, y, width, 16, 0x050805, 150);
 		this.getSurface().drawBoxBorder(x, width, y, 16, 0x264836);
@@ -16156,6 +16169,7 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Inventory count", "Show bag total near inventory", C_INV_COUNT, 34);
 				rowY = drawAdvancedToggle(x, rowY, width, "Batch progress bar", "Show skilling batch progress", C_BATCH_PROGRESS_BAR, 24);
 				rowY = drawAdvancedToggle(x, rowY, width, "Side menu", "Use the side action overlay", C_SIDE_MENU_OVERLAY, 30);
+				rowY = drawAdvancedToggle(x, rowY, width, "Click marker", "Show pending walk/action tile", optionPendingInputMarker, ADVANCED_ACTION_PENDING_INPUT_MARKER);
 				rowY = drawAdvancedCycle(x, rowY, width, "Fight menu", getFightMenuModeName(), 32);
 				drawAdvancedCycle(x, rowY, width, "XP counter", getExperienceCounterModeName(), ADVANCED_ACTION_EXPERIENCE_COUNTER);
 				break;
@@ -16266,6 +16280,13 @@ public final class mudclient implements Runnable {
 			case ADVANCED_ACTION_CHAT_OVERLAY:
 				C_CHAT_OVERLAY = !C_CHAT_OVERLAY;
 				saveChatOverlaySetting();
+				break;
+			case ADVANCED_ACTION_PENDING_INPUT_MARKER:
+				optionPendingInputMarker = !optionPendingInputMarker;
+				if (!optionPendingInputMarker) {
+					clearPendingInputMarker();
+				}
+				savePendingInputMarkerSetting();
 				break;
 			case 34:
 				C_INV_COUNT = !C_INV_COUNT;
@@ -28441,6 +28462,8 @@ public final class mudclient implements Runnable {
 				this.pathZ[0] = z1;
 			}
 
+			int pendingMarkerLocalX = this.pathX[0];
+			int pendingMarkerLocalZ = this.pathZ[0];
 			int predictionStartX = startX;
 			int predictionStartZ = startZ;
 			int predictionPathCount = count;
@@ -28476,7 +28499,7 @@ public final class mudclient implements Runnable {
 			this.mouseWalkY = this.mouseY;
 			this.mouseWalkX = this.mouseX;
 			this.mouseClickXStep = -24;
-			beginPendingInputFeedback(startX, startZ);
+			beginPendingInputFeedback(pendingMarkerLocalX, pendingMarkerLocalZ);
 			if (!walkToEntity && !reachBorder) {
 				beginLocalWalkPrediction(predictionStartX, predictionStartZ, predictionPathCount);
 			}
@@ -28487,6 +28510,11 @@ public final class mudclient implements Runnable {
 	}
 
 	private void beginPendingInputFeedback(int localX, int localZ) {
+		if (!optionPendingInputMarker) {
+			clearPendingInputMarker();
+			return;
+		}
+
 		if (this.localPlayer == null || localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) {
 			clearPendingInputMarker();
 			return;
@@ -28496,7 +28524,6 @@ public final class mudclient implements Runnable {
 		this.pendingInputMarkerLocalX = localX;
 		this.pendingInputMarkerLocalZ = localZ;
 		this.pendingInputMarkerStartMillis = System.currentTimeMillis();
-		faceLocalPlayerToward(localX, localZ);
 	}
 
 	private void clearPendingInputMarker() {
@@ -28504,23 +28531,6 @@ public final class mudclient implements Runnable {
 		this.pendingInputMarkerLocalX = -1;
 		this.pendingInputMarkerLocalZ = -1;
 		this.pendingInputMarkerStartMillis = 0L;
-	}
-
-	private void faceLocalPlayerToward(int localX, int localZ) {
-		if (this.localPlayer == null
-			|| this.localPlayer.direction == ORSCharacterDirection.COMBAT_A
-			|| this.localPlayer.direction == ORSCharacterDirection.COMBAT_B) {
-			return;
-		}
-
-		int targetX = localX * this.tileSize + 64;
-		int targetZ = localZ * this.tileSize + 64;
-		ORSCharacterDirection direction = directionForDelta(targetX - this.localPlayer.currentX,
-			targetZ - this.localPlayer.currentZ);
-		if (direction != null) {
-			this.localPlayer.direction = direction;
-			this.localPlayer.animationNext = direction.rsDir;
-		}
 	}
 
 	private int localPlayerTileX() {
