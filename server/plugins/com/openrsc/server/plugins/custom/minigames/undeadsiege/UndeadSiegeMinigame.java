@@ -361,13 +361,15 @@ public final class UndeadSiegeMinigame implements KillNpcTrigger, PlayerDeathTri
 
 	void applyTemporaryCombatStats(Player player) {
 		Skills skills = player.getSkills();
-		int level = UndeadSiegeConfig.TEMPORARY_COMBAT_LEVEL;
-		int experience = skills.experienceForLevel(level);
 		for (int skill : temporarySkills()) {
+			int level = skill == Skill.MAGIC.id()
+				? UndeadSiegeConfig.TEMPORARY_MAGIC_LEVEL
+				: UndeadSiegeConfig.TEMPORARY_COMBAT_LEVEL;
+			int experience = skills.experienceForLevel(level);
 			skills.setExperienceAndLevel(skill, experience, level, false);
 		}
 		player.getPrayers().resetPrayers();
-		player.setPrayerStatePoints(level * 120);
+		player.setPrayerStatePoints(UndeadSiegeConfig.TEMPORARY_COMBAT_LEVEL * 120);
 		ActionSender.sendStats(player);
 		ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
 	}

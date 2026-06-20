@@ -18,89 +18,101 @@ public final class UndeadSiegeConfig {
 	public static final int NPC_REPOSITION_MIN_RADIUS = 2;
 	public static final int NPC_REPOSITION_MAX_RADIUS = 6;
 
-	public static final int ARENA_MIN_X = 158;
-	public static final int ARENA_MIN_Y = 247;
-	public static final int ARENA_MAX_X = 180;
-	public static final int ARENA_MAX_Y = 264;
-	public static final int CHASE_MIN_X = 156;
-	public static final int CHASE_MIN_Y = 245;
-	public static final int CHASE_MAX_X = 181;
-	public static final int CHASE_MAX_Y = 268;
+	public static final int ARENA_MIN_X = 579;
+	public static final int ARENA_MIN_Y = 99;
+	public static final int ARENA_MAX_X = 621;
+	public static final int ARENA_MAX_Y = 141;
+	public static final int CHASE_MIN_X = 579;
+	public static final int CHASE_MIN_Y = 99;
+	public static final int CHASE_MAX_X = 621;
+	public static final int CHASE_MAX_Y = 141;
 
 	public static final int EXIT_X = 113;
 	public static final int EXIT_Y = 318;
 
-	public static final int START_X = 169;
-	public static final int START_Y = 257;
+	public static final int START_X = 600;
+	public static final int START_Y = 122;
 
-	public static final int START_ARROW_COUNT = 200;
-	public static final int START_AIR_RUNES = 200;
-	public static final int START_FIRE_RUNES = 250;
-	public static final int START_DEATH_RUNES = 50;
+	public static final int START_BOLT_COUNT = 180;
+	public static final int START_AIR_RUNES = 10;
+	public static final int START_EARTH_RUNES = 10;
+	public static final int START_CHAOS_RUNES = 5;
 	public static final int START_SWORDFISH = 8;
 	public static final int TEMPORARY_COMBAT_LEVEL = 40;
+	public static final int TEMPORARY_MAGIC_LEVEL = 70;
 
-	public static final int SUPPLY_SWORDFISH_COST = 75;
-	public static final int SUPPLY_STRENGTH_COST = 150;
-	public static final int SUPPLY_RANGED_COST = 200;
-	public static final int SUPPLY_RUNES_COST = 250;
+	public static final int SUPPLY_TUNA_COST = 45;
+	public static final int SUPPLY_CAKE_COST = 60;
+	public static final int SUPPLY_SWORDFISH_COST = 100;
+	public static final int SUPPLY_BOLTS_COST = 75;
+	public static final int SUPPLY_CRUMBLE_RUNES_COST = 160;
+	public static final int SUPPLY_STAFF_COST = 120;
 
 	public static final int REWARD_COINS_PER_WAVE = 250;
 	public static final int REWARD_COINS_CAP = 10000;
 
 	static final int[] START_ITEM_IDS = {
-		ItemId.RUNE_2_HANDED_SWORD.id(),
-		ItemId.SHORTBOW.id(),
-		ItemId.IRON_ARROWS.id(),
-		ItemId.FULL_STRENGTH_POTION.id(),
+		ItemId.CROSSBOW.id(),
+		ItemId.CROSSBOW_BOLTS.id(),
+		ItemId.STAFF_OF_AIR.id(),
 		ItemId.AIR_RUNE.id(),
-		ItemId.FIRE_RUNE.id(),
-		ItemId.DEATH_RUNE.id(),
+		ItemId.EARTH_RUNE.id(),
+		ItemId.CHAOS_RUNE.id(),
+		ItemId.TUNA.id(),
+		ItemId.CAKE.id(),
 		ItemId.SWORDFISH.id()
 	};
 
 	static final Point[] START_TILES = {
-		Point.location(169, 257),
-		Point.location(168, 257),
-		Point.location(170, 257),
-		Point.location(169, 258)
+		Point.location(600, 121),
+		Point.location(599, 121),
+		Point.location(601, 121),
+		Point.location(600, 123)
 	};
 
 	static final Point[] SPAWN_TILES = {
-		Point.location(160, 248),
-		Point.location(166, 247),
-		Point.location(173, 247),
-		Point.location(178, 248),
-		Point.location(158, 252),
-		Point.location(158, 257),
-		Point.location(180, 256),
-		Point.location(180, 260),
-		Point.location(159, 263),
-		Point.location(163, 264),
-		Point.location(179, 262),
-		Point.location(176, 248)
+		Point.location(584, 106),
+		Point.location(590, 103),
+		Point.location(600, 102),
+		Point.location(610, 103),
+		Point.location(616, 107),
+		Point.location(618, 118),
+		Point.location(616, 132),
+		Point.location(609, 137),
+		Point.location(600, 138),
+		Point.location(591, 137),
+		Point.location(583, 132),
+		Point.location(582, 120),
+		Point.location(590, 110),
+		Point.location(610, 129)
 	};
 
 	static final Point[] APPROACH_TILES = {
-		Point.location(164, 252),
-		Point.location(166, 252),
-		Point.location(169, 253),
-		Point.location(172, 253),
-		Point.location(175, 252),
-		Point.location(162, 256),
-		Point.location(166, 256),
-		Point.location(169, 257),
-		Point.location(172, 257),
-		Point.location(176, 257),
-		Point.location(160, 260),
-		Point.location(164, 261),
-		Point.location(168, 260),
-		Point.location(172, 260),
-		Point.location(176, 260),
-		Point.location(179, 260),
-		Point.location(163, 263),
-		Point.location(170, 263),
-		Point.location(176, 263)
+		Point.location(590, 108),
+		Point.location(596, 108),
+		Point.location(600, 108),
+		Point.location(604, 108),
+		Point.location(610, 108),
+		Point.location(590, 114),
+		Point.location(596, 114),
+		Point.location(600, 114),
+		Point.location(604, 114),
+		Point.location(610, 114),
+		Point.location(588, 120),
+		Point.location(594, 120),
+		Point.location(600, 120),
+		Point.location(606, 120),
+		Point.location(612, 120),
+		Point.location(590, 126),
+		Point.location(596, 126),
+		Point.location(600, 126),
+		Point.location(604, 126),
+		Point.location(610, 126),
+		Point.location(590, 132),
+		Point.location(596, 132),
+		Point.location(600, 132),
+		Point.location(604, 132),
+		Point.location(610, 132)
 	};
 
 	public static Point exitTile() {

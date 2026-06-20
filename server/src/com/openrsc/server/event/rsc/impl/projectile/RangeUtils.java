@@ -188,6 +188,11 @@ public class RangeUtils {
     public static void handleArrowLossAndDrop(World world, Player player, Mob target, int damage, int arrowId) {
         // Void Bow uses itself as an ammo sentinel only against Void NPCs.
         if (isVoidBow(arrowId)) return;
+        if (target instanceof Npc
+                && ((Npc) target).getAttribute(Npc.SUPPRESS_RANGED_AMMO_DROP_ATTRIBUTE, false)
+                && isBolt(arrowId)) {
+            return;
+        }
         if (Formulae.loseArrow(damage)) {
             GroundItem arrows = getArrows(arrowId, target, player);
             if (!DropTable.handleRingOfAvarice(player, new Item(arrowId, 1))) {
@@ -211,6 +216,10 @@ public class RangeUtils {
 
     private static GroundItem getArrows(int id, Mob target, Player player) {
         return target.getViewArea().getVisibleGroundItem(id, target.getLocation(), player);
+    }
+
+    private static boolean isBolt(int itemId) {
+        return BASIC_BOLTS.contains(itemId) || DRAGON_BOLTS.contains(itemId);
     }
 
     public static void applyPoison(Player player, Mob target, int arrowId) {

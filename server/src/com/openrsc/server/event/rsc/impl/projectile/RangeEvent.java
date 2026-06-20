@@ -30,6 +30,7 @@ public class RangeEvent extends GameTickEvent {
 	private final ServerConfiguration config;
 	private final PluginHandler pluginHandler;
 	private boolean deliveredFirstProjectile;
+	private boolean usedProjectileKiteGrace;
 	private Mob target;
 
 	public RangeEvent(final World world, final Player owner, final long tickDelay, final Mob target) {
@@ -87,6 +88,12 @@ public class RangeEvent extends GameTickEvent {
 			4 : 5;
 
 		if (!player.withinRange(target, radius)) {
+			if (!usedProjectileKiteGrace && PathValidation.shouldHoldProjectileKiteLine(player, target, radius)) {
+				usedProjectileKiteGrace = true;
+				player.resetPath();
+				setDelayTicks(1);
+				return;
+			}
 			if (getOwner().nextStep(getOwner().getX(), getOwner().getY(), target) == null) {
 				reset(ProjectileFailureReason.CANT_GET_CLOSE_ENOUGH);
 				return;
@@ -96,6 +103,7 @@ public class RangeEvent extends GameTickEvent {
 			return;
 		}
 
+		usedProjectileKiteGrace = false;
 		if (!player.finishedPath()) player.resetPath();
 
 		if (!PathValidation.checkPath(player.getWorld(), player.getLocation(), target.getLocation())) {

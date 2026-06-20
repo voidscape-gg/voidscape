@@ -45,6 +45,7 @@ public class Npc extends Mob {
 	public static final String CONTACT_ATTACK_MAX_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_max_damage";
 	public static final String CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_min_damage";
 	public static final String PLAYER_ATTACK_DAMAGE_FLOOR_ATTRIBUTE = "voidscape_player_attack_damage_floor";
+	public static final String SUPPRESS_RANGED_AMMO_DROP_ATTRIBUTE = "voidscape_suppress_ranged_ammo_drop";
 
 	/**
 	 * The asynchronous logger.

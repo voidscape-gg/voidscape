@@ -69,6 +69,28 @@ public class PathValidation {
 		return true;
 	}
 
+	public static boolean shouldHoldProjectileKiteLine(Mob attacker, Mob target, int radius) {
+		if (attacker == null || target == null || !attacker.isPlayer() || !target.isNpc() || radius <= 1) {
+			return false;
+		}
+		if (attacker.withinRange(target, radius)) {
+			return false;
+		}
+		if (attacker.getLocation().getDistancePythagoras(target.getLocation()) != radius + 1) {
+			return false;
+		}
+
+		Point targetNextStep = target.getWalkingQueue().getNextMovement();
+		if (targetNextStep.equals(target.getLocation())) {
+			return false;
+		}
+		if (!attacker.getLocation().withinRange(targetNextStep, radius)) {
+			return false;
+		}
+
+		return checkPath(attacker.getWorld(), attacker.getLocation(), targetNextStep);
+	}
+
 	/**
 	 * Determines if this path will be blocked at any point.
 	 * Note that if the path is empty this will return false, which can happen if the player is on the same tile as the target tile.

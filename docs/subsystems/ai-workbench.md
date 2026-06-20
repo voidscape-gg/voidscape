@@ -24,6 +24,8 @@ Default base URL: `http://127.0.0.1:18787`.
 - `POST /input/command` accepts `{"command":"quickauction"}` or `{"command":"::quickauction"}` and sends the existing client command packet.
 - `POST /dev/ready` uses the saved Existing User credentials to reach an in-game state, waits for the local player to appear, then clears blocking welcome/server-message dialogs and hides dev-iteration panels such as the Auction House and world map.
 - `POST /dev/ui-panel` accepts `{"panel":"inventory"}` and opens a named Voidscape HUD/menu state, optionally capturing it. Supported visible panel keys include `hud`, `options-profile`, `options-settings`, `friends`, `ignore`, `magic`, `prayers`, `skills`, `quests`, `loot`, `bestiary`, `minimap`, `inventory`, and `account`.
+- `POST /dev/world-reskin` accepts `{"mode":"auto"}`, `{"mode":"authentic"}`, or `{"mode":"void"}`. It updates the client-only world reskin flag, reloads the current region, and reports whether the void profile is active. Add `{"capture":"true"}` to save a screenshot in the same response.
+- `POST /dev/reload-entity-sprites` reloads entity sprites through the same client path used at startup, useful after repacking candidate frames while the workbench client is still open.
 - `POST /fixture/auction-house` requires the logged-in player to be an admin, dispatches `::workbenchauctionfixture`, and reseeds deterministic Auction House listings plus recent sales through the server DB layer.
 - `POST /scenario/auction-house-open` opens the Auction House, captures Browse, first-listing selection, My Auctions, Intel, and Food category states, then returns a report with all saved image paths.
 - `POST /scenario/ui-panels` runs `/dev/ready`, opens the visible core Voidscape menu panels one by one, and saves screenshots for the UI concept-art pipeline.
@@ -45,4 +47,4 @@ When the workbench is disabled, pressing backtick still saves an exact client-fr
 
 ## Current Boundaries
 
-The workbench currently supports capture, state, synthetic local input, command dispatch, dev-ready session setup, Auction House fixture seeding, an Auction House smoke scenario, Lumbridge Subscription Vendor claim/redeem scenarios, and screenshots around those flows. It deliberately has no reusable scenario DSL, image diffing, browser UI, or server packet changes yet. Those should be added as separately testable slices so each step can be verified in-game.
+The workbench currently supports capture, state, synthetic local input, command dispatch, dev-ready session setup, current-region world-reskin toggles, entity sprite reloads, Auction House fixture seeding, an Auction House smoke scenario, Lumbridge Subscription Vendor claim/redeem scenarios, and screenshots around those flows. It deliberately has no reusable scenario DSL, image diffing, browser UI, or server packet changes yet. Those should be added as separately testable slices so each step can be verified in-game.

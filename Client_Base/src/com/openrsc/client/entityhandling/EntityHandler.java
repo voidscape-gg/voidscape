@@ -249,6 +249,12 @@ public class EntityHandler {
 		// Voidscape: V3 ritual floor (id 28). Positive colour 64 references TextureDef id 64
 		// (archive slot 3289), giving the enclave a generated cracked-stone floor.
 		tiles.add(new TileDef(64, 3, 0));
+		// Voidscape: Undead Siege plank floor (id 29). Reuses the stock plankstimber
+		// texture for a house-board floor without adding cache art.
+		tiles.add(new TileDef(46, 3, 0));
+		// Voidscape: Undead Siege mossy stone floor (id 30). Reuses the stock mossy-brick
+		// texture for yard paths and damaged room patches.
+		tiles.add(new TileDef(23, 3, 0));
 	}
 
 	private static void loadElevationDefinitions() {

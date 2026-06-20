@@ -1398,8 +1398,9 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			return;
 		}
 
-		player.setFollowing(affectedMob);
-		player.setWalkToAction(new WalkToMobAction(player, affectedMob, 4, false, ActionType.ATTACKMAGIC) {
+		final int spellRange = player.getConfig().SPELL_RANGE_DISTANCE;
+		player.setFollowing(affectedMob, spellRange);
+		player.setWalkToAction(new WalkToMobAction(player, affectedMob, spellRange, false, ActionType.ATTACKMAGIC) {
 			public void executeInternal() {
 				if (!PathValidation.checkPath(getPlayer().getWorld(), getPlayer().getLocation(), affectedMob.getLocation())) {
 					getPlayer().playerServerMessage(MessageType.QUEST, "I can't get a clear shot from here");

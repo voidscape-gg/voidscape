@@ -77,6 +77,8 @@ final class WorkbenchServer {
 			httpServer.createContext("/dev/ready", WorkbenchServer::handleDevReady);
 			httpServer.createContext("/dev/ui-panel", WorkbenchServer::handleDevUiPanel);
 			httpServer.createContext("/dev/viewport", WorkbenchServer::handleViewportPreset);
+			httpServer.createContext("/dev/world-reskin", WorkbenchServer::handleWorldReskin);
+			httpServer.createContext("/dev/reload-entity-sprites", WorkbenchServer::handleReloadEntitySprites);
 			httpServer.createContext("/fixture/auction-house", WorkbenchServer::handleAuctionHouseFixture);
 			httpServer.createContext("/scenario/auction-house-open", WorkbenchServer::handleAuctionHouseScenario);
 			httpServer.createContext("/scenario/ui-panels", WorkbenchServer::handleUiPanelsScenario);
@@ -324,6 +326,46 @@ final class WorkbenchServer {
 		}
 	}
 
+	private static void handleWorldReskin(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		Map<String, String> fields = requestFields(exchange);
+		String requestedMode = fields.containsKey("mode") ? fields.get("mode") : fields.get("profile");
+		int mode = parseWorldReskinMode(requestedMode);
+		try {
+			mudclient client = requireClient();
+			runOnEdt(() -> client.workbenchSetWorldReskinMode(mode));
+			sleep(700);
+			StringBuilder json = new StringBuilder();
+			json.append("{\"ok\":true,");
+			json.append("\"action\":\"world-reskin\",");
+			json.append("\"mode\":").append(client.workbenchWorldReskinMode()).append(",");
+			appendString(json, "modeName", client.workbenchWorldReskinModeName()).append(",");
+			json.append("\"active\":").append(client.workbenchVoidWorldReskinActive()).append(",");
+			json.append("\"generatedAt\":\"").append(jsonEscape(isoTimestamp())).append("\"");
+			if ("true".equalsIgnoreCase(fields.get("capture"))) {
+				CaptureResult result = captureOnce("world-reskin-" + client.workbenchWorldReskinModeName());
+				json.append(",");
+				appendSingleCapture(json, result);
+			}
+			json.append("}");
+			sendJson(exchange, 200, json.toString());
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
+	private static void handleReloadEntitySprites(HttpExchange exchange) throws IOException {
+		if (!requirePost(exchange)) return;
+		try {
+			mudclient client = requireClient();
+			runOnEdt(client::workbenchReloadEntitySprites);
+			sleep(500);
+			sendJson(exchange, 200, controlJson("reload-entity-sprites", null));
+		} catch (IOException e) {
+			sendJson(exchange, 503, "{\"ok\":false,\"error\":\"" + jsonEscape(e.getMessage()) + "\"}");
+		}
+	}
+
 	private static void handleAuctionHouseFixture(HttpExchange exchange) throws IOException {
 		if (!requirePost(exchange)) return;
 		try {
@@ -451,7 +493,10 @@ final class WorkbenchServer {
 			json.append("\"width\":").append(client.getGameWidth()).append(",");
 			json.append("\"height\":").append(client.getGameHeight()).append(",");
 			appendString(json, "inputXAction", client.inputX_Action == null ? "" : client.inputX_Action.name()).append(",");
-			appendString(json, "inputTextCurrent", client.inputTextCurrent);
+			appendString(json, "inputTextCurrent", client.inputTextCurrent).append(",");
+			json.append("\"worldReskinMode\":").append(client.workbenchWorldReskinMode()).append(",");
+			appendString(json, "worldReskinModeName", client.workbenchWorldReskinModeName()).append(",");
+			json.append("\"worldReskinActive\":").append(client.workbenchVoidWorldReskinActive());
 		}
 		json.append("}");
 	}
@@ -1482,6 +1527,27 @@ final class WorkbenchServer {
 		} catch (NumberFormatException e) {
 			throw new IOException("Expected integer field: " + key);
 		}
+	}
+
+	private static int parseWorldReskinMode(String mode) throws IOException {
+		if (mode == null || mode.trim().isEmpty() || "auto".equalsIgnoreCase(mode.trim())) {
+			return Config.WORLD_RESKIN_AUTO;
+		}
+		String normalized = mode.trim().toLowerCase(Locale.ROOT);
+		if ("authentic".equals(normalized) || "classic".equals(normalized)) {
+			return Config.WORLD_RESKIN_AUTHENTIC;
+		}
+		if ("void".equals(normalized)) {
+			return Config.WORLD_RESKIN_VOID;
+		}
+		try {
+			int value = Integer.parseInt(normalized);
+			if (value >= Config.WORLD_RESKIN_AUTO && value <= Config.WORLD_RESKIN_VOID) {
+				return value;
+			}
+		} catch (NumberFormatException ignored) {
+		}
+		throw new IOException("Unknown world reskin mode: " + mode);
 	}
 
 	private static void sleep(long millis) throws IOException {

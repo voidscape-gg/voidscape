@@ -269,6 +269,7 @@ public final class WorldPopulator {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidEnclave.json", type);
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsDeathMatchArena.json", type);
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidRift.json", type);
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsUndeadSiege.json", type);
 				}
 				if (getWorld().getServer().getConfig().WANT_VOID_COLOSSUS) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidColossusArena.json", type);

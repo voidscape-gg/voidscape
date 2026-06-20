@@ -60,6 +60,7 @@ public final class World {
 	private int mapPointZ = 0;
 	private ZipFile tileArchive;
 	private Sector[] sectors;
+	private boolean voidReskinEnabled = false;
 	public String mapHash;
 
 	public World(Scene var1, GraphicsController var2) {
@@ -67,21 +68,7 @@ public final class World {
 			this.minimapGraphics = var2;
 			this.scene = var1;
 
-			int var3;
-			for (var3 = 0; var3 < 64; ++var3)
-				this.colorToResource[var3] = GenUtil.colorToResource(255 - var3 * 4,
-					255 - (int) ((double) var3 * 1.75D), 255 - var3 * 4);
-
-			for (var3 = 0; var3 < 64; ++var3)
-				this.colorToResource[64 + var3] = GenUtil.colorToResource(var3 * 3, 144, 0);
-
-			for (var3 = 0; var3 < 64; ++var3)
-				this.colorToResource[128 + var3] = GenUtil.colorToResource(192 - (int) ((double) var3 * 1.5D),
-					144 - (int) ((double) var3 * 1.5D), 0);
-
-			for (var3 = 0; var3 < 64; ++var3)
-				this.colorToResource[192 + var3] = GenUtil.colorToResource(96 - (int) ((double) var3 * 1.5D),
-					(int) ((double) var3 * 1.5D) + 48, 0);
+			this.applyTerrainPalette(false);
 
 			sectors = new Sector[4];
 
@@ -102,6 +89,140 @@ public final class World {
 			throw GenUtil.makeThrowable(var4,
 				"k.<init>(" + (var1 != null ? "{...}" : "null") + ',' + (var2 != null ? "{...}" : "null") + ')');
 		}
+	}
+
+	public void setVoidReskinEnabled(boolean enabled) {
+		if (this.voidReskinEnabled == enabled) {
+			return;
+		}
+		this.voidReskinEnabled = enabled;
+		this.applyTerrainPalette(enabled);
+	}
+
+	public boolean isVoidReskinEnabled() {
+		return this.voidReskinEnabled;
+	}
+
+	private void applyTerrainPalette(boolean voidPalette) {
+		if (voidPalette) {
+			this.applyVoidTerrainPalette();
+			return;
+		}
+		this.applyAuthenticTerrainPalette();
+	}
+
+	private void applyAuthenticTerrainPalette() {
+		int var3;
+		for (var3 = 0; var3 < 64; ++var3)
+			this.colorToResource[var3] = GenUtil.colorToResource(255 - var3 * 4,
+				255 - (int) ((double) var3 * 1.75D), 255 - var3 * 4);
+
+		for (var3 = 0; var3 < 64; ++var3)
+			this.colorToResource[64 + var3] = GenUtil.colorToResource(var3 * 3, 144, 0);
+
+		for (var3 = 0; var3 < 64; ++var3)
+			this.colorToResource[128 + var3] = GenUtil.colorToResource(192 - (int) ((double) var3 * 1.5D),
+				144 - (int) ((double) var3 * 1.5D), 0);
+
+		for (var3 = 0; var3 < 64; ++var3)
+			this.colorToResource[192 + var3] = GenUtil.colorToResource(96 - (int) ((double) var3 * 1.5D),
+				(int) ((double) var3 * 1.5D) + 48, 0);
+	}
+
+	private void applyVoidTerrainPalette() {
+		for (int index = 0; index < this.colorToResource.length; index++) {
+			double t = index / 255.0D;
+			int[] rgb;
+			if (t < 0.45D) {
+				rgb = lerpRgb(20, 8, 32, 54, 28, 70, t / 0.45D);
+			} else if (t < 0.78D) {
+				rgb = lerpRgb(54, 28, 70, 101, 76, 76, (t - 0.45D) / 0.33D);
+			} else {
+				rgb = lerpRgb(101, 76, 76, 204, 184, 112, (t - 0.78D) / 0.22D);
+			}
+			this.colorToResource[index] = GenUtil.colorToResource(rgb[0], rgb[1], rgb[2]);
+		}
+	}
+
+	private int getTileDefColour(int id) {
+		return resolveTileColour(Objects.requireNonNull(EntityHandler.getTileDef(id)).getColour());
+	}
+
+	private int resolveTileColour(int colour) {
+		if (!this.voidReskinEnabled || colour == Scene.TRANSPARENT || colour == 12345678) {
+			return colour;
+		}
+		if (colour <= 0) {
+			return shiftResourceToVoid(colour);
+		}
+		return colour;
+	}
+
+	private int resolveWallTexture(int texture) {
+		if (!this.voidReskinEnabled) {
+			return texture;
+		}
+		switch (texture) {
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+			case 7:
+			case 44:
+				return 55;
+			case 10:
+			case 12:
+			case 13:
+				return 56;
+			case 29:
+			case 30:
+			case 54:
+				return 60;
+			default:
+				return texture;
+		}
+	}
+
+	private int minimapWallColour() {
+		return this.voidReskinEnabled ? GenUtil.colorToResource(94, 76, 96) : 6316128;
+	}
+
+	private static int shiftResourceToVoid(int resource) {
+		int packed = -resource - 1;
+		int blue = ((packed & 31) << 3) + 4;
+		int green = (((packed >> 5) & 31) << 3) + 4;
+		int red = (((packed >> 10) & 31) << 3) + 4;
+		double luma = luma(red, green, blue);
+		int[] rgb = voidColourAtLuma(luma);
+		double targetLuma = Math.max(1.0D, luma(rgb[0], rgb[1], rgb[2]));
+		double scale = luma / targetLuma;
+		return GenUtil.colorToResource(clampColour((int) Math.round(rgb[0] * scale)),
+			clampColour((int) Math.round(rgb[1] * scale)), clampColour((int) Math.round(rgb[2] * scale)));
+	}
+
+	private static int[] voidColourAtLuma(double luma) {
+		double t = Math.max(0.0D, Math.min(1.0D, luma / 255.0D));
+		if (t < 0.55D) {
+			return lerpRgb(32, 12, 50, 88, 56, 76, t / 0.55D);
+		}
+		return lerpRgb(88, 56, 76, 207, 187, 119, (t - 0.55D) / 0.45D);
+	}
+
+	private static double luma(int red, int green, int blue) {
+		return red * 0.2126D + green * 0.7152D + blue * 0.0722D;
+	}
+
+	private static int[] lerpRgb(int r1, int g1, int b1, int r2, int g2, int b2, double t) {
+		t = Math.max(0.0D, Math.min(1.0D, t));
+		return new int[]{
+			clampColour((int) Math.round(r1 + (r2 - r1) * t)),
+			clampColour((int) Math.round(g1 + (g2 - g1) * t)),
+			clampColour((int) Math.round(b1 + (b2 - b1) * t))
+		};
+	}
+
+	private static int clampColour(int value) {
+		return Math.max(0, Math.min(255, value));
 	}
 
 	private String generateMapHash(String path) {
@@ -580,7 +701,7 @@ public final class World {
 								// 1];
 
 								int decorType2 = this.isTileType2(x, z, plane, 15282);
-								colorResource = res01 = Objects.requireNonNull(EntityHandler.getTileDef(decorID - 1)).getColour();
+								colorResource = res01 = getTileDefColour(decorID - 1);
 								if (decorType == 4) {
 									colorResource = 1;
 									res01 = 1;
@@ -716,8 +837,7 @@ public final class World {
 							if (this.getTileDecorationID((int) x, z, plane) > 0 && Objects.requireNonNull(EntityHandler
 								.getTileDef(this.getTileDecorationID((int) x, z, plane) - 1)).getTileValue() == 4) {
 
-								int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID(x, z, plane) - 1))
-									.getColour();
+								int tileDecor = getTileDefColour(this.getTileDecorationID(x, z, plane) - 1);
 								int v00 = worldMod.insertVertex(x * 128, -this.getTileElevation(x, z), z * 128);
 								int v10 = worldMod.insertVertex((x + 1) * 128, -this.getTileElevation(1 + x, z),
 									z * 128);
@@ -736,9 +856,7 @@ public final class World {
 								if (this.getTileDecorationID(x, z + 1, plane) > 0
 									&& Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID(x, 1 + z, plane) - 1))
 									.getTileValue() == 4) {
-									int tileDecor = Objects.requireNonNull(EntityHandler
-										.getTileDef(this.getTileDecorationID((int) x, z + 1, plane) - 1))
-										.getColour();
+									int tileDecor = getTileDefColour(this.getTileDecorationID((int) x, z + 1, plane) - 1);
 									int v00 = worldMod.insertVertex(x * 128, -this.getTileElevation(x, z), z * 128);
 									int v10 = worldMod.insertVertex((x + 1) * 128, -this.getTileElevation(1 + x, z),
 										z * 128);
@@ -757,9 +875,7 @@ public final class World {
 								if (this.getTileDecorationID((int) x, z - 1, plane) > 0
 									&& Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID((int) x, z - 1, plane) - 1))
 									.getTileValue() == 4) {
-									int tileDecor = Objects.requireNonNull(EntityHandler
-										.getTileDef(this.getTileDecorationID((int) x, z - 1, plane) - 1))
-										.getColour();
+									int tileDecor = getTileDefColour(this.getTileDecorationID((int) x, z - 1, plane) - 1);
 									int v00 = worldMod.insertVertex(x * 128, -this.getTileElevation(x, z), z * 128);
 									int v10 = worldMod.insertVertex((1 + x) * 128, -this.getTileElevation(x + 1, z),
 										z * 128);
@@ -778,9 +894,7 @@ public final class World {
 								if (this.getTileDecorationID((int) (x + 1), z, plane) > 0 && Objects.requireNonNull(EntityHandler
 									.getTileDef(this.getTileDecorationID((int) (x + 1), z, plane) - 1))
 									.getTileValue() == 4) {
-									int tileDecor = Objects.requireNonNull(EntityHandler
-										.getTileDef(this.getTileDecorationID((int) (1 + x), z, plane) - 1))
-										.getColour();
+									int tileDecor = getTileDefColour(this.getTileDecorationID((int) (1 + x), z, plane) - 1);
 									int v00 = worldMod.insertVertex(x * 128, -this.getTileElevation(x, z), z * 128);
 									int v10 = worldMod.insertVertex(128 + x * 128, -this.getTileElevation(1 + x, z),
 										z * 128);
@@ -799,9 +913,7 @@ public final class World {
 								if (this.getTileDecorationID((int) (x - 1), z, plane) > 0 && Objects.requireNonNull(EntityHandler
 									.getTileDef(this.getTileDecorationID((int) (x - 1), z, plane) - 1))
 									.getTileValue() == 4) {
-									int tileDecor = Objects.requireNonNull(EntityHandler
-										.getTileDef(this.getTileDecorationID((int) (x - 1), z, plane) - 1))
-										.getColour();
+									int tileDecor = getTileDefColour(this.getTileDecorationID((int) (x - 1), z, plane) - 1);
 									int v00 = worldMod.insertVertex(x * 128, -this.getTileElevation(x, z), z * 128);
 									int v10 = worldMod.insertVertex((x + 1) * 128, -this.getTileElevation(1 + x, z),
 										z * 128);
@@ -832,7 +944,7 @@ public final class World {
 				}
 				this.modelAccumulate.resetFaceVertHead((int) 1);
 
-				final int wallColor = 6316128;
+				final int wallColor = minimapWallColour();
 				for (int x = 0; x < 95; ++x)
 					for (int z = 0; z < 95; ++z) {
 
@@ -1245,7 +1357,7 @@ public final class World {
 			if (id == 0) {
 				return defaultVal;
 			}
-			return Objects.requireNonNull(EntityHandler.getTileDef(id - 1)).getColour();
+			return getTileDefColour(id - 1);
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7,
 				"k.M(" + "dummy" + ',' + xTile + ',' + defaultVal + ',' + plane + ',' + zTile + ')');
@@ -1441,11 +1553,11 @@ public final class World {
 			this.setVertexLightOther(t1X, t1Z, 40);
 			this.setVertexLightOther(t2X, t2Z, 40);
 			int height = Objects.requireNonNull(EntityHandler.getDoorDef(var1)).getWallObjectHeight();// CacheValues.wallObjectHeight[var1];
-			int frontTex = Objects.requireNonNull(EntityHandler.getDoorDef(var1)).getModelVar2();
+			int frontTex = resolveWallTexture(Objects.requireNonNull(EntityHandler.getDoorDef(var1)).getModelVar2());
 			if (var6 != -14584)
 				this.getTerrainColour((int) 104, -113);
 
-			int backTex = Objects.requireNonNull(EntityHandler.getDoorDef(var1)).getModelVar3();
+			int backTex = resolveWallTexture(Objects.requireNonNull(EntityHandler.getDoorDef(var1)).getModelVar3());
 			int x1 = t1X * 128;
 			int z1 = t1Z * 128;
 			int x2 = t2X * 128;
@@ -1889,7 +2001,7 @@ public final class World {
 					int decorID = this.getTileDecorationID((int) x, z, plane);
 					int decorType = Objects.requireNonNull(EntityHandler.getTileDef(decorID - 1)).getTileValue();
 					int decorType2 = this.isTileType2(x, z, plane, 15282);
-					colorResource = res01 = Objects.requireNonNull(EntityHandler.getTileDef(decorID - 1)).getColour();
+					colorResource = res01 = getTileDefColour(decorID - 1);
 					if (decorType == 4) {
 						colorResource = 1;
 						res01 = 1;
@@ -1954,42 +2066,38 @@ public final class World {
 			for (int z = 1; z < 95; ++z) {
 				if (this.getTileDecorationID((int) x, z, plane) > 0 && Objects.requireNonNull(EntityHandler
 					.getTileDef(this.getTileDecorationID((int) x, z, plane) - 1)).getTileValue() == 4) {
-					int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID(x, z, plane) - 1)).getColour();
+					int tileDecor = getTileDefColour(this.getTileDecorationID(x, z, plane) - 1);
 					this.drawMinimapTile(x, z, 0, tileDecor, tileDecor);
 				} else if (this.getTileDecorationID((int) x, z, plane) == 0
 					|| Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID(x, z, plane) - 1)).getTileValue() != 3) {
 					if (this.getTileDecorationID(x, z + 1, plane) > 0 && Objects.requireNonNull(EntityHandler
 						.getTileDef(this.getTileDecorationID(x, 1 + z, plane) - 1)).getTileValue() == 4) {
-						int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID((int) x, z + 1, plane) - 1))
-							.getColour();
+						int tileDecor = getTileDefColour(this.getTileDecorationID((int) x, z + 1, plane) - 1);
 						this.drawMinimapTile(x, (int) z, 0, tileDecor, tileDecor);
 					}
 
 					if (this.getTileDecorationID((int) x, z - 1, plane) > 0 && Objects.requireNonNull(EntityHandler
 						.getTileDef(this.getTileDecorationID((int) x, z - 1, plane) - 1)).getTileValue() == 4) {
-						int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID((int) x, z - 1, plane) - 1))
-							.getColour();
+						int tileDecor = getTileDefColour(this.getTileDecorationID((int) x, z - 1, plane) - 1);
 						this.drawMinimapTile(x, (int) z, 0, tileDecor, tileDecor);
 					}
 
 					if (this.getTileDecorationID((int) (x + 1), z, plane) > 0 && Objects.requireNonNull(EntityHandler
 						.getTileDef(this.getTileDecorationID((int) (x + 1), z, plane) - 1)).getTileValue() == 4) {
-						int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID((int) (1 + x), z, plane) - 1))
-							.getColour();
+						int tileDecor = getTileDefColour(this.getTileDecorationID((int) (1 + x), z, plane) - 1);
 						this.drawMinimapTile(x, (int) z, 0, tileDecor, tileDecor);
 					}
 
 					if (this.getTileDecorationID((int) (x - 1), z, plane) > 0 && Objects.requireNonNull(EntityHandler
 						.getTileDef(this.getTileDecorationID((int) (x - 1), z, plane) - 1)).getTileValue() == 4) {
-						int tileDecor = Objects.requireNonNull(EntityHandler.getTileDef(this.getTileDecorationID((int) (x - 1), z, plane) - 1))
-							.getColour();
+						int tileDecor = getTileDefColour(this.getTileDecorationID((int) (x - 1), z, plane) - 1);
 						this.drawMinimapTile(x, (int) z, 0, tileDecor, tileDecor);
 					}
 				}
 			}
 		}
 
-		final int wallColor = 6316128;
+		final int wallColor = minimapWallColour();
 		for (int x = 0; x < 95; ++x)
 			for (int z = 0; z < 95; ++z) {
 

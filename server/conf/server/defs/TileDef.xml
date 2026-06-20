@@ -155,4 +155,18 @@
     <unknown>3</unknown>
     <objectType>0</objectType>
   </TileDef>
+  <!-- Voidscape: Undead Siege plank floor (id 29). Reuses the stock plankstimber
+       texture for a house-board floor without adding cache art. -->
+  <TileDef>
+    <colour>46</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
+  <!-- Voidscape: Undead Siege mossy stone floor (id 30). Reuses the stock
+       mossy-brick texture for yard paths and damaged room patches. -->
+  <TileDef>
+    <colour>23</colour>
+    <unknown>3</unknown>
+    <objectType>0</objectType>
+  </TileDef>
 </TileDef-array>

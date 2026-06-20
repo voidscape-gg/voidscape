@@ -327,6 +327,7 @@ public final class mudclient implements Runnable {
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
 	private static final String VOIDSCAPE_FARMSIM_PREFIX = "@vsfarmsim@";
+	private static final String VOIDSCAPE_UNDEAD_SIEGE_PREFIX = "@vsundeadsiege@";
 	private static final int NORMAL_CHAT_INPUT_MAX = 80;
 	private static final int MESSAGE_COMMAND_INPUT_MAX = 240;
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
@@ -1141,6 +1142,7 @@ public final class mudclient implements Runnable {
 	private int shopSelectedItemIndex = -1;
 	private int shopSelectedItemType = -2;
 	private int shopSellPriceMod = 0;
+	private int undeadSiegeShopPoints = 0;
 	private long lastAndroidSmokeShopStateLogMillis = 0L;
 	private int lastAndroidSmokeShopSelectedIndex = -2;
 	private int lastAndroidSmokeShopItemCount = -1;
@@ -1967,7 +1969,24 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean isInsideUndeadSiegeArena(int worldX, int worldY) {
-		return worldX >= 156 && worldX <= 181 && worldY >= 245 && worldY <= 268;
+		return worldX >= 579 && worldX <= 621 && worldY >= 99 && worldY <= 141;
+	}
+
+	private boolean shouldUseVoidWorldReskin(int worldX, int worldY) {
+		if (Config.C_WORLD_RESKIN_MODE == Config.WORLD_RESKIN_VOID) {
+			return true;
+		}
+		if (Config.C_WORLD_RESKIN_MODE == Config.WORLD_RESKIN_AUTHENTIC) {
+			return false;
+		}
+		return isInsideUndeadSiegeArena(worldX, worldY);
+	}
+
+	private void applyWorldReskinForRegion(int worldX, int worldY) {
+		if (this.world == null) {
+			return;
+		}
+		this.world.setVoidReskinEnabled(shouldUseVoidWorldReskin(worldX, worldY));
 	}
 
 	private boolean isLocalPlayerInsideVoidArenaLobby() {
@@ -1988,6 +2007,52 @@ public final class mudclient implements Runnable {
 		this.scene.fogLandscapeDistance = fogDistance;
 		this.scene.fogEntityDistance = fogDistance;
 		this.scene.fogSmoothingStartDistance = Math.max(950, fogDistance - 400);
+	}
+
+	public void workbenchSetWorldReskinMode(int mode) {
+		if (mode < Config.WORLD_RESKIN_AUTO || mode > Config.WORLD_RESKIN_VOID) {
+			mode = Config.WORLD_RESKIN_AUTO;
+		}
+		Config.C_WORLD_RESKIN_MODE = mode;
+		workbenchReloadWorldReskin();
+	}
+
+	public boolean workbenchReloadWorldReskin() {
+		if (this.world == null || this.localPlayer == null || this.lastHeightOffset < 0) {
+			return false;
+		}
+		final int worldX = this.playerLocalX + this.midRegionBaseX;
+		final int worldY = this.playerLocalZ + this.midRegionBaseZ;
+		applyWorldReskinForRegion(worldX, worldY);
+		this.world.loadSections(worldX + this.worldOffsetX, worldY + this.worldOffsetZ, this.lastHeightOffset);
+		markRoofVisibilitySceneModelsLoaded();
+		readdTerrainEditorSceneModels();
+		this.world.playerAlive = true;
+		return true;
+	}
+
+	public int workbenchWorldReskinMode() {
+		return Config.C_WORLD_RESKIN_MODE;
+	}
+
+	public String workbenchWorldReskinModeName() {
+		switch (Config.C_WORLD_RESKIN_MODE) {
+			case Config.WORLD_RESKIN_AUTHENTIC:
+				return "authentic";
+			case Config.WORLD_RESKIN_VOID:
+				return "void";
+			case Config.WORLD_RESKIN_AUTO:
+			default:
+				return "auto";
+		}
+	}
+
+	public boolean workbenchVoidWorldReskinActive() {
+		return this.world != null && this.world.isVoidReskinEnabled();
+	}
+
+	public void workbenchReloadEntitySprites() {
+		loadEntitiesAuthentic();
 	}
 
 	private boolean isServerPlayerInsideVoidArenaLobby(ORSCharacter player) {
@@ -6257,6 +6322,10 @@ public final class mudclient implements Runnable {
 		return this.shopPriceMultiplier == 255 && this.shopBuyPriceMod == 0 && this.shopSellPriceMod == 0;
 	}
 
+	private boolean shouldDrawShopDialog() {
+		return this.showDialogShop && (this.combatTimeout == 0 || this.isUndeadSiegePointShop());
+	}
+
 	private void drawDialogShop() {
 		try {
 			boolean pointShop = this.isUndeadSiegePointShop();
@@ -6384,7 +6453,7 @@ public final class mudclient implements Runnable {
 			if (pointShop) {
 				this.getSurface().drawString("Supply stock in green", 2 + xr, 24 + yr, '\uff00', 1);
 				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
-				this.getSurface().drawString("Prices in points", 292 + xr, 24 + yr, 0xFFFF00, 1);
+				this.getSurface().drawString("Your points: " + this.undeadSiegeShopPoints, 292 + xr, 24 + yr, 0xFFFF00, 1);
 			} else {
 				this.getSurface().drawString("Shops stock in green", 2 + xr, 24 + yr, '\uff00', 1);
 				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
@@ -8800,6 +8869,7 @@ public final class mudclient implements Runnable {
 		if (this.world == null || this.localPlayer == null || this.lastHeightOffset < 0) return;
 		final int wantX = this.playerLocalX + this.midRegionBaseX + this.worldOffsetX;
 		final int wantZ = this.playerLocalZ + this.midRegionBaseZ + this.worldOffsetZ;
+		applyWorldReskinForRegion(wantX - this.worldOffsetX, wantZ - this.worldOffsetZ);
 		this.world.loadSections(wantX, wantZ, this.lastHeightOffset);
 		markRoofVisibilitySceneModelsLoaded();
 		readdTerrainEditorSceneModels();
@@ -11788,6 +11858,17 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
+	final boolean handleUndeadSiegeMessage(String message) {
+		if (message == null || !message.startsWith(VOIDSCAPE_UNDEAD_SIEGE_PREFIX)) {
+			return false;
+		}
+		String payload = message.substring(VOIDSCAPE_UNDEAD_SIEGE_PREFIX.length());
+		if (payload.startsWith("points|")) {
+			this.undeadSiegeShopPoints = Math.max(0, parseIntOrDefault(payload.substring("points|".length()), 0));
+		}
+		return true;
+	}
+
 	final boolean handleVoidArenaRatingMessage(String message) {
 		if (message == null || !message.startsWith(VOIDSCAPE_ARENA_PREFIX)) {
 			return false;
@@ -13633,7 +13714,7 @@ public final class mudclient implements Runnable {
 					clan.getClanInterface().onRender(getSurface());
 				} else if (party.getPartyInterface().isVisible()) {
 					party.getPartyInterface().onRender(getSurface());
-				} else if (this.showDialogShop && this.combatTimeout == 0 && !C_CUSTOM_UI) {
+				} else if (this.shouldDrawShopDialog() && !C_CUSTOM_UI) {
 					this.drawDialogShop();
 				} else if (S_WANT_SKILL_MENUS && skillGuideInterface.isVisible() && !C_CUSTOM_UI) {
 					this.drawSkillGuide();
@@ -13756,7 +13837,7 @@ public final class mudclient implements Runnable {
 						this.drawDialogBank();
 						interfaceOpen = true;
 					}
-					if (this.showDialogShop && this.combatTimeout == 0) {
+					if (this.shouldDrawShopDialog()) {
 						this.drawDialogShop();
 						interfaceOpen = true;
 					}
@@ -24812,6 +24893,7 @@ public final class mudclient implements Runnable {
 					this.currentRegionMinZ = midRegionZ * 48 - 32;
 					this.midRegionBaseZ = midRegionZ * 48 - 48;
 					this.currentRegionMinX = midRegionX * 48 - 32;
+					applyWorldReskinForRegion(wantX - this.worldOffsetX, wantZ - this.worldOffsetZ);
 					this.world.loadSections(wantX, wantZ, this.lastHeightOffset);
 					markRoofVisibilitySceneModelsLoaded();
 					this.midRegionBaseZ -= this.worldOffsetZ;
@@ -25535,6 +25617,7 @@ public final class mudclient implements Runnable {
 		byte sector_h = 0; // sector h
 		byte sector_x = 50; // sector x
 		byte sector_y = 50; // sector y    (h0x50y50 - Lumbridge sector) (h0x50y39 - deep wilderness sector)
+		applyWorldReskinForRegion(sector_x * 48 + 23, sector_y * 48 + 23);
 		this.world.loadSections(sector_x * 48 + 23, (sector_y * 48 + 23), sector_h);
 		this.world.addLoginScreenModels(this.modelCache);
 		this.worldComponentsLoaded = true;

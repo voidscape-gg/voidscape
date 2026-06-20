@@ -59,6 +59,9 @@ public final class NpcPreview {
 	private int combat = 0;             // 0 none, 1 A, 2 B
 	private int zoom = 100;             // % of camera1/camera2
 	private boolean animating = true;
+	private boolean entitySetMode = false;
+	private boolean onionSkin = false;
+	private int animationId = 0;
 
 	// combat-scene mode: NPC vs an opponent at combat distance, to dial facing + distance + lunge
 	private boolean combatScene = false;
@@ -71,6 +74,16 @@ public final class NpcPreview {
 
 	private final RenderPanel panel = new RenderPanel();
 	private final JLabel info = new JLabel();
+
+	private static final class EntityFrame {
+		final int variant;
+		final boolean mirror;
+
+		EntityFrame(int variant, boolean mirror) {
+			this.variant = variant;
+			this.mirror = mirror;
+		}
+	}
 
 	private NpcPreview() {
 		g = new MudClientGraphics(BUF_W, BUF_H, 12000);
@@ -109,12 +122,17 @@ public final class NpcPreview {
 		combatSprite = def.getCombatSprite();
 		camera1 = def.getCamera1();
 		camera2 = def.getCamera2();
+		if (def.getSprite(0) >= 0) animationId = def.getSprite(0);
 		// default zoom auto-fits the figure to ~85% of the buffer height
 		zoom = Math.max(10, Math.min(250, (int) (BUF_H * 0.85 / Math.max(1, camera2) * 100)));
 	}
 
 	/** Render the whole frame: a single NPC, or (combat-scene mode) the NPC vs an opponent. */
 	private void renderNpc() {
+		if (entitySetMode) {
+			renderEntitySet();
+			return;
+		}
 		java.util.Arrays.fill(g.pixelData, BG);
 		NPCDef def = EntityHandler.getNpcDef(npcId);
 		if (combatScene) {
@@ -137,6 +155,73 @@ public final class NpcPreview {
 				zoom, BUF_W / 2, combat != 0 ? overlay : 0);
 		}
 		image.setRGB(0, 0, BUF_W, BUF_H, g.pixelData, 0, BUF_W);
+	}
+
+	private void renderEntitySet() {
+		Graphics2D gr = image.createGraphics();
+		try {
+			gr.setColor(new Color(BG));
+			gr.fillRect(0, 0, BUF_W, BUF_H);
+			AnimationDef ad = EntityHandler.getAnimationDef(animationId);
+			int width = Math.max(1, 160 * zoom / 100);
+			int height = Math.max(1, 220 * zoom / 100);
+			if (onionSkin) {
+				drawEntityFrame(gr, ad, entityFrame(-1), width, height, 0.28f);
+				drawEntityFrame(gr, ad, entityFrame(1), width, height, 0.28f);
+			}
+			drawEntityFrame(gr, ad, entityFrame(0), width, height, 1.0f);
+			gr.setComposite(AlphaComposite.SrcOver);
+			gr.setColor(new Color(220, 214, 230));
+			gr.drawString(ad.getName() + " [" + animationId + "]", 12, 22);
+		} finally {
+			gr.dispose();
+		}
+	}
+
+	private void drawEntityFrame(Graphics2D gr, AnimationDef ad, EntityFrame frame, int width, int height, float alpha) {
+		BufferedImage layer = renderEntityFrameImage(ad, frame, width, height);
+		gr.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+		gr.drawImage(layer, 0, 0, null);
+	}
+
+	private BufferedImage renderEntityFrameImage(AnimationDef ad, EntityFrame frame, int width, int height) {
+		java.util.Arrays.fill(g.pixelData, BG);
+		Sprite sprite = g.spriteSelect(ad, frame.variant);
+		g.drawSpriteClipping(sprite, (BUF_W - width) / 2, (BUF_H - height) / 2, width, height,
+			ad.getCharColour(), 0, ad.getBlueMask(), frame.mirror, 0, 1);
+		BufferedImage layer = new BufferedImage(BUF_W, BUF_H, BufferedImage.TYPE_INT_ARGB);
+		int[] argb = new int[BUF_W * BUF_H];
+		for (int i = 0; i < g.pixelData.length; i++) {
+			int rgb = g.pixelData[i] & 0xFFFFFF;
+			argb[i] = rgb == (BG & 0xFFFFFF) ? 0 : 0xFF000000 | rgb;
+		}
+		layer.setRGB(0, 0, BUF_W, BUF_H, argb, 0, BUF_W);
+		return layer;
+	}
+
+	private EntityFrame entityFrame(int phaseOffset) {
+		AnimationDef ad = EntityHandler.getAnimationDef(animationId);
+		int var11 = 7 & (rsDir + (cameraRotation + 16) / 32);
+		boolean mirror = false;
+		int var13 = var11;
+		if (var11 == 5) { mirror = true; var13 = 3; }
+		else if (var11 == 6) { mirror = true; var13 = 2; }
+		else if (var11 == 7) { mirror = true; var13 = 1; }
+
+		int variant = WALK[(Math.max(0, stepFrame + phaseOffset * Math.max(1, walkModel)) / Math.max(1, walkModel)) % 4]
+			+ var13 * 3;
+		if (combat == 1 && ad.hasA()) {
+			mirror = false;
+			int cm = Math.max(2, combatModel);
+			variant = 15 + COMBAT_A[(Math.max(0, frameCounter + phaseOffset * cm) / (cm - 1)) % 8];
+		} else if (combat == 2 && ad.hasA()) {
+			mirror = true;
+			int cm = Math.max(1, combatModel);
+			variant = 15 + COMBAT_B[(Math.max(0, frameCounter + phaseOffset * cm) / cm) % 8];
+		} else if (mirror && var13 >= 1 && var13 <= 3 && ad.hasF()) {
+			variant += 15;
+		}
+		return new EntityFrame(variant, mirror);
 	}
 
 	/** Faithful replica of mudclient.drawNPC frame-selection + 12-layer composite, for one figure
@@ -215,7 +300,20 @@ public final class NpcPreview {
 		JPanel controls = new JPanel(new GridLayout(0, 1, 0, 2));
 		controls.setPreferredSize(new Dimension(300, BUF_H));
 
-		controls.add(labeled("NPC id", spinner(npcId, 0, EntityHandler.npcCount() - 1, v -> { npcId = v; applyDefDefaults(); syncSpinners(); })));
+		ButtonGroup modeGroup = new ButtonGroup();
+		JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		modeRow.add(new JLabel("Mode:"));
+		modeRow.add(radio("NPC", true, modeGroup, () -> entitySetMode = false));
+		modeRow.add(radio("Entity set", false, modeGroup, () -> entitySetMode = true));
+		controls.add(modeRow);
+
+		controls.add(labeled("NPC id", spinner(npcId, 0, EntityHandler.npcCount() - 1, v -> {
+			npcId = v;
+			applyDefDefaults();
+			syncSpinners();
+		})));
+		animationSp = spinner(animationId, 0, EntityHandler.animationCount() - 1, v -> animationId = v);
+		controls.add(labeled("AnimationDef id (entity set mode)", animationSp));
 		controls.add(labeled("Direction (rsDir 0-7: N,NW,W,SW,S,SE,E,NE)", slider(0, 7, rsDir, v -> rsDir = v)));
 		controls.add(labeled("Camera rotation (0-255)", slider(0, 255, cameraRotation, v -> cameraRotation = v)));
 		controls.add(labeled("Zoom %", slider(20, 250, zoom, v -> zoom = v)));
@@ -231,6 +329,9 @@ public final class NpcPreview {
 		JCheckBox anim = new JCheckBox("Animate", animating);
 		anim.addActionListener(e -> animating = anim.isSelected());
 		controls.add(anim);
+		JCheckBox onion = new JCheckBox("Onion skin (entity set mode)", onionSkin);
+		onion.addActionListener(e -> onionSkin = onion.isSelected());
+		controls.add(onion);
 		controls.add(labeled("Step frame (manual when paused)", slider(0, 240, stepFrame, v -> stepFrame = v)));
 
 		// --- combat-scene controls: see the actual fight composition ---
@@ -270,17 +371,21 @@ public final class NpcPreview {
 				overlay = Math.abs((frameCounter % 60) - 30) * 100 / 30;
 			}
 			NPCDef d = EntityHandler.getNpcDef(npcId);
-			info.setText("<html>" + d.getName() + " (id " + npcId + ")<br>wm=" + walkModel
+			AnimationDef ad = EntityHandler.getAnimationDef(animationId);
+			info.setText("<html>" + (entitySetMode ? "Entity set: " + ad.getName() + " (anim " + animationId + ")" : d.getName() + " (id " + npcId + ")")
+				+ "<br>wm=" + walkModel
 				+ " cm=" + combatModel + " cs=" + combatSprite + " cam=" + camera1 + "x" + camera2
+				+ (entitySetMode ? "<br>variant=" + entityFrame(0).variant + " onion=" + onionSkin : "")
 				+ (combatScene ? "<br>gap=" + gap + " overlay=" + overlay : "") + "</html>");
 			panel.repaint();
 		}).start();
 	}
 
-	private JSpinner walkSp, combatSp, combatSpriteSp, cam1Sp, cam2Sp;
+	private JSpinner walkSp, combatSp, combatSpriteSp, cam1Sp, cam2Sp, animationSp;
 	private void syncSpinners() {
 		walkSp.setValue(walkModel); combatSp.setValue(combatModel); combatSpriteSp.setValue(combatSprite);
 		cam1Sp.setValue(camera1); cam2Sp.setValue(camera2);
+		if (animationSp != null) animationSp.setValue(animationId);
 	}
 
 	// --- tiny Swing helpers ---
@@ -331,6 +436,36 @@ public final class NpcPreview {
 		System.out.println("dumped frames to " + outDir);
 	}
 
+	private void dumpEntitySet(int id, String outDir) throws Exception {
+		new java.io.File(outDir).mkdirs();
+		entitySetMode = true;
+		animationId = id;
+		combatScene = false;
+		cameraRotation = 128;
+		for (int d = 0; d < 8; d++) {
+			rsDir = d;
+			combat = 0;
+			for (int p = 0; p < 4; p++) {
+				stepFrame = p * Math.max(1, walkModel);
+				save(outDir + "/entity_dir" + d + "_walk" + p + ".png");
+			}
+		}
+		for (int c = 1; c <= 2; c++) {
+			combat = c;
+			for (int p = 0; p < 8; p++) {
+				frameCounter = p * Math.max(1, combatModel);
+				save(outDir + "/entity_combat" + (c == 1 ? "A" : "B") + p + ".png");
+			}
+		}
+		onionSkin = true;
+		combat = 0;
+		rsDir = 4;
+		stepFrame = Math.max(1, walkModel);
+		save(outDir + "/entity_onion.png");
+		onionSkin = false;
+		System.out.println("dumped entity set frames to " + outDir);
+	}
+
 	private void save(String path) throws Exception {
 		renderNpc();
 		javax.imageio.ImageIO.write(image, "png", new java.io.File(path));
@@ -366,6 +501,11 @@ public final class NpcPreview {
 		if (args.length >= 3 && args[1].equals("--dump")) {
 			int id = args.length >= 4 ? Integer.parseInt(args[3]) : 852;
 			app.dump(id, args[2]);
+			return;
+		}
+		if (args.length >= 3 && args[1].equals("--dump-entity")) {
+			int id = args.length >= 4 ? Integer.parseInt(args[3]) : 0;
+			app.dumpEntitySet(id, args[2]);
 			return;
 		}
 		SwingUtilities.invokeLater(app::buildUi);

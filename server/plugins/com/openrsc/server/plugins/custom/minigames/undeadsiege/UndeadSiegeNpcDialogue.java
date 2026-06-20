@@ -26,7 +26,7 @@ public final class UndeadSiegeNpcDialogue {
 			npcsay(player, npc,
 				"You enter with a temporary safe kit.",
 				"Undead kills earn points only for this run.",
-				"After each wave, spend points on food, potions, arrows, or runes.",
+				"After each wave, spend points on food, bolts, staves, or Crumble Undead runes.",
 				"When the run ends, your real gear returns and you receive a payout.");
 		}
 	}
@@ -35,7 +35,7 @@ public final class UndeadSiegeNpcDialogue {
 		npcsay(player, npc,
 			"You enter with a temporary safe kit.",
 			"Undead kills earn points only for this run.",
-			"After each wave, spend points on food, potions, arrows, or runes.",
+			"After each wave, spend points on food, bolts, staves, or Crumble Undead runes.",
 			"When the run ends, your real gear returns and you receive a payout.");
 	}
 

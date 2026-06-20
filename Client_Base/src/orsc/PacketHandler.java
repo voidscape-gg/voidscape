@@ -878,6 +878,7 @@ public class PacketHandler {
 
 		if (mc.handleVoidscapeAccountAuthMessage(message)
 			|| mc.handleVoidscapeFarmSimMessage(message)
+			|| mc.handleUndeadSiegeMessage(message)
 			|| mc.handleVoidArenaRatingMessage(message)) {
 			return;
 		}

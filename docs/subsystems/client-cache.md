@@ -108,6 +108,15 @@ Loading flow:
 
 **Implication**: assets live server-side. Hot-patching content (new items, sprites) doesn't require client rebuild — just a server config push.
 
+## World reskin probe
+
+The PC/shared client has a dev-facing world reskin mode controlled by `Config.C_WORLD_RESKIN_MODE` and the optional JVM property `-Dvoidscape.worldReskin=auto|authentic|void`. `auto` is the default and only applies the void terrain/tile/door pass inside the Undead Siege arena bounds; `authentic` and `void` force either profile for screenshot comparison. The pass is client-rendering only: it reuses existing terrain, tile, door, and wall texture definitions, does not ship new art, and does not change server packets or opcodes.
+
+Related tooling:
+- `POST /dev/world-reskin` in the AI workbench toggles the profile and reloads the current region.
+- `scripts/probe-void-recolor-defs.py` emits a reversible patch for NPCDef/AnimationDef tint sweeps without editing definitions by default.
+- `scripts/run-npc-preview.sh` opens the entity workbench; `--dump-entity <outDir> <animationId>` renders headless raw 27-frame entity-set checks.
+
 ## Launcher-managed updates
 
 When a client build or distributed cache file does need to change, the launcher manifest is the rollout path:

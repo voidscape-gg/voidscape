@@ -41,6 +41,7 @@ public final class UndeadSiegeInstance {
 	}
 
 	private static final String BOSS_ATTRIBUTE = "undead_siege_boss";
+	private static final String CLIENT_POINTS_PREFIX = "@vsundeadsiege@points|";
 
 	private final UndeadSiegeMinigame manager;
 	private final World world;
@@ -272,6 +273,7 @@ public final class UndeadSiegeInstance {
 		npc.setInstanceId(instanceId);
 		npc.setAttribute(UndeadSiegeMinigame.NPC_ATTRIBUTE, true);
 		npc.setAttribute(Npc.SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, true);
+		npc.setAttribute(Npc.SUPPRESS_RANGED_AMMO_DROP_ATTRIBUTE, true);
 		npc.setAttribute(Npc.FORCE_CHASE_ATTRIBUTE, true);
 		npc.setAttribute(Npc.CONTACT_ATTACK_ATTRIBUTE, true);
 		npc.setAttribute(Npc.CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE, contactDamageMinForWave());
@@ -300,15 +302,19 @@ public final class UndeadSiegeInstance {
 
 	private Shop createSupplyShop() {
 		return new Shop(false, Integer.MAX_VALUE, 0, 0, UndeadSiegeConfig.POINT_SHOP_PRICE_MODIFIER,
-			new Item(ItemId.SWORDFISH.id(), 1),
-			new Item(ItemId.FULL_STRENGTH_POTION.id(), 1),
-			new Item(ItemId.SHORTBOW.id(), 1),
-			new Item(ItemId.DEATH_RUNE.id(), 1))
+			new Item(ItemId.CROSSBOW_BOLTS.id(), 1),
+			new Item(ItemId.CHAOS_RUNE.id(), 1),
+			new Item(ItemId.STAFF_OF_AIR.id(), 1),
+			new Item(ItemId.TUNA.id(), 1),
+			new Item(ItemId.CAKE.id(), 1),
+			new Item(ItemId.SWORDFISH.id(), 1))
 			.withoutPlayerSales()
+			.withDisplayBuyPrice(ItemId.CROSSBOW_BOLTS.id(), UndeadSiegeConfig.SUPPLY_BOLTS_COST)
+			.withDisplayBuyPrice(ItemId.CHAOS_RUNE.id(), UndeadSiegeConfig.SUPPLY_CRUMBLE_RUNES_COST)
+			.withDisplayBuyPrice(ItemId.STAFF_OF_AIR.id(), UndeadSiegeConfig.SUPPLY_STAFF_COST)
+			.withDisplayBuyPrice(ItemId.TUNA.id(), UndeadSiegeConfig.SUPPLY_TUNA_COST)
+			.withDisplayBuyPrice(ItemId.CAKE.id(), UndeadSiegeConfig.SUPPLY_CAKE_COST)
 			.withDisplayBuyPrice(ItemId.SWORDFISH.id(), UndeadSiegeConfig.SUPPLY_SWORDFISH_COST)
-			.withDisplayBuyPrice(ItemId.FULL_STRENGTH_POTION.id(), UndeadSiegeConfig.SUPPLY_STRENGTH_COST)
-			.withDisplayBuyPrice(ItemId.SHORTBOW.id(), UndeadSiegeConfig.SUPPLY_RANGED_COST)
-			.withDisplayBuyPrice(ItemId.DEATH_RUNE.id(), UndeadSiegeConfig.SUPPLY_RUNES_COST)
 			.withBuyHandler(new Shop.BuyHandler() {
 				@Override
 				public void buy(Player player, Shop shop, int catalogID, int amount) {
@@ -623,8 +629,9 @@ public final class UndeadSiegeInstance {
 		player.resetMenuHandler();
 		player.resetShop();
 		player.setAccessingShop(supplyShop);
-		ActionSender.showShop(player, supplyShop);
 		int currentPoints = points.containsKey(player.getUsernameHash()) ? points.get(player.getUsernameHash()) : 0;
+		syncPointBalance(player, currentPoints);
+		ActionSender.showShop(player, supplyShop);
 		if (manual) {
 			player.message("@mag@" + UndeadSiegeConfig.NAME + ": @whi@shop reopened. Points: " + currentPoints + ".");
 		} else {
@@ -638,20 +645,26 @@ public final class UndeadSiegeInstance {
 			player.message("Supplies are only available between waves.");
 			return;
 		}
-		if (catalogID == ItemId.SWORDFISH.id()) {
+		if (catalogID == ItemId.CROSSBOW_BOLTS.id()) {
+			buy(player, UndeadSiegeConfig.SUPPLY_BOLTS_COST,
+				new Item(ItemId.CROSSBOW_BOLTS.id(), 100));
+		} else if (catalogID == ItemId.CHAOS_RUNE.id()) {
+			buy(player, UndeadSiegeConfig.SUPPLY_CRUMBLE_RUNES_COST,
+				new Item(ItemId.AIR_RUNE.id(), 20),
+				new Item(ItemId.EARTH_RUNE.id(), 20),
+				new Item(ItemId.CHAOS_RUNE.id(), 10));
+		} else if (catalogID == ItemId.STAFF_OF_AIR.id()) {
+			buy(player, UndeadSiegeConfig.SUPPLY_STAFF_COST,
+				new Item(ItemId.STAFF_OF_AIR.id(), 1));
+		} else if (catalogID == ItemId.TUNA.id()) {
+			buy(player, UndeadSiegeConfig.SUPPLY_TUNA_COST,
+				new Item(ItemId.TUNA.id(), 5));
+		} else if (catalogID == ItemId.CAKE.id()) {
+			buy(player, UndeadSiegeConfig.SUPPLY_CAKE_COST,
+				new Item(ItemId.CAKE.id(), 3));
+		} else if (catalogID == ItemId.SWORDFISH.id()) {
 			buy(player, UndeadSiegeConfig.SUPPLY_SWORDFISH_COST,
 				new Item(ItemId.SWORDFISH.id(), 5));
-		} else if (catalogID == ItemId.FULL_STRENGTH_POTION.id()) {
-			buy(player, UndeadSiegeConfig.SUPPLY_STRENGTH_COST,
-				new Item(ItemId.FULL_STRENGTH_POTION.id(), 1));
-		} else if (catalogID == ItemId.SHORTBOW.id()) {
-			buy(player, UndeadSiegeConfig.SUPPLY_RANGED_COST,
-				new Item(ItemId.SHORTBOW.id(), 1), new Item(ItemId.IRON_ARROWS.id(), 100));
-		} else if (catalogID == ItemId.DEATH_RUNE.id()) {
-			buy(player, UndeadSiegeConfig.SUPPLY_RUNES_COST,
-				new Item(ItemId.AIR_RUNE.id(), 120),
-				new Item(ItemId.FIRE_RUNE.id(), 150),
-				new Item(ItemId.DEATH_RUNE.id(), 30));
 		} else {
 			player.message("That supply is not available.");
 		}
@@ -661,14 +674,23 @@ public final class UndeadSiegeInstance {
 		long hash = player.getUsernameHash();
 		int current = points.containsKey(hash) ? points.get(hash) : 0;
 		if (current < cost) {
+			syncPointBalance(player, current);
 			player.message("You need " + cost + " points for that.");
 			return;
 		}
-		points.put(hash, current - cost);
+		int remaining = current - cost;
+		points.put(hash, remaining);
+		syncPointBalance(player, remaining);
 		for (Item item : items) {
 			giveOrDrop(player, item);
 		}
-		player.message("Supplies purchased. Points left: " + points.get(hash) + ".");
+		player.message("Supplies purchased. Points left: " + remaining + ".");
+	}
+
+	private void syncPointBalance(Player player, int currentPoints) {
+		if (player != null && player.loggedIn()) {
+			player.playerServerMessage(MessageType.QUEST, CLIENT_POINTS_PREFIX + Math.max(0, currentPoints));
+		}
 	}
 
 	private void clearSupplyMenus() {
@@ -709,13 +731,12 @@ public final class UndeadSiegeInstance {
 	}
 
 	private void applyStartingKit(Player player) {
-		equipTemporaryItem(player, ItemId.RUNE_2_HANDED_SWORD.id());
-		player.getCarriedItems().getInventory().add(new Item(ItemId.SHORTBOW.id()), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.IRON_ARROWS.id(), UndeadSiegeConfig.START_ARROW_COUNT), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.FULL_STRENGTH_POTION.id()), false);
+		equipTemporaryItem(player, ItemId.CROSSBOW.id());
+		player.getCarriedItems().getInventory().add(new Item(ItemId.CROSSBOW_BOLTS.id(), UndeadSiegeConfig.START_BOLT_COUNT), false);
+		player.getCarriedItems().getInventory().add(new Item(ItemId.STAFF_OF_AIR.id()), false);
 		player.getCarriedItems().getInventory().add(new Item(ItemId.AIR_RUNE.id(), UndeadSiegeConfig.START_AIR_RUNES), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.FIRE_RUNE.id(), UndeadSiegeConfig.START_FIRE_RUNES), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.DEATH_RUNE.id(), UndeadSiegeConfig.START_DEATH_RUNES), false);
+		player.getCarriedItems().getInventory().add(new Item(ItemId.EARTH_RUNE.id(), UndeadSiegeConfig.START_EARTH_RUNES), false);
+		player.getCarriedItems().getInventory().add(new Item(ItemId.CHAOS_RUNE.id(), UndeadSiegeConfig.START_CHAOS_RUNES), false);
 		for (int i = 0; i < UndeadSiegeConfig.START_SWORDFISH; i++) {
 			player.getCarriedItems().getInventory().add(new Item(ItemId.SWORDFISH.id()), false);
 		}
@@ -752,8 +773,10 @@ public final class UndeadSiegeInstance {
 		for (Player player : activePlayers.values()) {
 			if (player == null || !player.loggedIn() || player.isRemoved() || player.isUnregistering()) {
 				invalid.add(player);
-			} else if (player.getInstanceId() != instanceId || !UndeadSiegeConfig.isInsideArena(player.getLocation())) {
+			} else if (player.getInstanceId() != instanceId) {
 				invalid.add(player);
+			} else if (!UndeadSiegeConfig.isInsideArena(player.getLocation())) {
+				returnPlayerToArena(player);
 			}
 		}
 		for (Player player : invalid) {
@@ -767,6 +790,30 @@ public final class UndeadSiegeInstance {
 				finishPlayer(player, false, "", true);
 			}
 		}
+	}
+
+	private void returnPlayerToArena(Player player) {
+		Point fallback = closestWalkableStartTile(player.getLocation());
+		player.teleport(fallback.getX(), fallback.getY(), true);
+		player.cancelAutoWalk();
+		player.resetPath();
+		player.message("@mag@" + UndeadSiegeConfig.NAME + ": @whi@the barricades keep you inside the siege.");
+	}
+
+	private Point closestWalkableStartTile(Point from) {
+		Point best = null;
+		int bestDistance = Integer.MAX_VALUE;
+		for (Point tile : UndeadSiegeConfig.START_TILES) {
+			if (!isWalkable(tile)) {
+				continue;
+			}
+			int distance = from == null ? 0 : tile.getDistancePythagoras(from);
+			if (distance < bestDistance) {
+				best = tile;
+				bestDistance = distance;
+			}
+		}
+		return best != null ? best : Point.location(UndeadSiegeConfig.START_X, UndeadSiegeConfig.START_Y);
 	}
 
 	private void finishPlayer(Player player, boolean reward, String message, boolean teleport) {
