@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-20 - Instant input feedback and FPS overlay
+
+Added client-only feedback for accepted local walk/action path sends: the client now immediately turns the local sprite toward the target tile and shows a short-lived projected ground marker while waiting for the server-authoritative result. The marker clears on arrival, timeout, or region rebase; inventory, combat, dialogue, trading, pathfinding, movement speed, packets/opcodes, server ticks, and game state remain server-confirmed. Also made a small in-game FPS readout always visible for responsiveness testing. Files: `mudclient.java`. Reversibility is removing the pending marker/facing helpers and FPS overlay call.
+
 ### 2026-06-20 - Remote entity movement interpolation
 
 Changed desktop/client presentation for non-local player and NPC movement from a fixed `C_MOVE_PER_FRAME` pixel step to an elapsed-time pixel budget with fractional carry, so remote entities keep the same server-authoritative waypoint targets while gliding at a steadier visual speed across variable client frame pacing. The local player remains on the existing authoritative movement path, local speculative walk prediction stays opt-in, and no server tick rate, packet/opcode shape, combat timing, pathfinding, schema, or cache asset changed. Files: `mudclient.java`. Reversibility is restoring the remote player/NPC loops to use `Config.C_MOVE_PER_FRAME` directly.

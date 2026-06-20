@@ -458,6 +458,7 @@ public final class mudclient implements Runnable {
 	private static final boolean LOCAL_WALK_PREDICTION_ENABLED = Boolean.getBoolean("voidscape.localWalkPrediction");
 	private static final double REMOTE_ENTITY_MOVEMENT_FRAME_MILLIS = 20.0D;
 	private static final double REMOTE_ENTITY_MOVEMENT_MAX_ELAPSED_MILLIS = 80.0D;
+	private static final long PENDING_INPUT_MARKER_MILLIS = 1000L;
 	private final int[] localWalkPredictionWorldX = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private final int[] localWalkPredictionWorldZ = new int[LOCAL_WALK_PREDICTION_TRACK_STEPS];
 	private int localWalkPredictionCount = 0;
@@ -475,6 +476,10 @@ public final class mudclient implements Runnable {
 	private int localWalkCorrectionTargetZ = 0;
 	private long remoteEntityMoveLastNs = 0L;
 	private double remoteEntityMoveCarryPixels = 0.0D;
+	private boolean pendingInputMarkerActive = false;
+	private int pendingInputMarkerLocalX = -1;
+	private int pendingInputMarkerLocalZ = -1;
+	private long pendingInputMarkerStartMillis = 0L;
 
 	// World-map auto-walker route (slice 2). Populated by SEND_WORLD_WALK_ROUTE.
 	// Slice 5 renders this as a polyline overlay on the world map panel.
@@ -502,6 +507,10 @@ public final class mudclient implements Runnable {
 	private final int[][] worldWalkSceneTileProjection = new int[][]{
 		new int[3], new int[3], new int[3], new int[3]
 	};
+	private final int[][] pendingInputMarkerProjection = new int[][]{
+		new int[3], new int[3], new int[3], new int[3]
+	};
+	private final int[] pendingInputMarkerCenterProjection = new int[3];
 	private static final int TERRAIN_EDITOR_MAX_UNDO = 50;
 	private static final int TERRAIN_EDITOR_GRASS_TEXTURE = 96;
 	private static final int TERRAIN_EDITOR_WATER_OVERLAY = 2;
@@ -7973,6 +7982,7 @@ public final class mudclient implements Runnable {
 					drawVoidRushWaveProjectile();
 					if (!this.isCinematicHudHidden()) {
 						drawWorldWalkSceneRoute();
+						drawPendingInputMarker();
 					}
 					drawTerrainEditorHoverOverlay();
 					drawRareDropBeams();
@@ -8457,6 +8467,7 @@ public final class mudclient implements Runnable {
 					this.drawChatMessageTabs(var1 - 8);
 					this.drawTrainingXpRateBadge();
 					drawVoidArenaCountdownOverlay();
+					drawFpsOverlay();
 					// this.getSurface().draw(this.graphics, this.screenOffsetX,
 					// 256, this.screenOffsetY);
 					clientPort.draw();
@@ -8509,6 +8520,89 @@ public final class mudclient implements Runnable {
 	private boolean projectWorldWalkTileCorner(final int index, final int sceneX, final int sceneZ) {
 		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 2;
 		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.worldWalkSceneTileProjection[index]);
+	}
+
+	private void drawPendingInputMarker() {
+		if (!this.pendingInputMarkerActive || this.world == null || this.scene == null || this.localPlayer == null) {
+			return;
+		}
+
+		long ageMillis = System.currentTimeMillis() - this.pendingInputMarkerStartMillis;
+		if (ageMillis >= PENDING_INPUT_MARKER_MILLIS
+			|| this.pendingInputMarkerLocalX < 0
+			|| this.pendingInputMarkerLocalZ < 0
+			|| this.pendingInputMarkerLocalX >= 95
+			|| this.pendingInputMarkerLocalZ >= 95
+			|| localPlayerTileX() == this.pendingInputMarkerLocalX
+			&& localPlayerTileZ() == this.pendingInputMarkerLocalZ) {
+			clearPendingInputMarker();
+			return;
+		}
+
+		final int localX = this.pendingInputMarkerLocalX;
+		final int localZ = this.pendingInputMarkerLocalZ;
+		final int x0 = localX * this.tileSize;
+		final int z0 = localZ * this.tileSize;
+		final int x1 = x0 + this.tileSize;
+		final int z1 = z0 + this.tileSize;
+		if (!projectPendingInputMarkerCorner(0, x0, z0)) return;
+		if (!projectPendingInputMarkerCorner(1, x1, z0)) return;
+		if (!projectPendingInputMarkerCorner(2, x1, z1)) return;
+		if (!projectPendingInputMarkerCorner(3, x0, z1)) return;
+
+		int fade = (int)(PENDING_INPUT_MARKER_MILLIS - ageMillis);
+		int pulse = 14 + ((this.getFrameCounter() / 2) & 7);
+		int fillAlpha = Math.max(18, Math.min(70, fade * 70 / (int)PENDING_INPUT_MARKER_MILLIS));
+		int edgeAlpha = Math.max(70, Math.min(190, fade * 190 / (int)PENDING_INPUT_MARKER_MILLIS + pulse));
+		final int fillColor = 0x2AD28C;
+		final int edgeColor = 0xA8FFD6;
+		final int[] p0 = this.pendingInputMarkerProjection[0];
+		final int[] p1 = this.pendingInputMarkerProjection[1];
+		final int[] p2 = this.pendingInputMarkerProjection[2];
+		final int[] p3 = this.pendingInputMarkerProjection[3];
+		this.getSurface().drawQuadrilateralAlpha(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1],
+			p3[0], p3[1], fillColor, fillAlpha);
+		this.getSurface().drawLineAlpha(p0[0], p0[1], p1[0], p1[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p1[0], p1[1], p2[0], p2[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p2[0], p2[1], p3[0], p3[1], edgeColor, edgeAlpha);
+		this.getSurface().drawLineAlpha(p3[0], p3[1], p0[0], p0[1], edgeColor, edgeAlpha);
+		drawPendingInputMarkerCenter(localX, localZ, edgeColor, edgeAlpha);
+	}
+
+	private boolean projectPendingInputMarkerCorner(final int index, final int sceneX, final int sceneZ) {
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 3;
+		return this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.pendingInputMarkerProjection[index]);
+	}
+
+	private void drawPendingInputMarkerCenter(final int localX, final int localZ, final int color, final int alpha) {
+		final int sceneX = localX * this.tileSize + 64;
+		final int sceneZ = localZ * this.tileSize + 64;
+		final int sceneY = -this.world.getElevation(sceneX, sceneZ) - 14;
+		if (!this.scene.projectToScreen(sceneX, sceneY, sceneZ, this.pendingInputMarkerCenterProjection)) {
+			return;
+		}
+
+		final int x = this.pendingInputMarkerCenterProjection[0];
+		final int y = this.pendingInputMarkerCenterProjection[1];
+		final int radius = 5 + ((this.getFrameCounter() / 3) & 3);
+		this.getSurface().drawLineAlpha(x, y - radius, x + radius, y, color, alpha);
+		this.getSurface().drawLineAlpha(x + radius, y, x, y + radius, color, alpha);
+		this.getSurface().drawLineAlpha(x, y + radius, x - radius, y, color, alpha);
+		this.getSurface().drawLineAlpha(x - radius, y, x, y - radius, color, alpha);
+	}
+
+	private void drawFpsOverlay() {
+		if (this.getSurface() == null) {
+			return;
+		}
+
+		String label = "FPS " + FPS;
+		int x = 7;
+		int y = 22;
+		int width = this.getSurface().stringWidth(1, label) + 12;
+		this.getSurface().drawBoxAlpha(x, y, width, 16, 0x050805, 150);
+		this.getSurface().drawBoxBorder(x, width, y, 16, 0x264836);
+		this.getSurface().drawString(label, x + 6, y + 12, 0xD8FFE8, 1);
 	}
 
 	public void toggleTerrainEditorMode() {
@@ -25031,6 +25125,7 @@ public final class mudclient implements Runnable {
 						}
 					}
 
+					clearPendingInputMarker();
 					this.world.playerAlive = true;
 					return true;
 				}
@@ -28381,6 +28476,7 @@ public final class mudclient implements Runnable {
 			this.mouseWalkY = this.mouseY;
 			this.mouseWalkX = this.mouseX;
 			this.mouseClickXStep = -24;
+			beginPendingInputFeedback(startX, startZ);
 			if (!walkToEntity && !reachBorder) {
 				beginLocalWalkPrediction(predictionStartX, predictionStartZ, predictionPathCount);
 			}
@@ -28388,6 +28484,51 @@ public final class mudclient implements Runnable {
 			throw GenUtil.makeThrowable(var13, "client.DD(" + x1 + ',' + walkToEntity + ',' + startX + ',' + z1 + ',' + startZ
 				+ ',' + x2 + ',' + reachBorder + ',' + z2 + ',' + "dummy" + ')');
 		}
+	}
+
+	private void beginPendingInputFeedback(int localX, int localZ) {
+		if (this.localPlayer == null || localX < 0 || localZ < 0 || localX >= 95 || localZ >= 95) {
+			clearPendingInputMarker();
+			return;
+		}
+
+		this.pendingInputMarkerActive = true;
+		this.pendingInputMarkerLocalX = localX;
+		this.pendingInputMarkerLocalZ = localZ;
+		this.pendingInputMarkerStartMillis = System.currentTimeMillis();
+		faceLocalPlayerToward(localX, localZ);
+	}
+
+	private void clearPendingInputMarker() {
+		this.pendingInputMarkerActive = false;
+		this.pendingInputMarkerLocalX = -1;
+		this.pendingInputMarkerLocalZ = -1;
+		this.pendingInputMarkerStartMillis = 0L;
+	}
+
+	private void faceLocalPlayerToward(int localX, int localZ) {
+		if (this.localPlayer == null
+			|| this.localPlayer.direction == ORSCharacterDirection.COMBAT_A
+			|| this.localPlayer.direction == ORSCharacterDirection.COMBAT_B) {
+			return;
+		}
+
+		int targetX = localX * this.tileSize + 64;
+		int targetZ = localZ * this.tileSize + 64;
+		ORSCharacterDirection direction = directionForDelta(targetX - this.localPlayer.currentX,
+			targetZ - this.localPlayer.currentZ);
+		if (direction != null) {
+			this.localPlayer.direction = direction;
+			this.localPlayer.animationNext = direction.rsDir;
+		}
+	}
+
+	private int localPlayerTileX() {
+		return (this.localPlayer.currentX - 64) / this.tileSize;
+	}
+
+	private int localPlayerTileZ() {
+		return (this.localPlayer.currentZ - 64) / this.tileSize;
 	}
 
 	private int nextRemoteEntityMovePixels() {
