@@ -30,6 +30,7 @@ public class VoidscapeUpdater {
   }
 
   private static final String[] RUNTIME_FILES = new String[] {
+      "accounts.txt",
       "credentials.txt",
       "uid.dat",
       "ip.txt",

@@ -159,7 +159,7 @@ sha256_file() {
 
 is_runtime_file() {
 	case "$(basename "$1")" in
-		credentials.txt|uid.dat|ip.txt|port.txt|hideIp.txt|config.txt|client.properties|discord_inuse.txt|launcherSettings.conf|voidscapeLauncher.properties)
+		accounts.txt|credentials.txt|uid.dat|ip.txt|port.txt|hideIp.txt|config.txt|client.properties|discord_inuse.txt|launcherSettings.conf|voidscapeLauncher.properties)
 			return 0
 			;;
 		*)

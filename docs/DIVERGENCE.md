@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-20 - Exclude saved accounts from beta update manifests
+
+Aligned the static friend-beta launcher packaging with the launcher/cache docs by treating `accounts.txt` as local runtime state. `scripts/package-friend-beta.sh` no longer includes saved account lists in generated update manifests, and the desktop launcher seed path now preserves `accounts.txt` alongside credentials, endpoint files, and client settings. This prevents local test account data from being published in hosted update payloads or overwriting testers' saved account switcher lists. No packet, opcode, schema, gameplay rule, or client protocol version changed; reversibility is removing `accounts.txt` from the runtime-file exclusion lists.
+
 ### 2026-06-20 - Removed local walk prediction experiment
 
 Removed the PC client's Phase 3 local walk prediction and reconciliation experiment after playtesting showed it made movement feel unnatural. Local-player movement again renders only from authoritative server `PLAYER_COORDS` updates, while the retained responsiveness work is limited to frame pacing, smooth camera, remote/NPC render interpolation, the optional client-only click marker, and the FPS overlay. No server tick rate, opcode shape, pathfinding, movement speed, combat timing, schema, or cache asset changed. Files: `mudclient.java`, `WorkbenchServer.java`. Reversibility is restoring the removed prediction helpers and workbench telemetry from the prior checkpoint.
