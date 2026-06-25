@@ -6,10 +6,16 @@ import com.openrsc.client.entityhandling.defs.extras.AnimationDef;
 import com.openrsc.client.model.Sprite;
 import orsc.Config;
 import orsc.graphics.two.MudClientGraphics;
+import orsc.mudclient;
+import orsc.multiclient.ClientPort;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.nio.ByteBuffer;
 
 /**
  * Voidscape NPC sprite previewer (dev tool).
@@ -49,6 +55,53 @@ public final class NpcPreview {
 
 	private final MudClientGraphics g;
 	private final BufferedImage image = new BufferedImage(BUF_W, BUF_H, BufferedImage.TYPE_INT_RGB);
+
+	private static final class HeadlessClientPort implements ClientPort {
+		private final String cacheLocation;
+
+		HeadlessClientPort(String cacheLocation) {
+			this.cacheLocation = new File(cacheLocation).getPath() + File.separator;
+		}
+
+		@Override public boolean drawLoading(int i) { return true; }
+		@Override public void showLoadingProgress(int percentage, String status) {}
+		@Override public void initListeners() {}
+		@Override public void crashed() {}
+		@Override public void drawLoadingError() {}
+		@Override public void drawOutOfMemoryError() {}
+		@Override public boolean isDisplayable() { return true; }
+		@Override public void drawTextBox(String line2, byte var2, String line1) {}
+		@Override public void initGraphics() {}
+		@Override public void draw() {}
+		@Override public void close() {}
+		@Override public String getCacheLocation() { return cacheLocation; }
+		@Override public Sprite getBattery(int level) { return Sprite.getUnknownSprite(18, 18); }
+		@Override public int getBatteryPercent() { return 100; }
+		@Override public boolean getBatteryCharging() { return false; }
+		@Override public Sprite getConnectivity(int level) { return Sprite.getUnknownSprite(18, 18); }
+		@Override public String getConnectivityText() { return ""; }
+		@Override public void resized() {}
+		@Override public Sprite getSpriteFromByteArray(ByteArrayInputStream input) {
+			try {
+				ByteArrayOutputStream out = new ByteArrayOutputStream();
+				byte[] buffer = new byte[4096];
+				int read;
+				while ((read = input.read(buffer)) != -1) {
+					out.write(buffer, 0, read);
+				}
+				return Sprite.unpack(ByteBuffer.wrap(out.toByteArray()));
+			} catch (Exception e) {
+				return Sprite.getUnknownSprite(18, 18);
+			}
+		}
+		@Override public void playSound(byte[] soundData, int offset, int dataLength) {}
+		@Override public void stopSoundPlayer() {}
+		@Override public void drawKeyboard() {}
+		@Override public void closeKeyboard() {}
+		@Override public boolean openUrl(String url) { return false; }
+		@Override public void setTitle(String title) {}
+		@Override public void setIconImage(String serverName) {}
+	}
 
 	// live state
 	private int npcId = 852;            // Void Colossus
@@ -475,6 +528,7 @@ public final class NpcPreview {
 		String cache = args.length > 0 ? args[0] : "Cache";
 		Config.F_CACHE_DIR = cache;
 		Config.S_WANT_CUSTOM_SPRITES = false;
+		mudclient.clientPort = new HeadlessClientPort(cache);
 		System.out.println("Cache dir: " + new java.io.File(cache).getAbsolutePath());
 		EntityHandler.load(true);
 		NpcPreview app = new NpcPreview();

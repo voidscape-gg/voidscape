@@ -1,0 +1,4521 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voidscape Drop Table Balance Report</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111418;
+      --panel: #1b2027;
+      --panel-2: #222934;
+      --line: #35404e;
+      --text: #edf1f5;
+      --muted: #9faaaf;
+      --accent: #89d18f;
+      --void: #aeb4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 28px clamp(18px, 4vw, 44px) 18px;
+      border-bottom: 1px solid var(--line);
+      background: #171b21;
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 42px); font-weight: 760; }
+    p { margin: 0; color: var(--muted); max-width: 960px; line-height: 1.45; }
+    section { padding: 24px clamp(18px, 4vw, 44px); }
+    h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .npc-head {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+      align-items: center;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--line);
+    }
+    .npc-art {
+      width: 112px;
+      height: 132px;
+      display: grid;
+      place-items: center;
+      background: #12151a;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .npc-art img { max-width: 106px; max-height: 126px; object-fit: contain; image-rendering: pixelated; }
+    .npc-title { min-width: 0; }
+    .npc-title h3 { margin: 0 0 6px; font-size: 18px; line-height: 1.2; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 12px; }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #171b21;
+    }
+    .pill.good { color: var(--accent); border-color: #4d7c55; }
+    .pill.void { color: var(--void); border-color: #6067a5; }
+    .drops {
+      list-style: none;
+      margin: 0;
+      padding: 8px 10px 12px;
+      display: grid;
+      gap: 6px;
+    }
+    .drop {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 34px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: #15191f;
+    }
+    .sprite {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .sprite img { max-width: 28px; max-height: 28px; image-rendering: pixelated; }
+    .blank { border: 1px dashed #535c68; border-radius: 4px; }
+    .table-icon {
+      border: 1px solid #65728a;
+      border-radius: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .drop-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    .chance {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .noted {
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 800;
+      margin-left: 4px;
+      text-transform: uppercase;
+    }
+    .empty { opacity: 0.58; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Voidscape Drop Table Balance Report</h1>
+    <p>Generated from <code>NpcDrops.java</code> with local OpenPK drops treated as disabled. Weight-based drops show rounded one-in odds; hover an odds value for its exact table weight.</p>
+  </header>
+
+        <section>
+          <h2>Void Dungeon</h2>
+          <div class="grid">
+
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/854.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Spider</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 854</span>
+                  <span class="pill">lvl 12</span>
+                  <span class="pill">line 1905</span>
+                  <span class="pill good">empty 10.9%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x25</span>
+          <span class="chance" title="38/128 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x60</span>
+          <span class="chance" title="20/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x4</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/219.png" alt=""></span>
+          <span class="drop-name">Red spiders eggs</span>
+          <span class="chance" title="12/128 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/219.png" alt=""></span>
+          <span class="drop-name">Red spiders eggs x2</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/160.png" alt=""></span>
+          <span class="drop-name">uncut sapphire</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x3</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1604.png" alt=""></span>
+          <span class="drop-name">Warm ashes</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="14/128 exact table weight">1/9</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/860.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Unicorn</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 860</span>
+                  <span class="pill">lvl 25</span>
+                  <span class="pill">line 1941</span>
+                  <span class="pill good">empty 17.2%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/466.png" alt=""></span>
+          <span class="drop-name">Unicorn horn</span>
+          <span class="chance" title="Guaranteed">Guaranteed</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="35/128 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x150</span>
+          <span class="chance" title="20/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/160.png" alt=""></span>
+          <span class="drop-name">uncut sapphire</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x4</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x4</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x5</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/469.png" alt=""></span>
+          <span class="drop-name">Snape grass</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1607.png" alt=""></span>
+          <span class="drop-name">Blessed ashes</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/158.png" alt=""></span>
+          <span class="drop-name">uncut ruby</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/469.png" alt=""></span>
+          <span class="drop-name">Snape grass x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/483.png" alt=""></span>
+          <span class="drop-name">restore prayer Potion</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="22/128 exact table weight">1/6</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/859.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Wizard</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 859</span>
+                  <span class="pill">lvl 40</span>
+                  <span class="pill">line 1961</span>
+                  <span class="pill good">empty 6.2%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="240/1024 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x12</span>
+          <span class="chance" title="120/1024 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x6</span>
+          <span class="chance" title="104/1024 exact table weight">1/10</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x5</span>
+          <span class="chance" title="64/1024 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/825.png" alt=""></span>
+          <span class="drop-name">Soul-Rune x4</span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x8</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x10</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1595.png" alt=""></span>
+          <span class="drop-name">Void Amulet</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x300</span>
+          <span class="chance" title="64/1024 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/158.png" alt=""></span>
+          <span class="drop-name">uncut ruby</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x2</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/469.png" alt=""></span>
+          <span class="drop-name">Snape grass</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1468.png" alt=""></span>
+          <span class="drop-name">magic Potion</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">Two Restore Prayer Potion</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/157.png" alt=""></span>
+          <span class="drop-name">uncut diamond</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x3 <span class="noted">noted</span></span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1607.png" alt=""></span>
+          <span class="drop-name">Blessed ashes x2</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/317.png" alt=""></span>
+          <span class="drop-name">Diamond Amulet of power</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1477.png" alt=""></span>
+          <span class="drop-name">Super magic Potion</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="63/1024 exact table weight">1/16</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/856.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Wolf</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 856</span>
+                  <span class="pill">lvl 42</span>
+                  <span class="pill">line 1923</span>
+                  <span class="pill good">empty 10.9%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="40/128 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x160</span>
+          <span class="chance" title="20/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x8</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x3</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x2</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/160.png" alt=""></span>
+          <span class="drop-name">uncut sapphire</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x5</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1604.png" alt=""></span>
+          <span class="drop-name">Warm ashes</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x30</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x4 <span class="noted">noted</span></span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="14/128 exact table weight">1/9</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/855.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Giant</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 855</span>
+                  <span class="pill">lvl 55</span>
+                  <span class="pill">line 2007</span>
+                  <span class="pill good">empty 11.5%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x300</span>
+          <span class="chance" title="320/1024 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x700</span>
+          <span class="chance" title="112/1024 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x12</span>
+          <span class="chance" title="72/1024 exact table weight">1/14</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald x2</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x4</span>
+          <span class="chance" title="64/1024 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1593.png" alt=""></span>
+          <span class="drop-name">Void Scimitar</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1594.png" alt=""></span>
+          <span class="drop-name">Void Shortbow</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x6</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x8</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/825.png" alt=""></span>
+          <span class="drop-name">Soul-Rune x4</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1000</span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1601.png" alt=""></span>
+          <span class="drop-name">Void Key</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x100</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x8 <span class="noted">noted</span></span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/644.png" alt=""></span>
+          <span class="drop-name">Adamantite Arrows x50</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/370.png" alt=""></span>
+          <span class="drop-name">Swordfish x3</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1605.png" alt=""></span>
+          <span class="drop-name">Bright ashes x2</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="118/1024 exact table weight">1/9</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/858.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Ogre</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 858</span>
+                  <span class="pill">lvl 62</span>
+                  <span class="pill">line 1985</span>
+                  <span class="pill good">empty 9.3%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x240</span>
+          <span class="chance" title="320/1024 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x500</span>
+          <span class="chance" title="96/1024 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x8</span>
+          <span class="chance" title="72/1024 exact table weight">1/14</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald x2</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x3</span>
+          <span class="chance" title="64/1024 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1596.png" alt=""></span>
+          <span class="drop-name">Void Mace</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x15</span>
+          <span class="chance" title="56/1024 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x4</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x6</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x750</span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1601.png" alt=""></span>
+          <span class="drop-name">Void Key</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x8 <span class="noted">noted</span></span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/154.png" alt=""></span>
+          <span class="drop-name">adamantite ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x3</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1605.png" alt=""></span>
+          <span class="drop-name">Bright ashes x2</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">Two Super Strength Potion</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="95/1024 exact table weight">1/11</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/853.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Knight</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 853</span>
+                  <span class="pill">lvl 72</span>
+                  <span class="pill">line 2055</span>
+                  <span class="pill good">empty 5.9%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x250</span>
+          <span class="chance" title="256/1024 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x600</span>
+          <span class="chance" title="112/1024 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x8</span>
+          <span class="chance" title="80/1024 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x5</span>
+          <span class="chance" title="56/1024 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/825.png" alt=""></span>
+          <span class="drop-name">Soul-Rune x4</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x8</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x20</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x12</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/158.png" alt=""></span>
+          <span class="drop-name">uncut ruby x2</span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald x2</span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x3</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="32/1024 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1601.png" alt=""></span>
+          <span class="drop-name">Void Key</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x4 <span class="noted">noted</span></span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/644.png" alt=""></span>
+          <span class="drop-name">Adamantite Arrows x60</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/370.png" alt=""></span>
+          <span class="drop-name">Swordfish x3</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">Two Restore Prayer Potion</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1607.png" alt=""></span>
+          <span class="drop-name">Blessed ashes x2</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/646.png" alt=""></span>
+          <span class="drop-name">Rune Arrows x30</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/523.png" alt=""></span>
+          <span class="drop-name">Dragonstone</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1596.png" alt=""></span>
+          <span class="drop-name">Void Mace</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1594.png" alt=""></span>
+          <span class="drop-name">Void Shortbow</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1593.png" alt=""></span>
+          <span class="drop-name">Void Scimitar</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1595.png" alt=""></span>
+          <span class="drop-name">Void Amulet</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="60/1024 exact table weight">1/17</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/857.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Void Demon</h3>
+                <div class="meta">
+                  <span class="pill void">NPC 857</span>
+                  <span class="pill">lvl 83</span>
+                  <span class="pill">line 2031</span>
+                  <span class="pill good">empty 12.9%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x800</span>
+          <span class="chance" title="320/1024 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1600</span>
+          <span class="chance" title="144/1024 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x20</span>
+          <span class="chance" title="96/1024 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x16</span>
+          <span class="chance" title="72/1024 exact table weight">1/14</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/825.png" alt=""></span>
+          <span class="drop-name">Soul-Rune x10</span>
+          <span class="chance" title="48/1024 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald x3</span>
+          <span class="chance" title="64/1024 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1593.png" alt=""></span>
+          <span class="drop-name">Void Scimitar</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1596.png" alt=""></span>
+          <span class="drop-name">Void Mace</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1594.png" alt=""></span>
+          <span class="drop-name">Void Shortbow</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1595.png" alt=""></span>
+          <span class="drop-name">Void Amulet</span>
+          <span class="chance" title="1/1024 exact table weight">1/1024</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1601.png" alt=""></span>
+          <span class="drop-name">Void Key</span>
+          <span class="chance" title="40/1024 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1599.png" alt=""></span>
+          <span class="drop-name">Dragon sword blade</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1600.png" alt=""></span>
+          <span class="drop-name">Dragon sword tip</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1608.png" alt=""></span>
+          <span class="drop-name">Void ashes x2</span>
+          <span class="chance" title="24/1024 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/546.png" alt=""></span>
+          <span class="drop-name">Shark x3</span>
+          <span class="chance" title="16/1024 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/492.png" alt=""></span>
+          <span class="drop-name">Super strength Potion</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/483.png" alt=""></span>
+          <span class="drop-name">restore prayer Potion</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x3 <span class="noted">noted</span></span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/646.png" alt=""></span>
+          <span class="drop-name">Rune Arrows x40</span>
+          <span class="chance" title="8/1024 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="132/1024 exact table weight">1/8</span>
+        </li>
+            </ul>
+          </article>
+          </div>
+        </section>
+
+        <section>
+          <h2>Wilderness / Underground</h2>
+          <div class="grid">
+
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/67.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Hobgoblin</h3>
+                <div class="meta">
+                  <span class="pill">NPC 67</span>
+                  <span class="pill">lvl 32</span>
+                  <span class="pill">line 822</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x40</span>
+          <span class="chance" title="36/128 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x2</span>
+          <span class="chance" title="22/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x15</span>
+          <span class="chance" title="12/128 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x70</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x150</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x100</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/827.png" alt=""></span>
+          <span class="drop-name">Bronze Spear</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1.png" alt=""></span>
+          <span class="drop-name">Iron Short Sword</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/63.png" alt=""></span>
+          <span class="drop-name">Steel dagger</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1088.png" alt=""></span>
+          <span class="drop-name">Iron Spear</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1089.png" alt=""></span>
+          <span class="drop-name">Steel Spear</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/36.png" alt=""></span>
+          <span class="drop-name">Body-Rune x12</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x15</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x6</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/273.png" alt=""></span>
+          <span class="drop-name">Goblin Armour</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/640.png" alt=""></span>
+          <span class="drop-name">Steel Arrows x25</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/60.png" alt=""></span>
+          <span class="drop-name">Crossbow</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/72.png" alt=""></span>
+          <span class="drop-name">Steel Long Sword</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x4</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/61.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Giant</h3>
+                <div class="meta">
+                  <span class="pill">NPC 61</span>
+                  <span class="pill">lvl 37</span>
+                  <span class="pill">line 707</span>
+                  <span class="pill good">empty 0.8%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x95</span>
+          <span class="chance" title="26/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/220.png" alt=""></span>
+          <span class="drop-name">Limpwurt root x2</span>
+          <span class="chance" title="11/128 exact table weight">1/12</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x130</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x25</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x12</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/193.png" alt=""></span>
+          <span class="drop-name">Beer</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/6.png" alt=""></span>
+          <span class="drop-name">Large Iron Helmet</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/28.png" alt=""></span>
+          <span class="drop-name">Iron dagger</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/2.png" alt=""></span>
+          <span class="drop-name">Iron Kite Shield</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x25</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x15</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/94.png" alt=""></span>
+          <span class="drop-name">Bronze Mace</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/72.png" alt=""></span>
+          <span class="drop-name">Steel Long Sword</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x220</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/35.png" alt=""></span>
+          <span class="drop-name">Mind-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x4</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/153.png" alt=""></span>
+          <span class="drop-name">mithril ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x3 <span class="noted">noted</span></span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x25</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/104.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Moss Giant</h3>
+                <div class="meta">
+                  <span class="pill">NPC 104</span>
+                  <span class="pill">lvl 62</span>
+                  <span class="pill">line 974</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x180</span>
+          <span class="chance" title="35/128 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="19/128 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x40</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x260</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/432.png" alt=""></span>
+          <span class="drop-name">Black Square Shield</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x5</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x35</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x10</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x30</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x8</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x5</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/198.png" alt=""></span>
+          <span class="drop-name">Magic Staff</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/68.png" alt=""></span>
+          <span class="drop-name">Mithril Short Sword</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/105.png" alt=""></span>
+          <span class="drop-name">Medium Steel Helmet</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x650</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/129.png" alt=""></span>
+          <span class="drop-name">Steel Kite Shield</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x4 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x25</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x4</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x20</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/179.png" alt=""></span>
+          <span class="drop-name">spinach roll</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/186.png" alt=""></span>
+          <span class="drop-name">Brass necklace</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/135.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Ice Giant</h3>
+                <div class="meta">
+                  <span class="pill">NPC 135</span>
+                  <span class="pill">lvl 68</span>
+                  <span class="pill">line 1043</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x260</span>
+          <span class="chance" title="40/128 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="12/128 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x420</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x30</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x60</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/77.png" alt=""></span>
+          <span class="drop-name">Iron 2-handed Sword</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/88.png" alt=""></span>
+          <span class="drop-name">Steel Axe</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/433.png" alt=""></span>
+          <span class="drop-name">Black Kite Shield</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/67.png" alt=""></span>
+          <span class="drop-name">Steel Short Sword</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x8</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/36.png" alt=""></span>
+          <span class="drop-name">Body-Rune x50</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/35.png" alt=""></span>
+          <span class="drop-name">Mind-Rune x35</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/142.png" alt=""></span>
+          <span class="drop-name">wine</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x5</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x800</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/215.png" alt=""></span>
+          <span class="drop-name">Iron Plated Skirt</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/96.png" alt=""></span>
+          <span class="drop-name">Mithril Mace</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/126.png" alt=""></span>
+          <span class="drop-name">Mithril Square Shield</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/249.png" alt=""></span>
+          <span class="drop-name">banana</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/153.png" alt=""></span>
+          <span class="drop-name">mithril ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x6</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x5</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x30</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x30</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x4 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x30</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">One Restore Prayer Potion</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x300</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/158.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Ice Warrior</h3>
+                <div class="meta">
+                  <span class="pill">NPC 158</span>
+                  <span class="pill">lvl 57</span>
+                  <span class="pill">line 1110</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="57/128 exact table weight">1/2</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x8</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x4</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/89.png" alt=""></span>
+          <span class="drop-name">Iron battle Axe</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/827.png" alt=""></span>
+          <span class="drop-name">Bronze Spear</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/96.png" alt=""></span>
+          <span class="drop-name">Mithril Mace</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x30</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x4 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/160.png" alt=""></span>
+          <span class="drop-name">uncut sapphire</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">One Restore Prayer Potion</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/153.png" alt=""></span>
+          <span class="drop-name">mithril ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/556.png" alt=""></span>
+          <span class="drop-name">Ice Gloves</span>
+          <span class="chance" title="Guaranteed">Guaranteed</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/190.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Chaos Dwarf</h3>
+                <div class="meta">
+                  <span class="pill">NPC 190</span>
+                  <span class="pill">lvl 59</span>
+                  <span class="pill">line 1184</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x220</span>
+          <span class="chance" title="40/128 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="18/128 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x70</span>
+          <span class="chance" title="11/128 exact table weight">1/12</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x350</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/414.png" alt=""></span>
+          <span class="drop-name">Muddy key</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x6</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x12</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x15</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/35.png" alt=""></span>
+          <span class="drop-name">Mind-Rune x50</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x40</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/109.png" alt=""></span>
+          <span class="drop-name">Large Steel Helmet</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x5</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x800</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x25</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x6</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/126.png" alt=""></span>
+          <span class="drop-name">Mithril Square Shield</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/73.png" alt=""></span>
+          <span class="drop-name">Mithril Long Sword</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/319.png" alt=""></span>
+          <span class="drop-name">Cheese</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/320.png" alt=""></span>
+          <span class="drop-name">Tomato</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x4 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/153.png" alt=""></span>
+          <span class="drop-name">mithril ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/184.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Greater Demon</h3>
+                <div class="meta">
+                  <span class="pill">NPC 184</span>
+                  <span class="pill">lvl 87</span>
+                  <span class="pill">line 1145</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x300</span>
+          <span class="chance" title="40/132 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="29/132 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x500</span>
+          <span class="chance" title="10/132 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x100</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x40</span>
+          <span class="chance" title="7/132 exact table weight">1/19</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/78.png" alt=""></span>
+          <span class="drop-name">Steel 2-handed Sword</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/88.png" alt=""></span>
+          <span class="drop-name">Steel Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/90.png" alt=""></span>
+          <span class="drop-name">Steel battle Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x20</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x8</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/367.png" alt=""></span>
+          <span class="drop-name">Tuna x2</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/172.png" alt=""></span>
+          <span class="drop-name">gold bar</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/130.png" alt=""></span>
+          <span class="drop-name">Mithril Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/112.png" alt=""></span>
+          <span class="drop-name">Large Rune Helmet</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/123.png" alt=""></span>
+          <span class="drop-name">Adamantite Plate Mail Legs</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x75</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1000</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/43.png" alt=""></span>
+          <span class="drop-name">Thread x10</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1600.png" alt=""></span>
+          <span class="drop-name">Dragon sword tip</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/370.png" alt=""></span>
+          <span class="drop-name">Swordfish x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/646.png" alt=""></span>
+          <span class="drop-name">Rune Arrows x15</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/221.png" alt=""></span>
+          <span class="drop-name">Strength Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/397.png" alt=""></span>
+          <span class="drop-name">Rune short sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/405.png" alt=""></span>
+          <span class="drop-name">rune Axe</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/403.png" alt=""></span>
+          <span class="drop-name">Rune Square Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/290.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Black Demon</h3>
+                <div class="meta">
+                  <span class="pill">NPC 290</span>
+                  <span class="pill">lvl 156</span>
+                  <span class="pill">line 1454</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="23/132 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Ultra Rare Drop Table</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x350</span>
+          <span class="chance" title="39/132 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="7/132 exact table weight">1/19</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x130</span>
+          <span class="chance" title="6/132 exact table weight">1/22</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x600</span>
+          <span class="chance" title="6/132 exact table weight">1/22</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x120</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x25</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x12</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/424.png" alt=""></span>
+          <span class="drop-name">Black Short Sword</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/90.png" alt=""></span>
+          <span class="drop-name">Steel battle Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/428.png" alt=""></span>
+          <span class="drop-name">Black Axe</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x2</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x3 <span class="noted">noted</span></span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/646.png" alt=""></span>
+          <span class="drop-name">Rune Arrows x20</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/492.png" alt=""></span>
+          <span class="drop-name">Super strength Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/546.png" alt=""></span>
+          <span class="drop-name">Shark x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/157.png" alt=""></span>
+          <span class="drop-name">uncut diamond</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/400.png" alt=""></span>
+          <span class="drop-name">Rune Chain Mail Body</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/130.png" alt=""></span>
+          <span class="drop-name">Mithril Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/399.png" alt=""></span>
+          <span class="drop-name">Medium Rune Helmet</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x8</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x75</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1200</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/480.png" alt=""></span>
+          <span class="drop-name">defense Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1600.png" alt=""></span>
+          <span class="drop-name">Dragon sword tip</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/397.png" alt=""></span>
+          <span class="drop-name">Rune short sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/75.png" alt=""></span>
+          <span class="drop-name">Rune long sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/93.png" alt=""></span>
+          <span class="drop-name">Rune battle Axe</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/584.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Earth Warrior</h3>
+                <div class="meta">
+                  <span class="pill">NPC 584</span>
+                  <span class="pill">lvl 52</span>
+                  <span class="pill">line 1790</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="14/128 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1089.png" alt=""></span>
+          <span class="drop-name">Steel Spear</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/103.png" alt=""></span>
+          <span class="drop-name">Staff of earth</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="36/128 exact table weight">1/4</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x25</span>
+          <span class="chance" title="9/128 exact table weight">1/14</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x6</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x3</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x80</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x80</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x4</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x5</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/154.png" alt=""></span>
+          <span class="drop-name">adamantite ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x5 <span class="noted">noted</span></span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x40</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/159.png" alt=""></span>
+          <span class="drop-name">uncut emerald</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/221.png" alt=""></span>
+          <span class="drop-name">Strength Potion</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/787.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Shadow Warrior</h3>
+                <div class="meta">
+                  <span class="pill">NPC 787</span>
+                  <span class="pill">lvl 64</span>
+                  <span class="pill">line 1847</span>
+                  <span class="pill good">empty 0.8%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="18/128 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x80</span>
+          <span class="chance" title="47/128 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x8</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x4</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x60</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x4</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/572.png" alt=""></span>
+          <span class="drop-name">weapon poison</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1091.png" alt=""></span>
+          <span class="drop-name">Adamantite Spear</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/565.png" alt=""></span>
+          <span class="drop-name">Poisoned Black dagger</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1081.png" alt=""></span>
+          <span class="drop-name">Black throwing knife</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/425.png" alt=""></span>
+          <span class="drop-name">Black Long Sword</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/216.png" alt=""></span>
+          <span class="drop-name">Black robe</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x6</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x3</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1081.png" alt=""></span>
+          <span class="drop-name">Black throwing knife x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1079.png" alt=""></span>
+          <span class="drop-name">Adamantite throwing knife x8</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/373.png" alt=""></span>
+          <span class="drop-name">Lobster x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/173.png" alt=""></span>
+          <span class="drop-name">mithril bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/158.png" alt=""></span>
+          <span class="drop-name">uncut ruby</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/498.png" alt=""></span>
+          <span class="drop-name">ranging Potion</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/644.png" alt=""></span>
+          <span class="drop-name">Adamantite Arrows x30</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          </div>
+        </section>
+
+        <section>
+          <h2>Dragons</h2>
+          <div class="grid">
+
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/201.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Red Dragon</h3>
+                <div class="meta">
+                  <span class="pill">NPC 201</span>
+                  <span class="pill">lvl 140</span>
+                  <span class="pill">line 1264</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x450</span>
+          <span class="chance" title="40/132 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x180</span>
+          <span class="chance" title="29/132 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x750</span>
+          <span class="chance" title="10/132 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x120</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x6</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x5</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/79.png" alt=""></span>
+          <span class="drop-name">Mithril 2-handed Sword</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x8</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/203.png" alt=""></span>
+          <span class="drop-name">Mithril Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/91.png" alt=""></span>
+          <span class="drop-name">Mithril battle Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x50</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/332.png" alt=""></span>
+          <span class="drop-name">Chocolate Cake</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/332.png" alt=""></span>
+          <span class="drop-name">Chocolate Cake x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x2</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/154.png" alt=""></span>
+          <span class="drop-name">adamantite ore x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/158.png" alt=""></span>
+          <span class="drop-name">uncut ruby</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/370.png" alt=""></span>
+          <span class="drop-name">Swordfish x3</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/483.png" alt=""></span>
+          <span class="drop-name">restore prayer Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/75.png" alt=""></span>
+          <span class="drop-name">Rune long sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/120.png" alt=""></span>
+          <span class="drop-name">Adamantite Plate Mail Body</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1500</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/130.png" alt=""></span>
+          <span class="drop-name">Mithril Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1599.png" alt=""></span>
+          <span class="drop-name">Dragon sword blade</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/397.png" alt=""></span>
+          <span class="drop-name">Rune short sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/405.png" alt=""></span>
+          <span class="drop-name">rune Axe</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/403.png" alt=""></span>
+          <span class="drop-name">Rune Square Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/202.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Blue Dragon</h3>
+                <div class="meta">
+                  <span class="pill">NPC 202</span>
+                  <span class="pill">lvl 105</span>
+                  <span class="pill">line 1299</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x120</span>
+          <span class="chance" title="29/132 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="15/132 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x330</span>
+          <span class="chance" title="24/132 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x500</span>
+          <span class="chance" title="10/132 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x120</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x20</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/121.png" alt=""></span>
+          <span class="drop-name">Steel Plate Mail Legs</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/203.png" alt=""></span>
+          <span class="drop-name">Mithril Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/90.png" alt=""></span>
+          <span class="drop-name">Steel battle Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x6</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/154.png" alt=""></span>
+          <span class="drop-name">adamantite ore x2</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/467.png" alt=""></span>
+          <span class="drop-name">Blue dragon scale x3</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar <span class="noted">noted</span></span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/370.png" alt=""></span>
+          <span class="drop-name">Swordfish x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/483.png" alt=""></span>
+          <span class="drop-name">restore prayer Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/555.png" alt=""></span>
+          <span class="drop-name">Bass x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/555.png" alt=""></span>
+          <span class="drop-name">Bass</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1090.png" alt=""></span>
+          <span class="drop-name">Mithril Spear</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/130.png" alt=""></span>
+          <span class="drop-name">Mithril Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/111.png" alt=""></span>
+          <span class="drop-name">Large Adamantite Helmet</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x75</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1100</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1599.png" alt=""></span>
+          <span class="drop-name">Dragon sword blade</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/397.png" alt=""></span>
+          <span class="drop-name">Rune short sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/405.png" alt=""></span>
+          <span class="drop-name">rune Axe</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/398.png" alt=""></span>
+          <span class="drop-name">rune Scimitar</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/403.png" alt=""></span>
+          <span class="drop-name">Rune Square Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/291.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Black Dragon</h3>
+                <div class="meta">
+                  <span class="pill">NPC 291</span>
+                  <span class="pill">lvl 200</span>
+                  <span class="pill">line 1492</span>
+                  <span class="pill good">empty 2.3%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x500</span>
+          <span class="chance" title="40/132 exact table weight">1/3</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Ultra Rare Drop Table</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x200</span>
+          <span class="chance" title="20/132 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x850</span>
+          <span class="chance" title="10/132 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x150</span>
+          <span class="chance" title="5/132 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x60</span>
+          <span class="chance" title="6/132 exact table weight">1/22</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x10</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x8</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/79.png" alt=""></span>
+          <span class="drop-name">Mithril 2-handed Sword</span>
+          <span class="chance" title="4/132 exact table weight">1/33</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/203.png" alt=""></span>
+          <span class="drop-name">Mithril Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/619.png" alt=""></span>
+          <span class="drop-name">Blood-Rune x20</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/91.png" alt=""></span>
+          <span class="drop-name">Mithril battle Axe</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/332.png" alt=""></span>
+          <span class="drop-name">Chocolate Cake x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/332.png" alt=""></span>
+          <span class="drop-name">Chocolate Cake</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x3</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/174.png" alt=""></span>
+          <span class="drop-name">adamantite bar x2</span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/154.png" alt=""></span>
+          <span class="drop-name">adamantite ore x3 <span class="noted">noted</span></span>
+          <span class="chance" title="2/132 exact table weight">1/66</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/157.png" alt=""></span>
+          <span class="drop-name">uncut diamond</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/546.png" alt=""></span>
+          <span class="drop-name">Shark x2</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/483.png" alt=""></span>
+          <span class="drop-name">restore prayer Potion</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/523.png" alt=""></span>
+          <span class="drop-name">Dragonstone</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/130.png" alt=""></span>
+          <span class="drop-name">Mithril Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/120.png" alt=""></span>
+          <span class="drop-name">Adamantite Plate Mail Body</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/75.png" alt=""></span>
+          <span class="drop-name">Rune long sword</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x150</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x1800</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1599.png" alt=""></span>
+          <span class="drop-name">Dragon sword blade</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/396.png" alt=""></span>
+          <span class="drop-name">rune dagger</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/398.png" alt=""></span>
+          <span class="drop-name">rune Scimitar</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/93.png" alt=""></span>
+          <span class="drop-name">Rune battle Axe</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/404.png" alt=""></span>
+          <span class="drop-name">Rune Kite Shield</span>
+          <span class="chance" title="1/132 exact table weight">1/132</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="3/132 exact table weight">1/44</span>
+        </li>
+            </ul>
+          </article>
+          </div>
+        </section>
+
+        <section>
+          <h2>Mid-Level Undead</h2>
+          <div class="grid">
+
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/40.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Skeleton</h3>
+                <div class="meta">
+                  <span class="pill">NPC 40</span>
+                  <span class="pill">lvl 21</span>
+                  <span class="pill">line 502</span>
+                  <span class="pill good">empty 11.7%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="21/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x8</span>
+          <span class="chance" title="28/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x16</span>
+          <span class="chance" title="21/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x5</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x30</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/11.png" alt=""></span>
+          <span class="drop-name">Bronze Arrows x20</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x70</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/104.png" alt=""></span>
+          <span class="drop-name">Medium Bronze Helmet</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/35.png" alt=""></span>
+          <span class="drop-name">Mind-Rune x5</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x4</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x6</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/638.png" alt=""></span>
+          <span class="drop-name">Iron Arrows x20</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/113.png" alt=""></span>
+          <span class="drop-name">Bronze Chain Mail Body</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/16.png" alt=""></span>
+          <span class="drop-name">Leather Gloves</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">Iron Mace</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/21.png" alt=""></span>
+          <span class="drop-name">Bucket</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="15/128 exact table weight">1/9</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/41.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Zombie</h3>
+                <div class="meta">
+                  <span class="pill">NPC 41</span>
+                  <span class="pill">lvl 24</span>
+                  <span class="pill">line 527</span>
+                  <span class="pill good">empty 25.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x35</span>
+          <span class="chance" title="21/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x25</span>
+          <span class="chance" title="10/128 exact table weight">1/13</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x55</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"></span>
+          <span class="drop-name">Iron Mace</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/28.png" alt=""></span>
+          <span class="drop-name">Iron dagger</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/60.png" alt=""></span>
+          <span class="drop-name">Crossbow</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/36.png" alt=""></span>
+          <span class="drop-name">Body-Rune x8</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/166.png" alt=""></span>
+          <span class="drop-name">tinderbox</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/128.png" alt=""></span>
+          <span class="drop-name">Bronze Kite Shield</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/202.png" alt=""></span>
+          <span class="drop-name">tin ore</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/270.png" alt=""></span>
+          <span class="drop-name">Eye of newt</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x15</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x45</span>
+          <span class="chance" title="12/128 exact table weight">1/11</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/35.png" alt=""></span>
+          <span class="drop-name">Mind-Rune x8</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x2</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/155.png" alt=""></span>
+          <span class="drop-name">coal x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop empty">
+          <span class="sprite blank"></span>
+          <span class="drop-name">Nothing</span>
+          <span class="chance" title="32/128 exact table weight">1/4</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/46.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Skeleton</h3>
+                <div class="meta">
+                  <span class="pill">NPC 46</span>
+                  <span class="pill">lvl 25</span>
+                  <span class="pill">line 590</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="21/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x10</span>
+          <span class="chance" title="18/128 exact table weight">1/7</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x28</span>
+          <span class="chance" title="15/128 exact table weight">1/9</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/11.png" alt=""></span>
+          <span class="drop-name">Bronze Arrows x15</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x16</span>
+          <span class="chance" title="7/128 exact table weight">1/18</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/28.png" alt=""></span>
+          <span class="drop-name">Iron dagger</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/11.png" alt=""></span>
+          <span class="drop-name">Bronze Arrows x25</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/66.png" alt=""></span>
+          <span class="drop-name">Bronze Short Sword</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x42</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x60</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x16</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x5</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/34.png" alt=""></span>
+          <span class="drop-name">Earth-Rune x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/31.png" alt=""></span>
+          <span class="drop-name">Fire-Rune x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/70.png" alt=""></span>
+          <span class="drop-name">Bronze Long Sword</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/40.png" alt=""></span>
+          <span class="drop-name">Nature-Rune x4</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x100</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/29.png" alt=""></span>
+          <span class="drop-name">grain</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/151.png" alt=""></span>
+          <span class="drop-name">iron ore</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x55</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x5</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/640.png" alt=""></span>
+          <span class="drop-name">Steel Arrows x25</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/45.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Skeleton</h3>
+                <div class="meta">
+                  <span class="pill">NPC 45</span>
+                  <span class="pill">lvl 31</span>
+                  <span class="pill">line 555</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="20/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x20</span>
+          <span class="chance" title="25/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x35</span>
+          <span class="chance" title="24/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/5.png" alt=""></span>
+          <span class="drop-name">Medium Iron Helmet</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/169.png" alt=""></span>
+          <span class="drop-name">bronze bar</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1.png" alt=""></span>
+          <span class="drop-name">Iron Short Sword</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x105</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x150</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x15</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x20</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/12.png" alt=""></span>
+          <span class="drop-name">Iron Axe</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/83.png" alt=""></span>
+          <span class="drop-name">Iron Scimitar</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/113.png" alt=""></span>
+          <span class="drop-name">Bronze Chain Mail Body</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x20</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/392.png" alt=""></span>
+          <span class="drop-name">yellow key</span>
+          <span class="chance" title="Guaranteed">Guaranteed</span>
+        </li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="npc-head">
+              <div class="npc-art"><img src="drop-table-assets/npc/68.png" alt=""></div>
+              <div class="npc-title">
+                <h3>Zombie</h3>
+                <div class="meta">
+                  <span class="pill">NPC 68</span>
+                  <span class="pill">lvl 32</span>
+                  <span class="pill">line 854</span>
+                  <span class="pill good">empty 0.0%</span>
+                </div>
+              </div>
+            </div>
+            <ul class="drops">
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Herb Drop Table</span>
+          <span class="chance" title="20/128 exact table weight">1/6</span>
+        </li>
+
+        <li class="drop table-roll">
+          <span class="sprite table-icon">T</span>
+          <span class="drop-name">Rare Drop Table</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x20</span>
+          <span class="chance" title="25/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x35</span>
+          <span class="chance" title="24/128 exact table weight">1/5</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x75</span>
+          <span class="chance" title="8/128 exact table weight">1/16</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/5.png" alt=""></span>
+          <span class="drop-name">Medium Iron Helmet</span>
+          <span class="chance" title="6/128 exact table weight">1/21</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/169.png" alt=""></span>
+          <span class="drop-name">bronze bar</span>
+          <span class="chance" title="5/128 exact table weight">1/26</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/1.png" alt=""></span>
+          <span class="drop-name">Iron Short Sword</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x105</span>
+          <span class="chance" title="4/128 exact table weight">1/32</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x150</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/32.png" alt=""></span>
+          <span class="drop-name">Water-Rune x15</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/33.png" alt=""></span>
+          <span class="drop-name">Air-Rune x20</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x6</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x10</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x3</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/12.png" alt=""></span>
+          <span class="drop-name">Iron Axe</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/83.png" alt=""></span>
+          <span class="drop-name">Iron Scimitar</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/113.png" alt=""></span>
+          <span class="drop-name">Bronze Chain Mail Body</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/46.png" alt=""></span>
+          <span class="drop-name">Cosmic-Rune x3</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/10.png" alt=""></span>
+          <span class="drop-name">Coins x90</span>
+          <span class="chance" title="3/128 exact table weight">1/43</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/38.png" alt=""></span>
+          <span class="drop-name">Death-Rune x2</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/42.png" alt=""></span>
+          <span class="drop-name">Law-Rune x4</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/170.png" alt=""></span>
+          <span class="drop-name">iron bar</span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/171.png" alt=""></span>
+          <span class="drop-name">steel bar x2 <span class="noted">noted</span></span>
+          <span class="chance" title="2/128 exact table weight">1/64</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/642.png" alt=""></span>
+          <span class="drop-name">Mithril Arrows x20</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/41.png" alt=""></span>
+          <span class="drop-name">Chaos-Rune x8</span>
+          <span class="chance" title="1/128 exact table weight">1/128</span>
+        </li>
+
+        <li class="drop">
+          <span class="sprite"><img src="drop-table-assets/item/393.png" alt=""></span>
+          <span class="drop-name">Blue key</span>
+          <span class="chance" title="Guaranteed">Guaranteed</span>
+        </li>
+            </ul>
+          </article>
+          </div>
+        </section>
+</body>
+</html>
