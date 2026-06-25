@@ -75,6 +75,11 @@ python pack.py \
   --commit
 ```
 
+By default `pack.py` keeps the legacy RSC hard-mask behavior: `0` is
+transparent, and every non-zero pixel is opaque `0x00RRGGBB`. Use
+`--preserve-alpha` only for sprites whose client render path explicitly blends
+ARGB pixels, such as the elemental Blast projectiles.
+
 `pack.py` looks for `<input>.json` next to each input PNG and uses it as a
 per-image header sidecar. Falls back to `--sidecar PATH` for shared metadata,
 or zeros if neither is provided.
@@ -90,7 +95,8 @@ See `Client_Base/src/com/openrsc/client/model/Sprite.java`. Big-endian:
 - 4 bytes: something1 (i32)
 - 4 bytes: something2 (i32)
 - = 25-byte header
-- N×4 bytes: pixels (N = width×height, each int32 ARGB packed)
+- N×4 bytes: pixels (N = width×height). Legacy sprites store `0x00RRGGBB`
+  with `0` as transparent; opt-in alpha sprites store ARGB.
 
 ZIP entry name = `str(index)`.
 

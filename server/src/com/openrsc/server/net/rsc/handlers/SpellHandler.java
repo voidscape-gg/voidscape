@@ -56,6 +56,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	private static final String NECKLACE = "necklace";
 	private static final String CROWN = "crown";
 	private static final String DEFAULT = "";
+	private static final int MAGIC_PROJECTILE = 1;
+	private static final int FIRE_BLAST_PROJECTILE = 9;
+	private static final int WIND_BLAST_PROJECTILE = 10;
+	private static final int WATER_BLAST_PROJECTILE = 11;
+	private static final int EARTH_BLAST_PROJECTILE = 12;
 	private static final int[] elementalRunes = new int[4];
 
 	/**
@@ -1827,13 +1832,29 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 						int damage = CombatFormula.calculateMagicDamage(max, affectedMob);
 
-						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, 1, setChasing));
+						int projectileType = projectileTypeForSpell(spellEnum);
+						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, projectileType, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
 						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 				}
 			}
 		});
+		}
+
+	private int projectileTypeForSpell(Spells spellEnum) {
+		switch (spellEnum) {
+			case WIND_BLAST:
+				return WIND_BLAST_PROJECTILE;
+			case WATER_BLAST:
+				return WATER_BLAST_PROJECTILE;
+			case EARTH_BLAST:
+				return EARTH_BLAST_PROJECTILE;
+			case FIRE_BLAST:
+				return FIRE_BLAST_PROJECTILE;
+			default:
+				return MAGIC_PROJECTILE;
+		}
 	}
 
 	private boolean isBoostSpell(Player player, Spells spellEnum) {

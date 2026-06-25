@@ -95,7 +95,7 @@ These are positional in many loaders. Keep server and client append order aligne
 | Custom item ids | `1608` | Void ashes are current high-water mark. |
 | Custom NPC ids | `860` | Void Unicorn is current high-water mark. |
 | Custom scenery ids | `1309` | Colossus charge effect objects are current high-water mark. |
-| Custom client version | `10099` | Current working tree value. |
+| Custom client version | `10120` | Current working tree value. |
 
 ## Pre-release config sign-off
 

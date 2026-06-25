@@ -262,7 +262,7 @@ public final class mudclient implements Runnable {
 	public static final int spriteUtil = 2100;
 	public static final int spriteItem = 2150;
 	public static final int spriteProjectile = 3160;
-	private static final int SPRITE_PROJECTILE_COUNT = 9;
+	private static final int SPRITE_PROJECTILE_COUNT = 13;
 	public static final int spriteTexture = 3225;
 	static final int spriteLogo = 3150;
 	private static final int VOID_RUSH_UI_MIN_X = 486;
@@ -305,6 +305,8 @@ public final class mudclient implements Runnable {
 	private static final int VOID_COLOSSUS_PROJECTILE_SOURCE_Y_OFFSET = 420;
 	private static final int VOID_COLOSSUS_COMBAT_LEVEL = 350;
 	private static final int STANDARD_PLAYER_PROJECTILE_Y_OFFSET = 110;
+	private static final int STANDARD_PROJECTILE_SCENE_SIZE = 32;
+	private static final int BLAST_PROJECTILE_SCENE_SIZE = 50;
 	private static final int VOID_COLOSSUS_BOSS_HUD_WIDTH = 224;
 	private static final int VOID_COLOSSUS_BOSS_HUD_HEIGHT = 50;
 	private static final int CINEMATIC_CAMERA_CLASSIC = 0;
@@ -4326,6 +4328,20 @@ public final class mudclient implements Runnable {
 		return STANDARD_PLAYER_PROJECTILE_Y_OFFSET;
 	}
 
+	private int projectileSceneSize(SpriteDef projectileSprite) {
+		if (projectileSprite != null && isBlastProjectile(projectileSprite.id)) {
+			return BLAST_PROJECTILE_SCENE_SIZE;
+		}
+		return STANDARD_PROJECTILE_SCENE_SIZE;
+	}
+
+	private boolean isBlastProjectile(int projectileId) {
+		return projectileId == PROJECTILE_TYPES.FIRE_BLAST.id()
+			|| projectileId == PROJECTILE_TYPES.WIND_BLAST.id()
+			|| projectileId == PROJECTILE_TYPES.WATER_BLAST.id()
+			|| projectileId == PROJECTILE_TYPES.EARTH_BLAST.id();
+	}
+
 	private ORSCharacter findVoidColossusForHud() {
 		for (int i = 0; i < this.npcCount; i++) {
 			ORSCharacter npc = this.npcs[i];
@@ -7803,8 +7819,9 @@ public final class mudclient implements Runnable {
 									/ this.projectileMaxRange;
 								int var13 = ((this.projectileMaxRange - var3.projectileRange) * var9
 									+ var6 * var3.projectileRange) / this.projectileMaxRange;
+								int projectileSize = projectileSceneSize(var3.incomingProjectileSprite);
 								this.scene.drawSprite(var3.incomingProjectileSprite.id + spriteProjectile, var13,
-									0, var11, var12, 32, 32, (byte) 109);
+									0, var11, var12, projectileSize, projectileSize, (byte) 109);
 								++this.spriteCount;
 							}
 						}
@@ -7840,8 +7857,9 @@ public final class mudclient implements Runnable {
 									/ this.projectileMaxRange;
 								int var13 = ((this.projectileMaxRange - var3.projectileRange) * var9
 									+ var6 * var3.projectileRange) / this.projectileMaxRange;
+								int projectileSize = projectileSceneSize(var3.incomingProjectileSprite);
 								this.scene.drawSprite(var3.incomingProjectileSprite.id + spriteProjectile, var13,
-									0, var11, var12, 32, 32, (byte) 109);
+									0, var11, var12, projectileSize, projectileSize, (byte) 109);
 								++this.spriteCount;
 							}
 						}

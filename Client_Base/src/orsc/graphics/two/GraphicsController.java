@@ -1032,6 +1032,41 @@ public class GraphicsController {
 		}
 	}
 
+	private void plot_scale_argb_mask(int[] src, int heightStep, int scaleX, int srcStartY, int[] dest,
+									  int scaleY, int destHeight, int srcStartX, int destRowStride,
+									  int destWidth, int srcWidth, int destHead) {
+		try {
+			int firstColumn = srcStartX;
+
+			for (int i = -destHeight; i < 0; i += heightStep) {
+				int srcRowHead = (srcStartY >> 16) * srcWidth;
+				srcStartY += scaleY;
+
+				for (int j = -destWidth; j < 0; ++j) {
+					int argb = src[(srcStartX >> 16) + srcRowHead];
+					srcStartX += scaleX;
+					if (argb != 0) {
+						int alpha = argb >>> 24 & 0xFF;
+						int color = argb & 0xFFFFFF;
+						if (alpha == 0 || alpha >= 250) {
+							dest[destHead++] = color;
+						} else {
+							dest[destHead] = mixAlpha(dest[destHead], color, alpha + 1);
+							++destHead;
+						}
+					} else {
+						++destHead;
+					}
+				}
+
+				destHead += destRowStride;
+				srcStartX = firstColumn;
+			}
+		} catch (Exception var15) {
+			System.out.println("error in plot_argb_scale");
+		}
+	}
+
 	/*
 	 * public final void applyColorLookupTable(int imgID) { try {
 	 *  if (null != this.spriteColours[imgID]) { int
@@ -2846,6 +2881,95 @@ public class GraphicsController {
 		} catch (RuntimeException var17) {
 			throw GenUtil.makeThrowable(var17,
 				"ua.D(" + x + ',' + y + ',' + destHeight + ',' + destWidth + ',' + 5924 + ',' + sprite + ')');
+		}
+	}
+
+	public final void drawSpriteAlpha(Sprite sprite, int x, int y, int destWidth, int destHeight, int var5) {
+		try {
+			try {
+				int spriteWidth = sprite.getWidth();
+				int spriteHeight = sprite.getHeight();
+				int srcStartX = 0;
+				int srcStartY = 0;
+				int scaleX = (spriteWidth << 16) / destWidth;
+				int scaleY = (spriteHeight << 16) / destHeight;
+				int destHead;
+				int destRowStride;
+				if (sprite.requiresShift()) {
+					destHead = sprite.getSomething1();
+					destRowStride = sprite.getSomething2();
+					if (destHead == 0 || destRowStride == 0) {
+						return;
+					}
+
+					if (sprite.getYShift() * destHeight % destRowStride != 0) {
+						srcStartY = (destRowStride - destHeight * sprite.getYShift() % destRowStride << 16)
+							/ destHeight;
+					}
+
+					scaleX = (destHead << 16) / destWidth;
+					if (sprite.getXShift() * destWidth % destHead != 0) {
+						srcStartX = (destHead - sprite.getXShift() * destWidth % destHead << 16) / destWidth;
+					}
+
+					x += (destWidth * sprite.getXShift() + destHead - 1) / destHead;
+					scaleY = (destRowStride << 16) / destHeight;
+					y += (destRowStride + destHeight * sprite.getYShift() - 1) / destRowStride;
+					destHeight = (sprite.getHeight() - (srcStartY >> 16)) * destHeight / destRowStride;
+					destWidth = destWidth * (sprite.getWidth() - (srcStartX >> 16)) / destHead;
+				}
+
+				destHead = x + this.width2 * y;
+				if (y < this.clipTop) {
+					int lost = this.clipTop - y;
+					srcStartY += scaleY * lost;
+					destHeight -= lost;
+					destHead += this.width2 * lost;
+					y = 0;
+				}
+
+				destRowStride = this.width2 - destWidth;
+				if (y + destHeight >= this.clipBottom) {
+					destHeight -= y - this.clipBottom + destHeight + 1;
+				}
+
+				if (x < this.clipLeft) {
+					int lost = this.clipLeft - x;
+					destWidth -= lost;
+					destRowStride += lost;
+					destHead += lost;
+					x = 0;
+					srcStartX += scaleX * lost;
+				}
+
+				if (this.clipRight <= x + destWidth) {
+					int lost = 1 + x + (destWidth - this.clipRight);
+					destRowStride += lost;
+					destWidth -= lost;
+				}
+
+				byte heightStep = 1;
+				if (this.interlace) {
+					if ((y & 1) != 0) {
+						--destHeight;
+						destHead += this.width2;
+					}
+
+					destRowStride += this.width2;
+					heightStep = 2;
+					scaleY += scaleY;
+				}
+
+				this.plot_scale_argb_mask(sprite.getPixels(), heightStep, scaleX, srcStartY,
+					this.pixelData, scaleY, destHeight, srcStartX, destRowStride, destWidth, spriteWidth,
+					destHead);
+			} catch (Exception var16) {
+				System.out.println("drawSpriteAlpha: error in sprite clipping routine");
+			}
+
+		} catch (RuntimeException var17) {
+			throw GenUtil.makeThrowable(var17,
+				"ua.drawSpriteAlpha(" + x + ',' + y + ',' + destHeight + ',' + destWidth + ',' + var5 + ',' + sprite + ')');
 		}
 	}
 

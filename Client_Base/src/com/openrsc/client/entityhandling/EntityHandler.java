@@ -373,7 +373,11 @@ public class EntityHandler {
 		SPIKEBALL(5),
 		BLANK(6), //not sure if this is even used for anything
 		VOID_SHARD(7),
-		VOID_CLAW(8);
+		VOID_CLAW(8),
+		FIRE_BLAST(9),
+		WIND_BLAST(10),
+		WATER_BLAST(11),
+		EARTH_BLAST(12);
 
 		private final int value;
 
@@ -400,6 +404,10 @@ public class EntityHandler {
 		projectiles.add(new SpriteDef("blank projectile", mudclient.spriteProjectile + 6, "projectiles:6", 6));
 		projectiles.add(new SpriteDef("void shard projectile", mudclient.spriteProjectile + 7, "projectiles:7", 7));
 		projectiles.add(new SpriteDef("void claw projectile", mudclient.spriteProjectile + 8, "projectiles:8", 8));
+		projectiles.add(new SpriteDef("fire blast projectile", mudclient.spriteProjectile + 9, "projectiles:9", 9));
+		projectiles.add(new SpriteDef("wind blast projectile", mudclient.spriteProjectile + 10, "projectiles:10", 10));
+		projectiles.add(new SpriteDef("water blast projectile", mudclient.spriteProjectile + 11, "projectiles:11", 11));
+		projectiles.add(new SpriteDef("earth blast projectile", mudclient.spriteProjectile + 12, "projectiles:12", 12));
 	}
 
 	public enum GUIPARTS {

@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-25 - Elemental Blast alpha projectile set
+
+Upgraded the Blast-tier magic projectile presentation and the supporting sprite pipeline. `tools/voidscim-art/pack.py` now supports opt-in `--preserve-alpha` ARGB packing while legacy sprites still default to hard-mask `0x00RRGGBB`, and `extract_ref.py` decodes both formats for proof/round-trip work. Fire Blast now uses a round soft-alpha fireball projectile type `9` / archive entry `3169`, and Wind Blast, Water Blast, and Earth Blast use matching soft-alpha orb projectile types `10`, `11`, and `12` backed by `Authentic_Sprites.orsc` entries `3170`, `3171`, and `3172`. The shared client loads 13 projectile slots, routes the Blast family through a projectile alpha draw path, and renders those projectiles at 50x50 scene size. `CLIENT_VERSION`, local `client_version`, protocol docs, and voidbot moved to `10120` because stale `10116` clients only know projectile types `0..8` and lack the alpha renderer. No packet shape, opcode, spell damage, rune requirement, or combat formula changed; reversibility is restoring the Blast spells to projectile type `1`, dropping the extra projectile slots/assets and alpha render path, and downgrading the client version.
+
 ### 2026-06-20 - Exclude saved accounts from beta update manifests
 
 Aligned the static friend-beta launcher packaging with the launcher/cache docs by treating `accounts.txt` as local runtime state. `scripts/package-friend-beta.sh` no longer includes saved account lists in generated update manifests, and the desktop launcher seed path now preserves `accounts.txt` alongside credentials, endpoint files, and client settings. This prevents local test account data from being published in hosted update payloads or overwriting testers' saved account switcher lists. No packet, opcode, schema, gameplay rule, or client protocol version changed; reversibility is removing `accounts.txt` from the runtime-file exclusion lists.
