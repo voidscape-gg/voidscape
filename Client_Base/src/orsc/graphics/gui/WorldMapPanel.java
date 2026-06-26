@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -74,6 +75,10 @@ public final class WorldMapPanel {
 	private static final int BTN_H = 28;
 	private static final int RIGHT_COL_W = BTN_W + 16;
 	private static final int CLOSE_LINK_W = 80;
+	private static final int MOBILE_WEB_MIN_TOP_MARGIN = 34;
+	private static final int MOBILE_WEB_PORTRAIT_MIN_TOP_MARGIN = 72;
+	private static final int MOBILE_WEB_MIN_BOTTOM_MARGIN = 44;
+	private static final int MOBILE_WEB_MIN_X_MARGIN = 8;
 
 	private static final int COLOR_WIN_BG = 0x141420;
 	private static final int COLOR_WIN_BORDER = 0xC0C0C0;
@@ -187,13 +192,29 @@ public final class WorldMapPanel {
 
 	public void prepareLayout(final int gameWidth, final int gameHeight,
 	                          final int playerWorldX, final int playerWorldY) {
-		// Windowed dialog at 75% of the game area, centered. Side-panel icons
-		// and chat tabs remain visible around the edges; clicks outside the
-		// panel pass through on desktop.
-		winW = (gameWidth  * 3) / 4;
-		winH = (gameHeight * 3) / 4;
-		winX = (gameWidth  - winW) / 2;
-		winY = (gameHeight - winH) / 2;
+		// Desktop keeps the original centered 75% dialog. The iPhone TeaVM
+		// profile uses the same shared map renderer/input, but gives the modal
+		// most of the tall phone canvas so search, zoom, and walker taps are not
+		// squeezed into a desktop-shaped window.
+		if (Config.isWeb() && Config.isAndroid()) {
+			int marginX = Math.max(MOBILE_WEB_MIN_X_MARGIN, gameWidth / 40);
+			int topMargin = gameHeight >= 600
+				? Math.max(MOBILE_WEB_PORTRAIT_MIN_TOP_MARGIN, gameHeight / 14)
+				: Math.max(MOBILE_WEB_MIN_TOP_MARGIN, gameHeight / 16);
+			int bottomMargin = Math.max(MOBILE_WEB_MIN_BOTTOM_MARGIN, gameHeight / 14);
+			winX = marginX;
+			winY = topMargin;
+			winW = Math.max(260, gameWidth - marginX * 2);
+			winH = Math.max(220, gameHeight - topMargin - bottomMargin);
+		} else {
+			// Windowed dialog at 75% of the game area, centered. Side-panel icons
+			// and chat tabs remain visible around the edges; clicks outside the
+			// panel pass through on desktop.
+			winW = (gameWidth  * 3) / 4;
+			winH = (gameHeight * 3) / 4;
+			winX = (gameWidth  - winW) / 2;
+			winY = (gameHeight - winH) / 2;
+		}
 		closeLinkX = winX + winW - CLOSE_LINK_W - 4;
 		closeLinkY = winY + 2;
 
@@ -689,9 +710,7 @@ public final class WorldMapPanel {
 		if (floorLoadAttempted[floor]) return null;
 		floorLoadAttempted[floor] = true;
 
-		File f = worldMapAsset("plane-" + floor + ".png");
-		if (!f.exists()) return null;
-		Sprite s = readPngAsSprite(f);
+		Sprite s = readPngAsSprite("plane-" + floor + ".png");
 		floorSprites[floor] = s;
 		return s;
 	}
@@ -722,20 +741,21 @@ public final class WorldMapPanel {
 		return new Sprite(pixels, size, size);
 	}
 
-	private static Sprite readPngAsSprite(File f) {
+	private static Sprite readPngAsSprite(String relativePath) {
+		File f = worldMapAsset(relativePath);
 		Sprite sprite = PngSpriteLoader.read(f);
 		if (sprite != null) return sprite;
-		if (!f.isFile() || mudclient.clientPort == null) return null;
+		if (mudclient.clientPort == null) return null;
 		try {
-			return mudclient.clientPort.getSpriteFromByteArray(new ByteArrayInputStream(readFileBytes(f)));
+			return mudclient.clientPort.getSpriteFromByteArray(new ByteArrayInputStream(readResourceBytes(relativePath)));
 		} catch (Throwable ex) {
 			return null;
 		}
 	}
 
-	private static byte[] readFileBytes(File file) throws IOException {
-		try (InputStream in = new FileInputStream(file);
-			 ByteArrayOutputStream out = new ByteArrayOutputStream((int) Math.min(file.length(), 1024 * 1024))) {
+	private static byte[] readResourceBytes(String relativePath) throws IOException {
+		try (InputStream in = openWorldMapResource(relativePath);
+			 ByteArrayOutputStream out = new ByteArrayOutputStream(1024 * 1024)) {
 			byte[] buffer = new byte[8192];
 			int read;
 			while ((read = in.read(buffer)) != -1) {
@@ -745,6 +765,20 @@ public final class WorldMapPanel {
 		}
 	}
 
+	private static InputStream openWorldMapResource(String relativePath) throws IOException {
+		if (mudclient.clientPort != null) {
+			return mudclient.clientPort.openCacheResource("worldmap/" + relativePath);
+		}
+		return new FileInputStream(worldMapAsset(relativePath));
+	}
+
+	private static BufferedReader openWorldMapText(String relativePath) throws IOException {
+		if (mudclient.clientPort != null) {
+			return new BufferedReader(new InputStreamReader(openWorldMapResource(relativePath), "UTF-8"));
+		}
+		return new BufferedReader(new FileReader(worldMapAsset(relativePath)));
+	}
+
 	private static File worldMapAsset(String path) {
 		return new File(new File(Config.F_CACHE_DIR, "worldmap"), path);
 	}
@@ -752,11 +786,15 @@ public final class WorldMapPanel {
 	private static synchronized void ensureAssetsLoaded() {
 		if (assetsLoadAttempted) return;
 		assetsLoadAttempted = true;
-		labels = loadLabels(worldMapAsset("labels.tsv"));
-		points = loadPoints(worldMapAsset("points.tsv"));
-		File stone = worldMapAsset("stone-background.png");
-		if (stone.exists()) stoneBg = readPngAsSprite(stone);
+		labels = loadLabels("labels.tsv");
+		points = loadPoints("points.tsv");
+		stoneBg = readPngAsSprite("stone-background.png");
 		poiCircleSprite = makePoiCircle();
+		for (Poi p : points) {
+			if (iconSprites.containsKey(p.type)) continue;
+			Sprite s = readPngAsSprite("icons/" + p.type + ".png");
+			if (s != null) iconSprites.put(p.type, s);
+		}
 		File iconsDir = worldMapAsset("icons");
 		if (iconsDir.isDirectory()) {
 			File[] files = iconsDir.listFiles();
@@ -764,19 +802,19 @@ public final class WorldMapPanel {
 				for (File f : files) {
 					String n = f.getName();
 					if (!n.endsWith(".png")) continue;
-					Sprite s = readPngAsSprite(f);
+					if (iconSprites.containsKey(n.substring(0, n.length() - 4))) continue;
+					Sprite s = readPngAsSprite("icons/" + n);
 					if (s != null) iconSprites.put(n.substring(0, n.length() - 4), s);
 				}
 			}
 		}
 	}
 
-	private static List<Label> loadLabels(File f) {
+	private static List<Label> loadLabels(String relativePath) {
 		List<Label> out = new ArrayList<Label>();
-		if (!f.exists()) return out;
 		BufferedReader r = null;
 		try {
-			r = new BufferedReader(new FileReader(f));
+			r = openWorldMapText(relativePath);
 			String line;
 			while ((line = r.readLine()) != null) {
 				if (line.isEmpty() || line.charAt(0) == '#') continue;
@@ -799,12 +837,11 @@ public final class WorldMapPanel {
 		return out;
 	}
 
-	private static List<Poi> loadPoints(File f) {
+	private static List<Poi> loadPoints(String relativePath) {
 		List<Poi> out = new ArrayList<Poi>();
-		if (!f.exists()) return out;
 		BufferedReader r = null;
 		try {
-			r = new BufferedReader(new FileReader(f));
+			r = openWorldMapText(relativePath);
 			String line;
 			while ((line = r.readLine()) != null) {
 				if (line.isEmpty() || line.charAt(0) == '#') continue;

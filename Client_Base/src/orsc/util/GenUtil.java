@@ -199,6 +199,9 @@ public class GenUtil {
 	}
 
 	public static String getMD5Checksum(String filename) throws Exception {
+		if (orsc.osConfig.F_WEB_BUILD) {
+			return "";
+		}
 		byte[] b = createChecksum(filename);
 		String result = "";
 

@@ -35,7 +35,7 @@ public final class Network_Socket extends Network_Base implements Runnable {
 	}
 
 	@Override
-	final int available() throws IOException {
+	public final int available() throws IOException {
 		try {
 			return this.closed ? 0 : this.inStream.available();
 		} catch (RuntimeException var3) {
@@ -89,58 +89,6 @@ public final class Network_Socket extends Network_Base implements Runnable {
 			throw GenUtil.makeThrowable(var3, "da.A(" + true + ')');
 		}
 	}
-
-	public final int getByte() {
-		try {
-			return this.inStream.read();
-		} catch (IOException var3) {
-			throw GenUtil.makeThrowable(var3, "");
-		}
-	}
-
-	public final int getUnsignedByte() {
-		try {
-			int r = this.inStream.read();
-			return r & 255;
-		} catch (IOException var3) {
-			throw GenUtil.makeThrowable(var3, "");
-		}
-	}
-
-	public final int getShort() {
-		try {
-			int r = this.inStream.read() + this.inStream.read();
-			return r & 32767;
-		} catch (IOException var3) {
-			throw GenUtil.makeThrowable(var3, "tb.G(" + "dummy" + ')');
-		}
-	}
-
-	public final int get32() {
-		try {
-			int r = this.inStream.read() + this.inStream.read()
-				+ this.inStream.read() + this.inStream.read();
-			return r & 0xFF;
-		} catch (IOException var3) {
-			throw GenUtil.makeThrowable(var3, "tb.G(" + "dummy" + ')');
-		}
-	}
-
-
-	public final String readString() {
-		try {
-			StringBuilder bldr = new StringBuilder();
-			int i;
-			while ((i = this.inStream.read()) != 10) {
-				if (i == -1) break;
-				bldr.append((char) i);
-			}
-			return bldr.toString();
-		} catch (IOException var3) {
-			throw GenUtil.makeThrowable(var3, "");
-		}
-	}
-
 
 	@Override
 	public final void read(byte[] data, int offset, int count) throws IOException {

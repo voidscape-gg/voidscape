@@ -21,7 +21,7 @@ The PC client renders the game into an off-screen `BufferedImage`, then `PC_Clie
 - In the default `Window` UI scale mode, dragging the desktop window larger scales and centers the whole rendered game/UI while preserving the classic logical canvas and aspect ratio.
 - Existing saved fixed scale choices are respected and clamped down only if they no longer fit the current monitor.
 - Integer scaling uses nearest-neighbor rendering hints so RSC pixel art and text stay sharp.
-- F11 / F12 opt into fixed scale down/up. The settings wrench labels this as `UI scale`, and the filter row cycles `Crisp`, `Soft`, and `Smooth`.
+- F11 scales the fixed desktop viewport down; Shift+F11 scales it up. F12 saves an exact game-frame screenshot under `tmp/workbench/screenshots/`. The settings wrench labels viewport scale as `UI scale`, and the filter row cycles `Crisp`, `Soft`, and `Smooth`.
 - Saved fixed desktop scaling lives in `clientSettings.conf` as `scaling_type` and `scaling_scalar`; default window-follow mode has no saved scalar.
 
 This is PC-client presentation only. It does not change packets, opcodes, server configs, cache format, client version, or Android rendering.

@@ -35,6 +35,7 @@ public final class Panel {
 	private int[] controlHeight;
 	private int[] controlSpaceHeight;
 	private int[] controlSpaceTextHeight;
+	private int[] controlTouchRowHeight;
 	private int[][] controlListEntryCrown;
 	private String[][] controlListEntryString;
 	private String[][] controlListEntryString2;
@@ -81,6 +82,7 @@ public final class Panel {
 			this.controlHeight = new int[maxControls];
 			this.controlSpaceHeight = new int[maxControls];
 			this.controlSpaceTextHeight = new int[maxControls];
+			this.controlTouchRowHeight = new int[maxControls];
 			this.controlClicked = new boolean[maxControls];
 			this.controlListEntryString3 = new String[maxControls][];
 			this.controlX = new int[maxControls];
@@ -484,6 +486,14 @@ public final class Panel {
 		}
 	}
 
+	private int effectiveListRowHeight(int control, int font) {
+		int fontHeight = this.graphics.fontHeight(font);
+		if (control >= 0 && control < this.controlTouchRowHeight.length && this.controlTouchRowHeight[control] > fontHeight) {
+			return this.controlTouchRowHeight[control];
+		}
+		return fontHeight;
+	}
+
 	public final int getControlClickedListIndex(int control) {
 		try {
 
@@ -849,7 +859,9 @@ public final class Panel {
 									 int entryCount, String[] entriesString, int[] entriesCrowns, int scroll) {
 		try {
 
-			int maxLines = height / this.graphics.fontHeight(font);
+			int fontHeight = this.graphics.fontHeight(font);
+			int rowHeight = effectiveListRowHeight(controlIndex, font);
+			int maxLines = height / rowHeight;
 			if (entryCount <= maxLines) {
 				scroll = 0;
 				this.controlScrollAmount[controlIndex] = 0;
@@ -903,10 +915,11 @@ public final class Panel {
 			int lineY;
 
 			this.controlSelectedListIndex[controlIndex] = -1;
-			int heightWhitespace = height - this.graphics.fontHeight(font) * maxLines;
-			lineY = this.graphics.fontHeight(font) * 5 / 6 + y + heightWhitespace / 2;
+			int heightWhitespace = height - rowHeight * maxLines;
+			int rowTop = y + heightWhitespace / 2;
 
 			for (int line = scroll; line < entryCount; ++line) {
+				lineY = rowTop + (rowHeight - fontHeight) / 2 + fontHeight * 5 / 6;
 				int color;
 				if (this.controlUseAlternativeColour[controlIndex]) {
 					color = 16777215;
@@ -914,10 +927,16 @@ public final class Panel {
 					color = 0;
 				}
 
-				if (this.currMouseX >= 2 + x
-					&& this.currMouseX <= this.graphics.stringWidth(font, entriesString[line]) + 2 + x
-					&& this.currMouseY - 2 <= lineY
-					&& this.currMouseY - 2 > lineY - this.graphics.fontHeight(font)) {
+				boolean fullRowHit = rowHeight > fontHeight;
+				boolean rowXHit = fullRowHit
+					? this.currMouseX >= x && this.currMouseX < x + width - 12
+					: this.currMouseX >= 2 + x
+						&& this.currMouseX <= this.graphics.stringWidth(font, entriesString[line]) + 2 + x;
+				boolean rowYHit = fullRowHit
+					? this.currMouseY >= rowTop && this.currMouseY < rowTop + rowHeight
+					: this.currMouseY - 2 <= lineY
+						&& this.currMouseY - 2 > lineY - fontHeight;
+				if (rowXHit && rowYHit) {
 					if (this.controlUseAlternativeColour[controlIndex]) {
 						color = 8421504;
 					} else {
@@ -936,8 +955,8 @@ public final class Panel {
 				}
 
 				this.graphics.drawColoredString(x + 2, lineY, entriesString[line], font, color, entriesCrowns[line] << 24);
-				lineY += this.graphics.fontHeight(font);
-				if (lineY >= height + y) {
+				rowTop += rowHeight;
+				if (rowTop >= height + y) {
 					break;
 				}
 			}
@@ -1309,11 +1328,11 @@ public final class Panel {
 		if (control < 0 || control >= this.controlCount || !this.controlVisible[control]) {
 			return false;
 		}
-		int fontHeight = this.graphics.fontHeight(this.controlArgInt[control]);
-		if (fontHeight <= 0) {
+		int rowHeight = effectiveListRowHeight(control, this.controlArgInt[control]);
+		if (rowHeight <= 0) {
 			return false;
 		}
-		int maxLines = this.controlHeight[control] / fontHeight;
+		int maxLines = this.controlHeight[control] / rowHeight;
 		if (this.controlListCurrentSize[control] <= maxLines) {
 			return false;
 		}
@@ -1327,7 +1346,7 @@ public final class Panel {
 	}
 
 	public void scrollMethodList(int handle, int i) {
-		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / graphics.fontHeight(controlArgInt[handle]));
+		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / effectiveListRowHeight(handle, controlArgInt[handle]));
 		int diff = Math.abs(limit - controlScrollAmount[handle]);
 		if (controlScrollAmount[handle] <= limit) {
 			if (i > 0)
@@ -1366,6 +1385,20 @@ public final class Panel {
 		this.controlWidth[id] = w;
 		this.controlHeight[id] = h;
 
+	}
+
+	public void setScrollingListTouchRowHeight(int id, int rowHeight) {
+		if (id < 0 || id >= this.controlTouchRowHeight.length) {
+			return;
+		}
+		this.controlTouchRowHeight[id] = Math.max(0, rowHeight);
+	}
+
+	public void setControlFont(int id, int font) {
+		if (id < 0 || id >= this.controlArgInt.length) {
+			return;
+		}
+		this.controlArgInt[id] = Math.max(0, font);
 	}
 
 	public void resetScrollIndex(int auctionScrollHandle) {

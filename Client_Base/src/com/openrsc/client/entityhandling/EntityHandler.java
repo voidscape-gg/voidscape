@@ -207,9 +207,11 @@ public class EntityHandler {
 			"Increases your attack by 15%"));
 		prayers.add(new PrayerDef(37, 60, "Paralyze monster",
 			"Stops monsters from fighting back"));
-		prayers.add(new PrayerDef(40, 60, "Protect from missiles",
-			"100% protection from ranged attacks"));
-	}
+			prayers.add(new PrayerDef(40, 60, "Protect from missiles",
+				"100% protection from ranged attacks"));
+			prayers.add(new PrayerDef(43, 60, "Protect from magic",
+				"100% protection from magic attacks"));
+		}
 
 	private static void loadTileDefinitions() {
 		tiles.add(new TileDef(-16913, 1, 0));

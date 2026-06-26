@@ -1,0 +1,2480 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+	<meta name="application-name" content="Voidscape">
+	<meta name="theme-color" content="#000000">
+	<meta name="format-detection" content="telephone=no">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-title" content="Voidscape">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<link rel="manifest" href="manifest.webmanifest">
+	<link rel="icon" type="image/png" sizes="192x192" href="favicon.png">
+	<link rel="apple-touch-icon" href="apple-touch-icon.png">
+	<title>Voidscape</title>
+	<style>
+		:root {
+			color-scheme: dark;
+			font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			background: #000;
+			color: #eadfbd;
+			--viewport-height: 100vh;
+			--game-aspect: 512 / 346;
+			--game-aspect-ratio: 1.4797688;
+			--mobile-control-size: 54px;
+			--mobile-control-gap: 8px;
+			--mobile-control-bg: rgba(8, 8, 12, 0.82);
+			--mobile-control-bg-active: rgba(40, 27, 54, 0.92);
+			--mobile-control-border: rgba(204, 181, 111, 0.72);
+			--mobile-control-border-soft: rgba(108, 83, 144, 0.72);
+			--mobile-control-text: #efe5c4;
+			--mobile-control-frame: url("Cache/voidscape/ui/skin/top-tab-normal.png");
+			--mobile-control-frame-active: url("Cache/voidscape/ui/skin/top-tab-active.png");
+		}
+
+		html,
+		body {
+			margin: 0;
+			width: 100%;
+			height: var(--viewport-height);
+			min-height: 100vh;
+			min-height: 100dvh;
+			overflow: hidden;
+			background: #000;
+			overscroll-behavior: none;
+			touch-action: none;
+			-webkit-text-size-adjust: 100%;
+			-webkit-user-select: none;
+			user-select: none;
+		}
+
+		body {
+			position: fixed;
+			inset: 0;
+		}
+
+		main {
+			position: fixed;
+			inset: 0;
+			box-sizing: border-box;
+			background: #000;
+			padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+			display: grid;
+			place-items: center;
+		}
+
+		canvas {
+			width: min(100vw, calc(var(--viewport-height) * var(--game-aspect-ratio)));
+			height: auto;
+			max-width: 100%;
+			max-height: 100%;
+			aspect-ratio: var(--game-aspect);
+			display: block;
+			background: #050505;
+			image-rendering: pixelated;
+			border: 0;
+			outline: none;
+			-webkit-touch-callout: none;
+		}
+
+		html.desktop body,
+		html.tablet body {
+			background:
+				linear-gradient(180deg, #0b0a0d 0%, #040405 56%, #010101 100%);
+		}
+
+		html.desktop main,
+		html.tablet main {
+			padding:
+				calc(env(safe-area-inset-top) + 78px)
+				max(24px, env(safe-area-inset-right))
+				max(24px, env(safe-area-inset-bottom))
+				max(24px, env(safe-area-inset-left));
+			background:
+				linear-gradient(90deg, rgba(172, 135, 52, 0.08), transparent 22%, transparent 78%, rgba(105, 74, 154, 0.1)),
+				linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.22) 40%, rgba(0, 0, 0, 0.5)),
+				#050506;
+		}
+
+		html.desktop main {
+			place-items: start center;
+		}
+
+		html.desktop canvas {
+			width: min(512px, calc(100vw - 48px));
+			height: auto;
+			aspect-ratio: 512 / 346;
+			max-height: calc(var(--viewport-height) - 120px);
+		}
+
+		#play-shell {
+			position: fixed;
+			z-index: 7;
+			top: 0;
+			left: 0;
+			right: 0;
+			display: none;
+			box-sizing: border-box;
+			padding: calc(env(safe-area-inset-top) + 14px) max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+			pointer-events: none;
+		}
+
+		html.desktop #play-shell,
+		html.tablet #play-shell {
+			display: block;
+		}
+
+		html.touch #play-shell {
+			display: block;
+			top: auto;
+			left: auto;
+			right: calc(env(safe-area-inset-right) + 52px);
+			bottom: calc(max(8px, env(safe-area-inset-bottom)) + 6px);
+			padding: 0;
+		}
+
+		html.touch body:not(.in-game) #play-shell {
+			display: none;
+		}
+
+		html.touch #play-shell-bar {
+			width: auto;
+			min-height: 0;
+			margin: 0;
+			padding: 0;
+			border: 0;
+			background: transparent;
+			box-shadow: none;
+			pointer-events: none;
+		}
+
+		html.touch #play-shell-brand {
+			display: none;
+		}
+
+		html.touch #resource-mode-control {
+			display: grid;
+			grid-template-columns: repeat(2, 48px);
+			gap: 4px;
+			pointer-events: auto;
+		}
+
+		html.touch .resource-mode-button {
+			min-width: 0;
+			width: 48px;
+			height: 28px;
+			padding: 0;
+			border-radius: 5px;
+			font-size: 9px;
+		}
+
+		#play-shell-bar {
+			width: min(1180px, calc(100vw - 36px));
+			min-height: 52px;
+			margin: 0 auto;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 14px;
+			box-sizing: border-box;
+			padding: 8px 10px 8px 12px;
+			border: 1px solid rgba(199, 179, 106, 0.46);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.24)),
+				rgba(6, 6, 9, 0.9);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.78),
+				0 10px 26px rgba(0, 0, 0, 0.38);
+			pointer-events: auto;
+		}
+
+		#play-shell-brand {
+			min-width: 0;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			color: #efe5c4;
+			text-shadow: 0 1px 0 #000;
+			font-size: 15px;
+			font-weight: 800;
+			letter-spacing: 0;
+			white-space: nowrap;
+		}
+
+		#play-shell-brand img {
+			width: 30px;
+			height: 30px;
+			display: block;
+			flex: 0 0 auto;
+			image-rendering: auto;
+		}
+
+		#shell-runtime-label {
+			margin-left: 8px;
+			padding-left: 10px;
+			border-left: 1px solid rgba(199, 179, 106, 0.28);
+			color: #b9ad87;
+			font-size: 12px;
+			font-weight: 700;
+		}
+
+		#resource-mode-control {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			flex: 0 0 auto;
+		}
+
+		.resource-mode-button {
+			position: relative;
+			min-width: 68px;
+			height: 34px;
+			box-sizing: border-box;
+			border: 1px solid rgba(199, 179, 106, 0.46);
+			border-radius: 6px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.24)),
+				rgba(17, 16, 21, 0.88);
+			color: #d9cfaa;
+			font: inherit;
+			font-size: 11px;
+			font-weight: 800;
+			text-shadow: 0 1px 0 #000;
+			cursor: pointer;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.resource-mode-button[aria-pressed="true"] {
+			border-color: rgba(235, 211, 139, 0.86);
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.2)),
+				rgba(58, 39, 79, 0.92);
+			color: #fff1bd;
+		}
+
+		.resource-mode-button:active {
+			transform: translateY(1px);
+		}
+
+		@media (max-width: 760px) {
+			html.desktop main,
+			html.tablet main {
+				padding-top: calc(env(safe-area-inset-top) + 122px);
+			}
+
+			#play-shell-bar {
+				align-items: stretch;
+				flex-direction: column;
+			}
+
+			#resource-mode-control {
+				width: 100%;
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+
+			.resource-mode-button {
+				min-width: 0;
+			}
+		}
+
+			html.touch main {
+				display: grid;
+			}
+
+			html.touch canvas {
+				width: min(100%, calc(var(--viewport-height) * var(--game-aspect-ratio)));
+				height: min(100%, calc(100vw / var(--game-aspect-ratio)));
+				max-width: 100%;
+				max-height: 100%;
+				aspect-ratio: var(--game-aspect);
+			}
+
+		#status {
+			position: fixed;
+			left: max(10px, env(safe-area-inset-left));
+			bottom: max(10px, env(safe-area-inset-bottom));
+			max-width: min(460px, calc(100vw - 84px));
+			padding: 7px 9px;
+			box-sizing: border-box;
+			border: 1px solid rgba(199, 179, 106, 0.35);
+			background: rgba(0, 0, 0, 0.66);
+			color: #d8cfac;
+			font-size: 12px;
+			line-height: 1.2;
+			pointer-events: none;
+			transition: opacity 200ms ease;
+		}
+
+		body.game-drawn #status {
+			opacity: 0;
+		}
+
+		.mobile-control-button {
+			position: fixed;
+			z-index: 10;
+			width: var(--mobile-control-size);
+			height: var(--mobile-control-size);
+			display: none;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			border: 0;
+			border-radius: 0;
+			background: var(--mobile-control-frame) center / 100% 100% no-repeat;
+			box-shadow: none;
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 18px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			cursor: pointer;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+			transition: opacity 160ms ease;
+		}
+
+		.mobile-control-button::before,
+		.mobile-panel-button::before,
+		.mobile-chat-button::before,
+		.camera-control-button::before,
+		#diagnostics-button::before,
+		#diagnostics-copy-button::before {
+			content: "";
+			position: absolute;
+			inset: 4px;
+			border: 1px solid rgba(108, 83, 144, 0.55);
+			border-radius: 6px;
+			pointer-events: none;
+		}
+
+		.mobile-control-button::before {
+			display: none;
+		}
+
+		#inventory-button {
+			right: calc(env(safe-area-inset-right) + 64px);
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 52px);
+		}
+
+		#keyboard-button {
+			right: calc(env(safe-area-inset-right) + 64px);
+			bottom: max(10px, env(safe-area-inset-bottom));
+		}
+
+		.mobile-quick-button {
+			right: calc(env(safe-area-inset-right) + 10px);
+			width: 44px;
+			height: 44px;
+			font-size: 11px;
+			line-height: 1.05;
+			opacity: 0.72;
+		}
+
+		.mobile-quick-button.spell-shortcut {
+			font-size: 9px;
+			line-height: 1.05;
+			white-space: pre-line;
+			padding: 5px;
+			overflow: hidden;
+		}
+
+		#panel-button {
+			right: calc(env(safe-area-inset-right) + 10px);
+			top: calc(50% - 106px);
+			bottom: auto;
+		}
+
+		#chat-button {
+			left: max(10px, env(safe-area-inset-left));
+			top: calc(env(safe-area-inset-top) + 276px);
+			bottom: auto;
+		}
+
+		#chat-button .mobile-control-icon {
+			width: 30px;
+			height: 30px;
+			display: block;
+			background: url("Cache/voidscape/ui/skin/bottom-chat-history-32.png") center / contain no-repeat;
+			filter: drop-shadow(0 1px 0 #000);
+			pointer-events: none;
+		}
+
+		#mobile-panel-drawer {
+			position: fixed;
+			z-index: 30;
+			right: calc(env(safe-area-inset-right) + 74px);
+			top: max(calc(env(safe-area-inset-top) + 10px), calc(50% - 122px));
+			display: none;
+			grid-template-columns: repeat(2, var(--mobile-control-size));
+			grid-auto-rows: 50px;
+			gap: var(--mobile-control-gap);
+			padding: 8px;
+			box-sizing: border-box;
+			border: 1px solid var(--mobile-control-border);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.36)),
+				rgba(4, 5, 8, 0.92);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.78),
+				0 8px 22px rgba(0, 0, 0, 0.48);
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.mobile-panel-button {
+			position: relative;
+			width: var(--mobile-control-size);
+			height: 50px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			border: 1px solid rgba(204, 181, 111, 0.58);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.34)),
+				rgba(13, 12, 17, 0.86);
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 11px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			cursor: pointer;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.mobile-panel-button:active {
+			border-color: rgba(235, 211, 139, 0.9);
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.28)),
+				var(--mobile-control-bg-active);
+		}
+
+		#mobile-chat-tray {
+			position: fixed;
+			z-index: 30;
+			left: calc(env(safe-area-inset-left) + 74px);
+			top: calc(env(safe-area-inset-top) + 276px);
+			display: none;
+			grid-template-columns: repeat(3, var(--mobile-control-size));
+			grid-auto-rows: 50px;
+			gap: var(--mobile-control-gap);
+			padding: 8px;
+			box-sizing: border-box;
+			border: 1px solid var(--mobile-control-border);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.36)),
+				rgba(4, 5, 8, 0.92);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.78),
+				0 8px 22px rgba(0, 0, 0, 0.48);
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.mobile-chat-button {
+			position: relative;
+			width: var(--mobile-control-size);
+			height: 50px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 2px;
+			box-sizing: border-box;
+			border: 1px solid rgba(204, 181, 111, 0.58);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.34)),
+				rgba(13, 12, 17, 0.86);
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 11px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			cursor: pointer;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.mobile-chat-icon {
+			width: 24px;
+			height: 24px;
+			display: block;
+			background-position: center;
+			background-repeat: no-repeat;
+			background-size: contain;
+			filter: drop-shadow(0 1px 0 #000);
+			pointer-events: none;
+		}
+
+		.mobile-chat-label {
+			display: block;
+			max-width: 48px;
+			overflow: hidden;
+			font-size: 9px;
+			line-height: 1;
+			text-align: center;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			pointer-events: none;
+		}
+
+		.mobile-chat-button[data-chat="all"] .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-all-24.png");
+		}
+
+		.mobile-chat-button[data-chat="chat"] .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-24.png");
+		}
+
+		.mobile-chat-button[data-chat="quest"] .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-24.png");
+		}
+
+		.mobile-chat-button[data-chat="private"] .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-24.png");
+		}
+
+		.mobile-chat-button[data-chat="compose"] .mobile-chat-icon {
+			width: auto;
+			min-width: 24px;
+			height: 22px;
+			background: none;
+			color: var(--mobile-control-text);
+			font-size: 20px;
+			font-weight: 800;
+			line-height: 22px;
+			text-align: center;
+		}
+
+		.mobile-chat-button:active {
+			border-color: rgba(235, 211, 139, 0.9);
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.28)),
+				var(--mobile-control-bg-active);
+		}
+
+		.mobile-chat-button[data-chat="all"]:active .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-all-active-24.png");
+		}
+
+		.mobile-chat-button[data-chat="chat"]:active .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-active-24.png");
+		}
+
+		.mobile-chat-button[data-chat="quest"]:active .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-active-24.png");
+		}
+
+		.mobile-chat-button[data-chat="private"]:active .mobile-chat-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-active-24.png");
+		}
+
+		#camera-controls {
+			position: fixed;
+			left: max(10px, env(safe-area-inset-left));
+			top: calc(env(safe-area-inset-top) + 174px);
+			z-index: 10;
+			display: none;
+			grid-template-columns: repeat(2, 44px);
+			grid-auto-rows: 44px;
+			gap: 6px;
+		}
+
+		.camera-control-button {
+			position: relative;
+			width: 44px;
+			height: 44px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			border: 1px solid rgba(204, 181, 111, 0.58);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.34)),
+				rgba(8, 8, 12, 0.78);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.78),
+				0 4px 10px rgba(0, 0, 0, 0.36);
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 17px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			cursor: pointer;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.camera-control-button:active,
+		.camera-control-button.is-held {
+			border-color: rgba(235, 211, 139, 0.9);
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.28)),
+				var(--mobile-control-bg-active);
+		}
+
+		html.touch body.game-drawn #keyboard-button {
+			display: flex;
+		}
+
+		html.touch body.game-drawn.in-game .mobile-quick-button {
+			display: flex;
+		}
+
+		html.touch body.game-drawn.in-game #panel-button {
+			display: flex;
+		}
+
+		html.touch body.game-drawn.in-game.panel-drawer-open #mobile-panel-drawer {
+			display: grid;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-rail-visible #panel-button,
+		html.touch body.game-drawn.in-game.canvas-panel-rail-visible #mobile-panel-drawer {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #panel-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #mobile-panel-drawer {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.android-parity-canvas-panels #panel-button,
+		html.touch body.game-drawn.in-game.android-parity-canvas-panels #mobile-panel-drawer {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.chat-helper-visible #chat-button {
+			display: flex;
+		}
+
+		html.touch body.game-drawn.in-game.chat-helper-visible.chat-tray-open #mobile-chat-tray {
+			display: grid;
+		}
+
+		html.touch body.game-drawn.in-game #camera-controls {
+			display: none;
+		}
+
+		html.touch.diagnostics body.game-drawn.in-game #camera-controls {
+			display: grid;
+		}
+
+		html.touch body.keyboard-open #keyboard-button,
+		html.touch body.panel-drawer-open #panel-button,
+		html.touch body.chat-helper-visible.chat-tray-open #chat-button {
+			display: flex;
+			background: var(--mobile-control-frame-active) center / 100% 100% no-repeat;
+		}
+
+		html.touch body.chat-helper-visible.chat-tray-open #chat-button .mobile-control-icon {
+			background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-active-32.png");
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #panel-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #mobile-panel-drawer {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game #inventory-button {
+			right: calc(env(safe-area-inset-right) + 10px);
+			top: calc(50% - 90px);
+			bottom: auto;
+			width: 44px;
+			height: 44px;
+			opacity: 0.72;
+		}
+
+		html.touch body.game-drawn.in-game #keyboard-button {
+			right: calc(env(safe-area-inset-right) + 10px);
+			top: calc(50% - 42px);
+			bottom: auto;
+			width: 44px;
+			height: 44px;
+			font-size: 17px;
+			opacity: 0.72;
+		}
+
+		html.touch body.game-drawn.in-game #magic-button {
+			top: calc(50% + 6px);
+			bottom: auto;
+		}
+
+		html.touch body.game-drawn.in-game #prayer-button {
+			top: calc(50% + 54px);
+			bottom: auto;
+		}
+
+		html.touch body.game-drawn.in-game.world-map-open #inventory-button,
+		html.touch body.game-drawn.in-game.world-map-open #keyboard-button,
+		html.touch body.game-drawn.in-game.world-map-open .mobile-quick-button {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.keyboard-open #keyboard-button,
+		html.touch body.game-drawn.in-game.dialog-open #keyboard-button {
+			opacity: 1;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #inventory-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #keyboard-button {
+			width: 44px;
+			height: 44px;
+			top: auto;
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 91px);
+			font-size: 15px;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #inventory-button {
+			right: calc(env(safe-area-inset-right) + 64px);
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #keyboard-button {
+			right: calc(env(safe-area-inset-right) + 14px);
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #chat-button {
+			width: 44px;
+			height: 44px;
+			left: calc(env(safe-area-inset-left) + 15px);
+			top: auto;
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 91px);
+			font-size: 12px;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #chat-button .mobile-control-icon {
+			width: 28px;
+			height: 28px;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #chat-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #inventory-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #keyboard-button {
+			background: none;
+			text-shadow: 0 2px 0 #000, 0 0 8px rgba(235, 220, 176, 0.16);
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible.chat-tray-open #chat-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible.shared-panel-open #inventory-button,
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible.keyboard-open #keyboard-button {
+			background: rgba(40, 27, 54, 0.28);
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #chat-button .mobile-control-icon {
+			width: 32px;
+			height: 32px;
+		}
+
+		html.touch body.game-drawn.in-game.canvas-panel-dock-visible #keyboard-button {
+			font-size: 21px;
+		}
+
+		html.touch body.game-drawn.in-game #diagnostics-button {
+			right: calc(env(safe-area-inset-right) + 74px);
+			top: calc(50% - 50px);
+		}
+
+		html.touch body.game-drawn.in-game #diagnostics-copy-button {
+			right: calc(env(safe-area-inset-right) + 128px);
+			top: calc(50% - 50px);
+		}
+
+		html.touch body.game-drawn:not(.in-game) #diagnostics-button {
+			top: auto;
+			right: calc(env(safe-area-inset-right) + 10px);
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px);
+		}
+
+		html.touch body.game-drawn:not(.in-game) #diagnostics-copy-button {
+			top: auto;
+			right: calc(env(safe-area-inset-right) + 64px);
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px);
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #camera-controls {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #panel-button,
+		html.touch body.game-drawn.in-game.dialog-open #mobile-panel-drawer,
+		html.touch body.game-drawn.in-game.dialog-open #chat-button,
+		html.touch body.game-drawn.in-game.dialog-open #mobile-chat-tray,
+		html.touch body.game-drawn.in-game.dialog-open .mobile-quick-button {
+			display: none;
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #keyboard-button,
+		html.touch body.game-drawn.in-game.dialog-open #diagnostics-button,
+		html.touch body.game-drawn.in-game.dialog-open #diagnostics-copy-button {
+			top: auto;
+			bottom: calc(max(10px, env(safe-area-inset-bottom)) + 118px);
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #keyboard-button {
+			right: calc(env(safe-area-inset-right) + 10px);
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #diagnostics-button {
+			right: calc(env(safe-area-inset-right) + 74px);
+		}
+
+		html.touch body.game-drawn.in-game.dialog-open #diagnostics-copy-button {
+			right: calc(env(safe-area-inset-right) + 128px);
+		}
+
+		@media (orientation: landscape) and (max-height: 480px) {
+			html.touch #play-shell {
+				right: calc(env(safe-area-inset-right) + 112px);
+			}
+
+			#camera-controls {
+				top: calc(env(safe-area-inset-top) + 144px);
+				grid-template-columns: repeat(2, 40px);
+				grid-auto-rows: 40px;
+				gap: 5px;
+			}
+
+			html.touch body.game-drawn.in-game #keyboard-button {
+				top: calc(50% - 54px);
+			}
+
+			html.touch body.game-drawn.in-game #inventory-button,
+			html.touch body.game-drawn.in-game #magic-button,
+			html.touch body.game-drawn.in-game #prayer-button {
+				display: none;
+			}
+
+			#chat-button {
+				top: calc(env(safe-area-inset-top) + 184px);
+			}
+
+			html.touch body.game-drawn.in-game.canvas-panel-dock-visible #chat-button {
+				top: auto;
+				bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px);
+			}
+
+			#mobile-chat-tray {
+				left: calc(env(safe-area-inset-left) + 104px);
+				top: calc(env(safe-area-inset-top) + 92px);
+			}
+
+			.camera-control-button {
+				width: 40px;
+				height: 40px;
+				font-size: 15px;
+			}
+
+			html.touch body.game-drawn.in-game.dialog-open #keyboard-button,
+			html.touch body.game-drawn.in-game.dialog-open #diagnostics-button,
+			html.touch body.game-drawn.in-game.dialog-open #diagnostics-copy-button {
+				top: calc(env(safe-area-inset-top) + 58px);
+				bottom: auto;
+			}
+		}
+
+		#diagnostics-button {
+			position: fixed;
+			z-index: 20;
+			top: calc(env(safe-area-inset-top) + 10px);
+			right: calc(env(safe-area-inset-right) + 10px);
+			width: 44px;
+			height: 44px;
+			display: none;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			border: 1px solid var(--mobile-control-border);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.32)),
+				rgba(8, 8, 12, 0.82);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.86),
+				0 4px 12px rgba(0, 0, 0, 0.48);
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 15px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		#diagnostics-copy-button {
+			position: fixed;
+			z-index: 20;
+			top: calc(env(safe-area-inset-top) + 10px);
+			right: calc(env(safe-area-inset-right) + 64px);
+			width: 66px;
+			height: 44px;
+			display: none;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			border: 1px solid var(--mobile-control-border);
+			border-radius: 8px;
+			background:
+				linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.32)),
+				rgba(8, 8, 12, 0.82);
+			box-shadow:
+				inset 0 0 0 1px rgba(0, 0, 0, 0.86),
+				0 4px 12px rgba(0, 0, 0, 0.48);
+			color: var(--mobile-control-text);
+			font: inherit;
+			font-size: 12px;
+			font-weight: 700;
+			text-shadow: 0 1px 0 #000;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		#diagnostics-panel {
+			position: fixed;
+			z-index: 9;
+			top: calc(env(safe-area-inset-top) + 64px);
+			right: calc(env(safe-area-inset-right) + 10px);
+			width: min(360px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+			max-height: min(520px, calc(var(--viewport-height) - 86px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+			display: none;
+			box-sizing: border-box;
+			overflow: auto;
+			overscroll-behavior: contain;
+			-webkit-overflow-scrolling: touch;
+			border: 1px solid rgba(199, 179, 106, 0.5);
+			border-radius: 6px;
+			background: rgba(4, 5, 8, 0.92);
+			color: #eadfbd;
+			padding: 10px;
+			font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			white-space: pre-wrap;
+			word-break: break-word;
+			touch-action: pan-y;
+		}
+
+		#diagnostics-export {
+			position: fixed;
+			z-index: 21;
+			top: calc(env(safe-area-inset-top) + 64px);
+			right: calc(env(safe-area-inset-right) + 10px);
+			width: min(360px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+			height: min(520px, calc(var(--viewport-height) - 86px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+			display: none;
+			box-sizing: border-box;
+			overflow: auto;
+			overscroll-behavior: contain;
+			-webkit-overflow-scrolling: touch;
+			border: 1px solid rgba(199, 179, 106, 0.65);
+			border-radius: 6px;
+			background: rgba(4, 5, 8, 0.96);
+			color: #eadfbd;
+			padding: 10px;
+			font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			resize: none;
+			white-space: pre;
+			touch-action: pan-y;
+			-webkit-touch-callout: default;
+			-webkit-user-select: text;
+			user-select: text;
+		}
+
+		html.diagnostics #diagnostics-button {
+			display: flex;
+		}
+
+		html.diagnostics #diagnostics-copy-button {
+			display: flex;
+		}
+
+		html.desktop #diagnostics-button,
+		html.tablet #diagnostics-button {
+			top: calc(env(safe-area-inset-top) + 23px);
+			right: calc(max(18px, env(safe-area-inset-right)) + 287px);
+		}
+
+		html.desktop #diagnostics-copy-button,
+		html.tablet #diagnostics-copy-button {
+			top: calc(env(safe-area-inset-top) + 23px);
+			right: calc(max(18px, env(safe-area-inset-right)) + 341px);
+		}
+
+		html.diagnostics.diagnostics-open #diagnostics-panel {
+			display: block;
+		}
+
+			html.diagnostics.diagnostics-export-open #diagnostics-export {
+				display: block;
+			}
+
+			#low-resource-overlay {
+				position: fixed;
+				z-index: 18;
+				left: 50%;
+				bottom: calc(max(10px, env(safe-area-inset-bottom)) + 72px);
+				transform: translateX(-50%);
+				display: none;
+				align-items: center;
+				gap: 10px;
+				max-width: calc(100vw - 28px - env(safe-area-inset-left) - env(safe-area-inset-right));
+				box-sizing: border-box;
+				padding: 8px 10px;
+				border: 1px solid rgba(199, 179, 106, 0.56);
+				border-radius: 6px;
+				background:
+					linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.34)),
+					rgba(4, 5, 8, 0.9);
+				box-shadow:
+					inset 0 0 0 1px rgba(0, 0, 0, 0.84),
+					0 6px 18px rgba(0, 0, 0, 0.46);
+				color: #eadfbd;
+				font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+				text-shadow: 0 1px 0 #000;
+				pointer-events: auto;
+				touch-action: manipulation;
+			}
+
+			body.resource-gfx-off #low-resource-overlay {
+				display: flex;
+			}
+
+			#resource-resume-button {
+				min-width: 78px;
+				height: 34px;
+				border: 1px solid rgba(204, 181, 111, 0.72);
+				border-radius: 5px;
+				background: rgba(40, 27, 54, 0.9);
+				color: #efe5c4;
+				font: inherit;
+				font-weight: 700;
+				text-shadow: 0 1px 0 #000;
+				-webkit-tap-highlight-color: transparent;
+			}
+
+			#keyboard-capture {
+				font-size: 16px;
+			}
+	</style>
+</head>
+<body>
+	<main>
+		<canvas id="game" width="512" height="346" tabindex="0" aria-label="Voidscape game client"></canvas>
+	</main>
+	<div id="play-shell" aria-label="Voidscape web client controls">
+		<div id="play-shell-bar">
+			<div id="play-shell-brand">
+				<img src="favicon.png" alt="" aria-hidden="true">
+				<span>Voidscape</span>
+				<span id="shell-runtime-label">Desktop</span>
+			</div>
+			<div id="resource-mode-control" role="group" aria-label="Render mode">
+				<button class="resource-mode-button" type="button" data-resource-mode="normal" aria-pressed="true" tabindex="-1">Normal</button>
+				<button class="resource-mode-button" type="button" data-resource-mode="gfx-off" aria-pressed="false" tabindex="-1">GFX off</button>
+			</div>
+		</div>
+	</div>
+	<div id="camera-controls" aria-label="Camera controls">
+		<button class="camera-control-button" type="button" data-key="37" aria-label="Rotate camera left" tabindex="-1">&lt;</button>
+		<button class="camera-control-button" type="button" data-key="39" aria-label="Rotate camera right" tabindex="-1">&gt;</button>
+		<button class="camera-control-button" type="button" data-key="38" aria-label="Zoom in" tabindex="-1">+</button>
+		<button class="camera-control-button" type="button" data-key="40" aria-label="Zoom out" tabindex="-1">-</button>
+	</div>
+	<button id="panel-button" class="mobile-control-button" type="button" aria-label="Open mobile panel shortcuts" aria-pressed="false" tabindex="-1">UI</button>
+	<div id="mobile-panel-drawer" aria-label="Mobile panel shortcuts">
+		<button class="mobile-panel-button" type="button" data-panel="inventory" aria-label="Open inventory" tabindex="-1">Inv</button>
+		<button class="mobile-panel-button" type="button" data-panel="map" aria-label="Open map panel" tabindex="-1">Map</button>
+		<button class="mobile-panel-button" type="button" data-panel="magic" aria-label="Open magic panel" tabindex="-1">Mag</button>
+		<button class="mobile-panel-button" type="button" data-panel="prayer" aria-label="Open prayer panel" tabindex="-1">Pray</button>
+		<button class="mobile-panel-button" type="button" data-panel="skills" aria-label="Open skills panel" tabindex="-1">Skill</button>
+		<button class="mobile-panel-button" type="button" data-panel="quests" aria-label="Open quests panel" tabindex="-1">Quest</button>
+		<button class="mobile-panel-button" type="button" data-panel="friends" aria-label="Open friends panel" tabindex="-1">Fr</button>
+		<button class="mobile-panel-button" type="button" data-panel="options" aria-label="Open options panel" tabindex="-1">Opt</button>
+	</div>
+	<button id="chat-button" class="mobile-control-button" type="button" aria-label="Open mobile chat shortcuts" aria-pressed="false" tabindex="-1"><span class="mobile-control-icon" aria-hidden="true"></span></button>
+	<div id="mobile-chat-tray" aria-label="Mobile chat shortcuts">
+		<button class="mobile-chat-button" type="button" data-chat="all" aria-label="Show all messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">All</span></button>
+		<button class="mobile-chat-button" type="button" data-chat="chat" aria-label="Show chat messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Chat</span></button>
+		<button class="mobile-chat-button" type="button" data-chat="quest" aria-label="Show quest messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Quest</span></button>
+		<button class="mobile-chat-button" type="button" data-chat="private" aria-label="Show private messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Priv</span></button>
+		<button class="mobile-chat-button" type="button" data-chat="compose" aria-label="Compose chat message" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true">Aa</span><span class="mobile-chat-label">Say</span></button>
+	</div>
+	<button id="inventory-button" class="mobile-control-button mobile-quick-button" type="button" data-panel="side-inventory" aria-label="Open inventory panel" tabindex="-1">Inv</button>
+	<button id="keyboard-button" class="mobile-control-button" type="button" aria-label="Show keyboard" aria-pressed="false" tabindex="-1">Aa</button>
+	<button id="magic-button" class="mobile-control-button mobile-quick-button" type="button" data-panel="side-magic" aria-label="Open magic panel" tabindex="-1">Mag</button>
+	<button id="prayer-button" class="mobile-control-button mobile-quick-button" type="button" data-panel="side-prayer" aria-label="Open prayer panel" tabindex="-1">Pray</button>
+		<button id="diagnostics-button" type="button" aria-label="Toggle diagnostics" aria-pressed="false" tabindex="-1">i</button>
+		<button id="diagnostics-copy-button" type="button" aria-label="Copy diagnostics" tabindex="-1">copy</button>
+		<div id="diagnostics-panel" aria-live="polite"></div>
+		<textarea id="diagnostics-export" readonly aria-label="Diagnostics JSON report" tabindex="-1" spellcheck="false"></textarea>
+		<div id="low-resource-overlay" role="status" aria-live="polite">
+			<span>GFX off</span>
+			<button id="resource-resume-button" type="button" tabindex="-1">Resume</button>
+		</div>
+		<div id="status" aria-live="polite">Loading Voidscape...</div>
+	<script>
+		(function () {
+			window.__voidscapeAssetToken = window.__voidscapeAssetToken || "__VOIDSCAPE_ASSET_TOKEN__";
+			var lastTouchEndAt = 0;
+			var stableViewportHeight = 0;
+			window.__voidscapeKeyboardClosingUntil = window.__voidscapeKeyboardClosingUntil || 0;
+			var diagnosticsEnabled = false;
+			var diagnosticsSource = 'off';
+				var diagnosticsTimer = 0;
+				var diagnosticsCopyTimer = 0;
+				var endpointStorageBaseKey = 'voidscape.web.endpoint.v1';
+				var diagnosticsStorageKey = 'voidscape.web.diagnostics.v1';
+				var portalAccountStorageBaseKey = 'voidscape.web.portal.accountUrl.v1';
+				var portalRecoveryStorageBaseKey = 'voidscape.web.portal.recoveryUrl.v1';
+				var profile = resolveProfile();
+				var portalAccountStorageKey = profileStorageKey(portalAccountStorageBaseKey);
+				var portalRecoveryStorageKey = profileStorageKey(portalRecoveryStorageBaseKey);
+				var recentErrors = [];
+				var lifecycleSuspended = false;
+				var lifecycleState = {
+				createdAt: new Date().toISOString(),
+				hidden: !!document.hidden,
+				visibilityState: document.visibilityState || '',
+				lastEvent: 'init',
+				lastEventAt: '',
+				lastResumeAt: '',
+				lastViewportUpdateAt: '',
+				blurCount: 0,
+				focusCount: 0,
+				pageHideCount: 0,
+				pageShowCount: 0,
+				pageShowPersisted: false,
+				visibilityChangeCount: 0,
+				resumeCount: 0,
+				viewportUpdateCount: 0
+			};
+			var postResumeProof = {
+				createdAt: new Date().toISOString(),
+				updatedAt: '',
+				lastResumeAt: '',
+				resumeCount: 0,
+				inputAfterResume: false,
+				movementAfterResume: false,
+				lastInputAfterResumeAt: '',
+				lastMovementAfterResumeAt: '',
+				baselineClient: null,
+				lastClient: null,
+				lastMovementFrom: null,
+				lastMovementTo: null,
+				events: []
+			};
+				var controlLayoutHistory = {
+					createdAt: new Date().toISOString(),
+					updatedAt: '',
+					current: '',
+					portrait: null,
+					landscape: null
+				};
+				var resourceModeConfig = {
+					normal: { targetFps: 0 },
+					'gfx-off': { targetFps: 0 }
+				};
+				var resourceState = {
+					mode: 'normal',
+					source: 'default',
+					targetFps: 0,
+					createdAt: new Date().toISOString(),
+					createdAtMs: Date.now(),
+					updatedAt: '',
+					lastDecision: 'init',
+					lastReason: '',
+					lastUploadAt: '',
+					lastUploadAtMs: 0,
+					lastSkipAt: '',
+					lastSkipAtMs: 0,
+					lastConsideredAt: '',
+					lastConsideredAtMs: 0,
+					uploadCount: 0,
+					skippedCount: 0,
+					forcedUploadCount: 0,
+					forceNextUpload: true,
+					forceReason: 'initial',
+					canvasWidth: 0,
+					canvasHeight: 0,
+					effectiveUploadFps: 0
+				};
+
+				function normalizeProfileId(value) {
+					var text = String(value || '').trim().toLowerCase();
+					if (!text || text === '0' || text === 'default') return 'default';
+					var normalized = text.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+					return normalized || 'default';
+				}
+
+				function resolveProfile() {
+					var params = new URLSearchParams(window.location.search);
+					var raw = '';
+					var source = 'default';
+					if (params.has('profile')) {
+						raw = params.get('profile');
+						source = 'query';
+					} else if (params.has('clientProfile')) {
+						raw = params.get('clientProfile');
+						source = 'query';
+					} else if (params.has('accountProfile')) {
+						raw = params.get('accountProfile');
+						source = 'query';
+					} else if (params.has('slot')) {
+						raw = params.get('slot');
+						source = 'query';
+					}
+					var id = normalizeProfileId(raw);
+					return {
+						id: id,
+						source: source,
+						namespaced: id !== 'default'
+					};
+				}
+
+				function profileStorageKey(baseKey) {
+					return profile.id === 'default' ? baseKey : baseKey + '.profile.' + profile.id;
+				}
+
+				function queryFlag(params, name) {
+					if (!params.has(name)) return '';
+					var value = String(params.get(name) || '').trim().toLowerCase();
+					if (!value || value === '1' || value === 'true' || value === 'yes' || value === 'on') return '1';
+					if (value === '0' || value === 'false' || value === 'no' || value === 'off') return '0';
+					return value;
+				}
+
+				function explicitRuntimeMode(params) {
+					var mode = String(params.get('mode') || params.get('profileMode') || params.get('clientMode') || '').trim().toLowerCase();
+					if (mode === 'phone' || mode === 'mobile' || mode === 'iphone') return { mode: 'phone', source: 'query:mode' };
+					if (mode === 'tablet' || mode === 'ipad') return { mode: 'tablet', source: 'query:mode' };
+					if (mode === 'desktop' || mode === 'pc' || mode === 'classic') return { mode: 'desktop', source: 'query:mode' };
+					if (queryFlag(params, 'phone') === '1') return { mode: 'phone', source: 'query:phone' };
+					if (queryFlag(params, 'tablet') === '1') return { mode: 'tablet', source: 'query:tablet' };
+					if (queryFlag(params, 'desktop') === '1') return { mode: 'desktop', source: 'query:desktop' };
+					var mobile = queryFlag(params, 'mobile');
+					if (mobile === '1') return { mode: 'phone', source: 'query:mobile' };
+					if (mobile === '0') return { mode: 'desktop', source: 'query:mobile' };
+					return null;
+				}
+
+				function detectRuntimeMode() {
+					var params = new URLSearchParams(window.location.search);
+					var explicit = explicitRuntimeMode(params);
+					var ua = navigator.userAgent || '';
+					var platform = navigator.platform || '';
+					var maxTouchPoints = navigator.maxTouchPoints || 0;
+					var pointerCoarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+					var pointerFine = !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+					var anyPointerCoarse = !!(window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches);
+					var anyPointerFine = !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches);
+					var width = Math.max(1, window.innerWidth || (window.screen && window.screen.width) || 1);
+					var height = Math.max(1, window.innerHeight || (window.screen && window.screen.height) || 1);
+					var minViewport = Math.min(width, height);
+					var maxViewport = Math.max(width, height);
+					var iPhone = /iPhone|iPod/i.test(ua);
+					var iPad = /iPad/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1 && /Safari/i.test(ua) && !/Chrome|Chromium|Edg\//i.test(ua));
+					var android = /Android/i.test(ua);
+					var androidMobile = android && /Mobile/i.test(ua);
+					var tabletUa = iPad || (android && !androidMobile) || /Tablet|PlayBook|Silk|Kindle/i.test(ua);
+					var phoneUa = iPhone || androidMobile || /Windows Phone|IEMobile|Opera Mini|Mobile Safari/i.test(ua) && !tabletUa;
+					var touchDevice = maxTouchPoints > 0 || pointerCoarse || anyPointerCoarse;
+					var primaryTouch = pointerCoarse || (anyPointerCoarse && !pointerFine && !anyPointerFine);
+					var phoneViewport = minViewport <= 600 && maxViewport <= 1100;
+					var tabletViewport = minViewport > 600 && minViewport <= 1024 && maxViewport <= 1400;
+					var inferredMode = 'desktop';
+					var inferredSource = 'heuristic:desktop';
+					if (phoneUa || (touchDevice && primaryTouch && phoneViewport)) {
+						inferredMode = 'phone';
+						inferredSource = phoneUa ? 'heuristic:phone-ua' : 'heuristic:phone-viewport';
+					} else if (tabletUa || (touchDevice && primaryTouch && tabletViewport)) {
+						inferredMode = 'tablet';
+						inferredSource = tabletUa ? 'heuristic:tablet-ua' : 'heuristic:tablet-viewport';
+					}
+					var resolved = explicit || { mode: inferredMode, source: inferredSource };
+					return {
+						mode: resolved.mode,
+						source: resolved.source,
+						explicit: !!explicit,
+						phoneShell: resolved.mode === 'phone',
+						tabletProfile: resolved.mode === 'tablet',
+						touchDevice: touchDevice,
+						pointerCoarse: pointerCoarse,
+						pointerFine: pointerFine,
+						anyPointerCoarse: anyPointerCoarse,
+						anyPointerFine: anyPointerFine,
+						maxTouchPoints: maxTouchPoints,
+						userAgent: ua,
+						platform: platform,
+						viewport: {
+							width: width,
+							height: height,
+							min: minViewport,
+							max: maxViewport
+						}
+					};
+				}
+
+				function applyRuntimeMode() {
+					var runtime = detectRuntimeMode();
+					var root = document.documentElement;
+					root.classList.toggle('phone', runtime.mode === 'phone');
+					root.classList.toggle('tablet', runtime.mode === 'tablet');
+					root.classList.toggle('desktop', runtime.mode === 'desktop');
+					root.classList.toggle('touch', runtime.phoneShell);
+					root.classList.toggle('touch-device', runtime.touchDevice);
+					root.classList.toggle('coarse-pointer', runtime.pointerCoarse || runtime.anyPointerCoarse);
+					root.classList.toggle('fine-pointer', runtime.pointerFine || runtime.anyPointerFine);
+					window.__voidscapeRuntimeMode = runtime;
+					window.__voidscapeMobileProfile = runtime.phoneShell;
+					window.__voidscapeTabletProfile = runtime.tabletProfile;
+					updateShellRuntime(runtime);
+					return runtime;
+				}
+
+				window.__voidscapeProfile = profile;
+				window.__voidscapeProfileStorageKey = profileStorageKey;
+				window.__voidscapeDetectRuntimeMode = detectRuntimeMode;
+				window.__voidscapeApplyRuntimeMode = applyRuntimeMode;
+
+				function normalizeResourceMode(value) {
+					var text = String(value || '').trim().toLowerCase();
+					if (!text || text === '0' || text === 'false' || text === 'normal' || text === 'on') {
+						return 'normal';
+					}
+					if (text === '1' || text === 'true' || text === 'low' || text === 'battery'
+						|| text === 'battery-saver' || text === 'battery_saver' || text === 'low-resource'
+						|| text === 'low_resource') {
+						return 'normal';
+					}
+					if (text === 'off' || text === 'gfx-off' || text === 'gfxoff' || text === 'gfx_off'
+						|| text === 'graphics-off' || text === 'graphics_off') {
+						return 'gfx-off';
+					}
+					return 'normal';
+				}
+
+				function initialResourceMode() {
+					var params = new URLSearchParams(window.location.search);
+					if (params.has('resource')) return normalizeResourceMode(params.get('resource'));
+					if (params.has('lowResource')) return normalizeResourceMode(params.get('lowResource'));
+					if (params.has('gfx')) return normalizeResourceMode(params.get('gfx'));
+					return 'normal';
+				}
+
+				function initialResourceSource() {
+					var params = new URLSearchParams(window.location.search);
+					if (params.has('resource') || params.has('lowResource') || params.has('gfx')) {
+						return 'query';
+					}
+					return 'default';
+				}
+
+				function resourceSnapshot() {
+					var now = Date.now();
+					var elapsed = Math.max(1, now - resourceState.createdAtMs);
+					var snapshot = Object.assign({}, resourceState);
+					snapshot.effectiveUploadFps = Math.round((resourceState.uploadCount * 10000) / elapsed) / 10;
+					snapshot.visibilityState = document.visibilityState || '';
+					snapshot.hidden = !!document.hidden;
+					delete snapshot.createdAtMs;
+					delete snapshot.lastUploadAtMs;
+					delete snapshot.lastSkipAtMs;
+					delete snapshot.lastConsideredAtMs;
+					return snapshot;
+				}
+
+				function updateResourceBodyClass() {
+					if (!document.body) return;
+					document.body.classList.toggle('resource-gfx-off', resourceState.mode === 'gfx-off');
+					updateResourceControls();
+				}
+
+				function setResourceMode(mode, source) {
+					var next = normalizeResourceMode(mode);
+					var config = resourceModeConfig[next] || resourceModeConfig.normal;
+					if (resourceState.mode !== next) {
+						resourceState.forceNextUpload = true;
+						resourceState.forceReason = 'mode-change';
+					}
+					resourceState.mode = next;
+					resourceState.source = source || 'api';
+					resourceState.targetFps = config.targetFps;
+					resourceState.updatedAt = nowIso();
+					resourceState.lastDecision = 'mode';
+					resourceState.lastReason = resourceState.source;
+					updateResourceBodyClass();
+					window.__voidscapeResourceState = resourceSnapshot();
+					return resourceState.mode;
+				}
+
+				function resourceModeLabel(mode) {
+					if (mode === 'gfx-off') return 'GFX off';
+					return 'Normal';
+				}
+
+				function updateResourceControls() {
+					var buttons = document.querySelectorAll('.resource-mode-button');
+					for (var i = 0; i < buttons.length; i++) {
+						var button = buttons[i];
+						var mode = normalizeResourceMode(button.getAttribute('data-resource-mode') || 'normal');
+						var selected = mode === resourceState.mode;
+						button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+						button.title = resourceModeLabel(mode);
+					}
+				}
+
+				function updateShellRuntime(runtime) {
+					var label = document.getElementById('shell-runtime-label');
+					if (!label) return;
+					var mode = runtime && runtime.mode ? String(runtime.mode) : 'desktop';
+					label.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+				}
+
+				function forceResourceUpload(reason) {
+					resourceState.forceNextUpload = true;
+					resourceState.forceReason = reason || 'forced';
+					resourceState.updatedAt = nowIso();
+					window.__voidscapeResourceState = resourceSnapshot();
+				}
+
+				function prepareFrameUpload(width, height, sizeChanged) {
+					var now = Date.now();
+					resourceState.lastConsideredAtMs = now;
+					resourceState.lastConsideredAt = nowIso();
+					resourceState.canvasWidth = width || 0;
+					resourceState.canvasHeight = height || 0;
+					if (sizeChanged) {
+						resourceState.forceNextUpload = true;
+						resourceState.forceReason = 'canvas-resize';
+					}
+					if (resourceState.mode === 'normal') {
+						resourceState.lastDecision = 'upload';
+						resourceState.lastReason = 'normal';
+						window.__voidscapeResourceState = resourceSnapshot();
+						return true;
+					}
+					if (resourceState.forceNextUpload) {
+						resourceState.forceNextUpload = false;
+						resourceState.forcedUploadCount += 1;
+						resourceState.lastDecision = 'upload';
+						resourceState.lastReason = resourceState.forceReason || 'forced';
+						resourceState.forceReason = '';
+						window.__voidscapeResourceState = resourceSnapshot();
+						return true;
+					}
+					resourceState.skippedCount += 1;
+					resourceState.lastSkipAtMs = now;
+					resourceState.lastSkipAt = nowIso();
+					resourceState.lastDecision = 'skip';
+					resourceState.lastReason = 'gfx-off';
+					window.__voidscapeResourceState = resourceSnapshot();
+					return false;
+				}
+
+				function recordFrameUpload(width, height) {
+					var now = Date.now();
+					resourceState.uploadCount += 1;
+					resourceState.lastUploadAtMs = now;
+					resourceState.lastUploadAt = nowIso();
+					resourceState.canvasWidth = width || 0;
+					resourceState.canvasHeight = height || 0;
+					resourceState.lastDecision = 'upload';
+					resourceState.updatedAt = resourceState.lastUploadAt;
+					window.__voidscapeResourceState = resourceSnapshot();
+				}
+
+				function safePortalUrl(value) {
+					var text = String(value || '').trim();
+					if (!text) return '';
+					try {
+						var parsed = new URL(text, window.location.href);
+						if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+							return parsed.href;
+						}
+					} catch (error) {
+						// Invalid portal URLs are ignored; the client keeps its in-game fallback status.
+					}
+					return '';
+				}
+
+			function firstParam(params, names) {
+				for (var i = 0; i < names.length; i++) {
+					var value = params.get(names[i]);
+					if (value != null && String(value).trim().length > 0) {
+						return value;
+					}
+				}
+				return '';
+			}
+
+			function storedPortalUrl(key) {
+				try {
+					return window.localStorage ? window.localStorage.getItem(key) || '' : '';
+				} catch (error) {
+					return '';
+				}
+			}
+
+			function storePortalUrl(key, value) {
+				try {
+					if (!window.localStorage) return;
+					if (value) {
+						window.localStorage.setItem(key, value);
+					} else {
+						window.localStorage.removeItem(key);
+					}
+				} catch (error) {
+					// Portal URL persistence is a deployment/QA convenience; ignore storage failures.
+				}
+			}
+
+			function portalUrlFromBase(base, hash) {
+				var url = safePortalUrl(base || '/');
+				if (!url) return '';
+				try {
+					var parsed = new URL(url);
+					parsed.hash = hash;
+					return safePortalUrl(parsed.href);
+				} catch (error) {
+					return '';
+				}
+			}
+
+			function configurePortalUrls() {
+				var params = new URLSearchParams(window.location.search);
+				var existing = window.__voidscapePortalConfig || {};
+				var reset = params.get('resetPortal') === '1' || params.get('portalReset') === '1';
+				if (reset) {
+					storePortalUrl(portalAccountStorageKey, '');
+					storePortalUrl(portalRecoveryStorageKey, '');
+				}
+
+				var genericPortal = firstParam(params, ['portalUrl', 'portal']);
+				var globalPortal = existing.portalUrl || existing.baseUrl || '';
+				var base = genericPortal || globalPortal || '/';
+				var source = 'default';
+				if (genericPortal) {
+					source = 'query';
+				} else if (globalPortal) {
+					source = 'global';
+				}
+
+				var accountUrl = safePortalUrl(firstParam(params, ['portalAccountUrl', 'accountUrl']));
+				var recoveryUrl = safePortalUrl(firstParam(params, ['portalRecoveryUrl', 'recoveryUrl']));
+				if (accountUrl) {
+					source = 'query';
+					storePortalUrl(portalAccountStorageKey, accountUrl);
+				}
+				if (recoveryUrl) {
+					source = 'query';
+					storePortalUrl(portalRecoveryStorageKey, recoveryUrl);
+				}
+
+				if (!accountUrl && !reset && !genericPortal) {
+					accountUrl = safePortalUrl(existing.accountUrl) || safePortalUrl(storedPortalUrl(portalAccountStorageKey));
+					if (accountUrl) source = existing.accountUrl ? 'global' : 'stored';
+				}
+				if (!recoveryUrl && !reset && !genericPortal) {
+					recoveryUrl = safePortalUrl(existing.recoveryUrl) || safePortalUrl(storedPortalUrl(portalRecoveryStorageKey));
+					if (recoveryUrl) source = existing.recoveryUrl ? 'global' : 'stored';
+				}
+
+				if (!accountUrl) {
+					accountUrl = portalUrlFromBase(base, 'account');
+				}
+				if (!recoveryUrl) {
+					recoveryUrl = portalUrlFromBase(base, 'security');
+				}
+				if (source === 'query') {
+					storePortalUrl(portalAccountStorageKey, accountUrl);
+					storePortalUrl(portalRecoveryStorageKey, recoveryUrl);
+				}
+
+				window.__voidscapePortalConfig = {
+					accountUrl: accountUrl,
+					recoveryUrl: recoveryUrl,
+					portalUrl: safePortalUrl(base),
+					source: source
+				};
+				return window.__voidscapePortalConfig;
+			}
+
+			function recordOpenedUrl(url, kind, target) {
+				window.__voidscapeOpenedUrls = window.__voidscapeOpenedUrls || [];
+				window.__voidscapeOpenedUrls.push({
+					url: url,
+					kind: kind,
+					target: target,
+					at: new Date().toISOString()
+				});
+				window.__voidscapeLastOpenedUrl = url;
+			}
+
+			window.__voidscapeOpenClientUrl = function (url) {
+				var text = String(url || '').trim();
+				var kind = '';
+				if (text === 'voidscape:account') {
+					kind = 'account';
+				} else if (text === 'voidscape:recovery') {
+					kind = 'recovery';
+				}
+
+				var resolved = '';
+				if (kind) {
+					var config = configurePortalUrls();
+					resolved = kind === 'account' ? config.accountUrl : config.recoveryUrl;
+				} else {
+					resolved = safePortalUrl(text);
+				}
+				if (!resolved) {
+					return false;
+				}
+
+				var target = kind ? '_self' : '_blank';
+				recordOpenedUrl(resolved, kind || 'external', target);
+				if (kind && window.__voidscapePortalNavigationMode === 'capture') {
+					return true;
+				}
+
+				try {
+					if (kind) {
+						window.location.assign(resolved);
+						return true;
+					}
+					return !!window.open(resolved, '_blank', 'noopener');
+				} catch (error) {
+					recordDiagnosticError('open url failed: ' + shortDiagnosticValue(error));
+					return false;
+				}
+			};
+
+			function recordDiagnosticError(message) {
+				var text = String(message || 'unknown error');
+				if (recentErrors.length && recentErrors[recentErrors.length - 1] === text) {
+					return;
+				}
+				recentErrors.push(text);
+				if (recentErrors.length > 6) {
+					recentErrors.splice(0, recentErrors.length - 6);
+				}
+			}
+
+			function nowIso() {
+				return new Date().toISOString();
+			}
+
+				function refreshAfterLifecycleResume() {
+					updateViewportHeight();
+					lockScroll();
+					forceResourceUpload('lifecycle-resume');
+					if (diagnosticsEnabled) {
+						renderDiagnostics();
+					}
+			}
+
+			function scheduleLifecycleResumeRefresh() {
+				refreshAfterLifecycleResume();
+				window.setTimeout(refreshAfterLifecycleResume, 90);
+				window.setTimeout(refreshAfterLifecycleResume, 320);
+				window.setTimeout(refreshAfterLifecycleResume, 850);
+			}
+
+			function markLifecycleEvent(name, event) {
+				var hidden = !!document.hidden;
+				var persisted = !!(event && event.persisted);
+				lifecycleState.hidden = hidden;
+				lifecycleState.visibilityState = document.visibilityState || (hidden ? 'hidden' : 'visible');
+				lifecycleState.lastEvent = name;
+				lifecycleState.lastEventAt = nowIso();
+				if (name === 'blur') {
+					lifecycleState.blurCount++;
+					lifecycleSuspended = true;
+				} else if (name === 'focus') {
+					lifecycleState.focusCount++;
+				} else if (name === 'pagehide') {
+					lifecycleState.pageHideCount++;
+					lifecycleState.pageShowPersisted = persisted;
+					lifecycleSuspended = true;
+				} else if (name === 'pageshow') {
+					lifecycleState.pageShowCount++;
+					lifecycleState.pageShowPersisted = persisted;
+				} else if (name === 'visibilitychange') {
+					lifecycleState.visibilityChangeCount++;
+					if (hidden) {
+						lifecycleSuspended = true;
+					}
+				}
+				var resumed = name === 'focus'
+					|| name === 'pageshow'
+					|| (name === 'visibilitychange' && !hidden);
+				if (resumed && (lifecycleSuspended || persisted)) {
+					lifecycleSuspended = false;
+					lifecycleState.resumeCount++;
+					lifecycleState.lastResumeAt = lifecycleState.lastEventAt;
+					resetPostResumeProof();
+					scheduleLifecycleResumeRefresh();
+				}
+			}
+
+			function shortDiagnosticValue(value) {
+				var text = '';
+				try {
+					if (value && value.stack) {
+						text = value.stack;
+					} else if (value && value.message) {
+						text = value.message;
+					} else if (typeof value === 'string') {
+						text = value;
+					} else {
+						text = JSON.stringify(value);
+					}
+				} catch (error) {
+					text = String(value);
+				}
+				text = String(text || value || '');
+				return text.length > 240 ? text.slice(0, 237) + '...' : text;
+			}
+
+			function installConsoleDiagnostics() {
+				if (!window.console || window.console.__voidscapeDiagnosticsWrapped) return;
+				var originalError = typeof window.console.error === 'function' ? window.console.error : null;
+				if (originalError) {
+					window.console.error = function () {
+						var parts = [];
+						for (var i = 0; i < arguments.length; i++) {
+							parts.push(shortDiagnosticValue(arguments[i]));
+						}
+						recordDiagnosticError('console.error: ' + parts.join(' '));
+						return originalError.apply(window.console, arguments);
+					};
+				}
+				window.console.__voidscapeDiagnosticsWrapped = true;
+			}
+
+			function lockScroll() {
+				if (window.scrollX !== 0 || window.scrollY !== 0) {
+					window.scrollTo(0, 0);
+				}
+			}
+
+				function storedEndpoint() {
+					try {
+						return window.localStorage ? window.localStorage.getItem(profileStorageKey(endpointStorageBaseKey)) || '' : '';
+					} catch (error) {
+						return 'unavailable';
+					}
+			}
+
+			function storedDiagnosticsEnabled() {
+				try {
+					return !!window.localStorage && window.localStorage.getItem(diagnosticsStorageKey) === '1';
+				} catch (error) {
+					return false;
+				}
+			}
+
+			function setStoredDiagnosticsEnabled(enabled) {
+				try {
+					if (!window.localStorage) return;
+					if (enabled) {
+						window.localStorage.setItem(diagnosticsStorageKey, '1');
+					} else {
+						window.localStorage.removeItem(diagnosticsStorageKey);
+					}
+				} catch (error) {
+					// Diagnostics storage is a QA convenience; ignore private-mode/storage failures.
+				}
+			}
+
+			function objectLine(label, value) {
+				var rendered;
+				try {
+					rendered = typeof value === 'string' ? value : JSON.stringify(value);
+				} catch (error) {
+					rendered = String(value);
+				}
+				return label + ': ' + (rendered || '');
+			}
+
+			function lifecycleSnapshot() {
+				var snapshot = {};
+				for (var key in lifecycleState) {
+					if (Object.prototype.hasOwnProperty.call(lifecycleState, key)) {
+						snapshot[key] = lifecycleState[key];
+					}
+				}
+				return snapshot;
+			}
+
+			function clientMovementDigest(state) {
+				if (!state || typeof state !== 'object') return null;
+				return {
+					worldX: state.worldX | 0,
+					worldY: state.worldY | 0,
+					currentX: state.currentX | 0,
+					currentZ: state.currentZ | 0,
+					tileX: state.tileX | 0,
+					tileZ: state.tileZ | 0
+				};
+			}
+
+			function clientMovedBetween(before, after) {
+				if (!before || !after || !after.hasLocalPlayer) return false;
+				return (after.worldX | 0) !== (before.worldX | 0)
+					|| (after.worldY | 0) !== (before.worldY | 0)
+					|| Math.abs((after.currentX | 0) - (before.currentX | 0)) >= 128
+					|| Math.abs((after.currentZ | 0) - (before.currentZ | 0)) >= 128
+					|| (after.tileX | 0) !== (before.tileX | 0)
+					|| (after.tileZ | 0) !== (before.tileZ | 0);
+			}
+
+			function pushPostResumeEvent(kind, detail) {
+				if (!postResumeProof.lastResumeAt || lifecycleState.resumeCount <= 0) return;
+				var event = {
+					kind: kind,
+					at: nowIso(),
+					resumeCount: lifecycleState.resumeCount
+				};
+				if (detail && typeof detail === 'object') {
+					for (var key in detail) {
+						if (Object.prototype.hasOwnProperty.call(detail, key)) {
+							event[key] = detail[key];
+						}
+					}
+				}
+				postResumeProof.updatedAt = event.at;
+				postResumeProof.events.push(event);
+				if (postResumeProof.events.length > 24) {
+					postResumeProof.events.splice(0, postResumeProof.events.length - 24);
+				}
+				window.__voidscapePostResumeProof = postResumeProof;
+			}
+
+			function resetPostResumeProof() {
+				postResumeProof.updatedAt = nowIso();
+				postResumeProof.lastResumeAt = lifecycleState.lastResumeAt;
+				postResumeProof.resumeCount = lifecycleState.resumeCount;
+				postResumeProof.inputAfterResume = false;
+				postResumeProof.movementAfterResume = false;
+				postResumeProof.lastInputAfterResumeAt = '';
+				postResumeProof.lastMovementAfterResumeAt = '';
+				postResumeProof.baselineClient = cloneForDiagnostics(window.__voidscapeClientState || null);
+				postResumeProof.lastClient = postResumeProof.baselineClient;
+				postResumeProof.lastMovementFrom = null;
+				postResumeProof.lastMovementTo = null;
+				postResumeProof.events = [];
+				pushPostResumeEvent('resume', {
+					lifecycleEvent: lifecycleState.lastEvent,
+					client: clientMovementDigest(postResumeProof.baselineClient)
+				});
+			}
+
+			function recordPostResumeInput(value) {
+				if (!postResumeProof.lastResumeAt || lifecycleState.resumeCount <= 0) return;
+				postResumeProof.inputAfterResume = true;
+				postResumeProof.lastInputAfterResumeAt = nowIso();
+				pushPostResumeEvent('input', {
+					input: String(value || '').slice(0, 32)
+				});
+			}
+
+			function recordPostResumeClientState(state) {
+				if (!state || typeof state !== 'object') return;
+				var cloned = cloneForDiagnostics(state);
+				if (!postResumeProof.lastResumeAt || lifecycleState.resumeCount <= 0) {
+					postResumeProof.lastClient = cloned;
+					return;
+				}
+				if (!postResumeProof.baselineClient) {
+					postResumeProof.baselineClient = cloned;
+				}
+				postResumeProof.lastClient = cloned;
+				if (!postResumeProof.inputAfterResume || postResumeProof.movementAfterResume) return;
+				if (!clientMovedBetween(postResumeProof.baselineClient, cloned)) return;
+				postResumeProof.movementAfterResume = true;
+				postResumeProof.lastMovementAfterResumeAt = nowIso();
+				postResumeProof.lastMovementFrom = clientMovementDigest(postResumeProof.baselineClient);
+				postResumeProof.lastMovementTo = clientMovementDigest(cloned);
+				pushPostResumeEvent('movement', {
+					from: postResumeProof.lastMovementFrom,
+					to: postResumeProof.lastMovementTo
+				});
+			}
+
+			function cloneForDiagnostics(value) {
+				try {
+					return JSON.parse(JSON.stringify(value));
+				} catch (error) {
+					return value;
+				}
+			}
+
+			function controlSnapshot(selector) {
+				var element = document.querySelector(selector);
+				if (!element) {
+					return {
+						selector: selector,
+						present: false,
+						display: '',
+						visibility: '',
+						pointerEvents: '',
+						ariaPressed: '',
+						visible: false,
+						rect: null
+					};
+				}
+				var style = getComputedStyle(element);
+				var box = element.getBoundingClientRect();
+				var rect = {
+					left: Math.round(box.left),
+					top: Math.round(box.top),
+					right: Math.round(box.right),
+					bottom: Math.round(box.bottom),
+					width: Math.round(box.width),
+					height: Math.round(box.height)
+				};
+				var centerX = Math.max(0, Math.min(Math.max(0, window.innerWidth - 1), Math.round((rect.left + rect.right) / 2)));
+				var centerY = Math.max(0, Math.min(Math.max(0, window.innerHeight - 1), Math.round((rect.top + rect.bottom) / 2)));
+				var hit = rect.width > 0 && rect.height > 0 ? document.elementFromPoint(centerX, centerY) : null;
+				return {
+					selector: selector,
+					present: true,
+					display: style.display,
+					visibility: style.visibility,
+					pointerEvents: style.pointerEvents,
+					ariaPressed: element.getAttribute('aria-pressed') || '',
+					text: element.textContent.trim(),
+					backgroundImage: style.backgroundImage,
+					backgroundColor: style.backgroundColor,
+					fontSize: style.fontSize,
+					centerX: centerX,
+					centerY: centerY,
+					hitSelf: !!hit && (hit === element || element.contains(hit)),
+					hitSelector: hit ? ((hit.id ? '#' + hit.id : hit.tagName.toLowerCase()) + (hit.className && typeof hit.className === 'string' ? '.' + hit.className.trim().replace(/\s+/g, '.') : '')) : '',
+					visible: style.display !== 'none'
+						&& style.visibility !== 'hidden'
+						&& rect.width > 0
+						&& rect.height > 0
+						&& rect.right > 0
+						&& rect.bottom > 0
+						&& rect.left < window.innerWidth
+						&& rect.top < window.innerHeight,
+					rect: rect
+				};
+			}
+
+			function controlLayoutSnapshot() {
+				var panelButtons = Array.prototype.slice.call(document.querySelectorAll('.mobile-panel-button')).map(function (element) {
+					var selector = '.mobile-panel-button[data-panel="' + (element.getAttribute('data-panel') || '') + '"]';
+					return controlSnapshot(selector);
+				});
+				var chatButtons = Array.prototype.slice.call(document.querySelectorAll('.mobile-chat-button')).map(function (element) {
+					var selector = '.mobile-chat-button[data-chat="' + (element.getAttribute('data-chat') || '') + '"]';
+					return controlSnapshot(selector);
+				});
+				var quickButtons = Array.prototype.slice.call(document.querySelectorAll('.mobile-quick-button')).map(function (element) {
+					return controlSnapshot('#' + element.id);
+				});
+				var resourceButtons = Array.prototype.slice.call(document.querySelectorAll('.resource-mode-button')).map(function (element) {
+					return controlSnapshot('.resource-mode-button[data-resource-mode="' + (element.getAttribute('data-resource-mode') || '') + '"]');
+				});
+				return {
+					playShell: controlSnapshot('#play-shell'),
+					playShellBar: controlSnapshot('#play-shell-bar'),
+					keyboardButton: controlSnapshot('#keyboard-button'),
+					inventoryButton: controlSnapshot('#inventory-button'),
+					magicButton: controlSnapshot('#magic-button'),
+					prayerButton: controlSnapshot('#prayer-button'),
+					bestiaryButton: controlSnapshot('#bestiary-button'),
+					quickButtons: quickButtons,
+					panelButton: controlSnapshot('#panel-button'),
+					panelDrawer: controlSnapshot('#mobile-panel-drawer'),
+					panelButtons: panelButtons,
+						chatButton: controlSnapshot('#chat-button'),
+						chatTray: controlSnapshot('#mobile-chat-tray'),
+						chatButtons: chatButtons,
+						cameraControls: controlSnapshot('#camera-controls'),
+						resourceModeControl: controlSnapshot('#resource-mode-control'),
+						resourceButtons: resourceButtons,
+						lowResourceOverlay: controlSnapshot('#low-resource-overlay'),
+						resourceResumeButton: controlSnapshot('#resource-resume-button'),
+						diagnosticsButton: controlSnapshot('#diagnostics-button'),
+						diagnosticsCopyButton: controlSnapshot('#diagnostics-copy-button')
+					};
+			}
+
+			function currentControlOrientation(viewport) {
+				return viewport && viewport.innerWidth > viewport.innerHeight ? 'landscape' : 'portrait';
+			}
+
+			function recordControlLayoutHistory(viewport, controls) {
+				var orientation = currentControlOrientation(viewport);
+				var ui = window.__voidscapeUiState || {};
+				var entry = {
+					orientation: orientation,
+					updatedAt: nowIso(),
+					chatAccessMode: String(ui.chatAccessMode || 'canvas'),
+					panelAccessMode: String(ui.panelAccessMode || 'canvas'),
+					mobilePanelShell: !!ui.mobilePanelShell,
+					canvasTopTabsVisible: ui.canvasTopTabsVisible !== false,
+					canvasPanelRailVisible: !!ui.canvasPanelRailVisible,
+					canvasPanelDockVisible: !!ui.canvasPanelDockVisible,
+					viewport: cloneForDiagnostics(viewport),
+					controls: cloneForDiagnostics(controls)
+				};
+				controlLayoutHistory.current = orientation;
+				controlLayoutHistory.updatedAt = entry.updatedAt;
+				controlLayoutHistory[orientation] = entry;
+				return cloneForDiagnostics(controlLayoutHistory);
+			}
+
+			function collectDiagnostics() {
+				var canvas = document.getElementById('game');
+				var rect = canvas ? canvas.getBoundingClientRect() : { width: 0, height: 0, left: 0, top: 0 };
+				var viewport = window.visualViewport ? {
+					width: Math.round(window.visualViewport.width),
+					height: Math.round(window.visualViewport.height),
+					offsetLeft: Math.round(window.visualViewport.offsetLeft || 0),
+					offsetTop: Math.round(window.visualViewport.offsetTop || 0),
+					pageLeft: Math.round(window.visualViewport.pageLeft || 0),
+					pageTop: Math.round(window.visualViewport.pageTop || 0),
+					scale: window.visualViewport.scale
+				} : null;
+				var viewportSnapshot = {
+					innerWidth: window.innerWidth,
+					innerHeight: window.innerHeight,
+					visualViewport: viewport,
+					cssViewportHeight: getComputedStyle(document.documentElement).getPropertyValue('--viewport-height').trim(),
+					devicePixelRatio: window.devicePixelRatio || 1,
+					scrollX: window.scrollX,
+					scrollY: window.scrollY
+				};
+				var controls = controlLayoutSnapshot();
+				var controlsHistory = recordControlLayoutHistory(viewportSnapshot, controls);
+				var snapshot = {
+					title: document.title,
+					href: window.location.href,
+					standalone: !!window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches,
+					runtimeMode: window.__voidscapeRuntimeMode || null,
+					touchProfile: !!window.__voidscapeMobileProfile,
+					tabletProfile: !!window.__voidscapeTabletProfile,
+					inGame: !!window.__voidscapeInGame,
+						bodyClass: document.body ? document.body.className : '',
+						profile: profile,
+						endpoint: window.__voidscapeEndpoint || null,
+						effectiveWs: window.__voidscapeEffectiveWebSocketUrl || '',
+						storedEndpoint: storedEndpoint(),
+						portal: window.__voidscapePortalConfig || null,
+						resource: resourceSnapshot(),
+						viewport: viewportSnapshot,
+					canvas: {
+						width: canvas ? canvas.width : 0,
+						height: canvas ? canvas.height : 0,
+						cssWidth: Math.round(rect.width),
+						cssHeight: Math.round(rect.height),
+						left: Math.round(rect.left),
+						top: Math.round(rect.top)
+					},
+					keyboard: {
+						wanted: !!window.__voidscapeKeyboardWanted,
+						open: !!window.__voidscapeKeyboardOpen,
+						frozen: !!window.__voidscapeViewportKeyboardFrozen,
+						closingFrozen: !!window.__voidscapeViewportKeyboardClosingFrozen,
+						closingUntil: window.__voidscapeKeyboardClosingUntil || 0
+					},
+					diagnostics: {
+						enabled: !!diagnosticsEnabled,
+						source: diagnosticsSource,
+						stored: storedDiagnosticsEnabled(),
+						exportVisible: !!window.__voidscapeDiagnosticsExportVisible
+					},
+					lifecycle: lifecycleSnapshot(),
+					controls: controls,
+					controlsHistory: controlsHistory,
+						ui: cloneForDiagnostics(window.__voidscapeUiState || null),
+						uiHistory: cloneForDiagnostics(window.__voidscapeUiHistory || null),
+						worldMap: cloneForDiagnostics(window.__voidscapeWorldMapState || null),
+						worldMapHistory: cloneForDiagnostics(window.__voidscapeWorldMapHistory || null),
+						scrollHistory: cloneForDiagnostics(window.__voidscapeScrollHistory || []),
+						postResumeProof: cloneForDiagnostics(window.__voidscapePostResumeProof || postResumeProof),
+					input: {
+						queueLength: Array.isArray(window.__voidscapeInputQueue) ? window.__voidscapeInputQueue.length : null,
+						contextArmed: !!window.__voidscapeNextTapSecondary,
+						topMenu: !!window.__voidscapeTopMenuVisible,
+						scrollableUi: !!window.__voidscapeScrollableUiActive,
+						messageScroll: !!window.__voidscapeMessageScrollActive,
+						worldMap: !!window.__voidscapeWorldMapTouchActive,
+						longPressMillis: window.__voidscapeLongPressMillis || null,
+						panelDrawer: !!window.__voidscapePanelDrawerOpen,
+						chatTray: !!window.__voidscapeChatTrayOpen
+					},
+					login: cloneForDiagnostics(window.__voidscapeLoginState || null),
+					client: window.__voidscapeClientState || null,
+					recentErrors: recentErrors.slice()
+				};
+				window.__voidscapeDiagnosticsSnapshot = snapshot;
+				return snapshot;
+			}
+
+			function renderDiagnostics() {
+				if (!diagnosticsEnabled) return;
+				var panel = document.getElementById('diagnostics-panel');
+				if (!panel) return;
+				var snapshot = collectDiagnostics();
+				panel.textContent = [
+					objectLine('title', snapshot.title),
+						objectLine('standalone', snapshot.standalone),
+						objectLine('runtimeMode', snapshot.runtimeMode),
+						objectLine('touchProfile', snapshot.touchProfile),
+						objectLine('tabletProfile', snapshot.tabletProfile),
+						objectLine('inGame', snapshot.inGame),
+						objectLine('profile', snapshot.profile),
+						objectLine('endpoint', snapshot.endpoint),
+						objectLine('effectiveWs', snapshot.effectiveWs),
+						objectLine('storedEndpoint', snapshot.storedEndpoint),
+						objectLine('portal', snapshot.portal),
+						objectLine('resource', snapshot.resource),
+						objectLine('viewport', snapshot.viewport),
+					objectLine('canvas', snapshot.canvas),
+					objectLine('keyboard', snapshot.keyboard),
+					objectLine('diagnostics', snapshot.diagnostics),
+					objectLine('lifecycle', snapshot.lifecycle),
+					objectLine('controls', snapshot.controls),
+					objectLine('controlsHistory', snapshot.controlsHistory),
+						objectLine('ui', snapshot.ui),
+						objectLine('uiHistory', snapshot.uiHistory),
+						objectLine('worldMap', snapshot.worldMap),
+						objectLine('worldMapHistory', snapshot.worldMapHistory),
+						objectLine('scrollHistory', snapshot.scrollHistory),
+					objectLine('postResumeProof', snapshot.postResumeProof),
+					objectLine('input', snapshot.input),
+					objectLine('login', snapshot.login),
+					objectLine('recentErrors', snapshot.recentErrors)
+				].join('\n');
+			}
+
+			function diagnosticsReportText() {
+				var snapshot = collectDiagnostics();
+				var report = {
+					generatedAt: new Date().toISOString(),
+					userAgent: window.navigator.userAgent,
+					snapshot: snapshot
+				};
+				try {
+					return JSON.stringify(report, null, 2);
+				} catch (error) {
+					return String(snapshot);
+				}
+			}
+
+			function setDiagnosticsCopyLabel(label, durationMs) {
+				var button = document.getElementById('diagnostics-copy-button');
+				if (!button) return;
+				button.textContent = label;
+				if (diagnosticsCopyTimer) {
+					window.clearTimeout(diagnosticsCopyTimer);
+				}
+				diagnosticsCopyTimer = window.setTimeout(function () {
+					button.textContent = 'copy';
+				}, durationMs || 1200);
+			}
+
+			function hideDiagnosticsExport() {
+				document.documentElement.classList.remove('diagnostics-export-open');
+				window.__voidscapeDiagnosticsExportVisible = false;
+				window.__voidscapeDiagnosticsExportLength = 0;
+			}
+
+			function showDiagnosticsExport(text) {
+				var field = document.getElementById('diagnostics-export');
+				if (!field) return;
+				field.value = text;
+				document.documentElement.classList.add('diagnostics', 'diagnostics-export-open');
+				window.__voidscapeDiagnosticsExportVisible = true;
+				window.__voidscapeDiagnosticsExportLength = text.length;
+				window.setTimeout(function () {
+					field.focus();
+					field.select();
+				}, 0);
+				setDiagnosticsCopyLabel('select', 3200);
+			}
+
+			function copyDiagnosticsFallback(text) {
+				var field = document.createElement('textarea');
+				field.value = text;
+				field.setAttribute('readonly', 'readonly');
+				field.style.position = 'fixed';
+				field.style.left = '-9999px';
+				field.style.top = '0';
+				document.body.appendChild(field);
+				field.focus();
+				field.select();
+				try {
+					return document.execCommand('copy');
+				} finally {
+					document.body.removeChild(field);
+				}
+			}
+
+			function copyDiagnostics() {
+				var text = diagnosticsReportText();
+				function copied() {
+					hideDiagnosticsExport();
+					setDiagnosticsCopyLabel('copied');
+				}
+				function failed(error) {
+					var fallbackWorked = false;
+					try {
+						fallbackWorked = copyDiagnosticsFallback(text);
+					} catch (fallbackError) {
+						fallbackWorked = false;
+					}
+					if (fallbackWorked) {
+						copied();
+					} else {
+						showDiagnosticsExport(text);
+					}
+				}
+				if (window.navigator.clipboard && window.isSecureContext) {
+					window.navigator.clipboard.writeText(text).then(copied).catch(failed);
+				} else {
+					failed('clipboard unavailable');
+				}
+			}
+
+			function installDiagnostics() {
+				var params = new URLSearchParams(window.location.search);
+				var diag = params.get('diag');
+				var debug = params.get('debug');
+				var reset = params.get('endpoint') === 'reset' || params.get('resetEndpoint') === '1';
+				var enabledByQuery = diag === '1' || debug === '1';
+				var disabledByQuery = reset || diag === '0' || debug === '0';
+				if (enabledByQuery) {
+					setStoredDiagnosticsEnabled(true);
+					diagnosticsSource = 'query';
+				} else if (disabledByQuery) {
+					setStoredDiagnosticsEnabled(false);
+					diagnosticsSource = 'off';
+				} else if (storedDiagnosticsEnabled()) {
+					diagnosticsSource = 'stored';
+				} else {
+					diagnosticsSource = 'off';
+				}
+				diagnosticsEnabled = enabledByQuery || (!disabledByQuery && diagnosticsSource === 'stored');
+				window.__voidscapeDiagnosticsEnabled = diagnosticsEnabled;
+				window.__voidscapeDiagnosticsSource = diagnosticsSource;
+				window.__voidscapeCollectDiagnostics = collectDiagnostics;
+				window.__voidscapeRecordDiagnosticError = recordDiagnosticError;
+				if (!diagnosticsEnabled) return;
+				document.documentElement.classList.add('diagnostics');
+				var button = document.getElementById('diagnostics-button');
+				var panel = document.getElementById('diagnostics-panel');
+				if (button) {
+					button.addEventListener('pointerdown', function (event) {
+						var open = !document.documentElement.classList.contains('diagnostics-open');
+						document.documentElement.classList.toggle('diagnostics-open', open);
+						if (!open) {
+							hideDiagnosticsExport();
+						}
+						button.setAttribute('aria-pressed', open ? 'true' : 'false');
+						renderDiagnostics();
+						event.preventDefault();
+						event.stopPropagation();
+					});
+				}
+				var copyButton = document.getElementById('diagnostics-copy-button');
+				if (copyButton) {
+					copyButton.addEventListener('pointerdown', function (event) {
+						copyDiagnostics();
+						event.preventDefault();
+						event.stopPropagation();
+					});
+					copyButton.addEventListener('click', function (event) {
+						event.preventDefault();
+						event.stopPropagation();
+					});
+				}
+				if (panel) {
+					panel.addEventListener('pointerdown', function (event) {
+						event.stopPropagation();
+					});
+					panel.addEventListener('touchmove', function (event) {
+						event.stopPropagation();
+					}, { passive: true });
+				}
+				var exportField = document.getElementById('diagnostics-export');
+				if (exportField) {
+					['pointerdown', 'pointerup', 'click', 'dblclick', 'keydown', 'keyup'].forEach(function (type) {
+						exportField.addEventListener(type, function (event) {
+							event.stopPropagation();
+						});
+					});
+					['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (type) {
+						exportField.addEventListener(type, function (event) {
+							event.stopPropagation();
+						}, { passive: true });
+					});
+				}
+				renderDiagnostics();
+				diagnosticsTimer = window.setInterval(renderDiagnostics, 500);
+			}
+
+			installConsoleDiagnostics();
+			window.addEventListener('error', function (event) {
+				var target = event.target || event.srcElement;
+				if (target && target !== window) {
+					var tag = target.tagName || 'resource';
+					var source = target.currentSrc || target.src || target.href || '';
+					recordDiagnosticError('resource error: ' + tag + (source ? ' ' + source : ''));
+					return;
+				}
+				recordDiagnosticError((event.message || 'error') + (event.filename ? ' @ ' + event.filename + ':' + event.lineno : ''));
+			}, true);
+			window.addEventListener('unhandledrejection', function (event) {
+				var reason = event.reason && (event.reason.message || event.reason);
+				recordDiagnosticError('unhandled rejection: ' + reason);
+			});
+
+			function updateViewportHeight() {
+				var height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+				var closingFrozen = !!window.__voidscapeMobileProfile
+					&& Date.now() < Number(window.__voidscapeKeyboardClosingUntil || 0);
+				var keyboardFrozen = !!window.__voidscapeMobileProfile
+					&& (!!window.__voidscapeKeyboardOpen
+						|| !!window.__voidscapeKeyboardWanted
+						|| document.body.classList.contains('keyboard-open')
+						|| closingFrozen);
+				if (!stableViewportHeight || !keyboardFrozen || height > stableViewportHeight) {
+					stableViewportHeight = height;
+				}
+				var appliedHeight = keyboardFrozen ? stableViewportHeight : height;
+				window.__voidscapeViewportKeyboardFrozen = keyboardFrozen;
+				window.__voidscapeViewportKeyboardClosingFrozen = closingFrozen;
+				document.documentElement.style.setProperty('--viewport-height', Math.max(1, appliedHeight) + 'px');
+				lifecycleState.viewportUpdateCount++;
+				lifecycleState.lastViewportUpdateAt = nowIso();
+				lockScroll();
+			}
+
+				function applyProfileClass() {
+					var runtime = applyRuntimeMode();
+					var standalone = !!window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+					document.documentElement.classList.toggle('standalone', standalone);
+					return runtime;
+				}
+
+				function installResourceControls() {
+					var resumeButton = document.getElementById('resource-resume-button');
+					if (resumeButton) {
+						resumeButton.addEventListener('pointerdown', function (event) {
+							setResourceMode('normal', 'resume-button');
+							forceResourceUpload('resume-button');
+							event.preventDefault();
+							event.stopPropagation();
+						});
+						resumeButton.addEventListener('click', function (event) {
+							event.preventDefault();
+							event.stopPropagation();
+						});
+					}
+					var buttons = document.querySelectorAll('.resource-mode-button');
+					for (var i = 0; i < buttons.length; i++) {
+						(function (button) {
+							button.addEventListener('pointerdown', function (event) {
+								var mode = button.getAttribute('data-resource-mode') || 'normal';
+								setResourceMode(mode, 'shell-button');
+								forceResourceUpload('shell-button');
+								event.preventDefault();
+								event.stopPropagation();
+							});
+							button.addEventListener('click', function (event) {
+								event.preventDefault();
+								event.stopPropagation();
+							});
+						})(buttons[i]);
+					}
+					updateResourceControls();
+				}
+
+				window.__voidscapeUpdateViewportHeight = updateViewportHeight;
+				window.__voidscapeLifecycleState = lifecycleState;
+				window.__voidscapePostResumeProof = postResumeProof;
+				window.__voidscapeRecordInputActivity = recordPostResumeInput;
+				window.__voidscapeRecordClientState = recordPostResumeClientState;
+				window.__voidscapeSetResourceMode = setResourceMode;
+				window.__voidscapePrepareFrameUpload = prepareFrameUpload;
+				window.__voidscapeRecordFrameUpload = recordFrameUpload;
+				window.__voidscapeForceResourceUpload = forceResourceUpload;
+				setResourceMode(initialResourceMode(), initialResourceSource());
+				updateViewportHeight();
+				applyProfileClass();
+				configurePortalUrls();
+				installResourceControls();
+				installDiagnostics();
+				window.addEventListener('resize', function () {
+					forceResourceUpload('resize');
+					updateViewportHeight();
+				}, { passive: true });
+				window.addEventListener('orientationchange', function () {
+					forceResourceUpload('orientationchange');
+					updateViewportHeight();
+					window.setTimeout(updateViewportHeight, 90);
+					window.setTimeout(updateViewportHeight, 360);
+				}, { passive: true });
+			window.addEventListener('scroll', lockScroll, { passive: true });
+			window.addEventListener('blur', function (event) {
+				markLifecycleEvent('blur', event);
+			}, { passive: true });
+			window.addEventListener('focus', function (event) {
+				markLifecycleEvent('focus', event);
+			}, { passive: true });
+			window.addEventListener('pagehide', function (event) {
+				markLifecycleEvent('pagehide', event);
+			}, { passive: true });
+			window.addEventListener('pageshow', function (event) {
+				markLifecycleEvent('pageshow', event);
+			}, { passive: true });
+			document.addEventListener('visibilitychange', function (event) {
+				markLifecycleEvent('visibilitychange', event);
+			}, { passive: true });
+			if (window.visualViewport) {
+				window.visualViewport.addEventListener('resize', updateViewportHeight, { passive: true });
+				window.visualViewport.addEventListener('scroll', updateViewportHeight, { passive: true });
+			}
+			document.addEventListener('gesturestart', function (event) {
+				event.preventDefault();
+			});
+			document.addEventListener('dblclick', function (event) {
+				event.preventDefault();
+			});
+			document.addEventListener('touchmove', function (event) {
+				if (window.__voidscapeMobileProfile) {
+					event.preventDefault();
+				}
+			}, { passive: false });
+			document.addEventListener('touchend', function (event) {
+				var now = Date.now();
+				if (window.__voidscapeMobileProfile && now - lastTouchEndAt < 320) {
+					event.preventDefault();
+				}
+				lastTouchEndAt = now;
+			}, { passive: false });
+		})();
+	</script>
+	<script src="voidscape-web-client.js"></script>
+	<script>
+		if (typeof window.main === 'function') {
+			window.main([]);
+		} else {
+			document.getElementById('status').textContent = 'TeaVM main export was not found.';
+		}
+	</script>
+</body>
+</html>

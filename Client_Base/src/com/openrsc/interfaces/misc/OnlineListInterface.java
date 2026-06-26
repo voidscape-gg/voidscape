@@ -24,7 +24,7 @@ public class OnlineListInterface extends NComponent {
 
 		setBackground(10000536, 10000536, 128);
 		setSize(408, 246);
-		setLocation((client.getGameWidth() - getWidth()) / 2, (client.getGameHeight() - getHeight()) / 2);
+		updateLocation();
 		setInputListener(new InputListener() {
 			@Override
 			public boolean onMouseDown(int clickX, int clickY, int mButtonDown, int mButtonClick) {
@@ -79,6 +79,21 @@ public class OnlineListInterface extends NComponent {
 		setVisible(false);
 	}
 
+	private void updateLocation() {
+		int x = Math.max(4, (getClient().getGameWidth() - getWidth()) / 2);
+		int y = (getClient().getGameHeight() - getHeight()) / 2;
+		if (getClient().isVoidscapeClassicWebSmallHud()) {
+			int topSafe = getClient().getVoidscapeDesktopOverlayTopSafeY();
+			int bottomSafe = getClient().getVoidscapeDesktopOverlayBottomSafeY();
+			if (getHeight() <= bottomSafe - topSafe) {
+				y = Math.max(topSafe, Math.min(y, bottomSafe - getHeight()));
+			} else {
+				y = topSafe;
+			}
+		}
+		setLocation(x, Math.max(4, y));
+	}
+
 	public void addOnlineUser(final String user, final int crownID, String location, boolean isLast) {
 		String text = user;
 		if (!location.equals("")) {
@@ -105,6 +120,7 @@ public class OnlineListInterface extends NComponent {
 
 	@Override
 	public void update() {
+		updateLocation();
 		panel.handleMouse(getClient().getMouseX(), getClient().getMouseY(), getClient().getMouseButtonDown(),
 			getClient().getLastMouseDown());
 		panel.reposition(scroll, getX(), getY() + 20, getWidth(), getHeight() - 20);

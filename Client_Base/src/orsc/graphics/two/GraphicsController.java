@@ -5,11 +5,11 @@ import com.openrsc.client.entityhandling.defs.ItemDef;
 import com.openrsc.client.entityhandling.defs.SpriteDef;
 import com.openrsc.client.entityhandling.defs.extras.AnimationDef;
 import com.openrsc.client.model.Sprite;
-import com.openrsc.data.DataConversions;
 import orsc.Config;
 import orsc.MiscFunctions;
 import orsc.graphics.two.SpriteArchive.*;
 import orsc.mudclient;
+import orsc.util.CacheArchive;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
@@ -18,8 +18,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public class GraphicsController {
 
@@ -60,7 +58,7 @@ public class GraphicsController {
 	private final Map<String, int[]> countryFlagIcons = new HashMap<>();
 	// public int[][] image2D_pixels;
 	private int[] m_Xb;
-	private ZipFile spriteArchive;
+	private CacheArchive spriteArchive;
 	private static final int COUNTRY_FLAG_WIDTH = 13;
 	private static final int COUNTRY_FLAG_HEIGHT = 10;
 	private static final int COUNTRY_FLAG_ADVANCE = 15;
@@ -102,12 +100,12 @@ public class GraphicsController {
 			this.width2 = var1;
 			try {
 				if (!Config.S_WANT_CUSTOM_SPRITES) {
-					spriteArchive = new ZipFile(Config.F_CACHE_DIR + File.separator + "video" + File.separator + "Authentic_Sprites.orsc");
+					spriteArchive = mudclient.clientPort.openCacheArchive("video" + File.separator + "Authentic_Sprites.orsc");
 					sprites = new Sprite[var3];
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
-				System.exit(1);
+				Config.exit(1);
 			}
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7, "ua.<init>(" + var1 + ',' + var2 + ',' + var3 + ')' + ')');
@@ -3623,31 +3621,14 @@ public class GraphicsController {
 		return true;
 	}
 
-	public static ArrayList<Sprite> unpackSpriteData(ZipFile ioe, ZipEntry zipEntry) throws IOException {
+	public static ArrayList<Sprite> unpackSpriteData(byte[] archiveEntry) {
 		ArrayList<Sprite> sprites = new ArrayList<>();
 
 		try {
-			InputStream fileIn = ioe.getInputStream(zipEntry);
-			ByteArrayOutputStream fileBytesBuffer = new ByteArrayOutputStream();
-			byte[] buffer = new byte[4096];
-			int readByte;
-			while ((readByte = fileIn.read(buffer)) != -1) {
-				fileBytesBuffer.write(buffer, 0, readByte);
-			}
-
-			fileBytesBuffer.close();
-			fileIn.close();
-
-			byte[] fileBytes = fileBytesBuffer.toByteArray();
-			ByteBuffer fileByteBuffer = ByteBuffer.wrap(fileBytes);
-			try {
-				sprites = unpackSpriteNew(fileByteBuffer);
-			} catch (Exception e) {
-				System.out.println(e);
-			}
-
-		} catch (IOException a) {
-			a.printStackTrace();
+			ByteBuffer fileByteBuffer = ByteBuffer.wrap(archiveEntry);
+			sprites = unpackSpriteNew(fileByteBuffer);
+		} catch (Exception e) {
+			System.out.println(e);
 		}
 		return sprites;
 	}
@@ -3718,14 +3699,13 @@ public class GraphicsController {
 
 	public boolean loadSprite(int id, String packageName) {
 		try {
-			ZipEntry e = spriteArchive.getEntry(String.valueOf(id));
-			if (e == null) {
+			ByteBuffer data = spriteArchive.getEntryBuffer(String.valueOf(id));
+			if (data == null) {
 				if (Config.DEBUG)
 					System.err.println("Missing sprite: " + id + " from package " + packageName);
 				sprites[id] = Sprite.getUnknownSprite(48, 32);
 				return true;
 			}
-			ByteBuffer data = DataConversions.streamToBuffer(new BufferedInputStream(spriteArchive.getInputStream(e)));
 			sprites[id] = Sprite.unpack(data);
 			return true;
 		} catch (Exception e) {

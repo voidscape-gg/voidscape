@@ -169,7 +169,7 @@ public final class LostOnDeathInterface {
 		});
 
 		int keepXItems = 0;
-		if (mc.getLocalPlayer().skullVisible == 0) {
+		if ((mc.getLocalPlayer().skullVisible & 0x03) == 0) {
 			keepXItems += 3;
 		}
 		//TODO - add check for item protect

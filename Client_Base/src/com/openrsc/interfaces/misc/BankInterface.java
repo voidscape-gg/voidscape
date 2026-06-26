@@ -76,14 +76,14 @@ public class BankInterface {
 			mouseOverBankPageText = 2;
 		if (mc.getMouseClick() == 1 || ((mc.getMouseButtonDown() == 1 && mc.getMouseButtonDownTime() > 99999 && Config.isAndroid()) ||
 			(mc.getMouseButtonDown() == 1 && mc.getMouseButtonDownTime() > 20 && !Config.isAndroid()))) {
-			int selectedX = currMouseX - (mc.getGameWidth() / 2 - width / 2);
-			int selectedY = currMouseY - (mc.getGameHeight() / 2 - height / 2 + 20);
+			int selectedX = currMouseX - bankOriginX();
+			int selectedY = currMouseY - bankOriginY();
 			if (selectedX >= 0 && selectedY >= 16 && selectedX < 408 && selectedY < 280) {
 				if (mc.inputX_Action == InputXAction.ACT_0) {
 					selectSlot(selectedX, selectedY); // Set the slot we clicked on
 
-					selectedX = mc.getGameWidth() / 2 - width / 2;
-					selectedY = mc.getGameHeight() / 2 - height / 2 + 20;
+					selectedX = bankOriginX();
+					selectedY = bankOriginY();
 				}
 
 				// Check for a transaction
@@ -93,16 +93,16 @@ public class BankInterface {
 
 				// Select bank page
 			} else if (currentItems.size() > 48 && selectedX >= 50 && selectedX <= 115 &&
-				selectedY <= 16 && currMouseY > mc.getGameHeight() / 2 - 146 && membersWorld) {
+				selectedY <= 16 && currMouseY > bankOriginY() + 1 && membersWorld) {
 				mouseOverBankPageText = 0; // Select page 1
 			} else if (currentItems.size() > 48 && selectedX >= 115 && selectedX <= 180 &&
-				selectedY <= 16 && currMouseY > mc.getGameHeight() / 2 - 146 && membersWorld) {
+				selectedY <= 16 && currMouseY > bankOriginY() + 1 && membersWorld) {
 				mouseOverBankPageText = 1; // Select page 2
 			} else if (currentItems.size() > 96 && selectedX >= 180 && selectedX <= 245 &&
-				selectedY <= 16 && currMouseY > mc.getGameHeight() / 2 - 146 && membersWorld) {
+				selectedY <= 16 && currMouseY > bankOriginY() + 1 && membersWorld) {
 				mouseOverBankPageText = 2; // Select page 3
 			} else if (currentItems.size() > 144 && selectedX >= 245 && selectedX <= 310 &&
-				selectedY <= 16 && currMouseY > mc.getGameHeight() / 2 - 146 && membersWorld) {
+				selectedY <= 16 && currMouseY > bankOriginY() + 1 && membersWorld) {
 				mouseOverBankPageText = 3; // Select page 4
 
 			} else { // Close Bank
@@ -228,9 +228,21 @@ public class BankInterface {
 		}
 	}
 
+	private int bankOriginX() {
+		return (mc.getGameWidth() - width) / 2;
+	}
+
+	private int bankOriginY() {
+		int originY = mc.getGameHeight() / 2 - height / 2 + 20;
+		if (mc.isVoidscapeClassicWebSmallHud()) {
+			originY = mc.getVoidscapeDesktopOverlayTopSafeY();
+		}
+		return originY;
+	}
+
 	private void drawBankComponents(int currMouseX, int currMouseY) {
-		int relativeX = mc.getGameWidth() / 2 - width / 2; // WAS 256
-		int relativeY = mc.getGameHeight() / 2 - height / 2 + 20; // WAS 170
+		int relativeX = bankOriginX(); // WAS 256
+		int relativeY = bankOriginY(); // WAS 170
 		mc.getSurface().drawBox(relativeX, relativeY, 408, 12, 192);
 		int backgroundColour = 0x989898;
 		mc.getSurface().drawBoxAlpha(relativeX, relativeY + 12, 408, 17, backgroundColour, 160);

@@ -7,11 +7,16 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 
 import orsc.Config;
+import orsc.PacketHandler;
+import orsc.net.Network_Base;
+import orsc.net.Network_Socket;
+import orsc.util.CacheArchive;
 
 public interface ClientPort {
 
@@ -20,6 +25,9 @@ public interface ClientPort {
 	void showLoadingProgress(int percentage, String status);
 
 	void initListeners();
+
+	default void pollInput() {
+	}
 
 	void crashed();
 
@@ -66,6 +74,22 @@ public interface ClientPort {
 	void setTitle(String title);
 
 	void setIconImage(String serverName);
+
+	default String saveScreenshot() {
+		return "";
+	}
+
+	default Network_Base openNetworkConnection(PacketHandler packetHandler, String host, int port) throws IOException {
+		return new Network_Socket(packetHandler.openSocket(port, host), packetHandler);
+	}
+
+	default InputStream openCacheResource(String relativePath) throws IOException {
+		return new FileInputStream(getCacheLocation() + relativePath);
+	}
+
+	default CacheArchive openCacheArchive(String relativePath) throws IOException {
+		return CacheArchive.read(openCacheResource(relativePath));
+	}
 
 	static boolean saveHideIp(int preference) {
 		FileOutputStream fileout;

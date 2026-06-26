@@ -3,20 +3,18 @@ package orsc.graphics.three;
 import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.model.Sector;
 import com.openrsc.client.model.Tile;
-import com.openrsc.data.DataConversions;
 import orsc.Config;
 import orsc.graphics.two.GraphicsController;
+import orsc.mudclient;
+import orsc.util.CacheArchive;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 
 public final class World {
@@ -58,7 +56,7 @@ public final class World {
 	private Sector[] worldMapSector = new Sector[4];
 	private int mapPointX = 0;
 	private int mapPointZ = 0;
-	private ZipFile tileArchive;
+	private CacheArchive tileArchive;
 	private Sector[] sectors;
 	private boolean voidReskinEnabled = false;
 	public String mapHash;
@@ -75,14 +73,14 @@ public final class World {
 			try {
 				String path;
 				if (Config.S_WANT_CUSTOM_LANDSCAPE)
-					path = Config.F_CACHE_DIR + File.separator + "video" + File.separator + "Custom_Landscape.orsc";
+					path = "video" + File.separator + "Custom_Landscape.orsc";
 				else
-					path = Config.F_CACHE_DIR + File.separator + "video" + File.separator + "Authentic_Landscape.orsc";
-				tileArchive = new ZipFile(new File(path));
-				mapHash = generateMapHash(path);
+					path = "video" + File.separator + "Authentic_Landscape.orsc";
+				tileArchive = mudclient.clientPort.openCacheArchive(path);
+				mapHash = generateMapHash(Config.F_CACHE_DIR + File.separator + path);
 			} catch (Exception e) {
 				e.printStackTrace();
-				System.exit(1);
+				Config.exit(1);
 			}
 
 		} catch (RuntimeException var4) {
@@ -2131,8 +2129,8 @@ public final class World {
 		Sector s = null;
 		try {
 			String filename = "h" + height + "x" + sectionX + "y" + sectionY;
-			ZipEntry e = tileArchive.getEntry(filename);
-			if (e == null) {
+			ByteBuffer data = tileArchive.getEntryBuffer(filename);
+			if (data == null) {
 				s = new Sector();
 				if (height == 0 || height == 3) {
 					for (int i = 0; i < 2304; i++) {
@@ -2140,13 +2138,11 @@ public final class World {
 					}
 				}
 			} else {
-				ByteBuffer data = DataConversions
-					.streamToBuffer(new BufferedInputStream(tileArchive.getInputStream(e)));
 				s = Sector.unpack(data);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.exit(1);
+			Config.exit(1);
 		}
 		worldMapSector[sector] = s;
 	}
@@ -2155,8 +2151,8 @@ public final class World {
 		Sector s = null;
 		try {
 			String filename = "h" + height + "x" + sectionX + "y" + sectionY;
-			ZipEntry e = tileArchive.getEntry(filename);
-			if (e == null) {
+			ByteBuffer data = tileArchive.getEntryBuffer(filename);
+			if (data == null) {
 				s = new Sector();
 				if (height == 0 || height == 3) {
 					for (int i = 0; i < 2304; i++) {
@@ -2164,13 +2160,11 @@ public final class World {
 					}
 				}
 			} else {
-				ByteBuffer data = DataConversions
-					.streamToBuffer(new BufferedInputStream(tileArchive.getInputStream(e)));
 				s = Sector.unpack(data);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.exit(1);
+			Config.exit(1);
 		}
 		applyTerrainEditorOverrides(s, height, sectionX, sectionY);
 		sectors[sector] = s;

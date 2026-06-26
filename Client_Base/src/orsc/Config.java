@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static orsc.osConfig.F_ANDROID_BUILD;
+import static orsc.osConfig.F_WEB_BUILD;
 
 public class Config {
 	private static Properties prop = new Properties();
@@ -26,6 +27,7 @@ public class Config {
 	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
 	public static final int GLOBAL_CHAT_COUNTRY_FLAGS_CLIENT_VERSION = 10069;
 	public static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
+	public static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
 	public static final int MAX_MODERN_HAIR_STYLE = 0;
 	private static final int CACHE_VERSION = 4;
 	public static boolean MEMBER_WORLD = false;
@@ -202,6 +204,11 @@ public class Config {
 	}
 
 	static void initConfig() {
+		if (F_WEB_BUILD) {
+			F_CACHE_DIR = "Cache";
+			setConfigurationFromProperties();
+			return;
+		}
 		if (!F_ANDROID_BUILD) {
 			if (CUSTOM_CACHE_DIR_ENABLED) {
 				F_CACHE_DIR = CUSTOM_CACHE_DIR;
@@ -242,16 +249,17 @@ public class Config {
 						|| !prop.get(f.getName()).toString().equalsIgnoreCase(f.get(null).toString())) {
 						Class<?> t = f.getType();
 
+						Object fieldValue = f.get(null);
 						if (t == int.class) {
-							set(f.getName(), f.getInt(null));
+							set(f.getName(), fieldValue);
 						} else if (t == long.class) {
-							set(f.getName(), f.getLong(null));
+							set(f.getName(), fieldValue);
 						} else if (t == float.class) {
-							set(f.getName(), f.getFloat(null));
+							set(f.getName(), fieldValue);
 						} else if (t == double.class) {
-							set(f.getName(), f.getDouble(null));
+							set(f.getName(), fieldValue);
 						} else if (t == boolean.class) {
-							set(f.getName(), f.getBoolean(null));
+							set(f.getName(), fieldValue);
 						}
 					}
 				} catch (Exception e) {
@@ -333,6 +341,17 @@ public class Config {
 
 	public static boolean isAndroid() {
 		return F_ANDROID_BUILD;
+	}
+
+	public static boolean isWeb() {
+		return F_WEB_BUILD;
+	}
+
+	public static void exit(int status) {
+		if (F_WEB_BUILD) {
+			throw new IllegalStateException("Exit requested with status " + status);
+		}
+		System.exit(status);
 	}
 
 	static boolean Remember() {

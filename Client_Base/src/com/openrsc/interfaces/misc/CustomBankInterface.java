@@ -98,7 +98,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private void updateLayout() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			width = Math.min(BANK_PANEL_WIDTH_ANDROID, Math.max(bankGridWidth() + 20, mc.getGameWidth() - 8));
 			width = Math.min(width, mc.getGameWidth() - 8);
 			height = compactPanelHeight();
@@ -114,6 +114,16 @@ public final class CustomBankInterface extends BankInterface {
 		if (androidLayout()) {
 			x = Math.max(4, x);
 			y = Math.max(4, (mc.getGameHeight() - height) / 2);
+		} else if (smallDesktopWebLayout()) {
+			x = Math.max(4, Math.min(x, mc.getGameWidth() - width - 4));
+			int topSafe = mc.getVoidscapeDesktopOverlayTopSafeY();
+			int bottomSafe = mc.getVoidscapeDesktopOverlayBottomSafeY();
+			int centeredY = (mc.getGameHeight() - height) / 2;
+			if (height <= bottomSafe - topSafe) {
+				y = Math.max(topSafe, Math.min(centeredY, bottomSafe - height));
+			} else {
+				y = topSafe;
+			}
 		} else {
 			y = Math.max(55, Math.min(82, (mc.getGameHeight() - height) / 2 + 2));
 		}
@@ -123,8 +133,12 @@ public final class CustomBankInterface extends BankInterface {
 		return Config.isAndroid();
 	}
 
+	private boolean smallDesktopWebLayout() {
+		return mc.isVoidscapeClassicWebSmallHud();
+	}
+
 	private boolean spaciousLayout() {
-		return !androidLayout() && mc.getGameWidth() >= 700 && mc.getGameHeight() >= 520;
+		return !androidLayout() && !smallDesktopWebLayout() && mc.getGameWidth() >= 700 && mc.getGameHeight() >= 520;
 	}
 
 	private int contentX() {
@@ -140,7 +154,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int controlRowYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return 42;
 		}
 		return spaciousLayout() ? 58 : 54;
@@ -155,7 +169,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int bankGridYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return 64;
 		}
 		return spaciousLayout() ? 96 : 82;
@@ -174,7 +188,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int actionRowYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return bankGridYOffset() + bankGridHeight() + 4;
 		}
 		return bankGridYOffset() + bankGridHeight() + (spaciousLayout() ? 17 : 8);
@@ -200,28 +214,28 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int compactPanelHeight() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return inventoryGridYOffset() + inventoryGridHeight() + 6;
 		}
 		return inventoryGridYOffset() + inventoryGridHeight() + 18;
 	}
 
 	private int bankSlotWidth() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return BANK_SLOT_WIDTH_ANDROID;
 		}
 		return spaciousLayout() ? BANK_SLOT_WIDTH_SPACIOUS : BANK_SLOT_WIDTH_COMPACT;
 	}
 
 	private int bankSlotHeight() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return BANK_SLOT_HEIGHT_ANDROID;
 		}
 		return spaciousLayout() ? BANK_SLOT_HEIGHT_SPACIOUS : BANK_SLOT_HEIGHT_COMPACT;
 	}
 
 	private int actionButtonHeight() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout()) {
 			return 20;
 		}
 		return spaciousLayout() ? 26 : 22;

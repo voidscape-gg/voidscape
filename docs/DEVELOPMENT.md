@@ -93,6 +93,18 @@ scripts/run-portal.sh         # run website/account portal with local prototype 
 scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
 scripts/test-portal-api.sh    # smoke-test portal API flows
 scripts/test-portal-schema.sh # validate portal account-management schema contract
+scripts/build-web-teavm-spike.sh # build the TeaVM browser client target
+scripts/run-web-teavm-local.sh   # serve the TeaVM browser client on localhost/LAN
+scripts/run-web-teavm-iphone-simulator.sh # open TeaVM client in iOS Simulator Safari
+scripts/run-web-teavm-iphone-qa.sh # write LAN/deployed iPhone Safari QA reports
+scripts/validate-web-teavm-iphone-qa-report.py # validate copied Safari diagnostics report
+scripts/package-web-teavm.sh     # stage a production static web root for iPhone/Safari
+scripts/verify-web-teavm-deployment.sh # verify a hosted iPhone web-client deployment
+scripts/check-web-teavm-iphone-release.sh # run local automated iPhone web release preflight
+scripts/check-web-teavm-iphone-final-release.py # audit final hosted + physical iPhone web release evidence
+scripts/smoke-web-teavm-iphone.sh # Chrome iPhone-emulation login/post-login smoke
+scripts/smoke-web-teavm-iphone-controls.sh # synthetic iPhone control-regression smoke
+scripts/smoke-web-teavm-iphone-https-wss.sh # local HTTPS/same-host WSS proxy smoke
 scripts/build-android.sh      # build Android APK; requires Android SDK
 scripts/android-smoke.sh      # build/install Android APK and capture emulator QA screenshots
 scripts/reset-db.sh           # wipe + reseed dev DB
@@ -173,6 +185,15 @@ scripts/run-client.sh
 scripts/run-client.sh --login StepAlt:stepalt
 scripts/run-client.sh --user StepAlt --pass stepalt
 ```
+
+Feature-page screenshot loop:
+
+```bash
+scripts/run-server.sh
+scripts/run-client.sh --login test:test
+```
+
+Use the in-game Options -> Screenshot row or press F12 in the PC client. Before capturing feature-page images, switch to a clean chat tab or hide the chat box so welcome/system/server messages are not visible. The client saves exact game-frame PNGs under `tmp/workbench/screenshots/`, with JSON sidecars, so screenshots do not depend on macOS window placement or desktop cropping.
 
 Compile plugins standalone:
 ```bash

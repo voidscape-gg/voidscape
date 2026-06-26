@@ -10,3 +10,4 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Beta deployments](beta_deployments.md) — VPS beta deploy paths, runtime/migration sync, checks
 - [Content pipeline](content_pipeline.md) — custom content/art starts with scripts/content.sh packs and validation
 - [Discord posting](discord_posting.md) — canonical VoidBot command for bug-feed/release-note posts
+- [iPhone web client](iphone_web_client.md) — TeaVM mobile status, HUD direction, chat/world-map blockers; next chat handoff: `docs/iphone-web-client-next-chat-context.md`

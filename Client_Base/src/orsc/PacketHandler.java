@@ -12,6 +12,7 @@ import orsc.graphics.gui.KillAnnouncer;
 import orsc.graphics.gui.SocialLists;
 import orsc.graphics.three.RSModel;
 import orsc.multiclient.ClientPort;
+import orsc.net.Network_Base;
 import orsc.net.Network_Socket;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
@@ -35,7 +36,7 @@ public class PacketHandler {
 	private static final boolean HIT_FEEDBACK_DEBUG = Boolean.getBoolean("voidscape.hitFeedbackDebug");
 
 	private final RSBuffer_Bits packetsIncoming = new RSBuffer_Bits(30000);
-	private Network_Socket clientStream;
+	private Network_Base clientStream;
 	private mudclient mc;
 
 	private static final Map<Integer, String> incomingOpcodeMap = new HashMap<Integer, String>() {{
@@ -130,11 +131,11 @@ public class PacketHandler {
 		this.mc = mc;
 	}
 
-	public Network_Socket getClientStream() {
+	public Network_Base getClientStream() {
 		return clientStream;
 	}
 
-	public void setClientStream(Network_Socket clientStream) {
+	public void setClientStream(Network_Base clientStream) {
 		this.clientStream = clientStream;
 	}
 
@@ -161,6 +162,10 @@ public class PacketHandler {
 		s.setSoTimeout(readTimeout);
 		s.setTcpNoDelay(true);
 		return s;
+	}
+
+	public final Network_Base openConnection(String host, int port) throws IOException {
+		return mudclient.clientPort.openNetworkConnection(this, host, port);
 	}
 
 	public RSBuffer_Bits getPacketsIncoming() {

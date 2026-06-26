@@ -262,6 +262,8 @@ docs/
 │   ├── add-npc.md
 │   ├── add-quest.md
 │   ├── add-skill-action.md
+│   ├── deploy-iphone-web-client.md
+│   ├── test-iphone-web-client-local.md
 │   ├── tweak-combat-formula.md
 │   └── add-admin-command.md
 └── subsystems/                     # Deep dives, one per major subsystem
@@ -269,8 +271,9 @@ docs/
     ├── client-cache.md
     ├── content-pipeline.md
     ├── combat-system.md
-    ├── dynamic-wilderness-spawns.md
-    ├── networking-protocol.md
+	    ├── dynamic-wilderness-spawns.md
+	    ├── iphone-web-client.md
+	    ├── networking-protocol.md
     ├── persistence-db.md
     ├── player-appearance-rendering.md
     ├── player-titles.md
