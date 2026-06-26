@@ -1,5 +1,8 @@
 OpenRSC Commands
 ------------------------
+
+Production note: when `production_command_lockdown: true` is enabled, high-risk staff/dev commands that can mutate economy, accounts, combat state, world state, movement, server runtime, or QA fixtures are owner-only even if a non-owner staff account normally has the rank to run them. Moderation and read-only support commands remain staff-gated by their normal rank checks.
+
 Admin Commands
 ------------------------
 - clearipbans
@@ -837,17 +840,20 @@ Regular Player Commands
   - Usage: `::gameinfo`
   - Shows your coordinates and total time played.
 - beta
+  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
   - Usage: `::beta`
   - Alias: `::betaguide`
   - Opens the Voidscape beta tester toolkit.
   - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, FarmSim, test checklist, common coordinates, and item IDs.
 - farmkit
+  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
   - Usage: `::farmkit 40`
   - Usage: `::farmkit 60`
   - Usage: `::farmkit 80`
   - Usage: `::farmkit 99`
   - Applies beta-only melee stat/gear kits for drop-rate testing, resets ranged/prayer/magic to 1, and resets the FarmSim sample.
 - farmsim
+  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
   - Usage: `::farmsim`
   - Usage: `::farmsim start`
   - Usage: `::farmsim status`
@@ -857,8 +863,9 @@ Regular Player Commands
 - bug
   - Usage: `::bug <what happened>`
   - Alias: `::reportbug`
-  - Sends a beta bug report with your current location and client version to the server bug ledger and Discord bug queue.
+  - Sends a bug report with your current location and client version to the server bug ledger and Discord bug queue.
 - codes
+  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
   - Usage: `::codes`
   - Alias: `::refcodes`
   - Shows beta referral reward codes earned when invited players entered your in-game name during character creation.

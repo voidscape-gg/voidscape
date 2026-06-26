@@ -38,6 +38,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] `server_port` / `ws_server_port` are the intended public ports.
 - [ ] `server_name`, welcome text, and Discord/community URLs are correct.
 - [ ] `member_world` is intentional and documented.
+- [ ] `want_beta_onboarding_guide: false` for public launch unless this is an explicitly trusted beta window.
+- [ ] `production_command_lockdown: true` for public launch, then verified with owner and non-owner staff accounts.
 - [ ] XP rates and hit-XP timing flags are intentional and documented.
 - [ ] `restrict_item_id` allows the current custom item range.
 - [ ] `want_pcap_logging` is off unless actively debugging packet capture.
@@ -50,6 +52,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Migrations are idempotent or safe to apply once.
 - [ ] Backup taken before migration or public test.
 - [ ] Account creation and login tested on a clean player.
+- [ ] Newly created public accounts have user rank, not Admin or another staff rank.
 - [ ] Existing-account login tested after migration.
 - [ ] Player save/logout/relogin tested.
 
@@ -98,7 +101,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] Void Island starter path can be chosen once, grants the matching starter kit once, and shows the post-choice welcome box.
 - [ ] Home teleport works and respects wilderness restrictions.
-- [ ] Edgeville Void Rift teleports to the Void Enclave.
+- [ ] Edgeville Void Rift at `192 443` teleports only to the Void Enclave.
+- [ ] Starter-area Void Rift at `139 636` teleports only to the Void Enclave and does not show the old city destination menu.
 - [ ] Void Enclave safe zone blocks PvP and amenities work: bank, altar, healing pool, waystones, store.
 - [ ] Void Dungeon entrance at `112 296` charges 100,000 coins, enters the shared Wilderness cave, and the exit rift returns to `112 297`.
 - [ ] Void chest requires a Void Key and rolls rewards.
@@ -111,6 +115,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
 - [ ] Dragon sword components drop/source/assemble as intended.
 - [ ] Custom items render in inventory and when wielded.
+- [ ] Launch command audit spot-check: non-owner staff cannot run `::item`, `::noteditem`, `::spawnnpc`, `::setstats`, `::goto`, `::loadbots`, or `::workbenchauctionfixture`; owner can still run break-glass commands.
 
 ## Performance
 

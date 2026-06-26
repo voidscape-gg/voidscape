@@ -7,7 +7,8 @@ import com.openrsc.server.plugins.triggers.CommandTrigger;
 public final class BetaReferralCodes implements CommandTrigger {
 	@Override
 	public boolean blockCommand(Player player, String command, String[] args) {
-		return command.equalsIgnoreCase("codes") || command.equalsIgnoreCase("refcodes");
+		return player.getConfig().WANT_BETA_ONBOARDING_GUIDE
+			&& (command.equalsIgnoreCase("codes") || command.equalsIgnoreCase("refcodes"));
 	}
 
 	@Override

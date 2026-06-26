@@ -63,7 +63,7 @@ curl -I https://<server-host-or-ip>/voidscape/update/manifest.properties
 nc -vz <server-host-or-ip> 43596
 ```
 
-During the friend beta, newly created characters are temporarily created as Admins automatically so testers can use the command checklist immediately. Existing characters can still be changed with `make rank-sqlite` / `make rank-mysql` or in-game `::setrank` from an owner/admin account. Revert the auto-admin default before any public release.
+Newly created characters use the normal User rank. Promote only trusted testers manually with `make rank-sqlite` / `make rank-mysql` or in-game `::setrank` from an owner/admin account when admin-only beta checks are needed.
 
 ## Launcher updates
 

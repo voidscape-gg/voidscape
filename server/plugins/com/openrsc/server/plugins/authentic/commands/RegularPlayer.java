@@ -1949,7 +1949,7 @@ public final class RegularPlayer implements CommandTrigger {
 		if (message.length() == 0) {
 			player.message(badSyntaxPrefix + "bug <what happened>");
 			player.playerServerMessage(MessageType.QUEST,
-				"@mag@Example: @whi@::bug Void Knight door stuck after teleporting from ::beta");
+				"@mag@Example: @whi@::bug Void Knight door stuck after using the starter rift");
 			return;
 		}
 		if (message.length() < 8) {
@@ -2032,10 +2032,11 @@ public final class RegularPlayer implements CommandTrigger {
 
 	private void queryCommands(Player player, int page) {
 		if (page == 0) {
+			String[] commands = pageZeroCommands(player);
 			if (player.getClientLimitations().supportsMessageBox) {
-				ActionSender.sendBox(player, String.join("", pageZeroCommands), true);
+				ActionSender.sendBox(player, String.join("", commands), true);
 			} else {
-				for (String command : pageZeroCommands) {
+				for (String command : commands) {
 					player.playerServerMessage(MessageType.QUEST, command.replace("%", ""));
 					delay(2);
 				}
@@ -2055,6 +2056,13 @@ public final class RegularPlayer implements CommandTrigger {
 			}
 		}
 
+	}
+
+	private static String[] pageZeroCommands(Player player) {
+		if (player.getConfig().WANT_BETA_ONBOARDING_GUIDE) {
+			return pageZeroCommandsBeta;
+		}
+		return pageZeroCommands;
 	}
 
 	private void setClientVersion(Player player, String[] args) {
@@ -2126,8 +2134,32 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::online - shows players currently online %",
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",
+		"@whi@::bug <message> - sends a bug report %",
+		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
+		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
+		"@whi@::c <message> - talk in clan chat %",
+		"@whi@::p <message> - talk in party chat %",
+		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
+		"@whi@::wilderness - shows the wilderness activity %",
+		"@whi@::arena - enter ranked Void Arena %",
+		"@whi@::event - to enter an ongoing server event %",
+		"@whi@::kills - shows kill counts of npcs %",
+		"@whi@::qoloptout - opts you out of Quality of Life features %",
+		"@whi@::certoptout - opts you out of the traditional 'cert' system %"
+	};
+
+	private static final String[] pageZeroCommandsBeta = new String[]{
+		"@yel@Commands available: %",
+		"@lre@Type :: before you enter your command, see the list below. %",
+		" %", // this adds a line of whitespace for readability
+		"@whi@::gameinfo - shows player and server information %",
+		"@whi@::leave - leaves PK catching practice early %",
+		"@whi@::online - shows players currently online %",
+		"@whi@::uniqueonline - shows number of unique IPs logged in %",
+		"@whi@::onlinelist - shows players currently online in a list %",
 		"@whi@::beta - opens the Voidscape beta guide menu %",
-		"@whi@::bug <message> - sends a beta bug report %",
+		"@whi@::bug <message> - sends a bug report %",
+		"@whi@::codes - shows earned beta referral reward codes %",
 		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",

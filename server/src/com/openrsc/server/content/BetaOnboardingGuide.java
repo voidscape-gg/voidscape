@@ -22,7 +22,7 @@ public final class BetaOnboardingGuide {
 		new Destination("Subscription Vendor - 126,649", 126, 649),
 		new Destination("Edgeville bank - 217,449", 217, 449),
 		new Destination("Void Auctioneer - 217,460", 217, 460),
-		new Destination("City Void Rift - 139,636", 139, 636),
+		new Destination("Starter Void Rift - 139,636", 139, 636),
 		new Destination("Void Enclave - 113,314", 113, 314)
 	};
 

@@ -57,7 +57,7 @@ dist/friend-beta/VoidscapeLauncher.jar
 
 On first Play, the launcher writes the hosted server endpoint into its runtime cache, downloads the PC client/cache from the manifest, and starts the client.
 
-6. For this friend beta, newly created characters are temporarily created as Admins automatically.
+6. Newly created characters use the normal User rank. Promote only trusted testers manually when admin-only commands are needed.
 
 Manual SQLite rank example, if an existing character needs to be changed:
 
@@ -145,7 +145,7 @@ These do not require admin rank.
 
 ## Admin Test Commands
 
-Use these for fast beta testing with the temporary auto-admin beta accounts.
+Use these for fast beta testing only after manually promoting a trusted tester account.
 
 | Command | Use |
 |---|---|
@@ -307,7 +307,7 @@ Extra notes:
 ## Beta Guardrails
 
 - Use disposable beta passwords.
-- Keep auto-admin access to trusted testers only, and revert the temporary beta default before public launch.
+- Keep staff-rank access to trusted testers only, and demote test accounts before public launch.
 - Do not treat beta economy/progression as permanent unless explicitly announced.
 - If the server starts feeling laggy, stop load bots with `::loadbots stop`.
 - Before a bigger friend wave, run the release checklist in `docs/RELEASE-CHECKLIST.md`.

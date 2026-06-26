@@ -7,7 +7,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
 | Client version | `10070` | `10070` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
-| Member world | `true` | Decide before beta | Local comment says this keeps completed Dragon sword wieldable. Earlier project docs described F2P-by-default. Pick one and update docs/presets. |
+| Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
@@ -16,6 +16,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Custom landscape | expected `true` | likely `true` | Required for Void Island, Enclave, arenas, and map edits. |
 | Item cap | `restrict_item_id: 9999` | `9999` | Required for custom item ids in the 1500+ range. |
 | Packet capture | `want_pcap_logging: false` | `false` | Enable only for targeted networking debug. |
+| Production command lockdown | absent/default `false` locally | `true` for public launch | Makes high-risk staff/dev commands owner-only without tying launch safety to the beta guide flag. |
 
 ## Core identity
 
@@ -48,14 +49,17 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
-| `member_world` | `true` currently | Decide | Decide | Needs product decision before beta. |
+| `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
+| `production_command_lockdown` | `false` locally unless testing launch policy | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
 
 ## Content gates
 
 | Key | Expected value | Why it matters |
 |---|---:|---|
 | `want_void_enclave` | `true` | Loads the Enclave, several custom loc files, and related content. |
+| `want_beta_onboarding_guide` | `false` for launch | Beta-only tester toolkit for teleports, stat presets, item kits, and FarmSim shortcuts. Keep enabled only during trusted beta windows. |
+| `production_command_lockdown` | `true` for launch | Owner-only guard for item/NPC spawning, stat/account mutation, forced teleport/movement, server lifecycle, bot/load-test, event/world reset, and QA fixture commands. |
 | `custom_landscape` | `true` | Enables custom patched terrain used by multiple systems. |
 | `spawn_auction_npcs` | `true` if Auction House is live | Spawns the Void Auctioneer and gates marketplace access. |
 | `want_world_announcements` | `true` if Void Herald social broadcasts are live | Master switch for milestone and skulled-Wilderness PK world messages. |
@@ -99,10 +103,12 @@ These are positional in many loaders. Keep server and client append order aligne
 
 ## Pre-release config sign-off
 
-- [ ] F2P vs members default decided.
+- [x] F2P vs members default decided: hybrid/P2P-enabled world with F2P-feeling early progression.
 - [x] XP rates decided: 10x combat / 2x skills, subscription adds +1x to each.
 - [ ] PvP/safe-zone policy decided.
 - [ ] Economy-affecting QoL toggles decided: notes, auction house, bank presets, batch skilling.
+- [x] Rift travel policy decided: ordinary Void Rifts go only to the Void Enclave; world-map autowalk remains the broad traversal QoL.
+- [x] Launch command policy decided: enable `production_command_lockdown: true`; keep moderation/read-only staff support available and make high-risk staff/dev commands owner-only.
 - [ ] Production database selected.
 - [ ] Public host/ports selected.
 - [ ] Client update/cache distribution path selected.

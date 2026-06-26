@@ -441,7 +441,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.setString(3, password);
 			statement.setLong(4, System.currentTimeMillis() / 1000);
 			statement.setString(5, ip);
-			statement.setInt(6, Group.ADMIN);
+			statement.setInt(6, Group.DEFAULT_GROUP);
 
 			statement.executeUpdate();
 		} catch (final SQLException ex) {

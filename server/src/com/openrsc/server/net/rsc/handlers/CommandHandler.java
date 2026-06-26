@@ -69,6 +69,87 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		"setmonitorautomaticshutdown", "monitorautomaticshutdown", "simlogin",
 		"simregister", "cleanidle", "cleanidleconns", "cleanidleconnections"
 	));
+	private static final Set<String> PRODUCTION_OWNER_ONLY_COMMANDS = new HashSet<String>(Arrays.asList(
+		"saveall", "restart", "shutdown", "update", "reloadworld", "reloadland",
+		"reloadsslcert", "refreshsslcert", "sqlerrorreportingtest",
+		"clearipbans", "fixloggedincount",
+		"loadbots", "loadtest", "cinematic", "cine", "voidrushbots", "vrbots",
+		"pf", "pathfinddebug",
+		"item", "certeditem", "noteditem", "bankitem", "bitem", "addbank",
+		"fillbank", "unfillbank", "ritem", "rbitem", "swapitem", "wipeinventory",
+		"wipeinv", "wipebank", "massitem", "gi", "gitem", "grounditem",
+		"removegi", "removegitem", "removegrounditem", "rgi", "rgitem",
+		"rgrounditem", "stockgroup", "beastmode", "givemodtools", "givetools",
+		"lemons", "lemon", "quickauction", "workbenchauctionfixture",
+		"workbenchahfixture", "dropwave", "farmdrops", "spawndrops",
+		"gatherstreak", "resourcestreak",
+		"spawnnpc", "massnpc", "smitenpc", "damagenpc", "dmgnpc", "shootme",
+		"npcrangeevent", "npcfightevent", "npcrangedlvl", "strpotnpc",
+		"setnpcstats", "npcrangeevent2", "npcevent", "chickenevent",
+		"stopnpcevent", "cancelnpcevent", "stopchickenevent",
+		"holidaydrop", "stopholidaydrop", "cancelholidaydrop",
+		"christmasiscancelled", "cabbagehalloweendrop", "winterholidayevent",
+		"toggleholiday", "santaclausiscomingtotown", "resetevent",
+		"stopresetevent", "cancelresetevent", "wildhobdebug", "wildhobgoblin",
+		"wildrule", "setpvpevent", "startpvpevent", "stoppvpevent",
+		"eventchest", "seers", "toggleseers", "partyhall", "togglepartyhall",
+		"playertalk", "npctalk", "npcsay",
+		"teleport", "tp", "tele", "town", "goto", "tpto", "teleportto",
+		"tpat", "rftele", "rtele", "ftele", "return", "summon",
+		"summonall", "returnall", "groupteleport", "grouptele", "grouptp",
+		"groupteleportto", "groupteleto", "grouptpto", "returngroup",
+		"heal", "recharge", "healprayer", "healp", "hp", "sethp", "hits",
+		"sethits", "prayer", "setprayer", "kill", "damage", "dmg",
+		"skull", "unskull", "rskull", "freezexp", "freezeexp",
+		"freezeexperience", "xpstat", "xpstats", "setxpstat", "setxpstats",
+		"setxp", "stat", "stats", "setstat", "setstats", "currentstat",
+		"currentstats", "setcurrentstat", "setcurrentstats", "curstat",
+		"curstats", "setcurstat", "setcurstats", "setcombatstyle",
+		"combatstyle", "combatstylenpc",
+		"setgroup", "setrank", "group", "rank", "setcache", "scache",
+		"storecache", "deletecache", "dcache", "removecache", "rcache",
+		"setquest", "queststage", "setqueststage", "resetquest", "resetq",
+		"questcomplete", "questcom", "completeallquests", "renameplayer",
+		"rp", "rn", "ren", "renameuser", "renamechar", "copypassword",
+		"copypass", "copypw", "removeformername", "fatigue", "simlogin",
+		"simregister",
+		"setmaxplayersperip", "smppi", "setmaxconnectionsperip", "smcpi",
+		"setmaxconnectionspersecond", "smcps", "setpidshuffleinterval",
+		"setglobalcooldown", "setgloballevelreq", "setpidless",
+		"setpidlesscatching", "shufflepid", "pidshuffle", "sddrmdbr",
+		"setdowntimereportmillis", "smtm", "setmonitortimeoutmillis",
+		"mip", "smip", "setmonitorip", "monitorip", "mas", "smas",
+		"setmonitorautomaticshutdown", "monitorautomaticshutdown",
+		"cleanidle", "cleanidleconns", "cleanidleconnections",
+		"toggletutorial", "babymode", "togglespacefiltering",
+		"invisible", "invis", "invulnerable", "invul", "blink", "norender",
+		"renderself", "possess", "pos", "possessnpc", "pnpc", "posnpc",
+		"possessrandom", "pr", "possessnext", "pn", "lain",
+		"leapaboutinstantnavigator", "hellonavi", "becomelain", "navi",
+		"become", "becomenpc", "morph", "morphnpc", "becomegod",
+		"speaktongues", "restorehumanity", "resetappearance", "weird",
+		"weirdplayer", "stay", "set_icon", "redhat", "rhel", "robe",
+		"setrobe", "setrobes",
+		"radiusnpc", "createnpc", "cnpc", "cpc", "rpc", "rnpc", "removenpc",
+		"removeobject", "robject", "removescenery", "rscenery",
+		"createobject", "cobject", "addobject", "aobject", "createscenery",
+		"cscenery", "addscenery", "ascenery", "createwallobject",
+		"cwallobject", "addwallobject", "awallobject", "createboundary",
+		"cboundary", "addboundary", "aboundary", "rotateobject",
+		"rotatescenery", "debugregion", "error", "droptest", "fishingrate",
+		"lograte", "points", "sound", "cyclescenery", "cycleclothing",
+		"abort", "boundarydemo", "scenerydemo", "filtertest",
+		"atnpc", "attacknpc", "atobject", "atobj", "oploc", "usescenery",
+		"walkto", "npcinfo", "killnpc", "take", "takeitem", "pickup",
+		"grounditems", "talknpc", "opnpc", "dropinv", "dropitem",
+		"undeadsiege", "siege", "zombies", "undeadsiegeparty",
+		"siegeparty", "zombiesparty", "undeadsiegepartynear",
+		"siegepartynear", "zombiespartynear",
+		"undeadsiegeclear", "siegeclear", "zombiesclear", "undeadsiegefinish",
+		"siegefinish", "zombiesfinish", "undeadsiegefinishfull",
+		"siegefinishfull", "zombiesfinishfull", "undeadsiegedie", "siegedie",
+		"zombiesdie", "colossus", "voidcolossus", "colossuspeace"
+	));
 	private static final Set<String> COMMAND_AUDIT_TARGET_FIRST_ARG_COMMANDS = new HashSet<String>(Arrays.asList(
 		"ban", "unban", "tban", "ipban", "banip", "mute", "unmute", "gmute", "ungmute",
 		"kick", "jail", "release", "summon", "return", "send", "take", "put", "goto",
@@ -222,7 +303,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 				player.getWorld().getServer().getDiscordService().staffCommandLog(player, "::" + cmd + " " + String.join(" ", args));
 			}
 		}
-		boolean blocked = blockUnsafeBetaAdminCommand(player, normalizedCmd, args);
+		boolean blocked = blockUnsafeCommand(player, normalizedCmd, args);
 		auditStaffCommand(player, normalizedCmd, args, blocked);
 		if (blocked) {
 			return;
@@ -346,6 +427,41 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		}
 
 		return false;
+	}
+
+	private static boolean blockUnsafeCommand(Player player, String cmd, String[] args) {
+		if (blockUnsafeProductionCommand(player, cmd, args)) return true;
+		return blockUnsafeBetaAdminCommand(player, cmd, args);
+	}
+
+	private static boolean blockUnsafeProductionCommand(Player player, String cmd, String[] args) {
+		if (!player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN) return false;
+		if (player.isOwner()) return false;
+
+		if (PRODUCTION_OWNER_ONLY_COMMANDS.contains(cmd)
+			|| isProductionOwnerOnlyPrefix(cmd)
+			|| isProductionOwnerOnlySubcommand(cmd, args)
+			|| isProductionOwnerOnlyStaffAlias(player, cmd)) {
+			player.message(player.getConfig().MESSAGE_PREFIX + "That command is owner-only while production command lockdown is enabled.");
+			return true;
+		}
+		return false;
+	}
+
+	private static boolean isProductionOwnerOnlyPrefix(String cmd) {
+		return cmd.startsWith("tpnpc");
+	}
+
+	private static boolean isProductionOwnerOnlySubcommand(String cmd, String[] args) {
+		if ((cmd.equals("balancereport") || cmd.equals("balancestats"))
+			&& args != null && args.length > 0 && args[0].equalsIgnoreCase("reset")) {
+			return true;
+		}
+		return false;
+	}
+
+	private static boolean isProductionOwnerOnlyStaffAlias(Player player, String cmd) {
+		return cmd.equals("rename") && player.isPlayerMod();
 	}
 
 	private static boolean isTeleportCommand(String cmd) {

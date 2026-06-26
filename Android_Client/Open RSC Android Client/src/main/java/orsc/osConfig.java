@@ -1,6 +1,7 @@
 package orsc;
 
 public class osConfig {
+	public static final boolean F_WEB_BUILD = false;
 	/* Android: */
 	public static boolean F_ANDROID_BUILD = true; // This MUST be true if Android client or it will crash on launch, needs to be set as public for the Android client to use
 	public static final String DL_URL = "voidscape"; // needs to be set as public for the Android client to use
