@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-26 - Tracked preset client-version sync
+
+Synced the tracked Voidscape/OpenRSC-style server presets to `client_version: 10120` so fresh staging or production configs copied from `default`, `preservation`, `rsccabbage`, `rsccoleslaw`, `openpk`, or `uranium` do not reject the current launcher, Android, desktop, or TeaVM web clients. The special `2001scape` preset intentionally keeps its separate `20010000` protocol identity. This is release-config hardening only: no packet shape, opcode, cache asset, gameplay rule, database schema, or client behavior changed. Reversibility is restoring the old preset values only if those presets are deliberately paired with older clients.
+
 ### 2026-06-26 - Launch account E2E hardening
 
 Ran the portal signup -> real OpenRSC login -> Lumbridge Subscription Vendor claim -> Subscription card redeem path against a live local server/workbench client. The pass caught two launch-readiness gaps and this entry records the fixes: portal-created game passwords are now restricted to 4-20 letters/numbers, with the public launch first password requiring 8-20 letters/numbers because it doubles as the web password and first game login; and old SQLite/MySQL worlds now receive an idempotent `bankpresets` table migration so player load/save no longer logs SQL errors on bank-preset reads/writes. Portal smoke fixtures now use a client-typable launch password. Validation included a normal-rank portal-created character logging in, claiming item `1602` from NPC `848`, redeeming it into `acct_sub:<webAccountId>`, and portal account readback showing claimed starter-card state plus active subscription rates. No packet, opcode, client-version, cache asset, item definition, NPC definition, or subscription gameplay rule changed; reversibility is relaxing the portal validator and removing the bank preset forward patch if a different production schema bootstrap guarantees the table.
