@@ -477,6 +477,7 @@ if (apkBuilt) {
 	grep -q 'Reserve Name + Free Card' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
 	grep -q 'data-prelaunch-auth-cta' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
 	grep -q 'One account. Every platform.' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
+	grep -q 'href="/features"' <<<"$landing_html" || { echo "landing page should link to the full feature guide"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
 	grep -q 'href="/privacy"' <<<"$landing_html" || { echo "landing page should link to the privacy policy"; exit 1; }
 	grep -q 'href="/data-deletion"' <<<"$landing_html" || { echo "landing page should link to data deletion"; exit 1; }
@@ -488,6 +489,9 @@ if (apkBuilt) {
 	grep -q 'landing-install-help' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
 	grep -q 'id="download-actions" hidden' <<<"$landing_html" || { echo "landing page should keep post-launch download actions hidden before launch"; exit 1; }
 	grep -q 'id="landing-launch-proof" hidden' <<<"$landing_html" || { echo "landing page should keep launch proof hidden before launch"; exit 1; }
+	features_html="$(curl -fsS "http://127.0.0.1:${public_port}/features")"
+	grep -q '<title>Voidscape Features</title>' <<<"$features_html" || { echo "/features should serve the feature guide"; exit 1; }
+	grep -q 'Prelaunch feature guide' <<<"$features_html" || { echo "/features should use prelaunch wording"; exit 1; }
 	if grep -q 'landing-live-basics' <<<"$landing_html"; then
 		echo "prelaunch landing should not include the redundant live basics strip"
 		exit 1

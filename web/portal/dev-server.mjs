@@ -1595,9 +1595,11 @@ async function serveStatic(request, response, pathname) {
 			? "/privacy.html"
 			: pathname === "/data-deletion"
 				? "/data-deletion.html"
-				: pathname === "/transparency"
-					? "/transparency.html"
-					: decodeURIComponent(pathname);
+				: pathname === "/features"
+					? "/features.html"
+					: pathname === "/transparency"
+						? "/transparency.html"
+						: decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
