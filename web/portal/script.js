@@ -1593,7 +1593,7 @@
 				? (launchSignupModeActive
 						? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
-				: "Launch is open. Create or manage your account, then play in the browser or download a client.";
+				: "Launch is open. Create or manage your account, then download the launcher or use the mobile web client.";
 		}
 	}
 
@@ -1609,7 +1609,7 @@
 		}
 		if (landingHeroProof) {
 			landingHeroProof.innerHTML = launchOpenActive
-				? "<span>Create or manage your account.</span><span>Play in browser or download a client.</span><span>Your starter card is waiting at Lumbridge.</span>"
+				? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Mobile web is ready for iOS and Android.</span>"
 				: "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>";
 		}
 		if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
@@ -1621,7 +1621,7 @@
 		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Every platform.";
 		if (landingPlatformCopy) {
 			landingPlatformCopy.textContent = launchOpenActive
-				? "Play in the browser on desktop or mobile, download the desktop launcher, or use the Android APK when it is available. Your portal account and characters work across the supported clients."
+				? "Use the desktop launcher on PC, Mac, or Linux. On iOS and Android, use the mobile web client, or the Android APK when it is available. Your portal account and characters work across the supported clients."
 				: "Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.";
 		}
 		if (landingReservePrompt) {
@@ -3161,7 +3161,7 @@
 		var publicRows = rows.filter(function (row) {
 			return isPublicDownloadRow(row);
 		});
-		var displayRows = publicRows.length ? publicRows : rows;
+		var displayRows = (publicRows.length ? publicRows : rows).slice().sort(downloadSort);
 		var launcherRow = rows.find(function (row) {
 			return isLauncherDownloadRow(row) && row.available && row.url && row.url !== "#";
 		});
@@ -3180,6 +3180,17 @@
 				"</" + tag + ">"
 			].join("");
 		}).join("");
+	}
+
+	function downloadSort(left, right) {
+		return downloadRank(left) - downloadRank(right);
+	}
+
+	function downloadRank(row) {
+		if (isLauncherDownloadRow(row)) return 0;
+		if (isWebClientRow(row)) return 1;
+		if (row && row.slug === "android-apk") return 2;
+		return 3;
 	}
 
 	function downloadActionClass(row, available) {

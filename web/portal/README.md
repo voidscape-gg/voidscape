@@ -29,7 +29,7 @@ Returning players use the visible `Sign in` action in the landing nav, hero, or 
 
 The launch countdown defaults to **Saturday, July 11, 2026 at 11:00 AM Pacific / 2:00 PM Eastern / 7:00 PM UK** (`2026-07-11T18:00:00Z`). Set `PORTAL_LAUNCH_AT=2026-07-11T18:00:00Z` explicitly in production so the date is obvious in deployment config. `PORTAL_BETA_OPEN_AT` remains accepted as a backward-compatible fallback, but launch deployments should use `PORTAL_LAUNCH_AT`.
 
-Set `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` if the browser client moves. Prelaunch landing copy mentions Web/Desktop/iOS/Android support, but the public page keeps the clickable funnel on reserving the account name until the world opens. Once `PORTAL_LAUNCH_AT` is in the past, the same landing switches into the launch-open surface: play in browser, launcher download, Android APK availability, live build proof, and account-management CTAs render from `/api/public` download metadata.
+Set `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` if the mobile browser client moves. Prelaunch landing copy mentions Web/Desktop/iOS/Android support, but the public page keeps the clickable funnel on reserving the account name until the world opens. Once `PORTAL_LAUNCH_AT` is in the past, the same landing switches into the launch-open surface: desktop launcher download, mobile web client, Android APK availability, live build proof, and account-management CTAs render from `/api/public` download metadata.
 
 The public site also serves `/privacy` and `/data-deletion`. Keep those reachable before enabling Google sign-in or Android distribution, and update the support mailbox if production support uses a different address.
 
@@ -191,7 +191,7 @@ Useful local API environment variables:
 - `PORTAL_LAUNCH_SIGNUP_MODE=1` opens the public account-first launch flow while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden; use only with `PORTAL_PUBLIC_MODE=1`.
 - `PORTAL_GOOGLE_CLIENT_ID=...` enables the public Google Identity Services button and ID-token verification for launch signup. Without it, Google signup endpoints return `google_oauth_not_configured` and the button stays hidden. `PORTAL_GOOGLE_JWKS_URL` defaults to Google's public cert endpoint and exists only as a test/ops override.
 - `PORTAL_LAUNCH_AT=...` exposes a public-safe launch countdown through `/api/public`; use ISO-8601 with timezone.
-- `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` controls the release web-client URL used by API metadata and post-launch surfaces; the prelaunch landing does not link play/download actions.
+- `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` controls the release mobile web-client URL used by API metadata and post-launch surfaces; the prelaunch landing does not link play/download actions.
 - `PORTAL_ANDROID_APK=/path/to/voidscape.apk` overrides the APK served by `/downloads/android-apk`. If unset, the portal uses the standard Android build output when it exists. The prelaunch landing still hides download buttons until the countdown opens the post-launch chooser.
 - `PORTAL_BIND_HOST=127.0.0.1` sets the listen address; non-loopback binds require `PORTAL_DATA_DIR` (or `PORTAL_ALLOW_TMPDIR=1`).
 - `PORTAL_TRUST_PROXY=1` trusts `x-forwarded-for` from non-loopback peers (only set behind a real proxy).

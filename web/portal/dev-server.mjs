@@ -3111,13 +3111,13 @@ async function downloadState(options = {}) {
 	const includePrivate = options.includePrivate !== false;
 	const rows = [{
 		slug: "web-client",
-		label: "Play in browser",
-		state: "iOS, Android, Desktop",
+		label: "Mobile web client",
+		state: "iOS and Android browsers",
 		url: webClientUrl,
 		available: true,
 		publicDownload: true,
 		external: true,
-		primary: true
+		mobileOnly: true
 	}];
 	for (const artifact of downloadArtifacts) {
 		if (!includePrivate && artifact.publicDownload === false) {
@@ -3133,6 +3133,7 @@ async function downloadState(options = {}) {
 				url: `/downloads/${artifact.slug}`,
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
+				primary: artifact.slug === "launcher",
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
 				sha256
@@ -3144,7 +3145,8 @@ async function downloadState(options = {}) {
 				state: "Run scripts/build.sh",
 				url: "#",
 				available: false,
-				publicDownload: artifact.publicDownload !== false
+				publicDownload: artifact.publicDownload !== false,
+				primary: artifact.slug === "launcher"
 			});
 		}
 	}

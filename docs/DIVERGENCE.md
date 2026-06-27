@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-27 - Mobile-only `/play` browser client handoff
+
+Moved the public `/play` browser client to a mobile-only surface for normal visitors. The TeaVM shell now detects desktop-class browsers before loading the compiled client bundle and shows a launcher handoff that links directly to `/downloads/launcher`; iOS/Android mobile profiles and explicit mobile QA overrides still run the web client. The portal launch-open chooser/copy now treats the web client as the mobile option and the launcher as the desktop path. This is distribution UX only: no gameplay rule, server packet, opcode, cache asset, database schema, desktop Java runtime behavior, Android APK binary, or client protocol changed. Reversibility is removing the desktop launcher gate and restoring the web-client download row as the primary all-platform browser action.
+
 ### 2026-06-27 - Desktop classic camera and original-size preset
 
 Restored the desktop Java gameplay camera to the direct classic follow path by removing the extra render-time camera smoothing layer added during camera polish. The desktop screen-size cycle now includes a non-default `Classic 512x346` preset matching the original RSC applet/framebuffer size, and the opened inventory/stats panels in that preset use the original OpenRSC-style dimensions (`49x34` inventory slots, `196`-wide stats panel, `13px` skill rows) while the closed Voidscape tab chrome remains compact. This is desktop client presentation only: no server tick, pathing, packet, opcode, cache asset, database schema, web/mobile input, or gameplay rule changed. Reversibility is restoring the removed smooth-camera helper and removing the Classic preset/panel sizing branch if broader QA prefers the prior modern camera/window feel.

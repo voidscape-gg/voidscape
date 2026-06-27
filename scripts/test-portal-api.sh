@@ -435,7 +435,8 @@ grep -q '"mode": "hybrid-p2p-enabled"' <<<"$public_payload" || { echo "public-mo
 grep -q '"subscriptionGrantsMembers": false' <<<"$public_payload" || { echo "public-mode /api/public should expose subscription as non-membership-gating"; exit 1; }
 grep -q '"launch": {' <<<"$public_payload" || { echo "public-mode /api/public should expose launch countdown metadata"; exit 1; }
 grep -q '"openAt": "2026-07-11T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
-grep -q '"Play in browser"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web client action"; exit 1; }
+grep -q '"Mobile web client"' <<<"$public_payload" || { echo "public-mode /api/public should expose the mobile web client action"; exit 1; }
+grep -q '"iOS and Android browsers"' <<<"$public_payload" || { echo "public-mode /api/public should label the web client as mobile-only"; exit 1; }
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
 node -e "
