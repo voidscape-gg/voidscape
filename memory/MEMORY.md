@@ -11,3 +11,4 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Content pipeline](content_pipeline.md) — custom content/art starts with scripts/content.sh packs and validation
 - [Discord posting](discord_posting.md) — canonical VoidBot command for bug-feed/release-note posts
 - [iPhone web client](iphone_web_client.md) — TeaVM mobile status, HUD direction, chat/world-map blockers; next chat handoff: `docs/iphone-web-client-next-chat-context.md`
+- [Prelaunch readiness](prelaunch_readiness.md) — portal policy/countdown/account-manager slice done; remaining live/client gates

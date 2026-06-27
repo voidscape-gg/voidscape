@@ -9,7 +9,7 @@ Server-side networking layer: framework, pipeline, packet model, opcode dispatch
 - Boss group: `NioEventLoopGroup(0, NamedThreadFactory("IOBossThread"))` — accepts inbound connections.
 - Worker group: `NioEventLoopGroup(0, NamedThreadFactory("IOWorkerThread"))` — handles I/O.
 - Dual-port: TCP (game protocol) + WebSocket (web client). Both `NioServerSocketChannel`.
-- Optional SSL/TLS for WebSocket (`SSL_SERVER_CERT_PATH`, `SSL_SERVER_KEY_PATH`).
+- Optional SSL/TLS for WebSocket (`SSL_SERVER_CERT_PATH`, `SSL_SERVER_KEY_PATH`). Local/dev `ws://` runs without an SSL context; the pipeline only adds Netty's `OptionalSslHandler` when a context is configured.
 - Child options: `TCP_NODELAY=true`, `SO_KEEPALIVE=false`, `SO_RCVBUF=10000`, `SO_SNDBUF=10000`.
 
 ## Channel pipeline
@@ -26,7 +26,7 @@ RSCConnectionHandler  (login dispatch + queue to player)
 ```
 RSCMultiPortDecoder (DecoderMode.WS)
   ↓ removes itself
-  ↓ adds: OptionalSslHandler, HttpServerCodec, HttpObjectAggregator, HttpRequestHandler,
+  ↓ adds: OptionalSslHandler (only when SSL context exists), HttpServerCodec, HttpObjectAggregator, HttpRequestHandler,
           WebSocketServerCompressionHandler, WebSocketServerProtocolHandler, WebSocketFrameHandler
   ↓ adds: RSCProtocolDecoder, RSCProtocolWebEncoder
 RSCConnectionHandler

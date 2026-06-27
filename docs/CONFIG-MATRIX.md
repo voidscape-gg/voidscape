@@ -16,7 +16,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Custom landscape | expected `true` | likely `true` | Required for Void Island, Enclave, arenas, and map edits. |
 | Item cap | `restrict_item_id: 9999` | `9999` | Required for custom item ids in the 1500+ range. |
 | Packet capture | `want_pcap_logging: false` | `false` | Enable only for targeted networking debug. |
-| Production command lockdown | absent/default `false` locally | `true` for public launch | Makes high-risk staff/dev commands owner-only without tying launch safety to the beta guide flag. |
+| Production command lockdown | `true` for prelaunch/public rehearsal | `true` for public launch | Makes high-risk staff/dev commands owner-only without tying launch safety to the beta guide flag. |
 
 ## Core identity
 
@@ -27,7 +27,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
 | `client_version` | `10120` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
-| `want_packet_register` | `false` by server default and tracked presets; local beta may override `true` explicitly | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
+| `want_packet_register` | `false` by server default and current launch config | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
 
 ## Portal account API
 
@@ -54,7 +54,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
 | `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
-| `production_command_lockdown` | `false` locally unless testing launch policy | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
+| `production_command_lockdown` | `true` for prelaunch/public rehearsal | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
 | `want_packet_register` | `false` in tracked presets and as the Java default when omitted | `false` | `false` | Disables client packet registration so launch players enter through the portal signup/character flow first. |
 
 ## Content gates

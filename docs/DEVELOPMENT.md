@@ -88,7 +88,9 @@ scripts/build.sh              # compile server core + plugins + client
 scripts/run-server.sh         # run server with the voidscape preset
 scripts/run-client.sh         # run PC client against local server
 scripts/run-launcher.sh       # build + run the Voidscape desktop launcher
+scripts/smoke-launcher-prelaunch.sh # screenshot-backed desktop launcher smoke
 scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
+scripts/smoke-pc-client-prelaunch.sh # screenshot-backed desktop Java client smoke
 scripts/run-portal.sh         # run website/account portal with local prototype API
 scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
 scripts/test-portal-api.sh    # smoke-test portal API flows
@@ -109,6 +111,8 @@ scripts/smoke-web-teavm-iphone-controls.sh # synthetic iPhone control-regression
 scripts/smoke-web-teavm-iphone-https-wss.sh # local HTTPS/same-host WSS proxy smoke
 scripts/build-android.sh      # build Android APK; requires Android SDK
 scripts/android-smoke.sh      # build/install Android APK and capture emulator QA screenshots
+scripts/run-android-device-qa.sh # write physical Android QA report templates
+scripts/validate-android-device-qa-report.py # validate filled physical Android QA reports
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
 ```
@@ -144,13 +148,18 @@ Build Android client:
 ```bash
 # Requires Android SDK via ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
 # or Homebrew android-commandlinetools at /opt/homebrew/share/android-commandlinetools.
-scripts/build-android.sh
+scripts/build-android.sh --debug
+
+# Release APKs require upload signing config through environment or Gradle properties.
+scripts/build-android.sh --release
 ```
 
 Android emulator visual smoke:
 ```bash
 # Starts voidscape_api35 headless when no device is connected, installs the debug APK,
 # and writes wrapper/login screenshots to the chosen directory.
+# SDK discovery checks ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
+# common Android Studio/Homebrew SDK roots, then adb on PATH.
 scripts/android-smoke.sh --out /tmp/voidscape-android-smoke
 ```
 
@@ -186,6 +195,41 @@ scripts/run-client.sh
 # automatically after startup, avoiding mouse/keyboard login clicks during QA.
 scripts/run-client.sh --login StepAlt:stepalt
 scripts/run-client.sh --user StepAlt --pass stepalt
+
+# Workbench mode exposes loopback screenshot/state/input endpoints for visual QA.
+scripts/run-workbench-client.sh --user StepAlt --pass stepalt --workbench-port 18787
+```
+
+Desktop Java prelaunch visual smoke:
+```bash
+# Backs up local saved desktop credentials by default, proves fresh-cache login,
+# and captures login/in-game/panel PNGs plus manifest.json.
+scripts/smoke-pc-client-prelaunch.sh --user StepAlt --pass stepalt --out /tmp/voidscape-pc-client-prelaunch
+```
+
+Desktop launcher visual smoke:
+```bash
+# Captures the Swing launcher as PNG, verifies endpoint files, and writes manifest.json.
+scripts/smoke-launcher-prelaunch.sh --host voidscape.gg --port 43596 --portal-url https://voidscape.gg --out /tmp/voidscape-launcher-prelaunch
+
+# To verify a packaged staging jar's embedded config instead of system-property overrides:
+scripts/smoke-launcher-prelaunch.sh --jar dist/launch-staging/launcher/VoidscapeLauncher-staging.jar --use-packaged-config --host voidscape.gg --port 43596 --portal-url https://voidscape.gg
+```
+
+Prelaunch readiness report:
+```bash
+# Runs local schema/API/build, launch-staging packaging, and packaged launcher
+# visual smoke, then writes summary.md and per-check logs.
+scripts/check-prelaunch-readiness.sh --out tmp/prelaunch-readiness
+
+# Add optional gates when the needed environment is available.
+scripts/check-prelaunch-readiness.sh \
+  --out tmp/prelaunch-readiness-live \
+  --skip-build \
+  --live-portal-visual \
+  --android-release-guard \
+  --pc-user <qa-user> \
+  --pc-pass-file <qa-pass-file>
 ```
 
 Feature-page screenshot loop:
