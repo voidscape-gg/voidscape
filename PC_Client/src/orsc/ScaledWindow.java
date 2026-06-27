@@ -31,10 +31,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static boolean isMacOS = false;
 	private static boolean shouldRealign = false;
 	private static final int[][] VIEWPORT_PRESETS = new int[][]{
-		{640, 480}, {720, 540}, {800, 600}, {896, 672}, {1024, 768}
+		{640, 480}, {720, 540}, {800, 600}, {896, 672}, {1024, 768}, {512, 346}
 	};
 	private static final String[] VIEWPORT_PRESET_LABELS = new String[]{
-		"Small", "Medium", "Large", "XL", "Huge"
+		"Small", "Medium", "Large", "XL", "Huge", "Classic"
 	};
 	private static int viewportPresetIndex = 0;
 	// Voidscape: base render resolution. Uses a compact native buffer so the world does not turn into

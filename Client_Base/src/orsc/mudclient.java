@@ -769,10 +769,6 @@ public final class mudclient implements Runnable {
 	public boolean cameraAllowPitchModification = true;
 	public boolean isFirstPersonView = false;
 	public final static int DEFAULT_CAMERA_PITCH = 912;
-	private static final double CLASSIC_CAMERA_FOLLOW_RESPONSE = 24.0D;
-	private static final double CLASSIC_CAMERA_ROTATION_RESPONSE = 28.0D;
-	private static final double CLASSIC_CAMERA_MAX_ELAPSED_SECONDS = 0.05D;
-	private static final double CLASSIC_CAMERA_SNAP_DISTANCE = 768.0D;
 	public int cameraPitch = DEFAULT_CAMERA_PITCH;
 	public int cameraZoom = 750;
 	public int lastSavedCameraZoom = 0;
@@ -886,14 +882,6 @@ public final class mudclient implements Runnable {
 	private int cameraAngle = 1;
 	private int cameraPositionX = 0;
 	private int cameraPositionZ = 0;
-	private boolean classicCameraSmoothInitialized = false;
-	private double classicCameraSmoothX = 0.0D;
-	private double classicCameraSmoothZ = 0.0D;
-	private double classicCameraSmoothRotation = 128.0D;
-	private long classicCameraSmoothLastNs = 0L;
-	private int classicCameraRenderX = 0;
-	private int classicCameraRenderZ = 0;
-	private int classicCameraRenderRotation = 128;
 	private int cameraAutoMoveX = 0;
 	private int cameraAutoMoveZ = 0;
 	private int characterBubbleCount = 0;
@@ -8053,7 +8041,7 @@ public final class mudclient implements Runnable {
 						if (Config.S_ZOOM_VIEW_TOGGLE)
 							zoomMultiplier = Config.C_ZOOM == 0 ? 0 : Config.C_ZOOM == 1 ? +200 : Config.C_ZOOM == 2 ? +400 : -200;
 
-						this.setClassicGameCamera(centerX, centerZ, 180, (this.cameraZoom + zoomMultiplier) * 2);
+						this.setGameCamera(centerX, centerZ, 180, (this.cameraZoom + zoomMultiplier) * 2);
 
 					} else {
 						if (this.optionCameraModeAuto && !this.isInCinematicCameraMode() && !this.doCameraZoom) {
@@ -8084,7 +8072,7 @@ public final class mudclient implements Runnable {
 						centerX = this.cameraPositionX + this.cameraAutoMoveX;
 						centerZ = this.cameraPositionZ + this.cameraAutoMoveZ;
 
-							this.setClassicGameCamera(centerX, centerZ, -180, this.cameraZoom * 2);
+							this.setGameCamera(centerX, centerZ, -180, this.cameraZoom * 2);
 						}
 
 						logAndroidSmokeNpcTargets();
@@ -14993,7 +14981,7 @@ public final class mudclient implements Runnable {
 
 						if (def.isStackable()) {
 							this.getSurface().drawString("" + getInventoryItemSize(var4), 1 + var5,
-								id + (voidscapeClassicWebSmallHud() ? 11 : (useVoidscapeHudSkin() ? 13 : 10)), 0xFFFF00, 1);
+								id + (useVoidscapeHudSkin() ? 13 : 10), 0xFFFF00, 1);
 						}
 					}
 				}
@@ -17407,14 +17395,14 @@ public final class mudclient implements Runnable {
 		return 4;
 	}
 
-	// Compact chrome at the smallest (640-wide) viewport — the most-played size, so the
+	// Compact chrome at the smallest native viewport presets, so the
 	// HUD has to give as much screen as possible back to the world there.
 	private boolean voidscapeCompactHud() {
 		return voidscapePanelSizeClass() == 0;
 	}
 
 	private boolean voidscapeClassicWebSmallHud() {
-		return useVoidscapeHudSkin() && Config.isWeb() && !isAndroid()
+		return useVoidscapeHudSkin() && !isAndroid()
 			&& this.getGameWidth() <= 560 && this.getGameHeight() <= 380;
 	}
 
@@ -17702,7 +17690,7 @@ public final class mudclient implements Runnable {
 
 	private int voidscapeRightPanelListPad() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 5;
+			return 8;
 		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
@@ -17760,21 +17748,21 @@ public final class mudclient implements Runnable {
 
 	private int voidscapeInventoryCellWidth() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 34;
+			return 49;
 		}
 		return 49;
 	}
 
 	private int voidscapeInventoryCellHeight() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 25;
+			return 34;
 		}
 		return 34;
 	}
 
 	private int voidscapeSkillRowHeight() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 10;
+			return 13;
 		}
 		return voidscapePanelSizeClass() <= 1 ? 13 : VOIDSCAPE_SKILL_ROW_H;
 	}
@@ -17832,7 +17820,7 @@ public final class mudclient implements Runnable {
 		}
 		int iconX = voidscapeTopTabsStartX()
 			+ voidscapeTabIndexFor(this.showUiTab) * (voidscapeTopTabSize() + voidscapeTopTabGap());
-		int fitWidth = voidscapeClassicWebSmallHud() ? voidscapeRightPanelWidth() : voidscapeRightPanelVisualWidth();
+		int fitWidth = voidscapeRightPanelVisualWidth();
 		int maxLeft = this.getSurface().width2 - fitWidth - 3;
 		return Math.max(0, Math.min(iconX, maxLeft));
 	}
@@ -17936,7 +17924,7 @@ public final class mudclient implements Runnable {
 
 	private int voidscapeStandardPanelVisualWidth() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 176;
+			return 196;
 		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
@@ -20134,7 +20122,7 @@ public final class mudclient implements Runnable {
 
 	private int voidscapeStatsColumnGap() {
 		if (voidscapeClassicWebSmallHud()) {
-			return 4;
+			return 6;
 		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
@@ -20190,7 +20178,7 @@ public final class mudclient implements Runnable {
 		int columnGap = voidscapeStatsColumnGap();
 		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
-		boolean tinyClassic = voidscapeClassicWebSmallHud();
+		boolean tinyClassic = voidscapeClassicWebSmallHud() && rowH < 13;
 		for (int i = 0; i < skillCount; i++) {
 			int rowX = startX + voidscapeSkillColumn(i) * (columnWidth + columnGap);
 			int rowY = startY + voidscapeSkillRowIndex(i) * rowH;
@@ -20208,7 +20196,7 @@ public final class mudclient implements Runnable {
 			}
 			// Compact two-column rows: small icon + name left, level right. Smaller font (0) keeps the
 			// name and the level from converging within the narrow column.
-			int iconSize = tinyClassic ? 9 : (rowH <= 13 ? 12 : 14);
+			int iconSize = tinyClassic ? 10 : (rowH <= 13 ? 12 : 14);
 			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(voidscapeSkillIconName(i), iconSize),
 				rowX, rowY, iconSize, iconSize);
 			String level = current + "/" + base;
@@ -20257,14 +20245,14 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSkillLockSize(int rowH) {
-		if (voidscapeClassicWebSmallHud()) {
-			return 7;
+		if (voidscapeClassicWebSmallHud() && rowH < 13) {
+			return 8;
 		}
 		return rowH <= 13 ? 9 : 10;
 	}
 
 	private int voidscapeSkillLockX(int rowX, int columnWidth, int lockSize) {
-		if (voidscapeClassicWebSmallHud()) {
+		if (voidscapeClassicWebSmallHud() && voidscapeSkillRowHeight() < 13) {
 			return rowX + columnWidth - lockSize - 1;
 		}
 		return rowX + columnWidth - lockSize - 5;
@@ -32007,56 +31995,7 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private void setClassicGameCamera(int centerX, int centerZ, int defaultTargetYOffset, int defaultOffset) {
-		if (this.isInCinematicCameraMode()) {
-			resetClassicCameraSmoothing();
-			this.setGameCamera(centerX, centerZ, defaultTargetYOffset, defaultOffset);
-			return;
-		}
-		updateClassicCameraSmoothing(centerX, centerZ, this.cameraRotation);
-		this.setGameCamera(this.classicCameraRenderX, this.classicCameraRenderZ, defaultTargetYOffset,
-			defaultOffset, this.classicCameraRenderRotation);
-	}
-
-	private void updateClassicCameraSmoothing(int targetX, int targetZ, int targetRotation) {
-		long nowNs = System.nanoTime();
-		double elapsedSeconds = this.classicCameraSmoothLastNs == 0L
-			? 0.0D
-			: (nowNs - this.classicCameraSmoothLastNs) / 1000000000.0D;
-		elapsedSeconds = Math.max(0.0D, Math.min(CLASSIC_CAMERA_MAX_ELAPSED_SECONDS, elapsedSeconds));
-		this.classicCameraSmoothLastNs = nowNs;
-
-		if (!this.classicCameraSmoothInitialized
-			|| Math.abs(targetX - this.classicCameraSmoothX) > CLASSIC_CAMERA_SNAP_DISTANCE
-			|| Math.abs(targetZ - this.classicCameraSmoothZ) > CLASSIC_CAMERA_SNAP_DISTANCE) {
-			this.classicCameraSmoothInitialized = true;
-			this.classicCameraSmoothX = targetX;
-			this.classicCameraSmoothZ = targetZ;
-			this.classicCameraSmoothRotation = targetRotation & 255;
-		} else {
-			double followProgress = timeBasedCameraProgress(elapsedSeconds, CLASSIC_CAMERA_FOLLOW_RESPONSE);
-			double rotationProgress = timeBasedCameraProgress(elapsedSeconds, CLASSIC_CAMERA_ROTATION_RESPONSE);
-			this.classicCameraSmoothX = lerpDouble(this.classicCameraSmoothX, targetX, followProgress);
-			this.classicCameraSmoothZ = lerpDouble(this.classicCameraSmoothZ, targetZ, followProgress);
-			this.classicCameraSmoothRotation = lerpAngle256Double(this.classicCameraSmoothRotation,
-				targetRotation, rotationProgress);
-		}
-
-		this.classicCameraRenderX = (int) Math.round(this.classicCameraSmoothX);
-		this.classicCameraRenderZ = (int) Math.round(this.classicCameraSmoothZ);
-		this.classicCameraRenderRotation = ((int) Math.round(this.classicCameraSmoothRotation)) & 255;
-	}
-
-	private void resetClassicCameraSmoothing() {
-		this.classicCameraSmoothInitialized = false;
-		this.classicCameraSmoothLastNs = 0L;
-	}
-
 	private void setGameCamera(int centerX, int centerZ, int defaultTargetYOffset, int defaultOffset) {
-		this.setGameCamera(centerX, centerZ, defaultTargetYOffset, defaultOffset, this.cameraRotation);
-	}
-
-	private void setGameCamera(int centerX, int centerZ, int defaultTargetYOffset, int defaultOffset, int rotation) {
 		if (this.cinematicCameraPathPlaying) {
 			int cameraTargetY = -this.world.getElevation(centerX, centerZ) + this.getCinematicCameraPathTargetYOffset();
 			this.scene.setCamera(centerX, cameraTargetY, centerZ, this.getCinematicCameraPathPitch(),
@@ -32065,7 +32004,7 @@ public final class mudclient implements Runnable {
 		}
 		int cameraTargetY = -this.world.getElevation(centerX, centerZ) + this.getCameraTargetYOffset(defaultTargetYOffset);
 		this.scene.setCamera(centerX, cameraTargetY, centerZ, this.getCameraPitch(),
-			rotation * 4, 0, this.getCameraOffset(defaultOffset));
+			this.cameraRotation * 4, 0, this.getCameraOffset(defaultOffset));
 	}
 
 	private void saveCinematicCameraPoint(CinematicCameraPoint point, String label) {
@@ -32262,34 +32201,14 @@ public final class mudclient implements Runnable {
 		return (int) Math.round(from + (to - from) * progress);
 	}
 
-	private double lerpDouble(double from, double to, double progress) {
-		return from + (to - from) * progress;
-	}
-
 	private int lerpAngle256(int from, int to, double progress) {
 		int delta = ((to - from + 128) & 255) - 128;
 		return (from + (int) Math.round(delta * progress)) & 255;
 	}
 
-	private double lerpAngle256Double(double from, int to, double progress) {
-		double normalizedFrom = from % 256.0D;
-		if (normalizedFrom < 0.0D) {
-			normalizedFrom += 256.0D;
-		}
-		double delta = ((to - normalizedFrom + 384.0D) % 256.0D) - 128.0D;
-		double value = normalizedFrom + delta * progress;
-		value %= 256.0D;
-		return value < 0.0D ? value + 256.0D : value;
-	}
-
 	private int lerpAngle1024(int from, int to, double progress) {
 		int delta = ((to - from + 512) & 1023) - 512;
 		return (from + (int) Math.round(delta * progress)) & 1023;
-	}
-
-	private double timeBasedCameraProgress(double elapsedSeconds, double response) {
-		double progress = 1.0D - Math.exp(-Math.max(0.0D, elapsedSeconds) * response);
-		return smoothstep(progress);
 	}
 
 	private double smoothstep(double progress) {

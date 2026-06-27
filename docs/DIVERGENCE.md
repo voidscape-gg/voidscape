@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-27 - Desktop classic camera and original-size preset
+
+Restored the desktop Java gameplay camera to the direct classic follow path by removing the extra render-time camera smoothing layer added during camera polish. The desktop screen-size cycle now includes a non-default `Classic 512x346` preset matching the original RSC applet/framebuffer size, and the opened inventory/stats panels in that preset use the original OpenRSC-style dimensions (`49x34` inventory slots, `196`-wide stats panel, `13px` skill rows) while the closed Voidscape tab chrome remains compact. This is desktop client presentation only: no server tick, pathing, packet, opcode, cache asset, database schema, web/mobile input, or gameplay rule changed. Reversibility is restoring the removed smooth-camera helper and removing the Classic preset/panel sizing branch if broader QA prefers the prior modern camera/window feel.
+
 ### 2026-06-27 - Features page scroll unlock
 
 Fixed the restored standalone `/features` page so it opts out of the portal app shell's global `body { overflow: hidden; }` rule. `body.features-mode` now allows vertical scrolling with iOS momentum scrolling while still hiding horizontal overflow. This is CSS-only portal behavior; no gameplay, client, packet, server API, schema, or asset contract changed.
