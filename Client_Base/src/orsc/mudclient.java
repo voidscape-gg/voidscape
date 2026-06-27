@@ -341,6 +341,7 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_WORLD_MAP_FLAG = "android-smoke-world-map.flag";
 	private static final String ANDROID_SMOKE_SETTINGS_FLAG = "android-smoke-settings.flag";
 	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
+	private static final String ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG = "android-smoke-appearance-prompt.flag";
 	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
 	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
@@ -994,6 +995,7 @@ public final class mudclient implements Runnable {
 	private long lastAndroidSmokeGroundLootLabelLogMillis = 0L;
 	private long lastAndroidSmokeGroundLootBeamLogMillis = 0L;
 	private long lastAndroidSmokeWelcomeDialogLogMillis = 0L;
+	private long lastAndroidSmokeAppearancePromptLogMillis = 0L;
 	private int lastAndroidSmokeZoomLastZoom = -1;
 	private int lastAndroidSmokeZoomCameraZoom = -1;
 	private boolean loadingArea = false;
@@ -1217,8 +1219,6 @@ public final class mudclient implements Runnable {
 	private int lastAndroidSmokeShopSelectedIndex = -2;
 	private int lastAndroidSmokeShopItemCount = -1;
 	private boolean showAppearanceChange = false;
-	private boolean showVoidscapeReferralPrompt = false;
-	private boolean voidscapeReferralPromptSeen = false;
 	private boolean showSetRecoveryQuestion = false;
 	private boolean showSetContactDetails = false;
 	private boolean showDialogBank = false;
@@ -3250,8 +3250,10 @@ public final class mudclient implements Runnable {
 		this.panelLogin = new Panel(this.getSurface(), 50);
 		this.controlLoginStatus1 = this.panelLogin.addCenteredText(cx, voidscapeExistingStatus1Y(), "", 1, true);
 		this.controlLoginStatus2 = this.panelLogin.addCenteredText(cx, voidscapeExistingStatus2Y(), "", 0, true);
-		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingUserY(), 210, 320, 22, 1, false, true);
-		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingPassY(), 210, 20, 22, 1, true, true);
+		this.controlLoginUser = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingUserY(), 210, 320,
+			voidscapeExistingFieldHeight(), 1, false, true);
+		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingPassY(), 210, 20,
+			voidscapeExistingFieldHeight(), 1, true, true);
 
 		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
 			String cred = ClientPort.loadCredentials();
@@ -3310,15 +3312,15 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeExistingFrameY() {
-		return isAndroid() ? 9 : 93;
+		return isAndroid() ? 6 : 93;
 	}
 
 	private int voidscapeExistingFrameHeight() {
-		return isAndroid() ? 194 : 232;
+		return isAndroid() ? 244 : 232;
 	}
 
 	private int voidscapeExistingTitleY() {
-		return isAndroid() ? 27 : 112;
+		return isAndroid() ? 25 : 112;
 	}
 
 	private int voidscapeExistingStatus1Y() {
@@ -3330,23 +3332,27 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeExistingUserY() {
-		return isAndroid() ? 75 : 170;
+		return isAndroid() ? 87 : 170;
 	}
 
 	private int voidscapeExistingPassY() {
-		return isAndroid() ? 111 : 212;
+		return isAndroid() ? 132 : 212;
 	}
 
 	private int voidscapeExistingToggleY() {
-		return isAndroid() ? 145 : 243;
+		return isAndroid() ? 174 : 243;
 	}
 
 	private int voidscapeExistingActionY() {
-		return isAndroid() ? 173 : 272;
+		return isAndroid() ? 209 : 272;
 	}
 
 	private int voidscapeExistingForgotY() {
-		return isAndroid() ? 203 : 305;
+		return isAndroid() ? 238 : 305;
+	}
+
+	private int voidscapeExistingFieldHeight() {
+		return isAndroid() ? 31 : 23;
 	}
 
 	private int voidscapeNewFrameY() {
@@ -4004,7 +4010,10 @@ public final class mudclient implements Runnable {
 		rowY += 62;
 		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", this.skinColorLabel(this.appearanceSkinColour));
 		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
-		drawVoidscapeButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30, "Accept", true);
+		int acceptX = panelX + 382;
+		int acceptY = Math.min(this.getGameHeight() - 21, 316);
+		drawVoidscapeButton(acceptX, acceptY, 220, 30, "Accept", true);
+		logAndroidSmokeAppearancePrompt(panelX, panelY, panelWidth, panelHeight, acceptX, acceptY);
 	}
 
 	private void drawVoidscapeAppearanceReferralField() {
@@ -4053,61 +4062,6 @@ public final class mudclient implements Runnable {
 			this.enterPressed = false;
 			this.mouseButtonClick = 0;
 		}
-	}
-
-	private void drawVoidscapeReferralPrompt() {
-		int cx = halfGameWidth();
-		int panelWidth = Math.min(430, this.getGameWidth() - 20);
-		int panelHeight = Math.min(300, this.getGameHeight() - 20);
-		int panelX = cx - panelWidth / 2;
-		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
-		int artW = Math.min(150, panelWidth - 80);
-		int artH = 92;
-		int artX = cx - artW / 2;
-		int artY = panelY + 54;
-
-		drawVoidscapeLoginBackground();
-		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 82);
-		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
-		drawVoidscapeCenteredText(cx, "INVITE FRIENDS", 0xf3d46b, 1, panelY + 27);
-		drawVoidscapeCenteredText(cx, "Earn a 1-week subscription card", 0xe6e3d8, 1, panelY + 45);
-
-		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, 0x05070a, 214);
-		this.getSurface().drawBoxBorder(artX, artW, artY, artH, 0x0b0d10);
-		this.getSurface().drawBoxBorder(artX + 1, artW - 2, artY + 1, artH - 2, 0x8f63ff);
-		drawVoidscapePathItemIcon(1602, artX, artY, artW, artH, 0x8f63ff);
-
-		int textY = artY + artH + 24;
-		drawVoidscapeCenteredText(cx, "Your in-game name is your invite code.", 0xffd98a, 0, textY);
-		drawVoidscapeCenteredText(cx, "When friends make a character,", 0xe6e3d8, 0, textY + 16);
-		drawVoidscapeCenteredText(cx, "they enter your name on the next screen.", 0xe6e3d8, 0, textY + 30);
-		drawVoidscapeCenteredText(cx, "You get a real redeemable code.", 0xb68aff, 0, textY + 48);
-		drawVoidscapeButton(cx, panelY + panelHeight - 31, 190, 30, "Continue", true);
-		clientPort.draw();
-	}
-
-	private void handleVoidscapeReferralPromptInput() {
-		if (this.lastMouseButtonDown == 1 && isVoidscapeReferralPromptContinueHit()) {
-			closeVoidscapeReferralPrompt();
-		}
-	}
-
-	private boolean isVoidscapeReferralPromptContinueHit() {
-		int panelHeight = Math.min(300, this.getGameHeight() - 20);
-		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
-		int buttonCx = halfGameWidth();
-		int buttonCy = panelY + panelHeight - 31;
-		int x = buttonCx - 95;
-		int y = buttonCy - 15;
-		return this.mouseX >= x && this.mouseX <= x + 190
-			&& this.mouseY >= y && this.mouseY <= y + 30;
-	}
-
-	private void closeVoidscapeReferralPrompt() {
-		this.showVoidscapeReferralPrompt = false;
-		this.voidscapeReferralPromptSeen = true;
-		this.lastMouseButtonDown = 0;
-		this.mouseButtonClick = 0;
 	}
 
 	private String currentAppearanceReferralName() {
@@ -7781,11 +7735,7 @@ public final class mudclient implements Runnable {
 					// 256, this.screenOffsetY);
 					clientPort.draw();
 				} else if (this.showAppearanceChange) {
-					if (this.showVoidscapeReferralPrompt) {
-						this.drawVoidscapeReferralPrompt();
-					} else {
-						this.drawAppearancePanelCharacterSprites(-13759, Config.S_CHARACTER_CREATION_MODE);
-					}
+					this.drawAppearancePanelCharacterSprites(-13759, Config.S_CHARACTER_CREATION_MODE);
 				} else if (this.showSetRecoveryQuestion) {
 					this.method_182();
 				} else if (this.showSetContactDetails) {
@@ -9434,6 +9384,10 @@ public final class mudclient implements Runnable {
 		return isAndroidSmokeFilePresent(ANDROID_SMOKE_GROUND_LOOT_FLAG);
 	}
 
+	private boolean isAndroidSmokeAppearancePromptLoggingEnabled() {
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG);
+	}
+
 	private boolean isAndroidSmokeContextMenuLoggingEnabled() {
 		return isAndroidSmokeNpcTargetLoggingEnabled()
 			|| isAndroidSmokePlayerTargetLoggingEnabled()
@@ -9474,6 +9428,33 @@ public final class mudclient implements Runnable {
 			+ " dialogH=" + dialogHeight
 			+ " closeX=" + (welcomeDialogCloseX() + welcomeDialogCloseWidth() / 2)
 			+ " closeY=" + (welcomeDialogCloseY() + welcomeDialogCloseHeight() / 2)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
+	}
+
+	private void logAndroidSmokeAppearancePrompt(
+		final int dialogX,
+		final int dialogY,
+		final int dialogWidth,
+		final int dialogHeight,
+		final int acceptX,
+		final int acceptY
+	) {
+		if (!isAndroidSmokeAppearancePromptLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeAppearancePromptLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeAppearancePromptLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_APPEARANCE_PROMPT"
+			+ " dialogX=" + dialogX
+			+ " dialogY=" + dialogY
+			+ " dialogW=" + dialogWidth
+			+ " dialogH=" + dialogHeight
+			+ " acceptX=" + acceptX
+			+ " acceptY=" + acceptY
 			+ " mouseX=" + this.mouseX
 			+ " mouseY=" + this.mouseY
 			+ " gameWidth=" + this.getGameWidth()
@@ -9866,6 +9847,27 @@ public final class mudclient implements Runnable {
 			+ " mouseY=" + this.mouseY);
 	}
 
+	private int androidSmokeSettingsPanelX() {
+		if (useVoidscapeHudSkin()) {
+			return voidscapeRightPanelX() + voidscapeRightPanelReadableInset() + voidscapeRightPanelBodyShift();
+		}
+		return this.getSurface().width2 - 199;
+	}
+
+	private int androidSmokeSettingsPanelY() {
+		if (useVoidscapeHudSkin()) {
+			return voidscapeRightPanelY() + voidscapeOptionsContentTop();
+		}
+		return C_CUSTOM_UI ? getUITabsY() - 240 : 61;
+	}
+
+	private int androidSmokeSettingsPanelWidth() {
+		if (useVoidscapeHudSkin()) {
+			return voidscapeRightPanelWidth() - voidscapeRightPanelReadableInset() * 2;
+		}
+		return 196;
+	}
+
 	private void logAndroidSmokeSettingsState(final String event) {
 		if (!isAndroidSmokeSettingsLoggingEnabled()) return;
 
@@ -9874,10 +9876,14 @@ public final class mudclient implements Runnable {
 		if (!isAction && now - this.lastAndroidSmokeSettingsLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
 		this.lastAndroidSmokeSettingsLogMillis = now;
 
-		final int panelX = this.getSurface().width2 - 199;
-		final int panelY = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
+		final int panelX = androidSmokeSettingsPanelX();
+		final int panelY = androidSmokeSettingsPanelY();
 		final int tabY = panelY - 25;
-		final int panelWidth = 196;
+		final int panelWidth = androidSmokeSettingsPanelWidth();
+		final int clickableX = panelX + voidscapeSettingsRowTextPad();
+		final int logoutY = isAndroid() && !voidscapeUseModernWebSettings() && this.settingTab == 1
+			? getGeneralSettingsLogoutY(panelY)
+			: getSettingsLogoutY(panelY);
 		System.out.println("ANDROID_SMOKE_SETTINGS"
 			+ " event=" + event
 			+ " visible=" + (this.showUiTab == Config.OPTIONS_TAB)
@@ -9894,10 +9900,17 @@ public final class mudclient implements Runnable {
 			+ " androidTabX=" + (panelX + panelWidth * 5 / 6)
 			+ " tabY=" + (tabY + 12)
 			+ " logoutX=" + (panelX + 72)
-			+ " logoutY=" + getSettingsLogoutY(panelY)
+			+ " logoutY=" + logoutY
+			+ " logoutHit=" + settingsLogoutHit(clickableX, panelWidth, logoutY)
 			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
 			+ " mouseX=" + this.mouseX
-			+ " mouseY=" + this.mouseY);
+			+ " mouseY=" + this.mouseY
+			+ " click=" + this.mouseButtonClick
+			+ " lastDown=" + this.lastMouseButtonDown
+			+ " currentDown=" + this.currentMouseButtonDown
+			+ " topMenu=" + this.topMouseMenuVisible
+			+ " optionsMenu=" + this.optionsMenuShow
+			+ " advancedWindow=" + this.showAdvancedSettingsWindow);
 	}
 
 	private String androidSmokeLogToken(final String value) {
@@ -11647,8 +11660,10 @@ public final class mudclient implements Runnable {
 		} else if (this.loginScreenNumber == 2) {
 			drawVoidscapeExistingUser();
 			drawVoidscapePanelSkippingControls(this.panelLogin, this.controlLoginUser, this.controlLoginPass);
-			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginUser, halfGameWidth(), voidscapeExistingUserY(), 210, 1, false);
-			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginPass, halfGameWidth(), voidscapeExistingPassY(), 210, 1, true);
+			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginUser, halfGameWidth(), voidscapeExistingUserY(), 210,
+				voidscapeExistingFieldHeight(), 1, false);
+			drawVoidscapeFieldValue(this.panelLogin, this.controlLoginPass, halfGameWidth(), voidscapeExistingPassY(), 210,
+				voidscapeExistingFieldHeight(), 1, true);
 		} else if (this.loginScreenNumber == 3) {
 			drawVoidscapeFrame(96, 104, 320, 156);
 			panelLoginOptions.drawPanel();
@@ -11751,8 +11766,10 @@ public final class mudclient implements Runnable {
 		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
 		drawVoidscapeCenteredText(cx, this.voidscapeAddAccountPending ? "ADD ACCOUNT" : "EXISTING USER",
 			0xf3d46b, 1, voidscapeExistingTitleY());
-		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, 23, hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
-		drawVoidscapeField(cx, voidscapeExistingPassY(), 210, 23, hideFieldLabels ? "" : "Password", this.panelLogin.focusOn(this.controlLoginPass));
+		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, voidscapeExistingFieldHeight(),
+			hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
+		drawVoidscapeField(cx, voidscapeExistingPassY(), 210, voidscapeExistingFieldHeight(),
+			hideFieldLabels ? "" : "Password", this.panelLogin.focusOn(this.controlLoginPass));
 		if (shouldOfferHideIpToggle()) {
 			String text = (this.settingsHideIP != 1) ? "Hide IP" : "Show IP";
 			drawVoidscapeButton(cx + 54, voidscapeExistingToggleY(), 96, 24, text, false);
@@ -12509,12 +12526,18 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeFieldValue(Panel panel, int control, int cx, int cy, int width, int font, boolean maskText) {
+		drawVoidscapeFieldValue(panel, control, cx, cy, width, 23, font, maskText);
+	}
+
+	private void drawVoidscapeFieldValue(Panel panel, int control, int cx, int cy, int width, int height, int font,
+										 boolean maskText) {
 		if (control < 0) {
 			return;
 		}
 		int x = cx - width / 2;
+		int halfHeight = (height + 1) / 2;
 		if (this.lastMouseButtonDown == 1 && this.mouseX >= x && this.mouseX <= x + width
-			&& this.mouseY >= cy - 12 && this.mouseY <= cy + 12) {
+			&& this.mouseY >= cy - halfHeight && this.mouseY <= cy + halfHeight) {
 			panel.setFocus(control);
 		}
 		String text = panel.getControlText(control);
@@ -12541,7 +12564,7 @@ public final class mudclient implements Runnable {
 			drawX = left;
 		}
 		int baselineY = cy + this.getSurface().fontHeight(font) / 3;
-		this.getSurface().setClip(left, x + width - 5, cy + 10, cy - 10);
+		this.getSurface().setClip(left, x + width - 5, cy + halfHeight - 2, cy - halfHeight + 2);
 		this.getSurface().drawColoredString(drawX, baselineY + 1, text, font, 0x0f0f10, 0);
 		this.getSurface().drawColoredString(drawX, baselineY, text, font, 0xffffff, 0);
 		this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
@@ -14406,7 +14429,8 @@ public final class mudclient implements Runnable {
 					this.drawUiTabOptions(15, mustDrawMenu);
 				}
 
-				if (!this.showAdvancedSettingsWindow && !this.topMouseMenuVisible && !this.optionsMenuShow) {
+				if (!this.showAdvancedSettingsWindow && !this.topMouseMenuVisible && !this.optionsMenuShow
+					&& (!C_CUSTOM_UI || !mouseInTabArea || shouldCreateVoidscapeWebInventoryMenu(mouseInTabArea))) {
 					this.createTopMouseMenu(-128);
 				}
 
@@ -20478,7 +20502,7 @@ public final class mudclient implements Runnable {
 		// logout menu option
 		y = getSettingsLogoutY(panelTop);
 		logoutColor = 0xFFFFFF;
-		if (x < this.mouseX && x + boxWidth > this.mouseX && y - 12 < this.mouseY && this.mouseY < 4 + y) {
+		if (settingsLogoutHit(x, boxWidth, y)) {
 			logoutColor = 0xFFFF00;
 		}
 		this.getSurface().drawString("Click here to logout", baseX + 3, y, logoutColor, 1);
@@ -20496,6 +20520,23 @@ public final class mudclient implements Runnable {
 			return Math.min(panelTop + 190, voidscapeChatTabTop() - 10);
 		}
 		return panelTop + (useVoidscapeHudSkin() ? 238 : 232);
+	}
+
+	private int getGeneralSettingsLogoutY(int panelTop) {
+		if (voidscapeClassicWebSmallHud()) {
+			return Math.min(panelTop + 229, voidscapeChatTabTop() - 10);
+		}
+		if (C_CUSTOM_UI) {
+			return panelTop + 229;
+		}
+		return 290;
+	}
+
+	private boolean settingsLogoutHit(int x, int width, int y) {
+		int topPad = isAndroid() ? 18 : 12;
+		int bottomPad = isAndroid() ? 16 : 4;
+		return x < this.mouseX && x + width > this.mouseX
+			&& y - topPad < this.mouseY && this.mouseY < y + bottomPad;
 	}
 
 	private int getSettingsSocialHeadingY(int panelTop) {
@@ -20656,7 +20697,9 @@ public final class mudclient implements Runnable {
 		this.panelSettings.clearList(this.controlSettingPanel);
 		int index = 0;
 		boolean showingAdvanced = this.settingsAdvancedMode;
-		this.getSurface().drawString(showingAdvanced ? "Advanced options" : "Basic options", 3 + baseX, y, 0, 1);
+		if (!isAndroid() || voidscapeUseModernWebSettings()) {
+			this.getSurface().drawString(showingAdvanced ? "Advanced options" : "Basic options", 3 + baseX, y, 0, 1);
+		}
 
 		if (!showingAdvanced) {
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
@@ -20727,9 +20770,9 @@ public final class mudclient implements Runnable {
 				y = var4 + 214;
 			this.getSurface().drawString("Always logout when you finish", x, y, 0, 1);
 
-			y += 15;
+			y = getGeneralSettingsLogoutY(var4);
 			int logoutColor = 0xFFFFFF;
-			if (x < this.mouseX && x + boxWidth > this.mouseX && y - 12 < this.mouseY && this.mouseY < 4 + y) {
+			if (settingsLogoutHit(x, boxWidth, y)) {
 				logoutColor = 0xFFFF00;
 			}
 			this.getSurface().drawString("Click here to logout", baseX + 3, y, logoutColor, 1);
@@ -21107,7 +21150,9 @@ public final class mudclient implements Runnable {
 	private void drawAndroidSettingsOptions(int baseX, short boxWidth, int x, int y) {
 		this.panelSettings.clearList(this.controlSettingPanel);
 		int index = 0;
-		this.getSurface().drawString("Android options", 3 + baseX, y, 0, 1);
+		if (!isAndroid() || voidscapeUseModernWebSettings()) {
+			this.getSurface().drawString("Android options", 3 + baseX, y, 0, 1);
+		}
 
 		// Status Bar
 		if (osConfig.C_STATUS_BAR == 0) {
@@ -21584,18 +21629,37 @@ public final class mudclient implements Runnable {
 
 		// adjust for previous settings
 		if (useVoidscapeHudSkin()) {
-			yFromTopDistance = voidscapeRightPanelY() + voidscapeOptionsContentTop() + 209;
+			yFromTopDistance = voidscapeRightPanelY() + voidscapeOptionsContentTop();
 		} else if (C_CUSTOM_UI) {
-			yFromTopDistance = getUITabsY() - 240 + 214;
+			yFromTopDistance = getUITabsY() - 240;
 		} else {
-			yFromTopDistance = 275;
+			yFromTopDistance = 61;
 		}
 
 		// logout menu option
-		yFromTopDistance += 15;
-		if (this.mouseX > var6 && var5 + var6 > this.mouseX && this.mouseY > yFromTopDistance - 12
-			&& this.mouseY < yFromTopDistance + 4 && this.mouseButtonClick == 1) {
+		yFromTopDistance = getGeneralSettingsLogoutY(yFromTopDistance);
+		boolean logoutClick = this.mouseButtonClick == 1
+			|| (isAndroid() && (this.lastMouseButtonDown == 1 || this.currentMouseButtonDown == 1));
+		boolean logoutHit = settingsLogoutHit(var6, var5, yFromTopDistance);
+		if (isAndroidSmokeSettingsLoggingEnabled() && (logoutHit || logoutClick)) {
+			System.out.println("ANDROID_SMOKE_SETTINGS_LOGOUT"
+				+ " tab=game"
+				+ " hit=" + logoutHit
+				+ " clickSignal=" + logoutClick
+				+ " x=" + var6
+				+ " width=" + var5
+				+ " y=" + yFromTopDistance
+				+ " mouseX=" + this.mouseX
+				+ " mouseY=" + this.mouseY
+				+ " click=" + this.mouseButtonClick
+				+ " lastDown=" + this.lastMouseButtonDown
+				+ " currentDown=" + this.currentMouseButtonDown);
+		}
+		if (logoutHit && logoutClick) {
 			this.sendLogout(0);
+			this.lastMouseButtonDown = 0;
+			this.currentMouseButtonDown = 0;
+			this.mouseButtonClick = 0;
 		}
 	}
 
@@ -21732,9 +21796,11 @@ public final class mudclient implements Runnable {
 
 		// logout menu option
 		yFromTopDistance = getSettingsLogoutY(panelTop);
-		if (this.mouseX > var6 && var5 + var6 > this.mouseX && this.mouseY > yFromTopDistance - 12
-			&& this.mouseY < yFromTopDistance + 4 && this.mouseButtonClick == 1) {
+		boolean logoutClick = this.mouseButtonClick == 1 || (isAndroid() && this.lastMouseButtonDown == 1);
+		if (settingsLogoutHit(var6, var5, yFromTopDistance) && logoutClick) {
 			this.sendLogout(0);
+			this.lastMouseButtonDown = 0;
+			this.mouseButtonClick = 0;
 		}
 	}
 
@@ -22890,8 +22956,173 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private boolean handleVoidscapeAppearanceDirectControls() {
+		if (!this.useVoidscapeLogin() || !Config.isWeb() || !isVoidscapePrimaryClick()) {
+			return false;
+		}
+
+		int panelWidth = Math.min(500, this.getGameWidth() - 12);
+		int panelX = halfGameWidth() - panelWidth / 2;
+		int leftX = panelX + 308;
+		int rightX = panelX + 423;
+		int rowY = 88;
+
+		if (isVoidscapeAppearanceArrowHit(leftX, rowY, true)) {
+			previousVoidscapeAppearanceHead();
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(leftX, rowY, false)) {
+			nextVoidscapeAppearanceHead();
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, true)) {
+			this.appearanceHairColour = previousVoidscapeHairColour(this.appearanceHairColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, false)) {
+			this.appearanceHairColour = nextVoidscapeHairColour(this.appearanceHairColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+
+		rowY += 62;
+		if (isVoidscapeAppearanceArrowHit(leftX, rowY, true) || isVoidscapeAppearanceArrowHit(leftX, rowY, false)) {
+			toggleVoidscapeAppearanceBodyType();
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, true)) {
+			this.characterTopColour = previousVoidscapeClothingColour(this.characterTopColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, false)) {
+			this.characterTopColour = nextVoidscapeClothingColour(this.characterTopColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+
+		rowY += 62;
+		if (isVoidscapeAppearanceArrowHit(leftX, rowY, true)) {
+			this.appearanceSkinColour = previousVoidscapeSkinColour(this.appearanceSkinColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(leftX, rowY, false)) {
+			this.appearanceSkinColour = nextVoidscapeSkinColour(this.appearanceSkinColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, true)) {
+			this.characterBottomColour = previousVoidscapeClothingColour(this.characterBottomColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+		if (isVoidscapeAppearanceArrowHit(rightX, rowY, false)) {
+			this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+
+		int acceptX = panelX + 382;
+		int acceptY = Math.min(this.getGameHeight() - 21, 316);
+		if (isVoidscapeRectHit(acceptX, acceptY, 220, 30, 12)) {
+			submitVoidscapeAppearance();
+			consumeVoidscapeAppearanceClick();
+			return true;
+		}
+
+		return false;
+	}
+
+	private boolean isVoidscapePrimaryClick() {
+		return this.lastMouseButtonDown == 1 || this.mouseButtonClick == 1;
+	}
+
+	private boolean isVoidscapeAppearanceArrowHit(int selectorCx, int selectorCy, boolean left) {
+		return isVoidscapeRectHit(selectorCx + (left ? -42 : 42), selectorCy, 20, 20, 12);
+	}
+
+	private boolean isVoidscapeRectHit(int cx, int cy, int width, int height, int pad) {
+		return this.mouseX >= cx - width / 2 - pad && this.mouseX <= cx + width / 2 + pad
+			&& this.mouseY >= cy - height / 2 - pad && this.mouseY <= cy + height / 2 + pad;
+	}
+
+	private void consumeVoidscapeAppearanceClick() {
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+	}
+
+	private void previousVoidscapeAppearanceHead() {
+		do {
+			do {
+				this.appearanceHeadType = (EntityHandler.animationCount() + (this.appearanceHeadType - 1))
+					% EntityHandler.animationCount();
+			}
+			while ((3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1);
+		} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
+			& this.appearanceHeadGender * 4) == 0);
+		this.appearanceHairStyle = 0;
+	}
+
+	private void nextVoidscapeAppearanceHead() {
+		do {
+			do {
+				this.appearanceHeadType = (1 + this.appearanceHeadType) % EntityHandler.animationCount();
+			}
+			while (1 != (3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()));
+		} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
+			& this.appearanceHeadGender * 4) == 0);
+		this.appearanceHairStyle = 0;
+	}
+
+	private void toggleVoidscapeAppearanceBodyType() {
+		for (this.appearanceHeadGender = 3 - this.appearanceHeadGender; (3
+			& EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1
+			|| (EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
+			& this.appearanceHeadGender * 4) == 0; this.appearanceHeadType = (1
+			+ this.appearanceHeadType) % EntityHandler.animationCount()) {
+		}
+
+		while ((3 & EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) != 2
+			|| (this.appearanceHeadGender * 4
+			& EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) == 0) {
+			this.appearanceBodyGender = (this.appearanceBodyGender + 1) % EntityHandler.animationCount();
+		}
+		this.appearanceHairStyle = 0;
+	}
+
+	private void submitVoidscapeAppearance() {
+		this.packetHandler.getClientStream().newPacket(235);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadGender);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadType);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceBodyGender);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.character2Colour);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairColour);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.characterTopColour);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.characterBottomColour);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceSkinColour);
+		this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode1));
+		this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
+		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
+		if (this.useVoidscapeLogin()) {
+			this.packetHandler.getClientStream().bufferBits.putString(this.currentAppearanceReferralName());
+		}
+		this.packetHandler.getClientStream().finishPacket();
+		this.getSurface().blackScreen(true);
+		this.showAppearanceChange = false;
+	}
+
 	private void handleAppearancePanelControls(int var1) {
 		try {
+			if (handleVoidscapeAppearanceDirectControls()) {
+				return;
+			}
+
 			this.panelAppearance.handleMouse(this.mouseX, this.mouseY, this.currentMouseButtonDown,
 				this.lastMouseButtonDown);
 			handleVoidscapeAppearanceReferralFieldFocus();
@@ -22902,26 +23133,11 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHeadMinus)) {
-				do {
-					do {
-						this.appearanceHeadType = (EntityHandler.animationCount() + (this.appearanceHeadType - 1))
-							% EntityHandler.animationCount();
-					}
-					while ((3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1);
-				} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-					& this.appearanceHeadGender * 4) == 0);
-				this.appearanceHairStyle = 0;
+				previousVoidscapeAppearanceHead();
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHeadPlus)) {
-				do {
-					do {
-						this.appearanceHeadType = (1 + this.appearanceHeadType) % EntityHandler.animationCount();
-					}
-					while (1 != (3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()));
-				} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-					& this.appearanceHeadGender * 4) == 0);
-				this.appearanceHairStyle = 0;
+				nextVoidscapeAppearanceHead();
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceHair1)) {
@@ -22933,19 +23149,7 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceGender1) || this.panelAppearance.isClicked(this.controlButtonAppearanceGender2)) {
-				for (this.appearanceHeadGender = 3 - this.appearanceHeadGender; (3
-					& EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1
-					|| (EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-					& this.appearanceHeadGender * 4) == 0; this.appearanceHeadType = (1
-					+ this.appearanceHeadType) % EntityHandler.animationCount()) {
-				}
-
-				while ((3 & EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) != 2
-					|| (this.appearanceHeadGender * 4
-					& EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) == 0) {
-					this.appearanceBodyGender = (this.appearanceBodyGender + 1) % EntityHandler.animationCount();
-				}
-				this.appearanceHairStyle = 0;
+				toggleVoidscapeAppearanceBodyType();
 			}
 
 			// if (var1 < 68) {
@@ -22992,24 +23196,7 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceAccept)) {
-				this.packetHandler.getClientStream().newPacket(235);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadGender);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadType);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceBodyGender);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.character2Colour);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairColour);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.characterTopColour);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.characterBottomColour);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceSkinColour);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode1));
-				this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
-				this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
-				if (this.useVoidscapeLogin()) {
-					this.packetHandler.getClientStream().bufferBits.putString(this.currentAppearanceReferralName());
-				}
-				this.packetHandler.getClientStream().finishPacket();
-				this.getSurface().blackScreen(true);
-				this.showAppearanceChange = false;
+				submitVoidscapeAppearance();
 			}
 
 		} catch (RuntimeException var3) {
@@ -23069,11 +23256,7 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.showAppearanceChange) {
-				if (this.showVoidscapeReferralPrompt) {
-					this.handleVoidscapeReferralPromptInput();
-				} else {
-					this.handleAppearancePanelControls(86);
-				}
+				this.handleAppearancePanelControls(86);
 			} else if (this.showSetRecoveryQuestion) {
 				this.method_181();
 			} else if (this.showSetContactDetails) {
@@ -23858,12 +24041,6 @@ public final class mudclient implements Runnable {
 						this.voidscapeAccountAddPanel.keyPress(key);
 						return;
 					}
-					if (this.showAppearanceChange && this.showVoidscapeReferralPrompt) {
-						if (key == '\n' || key == '\r' || key == 27 || key == ' ') {
-							closeVoidscapeReferralPrompt();
-						}
-						return;
-					}
 					if (this.showAppearanceChange) {
 						this.panelAppearance.keyPress(key);
 						return;
@@ -24067,10 +24244,10 @@ public final class mudclient implements Runnable {
 
 	private void focusVoidscapeExistingFieldClick() {
 		int cx = halfGameWidth();
-		if (voidscapeLoginFieldClicked(cx, voidscapeExistingUserY(), 210, 23)) {
+		if (voidscapeLoginFieldClicked(cx, voidscapeExistingUserY(), 210, voidscapeExistingFieldHeight())) {
 			this.panelLogin.setFocus(this.controlLoginUser);
 			this.enterPressed = false;
-		} else if (voidscapeLoginFieldClicked(cx, voidscapeExistingPassY(), 210, 23)) {
+		} else if (voidscapeLoginFieldClicked(cx, voidscapeExistingPassY(), 210, voidscapeExistingFieldHeight())) {
 			this.panelLogin.setFocus(this.controlLoginPass);
 			this.enterPressed = false;
 		}
@@ -25979,6 +26156,15 @@ public final class mudclient implements Runnable {
 		} else if (index == accountCount && accountCount < VOIDSCAPE_ACCOUNT_MAX) {
 			startVoidscapeAddAccount();
 		}
+	}
+
+	private boolean shouldCreateVoidscapeWebInventoryMenu(boolean mouseInTabArea) {
+		return mouseInTabArea
+			&& useVoidscapeHudSkin()
+			&& Config.isWeb()
+			&& this.showUiTab == Config.INVENTORY_TAB
+			&& this.tabEquipmentIndex == 0
+			&& mouseOverVoidscapeActivePanel();
 	}
 
 	private boolean handleVoidscapeHudSkinTabClick() {
@@ -28413,14 +28599,11 @@ public final class mudclient implements Runnable {
 	public void setShowAppearanceChange(boolean show) {
 		this.showAppearanceChange = show;
 		if (show) {
-			this.showVoidscapeReferralPrompt = this.useVoidscapeLogin() && !this.voidscapeReferralPromptSeen;
 			// Rebuild the panel at the CURRENT window width so the clickable arrow
 			// hit-boxes line up with the arrows drawn this frame. They diverge if the
 			// window was resized since the panel was first built at startup.
 			// -24595 skips the login-screen viewport side-effect (we're in-game here).
 			this.createAppearancePanel(-24595, Config.S_CHARACTER_CREATION_MODE);
-		} else {
-			this.showVoidscapeReferralPrompt = false;
 		}
 	}
 
@@ -30564,9 +30747,9 @@ public final class mudclient implements Runnable {
 	}
 
 	private void positionAndroidSmokeSettingsMouse() {
-		final int panelX = this.getSurface().width2 - 199;
-		final int panelY = C_CUSTOM_UI ? getUITabsY() - 240 : 61;
-		this.mouseX = panelX + 98;
+		final int panelX = androidSmokeSettingsPanelX();
+		final int panelY = androidSmokeSettingsPanelY();
+		this.mouseX = panelX + androidSmokeSettingsPanelWidth() / 2;
 		this.mouseY = panelY + 78;
 		this.currentMouseButtonDown = 0;
 		this.lastMouseButtonDown = 0;

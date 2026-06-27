@@ -2051,7 +2051,7 @@ public class WebClientPort implements ClientPort {
 			"      } else {" +
 				"      const releasePoint = touchState.gestureAxis === 'scroll' ? [touchState.startX, touchState.startY] : p;" +
 				"      const releaseDrift = Math.max(Math.abs(p[0] - touchState.startX), Math.abs(p[1] - touchState.startY));" +
-				"      const movedScrollableUi = !!window.__voidscapeScrollableUiActive && touchState.moved;" +
+				"      const movedScrollableUi = !!window.__voidscapeScrollableUiActive && touchState.gestureAxis === 'scroll';" +
 				"      if (!touchState.longPressed && !movedScrollableUi && (!touchState.moved || (!touchState.gestureConsumed && releaseDrift < DRAG_CAMERA_START)) && e.type !== 'pointercancel') {" +
 			"        queuePointer(1, releasePoint, 1);" +
 			"      }" +
