@@ -17,6 +17,7 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Projectile;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.handler.PluginHandler;
@@ -80,6 +81,13 @@ public class RangeEvent extends GameTickEvent {
 			target.getSkills().getLevel(Skill.HITS.id()) <= 0 ||
 			(target.isPlayer() && (!((Player) target).loggedIn() || !player.checkAttack(target, true))) ||
 			!player.withinRange(target)) {
+			player.resetRange();
+			return;
+		}
+
+		ItemDefinition weaponDef = player.getWorld().getServer().getEntityHandler().getItemDef(weaponId);
+		if (!player.canUseMembersItemHere(weaponDef, weaponId)) {
+			player.sendCannotUseMembersHereMessage();
 			player.resetRange();
 			return;
 		}
@@ -207,7 +215,7 @@ public class RangeEvent extends GameTickEvent {
 				continue;
 			}
 
-			if (!config.MEMBER_WORLD && ammoId != ItemId.BRONZE_ARROWS.id() && ammoId != ItemId.CROSSBOW_BOLTS.id()) {
+			if (!WildernessRules.canUseItem(player, ammo)) {
 				reset(ProjectileFailureReason.NOT_ENOUGH_AMMO_ARROWS);
 				return -1;
 			}

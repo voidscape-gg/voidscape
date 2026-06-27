@@ -840,20 +840,20 @@ Regular Player Commands
   - Usage: `::gameinfo`
   - Shows your coordinates and total time played.
 - beta
-  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::beta`
   - Alias: `::betaguide`
   - Opens the Voidscape beta tester toolkit.
   - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, FarmSim, test checklist, common coordinates, and item IDs.
 - farmkit
-  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::farmkit 40`
   - Usage: `::farmkit 60`
   - Usage: `::farmkit 80`
   - Usage: `::farmkit 99`
   - Applies beta-only melee stat/gear kits for drop-rate testing, resets ranged/prayer/magic to 1, and resets the FarmSim sample.
 - farmsim
-  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::farmsim`
   - Usage: `::farmsim start`
   - Usage: `::farmsim status`
@@ -865,7 +865,7 @@ Regular Player Commands
   - Alias: `::reportbug`
   - Sends a bug report with your current location and client version to the server bug ledger and Discord bug queue.
 - codes
-  - Availability: beta worlds only (`want_beta_onboarding_guide: true`).
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::codes`
   - Alias: `::refcodes`
   - Shows beta referral reward codes earned when invited players entered your in-game name during character creation.

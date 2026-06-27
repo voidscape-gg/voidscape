@@ -48,11 +48,9 @@ public final class ItemUseOnItem implements PayloadProcessor<ItemOnItemStruct, O
 			player.message("Please unequip your item and try again.");
 			return;
 		}
-		if (item1.getDef(player.getWorld()).isMembersOnly() || item2.getDef(player.getWorld()).isMembersOnly()) {
-			if (!player.getConfig().MEMBER_WORLD) {
-				player.sendMemberErrorMessage();
-				return;
-			}
+		if (!player.canUseMembersItemHere(item1) || !player.canUseMembersItemHere(item2)) {
+			player.sendCannotUseMembersHereMessage();
+			return;
 		}
 
 		// Services.lookup(DatabaseManager.class).addQuery(new

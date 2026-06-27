@@ -28,9 +28,8 @@ public class ItemUseOnObject implements PayloadProcessor<ItemOnObjectStruct, Opc
 				}
 				getPlayer().resetAll();
 
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 				if (getPlayer().getWorld().getServer().getPluginHandler().handlePlugin(
@@ -63,9 +62,8 @@ public class ItemUseOnObject implements PayloadProcessor<ItemOnObjectStruct, Opc
 				}
 				getPlayer().resetAll();
 
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 

@@ -5,6 +5,7 @@ import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
 import com.openrsc.server.util.rsc.MessageType;
@@ -259,8 +260,12 @@ public class DropTable {
 				}
 				else if (drop.type == dropType.ITEM) {
 					if (drop.weight == 0) continue;
-					if (owner.getWorld().getServer().getEntityHandler().getItemDef(drop.id).isMembersOnly()
-						&& !owner.getWorld().getServer().getConfig().MEMBER_WORLD) {
+					ItemDefinition def = owner.getWorld().getServer().getEntityHandler().getItemDef(drop.id);
+					if (!WildernessRules.canUseItemAt(
+						owner.getWorld().getServer().getConfig().MEMBER_WORLD,
+						owner.getLocation(),
+						def,
+						drop.id)) {
 						continue; // Members only item on a free world
 					}
 					if (drop.id == ItemId.UNHOLY_SYMBOL_MOULD.id()) {

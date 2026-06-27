@@ -9,6 +9,7 @@ import com.openrsc.server.external.ItemLoc;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.model.world.WildernessRules;
 
 import java.util.Objects;
 
@@ -149,7 +150,11 @@ public class GroundItem extends Entity {
 	public boolean isInvisibleTo(final Player player) {
 		if (belongsTo(player))
 			return false;
-		if (getDef().isMembersOnly() && !getWorld().getServer().getConfig().MEMBER_WORLD)
+		if (!WildernessRules.canUseItemAt(
+			getWorld().getServer().getConfig().MEMBER_WORLD,
+			getLocation(),
+			getDef(),
+			getID()))
 			return true;
 		if (getDef().isUntradable())
 			return true;

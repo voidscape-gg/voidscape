@@ -137,6 +137,13 @@ public class ThrowingEvent extends GameTickEvent {
 			player.resetRange();
 			return;
 		}
+		if (!player.canUseMembersItemHere(
+			player.getWorld().getServer().getEntityHandler().getItemDef(throwingID),
+			throwingID)) {
+			player.sendCannotUseMembersHereMessage();
+			player.resetRange();
+			return;
+		}
 
 		Item rangeType;
 		int slot;

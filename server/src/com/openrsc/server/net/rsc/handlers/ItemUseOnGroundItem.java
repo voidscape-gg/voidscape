@@ -71,10 +71,9 @@ public class ItemUseOnGroundItem implements PayloadProcessor<ItemOnGroundItemStr
 				if (myItem == null || gItem == null)
 					return;
 
-				if ((myItem.getDef(getPlayer().getWorld()).isMembersOnly() || gItem.getDef()
-					.isMembersOnly())
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(myItem)
+					|| !getPlayer().canUseMembersItemHere(gItem.getDef(), gItem.getID())) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 

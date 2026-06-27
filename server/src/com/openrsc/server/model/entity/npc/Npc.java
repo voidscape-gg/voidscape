@@ -20,6 +20,7 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.*;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.triggers.KillNpcTrigger;
@@ -598,9 +599,13 @@ public class Npc extends Mob {
 			// world does not allow drop
 			return false;
 		}
-        // No p2p drops on f2p world. On openrsc we can just drop nothing.
+        // No p2p drops on f2p world/f2p wilderness. On openrsc we can just drop nothing.
         // In OSRS, they have a different f2p drop instead usually, but there wouldn't be data on this for RSC.
-        return getWorld().getServer().getConfig().MEMBER_WORLD || !item.getDef(getWorld()).isMembersOnly();
+        return WildernessRules.canUseItemAt(
+			getWorld().getServer().getConfig().MEMBER_WORLD,
+			getLocation(),
+			item.getDef(getWorld()),
+			item.getCatalogId());
     }
 
 	private int getBoneTier(int boneId) {
@@ -776,8 +781,11 @@ public class Npc extends Mob {
 		else amount = 1;
 		for (int count = 0; count < loop; count++) {
 			if (dropID != ItemId.NOTHING.id()
-				&& getWorld().getServer().getEntityHandler().getItemDef(dropID).isMembersOnly()
-				&& !getConfig().MEMBER_WORLD) {
+				&& !WildernessRules.canUseItemAt(
+					getConfig().MEMBER_WORLD,
+					getLocation(),
+					getWorld().getServer().getEntityHandler().getItemDef(dropID),
+					dropID)) {
 				continue; // Members item on a non-members world.
 			} else if (dropID != ItemId.NOTHING.id()) {
 				boolean destroyHerbs = false;

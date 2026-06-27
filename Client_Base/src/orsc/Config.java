@@ -30,7 +30,7 @@ public class Config {
 	public static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
 	public static final int MAX_MODERN_HAIR_STYLE = 0;
 	private static final int CACHE_VERSION = 4;
-	public static boolean MEMBER_WORLD = false;
+	public static boolean MEMBER_WORLD = true;
 	public static boolean DISPLAY_LOGO_SPRITE = false;
 	private static final boolean CUSTOM_CACHE_DIR_ENABLED = false;
 	private static final String CUSTOM_CACHE_DIR = System.getProperty("user.home") + File.separator + "OpenRSC";

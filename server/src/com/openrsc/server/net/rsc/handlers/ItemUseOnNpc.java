@@ -69,9 +69,8 @@ public class ItemUseOnNpc implements PayloadProcessor<ItemOnMobStruct, OpcodeIn>
 					return;
 				}
 
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 				if (getPlayer().getWorld().getServer().getPluginHandler().handlePlugin(

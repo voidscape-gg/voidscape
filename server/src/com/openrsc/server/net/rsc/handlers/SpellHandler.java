@@ -27,6 +27,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.update.ChatMessage;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.struct.UnequipRequest;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
@@ -199,8 +200,8 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			return null;
 		}
 
-		if (spell.isMembers() && !player.getConfig().MEMBER_WORLD) {
-			player.message("You need to login to a members world to use this spell");
+		if (!WildernessRules.canUseSpell(player, spell)) {
+			player.sendCannotUseMembersHereMessage();
 			player.resetPath();
 			return null;
 		}

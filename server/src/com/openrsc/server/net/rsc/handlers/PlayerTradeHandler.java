@@ -317,7 +317,7 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 						player.message("Definitely update your client before trying to trade that item.");
 						continue;
 					}
-					if (item.getDef(player.getWorld()).isMembersOnly() && !player.getConfig().MEMBER_WORLD) {
+					if (!player.canUseMembersItemHere(item) || !affectedPlayer.canUseMembersItemHere(item)) {
 						player.setRequiresOfferUpdate(true);
 						continue;
 					}

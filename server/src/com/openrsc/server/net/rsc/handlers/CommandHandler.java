@@ -20,6 +20,9 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	private static final int BETA_MAX_ITEM_AMOUNT = 10000;
 	private static final long BETA_SPAWN_NPC_COOLDOWN_MILLIS = 15000L;
 	private static final Map<Long, Long> BETA_SPAWN_NPC_LAST_USE_MILLIS = new ConcurrentHashMap<Long, Long>();
+	private static final Set<String> BETA_PLAYER_COMMANDS = new HashSet<String>(Arrays.asList(
+		"beta", "betaguide", "farmkit", "farmsim", "farmcal", "codes", "refcodes"
+	));
 	private static final Set<String> BETA_BLOCKED_ADMIN_COMMANDS = new HashSet<String>(Arrays.asList(
 		"restart", "shutdown", "update", "reloadworld", "reloadland",
 		"loadbots", "loadtest", "cinematic", "cine", "voidrushbots", "vrbots",
@@ -414,7 +417,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		if (cmd.equals("stat") || cmd.equals("stats") || cmd.equals("setstat") || cmd.equals("setstats")
 			|| cmd.equals("xpstat") || cmd.equals("xpstats") || cmd.equals("setxpstat")
 			|| cmd.equals("setxpstats") || cmd.equals("setxp")) {
-			player.message(player.getConfig().MESSAGE_PREFIX + "Use ::beta for stat presets during public beta.");
+			player.message(player.getConfig().MESSAGE_PREFIX + "Direct stat commands are disabled during public beta.");
 			return true;
 		}
 
@@ -430,8 +433,25 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	}
 
 	private static boolean blockUnsafeCommand(Player player, String cmd, String[] args) {
+		if (blockBetaPlayerCommand(player, cmd)) return true;
 		if (blockUnsafeProductionCommand(player, cmd, args)) return true;
 		return blockUnsafeBetaAdminCommand(player, cmd, args);
+	}
+
+	private static boolean blockBetaPlayerCommand(Player player, String cmd) {
+		if (!BETA_PLAYER_COMMANDS.contains(cmd)) return false;
+
+		if (!player.getWorld().getServer().getConfig().WANT_BETA_ONBOARDING_GUIDE) {
+			player.message(player.getConfig().MESSAGE_PREFIX + "That beta command is disabled on this world.");
+			return true;
+		}
+
+		if (player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN && !player.isOwner()) {
+			player.message(player.getConfig().MESSAGE_PREFIX + "That beta command is disabled during public launch.");
+			return true;
+		}
+
+		return false;
 	}
 
 	private static boolean blockUnsafeProductionCommand(Player player, String cmd, String[] args) {

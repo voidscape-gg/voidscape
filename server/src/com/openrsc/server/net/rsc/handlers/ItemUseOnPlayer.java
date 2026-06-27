@@ -53,9 +53,8 @@ public class ItemUseOnPlayer implements PayloadProcessor<ItemOnMobStruct, Opcode
 				}
 				getPlayer().resetAll();
 				getPlayer().face(affectedPlayer);
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 

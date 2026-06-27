@@ -39,6 +39,7 @@ import com.openrsc.server.model.entity.UnregisterForcefulness;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.npc.NpcInteraction;
 import com.openrsc.server.model.struct.UnequipRequest;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.ConnectionAttachment;
 import com.openrsc.server.net.Packet;
@@ -420,39 +421,104 @@ public final class Player extends Mob {
 	private boolean isSaving = false;
 	private boolean isLoggingOut = false;
 
-	/*
-	 * Restricts P2P stuff in F2P wilderness.
-	 */
-	/*public void unwieldMembersItems() {
-		if (!getServer().getConfig().MEMBER_WORLD) {
-			boolean found = false;
-			for (Item i : getCarriedItems().getInventory().getItems()) {
+	public boolean isF2PWilderness() {
+		return WildernessRules.isF2PWilderness(getLocation());
+	}
 
-				if (i.isWielded() && i.getDef().isMembersOnly()) {
-					getCarriedItems().getInventory().unwieldItem(i, true);
-					found = true;
-				}
-				if (i.getID() == 2109 && i.isWielded()) {
-					getCarriedItems().getInventory().unwieldItem(i, true);
+	public boolean canUseMembersItemHere(Item item) {
+		return WildernessRules.canUseItem(this, item);
+	}
+
+	public boolean canUseMembersItemHere(ItemDefinition def, int itemId) {
+		return WildernessRules.canUseItem(this, def, itemId);
+	}
+
+	public void sendCannotUseMembersHereMessage() {
+		if (isF2PWilderness()) {
+			message(WildernessRules.wildernessMemberMessage());
+			return;
+		}
+		sendMemberErrorMessage();
+	}
+
+	private int countF2PWildernessDisallowedEquipment(Point point) {
+		if (!WildernessRules.isF2PWilderness(point)) {
+			return 0;
+		}
+		int count = 0;
+		if (getConfig().WANT_EQUIPMENT_TAB) {
+			for (int slot = 0; slot < Equipment.SLOT_COUNT; slot++) {
+				Item item = getCarriedItems().getEquipment().get(slot);
+				if (item != null && !WildernessRules.canUseItemAt(
+					getConfig().MEMBER_WORLD,
+					point,
+					item.getDef(getWorld()),
+					item.getCatalogId())) {
+					count++;
 				}
 			}
-			if (found) {
-				message("Members objects can not be wielded on this world.");
-
-				ActionSender.sendInventory(this);
-				ActionSender.sendEquipmentStats(this);
-			}
-			for (int i = 0; i < 3; i++) {
-				int min = skills.getLevel(i);
-				int max = skills.getMaxStat(i);
-				int baseStat = min > max ? max : min;
-				int newStat = baseStat + DataConversions.roundUp((max / 100D) * 10) + 2;
-				if (min > newStat || (min > max && (i == 1 || i == 0))) {
-					skills.setLevel(i, max);
-				}
+			return count;
+		}
+		for (Item item : getCarriedItems().getInventory().getItems()) {
+			if (item != null && item.isWielded() && !WildernessRules.canUseItemAt(
+				getConfig().MEMBER_WORLD,
+				point,
+				item.getDef(getWorld()),
+				item.getCatalogId())) {
+				count++;
 			}
 		}
-	}*/
+		return count;
+	}
+
+	private boolean canEnterF2PWilderness(Point point) {
+		if (!getConfig().WANT_EQUIPMENT_TAB) {
+			return true;
+		}
+		int disallowedEquipment = countF2PWildernessDisallowedEquipment(point);
+		if (disallowedEquipment <= 0 || getCarriedItems().getInventory().getFreeSlots() >= disallowedEquipment) {
+			return true;
+		}
+		message("You need more inventory space before entering the F2P wilderness.");
+		resetPath();
+		return false;
+	}
+
+	public void unwieldF2PWildernessMembersItems() {
+		if (!isF2PWilderness()) {
+			return;
+		}
+
+		boolean found = false;
+		if (getConfig().WANT_EQUIPMENT_TAB) {
+			for (int slot = 0; slot < Equipment.SLOT_COUNT; slot++) {
+				Item item = getCarriedItems().getEquipment().get(slot);
+				if (item == null || WildernessRules.canUseItem(this, item)) {
+					continue;
+				}
+				found |= getCarriedItems().getEquipment().unequipItem(
+					new UnequipRequest(this, item, UnequipRequest.RequestType.FROM_EQUIPMENT, false),
+					false);
+			}
+		} else {
+			for (Item item : getCarriedItems().getInventory().getItems()) {
+				if (item == null || !item.isWielded() || WildernessRules.canUseItem(this, item)) {
+					continue;
+				}
+				found |= getCarriedItems().getEquipment().unequipItem(
+					new UnequipRequest(this, item, UnequipRequest.RequestType.FROM_INVENTORY, false),
+					false);
+			}
+		}
+
+		if (found) {
+			message("Members objects can not be wielded in the F2P wilderness.");
+			resetRange();
+			getUpdateFlags().setAppearanceChanged(true);
+			ActionSender.sendInventory(this);
+			ActionSender.sendEquipmentStats(this);
+		}
+	}
 
 	/**
 	 * Constructs a new Player instance from LoginRequest
@@ -3418,6 +3484,9 @@ public final class Player extends Mob {
 
 	@Override
 	public void setLocation(final Point point, final boolean teleported) {
+		if (!canEnterF2PWilderness(point)) {
+			return;
+		}
 		if (teleported || getSkullType() == 2 || getSkullType() == 0) {
 			// Inappropriate place for this to be getting set at for skulls, to me.
 			getUpdateFlags().setAppearanceChanged(true);
@@ -3430,6 +3499,7 @@ public final class Player extends Mob {
 		}
 
 		super.setLocation(point, teleported);
+		unwieldF2PWildernessMembersItems();
 
 	}
 

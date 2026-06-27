@@ -50,7 +50,7 @@ These remain available to the appropriate rank because they are operational rath
 
 ## Beta-only player commands
 
-`::beta`, `::farmkit`, and `::farmsim` were already gated by `want_beta_onboarding_guide`. Public command help now hides `::beta` and beta referral code help when that flag is off. `::codes` / `::refcodes` no longer handles unless the beta guide flag is enabled.
+`::beta`, `::farmkit`, `::farmsim`, `::farmcal`, `::codes`, and `::refcodes` are blocked centrally when `want_beta_onboarding_guide` is off. If a trusted beta flag is accidentally left on while `production_command_lockdown` is enabled, those beta player commands are still blocked for every non-owner account. Public command help hides `::beta` and beta referral code help when the beta guide flag is off.
 
 ## Spot checks for final playthrough
 
@@ -58,4 +58,5 @@ These remain available to the appropriate rank because they are operational rath
 - Owner: the same commands should reach their normal syntax/action paths.
 - Regular player: `::commands` should not list `::beta` or `::codes` on launch config.
 - Regular player: `::bug test report from launch smoke` should still accept a normal bug report.
-- Beta/staging world with `want_beta_onboarding_guide: true`: `::beta`, `::farmkit`, `::farmsim`, and `::codes` should remain available for trusted test windows.
+- Trusted beta/staging world with `want_beta_onboarding_guide: true` and `production_command_lockdown: false`: `::beta`, `::farmkit`, `::farmsim`, and `::codes` should remain available for trusted test windows.
+- Production world with both flags accidentally true: a non-owner `::beta` / `::farmkit` / `::farmsim` / `::codes` attempt should say the beta command is disabled during public launch.

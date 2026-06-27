@@ -226,9 +226,7 @@ public class Point {
 					}
 				}
 			}
-			/* If its allowed in these wild levels */
-			return wildernessLevel() >= 48 && wildernessLevel() <= 56;
-			/* It is F2P */
+			return false;
 		}
 		/* Not in wild, its P2P */
 		return true;
@@ -327,7 +325,7 @@ public class Point {
 	}
 
 	public boolean inFreeWild() {
-		return (wildernessLevel() >= 1 && wildernessLevel() <= 48);
+		return inWilderness() && !isMembersWild();
 	}
 
 	public boolean inVarrock() {
