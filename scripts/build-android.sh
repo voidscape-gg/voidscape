@@ -6,6 +6,57 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANDROID_DIR="$REPO_ROOT/Android_Client"
+GRADLE_ARGS=()
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/build-android.sh [--debug|--release] [gradle args...]
+
+Options:
+  --debug      Build the debug APK. Default when no task is supplied.
+  --release    Build the release APK. Requires upload signing config unless
+               VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1 is set for local experiments.
+  -h, --help   Show this help.
+
+Release signing can be supplied through environment:
+  VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE=/path/to/voidscape-upload.jks
+  VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD=...
+  VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD=...
+
+or matching Gradle properties:
+  voidscape.android.uploadKeystore.file
+  voidscape.android.uploadKeystore.storePassword
+  voidscape.android.uploadKeystore.keyPassword
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --debug)
+            GRADLE_ARGS=(assembleDebug)
+            shift
+            ;;
+        --release)
+            GRADLE_ARGS=(assembleRelease)
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                GRADLE_ARGS+=("$1")
+                shift
+            done
+            ;;
+        *)
+            GRADLE_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
 
 if [[ -z "${JAVA_HOME:-}" ]]; then
     if [[ -d /opt/homebrew/Cellar/openjdk@17 ]]; then
@@ -41,7 +92,7 @@ if [[ -z "${ANDROID_HOME:-}" && -z "${ANDROID_SDK_ROOT:-}" && ! -f "$ANDROID_DIR
 fi
 
 cd "$ANDROID_DIR"
-if [[ "$#" -eq 0 ]]; then
-    set -- assembleDebug
+if [[ "${#GRADLE_ARGS[@]}" -eq 0 ]]; then
+    GRADLE_ARGS=(assembleDebug)
 fi
-sh ./gradlew "$@"
+sh ./gradlew "${GRADLE_ARGS[@]}"

@@ -16,6 +16,8 @@ WS_URL="${WEB_TEA_IPHONE_QA_WS_URL:-}"
 PORTAL_URL="${WEB_TEA_IPHONE_QA_PORTAL_URL:-}"
 PORTAL_ACCOUNT_URL="${WEB_TEA_IPHONE_QA_PORTAL_ACCOUNT_URL:-}"
 PORTAL_RECOVERY_URL="${WEB_TEA_IPHONE_QA_PORTAL_RECOVERY_URL:-}"
+DEPLOYMENT_SUMMARY_FILE="${WEB_TEA_IPHONE_QA_DEPLOYMENT_SUMMARY:-}"
+DEPLOYMENT_SUMMARY_JSON=""
 
 usage() {
 	cat <<'EOF'
@@ -30,6 +32,9 @@ Options:
                       Explicit Create Account portal URL.
   --portal-recovery-url URL
                       Explicit Recover account portal URL.
+  --deployment-summary FILE
+                      Prefill the Deployment Verification JSON block from a
+                      hosted verify-web-teavm-deployment.sh summary.json.
   --port PORT         Local static-server port. Default: 8088.
   --bind HOST         Static-server bind host. Default: 0.0.0.0.
   --ws-port PORT      Game WebSocket port. Default: 43496.
@@ -75,6 +80,10 @@ while [[ $# -gt 0 ]]; do
 			PORTAL_RECOVERY_URL="${2:-}"
 			shift 2
 			;;
+		--deployment-summary)
+			DEPLOYMENT_SUMMARY_FILE="${2:-}"
+			shift 2
+			;;
 		--port)
 			PORT="${2:-}"
 			shift 2
@@ -114,6 +123,13 @@ done
 if [[ -z "$PORT" || -z "$BIND_HOST" || -z "$WS_PORT" || -z "$OUT_DIR" ]]; then
 	echo "ERROR: port, bind, ws-port, and out must be non-empty." >&2
 	exit 2
+fi
+if [[ -n "$DEPLOYMENT_SUMMARY_FILE" ]]; then
+	if [[ ! -f "$DEPLOYMENT_SUMMARY_FILE" ]]; then
+		echo "ERROR: deployment summary not found: $DEPLOYMENT_SUMMARY_FILE" >&2
+		exit 2
+	fi
+	DEPLOYMENT_SUMMARY_JSON="$(cat "$DEPLOYMENT_SUMMARY_FILE")"
 fi
 
 DEPLOYED_MODE=0
@@ -354,7 +370,7 @@ $([[ "$DEPLOYED_MODE" -eq 0 && "$LAN_IP" == "127.0.0.1" ]] && echo '**Warning:**
 Before real iPhone release testing, run the hosted deployment verifier with \`--smoke\` against the same URL and WSS/portal settings used for this report. Final release validation requires \`--expected-build-manifest dist/web-teavm/voidscape-web-build.json --deep-manifest\` so the uploaded package manifest is matched and every packaged asset is fetched, then paste its \`summary.json\` here. For local LAN development reports, leave this blank and validate with \`--allow-no-deployment-verification\`.
 
 \`\`\`json
-
+$DEPLOYMENT_SUMMARY_JSON
 \`\`\`
 
 Expected deployment values:

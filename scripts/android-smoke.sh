@@ -5,9 +5,48 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}}"
-ADB="$SDK_ROOT/platform-tools/adb"
-EMULATOR="$SDK_ROOT/emulator/emulator"
+ANDROID_DIR="$REPO_ROOT/Android_Client"
+
+discover_android_sdk_root() {
+    if [[ -n "${ANDROID_HOME:-}" ]]; then
+        printf '%s\n' "$ANDROID_HOME"
+        return
+    fi
+    if [[ -n "${ANDROID_SDK_ROOT:-}" ]]; then
+        printf '%s\n' "$ANDROID_SDK_ROOT"
+        return
+    fi
+
+    local local_properties="$ANDROID_DIR/local.properties"
+    if [[ -f "$local_properties" ]]; then
+        local sdk_dir
+        sdk_dir="$(sed -nE 's/^sdk\.dir[[:space:]]*=[[:space:]]*(.*)$/\1/p' "$local_properties" | tail -1)"
+        if [[ -n "$sdk_dir" ]]; then
+            printf '%s\n' "$sdk_dir"
+            return
+        fi
+    fi
+
+    local candidate
+    for candidate in "$HOME/Library/Android/sdk" /opt/homebrew/share/android-commandlinetools /usr/local/share/android-sdk /opt/android-sdk; do
+        if [[ -d "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+}
+
+SDK_ROOT="$(discover_android_sdk_root || true)"
+ADB="${ANDROID_SMOKE_ADB:-}"
+if [[ -z "$ADB" && -n "$SDK_ROOT" ]]; then
+    ADB="$SDK_ROOT/platform-tools/adb"
+elif [[ -z "$ADB" ]] && command -v adb >/dev/null 2>&1; then
+    ADB="$(command -v adb)"
+fi
+EMULATOR="${ANDROID_SMOKE_EMULATOR:-}"
+if [[ -z "$EMULATOR" && -n "$SDK_ROOT" ]]; then
+    EMULATOR="$SDK_ROOT/emulator/emulator"
+fi
 AVD_NAME="${AVD_NAME:-voidscape_api35}"
 APK="$REPO_ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
 OUT_DIR="${ANDROID_SCREENSHOT_DIR:-$REPO_ROOT/tmp/android-smoke-$(date +%Y%m%d-%H%M%S)}"
@@ -30,6 +69,7 @@ SMOKE_MAGIC_PRAYER_FLAG="$APP_SMOKE_FILES/android-smoke-magic-prayer.flag"
 SMOKE_WORLD_MAP_FLAG="$APP_SMOKE_FILES/android-smoke-world-map.flag"
 SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
 SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
+SMOKE_APPEARANCE_PROMPT_FLAG="$APP_SMOKE_FILES/android-smoke-appearance-prompt.flag"
 SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
 BUILD=1
 INSTALL=1
@@ -52,6 +92,15 @@ AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
 AUTH_PORT="${ANDROID_SMOKE_AUTH_PORT:-43596}"
 AUTH_DB="${ANDROID_SMOKE_AUTH_DB:-}"
+AUTH_USE_BUNDLED_ENDPOINT="${ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT:-0}"
+AUTH_EXISTING_USER_X_PCT="${ANDROID_SMOKE_AUTH_EXISTING_USER_X_PCT:-50}"
+AUTH_EXISTING_USER_Y_PCT="${ANDROID_SMOKE_AUTH_EXISTING_USER_Y_PCT:-20}"
+AUTH_USERNAME_X_PCT="${ANDROID_SMOKE_AUTH_USERNAME_X_PCT:-50}"
+AUTH_USERNAME_Y_PCT="${ANDROID_SMOKE_AUTH_USERNAME_Y_PCT:-8}"
+AUTH_PASSWORD_X_PCT="${ANDROID_SMOKE_AUTH_PASSWORD_X_PCT:-50}"
+AUTH_PASSWORD_Y_PCT="${ANDROID_SMOKE_AUTH_PASSWORD_Y_PCT:-12}"
+AUTH_OK_X_PCT="${ANDROID_SMOKE_AUTH_OK_X_PCT:-40}"
+AUTH_OK_Y_PCT="${ANDROID_SMOKE_AUTH_OK_Y_PCT:-19}"
 AUTH_NPC_ID="${ANDROID_SMOKE_NPC_ID:-839}"
 AUTH_NPC_ACTION="${ANDROID_SMOKE_NPC_ACTION:-NPC_TALK_TO}"
 AUTH_NPC_PLAYER_X="${ANDROID_SMOKE_NPC_PLAYER_X:-23}"
@@ -159,6 +208,8 @@ connected, launches the wrapper, and captures the core Android QA screenshots.
 
 Environment:
   ANDROID_HOME / ANDROID_SDK_ROOT  Android SDK root
+  ANDROID_SMOKE_ADB                Optional adb executable override
+  ANDROID_SMOKE_EMULATOR           Optional emulator executable override
   AVD_NAME                         Emulator name, default: voidscape_api35
   ANDROID_SCREENSHOT_DIR           Output directory
   ANDROID_SMOKE_AUTH_USER          Optional game username for in-game/logout smoke
@@ -166,6 +217,9 @@ Environment:
   ANDROID_SMOKE_AUTH_HOST          Optional auth smoke host, default: 10.0.2.2
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
+  ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT=1
+                                    Optional: do not write the requested endpoint before auth smoke launch
+  ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
@@ -486,8 +540,8 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
-if [[ ! -x "$ADB" ]]; then
-    echo "ERROR: adb not found at $ADB. Set ANDROID_HOME or ANDROID_SDK_ROOT." >&2
+if [[ -z "$ADB" || ! -x "$ADB" ]]; then
+    echo "ERROR: adb not found. Set ANDROID_HOME, ANDROID_SDK_ROOT, ANDROID_SMOKE_ADB, or Android_Client/local.properties sdk.dir." >&2
     exit 1
 fi
 
@@ -499,8 +553,8 @@ if [[ "$BUILD" -eq 1 ]]; then
 fi
 
 if ! "$ADB" get-state >/dev/null 2>&1; then
-    if [[ ! -x "$EMULATOR" ]]; then
-        echo "ERROR: no connected Android device and emulator not found at $EMULATOR." >&2
+    if [[ -z "$EMULATOR" || ! -x "$EMULATOR" ]]; then
+        echo "ERROR: no connected Android device and emulator not found. Set ANDROID_SMOKE_EMULATOR or an Android SDK root." >&2
         exit 1
     fi
     echo "Starting Android emulator: $AVD_NAME"
@@ -664,6 +718,14 @@ disable_android_smoke_ground_loot() {
     remove_smoke_files "$SMOKE_GROUND_LOOT_FLAG"
 }
 
+enable_android_smoke_appearance_prompt() {
+    touch_smoke_file "$SMOKE_APPEARANCE_PROMPT_FLAG"
+}
+
+disable_android_smoke_appearance_prompt() {
+    remove_smoke_files "$SMOKE_APPEARANCE_PROMPT_FLAG"
+}
+
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
     disable_android_smoke_player_targets
@@ -680,6 +742,7 @@ disable_android_smoke_targets() {
     disable_android_smoke_world_map
     disable_android_smoke_settings
     disable_android_smoke_ground_loot
+    disable_android_smoke_appearance_prompt
     disable_android_smoke_walk
 }
 
@@ -760,11 +823,18 @@ client_xy_to_screen_xy() {
     fi
 
     read -r x y < <(awk -v sw="$width" -v sh="$height" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
-        gw=512; gh=346;
+        gw=512; gh=346; surfaceExtra=12; portrait=0;
         scale=sw/gw;
-        if (sh/gh < scale) scale=sh/gh;
+        portraitGh=sh/scale - surfaceExtra;
+        if (portraitGh > gh) {
+            gh=portraitGh;
+            portrait=1;
+        } else if (sh/gh < scale) {
+            scale=sh/gh;
+        }
         ox=(sw - gw*scale)/2;
         oy=(sh - gh*scale)/2;
+        if (portrait) oy=0;
         printf "%d %d\n", ox + cx*scale + 0.5, oy + cy*scale + 0.5;
     }')
     echo "$x $y"
@@ -899,13 +969,31 @@ clear_focused_text_field() {
     done
 }
 
+tap_existing_user_button() {
+    tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
+}
+
+tap_login_ok_button() {
+    tap_pct "$AUTH_OK_X_PCT" "$AUTH_OK_Y_PCT"
+}
+
+close_auth_intro_dialog_if_present() {
+	enable_android_smoke_settings
+	enable_android_smoke_appearance_prompt
+	close_welcome_dialog_if_present 4
+	accept_appearance_prompt_if_present 10
+	close_welcome_dialog_if_present 10
+	disable_android_smoke_settings
+	disable_android_smoke_appearance_prompt
+}
+
 enter_auth_credentials() {
-    tap_pct 50 22
+    tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
     sleep 1
     clear_focused_text_field
     input_text "$AUTH_USER"
     sleep 1
-    tap_pct 50 32
+    tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
     sleep 1
     clear_focused_text_field
     input_text "$AUTH_PASS"
@@ -916,7 +1004,15 @@ enter_auth_credentials() {
 submit_login_and_wait() {
     "$ADB" logcat -c || true
     "$ADB" shell input keyevent ENTER
-    wait_for_successful_login 60 || {
+    if wait_for_successful_login 20; then
+        return 0
+    fi
+    if "$ADB" logcat -d 2>/dev/null | tr -d '\r' | grep -q 'login response:'; then
+        return 1
+    fi
+    echo "Android hardware Enter did not submit; tapping visible Ok button." >&2
+    tap_login_ok_button
+    wait_for_successful_login 45 || {
         echo "Android login response log not observed; checking auth DB online state." >&2
         wait_auth_online 30
     }
@@ -1017,6 +1113,14 @@ launch_game_with_endpoint() {
     sleep 5
     dismiss_fullscreen_education
     return 0
+}
+
+launch_authenticated_endpoint() {
+	if [[ "$AUTH_USE_BUNDLED_ENDPOINT" == "1" ]]; then
+		launch_to_login_home
+	else
+		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+	fi
 }
 
 dismiss_fullscreen_education() {
@@ -1203,16 +1307,12 @@ run_authenticated_login_smoke() {
 	"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 	"$ADB" logcat -c || true
 
-	if [[ "$AUTH_HOST" == "10.0.2.2" && "$AUTH_PORT" == "43596" ]]; then
-		launch_to_login_home
-	else
-		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
-	fi
+	launch_authenticated_endpoint
 	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || exit 1
 	sleep 2
 	screenshot 00-auth-login-home
 
-	tap_pct 50 65
+	tap_existing_user_button
 	sleep 3
 	screenshot 01-auth-existing-user-keyboard
 	enter_auth_credentials
@@ -1243,15 +1343,11 @@ run_authenticated_lifecycle_smoke() {
 	"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
 	"$ADB" logcat -c || true
 
-	if [[ "$AUTH_HOST" == "10.0.2.2" && "$AUTH_PORT" == "43596" ]]; then
-		launch_to_login_home
-	else
-		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
-	fi
+	launch_authenticated_endpoint
 	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || exit 1
 	screenshot 00-lifecycle-login-home
 
-	tap_pct 50 65
+	tap_existing_user_button
 	sleep 3
 	enter_auth_credentials
 	screenshot 01-lifecycle-credentials-entered
@@ -1264,10 +1360,7 @@ run_authenticated_lifecycle_smoke() {
 	}
 	screenshot 02-lifecycle-post-login
 
-	tap_pct 50 72
-	sleep 1
-	tap_pct 50 72
-	sleep 2
+	close_auth_intro_dialog_if_present
 	assert_game_activity_for_input "lifecycle game HUD" "03-lifecycle-lost-before-hud" || exit 1
 	screenshot 03-lifecycle-game-hud
 
@@ -1300,11 +1393,21 @@ run_authenticated_lifecycle_smoke() {
 	}
 	screenshot 05-lifecycle-after-duplicate-relaunch
 
+	local settings_row settings_camera settings_mouse settings_sound expected_camera expected_mouse
+	settings_row="$(read_auth_settings)"
+	read -r settings_camera settings_mouse settings_sound <<< "$settings_row"
+	expected_camera="$([[ "$settings_camera" == "1" ]] && echo true || echo false)"
+	expected_mouse="$([[ "$settings_mouse" == "1" ]] && echo true || echo false)"
+	local settings_line logout_x logout_y
 	enable_android_smoke_settings
-	tap_client_xy 330 19
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	settings_line="$(wait_for_settings_state "$expected_camera" "$expected_mouse" 30)" || exit 1
 	sleep 2
 	screenshot 06-lifecycle-settings-open
-	tap_client_xy 385 293
+	logout_x="$(log_int_or_default "$settings_line" logoutX 385)"
+	logout_y="$(log_int_or_default "$settings_line" logoutY 293)"
+	tap_client_xy "$logout_x" "$logout_y"
 	sleep 10
 	disable_android_smoke_settings
 	assert_no_android_runtime_crash "after lifecycle logout" || {
@@ -1313,7 +1416,7 @@ run_authenticated_lifecycle_smoke() {
 	}
 	wait_auth_offline 45 || exit 1
 	screenshot 07-lifecycle-after-logout-login-home
-	tap_pct 50 65
+	tap_existing_user_button
 	sleep 3
 	assert_soft_keyboard_visible
 	screenshot 08-lifecycle-after-logout-keyboard
@@ -2236,6 +2339,40 @@ close_welcome_dialog_if_present() {
     echo "Closing Android welcome dialog at client $client_x,$client_y"
     tap_client_xy "$client_x" "$client_y"
     sleep 2
+}
+
+wait_for_appearance_prompt() {
+    local timeout="${1:-8}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_APPEARANCE_PROMPT " | tail -1 || true)"
+        if [[ "$line" =~ acceptX=([0-9]+).*acceptY=([0-9]+) ]]; then
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
+accept_appearance_prompt_if_present() {
+    local timeout="${1:-8}"
+    local coords client_x client_y
+
+    "$ADB" logcat -c || true
+    coords="$(wait_for_appearance_prompt "$timeout" || true)"
+    if [[ -z "$coords" ]]; then
+        echo "Android appearance prompt not observed; continuing without accepting appearance."
+        return 0
+    fi
+
+    read -r client_x client_y <<< "$coords"
+    echo "Accepting Android appearance prompt at client $client_x,$client_y"
+    tap_client_xy "$client_x" "$client_y"
+    sleep 8
 }
 
 wait_for_inventory_target() {
@@ -3600,7 +3737,7 @@ run_authenticated_logout_smoke() {
     "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
     launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
     screenshot 28-auth-login-home
-    tap_pct 50 65
+    tap_existing_user_button
     sleep 3
     enter_auth_credentials
     screenshot 29-auth-credentials-entered
@@ -3628,7 +3765,7 @@ run_authenticated_logout_smoke() {
 	tap_pct 67 85
 	sleep 10
     screenshot 36-auth-after-logout-login-home
-    tap_pct 50 65
+    tap_existing_user_button
     sleep 3
     assert_soft_keyboard_visible
     screenshot 37-auth-after-logout-existing-user-keyboard
@@ -3661,7 +3798,7 @@ run_authenticated_npc_smoke() {
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3707,7 +3844,7 @@ run_authenticated_object_smoke() {
         enable_android_smoke_object_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_object_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3759,7 +3896,7 @@ run_authenticated_inventory_smoke() {
         enable_android_smoke_inventory_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_inventory_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3820,7 +3957,7 @@ run_authenticated_item_on_object_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_inventory_targets
         enable_android_smoke_object_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3876,7 +4013,7 @@ run_authenticated_item_on_npc_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_inventory_targets
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3926,7 +4063,7 @@ run_authenticated_context_menu_smoke() {
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -3985,7 +4122,7 @@ run_authenticated_edge_context_menu_smoke() {
         enable_android_smoke_npc_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4045,7 +4182,7 @@ run_authenticated_camera_rotate_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_camera
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4096,7 +4233,7 @@ run_authenticated_zoom_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_zoom
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4148,7 +4285,7 @@ run_authenticated_chat_tab_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_chat_tabs
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4209,7 +4346,7 @@ run_authenticated_chat_send_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_chat_send
         enable_android_smoke_npc_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4276,7 +4413,7 @@ run_authenticated_bank_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_bank
         enable_android_smoke_object_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4443,9 +4580,9 @@ run_authenticated_shop_smoke() {
         enable_android_smoke_shop
         enable_android_smoke_npc_targets
         sleep 3
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 1
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4543,7 +4680,7 @@ run_authenticated_equipment_smoke() {
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_inventory_targets
         enable_android_smoke_equipment
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4636,7 +4773,7 @@ run_authenticated_magic_prayer_smoke() {
         enable_android_smoke_magic_prayer
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_magic_prayer
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4679,7 +4816,7 @@ run_authenticated_magic_prayer_smoke() {
         enable_android_smoke_magic_prayer
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_magic_prayer
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4740,7 +4877,7 @@ run_authenticated_world_map_smoke() {
         enable_android_smoke_world_map
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_world_map
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4823,7 +4960,7 @@ run_authenticated_settings_smoke() {
         enable_android_smoke_settings
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_settings
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4855,7 +4992,7 @@ run_authenticated_settings_smoke() {
         "$ADB" logcat -c || true
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_settings
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -4918,7 +5055,7 @@ run_authenticated_ground_loot_smoke() {
         screenshot diagnostic-ground-loot-login-home
         enable_android_smoke_ground_loot
         assert_game_activity_for_input "ground-loot existing-user tap" "ground-loot-lost-before-existing-user" || exit 1
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         assert_game_activity_for_input "ground-loot credentials entry" "ground-loot-lost-before-credentials" || exit 1
         screenshot diagnostic-ground-loot-login-form
@@ -5000,7 +5137,7 @@ run_authenticated_wilderness_target_smoke() {
         assert_game_activity_for_input "wilderness target login launch" "wilderness-target-lost-after-launch" || exit 1
         screenshot 103-auth-wilderness-login-home
         enable_android_smoke_player_targets
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -5104,7 +5241,7 @@ run_authenticated_pvp_stress_smoke() {
         enable_android_smoke_magic_prayer
         enable_android_smoke_player_targets
         enable_android_smoke_walk
-        tap_pct 50 65
+        tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
@@ -5397,7 +5534,7 @@ screenshot 05-manual-server
 
 launch_to_login_home
 screenshot 06-login-home
-tap_pct 50 65
+tap_existing_user_button
 sleep 3
 screenshot 07-existing-user-keyboard
 "$ADB" shell input text testuser
@@ -5409,7 +5546,7 @@ screenshot 08-login-missing-password-error
 
 launch_to_login_home
 screenshot 09-login-home-after-error
-tap_pct 50 65
+tap_existing_user_button
 sleep 3
 screenshot 10-existing-user-keyboard
 "$ADB" shell input text testuser
@@ -5427,7 +5564,7 @@ screenshot 13-existing-user-credentials-saved
 
 launch_to_login_home
 screenshot 14-login-home-after-credentials-save
-tap_pct 50 65
+tap_existing_user_button
 sleep 3
 screenshot 15-saved-credentials-loaded
 "$ADB" shell input keyevent BACK
@@ -5453,7 +5590,7 @@ screenshot 19-background-home
 sleep 3
 ensure_game_activity_from_wrapper
 screenshot 20-resume-login-home
-tap_pct 50 65
+tap_existing_user_button
 sleep 3
 screenshot 21-resume-existing-user-keyboard
 "$ADB" shell input text resumeuser

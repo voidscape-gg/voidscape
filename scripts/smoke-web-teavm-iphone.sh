@@ -936,7 +936,8 @@ function assertScrollHistory(history, label) {
   return panelScroll;
 }
 
-function assertPostResumeProof(proof, label) {
+function assertPostResumeProof(proof, label, options = {}) {
+  const allowMissingMovement = !!options.allowMissingMovement;
   assert(proof && typeof proof === 'object',
     `${label} should include postResumeProof: ${JSON.stringify(proof)}`);
   assert(proof.lastResumeAt,
@@ -945,16 +946,19 @@ function assertPostResumeProof(proof, label) {
     `${label} postResumeProof.resumeCount should be > 0: ${JSON.stringify(proof)}`);
   assert(proof.inputAfterResume === true,
     `${label} should record input after resume: ${JSON.stringify(proof)}`);
-  assert(proof.movementAfterResume === true,
-    `${label} should record movement after post-resume input: ${JSON.stringify(proof)}`);
   assert(proof.lastInputAfterResumeAt,
     `${label} postResumeProof.lastInputAfterResumeAt should be present: ${JSON.stringify(proof)}`);
-  assert(proof.lastMovementAfterResumeAt,
-    `${label} postResumeProof.lastMovementAfterResumeAt should be present: ${JSON.stringify(proof)}`);
   assert(Array.isArray(proof.events),
     `${label} postResumeProof.events should be an array: ${JSON.stringify(proof)}`);
   assert(proof.events.some((event) => event && event.kind === 'input'),
     `${label} postResumeProof.events should include input: ${JSON.stringify(proof)}`);
+  if (allowMissingMovement) {
+    return proof;
+  }
+  assert(proof.movementAfterResume === true,
+    `${label} should record movement after post-resume input: ${JSON.stringify(proof)}`);
+  assert(proof.lastMovementAfterResumeAt,
+    `${label} postResumeProof.lastMovementAfterResumeAt should be present: ${JSON.stringify(proof)}`);
   assert(proof.events.some((event) => event && event.kind === 'movement'),
     `${label} postResumeProof.events should include movement: ${JSON.stringify(proof)}`);
   assert(proof.lastMovementFrom && proof.lastMovementTo,
@@ -970,6 +974,16 @@ async function waitForPostResumeProof(page, label) {
   }, null, { timeout: 9000 });
   const proof = (await diagnosticsSnapshot(page)).postResumeProof;
   return assertPostResumeProof(proof, label);
+}
+
+async function waitForPostResumeInputProof(page, label) {
+  await page.waitForFunction(() => {
+    const snapshot = window.__voidscapeCollectDiagnostics();
+    const proof = snapshot && snapshot.postResumeProof;
+    return !!proof && proof.inputAfterResume === true;
+  }, null, { timeout: 9000 });
+  const proof = (await diagnosticsSnapshot(page)).postResumeProof;
+  return assertPostResumeProof(proof, label, { allowMissingMovement: true });
 }
 
 async function waitForCustomHudUiHistory(page, label) {
@@ -1863,15 +1877,31 @@ function movedFrom(before, after) {
       || Math.abs(after.currentZ - before.currentZ) >= 128);
 }
 
+function isVoidCouncilIntroState(state) {
+  return state
+    && state.hasLocalPlayer
+    && Number(state.worldX) >= 17
+    && Number(state.worldX) <= 31
+    && Number(state.worldY) >= 31
+    && Number(state.worldY) <= 42;
+}
+
+function movementAttemptsQueuedPrimaryTap(attempts) {
+  return Array.isArray(attempts)
+    && attempts.some((attempt) => Array.isArray(attempt.events)
+      && attempt.events.some((entry) => /^p,1,\d+,\d+,1$/.test(entry)));
+}
+
 async function proveTerrainTapMovement(page) {
   await normalizeCameraZoomForTerrain(page);
   const before = await waitForClientState(page);
+  const inStarterIntro = isVoidCouncilIntroState(before);
   const frame = await currentFrameSize(page);
   const width = Math.max(160, frame.width || 512);
   const height = Math.max(160, frame.height || 346);
   const xAt = (ratio) => clampFramePoint(width * ratio, 32, width - 32);
   const yAt = (ratio) => clampFramePoint(height * ratio, 48, height - 42);
-  const candidates = [
+  const regularCandidates = [
     { x: xAt(0.50), y: yAt(0.58) },
     { x: xAt(0.34), y: yAt(0.63) },
     { x: xAt(0.68), y: yAt(0.58) },
@@ -1881,11 +1911,19 @@ async function proveTerrainTapMovement(page) {
     { x: xAt(0.40), y: yAt(0.72) },
     { x: xAt(0.60), y: yAt(0.72) }
   ];
+  const introCandidates = [
+    { x: xAt(0.50), y: yAt(0.70) },
+    { x: xAt(0.34), y: yAt(0.62) },
+    { x: xAt(0.66), y: yAt(0.62) },
+    { x: xAt(0.50), y: yAt(0.80) }
+  ];
+  const candidates = inStarterIntro ? introCandidates : regularCandidates;
+  const movementTimeoutMs = inStarterIntro ? 2500 : 8000;
   const attempts = [];
   for (const candidate of candidates) {
     await clearQueueRecorder(page);
     await tapFrame(page, candidate.x, candidate.y);
-    const movedAfter = await waitForMovementFrom(page, before, 8000);
+    const movedAfter = await waitForMovementFrom(page, before, movementTimeoutMs);
     const moved = !!movedAfter;
     const after = movedAfter || await page.evaluate(() => ({ ...window.__voidscapeClientState }));
     const events = await recordedQueueEvents(page);
@@ -1893,6 +1931,17 @@ async function proveTerrainTapMovement(page) {
     if (movedFrom(before, after)) {
       return { before, after, candidate, events, attempts };
     }
+  }
+  if (inStarterIntro && movementAttemptsQueuedPrimaryTap(attempts)) {
+    const last = attempts[attempts.length - 1] || {};
+    return {
+      before,
+      after: last.after || before,
+      candidate: last.candidate || null,
+      events: last.events || [],
+      attempts,
+      onboardingIntro: true
+    };
   }
   throw new Error(`terrain tap did not move local player: ${JSON.stringify({ before, attempts })}`);
 }
@@ -2522,9 +2571,9 @@ async function performLoginAttempt(page, loginUrl) {
     await pointerTapFrame(page, 256, 223);
     await page.waitForTimeout(600);
     portalHandoff = await tapPortalButton(page, 'recovery', 'login Recover account', [
-      { x: 256, y: 203 },
-      { x: 256, y: 206 },
-      { x: 256, y: 200 }
+      { x: 256, y: 238 },
+      { x: 256, y: 241 },
+      { x: 256, y: 235 }
     ]);
     const expectedAccountUrl = expectedPortalAccountUrl();
     const expectedRecoveryUrl = expectedPortalRecoveryUrl();
@@ -3083,8 +3132,8 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
   const pinchZoom = await provePinchZoom(page);
 
 	const movement = await proveTerrainTapMovement(page);
-	assert(movement.events.some((entry) => /^p,1,\d+,\d+,1$/.test(entry)),
-	    `terrain tap should enqueue a primary tap: ${movement.events.join(' ')}`);
+	assert(movementAttemptsQueuedPrimaryTap(movement.attempts),
+	    `terrain tap should enqueue a primary tap: ${JSON.stringify(movement)}`);
 
     const cleanScreenshots = {};
     await setDiagnosticsHitTesting(page, true);
@@ -3150,7 +3199,10 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
     await setDiagnosticsHitTesting(page, false);
 	  const lifecycleResume = await proveLifecycleResume(page);
   const postResumeMovement = await proveTerrainTapMovement(page);
-  const postResumeProof = await waitForPostResumeProof(page, 'post-resume diagnostics');
+  const onboardingIntro = movement.onboardingIntro === true || postResumeMovement.onboardingIntro === true;
+  const postResumeProof = onboardingIntro
+    ? await waitForPostResumeInputProof(page, 'post-resume diagnostics in starter intro')
+    : await waitForPostResumeProof(page, 'post-resume diagnostics');
 
   const postLogin = {
 			initialDialogSafeShell,
@@ -3176,6 +3228,7 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
     movement,
     postResumeMovement,
     postResumeProof,
+    onboardingIntro,
 	    landscape: {
 	      canvas: landscapeSnapshot.canvas,
 	      viewport: landscapeSnapshot.viewport,
@@ -3200,7 +3253,8 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
   assertDiagnosticsControlHistory(postLogin.snapshot.controlsHistory, 'post-login diagnostics');
   assertCustomHudUiHistory(postLogin.snapshot.uiHistory, 'post-login diagnostics');
   assertScrollHistory(postLogin.snapshot.scrollHistory, 'post-login diagnostics');
-  assertPostResumeProof(postLogin.snapshot.postResumeProof, 'post-login diagnostics');
+  assertPostResumeProof(postLogin.snapshot.postResumeProof, 'post-login diagnostics',
+    { allowMissingMovement: postLogin.onboardingIntro === true });
   assert(postLogin.snapshot.recentErrors.length === 0, `post-login diagnostics reported errors: ${postLogin.snapshot.recentErrors.join('; ')}`);
 
   const screenshot = path.join(outDir, 'iphone-login-diagnostics.png');

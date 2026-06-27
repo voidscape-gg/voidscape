@@ -97,16 +97,22 @@ async function verifyServerConfig() {
 	const text = await readFile(configPath, "utf8");
 	const expectedClientVersion = args.expectedClientVersion || await readClientVersion();
 	const values = {
+		server_name: configValue(text, "server_name"),
+		server_name_welcome: configValue(text, "server_name_welcome"),
 		client_version: configValue(text, "client_version"),
 		enforce_custom_client_version: configValue(text, "enforce_custom_client_version"),
 		want_packet_register: configValue(text, "want_packet_register"),
+		want_pcap_logging: configValue(text, "want_pcap_logging"),
 		production_command_lockdown: configValue(text, "production_command_lockdown"),
 		member_world: configValue(text, "member_world"),
 		want_feature_websockets: configValue(text, "want_feature_websockets")
 	};
+	assertCheck("server branded Voidscape", values.server_name === "Voidscape", String(values.server_name));
+	assertCheck("server welcome branded Voidscape", values.server_name_welcome === "Voidscape", String(values.server_name_welcome));
 	assertCheck("server client version", values.client_version === expectedClientVersion, `${values.client_version} vs expected ${expectedClientVersion}`);
 	assertCheck("server enforces custom client version", values.enforce_custom_client_version === "true", String(values.enforce_custom_client_version));
 	assertCheck("server packet registration disabled", values.want_packet_register === "false", String(values.want_packet_register));
+	assertCheck("server pcap logging disabled", values.want_pcap_logging === "false", String(values.want_pcap_logging));
 	assertCheck("server command lockdown enabled", values.production_command_lockdown === "true", String(values.production_command_lockdown));
 	assertCheck("server member world enabled globally", values.member_world === "true", String(values.member_world));
 	assertCheck("server websockets enabled", values.want_feature_websockets === "true", String(values.want_feature_websockets));
@@ -121,6 +127,8 @@ async function verifyPortalHealth() {
 	assertCheck("portal durable storage", body.storage && body.storage.durable === true, JSON.stringify(body.storage || null));
 	assertCheck("portal temp storage override off", !(body.storage && body.storage.tempDirOverride), JSON.stringify(body.storage || null));
 	assertCheck("portal OpenRSC DB bridge configured", body.openRscDb && body.openRscDb.configured === true, JSON.stringify(body.openRscDb || null));
+	assertCheck("portal public config ready", body.config && body.config.publicReady === true, JSON.stringify(body.config || null));
+	assertCheck("portal abuse salt configured", body.config && body.config.abuseHashSaltConfigured === true, JSON.stringify(body.config || null));
 }
 
 async function verifyPublicLaunchPayload() {
@@ -139,6 +147,13 @@ async function verifyPublicLaunchPayload() {
 		assertCheck("google configured intentionally", google.enabled === true && Boolean(google.clientId), JSON.stringify(google));
 	} else {
 		assertCheck("google hidden", google.enabled === false && !google.clientId, JSON.stringify(google));
+	}
+	const downloads = Array.isArray(body.downloads) ? body.downloads : [];
+	const android = downloads.find((row) => row && row.slug === "android-apk") || {};
+	assertCheck("android APK row present", Boolean(android.slug), JSON.stringify(android));
+	if (android.available === true) {
+		assertCheck("android APK public link", Boolean(android.url) && android.url !== "#", JSON.stringify(android));
+		assertCheck("android APK hash", /^[0-9a-f]{64}$/.test(android.sha256 || ""), JSON.stringify(android));
 	}
 }
 
@@ -216,8 +231,8 @@ async function verifySignupFlow() {
 			password: signupPassword
 		}
 	});
-	assertCheck("staged signup status", signup.status === 201, `HTTP ${signup.status} ${JSON.stringify(signup.body)}`);
-	assertCheck("staged signup issued token", Boolean(signup.body.token), JSON.stringify(signup.body));
+	assertCheck("staged signup status", signup.status === 201, `HTTP ${signup.status} ${safeJson(signup.body)}`);
+	assertCheck("staged signup issued token", Boolean(signup.body.token), safeJson({ token: signup.body.token }));
 	assertAccountPayload("staged signup account payload", signup.body);
 
 	const token = signup.body.token;
@@ -235,20 +250,20 @@ async function verifySignupFlow() {
 		}
 	});
 	assertCheck("created account login status", login.status === 200, `HTTP ${login.status}`);
-	assertCheck("created account login issued token", Boolean(login.body.token), JSON.stringify(login.body));
+	assertCheck("created account login issued token", Boolean(login.body.token), safeJson({ token: login.body.token }));
 	assertAccountPayload("created account login payload", login.body);
 }
 
 function assertAccountPayload(name, body) {
 	const characters = Array.isArray(body.characters) ? body.characters : [];
 	const first = characters[0] || {};
-	assertCheck(`${name}: email`, body.account && body.account.email === signupEmail, JSON.stringify(body.account || null));
-	assertCheck(`${name}: one used character slot`, characters.length === 1, JSON.stringify(characters));
-	assertCheck(`${name}: first character name`, first.name === signupUser, JSON.stringify(first));
-	assertCheck(`${name}: real OpenRSC save`, first.source === "openrsc-sqlite-created", JSON.stringify(first));
-	assertCheck(`${name}: linked save`, first.linkStatus === "linked" && Number.isInteger(first.playerId), JSON.stringify(first));
-	assertCheck(`${name}: starter card waiting`, body.rewards && body.rewards.starterCardStatus === "waiting", JSON.stringify(body.rewards || null));
-	assertCheck(`${name}: one starter card`, body.rewards && body.rewards.starterSubscriptionCards === 1, JSON.stringify(body.rewards || null));
+	assertCheck(`${name}: email`, body.account && body.account.email === signupEmail, safeJson(body.account || null));
+	assertCheck(`${name}: one used character slot`, characters.length === 1, safeJson(characters));
+	assertCheck(`${name}: first character name`, first.name === signupUser, safeJson(first));
+	assertCheck(`${name}: real OpenRSC save`, first.source === "openrsc-sqlite-created", safeJson(first));
+	assertCheck(`${name}: linked save`, first.linkStatus === "linked" && Number.isInteger(first.playerId), safeJson(first));
+	assertCheck(`${name}: starter card waiting`, body.rewards && body.rewards.starterCardStatus === "waiting", safeJson(body.rewards || null));
+	assertCheck(`${name}: one starter card`, body.rewards && body.rewards.starterSubscriptionCards === 1, safeJson(body.rewards || null));
 }
 
 async function verifyWebDeployment() {
@@ -292,7 +307,7 @@ async function verifyWebDeployment() {
 		maxBuffer: 1024 * 1024 * 20
 	});
 	await mkdir(outDir, { recursive: true });
-	await writeFile(resolve(outDir, "verify-command.txt"), `${command.map(shellQuote).join(" ")}\n`);
+	await writeFile(resolve(outDir, "verify-command.txt"), `${redactedCommand(command).map(shellQuote).join(" ")}\n`);
 	await writeFile(resolve(outDir, "stdout.log"), result.stdout || "");
 	await writeFile(resolve(outDir, "stderr.log"), result.stderr || "");
 	assertCheck("web deployment verifier", result.status === 0, `exit ${result.status}; see ${outDir}`);
@@ -337,7 +352,7 @@ async function request(path, options = {}) {
 	await writeFile(resolve(args.out, `${artifactName}-${Date.now()}.json`), JSON.stringify({
 		url: url.href,
 		status: response.status,
-		body: parsed
+		body: redactSensitive(parsed)
 	}, null, 2));
 	return { status: response.status, body: parsed, text };
 }
@@ -438,6 +453,9 @@ function parseArgs(argv) {
 			case "--allow-payment":
 				parsed.allowPayment = true;
 				break;
+			case "--allow-android-apk":
+				parsed.allowAndroidApk = true;
+				break;
 			default:
 				throw new Error(`Unknown option: ${arg}`);
 		}
@@ -454,7 +472,8 @@ Verifies the production-like launch gate for a staged Voidscape deployment:
   - payment and Google provider surfaces are disabled/hidden unless explicitly allowed
   - launch signup rejects punctuation passwords and, with --run-signup, creates one real linked OpenRSC character plus a waiting starter card
   - /play static deployment matches dist/web-teavm/voidscape-web-build.json and optionally runs web login smoke
-  - deployed server config copy has production_command_lockdown: true and want_packet_register: false
+  - deployed server config copy is Voidscape-branded, disables pcap logging,
+    has production_command_lockdown: true, and has want_packet_register: false
 
 Required for the full gate:
   --portal-url URL              Staged portal URL, e.g. https://staging.voidscape.gg/
@@ -475,6 +494,7 @@ Useful options:
   --skip-signup                 Non-mutating dry gate.
   --allow-google                Expect Google to be intentionally configured.
   --allow-payment               Do not fail if payment endpoint is configured.
+  --allow-android-apk           Accepted for older package scripts; Android is verified from /api/public.
   --allow-http                  Permit http:// for local fixtures.
   --insecure                    Pass --insecure to the web deployment verifier.
   --out DIR                     Default: ${defaultOut}.
@@ -564,6 +584,47 @@ function shellQuote(value) {
 	const text = String(value);
 	if (/^[A-Za-z0-9_./:=@+-]+$/.test(text)) return text;
 	return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
+function safeJson(value) {
+	return JSON.stringify(redactSensitive(value));
+}
+
+function redactSensitive(value) {
+	if (Array.isArray(value)) return value.map((item) => redactSensitive(item));
+	if (typeof value === "string") return redactSensitiveString(value);
+	if (!value || typeof value !== "object") return value;
+	const redacted = {};
+	for (const [key, item] of Object.entries(value)) {
+		if (/^(token|sessionToken|session|authorization|password)$/i.test(key)) {
+			redacted[key] = "[redacted]";
+		} else {
+			redacted[key] = redactSensitive(item);
+		}
+	}
+	return redacted;
+}
+
+function redactSensitiveString(value) {
+	return String(value)
+		.replace(/("(?:token|sessionToken|session|authorization|password)"\s*:\s*")[^"]+"/gi, "$1[redacted]\"")
+		.replace(/((?:token|sessionToken|session|authorization|password)=)[^\s&]+/gi, "$1[redacted]");
+}
+
+function redactedCommand(command) {
+	const redactNext = new Set(["--pass", "--qa-pass", "--signup-password"]);
+	const redacted = [];
+	let redact = false;
+	for (const part of command) {
+		if (redact) {
+			redacted.push("[redacted]");
+			redact = false;
+			continue;
+		}
+		redacted.push(part);
+		if (redactNext.has(part)) redact = true;
+	}
+	return redacted;
 }
 
 function escapeRegExp(value) {

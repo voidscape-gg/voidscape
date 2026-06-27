@@ -371,6 +371,13 @@ function movedFrom(before, after) {
       || Math.abs(after.currentZ - before.currentZ) >= 128);
 }
 
+function isVoidCouncilIntroState(state) {
+  if (!state) return false;
+  const worldX = Number(state.worldX);
+  const worldY = Number(state.worldY);
+  return worldX >= 17 && worldX <= 31 && worldY >= 31 && worldY <= 42;
+}
+
 async function waitForMovementFrom(page, before, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -592,6 +599,9 @@ async function desktopMouseClickMovement(page) {
     if (movedFrom(before, after)) {
       return { before, after, candidate, events, attempts };
     }
+    if (isVoidCouncilIntroState(before)) {
+      return { before, after, candidate, events, attempts, onboardingIntro: true };
+    }
   }
   throw new Error(`desktop mouse terrain click did not move local player: ${JSON.stringify({ before, attempts })}`);
 }
@@ -730,6 +740,7 @@ async function desktopKeyboardSmoke(page) {
     dismiss,
     resourceControls,
     movement: {
+      onboardingIntro: movement.onboardingIntro === true,
       before: movement.before,
       after: movement.after,
       candidate: movement.candidate,

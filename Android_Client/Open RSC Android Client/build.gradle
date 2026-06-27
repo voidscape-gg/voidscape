@@ -19,6 +19,11 @@ def uploadSigningReady = file(uploadKeystorePath).isFile()
     && uploadStorePassword.length() > 0
     && uploadKeyPassword != null
     && uploadKeyPassword.length() > 0
+def allowUnsignedRelease = (
+    findProperty("voidscape.android.allowUnsignedRelease")
+        ?: System.getenv("VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE")
+        ?: "false"
+).toString().toBoolean()
 
 tasks.register("syncVoidscapeCache", Sync) {
     from("${rootDir}/../Client_Base/Cache") {
@@ -100,6 +105,28 @@ android {
 
 tasks.named("preBuild").configure {
     dependsOn syncVoidscapeCache
+}
+
+tasks.register("verifyVoidscapeReleaseSigning") {
+    doLast {
+        if (!uploadSigningReady && !allowUnsignedRelease) {
+            throw new GradleException(
+                "Voidscape release APK signing is not configured. Set " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE, " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD, and " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD, or matching " +
+                    "voidscape.android.uploadKeystore.* Gradle properties. " +
+                    "For local unsigned release experiments only, set " +
+                    "VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1."
+            )
+        }
+    }
+}
+
+tasks.matching { task ->
+    task.name == "assembleRelease" || task.name == "bundleRelease"
+}.configureEach {
+    dependsOn tasks.named("verifyVoidscapeReleaseSigning")
 }
 
 dependencies {
