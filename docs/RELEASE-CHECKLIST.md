@@ -129,6 +129,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] Discord access gate listener is running if using the announcement gate.
 - [ ] `docs/community/discord-server-setup.md` permissions still match the live server.
+- [ ] Launch staging bundle is generated with the target host URLs:
+  `scripts/package-launch-staging.sh --host <game-host> --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws-url wss://<portal-host>/play/ws/`
 - [ ] Prelaunch portal signup is backed by production persistence, creates linked game characters, and disables/redirects client packet registration.
 - [ ] Hosted launch staging verifier passes against the deployed portal, web client, WSS endpoint, and deployed server config:
   `scripts/verify-launch-staging.mjs --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws wss://<portal-host>/play/ws/ --server-config <deployed-server.conf> --run-signup`

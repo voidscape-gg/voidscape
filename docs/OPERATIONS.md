@@ -15,6 +15,16 @@ SQLite is fine for local work and small private testing. Move to MariaDB before 
 For a launch-candidate staging deployment, run the hosted gate after syncing the portal, game server, and web client. The command intentionally requires an explicit signup flag because it creates a real staged account and first game character:
 
 ```bash
+scripts/package-launch-staging.sh \
+  --host <game-host> \
+  --portal-url https://<staging-host>/ \
+  --web-url https://<staging-host>/play/ \
+  --ws-url wss://<staging-host>/play/ws/
+```
+
+The package includes a generated `server/local.launch-staging.conf`, `portal/portal.env.staging`, the `/play` static root, a staging-configured launcher, and an Android APK rebuilt with the staging game host. If a remote target is ready, add `--rsync-target user@host:/opt/voidscape-staging` to sync the bundle.
+
+```bash
 scripts/verify-launch-staging.mjs \
   --portal-url https://<staging-host>/ \
   --web-url https://<staging-host>/play/ \
@@ -23,7 +33,7 @@ scripts/verify-launch-staging.mjs \
   --run-signup
 ```
 
-The verifier checks durable portal storage, the OpenRSC DB bridge, portal-first registration, packet registration off, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json`.
+The verifier checks durable portal storage, the OpenRSC DB bridge, portal-first registration, packet registration off, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json` or the package's `play/voidscape-web-build.json`.
 
 ## Build and run
 
