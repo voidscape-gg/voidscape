@@ -6,6 +6,8 @@ cd "$(dirname "$0")/.."
 PORT="${PORT:-8799}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-api.XXXXXX")"
 fixture_db="$tmp_dir/openrsc-fixture.db"
+public_admin_token="portal-public-admin-token-fixture-1234567890"
+public_abuse_salt="portal-public-abuse-salt-fixture-1234567890"
 server_pid=""
 
 cleanup() {
@@ -205,6 +207,8 @@ INSERT INTO players (
 	77, 'SmokeHero', 10, 'smoke@example.com', 'fixture-pass', '', 87, 1194, 122, 509, 28, 319, 4,
 	47, 1780539120, 0, 1, 2, 8, 14, 0, 1, 2
 );
+INSERT INTO players (id, username, group_id, email, pass, salt)
+VALUES (78, 'TakenHero', 10, 'taken@example.com', 'fixture-pass', '');
 INSERT INTO player_cache (playerID, type, key, value) VALUES
 	(77, 1, 'player_title_active', 'conqueror'),
 	(77, 0, 'void_path', '1');
@@ -355,10 +359,11 @@ fi
 
 # ---- PORTAL_PUBLIC_MODE lockdown ----
 public_port=$((PORT + 1))
-PORT="$public_port" \
+	PORT="$public_port" \
 	PORTAL_DATA_DIR="$tmp_dir/public-store" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
-	PORTAL_ADMIN_TOKEN="dev-admin" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
 	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-public-smoke.log 2>&1 &
@@ -371,6 +376,15 @@ for _ in {1..60}; do
 	fi
 	sleep 0.1
 done
+
+public_health_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/health")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.config || payload.config.publicReady !== true) throw new Error('public health should report launch config ready');
+if (payload.config.abuseHashSaltConfigured !== true) throw new Error('public health should report a configured abuse hash salt');
+if (payload.config.adminTokenConfigured !== true) throw new Error('public health should report a configured admin token');
+if ((payload.config.issues || []).length) throw new Error('public health should not report config issues: ' + JSON.stringify(payload.config.issues));
+" "$public_health_payload"
 
 expect_status() {
 	local expected="$1"; shift
@@ -404,8 +418,11 @@ fi
 if [[ -f "PC_Launcher/OpenRSC.jar" ]]; then
 	expect_status 200 "http://127.0.0.1:${public_port}/downloads/launcher"
 fi
-if [[ -f "Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk" ]]; then
+default_android_apk="Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
+if [[ -f "$default_android_apk" ]]; then
 	expect_status 200 "http://127.0.0.1:${public_port}/downloads/android-apk"
+else
+	expect_status 404 "http://127.0.0.1:${public_port}/downloads/android-apk"
 fi
 
 # /api/public is sanitized: no fake live-world stats, flagged for the UI
@@ -419,6 +436,20 @@ grep -q '"openAt": "2026-07-11T18:00:00.000Z"' <<<"$public_payload" || { echo "p
 grep -q '"Play in browser"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web client action"; exit 1; }
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+const apkBuilt = process.argv[2] === '1';
+const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+if (!android) throw new Error('public payload should keep an Android APK row for launch-open UI copy');
+if (apkBuilt) {
+	if (android.available !== true) throw new Error('built Android APK should be public in the launch-open chooser');
+	if (android.url !== '/downloads/android-apk') throw new Error('built Android APK should link to /downloads/android-apk');
+	if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('built Android APK should expose sha256');
+} else {
+	if (android.available === true) throw new Error('missing Android APK should not be marked available');
+	if (android.url !== '#') throw new Error('missing Android APK row should not link to a download');
+}
+" "$public_payload" "$([[ -f "$default_android_apk" ]] && printf 1 || printf 0)"
 	grep -q '"blocked24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized integrity counts"; exit 1; }
 	grep -q '"staffMints24h": 2' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized item receipt counts"; exit 1; }
 	grep -q '"npcDrops24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized npc drop receipt counts"; exit 1; }
@@ -447,7 +478,16 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q 'data-prelaunch-auth-cta' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
 	grep -q 'One account. Every platform.' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
+	grep -q 'href="/privacy"' <<<"$landing_html" || { echo "landing page should link to the privacy policy"; exit 1; }
+	grep -q 'href="/data-deletion"' <<<"$landing_html" || { echo "landing page should link to data deletion"; exit 1; }
+	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$landing_html" || { echo "landing page should link to the Voidscape AGPL source mirror"; exit 1; }
+	if grep -q 'Open-RSC/Core-Framework' <<<"$landing_html"; then
+		echo "landing page should not use upstream-only source disclosure"
+		exit 1
+	fi
 	grep -q 'landing-install-help' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
+	grep -q 'id="download-actions" hidden' <<<"$landing_html" || { echo "landing page should keep post-launch download actions hidden before launch"; exit 1; }
+	grep -q 'id="landing-launch-proof" hidden' <<<"$landing_html" || { echo "landing page should keep launch proof hidden before launch"; exit 1; }
 	if grep -q 'landing-live-basics' <<<"$landing_html"; then
 		echo "prelaunch landing should not include the redundant live basics strip"
 		exit 1
@@ -468,6 +508,22 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q 'transparency.js' <<<"$transparency_html" || { echo "/transparency should load the standalone transparency script"; exit 1; }
 	grep -q 'trust-staff-board' <<<"$transparency_html" || { echo "/transparency should include the staff ledger board"; exit 1; }
 	grep -q 'trust-source-board' <<<"$transparency_html" || { echo "/transparency should include the build proof board"; exit 1; }
+	expect_status 200 "http://127.0.0.1:${public_port}/privacy"
+	expect_status 200 "http://127.0.0.1:${public_port}/data-deletion"
+	privacy_html="$(curl -fsS "http://127.0.0.1:${public_port}/privacy")"
+	grep -q 'Voidscape account data should stay boring and explainable.' <<<"$privacy_html" || { echo "/privacy should render the policy copy"; exit 1; }
+	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$privacy_html" || { echo "/privacy should link to the Voidscape AGPL source mirror"; exit 1; }
+	if grep -q 'Open-RSC/Core-Framework' <<<"$privacy_html"; then
+		echo "/privacy should not use upstream-only source disclosure"
+		exit 1
+	fi
+	deletion_html="$(curl -fsS "http://127.0.0.1:${public_port}/data-deletion")"
+	grep -q 'Request account data deletion.' <<<"$deletion_html" || { echo "/data-deletion should render the deletion flow"; exit 1; }
+	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$deletion_html" || { echo "/data-deletion should link to the Voidscape AGPL source mirror"; exit 1; }
+	if grep -q 'Open-RSC/Core-Framework' <<<"$deletion_html"; then
+		echo "/data-deletion should not use upstream-only source disclosure"
+		exit 1
+	fi
 
 	integrity_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/integrity")"
 	grep -q '"total24h": 2' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose exported staff command totals"; exit 1; }
@@ -483,13 +539,49 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 
 # admin stays available with the token, refused without
 expect_status 403 "http://127.0.0.1:${public_port}/api/admin/signups"
-admin_funnel="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/funnel")"
+admin_funnel="$(curl -fsS -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${public_port}/api/admin/funnel")"
 grep -q '"event": "transparency"' <<<"$admin_funnel" || { echo "admin funnel summary should include tracked transparency clicks"; exit 1; }
-admin_signups="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/signups")"
+admin_signups="$(curl -fsS -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${public_port}/api/admin/signups")"
 grep -q '"PublicGuy"' <<<"$admin_signups" || { echo "public-mode admin signup list should include the signup"; exit 1; }
 
 kill "$public_pid" >/dev/null 2>&1 || true
 wait "$public_pid" >/dev/null 2>&1 || true
+trap cleanup EXIT
+
+# Public Android APK downloads can also be pointed at an explicit artifact path.
+android_public_port=$((PORT + 3))
+android_release_apk="$tmp_dir/voidscape-release.apk"
+dd if=/dev/zero of="$android_release_apk" bs=2048 count=1 >/dev/null 2>&1
+	PORT="$android_public_port" \
+	PORTAL_DATA_DIR="$tmp_dir/android-public-store" \
+	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_ANDROID_APK="$android_release_apk" \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-android-public-smoke.log 2>&1 &
+android_public_pid="$!"
+trap 'kill "$android_public_pid" >/dev/null 2>&1 || true; cleanup' EXIT
+
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${android_public_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+android_public_payload="$(curl -fsS "http://127.0.0.1:${android_public_port}/api/public")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+if (!android || android.available !== true) throw new Error('explicit public Android APK should be available');
+if (android.url !== '/downloads/android-apk') throw new Error('explicit public Android APK should link to /downloads/android-apk');
+if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('explicit public Android APK should expose sha256');
+" "$android_public_payload"
+expect_status 200 "http://127.0.0.1:${android_public_port}/downloads/android-apk"
+
+kill "$android_public_pid" >/dev/null 2>&1 || true
+wait "$android_public_pid" >/dev/null 2>&1 || true
 trap cleanup EXIT
 
 # ---- PORTAL_LAUNCH_SIGNUP_MODE public account flow ----
@@ -498,7 +590,8 @@ PORT="$launch_port" \
 	PORTAL_DATA_DIR="$tmp_dir/launch-store" \
 	PORTAL_OPENRSC_DB="$fixture_db" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
-	PORTAL_ADMIN_TOKEN="dev-admin" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
 	PORTAL_LAUNCH_SIGNUP_MODE=1 \
 	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
@@ -522,6 +615,10 @@ if (!payload.publicMode) throw new Error('launch health should report public mod
 if (!payload.launchSignupMode) throw new Error('launch health should report launch-signup mode');
 if (!payload.storage || payload.storage.durable !== true) throw new Error('launch health should report durable portal storage');
 if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('launch health should report the OpenRSC DB bridge');
+if (!payload.config || payload.config.publicReady !== true) throw new Error('launch health should report public config ready');
+if (payload.config.abuseHashSaltConfigured !== true) throw new Error('launch health should report a configured abuse hash salt');
+if (payload.config.adminTokenConfigured !== true) throw new Error('launch health should report a configured admin token');
+if ((payload.config.issues || []).length) throw new Error('launch health should not report config issues: ' + JSON.stringify(payload.config.issues));
 " "$launch_health_payload"
 grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
 grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the global members-world flag"; exit 1; }
@@ -564,6 +661,54 @@ const payload = JSON.parse(process.argv[1]);
 if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('returning login should expose one used character slot');
 if (payload.characters[0].name !== 'LaunchGuy') throw new Error('returning login should expose the first character');
 " "$launch_login"
+launch_login_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_login")"
+if [[ -z "$launch_login_token" ]]; then
+	echo "launch-signup returning login returned an empty token"
+	exit 1
+fi
+
+launch_recovery_codes="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/security/recovery-codes" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.codes) || payload.codes.length !== 8) throw new Error('launch-signup recovery endpoint should generate eight one-time codes');
+if (!payload.security || !payload.security.recoveryCodes || payload.security.recoveryCodes.activeCount !== 8) throw new Error('launch-signup security state should count active recovery codes');
+" "$launch_recovery_codes"
+launch_recovery_code="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write((payload.codes && payload.codes[0]) || '');" "$launch_recovery_codes")"
+if [[ -z "$launch_recovery_code" ]]; then
+	echo "launch-signup recovery endpoint returned an empty code"
+	exit 1
+fi
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/recover-password" \
+	-H 'content-type: application/json' \
+	-d '{"email":"launch-guy@example.com","code":"VOID-BAD-BAD","newPassword":"Launchpass2"}'
+
+launch_recovered="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/recover-password" \
+	-H 'content-type: application/json' \
+	-d "{\"email\":\"launch-guy@example.com\",\"code\":\"${launch_recovery_code}\",\"newPassword\":\"Launchpass2\"}")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.token) throw new Error('launch-signup password recovery should issue a new session');
+if (!payload.security || !payload.security.recoveryCodes || payload.security.recoveryCodes.activeCount !== 7) throw new Error('launch-signup password recovery should consume exactly one recovery code');
+if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('launch-signup password recovery should preserve the character roster');
+" "$launch_recovered"
+launch_recovered_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_recovered")"
+if [[ -z "$launch_recovered_token" || "$launch_recovered_token" == "$launch_token" || "$launch_recovered_token" == "$launch_login_token" ]]; then
+	echo "launch-signup password recovery should create a fresh session token"
+	exit 1
+fi
+expect_status 401 -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account"
+expect_status 401 -H "authorization: Bearer ${launch_login_token}" "http://127.0.0.1:${launch_port}/api/account"
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass1"}'
+launch_login_after_recovery="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
+grep -q '"token":' <<<"$launch_login_after_recovery" || { echo "launch-signup recovered password should support returning login"; exit 1; }
+launch_token="$launch_recovered_token"
 
 launch_player_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
 if [[ "$launch_player_count" != "1" ]]; then
@@ -582,15 +727,52 @@ if [[ "$launch_starter_card_state" != "1" ]]; then
 	exit 1
 fi
 
-launch_admin_waiting="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${launch_port}/api/admin/accounts/1")"
+launch_admin_waiting="$(curl -fsS -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${launch_port}/api/admin/accounts/1")"
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin account state should show starter card waiting');
 if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin account state should expose one waiting starter card');
 " "$launch_admin_waiting"
+launch_starter_marker_total_before_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+
+launch_extra_character="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/characters" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"name":"LaunchAlt","gamePassword":"Launchalt1"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 2) throw new Error('creating a second launch character should use a second character slot');
+const extra = payload.characters.find((character) => character.name === 'LaunchAlt');
+if (!extra) throw new Error('second launch character should appear in the account roster');
+if (extra.source !== 'openrsc-sqlite-created') throw new Error('second launch character should create a real OpenRSC save');
+if (extra.linkStatus !== 'linked') throw new Error('second launch character should be linked to the account');
+if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('second character creation should leave the starter card waiting');
+if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('second character creation should not grant another starter card');
+if (!Array.isArray(payload.rewards.cards) || payload.rewards.cards.length !== 1) throw new Error('second character creation should leave exactly one visible starter-card entitlement');
+" "$launch_extra_character"
+launch_player_count_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username IN ('LaunchGuy', 'LaunchAlt') AND group_id=10;")"
+if [[ "$launch_player_count_after_extra" != "2" ]]; then
+	echo "second launch character creation should create exactly two normal User-ranked OpenRSC players"
+	exit 1
+fi
+launch_extra_link_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchAlt';")"
+if [[ "$launch_extra_link_count" != "1" ]]; then
+	echo "second launch OpenRSC player should be linked to the same web account"
+	exit 1
+fi
+launch_starter_marker_count_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
+if [[ "$launch_starter_marker_count_after_extra" != "1" ]]; then
+	echo "second launch character creation should preserve exactly one waiting starter card marker"
+	exit 1
+fi
+launch_starter_marker_total_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+if [[ "$launch_starter_marker_total_after_extra" != "$launch_starter_marker_total_before_extra" ]]; then
+	echo "second launch character creation should not mint additional starter-card markers"
+	exit 1
+fi
 
 launch_revoke="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
-	-H 'x-portal-admin-token: dev-admin' \
+	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \
 	-d '{"action":"revoke"}')"
 node -e "
@@ -605,7 +787,7 @@ if [[ "$launch_waiting_after_revoke" != "0" ]]; then
 fi
 
 launch_grant="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
-	-H 'x-portal-admin-token: dev-admin' \
+	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \
 	-d '{"action":"grant"}')"
 node -e "
@@ -629,7 +811,7 @@ if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('clai
 " "$launch_account_claimed"
 
 launch_revoke_claimed="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
-	-H 'x-portal-admin-token: dev-admin' \
+	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \
 	-d '{"action":"revoke"}')"
 node -e "

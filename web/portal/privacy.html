@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape Privacy</title>
+	<meta name="description" content="Voidscape privacy policy for prelaunch account reservations, account management, starter-card abuse checks, and public transparency data.">
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="preload" as="image" href="assets/prelaunch/voidscape-launcher-logo.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body class="prelaunch-mode transparency-mode policy-mode">
+	<main class="prelaunch-page landing-redesign transparency-page policy-page" aria-label="Voidscape privacy policy">
+		<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
+		<div class="prelaunch-vignette" aria-hidden="true"></div>
+
+		<div class="prelaunch-content landing-page-inner transparency-page-inner policy-page-inner">
+			<header class="landing-nav" id="home">
+				<a class="landing-brand" href="/" aria-label="Voidscape home">
+					<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+				</a>
+				<nav class="landing-nav-links" aria-label="Privacy navigation">
+					<a href="/">Prelaunch</a>
+					<a href="/#account">Account</a>
+					<a href="/transparency">Trust</a>
+					<a href="/data-deletion">Data Deletion</a>
+				</nav>
+				<a class="landing-nav-cta" href="/">Reserve Name</a>
+			</header>
+
+			<section class="landing-integrity transparency-hub policy-hub" aria-labelledby="privacy-title">
+				<div class="landing-integrity-head">
+					<div>
+						<p class="landing-kicker">Privacy</p>
+						<h1 id="privacy-title">Voidscape account data should stay boring and explainable.</h1>
+						<p>Effective June 27, 2026. This policy covers the Voidscape website, prelaunch signup, account management, downloads, and public trust pages.</p>
+					</div>
+					<div class="integrity-seal" aria-label="Privacy promise">
+						<span>Prelaunch policy</span>
+						<strong>We collect what the account flow needs, keep abuse signals hashed, and do not sell player data.</strong>
+					</div>
+				</div>
+
+				<div class="policy-grid">
+					<article>
+						<span>01</span>
+						<h2>What We Collect</h2>
+						<p>Account signup stores your email address, chosen username, password hash, session hashes, character links, recovery-code hashes, starter-card entitlement state, and account security events.</p>
+						<p>If Google sign-in is enabled, the portal stores the Google account id, verified email, display name, and avatar URL returned by Google. Discord links, if enabled, store the Discord identity and role metadata needed for community access.</p>
+					</article>
+					<article>
+						<span>02</span>
+						<h2>Game And Entitlement Data</h2>
+						<p>The portal may create or link OpenRSC game characters, read safe character snapshot fields, and write account-level markers such as <code>web_account_id</code>, <code>starter_card:&lt;accountId&gt;</code>, and subscription expiry markers so the Lumbridge vendor and portal agree.</p>
+					</article>
+					<article>
+						<span>03</span>
+						<h2>Abuse Protection</h2>
+						<p>To prevent starter-card abuse, the portal stores salted hashes of IP, email, and identity signals with counters and review reasons. These signals are for account protection and staff review, not public display.</p>
+					</article>
+					<article>
+						<span>04</span>
+						<h2>Public Transparency</h2>
+						<p>Public trust pages show aggregate staff-action, build, item-history, and account-integrity summaries. They intentionally exclude raw IP addresses, private identifiers, full command arguments, and private findings.</p>
+					</article>
+					<article>
+						<span>05</span>
+						<h2>Downloads And Logs</h2>
+						<p>Normal web server logs may include IP address, user agent, request path, timestamp, and download requests. The portal also records lightweight funnel clicks so launch links can be checked for broken or confusing paths.</p>
+					</article>
+					<article>
+						<span>06</span>
+						<h2>Your Choices</h2>
+						<p>You can use email/password signup without Google when Google is optional, generate recovery codes, rotate your password, end other sessions, or request deletion of portal account data through the process below.</p>
+					</article>
+					<article>
+						<span>07</span>
+						<h2>Deletion Requests</h2>
+						<p>Use the <a href="/data-deletion">data deletion page</a> for the deletion process. Some game records, fraud-prevention records, security logs, and AGPL/source-distribution records may be retained where needed to operate the service, prevent abuse, or satisfy legal obligations.</p>
+					</article>
+					<article>
+						<span>08</span>
+						<h2>Contact</h2>
+						<p>Email <a href="mailto:support@voidscape.gg">support@voidscape.gg</a> or contact staff through the official Voidscape community channels for privacy, access, correction, or deletion requests.</p>
+					</article>
+				</div>
+			</section>
+
+			<section class="landing-final transparency-final" aria-label="Voidscape policies">
+				<div>
+					<p class="landing-kicker">Account control</p>
+					<h2>Need data removed?</h2>
+				</div>
+				<div class="landing-final-actions">
+					<a class="landing-button landing-button-primary" href="/data-deletion">Data Deletion</a>
+					<a class="landing-button landing-button-secondary" href="/">Back to Prelaunch</a>
+				</div>
+			</section>
+
+			<footer class="landing-footer">
+				<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+				<div>
+					<a href="/">Prelaunch</a>
+					<a href="/transparency">Trust</a>
+					<a href="/privacy">Privacy</a>
+					<a href="/data-deletion">Data Deletion</a>
+					<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">AGPL Source</a>
+				</div>
+			</footer>
+		</div>
+	</main>
+</body>
+</html>

@@ -114,6 +114,7 @@
 	var signupCodeHelp = document.getElementById("signup-code-help");
 	var copySignupCode = document.getElementById("copy-signup-code");
 	var betaCountdown = document.getElementById("beta-countdown");
+	var betaCountdownLabel = document.getElementById("beta-countdown-label");
 	var betaCountdownDays = document.getElementById("beta-countdown-days");
 	var betaCountdownHours = document.getElementById("beta-countdown-hours");
 	var betaCountdownMinutes = document.getElementById("beta-countdown-minutes");
@@ -121,6 +122,18 @@
 	var betaSignupCounter = document.getElementById("beta-signup-counter");
 	var betaSignupCount = document.getElementById("beta-signup-count");
 	var betaCountdownNote = document.getElementById("beta-countdown-note");
+	var landingHeroKicker = document.getElementById("landing-hero-kicker");
+	var landingHeroTitle = document.getElementById("landing-hero-title");
+	var landingHeroProof = document.getElementById("landing-hero-proof");
+	var landingNavPrimaryCta = document.getElementById("landing-nav-primary-cta");
+	var landingHeroPrimaryCta = document.getElementById("landing-hero-primary-cta");
+	var landingPlatformPrimaryCta = document.getElementById("landing-platform-primary-cta");
+	var landingFinalPrimaryCta = document.getElementById("landing-final-primary-cta");
+	var landingPlatformLabel = document.getElementById("landing-platform-label");
+	var landingPlatformTitle = document.getElementById("landing-platform-title");
+	var landingPlatformCopy = document.getElementById("landing-platform-copy");
+	var landingReservePrompt = document.getElementById("landing-reserve-prompt");
+	var landingLaunchProof = document.getElementById("landing-launch-proof");
 	var founderProgressLabel = document.getElementById("founder-progress-label");
 	var founderRewardLabel = document.getElementById("founder-reward-label");
 	var founderProgressFill = document.getElementById("founder-progress-fill");
@@ -256,6 +269,7 @@
 	var betaDownloadRows = [];
 	var launchCountdownState = null;
 	var launchCountdownTimer = 0;
+	var launchOpenActive = false;
 	var googleClientId = "";
 	var googleNonce = "";
 	var googleButtonRendered = false;
@@ -1370,6 +1384,7 @@
 		}
 		launchCountdownState = schedule && schedule.openAt ? schedule : null;
 		if (!launchCountdownState) {
+			setLaunchOpenState(false);
 			setCountdownValue("--", "--", "--", "--");
 			if (betaCountdownNote) {
 				betaCountdownNote.textContent = "Launch date is being finalized. Reservations and codes are open now.";
@@ -1392,12 +1407,16 @@
 		if (founderTitle) {
 			founderTitle.textContent = signInMode
 				? "Sign in to account management"
-				: launchSignupModeActive ? "Reserve your account name" : "Reserve your username";
+				: launchSignupModeActive
+				? (launchOpenActive ? "Create your account and character" : "Reserve your account name")
+				: launchOpenActive ? "Create your launch username" : "Reserve your username";
 		}
 		if (founderSubmit) {
 			founderSubmit.textContent = signInMode
 				? "Sign in"
-				: launchSignupModeActive ? "Reserve name + free card" : "Reserve & get my code";
+				: launchSignupModeActive
+				? (launchOpenActive ? "Create account + character" : "Reserve name + free card")
+				: launchOpenActive ? "Create launch code" : "Reserve & get my code";
 		}
 		if (founderPassword) {
 			if (launchSignupModeActive) {
@@ -1414,7 +1433,11 @@
 			founderMessage.textContent = signInMode
 				? "Use your email and password to manage characters, recovery, and launch rewards."
 				: launchSignupModeActive
-				? "Reserve your account name, create your first character, and get one free 1-week subscription card."
+				? (launchOpenActive
+					? "Create your account, first character, and starter card, then choose a play option below."
+					: "Reserve your account name, create your first character, and get one free 1-week subscription card.")
+				: launchOpenActive
+				? "Create your launch username and keep your subscription card code."
 				: "Reserve your launch username and keep your subscription card code.";
 		}
 		updatePrelaunchAuthCtas();
@@ -1554,9 +1577,11 @@
 		var openAtMs = Date.parse(launchCountdownState.openAt);
 		if (!Number.isFinite(openAtMs)) {
 			setCountdownValue("--", "--", "--", "--");
+			setLaunchOpenState(false);
 			return;
 		}
 		var remaining = Math.max(0, openAtMs - Date.now());
+		setLaunchOpenState(remaining <= 0);
 		var totalSeconds = Math.floor(remaining / 1000);
 		var days = Math.floor(totalSeconds / 86400);
 		var hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -1568,8 +1593,54 @@
 				? (launchSignupModeActive
 						? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
-				: "Launch window is here. Check the launcher and Discord for final world-open status.";
+				: "Launch is open. Create or manage your account, then play in the browser or download a client.";
 		}
+	}
+
+	function setLaunchOpenState(isOpen) {
+		var changed = launchOpenActive !== Boolean(isOpen);
+		launchOpenActive = Boolean(isOpen);
+		document.body.classList.toggle("launch-open", launchOpenActive);
+		if (landingHeroKicker) landingHeroKicker.textContent = launchOpenActive ? "Now open" : "Prelaunch";
+		if (landingHeroTitle) {
+			landingHeroTitle.innerHTML = launchOpenActive
+				? "<span>Voidscape</span> is open."
+				: "<span>Voidscape</span> launches soon.";
+		}
+		if (landingHeroProof) {
+			landingHeroProof.innerHTML = launchOpenActive
+				? "<span>Create or manage your account.</span><span>Play in browser or download a client.</span><span>Your starter card is waiting at Lumbridge.</span>"
+				: "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>";
+		}
+		if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
+		setText(landingNavPrimaryCta, launchOpenActive ? "Create Account" : "Reserve Name");
+		setText(landingHeroPrimaryCta, launchOpenActive ? "Create Account + Play" : "Reserve Name + Free Card");
+		setText(landingPlatformPrimaryCta, launchOpenActive ? "Create or Manage Account" : "Reserve Name + Free Card");
+		setText(landingFinalPrimaryCta, launchOpenActive ? "Create Account + Play" : "Reserve Name + Free Card");
+		if (landingPlatformLabel) landingPlatformLabel.textContent = launchOpenActive ? "Play now" : "Launch platform support";
+		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Every platform.";
+		if (landingPlatformCopy) {
+			landingPlatformCopy.textContent = launchOpenActive
+				? "Play in the browser on desktop or mobile, download the desktop launcher, or use the Android APK when it is available. Your portal account and characters work across the supported clients."
+				: "Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.";
+		}
+		if (landingReservePrompt) {
+			var promptLabel = landingReservePrompt.querySelector("span");
+			if (promptLabel) promptLabel.textContent = launchOpenActive ? "Account action" : "Prelaunch action";
+		}
+		if (landingLaunchProof) landingLaunchProof.hidden = !launchOpenActive;
+		if (!launchOpenActive && downloadActions) {
+			downloadActions.hidden = true;
+			downloadActions.innerHTML = "";
+		}
+		if (changed) {
+			updateLaunchSignupCopy();
+			if (betaDownloadRows.length) renderDownloads(betaDownloadRows);
+		}
+	}
+
+	function setText(element, value) {
+		if (element) element.textContent = value;
 	}
 
 	function setCountdownValue(days, hours, minutes, seconds) {
@@ -1962,9 +2033,6 @@
 		if (queueCharacter) {
 			queueCharacter.disabled = !sessionToken || characters.length >= maxCharacters;
 		}
-		if (characterMessage && !sessionToken) {
-			characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
-		}
 	}
 
 	function applyFounderState(apiFounder) {
@@ -2285,6 +2353,15 @@
 		rosterTitle.textContent = characters.length + " character" + (characters.length === 1 ? "" : "s");
 		if (slotBadge) slotBadge.textContent = Math.max(0, maxCharacters - characters.length) + " open";
 		queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+		if (characterMessage) {
+			if (!sessionToken) {
+				characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
+			} else if (characters.length >= maxCharacters) {
+				characterMessage.textContent = "Roster is full. Web accounts are capped at 10 characters.";
+			} else {
+				characterMessage.textContent = "Create another game login with its own 4-20 letter and number password.";
+			}
+		}
 		if (!characters.length) {
 			characterCards.innerHTML = [
 				'<div class="empty-roster">',
@@ -2691,8 +2768,14 @@
 			? "Rotate codes"
 			: "New codes";
 		if (passwordForm) passwordForm.hidden = !passwordEnabled;
-		if (securityMessage && !passwordEnabled && auth.googleConnected) {
-			securityMessage.textContent = "Google sign-in is active. Password controls are hidden for this account.";
+		if (securityMessage) {
+			if (!passwordEnabled && auth.googleConnected) {
+				securityMessage.textContent = "Google sign-in is active. Password controls are hidden for this account.";
+			} else if (security.recoveryCodes && security.recoveryCodes.activeCount > 0) {
+				securityMessage.textContent = "Recovery codes are ready. Rotate them any time you need a fresh set.";
+			} else {
+				securityMessage.textContent = "Generate recovery codes and review sessions before launch day.";
+			}
 		}
 		renderSessions(security.sessions || []);
 	}
@@ -3070,6 +3153,11 @@
 
 	function renderDownloads(rows) {
 		if (!downloadActions) return;
+		if (!launchOpenActive) {
+			downloadActions.hidden = true;
+			downloadActions.innerHTML = "";
+			return;
+		}
 		var publicRows = rows.filter(function (row) {
 			return isPublicDownloadRow(row);
 		});
@@ -3080,6 +3168,7 @@
 		if (launcherRow && prelaunchDownload) {
 			prelaunchDownload.href = launcherRow.url;
 		}
+		downloadActions.hidden = false;
 		downloadActions.innerHTML = displayRows.map(function (row) {
 			var available = Boolean(row.available && row.url && row.url !== "#");
 			var tag = available ? "a" : "button";
@@ -3118,7 +3207,7 @@
 		var manifest = build.manifest || {};
 		var patch = state.status && state.status.patch ? String(state.status.patch) : "beta";
 		if (landingLiveBuild) {
-			landingLiveBuild.textContent = patch === "prelaunch" || patch === "countdown"
+			landingLiveBuild.textContent = patch === "prelaunch" || patch === "countdown" || patch === "launch"
 				? "Launch build"
 				: patch === "beta" ? "Beta build" : "Build " + patch;
 		}

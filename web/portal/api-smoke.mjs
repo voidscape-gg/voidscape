@@ -226,6 +226,16 @@ const heldNameBlocked = await api("/api/characters", {
 });
 assert(heldNameBlocked.error === "username_reserved", "character creation should respect founder reservations held by another email");
 
+const existingGameNameBlocked = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "TakenHero",
+		email: "taken-squatter@example.com"
+	},
+	expectStatus: 409
+});
+assert(existingGameNameBlocked.error === "username_reserved", "founder reservations should respect existing OpenRSC character names");
+
 const originalToken = token;
 const secondLogin = await api("/api/accounts/login", {
 	method: "POST",
@@ -422,6 +432,16 @@ for (let i = 2; i <= 10; i += 1) {
 	assert(created.source === "openrsc-sqlite-created", `Smoke${i} should report the OpenRSC creation source`);
 	assert(created.playerId > 77, `Smoke${i} should expose the OpenRSC player id`);
 }
+
+const existingPortalCharacterBlocked = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "Smoke2",
+		email: "smoke-two-squatter@example.com"
+	},
+	expectStatus: 409
+});
+assert(existingPortalCharacterBlocked.error === "username_reserved", "founder reservations should respect already-created portal characters");
 
 const overflow = await api("/api/characters", {
 	method: "POST",

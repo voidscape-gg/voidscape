@@ -53,8 +53,12 @@ const subscriptionXpBonus = 1;
 const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
 const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || signupIpDailyLimit));
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
-const abuseHashSalt = process.env.PORTAL_ABUSE_HASH_SALT || "voidscape-portal-dev";
+const defaultAbuseHashSalt = "voidscape-portal-dev";
+const abuseHashSaltInput = process.env.PORTAL_ABUSE_HASH_SALT || "";
+const abuseHashSalt = abuseHashSaltInput || defaultAbuseHashSalt;
 const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
+const abuseHashSaltConfigured = configuredSecret(abuseHashSaltInput, defaultAbuseHashSalt);
+const adminTokenConfigured = configuredSecret(adminToken, "");
 const discordApiBase = process.env.PORTAL_DISCORD_API_BASE || "https://discord.com/api/v10";
 const discordClientId = process.env.PORTAL_DISCORD_CLIENT_ID || "";
 const discordClientSecret = process.env.PORTAL_DISCORD_CLIENT_SECRET || "";
@@ -140,6 +144,31 @@ function configuredNonNegativeInteger(envName, value) {
 		throw new Error(`${envName} must be a non-negative integer`);
 	}
 	return number;
+}
+
+function configuredSecret(value, fallback) {
+	const text = String(value || "").trim();
+	if (!text || text === fallback) return false;
+	const lowered = text.toLowerCase();
+	if (lowered === "dev" || lowered === "test" || lowered === "dev-admin") return false;
+	if (lowered.includes("change_me") || lowered.includes("changeme")) return false;
+	return text.length >= 16;
+}
+
+function portalConfigHealth() {
+	const issues = [];
+	if (publicMode && !abuseHashSaltConfigured) {
+		issues.push("abuse_hash_salt_not_configured");
+	}
+	if (adminToken && !adminTokenConfigured) {
+		issues.push("admin_token_weak");
+	}
+	return {
+		publicReady: issues.length === 0,
+		abuseHashSaltConfigured,
+		adminTokenConfigured,
+		issues
+	};
 }
 
 function configuredBetaSignupCounterStartedAt() {
@@ -253,58 +282,17 @@ const betaContent = {
 		{ group: "Settings", access: "All testers", command: "::toggleblockprivate", note: "Toggle private message blocking while testing social flows." },
 		{ group: "Settings", access: "All testers", command: "::toggleblocktrade", note: "Toggle trade request blocking." },
 		{ group: "Settings", access: "All testers", command: "::toggleblockduel", note: "Toggle duel request blocking." },
-		{ group: "Movement", access: "Beta admin", command: "::goto <x> <y>", note: "Teleport to exact test coordinates." },
-		{ group: "Movement", access: "Beta admin", command: "::goto <town>", note: "Teleport to a named town if configured." },
-		{ group: "Movement", access: "Beta admin", command: "::return", note: "Return after teleport/summon flows when available." },
-		{ group: "Movement", access: "Beta admin", command: "::pf <x> <y>", note: "Check whether world pathfinding can route there." },
-		{ group: "Movement", access: "Beta admin", command: "::pathto <x> <y>", note: "Autowalk to coordinates using server pathfinding." },
-		{ group: "Utility", access: "Beta admin", command: "::quickbank", note: "Open your bank immediately." },
-		{ group: "Utility", access: "Beta admin", command: "::quickauction", note: "Open the Auction House immediately." },
-		{ group: "Utility", access: "Beta admin", command: "::workbenchahfixture", note: "Seed deterministic Auction House listings and market intel rows." },
-		{ group: "Inventory", access: "Beta admin", command: "::item <id/name> <amount>", note: "Spawn an item into your inventory. Use sparingly around economy tests." },
-		{ group: "Inventory", access: "Beta admin", command: "::item <id/name> <amount> <player>", note: "Spawn an item for an online tester." },
-		{ group: "Inventory", access: "Beta admin", command: "::certeditem <id/name> <amount>", note: "Spawn a noted/certed item when noteable." },
-		{ group: "Stats", access: "Beta admin", command: "::setstat <level>", note: "Set all your levels for gate testing." },
-		{ group: "Stats", access: "Beta admin", command: "::setstat <level> <skill>", note: "Set one level, such as ::setstat 60 attack." },
-		{ group: "Stats", access: "Beta admin", command: "::setxp <experience> <skill>", note: "Set one skill's XP for progression edge cases." },
-		{ group: "Combat", access: "Beta admin", command: "::heal", note: "Restore hits." },
-		{ group: "Combat", access: "Beta admin", command: "::recharge", note: "Restore prayer." },
-		{ group: "Combat", access: "Beta admin", command: "::beastmode", note: "Equip a high-power admin combat kit for boss/combat testing." },
-		{ group: "Combat", access: "Beta admin", command: "::skull <player>", note: "Skull a player for Wilderness PK announcement tests." },
-		{ group: "Combat", access: "Beta admin", command: "::unskull <player>", note: "Remove a player's skull." },
-		{ group: "Telemetry", access: "Beta admin", command: "::announcepreview skill|total|pk", note: "Preview milestone and PK world messages." },
-		{ group: "Telemetry", access: "Beta admin", command: "::balancereport", note: "Show beta telemetry summary." },
-		{ group: "Telemetry", access: "Beta admin", command: "::balancereport xp|players|npcs|drops", note: "Inspect XP, player, NPC-kill, or drop telemetry." },
-		{ group: "Telemetry", access: "Beta admin", command: "::balancereport reset", note: "Clear the in-memory telemetry window." },
-		{ group: "Telemetry", access: "Beta admin", command: "::gatherstreak <skill> <resource-key> [failures]", note: "Seed gathering dry-streak protection for local testing." },
-		{ group: "World load", access: "Beta admin", command: "::wildhobdebug status", note: "Show adaptive Wilderness hobgoblin spawn state." },
-		{ group: "World load", access: "Beta admin", command: "::wildhobdebug <0-20>", note: "Simulate unique-IP pressure for dynamic hobgoblins." },
-		{ group: "World load", access: "Beta admin", command: "::wildhobdebug off", note: "Clear simulated hobgoblin pressure." },
-		{ group: "World load", access: "Beta admin", command: "::dropwave <npc_id> <count> <radius>", note: "Credit-kill NPCs using their normal drop tables. Example: ::dropwave 67 10 3." },
-		{ group: "World load", access: "Beta admin", command: "::loadbots start <count> <radius> <intervalTicks>", note: "Spawn synthetic players for local crowd/path testing." },
-		{ group: "World load", access: "Beta admin", command: "::loadbots status", note: "Show synthetic load-bot state." },
-		{ group: "World load", access: "Beta admin", command: "::loadbots stop", note: "Remove synthetic load-test players." },
-		{ group: "World load", access: "Beta admin", command: "::voidrushbots <count>", note: "Queue a Void Rush run with bots." },
-		{ group: "World load", access: "Beta admin", command: "::cinematic bossfight <actors> <bossNpcId> <radius>", note: "Spawn a staged cinematic boss scene." },
-		{ group: "World load", access: "Beta admin", command: "::cinematic stop", note: "Clean up the cinematic scene." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::atnpc <npcId>", note: "Walk to and attack nearest visible NPC of that id through the real action path." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::atobject <objId> [2]", note: "Walk to and operate nearest scenery object; 2 uses the alternate command." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::talknpc <npcId>", note: "Walk to and talk to nearest visible NPC." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::opnpc <npcId> [cmd|2]", note: "Operate the nearest NPC menu command." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::grounditems [radius]", note: "List nearby ground item ids, amounts, owners, and coordinates." },
-		{ group: "Dev automation", access: "Staff dev only", command: "::colossus", note: "Enter a fresh Void Colossus solo instance." }
 	],
 	checklist: [
 		"Create a fresh character through the portal account flow, finish appearance, and choose a Void Island starter path.",
 		"Confirm the starter kit appears once, survives relog, and does not repeat on relog.",
-		"Claim the free subscription card from the Lumbridge Subscription Vendor with your beta code.",
+		"Claim the free subscription card from the Lumbridge Subscription Vendor with your starter code.",
 		"Redeem the Subscription card and confirm wrench/profile XP rates change to subscribed rates.",
-		"Use Edgeville Auction House or ::quickauction: browse, list, buy, and inspect market intel.",
+		"Use Edgeville Auction House through the in-game NPC: browse, list, buy, and inspect market intel.",
 		"Open ::titles, page the catalogue, inspect requirements, equip a title, then clear it.",
 		"Customize rare drop beams with ::lootbeam and confirm ground-item visuals work.",
 		"Send ::g test and toggle country flag/global chat settings from the client.",
 		"Run a Void Arena lobby/challenge/stats/top test with another online player.",
-		"Use ::setstat, ::item, and ::goto only to reach test states quickly; report which shortcuts you used.",
 		"Visit Void Enclave, Void Dungeon, Void Knight chamber, Wilderness hobgoblins, and PK Catching Trainer.",
 		"Try desktop launcher update/play states and Android APK on a safe test device if available.",
 		"Report blockers with ::bug first, then add screenshots, client/platform, and repro steps in Discord."
@@ -313,7 +301,7 @@ const betaContent = {
 		{ group: "Onboarding", label: "Void Council intro", value: "24, 37", note: "Fresh-character intro clearing." },
 		{ group: "Onboarding", label: "Void Island Herald", value: "24, 24", note: "Choose starter path; later routes to Void Rush." },
 		{ group: "Home", label: "Lumbridge home", value: "120, 648", note: "Respawn/home flow." },
-		{ group: "Home", label: "Subscription Vendor", value: "126, 649", note: "Claim release-valid beta card code." },
+		{ group: "Home", label: "Subscription Vendor", value: "126, 649", note: "Claim release-valid starter card code." },
 		{ group: "Market", label: "Edgeville bank", value: "217, 449", note: "Bank, PvP access, nearby Auction House." },
 		{ group: "Market", label: "Void Auctioneer", value: "217, 460", note: "Auction House UI, listings, market intel." },
 		{ group: "Travel", label: "City Void Rift", value: "139, 636", note: "Rift menu to Varrock, Falador, Draynor, Lumbridge, and Edgeville." },
@@ -334,9 +322,9 @@ const betaContent = {
 		{ group: "Void Arena", label: "Arena bank chest", value: "596, 2915", note: "Gear prep before challenges." },
 		{ group: "Wilderness", label: "Wilderness hobgoblins", value: "217, 255", note: "Dynamic spawns and faster respawns." },
 		{ group: "PvP", label: "PK Catching Trainer", value: "214, 437", note: "Five-minute catching drill and highscores." },
-		{ group: "Smoke routes", label: "Varrock area", value: "122, 509", note: "Code-backed ::goto varrock target." },
-		{ group: "Smoke routes", label: "Draynor area", value: "214, 632", note: "Code-backed ::goto draynor target." },
-		{ group: "Smoke routes", label: "Falador area", value: "304, 542", note: "Code-backed ::goto falador target." }
+		{ group: "Smoke routes", label: "Varrock area", value: "122, 509", note: "Varrock route target." },
+		{ group: "Smoke routes", label: "Draynor area", value: "214, 632", note: "Draynor route target." },
+		{ group: "Smoke routes", label: "Falador area", value: "304, 542", note: "Falador route target." }
 	],
 	items: [
 		{ group: "Currency", id: 10, name: "Coins", note: "Use for vendor/rift/economy smoke tests." },
@@ -368,7 +356,7 @@ const betaContent = {
 		{ group: "Voidscape", id: 1599, name: "Dragon sword blade", note: "Dragon Sword smithing part." },
 		{ group: "Voidscape", id: 1600, name: "Dragon sword tip", note: "Dragon Sword smithing part." },
 		{ group: "Voidscape", id: 1601, name: "Void Key", note: "Void reward/chest testing." },
-		{ group: "Release reward", id: 1602, name: "Subscription card", note: "One-week account subscription reward. Beta code remains valid for release." },
+		{ group: "Release reward", id: 1602, name: "Subscription card", note: "One-week account subscription reward." },
 		{ group: "Voidscape", id: 1603, name: "Void Sparrow", note: "Wilderness scouting/custom item smoke tests." },
 		{ group: "Ash offerings", id: 1604, name: "Warm ashes", note: "Prayer offering item." },
 		{ group: "Ash offerings", id: 1605, name: "Bright ashes", note: "Prayer offering item." },
@@ -377,8 +365,8 @@ const betaContent = {
 		{ group: "Voidscape", id: 1608, name: "Void ashes", note: "Void resource/drop checks." }
 	],
 	policies: {
-		progress: "Public beta character/world progress may be wiped before launch.",
-		codes: "Discord beta codes are release-valid and must be preserved in the portal ledger, then resynced to the release game database."
+		progress: "Prelaunch test character/world progress may be wiped before launch.",
+		codes: "Starter card codes are release-valid and must be preserved in the portal ledger, then resynced to the release game database."
 	}
 };
 
@@ -496,7 +484,8 @@ async function handleApi(request, response, url) {
 			},
 			openRscDb: {
 				configured: Boolean(openRscDbPath)
-			}
+			},
+			config: portalConfigHealth()
 		});
 		return;
 	}
@@ -589,7 +578,7 @@ async function handleApi(request, response, url) {
 					throw new HttpError(429, "rate_limited");
 				}
 			}
-			const founder = reserveFounder(store, payload);
+			const founder = await reserveFounder(store, payload);
 			// Codes are minted only on this public landing route: registered portal
 			// accounts get their starter card through the account-bound marker instead.
 			ensureFounderSignupCode(store, founder);
@@ -655,7 +644,7 @@ async function handleApi(request, response, url) {
 				throw new HttpError(409, "account_exists");
 			}
 
-			const founder = reserveFounder(store, payload);
+			const founder = await reserveFounder(store, payload);
 			const account = {
 				id: nextId(store, "account"),
 				emailCanonical,
@@ -1426,7 +1415,7 @@ async function upsertDiscordBetaAccount(store, profile, membership, request) {
 		account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical) || null;
 	}
 
-	const founder = reserveFounder(store, {
+	const founder = await reserveFounder(store, {
 		username,
 		email: emailCanonical
 	});
@@ -1889,15 +1878,14 @@ async function serveOpenRscAvatar(response, pathname) {
 	createReadStream(filePath).pipe(response);
 }
 
-function reserveFounder(store, payload) {
+async function reserveFounder(store, payload) {
 	const username = cleanUsername(payload.username || payload.name || "");
 	const normalizedName = normalizeUsername(username);
 	const emailCanonical = canonicalEmail(payload.email || "");
 	if (!normalizedName) throw new HttpError(400, "invalid_username");
 	if (!emailCanonical) throw new HttpError(400, "invalid_email");
 
-	const nameOwner = store.founders.find((entry) => entry.normalizedName === normalizedName && entry.emailCanonical !== emailCanonical);
-	if (nameOwner) throw new HttpError(409, "username_reserved");
+	await assertFounderUsernameAvailable(store, normalizedName, emailCanonical);
 
 	let founder = store.founders.find((entry) => entry.emailCanonical === emailCanonical);
 	if (!founder) {
@@ -1925,6 +1913,38 @@ function reserveFounder(store, payload) {
 
 	creditFounderReferral(store, founder, payload.referrerCode || payload.referralCode || payload.ref || "");
 	return founder;
+}
+
+async function assertFounderUsernameAvailable(store, normalizedName, emailCanonical) {
+	const nameOwner = store.founders.find((entry) =>
+		entry.normalizedName === normalizedName &&
+		entry.emailCanonical !== emailCanonical &&
+		entry.status !== "released" &&
+		entry.status !== "expired"
+	);
+	if (nameOwner) throw new HttpError(409, "username_reserved");
+
+	const characterOwner = store.characters.find((character) => character.normalizedName === normalizedName);
+	if (characterOwner && !characterBelongsToEmail(store, characterOwner, emailCanonical)) {
+		throw new HttpError(409, "username_reserved");
+	}
+
+	const openRscOwnerEmail = await openRscPlayerOwnerEmail(normalizedName);
+	if (openRscOwnerEmail && openRscOwnerEmail !== emailCanonical && !characterHeldByEmail(store, normalizedName, emailCanonical)) {
+		throw new HttpError(409, "username_reserved");
+	}
+}
+
+function characterHeldByEmail(store, normalizedName, emailCanonical) {
+	return store.characters.some((character) =>
+		character.normalizedName === normalizedName &&
+		characterBelongsToEmail(store, character, emailCanonical)
+	);
+}
+
+function characterBelongsToEmail(store, character, emailCanonical) {
+	const account = store.accounts.find((entry) => entry.id === character.accountId);
+	return Boolean(account && account.emailCanonical === emailCanonical);
 }
 
 function creditFounderReferral(store, founder, codeInput) {
@@ -2469,6 +2489,7 @@ async function publicState(store) {
 	}
 	if (publicMode) {
 		// No fake world stats on the public site; downloads stay open without auth.
+		const launchOpen = launchSchedule && !launchSchedule.locked;
 		return {
 			publicMode: true,
 			launchSignupMode,
@@ -2476,10 +2497,10 @@ async function publicState(store) {
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
 			status: {
-				world: launchSchedule && launchSchedule.locked ? "Launch Countdown" : "Voidscape",
+				world: launchSchedule && launchSchedule.locked ? "Launch Countdown" : launchOpen ? "Launch Open" : "Voidscape",
 				online: false,
 				playersOnline: 0,
-				patch: "prelaunch",
+				patch: launchOpen ? "launch" : "prelaunch",
 				lastSave: ""
 			},
 			rates: xpRates(),
@@ -3129,7 +3150,7 @@ async function downloadState(options = {}) {
 }
 
 async function buildProofState() {
-	const artifacts = await downloadState({ includePrivate: true });
+	const artifacts = await downloadState({ includePrivate: true, publicSurface: true });
 	const publicArtifacts = artifacts
 		.filter((artifact) => artifact.publicDownload !== false)
 		.map((artifact) => ({
@@ -3416,6 +3437,19 @@ async function openRscPlayerExists(normalizedName) {
 		LIMIT 1
 	`);
 	return rows.length > 0;
+}
+
+async function openRscPlayerOwnerEmail(normalizedName) {
+	if (!openRscDbPath) return "";
+	const rows = await sqliteJson(`
+		SELECT email
+		FROM players
+		WHERE lower(username) = ${sqlString(normalizedName)}
+		LIMIT 1
+	`);
+	if (!rows.length) return "";
+	const email = canonicalEmail(rows[0].email || "");
+	return email || "__unknown__";
 }
 
 async function syncStarterCardToOpenRsc(account) {
@@ -4333,7 +4367,7 @@ async function upsertGoogleAccount(store, profile, payload, request) {
 	}
 
 	if (!account) {
-		const founder = reserveFounder(store, {
+		const founder = await reserveFounder(store, {
 			username: profile.username,
 			email: profile.emailDisplay,
 			referrerCode: payload.referrerCode || payload.referralCode || payload.ref || ""

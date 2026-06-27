@@ -99,30 +99,30 @@
 								</nav>
 								<div class="landing-nav-actions">
 									<button class="landing-nav-auth" type="button" data-prelaunch-auth-cta>Sign in</button>
-									<button class="landing-nav-cta" type="button" data-landing-scroll="founder-form">Reserve Name</button>
+									<button class="landing-nav-cta" id="landing-nav-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name</button>
 								</div>
 							</header>
 
 							<section class="landing-hero" aria-labelledby="landing-hero-title">
 								<div class="landing-hero-copy">
-									<p class="landing-kicker">Prelaunch</p>
+									<p class="landing-kicker" id="landing-hero-kicker">Prelaunch</p>
 									<h1 id="landing-hero-title"><span>Voidscape</span> launches soon.</h1>
-									<p class="landing-hero-proof">
+									<p class="landing-hero-proof" id="landing-hero-proof">
 										<span>Reserve your account name.</span>
 										<span>Get a free 1-week subscription card.</span>
 										<span>Web, Desktop, iOS, and Android at launch.</span>
 									</p>
 									<div class="landing-hero-actions">
-										<button class="landing-button landing-button-primary" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
+										<button class="landing-button landing-button-primary" id="landing-hero-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
 										<button class="landing-button landing-button-secondary" type="button" data-prelaunch-auth-cta>Sign in</button>
-										<button class="landing-button landing-button-secondary" type="button" data-landing-scroll="gameplay">Features</button>
+										<a class="landing-button landing-button-secondary" href="https://discord.gg/f6uQmrRv4" target="_blank" rel="noopener" data-funnel-event="discord_rewards">Discord</a>
 									</div>
 								</div>
 							</section>
 
 							<section class="landing-access-band" id="beta-access" aria-label="Reserve Voidscape">
 								<div class="beta-countdown" id="beta-countdown" aria-live="polite">
-									<span>Launch opens in</span>
+									<span id="beta-countdown-label">Launch opens in</span>
 									<div class="beta-countdown-grid" aria-label="Countdown until Voidscape launch opens">
 										<div><strong id="beta-countdown-days">--</strong><em>Days</em></div>
 										<div><strong id="beta-countdown-hours">--</strong><em>Hours</em></div>
@@ -226,9 +226,9 @@
 								</div>
 
 								<div class="landing-public-downloads landing-platform-proof" aria-label="Voidscape launch platform support">
-									<span>Launch platform support</span>
-									<strong>One account. Every platform.</strong>
-									<p>Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.</p>
+									<span id="landing-platform-label">Launch platform support</span>
+									<strong id="landing-platform-title">One account. Every platform.</strong>
+									<p id="landing-platform-copy">Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.</p>
 									<div class="landing-install-help" aria-label="Launch platforms">
 										<div>
 											<span>Web</span>
@@ -251,9 +251,27 @@
 											<em>Use either path</em>
 										</div>
 									</div>
-									<div class="landing-reward-prompt landing-reserve-prompt">
+									<div class="landing-launch-proof-grid" id="landing-launch-proof" hidden aria-label="Launch readiness">
+										<div>
+											<span>Status</span>
+											<strong id="landing-live-status">Prelaunch</strong>
+											<em id="landing-live-players">Reservations open</em>
+										</div>
+										<div>
+											<span>Build</span>
+											<strong id="landing-live-build">Launch build</strong>
+											<em id="landing-live-build-detail">Build waiting</em>
+										</div>
+										<div>
+											<span>Proof</span>
+											<strong id="landing-live-updated">Checking</strong>
+											<em id="landing-live-updated-detail">Status snapshot</em>
+										</div>
+									</div>
+									<div class="landing-public-download-grid" id="download-actions" hidden aria-label="Play and download Voidscape"></div>
+									<div class="landing-reward-prompt landing-reserve-prompt" id="landing-reserve-prompt">
 										<span>Prelaunch action</span>
-										<button class="ghost-button" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
+										<button class="ghost-button" id="landing-platform-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
 									</div>
 								</div>
 								</section>
@@ -339,15 +357,15 @@
 									<h2>Reserve now. Play on launch day.</h2>
 								</div>
 								<div class="landing-final-actions">
-									<button class="landing-button landing-button-primary" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
+									<button class="landing-button landing-button-primary" id="landing-final-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
 									<button class="landing-button landing-button-secondary" type="button" data-landing-scroll="gameplay">Features</button>
 								</div>
 							</section>
 
-							<section class="beta-hub" id="beta-hub" hidden aria-label="Beta tester hub">
+							<section class="beta-hub" id="beta-hub" hidden aria-label="Prelaunch tester hub">
 								<div class="beta-hub-head">
 									<div>
-										<p class="whitepaper-kicker">Beta tester pass</p>
+										<p class="whitepaper-kicker">Prelaunch tester pass</p>
 										<h2 id="beta-discord-name">Discord connected</h2>
 									</div>
 									<div class="beta-code-card">
@@ -362,7 +380,7 @@
 								<div class="beta-downloads" id="beta-downloads"></div>
 								<div class="beta-reference-tools">
 									<label>
-										<span>Search beta reference</span>
+										<span>Search launch reference</span>
 										<input id="beta-reference-search" autocomplete="off" placeholder="command, item, coord, feature">
 									</label>
 									<small id="beta-reference-count">0 entries</small>
@@ -385,7 +403,7 @@
 										<ul id="beta-items"></ul>
 									</div>
 								</div>
-								<p class="beta-policy" id="beta-policy">Beta progress may wipe before launch. Your beta code stays valid for release.</p>
+								<p class="beta-policy" id="beta-policy">Prelaunch test progress may wipe before launch. Your starter code stays valid for release.</p>
 							</section>
 
 							<footer class="landing-footer">
@@ -393,11 +411,11 @@
 								<div>
 									<button type="button" data-landing-scroll="home">Home</button>
 									<a href="/transparency">Trust</a>
-									<button type="button" data-landing-scroll="features">Features</button>
-									<button type="button" data-landing-scroll="whitepaper">Whitepaper</button>
+									<button type="button" data-landing-scroll="gameplay">Features</button>
 									<button type="button" data-discord-login>Discord</button>
 									<a href="/privacy">Privacy</a>
-									<a href="https://github.com/Open-RSC/Core-Framework" rel="noopener">AGPL Source</a>
+									<a href="/data-deletion">Data Deletion</a>
+									<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">AGPL Source</a>
 								</div>
 							</footer>
 
@@ -599,6 +617,7 @@
 							<button class="primary-button" type="submit">Update password</button>
 						</form>
 						<div class="recovery-code-list" id="recovery-codes" hidden></div>
+						<p class="inline-state recovery-support-note" id="recovery-support-note">Lost your recovery codes? Email <a href="mailto:support@voidscape.gg">support@voidscape.gg</a> from your account email with your character names for staff review.</p>
 						<p class="inline-state" id="security-message">Local API security state appears after sign in.</p>
 					</section>
 				</div>
