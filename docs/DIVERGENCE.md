@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-26 - Launch staging verifier
+
+Added `scripts/verify-launch-staging.mjs` as the hosted launch gate for production-like staging. The verifier checks the staged portal health and `/api/public` launch rules, requires durable portal storage plus an OpenRSC DB bridge, verifies hidden Google and disabled payment surfaces by default, requires a deployed server config copy with `production_command_lockdown: true` and `want_packet_register: false`, creates a real staged account/first OpenRSC character when `--run-signup` is supplied, and runs the `/play` deployment verifier against `dist/web-teavm/voidscape-web-build.json`. The portal health endpoint now exposes only public-safe booleans for public mode, launch-signup mode, durable storage, and OpenRSC DB bridge status. Release/development/operations docs now point at the hosted verifier. This is launch operations hardening only: no packet shape, opcode, cache asset, gameplay rule, database schema, or client behavior changed. Reversibility is removing the verifier and health booleans if a separate deployment platform supplies equivalent staged evidence.
+
 ### 2026-06-26 - Tracked preset client-version sync
 
 Synced the tracked Voidscape/OpenRSC-style server presets to `client_version: 10120` so fresh staging or production configs copied from `default`, `preservation`, `rsccabbage`, `rsccoleslaw`, `openpk`, or `uranium` do not reject the current launcher, Android, desktop, or TeaVM web clients. The special `2001scape` preset intentionally keeps its separate `20010000` protocol identity. This is release-config hardening only: no packet shape, opcode, cache asset, gameplay rule, database schema, or client behavior changed. Reversibility is restoring the old preset values only if those presets are deliberately paired with older clients.

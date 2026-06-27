@@ -12,6 +12,19 @@ This is the practical runbook for operating Voidscape outside a one-off coding s
 
 SQLite is fine for local work and small private testing. Move to MariaDB before real public load, multi-operator work, or anything where file-copy backups are too informal.
 
+For a launch-candidate staging deployment, run the hosted gate after syncing the portal, game server, and web client. The command intentionally requires an explicit signup flag because it creates a real staged account and first game character:
+
+```bash
+scripts/verify-launch-staging.mjs \
+  --portal-url https://<staging-host>/ \
+  --web-url https://<staging-host>/play/ \
+  --ws wss://<staging-host>/play/ws/ \
+  --server-config <copy-of-deployed-server.conf> \
+  --run-signup
+```
+
+The verifier checks durable portal storage, the OpenRSC DB bridge, portal-first registration, packet registration off, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json`.
+
 ## Build and run
 
 Canonical commands:

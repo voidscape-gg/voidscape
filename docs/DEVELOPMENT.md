@@ -93,6 +93,7 @@ scripts/run-portal.sh         # run website/account portal with local prototype 
 scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
 scripts/test-portal-api.sh    # smoke-test portal API flows
 scripts/test-portal-schema.sh # validate portal account-management schema contract
+scripts/verify-launch-staging.mjs # verify hosted launch portal + /play staging gates
 scripts/build-web-teavm-spike.sh # build the TeaVM browser client target
 scripts/run-web-teavm-local.sh   # serve the TeaVM browser client on localhost/LAN
 scripts/run-web-teavm-iphone-simulator.sh # open TeaVM client in iOS Simulator Safari

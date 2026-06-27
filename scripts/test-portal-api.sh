@@ -269,7 +269,13 @@ for _ in {1..60}; do
 	sleep 0.1
 done
 
-curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null
+health_payload="$(curl -fsS "http://127.0.0.1:${PORT}/api/health")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.ok) throw new Error('health endpoint should report ok');
+if (!payload.storage || payload.storage.durable !== true) throw new Error('health endpoint should report durable portal storage when PORTAL_DATA_DIR is set');
+if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('health endpoint should report the OpenRSC DB bridge');
+" "$health_payload"
 PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" PORTAL_SIGNUP_IP_DAILY_LIMIT=3 node web/portal/api-smoke.mjs
 
 signup_code_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:VOID%' AND value='1';")"
@@ -509,6 +515,14 @@ for _ in {1..60}; do
 done
 
 launch_public_payload="$(curl -fsS "http://127.0.0.1:${launch_port}/api/public")"
+launch_health_payload="$(curl -fsS "http://127.0.0.1:${launch_port}/api/health")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.publicMode) throw new Error('launch health should report public mode');
+if (!payload.launchSignupMode) throw new Error('launch health should report launch-signup mode');
+if (!payload.storage || payload.storage.durable !== true) throw new Error('launch health should report durable portal storage');
+if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('launch health should report the OpenRSC DB bridge');
+" "$launch_health_payload"
 grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
 grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the global members-world flag"; exit 1; }
 grep -q '"packetRegistration": false' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose portal-first registration"; exit 1; }

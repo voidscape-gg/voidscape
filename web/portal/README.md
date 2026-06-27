@@ -91,6 +91,19 @@ journalctl -u voidscape-integrity-export.service -n 20 --no-pager
 - Code-only launch day, to make codes redeemable in-game: copy `dev-store.json` from the public host into a `PORTAL_DATA_DIR` on the game machine, run the portal there with `PORTAL_OPENRSC_DB=/path/to/voidscape.db` (loopback is fine, no public mode needed), and `curl -X POST -H "x-portal-admin-token: $TOKEN" http://127.0.0.1:8788/api/admin/signups/sync`. Already-redeemed codes are skipped; the endpoint is idempotent.
 - If bot signups become a problem, put Cloudflare in front with a managed challenge on `POST /api/founder/reservations` — the app-side per-IP cap is the backstop, not the whole defense.
 
+After deploying a launch-signup staging build, verify it with the hosted release gate:
+
+```bash
+scripts/verify-launch-staging.mjs \
+  --portal-url https://yourdomain.com/ \
+  --web-url https://yourdomain.com/play/ \
+  --ws wss://yourdomain.com/play/ws/ \
+  --server-config <copy-of-deployed-server.conf> \
+  --run-signup
+```
+
+The verifier reads `/api/health` and `/api/public`, so those endpoints expose only public-safe booleans for durable storage and OpenRSC DB bridge status, not filesystem paths or credentials.
+
 Binding non-loopback without `PORTAL_DATA_DIR` refuses to start (the signup list would live in $TMPDIR); `PORTAL_ALLOW_TMPDIR=1` overrides. `x-forwarded-for` is only trusted from loopback peers (same-host reverse proxy) or with `PORTAL_TRUST_PROXY=1` — only set that when the origin is reachable exclusively through the proxy. `PORTAL_SIGNUP_IP_DAILY_LIMIT` (default 10) caps signups per non-local IP per day (429 past it).
 
 Open directly in a browser:

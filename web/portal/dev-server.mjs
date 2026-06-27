@@ -484,7 +484,19 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "GET" && url.pathname === "/api/health") {
-		json(response, 200, { ok: true, service: "voidscape-portal-dev" });
+		json(response, 200, {
+			ok: true,
+			service: "voidscape-portal-dev",
+			publicMode,
+			launchSignupMode,
+			storage: {
+				durable: Boolean(process.env.PORTAL_DATA_DIR),
+				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1"
+			},
+			openRscDb: {
+				configured: Boolean(openRscDbPath)
+			}
+		});
 		return;
 	}
 
