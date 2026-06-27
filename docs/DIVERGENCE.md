@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-27 - Features page scroll unlock
+
+Fixed the restored standalone `/features` page so it opts out of the portal app shell's global `body { overflow: hidden; }` rule. `body.features-mode` now allows vertical scrolling with iOS momentum scrolling while still hiding horizontal overflow. This is CSS-only portal behavior; no gameplay, client, packet, server API, schema, or asset contract changed.
+
 ### 2026-06-27 - Public features guide route restoration
 
 Restored the standalone `/features` portal page from the earlier custom feature-guide work, including its screenshot assets, lightbox script, and responsive feature-page styling. The prelaunch landing now links to the full guide from the hero and footer while preserving the existing in-page gameplay section links, and the static portal server maps `/features` to `features.html` alongside `/privacy`, `/data-deletion`, and `/transparency`. The restored copy was updated from public-beta wording to prelaunch/launch wording so it does not advertise retired beta command/reward flows. `scripts/test-portal-api.sh` now asserts the landing exposes `/features` and the route serves the prelaunch feature guide. This is portal content/navigation only: no server packet, opcode, game DB schema, gameplay rule, client runtime behavior, or cache format changed; reversibility is removing the route/page/assets and the two landing links.

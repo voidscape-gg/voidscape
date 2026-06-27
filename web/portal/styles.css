@@ -10519,6 +10519,12 @@ body.features-mode a {
 	text-decoration: none;
 }
 
+body.features-mode {
+	overflow-x: hidden;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
 body.features-mode img {
 	display: block;
 	max-width: 100%;
