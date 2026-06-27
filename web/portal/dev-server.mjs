@@ -50,8 +50,8 @@ const baseCombatXpRate = 10;
 const baseSkillXpRate = 2;
 const sha256Cache = new Map();
 const subscriptionXpBonus = 1;
-const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || 5));
 const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
+const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || signupIpDailyLimit));
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
 const abuseHashSalt = process.env.PORTAL_ABUSE_HASH_SALT || "voidscape-portal-dev";
 const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
@@ -107,6 +107,7 @@ const funnelEvents = new Set([
 ]);
 const clientCacheDir = join(repoRoot, "Client_Base/Cache");
 const launcherRuntimeFiles = new Set([
+	"accounts.txt",
 	"credentials.txt",
 	"uid.dat",
 	"ip.txt",

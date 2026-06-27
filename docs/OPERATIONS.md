@@ -35,6 +35,49 @@ scripts/verify-launch-staging.mjs \
 
 The verifier checks durable portal storage, the OpenRSC DB bridge, portal-first registration, packet registration off, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json` or the package's `play/voidscape-web-build.json`.
 
+## Current public host layout
+
+As of June 27, 2026, `voidscape.gg` resolves to the Hetzner VPS `5.161.114.251` (`voidscape-beta-ash-1`). SSH access is `root@voidscape.gg` or `root@5.161.114.251` with `~/.ssh/voidscape_hetzner`. Do not print or commit secret values from `/etc/voidscape/portal.env`.
+
+Runtime paths:
+
+| Purpose | Path |
+|---|---|
+| Game/source root | `/opt/voidscape` |
+| Game server config | `/opt/voidscape/server/local.conf` |
+| Game jars | `/opt/voidscape/server/core.jar`, `/opt/voidscape/server/plugins.jar` |
+| Game SQLite DB | `/opt/voidscape/server/inc/sqlite/voidscape.db` |
+| Portal root | `/opt/voidscape/web/portal` |
+| Portal env | `/etc/voidscape/portal.env` |
+| Portal data | `/var/lib/voidscape-portal` |
+| Nginx web root | `/var/www/html` |
+| Web client `/play/` root | `/var/www/html/play` |
+| Launcher/download root | `/var/www/html/voidscape` |
+| Desktop launcher download | `/var/www/html/voidscape/VoidscapeLauncher.jar` |
+| Android APK download | `/var/www/html/voidscape/Voidscape-Android-Beta.apk` |
+| Launcher update root | `/var/www/html/voidscape/update` |
+
+Services and ports:
+
+| Purpose | Value |
+|---|---|
+| Game server | `voidscape.service` |
+| Portal | `voidscape-portal.service` |
+| Reverse proxy | `nginx.service` |
+| Integrity export | `voidscape-integrity-export.service` / timer |
+| HTTPS/HTTP | nginx on `443` / `80` |
+| Portal backend | `127.0.0.1:8788` |
+| Game TCP | `43596` |
+| WebSocket | `43496`, proxied at `wss://voidscape.gg/play/ws/` |
+
+Deploy notes:
+
+- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files.
+- Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
+- `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
+- For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
+- Restart with `systemctl restart voidscape voidscape-portal`, reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
+
 ## Build and run
 
 Canonical commands:

@@ -3013,10 +3013,18 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
   }, null, { timeout: 5000 });
   await page.waitForFunction(() => {
     const snapshot = window.__voidscapeCollectDiagnostics();
-    return snapshot.ui && snapshot.ui.messageTab === 'CHAT' && snapshot.ui.chatPanelHidden === false;
+    return snapshot.ui
+      && ['ALL', 'CHAT'].includes(String(snapshot.ui.messageTab || ''))
+      && snapshot.ui.chatPanelHidden === false
+      && snapshot.keyboard
+      && snapshot.keyboard.open;
   }, null, { timeout: 5000 });
   const chatComposeState = await diagnosticsSnapshot(page);
-  assert(chatComposeState.ui && chatComposeState.ui.messageTab === 'CHAT' && chatComposeState.ui.chatPanelHidden === false,
+  assert(chatComposeState.ui
+      && ['ALL', 'CHAT'].includes(String(chatComposeState.ui.messageTab || ''))
+      && chatComposeState.ui.chatPanelHidden === false
+      && chatComposeState.keyboard
+      && chatComposeState.keyboard.open,
     `Aa should put plain in-game input into the shared public chat entry: ${JSON.stringify(chatComposeState.ui)}`);
   await page.keyboard.type(chatMessage, { delay: 15 });
   await page.keyboard.press('Enter');

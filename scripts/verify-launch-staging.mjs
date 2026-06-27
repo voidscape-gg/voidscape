@@ -19,7 +19,7 @@ const checks = [];
 const failures = [];
 const warnings = [];
 let signupUser = args.signupUsername || generatedUsername();
-let signupEmail = args.signupEmail || `staging+${signupUser.toLowerCase()}@voidscape.gg`;
+let signupEmail = args.signupEmail || `staging-${signupUser.toLowerCase()}@voidscape.gg`;
 let signupPassword = args.signupPassword || "Launchpass1";
 
 try {
@@ -189,7 +189,7 @@ async function verifyBadLaunchPassword() {
 		method: "POST",
 		body: {
 			username: badUsername,
-			email: `staging+${badUsername.toLowerCase()}@voidscape.gg`,
+			email: `staging-${badUsername.toLowerCase()}@voidscape.gg`,
 			password: "bad-pass-1"
 		}
 	});

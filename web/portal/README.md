@@ -172,8 +172,8 @@ Useful local API environment variables:
 
 - `PORTAL_OPENRSC_DB=/path/to/voidscape.db` enables the SQLite game bridge.
 - `PORTAL_ADMIN_TOKEN=...` enables `/api/admin/*`; without it the admin API returns `admin_not_configured`.
-- `PORTAL_STARTER_IP_DAILY_LIMIT=5` controls how many starter-card grants a non-local IP bucket can receive per day before new accounts are left active but their free card is marked for review.
 - `PORTAL_SIGNUP_IP_DAILY_LIMIT=10` caps prelaunch landing signups per non-local IP per day (429 `rate_limited` past it).
+- `PORTAL_STARTER_IP_DAILY_LIMIT=10` controls how many starter-card grants a non-local IP bucket can receive per day before new accounts are left active but their free card is marked for review. Default matches `PORTAL_SIGNUP_IP_DAILY_LIMIT` so every accepted prelaunch signup gets the promised starter card unless ops intentionally sets a lower review threshold.
 - `PORTAL_PUBLIC_MODE=1` locks the server to the prelaunch signup surface (see "Launching the public prelaunch site").
 - `PORTAL_LAUNCH_SIGNUP_MODE=1` opens the public account-first launch flow while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden; use only with `PORTAL_PUBLIC_MODE=1`.
 - `PORTAL_GOOGLE_CLIENT_ID=...` enables the public Google Identity Services button and ID-token verification for launch signup. Without it, Google signup endpoints return `google_oauth_not_configured` and the button stays hidden.

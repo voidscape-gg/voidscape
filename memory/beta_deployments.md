@@ -21,6 +21,15 @@ Known beta VPS:
 - Public update base: `https://voidscape.5.161.114.251.sslip.io/voidscape/update/`.
 - Public game port: `43596`; websocket: `43496`.
 
+Current public deploy map as of 2026-06-27:
+- Host: `voidscape.gg` / `5.161.114.251` (`voidscape-beta-ash-1`), SSH `root@voidscape.gg -i ~/.ssh/voidscape_hetzner`.
+- Game/source root: `/opt/voidscape`; active config: `/opt/voidscape/server/local.conf`; jars: `/opt/voidscape/server/core.jar` and `/opt/voidscape/server/plugins.jar`; DB: `/opt/voidscape/server/inc/sqlite/voidscape.db`.
+- Portal: `/opt/voidscape/web/portal`; env: `/etc/voidscape/portal.env`; data: `/var/lib/voidscape-portal`; service: `voidscape-portal.service`; backend listens on `127.0.0.1:8788`.
+- Prelaunch promise env: keep `PORTAL_SIGNUP_IP_DAILY_LIMIT` and `PORTAL_STARTER_IP_DAILY_LIMIT` aligned (live set to `10` on 2026-06-27) so every accepted prelaunch account gets the advertised starter subscription card unless public copy is changed to mention review holds.
+- Nginx root: `/var/www/html`; web client: `/var/www/html/play`; downloads: `/var/www/html/voidscape`; launcher: `/var/www/html/voidscape/VoidscapeLauncher.jar`; Android APK: `/var/www/html/voidscape/Voidscape-Android-Beta.apk`; launcher update root: `/var/www/html/voidscape/update`.
+- Services/ports: `voidscape.service` on TCP `43596`, WebSocket `43496` proxied at `wss://voidscape.gg/play/ws/`, `nginx.service` on `80/443`, integrity timer/service `voidscape-integrity-export`.
+- Before launch deploys, back up active jars, `server/local.conf`, SQLite DB, `/etc/voidscape/portal.env`, portal root, `/var/www/html/play`, and `/var/www/html/voidscape`. Preserve live DB/env secrets and patch config keys instead of wholesale replacing `local.conf` unless deliberate.
+
 Verify after every beta deploy:
 - `curl -I https://voidscape.5.161.114.251.sslip.io/voidscape/update/manifest.properties`
 - `curl -I https://voidscape.5.161.114.251.sslip.io/voidscape/VoidscapeLauncher.jar`
