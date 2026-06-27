@@ -271,7 +271,7 @@ Ask each tester to try a few of these instead of everyone doing the same route.
 
 | Feature | Quick test |
 |---|---|
-| Client character creation | Create a fresh character from `New User`, complete appearance, and choose one Void Island path. |
+| Client character creation | Create a fresh character through the portal/account flow, complete appearance, and choose one Void Island path. |
 | Starter kits | Confirm the chosen path gives the right gear once and does not repeat on relog. |
 | Subscription cards | Buy from the Lumbridge vendor, redeem, and check the wrench/profile XP-rate display. |
 | Auction House UI | Use the Edgeville auctioneer or `::quickauction`; browse categories, inspect item cards, seed fixture data if needed. |

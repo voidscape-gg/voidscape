@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
-import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
 import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,10 +15,13 @@ const repoRoot = resolve(rootDir, "../..");
 const port = Number(process.env.PORT || 8788);
 const bindHost = process.env.PORTAL_BIND_HOST || "127.0.0.1";
 const trustProxyHeader = process.env.PORTAL_TRUST_PROXY === "1";
+const defaultLaunchAtIso = "2026-07-11T18:00:00Z";
 // Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
 const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
+const launchSignupMode = publicMode && process.env.PORTAL_LAUNCH_SIGNUP_MODE === "1";
 const betaMode = process.env.PORTAL_BETA_MODE === "1" || process.env.PORTAL_PUBLIC_BETA === "1";
-const betaOpenAtIso = configuredIsoTimestamp("PORTAL_BETA_OPEN_AT", process.env.PORTAL_BETA_OPEN_AT || "");
+const launchOpenAtIso = configuredIsoTimestamp("PORTAL_LAUNCH_AT", process.env.PORTAL_LAUNCH_AT || process.env.PORTAL_BETA_OPEN_AT || defaultLaunchAtIso);
+const betaOpenAtIso = configuredIsoTimestamp("PORTAL_BETA_OPEN_AT", process.env.PORTAL_BETA_OPEN_AT || process.env.PORTAL_LAUNCH_AT || "");
 const betaSignupCounterBase = configuredNonNegativeInteger("PORTAL_BETA_COUNTER_BASE", process.env.PORTAL_BETA_COUNTER_BASE || "132");
 const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
 const betaSignupCounterSeed = process.env.PORTAL_BETA_COUNTER_SEED || "voidscape-public-beta";
@@ -64,6 +67,11 @@ const discordOauthScopes = (process.env.PORTAL_DISCORD_SCOPES || "identify guild
 	.split(/[,\s]+/)
 	.map((scope) => scope.trim())
 	.filter(Boolean);
+const googleClientId = process.env.PORTAL_GOOGLE_CLIENT_ID || "";
+const googleJwksUrl = process.env.PORTAL_GOOGLE_JWKS_URL || "https://www.googleapis.com/oauth2/v3/certs";
+const googleIdentityProvider = "google";
+let googleJwksCache = { expiresAt: 0, keys: new Map() };
+const webClientUrl = process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/";
 const downloadArtifacts = [
 	{
 		slug: "client-runtime",
@@ -89,6 +97,7 @@ const downloadArtifacts = [
 	}
 ];
 const funnelEvents = new Set([
+	"play_web",
 	"download_launcher",
 	"download_android",
 	"download",
@@ -285,7 +294,7 @@ const betaContent = {
 		{ group: "Dev automation", access: "Staff dev only", command: "::colossus", note: "Enter a fresh Void Colossus solo instance." }
 	],
 	checklist: [
-		"Create a fresh character from New User, finish appearance, and choose a Void Island starter path.",
+		"Create a fresh character through the portal account flow, finish appearance, and choose a Void Island starter path.",
 		"Confirm the starter kit appears once, survives relog, and does not repeat on relog.",
 		"Claim the free subscription card from the Lumbridge Subscription Vendor with your beta code.",
 		"Redeem the Subscription card and confirm wrench/profile XP rates change to subscribed rates.",
@@ -405,14 +414,20 @@ if (!loopbackBind && !process.env.PORTAL_DATA_DIR && process.env.PORTAL_ALLOW_TM
 }
 
 server.listen(port, bindHost, () => {
-	const modeLabel = betaMode ? " (PUBLIC BETA MODE)" : publicMode ? " (PUBLIC PRELAUNCH MODE)" : "";
+	const modeLabel = betaMode
+		? " (PUBLIC BETA MODE)"
+		: launchSignupMode
+			? " (PUBLIC LAUNCH SIGNUP MODE)"
+			: publicMode
+				? " (PUBLIC PRELAUNCH MODE)"
+				: "";
 	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${modeLabel}`);
 	console.log(`Portal API data: ${storePath}`);
 });
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
-	if (publicMode && !betaMode && (
+	if (publicMode && !betaMode && !launchSignupMode && (
 		url.pathname.startsWith("/openrsc/avatar/")
 	)) {
 		throw new HttpError(404, "not_available_during_prelaunch");
@@ -449,6 +464,16 @@ async function handleApi(request, response, url) {
 			|| (method === "GET" && url.pathname === "/api/integrity")
 			|| (method === "POST" && url.pathname === "/api/funnel/click")
 			|| (!betaMode && method === "POST" && url.pathname === "/api/founder/reservations")
+			|| (launchSignupMode && method === "GET" && url.pathname === "/api/account")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/register")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/google")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/login")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/recover-password")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/oauth/google/nonce")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/characters")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/password")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/recovery-codes")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/sessions/revoke-others")
 			|| (betaMode && method === "GET" && url.pathname === "/api/account")
 			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/start")
 			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/callback")
@@ -479,6 +504,23 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = await recordFunnelClick(request, payload);
 		json(response, 202, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/oauth/google/nonce") {
+		requireGoogleConfigured();
+		const nonce = randomBytes(24).toString("base64url");
+		await updateStore((store) => {
+			pruneOauthStates(store);
+			store.oauthStates.push({
+				provider: "google_id_token",
+				stateHash: hashToken(nonce),
+				ipHash: abuseHash(clientIp(request)),
+				createdAt: now(),
+				expiresAt: Date.now() + oauthStateTtlMs
+			});
+		});
+		json(response, 200, { nonce, expiresIn: Math.floor(oauthStateTtlMs / 1000) });
 		return;
 	}
 
@@ -588,7 +630,11 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/register") {
 		const payload = await readJson(request);
-		const passwordHash = await hashPassword(requirePassword(payload.password));
+		const password = requirePassword(payload.password);
+		if (launchSignupMode) {
+			requireLaunchFirstGamePassword(password);
+		}
+		const passwordHash = await hashPassword(password);
 		const result = await updateStore(async (store) => {
 			const emailCanonical = canonicalEmail(payload.email || "");
 			if (!emailCanonical) throw new HttpError(400, "invalid_email");
@@ -608,7 +654,16 @@ async function handleApi(request, response, url) {
 				updatedAt: now()
 			};
 			store.accounts.push(account);
-			createCharacter(store, account.id, founder.username, "warrior");
+			if (launchSignupMode) {
+				await createLaunchFirstCharacter(store, account, {
+					username: founder.username,
+					gamePassword: password
+				}, request);
+			} else {
+				const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
+				reservedCharacter.source = "founder-reserved";
+				reservedCharacter.status = "Reserved username";
+			}
 			await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
 				emailCanonical,
 				provider: "password"
@@ -618,6 +673,37 @@ async function handleApi(request, response, url) {
 			return { token, ...(await accountState(store, account)) };
 		});
 		json(response, 201, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/google") {
+		requireGoogleConfigured();
+		const payload = await readJson(request);
+		const profile = await googleProfileFromCredential(payload);
+		const result = await updateStore(async (store) => {
+			consumeGoogleNonce(store, payload.nonce || "", request);
+			const account = await upsertGoogleAccount(store, profile, payload, request);
+			if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
+				await createLaunchFirstCharacter(store, account, {
+					username: payload.username || payload.reservedUsername || profile.username,
+					gamePassword: payload.gamePassword || payload.characterPassword
+				}, request);
+			}
+			const token = createSession(store, account.id);
+			audit(store, "account_google_login", {
+				accountId: account.id,
+				email: profile.emailCanonical
+			});
+			return {
+				token,
+				auth: {
+					provider: googleIdentityProvider,
+					emailVerified: profile.emailVerified
+				},
+				...(await accountState(store, account))
+			};
+		});
+		json(response, 200, result);
 		return;
 	}
 
@@ -1052,6 +1138,7 @@ async function handleApi(request, response, url) {
 							entry.status = "revoked";
 							entry.revokedAt = now();
 						});
+					await revokeStarterCardFromOpenRsc(account);
 				} else {
 					throw new HttpError(400, "invalid_starter_card_action");
 				}
@@ -1925,6 +2012,21 @@ function createCharacter(store, accountId, name, path) {
 	return character;
 }
 
+async function createLaunchFirstCharacter(store, account, payload, request) {
+	const existingCharacters = store.characters.filter((character) => character.accountId === account.id);
+	const linkedCharacter = existingCharacters.find((character) => character.source === "openrsc-sqlite-created");
+	if (linkedCharacter) return linkedCharacter;
+	const reservedCharacter = existingCharacters.find((character) => character.source === "founder-reserved");
+	const username = cleanUsername(payload.username || payload.name || (reservedCharacter && reservedCharacter.name) || "");
+	const gamePassword = launchSignupMode
+		? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
+		: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+	return await createAccountCharacter(store, account, {
+		name: username,
+		gamePassword
+	}, request);
+}
+
 async function createAccountCharacter(store, account, payload, request) {
 	const username = cleanUsername(payload.name || payload.username || "");
 	const normalizedName = normalizeUsername(username);
@@ -1947,6 +2049,9 @@ async function createAccountCharacter(store, account, payload, request) {
 	}
 
 	if (!openRscDbPath) {
+		if (launchSignupMode) {
+			throw new HttpError(503, "openrsc_db_not_configured");
+		}
 		if (reservedForAccount) {
 			const kit = kits.warrior;
 			Object.assign(existingCharacter, {
@@ -2067,7 +2172,7 @@ async function accountState(store, account, currentSession) {
 		linkChallenges: store.linkChallenges
 			.filter((challenge) => challenge.accountId === account.id && challenge.status === "pending" && challenge.expiresAt > Date.now())
 			.map((challenge) => linkChallengeState(challenge)),
-		rewards: rewardState(store, account),
+		rewards: await rewardState(store, account),
 		security: securityState(store, account, currentSession, founder),
 		abuse: accountAbuseState(account)
 	};
@@ -2178,20 +2283,75 @@ function betaScheduleState() {
 	};
 }
 
-function rewardState(store, account) {
+function launchScheduleState() {
+	if (!launchOpenAtIso) return null;
+	const openAtMs = Date.parse(launchOpenAtIso);
+	const remainingMs = Math.max(0, openAtMs - Date.now());
+	return {
+		openAt: launchOpenAtIso,
+		now: new Date().toISOString(),
+		remainingMs,
+		locked: remainingMs > 0
+	};
+}
+
+async function rewardState(store, account) {
 	const starterCards = store.entitlements.filter((entry) =>
 		entry.accountId === account.id &&
 		entry.type === starterFreeSubscriptionType &&
 		entry.status === "granted"
 	);
+	const ledger = await starterCardLedgerState(account);
+	const hasGameLedger = Boolean(ledger.configured);
+	let starterSubscriptionCards = starterCards.length;
+	let starterSubscriptionCardsClaimed = 0;
+	let starterCardStatus = starterSubscriptionCards > 0 ? "waiting" : "none";
+
+	if (hasGameLedger) {
+		if (ledger.status === "claimed") {
+			starterSubscriptionCards = 0;
+			starterSubscriptionCardsClaimed = 1;
+			starterCardStatus = "claimed";
+		} else if (ledger.status === "waiting") {
+			starterSubscriptionCards = Math.max(1, starterCards.length);
+			starterCardStatus = "waiting";
+		} else if (ledger.status === "unknown") {
+			starterSubscriptionCards = 0;
+			starterCardStatus = "unknown";
+		} else {
+			starterSubscriptionCards = 0;
+			starterCardStatus = "none";
+		}
+	}
+
+	const visibleCards = starterCards.length > 0
+		? starterCards
+		: (starterSubscriptionCards > 0 || starterSubscriptionCardsClaimed > 0)
+			? [{
+				id: null,
+				type: starterFreeSubscriptionType,
+				status: starterCardStatus === "claimed" ? "claimed" : "granted",
+				source: "openrsc_ledger",
+				createdAt: null
+			}]
+			: [];
+
 	return {
-		starterSubscriptionCards: starterCards.length,
-		cards: starterCards.map((entry) => ({
+		starterSubscriptionCards,
+		starterSubscriptionCardsClaimed,
+		starterCardStatus,
+		starterCardLedger: {
+			synced: hasGameLedger,
+			status: ledger.status
+		},
+		cards: visibleCards.map((entry) => ({
 			id: entry.id,
 			type: entry.type,
-			status: entry.status,
+			status: starterCardStatus === "claimed" ? "claimed" : entry.status,
 			source: entry.source,
-			label: "Starter subscription card reserved in Lumbridge",
+			label: starterCardStatus === "claimed"
+				? "Starter subscription card claimed in game"
+				: "Starter subscription card reserved in Lumbridge",
 			createdAt: entry.createdAt
 		}))
 	};
@@ -2257,6 +2417,7 @@ async function publicState(store) {
 	const betaTesterCount = store.founders.filter((founder) => founder.betaTester).length;
 	const integrity = await integrityState(store);
 	const playersOnline = await openRscPlayersOnlineCount();
+	const launchSchedule = launchScheduleState();
 	if (betaMode) {
 		const betaResources = betaResourceState();
 		const betaSchedule = betaResources.schedule || null;
@@ -2264,8 +2425,11 @@ async function publicState(store) {
 		return {
 			publicMode: Boolean(publicMode),
 			betaMode: true,
+			launch: launchSchedule,
+			worldRules: worldRules(),
+			oauth: oauthPublicState(),
 			status: {
-				world: betaSchedule && betaSchedule.locked ? "Beta Countdown" : "Public Beta",
+				world: betaSchedule && betaSchedule.locked ? "Launch Countdown" : "Public Beta",
 				online: !(betaSchedule && betaSchedule.locked),
 				playersOnline,
 				patch: betaSchedule && betaSchedule.locked ? "countdown" : "beta",
@@ -2294,7 +2458,17 @@ async function publicState(store) {
 		// No fake world stats on the public site; downloads stay open without auth.
 		return {
 			publicMode: true,
-			status: { world: "Voidscape", online: false, playersOnline: 0, patch: "prelaunch", lastSave: "" },
+			launchSignupMode,
+			launch: launchSchedule,
+			worldRules: worldRules(),
+			oauth: oauthPublicState(),
+			status: {
+				world: launchSchedule && launchSchedule.locked ? "Launch Countdown" : "Voidscape",
+				online: false,
+				playersOnline: 0,
+				patch: "prelaunch",
+				lastSave: ""
+			},
 			rates: xpRates(),
 			founderStats: {
 				reservations: store.founders.length,
@@ -2309,6 +2483,9 @@ async function publicState(store) {
 		};
 	}
 	return {
+		launch: launchSchedule,
+		worldRules: worldRules(),
+		oauth: oauthPublicState(),
 		status: {
 			world: "World 1",
 			online: true,
@@ -2896,7 +3073,16 @@ function betaSignupHourlyIncrement(hourIndex) {
 
 async function downloadState(options = {}) {
 	const includePrivate = options.includePrivate !== false;
-	const rows = [];
+	const rows = [{
+		slug: "web-client",
+		label: "Play in browser",
+		state: "iOS, Android, Desktop",
+		url: webClientUrl,
+		available: true,
+		publicDownload: true,
+		external: true,
+		primary: true
+	}];
 	for (const artifact of downloadArtifacts) {
 		if (!includePrivate && artifact.publicDownload === false) {
 			continue;
@@ -3224,14 +3410,8 @@ async function syncStarterCardToOpenRsc(account) {
 	const key = starterCardCacheKey(account.id);
 	if (!key) return;
 
-	const current = await sqliteJson(`
-		SELECT value
-		FROM player_cache
-		WHERE playerID = 0 AND key = ${sqlString(key)}
-		ORDER BY dbid DESC
-		LIMIT 1
-	`);
-	if (current.length && Number(current[0].value) === starterCardClaimed) {
+	const current = await starterCardLedgerState(account);
+	if (current.status === "claimed") {
 		return;
 	}
 
@@ -3243,6 +3423,56 @@ async function syncStarterCardToOpenRsc(account) {
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
 	`);
+}
+
+async function starterCardLedgerState(account) {
+	const state = {
+		configured: Boolean(openRscDbPath),
+		status: "none",
+		value: null
+	};
+	if (!openRscDbPath || !account) {
+		state.configured = false;
+		return state;
+	}
+	const key = starterCardCacheKey(account.id);
+	if (!key) return state;
+	const current = await sqliteJson(`
+		SELECT value
+		FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		ORDER BY dbid DESC
+		LIMIT 1
+	`);
+	if (!current.length) return state;
+	const value = Number(current[0].value);
+	state.value = Number.isFinite(value) ? value : current[0].value;
+	if (value === starterCardClaimed) {
+		state.status = "claimed";
+	} else if (value === starterCardAvailable) {
+		state.status = "waiting";
+	} else {
+		state.status = "unknown";
+	}
+	return state;
+}
+
+async function revokeStarterCardFromOpenRsc(account) {
+	if (!openRscDbPath || !account) return starterCardLedgerState(account);
+	const key = starterCardCacheKey(account.id);
+	if (!key) return starterCardLedgerState(account);
+	const current = await starterCardLedgerState(account);
+	if (current.status === "claimed") return current;
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache
+		WHERE playerID = 0
+		  AND key = ${sqlString(key)}
+		  AND value = ${sqlString(starterCardAvailable)};
+		COMMIT;
+		SELECT 1 AS ok;
+	`);
+	return starterCardLedgerState(account);
 }
 
 async function syncSignupCodeToOpenRsc(founder) {
@@ -3966,6 +4196,111 @@ function googleDevProfile(payload) {
 	};
 }
 
+async function googleProfileFromCredential(payload) {
+	const requestedUsername = requireReservationUsername(payload.username || payload.reservedUsername || "");
+	const credential = String(payload.credential || payload.idToken || "").trim();
+	if (!credential) throw new HttpError(401, "invalid_google_token");
+	const claims = await verifyGoogleIdToken(credential, payload.nonce || "");
+	const emailDisplay = String(claims.email || "").trim();
+	const emailCanonical = canonicalEmail(emailDisplay);
+	if (!emailCanonical) throw new HttpError(400, "invalid_google_email");
+	if (claims.email_verified === false || claims.email_verified === "false") {
+		throw new HttpError(401, "google_email_not_verified");
+	}
+	return {
+		provider: googleIdentityProvider,
+		providerSubject: String(claims.sub || ""),
+		emailCanonical,
+		emailDisplay,
+		displayName: cleanUsername(claims.name || claims.given_name || requestedUsername || emailDisplay.split("@")[0] || "Voidscape player"),
+		avatarUrl: String(claims.picture || "").trim(),
+		emailVerified: true,
+		username: requestedUsername
+	};
+}
+
+async function verifyGoogleIdToken(credential, nonce) {
+	requireGoogleConfigured();
+	const parts = String(credential || "").split(".");
+	if (parts.length !== 3) throw new HttpError(401, "invalid_google_token");
+	let header;
+	let claims;
+	try {
+		header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+		claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+	} catch (error) {
+		throw new HttpError(401, "invalid_google_token");
+	}
+	if (header.alg !== "RS256" || !header.kid) throw new HttpError(401, "invalid_google_token");
+	const keys = await googleJwks();
+	const jwk = keys.get(header.kid);
+	if (!jwk) throw new HttpError(401, "invalid_google_token");
+	const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
+	const signature = Buffer.from(parts[2], "base64url");
+	const publicKey = createPublicKey({ key: jwk, format: "jwk" });
+	const valid = verifySignature("RSA-SHA256", signed, publicKey, signature);
+	if (!valid) throw new HttpError(401, "invalid_google_token");
+	const issuer = String(claims.iss || "");
+	if (issuer !== "https://accounts.google.com" && issuer !== "accounts.google.com") {
+		throw new HttpError(401, "invalid_google_token");
+	}
+	if (String(claims.aud || "") !== googleClientId) throw new HttpError(401, "invalid_google_token");
+	if (!claims.sub) throw new HttpError(401, "invalid_google_token");
+	const expiresAt = Number(claims.exp || 0) * 1000;
+	if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new HttpError(401, "invalid_google_token");
+	if (nonce && claims.nonce !== nonce) throw new HttpError(401, "invalid_google_token");
+	return claims;
+}
+
+async function googleJwks() {
+	if (googleJwksCache.expiresAt > Date.now() && googleJwksCache.keys.size) {
+		return googleJwksCache.keys;
+	}
+	let response;
+	try {
+		response = await fetch(googleJwksUrl);
+	} catch (error) {
+		throw new HttpError(503, "google_jwks_unavailable");
+	}
+	if (!response || !response.ok) throw new HttpError(503, "google_jwks_unavailable");
+	const body = await response.json();
+	const keys = new Map();
+	(body.keys || []).forEach((key) => {
+		if (key && key.kid) keys.set(key.kid, key);
+	});
+	if (!keys.size) throw new HttpError(503, "google_jwks_unavailable");
+	const cacheControl = String(response.headers.get("cache-control") || "");
+	const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+	const maxAgeMs = maxAgeMatch ? Number(maxAgeMatch[1]) * 1000 : 60 * 60 * 1000;
+	googleJwksCache = {
+		expiresAt: Date.now() + Math.max(60 * 1000, Math.min(maxAgeMs, 24 * 60 * 60 * 1000)),
+		keys
+	};
+	return keys;
+}
+
+function consumeGoogleNonce(store, nonce, request) {
+	pruneOauthStates(store);
+	const text = String(nonce || "").trim();
+	if (!text) throw new HttpError(400, "google_nonce_invalid");
+	const nonceHash = hashToken(text);
+	const index = store.oauthStates.findIndex((entry) =>
+		entry.provider === "google_id_token" &&
+		entry.stateHash === nonceHash &&
+		entry.expiresAt > Date.now()
+	);
+	if (index === -1) throw new HttpError(400, "google_nonce_invalid");
+	const [entry] = store.oauthStates.splice(index, 1);
+	if (entry.ipHash && entry.ipHash !== abuseHash(clientIp(request))) {
+		audit(store, "google_nonce_ip_changed", {});
+	}
+	return entry;
+}
+
+function requireGoogleConfigured() {
+	if (!googleClientId) throw new HttpError(503, "google_oauth_not_configured");
+}
+
 function requireReservationUsername(value) {
 	const username = cleanUsername(value || "");
 	if (!/^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
@@ -4305,6 +4640,16 @@ function sanitizeFunnelHref(value) {
 	const text = sanitizeFunnelText(value, 220);
 	if (!text) return "";
 	if (text.startsWith("/downloads/") || text === "/transparency") return text;
+	if (text === "/play/" || text === "/play") return text;
+	try {
+		const url = new URL(text);
+		const webUrl = new URL(webClientUrl);
+		if (url.origin === webUrl.origin && url.pathname.replace(/\/$/, "") === webUrl.pathname.replace(/\/$/, "")) {
+			return `${url.origin}${url.pathname}`.slice(0, 220);
+		}
+	} catch (error) {
+		// Ignore non-URL text.
+	}
 	return "";
 }
 
@@ -4360,7 +4705,15 @@ function requirePassword(password) {
 
 function requireGamePassword(password) {
 	const text = String(password || "");
-	if (text.length < 4 || text.length > 20) {
+	if (!/^[a-zA-Z0-9]{4,20}$/.test(text)) {
+		throw new HttpError(400, "invalid_game_password");
+	}
+	return text;
+}
+
+function requireLaunchFirstGamePassword(password) {
+	const text = String(password || "");
+	if (!/^[a-zA-Z0-9]{8,20}$/.test(text)) {
 		throw new HttpError(400, "invalid_game_password");
 	}
 	return text;
@@ -4405,6 +4758,26 @@ function xpRates() {
 		baseSkill: baseSkillXpRate,
 		subscribedCombat: baseCombatXpRate + subscriptionXpBonus,
 		subscribedSkill: baseSkillXpRate + subscriptionXpBonus
+	};
+}
+
+function worldRules() {
+	return {
+		mode: "hybrid-p2p-enabled",
+		memberWorld: true,
+		membershipAccess: "global",
+		subscriptionGrantsMembers: false,
+		registration: "portal-first",
+		packetRegistration: false
+	};
+}
+
+function oauthPublicState() {
+	return {
+		google: {
+			enabled: Boolean(googleClientId),
+			clientId: googleClientId || ""
+		}
 	};
 }
 

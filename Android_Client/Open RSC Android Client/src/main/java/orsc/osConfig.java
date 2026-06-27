@@ -13,8 +13,8 @@ public class osConfig {
 	public static final String VOIDSCAPE_EMULATOR_HOST = "10.0.2.2";
 	public static final String VOIDSCAPE_LAN_HOST = "192.168.1.100";
 	public static final String VOIDSCAPE_DEFAULT_PORT = "43596";
-	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "";
-	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "";
+	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/#account";
+	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/#security";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;

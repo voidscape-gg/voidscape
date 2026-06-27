@@ -69,7 +69,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] `scripts/run-client.sh` connects to the intended host/port.
 - [ ] Login screen renders Voidscape branding correctly.
-- [ ] New-account appearance flow works.
+- [ ] Portal-first account creation works and launch clients send Create Account/Recover account traffic to the account manager instead of relying on packet registration.
 - [ ] Existing account login works.
 - [ ] Basic movement, chat, inventory, bank, shop, combat, and logout work.
 - [ ] Wrench/profile/advanced settings open and persist.
@@ -110,7 +110,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.
 - [ ] Player titles command opens and active title appears in chat.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
-- [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, and redeemed cards apply the intended account-wide XP rates.
+- [ ] Desktop, Android, and web clients send Create Account/recovery traffic to the portal-first account manager; packet registration remains disabled unless explicitly enabled for a private beta/dev build.
+- [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, marks the portal reward as claimed, and redeemed cards apply the intended account-wide XP rates.
 - [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
 - [ ] Dragon sword components drop/source/assemble as intended.

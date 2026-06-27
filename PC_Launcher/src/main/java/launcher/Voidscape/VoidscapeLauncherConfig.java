@@ -18,8 +18,8 @@ public final class VoidscapeLauncherConfig {
   public static final int WINDOW_WIDTH = 820;
   public static final int WINDOW_HEIGHT = 560;
 
-  private static final String DEFAULT_PORTAL_URL = "";
-  private static final String DEFAULT_WEBSITE_URL = "";
+  private static final String DEFAULT_PORTAL_URL = "https://voidscape.gg";
+  private static final String DEFAULT_WEBSITE_URL = "https://voidscape.gg";
   private static final String PORTAL_MANIFEST_PATH = "api/launcher/manifest.properties";
   private static final String LAUNCHER_PROPERTIES = "voidscape-launcher.properties";
   private static final Properties PACKAGED_SETTINGS = loadPackagedSettings();
@@ -96,7 +96,7 @@ public final class VoidscapeLauncherConfig {
     if (url == null || url.trim().length() == 0) {
       return "";
     }
-    return url + "#" + route;
+    return url + "/#" + route;
   }
 
   private static String portalPath(String path) {

@@ -354,6 +354,7 @@ PORT="$public_port" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
 	PORTAL_ADMIN_TOKEN="dev-admin" \
 	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-public-smoke.log 2>&1 &
 public_pid="$!"
 trap 'kill "$public_pid" >/dev/null 2>&1 || true; cleanup' EXIT
@@ -405,6 +406,11 @@ fi
 public_payload="$(curl -fsS "http://127.0.0.1:${public_port}/api/public")"
 grep -q '"publicMode": true' <<<"$public_payload" || { echo "public-mode /api/public should be flagged"; exit 1; }
 grep -q '"playersOnline": 0' <<<"$public_payload" || { echo "public-mode /api/public should not report fake players online"; exit 1; }
+grep -q '"mode": "hybrid-p2p-enabled"' <<<"$public_payload" || { echo "public-mode /api/public should expose the global launch world mode"; exit 1; }
+grep -q '"subscriptionGrantsMembers": false' <<<"$public_payload" || { echo "public-mode /api/public should expose subscription as non-membership-gating"; exit 1; }
+grep -q '"launch": {' <<<"$public_payload" || { echo "public-mode /api/public should expose launch countdown metadata"; exit 1; }
+grep -q '"openAt": "2026-07-11T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
+grep -q '"Play in browser"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web client action"; exit 1; }
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
 	grep -q '"blocked24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized integrity counts"; exit 1; }
@@ -421,10 +427,33 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	fi
 
 	landing_html="$(curl -fsS "http://127.0.0.1:${public_port}/")"
+	grep -q '<title>Voidscape Prelaunch</title>' <<<"$landing_html" || { echo "landing page should be prelaunch-branded"; exit 1; }
+	grep -q 'Launch opens in' <<<"$landing_html" || { echo "landing page should include the launch countdown"; exit 1; }
+	if grep -q 'href="https://voidscape.gg/play/"' <<<"$landing_html"; then
+		echo "prelaunch landing should not send visitors to the web client before launch"
+		exit 1
+	fi
+	if grep -q 'data-funnel-event="play_web"' <<<"$landing_html"; then
+		echo "prelaunch landing should not tag play-web clicks before launch"
+		exit 1
+	fi
+	grep -q 'Reserve Name + Free Card' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
+	grep -q 'data-prelaunch-auth-cta' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
+	grep -q 'One account. Every platform.' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
 	grep -q 'landing-install-help' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
-	grep -q 'landing-live-basics' <<<"$landing_html" || { echo "landing page should include live basics"; exit 1; }
-	grep -q 'data-funnel-event="download_launcher"' <<<"$landing_html" || { echo "landing page should tag download clicks for funnel tracking"; exit 1; }
+	if grep -q 'landing-live-basics' <<<"$landing_html"; then
+		echo "prelaunch landing should not include the redundant live basics strip"
+		exit 1
+	fi
+	if grep -q 'Why reserve early' <<<"$landing_html"; then
+		echo "prelaunch landing should not include the redundant why-reserve strip"
+		exit 1
+	fi
+	if grep -q 'data-funnel-event="download_launcher"' <<<"$landing_html"; then
+		echo "prelaunch landing should not promote launcher downloads before launch"
+		exit 1
+	fi
 	if grep -q 'class="landing-integrity' <<<"$landing_html"; then
 		echo "landing page should not embed the full transparency dashboard"
 		exit 1
@@ -443,18 +472,184 @@ grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public 
 	grep -q '"accountIntegrity"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose account integrity totals"; exit 1; }
 	grep -q '"sha256"' <<<"$integrity_payload" || { echo "public-mode /api/integrity should expose build hashes"; exit 1; }
 
-	funnel_click="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/funnel/click" -H 'content-type: application/json' -d '{"event":"download_launcher","target":"Download Launcher","href":"/downloads/launcher","page":"/?utm_source=smoke&utm_campaign=portal","utm":{"utm_source":"smoke","utm_campaign":"portal"}}')"
-	grep -q '"event": "download_launcher"' <<<"$funnel_click" || { echo "public-mode funnel click endpoint should accept download events"; exit 1; }
+	funnel_click="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/funnel/click" -H 'content-type: application/json' -d '{"event":"transparency","target":"Trust","href":"/transparency","page":"/?utm_source=smoke&utm_campaign=portal","utm":{"utm_source":"smoke","utm_campaign":"portal"}}')"
+	grep -q '"event": "transparency"' <<<"$funnel_click" || { echo "public-mode funnel click endpoint should accept transparency events"; exit 1; }
 
 # admin stays available with the token, refused without
 expect_status 403 "http://127.0.0.1:${public_port}/api/admin/signups"
 admin_funnel="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/funnel")"
-grep -q '"event": "download_launcher"' <<<"$admin_funnel" || { echo "admin funnel summary should include tracked download clicks"; exit 1; }
+grep -q '"event": "transparency"' <<<"$admin_funnel" || { echo "admin funnel summary should include tracked transparency clicks"; exit 1; }
 admin_signups="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${public_port}/api/admin/signups")"
 grep -q '"PublicGuy"' <<<"$admin_signups" || { echo "public-mode admin signup list should include the signup"; exit 1; }
 
 kill "$public_pid" >/dev/null 2>&1 || true
 wait "$public_pid" >/dev/null 2>&1 || true
+trap cleanup EXIT
+
+# ---- PORTAL_LAUNCH_SIGNUP_MODE public account flow ----
+launch_port=$((PORT + 2))
+PORT="$launch_port" \
+	PORTAL_DATA_DIR="$tmp_dir/launch-store" \
+	PORTAL_OPENRSC_DB="$fixture_db" \
+	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+	PORTAL_ADMIN_TOKEN="dev-admin" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
+	PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-launch-signup-smoke.log 2>&1 &
+launch_pid="$!"
+trap 'kill "$launch_pid" >/dev/null 2>&1 || true; cleanup' EXIT
+
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${launch_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+launch_public_payload="$(curl -fsS "http://127.0.0.1:${launch_port}/api/public")"
+grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
+grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the global members-world flag"; exit 1; }
+grep -q '"packetRegistration": false' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose portal-first registration"; exit 1; }
+grep -q '"oauth": {' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose OAuth config"; exit 1; }
+grep -q '"clientId": "test-google-client"' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the Google client id when configured"; exit 1; }
+
+launch_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"LaunchGuy","email":"launch-guy@example.com","password":"Launchpass1"}')"
+grep -q '"token":' <<<"$launch_signup" || { echo "launch-signup account registration should issue a session"; exit 1; }
+grep -q '"LaunchGuy"' <<<"$launch_signup" || { echo "launch-signup account registration should create the requested username"; exit 1; }
+grep -q '"source": "openrsc-sqlite-created"' <<<"$launch_signup" || { echo "launch-signup registration should create a real OpenRSC save immediately"; exit 1; }
+grep -q '"linkStatus": "linked"' <<<"$launch_signup" || { echo "launch-signup registration should link the OpenRSC save immediately"; exit 1; }
+grep -q '"starterSubscriptionCards": 1' <<<"$launch_signup" || { echo "launch-signup registration should reserve one starter subscription card"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('launch signup should use exactly one character slot');
+if (payload.characters[0].name !== 'LaunchGuy') throw new Error('launch signup should return LaunchGuy as the first character');
+if (payload.characters[0].source !== 'openrsc-sqlite-created') throw new Error('launch signup should return the OpenRSC-created source');
+" "$launch_signup"
+launch_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_signup")"
+if [[ -z "$launch_token" ]]; then
+	echo "launch-signup registration returned an empty token"
+	exit 1
+fi
+
+launch_account="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
+grep -q '"email": "launch-guy@example.com"' <<<"$launch_account" || { echo "launch-signup session should read the created account"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('launch account should keep exactly one character slot used');
+" "$launch_account"
+launch_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass1"}')"
+grep -q '"token":' <<<"$launch_login" || { echo "launch-signup returning login should issue a session"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('returning login should expose one used character slot');
+if (payload.characters[0].name !== 'LaunchGuy') throw new Error('returning login should expose the first character');
+" "$launch_login"
+
+launch_player_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
+if [[ "$launch_player_count" != "1" ]]; then
+	echo "launch-signup registration should create one normal User-ranked OpenRSC player"
+	exit 1
+fi
+launch_link_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchGuy';")"
+if [[ "$launch_link_count" != "1" ]]; then
+	echo "launch-signup OpenRSC player should be linked to the web account"
+	exit 1
+fi
+
+launch_starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$launch_starter_card_state" != "1" ]]; then
+	echo "launch-signup registration should sync one waiting starter card marker"
+	exit 1
+fi
+
+launch_admin_waiting="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${launch_port}/api/admin/accounts/1")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin account state should show starter card waiting');
+if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin account state should expose one waiting starter card');
+" "$launch_admin_waiting"
+
+launch_revoke="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H 'x-portal-admin-token: dev-admin' \
+	-H 'content-type: application/json' \
+	-d '{"action":"revoke"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'none') throw new Error('admin revoke should clear an unclaimed starter card');
+if (payload.rewards.starterSubscriptionCards !== 0) throw new Error('admin revoke should leave zero waiting starter cards');
+" "$launch_revoke"
+launch_waiting_after_revoke="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
+if [[ "$launch_waiting_after_revoke" != "0" ]]; then
+	echo "admin starter-card revoke should clear the unclaimed OpenRSC marker"
+	exit 1
+fi
+
+launch_grant="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H 'x-portal-admin-token: dev-admin' \
+	-H 'content-type: application/json' \
+	-d '{"action":"grant"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin grant should restore starter card waiting state');
+if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin grant should expose one waiting starter card');
+" "$launch_grant"
+launch_waiting_after_grant="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$launch_waiting_after_grant" != "1" ]]; then
+	echo "admin starter-card grant should restore the OpenRSC marker"
+	exit 1
+fi
+
+sqlite3 "$fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key='starter_card:1';"
+launch_account_claimed="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('account state should show a claimed starter card');
+if (payload.rewards.starterSubscriptionCards !== 0) throw new Error('claimed starter cards should not remain waiting');
+if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed starter card count should be exposed');
+" "$launch_account_claimed"
+
+launch_revoke_claimed="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H 'x-portal-admin-token: dev-admin' \
+	-H 'content-type: application/json' \
+	-d '{"action":"revoke"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('admin revoke should not erase an already claimed starter card');
+if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed starter card should remain visible after revoke');
+" "$launch_revoke_claimed"
+launch_claimed_after_revoke="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$launch_claimed_after_revoke" != "2" ]]; then
+	echo "admin starter-card revoke should preserve an already claimed marker"
+	exit 1
+fi
+
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/characters" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"name":"LaunchGuy","gamePassword":"playpass"}'
+google_nonce_payload="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}')"
+grep -q '"nonce":' <<<"$google_nonce_payload" || { echo "launch-signup Google nonce endpoint should mint a nonce when configured"; exit 1; }
+google_nonce="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.nonce || '');" "$google_nonce_payload")"
+if [[ -z "$google_nonce" ]]; then
+	echo "launch-signup Google nonce was empty"
+	exit 1
+fi
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
+	-H 'content-type: application/json' \
+	-d "{\"credential\":\"bad-token\",\"nonce\":\"${google_nonce}\",\"username\":\"GoogleGuy\",\"gamePassword\":\"googlepass\"}"
+expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google/dev" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/founder/simulate-referral" -H 'content-type: application/json' -d '{}'
+expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/character-links/simulate-verify" -H 'content-type: application/json' -d '{}'
+expect_status 404 "http://127.0.0.1:${launch_port}/api/openrsc/characters/LaunchGuy"
+
+kill "$launch_pid" >/dev/null 2>&1 || true
+wait "$launch_pid" >/dev/null 2>&1 || true
 trap cleanup EXIT
 
 # Simulate one in-game redemption, then check the admin signup list reflects it.

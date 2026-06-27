@@ -34,7 +34,7 @@ Voidscape subscription is an account-level timed XP boost unlocked by redeeming 
 - The vendor does not sell subscription cards, does not open a shop, and does not maintain stock or price tiers.
 - Starter cards use global `player_cache` keys named `starter_card:<webAccountId>` with value `1` for available and `2` for claimed.
 
-Pre-release starter-card reservations use the same global-cache pattern while the website/account system is still a local prototype. The portal writes the available marker when `PORTAL_OPENRSC_DB` points at the game SQLite database; the game server marks it claimed after the vendor successfully puts the card in the player's inventory. Redeeming the physical item is still the only action that starts or extends subscription time.
+Pre-release starter-card reservations use the same global-cache pattern while the website/account system is still a local prototype. The portal writes the available marker when `PORTAL_OPENRSC_DB` points at the game SQLite database; the game server marks it claimed after the vendor successfully puts the card in the player's inventory. The portal dashboard and admin account view read that game marker when available, so `1` appears as waiting and `2` appears as claimed instead of disappearing. Staff revoke clears only an unclaimed `1` marker; a claimed `2` marker remains as the audit truth because the physical card has already been minted. Redeeming the physical item is still the only action that starts or extends subscription time.
 
 ## Signup Codes (vendor input box)
 
@@ -53,11 +53,11 @@ For a quick server-side test without the portal: insert a row (`INSERT INTO play
 
 Because cards are tradable, abuse prevention belongs before item creation: the portal grants at most one starter-card marker per web account, records account identity/risk signals, and can hold suspicious signups for staff review without changing the in-game item. Once a card exists, it behaves like any other tradable subscription card.
 
-The portal's Subscription view should therefore show two separate states: the account's current effective XP rates/subscription status, and whether a starter card is waiting at Lumbridge. A fresh pre-release signup remains `Unsubscribed` at 10x combat / 2x skilling, while the reward wallet shows `1 card reserved in Lumbridge` until the in-game vendor gives the physical card.
+The portal's Subscription view should therefore show two separate states: the account's current effective XP rates/subscription status, and whether a starter card is waiting at Lumbridge or already claimed. A fresh pre-release signup remains `Unsubscribed` at 10x combat / 2x skilling, while the reward wallet shows `1 card reserved in Lumbridge` until the in-game vendor gives the physical card.
 
 ## Local Verification
 
-For a live-client starter-card claim check, launch the local server and the workbench client, seed the logged-in character with `web_account_id`, seed the matching `starter_card:<webAccountId> = 1` global marker, then run:
+For a live-client starter-card claim check, launch the local server and the workbench client, seed the logged-in character with `web_account_id`, seed the matching `starter_card:<webAccountId> = 1` global marker, and either log the character in near the Lumbridge vendor at `(126, 649)` or use a staff/dev test account that can run the workbench teleport helper, then run:
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:18787/scenario/subscription-vendor-claim

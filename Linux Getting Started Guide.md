@@ -14,7 +14,7 @@ You are now ready to run "./Start-Linux.sh"
 
 You must have the game server fully running before the game client. You can verify it is running after starting it up by typing "screen -r" and pressing enter. To "minimize" the screen instance of the running game server and not close it, type "CTRL + A + D" and it will return to your previous console view.
 
-Once you open the game client, you will need to click "New User" to create a player. If you become stuck on Tutorial Island or just wish to skip it, there is a link in the in-game options menu above the log out that reads "skip tutorial".
+For launch builds, create your account through the Voidscape account portal first, then log into the client with the character username and game password created there. If you become stuck on Tutorial Island or just wish to skip it, there is a link in the in-game options menu above the log out that reads "skip tutorial".
 
 ## Changing game features and configuration
 

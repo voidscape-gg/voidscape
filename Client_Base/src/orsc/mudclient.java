@@ -3081,7 +3081,7 @@ public final class mudclient implements Runnable {
 				panelLoginWelcome.addButtonBackground(halfGameWidth() - 100, halfGameHeight() + 73 + yOffsetWelcome, 120, 35);
 				panelLoginWelcome.addButtonBackground(halfGameWidth() + 100, halfGameHeight() + 73 + yOffsetWelcome, 120, 35);
 
-				panelLoginWelcome.addCenteredText(halfGameWidth() - 100, halfGameHeight() + 73 + yOffsetWelcome, "New User", 5, false);
+				panelLoginWelcome.addCenteredText(halfGameWidth() - 100, halfGameHeight() + 73 + yOffsetWelcome, "Create Account", 5, false);
 				panelLoginWelcome.addCenteredText(halfGameWidth() + 100, halfGameHeight() + 73 + yOffsetWelcome, "Existing User", 5, false);
 
 				loginButtonNewUser = panelLoginWelcome.addButton(halfGameWidth() - 100, halfGameHeight() + 73 + yOffsetWelcome, 120, 35);
@@ -3093,7 +3093,7 @@ public final class mudclient implements Runnable {
 				panelLoginWelcome.addButtonBackground(halfGameWidth() - 100, halfGameHeight() + 83 + yOffsetWelcome, 120, 35);
 				panelLoginWelcome.addButtonBackground(halfGameWidth() + 100, halfGameHeight() + 83 + yOffsetWelcome, 120, 35);
 
-				panelLoginWelcome.addCenteredText(halfGameWidth() - 100, halfGameHeight() + 83 + yOffsetWelcome, "New User", 5, false);
+				panelLoginWelcome.addCenteredText(halfGameWidth() - 100, halfGameHeight() + 83 + yOffsetWelcome, "Create Account", 5, false);
 				panelLoginWelcome.addCenteredText(halfGameWidth() + 100, halfGameHeight() + 83 + yOffsetWelcome, "Existing User", 5, false);
 
 				loginButtonNewUser = panelLoginWelcome.addButton(halfGameWidth() - 100, halfGameHeight() + 83 + yOffsetWelcome, 120, 35);
@@ -11680,7 +11680,7 @@ public final class mudclient implements Runnable {
 		drawVoidscapeFrame(cx - 97, 118, 194, 185);
 		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", 0xf3d46b, 1, 143);
 		drawVoidscapeCenteredText(cx, "Relive the classic.", 0xffffff, 1, 160);
-		drawVoidscapeButton(cx, 181, 176, 34, isAndroid() ? "Create Account" : "New User", true);
+		drawVoidscapeButton(cx, 181, 176, 34, "Create Account", true);
 		drawVoidscapeButton(cx, 223, 176, 34, "Existing User", false);
 		if (this.voidscapeLoginHomeStatus1.length() > 0) {
 			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus1, 0xffd98a, 0, 267);
@@ -11706,21 +11706,25 @@ public final class mudclient implements Runnable {
 		return url != null && url.trim().length() > 0 && clientPort.openUrl(url.trim());
 	}
 
-	private void openAndroidCreateAccount() {
+	private boolean hasConfiguredUrl(String url) {
+		return url != null && url.trim().length() > 0;
+	}
+
+	private void openCreateAccountPortal() {
 		clientPort.closeKeyboard();
 		if (openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
 			showVoidscapeLoginHomeStatus("Opening account portal", "Return here to log in.");
 		} else {
-			showVoidscapeLoginHomeStatus("Account portal not set", "Use website to create.");
+			showVoidscapeLoginHomeStatus("Account portal not set", "Use voidscape.gg to create.");
 		}
 	}
 
-	private void openAndroidRecovery() {
+	private void openRecoveryPortal() {
 		clientPort.closeKeyboard();
 		if (openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_RECOVERY_URL)) {
 			showLoginScreenStatus("Opening account portal.", " ");
 		} else {
-			showLoginScreenStatus("Use website to recover.", " ");
+			showLoginScreenStatus("Use voidscape.gg to recover.", " ");
 		}
 	}
 
@@ -24246,8 +24250,12 @@ public final class mudclient implements Runnable {
 					}
 
 					if (this.panelLogin.isClicked(this.lostPasswordButtonIdx)) {
-						if (isAndroid()) {
-							openAndroidRecovery();
+						if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_RECOVERY_URL)) {
+							openRecoveryPortal();
+							return;
+						}
+						if (isAndroid() || Config.isWeb()) {
+							showLoginScreenStatus("Use voidscape.gg to recover.", " ");
 							return;
 						}
 
@@ -24436,8 +24444,10 @@ public final class mudclient implements Runnable {
 					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
-					if (isAndroid()) {
-						openAndroidCreateAccount();
+					if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
+						openCreateAccountPortal();
+					} else if (isAndroid() || Config.isWeb()) {
+						showVoidscapeLoginHomeStatus("Account portal not set", "Use voidscape.gg to create.");
 					} else {
 						loginScreenNumber = 1;
 						this.menuNewUser.setText(this.menuNewUserStatus, "Please fill in all fields");

@@ -106,8 +106,14 @@ Phase 1 keeps game login untouched but makes signup portal-first:
 1. A player logs into the PC client with the character username and game password created by the portal.
 2. The website authenticates by web account email/password or Google OpenID Connect.
 3. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
-4. Public client packet registration is disabled; the client should direct new users to the portal.
+4. Public client packet registration is disabled; shipped desktop, Android, and web clients direct new users to the portal account manager.
 5. Subscription state lives at the web-account level. The game bridge stores `web_account_id` on each character and `acct_sub:<webAccountId>` as the account-wide expiry in global `player_cache`.
+
+Launch decision: `member_world` stays globally enabled on the server for every client surface. Subscription cards are an account-wide XP/card incentive, not a per-player P2P unlock. The server config remains the source of truth for F2P/P2P restrictions, so launcher, Android, and web clients do not need separate membership logic.
+
+The shared game client still contains the original packet registration form for explicit dev/beta builds with no portal URL configured, but release defaults point Create Account and recovery to `https://voidscape.gg/#account` / `#security` (or web-client portal sentinels resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
+
+Starter-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. `starter_card:<webAccountId> = 1` means waiting at the Lumbridge vendor, `2` means claimed, and staff revoke only clears an unclaimed waiting marker.
 
 Phase 2 can optionally introduce a character-picker login, but that is a protocol/client feature and must follow `docs/subsystems/networking-protocol.md`.
 
@@ -174,22 +180,24 @@ If avatar rendering is not ready, the API should still return exact appearance/e
 It currently proves:
 
 - founder/reserved-name shape
+- public launch-signup mode (`PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1`) that exposes the safe account path while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden
 - starter-card reward state for the free weekly subscription card
 - public site payloads for status, XP rates, news, downloads, highscores, market intel, and activity feed
 - web account registration/login flow
-- local dev Google sign-in flow that stores a `google` provider identity and returns a normal portal bearer session
+- local dev Google sign-in flow and launch-mode Google Identity Services ID-token signup that store a `google` provider identity and return a normal portal bearer session
 - `scrypt` password hashing with per-password salts
 - bearer sessions stored server-side as token hashes
 - local account security controls for password rotation, hashed recovery-code generation, and ending other active sessions
 - local recovery-code password reset through `POST /api/accounts/recover-password`; a valid code is consumed, all old sessions are revoked, the password hash is rotated, and a fresh bearer session is issued
 - server-side 10-character roster cap
 - character-state API responses shaped for the portal
+- launch-mode account registration that creates the requested first character as a real linked OpenRSC save immediately when `PORTAL_OPENRSC_DB` is configured, using the same username and password as the starter game login
 - OpenRSC SQLite-backed character creation through `POST /api/characters` when `PORTAL_OPENRSC_DB` is configured; the endpoint creates the normal `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows, then stores the created player id in the local portal roster state
 - local character link challenges with hashed one-time codes and a dev simulation path
 - account-wide subscription-card redemption state
 - starter-card abuse controls that store salted hashes for IP/email/identity signals, keep suspicious new accounts active, and withhold only the free starter card for staff review after repeated non-local IP grants
 - token-gated local staff endpoints for account lookup, status changes, subscription grants/clears, starter-card grants/revokes, and session revocation
-- explicit `501` stubs for production Google OAuth and subscription-card payment checkout
+- explicit `501` stubs for redirect-style Google OAuth and subscription-card payment checkout
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
 - portal account-management schema constraints through `scripts/test-portal-schema.sh`
 
@@ -200,7 +208,7 @@ It does not yet prove:
 - production-safe OpenRSC character ownership/linking
 - production OpenRSC database writes outside the local SQLite dev bridge
 - real in-game `::link` command handling or signed game-server verification callback
-- production Google OAuth redirect/callback handling and ID-token verification
+- production Google OAuth redirect/callback handling
 - production payment checkout/webhook handling
 - production email-delivered password reset or account-recovery support queue
 - production staff identity/RBAC beyond the local bearer-token guard
@@ -227,7 +235,7 @@ The low-friction recovery path is:
 2. If they later lose the password, `POST /api/accounts/recover-password` verifies a code hash plus canonical email, consumes that code, rotates the `scrypt` password hash, revokes old sessions, and returns a new session.
 3. If they lose both login and recovery codes, staff support must verify evidence out of band and then use the admin API to review/lock, revoke sessions, or restore access.
 
-Production still needs email delivery, provider-backed Google OAuth, and a staff identity/RBAC layer before this becomes an internet-facing recovery system.
+Production still needs email delivery, redirect-style Google OAuth if that provider flow is wanted, and a staff identity/RBAC layer before this becomes an internet-facing recovery system.
 
 ### Read-only OpenRSC snapshot endpoint
 
@@ -246,7 +254,7 @@ It does not authenticate ownership or mutate game data. Production account linki
 
 ### Local OpenRSC character creation
 
-When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 character `gamePassword`. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, stamps the created player cache with `web_account_id`, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
+When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 letter/number `gamePassword`; the public launch form uses an 8-20 letter/number password because that first password is also the initial game login. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, stamps the created player cache with `web_account_id`, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
 
 This is deliberately still a local bridge. It does not bypass Void Island starter-path onboarding, does not implement a web-account character picker in the client, and does not create production Google/OAuth account records in OpenRSC.
 

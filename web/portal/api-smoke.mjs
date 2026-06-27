@@ -202,9 +202,10 @@ const registered = await api("/api/accounts/register", {
 });
 token = registered.token;
 assert(token, "registration should return a session token");
-assert(registered.characters.length === 1, "registration should create the first character");
+assert(registered.characters.length === 1, "registration should reserve the first character name");
 assert(registered.founder.starterCardUnlocked === true, "prelaunch signup should reserve the starter subscription card");
 assert(registered.rewards.starterSubscriptionCards === 1, "reserved starter card should appear in account reward state");
+assert(registered.characters[0].source === "founder-reserved", "registration should wait for a game password before creating the OpenRSC save");
 assert(registered.characters[0].appearanceData.topColour === 4, "starter characters should expose default appearance data");
 
 const heldReservation = await api("/api/founder/reservations", {

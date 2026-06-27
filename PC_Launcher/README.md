@@ -33,8 +33,8 @@ Configuration precedence is system properties, environment variables, sidecar `v
 voidscape.serverHost=play.example.com
 voidscape.serverPort=43596
 voidscape.manifestUrl=https://play.example.com/voidscape/update/manifest.properties
-voidscape.websiteUrl=
-voidscape.portalUrl=
+voidscape.websiteUrl=https://voidscape.gg
+voidscape.portalUrl=https://voidscape.gg
 voidscape.discordUrl=https://discord.gg/example
 voidscape.discordApplicationId=123456789012345678
 voidscape.discordLargeImageKey=voidscape_logo

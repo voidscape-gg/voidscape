@@ -683,7 +683,7 @@ public class ServerConfiguration {
 		WANT_COMBAT_ODYSSEY = tryReadBool("want_combat_odyssey").orElse(false);
 		WANT_INVISIBLE_NPCS = tryReadBool("want_invisible_npcs").orElse(false);
 		EQUIP_QUEST_ITEMS_WITHOUT_QUESTS = tryReadBool("equip_quest_items_without_quests").orElse(false);
-		WANT_PACKET_REGISTER = tryReadBool("want_packet_register").orElse(true);
+		WANT_PACKET_REGISTER = tryReadBool("want_packet_register").orElse(false);
 		TIMED_EVENT_INTERVAL = tryReadInt("timed_event_interval").orElse(30000);
 
 		// Party settings

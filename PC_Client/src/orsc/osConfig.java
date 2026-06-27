@@ -8,8 +8,8 @@ public class osConfig {
 	public static final String ANDROID_DOWNLOAD_PATH = "https://" + DL_URL + "/downloads/";
 	public static final String CACHE_URL = "https://" + DL_URL + "/downloads/";
 	public static final int ANDROID_CLIENT_VERSION = 143; // Important! Depends on web server android_version.txt to check for an updated version
-	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "";
-	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "";
+	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/#account";
+	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/#security";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;

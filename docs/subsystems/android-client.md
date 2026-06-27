@@ -19,6 +19,7 @@ Focused `--only-auth-wilderness-target` coverage verifies wilderness player-targ
 The APK should prioritize one-tap entry for beta players:
 
 - After bundled cache install, the visible `Play` button starts `GameActivity` using the saved Android app-private `ip.txt` / `port.txt` endpoint when present. Release builds always default to `5.161.114.251:43596`, including emulator-like Play review devices; debuggable builds on Android emulators default to `10.0.2.2:43596` so local smoke tests hit the host server without the advanced picker.
+- The shared login screen's `Create Account` and recovery actions open the portal (`https://voidscape.gg/#account` and `#security`) in Android's browser. Android does not use in-client packet registration for release account creation.
 - Long-press `Play` opens the advanced server picker for developers and testers only in debuggable builds.
 - Debug advanced choices are public Voidscape, Android emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, and manual host/port. Manual host/port opens prefilled with the current saved endpoint to avoid accidentally switching a QA device back to the default server.
 - Replace the hardcoded public IP with the final DNS name before broad release so old APKs survive VPS moves.
@@ -77,7 +78,7 @@ Endpoint note: when iterating against a non-default local port, write `ip.txt` /
 
 Current emulator quirk: `adb shell wm size` and `dumpsys window displays` can report stale orientation after switching between the portrait wrapper and landscape `GameActivity`. The smoke script sizes tap coordinates from a temporary `screencap` PNG first, then falls back to `dumpsys`/`wm size` only if image probing fails. The native wrapper's `Play` button can land higher on tablet-density layouts than on phone profiles, so smoke taps the UIAutomator text when possible and falls back to the actual button band instead of a bottom-biased percentage. Named screenshots also go through a timeout-backed `screencap` helper; if adb stalls, the smoke logs a warning and keeps action assertions moving instead of hanging indefinitely. The ATD automation image is reliable for log-driven assertions but can return black `screencap` frames in this environment; use it for repeatable input proof, then use `voidscape_api35` or a real device for visual QA screenshots. The Google APIs image can still ANR during credential entry under headless load, so real-device visual screenshots remain the release-grade check. Fresh Google APIs profiles can show Android's OS-owned fullscreen education card (`Viewing full screen` / `Got it`) on first launch; focused authenticated UI smokes close the game welcome panel from logged client coordinates instead of blind center taps.
 
-Android account creation and recovery are portal handoffs, not legacy in-client packet flows. The shared login screen labels the welcome action `Create Account` on Android and opens `orsc.osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL` when configured; a blank pre-release URL leaves the player on the welcome panel with an explicit status. The existing-user `Recover account` action uses `VOIDSCAPE_PORTAL_RECOVERY_URL` the same way. Desktop client registration/recovery behavior is unchanged.
+Android account creation and recovery are portal handoffs, not legacy in-client packet flows. The shared login screen labels the welcome action `Create Account` on Android and opens `orsc.osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL`; the existing-user `Recover account` action uses `VOIDSCAPE_PORTAL_RECOVERY_URL` the same way. Release builds point those URLs at `https://voidscape.gg/#account` and `#security`. Because the APK targets modern Android, `AndroidManifest.xml` declares HTTP/HTTPS `ACTION_VIEW` queries so `GameActivity.openUrl()` can discover Chrome/browser handlers before calling `startActivity`.
 
 Android shows the existing `Save` credential button even when the server-side desktop remember-login flag is disabled. Saved credentials are stored in Android app-private `credentials.txt`, reloaded into the shared login fields on the next app launch, and remain excluded from bundled APK cache assets.
 
@@ -154,9 +155,9 @@ This is the working Android punch list. The standard loop for each visual/input 
 ### Account and Login Flow
 
 - [x] Decide Android's public account path: mobile-friendly portal handoff for account creation and recovery; existing users log in inside the client.
-- [x] If client packet registration remains disabled for beta, hide or repurpose `New User` on Android so players are not sent into a dead path.
-- [x] Add a clear `Create Account` path that opens the configured portal/account site, with an in-client fallback status while the production URL is blank.
-- [x] Add a clear `Forgot password` path that opens the configured portal recovery flow, with an in-client fallback status while the production URL is blank.
+- [x] If client packet registration remains disabled, route `Create Account` to the portal so players are not sent into a dead path.
+- [x] Add a clear `Create Account` path that opens the configured portal/account site, with an in-client fallback status if the URL is missing in a dev build.
+- [x] Add a clear `Forgot password` path that opens the configured portal recovery flow, with an in-client fallback status if the URL is missing in a dev build.
 - [x] Verify existing-user username/password entry with the Android soft keyboard.
 - [x] Verify password field masking and input focus behavior.
 - [x] Verify back button behavior from login, keyboard, recovery, and server picker.

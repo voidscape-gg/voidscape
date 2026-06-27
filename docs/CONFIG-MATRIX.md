@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10070` | `10070` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10120` | `10120` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
@@ -25,9 +25,9 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10099` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10120` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
-| `want_packet_register` | `true` | `true` for beta | Decide before public launch | Friend beta allows in-client account/character creation; the portal flow can still be used. |
+| `want_packet_register` | `false` by server default and tracked presets; local beta may override `true` explicitly | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
 
 ## Portal account API
 
@@ -37,8 +37,11 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `PORTAL_ADMIN_TOKEN` | explicit local secret | secret manager | replace with staff identity/RBAC | Enables `/api/admin/*`; unset means admin endpoints return `admin_not_configured`. |
 | `PORTAL_STARTER_IP_DAILY_LIMIT` | `5` default, tests use `2` | tune from beta traffic | tune with logs and support policy | Limits only free starter-card grants from the same non-local IP bucket; accounts still register. |
 | `PORTAL_ABUSE_HASH_SALT` | dev-only value | stable private secret | stable private secret | Rotating it loses the ability to compare old abuse-signal hashes. |
-| Google OAuth/provider config | dev endpoint only | configured provider | configured provider | Production `/api/oauth/google/*` currently returns `501` until real OAuth is wired. |
+| Google OAuth/provider config | hidden unless configured | optional later | optional later | Leave `PORTAL_GOOGLE_CLIENT_ID` unset for launch unless intentionally enabling Google Identity Services; redirect-style `/api/oauth/google/*` remains a placeholder. |
 | Payment provider config | none | sandbox checkout/webhooks | live checkout/webhooks | Production subscription-card checkout currently returns `501` until a provider is wired. |
+| `PORTAL_PUBLIC_MODE` | optional | `1` for public rehearsal | `1` | Locks the portal to public-safe landing/account surfaces plus token-gated admin endpoints. |
+| `PORTAL_LAUNCH_SIGNUP_MODE` | optional | `1` for ad-flow rehearsal | `1` for ads | Turns public mode into account-first signup: creates the web account, first linked OpenRSC character, one used roster slot, and starter-card reservation in one flow. Requires `PORTAL_OPENRSC_DB` for real launch use. |
+| `PORTAL_WEB_CLIENT_URL` | `https://voidscape.gg/play/` | release URL | release URL | Browser-client URL used by release account surfaces/API metadata; the prelaunch landing mentions platform support but keeps the main CTA on reservation. |
 
 ## World rules
 
@@ -49,9 +52,10 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
-| `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. |
+| `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
 | `production_command_lockdown` | `false` locally unless testing launch policy | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
+| `want_packet_register` | `false` in tracked presets and as the Java default when omitted | `false` | `false` | Disables client packet registration so launch players enter through the portal signup/character flow first. |
 
 ## Content gates
 
@@ -68,7 +72,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
 | `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
 | `more_shafts_per_better_log` | `true` | Lets higher-tier logs feed the player-made arrow economy instead of every log producing the same 10 shafts. |
-| Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days; Lumbridge vendor grants one starter card reserved by the portal account flow. |
+| Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days and the small XP bump; they do not unlock P2P areas because `member_world` is already global. Lumbridge vendor grants one starter card reserved by the portal account flow. |
 | `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
 | `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
 | `want_bank_notes` / `want_cert_as_notes` | `true` if shipping notes | Controls note-style item handling and visuals. |

@@ -8,6 +8,7 @@
 	var views = Array.prototype.slice.call(document.querySelectorAll(".view"));
 	var viewLinks = Array.prototype.slice.call(document.querySelectorAll("[data-view-link]"));
 	var landingScrollButtons = Array.prototype.slice.call(document.querySelectorAll("[data-landing-scroll]"));
+	var prelaunchAuthButtons = Array.prototype.slice.call(document.querySelectorAll("[data-prelaunch-auth-cta]"));
 	var discordLoginButtons = Array.prototype.slice.call(document.querySelectorAll("[data-discord-login]"));
 	var whitepaperJumpButtons = Array.prototype.slice.call(document.querySelectorAll("[data-whitepaper-jump]"));
 	var trustTabs = Array.prototype.slice.call(document.querySelectorAll("[data-trust-tab]"));
@@ -94,6 +95,9 @@
 	var founderPassword = document.getElementById("founder-password");
 	var founderSubmit = document.getElementById("founder-submit");
 	var founderMessage = document.getElementById("founder-message");
+	var prelaunchGoogle = document.getElementById("prelaunch-google");
+	var googleSignupButton = document.getElementById("google-signup-button");
+	var googleSignupMessage = document.getElementById("google-signup-message");
 	var prelaunchSuccess = document.getElementById("prelaunch-success");
 	var prelaunchSuccessAccount = document.getElementById("prelaunch-success-account");
 	var prelaunchSuccessName = document.getElementById("prelaunch-success-name");
@@ -103,11 +107,20 @@
 	var prelaunchCreateGameLogin = document.getElementById("prelaunch-create-game-login");
 	var prelaunchDownload = document.getElementById("prelaunch-download");
 	var accountModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-account-mode]"));
+	var prelaunchAuthTabs = document.querySelector(".prelaunch-auth-tabs");
 	var prelaunchSuccessActions = document.getElementById("prelaunch-success-actions");
 	var prelaunchSuccessCode = document.getElementById("prelaunch-success-code");
 	var signupCodeBlock = document.getElementById("signup-code-block");
 	var signupCodeHelp = document.getElementById("signup-code-help");
 	var copySignupCode = document.getElementById("copy-signup-code");
+	var betaCountdown = document.getElementById("beta-countdown");
+	var betaCountdownDays = document.getElementById("beta-countdown-days");
+	var betaCountdownHours = document.getElementById("beta-countdown-hours");
+	var betaCountdownMinutes = document.getElementById("beta-countdown-minutes");
+	var betaCountdownSeconds = document.getElementById("beta-countdown-seconds");
+	var betaSignupCounter = document.getElementById("beta-signup-counter");
+	var betaSignupCount = document.getElementById("beta-signup-count");
+	var betaCountdownNote = document.getElementById("beta-countdown-note");
 	var founderProgressLabel = document.getElementById("founder-progress-label");
 	var founderRewardLabel = document.getElementById("founder-reward-label");
 	var founderProgressFill = document.getElementById("founder-progress-fill");
@@ -149,6 +162,14 @@
 	var dashboardCharacterCount = document.getElementById("dashboard-character-count");
 	var dashboardCardState = document.getElementById("dashboard-card-state");
 	var dashboardSecurityState = document.getElementById("dashboard-security-state");
+	var portalAuthForm = document.getElementById("portal-auth-form");
+	var portalAuthUsernameRow = document.getElementById("portal-auth-username-row");
+	var portalAuthUsername = document.getElementById("portal-auth-username");
+	var portalAuthEmail = document.getElementById("portal-auth-email");
+	var portalAuthPassword = document.getElementById("portal-auth-password");
+	var portalAuthSubmit = document.getElementById("portal-auth-submit");
+	var portalAuthMessage = document.getElementById("portal-auth-message");
+	var portalAuthModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-portal-auth-mode]"));
 	var securityScore = document.getElementById("security-score");
 	var securityEmailCheck = document.getElementById("security-email-check");
 	var securityRecoveryCheck = document.getElementById("security-recovery-check");
@@ -213,9 +234,18 @@
 	var sessionToken = localStorage.getItem(sessionKey) || "";
 	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
+	var portalAuthMode = "register";
 	var publicModeActive = false;
+	var launchSignupModeActive = false;
 	var publicModeViews = {
 		account: true
+	};
+	var launchSignupModeViews = {
+		account: true,
+		dashboard: true,
+		characters: true,
+		subscription: true,
+		security: true
 	};
 	var lastCharacterRefreshAt = 0;
 	var activeReferralCode = captureReferralFromLocation();
@@ -224,6 +254,12 @@
 	var betaResources = null;
 	var betaAccount = null;
 	var betaDownloadRows = [];
+	var launchCountdownState = null;
+	var launchCountdownTimer = 0;
+	var googleClientId = "";
+	var googleNonce = "";
+	var googleButtonRendered = false;
+	var googleScriptPromise = null;
 	var retiredViews = {
 		landing: "account",
 		highscores: "account",
@@ -241,7 +277,7 @@
 	};
 
 	var characters = loadRoster();
-	var selectedCharacter = localStorage.getItem(selectedKey) || characters[0].name;
+	var selectedCharacter = localStorage.getItem(selectedKey) || (characters[0] && characters[0].name) || "";
 	if (adminTokenInput) adminTokenInput.value = adminToken;
 
 	var ranks = [
@@ -290,6 +326,14 @@
 		button.addEventListener("click", function (event) {
 			event.preventDefault();
 			scrollToLandingTarget(button.getAttribute("data-landing-scroll"));
+			if (shell) shell.classList.remove("nav-open");
+		});
+	});
+
+	prelaunchAuthButtons.forEach(function (button) {
+		button.addEventListener("click", function (event) {
+			event.preventDefault();
+			handlePrelaunchAuthCta();
 			if (shell) shell.classList.remove("nav-open");
 		});
 	});
@@ -345,46 +389,54 @@
 				return;
 			}
 			var gamePassword = characterPassword ? characterPassword.value : "";
-			if (gamePassword.length < 4 || gamePassword.length > 20) {
-				characterMessage.textContent = "Game password must be 4-20 characters.";
+			if (!isGamePassword(gamePassword, 4)) {
+				characterMessage.textContent = "Game password must be 4-20 letters and numbers.";
 				if (characterPassword) characterPassword.focus();
 				return;
 			}
-			if (sessionToken) {
-				try {
-					var state = await apiRequest("/api/characters", {
-						method: "POST",
-						body: {
-							name: name,
-							gamePassword: gamePassword
-						}
-					});
-					applyAccountState(state);
-					selectedCharacter = name;
-					renderCharacters();
-					renderSelectedCharacter();
-					if (characterPassword) characterPassword.value = "";
-					var created = characters.find(function (entry) { return entry.name === name; });
-					characterMessage.textContent = name + (created && created.source === "openrsc-sqlite-created"
-						? " game login created."
-						: " added locally.");
-					return;
-				} catch (error) {
-					if (error.status === 401) {
-						clearSession();
-					} else if (error.status === 409) {
-						characterMessage.textContent = error.code === "character_limit_reached"
-							? "Roster is full. Web accounts are capped at 10 characters."
-							: "That character name is already taken.";
-						return;
-					} else if (error.status === 400 && error.code === "invalid_game_password") {
-						characterMessage.textContent = "Enter a 4-20 character game password for this character.";
-						if (characterPassword) characterPassword.focus();
-						return;
-					}
-				}
+			if (!sessionToken) {
+				characterMessage.textContent = "Sign in on the Account page before creating a game login.";
+				activateView("dashboard");
+				return;
 			}
-			createLocalCharacter(name);
+			queueCharacter.disabled = true;
+			characterMessage.textContent = "Creating game login...";
+			try {
+				var state = await apiRequest("/api/characters", {
+					method: "POST",
+					body: {
+						name: name,
+						gamePassword: gamePassword
+					}
+				});
+				applyAccountState(state);
+				selectedCharacter = name;
+				renderCharacters();
+				renderSelectedCharacter();
+				if (characterPassword) characterPassword.value = "";
+				var created = characters.find(function (entry) { return entry.name === name; });
+				characterMessage.textContent = name + (created && created.source === "openrsc-sqlite-created"
+					? " game login created."
+					: " added to this portal account.");
+			} catch (error) {
+				if (error.status === 401) {
+					clearSession();
+					characterMessage.textContent = "Session expired. Sign in again before creating a game login.";
+				} else if (error.status === 409) {
+					characterMessage.textContent = error.code === "character_limit_reached"
+						? "Roster is full. Web accounts are capped at 10 characters."
+						: "That character name is already taken.";
+				} else if (error.status === 400 && error.code === "invalid_game_password") {
+					characterMessage.textContent = "Enter a 4-20 letter and number game password for this character.";
+					if (characterPassword) characterPassword.focus();
+				} else if (error.status === 404 && error.code === "not_available_during_prelaunch") {
+					characterMessage.textContent = "Public prelaunch mode only accepts reservations. Character creation opens with the account portal.";
+				} else {
+					characterMessage.textContent = "Character creation failed: " + (error.code || "api_error") + ".";
+				}
+			} finally {
+				queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+			}
 		});
 	}
 
@@ -719,18 +771,121 @@
 		});
 	}
 
+	if (portalAuthForm) {
+		portalAuthModeButtons.forEach(function (button) {
+			button.addEventListener("click", function () {
+				setPortalAuthMode(button.getAttribute("data-portal-auth-mode") || "register");
+			});
+		});
+		portalAuthForm.addEventListener("submit", async function (event) {
+			event.preventDefault();
+			handlePortalAuth();
+		});
+		setPortalAuthMode(portalAuthMode);
+	}
+
+	function handlePrelaunchAuthCta() {
+		if (sessionToken) {
+			activateView("dashboard");
+			return;
+		}
+		setAccountMode("signin");
+		scrollToLandingTarget("founder-form");
+		window.setTimeout(function () {
+			if (founderEmail && !founderEmail.value) founderEmail.focus();
+		}, 120);
+	}
+
 	function setAccountMode(mode) {
 		document.body.classList.remove("prelaunch-claimed");
-		accountMode = mode === "signin" ? "signin" : "reserve";
+		accountMode = mode === "signin" && launchSignupModeActive ? "signin" : "reserve";
 		accountModeButtons.forEach(function (button) {
 			button.classList.toggle("is-active", button.getAttribute("data-account-mode") === accountMode);
 		});
-		if (founderNameRow) founderNameRow.hidden = false;
-		if (founderTitle) founderTitle.textContent = "Reserve your username";
-		if (founderSubmit) founderSubmit.textContent = "Reserve & get my code";
-		if (founderPassword) founderPassword.setAttribute("autocomplete", "new-password");
-		if (founderMessage) {
-			founderMessage.textContent = "Downloads are instant. Connect Discord only if you want the beta role and reward code.";
+		if (founderForm) {
+			founderForm.classList.remove("is-claimed", "needs-game-login", "has-game-login");
+		}
+		if (prelaunchSuccess) prelaunchSuccess.hidden = true;
+		if (signupCodeBlock) signupCodeBlock.hidden = true;
+		if (prelaunchGameOnboarding) prelaunchGameOnboarding.hidden = true;
+		updateLaunchSignupCopy();
+	}
+
+	function setPortalAuthMode(mode) {
+		portalAuthMode = mode === "login" ? "login" : "register";
+		portalAuthModeButtons.forEach(function (button) {
+			button.classList.toggle("is-active", button.getAttribute("data-portal-auth-mode") === portalAuthMode);
+		});
+		if (portalAuthUsernameRow) portalAuthUsernameRow.hidden = portalAuthMode === "login";
+		if (portalAuthPassword) {
+			portalAuthPassword.setAttribute("autocomplete", portalAuthMode === "login" ? "current-password" : "new-password");
+		}
+		if (portalAuthSubmit) portalAuthSubmit.textContent = portalAuthMode === "login" ? "Sign in" : "Create portal account";
+		if (portalAuthMessage) {
+			portalAuthMessage.textContent = portalAuthMode === "login"
+				? "Sign in to manage your roster, subscription status, and security settings."
+				: "Create the web account first. Game logins still use their own 4-20 character password.";
+		}
+	}
+
+	async function handlePortalAuth() {
+		if (window.location.protocol === "file:") {
+			if (portalAuthMessage) portalAuthMessage.textContent = "Run scripts/run-portal.sh before using portal account tools.";
+			return;
+		}
+		var email = (portalAuthEmail && portalAuthEmail.value || "").trim();
+		var password = portalAuthPassword ? portalAuthPassword.value : "";
+		var username = normalizeName(portalAuthUsername && portalAuthUsername.value || "");
+		if (portalAuthMode === "register" && !/^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
+			if (portalAuthMessage) portalAuthMessage.textContent = "Choose a 2-12 character username.";
+			if (portalAuthUsername) portalAuthUsername.focus();
+			return;
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			if (portalAuthMessage) portalAuthMessage.textContent = "Enter a valid email address.";
+			if (portalAuthEmail) portalAuthEmail.focus();
+			return;
+		}
+		if (password.length < 8) {
+			if (portalAuthMessage) portalAuthMessage.textContent = "Portal password must be at least 8 characters.";
+			if (portalAuthPassword) portalAuthPassword.focus();
+			return;
+		}
+
+		if (portalAuthSubmit) portalAuthSubmit.disabled = true;
+		if (portalAuthMessage) portalAuthMessage.textContent = portalAuthMode === "login" ? "Signing in..." : "Creating portal account...";
+		try {
+			var path = portalAuthMode === "login" ? "/api/accounts/login" : "/api/accounts/register";
+			var body = portalAuthMode === "login"
+				? { email: email, password: password }
+				: { username: username, email: email, password: password };
+			var state = await apiRequest(path, {
+				method: "POST",
+				body: body
+			});
+			applyAccountState(state);
+			if (portalAuthPassword) portalAuthPassword.value = "";
+			if (portalAuthMessage) {
+				portalAuthMessage.textContent = portalAuthMode === "login"
+					? "Signed in. Character tools are ready."
+					: "Portal account created. Add game logins from the Characters page.";
+			}
+			if (portalAuthForm) portalAuthForm.classList.add("is-authenticated");
+		} catch (error) {
+			if (error.status === 404 && error.code === "not_available_during_prelaunch") {
+				if (portalAuthMessage) portalAuthMessage.textContent = "Public prelaunch mode only accepts reservations. Full account tools stay closed until release.";
+			} else if (error.status === 409 && error.code === "account_exists") {
+				setPortalAuthMode("login");
+				if (portalAuthMessage) portalAuthMessage.textContent = "That email already has an account. Sign in instead.";
+			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
+				if (portalAuthMessage) portalAuthMessage.textContent = "That username is already reserved.";
+			} else if (error.status === 401) {
+				if (portalAuthMessage) portalAuthMessage.textContent = "Email or password did not match.";
+			} else {
+				if (portalAuthMessage) portalAuthMessage.textContent = "Portal account request failed: " + (error.code || "api_error") + ".";
+			}
+		} finally {
+			if (portalAuthSubmit) portalAuthSubmit.disabled = false;
 		}
 	}
 
@@ -738,15 +893,18 @@
 		if (!founderForm || !prelaunchSuccess) return;
 		var rewards = state && state.rewards ? state.rewards : null;
 		var hasCard = rewards && rewards.starterSubscriptionCards > 0;
-		if (!hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
+		if (!launchSignupModeActive && !hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
 		document.body.classList.add("prelaunch-claimed");
-		var founderUsername = state && state.founder ? state.founder.username : founderName.value;
+		var firstCharacter = state && Array.isArray(state.characters) && state.characters.length ? state.characters[0] : null;
+		var founderUsername = state && state.founder ? state.founder.username : firstCharacter ? firstCharacter.name : founderName.value;
 		var character = prelaunchReservedCharacter(state, founderUsername);
 		var needsGameLogin = Boolean(character && character.source === "founder-reserved");
+		var usedSlots = state && Array.isArray(state.characters) ? state.characters.length : (character ? 1 : 0);
 
 		founderForm.classList.add("is-claimed");
 		founderForm.classList.toggle("needs-game-login", needsGameLogin);
 		founderForm.classList.toggle("has-game-login", !needsGameLogin);
+		if (prelaunchGoogle) prelaunchGoogle.hidden = true;
 		prelaunchSuccess.hidden = false;
 		if (prelaunchSuccessAccount) {
 			prelaunchSuccessAccount.textContent = (state.account && state.account.email) || (state.founder && state.founder.email) || founderEmail.value || "-";
@@ -755,17 +913,23 @@
 			prelaunchSuccessName.textContent = founderUsername || "-";
 		}
 		if (prelaunchSuccessStatus) {
-			prelaunchSuccessStatus.textContent = needsGameLogin ? "Password needed" : "Ready in-game";
+			prelaunchSuccessStatus.textContent = needsGameLogin ? "Game password needed" : usedSlots + " / " + maxCharacters + " slots used";
 		}
 		var successTitle = prelaunchSuccess.querySelector("h2");
 		var successCopy = prelaunchSuccess.querySelector("p");
 		if (successTitle) {
-			successTitle.textContent = needsGameLogin ? "Set your game password" : "Game login ready";
+			successTitle.textContent = needsGameLogin ? "Set your game password" : "Account ready for launch";
 		}
 		if (successCopy) {
 			successCopy.textContent = needsGameLogin
-				? "Create your playable character, then download the launcher and log in with this username and password."
-				: "Download the launcher, log in with your username and game password, then speak to the Subscription Vendor in Lumbridge.";
+				? "Your web account and name reservation are saved. Create the playable login with a separate 4-20 character game password."
+				: "Your first character uses this username and your starter card is reserved for launch day.";
+		}
+		if (signupCodeBlock) signupCodeBlock.hidden = true;
+		if (signupCodeHelp) {
+			signupCodeHelp.textContent = hasCard
+				? "Your starter subscription card is reserved at the Lumbridge Subscription Vendor."
+				: "Your account is active. If the starter card needs review, staff can release it without blocking play.";
 		}
 		if (prelaunchGameOnboarding) {
 			prelaunchGameOnboarding.hidden = !needsGameLogin;
@@ -789,7 +953,7 @@
 
 	async function createPrelaunchGameLogin() {
 		if (!sessionToken) {
-			founderMessage.textContent = "Sign in with Google first.";
+			founderMessage.textContent = "Sign in to the portal first.";
 			return;
 		}
 		var name = (prelaunchSuccessName && prelaunchSuccessName.textContent) || founderName.value || "";
@@ -799,8 +963,8 @@
 			founderMessage.textContent = "Reserve a username before creating the game login.";
 			return;
 		}
-		if (gamePassword.length < 4 || gamePassword.length > 20) {
-			founderMessage.textContent = "Game password must be 4-20 characters.";
+		if (!isGamePassword(gamePassword, 4)) {
+			founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
 			if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			return;
 		}
@@ -826,9 +990,9 @@
 		} catch (error) {
 			if (error.status === 401) {
 				clearSession();
-				founderMessage.textContent = "Sign in with Google again to continue.";
+				founderMessage.textContent = "Sign in to the portal again to continue.";
 			} else if (error.status === 400 && error.code === "invalid_game_password") {
-				founderMessage.textContent = "Game password must be 4-20 characters.";
+				founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
 				if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			} else if (error.status === 409) {
 				founderMessage.textContent = "That username is already taken. Open Manage characters to choose another.";
@@ -845,19 +1009,83 @@
 	async function handlePrelaunchSignup() {
 		var name = normalizeName(founderName.value || "");
 		var email = (founderEmail && founderEmail.value || "").trim();
+		var webPassword = founderPassword ? founderPassword.value : "";
+		if (launchSignupModeActive && accountMode === "signin") {
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+				founderMessage.textContent = "Enter the email for your Voidscape account.";
+				if (founderEmail) founderEmail.focus();
+				return;
+			}
+			if (webPassword.length < 8 || webPassword.length > 20) {
+				founderMessage.textContent = "Password must be 8-20 characters.";
+				if (founderPassword) founderPassword.focus();
+				return;
+			}
+			if (founderSubmit) founderSubmit.disabled = true;
+			founderMessage.textContent = "Signing in...";
+			try {
+				var loginState = await apiRequest("/api/accounts/login", {
+					method: "POST",
+					body: {
+						email: email,
+						password: webPassword
+					}
+				});
+				applyAccountState(loginState);
+				if (founderPassword) founderPassword.value = "";
+				if (launchSignupModeActive) showPrelaunchClaimSuccess(loginState);
+				founderMessage.textContent = "Signed in. Account management is ready.";
+				activateView("dashboard");
+			} catch (error) {
+				if (error.status === 401) {
+					founderMessage.textContent = "Email or password did not match.";
+				} else if (error.status === 404 && error.code === "not_available_during_prelaunch") {
+					founderMessage.textContent = "Account sign-in opens with the launch signup flow.";
+				} else {
+					founderMessage.textContent = "Sign-in is unavailable right now. Please try again soon.";
+				}
+			} finally {
+				if (founderSubmit) founderSubmit.disabled = false;
+			}
+			return;
+		}
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 			founderMessage.textContent = "Choose a 2-12 character username to reserve.";
 			founderName.focus();
 			return;
 		}
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-			founderMessage.textContent = "Enter a valid email address. Your code is tied to it.";
+			founderMessage.textContent = launchSignupModeActive
+				? "Enter a valid email address for your web account."
+				: "Enter a valid email address. Your code is tied to it.";
 			if (founderEmail) founderEmail.focus();
 			return;
 		}
+		if (launchSignupModeActive && !isGamePassword(webPassword, 8)) {
+			founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+			if (founderPassword) founderPassword.focus();
+			return;
+		}
 		if (founderSubmit) founderSubmit.disabled = true;
-		founderMessage.textContent = "Reserving " + name + "...";
+		founderMessage.textContent = launchSignupModeActive ? "Reserving your name and starter card..." : "Reserving " + name + "...";
 		try {
+			if (launchSignupModeActive) {
+				var accountState = await apiRequest("/api/accounts/register", {
+					method: "POST",
+					body: {
+						username: name,
+						email: email,
+						password: webPassword,
+						referrerCode: currentReferralCode() || undefined
+					}
+				});
+				applyAccountState(accountState);
+				if (founderPassword) founderPassword.value = "";
+				if (characterName) characterName.value = name;
+				showPrelaunchClaimSuccess(accountState);
+				founderMessage.textContent = "Account and first character ready. Your starter card is waiting for launch.";
+				return;
+			}
 			var result = await apiRequest("/api/founder/reservations", {
 				method: "POST",
 				body: {
@@ -880,11 +1108,32 @@
 			} else if (error.status === 400 && error.code === "invalid_username") {
 				founderMessage.textContent = "Choose a 2-12 character username to reserve.";
 			} else if (error.status === 400 && error.code === "invalid_email") {
-				founderMessage.textContent = "Enter a valid email address. Your code is tied to it.";
+				founderMessage.textContent = launchSignupModeActive
+					? "Enter a valid email address for your web account."
+					: "Enter a valid email address. Your code is tied to it.";
+			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_password") {
+				founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_game_password") {
+				founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
 				founderMessage.textContent = "That username is already reserved by someone else.";
 			} else if (error.status === 429) {
 				founderMessage.textContent = "Too many signups from your network today. Try again tomorrow.";
+			} else if (launchSignupModeActive && error.status === 409 && error.code === "account_exists") {
+				try {
+					var signedIn = await apiRequest("/api/accounts/login", {
+						method: "POST",
+						body: {
+							email: email,
+							password: webPassword
+						}
+					});
+					applyAccountState(signedIn);
+					showPrelaunchClaimSuccess(signedIn);
+					founderMessage.textContent = "Signed in. Continue with your reserved name and game login.";
+				} catch (loginError) {
+					founderMessage.textContent = "That email already has an account. Use the Account page to sign in.";
+				}
 			} else {
 				founderMessage.textContent = "Signup is unavailable right now. Please try again soon.";
 			}
@@ -920,7 +1169,7 @@
 		if (prelaunchGameOnboarding) prelaunchGameOnboarding.hidden = true;
 		if (prelaunchDownload) prelaunchDownload.hidden = true;
 		if (prelaunchSuccessActions) prelaunchSuccessActions.hidden = true;
-		founderMessage.textContent = "You're on the list! We'll see you in Lumbridge.";
+		founderMessage.textContent = "You're on the launch list. We'll see you in Lumbridge.";
 		renderFounder();
 	}
 
@@ -999,6 +1248,7 @@
 		renderCharacters();
 		renderSelectedCharacter();
 		updateDashboardHome();
+		renderPortalAuthState();
 		renderRankTable();
 		renderMarketTable();
 		renderWorldFeed();
@@ -1010,38 +1260,53 @@
 			var returnedState = consumeDiscordReturnState();
 			if (returnedState) {
 				applyAccountState(returnedState);
-				if (founderMessage) founderMessage.textContent = "Discord connected. Your beta reward code is ready.";
+				if (founderMessage) founderMessage.textContent = "Discord connected. Your reward code is ready.";
 			}
 			await apiRequest("/api/health");
 			var publicState = await apiRequest("/api/public");
 			applyPublicState(publicState);
 			if (!sessionToken) {
-				founderMessage.textContent = "Downloads are instant. Connect Discord only if you want the beta role and reward code.";
+				founderMessage.textContent = launchSignupModeActive
+					? "Reserve your account name, create your first character, and keep your free starter card waiting."
+					: "Reserve your launch username and keep your subscription card code.";
 				return;
 			}
 			var state = await apiRequest("/api/account");
 			applyAccountState(state);
-			founderMessage.textContent = "Portal account loaded from the local API.";
+			if (launchSignupModeActive) {
+				showPrelaunchClaimSuccess(state);
+			}
+			founderMessage.textContent = "Signed in. Manage your account or reserve another character from the dashboard.";
 		} catch (error) {
+			if (error && error.status === 401) {
+				clearSession();
+				updateLaunchSignupCopy();
+			}
 			// Opening index.html directly or serving it statically keeps using localStorage.
 		}
 	}
 
 	function applyPublicState(state) {
 		if (!state) return;
+		launchSignupModeActive = Boolean(state.launchSignupMode);
+		document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
+		googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
+		updateLaunchSignupCopy();
+		updateGoogleSignupButton();
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
 			document.body.classList.add("public-mode");
 			activateView((window.location.hash || "#account").replace("#", "") || "account");
 		}
+		applyLaunchState(state.launch || (state.beta && state.beta.schedule) || null, state.founderStats || null);
 		if (state.status) {
 			if (serverWorldLabel) serverWorldLabel.textContent = state.status.world || "World 1";
 			if (serverOnlineCount) serverOnlineCount.textContent = (state.status.playersOnline || 0) + " online";
 			if (patchChip) patchChip.textContent = "Patch " + (state.status.patch || "0.8.7");
 			if (landingWorldState) landingWorldState.textContent = state.status.online ? "Online" : "Offline";
-			if (landingWorldDetail) landingWorldDetail.textContent = (state.status.playersOnline || 0) + " players online";
-			if (landingLiveStatus) landingLiveStatus.textContent = state.status.online ? "Online" : "Offline";
-			if (landingLivePlayers) landingLivePlayers.textContent = (state.status.playersOnline || 0) + " players online";
+			if (landingWorldDetail) landingWorldDetail.textContent = state.status.world || "Launch status";
+			if (landingLiveStatus) landingLiveStatus.textContent = state.status.online ? "Online" : (state.status.world || "Prelaunch");
+			if (landingLivePlayers) landingLivePlayers.textContent = state.status.online ? (state.status.playersOnline || 0) + " players online" : "Reservations open";
 			if (dashboardWorldState) dashboardWorldState.textContent = state.status.online ? "Online" : "Offline";
 			if (dashboardWorldSave) dashboardWorldSave.textContent = "Last save " + (state.status.lastSave || "recently");
 		}
@@ -1094,6 +1359,228 @@
 			betaResources = normalizeBetaResources(state.beta);
 			renderBetaHub();
 		}
+	}
+
+	function applyLaunchState(schedule, founderStats) {
+		if (betaCountdown) betaCountdown.hidden = false;
+		var reservations = Number(founderStats && (founderStats.betaSignupCounter || founderStats.reservations || 0));
+		if (betaSignupCounter && betaSignupCount) {
+			betaSignupCounter.hidden = reservations <= 0;
+			betaSignupCount.textContent = formatCompactNumber(reservations);
+		}
+		launchCountdownState = schedule && schedule.openAt ? schedule : null;
+		if (!launchCountdownState) {
+			setCountdownValue("--", "--", "--", "--");
+			if (betaCountdownNote) {
+				betaCountdownNote.textContent = "Launch date is being finalized. Reservations and codes are open now.";
+			}
+			if (launchCountdownTimer) {
+				window.clearInterval(launchCountdownTimer);
+				launchCountdownTimer = 0;
+			}
+			return;
+		}
+		updateLaunchCountdown();
+		if (!launchCountdownTimer) {
+			launchCountdownTimer = window.setInterval(updateLaunchCountdown, 1000);
+		}
+	}
+
+	function updateLaunchSignupCopy() {
+		var signInMode = launchSignupModeActive && accountMode === "signin";
+		if (prelaunchAuthTabs) prelaunchAuthTabs.hidden = !launchSignupModeActive;
+		if (founderTitle) {
+			founderTitle.textContent = signInMode
+				? "Sign in to account management"
+				: launchSignupModeActive ? "Reserve your account name" : "Reserve your username";
+		}
+		if (founderSubmit) {
+			founderSubmit.textContent = signInMode
+				? "Sign in"
+				: launchSignupModeActive ? "Reserve name + free card" : "Reserve & get my code";
+		}
+		if (founderPassword) {
+			if (launchSignupModeActive) {
+				founderPassword.setAttribute("type", "password");
+				founderPassword.setAttribute("autocomplete", signInMode ? "current-password" : "new-password");
+			} else {
+				founderPassword.setAttribute("type", "hidden");
+			}
+		}
+		var founderPasswordRow = document.getElementById("founder-password-row");
+		if (founderPasswordRow) founderPasswordRow.hidden = !launchSignupModeActive;
+		if (founderNameRow) founderNameRow.hidden = signInMode;
+		if (founderMessage && founderForm && !founderForm.classList.contains("is-claimed")) {
+			founderMessage.textContent = signInMode
+				? "Use your email and password to manage characters, recovery, and launch rewards."
+				: launchSignupModeActive
+				? "Reserve your account name, create your first character, and get one free 1-week subscription card."
+				: "Reserve your launch username and keep your subscription card code.";
+		}
+		updatePrelaunchAuthCtas();
+	}
+
+	function updatePrelaunchAuthCtas() {
+		var signedIn = Boolean(sessionToken);
+		prelaunchAuthButtons.forEach(function (button) {
+			button.textContent = signedIn ? "Manage Account" : "Sign in";
+			button.classList.toggle("is-authenticated", signedIn);
+			button.setAttribute("aria-label", signedIn ? "Manage your Voidscape account" : "Sign in to account management");
+		});
+	}
+
+	function updateGoogleSignupButton() {
+		if (!prelaunchGoogle || !googleSignupButton) return;
+		var enabled = Boolean(launchSignupModeActive && googleClientId && !(founderForm && founderForm.classList.contains("is-claimed")));
+		prelaunchGoogle.hidden = !enabled;
+		if (!enabled || googleButtonRendered) return;
+		renderGoogleSignupButton();
+	}
+
+	async function renderGoogleSignupButton() {
+		if (!googleSignupButton || !googleClientId) return;
+		try {
+			var nonceState = await apiRequest("/api/oauth/google/nonce", { method: "POST", body: {} });
+			googleNonce = nonceState.nonce || "";
+			await ensureGoogleScript();
+			if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+				throw new Error("google_identity_unavailable");
+			}
+			window.google.accounts.id.initialize({
+				client_id: googleClientId,
+				callback: handleGoogleCredential,
+				nonce: googleNonce
+			});
+			googleSignupButton.innerHTML = "";
+			window.google.accounts.id.renderButton(googleSignupButton, {
+				theme: "outline",
+				size: "large",
+				text: "continue_with",
+				shape: "rectangular",
+				width: Math.min(360, googleSignupButton.clientWidth || 360)
+			});
+			googleButtonRendered = true;
+			if (googleSignupMessage) {
+				googleSignupMessage.textContent = "Google creates the web login; the password above becomes the first character login.";
+			}
+		} catch (error) {
+			googleButtonRendered = false;
+			if (googleSignupMessage) {
+				googleSignupMessage.textContent = "Google sign-in is not available right now. Use email and password to reserve.";
+			}
+		}
+	}
+
+	function ensureGoogleScript() {
+		if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve();
+		if (googleScriptPromise) return googleScriptPromise;
+		googleScriptPromise = new Promise(function (resolve, reject) {
+			var existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+			if (existing) {
+				existing.addEventListener("load", resolve, { once: true });
+				existing.addEventListener("error", reject, { once: true });
+				return;
+			}
+			var script = document.createElement("script");
+			script.src = "https://accounts.google.com/gsi/client";
+			script.async = true;
+			script.defer = true;
+			script.addEventListener("load", resolve, { once: true });
+			script.addEventListener("error", reject, { once: true });
+			document.head.appendChild(script);
+		});
+		return googleScriptPromise;
+	}
+
+	async function handleGoogleCredential(response) {
+		var credential = response && response.credential ? response.credential : "";
+		var name = normalizeName(founderName.value || "");
+		var gamePassword = founderPassword ? founderPassword.value : "";
+		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
+			founderMessage.textContent = "Choose a 2-12 character username to reserve.";
+			founderName.focus();
+			return;
+		}
+		if (!isGamePassword(gamePassword, 8)) {
+			founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
+			if (founderPassword) founderPassword.focus();
+			return;
+		}
+		if (!credential || !googleNonce) {
+			founderMessage.textContent = "Google sign-in did not return a usable login. Try again or use email.";
+			googleButtonRendered = false;
+			renderGoogleSignupButton();
+			return;
+		}
+		founderMessage.textContent = "Creating your account and first character with Google...";
+		try {
+			var state = await apiRequest("/api/accounts/google", {
+				method: "POST",
+				body: {
+					credential: credential,
+					nonce: googleNonce,
+					username: name,
+					gamePassword: gamePassword,
+					referrerCode: currentReferralCode() || undefined
+				}
+			});
+			applyAccountState(state);
+			if (founderPassword) founderPassword.value = "";
+			if (characterName) characterName.value = name;
+			showPrelaunchClaimSuccess(state);
+			founderMessage.textContent = "Account and first character ready. Your starter card is waiting for launch.";
+			googleButtonRendered = false;
+			googleNonce = "";
+		} catch (error) {
+			if (error.status === 400 && error.code === "google_nonce_invalid") {
+				founderMessage.textContent = "Google sign-in timed out. Try the Google button again.";
+				googleButtonRendered = false;
+				renderGoogleSignupButton();
+			} else if (error.status === 401) {
+				founderMessage.textContent = "Google sign-in could not be verified. Try again or use email.";
+			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved" || error.code === "character_name_taken")) {
+				founderMessage.textContent = "That username is already taken.";
+			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
+				founderMessage.textContent = "Launch signup needs the game database before creating characters.";
+			} else {
+				founderMessage.textContent = "Google signup is unavailable right now. Use email and password to reserve.";
+			}
+		}
+	}
+
+
+	function updateLaunchCountdown() {
+		if (!launchCountdownState || !launchCountdownState.openAt) return;
+		var openAtMs = Date.parse(launchCountdownState.openAt);
+		if (!Number.isFinite(openAtMs)) {
+			setCountdownValue("--", "--", "--", "--");
+			return;
+		}
+		var remaining = Math.max(0, openAtMs - Date.now());
+		var totalSeconds = Math.floor(remaining / 1000);
+		var days = Math.floor(totalSeconds / 86400);
+		var hours = Math.floor((totalSeconds % 86400) / 3600);
+		var minutes = Math.floor((totalSeconds % 3600) / 60);
+		var seconds = totalSeconds % 60;
+		setCountdownValue(days, pad2(hours), pad2(minutes), pad2(seconds));
+		if (betaCountdownNote) {
+			betaCountdownNote.textContent = remaining > 0
+				? (launchSignupModeActive
+						? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
+					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
+				: "Launch window is here. Check the launcher and Discord for final world-open status.";
+		}
+	}
+
+	function setCountdownValue(days, hours, minutes, seconds) {
+		if (betaCountdownDays) betaCountdownDays.textContent = String(days);
+		if (betaCountdownHours) betaCountdownHours.textContent = String(hours);
+		if (betaCountdownMinutes) betaCountdownMinutes.textContent = String(minutes);
+		if (betaCountdownSeconds) betaCountdownSeconds.textContent = String(seconds);
+	}
+
+	function pad2(value) {
+		return String(value).padStart(2, "0");
 	}
 
 	async function apiRequest(path, options) {
@@ -1243,9 +1730,12 @@
 		if (Array.isArray(state.downloads)) {
 			betaDownloadRows = state.downloads.slice();
 		}
-		if (Array.isArray(state.characters) && state.characters.length) {
+		if (Array.isArray(state.characters)) {
 			characters = state.characters.slice(0, maxCharacters);
-			if (!characters.some(function (character) { return character.name === selectedCharacter; })) {
+			if (!characters.length) {
+				selectedCharacter = "";
+				localStorage.removeItem(selectedKey);
+			} else if (!characters.some(function (character) { return character.name === selectedCharacter; })) {
 				selectedCharacter = characters[0].name;
 			}
 			saveRoster();
@@ -1261,6 +1751,8 @@
 		}
 		renderRewards(state.rewards || null);
 		updateDashboardHome(state);
+		renderPortalAuthState(state);
+		updatePrelaunchAuthCtas();
 		renderBetaHub();
 	}
 
@@ -1322,9 +1814,9 @@
 		betaDownloads.innerHTML = displayRows.map(function (row) {
 			var available = Boolean(row.available && row.url && row.url !== "#");
 			var tag = available ? "a" : "button";
-			var attrs = available ? ' href="' + escapeAttr(row.url) + '" download' : ' type="button" disabled';
+			var attrs = available ? linkAttributes(row, false) : ' type="button" disabled';
 			return [
-				"<" + tag + ' class="ghost-button download-action' + (available ? " is-ready" : "") + '"' + attrs + ">",
+				"<" + tag + ' class="' + downloadActionClass(row, available) + '"' + attrs + ">",
 				"<strong>" + escapeHtml(row.label || "") + "</strong>",
 				"<span>" + escapeHtml(row.state || "") + "</span>",
 				"</" + tag + ">"
@@ -1402,21 +1894,29 @@
 	function renderRewards(rewards) {
 		if (!founderRewardCard || !founderRewardCount || !useFounderReward) return;
 		var count = rewards && rewards.starterSubscriptionCards ? rewards.starterSubscriptionCards : 0;
-		founderRewardCard.hidden = count <= 0;
+		var claimed = Boolean(rewards && (rewards.starterCardStatus === "claimed" || rewards.starterSubscriptionCardsClaimed > 0));
+		founderRewardCard.hidden = count <= 0 && !claimed;
 		founderRewardCard.classList.toggle("is-ready", count > 0);
+		founderRewardCard.classList.toggle("is-claimed", claimed);
 		founderRewardCount.textContent = count > 0
 			? count + " card reserved in Lumbridge"
+			: claimed
+				? "Starter card claimed in game"
 			: "No reserved cards";
-		useFounderReward.textContent = count > 0 ? "Claim in Lumbridge" : "No card";
+		useFounderReward.textContent = count > 0 ? "Claim in Lumbridge" : claimed ? "Claimed in game" : "No card";
 		useFounderReward.disabled = true;
 		if (redeemState) {
 			redeemState.textContent = count > 0
 				? "You have a subscription card waiting at the Lumbridge Subscription Vendor."
+				: claimed
+					? "Your starter subscription card has been claimed in game."
 				: "No subscription card is waiting right now.";
 		}
 		if (dashboardCardState) {
 			dashboardCardState.textContent = count > 0
 				? count + " waiting"
+				: claimed
+					? "Claimed in game"
 				: "No card waiting";
 		}
 	}
@@ -1429,7 +1929,7 @@
 			dashboardAccountName.textContent = accountName.textContent || "Voidscape account";
 		}
 		if (dashboardAccountEmail && accountEmail) {
-			dashboardAccountEmail.textContent = accountEmail.textContent || "Sign in with Google to manage characters.";
+			dashboardAccountEmail.textContent = accountEmail.textContent || "Sign in to manage game logins and launch rewards.";
 		}
 		if (dashboardSubscriptionState && subDays) {
 			dashboardSubscriptionState.textContent = subDays.textContent || "Unsubscribed";
@@ -1440,6 +1940,30 @@
 			dashboardSecurityState.textContent = recoveryCount > 0
 				? "Recovery ready"
 				: auth.googleConnected ? "Google connected" : "Local account";
+		} else if (dashboardSecurityState && !sessionToken) {
+			dashboardSecurityState.textContent = "Not signed in";
+		}
+	}
+
+	function renderPortalAuthState(state) {
+		var account = state && state.account ? state.account : betaAccount && betaAccount.account ? betaAccount.account : null;
+		if (portalAuthForm) {
+			portalAuthForm.classList.toggle("is-authenticated", Boolean(account && sessionToken));
+		}
+		if (portalAuthMessage) {
+			if (account && sessionToken) {
+				portalAuthMessage.textContent = "Signed in as " + (account.email || account.displayName || "this account") + ". Character tools are ready.";
+			} else if (!sessionToken && (!portalAuthForm || !portalAuthForm.classList.contains("is-authenticated"))) {
+				portalAuthMessage.textContent = portalAuthMode === "login"
+					? "Sign in to manage your roster, subscription status, and security settings."
+					: "Create the web account first. Game logins still use their own 4-20 character password.";
+			}
+		}
+		if (queueCharacter) {
+			queueCharacter.disabled = !sessionToken || characters.length >= maxCharacters;
+		}
+		if (characterMessage && !sessionToken) {
+			characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
 		}
 	}
 
@@ -1459,6 +1983,10 @@
 	function clearSession() {
 		sessionToken = "";
 		localStorage.removeItem(sessionKey);
+		betaAccount = null;
+		renderPortalAuthState();
+		updatePrelaunchAuthCtas();
+		renderCharacters();
 	}
 
 	function createLocalCharacter(name) {
@@ -1539,7 +2067,8 @@
 	function activateView(id) {
 		var landingTarget = landingAnchorFor(id);
 		if (landingTarget) id = "account";
-		if (publicModeActive && !publicModeViews[id]) id = "account";
+		var allowedPublicViews = launchSignupModeActive ? launchSignupModeViews : publicModeViews;
+		if (publicModeActive && !allowedPublicViews[id]) id = "account";
 		id = retiredViews[id] || id;
 		var next = views.find(function (view) {
 			return view.id === id;
@@ -1606,7 +2135,7 @@
 
 	function startDiscordRewardFlow(button) {
 		if (window.location.protocol === "file:") {
-			if (founderMessage) founderMessage.textContent = "Run scripts/run-portal.sh before claiming Discord beta rewards.";
+			if (founderMessage) founderMessage.textContent = "Run scripts/run-portal.sh before connecting Discord rewards.";
 			return;
 		}
 		if (button) {
@@ -1710,13 +2239,15 @@
 			founderRewardLabel.textContent = "Invite friends for codes";
 			founderProgressFill.style.width = "0%";
 			founderLink.value = "";
+			accountName.textContent = "Voidscape";
+			accountEmail.textContent = "Reserve before launch";
 			renderReferralRewardCodes([]);
 			return;
 		}
 		founderName.value = founder.username || "";
 		founderEmail.value = founder.email || "";
-		accountName.textContent = founder.username || "Zamak42";
-		accountEmail.textContent = founder.email || "void@example.com";
+		accountName.textContent = founder.username || "Voidscape";
+		accountEmail.textContent = founder.email || "Reserve before launch";
 		var invites = founder.invites || 0;
 		var rewardCodes = Array.isArray(founder.rewardCodes) ? founder.rewardCodes : [];
 		founderProgressLabel.textContent = invites + " invite" + (invites === 1 ? "" : "s") + " credited";
@@ -1753,7 +2284,17 @@
 	function renderCharacters() {
 		rosterTitle.textContent = characters.length + " character" + (characters.length === 1 ? "" : "s");
 		if (slotBadge) slotBadge.textContent = Math.max(0, maxCharacters - characters.length) + " open";
-		queueCharacter.disabled = characters.length >= maxCharacters;
+		queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+		if (!characters.length) {
+			characterCards.innerHTML = [
+				'<div class="empty-roster">',
+				"<strong>No game logins yet</strong>",
+				"<span>Sign in, then create up to 10 playable character logins for this web account.</span>",
+				"</div>"
+			].join("");
+			updateDashboardHome();
+			return;
+		}
 		characterCards.innerHTML = characters.map(function (character) {
 			return [
 				'<button class="character-card character-card-simple' + (character.name === selectedCharacter ? " is-selected" : "") + '" type="button" data-character="' + escapeAttr(character.name) + '">',
@@ -2045,10 +2586,13 @@
 		if (adminSubscriptionTile) adminSubscriptionTile.textContent = account ? (subscription.active ? subscription.label : "Unsubscribed") : "-";
 		if (adminSubscriptionNote) adminSubscriptionNote.textContent = account ? (subscription.active ? "Active account sub" : "No active sub") : "Account-wide";
 		if (adminCharacterTile) adminCharacterTile.textContent = String(characters.length || 0);
-		if (adminStarterTile) adminStarterTile.textContent = account ? titleCase(starterCard.status || (rewards.starterSubscriptionCards ? "clear" : "none")) : "-";
+		var rewardStatus = rewards.starterCardStatus || (rewards.starterSubscriptionCards ? "waiting" : "");
+		if (adminStarterTile) adminStarterTile.textContent = account ? titleCase(starterCard.status || rewardStatus || "none") : "-";
 		if (adminStarterNote) {
 			adminStarterNote.textContent = account
-				? rewards.starterSubscriptionCards ? rewards.starterSubscriptionCards + " card waiting" : adminStarterReasons(starterCard)
+				? rewardStatus === "claimed"
+					? "Claimed in game"
+					: rewards.starterSubscriptionCards ? rewards.starterSubscriptionCards + " card waiting" : adminStarterReasons(starterCard)
 				: "Review state";
 		}
 		if (adminAccountTitle) adminAccountTitle.textContent = account ? (account.displayName || account.email || "Account") : "No account loaded";
@@ -2539,16 +3083,29 @@
 		downloadActions.innerHTML = displayRows.map(function (row) {
 			var available = Boolean(row.available && row.url && row.url !== "#");
 			var tag = available ? "a" : "button";
-			var attrs = available
-				? ' href="' + escapeAttr(row.url) + '" download data-funnel-event="' + escapeAttr(downloadFunnelEvent(row)) + '"'
-				: ' type="button" disabled';
+			var attrs = available ? linkAttributes(row, true) : ' type="button" disabled';
 			return [
-				"<" + tag + ' class="ghost-button download-action' + (available ? " is-ready" : "") + '"' + attrs + ">",
+				"<" + tag + ' class="' + downloadActionClass(row, available) + '"' + attrs + ">",
 				"<strong>" + escapeHtml(row.label || "") + "</strong>",
 				"<span>" + escapeHtml(row.state || "") + "</span>",
 				"</" + tag + ">"
 			].join("");
 		}).join("");
+	}
+
+	function downloadActionClass(row, available) {
+		var classes = ["ghost-button", "download-action"];
+		if (available) classes.push("is-ready");
+		if (isWebClientRow(row)) classes.push("web-client-action");
+		return classes.join(" ");
+	}
+
+	function linkAttributes(row, withFunnel) {
+		var attrs = ' href="' + escapeAttr(row.url || "#") + '"';
+		if (!isWebClientRow(row) && !row.external) attrs += " download";
+		if (withFunnel) attrs += ' data-funnel-event="' + escapeAttr(downloadFunnelEvent(row)) + '"';
+		if (row.external) attrs += ' rel="noopener"';
+		return attrs;
 	}
 
 	function renderLiveBuildBasics(state) {
@@ -2560,7 +3117,11 @@
 		var build = state.integrity && state.integrity.build || {};
 		var manifest = build.manifest || {};
 		var patch = state.status && state.status.patch ? String(state.status.patch) : "beta";
-		if (landingLiveBuild) landingLiveBuild.textContent = patch === "beta" ? "Beta build" : "Build " + patch;
+		if (landingLiveBuild) {
+			landingLiveBuild.textContent = patch === "prelaunch" || patch === "countdown"
+				? "Launch build"
+				: patch === "beta" ? "Beta build" : "Build " + patch;
+		}
 		if (landingLiveBuildDetail) {
 			if (manifest.version) {
 				landingLiveBuildDetail.textContent = "Manifest " + String(manifest.version).slice(0, 12);
@@ -2580,6 +3141,7 @@
 
 	function downloadFunnelEvent(row) {
 		if (!row) return "download";
+		if (isWebClientRow(row)) return "play_web";
 		if (row.slug === "android-apk") return "download_android";
 		if (row.slug === "launcher" || isLauncherDownloadRow(row)) return "download_launcher";
 		return "download";
@@ -2639,10 +3201,17 @@
 		if (!row) return false;
 		var url = String(row.url || "").toLowerCase();
 		return row.publicDownload === true
+			|| isWebClientRow(row)
 			|| row.slug === "launcher"
 			|| row.slug === "android-apk"
 			|| url.indexOf("/downloads/launcher") !== -1
 			|| url.indexOf("/downloads/android-apk") !== -1;
+	}
+
+	function isWebClientRow(row) {
+		if (!row) return false;
+		var url = String(row.url || "").toLowerCase();
+		return row.slug === "web-client" || url.indexOf("/play") !== -1 || url.indexOf("voidscape.gg/play") !== -1;
 	}
 
 	function isLauncherDownloadRow(row) {
@@ -2711,9 +3280,9 @@
 	function loadRoster() {
 		try {
 			var roster = JSON.parse(localStorage.getItem(rosterKey));
-			return Array.isArray(roster) && roster.length ? roster.slice(0, maxCharacters) : defaultCharacters();
+			return Array.isArray(roster) ? roster.slice(0, maxCharacters) : [];
 		} catch (error) {
-			return defaultCharacters();
+			return [];
 		}
 	}
 
@@ -2750,6 +3319,12 @@
 
 	function normalizeName(value) {
 		return value.trim().replace(/\s+/g, " ");
+	}
+
+	function isGamePassword(value, minLength) {
+		var text = String(value || "");
+		var min = minLength || 4;
+		return text.length >= min && text.length <= 20 && /^[a-zA-Z0-9]+$/.test(text);
 	}
 
 	function normalizeReferralCode(value) {

@@ -926,7 +926,8 @@ assert_resumed_activity() {
 	local expected="$1"
 	local activities
 	activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
-	if grep -Eq "(^|[[:space:]])(mResumedActivity|topResumedActivity)[:=].*com\\.voidscape\\.client/.*${expected}" <<< "$activities"; then
+	local escaped_app_id="${APP_ID//./\\.}"
+	if grep -Eq "(^|[[:space:]])(mResumedActivity|topResumedActivity)[:=].*${escaped_app_id}/.*${expected}" <<< "$activities"; then
 		return 0
 	fi
 
@@ -957,7 +958,8 @@ is_resumed_activity() {
 	local expected="$1"
 	local activities
 	activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
-	grep -Eq "(^|[[:space:]])(mResumedActivity|topResumedActivity)[:=].*com\\.voidscape\\.client/.*${expected}" <<< "$activities"
+	local escaped_app_id="${APP_ID//./\\.}"
+	grep -Eq "(^|[[:space:]])(mResumedActivity|topResumedActivity)[:=].*${escaped_app_id}/.*${expected}" <<< "$activities"
 }
 
 wait_for_resumed_activity() {
@@ -5431,14 +5433,14 @@ screenshot 15-saved-credentials-loaded
 "$ADB" shell input keyevent BACK
 sleep 1
 tap_pct 50 59
-sleep 1
+sleep 4
 screenshot 16-recover-account-handoff
 
 "$ADB" shell input keyevent BACK
 sleep 1
 screenshot 17-existing-user-back-home
 tap_pct 50 52
-sleep 1
+sleep 4
 screenshot 18-create-account-handoff
 
 "$ADB" shell input keyevent BACK
