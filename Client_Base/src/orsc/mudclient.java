@@ -4473,7 +4473,7 @@ public final class mudclient implements Runnable {
 
 	private void drawChatMessageTabs(int var1) {
 		try {
-			if (useVoidscapeHudSkin()) {
+			if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 				drawVoidscapeChatMessageTabs(var1);
 				return;
 			}
@@ -8471,9 +8471,12 @@ public final class mudclient implements Runnable {
 					}
 
 					boolean voidscapeChatHidden = voidscapeChatPanelHidden();
-					drawVoidscapeChatFrame();
+					boolean voidscapeDesktopClassicChat = useVoidscapeDesktopClassicChat();
+					if (!voidscapeDesktopClassicChat) {
+						drawVoidscapeChatFrame();
+					}
 
-					if (useVoidscapeHudSkin() && !voidscapeChatHidden
+					if (useVoidscapeHudSkin() && !voidscapeDesktopClassicChat && !voidscapeChatHidden
 						&& !voidscapeUseLooseChatMessages()) {
 						// Clip chat history + input to the frame interior so long lines
 						// can't march past the filigree border onto the world.
@@ -8483,7 +8486,7 @@ public final class mudclient implements Runnable {
 					}
 
 					if (this.messageTabSelected == MessageTab.ALL && !voidscapeChatHidden) {
-						if (useVoidscapeHudSkin()) {
+						if (useVoidscapeHudSkin() && !voidscapeDesktopClassicChat) {
 							if (voidscapeUseLooseChatMessages()) {
 								drawVoidscapeLooseLandscapeChatMessages();
 							} else {
@@ -8548,12 +8551,16 @@ public final class mudclient implements Runnable {
 					}
 
 					if (!voidscapeChatHidden) {
-						MiscFunctions.textListEntryHeightMod = 2;
-						this.panelMessageTabs.drawPanel();
-						MiscFunctions.textListEntryHeightMod = 0;
+						if (useVoidscapeHudSkin() && !voidscapeDesktopClassicChat) {
+							MiscFunctions.textListEntryHeightMod = 2;
+							this.panelMessageTabs.drawPanel();
+							MiscFunctions.textListEntryHeightMod = 0;
+						} else {
+							this.panelMessageTabs.drawPanel();
+						}
 					}
 
-					if (useVoidscapeHudSkin()) {
+					if (useVoidscapeHudSkin() && !voidscapeDesktopClassicChat) {
 						this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
 					}
 
@@ -17040,6 +17047,10 @@ public final class mudclient implements Runnable {
 		return C_CUSTOM_UI;
 	}
 
+	private boolean useVoidscapeDesktopClassicChat() {
+		return useVoidscapeHudSkin() && !Config.isWeb() && !isAndroid();
+	}
+
 	private boolean voidscapeUseMobilePanelShell() {
 		// Android-parity baseline: keep panel access in the shared canvas HUD instead of
 		// replacing Android's top-tab path with a TeaVM-only bottom dock.
@@ -18706,7 +18717,7 @@ public final class mudclient implements Runnable {
 	// Falls back to the plain single-entry add for the authentic UI / Android.
 	private void voidscapeAddWrapped(String msg, boolean scrollToEnd, int crownId, String sender,
 									 String formerName, int control) {
-		if (!useVoidscapeHudSkin()) {
+		if (!useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat()) {
 			this.panelMessageTabs.addToList(msg, scrollToEnd, crownId, sender, formerName, control);
 			return;
 		}
@@ -18732,7 +18743,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeChatFrame() {
-		if (!useVoidscapeHudSkin() || !C_CHAT_OVERLAY || voidscapeChatPanelHidden()
+		if (!useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat() || !C_CHAT_OVERLAY || voidscapeChatPanelHidden()
 			|| voidscapeUseLooseChatMessages()) {
 			return;
 		}
@@ -18795,7 +18806,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean voidscapeChatPanelHidden() {
-		return useVoidscapeHudSkin() && this.voidscapeChatHidden;
+		return useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat() && this.voidscapeChatHidden;
 	}
 
 	public boolean isVoidscapeChatPanelHidden() {
@@ -19019,7 +19030,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean shouldHandleVoidscapeChatPanelMouse() {
-		if (!useVoidscapeHudSkin()) {
+		if (!useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat()) {
 			return true;
 		}
 		if (voidscapeChatPanelHidden()) {
@@ -22830,7 +22841,7 @@ public final class mudclient implements Runnable {
 			panelMagic.reposition(controlMagicPanel, var3, (maxY - 182) + 24, 196, 90);
 			panelQuestInfo.reposition(controlQuestInfoPanel, var3, (maxY - 287) + 24, 196, 251);
 		}
-		if (useVoidscapeHudSkin()) {
+		if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 			int chatX = voidscapeChatContentX();
 			int chatW = voidscapeChatContentWidth();
 			int chatY = voidscapeChatListY();
@@ -22841,6 +22852,12 @@ public final class mudclient implements Runnable {
 			panelMessageTabs.reposition(panelMessageQuest, chatX, chatY, chatW, chatH);
 			panelMessageTabs.reposition(panelMessagePrivate, chatX, chatY, chatW, chatH);
 			panelMessageTabs.reposition(panelMessageClan, chatX, chatY, chatW, chatH);
+		} else if (useVoidscapeDesktopClassicChat()) {
+			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
+			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 14, 14);
+			panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
+			panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
+			panelMessageTabs.reposition(panelMessageClan, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		} else {
 			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 300, 14);
@@ -23582,7 +23599,7 @@ public final class mudclient implements Runnable {
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
 						&& !this.showDialogFarmSim
 						&& !this.showDialogVoidArenaDeathMatch) {
-						if (useVoidscapeHudSkin()) {
+						if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 							handleVoidscapeChatTabClick();
 						} else if (mouseY > (getGameHeight() - 4)) { // Chat Tab Selection
 							final MessageTab androidSmokeBeforeMessageTab = this.messageTabSelected;
@@ -23648,7 +23665,7 @@ public final class mudclient implements Runnable {
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
-							if (!useVoidscapeHudSkin() && this.messageTabSelected != MessageTab.ALL && this.mouseX >= 494
+							if ((!useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat()) && this.messageTabSelected != MessageTab.ALL && this.mouseX >= 494
 								&& this.mouseY >= this.getGameHeight() - 66) {
 								this.lastMouseButtonDown = 0;
 							}
