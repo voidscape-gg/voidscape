@@ -14430,7 +14430,7 @@ public final class mudclient implements Runnable {
 				}
 
 				if (!this.showAdvancedSettingsWindow && !this.topMouseMenuVisible && !this.optionsMenuShow
-					&& (!C_CUSTOM_UI || !mouseInTabArea || shouldCreateVoidscapeWebInventoryMenu(mouseInTabArea))) {
+					&& (!C_CUSTOM_UI || !mouseInTabArea || shouldCreateVoidscapeInventoryMenu(mouseInTabArea))) {
 					this.createTopMouseMenu(-128);
 				}
 
@@ -26158,10 +26158,9 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private boolean shouldCreateVoidscapeWebInventoryMenu(boolean mouseInTabArea) {
+	private boolean shouldCreateVoidscapeInventoryMenu(boolean mouseInTabArea) {
 		return mouseInTabArea
 			&& useVoidscapeHudSkin()
-			&& Config.isWeb()
 			&& this.showUiTab == Config.INVENTORY_TAB
 			&& this.tabEquipmentIndex == 0
 			&& mouseOverVoidscapeActivePanel();
