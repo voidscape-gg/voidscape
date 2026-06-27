@@ -139,7 +139,7 @@ python3 -m http.server 8788 --directory web/portal
 - invite-code referrals that mint one referral reward subscription-card code per credited beta invite, plus a dev-only referral simulation shortcut
 - legacy public status, rates, news, highscores, market intel, and activity feed payloads for API compatibility; the current prelaunch landing uses platform-support proof copy instead of public play/download CTAs
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
-- launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `VoidscapeClient.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/client-runtime` and `/downloads/cache/...`
+- launcher update manifest at `GET /api/launcher/manifest.properties`, including SHA-256 entries for `Open_RSC_Client.jar` and non-runtime `Client_Base/Cache` files served through `/downloads/client-runtime` and `/downloads/cache/...`
 - web account registration/login with `scrypt` password hashing
 - local dev Google sign-in through `POST /api/accounts/google/dev`, plus launch-mode Google Identity Services ID-token signup through `POST /api/accounts/google` when `PORTAL_GOOGLE_CLIENT_ID` is configured; both are backed by `web_account_identities` in the schema
 - bearer sessions stored as token hashes

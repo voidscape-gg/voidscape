@@ -413,6 +413,8 @@ expect_status 404 "http://127.0.0.1:${public_port}/api/openrsc/characters/SmokeH
 # launch-day public downloads stay open without requiring Discord or portal login
 if [[ -f "Client_Base/Open_RSC_Client.jar" ]]; then
 	expect_status 200 "http://127.0.0.1:${public_port}/api/launcher/manifest.properties"
+	launcher_manifest="$(curl -fsS "http://127.0.0.1:${public_port}/api/launcher/manifest.properties")"
+	grep -q '^file\.1\.path=Open_RSC_Client\.jar$' <<<"$launcher_manifest" || { echo "launcher manifest should download the client to the jar name used by Play"; exit 1; }
 	expect_status 200 "http://127.0.0.1:${public_port}/downloads/client-runtime"
 fi
 if [[ -f "PC_Launcher/OpenRSC.jar" ]]; then

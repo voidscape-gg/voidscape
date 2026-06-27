@@ -18,6 +18,8 @@ public final class VoidscapeLauncherConfig {
   public static final int WINDOW_WIDTH = 820;
   public static final int WINDOW_HEIGHT = 560;
 
+  private static final String DEFAULT_SERVER_HOST = "voidscape.gg";
+  private static final int DEFAULT_SERVER_PORT = 43596;
   private static final String DEFAULT_PORTAL_URL = "https://voidscape.gg";
   private static final String DEFAULT_WEBSITE_URL = "https://voidscape.gg";
   private static final String PORTAL_MANIFEST_PATH = "api/launcher/manifest.properties";
@@ -36,15 +38,15 @@ public final class VoidscapeLauncherConfig {
   }
 
   public static String serverHost() {
-    return setting("voidscape.serverHost", "VOIDSCAPE_SERVER_HOST", "127.0.0.1");
+    return setting("voidscape.serverHost", "VOIDSCAPE_SERVER_HOST", DEFAULT_SERVER_HOST);
   }
 
   public static int serverPort() {
-    String configured = setting("voidscape.serverPort", "VOIDSCAPE_SERVER_PORT", null);
+    String configured = setting("voidscape.serverPort", "VOIDSCAPE_SERVER_PORT", String.valueOf(DEFAULT_SERVER_PORT));
     if (configured != null && configured.trim().length() > 0) {
-      return parsePort(configured.trim(), 43594);
+      return parsePort(configured.trim(), DEFAULT_SERVER_PORT);
     }
-    return detectLocalServerPort();
+    return DEFAULT_SERVER_PORT;
   }
 
   public static String manifestUrl() {

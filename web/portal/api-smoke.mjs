@@ -58,7 +58,7 @@ if (clientRuntimeDownload.available) {
 	assert(manifestResponse.ok, "available client runtime should expose launcher manifest");
 	const manifest = await manifestResponse.text();
 	assert(/^version=.+$/m.test(manifest), "launcher manifest should include a version");
-	assert(/^file\.\d+\.path=VoidscapeClient\.jar$/m.test(manifest), "launcher manifest should include the client runtime jar path");
+	assert(/^file\.\d+\.path=Open_RSC_Client\.jar$/m.test(manifest), "launcher manifest should use the jar path launched by Play");
 	assert(/^file\.\d+\.sha256=[0-9a-f]{64}$/m.test(manifest), "launcher manifest should include SHA-256 hashes");
 	assert(manifest.includes(`${baseUrl}/downloads/client-runtime`), "launcher manifest should point at the client runtime download");
 }

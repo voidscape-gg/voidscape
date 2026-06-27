@@ -80,7 +80,7 @@ const downloadArtifacts = [
 	{
 		slug: "client-runtime",
 		label: "Voidscape client runtime",
-		filename: "VoidscapeClient.jar",
+		filename: "Open_RSC_Client.jar",
 		path: configuredDownloadPath("PORTAL_PC_CLIENT_JAR", join(repoRoot, "Client_Base/Open_RSC_Client.jar")),
 		contentType: "application/java-archive",
 		publicDownload: false
