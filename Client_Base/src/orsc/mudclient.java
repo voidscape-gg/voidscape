@@ -8242,15 +8242,8 @@ public final class mudclient implements Runnable {
 							inWild = true;
 							centerZ = centerX / 6 + 1;
 							this.voidscapeWildLevel = centerZ;
-							// The voidscape HUD surfaces wilderness state in the location plaque,
-							// so suppress the classic bottom-right skull/level overlay that would
-							// collide with the new chat tab row.
 							if (!useVoidscapeHudSkin()) {
-								this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), this.getGameWidth() - 59, this.getGameHeight() - 56);
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 47, "Wilderness", 0xFFFF00, 0, 1,
-									this.getGameHeight() - 20);
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 47, "Level: " + centerZ, 0xFFFF00, 0, 1,
-									this.getGameHeight() - 7);
+								drawWildernessLevelIndicator(centerZ, false);
 							}
 							if (this.showUiWildWarn == 0) {
 								this.showUiWildWarn = 2;
@@ -8591,6 +8584,7 @@ public final class mudclient implements Runnable {
 					drawVoidscapeHudSkin();
 					this.getSurface().loggedIn = false;
 					this.drawChatMessageTabs(var1 - 8);
+					drawVoidscapeWildernessLevelIndicator();
 					this.drawTrainingXpRateBadge();
 					drawVoidArenaCountdownOverlay();
 					drawFpsOverlay();
@@ -18221,6 +18215,25 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0,
 				y + (voidscapeCompactHud() ? 19 : 24));
 		}
+	}
+
+	private void drawVoidscapeWildernessLevelIndicator() {
+		if (!useVoidscapeHudSkin() || !inWild || this.voidscapeWildLevel <= 0) {
+			return;
+		}
+		drawWildernessLevelIndicator(this.voidscapeWildLevel, true);
+	}
+
+	private void drawWildernessLevelIndicator(int level, boolean avoidVoidscapeChatTabs) {
+		int x = this.getGameWidth() - 59;
+		int y = this.getGameHeight() - 56;
+		if (avoidVoidscapeChatTabs) {
+			y = Math.min(y, voidscapeChatTabTop() - 56);
+			y = Math.max(64, y);
+		}
+		this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), x, y);
+		this.getSurface().drawColoredStringCentered(x + 12, "Wilderness", 0xFFFF00, 0, 1, y + 36);
+		this.getSurface().drawColoredStringCentered(x + 12, "Level: " + level, 0xFFFF00, 0, 1, y + 49);
 	}
 
 	private boolean vInBounds(int wx, int wy, int x1, int y1, int x2, int y2) {

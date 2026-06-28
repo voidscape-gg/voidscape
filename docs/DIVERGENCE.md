@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-06-27 - Wilderness level HUD indicator restoration
+
+Restored the original-style bottom-right wilderness danger indicator for the Voidscape HUD while keeping the location plaque for normal area names. The shared client now draws the skull, `Wilderness`, and `Level: N` indicator in classic HUD mode through a helper and also draws it for the Voidscape HUD after chat tabs, lifted above the skinned bottom row so it remains visible without covering the tab strip. Existing safe-zone carve-outs for Void Island and the Void Enclave still suppress wilderness state. This is client presentation only: no wilderness rules, PvP calculations, server packets, opcodes, cache assets, database schema, Android wrapper code, or launcher protocol changed. Reversibility is removing the Voidscape HUD call and inlining/restoring the old classic overlay draw block.
+
 ### 2026-06-27 - Mobile-only `/play` browser client handoff
 
 Moved the public `/play` browser client to a mobile-only surface for normal visitors. The TeaVM shell now detects desktop-class browsers before loading the compiled client bundle and shows a launcher handoff that links directly to `/downloads/launcher`; iOS/Android mobile profiles and explicit mobile QA overrides still run the web client. The portal launch-open chooser/copy now treats the web client as the mobile option and the launcher as the desktop path. This is distribution UX only: no gameplay rule, server packet, opcode, cache asset, database schema, desktop Java runtime behavior, Android APK binary, or client protocol changed. Reversibility is removing the desktop launcher gate and restoring the web-client download row as the primary all-platform browser action.
