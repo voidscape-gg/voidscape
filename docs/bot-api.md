@@ -110,6 +110,23 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 - `voidbot stop` — clean logout + shutdown
 - `voidbot ping` — daemon/login liveness
 
+**Running multiple instances (QA fleet)**
+One daemon = one logged-in account. For parallel sessions give each instance its own
+control port and account, and export the port for *every* call to that instance:
+
+```bash
+VOIDBOT_CTRL_PORT=18901 tools/voidbot/voidbot start --user qabot01 --pass voidqa123
+VOIDBOT_CTRL_PORT=18901 tools/voidbot/voidbot state position
+```
+
+Logs land at `${TMPDIR}/voidbotd-<port>.log`. The wrapper refuses to start onto a busy
+port (exit 2) and the daemon aborts before login if its control bind fails. The server
+exempts 127.0.0.1 from the per-IP player caps, but the 2-logins/sec throttle still
+applies — stagger daemon starts by ~600ms (the throttle lifts for the host once one
+admin account has logged in from it). Duplicate usernames are rejected with
+ACCOUNT_LOGGEDIN, so one account per daemon. Account pool + provisioning:
+`scripts/qa-provision-accounts.sh`; fleet conventions: `docs/QA-CAMPAIGN.md`.
+
 **Actions** (real game packets)
 - `voidbot goto <x> <y>` — server-pathfind walk (WORLD_WALK_REQUEST)
 - `voidbot walk-step <x> <y>` — direct step (WALK_TO_POINT)
