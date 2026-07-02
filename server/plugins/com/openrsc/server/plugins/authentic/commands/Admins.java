@@ -1376,6 +1376,11 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + "Invalid name or player is not online");
 			return;
 		}
+		// The auctioneer NPC open paths set this attribute; without it the
+		// InterfaceOptionHandler gate drops every auction option packet (Refresh, Buy,
+		// Create, ...), so an admin-opened AH panel can never fetch listings. Mirror
+		// Auctioneers/VoidAuctioneer so the workbench/admin open path works too.
+		targetPlayer.setAttribute("auctionhouse", true);
 		ActionSender.sendOpenAuctionHouse(targetPlayer);
 	}
 
