@@ -81,6 +81,12 @@ for i in $(seq -w 1 "$COUNT"); do
     sleep 0.7
     register "qabot$i" "$PASS_QABOT" || FAILED=1
 done
+# One deliberately NON-privileged account (rank stays USER/group_id 10): admin accounts
+# skip dropOnDeath() (Player.java hasElevatedPriveledges), so items-kept-on-death (VS-003)
+# is only testable with a normal-rank account. The name is outside the qabot% pattern so
+# the admin grant below leaves it non-admin.
+sleep 0.7
+register qanpc1 "$PASS_QABOT" || FAILED=1
 
 echo "==> Stopping server before the admin-rank UPDATE"
 SRV_PID="$(lsof -ti tcp:"$GAME_PORT" || true)"
@@ -105,15 +111,20 @@ sqlite3 "$DB_FILE" "UPDATE players SET group_id=1 WHERE username LIKE 'qabot%' O
 echo "==> Granting void_path so the pool can leave Void Island"
 sqlite3 "$DB_FILE" "INSERT INTO player_cache (playerID, type, key, value)
     SELECT id, 0, 'void_path', '1' FROM players
-    WHERE (username LIKE 'qabot%' OR username='wbtest')
+    WHERE (username LIKE 'qabot%' OR username IN ('wbtest','qanpc1'))
       AND id NOT IN (SELECT playerID FROM player_cache WHERE key='void_path');"
 
 EXPECTED=$((COUNT + 1))
 GRANTED="$(sqlite3 "$DB_FILE" "SELECT count(*) FROM players WHERE group_id=1 AND (username LIKE 'qabot%' OR username='wbtest');")"
+NPC_RANK="$(sqlite3 "$DB_FILE" "SELECT group_id FROM players WHERE username='qanpc1';")"
 
-echo "==> Provisioned $GRANTED/$EXPECTED admin accounts (wbtest + qabot01..qabot$(printf '%02d' "$COUNT"))"
+echo "==> Provisioned $GRANTED/$EXPECTED admin accounts (wbtest + qabot01..qabot$(printf '%02d' "$COUNT")) + qanpc1 (rank=$NPC_RANK)"
 if [ "$FAILED" -ne 0 ] || [ "$GRANTED" -ne "$EXPECTED" ]; then
     echo "ERROR: provisioning incomplete" >&2
+    exit 1
+fi
+if [ "$NPC_RANK" != "10" ]; then
+    echo "ERROR: qanpc1 should be a non-privileged USER (group_id 10) but is '$NPC_RANK'" >&2
     exit 1
 fi
 echo "==> Done. Server left STOPPED — start it with scripts/run-server.sh"
