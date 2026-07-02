@@ -863,6 +863,32 @@ class Daemon:
             time.sleep(0.3)
 
 
+def do_register(args):
+    """One-shot account registration; prints one JSON object, returns exit code."""
+    email = args.email or (args.user + "@voidscape.test")
+    detail = {0: "created", 2: "username already taken",
+              4: "packet registration disabled (set want_packet_register: true in server/local.conf)",
+              5: "throttled/recently-registered/server error",
+              6: "invalid email or DB failure",
+              7: "username must be 2-12 chars",
+              8: "disallowed username or bad password length"}
+    try:
+        c = P.Connection(args.host, args.game_port, timeout=10)
+        body = P.build_register(args.user, args.password, email)
+        c.send_packet(body[0], body[1:])
+        resp = c.recv_byte()
+        c.close()
+    except (ConnectionError, OSError) as e:
+        print(json.dumps({"ok": False, "response": None,
+                          "error": "no register response (%s) — server down, or request "
+                                   "dropped by the 2 logins/sec throttle; retry after ~1s" % e}))
+        return 1
+    ok = resp == 0
+    print(json.dumps({"ok": ok, "response": resp,
+                      "detail": detail.get(resp, "unknown response"), "user": args.user}))
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -871,7 +897,12 @@ def main():
     ap.add_argument("--user", required=True)
     ap.add_argument("--pass", dest="password", required=True)
     ap.add_argument("--defs", default=None, help="server/conf/server/defs dir for item names")
+    ap.add_argument("--register", action="store_true",
+                    help="one-shot: register the account and exit (no daemon)")
+    ap.add_argument("--email", default=None, help="email for --register (default <user>@voidscape.test)")
     args = ap.parse_args()
+    if args.register:
+        sys.exit(do_register(args))
     Daemon(args).run()
 
 

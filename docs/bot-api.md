@@ -101,6 +101,12 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 **Session**
 - `voidbot start --user U --pass P` — launch the daemon (logs in, holds the session)
 - `voidbot login --user U --pass P` — alias for `start`
+- `voidbot register --user U --pass P [--email E]` — one-shot account creation
+  (REGISTER_ACCOUNT, wire opcode 2; no daemon). Requires `want_packet_register: true`
+  in `server/local.conf` (dev-only — the launch policy keeps it false on deployed
+  hosts). Response byte 0 = created, 2 = name taken, 4 = registration disabled,
+  5/6/7/8 = throttled/email/name-length/disallowed; no response = dropped by the
+  2-logins-per-second throttle, retry after ~1s. Default email `<user>@voidscape.test`.
 - `voidbot stop` — clean logout + shutdown
 - `voidbot ping` — daemon/login liveness
 

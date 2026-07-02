@@ -16,6 +16,7 @@ import struct
 # ---- Outbound opcode wire values (Client_Base/src/orsc/net/Opcodes.java `Out`) ----
 OUT = {
     "LOGIN": 0,
+    "REGISTER_ACCOUNT": 2,           # login-phase only; needs want_packet_register: true
     "PING": 67,
     "WALK_TO_POINT": 187,
     "WALK_TO_ENTITY": 16,
@@ -301,6 +302,22 @@ class Connection:
     def close(self):
         try: self.sock.close()
         except OSError: pass
+
+
+def build_register(username: str, password: str, email: str) -> bytes:
+    """REGISTER_ACCOUNT body for the custom-client path (server classifies our framing
+    as authenticClient == -1 -> the plain-strings branch in LoginPacketHandler ~L750):
+    three 0x0A-terminated strings. Password travels plaintext — loopback dev use only.
+    Server replies with ONE raw byte: 0=created, 2=name taken, 4=packet registration
+    disabled (want_packet_register: false), 5=throttled/recently-registered/error,
+    6=bad email or DB failure, 7=username not 2-12 chars, 8=disallowed name or bad
+    password length. No reply at all = dropped by the 2/s login throttle."""
+    w = BitWriter()
+    w.u8(OUT["REGISTER_ACCOUNT"])
+    w.rsstr(username)
+    w.rsstr(password)
+    w.rsstr(email)
+    return bytes(w.b)
 
 
 def build_login(username: str, password: str, exponent: int, modulus: int,
