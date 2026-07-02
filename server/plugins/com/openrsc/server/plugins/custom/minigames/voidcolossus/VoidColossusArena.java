@@ -69,6 +69,9 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	// Singleton handle so dev tooling (::colossus) can drive the real entry flow without the rift.
 	private static volatile VoidColossusArena instance;
 
+	// Guards against a player leaving the arena without clearing their instanceId (VS-028).
+	private volatile boolean strayExitGuardScheduled = false;
+
 	@Inject
 	private World world;
 
@@ -209,14 +212,51 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		int instanceId = nextInstanceId.getAndIncrement();
 		playerInstance.put(hash, instanceId);
 		instanceOwner.put(instanceId, hash);
-		player.setInstanceId(instanceId);
 
 		player.message("You step into the Void Rift.");
 		displayTeleportBubble(player, player.getX(), player.getY(), false);
 		delay(2);
 		player.teleport(ARENA_LANDING_X, ARENA_LANDING_Y, true);
+		// Assign the phase only once the player is physically inside the arena, so the
+		// stray-exit guard (which clears the instance for any owner it finds outside the
+		// arena) cannot fire during the pre-teleport delay window and cancel this entry.
+		player.setInstanceId(instanceId);
 		spawnBoss(instanceId);
 		player.message("The void folds around you and opens onto a shattered plaza, yours alone.");
+		ensureStrayExitGuard();
+	}
+
+	/**
+	 * Recurring guard: if a player leaves the arena by any means OTHER than the rift/death/logout
+	 * (a teleport spell, teleport item, home-teleport, or admin ::teleport), nothing clears their
+	 * instanceId, and the RegionManager instance filter then hides every overworld NPC from them
+	 * until relog (VS-028). This sweep clears the stale phase in place the moment an owner is found
+	 * outside the arena. Self-schedules on first entry and stops when no instances remain.
+	 */
+	private synchronized void ensureStrayExitGuard() {
+		if (strayExitGuardScheduled) {
+			return;
+		}
+		strayExitGuardScheduled = true;
+		world.getServer().getGameEventHandler().add(new DelayedEvent(world, null, 1200, "Colossus Stray-Exit Guard") {
+			@Override
+			public void run() {
+				if (instanceOwner.isEmpty()) {
+					strayExitGuardScheduled = false;
+					stop();
+					return;
+				}
+				for (Map.Entry<Integer, Long> entry : instanceOwner.entrySet()) {
+					Player owner = world.getPlayer(entry.getValue());
+					if (owner == null) {
+						continue; // offline: the logout hook already tears the instance down
+					}
+					if (owner.getInstanceId() > 0 && !inArena(owner.getX(), owner.getY())) {
+						exitInstance(owner, false); // clear the stale phase in place, no teleport
+					}
+				}
+			}
+		});
 	}
 
 	private void exitInstance(Player player, boolean teleport) {
