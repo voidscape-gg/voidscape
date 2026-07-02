@@ -4983,11 +4983,19 @@ async function readJson(request) {
 		chunks.push(chunk);
 	}
 	if (!chunks.length) return {};
+	let parsed;
 	try {
-		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+		parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 	} catch (error) {
 		throw new HttpError(400, "invalid_json");
 	}
+	// Every caller reads named fields off the payload, so a non-object JSON body
+	// (null, an array, or a bare primitive) must be rejected here — otherwise
+	// `payload.password` on null throws an uncaught TypeError → 500.
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new HttpError(400, "invalid_json");
+	}
+	return parsed;
 }
 
 function json(response, status, body) {
