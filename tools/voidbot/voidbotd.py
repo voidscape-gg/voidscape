@@ -810,11 +810,23 @@ class Daemon:
         return {"ok": False, "matched": False, "timeout": timeout, "error": "wait timed out"}
 
     # ---------------- control server ----------------
-    def serve_control(self):
+    def bind_control(self):
+        """Bind the control socket. Called BEFORE login so a port collision aborts
+        the process instead of orphaning an uncontrollable logged-in session (the
+        old behavior: bind died in a daemon thread while run() logged in anyway)."""
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.1", self.args.ctrl_port))
+        try:
+            srv.bind(("127.0.0.1", self.args.ctrl_port))
+        except OSError as e:
+            print("voidbotd: FATAL: cannot bind control port %d (%s) — is another "
+                  "voidbotd running? Set VOIDBOT_CTRL_PORT to a free port." %
+                  (self.args.ctrl_port, e), flush=True)
+            return None
         srv.listen(8)
+        return srv
+
+    def serve_control(self, srv):
         print("voidbotd: control on 127.0.0.1:%d, game session %s" %
               (self.args.ctrl_port, self.args.user), flush=True)
         while self.running:
@@ -849,7 +861,10 @@ class Daemon:
 
     def run(self):
         # Control server first so `state`/`wait logged-in` work while login retries.
-        threading.Thread(target=self.serve_control, daemon=True).start()
+        srv = self.bind_control()
+        if srv is None:
+            sys.exit(2)
+        threading.Thread(target=self.serve_control, args=(srv,), daemon=True).start()
         try:
             self.connect_and_login()
         except Exception as e:

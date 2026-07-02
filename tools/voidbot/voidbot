@@ -33,6 +33,14 @@ case "${1:-}" in
       esac
     done
     [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"start needs --user and --pass"}'; exit 2; }
+    # Refuse if something already listens on the control port: blind-spawning here
+    # orphans an uncontrollable logged-in session and the readiness ping below would
+    # hit the OLD daemon and report false success. One-shot connect (not cli.py ping,
+    # which retries the connect for ~5s and would make free-port checks slow).
+    if "$PY" -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1',$CTRL_PORT))==0 else 1)" 2>/dev/null; then
+      echo "{\"ok\":false,\"error\":\"control port $CTRL_PORT is already in use (another voidbotd?) — stop it or set VOIDBOT_CTRL_PORT to a free port\",\"ctrl_port\":$CTRL_PORT}"
+      exit 2
+    fi
     LOG="${VOIDBOT_LOG:-${TMPDIR:-/tmp}/voidbotd-$CTRL_PORT.log}"
     # Redirect daemon output to a log file so this command-substitution-friendly
     # wrapper returns immediately (a backgrounded child sharing our stdout pipe
