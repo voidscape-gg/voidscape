@@ -122,7 +122,10 @@ public final class CustomBankInterface extends BankInterface {
 			if (height <= bottomSafe - topSafe) {
 				y = Math.max(topSafe, Math.min(centeredY, bottomSafe - height));
 			} else {
-				y = topSafe;
+				// Panel taller than the safe band (Classic 512x346): anchor near the top but
+				// clamp the bottom to the game height so the last inventory row and first item
+				// aren't cut off / hidden behind the frame (VS-030).
+				y = Math.max(0, Math.min(topSafe, mc.getGameHeight() - height));
 			}
 		} else {
 			y = Math.max(55, Math.min(82, (mc.getGameHeight() - height) / 2 + 2));
