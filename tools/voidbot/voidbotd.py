@@ -121,6 +121,13 @@ class Daemon:
             self.stackable, self.names = load_item_defs(args.defs)
             self.object_defs = load_object_defs(args.defs)
         self.running = True
+        # Wire-format flags that gate optional per-item bytes in the ground-item stream
+        # (and the bank-withdraw noted byte). Must match the server's config: the
+        # voidscape preset ships want_bank_notes: true, so default on; override with
+        # VOIDBOT_WANT_BANK_NOTES=0 for a preset that has it off. The rare-drop-beam
+        # byte is present for client versions >= 10030 (P.CLIENT_VERSION).
+        self.want_bank_notes = os.environ.get("VOIDBOT_WANT_BANK_NOTES", "1") != "0"
+        self.ground_has_beam = P.CLIENT_VERSION >= 10030
 
     # ---------------- connection / login ----------------
     def connect_and_login(self):
@@ -233,8 +240,18 @@ class Daemon:
             self._decode_inventory_slot(p)
         elif name == "REMOVE_INVENTORY_SLOT":
             slot = p[0] if p else -1
+            # Server compacts on removal (client PacketHandler.removeItem shifts every
+            # higher slot down by one), so decrement slots above the removed one — else
+            # the daemon's slot map goes stale and slot-addressed commands mis-target.
             with st.lock:
-                st.inventory = [it for it in st.inventory if it["slot"] != slot]
+                newinv = []
+                for it in st.inventory:
+                    if it["slot"] == slot:
+                        continue
+                    if it["slot"] > slot:
+                        it = dict(it, slot=it["slot"] - 1)
+                    newinv.append(it)
+                st.inventory = newinv
             st.event("inventory_remove", slot=slot)
         elif name == "SET_STATS":
             self._decode_stats(p)
@@ -353,12 +370,18 @@ class Daemon:
                 "amount": amount, "wielded": wielded, "noted": bool(noted)}
 
     def _decode_inventory_full(self, p):
+        # SEND_INVENTORY wire format (PayloadCustomGenerator SEND_INVENTORY / client
+        # updateInventory): byte size, then per item: short catalogID (RAW — the
+        # wielded bit is NOT packed into it here, unlike the single-slot update),
+        # byte wielded, byte noted (always present), int amount (only when the item is
+        # stackable or noted). The old decoder read the update-item layout (wielded bit
+        # in the short, no separate wielded byte) and desynced after item 1.
         i = 0
         size = p[i]; i += 1
         inv = []
         for slot in range(size):
-            raw = int.from_bytes(p[i:i+2], "big"); i += 2
-            wielded = bool(raw & 0x8000); iid = raw & 0x7FFF
+            iid = int.from_bytes(p[i:i+2], "big"); i += 2
+            wielded = bool(p[i]); i += 1
             noted = p[i]; i += 1
             amount = 1
             if iid in self.stackable or noted:
@@ -480,29 +503,62 @@ class Daemon:
         self.st.event("bank_update", slot=slot, id=iid, amount=amt)
 
     def _decode_grounditems(self, p):
-        # variable; entries: [short id][byte dx][byte dy]... 0xFF markers for removal.
-        # We rebuild best-effort: ids with relative coords from player.
-        items = []
+        # Incremental add/remove delta stream (mirrors client PacketHandler
+        # .drawGroundItems) — NOT a full snapshot, so we apply deltas to persistent
+        # state instead of rebuilding. Per entry, peek one byte:
+        #   != 255: short id (0x8000 bit = remove-this-item), byte dx, byte dy,
+        #           [byte noted if want_bank_notes], [byte beam if client>=10030].
+        #           x=localX+dx, y=localY+dy. id&0x8000 -> remove (x,y,id&0x7FFF);
+        #           else add.
+        #   == 255: byte dx, byte dy, [byte noted], [byte beam] — region-clear: drop
+        #           every known item whose 8-tile region equals ((localX+dx)>>3,
+        #           (localY+dy)>>3) (item scrolled out of range / was taken elsewhere).
+        # The old decoder ignored the noted+beam bytes (desyncing every multi-entry
+        # packet) and rebuilt the list each packet (so taken items never disappeared
+        # and removes became phantom adds).
+        st = self.st
+        bx = st.x or 0
+        by = st.y or 0
         i = 0
-        bx = self.st.x or 0
-        by = self.st.y or 0
-        try:
-            while i + 3 <= len(p):
-                if p[i] == 0xFF:
-                    i += 3
-                    continue
-                iid = int.from_bytes(p[i:i+2], "big"); i += 2
-                dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
-                dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
-                real = iid & 0x7FFF
-                items.append({"id": real, "x": bx + dx, "y": by + dy,
-                              "name": self.names.get(real, "")})
-        except IndexError:
-            pass
-        with self.st.lock:
-            # merge: new sightings add/refresh
-            self.st.ground_items = items
-        self.st.event("grounditems", count=len(items))
+        n = len(p)
+        with st.lock:
+            ground = list(st.ground_items)
+            try:
+                while i < n:
+                    marker = p[i]
+                    if marker != 255:
+                        raw = int.from_bytes(p[i:i+2], "big"); i += 2
+                        dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        noted = False
+                        if self.want_bank_notes:
+                            noted = p[i] == 1; i += 1
+                        if self.ground_has_beam:
+                            i += 1
+                        x, y = bx + dx, by + dy
+                        iid = raw & 0x7FFF
+                        if raw & 0x8000:
+                            ground = [g for g in ground if not
+                                      (g["x"] == x and g["y"] == y and g["id"] == iid)]
+                        else:
+                            ground.append({"id": iid, "x": x, "y": y,
+                                           "noted": noted, "name": self.names.get(iid, "")})
+                    else:
+                        i += 1  # consume the 255 marker
+                        dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        if self.want_bank_notes:
+                            i += 1
+                        if self.ground_has_beam:
+                            i += 1
+                        rx, ry = (bx + dx) >> 3, (by + dy) >> 3
+                        ground = [g for g in ground if not
+                                  ((g["x"] >> 3) == rx and (g["y"] >> 3) == ry)]
+            except IndexError:
+                pass
+            st.ground_items = ground
+            count = len(ground)
+        self.st.event("grounditems", count=count)
 
     # ---------------- command dispatch ----------------
     def _slot_amount(self, slot):
@@ -652,8 +708,13 @@ class Daemon:
                 self.send("ITEM_UNEQUIP_FROM_INVENTORY", P.BitWriter().u16(int(a["slot"])).b)
                 return {"ok": True}
             if cmd == "bank-withdraw":
+                # want_bank_notes servers always read a trailing noted byte, so send it
+                # unconditionally (0 unless --noted); omitting it made the server parse
+                # a short packet and silently drop un-noted withdrawals.
                 w = P.BitWriter().u16(int(a["id"])).u32(int(a["amount"]))
-                if a.get("noted"):
+                if self.want_bank_notes:
+                    w.u8(1 if a.get("noted") else 0)
+                elif a.get("noted"):
                     w.u8(1)
                 self.send("BANK_WITHDRAW", w.b)
                 return {"ok": True}
