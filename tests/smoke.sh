@@ -11,6 +11,11 @@
 # Requires: a running voidscape server and an admin account.
 #   VOIDBOT_USER / VOIDBOT_PASS  (default wbtest / voidtest123)
 #   VOIDBOT_GAME_PORT            (default 43596)
+#   VOIDBOT_CTRL_PORT            (default 18900; set a unique port per parallel run)
+#   VOIDBOT_SMOKE_X/_Y           (default 126/650; walk/kill/loot arena anchor — give
+#                                 each parallel run its own open-ground tile so ground
+#                                 items and NPC spawns don't cross-contaminate; the
+#                                 vendor-dialog stage stays at its fixed NPC location)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +24,8 @@ VB="$REPO/tools/voidbot/voidbot"
 USER="${VOIDBOT_USER:-wbtest}"
 PASS="${VOIDBOT_PASS:-voidtest123}"
 GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
+SPOT_X="${VOIDBOT_SMOKE_X:-126}"
+SPOT_Y="${VOIDBOT_SMOKE_Y:-650}"
 if [ -n "${VOIDBOT_PYTHON:-}" ]; then
   PY="$VOIDBOT_PYTHON"
 elif command -v python3 >/dev/null 2>&1; then
@@ -68,10 +75,10 @@ ok "have position" "$("$VB" state position)"
 
 # ---- 2. walk (real WORLD_WALK_REQUEST) ----
 echo "[2] walk"
-ok    "teleport setup"  "$("$VB" admin "::teleport 126 650")"
+ok    "teleport setup"  "$("$VB" admin "::teleport $SPOT_X $SPOT_Y")"
 sleep 1
-ok    "goto issued"     "$("$VB" goto 122 648)"
-matched "arrived near target" "$("$VB" wait near --x 122 --y 648 --radius 2 --timeout 20)"
+ok    "goto issued"     "$("$VB" goto $((SPOT_X-4)) $((SPOT_Y-2)))"
+matched "arrived near target" "$("$VB" wait near --x $((SPOT_X-4)) --y $((SPOT_Y-2)) --radius 2 --timeout 20)"
 
 # ---- 3. npc dialog (real NPC_TALK_TO) ----
 echo "[3] npc dialog"
@@ -84,6 +91,7 @@ ok    "dismiss input box (soft-lock-fix path)" "$("$VB" input-reply --text '')"
 
 # ---- 4. kill an npc (real NPC_ATTACK), tracked by the specific instance ----
 echo "[4] kill"
+"$VB" admin "::teleport $SPOT_X $SPOT_Y" >/dev/null   # back to this run's own arena
 "$VB" admin "::setstat attack 90"   >/dev/null
 "$VB" admin "::setstat strength 90" >/dev/null
 "$VB" admin "::setstat hits 90"     >/dev/null
@@ -91,7 +99,7 @@ echo "[4] kill"
 # spawn + detect in a short retry loop (the bit-packed NPC stream can drop a frame)
 RAT_SI=""; SPAWN_OK="no"
 for attempt in 1 2 3; do
-  "$VB" admin "::spawnnpc 3 30 2 127 651" >/dev/null
+  "$VB" admin "::spawnnpc 3 30 2 $((SPOT_X+1)) $((SPOT_Y+1))" >/dev/null
   PR=$("$VB" wait npc-present --id 3 --timeout 12)
   if echo "$PR" | grep -q '"matched": *true'; then
     RAT_SI=$("$VB" state npcs | "$PY" -c 'import sys,json
