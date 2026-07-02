@@ -10,6 +10,7 @@ Framing:
   S2C  [u16 BE len][opcode][payload]   len INCLUSIVE of the 2 len bytes
 The single login-response byte is sent raw (unframed) right after config.
 """
+import os
 import socket
 import struct
 
@@ -92,7 +93,10 @@ LOGIN_TRAILER = bytes.fromhex(
     "1c000000df0100060000002f000000110000001600630000002504147fffffff"
     "66656533396431306639636235643630323762616331623332666133333566330a00"
 )
-CLIENT_VERSION = 10120
+# Login client version. Matches the real client (Client_Base/src/orsc/Config.java
+# CLIENT_VERSION); env-overridable so QA can probe server version gates (e.g. paths
+# gated to specific client versions).
+CLIENT_VERSION = int(os.environ.get("VOIDBOT_CLIENT_VERSION", "10120"))
 
 
 class BitWriter:

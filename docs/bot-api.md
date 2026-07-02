@@ -178,7 +178,7 @@ respawns is best-effort.
 - **C2S** `[u16 BE len][opcode][payload]`, len excludes the 2 length bytes.
 - **S2C** `[u16 BE len][opcode][payload]`, len **includes** the 2 length bytes; the
   login response is a single raw (unframed) byte (`& 0x40` ⇒ success).
-- LOGIN body: `reconnect:u8 | clientVersion:u32(10087) | username\n | encVer:u8(1) |
+- LOGIN body: `reconnect:u8 | clientVersion:u32(10120, env VOIDBOT_CLIENT_VERSION) | username\n | encVer:u8(1) |
   u16 rsaPwLen + RSA(addCharacters(pw,20)+"\n") | u16 rsaDetailsLen + RSA("dir/jar\n") |
   UID:8 + limitations-trailer` (trailer constant for this client build).
 - Outbound opcode values: `Client_Base/src/orsc/net/Opcodes.java` `Out`. Inbound names:
