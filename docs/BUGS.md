@@ -31,8 +31,14 @@ to resume from these two files alone. Keep every entry self-contained.
   fast-forwarding local main to the checkpoint branch head (origin/main was a strict
   ancestor, 132 ahead / 0 behind; `codex/ui-loot-checkpoint-20260613` left intact at
   the same commit). Commit future fixes on main; pushing origin/main is Ryan's call.
-- **Session preflight 2026-07-03:** dirty files all match the §7 Collisions list;
-  pre-change `scripts/build.sh` green.
+- **Session preflight 2026-07-03 (later session, /loop /fix-bugs):** dirty files all
+  match the §7 Collisions list; branch main; pre-change `scripts/build.sh` green; dev
+  server still up on 43596; voidbot daemon down (restart needed). Ryan invoked
+  `/loop /fix-bugs` — the loop resumes per Next action (Intake triage first, canHold
+  priority); the P3/P4-tail deprioritization ruling stands. This session so far:
+  VS-048 triaged from Intake → fixed → verified → committed (canHold over-cap merge
+  rejection; open cap-ruling question for Ryan inside the entry). Server restarted on
+  the fixed build (port 43596); smoke 26/26.
 - **Last session:** 2026-07-03 — 10 commits, 8 bugs verified: VS-041 (dae8a471,
   voidbot Patch18 gate), VS-047 (546fa5cd, smoke gate 26/26 restored), **VS-008
   (32406401, P3→shipped: SEND_BANK_UPDATE short slot, CLIENT bumped 10120→10121 —
@@ -134,22 +140,15 @@ half-remembered is fine, triage will chase it down.)_
 - S-W integrity export flags 7 high-severity rows (missing_skill_row ×6,
   missing_table ×1) on the dev DB — verify these are fixture artifacts, not real
   (tmp/qa/S-W/integrity-findings.json)
-- `Bank.canHold` (`Bank.java:578`) mis-rejects deposits with "You don't have room for
-  that in your bank" in at least two cases (2026-07-03, qabot04): (a) FULL bank
-  (1608/1608) rejecting a deposit that would merge into an EXISTING stack (coins already
-  at slot 0) and create no new slot; (b) bank at 1607/1608 with ONE FREE SLOT rejecting
-  a 48× noted-staff deposit that needs exactly one slot (id 100, would bank unnoted).
-  (b) suggests noted items confuse the capacity math, not just the at-cap merge case.
-  Players with big banks can't deposit — check canHold's noted/merge handling vs
-  authentic behavior.
-- Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests (VS-008 now
-  verified; fixture still useful for VS-031). 2026-07-03: its inventory now carries the
-  VS-008 probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2, 100 coins) — the
-  full-bank canHold bug above blocks depositing them back. Two Blessed ashes on the
-  ground near (137,644) (tmp/qa/S-D end state). 2026-07-03 VS-042 work left qabot04
-  with Cook's Assistant COMPLETED (stage -1; was untracked before), ~9 raw + 1 burnt
-  shrimp, and attack/strength max 90. VS-031 verify left the bank at 1607 stacks (id
-  100 staffs now 50× noted in inventory — the canHold Intake bug blocks re-deposit).
+- Housekeeping: qabot04's bank left at 1607 stacks for retests (over the live 192 cap
+  — see VS-048 in the Fixed archive). 2026-07-03: its inventory carries the VS-008
+  probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2 — noted staffs now 50×);
+  the VS-048 fix let the 100 loose coins deposit back (merge), but the noted probe
+  items still can't re-deposit — they need NEW slots and the bank exceeds the 192 cap
+  (awaiting Ryan's cap ruling in VS-048). Two Blessed ashes on the ground near
+  (137,644) (tmp/qa/S-D end state). 2026-07-03 VS-042 work left qabot04 with Cook's
+  Assistant COMPLETED (stage -1; was untracked before), ~9 raw + 1 burnt shrimp, and
+  attack/strength max 90.
 
 ---
 
@@ -507,6 +506,32 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
 
+### VS-048 — Bank over configured cap rejected ALL deposits, including zero-slot merges (FIXED)
+- Status: verified · Severity: P3 · Area: server-core (bank container)
+- Root cause: `World.java:162` hardcodes `maxBankSize = MEMBER_WORLD ?
+  (WANT_CUSTOM_BANKS ? ItemId.maxCustom(=1608) : 192) : 48` (`bank_size` conf key is
+  deprecated upstream); voidscape local.conf has `want_custom_banks: false` → live cap
+  **192**. qabot04's 1607-stack QA bank (filled while a larger cap was in effect) made
+  `canHold` compute `192 − 1607 ≥ required` → false for EVERY deposit — including
+  merges into an existing stack, which need no new slot and which `Bank.add` itself
+  accepts at any size. Intake's "noted confuses the math" guess was wrong (noted plays
+  no role); datapoint (b) (new stack at 1607) is correct-by-config under cap 192 — the
+  QA "/1608" denominator was an assumption.
+- Fix: `canHold` returns true when `getRequiredSlots(item) == 0`; new-stack deposits
+  keep the headroom check (still refused over cap). Aligns the predicate with add()'s
+  actual acceptance; protects players stranded over-cap by any future cap reduction.
+- Verified 2026-07-03 live on the fixture: pre-fix, 100-coin merge deposit refused
+  (tmp/vs048/01-coin-deposit-events.json); post-fix it lands as slot-0 bank_update
+  24050→24150, no new slot, inventory coins gone (tmp/vs048/03-*.json); 48× noted
+  staff (needs new slot) still correctly refused (tmp/vs048/04-*.json);
+  tests/smoke.sh 26/26.
+- **Question for Ryan (open):** intended launch bank cap — authentic 192 (current,
+  `want_custom_banks: false`) or 1608 (`ItemId.maxCustom`, what the QA fleet assumed
+  and what Void Glass pages/search were exercised against)? If 192 stands, the
+  1607-stack QA fixture can never re-deposit its withdrawn noted probe items.
+- Log: 2026-07-03 triaged from Intake (2 datapoints), root-caused, repro'd, fixed,
+  verified, committed same day.
+
 ### VS-003 — Items kept on death: noted always lost (CLOSED by ruling + server fix)
 - Status: verified · Severity: P4→gameplay-rule fix · Area: client-ui + server-core · commits b6c8841f (client preview) + the VS-003 server commit
 - History: the client preview's two original bugs (Protect Item ignored; stackable
@@ -583,7 +608,8 @@ _(entries move here when `verified`; find each fix via its subject — `git log 
   tmp/vs031-resync.json).
 - Log: 2026-07-02 wave-1 S-D filed vs server. 2026-07-03 re-scoped to voidbot (client
   handler read), fixed, verified, committed. Deposit-back of the withdrawn noted stack
-  was rejected by the canHold Intake bug above (fixture note in Housekeeping).
+  was rejected by the over-cap canHold bug, since fixed as VS-048 (fixture note in
+  Housekeeping; new-slot deposits still capped at 192 pending Ryan's cap ruling).
 
 ### VS-042 — Cook's Range "silent no-op" was mostly authentic + a voidbot blind spot (FIXED, narrow)
 - Status: verified · Severity: P3→P4 (as-landed) · Area: server-plugin (cooking) + tooling
