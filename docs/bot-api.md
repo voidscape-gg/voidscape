@@ -161,6 +161,12 @@ npc-present --id | npc-dead (--id|--server_index) | ground-item --id | xp-gained
 
 **Events** — `voidbot events --since <seq>` (timestamped game-event log).
 
+NPC overhead chat (SEND_UPDATE_NPC type 1, wire 104) is decoded: each line emits an
+`npc_say` event (`server_index`, `text`, `recipient`) and is mirrored into
+`state messages` with `type: "npc"` and `npc_index`, so `wait message --regex` can
+assert NPC dialogue (e.g. denial lines outside menu dialogs). The packet's other
+update types (damage, projectiles, skull, wield, bubble) are skipped, not surfaced.
+
 Exit codes: `0` ok/matched, `1` not-ok/timeout, `2` usage/connection error. Every command prints one JSON object.
 
 ## Known limitation

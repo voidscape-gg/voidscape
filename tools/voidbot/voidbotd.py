@@ -265,6 +265,8 @@ class Daemon:
                 st.event("move", x=x, y=y)
         elif name == "NPC_COORDS":
             self._decode_npcs(p)
+        elif name == "UPDATE_NPC":
+            self._decode_npc_update(p)
         elif name == "SET_INVENTORY":
             self._decode_inventory_full(p)
         elif name == "SET_INVENTORY_SLOT":
@@ -474,6 +476,55 @@ class Daemon:
         with self.st.lock:
             self.st.skills[nm] = {"cur": cur, "max": mx, "xp": xp}
         self.st.event("stat", skill=nm, cur=cur, max=mx, xp=xp)
+
+    def _decode_npc_update(self, p):
+        # SEND_UPDATE_NPC (GameStateUpdater.updateNpcAppearances, custom client):
+        # short count, then per update: short serverIndex, byte type. Type 1 = overhead
+        # chat (short recipientIndex, \n-terminated string) -> npc_say event + a "npc"
+        # entry in messages so `wait message --regex` can assert NPC dialogue. Other
+        # types are skipped by their fixed sizes: 2 damage(3), 10 damage+feedback(8),
+        # 3/4 projectile(4), 5 skull(1), 6 wield(2), 7 bubble(2).
+        count = int.from_bytes(p[0:2], "big")
+        i = 2
+        for _ in range(count):
+            idx = int.from_bytes(p[i:i + 2], "big")
+            i += 2
+            ut = p[i]
+            i += 1
+            if ut == 1:
+                recipient = int.from_bytes(p[i:i + 2], "big", signed=True)
+                i += 2
+                end = p.find(b"\n", i)
+                if end < 0:
+                    end = len(p)
+                text = p[i:end].decode("latin1", "replace")
+                i = end + 1
+                with self.st.lock:
+                    self.st._seq += 1
+                    self.st.messages.append({"seq": self.st._seq,
+                                             "t": round(time.time(), 3),
+                                             "text": text, "type": "npc",
+                                             "npc_index": idx})
+                    if len(self.st.messages) > 2000:
+                        self.st.messages = self.st.messages[-1200:]
+                self.st.event("npc_say", server_index=idx, text=text,
+                              recipient=recipient)
+            elif ut == 2:
+                i += 3
+            elif ut == 10:
+                i += 8
+            elif ut in (3, 4):
+                i += 4
+            elif ut == 5:
+                i += 1
+            elif ut == 6:
+                i += 2
+            elif ut == 7:
+                i += 2
+            else:
+                self.st.event("decode_error", opcode=104,
+                              error="unknown npc update type %d" % ut)
+                break
 
     def _decode_message(self, p):
         # int icon, byte type, byte infobits, string msg, [sender,sender], [color]
