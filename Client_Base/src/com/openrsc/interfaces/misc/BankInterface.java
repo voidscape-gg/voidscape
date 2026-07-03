@@ -160,6 +160,10 @@ public class BankInterface {
 	private int vgCaretTick = 0;
 	private int vgPage = 0;
 	private static final int VG_PAGE_SIZE = 48, VG_PAGE_MAX = 6;
+	private ArrayList<BankItem> vgVisCache = null;
+	private String vgCacheQuery = null;
+	private int vgCachePage = -1, vgCacheStamp = -1;
+	private int vgBankStamp = 0; // bumped on every bankItems mutation
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
@@ -175,6 +179,9 @@ public class BankInterface {
 	private int vgInvRows() { int c = vgCols(); return (30 + c - 1) / c; }
 
 	private boolean renderVoidGlassBank(int mx, int my) {
+		// While the X-amount prompt is up, skip the whole panel: in the custom-UI frame
+		// order the prompt is drawn BEFORE the bank, so anything we paint would cover it.
+		if (mc.inputX_Action != InputXAction.ACT_0) return true;
 		int gw = mc.getGameWidth();
 		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH();
 		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
@@ -207,21 +214,28 @@ public class BankInterface {
 		int invGY = invLabelY + invLabelH;
 		int actionY = invGY + invRows * cellH + pad;
 
-		// visible list = page slice, or live search filter (name contains, case-insensitive)
+		// visible list = page slice, or live search filter (name contains, case-insensitive);
+		// cached against (query, page, bank mutation stamp) — rebuilding per frame churns
+		// hundreds of lowercase copies at 50fps on a large bank
 		ArrayList<BankItem> vis;
-		if (!vq.isEmpty()) {
-			vis = new ArrayList<>();
-			for (BankItem bi : bankItems) {
-				if (bi == null || bi.getItem() == null) continue;
-				ItemDef d = bi.getItem().getItemDef();
-				if (d != null && d.getName() != null && d.getName().toLowerCase(Locale.ROOT).contains(vq)) vis.add(bi);
-			}
-		} else if (vgPage > 0) {
-			int from = (vgPage - 1) * VG_PAGE_SIZE;
-			int to = vgPage == VG_PAGE_MAX ? bankItems.size() : Math.min(bankItems.size(), vgPage * VG_PAGE_SIZE);
-			vis = from < bankItems.size() ? new ArrayList<>(bankItems.subList(from, to)) : new ArrayList<>();
-		} else {
+		if (vq.isEmpty() && vgPage == 0) {
 			vis = bankItems;
+		} else if (vgVisCache != null && vq.equals(vgCacheQuery) && vgPage == vgCachePage && vgBankStamp == vgCacheStamp) {
+			vis = vgVisCache;
+		} else {
+			if (!vq.isEmpty()) {
+				vis = new ArrayList<>();
+				for (BankItem bi : bankItems) {
+					if (bi == null || bi.getItem() == null) continue;
+					ItemDef d = bi.getItem().getItemDef();
+					if (d != null && d.getName() != null && d.getName().toLowerCase(Locale.ROOT).contains(vq)) vis.add(bi);
+				}
+			} else {
+				int from = (vgPage - 1) * VG_PAGE_SIZE;
+				int to = vgPage == VG_PAGE_MAX ? bankItems.size() : Math.min(bankItems.size(), vgPage * VG_PAGE_SIZE);
+				vis = from < bankItems.size() ? new ArrayList<>(bankItems.subList(from, to)) : new ArrayList<>();
+			}
+			vgVisCache = vis; vgCacheQuery = vq; vgCachePage = vgPage; vgCacheStamp = vgBankStamp;
 		}
 		if (!vq.equals(vgLastQuery)) { vgLastQuery = vq; vgScrollRow = 0; }
 
@@ -249,7 +263,9 @@ public class BankInterface {
 		if (vgMenu && (click || rclick)) {
 			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
 			if (mx >= vgMenuX && mx < vgMenuX + mw && my >= vgMenuY && my < vgMenuY + mh) {
-				int row = (my - vgMenuY - 2) / VG_MENU_ROW_H;
+				// guard the 2px header band: negative dividends truncate toward zero,
+				// which would fire row 0 on a double-click at the menu's top edge
+				int row = my < vgMenuY + 2 ? -1 : (my - vgMenuY - 2) / VG_MENU_ROW_H;
 				if (row >= 0 && row < vgMenuLabels.size()) vgDoMenu(row);
 			}
 			vgMenu = false; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
@@ -257,9 +273,9 @@ public class BankInterface {
 
 		// --- input: scrollbar drag / track click ---
 		if (!down) vgScrollDrag = false;
-		if (down && !vgInvScrollDrag && maxScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= sbY && my <= sbY + sbH) {
+		if (down && !vgMenu && !vgInvScrollDrag && maxScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= sbY && my <= sbY + sbH) {
 			if (my >= thumbY && my <= thumbY + thumbH) vgScrollDrag = true;
-			else if (mc.getMouseButtonDownTime() < 3) vgScrollRow += (my < thumbY ? -bankRows : bankRows);
+			else if (mc.getMouseButtonDownTime() < 1) vgScrollRow += (my < thumbY ? -bankRows : bankRows);
 		}
 		if (vgScrollDrag && maxScroll > 0) {
 			int rel = my - sbY - thumbH / 2;
@@ -270,9 +286,9 @@ public class BankInterface {
 
 		// --- input: inventory scrollbar drag / track click ---
 		if (!down) vgInvScrollDrag = false;
-		if (down && !vgScrollDrag && maxInvScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invSbY && my <= invSbY + invSbH) {
+		if (down && !vgMenu && !vgScrollDrag && maxInvScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invSbY && my <= invSbY + invSbH) {
 			if (my >= invThumbY && my <= invThumbY + invThumbH) vgInvScrollDrag = true;
-			else if (mc.getMouseButtonDownTime() < 3) vgInvScrollRow += (my < invThumbY ? -invRows : invRows);
+			else if (mc.getMouseButtonDownTime() < 1) vgInvScrollRow += (my < invThumbY ? -invRows : invRows);
 		}
 		if (vgInvScrollDrag && maxInvScroll > 0) {
 			int rel = my - invSbY - invThumbH / 2;
@@ -384,7 +400,7 @@ public class BankInterface {
 		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);
 		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER);
 		drawString("Bank", px + 10, py + 16, 5, VG_TITLE_TEXT);
-		String counter = vq.isEmpty() ? bankItems.size() + " / 1608" : vis.size() + " found";
+		String counter = vq.isEmpty() ? bankItems.size() + " / " + mc.bankItemsMax : vis.size() + " found";
 		drawString(counter, px + pw - 40 - mc.getSurface().stringWidth(1, counter), py + 15, 1, VG_LABEL);
 		drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
 
@@ -411,17 +427,21 @@ public class BankInterface {
 			}
 		}
 
-		// ---- render: bank grid ----
+		// ---- render: bank grid (fills, then lines, then icons — lines under sprites) ----
 		for (int r = 0; r < bankRows; r++) {
 			for (int c = 0; c < cols; c++) {
-				int idx = (vgScrollRow + r) * cols + c;
 				int cx = gx + c * cellW, cy = bankGY + r * cellH;
 				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
 				if (r * cols + c == bankHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
-				if (idx < vis.size()) drawVoidGlassCell(vis.get(idx).getItem(), vis.get(idx).getItem().getAmount(), true, cx, cy, cellW, cellH);
 			}
 		}
 		drawVgGridLines(gx, bankGY, cols, bankRows, cellW, cellH);
+		for (int r = 0; r < bankRows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int idx = (vgScrollRow + r) * cols + c;
+				if (idx < vis.size()) drawVoidGlassCell(vis.get(idx).getItem(), vis.get(idx).getItem().getAmount(), true, gx + c * cellW, bankGY + r * cellH, cellW, cellH);
+			}
+		}
 		if (bankHover >= 0) mc.getSurface().drawBoxBorder(gx + (bankHover % cols) * cellW, cellW, bankGY + (bankHover / cols) * cellH, cellH, VG_HOVER_BORDER);
 		if (maxScroll > 0) {
 			boolean hovSb = mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= thumbY && my <= thumbY + thumbH;
@@ -439,11 +459,17 @@ public class BankInterface {
 				int cx = gx + c * cellW, cy = invGY + r * cellH;
 				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
 				if (r * cols + c == invHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
-				if (slot < invCount && mc.getInventoryItemID(slot) != -1)
-					drawVoidGlassCell(mc.getInventoryItem(slot), mc.getInventoryItemAmount(slot), false, cx, cy, cellW, cellH);
 			}
 		}
 		drawVgGridLines(gx, invGY, cols, invRows, cellW, cellH);
+		for (int r = 0; r < invRows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int slot = (vgInvScrollRow + r) * cols + c;
+				if (slot >= 30) break;
+				if (slot < invCount && mc.getInventoryItemID(slot) != -1)
+					drawVoidGlassCell(mc.getInventoryItem(slot), mc.getInventoryItemAmount(slot), false, gx + c * cellW, invGY + r * cellH, cellW, cellH);
+			}
+		}
 		if (invHover >= 0) mc.getSurface().drawBoxBorder(gx + (invHover % cols) * cellW, cellW, invGY + (invHover / cols) * cellH, cellH, VG_HOVER_BORDER);
 		if (maxInvScroll > 0) {
 			boolean hovIsb = mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invThumbY && my <= invThumbY + invThumbH;
@@ -482,6 +508,7 @@ public class BankInterface {
 	// Called from mudclient's key dispatcher while the bank dialog is open.
 	public boolean vgHandleKey(int key) {
 		if (!voidGlassBank() || !mc.isShowDialogBank()) return false;
+		if (mc.inputX_Action != InputXAction.ACT_0) return false; // X-amount prompt owns the keyboard
 		if (key == 27) {
 			if (vgSearchFocus || !vgSearch.isEmpty()) { vgSearch = ""; vgSearchFocus = false; }
 			else bankClose();
@@ -493,14 +520,18 @@ public class BankInterface {
 			return true;
 		}
 		if (key == 10 || key == 13) { vgSearchFocus = false; return true; }
-		if (vgSearch.length() < 18 && Fonts.inputFilterChars.indexOf((char) key) >= 0) vgSearch += (char) key;
+		if (Fonts.inputFilterChars.indexOf((char) key) >= 0
+			&& mc.getSurface().stringWidth(1, vgSearch + (char) key) <= 150) // pixel cap: box is 170px, drawString doesn't clip
+			vgSearch += (char) key;
 		return true;
 	}
 
 	public void vgResetSearch() {
 		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
 		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgPage = 0;
-		swapNoteMode = false;
+		// only the Void Glass bank resets note mode per visit; the classic path
+		// keeps its once-per-login semantics (this runs on every bank-open packet)
+		if (voidGlassBank()) swapNoteMode = false;
 	}
 
 	private void vgDoMenu(int row) {
@@ -511,11 +542,11 @@ public class BankInterface {
 		boolean dep = vgMenuDep.get(row);
 		int amt = vgMenuAmt.get(row);
 		selectedBankSlotItemID = vgMenuItemID;
-		if (dep) {
-			int ci = vgFindCurrentIndex(vgMenuItemID);
-			if (ci < 0) return;
-			this.selectedBankSlot = ci;
-		}
+		// the InputX submit path gates on selectedBankSlot >= 0 for withdraws too,
+		// so both directions need the current-items index set
+		int ci = vgFindCurrentIndex(vgMenuItemID);
+		if (ci < 0) return;
+		this.selectedBankSlot = ci;
 		if (amt == VG_X) {
 			mc.showItemModX(dep ? InputXPrompt.bankDepositX : InputXPrompt.bankWithdrawX,
 				dep ? InputXAction.BANK_DEPOSIT : InputXAction.BANK_WITHDRAW, true);
@@ -1081,7 +1112,18 @@ public class BankInterface {
 	}
 
 	public void sendDeposit(int i) {
-		int itemID = currentItems.get(this.selectedBankSlot).getCatalogID();
+		// currentItems is rebuilt every frame, so an index recorded before the X-amount
+		// prompt can drift (or run past the end) by submit time — re-resolve by item ID
+		// when the recorded index no longer names the selected item. Classic selection
+		// sets both fields together, so its behavior is unchanged.
+		int slot = this.selectedBankSlot;
+		if (slot < 0 || slot >= currentItems.size()
+			|| (selectedBankSlotItemID >= 0 && currentItems.get(slot).getCatalogID() != selectedBankSlotItemID)) {
+			slot = vgFindCurrentIndex(selectedBankSlotItemID);
+			if (slot < 0) return;
+			this.selectedBankSlot = slot;
+		}
+		int itemID = currentItems.get(slot).getCatalogID();
 		mc.packetHandler.getClientStream().newPacket(23);
 		mc.packetHandler.getClientStream().bufferBits.putShort(itemID);
 		if (i > mc.getInventoryCount(itemID)) {
@@ -1132,14 +1174,17 @@ public class BankInterface {
 	}
 
 	public void resetBank() {
+		vgBankStamp++;
 		bankItems.clear();
 	}
 
 	public void addBank(int bankID, int itemID, int amount) {
+		vgBankStamp++;
 		bankItems.add(new BankItem(bankID, itemID, amount));
 	}
 
 	public void updateBank(int slot, int itemID, int amount) {
+		vgBankStamp++;
 		if (amount == 0) {
 			bankItems.remove(slot);
 			for (slot = 0; slot < bankItems.size(); slot++) {
