@@ -18,6 +18,9 @@ public final class LostOnDeathInterface {
 	int itemSelected = -1, rightClickMenuX = 0, rightClickMenuY = 0;
 	int width = 509;
 	int height = 331;
+	// Prayer index for Protect Items — must match server Prayers.PROTECT_ITEMS (8) and the
+	// client prayer list; mc.checkPrayerOn(8) is server-synced via opcode 206 SET_PRAYERS.
+	private static final int PROTECT_ITEMS_PRAYER = 8;
 	private ArrayList<OnDeathItem> onDeathItems;
 	private boolean visible;
 	private mudclient mc;
@@ -161,54 +164,47 @@ public final class LostOnDeathInterface {
 			}
 		}
 
+		// Stackable and noted items are always lost in full on death (the server keys
+		// them -1 in Inventory.dropOnDeath and never keeps one), so rank them below every
+		// keepable item rather than by their per-item price.
 		Collections.sort(onDeathItems, new Comparator<OnDeathItem>() {
 			@Override
 			public int compare(OnDeathItem obj1, OnDeathItem obj2) {
-				return (int) (obj2.getPrice() - obj1.getPrice());
+				long p1 = isAlwaysLost(obj1) ? -1L : obj1.getPrice();
+				long p2 = isAlwaysLost(obj2) ? -1L : obj2.getPrice();
+				return Long.compare(p2, p1);
 			}
 		});
 
+		// Keep the 3 most valuable items (0 if skulled), plus 1 more while the Protect
+		// Items prayer is active — matches server Inventory.dropOnDeath(). Note that in
+		// this interface lost==true actually marks an item as KEPT (see getLossTotal /
+		// drawItemsLost), so the keep loop sets lost on the top items.
 		int keepXItems = 0;
 		if ((mc.getLocalPlayer().skullVisible & 0x03) == 0) {
 			keepXItems += 3;
 		}
-		//TODO - add check for item protect
-		//TODO - fix stackables not being properly set to lost or not
+		if (mc.checkPrayerOn(PROTECT_ITEMS_PRAYER)) {
+			keepXItems += 1;
+		}
 
-		// Sets keepXItems amount of items first (sorted by price) to keep
 		for (int i = 0; i < keepXItems; i++) {
 			if (i >= onDeathItems.size()) {
 				break;
 			}
-			// Handles special case of stackable items being kept
-			if (EntityHandler.getItemDef(onDeathItems.get(i).getItemID()).isStackable()) {
-				onDeathItems.add(i, new OnDeathItem(onDeathItems.get(i).getItemID(), onDeathItems.get(i).getPrice(), 1, false, false));
-				onDeathItems.set(i + 1, new OnDeathItem(onDeathItems.get(i + 1).getItemID(), onDeathItems.get(i + 1).getPrice(), onDeathItems.get(i + 1).getStackCount() - 1, false, false));
-				if (onDeathItems.get(i+1).getStackCount() <= 0)
-					onDeathItems.remove(i+1);
+			// Stackable/noted items sort last and are never kept; once we reach one, no
+			// later item can be kept either, so stop.
+			if (isAlwaysLost(onDeathItems.get(i))) {
+				break;
 			}
 			onDeathItems.get(i).setLost(true);
 		}
+	}
 
-		// Handles special case of some stackables being kept and some being lost
-		for (int i = 0; i < keepXItems; i++) {
-			if (i >= onDeathItems.size()) {
-				break;
-			}
-			if (!EntityHandler.getItemDef(onDeathItems.get(i).getItemID()).isStackable()) {
-				break;
-			}
-			for (int j = i + 1; j < keepXItems; j++) {
-				if (j >= onDeathItems.size()) {
-					break;
-				}
-				if (onDeathItems.get(i).getItemID() == onDeathItems.get(j).getItemID()) {
-					OnDeathItem odi = onDeathItems.get(i);
-					onDeathItems.set(i, new OnDeathItem(odi.getItemID(), odi.getPrice(), odi.getStackCount() + 1, odi.getLost(), odi.getNoted()));
-					onDeathItems.remove(i + 1);
-				}
-			}
-		}
+	/** True if the item is always fully lost on death (stackable or noted), matching the
+	 *  server's Inventory.dropOnDeath rule. */
+	private boolean isAlwaysLost(OnDeathItem item) {
+		return item.getNoted() || EntityHandler.getItemDef(item.getItemID()).isStackable();
 	}
 
 	private String getLossTotal() {
