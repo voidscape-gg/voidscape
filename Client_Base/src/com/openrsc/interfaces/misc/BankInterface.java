@@ -148,6 +148,8 @@ public class BankInterface {
 	private final ArrayList<Integer> vgMenuAmt = new ArrayList<>();
 	private int vgScrollRow = 0;
 	private boolean vgScrollDrag = false;
+	private int vgInvScrollRow = 0;
+	private boolean vgInvScrollDrag = false;
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
@@ -165,12 +167,17 @@ public class BankInterface {
 	private boolean renderVoidGlassBank(int mx, int my) {
 		int gw = mc.getGameWidth();
 		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH();
-		int invRows = vgInvRows();
 		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
 		int availH = botSafe - topSafe;
 		int titleH = VG_TITLE_H, invLabelH = 16, actionH = 22, pad = 4;
-		int fixed = titleH + pad + invLabelH + invRows * cellH + actionH + pad + pad;
-		int bankRows = Math.max(1, Math.min(14, (availH - fixed) / cellH));
+		// Adaptive bank/inventory split: the bank grid keeps >=3 rows; the inventory
+		// tray takes the remainder (min 1) and scrolls when rows are hidden (Classic 512x334).
+		int invRowsFull = vgInvRows();
+		int chrome = titleH + pad + invLabelH + actionH + pad + pad;
+		int totalRows = Math.max(2, (availH - chrome) / cellH);
+		int invRows = Math.max(1, Math.min(invRowsFull, totalRows - 3));
+		int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
+		int fixed = chrome + invRows * cellH;
 		int pw = vgPanelW();
 		int ph = fixed + bankRows * cellH;
 		int px = (gw - pw) / 2;
@@ -195,6 +202,13 @@ public class BankInterface {
 		int thumbH = maxScroll > 0 ? Math.max(18, sbH * bankRows / Math.max(1, bankTotalRows)) : sbH;
 		int thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
 
+		// inventory tray scrollbar (same gutter, tray Y-range) for rows hidden by the split
+		int maxInvScroll = Math.max(0, invRowsFull - invRows);
+		vgInvScrollRow = Math.max(0, Math.min(maxInvScroll, vgInvScrollRow));
+		int invSbY = invGY, invSbH = invRows * cellH;
+		int invThumbH = maxInvScroll > 0 ? Math.max(14, invSbH * invRows / Math.max(1, invRowsFull)) : invSbH;
+		int invThumbY = maxInvScroll > 0 ? invSbY + (invSbH - invThumbH) * vgInvScrollRow / maxInvScroll : invSbY;
+
 		// --- input: right-click quantity menu takes priority ---
 		if (vgMenu && (click || rclick)) {
 			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
@@ -207,7 +221,7 @@ public class BankInterface {
 
 		// --- input: scrollbar drag / track click ---
 		if (!down) vgScrollDrag = false;
-		if (down && maxScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= sbY && my <= sbY + sbH) {
+		if (down && !vgInvScrollDrag && maxScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= sbY && my <= sbY + sbH) {
 			if (my >= thumbY && my <= thumbY + thumbH) vgScrollDrag = true;
 			else if (mc.getMouseButtonDownTime() < 3) vgScrollRow += (my < thumbY ? -bankRows : bankRows);
 		}
@@ -217,6 +231,19 @@ public class BankInterface {
 		}
 		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
 		thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
+
+		// --- input: inventory scrollbar drag / track click ---
+		if (!down) vgInvScrollDrag = false;
+		if (down && !vgScrollDrag && maxInvScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invSbY && my <= invSbY + invSbH) {
+			if (my >= invThumbY && my <= invThumbY + invThumbH) vgInvScrollDrag = true;
+			else if (mc.getMouseButtonDownTime() < 3) vgInvScrollRow += (my < invThumbY ? -invRows : invRows);
+		}
+		if (vgInvScrollDrag && maxInvScroll > 0) {
+			int rel = my - invSbY - invThumbH / 2;
+			vgInvScrollRow = rel * maxInvScroll / Math.max(1, invSbH - invThumbH);
+		}
+		vgInvScrollRow = Math.max(0, Math.min(maxInvScroll, vgInvScrollRow));
+		invThumbY = maxInvScroll > 0 ? invSbY + (invSbH - invThumbH) * vgInvScrollRow / maxInvScroll : invSbY;
 
 		// --- input: close button ---
 		int closeX = px + pw - 18, closeY = py + 5;
@@ -250,11 +277,11 @@ public class BankInterface {
 		int invCount = mc.getInventoryItemCount();
 		for (int r = 0; r < invRows; r++) {
 			for (int c = 0; c < cols; c++) {
-				int slot = r * cols + c;
+				int slot = (vgInvScrollRow + r) * cols + c;
 				if (slot >= 30) break;
 				int cx = gx + c * cellW, cy = invGY + r * cellH;
 				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && slot < invCount && mc.getInventoryItemID(slot) != -1) {
-					invHover = slot;
+					invHover = r * cols + c;
 					int id = mc.getInventoryItemID(slot);
 					if (rclick) { openVgMenu(id, mx, my); mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false; }
 					else if (click) {
@@ -298,17 +325,21 @@ public class BankInterface {
 		drawString("Inventory", px + 10, invLabelY + 12, 1, VG_LABEL);
 		for (int r = 0; r < invRows; r++) {
 			for (int c = 0; c < cols; c++) {
-				int slot = r * cols + c;
+				int slot = (vgInvScrollRow + r) * cols + c;
 				if (slot >= 30) break;
 				int cx = gx + c * cellW, cy = invGY + r * cellH;
 				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
-				if (slot == invHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
+				if (r * cols + c == invHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
 				if (slot < invCount && mc.getInventoryItemID(slot) != -1)
 					drawVoidGlassCell(mc.getInventoryItem(slot), mc.getInventoryItemAmount(slot), false, cx, cy, cellW, cellH);
 			}
 		}
 		drawVgGridLines(gx, invGY, cols, invRows, cellW, cellH);
 		if (invHover >= 0) mc.getSurface().drawBoxBorder(gx + (invHover % cols) * cellW, cellW, invGY + (invHover / cols) * cellH, cellH, VG_HOVER_BORDER);
+		if (maxInvScroll > 0) {
+			mc.getSurface().drawBoxAlpha(sbX, invSbY, sbW, invSbH, 0x0C0620, 120);
+			mc.getSurface().drawBoxAlpha(sbX, invThumbY, sbW, invThumbH, VG_FRAME_INNER, 160);
+		}
 
 		// ---- render: action bar (deposit all) ----
 		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
