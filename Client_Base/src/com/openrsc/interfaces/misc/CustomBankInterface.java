@@ -962,13 +962,33 @@ public final class CustomBankInterface extends BankInterface {
 			return;
 		}
 		String text = mudclient.formatStackAmount(amount);
-		int chipX = sx + 2;
+		int tx = sx + 4;
 		int baseline = sy + bankSlotHeight() - 5;
-		drawString(text, chipX + 2, baseline, 0, color);
+		drawString(text, tx + 1, baseline + 1, 0, 0x000000); // shadow for legibility over the item
+		drawString(text, tx, baseline, 0, color);
 	}
 
 	private void drawItemInSlot(Item item, int drawX, int drawY, boolean dragging) {
-		drawItemSprite(item, drawX + (bankSlotWidth() - 48) / 2, drawY + (bankSlotHeight() - 32) / 2, dragging);
+		// Fit the item sprite inside the ACTUAL cell (preserving the 48x32 / 3:2 aspect,
+		// 1px inset) instead of drawing a fixed 48x32 that overflows and mis-aligns when
+		// the responsive cell is smaller than 48x32. Keeps items on the grid at any size.
+		drawItemFittedInCell(item, drawX, drawY, bankSlotWidth(), bankSlotHeight(), dragging);
+	}
+
+	/** Draw an item sprite scaled to fit within a cell of (cellW x cellH), centered.
+	 *  Capped at the native 48x32 so items only shrink for small cells, never upscale. */
+	private void drawItemFittedInCell(Item item, int cellX, int cellY, int cellW, int cellH, boolean dragging) {
+		int availW = Math.min(48, Math.max(1, cellW - 2));
+		int availH = Math.min(32, Math.max(1, cellH - 2));
+		int iw = availW;
+		int ih = iw * 32 / 48;
+		if (ih > availH) {
+			ih = availH;
+			iw = ih * 48 / 32;
+		}
+		int ix = cellX + (cellW - iw) / 2;
+		int iy = cellY + (cellH - ih) / 2;
+		drawItemSpriteScaled(item, ix, iy, iw, ih, dragging);
 	}
 
 	private void drawCenteredString(String label, int cx, int cy, int font, int color) {
@@ -1228,37 +1248,44 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private void drawItemSprite(Item item, int drawX, int drawY, boolean dragging) {
+		drawItemSpriteScaled(item, drawX, drawY, 48, 32, dragging);
+	}
+
+	/**
+	 * Draw an item sprite at an arbitrary size (drawW x drawH). Surface.drawSpriteClipping
+	 * scales the sprite to the destination rect, so any slot size aligns correctly. The
+	 * noted/cert background fills the rect and the inner item scales proportionally to the
+	 * classic 48x32/29x19 layout.
+	 */
+	private void drawItemSpriteScaled(Item item, int drawX, int drawY, int drawW, int drawH, boolean dragging) {
 		if (item == null || item.getCatalogID() == -1 || item.getItemDef() == null) {
 			return;
 		}
 		ItemDef def = item.getItemDef();
 		if (item.getNoted()) {
-			if (S_WANT_CERT_AS_NOTES) {
-				if (dragging) {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.noteDef), drawX, drawY, 48, 32,
-						EntityHandler.noteDef.getPictureMask(), 0, EntityHandler.noteDef.getBlueMask(), false, 0, 1);
-				} else {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.noteDef), drawX, drawY, 48, 32,
-						EntityHandler.noteDef.getPictureMask(), 0, EntityHandler.noteDef.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
-				}
-				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX + 7, drawY + 8, 29, 19,
-					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+			ItemDef bg = S_WANT_CERT_AS_NOTES ? EntityHandler.noteDef : EntityHandler.certificateDef;
+			if (dragging) {
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(bg), drawX, drawY, drawW, drawH,
+					bg.getPictureMask(), 0, bg.getBlueMask(), false, 0, 1);
 			} else {
-				if (dragging) {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.certificateDef), drawX, drawY, 48, 32,
-						EntityHandler.certificateDef.getPictureMask(), 0, EntityHandler.certificateDef.getBlueMask(), false, 0, 1);
-				} else {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.certificateDef), drawX, drawY, 48, 32,
-						EntityHandler.certificateDef.getPictureMask(), 0, EntityHandler.certificateDef.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
-				}
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(bg), drawX, drawY, drawW, drawH,
+					bg.getPictureMask(), 0, bg.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
+			}
+			if (S_WANT_CERT_AS_NOTES) {
+				int innerW = Math.max(1, drawW * 29 / 48);
+				int innerH = Math.max(1, drawH * 19 / 32);
+				int innerX = drawX + drawW * 7 / 48;
+				int innerY = drawY + drawH * 8 / 32;
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), innerX, innerY, innerW, innerH,
+					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
 			}
 			return;
 		}
 		if (dragging) {
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, 48, 32,
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, drawW, drawH,
 				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
 		} else {
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, 48, 32,
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, drawW, drawH,
 				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
 		}
 	}
