@@ -71,11 +71,11 @@ to resume from these two files alone. Keep every entry self-contained.
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
   + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 + **VS-003 (closed by Ryan's rulings +
-  server noted-on-death fix)** DONE 2026-07-03 → next: **VS-034** (dialog busy-state,
-  P3, player-facing — deep diagnosis already in its Log: trace the stale-cleanup
-  dialog_close race + extend the PluginHandler stop to non-NPC dialog scripts), then
-  VS-009 (bank value sort), P4 tail, and triage the Intake backlog (canHold, spawnnpc
-  coords, over-deposit bullets — several have fresh 2026-07-03 datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  server noted-on-death fix)** DONE 2026-07-03. **Ryan redirected 2026-07-03: the bug
+  loop's P3/P4 tail is DEPRIORITIZED in favor of the launch-readiness sweep
+  (docs/RELEASE-CHECKLIST.md, launch 2026-07-11)** — new findings still land in
+  Intake. When the loop resumes: VS-034 (deep diagnosis in its Log), VS-009, P4 tail,
+  Intake triage (canHold has two fresh datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
