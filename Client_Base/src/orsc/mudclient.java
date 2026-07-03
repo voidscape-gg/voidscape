@@ -17362,13 +17362,12 @@ public final class mudclient implements Runnable {
 		if (!useVoidscapeHudSkin()) {
 			return;
 		}
-		if (isShowDialogBank()) {
-			return; // hide the location plaque + top tabs while banking for clean, unobstructed space
-		}
 		refreshVoidscapeCurrentAccountCache();
-		drawVoidscapeLocationPlaque();
+		if (!isShowDialogBank()) {
+			drawVoidscapeLocationPlaque(); // plaque stays hidden while banking (per design)
+		}
 		if (!voidscapeUseMobilePanelShell()) {
-			drawVoidscapeTopTabs();
+			drawVoidscapeTopTabs(); // top menu stays visible while banking
 		}
 	}
 

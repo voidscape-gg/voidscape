@@ -67,6 +67,12 @@ public class BankInterface {
 			currentItemIDs.add(itemID);
 		}
 
+		// Voidscape modern "Void Glass" bank (skin on). Preservation / skin-off falls through
+		// to the authentic classic bank below.
+		if (voidGlassBank()) {
+			return renderVoidGlassBank(currMouseX, currMouseY);
+		}
+
 		// Set Bank Page
 		if (mouseOverBankPageText > 0 && currentItems.size() <= 48)
 			mouseOverBankPageText = 0;
@@ -114,6 +120,129 @@ public class BankInterface {
 		// Draw the top header
 		drawBankComponents(currMouseX, currMouseY);
 		return true;
+	}
+
+	// ===================== Void Glass bank (voidscape modern skin) =====================
+	// Translucent purple GLASS colorway (see-through). Slice 1: centered HUD-safe glass slab
+	// + native-icon grid + amounts + left-click withdraw/deposit. Chrome/tabs/search/loadouts
+	// come in later slices. Classic bank (skin off) is untouched for preservation.
+	private static final int VG_BODY = 0x160B2C, VG_BODY_A = 150;      // glass panel body
+	private static final int VG_STRIP = 0x2A1A4D, VG_STRIP_A = 55;     // title chrome strip (over body)
+	private static final int VG_HAIRLINE = 0x7C63C0;                   // region dividers
+	private static final int VG_FRAME_INNER = 0x8A6BD8;               // lavender inner rim
+	private static final int VG_SLOT = 0x3A2A5E, VG_SLOT_A = 60;       // slot glass
+	private static final int VG_SLOT_BORDER = 0x6E5CA8;               // slot hairline border
+	private static final int VG_HOVER = 0x8F2BFF, VG_HOVER_A = 70;     // hover bloom
+	private static final int VG_HOVER_BORDER = 0xC35CFF;
+	private static final int VG_SEL_RING = 0xF6DA7D;                  // gold selected ring
+	private static final int VG_TITLE_TEXT = 0xF2ECFF, VG_LABEL = 0xB6A6D6;
+	private static final int VG_GREEN = 0x54FF6A, VG_CYAN = 0x66E0FF, VG_GOLD = 0xF6DA7D;
+	private static final int VG_INNER_PAD = 10, VG_SCROLL_GUTTER = 8, VG_SIDE_MARGIN = 8, VG_TITLE_H = 24;
+
+	private boolean voidGlassBank() {
+		return Config.C_CUSTOM_UI && !Config.isAndroid();
+	}
+
+	private int vgTier() { int gw = mc.getGameWidth(); return gw < 700 ? 0 : (gw < 940 ? 1 : 2); }
+	private int vgCols() { int t = vgTier(); return t == 0 ? 8 : (t == 1 ? 10 : 12); }
+	private int vgCellW() { int t = vgTier(); return t == 0 ? 49 : (t == 1 ? 54 : 60); }
+	private int vgCellH() { int t = vgTier(); return t == 0 ? 34 : (t == 1 ? 36 : 40); }
+	private int vgTopSafe() { return Math.max(56, mc.getVoidscapeDesktopOverlayTopSafeY()); }
+	private int vgBotSafe() { int gh = mc.getGameHeight(); int e = mc.getVoidscapeDesktopOverlayBottomSafeY(); return e < gh ? e : gh - 22; }
+	private int vgChrome() { return VG_TITLE_H + 4 + 6; } // title + top pad + bottom pad
+	private int vgPanelW() { return Math.min(vgCols() * vgCellW() + 2 * VG_INNER_PAD + VG_SCROLL_GUTTER, mc.getGameWidth() - 2 * VG_SIDE_MARGIN); }
+	private int vgVisibleRows() {
+		int availH = vgBotSafe() - vgTopSafe();
+		int rows = (Math.min(vgChrome() + 14 * vgCellH(), availH) - vgChrome()) / vgCellH();
+		return Math.max(3, Math.min(14, rows));
+	}
+	private int vgPanelH() { return vgChrome() + vgVisibleRows() * vgCellH(); }
+	private int vgPanelX() { return (mc.getGameWidth() - vgPanelW()) / 2; }
+	private int vgPanelY() { int availH = vgBotSafe() - vgTopSafe(); return vgTopSafe() + Math.max(0, (availH - vgPanelH()) / 2); }
+	private int vgGridX() { return vgPanelX() + VG_INNER_PAD; }
+	private int vgGridY() { return vgPanelY() + VG_TITLE_H + 4; }
+
+	private boolean renderVoidGlassBank(int mx, int my) {
+		int px = vgPanelX(), py = vgPanelY(), pw = vgPanelW(), ph = vgPanelH();
+		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH(), rows = vgVisibleRows();
+		int gx = vgGridX(), gy = vgGridY();
+		boolean click = mc.getMouseClick() == 1;
+
+		// --- input: close button ---
+		int closeX = px + pw - 18, closeY = py + 5;
+		boolean overClose = mx >= closeX && mx <= closeX + 14 && my >= closeY && my <= closeY + 14;
+		if (click && overClose) { mc.setMouseClick(0); bankClose(); return false; }
+
+		// --- input: grid clicks (left-click withdraw-1 / deposit-1) + hover ---
+		int hoverSlot = -1;
+		for (int r = 0; r < rows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int idx = r * cols + c;
+				int cx = gx + c * cellW, cy = gy + r * cellH;
+				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH) {
+					hoverSlot = idx;
+					if (click && idx < currentItems.size()) {
+						Item it = currentItems.get(idx);
+						if (it.getCatalogID() != -1) {
+							selectedBankSlotItemID = it.getCatalogID();
+							this.selectedBankSlot = idx;
+							mc.setMouseClick(0);
+							Item banked = getBankItemByID(it.getCatalogID());
+							if (banked != null && banked.getAmount() > 0) sendWithdraw(1);
+							else if (mc.getInventoryCount(it.getCatalogID()) > 0) sendDeposit(1);
+						}
+					}
+				}
+			}
+		}
+
+		// --- render ---
+		mc.getSurface().drawBoxAlpha(px, py, pw, ph, VG_BODY, VG_BODY_A);              // glass body
+		mc.getSurface().drawBoxAlpha(px, py, pw, VG_TITLE_H, VG_STRIP, VG_STRIP_A);    // title strip
+		mc.getSurface().drawLineHoriz(px, py + VG_TITLE_H, pw, VG_HAIRLINE);           // divider under title
+		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);                              // black outer frame
+		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER); // lavender inner rim
+		drawString("Bank", px + 10, py + 16, 5, VG_TITLE_TEXT);
+		String counter = bankItems.size() + " / 1608";
+		drawString(counter, px + pw - 40 - mc.getSurface().stringWidth(1, counter), py + 15, 1, VG_LABEL);
+		drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
+
+		for (int r = 0; r < rows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int idx = r * cols + c;
+				int cx = gx + c * cellW, cy = gy + r * cellH;
+				boolean hovered = idx == hoverSlot;
+				boolean selected = idx == this.selectedBankSlot && idx < currentItems.size();
+				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
+				if (hovered) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
+				mc.getSurface().drawBoxBorder(cx, cellW, cy, cellH, selected ? VG_SEL_RING : (hovered ? VG_HOVER_BORDER : VG_SLOT_BORDER));
+				if (idx < currentItems.size()) drawVoidGlassItem(currentItems.get(idx), cx, cy, cellW, cellH);
+			}
+		}
+		return true;
+	}
+
+	private void drawVoidGlassItem(Item it, int cx, int cy, int cellW, int cellH) {
+		if (it.getCatalogID() == -1) return;
+		if (!(it.getAmount() > 0 || mc.getInventoryCount(it.getCatalogID()) > 0)) return;
+		ItemDef def = it.getItemDef();
+		if (def == null) return;
+		int ix = cx + (cellW - 48) / 2, iy = cy + 1 + (cellH - 34) / 2;
+		mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix, iy, 48, 32,
+			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+		Item banked = getBankItemByID(it.getCatalogID());
+		int amt = banked != null ? banked.getAmount() : 0;
+		if (amt > 0) {
+			String s = String.valueOf(amt);
+			drawString(s, cx + 3, cy + 11, 1, 0x000000);
+			drawString(s, cx + 2, cy + 10, 1, amt >= 100000 ? VG_GOLD : VG_GREEN);
+		}
+		int held = mc.getInventoryCount(it.getCatalogID());
+		if (held > 0) {
+			String h = String.valueOf(held);
+			int hx = cx + cellW - 3 - mc.getSurface().stringWidth(1, h);
+			drawString(h, hx, cy + cellH - 4, 1, VG_CYAN);
+		}
 	}
 
 	private void selectSlot(int selectedX, int selectedY) {
@@ -233,11 +362,8 @@ public class BankInterface {
 	}
 
 	private int bankOriginY() {
-		int originY = mc.getGameHeight() / 2 - height / 2 + 20;
-		if (mc.isVoidscapeClassicWebSmallHud()) {
-			originY = mc.getVoidscapeDesktopOverlayTopSafeY();
-		}
-		return originY;
+		// Absolute default bank position (centered). No voidscape offset override.
+		return mc.getGameHeight() / 2 - height / 2 + 20;
 	}
 
 	private void drawBankComponents(int currMouseX, int currMouseY) {
