@@ -39,7 +39,8 @@ to resume from these two files alone. Keep every entry self-contained.
   VS-048 triaged → fixed → verified → committed (canHold over-cap merge rejection;
   open cap-ruling question for Ryan). VS-049 (portal login throttle, P2 launch
   surface) triaged → fixed → verified → committed. VS-051 (google credential/username
-  error ordering) fixed → verified → committed. Intake triage pass: 3 bullets
+  error ordering) fixed → verified → committed. VS-052 (voidbot wait usage errors +
+  fail-fast on typo'd conditions) fixed → verified → committed. Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
   blocked(WIP-collision). Server on the VS-048 build
@@ -133,7 +134,6 @@ half-remembered is fine, triage will chase it down.)_
 - `::queststage` usage string says stage optional; handler requires all 3 args (S-G §2)
 - `::setstat` arg order is LEVEL STAT with a misleading error on the natural order —
   fix docs/briefs that say SKILL LVL (tmp/qa/S-I, S-B, S-E)
-- `wait xp-gained` without --skill crashes with raw KeyError (tmp/qa/S-C F8)
 - Rested XP wording: docs say per-second, in-game message says per-minute (S-H F4)
 - Undead Siege mid-run logout gives no payout/forfeit feedback (tmp/qa/S-I)
 - ~~Death items-kept untestable by fleet~~ → **CLOSED 2026-07-03: resolved by F0.8** —
@@ -536,6 +536,22 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-052 — voidbot wait: raw KeyError on missing args; typo'd conditions burned the timeout (FIXED)
+- Status: verified · Severity: P3 · Area: tooling (voidbot)
+- Evidence: `wait xp-gained` without --skill → `KeyError: 'skill'` exit 1 (S-C F8;
+  live repro tmp/vs052/01-prefix-keyerror.json); same for every wait's required args
+  (`wait position` → `KeyError: 'x'`); typo'd condition (`wait bank-opne`) burned the
+  full timeout before exiting 1.
+- Fix: per-condition required-args table validated at the top of `Daemon.wait()`
+  (plus npc-dead/npc-gone --id OR --server_index, and unknown-condition detection)
+  returning `usage: ...` errors; cli.py maps `usage:` errors to exit 2 (extends the
+  VS-025 "unknown command" mapping).
+- Verified 2026-07-03 live on a restarted daemon: no-skill xp-gained → usage exit 2;
+  bank-opne → usage exit 2 in 0.14s; missing-coords + neither-id branches exit 2;
+  valid waits unchanged (match 0 / timeout 1); tests/smoke.sh 26/26; build green.
+- Log: 2026-07-03 triaged from Intake (S-C F8), repro'd all three shapes, fixed,
+  verified, committed same day.
 
 ### VS-051 — /api/accounts/google validated username before the credential (FIXED)
 - Status: verified · Severity: P4 · Area: web-portal

@@ -111,9 +111,9 @@ def main():
     print(json.dumps(resp, indent=None))
     if resp.get("ok"):
         sys.exit(0)
-    # unknown command = usage error (documented contract: exit 2, not 1)
+    # unknown command / "usage: ..." = usage error (documented contract: exit 2, not 1)
     err = str(resp.get("error", ""))
-    sys.exit(2 if err.startswith("unknown command") else 1)
+    sys.exit(2 if err.startswith(("unknown command", "usage:")) else 1)
 
 
 if __name__ == "__main__":

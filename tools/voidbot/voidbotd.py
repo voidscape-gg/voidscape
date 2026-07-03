@@ -920,8 +920,27 @@ class Daemon:
         key = aliases.get(section, section)
         return {key: full.get(key)}
 
+    WAIT_REQUIRED_ARGS = {
+        "position": ("x", "y"), "near": ("x", "y"),
+        "inventory-contains": ("id",), "inventory-lacks": ("id",),
+        "message": ("regex",), "xp-gained": ("skill",),
+        "npc-present": ("id",), "ground-item": ("id",),
+        "dialog-open": (), "input-open": (), "dialog-or-message": (),
+        "bank-open": (), "logged-in": (), "npc-dead": (), "npc-gone": (),
+    }
+
     def wait(self, a):
         cond = a.get("condition")
+        # Usage errors ("usage: ...") must fail fast with exit 2, not surface as raw
+        # KeyErrors or spin the full timeout on a typo'd condition.
+        if cond not in self.WAIT_REQUIRED_ARGS:
+            return {"ok": False, "error": "usage: unknown wait condition: %s" % cond}
+        missing = [k for k in self.WAIT_REQUIRED_ARGS[cond] if a.get(k) is None]
+        if missing:
+            return {"ok": False, "error": "usage: wait %s requires --%s"
+                    % (cond, " --".join(missing))}
+        if cond in ("npc-dead", "npc-gone") and a.get("id") is None and a.get("server_index") is None:
+            return {"ok": False, "error": "usage: wait %s requires --id or --server_index" % cond}
         timeout = float(a.get("timeout", 10))
         deadline = time.time() + timeout
         st = self.st
