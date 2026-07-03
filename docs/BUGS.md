@@ -59,9 +59,10 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 + VS-043 DONE 2026-07-03 (plus voidbot npc_say extension) → next:
-  VS-025 (voidbot CLI/doc drift), then remaining P3s (VS-032 render-cap loss risk is
-  the most player-facing), P4 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 + VS-043 + VS-025 DONE 2026-07-03 (plus voidbot npc_say extension)
+  → next: VS-032 (render-cap "Unobtanium" + force-drop loss risk — most player-facing
+  open P3), VS-034 (dialog busy-state), VS-009, then P4 tail / triage the Intake
+  backlog (canHold, spawnnpc-coords, quickbank no-op bullets etc.). VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -376,14 +377,6 @@ half-remembered is fine, triage will chase it down.)_
 - Log: 2026-07-02 seeded from survey; narrowed to Grog + the attack-vs-strength
   mismatch on verification pass.
 
-### VS-025 — voidbot CLI/doc drift: unknown commands exit 0; bot-api.md lists unimplemented commands
-- Status: confirmed · Severity: P3 · Area: tooling (voidbot) / docs
-- Evidence: unknown command prints ok:false but exits 0 (docs promise exit 2);
-  bot-api.md's implemented list includes ~7 commands the binary lacks (combat-style,
-  prayer-on/off, cast-npc/self, use-on-item, examine, boundary-action) (S-A/B/C).
-- Repro: `voidbot combat-style aggressive; echo $?`
-- Verify: docs match binary; unknown command exits 2.
-- Log: 2026-07-02 wave-1 (S-A/B/C).
 
 ### VS-027 — Rapid admin `::commands` drop under fast fire (re-scoped; deposits are fine)
 - Status: confirmed · Severity: P3 · Area: server-core (admin-command path) / QA-ergonomics
@@ -530,6 +523,20 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-025 — voidbot CLI/doc drift settled: unknown commands exit 2; roadmap rows marked (FIXED)
+- Status: verified · Severity: P3 · Area: tooling (voidbot) / docs
+- Two halves: (1) unknown commands exited 1 by session start (0 at wave-1) though the
+  documented contract is 2 for usage errors — cli.py now exits 2 when the daemon
+  reports "unknown command"; ok=0 and timeout=1 unchanged. (2) bot-api.md's handler
+  table suggested `voidbot ...` syntax for six commands the binary lacks (combat-style,
+  boundary-action, examine, prayer-on/off, cast-self, cast-npc) — those rows are now
+  marked "NOT IMPLEMENTED (planned syntax)". use-on-item from the original list landed
+  with E1. Implementing the six (esp. boundary-action = the E2 doors dependency)
+  remains future tooling work, not doc drift.
+- Verified 2026-07-03: `voidbot combat-style aggressive` exits 2; valid command 0;
+  wait timeout 1; tests/smoke.sh 26/26 after the exit-code change.
+- Log: 2026-07-02 wave-1 filed. 2026-07-03 fixed + verified + committed.
 
 ### VS-043 — ::item into a full inventory now reports the ground drop (FIXED)
 - Status: verified · Severity: P4 · Area: server-plugin (admin command)
