@@ -93,7 +93,9 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				player.getBank().depositItemFromInventory(catalogID, amount, true);
 				break;
 			case BANK_DEPOSIT_ALL_FROM_INVENTORY:
-				if (!player.getConfig().WANT_CUSTOM_BANKS) {
+				// voidscape: the Void Glass bank (per-player custom_ui, no custom-banks panel)
+				// also offers deposit-all, so accept it for those players too.
+				if (!player.getConfig().WANT_CUSTOM_BANKS && !player.getCustomUI()) {
 					player.setSuspiciousPlayer(true, "Trying to deposit all from inventory without custom bank enabled");
 					return;
 				}
@@ -116,7 +118,8 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				// voidscape: equipment-tab gate removed — bank presets are independent of the equipment-tab UI.
 				// Upstream gated both load and save on WANT_EQUIPMENT_TAB and even flagged the player as suspicious,
 				// so on a server with bank presets but no equipment tab (like voidscape), every load/save was silently refused.
-				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) {
+				// Void Glass bank players (per-player custom_ui) also get presets without the custom-banks panel.
+				if (!(player.getConfig().WANT_BANK_PRESETS && (player.getConfig().WANT_CUSTOM_BANKS || player.getCustomUI()))) {
 					player.setSuspiciousPlayer(true, "Player loading preset without feature enabled");
 					return;
 				}
@@ -137,7 +140,7 @@ public final class BankHandler implements PayloadProcessor<BankStruct, OpcodeIn>
 				break;
 			case BANK_SAVE_PRESET:
 				// voidscape: see BANK_LOAD_PRESET comment above re: removed equipment-tab gate.
-				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) {
+				if (!(player.getConfig().WANT_BANK_PRESETS && (player.getConfig().WANT_CUSTOM_BANKS || player.getCustomUI()))) {
 					player.setSuspiciousPlayer(true, "Player saving preset without feature enabled");
 					return;
 				}
