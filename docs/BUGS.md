@@ -67,12 +67,12 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 DONE 2026-07-03 → next: **VS-034**
-  (dialog busy-state, P3, player-facing — deep diagnosis already in its Log: trace the
-  stale-cleanup dialog_close race + extend the PluginHandler stop to non-NPC dialog
-  scripts), then VS-009 (bank value sort), P4 tail, and triage the Intake backlog
-  (canHold, spawnnpc coords, over-deposit bullets — several have fresh 2026-07-03
-  datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 + **VS-003 (closed by Ryan's rulings +
+  server noted-on-death fix)** DONE 2026-07-03 → next: **VS-034** (dialog busy-state,
+  P3, player-facing — deep diagnosis already in its Log: trace the stale-cleanup
+  dialog_close race + extend the PluginHandler stop to non-NPC dialog scripts), then
+  VS-009 (bank value sort), P4 tail, and triage the Intake backlog (canHold, spawnnpc
+  coords, over-deposit bullets — several have fresh 2026-07-03 datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -198,47 +198,6 @@ half-remembered is fine, triage will chase it down.)_
   is latent (save path is correct on both backends); naive shared-query fix breaks
   SQLite saves — reverted; downgraded P2→P3; correct fix needs an isolated query +
   MySQL verification. The verify step prevented a production-breaking change.
-
-### VS-003 — "Items kept on death" screen ignores Protect Item and misreports stackables
-- Status: **fixed-but-partial / reopened** (fix removed the old bugs but diverges from server on noted items; interface is DORMANT) · Severity: **P4** (dead code under every voidscape preset) · Area: client-ui · commit b6c8841f
-- **Wave-2 findings (2026-07-02) that change the picture:**
-  1. The interface is UNREACHABLE in all voidscape presets: `want_equipment_tab: false`
-     (local.conf:239) + `items_on_death_menu: false` (local.conf:121); the equipment-tab
-     button (mudclient.java:15195) is the only opener and isn't drawn. So the whole bug
-     is dead code for players unless those flags are enabled (they're true only in
-     rsccabbage/rsccoleslaw). → downgraded P2→P4.
-  2. My fix treats noted as always-lost, but the SERVER keep-loop
-     (`Inventory.java:477-490`) only `break`s on `isStackable()`, NOT noted — so the
-     server CAN keep a noted non-stackable item when the player has <3 more-valuable
-     non-noted items. S-DEATH confirmed live: qanpc1 (skull off, 2 gear + noted x3, no
-     coins) KEPT the noted stack. So my client fix now DIVERGES from the server in that
-     edge case (over-corrected).
-- Net: the fix DID remove the two clear original bugs (Protect Item ignored, stackable
-  split as "1 kept") — a real improvement — but to truly mirror the server it should
-  break only on `isStackable()` (keep noted if reached), not treat noted as always-lost.
-- **Question for Ryan:** (a) should the items-kept-on-death interface be enabled at all
-  in voidscape (it's off)? (b) intended: are noted items kept or always lost on death?
-  The server currently *can* keep them — that itself may be a server bug. Answer decides
-  whether to refine the client (break only on stackable) or fix the server (break on
-  noted too).
-- Root cause (diagnosed 2026-07-02, agent a385dba): the interface is a client-LOCAL
-  computation (equipment-tab button, no packet). It sorted stackables by price (so a big
-  stack could take a keep slot) and split off 1 unit as "kept", and never added the
-  Protect Item +1. Server truth `Inventory.dropOnDeath` (`server/.../container/Inventory.java:424-490`):
-  keep 3 most valuable NON-stackable/non-noted (0 if skulled), +1 if Protect Items
-  (prayer id 8) active; stackable+noted ALWAYS fully lost. Note the interface's `lost`
-  field is inverted (`lost==true` means kept).
-- Fix: `LostOnDeathInterface.java` — demote stackable/noted below all keepable items in
-  the sort, keep `(skulled?0:3)+(protect?1:0)` via `mc.checkPrayerOn(8)` (server-synced,
-  opcode 206), stop at the first always-lost item; deleted the buggy split block.
-- Fix status: removed the two original bugs (Protect Item, stackable-split) — verified by
-  code review; but see the noted-item divergence above. Runtime display matrix could NOT
-  be run (interface dormant — S-VD). Server death rule itself verified live via S-DEATH
-  (skull off → keep 3 non-stackables; skull on → keep 0; and the noted edge case above).
-- Log: 2026-07-02 seeded; diagnosed + fixed (b6c8841f); **wave-2 (S-DEATH + S-VD) found
-  the interface is dormant and the fix diverges from the server on noted items** →
-  reopened, downgraded P2→P4, spec question raised for Ryan. Don't archive until the
-  noted behavior is decided.
 
 ### VS-004 — Fresh-checkout config trap for custom item IDs (likely already fixed — re-verify)
 - Status: reported · Severity: P3 · Area: content-pipeline / config
@@ -475,6 +434,9 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 - Runecrafting disabled (`want_runecraft: false`) — intended, including for launch
   (ruled 2026-07-03; removed from Intake).
+- Noted items are ALWAYS lost on death, like stackables (ruled 2026-07-03; enforced
+  server-side by the VS-003 fix). The items-kept-on-death preview interface stays
+  disabled in voidscape presets.
 
 - Harvesting skill disabled on the launch preset (`want_harvesting: false`) — intended.
 - Bone-bury prayer XP rides `combat_exp_rate` (10×, i.e. 37.5/bone) — intended.
@@ -541,6 +503,26 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-003 — Items kept on death: noted always lost (CLOSED by ruling + server fix)
+- Status: verified · Severity: P4→gameplay-rule fix · Area: client-ui + server-core · commits b6c8841f (client preview) + the VS-003 server commit
+- History: the client preview's two original bugs (Protect Item ignored; stackable
+  split as "1 kept") were fixed 2026-07-02 (b6c8841f). Wave-2 then found the preview
+  is DORMANT in all voidscape presets and that the SERVER could keep a whole noted
+  stack in a keep slot (S-DEATH live) — parked for Ryan's ruling.
+- Ruling (Ryan, 2026-07-03): noted items are ALWAYS lost on death (like stackables);
+  the items-kept preview interface stays disabled. Closes the noting-as-death-insurance
+  loophole (whole noted stacks surviving death; PvP killers getting nothing).
+- Server fix: `Inventory.dropOnDeath` keep-3 loop and Protect-Item fourth-slot block
+  now refuse `getNoted()` items as well as `isStackable()` (the value map already keyed
+  noted as always-lost -1; only the keep checks lagged). Matches the shipped client
+  preview model exactly.
+- Verified 2026-07-03 live on the S-DEATH fixture (qanpc1, non-priv, unskulled, 2 gear
+  + noted Rune Plate Mail Legs ×3): after death the 2 gear are kept, the noted stack is
+  gone and lies on the death tile (ground item, noted=True), hits restored;
+  tests/smoke.sh 26/26.
+- Log: 2026-07-02 client fix + reopen; 2026-07-03 ruled, server fixed, verified,
+  committed. Preview interface remains dormant-but-correct by ruling.
 
 ### VS-032 — "Unobtanium"/force-drop was voidbot's stale login trailer, not a player loss risk (FIXED)
 - Status: verified · Severity: P3 · Area: tooling (voidbot); server behavior confirmed correct

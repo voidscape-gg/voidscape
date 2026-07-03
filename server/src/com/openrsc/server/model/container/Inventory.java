@@ -475,7 +475,10 @@ public class Inventory {
 		// Save three most expensive items by ItemDef default price
 		if (!player.isSkulled() && !player.isIronMan(IronmanMode.Ultimate.id())) {
 			for (int items = 1; items <= 3 && iterator.hasNext(); items++) {
-				if (iterator.next().getDef(player.getWorld()).isStackable()) {
+				final Item keptItem = iterator.next();
+				// noted items are keyed -1 above like stacks; never let one occupy a
+				// keep slot (VS-003, ruled 2026-07-03: noted always lost on death)
+				if (keptItem.getDef(player.getWorld()).isStackable() || keptItem.getNoted()) {
 					iterator.previous();
 					break;
 				}
@@ -484,7 +487,8 @@ public class Inventory {
 
 		// Save a fourth item if protect item prayer is enabled
 		if (player.getPrayers().isPrayerActivated(Prayers.PROTECT_ITEMS) && iterator.hasNext()) {
-			if (iterator.next().getDef(player.getWorld()).isStackable()) {
+			final Item keptItem = iterator.next();
+			if (keptItem.getDef(player.getWorld()).isStackable() || keptItem.getNoted()) {
 				iterator.previous();
 			}
 		}
