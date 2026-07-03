@@ -107,7 +107,8 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				handlePoints(player, payload);
 				break;
 			case BANK_CLEAR_PRESET:
-				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) return;
+				// voidscape: Void Glass bank players (per-player custom_ui) get presets too.
+				if (!(player.getConfig().WANT_BANK_PRESETS && (player.getConfig().WANT_CUSTOM_BANKS || player.getCustomUI()))) return;
 				handleBankClearPreset(player, payload);
 				break;
 			case ACCOUNT_VALIDATE:

@@ -48,18 +48,17 @@ public abstract class JDBCDatabase extends GameDatabase {
             String query,
             CheckedConsumer<Exception, ResultSet> resultSetConsumer
     ) {
-        ResultSet resultSet = withPreparedStatement(
+        // The ResultSet must be consumed inside the statement's scope: withPreparedStatement
+        // closes the PreparedStatement on return, which closes its ResultSet, and a closed
+        // sqlite-jdbc ResultSet reads as empty instead of throwing.
+        withPreparedStatement(
                 query,
-                (CheckedFunction<Exception, PreparedStatement, ResultSet>) PreparedStatement::executeQuery
+                (CheckedConsumer<Exception, PreparedStatement>) statement -> {
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        resultSetConsumer.accept(resultSet);
+                    }
+                }
         );
-        try {
-            resultSetConsumer.accept(resultSet);
-        } catch(Exception ex) {
-            throw new GameDatabaseException(
-                    getClass(),
-                    ex.getMessage()
-            );
-        }
     }
 
     public PreparedStatement preparedStatement(String query) throws SQLException {
