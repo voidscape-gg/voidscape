@@ -1164,6 +1164,10 @@ public final class Admins implements CommandTrigger {
 			if (player.getUsernameHash() != p.getUsernameHash() && !player.isInvisibleTo(p)) {
 				p.message(messagePrefix + "A staff member has given you " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName());
 			}
+		} else if (!p.getCarriedItems().getInventory().canHold(id, amount)) {
+			// Inventory.add drops the item at the player's feet when the inventory is
+			// full — the spawn succeeded to the ground, so say that (VS-043)
+			player.message(messagePrefix + p.getUsername() + "'s inventory is full - the " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " dropped to the ground");
 		} else {
 			player.message(messagePrefix + "Something went wrong spawning " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername());
 		}

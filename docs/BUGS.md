@@ -59,8 +59,9 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 DONE 2026-07-03 (plus voidbot npc_say extension) → next: VS-043
-  (::item full-inv message), VS-025 (voidbot CLI/doc drift), P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 + VS-043 DONE 2026-07-03 (plus voidbot npc_say extension) → next:
+  VS-025 (voidbot CLI/doc drift), then remaining P3s (VS-032 render-cap loss risk is
+  the most player-facing), P4 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -503,15 +504,6 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Log: 2026-07-02 split from VS-030 (residual third symptom).
 
 
-### VS-043 — Admin ::item into a full inventory drops to the ground but reports "Something went wrong spawning"
-- Status: confirmed · Severity: P4 · Area: server-plugin (admin command)
-- Evidence: S-C2/S-F — with a 30/30 inventory, `::item 546 1` prints "Something went wrong
-  spawning 1 Shark" yet the Shark appears on the ground at the player's feet. Misleading
-  admin feedback (the spawn succeeded to ground). Bit QA provisioning twice.
-- Repro: fill inventory to 30, `::item 546 1`, `state messages` (error) + `state
-  ground-items` (item present).
-- Verify: message should say the item dropped to the ground / inventory full.
-- Log: 2026-07-02 wave-2 S-C2/S-F. QA-ergonomics but also player-facing for admins.
 
 ## Watch list — not open bugs, but recurrence risks and burned areas
 
@@ -538,6 +530,17 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-043 — ::item into a full inventory now reports the ground drop (FIXED)
+- Status: verified · Severity: P4 · Area: server-plugin (admin command)
+- `Inventory.add` drops the spawned item at the player's feet when the inventory is
+  full and returns false; the ::item handler then claimed "Something went wrong
+  spawning". The failure branch now checks `canHold(id, amount)` and reports
+  "<player>'s inventory is full - the <item> dropped to the ground"; genuine failures
+  (e.g. restrict_item_id) keep the old message.
+- Verified 2026-07-03 live: 30/30 inventory + `::item 546 1` → new message + Shark on
+  the ground at the player's tile (tmp/vs043-fullinv-message.json).
+- Log: 2026-07-02 wave-2 S-C2/S-F filed. 2026-07-03 fixed + verified + committed.
 
 ### VS-031 — voidbot bank model didn't compact on amount-0 updates (FIXED)
 - Status: verified · Severity: P3 · Area: tooling (voidbot)
