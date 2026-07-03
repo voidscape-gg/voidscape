@@ -4266,10 +4266,12 @@ function googleDevProfile(payload) {
 }
 
 async function googleProfileFromCredential(payload) {
-	const requestedUsername = requireReservationUsername(payload.username || payload.reservedUsername || "");
+	// Authenticate the credential before validating request shape: a garbage token
+	// must answer invalid_google_token, not complain about the (absent) username.
 	const credential = String(payload.credential || payload.idToken || "").trim();
 	if (!credential) throw new HttpError(401, "invalid_google_token");
 	const claims = await verifyGoogleIdToken(credential, payload.nonce || "");
+	const requestedUsername = requireReservationUsername(payload.username || payload.reservedUsername || "");
 	const emailDisplay = String(claims.email || "").trim();
 	const emailCanonical = canonicalEmail(emailDisplay);
 	if (!emailCanonical) throw new HttpError(400, "invalid_google_email");

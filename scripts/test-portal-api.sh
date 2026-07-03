@@ -740,6 +740,13 @@ launch_local_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/acc
 	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
 grep -q '"token":' <<<"$launch_local_login" || { echo "loopback without x-forwarded-for should stay exempt from the login throttle"; exit 1; }
 
+# VS-051: a garbage Google credential must fail on the credential (401
+# invalid_google_token), not trip the username check first (the old ordering
+# answered 400 invalid_username).
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
+	-H 'content-type: application/json' \
+	-d '{"credential":"garbage"}'
+
 launch_player_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
 if [[ "$launch_player_count" != "1" ]]; then
 	echo "launch-signup registration should create one normal User-ranked OpenRSC player"

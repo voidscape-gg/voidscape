@@ -38,10 +38,11 @@ to resume from these two files alone. Keep every entry self-contained.
   priority); the P3/P4-tail deprioritization ruling stands. This session so far:
   VS-048 triaged → fixed → verified → committed (canHold over-cap merge rejection;
   open cap-ruling question for Ryan). VS-049 (portal login throttle, P2 launch
-  surface) triaged → fixed → verified → committed. Intake triage pass: 3 bullets
+  surface) triaged → fixed → verified → committed. VS-051 (google credential/username
+  error ordering) fixed → verified → committed. Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
-  blocked(WIP-collision), VS-051 filed confirmed P4. Server on the VS-048 build
+  blocked(WIP-collision). Server on the VS-048 build
   (port 43596); smoke 26/26; portal batteries green.
 - **Last session:** 2026-07-03 — 10 commits, 8 bugs verified: VS-041 (dae8a471,
   voidbot Patch18 gate), VS-047 (546fa5cd, smoke gate 26/26 restored), **VS-008
@@ -479,20 +480,6 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Log: 2026-07-03 triaged from Intake (S-W). Blocked until the Resend workstream
   commits — my hunk can't be staged without folding in Ryan's WIP (§7).
 
-### VS-051 — /api/accounts/google validates username before the credential
-- Status: confirmed · Severity: P4 · Area: web-portal
-- Evidence: S-W probe 36 — garbage Google credential → 400 `invalid_username`
-  (misleading; the credential is the problem). Code-pinned:
-  `googleProfileFromCredential` (dev-server.mjs:4790, committed region) calls
-  `requireReservationUsername(payload.username || ...)` as its FIRST statement, before
-  `invalid_google_token`/JWT checks ever run — so a credential-less or garbage-cred
-  request with no username dies on the username check.
-- Repro: `POST /api/accounts/google {credential:"garbage"}` → 400 invalid_username
-  (expect 401 invalid_google_token).
-- Verify: reorder credential validation first; probe returns 401 invalid_google_token;
-  test-portal-api.sh green.
-- Log: 2026-07-03 triaged from Intake (S-W), code-confirmed.
-
 ### VS-038 — Death Match has no voluntary forfeit (logout blocked, ladder outside arena)
 - Status: reported · Severity: P3 · Area: server-plugin (minigame)
 - Evidence: from the VS-026 diagnosis — the forfeit ladder (object 5 at 984,668) is in
@@ -549,6 +536,20 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-051 — /api/accounts/google validated username before the credential (FIXED)
+- Status: verified · Severity: P4 · Area: web-portal
+- Evidence: S-W probe 36 — garbage Google credential → 400 `invalid_username`
+  (misleading; the credential was the problem). `googleProfileFromCredential` called
+  `requireReservationUsername` as its first statement, before any JWT check.
+- Fix: credential validation (`invalid_google_token` / `verifyGoogleIdToken`) now runs
+  first; username rules unchanged for authenticated requests. Regression probe added
+  to test-portal-api.sh (garbage credential → 401; answered 400 pre-fix,
+  tmp/vs051-prefix.log).
+- Verified 2026-07-03: both hermetic portal batteries green post-fix
+  (tmp/vs051-postfix.log, tmp/vs051-schema.log); build green.
+- Log: 2026-07-03 triaged, repro'd via battery probe, fixed, verified, committed
+  same day.
 
 ### VS-049 — Portal login had no throttle: unlimited password guessing per IP (FIXED)
 - Status: verified · Severity: P2 · Area: web-portal (launch surface)
