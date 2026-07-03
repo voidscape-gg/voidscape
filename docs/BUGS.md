@@ -106,8 +106,7 @@ half-remembered is fine, triage will chase it down.)_
   VS-046, tmp/qa/S-C2 F3); equipping from inventory while banking closes the bank
   (server hideBank — possibly intended; tmp/qa/S-D2); `state skills` omits custom skills
   (runecraft/harvesting) so their xp can't be asserted (voidbot gap; tmp/qa/S-F);
-  runecraft disabled in preset (`want_runecraft:false`) — spec question, is that intended
-  for launch? (tmp/qa/S-F); artisan XP-per-action ratios looked off vs def exp but the
+  artisan XP-per-action ratios looked off vs def exp but the
   VoidPath 2x/rested 1.5x boosts confound it — needs isolation (tmp/qa/S-F).
 - Server-side bank adds while the bank UI is open push no updates (`Bank.add(item,
   false)`) — view stale until reopen (tmp/qa/S-D F5)
@@ -472,7 +471,10 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - "over-deposit no-op" → still UNVERIFIED (bank wouldn't open via banker dialogue — VS-046).
 - NEW: the fixed decoder still desyncs for item ids 44/45 (patch-def mismatch) → VS-041.
 
-## Design rulings (Ryan, 2026-07-02) — intended behavior, do NOT re-file
+## Design rulings (Ryan) — intended behavior, do NOT re-file
+
+- Runecrafting disabled (`want_runecraft: false`) — intended, including for launch
+  (ruled 2026-07-03; removed from Intake).
 
 - Harvesting skill disabled on the launch preset (`want_harvesting: false`) — intended.
 - Bone-bury prayer XP rides `combat_exp_rate` (10×, i.e. 37.5/bone) — intended.
