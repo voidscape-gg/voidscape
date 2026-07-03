@@ -156,6 +156,8 @@ public class BankInterface {
 	private String vgLastQuery = "";
 	private boolean vgSearchFocus = false;
 	private int vgCaretTick = 0;
+	private int vgPage = 0;
+	private static final int VG_PAGE_SIZE = 48, VG_PAGE_MAX = 6;
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
@@ -176,10 +178,18 @@ public class BankInterface {
 		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
 		int availH = botSafe - topSafe;
 		int titleH = VG_TITLE_H, invLabelH = 16, actionH = 22, pad = 4;
+		// page tabs (client-side slices of bankItems, 48 per tab like classic pages)
+		String vq = vgSearch.trim().toLowerCase(Locale.ROOT);
+		int bankPages = bankItems.isEmpty() ? 0 : Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
+		if (!vq.isEmpty() && vgPage != 0) vgPage = 0; // search always spans the whole bank
+		if (vgPage > bankPages) vgPage = 0;
+		boolean tabsVisible = vq.isEmpty() && bankPages > 1;
+		int tabRowH = tabsVisible ? 20 : 0;
+
 		// Adaptive bank/inventory split: the bank grid keeps >=3 rows; the inventory
 		// tray takes the remainder (min 1) and scrolls when rows are hidden (Classic 512x334).
 		int invRowsFull = vgInvRows();
-		int chrome = titleH + pad + invLabelH + actionH + pad + pad;
+		int chrome = titleH + tabRowH + pad + invLabelH + actionH + pad + pad;
 		int totalRows = Math.max(2, (availH - chrome) / cellH);
 		int invRows = Math.max(1, Math.min(invRowsFull, totalRows - 3));
 		int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
@@ -189,24 +199,27 @@ public class BankInterface {
 		int px = (gw - pw) / 2;
 		int py = topSafe + Math.max(0, (availH - ph) / 2);
 		int gx = px + VG_INNER_PAD;
-		int bankGY = py + titleH + pad;
+		int bankGY = py + titleH + tabRowH + pad;
 		int gridH = bankRows * cellH;
 		int invLabelY = bankGY + gridH;
 		int invGY = invLabelY + invLabelH;
 		int actionY = invGY + invRows * cellH + pad;
 
-		// live search filter over the bank grid (name contains, case-insensitive)
-		String vq = vgSearch.trim().toLowerCase(Locale.ROOT);
+		// visible list = page slice, or live search filter (name contains, case-insensitive)
 		ArrayList<BankItem> vis;
-		if (vq.isEmpty()) {
-			vis = bankItems;
-		} else {
+		if (!vq.isEmpty()) {
 			vis = new ArrayList<>();
 			for (BankItem bi : bankItems) {
 				if (bi == null || bi.getItem() == null) continue;
 				ItemDef d = bi.getItem().getItemDef();
 				if (d != null && d.getName() != null && d.getName().toLowerCase(Locale.ROOT).contains(vq)) vis.add(bi);
 			}
+		} else if (vgPage > 0) {
+			int from = (vgPage - 1) * VG_PAGE_SIZE;
+			int to = vgPage == VG_PAGE_MAX ? bankItems.size() : Math.min(bankItems.size(), vgPage * VG_PAGE_SIZE);
+			vis = from < bankItems.size() ? new ArrayList<>(bankItems.subList(from, to)) : new ArrayList<>();
+		} else {
+			vis = bankItems;
 		}
 		if (!vq.equals(vgLastQuery)) { vgLastQuery = vq; vgScrollRow = 0; }
 
@@ -280,6 +293,21 @@ public class BankInterface {
 			else vgSearchFocus = false;
 		}
 
+		// --- input: page tabs ---
+		int tabY = py + titleH, tabH = Math.max(0, tabRowH - 3), tabGap = 4;
+		int tabCount = tabsVisible ? bankPages + 1 : 0;
+		int tabW = tabsVisible ? Math.max(30, Math.min(60, (pw - 2 * VG_INNER_PAD - (tabCount - 1) * tabGap) / tabCount)) : 0;
+		if (tabsVisible && click) {
+			for (int t = 0; t < tabCount; t++) {
+				int tx = gx + t * (tabW + tabGap);
+				if (mx >= tx && mx < tx + tabW && my >= tabY && my < tabY + tabH) {
+					vgPage = t; vgScrollRow = 0;
+					mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+					break;
+				}
+			}
+		}
+
 		// --- input: deposit-all button ---
 		int daW = Math.min(170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
 		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
@@ -341,6 +369,20 @@ public class BankInterface {
 		if (vgSearchFocus && (vgCaretTick / 25) % 2 == 0) disp = disp + "|";
 		if (disp.isEmpty()) drawString("Search", sx + 5, sy + 12, 1, 0x8474A8);
 		else drawString(disp, sx + 5, sy + 12, 1, VG_TITLE_TEXT);
+
+		// ---- render: page tabs ----
+		if (tabsVisible) {
+			for (int t = 0; t < tabCount; t++) {
+				int tx = gx + t * (tabW + tabGap);
+				boolean active = t == vgPage;
+				boolean hovT = mx >= tx && mx < tx + tabW && my >= tabY && my < tabY + tabH;
+				mc.getSurface().drawBoxAlpha(tx, tabY, tabW, tabH, active ? VG_STRIP : 0x0C0620, active ? 170 : (hovT ? 150 : 105));
+				mc.getSurface().drawBoxBorder(tx, tabW, tabY, tabH, active ? VG_FRAME_INNER : VG_SLOT_BORDER);
+				if (active) mc.getSurface().drawBoxAlpha(tx + 1, tabY + tabH - 2, tabW - 2, 2, VG_SEL_RING, 200);
+				String lb = t == 0 ? "All" : (tabW < 44 ? "T" + t : "Tab " + t);
+				drawString(lb, tx + (tabW - mc.getSurface().stringWidth(1, lb)) / 2, tabY + 12, 1, active ? VG_TITLE_TEXT : VG_LABEL);
+			}
+		}
 
 		// ---- render: bank grid ----
 		for (int r = 0; r < bankRows; r++) {
@@ -411,7 +453,7 @@ public class BankInterface {
 
 	public void vgResetSearch() {
 		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
-		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false;
+		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgPage = 0;
 	}
 
 	private void vgDoMenu(int row) {
