@@ -42,8 +42,9 @@ to resume from these two files alone. Keep every entry self-contained.
   error ordering) fixed → verified → committed. VS-052 (voidbot wait usage errors +
   fail-fast on typo'd conditions) fixed → verified → committed. VS-053 (::spawnnpc
   coordinate support; wave-1 half settled as VS-027 pacing) fixed → verified →
-  committed. Over-deposit bullet settled (safe hardening). Server restarted on the
-  VS-053 build. Intake triage pass: 3 bullets
+  committed. Over-deposit bullet settled (safe hardening). VS-054 (::setstat natural
+  order) fixed → verified → committed; server restarted on the VS-054 build.
+  Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
   blocked(WIP-collision). Server on the VS-048 build
@@ -136,8 +137,6 @@ half-remembered is fine, triage will chase it down.)_
 - `::teleport` silently swallowed while a skilling batch is active, reproduced 2× (S-E F3)
 - `wait xp-gained` missed one in-window thieving gain once — flaky (tmp/qa/S-E F4)
 - `::queststage` usage string says stage optional; handler requires all 3 args (S-G §2)
-- `::setstat` arg order is LEVEL STAT with a misleading error on the natural order —
-  fix docs/briefs that say SKILL LVL (tmp/qa/S-I, S-B, S-E)
 - Rested XP wording: docs say per-second, in-game message says per-minute (S-H F4)
 - Undead Siege mid-run logout gives no payout/forfeit feedback (tmp/qa/S-I)
 - ~~Death items-kept untestable by fleet~~ → **CLOSED 2026-07-03: resolved by F0.8** —
@@ -540,6 +539,22 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-054 — ::setstat natural order answered "Invalid name or player is not online" (FIXED)
+- Status: verified · Severity: P3 · Area: server-plugin (admin command / QA tooling)
+- Evidence: `::setstat attack 77` → misleading player-name error, stat unchanged
+  (tmp/vs054/01-misleading-error.txt); non-numeric args[0] was only ever tried as a
+  player name. Hit by S-I/S-B/S-E and the root of VS-047's smoke breakage.
+- Fix: name-lookup catch falls back to the natural self-targeted "stat level" form
+  when no online player matches args[0], it names a skill, and args[1] parses as a
+  level; online players named like skills still win (existing presence heuristic).
+  Documented forms unchanged; bad input keeps the old error.
+- Verified 2026-07-03 live: natural order sets Attack 77 + success message;
+  `::setstat 90 attack` and the player form unchanged (fixture restored to 90);
+  bogus name keeps old error (tmp/vs054/02-verify-messages.txt); build green;
+  smoke 26/26.
+- Log: 2026-07-03 triaged (3 suite citations), repro'd, fixed, verified, committed
+  same day. ::cinematic WIP untouched.
 
 ### VS-053 — ::spawnnpc silently ignored coordinate arguments (FIXED)
 - Status: verified · Severity: P3 · Area: server-plugin (admin command / QA tooling)

@@ -3775,7 +3775,35 @@ public final class Admins implements CommandTrigger {
 		catch(NumberFormatException ex) {
 			otherPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0]));
 
-			if (args.length < 2) {
+			// Natural-order fallback: "::setstat attack 90". Only when no online player
+			// matches args[0] and it names a skill — an online player of that name still
+			// wins, the same presence heuristic the handler already relies on.
+			int naturalStat = -1;
+			if (otherPlayer == null && args.length == 2) {
+				naturalStat = player.getWorld().getServer().getConstants().getSkills().getSkillIndex(args[0].toLowerCase());
+			}
+			Integer naturalLevel = null;
+			if (naturalStat != -1) {
+				try {
+					naturalLevel = Integer.valueOf(args[1]);
+				} catch (NumberFormatException e) {
+					naturalLevel = null;
+				}
+			}
+
+			if (naturalLevel != null) {
+				otherPlayer = player;
+				stat = naturalStat;
+				level = naturalLevel.intValue();
+				try {
+					statName = player.getWorld().getServer().getConstants().getSkills().getSkillName(stat);
+				}
+				catch (IndexOutOfBoundsException e) {
+					player.message(messagePrefix + "Invalid stat");
+					return;
+				}
+			}
+			else if (args.length < 2) {
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [level] OR ");
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [level] OR ");
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [level] [stat] OR");
