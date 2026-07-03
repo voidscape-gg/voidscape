@@ -164,16 +164,22 @@ public class BankInterface {
 	private String vgCacheQuery = null;
 	private int vgCachePage = -1, vgCacheStamp = -1;
 	private int vgBankStamp = 0; // bumped on every bankItems mutation
+	private int vgArrangeMode = 0; // 0 off, 1 swap, 2 insert (classic organizeMode semantics)
+	private int vgDragSlot = -1;   // real bank slot being dragged while arrange mode is on
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
 	}
 
 	private int vgTier() { int gw = mc.getGameWidth(); return gw < 700 ? 0 : (gw < 940 ? 1 : 2); }
-	private int vgCols() { int t = vgTier(); return t == 0 ? 8 : (t == 1 ? 10 : 12); }
+	private int vgCols() { int t = vgTier(); return t == 0 ? 9 : (t == 1 ? 10 : 12); }
 	private int vgCellW() { int t = vgTier(); return t == 0 ? 49 : (t == 1 ? 54 : 60); }
 	private int vgCellH() { int t = vgTier(); return t == 0 ? 34 : (t == 1 ? 36 : 40); }
-	private int vgTopSafe() { return Math.max(56, mc.getVoidscapeDesktopOverlayTopSafeY()); }
+	private int vgTopSafe() {
+		// the small-HUD preset hides the top-tab row while banking, freeing the whole top
+		if (mc.isVoidscapeClassicWebSmallHud()) return 8;
+		return Math.max(56, mc.getVoidscapeDesktopOverlayTopSafeY());
+	}
 	private int vgBotSafe() { int gh = mc.getGameHeight(); int e = mc.getVoidscapeDesktopOverlayBottomSafeY(); return e < gh ? e : gh - 22; }
 	private int vgPanelW() { return Math.min(vgCols() * vgCellW() + 2 * VG_INNER_PAD + VG_SCROLL_GUTTER, mc.getGameWidth() - 2 * VG_SIDE_MARGIN); }
 	private int vgInvRows() { int c = vgCols(); return (30 + c - 1) / c; }
@@ -355,6 +361,15 @@ public class BankInterface {
 			mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
 		}
 
+		// --- input: arrange-mode toggle (Off -> Swap -> Insert) ---
+		int arW = 78, arX = noteX + (S_WANT_BANK_NOTES ? noteW + 6 : 0);
+		boolean overAr = mx >= arX && mx < arX + arW && my >= loY && my < loY + actionH;
+		if (overAr && click) {
+			vgArrangeMode = (vgArrangeMode + 1) % 3;
+			vgDragSlot = -1;
+			mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+		}
+
 		// --- input: bank grid (withdraw) ---
 		int bankHover = -1;
 		for (int r = 0; r < bankRows; r++) {
@@ -366,11 +381,32 @@ public class BankInterface {
 					int id = vis.get(idx).getItem().getCatalogID();
 					if (id != -1) {
 						if (rclick) { openVgMenu(id, mx, my); mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false; }
-						else if (click) { selectedBankSlotItemID = id; mc.setMouseClick(0); mc.mouseButtonClick = 0; sendWithdraw(1); }
+						else if (click) {
+							if (vgArrangeMode > 0 && vq.isEmpty()) {
+								// arrange mode: press starts a drag instead of withdrawing
+								vgDragSlot = vis.get(idx).bankID;
+								mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+							} else {
+								selectedBankSlotItemID = id; mc.setMouseClick(0); mc.mouseButtonClick = 0; sendWithdraw(1);
+							}
+						}
 					}
 				}
 			}
 		}
+
+		// --- input: drop a dragged item (arrange mode) ---
+		if (vgDragSlot >= 0 && !down) {
+			if (bankHover >= 0) {
+				int tIdx = vgScrollRow * cols + bankHover;
+				if (tIdx < vis.size()) {
+					int target = vis.get(tIdx).bankID;
+					if (target != vgDragSlot) sendVgArrange(vgDragSlot, target);
+				}
+			}
+			vgDragSlot = -1;
+		}
+		if (vgArrangeMode == 0 || !vq.isEmpty()) vgDragSlot = -1;
 
 		// --- input: inventory tray (deposit) ---
 		int invHover = -1;
@@ -495,10 +531,24 @@ public class BankInterface {
 			String nl = swapNoteMode ? "Note: On" : "Note: Off";
 			drawString(nl, noteX + (noteW - mc.getSurface().stringWidth(1, nl)) / 2, loY + 15, 1, swapNoteMode ? VG_GREEN : VG_LABEL);
 		}
+		boolean arOn = vgArrangeMode > 0;
+		mc.getSurface().drawBoxAlpha(arX, loY, arW, actionH, overAr ? VG_HOVER : 0x341F5E, overAr ? 95 : (arOn ? 165 : 110));
+		mc.getSurface().drawBoxBorder(arX, arW, loY, actionH, arOn ? VG_FRAME_INNER : VG_SLOT_BORDER);
+		String al = vgArrangeMode == 0 ? "Arrange: Off" : (vgArrangeMode == 1 ? "Arrange: Swap" : "Arrange: Ins");
+		drawString(al, arX + (arW - mc.getSurface().stringWidth(1, al)) / 2, loY + 15, 1, arOn ? VG_GOLD : VG_LABEL);
 		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
 		mc.getSurface().drawBoxBorder(daX, daW, daY, actionH, VG_FRAME_INNER);
 		String da = "Deposit all inventory";
 		drawString(da, daX + (daW - mc.getSurface().stringWidth(1, da)) / 2, daY + 15, 1, VG_GOLD);
+
+		// ---- render: dragged item ghost (arrange mode) ----
+		if (vgDragSlot >= 0 && vgDragSlot < bankItems.size()) {
+			Item di = bankItems.get(vgDragSlot).getItem();
+			ItemDef dd = di != null ? di.getItemDef() : null;
+			if (dd != null)
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(dd), mx - 24, my - 16, 48, 32,
+					dd.getPictureMask(), 0, dd.getBlueMask(), false, 0, 1);
+		}
 
 		if (vgMenu) drawVoidGlassMenu(mx, my);
 		return true;
@@ -529,6 +579,7 @@ public class BankInterface {
 	public void vgResetSearch() {
 		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
 		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgPage = 0;
+		vgArrangeMode = 0; vgDragSlot = -1;
 		// only the Void Glass bank resets note mode per visit; the classic path
 		// keeps its once-per-login semantics (this runs on every bank-open packet)
 		if (voidGlassBank()) swapNoteMode = false;
@@ -563,6 +614,16 @@ public class BankInterface {
 		mc.packetHandler.getClientStream().newPacket(24);
 		mc.packetHandler.getClientStream().finishPacket();
 		mc.setMouseClick(0); mc.setMouseButtonDown(0);
+	}
+
+	// Arrange-mode reorders ride the custom-bank INTERFACE_OPTIONS packet:
+	// sub-op 2 = BANK_SWAP, 3 = BANK_INSERT, both with (from, to) real bank slots.
+	private void sendVgArrange(int from, int to) {
+		mc.packetHandler.getClientStream().newPacket(199);
+		mc.packetHandler.getClientStream().bufferBits.putByte(vgArrangeMode == 1 ? 2 : 3);
+		mc.packetHandler.getClientStream().bufferBits.putInt(from);
+		mc.packetHandler.getClientStream().bufferBits.putInt(to);
+		mc.packetHandler.getClientStream().finishPacket();
 	}
 
 	// Loadout actions ride the existing custom-bank preset packets:

@@ -2394,8 +2394,11 @@ public class PacketHandler {
 	}
 
 	private void showBank() {
+		// the server re-sends this packet to refresh an already-open bank (e.g. after an
+		// insert-reorder) — only reset the Void Glass view state on a fresh open
+		boolean wasOpen = mc.isShowDialogBank();
 		mc.setShowDialogBank(true);
-		mc.getBank().vgResetSearch();
+		if (!wasOpen) mc.getBank().vgResetSearch();
 		mc.setNewBankItemCount(packetsIncoming.getShort());
 		mc.setBankItemsMax(packetsIncoming.getShort());
 		mc.getBank().resetBank();

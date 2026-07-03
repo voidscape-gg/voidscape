@@ -17367,7 +17367,11 @@ public final class mudclient implements Runnable {
 			drawVoidscapeLocationPlaque(); // plaque stays hidden while banking (per design)
 		}
 		if (!voidscapeUseMobilePanelShell()) {
-			drawVoidscapeTopTabs(); // top menu stays visible while banking
+			// The small-HUD preset gives the freed rows to the bank panel; tab clicks are
+			// already ignored while banking (handleVoidscapeHudSkinTabClick early-out).
+			if (!(isShowDialogBank() && voidscapeClassicWebSmallHud())) {
+				drawVoidscapeTopTabs();
+			}
 		}
 	}
 
