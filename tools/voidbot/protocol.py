@@ -326,8 +326,22 @@ def build_register(username: str, password: str, email: str) -> bytes:
     return bytes(w.b)
 
 
+def login_trailer(max_item_id=None) -> bytes:
+    """The UID+limitations trailer, optionally with maxItemId patched.
+
+    The captured constant under-reports limits added after its capture date
+    (10088: maxItemId 1603), and the server force-drops or placeholder-swaps
+    items it thinks the client can't render (VS-032). Layout after the 8-byte
+    UID mirrors mudclient.tellLimitations: short maxAnimationId, int maxItemId.
+    """
+    t = bytearray(LOGIN_TRAILER)
+    if max_item_id is not None:
+        struct.pack_into(">I", t, 10, max_item_id)
+    return bytes(t)
+
+
 def build_login(username: str, password: str, exponent: int, modulus: int,
-                reconnect=False) -> bytes:
+                reconnect=False, max_item_id=None) -> bytes:
     """Full LOGIN packet body (opcode + fields); caller frames it."""
     w = BitWriter()
     w.u8(OUT["LOGIN"])
@@ -341,5 +355,5 @@ def build_login(username: str, password: str, exponent: int, modulus: int,
     det_plain = ("voidbot/voidbot.jar" + "\n").encode("latin1")
     det_cipher = rsa_block(det_plain, exponent, modulus)
     w.u16(len(det_cipher)); w.raw(det_cipher)
-    w.raw(LOGIN_TRAILER)
+    w.raw(login_trailer(max_item_id))
     return bytes(w.b)

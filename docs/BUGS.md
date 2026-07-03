@@ -59,10 +59,10 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 + VS-043 + VS-025 DONE 2026-07-03 (plus voidbot npc_say extension)
-  → next: VS-032 (render-cap "Unobtanium" + force-drop loss risk — most player-facing
-  open P3), VS-034 (dialog busy-state), VS-009, then P4 tail / triage the Intake
-  backlog (canHold, spawnnpc-coords, quickbank no-op bullets etc.). VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 DONE 2026-07-03 (9 commits: 8 fixes +
+  npc_say extension) → next: VS-034 (dialog busy-state, P3, player-facing), VS-009
+  (bank value sort), then P4 tail / triage the Intake backlog (canHold, spawnnpc
+  coords, over-deposit bullets — several now have fresh datapoints from today). VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -401,16 +401,6 @@ half-remembered is fine, triage will chase it down.)_
   already documented in the campaign doc. Not worth a risky server change now. 2026-07-02
   wave-2 S-D2 CONFIRMED deposits are fine: 6 and 20 rapid deposits all landed exactly.
 
-### VS-032 — Items above client render cap: bank shows "Unobtanium" placeholder; withdraw force-drops the real item
-- Status: confirmed · Severity: P3 · Area: server-core / content-pipeline
-- Evidence: S-D — banked ids 1604-1607 render as id 1544 "Unobtanium" ×50; withdrawing
-  → "Your client could not receive Blessed ashes, it drops to the ground!" (real item
-  force-dropped; DB held correct ids). Loss risk for players. Two Blessed ashes remain
-  on the ground near (137,644). `tmp/qa/S-D/16-events-ashes-unobtanium.txt`.
-- Repro: `::fillbank` → withdraw id 1607.
-- Verify: either the client renders these ids, or the server blocks banking/spawning
-  them with an honest message — never placeholder + silent floor drop.
-- Log: 2026-07-02 wave-1 (S-D): VS-004-adjacent; the cap guard's failure mode is the bug.
 
 ### VS-034 — Abandoned/cancelled NPC dialog leaves the NPC silently un-talkable ~30-60s
 - Status: confirmed · Severity: P3 · Area: server-core (dialog busy-state)
@@ -523,6 +513,26 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-032 — "Unobtanium"/force-drop was voidbot's stale login trailer, not a player loss risk (FIXED)
+- Status: verified · Severity: P3 · Area: tooling (voidbot); server behavior confirmed correct
+- Resolution: the shipped client HAS defs for 1604-1608 (EntityHandler, 1611 defs) and
+  reports maxItemId 1610 at login (tellLimitations) — it renders the ashes fine.
+  voidbot's constant LOGIN_TRAILER (captured at 10088) reported maxItemId **1603**, so
+  the server correctly protected a "limited client": bank view swapped over-cap ids to
+  the 1544 "Unobtanium" placeholder (`Item.getSafeItemId`) and withdraws force-dropped
+  WITH a message (`Inventory.java:117`) — honest by design, only misled QA because the
+  wave couldn't know the trailer was stale.
+- Fix: `protocol.py login_trailer()` patches the trailer's maxItemId from the server
+  defs (max id in `load_item_defs`); daemon passes it at login.
+- Verified 2026-07-03: qabot04's banked 1604-1607 now decode with real ids/names;
+  `bank-withdraw --id 1607` lands in inventory, no force-drop message; real client
+  (workbench) renders spawned Blessed ashes at slot 0 (screenshot
+  tmp/workbench/screenshots/20260703-085046-576-http.png); tests/smoke.sh 26/26 on the
+  new login path.
+- Log: 2026-07-02 wave-1 S-D filed as server loss risk. 2026-07-03 root-caused to the
+  stale trailer, fixed, verified, committed. Stale REAL clients would legitimately hit
+  the protection, but enforce_custom_client_version rejects them at login anyway.
 
 ### VS-025 — voidbot CLI/doc drift settled: unknown commands exit 2; roadmap rows marked (FIXED)
 - Status: verified · Severity: P3 · Area: tooling (voidbot) / docs

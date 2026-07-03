@@ -183,7 +183,8 @@ class Daemon:
         resp = None
         for attempt in range(6):
             c = P.Connection(self.args.host, self.args.game_port)
-            body = P.build_login(self.args.user, self.args.password, exp, mod)
+            body = P.build_login(self.args.user, self.args.password, exp, mod,
+                                 max_item_id=max(self.names) if self.names else None)
             c.send_packet(body[0], body[1:])
             try:
                 resp = c.recv_byte()
