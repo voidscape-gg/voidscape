@@ -2507,7 +2507,8 @@ public class PacketHandler {
 	}
 
 	private void updateBank() {
-		int slot = packetsIncoming.getUnsignedByte();
+		// slot widened to a short at 10121 — one byte wrapped mod 256 past slot 255 (VS-008)
+		int slot = packetsIncoming.getShort();
 		int item = packetsIncoming.getShort();
 		int itemCount = packetsIncoming.get32();
 		mc.getBank().updateBank(slot, item, itemCount);

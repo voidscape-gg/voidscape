@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10120` | `10120` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10121` | `10121` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
@@ -25,7 +25,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10120` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10121` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_packet_register` | `false` by server default and current launch config | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
 
@@ -103,7 +103,7 @@ These are positional in many loaders. Keep server and client append order aligne
 | Custom item ids | `1608` | Void ashes are current high-water mark. |
 | Custom NPC ids | `860` | Void Unicorn is current high-water mark. |
 | Custom scenery ids | `1309` | Colossus charge effect objects are current high-water mark. |
-| Custom client version | `10120` | Current working tree value. |
+| Custom client version | `10121` | Current working tree value. |
 
 ## Pre-release config sign-off
 

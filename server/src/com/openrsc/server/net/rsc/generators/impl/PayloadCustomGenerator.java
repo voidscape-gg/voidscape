@@ -664,7 +664,12 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 
 				case SEND_BANK_UPDATE:
 					BankUpdateStruct bu = (BankUpdateStruct) payload;
-					builder.writeByte((byte) bu.slot);
+					if (player.getClientVersion() >= 10121) {
+						// a one-byte slot wraps mod 256 in banks past 256 slots (VS-008)
+						builder.writeShort(bu.slot);
+					} else {
+						builder.writeByte((byte) bu.slot);
+					}
 					builder.writeShort(bu.catalogID);
 					builder.writeInt(bu.amount);
 					break;

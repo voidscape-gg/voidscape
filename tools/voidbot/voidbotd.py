@@ -520,10 +520,15 @@ class Daemon:
         self.st.event("bank_open", count=len(items))
 
     def _decode_bank_update(self, p):
-        # [byte slot][short id][int amount]; amount 0 means the slot was emptied.
-        slot = p[0]
-        iid = int.from_bytes(p[1:3], "big")
-        amt = int.from_bytes(p[3:7], "big")
+        # [short slot][short id][int amount]; amount 0 means the slot was emptied.
+        # Slot was one byte before client 10121 (it wrapped mod 256 — VS-008), so
+        # honor the negotiated version when probing older gates.
+        if P.CLIENT_VERSION >= 10121:
+            slot, off = int.from_bytes(p[0:2], "big"), 2
+        else:
+            slot, off = p[0], 1
+        iid = int.from_bytes(p[off:off + 2], "big")
+        amt = int.from_bytes(p[off + 2:off + 6], "big")
         with self.st.lock:
             bank = [b for b in self.st.bank if b["slot"] != slot]
             if amt > 0:

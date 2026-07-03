@@ -58,11 +58,14 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 DONE
-  2026-07-03 (voidbot decoder trust + 26/26 smoke gate restored) → next is VS-008
-  (P3 server one-byte bank slot; qabot04's bank is still filled for the retest), then
-  VS-042/043, P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors) to unblock
-  a quests wave. VS-003: await Ryan's ruling.
+- **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
+  DONE 2026-07-03 (voidbot decoder trust, 26/26 smoke gate, bank wire contract at
+  10121) → next: VS-042 (Cook's Range gate), VS-043 (::item full-inv message),
+  VS-031 (voidbot bank compaction — now confirmed voidbot-side), P3 tail. VS-002
+  deferred (needs MySQL env). Also: E2 (doors) to unblock a quests wave. VS-003:
+  await Ryan's ruling. NOTE: client version bumped to 10121 — a fielded 10120 client
+  build will be version-rejected by the updated dev/staging server (expected; the
+  launcher updates clients).
 
 ---
 
@@ -119,8 +122,16 @@ half-remembered is fine, triage will chase it down.)_
 - S-W integrity export flags 7 high-severity rows (missing_skill_row ×6,
   missing_table ×1) on the dev DB — verify these are fixture artifacts, not real
   (tmp/qa/S-W/integrity-findings.json)
-- Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests; two Blessed
-  ashes on the ground near (137,644) (tmp/qa/S-D end state)
+- A FULL bank (1608/1608 stacks) rejects deposits with "You don't have room for that in
+  your bank" even when the deposit would merge into an EXISTING stack and create no new
+  slot (`Bank.canHold` before the merge-aware add, `Bank.java:578`). Reproduced
+  2026-07-03 on qabot04: coins already banked at slot 0, `bank-deposit --id 10` rejected.
+  Players with full banks can't top up coin/stack deposits — check authentic behavior.
+- Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests (VS-008 now
+  verified; fixture still useful for VS-031). 2026-07-03: its inventory now carries the
+  VS-008 probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2, 100 coins) — the
+  full-bank canHold bug above blocks depositing them back. Two Blessed ashes on the
+  ground near (137,644) (tmp/qa/S-D end state)
 
 ---
 
@@ -262,35 +273,6 @@ half-remembered is fine, triage will chase it down.)_
 - Verify: depends on finding; likely distribution check over N kills vs intended table.
 - Log: 2026-07-02 seeded from survey.
 
-### VS-008 — SEND_BANK_UPDATE writes bank slot as one byte; slots ≥256 wrap mod 256
-- Status: confirmed · Severity: P3 · Area: server-net
-- Evidence: `server/src/com/openrsc/server/net/rsc/ActionSender.java:2282-2289` — TODO
-  admits the per-slot bank update is broken for >256-item banks and adds a whole-bank
-  `showBank` resend as a quickfix, but the quickfix is **gated to client versions
-  10009/10010** (with custom banks). Voidscape's client is 10120
-  (`Client_Base/src/orsc/Config.java:23`; voidbot logs in as 10087 per docs/bot-api.md),
-  so current clients take the raw per-slot path — unestablished whether that desyncs
-  (stale bank screen past slot 256) or whether the newer client handles it fine.
-- Repro: build a >256-distinct-item bank, then deposit/withdraw an item past slot 256
-  and check what the real client shows / voidbot's decoded bank state.
-- Verify: per-slot updates correct past slot 256 on client 10120 and via voidbot; if it
-  turns out fine, `wontfix(inapplicable to voidscape client)`. **Packet contract
-  warning:** any wire change must follow `docs/subsystems/networking-protocol.md`.
-- Log: 2026-07-02 seeded from survey. 2026-07-02 verification pass: quickfix is
-  version-gated and inapplicable to voidscape — reframed from "wasteful resend" to
-  "possible stale bank screen"; confirmed→reported pending live repro.
-  2026-07-02 wave-1 S-D: CONFIRMED + root-caused —
-  `PayloadCustomGenerator.java:667` `builder.writeByte((byte) bu.slot)` truncates the
-  slot; five wrap datapoints on a 1608-stack `::fillbank` bank (300→44, 1000→232,
-  1544→8, 1607→71 ×2). Client view corrupts; DB stays correct; bank close/reopen
-  fully resyncs (hence P3). Repro: `::fillbank` → reopen bank →
-  `bank-withdraw --id 1000 --amount 3 --noted` → events show `bank_update slot 232`.
-  Sibling compaction desync split to VS-031. qabot04's bank is left filled for retest.
-  2026-07-02 wave-2 S-D2 (fixed decoder): full-list bank display on open is now
-  correct (no wrap) — but the live single-slot SEND_BANK_UPDATE STILL truncates slot to
-  one byte, corrupting any op on slots >=256. Server bug CONFIRMED on the fixed decoder
-  (not a decoder artifact). Withdraw of a slot-262 item updated slot 6.
-
 ### VS-009 — Bank value-sorting deliberately broken; falls back to catalog-ID order
 - Status: confirmed · Severity: P3 · Area: server-core
 - Evidence: `server/src/com/openrsc/server/model/container/Item.java:187-189` — original
@@ -421,17 +403,19 @@ half-remembered is fine, triage will chase it down.)_
   already documented in the campaign doc. Not worth a risky server change now. 2026-07-02
   wave-2 S-D2 CONFIRMED deposits are fine: 6 and 20 rapid deposits all landed exactly.
 
-### VS-031 — Full-stack bank withdrawal: server compacts slots but sends no shift updates
-- Status: reported · Severity: P3 · Area: server-net / tooling (voidbot)
+### VS-031 — voidbot bank model doesn't compact on amount-0 updates (re-scoped: voidbot bug, not server)
+- Status: confirmed · Severity: P3 · Area: tooling (voidbot)
 - Evidence: S-D — withdrawing an entire stack sends one `bank_update slot N amount 0`;
-  server compacts (proven by later appends/updates) but no shift updates follow, so a
-  slot-model client desyncs below slot 256 too. UNKNOWN whether the real 10120 client
-  compacts on amount-0 (then this is a voidbot model bug) — check that first.
-  `tmp/qa/S-D/25-events-full.json` seq 908-930.
+  server compacts (proven by later appends/updates) but no shift updates follow.
+  **SETTLED 2026-07-03 (during VS-008): the real client compacts on amount-0** —
+  `BankInterface.updateBank` (Client_Base, :1249-1254) removes the slot and reindexes
+  every later item. So the wire contract is "amount 0 = remove + compact" and voidbot's
+  `_decode_bank_update` (drops the slot, leaves a hole, no reindex) is the wrong side.
 - Repro: after `::fillbank`: `bank-withdraw --id 1 --amount 51 --noted` → hole in view.
-- Verify: workbench bank state after a full-stack withdraw settles the contract; fix
-  whichever side is wrong.
-- Log: 2026-07-02 wave-1 (S-D): interacts with VS-008.
+- Verify: after a full-stack withdraw, voidbot's `state bank` slots match a
+  close/reopen resync (contiguous, shifted down).
+- Log: 2026-07-02 wave-1 (S-D): interacts with VS-008. 2026-07-03 VS-008 work read the
+  client handler and settled the contract question → re-scoped to voidbot, confirmed.
 
 ### VS-032 — Items above client render cap: bank shows "Unobtanium" placeholder; withdraw force-drops the real item
 - Status: confirmed · Severity: P3 · Area: server-core / content-pipeline
@@ -578,6 +562,26 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-008 — SEND_BANK_UPDATE wrote the bank slot as one byte; slots ≥256 wrapped (FIXED)
+- Status: verified · Severity: P3 · Area: server-net · packet-shape change at client 10121
+- Root cause: `PayloadCustomGenerator` `SEND_BANK_UPDATE` wrote `writeByte((byte) slot)`;
+  every live per-slot update past slot 255 wrapped mod 256 (wave-1: 300→44, 1000→232,
+  1544→8, 1607→71 on a 1608-stack bank). Upstream TODO's whole-bank resend quickfix
+  only covered clients 10009/10010.
+- Fix: slot widened to a short for custom clients >= 10121 (older clients keep the
+  byte); shared client `PacketHandler.updateBank` reads the short; CLIENT_VERSION
+  10120→10121 (Config.java + all tracked preset confs + local.conf + CONFIG-MATRIX);
+  voidbot decodes per its negotiated VOIDBOT_CLIENT_VERSION (default 10121). Contract
+  entry added to docs/subsystems/networking-protocol.md.
+- Verified 2026-07-03 live on qabot04's 1608-stack bank: withdraws at slots
+  100/300/998/1544/1607 all emit true-slot bank_update events
+  (tmp/vs008-multi-slot-events.txt); real client decoded a live update on the new shape
+  exactly (workbench, tmp/vs008-workbench-after-withdraw.txt); 10121 login passes the
+  enforced version gate for both client and voidbot; tests/smoke.sh 26/26.
+- Log: 2026-07-02 seeded, wave-1 root cause, wave-2 confirmed server-half real.
+  2026-07-03 fixed + verified + committed. Side finds: VS-031 settled as a voidbot bug
+  (client compacts on amount-0), full-bank canHold merge rejection → Intake.
 
 ### VS-047 — tests/smoke.sh: setstat arg order + admin pacing broke the gate (FIXED)
 - Status: verified · Severity: P2 · Area: tooling (smoke gate) · found during VS-041 verify
