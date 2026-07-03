@@ -8715,6 +8715,9 @@ public final class mudclient implements Runnable {
 		if (this.getSurface() == null) {
 			return;
 		}
+		if (isShowDialogBank()) {
+			return; // hide the FPS counter while banking for clean space
+		}
 
 		String label = "FPS " + FPS;
 		if (voidscapeUseMobilePanelShell()) {
@@ -17358,6 +17361,9 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeHudSkin() {
 		if (!useVoidscapeHudSkin()) {
 			return;
+		}
+		if (isShowDialogBank()) {
+			return; // hide the location plaque + top tabs while banking for clean, unobstructed space
 		}
 		refreshVoidscapeCurrentAccountCache();
 		drawVoidscapeLocationPlaque();

@@ -53,15 +53,23 @@ def main():
     if not gw or not gh:
         print(json.dumps({'ok': False, 'error': 'no game width/height in /state'})); return 2
 
+    panels = find_panels(st)
+
+    # The location plaque + top-right tab row are HIDDEN while a bank is open (the client
+    # blanks the HUD for clean space), so those zones aren't reserved then. The bottom chat
+    # strip stays visible in every state. Condition the plaque/tab zones on bank-closed.
+    bank_open = any('bank' in name.lower() for name, _ in panels)
     # Reserved persistent-HUD zones (client geometry). A panel must not intrude here.
     # Plaque: top-left (18,18) ~150x30 at compact hud, plus a small margin. Top tabs:
-    # top-right strip. Chat strip: bottom ~24px. Coin overlay: left edge under the plaque.
+    # top-right strip. Chat strip: bottom ~24px.
     hud = [
-        {'name': 'location-plaque',  'x1': 4,        'y1': 4,       'x2': 168,      'y2': 52},
-        {'name': 'top-tab-row',      'x1': gw - 300, 'y1': 0,       'x2': gw,       'y2': 40},
         {'name': 'chat-strip',       'x1': 0,        'y1': gh - 20, 'x2': gw,       'y2': gh},
     ]
-    panels = find_panels(st)
+    if not bank_open:
+        hud += [
+            {'name': 'location-plaque',  'x1': 4,        'y1': 4,       'x2': 168,      'y2': 52},
+            {'name': 'top-tab-row',      'x1': gw - 300, 'y1': 0,       'x2': gw,       'y2': 40},
+        ]
     violations = []
     for name, p in panels:
         pr = {'x1': p['x'], 'y1': p['y'], 'x2': p['x'] + p['w'], 'y2': p['y'] + p['h']}
