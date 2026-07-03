@@ -43,8 +43,9 @@ to resume from these two files alone. Keep every entry self-contained.
   fail-fast on typo'd conditions) fixed → verified → committed. VS-053 (::spawnnpc
   coordinate support; wave-1 half settled as VS-027 pacing) fixed → verified →
   committed. Over-deposit bullet settled (safe hardening). VS-054 (::setstat natural
-  order) + VS-055 (::queststage 2-arg reset) fixed → verified → committed; server
-  restarted on the VS-055 build.
+  order) + VS-055 (::queststage 2-arg reset) + VS-056 (::rested wording) fixed →
+  verified → committed; server restarted on the VS-056 build. New Watch-list entry:
+  post-restart smoke flake pattern (2 sightings).
   Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
@@ -137,7 +138,6 @@ half-remembered is fine, triage will chase it down.)_
   false)`) — view stale until reopen (tmp/qa/S-D F5)
 - `::teleport` silently swallowed while a skilling batch is active, reproduced 2× (S-E F3)
 - `wait xp-gained` missed one in-window thieving gain once — flaky (tmp/qa/S-E F4)
-- Rested XP wording: docs say per-second, in-game message says per-minute (S-H F4)
 - Undead Siege mid-run logout gives no payout/forfeit feedback (tmp/qa/S-I)
 - ~~Death items-kept untestable by fleet~~ → **CLOSED 2026-07-03: resolved by F0.8** —
   qanpc1 (non-privileged) is provisioned by `scripts/qa-provision-accounts.sh` and the
@@ -516,6 +516,13 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 ## Watch list — not open bugs, but recurrence risks and burned areas
 
+- **smoke.sh first run after a fresh server restart can fail 1-3 checks; rerun is
+  clean.** Seen twice on 2026-07-03 (VS-053 verify: 1 fail; VS-056 verify: 3 fails;
+  both 26/26 on immediate rerun, same build). Consistent with warm-up (NPC spawns
+  settling / VS-013 AoI class). If a post-restart smoke fails, rerun before
+  diagnosing; if a THIRD instance shows up, file it as a bug and capture the failing
+  check names.
+
 - **`server/inc/sqlite/preservation.db` is currently modified in the working tree**
   (+127KB, runtime side effect of running the server). Never commit it (hard rule 4).
   The dev DB itself is expendable: running the server mutates it, `scripts/reset-db.sh`
@@ -539,6 +546,16 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-056 — ::rested wording implied per-minute accrual; pool is per-second (FIXED)
+- Status: verified · Severity: P4 · Area: server-core (message string)
+- The status line said "one rested minute per offline minute" while accrual stores
+  raw offline seconds (same 1:1 rate, wrong quantization implication); docs +
+  original DIVERGENCE both say per-second (S-H F4). Message now matches.
+- Verified 2026-07-03 live: `::rested` renders the per-second line
+  (tmp/vs056/01-new-wording.txt); build green; smoke 26/26 (first post-restart run
+  flaked 23/26, clean rerun — second sighting, Watch-listed).
+- Log: 2026-07-03 triaged (S-H F4), fixed, verified, committed same day.
 
 ### VS-055 — ::queststage rejected its documented 2-arg reset form (FIXED)
 - Status: verified · Severity: P4 · Area: server-plugin (admin command)

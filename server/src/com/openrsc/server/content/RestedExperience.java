@@ -96,7 +96,7 @@ public final class RestedExperience {
 		drainElapsedSessionTime(player);
 		long pool = getPool(player);
 		return "@whi@Rested XP: @gre@" + formatDuration(pool) + "@whi@ / @gre@"
-			+ formatDuration(MAX_RESTED_SECONDS) + "@whi@ at 1.5x XP. Earns one rested minute per offline minute.";
+			+ formatDuration(MAX_RESTED_SECONDS) + "@whi@ at 1.5x XP. Earns one rested second per offline second.";
 	}
 
 	private static void drainElapsedSessionTime(Player player) {
