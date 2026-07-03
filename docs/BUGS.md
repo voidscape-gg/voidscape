@@ -113,8 +113,12 @@ half-remembered is fine, triage will chase it down.)_
 - Equipping a non-wieldable item silently ignored — wave-2: REAL but EXPECTED (authentic
   client never offers wield on non-wieldable; not a defect). Closed.
 - `::item` into a full inventory misleading message → promoted to **VS-043**.
-- Over-deposit of an unheld item is a silent no-op — wave-2 could NOT re-verify (bank
-  wouldn't open via banker dialogue in the daemon = VS-046 below); still open.
+- ~~Over-deposit of an unheld item is a silent no-op~~ → **CLOSED 2026-07-03:
+  confirmed live (bank open via npc-command, `bank-deposit --id 20` unheld → zero
+  events) and by code — `depositItemFromInventory` clamps to `countId` (0) and
+  returns. The authentic client can only offer deposits of HELD items, so this packet
+  only arises from bots/hacked clients; a silent no-op is correct hardening, not a
+  player-facing defect.
 - ~~`::quickbank` admin command is a no-op~~ → **CLOSED 2026-07-03: was the VS-027
   rapid-admin drop** — VS-047's diagnosis pinned exactly this (quickbank fired ~0.3s
   after ::item → dropped); with 1.2s pacing the smoke gate's quickbank section passes
