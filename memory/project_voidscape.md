@@ -14,6 +14,20 @@ Voidscape is a **private RuneScape Classic server**, hard-forked from OpenRSC Co
 - `is_localhost_restricted: false` (dev only)
 - Authentic preserved: `game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `location_data: 1`.
 
+**Ryan's roadmap (stated 2026-07-03), in order:**
+1. **Bug-fix everything in the game** — the autonomous ledger loop (`/fix-bugs`,
+   docs/BUGS.md + docs/BUGFIX-LOOP.md) is the vehicle; it survives context clears by
+   design, so no handoff prompt is required — `/fix-bugs` alone resumes.
+2. **Standardize the UI** — beautiful, easily usable, readable. Feature-scale: use
+   `/feature` with Ryan's sign-off on direction before restyling broadly (the Void
+   Glass bank is the existing quality bar / design reference).
+3. **The absolute best Android APK of any private server.** Feature-scale, physical-
+   device QA gates apply.
+Preferred working rhythm: fix bugs / add a feature → durable-state update → session
+clear is fine at any time. Sessions should lean on the ledger/memory, not on pasted
+handoffs. (A launch-readiness sweep of docs/RELEASE-CHECKLIST.md was queued 2026-07-03
+ahead of phase 1's tail — launch target 2026-07-11.)
+
 **Why this matters for future sessions:** the foundation phase is done. The next session should NOT be re-bootstrapping or re-exploring the codebase — that work is captured in `docs/`. It should be doing real work.
 
 **How to apply:**
