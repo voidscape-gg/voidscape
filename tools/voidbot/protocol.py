@@ -28,6 +28,8 @@ OUT = {
     "NPC_COMMAND2": 203,
     "NPC_ATTACK1": 190,
     "NPC_USE_ITEM": 135,
+    "ITEM_USE_ITEM": 91,             # use one inventory item on another (combine/craft)
+    "GROUND_ITEM_USE_ITEM": 53,      # use a carried item on a ground item (e.g. light logs)
     "PLAYER_ATTACK": 171,
     "PLAYER_FOLLOW": 165,
     "PLAYER_USE_ITEM": 113,

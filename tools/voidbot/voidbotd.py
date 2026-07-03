@@ -671,6 +671,39 @@ class Daemon:
                 self.send("CAST_ON_SCENERY", P.BitWriter().u16(int(a["spell"]))
                           .u16(int(a["x"])).u16(int(a["y"])).b)
                 return {"ok": True, "spell": int(a["spell"]), "x": int(a["x"]), "y": int(a["y"])}
+            if cmd == "use-on-item":
+                # ITEM_USE_ITEM: combine two inventory items (herblaw, fletching, gem
+                # cutting, firemaking tinderbox-on-logs, potion mixing). Payload: two
+                # inventory slots (wire length 4).
+                self.send("ITEM_USE_ITEM",
+                          P.BitWriter().u16(int(a["slot1"])).u16(int(a["slot2"])).b)
+                return {"ok": True, "slot1": int(a["slot1"]), "slot2": int(a["slot2"])}
+            if cmd == "use-item-on-object":
+                # USE_ITEM_ON_SCENERY (wire 115): use an inventory item on a scenery
+                # object (smelting ore on furnace, smithing bar on anvil, cooking on a
+                # range, crafting on a wheel). Prewalk to the object edge like the real
+                # client, then send objectX, objectY, slot.
+                x = int(a["x"]); y = int(a["y"]); slot = int(a["slot"])
+                walk_tile = self.object_prewalk_tile(x, y, a.get("id"), int(a.get("direction", 0)))
+                if walk_tile:
+                    self.send("WALK_TO_POINT", P.BitWriter().u16(walk_tile[0]).u16(walk_tile[1]).b)
+                self.send("OBJECT_USE_ITEM", P.BitWriter().u16(x).u16(y).u16(slot).b)
+                return {"ok": True, "x": x, "y": y, "slot": slot, "walk_tile": walk_tile}
+            if cmd == "use-item-on-npc":
+                # NPC_USE_ITEM (wire 135): use an inventory item on an NPC (quests,
+                # cert/note exchange). Payload: NPC server index, inventory slot.
+                si = int(a.get("server_index", a.get("serverIndex")))
+                self.send("NPC_USE_ITEM", P.BitWriter().u16(si).u16(int(a["slot"])).b)
+                return {"ok": True, "server_index": si, "slot": int(a["slot"])}
+            if cmd == "use-item-on-ground":
+                # GROUND_ITEM_USE_ITEM (wire 53): use a carried item on a ground item
+                # (classic: light dropped logs with a tinderbox). Payload: groundX,
+                # groundY, inventory slot, ground-item id. Walk onto the tile first.
+                x = int(a["x"]); y = int(a["y"]); slot = int(a["slot"]); gid = int(a["ground_id"])
+                self.send("WALK_TO_POINT", P.BitWriter().u16(x).u16(y).b)
+                self.send("GROUND_ITEM_USE_ITEM",
+                          P.BitWriter().u16(x).u16(y).u16(slot).u16(gid).b)
+                return {"ok": True, "x": x, "y": y, "slot": slot, "ground_id": gid}
             if cmd == "say":
                 txt = a["text"]
                 self.send("CHAT_MESSAGE", P.encrypted_chat_payload(txt))

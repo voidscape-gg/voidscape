@@ -137,6 +137,10 @@ ACCOUNT_LOGGEDIN, so one account per daemon. Account pool + provisioning:
 - `voidbot take-item <x> <y> <itemId>` — GROUND_ITEM_TAKE
 - `voidbot object-action <x> <y> [1|2] [--id <objectId>]` — OBJECT_COMMAND1/2; `--id` lets the bot calculate the same object-edge prewalk the real client sends for large scenery
 - `voidbot cast-object <spellId> <x> <y>` — CAST_ON_SCENERY
+- `voidbot use-on-item <slot1> <slot2>` — ITEM_USE_ITEM (combine two inventory items: herblaw, fletching, gem cutting, potion mixing)
+- `voidbot use-item-on-object <x> <y> <slot>` — USE_ITEM_ON_SCENERY (item on scenery: smelt ore on furnace, smith bar on anvil, cook on a range, craft on a wheel; prewalks to the object)
+- `voidbot use-item-on-ground <slot> <x> <y> <groundItemId>` — GROUND_ITEM_USE_ITEM (item on a ground item: light dropped logs with a tinderbox)
+- `voidbot use-item-on-npc <npc-server-index> <slot>` — NPC_USE_ITEM (item on an NPC: quests, cert/note exchange)
 - `voidbot drop <slot> [--amount N]` — ITEM_DROP
 - `voidbot item-command <slot> [--amount N] [--command K]` — ITEM_COMMAND (eat/redeem/...)
 - `voidbot equip <slot>` / `voidbot unequip <slot>`

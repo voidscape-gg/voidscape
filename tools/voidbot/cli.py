@@ -79,6 +79,14 @@ def main():
             args["which"] = pos[2]
     elif cmd == "cast-object" and len(pos) >= 3:
         args["spell"], args["x"], args["y"] = pos[0], pos[1], pos[2]
+    elif cmd == "use-on-item" and len(pos) >= 2:
+        args["slot1"], args["slot2"] = pos[0], pos[1]
+    elif cmd == "use-item-on-object" and len(pos) >= 3:
+        args["x"], args["y"], args["slot"] = pos[0], pos[1], pos[2]
+    elif cmd == "use-item-on-npc" and len(pos) >= 2:
+        args["server_index"], args["slot"] = pos[0], pos[1]
+    elif cmd == "use-item-on-ground" and len(pos) >= 4:
+        args["slot"], args["x"], args["y"], args["ground_id"] = pos[0], pos[1], pos[2], pos[3]
     elif cmd in ("npc-talk", "npc-command", "attack-npc") and pos and "id" not in args and "server_index" not in args:
         args["server_index"] = pos[0]
     elif cmd == "menu-reply" and pos:
