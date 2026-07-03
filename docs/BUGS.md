@@ -43,7 +43,8 @@ to resume from these two files alone. Keep every entry self-contained.
   fail-fast on typo'd conditions) fixed → verified → committed. VS-053 (::spawnnpc
   coordinate support; wave-1 half settled as VS-027 pacing) fixed → verified →
   committed. Over-deposit bullet settled (safe hardening). VS-054 (::setstat natural
-  order) fixed → verified → committed; server restarted on the VS-054 build.
+  order) + VS-055 (::queststage 2-arg reset) fixed → verified → committed; server
+  restarted on the VS-055 build.
   Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
@@ -136,7 +137,6 @@ half-remembered is fine, triage will chase it down.)_
   false)`) — view stale until reopen (tmp/qa/S-D F5)
 - `::teleport` silently swallowed while a skilling batch is active, reproduced 2× (S-E F3)
 - `wait xp-gained` missed one in-window thieving gain once — flaky (tmp/qa/S-E F4)
-- `::queststage` usage string says stage optional; handler requires all 3 args (S-G §2)
 - Rested XP wording: docs say per-second, in-game message says per-minute (S-H F4)
 - Undead Siege mid-run logout gives no payout/forfeit feedback (tmp/qa/S-I)
 - ~~Death items-kept untestable by fleet~~ → **CLOSED 2026-07-03: resolved by F0.8** —
@@ -539,6 +539,19 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-055 — ::queststage rejected its documented 2-arg reset form (FIXED)
+- Status: verified · Severity: P4 · Area: server-plugin (admin command)
+- Evidence: `::queststage qabot04 5` → usage error, though the usage string documents
+  `(stage)` optional and the handler carried a dead `stage = 0` default branch behind
+  an `args.length < 3` gate (tmp/vs055/01-usage-error.txt; S-G §2). resetquest/resetq
+  aliases were equally dead.
+- Fix: gate `< 3` → `< 2`; the reset-to-0 branch comes alive per the usage string;
+  3-arg path unchanged.
+- Verified 2026-07-03 live on quest 5: baseline 0 → 3-arg set 2 → query 2 → 2-arg
+  reset → query 0 (tmp/vs055/02-verify.txt); build green; smoke 26/26. Fixture left
+  at default.
+- Log: 2026-07-03 triaged (S-G §2), repro'd, fixed, verified, committed same day.
 
 ### VS-054 — ::setstat natural order answered "Invalid name or player is not online" (FIXED)
 - Status: verified · Severity: P3 · Area: server-plugin (admin command / QA tooling)
