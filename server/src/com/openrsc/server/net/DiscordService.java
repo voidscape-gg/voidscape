@@ -548,6 +548,10 @@ public class DiscordService implements Runnable{
 	}
 
 	public void monitoringSendServerBehind(final String message, final boolean showEventData) {
+		// Skip building the profiling dump on the game thread when it can never be sent.
+		if (!getServer().getConfig().WANT_DISCORD_MONITORING_UPDATES) {
+			return;
+		}
 		monitoringSendToDiscord(message + (showEventData ? "\r\n" + getServer().getGameEventHandler().buildProfilingDebugInformation(false) : ""));
 	}
 

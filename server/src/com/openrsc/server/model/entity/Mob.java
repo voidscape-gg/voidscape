@@ -1083,6 +1083,19 @@ public abstract class Mob extends Entity {
 		statRestorationEvent.tryResyncHit();
 	}
 
+	/**
+	 * Re-arms this mob's stat restoration event if it parked itself (NPC at full stats).
+	 * Called from Skills mutators so any stat change wakes the restoration cycle back up.
+	 */
+	public void ensureStatRestorationActive() {
+		final StatRestorationEvent event = statRestorationEvent;
+		if (event == null || event.isRunning()) {
+			return;
+		}
+		event.restart();
+		getWorld().getServer().getGameEventHandler().add(event);
+	}
+
 	public UpdateFlags getUpdateFlags() {
 		return updateFlags;
 	}

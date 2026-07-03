@@ -503,7 +503,7 @@ public final class Admins implements CommandTrigger {
 
 	private void cinematic(Player player, String[] args) {
 		if (args.length < 1) {
-			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], teamfight [actors] [radius], sparrowcastle [actors] [radius], stop, status");
 			return;
 		}
 		final String action = args[0].toLowerCase();
@@ -515,8 +515,32 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().status());
 			return;
 		}
+		if (action.equals("teamfight") || action.equals("teams") || action.equals("fight")) {
+			try {
+				final int actors = args.length >= 2 ? Integer.parseInt(args[1]) : 36;
+				final int sceneRadius = args.length >= 3 ? Integer.parseInt(args[2]) : 8;
+				player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService()
+					.startCinematicTeamFight(player, actors, sceneRadius));
+				player.message(messagePrefix + "Use ::cinematic stop when you are done filming.");
+			} catch (NumberFormatException ex) {
+				player.message(messagePrefix + "actors and radius must be integers");
+			}
+			return;
+		}
+		if (action.equals("sparrowcastle") || action.equals("sparrow") || action.equals("castleflyover")) {
+			try {
+				final int actors = args.length >= 2 ? Integer.parseInt(args[1]) : 40;
+				final int sceneRadius = args.length >= 3 ? Integer.parseInt(args[2]) : 8;
+				player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService()
+					.startVoidSparrowCastleFlyover(player, actors, sceneRadius));
+				player.message(messagePrefix + "Use Escape to return from the sparrow view, then ::cinematic stop.");
+			} catch (NumberFormatException ex) {
+				player.message(messagePrefix + "actors and radius must be integers");
+			}
+			return;
+		}
 		if (!action.equals("bossfight") && !action.equals("boss")) {
-			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], teamfight [actors] [radius], sparrowcastle [actors] [radius], stop, status");
 			return;
 		}
 		try {

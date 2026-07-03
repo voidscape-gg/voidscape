@@ -345,6 +345,7 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
 	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
+	private static final String CLIENT_SETTING_CAMERA_INTERPOLATION = "camera_interpolation";
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
@@ -417,6 +418,7 @@ public final class mudclient implements Runnable {
 	public static HashMap<String, File> soundCache = new HashMap<String, File>();
 	public static boolean optionSoundDisabled = true;
 	private static boolean optionPendingInputMarker = false;
+	private static boolean optionCameraInterpolation = false;
 	static byte[][] s_kb = new byte[250][];
 	static int[] s_wb;
 	private static int FPS = 0;
@@ -1025,6 +1027,7 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_ACTION_CHAT_OVERLAY = 1003;
 	private static final int ADVANCED_ACTION_PENDING_INPUT_MARKER = 1004;
 	private static final int ADVANCED_ACTION_SCREENSHOT = 1005;
+	private static final int ADVANCED_ACTION_CAMERA_INTERPOLATION = 1006;
 	private int settingTab = SETTINGS_PROFILE_TAB;
 	private boolean settingsAdvancedMode = false;
 	private boolean showAdvancedSettingsWindow = false;
@@ -1464,6 +1467,10 @@ public final class mudclient implements Runnable {
 		if (pendingInputMarker != null && !pendingInputMarker.trim().isEmpty()) {
 			optionPendingInputMarker = Boolean.parseBoolean(pendingInputMarker);
 		}
+		String cameraInterpolation = props.getProperty(CLIENT_SETTING_CAMERA_INTERPOLATION);
+		if (cameraInterpolation != null && !cameraInterpolation.trim().isEmpty()) {
+			optionCameraInterpolation = Boolean.parseBoolean(cameraInterpolation);
+		}
 	}
 
 	private static void saveChatOverlaySetting() {
@@ -1472,6 +1479,10 @@ public final class mudclient implements Runnable {
 
 	private static void savePendingInputMarkerSetting() {
 		saveClientSetting(CLIENT_SETTING_PENDING_INPUT_MARKER, Boolean.toString(optionPendingInputMarker));
+	}
+
+	private static void saveCameraInterpolationSetting() {
+		saveClientSetting(CLIENT_SETTING_CAMERA_INTERPOLATION, Boolean.toString(optionCameraInterpolation));
 	}
 
 	private static boolean isValidEmailAddress(String email) {
@@ -2483,10 +2494,19 @@ public final class mudclient implements Runnable {
 				return;
 			}
 
-			// TODO: Inauthentic to loop through packets like this.
-			int len = this.packetHandler.getClientStream().readIncomingPacket(packetHandler.getPacketsIncoming());
-			if (len > 0)
+			// Voidscape: bounded drain instead of the authentic one-packet-per-frame read.
+			// The server flushes a whole tick's packets as one burst; applying only one per
+			// 20ms frame smeared each burst over several frames of visible lag. The bound
+			// keeps a huge burst from starving the frame; the mode/stream guard stops the
+			// drain if a handled packet closed the connection or dropped us to LOGIN.
+			for (int i = 0; i < 32; i++) {
+				int len = this.packetHandler.getClientStream().readIncomingPacket(packetHandler.getPacketsIncoming());
+				if (len <= 0)
+					break;
 				this.packetHandler.handlePacket(packetHandler.getPacketsIncoming().getUnsignedByte(), len);
+				if (this.currentViewMode != GameMode.GAME || this.packetHandler.getClientStream() == null)
+					break;
+			}
 
 			if (System.currentTimeMillis() - timeOfLastCombatStylePacket > 1000) {
 				setCombatStyle(proposedStyle);
@@ -16656,6 +16676,7 @@ public final class mudclient implements Runnable {
 				this.getSurface().drawString("Gameplay", x, rowY, 0xd9b6ff, 1);
 				rowY += 22;
 				rowY = drawAdvancedCycle(x, rowY, width, "Camera angle", this.optionCameraModeAuto ? "Auto" : "Manual", 0);
+				rowY = drawAdvancedToggle(x, rowY, width, "Camera interpolation", "Smooth camera follow and rotation", optionCameraInterpolation, ADVANCED_ACTION_CAMERA_INTERPOLATION);
 				rowY = drawAdvancedCycle(x, rowY, width, "Mouse buttons", this.optionMouseButtonOne ? "One" : "Two", 1);
 				rowY = drawAdvancedToggle(x, rowY, width, "Sound effects", "Play in-game audio cues", !optionSoundDisabled, 2);
 				rowY = drawAdvancedToggle(x, rowY, width, "XP drops", "Show XP gained beside the screen", C_EXPERIENCE_DROPS, 25);
@@ -16774,6 +16795,9 @@ public final class mudclient implements Runnable {
 					clearPendingInputMarker();
 				}
 				savePendingInputMarkerSetting();
+				break;
+			case ADVANCED_ACTION_CAMERA_INTERPOLATION:
+				toggleCameraInterpolation();
 				break;
 			case ADVANCED_ACTION_SCREENSHOT:
 				captureScreenshot();
@@ -20712,6 +20736,30 @@ public final class mudclient implements Runnable {
 		repositionCustomUI();
 	}
 
+	private String getCameraInterpolationLabel() {
+		return optionCameraInterpolation ? "@gre@On" : "@red@Off";
+	}
+
+	private void toggleCameraInterpolation() {
+		optionCameraInterpolation = !optionCameraInterpolation;
+		if (!optionCameraInterpolation) {
+			snapCameraToLocalPlayer();
+		}
+		saveCameraInterpolationSetting();
+	}
+
+	private void snapCameraToLocalPlayer() {
+		if (this.localPlayer == null) {
+			return;
+		}
+		this.cameraPositionX = this.localPlayer.currentX;
+		this.cameraPositionZ = this.localPlayer.currentZ;
+		this.m_Wc = 0;
+		if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
+			this.cameraRotation = (this.cameraAngle * 32) & 255;
+		}
+	}
+
 	// custom game menu tab
 	private void drawGeneralSettingsOptions(int baseX, short boxWidth, int x, int y) {
 		int var4 = y - 15;
@@ -20726,6 +20774,9 @@ public final class mudclient implements Runnable {
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 				"@whi@Camera angle - " + (this.optionCameraModeAuto ? "@gre@Auto" : "@red@Manual"),
 				0, null, null);
+			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+				"@whi@Camera interpolation - " + getCameraInterpolationLabel(),
+				ADVANCED_ACTION_CAMERA_INTERPOLATION, null, null);
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 				"@whi@Mouse buttons - " + (this.optionMouseButtonOne ? "@red@One" : "@gre@Two"),
 				1, null, null);
@@ -20812,6 +20863,9 @@ public final class mudclient implements Runnable {
 			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 				"@whi@Camera angle mode - @red@Manual", 0, null, null);
 		}
+		this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+			"@whi@Camera interpolation - " + getCameraInterpolationLabel(),
+			ADVANCED_ACTION_CAMERA_INTERPOLATION, null, null);
 
 		// sound effects - byte index 2
 		if (wantMembers()) {
@@ -20825,7 +20879,7 @@ public final class mudclient implements Runnable {
 		}
 
 		// rendering scalar - byte index 45
-		int scalarOptionIdx = (wantMembers() ? 2 : 1) + 1;
+		int scalarOptionIdx = (wantMembers() ? 2 : 1) + 2;
 		boolean isScalarOptionOffered = !isAndroid();
 		boolean isScalarOptionShowing = panelSettings.controlScrollAmount[0] <= scalarOptionIdx && isScalarOptionOffered;
 
@@ -21344,6 +21398,11 @@ public final class mudclient implements Runnable {
 			return;
 		}
 
+		if (settingIndex == ADVANCED_ACTION_CAMERA_INTERPOLATION && this.mouseButtonClick == 1) {
+			toggleCameraInterpolation();
+			return;
+		}
+
 		// camera mode - byte index 0
 		if (settingIndex == 0 && this.mouseButtonClick == 1) {
 			this.optionCameraModeAuto = !this.optionCameraModeAuto;
@@ -21365,7 +21424,7 @@ public final class mudclient implements Runnable {
 		/* rendering scalar - (would be byte index 45) */
 
 		boolean showingAdvanced = this.settingsAdvancedMode;
-		int scalarOptionIdx = (wantMembers() ? 2 : 1) + (showingAdvanced ? 1 : 0);
+		int scalarOptionIdx = (wantMembers() ? 2 : 1) + (showingAdvanced ? 2 : 0);
 		boolean isScalarOptionShowing = showingAdvanced && !isAndroid()
 			&& panelSettings.controlScrollAmount[0] <= scalarOptionIdx;
 
@@ -23554,43 +23613,53 @@ public final class mudclient implements Runnable {
 					if (this.optionCameraModeAuto && !this.isInCinematicCameraMode()) {
 						updateIndex = this.cameraAngle * 32;
 						var10 = updateIndex - this.cameraRotation;
-						byte var12 = 1;
-						if (var10 != 0) {
-							++this.m_Wc;
-							if (var10 <= 128) {
-								if (var10 <= 0) {
-									if (var10 >= -128) {
-										if (var10 < 0) {
-											var12 = -1;
-											var10 = -var10;
+						if (!optionCameraInterpolation) {
+							this.cameraRotation = updateIndex & 255;
+							this.m_Wc = 0;
+						} else {
+							byte var12 = 1;
+							if (var10 != 0) {
+								++this.m_Wc;
+								if (var10 <= 128) {
+									if (var10 <= 0) {
+										if (var10 >= -128) {
+											if (var10 < 0) {
+												var12 = -1;
+												var10 = -var10;
+											}
+										} else {
+											var10 += 256;
+											var12 = 1;
 										}
 									} else {
-										var10 += 256;
 										var12 = 1;
 									}
 								} else {
-									var12 = 1;
+									var12 = -1;
+									var10 = 256 - var10;
 								}
-							} else {
-								var12 = -1;
-								var10 = 256 - var10;
-							}
 
-							this.cameraRotation += (var10 * this.m_Wc + 255) / 256 * var12;
-							this.cameraRotation &= 255;
-						} else {
-							this.m_Wc = 0;
+								this.cameraRotation += (var10 * this.m_Wc + 255) / 256 * var12;
+								this.cameraRotation &= 255;
+							} else {
+								this.m_Wc = 0;
+							}
 						}
 					}
 
-					if (this.localPlayer.currentZ != this.cameraPositionZ) {
-						this.cameraPositionZ += (this.localPlayer.currentZ - this.cameraPositionZ)
-							/ ((this.cameraZoom - 500) / 15 + 16);
-					}
+					if (optionCameraInterpolation) {
+						if (this.localPlayer.currentZ != this.cameraPositionZ) {
+							this.cameraPositionZ += (this.localPlayer.currentZ - this.cameraPositionZ)
+								/ ((this.cameraZoom - 500) / 15 + 16);
+						}
 
-					if (this.cameraPositionX != this.localPlayer.currentX) {
-						this.cameraPositionX += (this.localPlayer.currentX - this.cameraPositionX)
-							/ ((this.cameraZoom - 500) / 15 + 16);
+						if (this.cameraPositionX != this.localPlayer.currentX) {
+							this.cameraPositionX += (this.localPlayer.currentX - this.cameraPositionX)
+								/ ((this.cameraZoom - 500) / 15 + 16);
+						}
+					} else {
+						this.cameraPositionX = this.localPlayer.currentX;
+						this.cameraPositionZ = this.localPlayer.currentZ;
 					}
 				} else if (this.cameraPositionX - this.localPlayer.currentX < -500
 					|| this.cameraPositionX - this.localPlayer.currentX > 500

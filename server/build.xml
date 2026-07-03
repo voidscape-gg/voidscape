@@ -82,12 +82,15 @@
     <property name="confFile" value="default" />
     <property name="coloredLogging" value="false" />
     <target name="runserverzgc">
-        <!-- java 17+ recommended for mature ZGC implementation -->
+        <!-- java 17+ recommended for mature ZGC implementation (generational ZGC is default on 23+) -->
         <echo message="Using JVM 17+ launch arguments"/>
+        <mkdir dir="logs"/>
         <java classname="com.openrsc.server.Server" fork="true">
             <!-- usage: `ant runserver -DconfFile=preservation` to run server with config file preservation.conf -->
             <arg value="${confFile}.conf"/>
-            <jvmarg line="-Xms800M -Xmx2048M -Xdiag -XX:+UseZGC -XX:NewSize=128m -DcoloredLogging=${coloredLogging}"/>
+            <!-- NewSize dropped (ignored by ZGC); gc log rotates 5x20MB for tick-spike attribution.
+                 1g floor / 2g cap fits the 4GB prod VPS alongside portal+nginx; ZGC uncommits above it -->
+            <jvmarg line="-Xms1g -Xmx2g -Xdiag -XX:+UseZGC -Xlog:gc*,safepoint:file=logs/gc.log:time,uptime,level,tags:filecount=5,filesize=20m -DcoloredLogging=${coloredLogging}"/>
             <classpath>
                 <pathelement location="${lib}/disruptor-3.3.0.jar"/>
                 <pathelement location="${lib}/log4j-api-2.17.0.jar"/>
@@ -107,14 +110,17 @@
     </target>
 
     <target name="runserver">
-        <!-- java 8 compatible jvm args. Add more heap if you can. -->
-        <echo message="Using JVM arguments for Java 8 minimum."/>
-        <echo message="Upgrade to Java 17 or later for better garbage collection."/>
-        <echo message="Launch with 'ant runserverzgc' if you are already on Java 17 or newer."/>
+        <!-- G1 fallback target. Requires JDK 11+ (-Xlog is fatal on Java 8). -->
+        <echo message="Using G1 fallback JVM arguments (JDK 11+)."/>
+        <echo message="Launch with 'ant runserverzgc' if you are on Java 17 or newer."/>
+        <mkdir dir="logs"/>
         <java classname="com.openrsc.server.Server" fork="true">
             <!-- usage: `ant runserver -DconfFile=preservation` to run server with config file preservation.conf -->
             <arg value="${confFile}.conf"/>
-            <jvmarg line="-XX:+IgnoreUnrecognizedVMOptions -Xdiag -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseBiasedLocking -XX:NewSize=64m -DcoloredLogging=${coloredLogging}"/>
+            <!-- UseBiasedLocking dropped (removed in JDK 15); NewSize=64m pin dropped (starved G1's
+                 young gen into ~17ms pauses every ~12s); MaxGCPauseMillis lowered so G1 sizes for
+                 short pauses; ExplicitGCInvokesConcurrent guards against library System.gc() stalls -->
+            <jvmarg line="-XX:+IgnoreUnrecognizedVMOptions -Xdiag -XX:+UseG1GC -XX:MaxGCPauseMillis=30 -XX:+ExplicitGCInvokesConcurrent -Xlog:gc*,safepoint:file=logs/gc.log:time,uptime,level,tags:filecount=5,filesize=20m -DcoloredLogging=${coloredLogging}"/>
             <classpath>
                 <pathelement location="${lib}/disruptor-3.3.0.jar"/>
                 <pathelement location="${lib}/log4j-api-2.17.0.jar"/>

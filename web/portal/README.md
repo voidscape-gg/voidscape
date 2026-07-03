@@ -6,7 +6,7 @@ Static click-through prototype for the Voidscape pre-release landing, account-ma
 
 The launch landing has two public modes:
 
-- `PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1` is the ad-facing launch flow. A visitor enters username, email, and an 8-20 letter/number password; the portal creates the web account immediately, creates the first real OpenRSC character with the same username and password, links it to slot 1 of 10, and reserves one starter Subscription card for the Lumbridge vendor. In launch-signup mode, `PORTAL_OPENRSC_DB` must point at the game SQLite DB so signup cannot silently fall back to a preview-only roster card. The account dashboard reads the `starter_card:<webAccountId>` game marker so a card shows as waiting until the vendor marks it claimed. If `PORTAL_GOOGLE_CLIENT_ID` is configured, the same form also shows Google sign-in: Google owns the web login, while the submitted password becomes the first character login until the clients support web-account SSO.
+- `PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1` is the ad-facing launch flow. A visitor enters username, email, and an 8-20 letter/number password; the portal creates the web account immediately, creates the first real OpenRSC character with the same username and password, links it to slot 1 of 10, reserves one starter Subscription card for the Lumbridge vendor, and queues a confirmation email when email delivery is configured. In launch-signup mode, `PORTAL_OPENRSC_DB` must point at the game SQLite DB so signup cannot silently fall back to a preview-only roster card. The account dashboard reads the `starter_card:<webAccountId>` game marker so a card shows as waiting until the vendor marks it claimed. If `PORTAL_GOOGLE_CLIENT_ID` is configured, the same form also shows Google sign-in: Google owns the web login, while the submitted password becomes the first character login until the clients support web-account SSO.
 - `PORTAL_PUBLIC_MODE=1` without launch signup keeps the older code-only reservation flow. A visitor enters an email + desired username, the username is reserved, and a one-time `VOID-XXXX-XXXX` signup code is shown on-screen. The code is written into the game DB as a global `player_cache` row (`signup_code:<CODE>` = 1) when `PORTAL_OPENRSC_DB` is set. In-game, the player talks to the Void Subscription Vendor in Lumbridge, types the code into the popup he opens (custom client 10087+), and receives one tradable Subscription card.
 
 One reservation/code is minted per canonical email in code-only mode; re-signing up with the same email shows the same code. Username reservation checks the founder ledger, existing portal roster cards, and the configured OpenRSC `players` table before showing a name as reserved; an existing OpenRSC player may refresh the reservation only with the same canonical email. If the signup credits another founder's invite code during beta, the referrer also receives one additional referral reward code per credited referral. Referral reward codes use the same `signup_code:<CODE>` ledger and vendor redemption path. Codes are bearer tokens; anyone who knows the email can re-view the signup code, which is accepted for prelaunch stakes. Codes are minted only on the code-only public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
@@ -17,6 +17,15 @@ Signup-list export (token-gated):
 curl -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:8788/api/admin/signups
 curl -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" "http://127.0.0.1:8788/api/admin/signups?format=csv" > signups.csv
 curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:8788/api/admin/signups/sync  # re-push unsynced codes
+```
+
+Email queue/admin actions (token-gated):
+
+```bash
+curl -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" http://127.0.0.1:8788/api/admin/emails
+curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" -H 'content-type: application/json' -d '{"dryRun":true}' http://127.0.0.1:8788/api/admin/emails/signup-confirmations
+curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" -H 'content-type: application/json' -d '{"dryRun":true}' http://127.0.0.1:8788/api/admin/emails/launch-live
+curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" -H 'content-type: application/json' -d '{"retryFailed":true}' http://127.0.0.1:8788/api/admin/emails/send-pending
 ```
 
 ## Launching the public prelaunch site
@@ -55,6 +64,11 @@ Environment=PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summar
 Environment=PORTAL_ADMIN_TOKEN=<long random secret>
 Environment=PORTAL_ABUSE_HASH_SALT=<long random secret, set once, never change>
 Environment=PORTAL_SIGNUP_IP_DAILY_LIMIT=10
+Environment=PORTAL_PUBLIC_ORIGIN=https://voidscape.gg
+Environment=PORTAL_EMAIL_PROVIDER=resend
+Environment="PORTAL_EMAIL_FROM=Voidscape <launch@voidscape.gg>"
+Environment=PORTAL_EMAIL_REPLY_TO=support@voidscape.gg
+Environment=PORTAL_RESEND_API_KEY=<resend api key>
 ExecStart=/usr/bin/node web/portal/dev-server.mjs
 Restart=always
 
@@ -90,7 +104,7 @@ journalctl -u voidscape-integrity-export.service -n 20 --no-pager
 - Back up the signup list: it is one file, `$PORTAL_DATA_DIR/dev-store.json` (atomic writes). A cron copy or the CSV export both work as backups.
 - Pull the list any time: `curl -H "x-portal-admin-token: $TOKEN" "https://yourdomain.com/api/admin/signups?format=csv"`.
 - Google sign-in is optional. Set `PORTAL_GOOGLE_CLIENT_ID` to a Google Identity Services web client id to show the button; leave it unset to keep the email/password path only. The redirect-style `/api/oauth/google/start` and `/api/oauth/google/callback` endpoints are still placeholders.
-- Email delivery, Turnstile, and checkout are intentionally plug-in-later provider slots. The launch staging env template reserves `PORTAL_SMTP_*`, `PORTAL_TURNSTILE_*`, and `PORTAL_PAYMENT_*` names, but the current portal does not send email, require Turnstile tokens, or sell subscription-card checkout until those handlers are implemented and tested.
+- Email delivery supports Resend. New launch-signup accounts queue `signup_confirmation` emails, and staff can backfill confirmations, send/retry pending events, or send `launch_live` emails through the token-gated admin API. Use `PORTAL_EMAIL_DRY_RUN=1` for staging/smoke tests. Turnstile and checkout remain plug-in-later provider slots; the portal does not require Turnstile tokens or sell subscription-card checkout until those handlers are implemented and tested.
 - Code-only launch day, to make codes redeemable in-game: copy `dev-store.json` from the public host into a `PORTAL_DATA_DIR` on the game machine, run the portal there with `PORTAL_OPENRSC_DB=/path/to/voidscape.db` (loopback is fine, no public mode needed), and `curl -X POST -H "x-portal-admin-token: $TOKEN" http://127.0.0.1:8788/api/admin/signups/sync`. Already-redeemed codes are skipped; the endpoint is idempotent.
 - If bot signups become a problem, put Cloudflare in front with a managed challenge on `POST /api/founder/reservations` — the app-side per-IP cap is the backstop, not the whole defense.
 
@@ -190,6 +204,8 @@ Useful local API environment variables:
 - `PORTAL_PUBLIC_MODE=1` locks the server to the prelaunch signup surface (see "Launching the public prelaunch site").
 - `PORTAL_LAUNCH_SIGNUP_MODE=1` opens the public account-first launch flow while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden; use only with `PORTAL_PUBLIC_MODE=1`.
 - `PORTAL_GOOGLE_CLIENT_ID=...` enables the public Google Identity Services button and ID-token verification for launch signup. Without it, Google signup endpoints return `google_oauth_not_configured` and the button stays hidden. `PORTAL_GOOGLE_JWKS_URL` defaults to Google's public cert endpoint and exists only as a test/ops override.
+- `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg` sets the public origin used in outgoing emails. If unset, the portal derives it from request headers.
+- `PORTAL_EMAIL_PROVIDER=resend` enables live email delivery through Resend when `PORTAL_RESEND_API_KEY` and `PORTAL_EMAIL_FROM` are configured. `PORTAL_EMAIL_REPLY_TO` defaults to `support@voidscape.gg`; `PORTAL_EMAIL_DRY_RUN=1` marks events sent without calling Resend; `PORTAL_REQUIRE_EMAIL=1` makes `/api/health.config.publicReady` fail until email delivery is configured.
 - `PORTAL_LAUNCH_AT=...` exposes a public-safe launch countdown through `/api/public`; use ISO-8601 with timezone.
 - `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` controls the release mobile web-client URL used by API metadata and post-launch surfaces; the prelaunch landing does not link play/download actions.
 - `PORTAL_ANDROID_APK=/path/to/voidscape.apk` overrides the APK served by `/downloads/android-apk`. If unset, the portal uses the standard Android build output when it exists. The prelaunch landing still hides download buttons until the countdown opens the post-launch chooser.

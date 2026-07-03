@@ -17,3 +17,5 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Feedback: UI QA](feedback_ui_qa.md) — catch UI overlaps deterministically (scripts/ui-geometry-lint.py), not by eye; prefer original OpenRSC bank sizing
 - [Project: bank UI rebuild](project_bank_ui_rebuild.md) — Void Glass bank SHIPPED 2026-07-02 (search/tabs/loadouts/note-mode, 6 viewports); open: drag-reorder for Ryan; skin-on test recipe inside
 - [Feedback: bugfix autonomy](feedback_bugfix_autonomy.md) — run the bug-fix/QA loop straight through, no per-fix approval pauses
+- [Perf pass 2](project_perf_pass2.md) — 2026-07-03 tick-loop pass: results, do-not-break invariants (NPC event parking, inline events, WAL), next wall = update generation
+- [Prelaunch priorities](prelaunch_priorities.md) — agreed work order: exploit sweep → device QA → bug triage → golden-path QA → soak → jar deploy

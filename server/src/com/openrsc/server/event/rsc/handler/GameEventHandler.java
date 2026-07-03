@@ -25,6 +25,7 @@ public class GameEventHandler {
 	private final ConcurrentHashMap<String, Long> eventsDurations = new ConcurrentHashMap<>();
 	private final Server server;
 	private ThreadPoolExecutor executor;
+	private boolean singleThreaded;
 
 	public GameEventHandler(final Server server) {
 		this.server = server;
@@ -40,6 +41,9 @@ public class GameEventHandler {
 			// single thread events so that PID order is always respected.
 			maxThreads = 1;
 		}
+		// With one worker, invokeAll degenerates to serial FIFO execution while the game
+		// thread parks — run events inline instead and skip the per-event FutureTask handoff.
+		singleThreaded = maxThreads == 1;
 		executor = new ThreadPoolExecutor(Math.max(1, maxThreads / 2), maxThreads, Long.MAX_VALUE, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), new NamedThreadFactory(getServer().getName() + " : EventHandler", getServer().getConfig()));
 		executor.prestartAllCoreThreads();
 	}
@@ -83,12 +87,29 @@ public class GameEventHandler {
 
 	public long processNonPlayerEvents() {
 		return getServer().bench(() -> {
+			if (singleThreaded) {
+				runEventsInline(eventStore.getNonPlayerEvents());
+				return;
+			}
 			try {
 				executor.invokeAll(eventStore.getNonPlayerEvents());
 			} catch (final Exception e) {
 				LOGGER.error("Exception while executing GameEventHandler processNonPlayerEvents()", e);
 			}
 		});
+	}
+
+	// Matches single-worker invokeAll semantics exactly: same list order, and a Throwable
+	// from one event (FutureTask swallows even Errors) cannot abort the remaining events.
+	private void runEventsInline(final Collection<GameTickEvent> events) {
+		for (final GameTickEvent event : events) {
+			try {
+				event.call();
+			} catch (final Throwable t) {
+				LOGGER.error("Error in inline event " + event.getDescriptor(), t);
+				event.stop();
+			}
+		}
 	}
 
 	public long runPlayerEvents(final Player player) {
@@ -107,6 +128,10 @@ public class GameEventHandler {
 	}
 
 	public void processEvents(final Player player) {
+		if (singleThreaded) {
+			runEventsInline(eventStore.getPlayerEvents(player.getUsernameHash()));
+			return;
+		}
 		try {
 			executor.invokeAll(eventStore.getPlayerEvents(player.getUsernameHash()));
 		} catch (final Exception e) {
@@ -212,8 +237,8 @@ public class GameEventHandler {
 			}
 		}
 
-		// Running GC before grabbing memory usage in order to get the actual used and referenced memory amount.
-		System.gc();
+		// Memory figures are approximate (no forced GC): this runs on the game thread via the
+		// late-tick monitoring path, where a System.gc() full-GC stall snowballs into more late ticks.
 		final String totalMemory = DataConversions.formatBytes(Runtime.getRuntime().totalMemory());
 		final String freeMemory = DataConversions.formatBytes(Runtime.getRuntime().freeMemory());
 		final String usedMemory = DataConversions.formatBytes(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());

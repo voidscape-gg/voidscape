@@ -764,24 +764,23 @@ public final class Player extends Mob {
 	}
 
 	public boolean requiresAppearanceUpdateFor(final Player player) {
-		for (Entry<Long, Integer> entry : knownPlayersAppearanceIDs.entrySet()) {
-			if (entry.getKey() == player.getUsernameHash()) {
-				if (entry.getValue() != player.getAppearanceID()) {
-					knownPlayersAppearanceIDs.put(player.getUsernameHash(), player.getAppearanceID());
-					return true;
-				}
-				return false;
+		// Direct key lookup — this runs per visible player per observer per tick, and the
+		// old linear entrySet scan made crowded areas O(localPlayers^2) per observer.
+		final Integer knownAppearanceID = knownPlayersAppearanceIDs.get(player.getUsernameHash());
+		if (knownAppearanceID != null) {
+			if (knownAppearanceID.intValue() != player.getAppearanceID()) {
+				knownPlayersAppearanceIDs.put(player.getUsernameHash(), player.getAppearanceID());
+				return true;
 			}
+			return false;
 		}
 		knownPlayersAppearanceIDs.put(player.getUsernameHash(), player.getAppearanceID());
 		return true;
 	}
 
 	public boolean requiresAppearanceUpdateForPeek(final Player player) {
-		for (Entry<Long, Integer> entry : knownPlayersAppearanceIDs.entrySet())
-			if (entry.getKey() == player.getUsernameHash())
-				return entry.getValue() != player.getAppearanceID();
-		return true;
+		final Integer knownAppearanceID = knownPlayersAppearanceIDs.get(player.getUsernameHash());
+		return knownAppearanceID == null || knownAppearanceID.intValue() != player.getAppearanceID();
 	}
 
 	public HashMap<Long, Integer> getKnownPlayerAppearanceIDs() {

@@ -12,6 +12,7 @@ import com.openrsc.server.model.world.World;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +49,12 @@ public class RegionManager {
 	 * @return The collection of local players.
 	 */
 	public Collection<Player> getLocalPlayers(final Entity entity) {
+		// Nobody online means the scan below is provably empty; skip the region walk and
+		// set churn entirely (every aggressive NPC calls this each tick). Callers only
+		// iterate the result — the returned set must not be mutated.
+		if (getWorld().getPlayers().size() == 0) {
+			return Collections.emptySet();
+		}
 		final LinkedHashSet<Player> localPlayers = new LinkedHashSet<Player>();
 		final Point viewLocation = getViewLocation(entity);
 		for (final Region region : getVisibleRegions(viewLocation)) {
@@ -143,33 +150,23 @@ public class RegionManager {
 		final int offsetX = location.getX() % Constants.REGION_SIZE;
 		final int offsetY = location.getY() % Constants.REGION_SIZE;
 
-		List<Integer> xMod = new ArrayList<>(2);
-		List<Integer> yMod = new ArrayList<>(2);
-		xMod.add(0);
-		yMod.add(0);
+		// Primitive mods instead of boxed lists; visit order matches the original
+		// (0,0) -> (0,yMod) -> (xMod,0) -> (xMod,yMod) since region order determines
+		// downstream entity iteration order.
+		final int xMod = offsetX <= viewDistance ? -1
+			: (Constants.REGION_SIZE - offsetX <= viewDistance ? 1 : 0);
+		final int yMod = offsetY <= viewDistance ? -1
+			: (Constants.REGION_SIZE - offsetY <= viewDistance ? 1 : 0);
 
 		final LinkedHashSet<Region> visible = new LinkedHashSet<>();
-		if(offsetX <= viewDistance) {
-			xMod.add(-1);
-		} else if(Constants.REGION_SIZE - offsetX <= viewDistance) {
-			xMod.add(1);
+		visible.add(getRegionFromSectorCoordinates(regionX, regionY));
+		if (yMod != 0) {
+			visible.add(getRegionFromSectorCoordinates(regionX, regionY + yMod));
 		}
-
-		if(offsetY <= viewDistance) {
-			yMod.add(-1);
-		} else if(Constants.REGION_SIZE - offsetY <= viewDistance) {
-			yMod.add(1);
-		}
-
-		for(int x : xMod) {
-			for(int y : yMod) {
-				final Region tmpRegion = getRegionFromSectorCoordinates(
-						regionX + x,
-						regionY + y
-				);
-				if (tmpRegion != null) {
-					visible.add(tmpRegion);
-				}
+		if (xMod != 0) {
+			visible.add(getRegionFromSectorCoordinates(regionX + xMod, regionY));
+			if (yMod != 0) {
+				visible.add(getRegionFromSectorCoordinates(regionX + xMod, regionY + yMod));
 			}
 		}
 
@@ -200,16 +197,17 @@ public class RegionManager {
 	}
 
 	private Region getRegionFromSectorCoordinates(final int regionX, final int regionY) {
-		// Create a new HashMap if it doesn't exist.
-		if (!getRegions().containsKey(regionX)) {
-			getRegions().put(regionX, new ConcurrentHashMap<>());
+		// Hit path is two lock-free gets; computeIfAbsent only on first touch of a sector
+		// (also closes the old check-then-act race that could clobber a freshly made row).
+		ConcurrentHashMap<Integer, Region> row = regions.get(regionX);
+		if (row == null) {
+			row = regions.computeIfAbsent(regionX, k -> new ConcurrentHashMap<>());
 		}
-
-		if (!getRegions().get(regionX).containsKey(regionY)) {
-			getRegions().get(regionX).put(regionY, new Region(this, regionX, regionY));
+		Region region = row.get(regionY);
+		if (region == null) {
+			region = row.computeIfAbsent(regionY, k -> new Region(this, regionX, regionY));
 		}
-
-		return getRegions().get(regionX).get(regionY);
+		return region;
 	}
 
 	public Region getRegion(final int x, final int y) {

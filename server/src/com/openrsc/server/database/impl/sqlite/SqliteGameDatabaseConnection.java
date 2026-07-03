@@ -44,6 +44,13 @@ public class SqliteGameDatabaseConnection extends JDBCDatabaseConnection {
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + getDBPath(dbName));
             statement = getConnection().createStatement();
+            // WAL keeps readers/writers from serializing on the delete-journal fsync cycle;
+            // NORMAL sync only risks the last few commits on OS/power loss (autosave is 120s).
+            // A clean close() checkpoints the -wal file back into the .db automatically;
+            // bare-file backups must run PRAGMA wal_checkpoint(TRUNCATE) first.
+            statement.execute("PRAGMA journal_mode=WAL");
+            statement.execute("PRAGMA synchronous=NORMAL");
+            statement.execute("PRAGMA busy_timeout=5000");
             connected = checkConnection();
         } catch (final SQLException e) {
             LOGGER.catching(e);

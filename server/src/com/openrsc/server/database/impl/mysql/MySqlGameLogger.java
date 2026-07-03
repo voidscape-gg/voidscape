@@ -99,18 +99,23 @@ public final class MySqlGameLogger extends GameLogger {
 	}
 
 	protected void runQuery(final Query query) {
+		if (query == null) {
+			return;
+		}
+		// This path uses the raw Connection, bypassing the locked JDBCDatabaseConnection
+		// wrappers — take the same lock so log inserts can't interleave into an open
+		// atomically() transaction (e.g. a player save) on the shared connection.
+		getDatabase().getConnection().getConnectionLock().lock();
 		try {
-			if (query != null) {
-				if (query instanceof ResultQuery) {
-					final ResultQuery rq = (ResultQuery) query;
-					try (final PreparedStatement statement = rq.prepareStatement(getDatabase().getConnection().getConnection());
-						 final ResultSet result = statement.executeQuery();) {
-						rq.onResult(result);
-					}
-				} else {
-					try (final PreparedStatement statement = query.prepareStatement(getDatabase().getConnection().getConnection());) {
-						statement.execute();
-					}
+			if (query instanceof ResultQuery) {
+				final ResultQuery rq = (ResultQuery) query;
+				try (final PreparedStatement statement = rq.prepareStatement(getDatabase().getConnection().getConnection());
+					 final ResultSet result = statement.executeQuery();) {
+					rq.onResult(result);
+				}
+			} else {
+				try (final PreparedStatement statement = query.prepareStatement(getDatabase().getConnection().getConnection());) {
+					statement.execute();
 				}
 			}
 		/*} catch (final GameDatabaseException ex) {
@@ -120,6 +125,8 @@ public final class MySqlGameLogger extends GameLogger {
 			if (server.getDiscordService() != null && server.getConfig().WANT_DISCORD_GENERAL_LOGGING) {
 				server.getDiscordService().errorLogStackTrace(ex);
 			}
+		} finally {
+			getDatabase().getConnection().getConnectionLock().unlock();
 		}
 	}
 

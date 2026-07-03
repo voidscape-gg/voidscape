@@ -26,7 +26,14 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none
+- **Active bug:** VS-038 (Death Match voluntary forfeit) — per Ryan's 2026-07-03
+  redirect.
+- **Ryan's redirect (2026-07-03, mid-loop):** work **from VS-038 down**, impact-first
+  — skip the "meh" tail. In scope, in order: VS-038 (Death Match forfeit), then
+  player-facing Intake items (Undead Siege logout feedback, bank-add-while-open stale
+  view, goto silent stall). Explicitly deprioritized by this ruling: VS-034, VS-009,
+  VS-036 (above VS-038 on the ready list), VS-006 (vague TODO), VS-013 (QA tooling),
+  and the P4 tail.
 - **Branch (ruled 2026-07-03):** work lands on **`main`** — Ryan approved
   fast-forwarding local main to the checkpoint branch head (origin/main was a strict
   ancestor, 132 ahead / 0 behind; `codex/ui-loot-checkpoint-20260613` left intact at

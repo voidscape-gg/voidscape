@@ -305,6 +305,7 @@ PORTAL_DATA_DIR=/var/lib/voidscape-portal
 PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
 PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
 PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json
+PORTAL_PUBLIC_ORIGIN=$PORTAL_URL
 PORTAL_SIGNUP_IP_DAILY_LIMIT=10
 PORTAL_STARTER_IP_DAILY_LIMIT=10
 PORTAL_ABUSE_HASH_SALT=CHANGE_ME_STABLE_PRIVATE_SECRET
@@ -314,13 +315,14 @@ PORTAL_ABUSE_HASH_SALT=CHANGE_ME_STABLE_PRIVATE_SECRET
 # PORTAL_ANDROID_APK=/opt/voidscape/downloads/voidscape-staging-release.apk
 # PORTAL_GOOGLE_CLIENT_ID=
 # PORTAL_GOOGLE_JWKS_URL=https://www.googleapis.com/oauth2/v3/certs
-# Reserved provider slots. These are intentionally inert until the portal
-# implements email delivery, bot checks, and checkout/webhook handlers.
-# PORTAL_SMTP_HOST=
-# PORTAL_SMTP_PORT=587
-# PORTAL_SMTP_USER=
-# PORTAL_SMTP_PASS=
-# PORTAL_SMTP_FROM=support@voidscape.gg
+# Resend email delivery is optional for staging; enable dry-run for smoke tests
+# or set a real API key once DNS is verified.
+# PORTAL_EMAIL_PROVIDER=resend
+# PORTAL_EMAIL_DRY_RUN=1
+# PORTAL_RESEND_API_KEY=
+# PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>"
+# PORTAL_EMAIL_REPLY_TO=support@voidscape.gg
+# PORTAL_REQUIRE_EMAIL=1
 # PORTAL_TURNSTILE_SITE_KEY=
 # PORTAL_TURNSTILE_SECRET=
 # PORTAL_PAYMENT_PROVIDER=
@@ -517,7 +519,8 @@ or merge its release-critical values into the real private config:
 
 Copy \`portal/portal.env.staging\` to the host, replace the two
 \`CHANGE_ME\` values, and keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google
-is intentionally being tested.
+is intentionally being tested. Enable the Resend email variables only after the
+sender domain is verified, or use \`PORTAL_EMAIL_DRY_RUN=1\` for staging smoke.
 
 ## Verify
 
@@ -556,6 +559,7 @@ front of people. Fill the blanks with the actual deployed paths from the host.
   - \`PORTAL_ABUSE_HASH_SALT\`
   - \`PORTAL_ADMIN_TOKEN\`, if staff admin endpoints are enabled
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
+- If email is enabled, confirm \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\`.
 - If Android is public, prefer a release APK bundle, confirm \`MANIFEST.txt\` says \`android_apk_type=release\`, and set \`PORTAL_ANDROID_APK\` to that APK if it lives outside the default build path.
 
 ## Backup Paths

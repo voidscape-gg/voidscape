@@ -78,6 +78,16 @@ const googleJwksUrl = process.env.PORTAL_GOOGLE_JWKS_URL || "https://www.googlea
 const googleIdentityProvider = "google";
 let googleJwksCache = { expiresAt: 0, keys: new Map() };
 const webClientUrl = process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/";
+const publicSiteOrigin = normalizedOrigin(process.env.PORTAL_PUBLIC_ORIGIN || "");
+const discordInviteUrl = process.env.PORTAL_DISCORD_INVITE_URL || "https://discord.gg/f6uQmrRv4";
+const emailProvider = String(process.env.PORTAL_EMAIL_PROVIDER || "").trim().toLowerCase();
+const emailDryRun = process.env.PORTAL_EMAIL_DRY_RUN === "1";
+const requireEmailDelivery = process.env.PORTAL_REQUIRE_EMAIL === "1";
+const resendApiKey = String(process.env.PORTAL_RESEND_API_KEY || "").trim();
+const emailFrom = String(process.env.PORTAL_EMAIL_FROM || "Voidscape <launch@voidscape.gg>").trim();
+const emailReplyTo = String(process.env.PORTAL_EMAIL_REPLY_TO || "support@voidscape.gg").trim();
+const signupConfirmationEmailType = "signup_confirmation";
+const launchLiveEmailType = "launch_live";
 const downloadArtifacts = [
 	{
 		slug: "client-runtime",
@@ -157,6 +167,17 @@ function configuredSecret(value, fallback) {
 	return text.length >= 16;
 }
 
+function emailConfigured() {
+	if (!emailFrom) return false;
+	if (emailDryRun) return true;
+	return emailProvider === "resend" && Boolean(resendApiKey);
+}
+
+function emailProviderLabel() {
+	if (emailDryRun) return "dry-run";
+	return emailProvider || "disabled";
+}
+
 function portalConfigHealth() {
 	const issues = [];
 	if (publicMode && !abuseHashSaltConfigured) {
@@ -165,10 +186,20 @@ function portalConfigHealth() {
 	if (adminToken && !adminTokenConfigured) {
 		issues.push("admin_token_weak");
 	}
+	if (requireEmailDelivery && !emailConfigured()) {
+		issues.push("email_not_configured");
+	}
 	return {
 		publicReady: issues.length === 0,
 		abuseHashSaltConfigured,
 		adminTokenConfigured,
+		email: {
+			provider: emailProviderLabel(),
+			configured: emailConfigured(),
+			dryRun: emailDryRun,
+			requireConfigured: requireEmailDelivery,
+			fromConfigured: Boolean(emailFrom)
+		},
 		issues
 	};
 }
@@ -673,9 +704,19 @@ async function handleApi(request, response, url) {
 				provider: "password"
 			});
 			const token = createSession(store, account.id);
+			const queuedEmail = queueAccountEmail(store, account, signupConfirmationEmailType, {
+				origin: requestPublicOrigin(request)
+			});
 			audit(store, "account_registered", { accountId: account.id });
-			return { token, ...(await accountState(store, account)) };
+			return {
+				emailEventId: queuedEmail && queuedEmail.event.id,
+				token,
+				...(await accountState(store, account))
+			};
 		});
+		const emailEventId = result.emailEventId;
+		delete result.emailEventId;
+		scheduleEmailDelivery(emailEventId);
 		json(response, 201, result);
 		return;
 	}
@@ -686,6 +727,7 @@ async function handleApi(request, response, url) {
 		const profile = await googleProfileFromCredential(payload);
 		const result = await updateStore(async (store) => {
 			consumeGoogleNonce(store, payload.nonce || "", request);
+			const wasNewAccount = !findGoogleAccount(store, profile);
 			const account = await upsertGoogleAccount(store, profile, payload, request);
 			if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
 				await createLaunchFirstCharacter(store, account, {
@@ -694,11 +736,17 @@ async function handleApi(request, response, url) {
 				}, request);
 			}
 			const token = createSession(store, account.id);
+			const queuedEmail = wasNewAccount
+				? queueAccountEmail(store, account, signupConfirmationEmailType, {
+					origin: requestPublicOrigin(request)
+				})
+				: null;
 			audit(store, "account_google_login", {
 				accountId: account.id,
 				email: profile.emailCanonical
 			});
 			return {
+				emailEventId: queuedEmail && queuedEmail.event.id,
 				token,
 				auth: {
 					provider: googleIdentityProvider,
@@ -707,6 +755,9 @@ async function handleApi(request, response, url) {
 				...(await accountState(store, account))
 			};
 		});
+		const emailEventId = result.emailEventId;
+		delete result.emailEventId;
+		scheduleEmailDelivery(emailEventId);
 		json(response, 200, result);
 		return;
 	}
@@ -715,13 +766,20 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
 			const profile = googleDevProfile(payload);
+			const wasNewAccount = !findGoogleAccount(store, profile);
 			const account = await upsertGoogleAccount(store, profile, payload, request);
 			const token = createSession(store, account.id);
+			const queuedEmail = wasNewAccount
+				? queueAccountEmail(store, account, signupConfirmationEmailType, {
+					origin: requestPublicOrigin(request)
+				})
+				: null;
 			audit(store, "account_google_login_dev", {
 				accountId: account.id,
 				email: profile.emailCanonical
 			});
 			return {
+				emailEventId: queuedEmail && queuedEmail.event.id,
 				token,
 				auth: {
 					provider: "google",
@@ -731,6 +789,9 @@ async function handleApi(request, response, url) {
 				...(await accountState(store, account))
 			};
 		});
+		const emailEventId = result.emailEventId;
+		delete result.emailEventId;
+		scheduleEmailDelivery(emailEventId);
 		json(response, 200, result);
 		return;
 	}
@@ -1067,6 +1128,72 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "GET" && url.pathname === "/api/admin/emails") {
+		requireAdmin(request);
+		const store = await loadStore();
+		const status = String(url.searchParams.get("status") || "").trim();
+		const type = String(url.searchParams.get("type") || "").trim();
+		const limit = adminEmailLimit(url.searchParams.get("limit") || 100);
+		const events = store.emailEvents
+			.filter((event) => !status || event.status === status)
+			.filter((event) => !type || event.type === type)
+			.slice(-limit)
+			.reverse()
+			.map((event) => emailEventState(store, event));
+		json(response, 200, {
+			config: portalConfigHealth().email,
+			summary: emailEventSummary(store),
+			events
+		});
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/admin/emails/send-pending") {
+		requireAdmin(request);
+		const payload = await readJson(request);
+		const limit = adminEmailLimit(payload.limit || 100);
+		const retryFailed = Boolean(payload.retryFailed);
+		const eventIds = await updateStore((store) => {
+			const eligible = store.emailEvents
+				.filter((event) => event.status === "pending" || (retryFailed && event.status === "failed"))
+				.slice(0, limit);
+			audit(store, "admin_email_pending_requested", {
+				count: eligible.length,
+				retryFailed
+			});
+			return eligible.map((event) => event.id);
+		});
+		const delivery = await deliverEmailEvents(eventIds);
+		json(response, 200, { requested: eventIds.length, ...delivery });
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/admin/emails/signup-confirmations") {
+		requireAdmin(request);
+		const payload = await readJson(request);
+		const result = await queueAdminBulkEmail(request, signupConfirmationEmailType, payload, {
+			requireFounder: true,
+			auditType: "admin_signup_confirmation_email_requested"
+		});
+		const delivery = result.dryRun ? { sent: 0, failed: 0, skipped: 0 } : await deliverEmailEvents(result.eventIds);
+		delete result.eventIds;
+		json(response, 200, { ...result, ...delivery });
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/admin/emails/launch-live") {
+		requireAdmin(request);
+		const payload = await readJson(request);
+		const result = await queueAdminBulkEmail(request, launchLiveEmailType, payload, {
+			requireFounder: false,
+			auditType: "admin_launch_live_email_requested"
+		});
+		const delivery = result.dryRun ? { sent: 0, failed: 0, skipped: 0 } : await deliverEmailEvents(result.eventIds);
+		delete result.eventIds;
+		json(response, 200, { ...result, ...delivery });
+		return;
+	}
+
 	if (method === "GET" && url.pathname === "/api/admin/accounts") {
 		requireAdmin(request);
 		const store = await loadStore();
@@ -1203,6 +1330,419 @@ async function recordFunnelClick(request, payload) {
 		return null;
 	});
 	return { ok: true, event };
+}
+
+function requestPublicOrigin(request) {
+	return publicSiteOrigin || normalizedOrigin(publicOrigin(request)) || "https://voidscape.gg";
+}
+
+function normalizedOrigin(value) {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		const parsed = new URL(text);
+		return parsed.origin;
+	} catch (error) {
+		return text.replace(/\/+$/g, "");
+	}
+}
+
+function joinUrl(origin, path) {
+	const base = normalizedOrigin(origin) || "https://voidscape.gg";
+	return new URL(path, `${base}/`).toString();
+}
+
+function adminEmailLimit(value) {
+	const limit = Number(value || 500);
+	if (!Number.isInteger(limit) || limit <= 0) return 500;
+	return Math.min(limit, 1000);
+}
+
+function deliverableAccountEmail(account) {
+	const email = account && (account.emailDisplay || account.emailCanonical || "");
+	const canonical = account && account.emailCanonical || canonicalEmail(email);
+	if (!email || !canonical) return false;
+	return !canonical.endsWith(".local") && !canonical.endsWith("@discord.voidscape.local");
+}
+
+function findFounderForAccount(store, account) {
+	return account ? store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null : null;
+}
+
+function findGoogleAccount(store, profile) {
+	const identity = store.identities.find((entry) =>
+		entry.provider === profile.provider &&
+		entry.providerSubject === profile.providerSubject
+	);
+	if (identity) {
+		const account = store.accounts.find((entry) => entry.id === identity.accountId);
+		if (account) return account;
+	}
+	return store.accounts.find((entry) => entry.emailCanonical === profile.emailCanonical) || null;
+}
+
+function queueAccountEmail(store, account, type, metadata = {}, options = {}) {
+	if (!deliverableAccountEmail(account)) return null;
+	if (!store.emailEvents) store.emailEvents = [];
+	const duplicate = !options.force && store.emailEvents.find((event) =>
+		event.accountId === account.id &&
+		event.type === type &&
+		["pending", "sending", "sent"].includes(event.status)
+	);
+	if (duplicate) {
+		return { event: duplicate, created: false };
+	}
+	const event = {
+		id: nextId(store, "emailEvent"),
+		accountId: account.id,
+		emailCanonical: account.emailCanonical,
+		emailDisplay: account.emailDisplay || account.emailCanonical,
+		type,
+		status: "pending",
+		provider: emailProviderLabel(),
+		attempts: 0,
+		providerMessageId: "",
+		lastError: "",
+		metadata: {
+			origin: normalizedOrigin(metadata.origin || publicSiteOrigin),
+			source: String(metadata.source || "").trim().slice(0, 80),
+			requestedBy: String(metadata.requestedBy || "").trim().slice(0, 80)
+		},
+		createdAt: now(),
+		updatedAt: now(),
+		sentAt: null
+	};
+	store.emailEvents.push(event);
+	audit(store, "email_event_queued", {
+		emailEventId: event.id,
+		accountId: account.id,
+		type
+	});
+	return { event, created: true };
+}
+
+async function queueAdminBulkEmail(request, type, payload, options) {
+	const dryRun = Boolean(payload && payload.dryRun);
+	const force = Boolean(payload && payload.force);
+	const limit = adminEmailLimit(payload && payload.limit);
+	const origin = requestPublicOrigin(request);
+	return await updateStore((store) => {
+		const candidates = store.accounts
+			.filter((account) => account.status === "active")
+			.filter((account) => deliverableAccountEmail(account))
+			.filter((account) => !options.requireFounder || findFounderForAccount(store, account));
+		const selected = candidates.slice(0, limit);
+		if (dryRun) {
+			audit(store, options.auditType, {
+				type,
+				dryRun: true,
+				eligible: candidates.length,
+				selected: selected.length
+			});
+			return {
+				dryRun: true,
+				type,
+				eligible: candidates.length,
+				selected: selected.length,
+				queued: 0,
+				existing: 0,
+				eventIds: [],
+				config: portalConfigHealth().email
+			};
+		}
+		const eventIds = [];
+		let queued = 0;
+		let existing = 0;
+		for (const account of selected) {
+			const queuedEmail = queueAccountEmail(store, account, type, {
+				origin,
+				requestedBy: "admin"
+			}, { force });
+			if (!queuedEmail) continue;
+			if (queuedEmail.created) queued += 1;
+			else existing += 1;
+			if (["pending", "failed"].includes(queuedEmail.event.status)) {
+				eventIds.push(queuedEmail.event.id);
+			}
+		}
+		audit(store, options.auditType, {
+			type,
+			dryRun: false,
+			eligible: candidates.length,
+			selected: selected.length,
+			queued,
+			existing,
+			force
+		});
+		return {
+			dryRun: false,
+			type,
+			eligible: candidates.length,
+			selected: selected.length,
+			queued,
+			existing,
+			eventIds,
+			config: portalConfigHealth().email
+		};
+	});
+}
+
+function scheduleEmailDelivery(emailEventId) {
+	if (!emailEventId) return;
+	setTimeout(() => {
+		deliverQueuedEmail(emailEventId).catch((error) => {
+			console.error("email_delivery_failed", sanitizeEmailError(error));
+		});
+	}, 0);
+}
+
+async function deliverEmailEvents(eventIds) {
+	const totals = { sent: 0, failed: 0, skipped: 0 };
+	for (const eventId of eventIds || []) {
+		const result = await deliverQueuedEmail(eventId);
+		totals.sent += result.sent || 0;
+		totals.failed += result.failed || 0;
+		totals.skipped += result.skipped || 0;
+	}
+	return totals;
+}
+
+async function deliverQueuedEmail(emailEventId) {
+	let message = null;
+	let skippedReason = "";
+	await updateStore((store) => {
+		const event = store.emailEvents.find((entry) => entry.id === emailEventId);
+		if (!event) {
+			skippedReason = "email_event_not_found";
+			return null;
+		}
+		if (!["pending", "failed"].includes(event.status)) {
+			skippedReason = `email_event_${event.status}`;
+			return null;
+		}
+		if (!emailConfigured()) {
+			event.lastError = "email_not_configured";
+			event.updatedAt = now();
+			skippedReason = "email_not_configured";
+			return null;
+		}
+		const account = store.accounts.find((entry) => entry.id === event.accountId);
+		if (!account || account.status !== "active" || !deliverableAccountEmail(account)) {
+			event.status = "skipped";
+			event.lastError = "account_not_deliverable";
+			event.updatedAt = now();
+			skippedReason = "account_not_deliverable";
+			return null;
+		}
+		const founder = findFounderForAccount(store, account);
+		message = buildEmailMessage(event, account, founder);
+		event.status = "sending";
+		event.provider = emailProviderLabel();
+		event.attempts = Number(event.attempts || 0) + 1;
+		event.lastError = "";
+		event.updatedAt = now();
+		return null;
+	});
+	if (!message) return { skipped: 1, reason: skippedReason || "email_not_ready" };
+
+	try {
+		const providerResult = await sendEmailMessage(message);
+		await updateStore((store) => {
+			const event = store.emailEvents.find((entry) => entry.id === emailEventId);
+			if (!event) return null;
+			event.status = "sent";
+			event.provider = providerResult.provider;
+			event.providerMessageId = providerResult.id || "";
+			event.lastError = "";
+			event.updatedAt = now();
+			event.sentAt = now();
+			audit(store, "email_event_sent", {
+				emailEventId: event.id,
+				accountId: event.accountId,
+				type: event.type,
+				provider: event.provider
+			});
+			return null;
+		});
+		return { sent: 1 };
+	} catch (error) {
+		const lastError = sanitizeEmailError(error);
+		await updateStore((store) => {
+			const event = store.emailEvents.find((entry) => entry.id === emailEventId);
+			if (!event) return null;
+			event.status = "failed";
+			event.lastError = lastError;
+			event.updatedAt = now();
+			audit(store, "email_event_failed", {
+				emailEventId: event.id,
+				accountId: event.accountId,
+				type: event.type,
+				error: lastError
+			});
+			return null;
+		});
+		return { failed: 1 };
+	}
+}
+
+function buildEmailMessage(event, account, founder) {
+	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
+	const manageUrl = joinUrl(origin, "/");
+	const playUrl = joinUrl(origin, "/play/");
+	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
+	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
+	if (event.type === launchLiveEmailType) {
+		return emailMessage({
+			event,
+			account,
+			subject: "Voidscape is live",
+			heading: "Voidscape is live",
+			intro: `Your reserved name ${reservedName} is ready. The desktop launcher and mobile web client are live from the Voidscape site.`,
+			bullets: [
+				`Reserved username: ${reservedName}`,
+				"Desktop players should use the launcher from the website.",
+				"Mobile players can use the web client from the play page.",
+				"Your starter subscription card is waiting for eligible prelaunch accounts."
+			],
+			primaryUrl: manageUrl,
+			primaryLabel: "Open Voidscape",
+			secondaryUrl: playUrl,
+			secondaryLabel: "Mobile web client"
+		});
+	}
+	return emailMessage({
+		event,
+		account,
+		subject: "Your Voidscape name is reserved",
+		heading: "Your Voidscape prelaunch account is ready",
+		intro: `Your account is set up and ${reservedName} is reserved for launch.`,
+		bullets: [
+			`Reserved username: ${reservedName}`,
+			"Your free 1-week subscription card is reserved on your account.",
+			"When the world opens, talk to the Void Subscription Vendor in Lumbridge to claim it.",
+			"We never include your password in email."
+		],
+		primaryUrl: manageUrl,
+		primaryLabel: "Manage account",
+		secondaryUrl: discordInviteUrl,
+		secondaryLabel: "Join Discord"
+	});
+}
+
+function emailMessage(details) {
+	const text = [
+		"Hi,",
+		"",
+		details.intro,
+		"",
+		...details.bullets.map((line) => `- ${line}`),
+		"",
+		`${details.primaryLabel}: ${details.primaryUrl}`,
+		details.secondaryUrl ? `${details.secondaryLabel}: ${details.secondaryUrl}` : "",
+		"",
+		"- Voidscape"
+	].filter((line) => line !== "").join("\n");
+	const htmlBullets = details.bullets
+		.map((line) => `<li>${escapeHtml(line)}</li>`)
+		.join("");
+	const secondaryLink = details.secondaryUrl
+		? `<p><a href="${escapeHtml(details.secondaryUrl)}">${escapeHtml(details.secondaryLabel)}</a></p>`
+		: "";
+	return {
+		eventId: details.event.id,
+		type: details.event.type,
+		to: details.account.emailDisplay || details.account.emailCanonical,
+		subject: details.subject,
+		text,
+		html: `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#111319;color:#f2efe4;font-family:Arial,Helvetica,sans-serif;">
+	<div style="max-width:560px;margin:0 auto;padding:28px 22px;">
+		<h1 style="margin:0 0 14px;color:#f4d37d;font-size:24px;">${escapeHtml(details.heading)}</h1>
+		<p style="font-size:16px;line-height:1.5;">${escapeHtml(details.intro)}</p>
+		<ul style="font-size:15px;line-height:1.6;padding-left:22px;">${htmlBullets}</ul>
+		<p style="margin:24px 0;">
+			<a href="${escapeHtml(details.primaryUrl)}" style="background:#6f48d8;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:4px;display:inline-block;font-weight:bold;">${escapeHtml(details.primaryLabel)}</a>
+		</p>
+		${secondaryLink}
+		<p style="font-size:13px;color:#b8b0c8;">You are receiving this because this email was used for a Voidscape prelaunch signup.</p>
+	</div>
+</body>
+</html>`
+	};
+}
+
+async function sendEmailMessage(message) {
+	if (!emailConfigured()) throw new Error("email_not_configured");
+	if (emailDryRun) {
+		return { provider: "dry-run", id: `dry-run-${message.eventId}` };
+	}
+	if (emailProvider !== "resend") {
+		throw new Error("email_provider_not_configured");
+	}
+	const body = {
+		from: emailFrom,
+		to: [message.to],
+		subject: message.subject,
+		html: message.html,
+		text: message.text
+	};
+	if (emailReplyTo) {
+		body.reply_to = emailReplyTo;
+	}
+	const resendResponse = await fetch("https://api.resend.com/emails", {
+		method: "POST",
+		headers: {
+			authorization: `Bearer ${resendApiKey}`,
+			"content-type": "application/json"
+		},
+		body: JSON.stringify(body)
+	});
+	const responseText = await resendResponse.text();
+	let responseBody = {};
+	try {
+		responseBody = responseText ? JSON.parse(responseText) : {};
+	} catch (error) {
+		responseBody = { message: responseText };
+	}
+	if (!resendResponse.ok) {
+		throw new Error(`resend_${resendResponse.status}:${String(responseBody.message || responseBody.error || responseText || "send_failed").slice(0, 180)}`);
+	}
+	return { provider: "resend", id: String(responseBody.id || "") };
+}
+
+function emailEventSummary(store) {
+	const summary = {};
+	for (const event of store.emailEvents || []) {
+		const key = `${event.type}:${event.status}`;
+		summary[key] = (summary[key] || 0) + 1;
+	}
+	return summary;
+}
+
+function emailEventState(store, event) {
+	const account = store.accounts.find((entry) => entry.id === event.accountId);
+	const founder = account ? findFounderForAccount(store, account) : null;
+	return {
+		id: event.id,
+		accountId: event.accountId,
+		email: event.emailDisplay || event.emailCanonical,
+		username: founder && founder.username || "",
+		type: event.type,
+		status: event.status,
+		provider: event.provider || "",
+		attempts: event.attempts || 0,
+		lastError: event.lastError || "",
+		createdAt: event.createdAt,
+		updatedAt: event.updatedAt,
+		sentAt: event.sentAt || null
+	};
+}
+
+function sanitizeEmailError(error) {
+	const raw = String(error && error.message || error || "email_error");
+	const redacted = resendApiKey ? raw.replaceAll(resendApiKey, "[redacted]") : raw;
+	return redacted.slice(0, 240);
 }
 
 async function startDiscordOAuth(request, response, url) {
@@ -4596,7 +5136,8 @@ function normalizeStore(store) {
 			recoveryCode: Number(store.nextIds && store.nextIds.recoveryCode) || 1,
 			identity: Number(store.nextIds && store.nextIds.identity) || 1,
 			audit: Number(store.nextIds && store.nextIds.audit) || 1,
-			abuseSignal: Number(store.nextIds && store.nextIds.abuseSignal) || 1
+			abuseSignal: Number(store.nextIds && store.nextIds.abuseSignal) || 1,
+			emailEvent: Number(store.nextIds && store.nextIds.emailEvent) || 1
 		},
 		accounts: Array.isArray(store.accounts) ? store.accounts : [],
 		identities: Array.isArray(store.identities) ? store.identities : [],
@@ -4609,7 +5150,8 @@ function normalizeStore(store) {
 		recoveryCodes: Array.isArray(store.recoveryCodes) ? store.recoveryCodes : [],
 		oauthStates: Array.isArray(store.oauthStates) ? store.oauthStates : [],
 		audit: Array.isArray(store.audit) ? store.audit : [],
-		abuseSignals: Array.isArray(store.abuseSignals) ? store.abuseSignals : []
+		abuseSignals: Array.isArray(store.abuseSignals) ? store.abuseSignals : [],
+		emailEvents: Array.isArray(store.emailEvents) ? store.emailEvents : []
 	};
 }
 

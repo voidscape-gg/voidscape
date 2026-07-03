@@ -2,6 +2,7 @@ package com.openrsc.server.model;
 
 import com.google.common.collect.Multimap;
 import com.openrsc.server.ServerConfiguration;
+import com.openrsc.server.constants.Constants;
 import com.openrsc.server.model.action.WalkToMobAction;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
@@ -638,12 +639,20 @@ public class PathValidation {
 	}
 
 	private static boolean checkBlocking(World world, Mob mob, int x, int y, int bit, boolean isCurrentTile) {
-		TileValue t = world.getTile(x, y);
+		// Resolve the tile's Region once and share it with the mob probe below —
+		// world.getTile + isMobBlocking used to each walk the region map separately.
+		if (!world.withinWorld(x, y)) return true;
+		final Region region = world.getRegionManager().getRegion(x, y);
+		final TileValue t = region.getTileValue(x % Constants.REGION_SIZE, y % Constants.REGION_SIZE);
 		if (t == null) return true;
 		boolean blockedPath = PathValidation.isBlocking(t.traversalMask, (byte) bit, isCurrentTile);
 		if (mob != null) {
-			blockedPath |= isMobBlocking(mob, x, y);
+			if (!blockedPath) {
+				// isMobBlocking is side-effect free, so it can be skipped once blocked.
+				blockedPath = isMobBlocking(mob, region, x, y);
+			}
 			if (mob.isPlayer() && mob.getConfig().PLAYER_BLOCKING == 2) {
+				// Always evaluated (as before): sets lastTileClicked as a side effect.
 				blockedPath |= isPlayerBlocking((Player)mob, x, y);
 			}
 		}
@@ -672,14 +681,18 @@ public class PathValidation {
 	}
 
 	public static boolean isMobBlocking(Mob mob, int x, int y) {
-		Region region = mob.getWorld().getRegionManager().getRegion(Point.location(x, y));
+		return isMobBlocking(mob, mob.getWorld().getRegionManager().getRegion(Point.location(x, y)), x, y);
+	}
 
+	private static boolean isMobBlocking(Mob mob, Region region, int x, int y) {
 		if (mob.getX() == x && mob.getY() == y) {
 			return false;
 		}
 
+		final Point location = Point.location(x, y);
+
 		// visible (&alive) npcs
-		Npc npc = region.getNpc(Point.location(x, y), mob);
+		Npc npc = region.getNpc(location, mob);
 
 		/*
 		 * NPC blocking config controlled
@@ -702,7 +715,7 @@ public class PathValidation {
 		}
 
 		if (mob.isNpc()) {
-			Player player = region.getPlayer(x, y, mob, false);
+			Player player = region.getPlayer(location, mob, false);
 			return player != null;
 		}
 		return false;

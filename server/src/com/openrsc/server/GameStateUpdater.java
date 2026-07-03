@@ -67,27 +67,18 @@ public final class GameStateUpdater {
 	public void sendUpdatePackets(final Player player) {
 		// TODO: Should be private
 		try {
-			if (player.isUsing233CompatibleClient()) {
-				if (player.isChangingAppearance()) {
-					sendAppearanceKeepalive(player);
-				} else {
-					updatePlayers(player);
-					updatePlayerAppearances(player);
-					updateNpcs(player);
-					updateNpcAppearances(player);
-					updateGameObjects(player);
-					updateWallObjects(player);
-					updateGroundItems(player);
-					sendClearLocations(player);
-					updateTimeouts(player);
-				}
+			if (player.isUsing233CompatibleClient() && player.isChangingAppearance()) {
+				sendAppearanceKeepalive(player);
 			} else {
 				updatePlayers(player);
 				updatePlayerAppearances(player);
 				updateNpcs(player);
 				updateNpcAppearances(player);
-				updateGameObjects(player);
-				updateWallObjects(player);
+				// One scenery region scan shared by both passes (scenery + boundaries) —
+				// nothing mutates region object sets between the two calls.
+				final Collection<GameObject> sceneryInView = player.getViewArea().getGameObjectsInView();
+				updateGameObjects(player, sceneryInView);
+				updateWallObjects(player, sceneryInView);
 				updateGroundItems(player);
 				sendClearLocations(player);
 				updateTimeouts(player);
@@ -1122,6 +1113,10 @@ public final class GameStateUpdater {
 	}
 
 	protected void updateGameObjects(final Player playerToUpdate) {
+		updateGameObjects(playerToUpdate, playerToUpdate.getViewArea().getGameObjectsInView());
+	}
+
+	protected void updateGameObjects(final Player playerToUpdate, final Collection<GameObject> objectsInView) {
 		boolean changed = false;
 
 		GameObjectsUpdateStruct struct = new GameObjectsUpdateStruct();
@@ -1152,7 +1147,7 @@ public final class GameStateUpdater {
 		}
 
 		// Add scenery
-		for (final GameObject newObject : playerToUpdate.getViewArea().getGameObjectsInView()) {
+		for (final GameObject newObject : objectsInView) {
 			boolean skipAdd = newObject.isRemoved() ||
 				newObject.isInvisibleTo(playerToUpdate) ||
 				newObject.getType() != 0 || // not a wallObject
@@ -1248,6 +1243,10 @@ public final class GameStateUpdater {
 	}
 
 	protected void updateWallObjects(final Player playerToUpdate) {
+		updateWallObjects(playerToUpdate, playerToUpdate.getViewArea().getGameObjectsInView());
+	}
+
+	protected void updateWallObjects(final Player playerToUpdate, final Collection<GameObject> objectsInView) {
 		boolean changed = false;
 
 		GameObjectsUpdateStruct struct = new GameObjectsUpdateStruct();
@@ -1310,7 +1309,7 @@ public final class GameStateUpdater {
 		}
 
 		// add all new boundaries to be added
-		for (final GameObject newObject : playerToUpdate.getViewArea().getGameObjectsInView()) {
+		for (final GameObject newObject : objectsInView) {
 			if (!playerToUpdate.withinViewGridRange(newObject) || newObject.isRemoved()
 				|| newObject.isInvisibleTo(playerToUpdate) || newObject.getType() != 1
 				|| playerToUpdate.getLocalWallObjects().contains(newObject)) {

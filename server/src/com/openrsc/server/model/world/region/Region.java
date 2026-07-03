@@ -218,20 +218,39 @@ public class Region {
 	}
 
 	public Npc getNpc(Point location, Entity observer) {
-		return npcs.get(location)
-			.stream()
-			.filter(npc -> observer == null || !npc.isInvisibleTo(observer))
-			.findFirst()
-			.orElse(null);
+		// Hot path (every collision probe): plain first-match loop over the tile's entry,
+		// synchronized on the wrapper per Guava's synchronizedMultimap contract. Insertion
+		// order is preserved, so the match is identical to the old stream findFirst.
+		synchronized (npcs) {
+			if (!npcs.containsKey(location)) {
+				return null;
+			}
+			for (final Npc npc : npcs.get(location)) {
+				if (observer == null || !npc.isInvisibleTo(observer)) {
+					return npc;
+				}
+			}
+		}
+		return null;
+	}
+
+	public Player getPlayer(Point location, Entity observer, boolean includeSelf) {
+		synchronized (players) {
+			if (!players.containsKey(location)) {
+				return null;
+			}
+			for (final Player player : players.get(location)) {
+				if ((observer == null || !player.isInvisibleTo(observer))
+					&& (observer == null || (!includeSelf || player.equals(observer)))) {
+					return player;
+				}
+			}
+		}
+		return null;
 	}
 
 	public Player getPlayer(int x, int y, Entity observer, boolean includeSelf) {
-		return players.get(new Point(x, y))
-			.stream()
-			.filter(player -> observer == null || !player.isInvisibleTo(observer))
-			.filter(player -> observer == null || (!includeSelf || player.equals(observer)))
-			.findFirst()
-			.orElse(null);
+		return getPlayer(new Point(x, y), observer, includeSelf);
 	}
 
 	public Player getPlayer(int x, int y, Entity observer) {

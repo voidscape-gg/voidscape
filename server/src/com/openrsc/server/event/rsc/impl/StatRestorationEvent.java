@@ -119,6 +119,25 @@ public class StatRestorationEvent extends GameTickEvent {
 		if (!sendUpdate && (restoredHits || restoredStats)) {
 			getOwner().getSkills().sendUpdateAll();
 		}
+
+		// Park NPC events with nothing to restore: NPCs sit at full stats almost always,
+		// and thousands of always-on per-NPC events dominated the idle events stage.
+		// The same object is re-armed by Skills mutators via Mob.ensureStatRestorationActive(),
+		// so the wall-clock restoration anchors above survive parking untouched.
+		if (getOwner().isNpc() && !restoringHits.get() && restoringStats.isEmpty()) {
+			stop();
+		}
+	}
+
+	/**
+	 * Re-activates a parked event so it can be re-added to the event store.
+	 * Must be called before GameEventHandler.add(): if the event parked earlier in the
+	 * same tick it is still tracked (add() returns false), and running=true is what stops
+	 * the end-of-tick cleanup from removing it.
+	 */
+	public void restart() {
+		running = true;
+		resetCountdown();
 	}
 
 	/**

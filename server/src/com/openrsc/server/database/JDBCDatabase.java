@@ -3,6 +3,7 @@ package com.openrsc.server.database;
 import com.openrsc.server.Server;
 import com.openrsc.server.util.checked.CheckedConsumer;
 import com.openrsc.server.util.checked.CheckedFunction;
+import com.openrsc.server.util.checked.CheckedRunnable;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,6 +16,22 @@ public abstract class JDBCDatabase extends GameDatabase {
     }
 
     public abstract JDBCDatabaseConnection getConnection();
+
+    /**
+     * Holds the connection lock for the whole BEGIN..COMMIT/ROLLBACK span so concurrent
+     * threads (login/save, auction, game logger) cannot interleave statements — or a
+     * colliding rollback — into an open transaction on the single shared connection.
+     * The lock is reentrant, so statements inside the runnable re-acquire it freely.
+     */
+    @Override
+    public boolean atomically(CheckedRunnable<Exception> runnable) {
+        getConnection().getConnectionLock().lock();
+        try {
+            return super.atomically(runnable);
+        } finally {
+            getConnection().getConnectionLock().unlock();
+        }
+    }
 
     public void withPreparedStatement(
             String query,

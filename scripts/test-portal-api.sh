@@ -603,6 +603,10 @@ PORT="$launch_port" \
 	PORTAL_LAUNCH_SIGNUP_MODE=1 \
 	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
 	PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
+	PORTAL_EMAIL_PROVIDER=resend \
+	PORTAL_EMAIL_DRY_RUN=1 \
+	PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-launch-signup-smoke.log 2>&1 &
 launch_pid="$!"
 trap 'kill "$launch_pid" >/dev/null 2>&1 || true; cleanup' EXIT
@@ -625,6 +629,9 @@ if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error
 if (!payload.config || payload.config.publicReady !== true) throw new Error('launch health should report public config ready');
 if (payload.config.abuseHashSaltConfigured !== true) throw new Error('launch health should report a configured abuse hash salt');
 if (payload.config.adminTokenConfigured !== true) throw new Error('launch health should report a configured admin token');
+if (!payload.config.email || payload.config.email.provider !== 'dry-run') throw new Error('launch health should report dry-run email provider');
+if (payload.config.email.configured !== true) throw new Error('launch health should report configured email delivery');
+if (payload.config.email.dryRun !== true) throw new Error('launch health should report email dry run');
 if ((payload.config.issues || []).length) throw new Error('launch health should not report config issues: ' + JSON.stringify(payload.config.issues));
 " "$launch_health_payload"
 grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
@@ -652,6 +659,45 @@ if [[ -z "$launch_token" ]]; then
 	echo "launch-signup registration returned an empty token"
 	exit 1
 fi
+for _ in {1..30}; do
+	launch_emails="$(curl -fsS -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${launch_port}/api/admin/emails")"
+	if node -e "
+const payload = JSON.parse(process.argv[1]);
+const event = (payload.events || []).find((row) => row.type === 'signup_confirmation' && row.email === 'launch-guy@example.com');
+if (!event || event.status !== 'sent' || event.provider !== 'dry-run') process.exit(1);
+" "$launch_emails"; then
+		break
+	fi
+	sleep 0.1
+done
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.config || payload.config.provider !== 'dry-run' || payload.config.configured !== true) throw new Error('admin email list should expose safe email config');
+const event = (payload.events || []).find((row) => row.type === 'signup_confirmation' && row.email === 'launch-guy@example.com');
+if (!event) throw new Error('launch signup should queue a confirmation email event');
+if (event.status !== 'sent') throw new Error('dry-run confirmation email should be marked sent, got ' + event.status);
+if (event.username !== 'LaunchGuy') throw new Error('confirmation email event should include the reserved username');
+" "$launch_emails"
+launch_email_backfill="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/signup-confirmations" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"dryRun":true}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.dryRun !== true) throw new Error('confirmation backfill dry run should not send');
+if (payload.eligible < 1) throw new Error('confirmation backfill should see the launch account as eligible');
+if (payload.queued !== 0 || payload.sent !== 0) throw new Error('confirmation backfill dry run should queue/send nothing');
+" "$launch_email_backfill"
+launch_live_email_dry="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/launch-live" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"dryRun":true}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.dryRun !== true) throw new Error('launch-live dry run should not send');
+if (payload.eligible < 1) throw new Error('launch-live dry run should see the launch account as eligible');
+if (payload.queued !== 0 || payload.sent !== 0) throw new Error('launch-live dry run should queue/send nothing');
+" "$launch_live_email_dry"
 
 launch_account="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
 grep -q '"email": "launch-guy@example.com"' <<<"$launch_account" || { echo "launch-signup session should read the created account"; exit 1; }

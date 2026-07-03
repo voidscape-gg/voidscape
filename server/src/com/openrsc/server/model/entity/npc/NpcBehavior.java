@@ -41,6 +41,7 @@ public class NpcBehavior {
 
 	private boolean draynorManorSkeleton;
 	private boolean blackKnightsFortress;
+	private boolean gnomeBaller;
 	private int tickFactor;
 
 	NpcBehavior(final Npc npc) {
@@ -51,6 +52,13 @@ public class NpcBehavior {
 		this.draynorManorSkeleton = npc.getID() == NpcId.SKELETON_LVL21.id()
 			&& npc.getLoc().startX() >= 208 && npc.getLoc().startX() <= 211
 			&& npc.getLoc().startY() >= 545 && npc.getLoc().startY() <= 546;
+		this.gnomeBaller = npc.getDef().getName().toLowerCase().equals("gnome baller");
+		// Jitter only the phase of the first roam roll: NPCs loaded in the same tick would
+		// otherwise re-roll their roam walk in lockstep every 5 ticks forever, concentrating
+		// all path building into the same ticks (measured as the npc-stage p95 spikes).
+		// Cadence, roll probability, and destinations are unchanged.
+		this.lastMovement = System.currentTimeMillis()
+			- (long) DataConversions.random(0, 5 * tickFactor - 1) * npc.getConfig().GAME_TICK;
 
 		switch (NpcId.getById(npc.getID())) {
 			case BANDIT_AGGRESSIVE:
@@ -140,9 +148,9 @@ public class NpcBehavior {
 		}
 
 		// Check for tackle
-		if (System.currentTimeMillis() - lastTackleAttempt > npc.getConfig().GAME_TICK * 5 &&
+		if (gnomeBaller
+			&& System.currentTimeMillis() - lastTackleAttempt > npc.getConfig().GAME_TICK * 5 &&
 			checkCombatTimer(npc.getCombatTimer(), 5)
-			&& npc.getDef().getName().toLowerCase().equals("gnome baller")
 			&& !(npc.getID() == NpcId.GNOME_BALLER_TEAMNORTH.id() || npc.getID() == NpcId.GNOME_BALLER_TEAMSOUTH.id())) {
 			for (Player player : npc.getViewArea().getPlayersInView()) {
 				int range = 1;
