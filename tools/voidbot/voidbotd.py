@@ -585,6 +585,12 @@ class Daemon:
             if amt > 0:
                 bank.append({"slot": slot, "id": iid, "amount": amt,
                              "name": self.names.get(iid, "")})
+            else:
+                # amount 0 = remove + compact: the client (BankInterface.updateBank)
+                # deletes the slot and shifts every later item down one (VS-031).
+                for b in bank:
+                    if b["slot"] > slot:
+                        b["slot"] -= 1
             bank.sort(key=lambda b: b["slot"])
             self.st.bank = bank
         self.st.event("bank_update", slot=slot, id=iid, amount=amt)

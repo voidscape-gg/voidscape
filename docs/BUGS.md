@@ -59,9 +59,8 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 DONE 2026-07-03 (plus voidbot npc_say extension) → next: VS-031 (voidbot
-  bank compaction — confirmed voidbot-side), VS-043 (::item full-inv message), VS-025
-  (voidbot CLI/doc drift), P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 DONE 2026-07-03 (plus voidbot npc_say extension) → next: VS-043
+  (::item full-inv message), VS-025 (voidbot CLI/doc drift), P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -121,18 +120,22 @@ half-remembered is fine, triage will chase it down.)_
 - S-W integrity export flags 7 high-severity rows (missing_skill_row ×6,
   missing_table ×1) on the dev DB — verify these are fixture artifacts, not real
   (tmp/qa/S-W/integrity-findings.json)
-- A FULL bank (1608/1608 stacks) rejects deposits with "You don't have room for that in
-  your bank" even when the deposit would merge into an EXISTING stack and create no new
-  slot (`Bank.canHold` before the merge-aware add, `Bank.java:578`). Reproduced
-  2026-07-03 on qabot04: coins already banked at slot 0, `bank-deposit --id 10` rejected.
-  Players with full banks can't top up coin/stack deposits — check authentic behavior.
+- `Bank.canHold` (`Bank.java:578`) mis-rejects deposits with "You don't have room for
+  that in your bank" in at least two cases (2026-07-03, qabot04): (a) FULL bank
+  (1608/1608) rejecting a deposit that would merge into an EXISTING stack (coins already
+  at slot 0) and create no new slot; (b) bank at 1607/1608 with ONE FREE SLOT rejecting
+  a 48× noted-staff deposit that needs exactly one slot (id 100, would bank unnoted).
+  (b) suggests noted items confuse the capacity math, not just the at-cap merge case.
+  Players with big banks can't deposit — check canHold's noted/merge handling vs
+  authentic behavior.
 - Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests (VS-008 now
   verified; fixture still useful for VS-031). 2026-07-03: its inventory now carries the
   VS-008 probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2, 100 coins) — the
   full-bank canHold bug above blocks depositing them back. Two Blessed ashes on the
   ground near (137,644) (tmp/qa/S-D end state). 2026-07-03 VS-042 work left qabot04
   with Cook's Assistant COMPLETED (stage -1; was untracked before), ~9 raw + 1 burnt
-  shrimp, and attack/strength max 90.
+  shrimp, and attack/strength max 90. VS-031 verify left the bank at 1607 stacks (id
+  100 staffs now 50× noted in inventory — the canHold Intake bug blocks re-deposit).
 
 ---
 
@@ -404,20 +407,6 @@ half-remembered is fine, triage will chase it down.)_
   already documented in the campaign doc. Not worth a risky server change now. 2026-07-02
   wave-2 S-D2 CONFIRMED deposits are fine: 6 and 20 rapid deposits all landed exactly.
 
-### VS-031 — voidbot bank model doesn't compact on amount-0 updates (re-scoped: voidbot bug, not server)
-- Status: confirmed · Severity: P3 · Area: tooling (voidbot)
-- Evidence: S-D — withdrawing an entire stack sends one `bank_update slot N amount 0`;
-  server compacts (proven by later appends/updates) but no shift updates follow.
-  **SETTLED 2026-07-03 (during VS-008): the real client compacts on amount-0** —
-  `BankInterface.updateBank` (Client_Base, :1249-1254) removes the slot and reindexes
-  every later item. So the wire contract is "amount 0 = remove + compact" and voidbot's
-  `_decode_bank_update` (drops the slot, leaves a hole, no reindex) is the wrong side.
-- Repro: after `::fillbank`: `bank-withdraw --id 1 --amount 51 --noted` → hole in view.
-- Verify: after a full-stack withdraw, voidbot's `state bank` slots match a
-  close/reopen resync (contiguous, shifted down).
-- Log: 2026-07-02 wave-1 (S-D): interacts with VS-008. 2026-07-03 VS-008 work read the
-  client handler and settled the contract question → re-scoped to voidbot, confirmed.
-
 ### VS-032 — Items above client render cap: bank shows "Unobtanium" placeholder; withdraw force-drops the real item
 - Status: confirmed · Severity: P3 · Area: server-core / content-pipeline
 - Evidence: S-D — banked ids 1604-1607 render as id 1544 "Unobtanium" ×50; withdrawing
@@ -549,6 +538,19 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-031 — voidbot bank model didn't compact on amount-0 updates (FIXED)
+- Status: verified · Severity: P3 · Area: tooling (voidbot)
+- Wire contract settled during VS-008: the real client (`BankInterface.updateBank`
+  :1249-1254) treats `bank_update amount 0` as remove + compact (shift every later slot
+  down). voidbot left a hole. `_decode_bank_update` now mirrors the client.
+- Verified 2026-07-03 on qabot04's 1608-stack bank: full-stack withdraw of slot 100 →
+  model shows 1607 contiguous slots with the old slot-101 item at 100; close/reopen
+  full resync matches the model EXACTLY (tmp/vs031-after-fullstack-withdraw.json,
+  tmp/vs031-resync.json).
+- Log: 2026-07-02 wave-1 S-D filed vs server. 2026-07-03 re-scoped to voidbot (client
+  handler read), fixed, verified, committed. Deposit-back of the withdrawn noted stack
+  was rejected by the canHold Intake bug above (fixture note in Housekeeping).
 
 ### VS-042 — Cook's Range "silent no-op" was mostly authentic + a voidbot blind spot (FIXED, narrow)
 - Status: verified · Severity: P3→P4 (as-landed) · Area: server-plugin (cooking) + tooling
