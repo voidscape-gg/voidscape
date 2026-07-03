@@ -24,6 +24,9 @@ public class ObjectCooking implements UseLocTrigger {
 			Npc cook = ifnearvisnpc(owner, NpcId.COOK.id(), 20);
 			if (cook != null) {
 				npcsay(owner, cook, "Hey! Who said you could use that?");
+			} else {
+				// the cook can be dead or out of sight; don't deny silently (VS-042)
+				owner.message("You need to complete the cook's assistant quest to use this range");
 			}
 		} else
 			handleCooking(item, owner, object);

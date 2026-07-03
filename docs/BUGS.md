@@ -59,13 +59,12 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  DONE 2026-07-03 (voidbot decoder trust, 26/26 smoke gate, bank wire contract at
-  10121) → next: VS-042 (Cook's Range gate), VS-043 (::item full-inv message),
-  VS-031 (voidbot bank compaction — now confirmed voidbot-side), P3 tail. VS-002
-  deferred (needs MySQL env). Also: E2 (doors) to unblock a quests wave. VS-003:
-  await Ryan's ruling. NOTE: client version bumped to 10121 — a fielded 10120 client
-  build will be version-rejected by the updated dev/staging server (expected; the
-  launcher updates clients).
+  + VS-042 DONE 2026-07-03 (plus voidbot npc_say extension) → next: VS-031 (voidbot
+  bank compaction — confirmed voidbot-side), VS-043 (::item full-inv message), VS-025
+  (voidbot CLI/doc drift), P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
+  10121 — a fielded 10120 client build will be version-rejected by the updated
+  dev/staging server (expected; the launcher updates clients).
 
 ---
 
@@ -131,7 +130,9 @@ half-remembered is fine, triage will chase it down.)_
   verified; fixture still useful for VS-031). 2026-07-03: its inventory now carries the
   VS-008 probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2, 100 coins) — the
   full-bank canHold bug above blocks depositing them back. Two Blessed ashes on the
-  ground near (137,644) (tmp/qa/S-D end state)
+  ground near (137,644) (tmp/qa/S-D end state). 2026-07-03 VS-042 work left qabot04
+  with Cook's Assistant COMPLETED (stage -1; was untracked before), ~9 raw + 1 burnt
+  shrimp, and attack/strength max 90.
 
 ---
 
@@ -512,20 +513,6 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Verify: bank inventory grid bottom <= voidscapeChatTabTop; workbench screenshot.
 - Log: 2026-07-02 split from VS-030 (residual third symptom).
 
-### VS-042 — Lumbridge Cook's Range blocks cooking for players who haven't done Cook's Assistant
-- Status: confirmed · Severity: P3 · Area: server-plugin (cooking)
-- Evidence: S-F — cooking raw shrimp on the Lumbridge Cook's Range (obj 119 @131,660) is
-  a silent no-op (no cook, no product, no message) for a fresh player. `ObjectCooking`
-  gates COOKS_RANGE behind `getQuestStage(COOKS_ASSISTANT) > -1`, but an un-started quest
-  is stage 0 (>-1 == true) and a COMPLETED quest is stage -1 — so the range only works
-  BEFORE... actually only fails while the completed sentinel isn't set; the gate is
-  inverted for the intended "members can use after quest" logic, and gives no feedback.
-  Fires only when no cooking-assistant NPC is in range. Cooking on a fire works fine.
-- Repro: `::teleport 131 661` → `::item 349 5` → `use-item-on-object 131 660 <slot>` →
-  no xp, no message (tmp/qa/S-F/skills_final.json).
-- Verify: a fresh player can cook on the range (or gets a clear message); check the
-  intended authentic rule for this range.
-- Log: 2026-07-02 wave-2 S-F.
 
 ### VS-043 — Admin ::item into a full inventory drops to the ground but reports "Something went wrong spawning"
 - Status: confirmed · Severity: P4 · Area: server-plugin (admin command)
@@ -562,6 +549,24 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-042 — Cook's Range "silent no-op" was mostly authentic + a voidbot blind spot (FIXED, narrow)
+- Status: verified · Severity: P3→P4 (as-landed) · Area: server-plugin (cooking) + tooling
+- Resolution: the quest gate is AUTHENTIC — Cook's Assistant's RSC reward is permission
+  to use the cook's range; `getQuestStage > -1` correctly means "not yet completed" (the
+  wave-2 "inverted gate" reading was wrong). The denial was also NOT silent: the cook
+  says "Hey! Who said you could use that?" — wave-2 couldn't see it because voidbot
+  didn't decode NPC overhead chat (fixed, own commit: npc_say events). The only real
+  defect was the `cook == null` branch (cook dead/out of sight) denying with zero
+  feedback — it now sends "You need to complete the cook's assistant quest to use this
+  range".
+- Verified 2026-07-03 live as qabot04: stage 0 + cook present → authentic npc_say
+  denial, no double message; stage -1 → range cooks (batch menu → burnt shrimp at
+  cooking 1, normal); cook-absent branch verified by inspection (cook wouldn't die in
+  60s and scenery 119 exists only in the kitchen — impractical to force live).
+  Evidence tmp/vs042-events-full.json.
+- Log: 2026-07-02 wave-2 S-F filed. 2026-07-03 re-diagnosed with npc_say decoding,
+  narrow fix, verified, committed.
 
 ### VS-008 — SEND_BANK_UPDATE wrote the bank slot as one byte; slots ≥256 wrapped (FIXED)
 - Status: verified · Severity: P3 · Area: server-net · packet-shape change at client 10121
