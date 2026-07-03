@@ -40,7 +40,10 @@ to resume from these two files alone. Keep every entry self-contained.
   open cap-ruling question for Ryan). VS-049 (portal login throttle, P2 launch
   surface) triaged → fixed → verified → committed. VS-051 (google credential/username
   error ordering) fixed → verified → committed. VS-052 (voidbot wait usage errors +
-  fail-fast on typo'd conditions) fixed → verified → committed. Intake triage pass: 3 bullets
+  fail-fast on typo'd conditions) fixed → verified → committed. VS-053 (::spawnnpc
+  coordinate support; wave-1 half settled as VS-027 pacing) fixed → verified →
+  committed. Over-deposit bullet settled (safe hardening). Server restarted on the
+  VS-053 build. Intake triage pass: 3 bullets
   closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
   death-testability = resolved by qanpc1/F0.8), VS-050 filed
   blocked(WIP-collision). Server on the VS-048 build
@@ -105,9 +108,6 @@ half-remembered is fine, triage will chase it down.)_
 **Wave-1 oddity tail (un-triaged; each cites its report):**
 - goto to unreachable tile stalls silently mid-route; reissue no-ops while walk-step
   crosses fine — no failure feedback for WORLD_WALK (tmp/qa/S-A §2)
-- `::spawnnpc 19` (Rat) fails silently — no NPC, no message (tmp/qa/S-B F4). Wave-2
-  corroboration: `::spawnnpc <id> 1 1 X Y` spawns relative to the SENDER'S tile, not the
-  passed X/Y — remote-coord spawns silently do nothing (tmp/qa/S-DEATH). Likely one bug.
 - ~~`item-command` acts on the LAST stack~~ → **wave-2 RESOLVED: was a decoder artifact**
   (now honors the requested slot; tmp/qa/S-C2). Removed.
 - Equipping a non-wieldable item silently ignored — wave-2: REAL but EXPECTED (authentic
@@ -540,6 +540,24 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-053 — ::spawnnpc silently ignored coordinate arguments (FIXED)
+- Status: verified · Severity: P3 · Area: server-plugin (admin command / QA tooling)
+- Evidence: `::spawnnpc 3 1 1 130 650` from (148,503) spawned the Chicken at the
+  SENDER — the handler parsed only `[id] (radius) (time)`, dropping extra args and
+  hardcoding the sender's tile (tmp/vs053/01-remote-spawn-ignored.txt). Bit QA twice
+  (S-B F4, S-DEATH). Wave-1's "plain ::spawnnpc fails silently" settled as the
+  VS-027 rapid-admin drop (works when paced, repro'd).
+- Fix: optional trailing `x y` (both or usage message), `withinWorld`-validated
+  ("Invalid coordinates", the ::teleport idiom), spawn + wander bounds centered
+  there; success message reports the spawn point.
+- Verified 2026-07-03 live: remote spawn present at (131,650) after teleporting
+  there, none at the sender (tmp/vs053/02-*, 03-messages.txt); 4-arg → usage;
+  (99999,99999) → Invalid coordinates; plain form unchanged; build green;
+  smoke 26/26 twice (one unreproduced first-run flake, consistent with the
+  documented VS-013 class).
+- Log: 2026-07-03 triaged from Intake (2 datapoints), repro'd, fixed, verified,
+  committed same day. Admins.java ::cinematic WIP untouched (own hunks staged).
 
 ### VS-052 — voidbot wait: raw KeyError on missing args; typo'd conditions burned the timeout (FIXED)
 - Status: verified · Severity: P3 · Area: tooling (voidbot)

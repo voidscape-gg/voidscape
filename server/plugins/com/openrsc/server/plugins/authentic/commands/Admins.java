@@ -3177,8 +3177,11 @@ public final class Admins implements CommandTrigger {
 	}
 
 	private void spawnNpc(Player player, String command, String[] args) {
-		if (args.length < 1) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+		final String usage = badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes) (x y)";
+		// Coordinates used to be silently ignored (spawn was always at the sender),
+		// which made remote-coordinate spawns look like silent no-ops.
+		if (args.length < 1 || args.length == 4 || args.length > 5) {
+			player.message(usage);
 			return;
 		}
 
@@ -3186,7 +3189,7 @@ public final class Admins implements CommandTrigger {
 		try {
 			id = Integer.parseInt(args[0]);
 		} catch (NumberFormatException ex) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+			player.message(usage);
 			return;
 		}
 
@@ -3195,7 +3198,7 @@ public final class Admins implements CommandTrigger {
 			try {
 				radius = Integer.parseInt(args[1]);
 			} catch (NumberFormatException ex) {
-				player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+				player.message(usage);
 				return;
 			}
 		} else {
@@ -3207,11 +3210,27 @@ public final class Admins implements CommandTrigger {
 			try {
 				time = Integer.parseInt(args[2]);
 			} catch (NumberFormatException ex) {
-				player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+				player.message(usage);
 				return;
 			}
 		} else {
 			time = 10;
+		}
+
+		int spawnX = player.getX();
+		int spawnY = player.getY();
+		if (args.length >= 5) {
+			try {
+				spawnX = Integer.parseInt(args[3]);
+				spawnY = Integer.parseInt(args[4]);
+			} catch (NumberFormatException ex) {
+				player.message(usage);
+				return;
+			}
+			if (!player.getWorld().withinWorld(spawnX, spawnY)) {
+				player.message(messagePrefix + "Invalid coordinates");
+				return;
+			}
 		}
 
 		if (player.getWorld().getServer().getEntityHandler().getNpcDef(id) == null) {
@@ -3219,9 +3238,9 @@ public final class Admins implements CommandTrigger {
 			return;
 		}
 
-		final Npc n = new Npc(player.getWorld(), id, player.getX(), player.getY(),
-			player.getX() - radius, player.getX() + radius,
-			player.getY() - radius, player.getY() + radius);
+		final Npc n = new Npc(player.getWorld(), id, spawnX, spawnY,
+			spawnX - radius, spawnX + radius,
+			spawnY - radius, spawnY + radius);
 		n.setShouldRespawn(false);
 		player.getWorld().registerNpc(n);
 		player.getWorld().getServer().getGameEventHandler().add(new SingleEvent(player.getWorld(), null, time * 60000, "Spawn NPC Command") {
@@ -3231,7 +3250,7 @@ public final class Admins implements CommandTrigger {
 			}
 		});
 
-		player.message(messagePrefix + "You have spawned " + player.getWorld().getServer().getEntityHandler().getNpcDef(id).getName() + ", radius: " + radius + " for " + time + " minutes");
+		player.message(messagePrefix + "You have spawned " + player.getWorld().getServer().getEntityHandler().getNpcDef(id).getName() + " at (" + spawnX + ", " + spawnY + "), radius: " + radius + " for " + time + " minutes");
 	}
 
 	private void spawnNpcDropWave(Player player, String command, String[] args) {
