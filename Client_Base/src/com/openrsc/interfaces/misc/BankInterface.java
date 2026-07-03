@@ -144,6 +144,8 @@ public class BankInterface {
 	private static final int VG_MENU_CARD = 0x160B28, VG_MENU_ROW_H = 15;
 	private static final int VG_X = -2, VG_ALL = Integer.MAX_VALUE;
 	private boolean vgMenu;
+	private int vgMenuKind = 0; // 0 = item quantity menu, 1 = loadout actions
+	private int vgMenuPresetSlot = -1;
 	private int vgMenuX, vgMenuY, vgMenuSlot, vgMenuItemID;
 	private final ArrayList<String> vgMenuLabels = new ArrayList<>();
 	private final ArrayList<Boolean> vgMenuDep = new ArrayList<>();
@@ -313,6 +315,22 @@ public class BankInterface {
 		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
 		if (click && overDA) { mc.setMouseClick(0); mc.mouseButtonClick = 0; sendVgDepositAll(); click = false; }
 
+		// --- input: loadout chips (left of the action bar); any click opens the action menu ---
+		int loW = 26, loGap = 4, loY = actionY;
+		int loHover = -1;
+		if (S_WANT_BANK_PRESETS) {
+			for (int p = 0; p < 3; p++) {
+				int lx = gx + p * (loW + loGap);
+				if (mx >= lx && mx < lx + loW && my >= loY && my < loY + actionH) {
+					loHover = p;
+					if (click || rclick) {
+						openVgPresetMenu(p, mx, my);
+						mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
+					}
+				}
+			}
+		}
+
 		// --- input: bank grid (withdraw) ---
 		int bankHover = -1;
 		for (int r = 0; r < bankRows; r++) {
@@ -422,7 +440,18 @@ public class BankInterface {
 			mc.getSurface().drawBoxAlpha(sbX, invThumbY, sbW, invThumbH, VG_FRAME_INNER, 160);
 		}
 
-		// ---- render: action bar (deposit all) ----
+		// ---- render: action bar (loadouts + deposit all) ----
+		if (S_WANT_BANK_PRESETS) {
+			for (int p = 0; p < 3; p++) {
+				int lx = gx + p * (loW + loGap);
+				boolean filled = !vgPresetEmpty(p);
+				boolean hovL = p == loHover;
+				mc.getSurface().drawBoxAlpha(lx, loY, loW, actionH, hovL ? VG_HOVER : 0x341F5E, hovL ? 95 : (filled ? 165 : 110));
+				mc.getSurface().drawBoxBorder(lx, loW, loY, actionH, filled ? VG_FRAME_INNER : VG_SLOT_BORDER);
+				String ll = "L" + (p + 1);
+				drawString(ll, lx + (loW - mc.getSurface().stringWidth(1, ll)) / 2, loY + 15, 1, filled ? VG_GOLD : VG_LABEL);
+			}
+		}
 		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
 		mc.getSurface().drawBoxBorder(daX, daW, daY, actionH, VG_FRAME_INNER);
 		String da = "Deposit all inventory";
@@ -457,6 +486,10 @@ public class BankInterface {
 	}
 
 	private void vgDoMenu(int row) {
+		if (vgMenuKind == 1) {
+			sendVgPreset(vgMenuAmt.get(row), vgMenuPresetSlot);
+			return;
+		}
 		boolean dep = vgMenuDep.get(row);
 		int amt = vgMenuAmt.get(row);
 		selectedBankSlotItemID = vgMenuItemID;
@@ -481,6 +514,42 @@ public class BankInterface {
 		mc.packetHandler.getClientStream().newPacket(24);
 		mc.packetHandler.getClientStream().finishPacket();
 		mc.setMouseClick(0); mc.setMouseButtonDown(0);
+	}
+
+	// Loadout actions ride the existing custom-bank preset packets:
+	// load = 28, save = 27 (server snapshots current inventory/equipment), clear = 199 sub-op 14.
+	private void sendVgPreset(int action, int slot) {
+		if (action == 0 || action == 1) {
+			mc.packetHandler.getClientStream().newPacket(action == 0 ? 28 : 27);
+			mc.packetHandler.getClientStream().bufferBits.putShort(slot);
+		} else {
+			mc.packetHandler.getClientStream().newPacket(199);
+			mc.packetHandler.getClientStream().bufferBits.putByte(14);
+			mc.packetHandler.getClientStream().bufferBits.putByte(slot);
+		}
+		mc.packetHandler.getClientStream().finishPacket();
+	}
+
+	private boolean vgPresetEmpty(int slot) {
+		CustomBankInterface cbi = mc.getBank();
+		if (cbi == null || slot < 0 || slot >= cbi.presets.length || cbi.presets[slot] == null) return true;
+		for (Item it : cbi.presets[slot].inventory)
+			if (it != null && it.getItemDef() != null) return false;
+		for (Item it : cbi.presets[slot].equipment)
+			if (it != null && it.getItemDef() != null) return false;
+		return true;
+	}
+
+	private void openVgPresetMenu(int slot, int mx, int my) {
+		vgMenuLabels.clear(); vgMenuDep.clear(); vgMenuAmt.clear();
+		boolean empty = vgPresetEmpty(slot);
+		if (!empty) addVgMenu("Load loadout " + (slot + 1), false, 0);
+		addVgMenu("Save current as loadout " + (slot + 1), true, 1);
+		if (!empty) addVgMenu("Clear loadout " + (slot + 1), true, 2);
+		vgMenuKind = 1; vgMenuPresetSlot = slot; vgMenu = true;
+		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
+		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
+		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
 	}
 
 	private void drawVgGridLines(int gx, int gy, int cols, int rows, int cw, int ch) {
@@ -526,7 +595,7 @@ public class BankInterface {
 		}
 		if (vgMenuLabels.isEmpty()) return;
 		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
-		vgMenu = true; vgMenuItemID = id;
+		vgMenu = true; vgMenuKind = 0; vgMenuItemID = id;
 		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
 		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
 	}
