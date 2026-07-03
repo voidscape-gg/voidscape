@@ -27,10 +27,41 @@ SKILL_NAMES = ["attack", "defense", "strength", "hits", "ranged", "prayer", "mag
                "runecraft", "harvesting"]
 
 
+def read_based_config_data(defs_dir):
+    """The server's based_config_data, which gates def patching (default 85).
+
+    Read from server/local.conf (three levels up from the defs dir, matching
+    scripts/run-server.sh); VOIDBOT_BASED_CONFIG_DATA overrides for probing.
+    """
+    override = os.environ.get("VOIDBOT_BASED_CONFIG_DATA")
+    if override:
+        return int(override)
+    conf = os.path.normpath(os.path.join(defs_dir, "..", "..", "..", "local.conf"))
+    try:
+        with open(conf, encoding="utf-8") as fh:
+            for line in fh:
+                m = re.match(r"\s*based_config_data\s*:\s*(\d+)", line)
+                if m:
+                    return int(m.group(1))
+    except OSError:
+        pass
+    return 85
+
+
 def load_item_defs(defs_dir):
-    """Return (stackable_set, name_by_id) from the server item defs."""
+    """Return (stackable_set, name_by_id) from the server item defs.
+
+    Mirrors EntityHandler: ItemDefs + ItemDefsCustom always load;
+    ItemDefsPatch<N>.json applies only when based_config_data (N) < 85.
+    patchObject only overrides truthy fields, so union-adding stackable
+    ids from an applied patch matches the server's merge.
+    """
+    files = ["ItemDefs.json", "ItemDefsCustom.json"]
+    based = read_based_config_data(defs_dir)
+    if based < 85:
+        files.append("ItemDefsPatch%d.json" % based)
     stackable, names = set(), {}
-    for fn in ("ItemDefs.json", "ItemDefsCustom.json", "ItemDefsPatch18.json"):
+    for fn in files:
         path = os.path.join(defs_dir, fn)
         if not os.path.exists(path):
             continue

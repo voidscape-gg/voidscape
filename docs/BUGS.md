@@ -27,6 +27,9 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** none
+- **Session preflight 2026-07-03:** branch `codex/ui-loot-checkpoint-20260613` (scratch
+  checkpoint branch — standing Question for Ryan: where should bug fixes land?); dirty
+  files all match the §7 Collisions list; pre-change `scripts/build.sh` green.
 - **Last session:** 2026-07-02 — big run, 13 items committed. Verified fixes: wave-2
   tooling gate (VS-020/021/022/023/024, f89e872), VS-033 (bfab2e9), **VS-026 (P1,
   f29c301)**, VS-037 (eefd499), **VS-028 (P2, ca1f7fb)**, **VS-030 (P2, e6145c2c)**,
@@ -55,11 +58,11 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action (top open confirmed, launch surfaces first):** VS-041 (P2 tooling — fix
-  voidbot's Patch18/based_config_data mismatch so 44/45 inventories decode; gates QA
-  trust). Then VS-008 (P3 server one-byte bank slot), VS-002 (deferred, needs MySQL env),
-  VS-042/043, P3 tail. Also: E2 (doors) to unblock a quests wave. VS-003: await Ryan's
-  ruling.
+- **Next action (top open confirmed, launch surfaces first):** VS-041 DONE 2026-07-03 →
+  next is the smoke.sh ::setstat Intake bullet (quick tooling fix, restores the 26/26
+  smoke gate), then VS-008 (P3 server one-byte bank slot), VS-002 (deferred, needs MySQL
+  env), VS-042/043, P3 tail. Also: E2 (doors) to unblock a quests wave. VS-003: await
+  Ryan's ruling.
 
 ---
 
@@ -118,6 +121,15 @@ half-remembered is fine, triage will chase it down.)_
   (tmp/qa/S-W/integrity-findings.json)
 - Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests; two Blessed
   ashes on the ground near (137,644) (tmp/qa/S-D end state)
+- tests/smoke.sh fails 3/26 (2026-07-03, twice, during VS-041 verify): `::setstat attack
+  90` in smoke.sh uses the broken natural arg order (the known ::setstat LEVEL-STAT
+  bullet above) so it silently no-ops → wbtest fights at attack 3 → chicken outlives the
+  4×8s npc-dead window ("chicken died" FAIL) → bot still in combat at section 6 →
+  ::quickbank ignored → "bank open" + "bank coins delta" cascade-FAIL. Verified manually:
+  same kill succeeds with a 60s window and quickbank opens right after (attack-3 kill +
+  bank-open exit 0); quickbank itself works under both old and new voidbotd code. Fix =
+  correct smoke.sh's setstat arg order (and/or widen the kill window); distinct from the
+  ::setstat server-side UX bullet.
 
 ---
 
@@ -525,23 +537,6 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Verify: bank inventory grid bottom <= voidscapeChatTabTop; workbench screenshot.
 - Log: 2026-07-02 split from VS-030 (residual third symptom).
 
-### VS-041 — voidbot inventory decoder desyncs for item ids 44/45 (patch-def mismatch)
-- Status: confirmed · Severity: P2 · Area: tooling (voidbot) · found wave-2 S-C2
-- Root cause: voidbot `load_item_defs` unconditionally merges `ItemDefsPatch18.json`, but
-  the running preservation server (`based_config_data=85`) does NOT apply that patch
-  (`EntityHandler.patchItems()` only patches when `<85`). Ids 44 and 45 differ in
-  stackability between base and Patch18 (id44 base "Holy Symbol" stackable=0 vs Patch18
-  "Soul-Rune" stackable=1). So voidbot thinks 44 is stackable and reads 4 amount bytes
-  the server never wrote → SET_INVENTORY (opcode 53) stream desync → IndexError →
-  `state inventory` returns [] whenever the inventory holds item 44 or 45.
-- Repro: give qabot03 item 44 among others, relogin → `state inventory` [] + `events`
-  shows decode_error opcode 53 "index out of range" (tmp/qa/S-C2/finding1_decoder*).
-- Verify: voidbot should respect `based_config_data` (only apply Patch18 when the server
-  does) or derive the stackable set from the server's actual defs; then inventories with
-  44/45 decode correctly. This is a residual of the VS-020 fix — the wire parsing is
-  right, the stackable SET is wrong.
-- Log: 2026-07-02 wave-2 S-C2. Gates trustworthy inventory state for any item touching 44/45.
-
 ### VS-042 — Lumbridge Cook's Range blocks cooking for players who haven't done Cook's Assistant
 - Status: confirmed · Severity: P3 · Area: server-plugin (cooking)
 - Evidence: S-F — cooking raw shrimp on the Lumbridge Cook's Range (obj 119 @131,660) is
@@ -592,6 +587,26 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-041 — voidbot inventory decoder desynced for item ids 44/45 (FIXED)
+- Status: verified · Severity: P2 · Area: tooling (voidbot) · found wave-2 S-C2
+- Root cause: voidbot `load_item_defs` unconditionally merged `ItemDefsPatch18.json`, but
+  the server (`EntityHandler.patchItems`) only applies `ItemDefsPatch<N>.json` when
+  `based_config_data` (N) < 85 — voidscape presets run 85, unpatched. Ids 44/45 are
+  non-stackable in base defs but stackable "Soul-Rune"/"Reality-Rune" in Patch18, so the
+  bot read 4 amount bytes the server never wrote: single-slot updates decoded amount 0;
+  a full SET_INVENTORY (opcode 53) with an item after 44 desynced → IndexError →
+  `state inventory` [].
+- Fix: `load_item_defs` mirrors the server — base + custom always; the patch file only
+  when N < 85, N read from `server/local.conf` (fallback 85, matching
+  ServerConfiguration; `VOIDBOT_BASED_CONFIG_DATA` env overrides for probing).
+- Verified live as wbtest 2026-07-03: exact repro (44 + item after it, relogin) went
+  from [] + decode_error to full 12-slot decode, correct name/amount; both gate branches
+  checked offline (85 → base names, non-stackable; 18 → Patch18 semantics);
+  `wait inventory-contains --id 44` matches on the single-slot path. Evidence
+  tmp/vs041/01-04*.json. tests/smoke.sh 23/26 — the 3 fails reproduce identically on
+  pre-fix code (smoke's own ::setstat arg-order no-op; filed in Intake).
+- Log: 2026-07-02 wave-2 S-C2. 2026-07-03 reproduced, fixed, verified, committed.
 
 ### VS-044 — Bank at Classic (skin-on) overlapped the plaque + oversized (FIXED by the Void Glass rebuild)
 - Status: verified · Severity: P2 · Area: client-ui · commits 68ee7588..9d3bbc01
