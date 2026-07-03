@@ -331,6 +331,14 @@ public class BankInterface {
 			}
 		}
 
+		// --- input: withdraw-as-note toggle (sendWithdraw appends swapNoteMode) ---
+		int noteW = 62, noteX = gx + (S_WANT_BANK_PRESETS ? 3 * (loW + loGap) + 6 : 0);
+		boolean overNote = S_WANT_BANK_NOTES && mx >= noteX && mx < noteX + noteW && my >= loY && my < loY + actionH;
+		if (overNote && click) {
+			swapNoteMode = !swapNoteMode;
+			mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+		}
+
 		// --- input: bank grid (withdraw) ---
 		int bankHover = -1;
 		for (int r = 0; r < bankRows; r++) {
@@ -370,6 +378,7 @@ public class BankInterface {
 
 		// ---- render: panel + title ----
 		mc.getSurface().drawBoxAlpha(px, py, pw, ph, VG_BODY, VG_BODY_A);
+		mc.getSurface().drawBoxAlpha(px + 1, py + titleH, pw - 2, (ph - titleH) * 2 / 5, 0xBFA8FF, 12); // glass sheen
 		mc.getSurface().drawBoxAlpha(px, py, pw, titleH, VG_STRIP, VG_STRIP_A);
 		mc.getSurface().drawLineAlpha(px, py + titleH, px + pw, py + titleH, VG_HAIRLINE, 120);
 		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);
@@ -415,8 +424,9 @@ public class BankInterface {
 		drawVgGridLines(gx, bankGY, cols, bankRows, cellW, cellH);
 		if (bankHover >= 0) mc.getSurface().drawBoxBorder(gx + (bankHover % cols) * cellW, cellW, bankGY + (bankHover / cols) * cellH, cellH, VG_HOVER_BORDER);
 		if (maxScroll > 0) {
+			boolean hovSb = mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= thumbY && my <= thumbY + thumbH;
 			mc.getSurface().drawBoxAlpha(sbX, sbY, sbW, sbH, 0x0C0620, 120);
-			mc.getSurface().drawBoxAlpha(sbX, thumbY, sbW, thumbH, VG_FRAME_INNER, 160);
+			mc.getSurface().drawBoxAlpha(sbX, thumbY, sbW, thumbH, VG_FRAME_INNER, hovSb || vgScrollDrag ? 220 : 160);
 		}
 
 		// ---- render: inventory divider + tray ----
@@ -436,8 +446,9 @@ public class BankInterface {
 		drawVgGridLines(gx, invGY, cols, invRows, cellW, cellH);
 		if (invHover >= 0) mc.getSurface().drawBoxBorder(gx + (invHover % cols) * cellW, cellW, invGY + (invHover / cols) * cellH, cellH, VG_HOVER_BORDER);
 		if (maxInvScroll > 0) {
+			boolean hovIsb = mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invThumbY && my <= invThumbY + invThumbH;
 			mc.getSurface().drawBoxAlpha(sbX, invSbY, sbW, invSbH, 0x0C0620, 120);
-			mc.getSurface().drawBoxAlpha(sbX, invThumbY, sbW, invThumbH, VG_FRAME_INNER, 160);
+			mc.getSurface().drawBoxAlpha(sbX, invThumbY, sbW, invThumbH, VG_FRAME_INNER, hovIsb || vgInvScrollDrag ? 220 : 160);
 		}
 
 		// ---- render: action bar (loadouts + deposit all) ----
@@ -451,6 +462,12 @@ public class BankInterface {
 				String ll = "L" + (p + 1);
 				drawString(ll, lx + (loW - mc.getSurface().stringWidth(1, ll)) / 2, loY + 15, 1, filled ? VG_GOLD : VG_LABEL);
 			}
+		}
+		if (S_WANT_BANK_NOTES) {
+			mc.getSurface().drawBoxAlpha(noteX, loY, noteW, actionH, overNote ? VG_HOVER : 0x341F5E, overNote ? 95 : (swapNoteMode ? 165 : 110));
+			mc.getSurface().drawBoxBorder(noteX, noteW, loY, actionH, swapNoteMode ? VG_FRAME_INNER : VG_SLOT_BORDER);
+			String nl = swapNoteMode ? "Note: On" : "Note: Off";
+			drawString(nl, noteX + (noteW - mc.getSurface().stringWidth(1, nl)) / 2, loY + 15, 1, swapNoteMode ? VG_GREEN : VG_LABEL);
 		}
 		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
 		mc.getSurface().drawBoxBorder(daX, daW, daY, actionH, VG_FRAME_INNER);
@@ -483,6 +500,7 @@ public class BankInterface {
 	public void vgResetSearch() {
 		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
 		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgPage = 0;
+		swapNoteMode = false;
 	}
 
 	private void vgDoMenu(int row) {
@@ -564,11 +582,21 @@ public class BankInterface {
 		ItemDef def = it.getItemDef();
 		if (def == null) return;
 		int ix = cx + (cellW - 48) / 2, iy = cy + 1 + (cellH - 34) / 2;
-		mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix, iy, 48, 32,
-			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
-		if (amount > 1 || def.isStackable()) {
+		if (it.getNoted()) {
+			// classic two-layer note: paper backing at full size, item inset at 29x19
+			ItemDef bg = S_WANT_CERT_AS_NOTES ? EntityHandler.noteDef : EntityHandler.certificateDef;
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(bg), ix, iy, 48, 32,
+				bg.getPictureMask(), 0, bg.getBlueMask(), false, 0, 1);
+			if (S_WANT_CERT_AS_NOTES)
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix + 7, iy + 8, 29, 19,
+					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+		} else {
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix, iy, 48, 32,
+				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+		}
+		if (amount > 1 || def.isStackable() || it.getNoted()) {
 			String s = String.valueOf(amount);
-			int col = bankSide ? (amount >= 100000 ? VG_GOLD : VG_GREEN) : VG_CYAN;
+			int col = bankSide ? (amount >= 10000000 ? VG_CYAN : (amount >= 100000 ? VG_GOLD : VG_GREEN)) : VG_CYAN;
 			drawString(s, cx + 3, cy + 11, 1, 0x000000);
 			drawString(s, cx + 2, cy + 10, 1, col);
 		}
