@@ -21,3 +21,16 @@
   (F0.1 voidbot `register`, F0.2 scripts/qa-provision-accounts.sh + reset-db hook).
   Until then: register via the real client, grant admin via offline sqlite UPDATE with
   the server stopped. See [[qa_campaign]].
+- 2026-07-03 verification traps that cost real time (each misread as a server bug):
+  (1) Batch-count prompts ("How many would you like to cook/smelt?") are DIALOGUE
+  MENUS (`multi()` → `menu-reply 0`), NOT input boxes — `input-reply` silently goes
+  nowhere and the blocked script then makes the player busy (swallowing further
+  actions) until timeout. `state dialog` first when a prompt appears. (2) A wave
+  finding of "silent" server behavior may be a voidbot OBSERVATION GAP — npc overhead
+  chat was invisible until the 2026-07-03 npc_say decoder (VS-042 taught this); when a
+  suite says "no feedback", first ask what voidbot can't see. (3) voidbot impersonates
+  the client at login (version + limitations trailer) — after client-visible content
+  or version changes, stale voidbot constants make the SERVER correctly degrade
+  behavior for it (VS-032: item force-drops; VS-041: patch defs). The trailer's
+  maxItemId now self-patches from server defs, but a future capture refresh is needed
+  if other limitation fields drift.
