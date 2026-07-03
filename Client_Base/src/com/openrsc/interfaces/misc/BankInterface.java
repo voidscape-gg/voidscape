@@ -126,7 +126,8 @@ public class BankInterface {
 	// Translucent purple GLASS colorway (see-through). Slice 1: centered HUD-safe glass slab
 	// + native-icon grid + amounts + left-click withdraw/deposit. Chrome/tabs/search/loadouts
 	// come in later slices. Classic bank (skin off) is untouched for preservation.
-	private static final int VG_BODY = 0x160B2C, VG_BODY_A = 150;      // glass panel body
+	private static final int VG_BODY = 0x160B2C, VG_BODY_A = 112;      // glass panel body (more see-through)
+	private static final int VG_GRID_LINE = 0x8A6BD8, VG_GRID_LINE_A = 36; // thin subtle grid lines
 	private static final int VG_STRIP = 0x2A1A4D, VG_STRIP_A = 55;     // title chrome strip (over body)
 	private static final int VG_HAIRLINE = 0x7C63C0;                   // region dividers
 	private static final int VG_FRAME_INNER = 0x8A6BD8;               // lavender inner rim
@@ -145,6 +146,8 @@ public class BankInterface {
 	private final ArrayList<String> vgMenuLabels = new ArrayList<>();
 	private final ArrayList<Boolean> vgMenuDep = new ArrayList<>();
 	private final ArrayList<Integer> vgMenuAmt = new ArrayList<>();
+	private int vgScrollRow = 0;
+	private boolean vgScrollDrag = false;
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
@@ -156,108 +159,217 @@ public class BankInterface {
 	private int vgCellH() { int t = vgTier(); return t == 0 ? 34 : (t == 1 ? 36 : 40); }
 	private int vgTopSafe() { return Math.max(56, mc.getVoidscapeDesktopOverlayTopSafeY()); }
 	private int vgBotSafe() { int gh = mc.getGameHeight(); int e = mc.getVoidscapeDesktopOverlayBottomSafeY(); return e < gh ? e : gh - 22; }
-	private int vgChrome() { return VG_TITLE_H + 4 + 6; } // title + top pad + bottom pad
 	private int vgPanelW() { return Math.min(vgCols() * vgCellW() + 2 * VG_INNER_PAD + VG_SCROLL_GUTTER, mc.getGameWidth() - 2 * VG_SIDE_MARGIN); }
-	private int vgVisibleRows() {
-		int availH = vgBotSafe() - vgTopSafe();
-		int rows = (Math.min(vgChrome() + 14 * vgCellH(), availH) - vgChrome()) / vgCellH();
-		return Math.max(3, Math.min(14, rows));
-	}
-	private int vgPanelH() { return vgChrome() + vgVisibleRows() * vgCellH(); }
-	private int vgPanelX() { return (mc.getGameWidth() - vgPanelW()) / 2; }
-	private int vgPanelY() { int availH = vgBotSafe() - vgTopSafe(); return vgTopSafe() + Math.max(0, (availH - vgPanelH()) / 2); }
-	private int vgGridX() { return vgPanelX() + VG_INNER_PAD; }
-	private int vgGridY() { return vgPanelY() + VG_TITLE_H + 4; }
+	private int vgInvRows() { int c = vgCols(); return (30 + c - 1) / c; }
 
 	private boolean renderVoidGlassBank(int mx, int my) {
-		int px = vgPanelX(), py = vgPanelY(), pw = vgPanelW(), ph = vgPanelH();
-		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH(), rows = vgVisibleRows();
-		int gx = vgGridX(), gy = vgGridY();
+		int gw = mc.getGameWidth();
+		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH();
+		int invRows = vgInvRows();
+		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
+		int availH = botSafe - topSafe;
+		int titleH = VG_TITLE_H, invLabelH = 16, actionH = 22, pad = 4;
+		int fixed = titleH + pad + invLabelH + invRows * cellH + actionH + pad + pad;
+		int bankRows = Math.max(1, Math.min(14, (availH - fixed) / cellH));
+		int pw = vgPanelW();
+		int ph = fixed + bankRows * cellH;
+		int px = (gw - pw) / 2;
+		int py = topSafe + Math.max(0, (availH - ph) / 2);
+		int gx = px + VG_INNER_PAD;
+		int bankGY = py + titleH + pad;
+		int gridH = bankRows * cellH;
+		int invLabelY = bankGY + gridH;
+		int invGY = invLabelY + invLabelH;
+		int actionY = invGY + invRows * cellH + pad;
+
+		int bankTotalRows = (bankItems.size() + cols - 1) / cols;
+		int maxScroll = Math.max(0, bankTotalRows - bankRows);
+		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
+
 		boolean click = mc.getMouseClick() == 1 || mc.mouseButtonClick == 1;
 		boolean rclick = mc.getMouseClick() == 2 || mc.mouseButtonClick == 2;
+		boolean down = mc.getMouseButtonDown() == 1;
+
+		// scrollbar geometry (right gutter)
+		int sbW = 6, sbX = px + pw - VG_INNER_PAD + 1, sbY = bankGY, sbH = gridH;
+		int thumbH = maxScroll > 0 ? Math.max(18, sbH * bankRows / Math.max(1, bankTotalRows)) : sbH;
+		int thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
 
 		// --- input: right-click quantity menu takes priority ---
 		if (vgMenu && (click || rclick)) {
 			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
 			if (mx >= vgMenuX && mx < vgMenuX + mw && my >= vgMenuY && my < vgMenuY + mh) {
 				int row = (my - vgMenuY - 2) / VG_MENU_ROW_H;
-				if (row >= 0 && row < vgMenuLabels.size()) {
-					this.selectedBankSlot = vgMenuSlot;
-					this.selectedBankSlotItemID = vgMenuItemID;
-					boolean dep = vgMenuDep.get(row);
-					int amt = vgMenuAmt.get(row);
-					if (amt == VG_X) {
-						mc.showItemModX(dep ? InputXPrompt.bankDepositX : InputXPrompt.bankWithdrawX,
-							dep ? InputXAction.BANK_DEPOSIT : InputXAction.BANK_WITHDRAW, true);
-					} else if (dep) sendDeposit(amt); else sendWithdraw(amt);
-				}
+				if (row >= 0 && row < vgMenuLabels.size()) vgDoMenu(row);
 			}
-			vgMenu = false;
-			mc.setMouseClick(0); mc.mouseButtonClick = 0;
-			click = false; rclick = false;
+			vgMenu = false; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
 		}
+
+		// --- input: scrollbar drag / track click ---
+		if (!down) vgScrollDrag = false;
+		if (down && maxScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= sbY && my <= sbY + sbH) {
+			if (my >= thumbY && my <= thumbY + thumbH) vgScrollDrag = true;
+			else if (mc.getMouseButtonDownTime() < 3) vgScrollRow += (my < thumbY ? -bankRows : bankRows);
+		}
+		if (vgScrollDrag && maxScroll > 0) {
+			int rel = my - sbY - thumbH / 2;
+			vgScrollRow = rel * maxScroll / Math.max(1, sbH - thumbH);
+		}
+		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
+		thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
 
 		// --- input: close button ---
 		int closeX = px + pw - 18, closeY = py + 5;
 		boolean overClose = mx >= closeX && mx <= closeX + 14 && my >= closeY && my <= closeY + 14;
 		if (click && overClose) { mc.setMouseClick(0); bankClose(); return false; }
 
-		// --- input: grid clicks (left = withdraw/deposit-1, right = quantity menu) + hover ---
-		int hoverSlot = -1;
-		for (int r = 0; r < rows; r++) {
+		// --- input: deposit-all button ---
+		int daW = Math.min(170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
+		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
+		if (click && overDA) { mc.setMouseClick(0); mc.mouseButtonClick = 0; sendVgDepositAll(); click = false; }
+
+		// --- input: bank grid (withdraw) ---
+		int bankHover = -1;
+		for (int r = 0; r < bankRows; r++) {
 			for (int c = 0; c < cols; c++) {
-				int idx = r * cols + c;
-				int cx = gx + c * cellW, cy = gy + r * cellH;
-				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && idx < currentItems.size()) {
-					hoverSlot = idx;
-					Item it = currentItems.get(idx);
-					if (it.getCatalogID() != -1) {
-						if (rclick) {
-							openVgMenu(idx, mx, my);
-							mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false;
-						} else if (click) {
-							selectedBankSlotItemID = it.getCatalogID();
-							this.selectedBankSlot = idx;
-							mc.setMouseClick(0); mc.mouseButtonClick = 0;
-							Item banked = getBankItemByID(it.getCatalogID());
-							if (banked != null && banked.getAmount() > 0) sendWithdraw(1);
-							else if (mc.getInventoryCount(it.getCatalogID()) > 0) sendDeposit(1);
-						}
+				int idx = (vgScrollRow + r) * cols + c;
+				int cx = gx + c * cellW, cy = bankGY + r * cellH;
+				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && idx < bankItems.size()) {
+					bankHover = r * cols + c;
+					int id = bankItems.get(idx).getItem().getCatalogID();
+					if (id != -1) {
+						if (rclick) { openVgMenu(id, mx, my); mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false; }
+						else if (click) { selectedBankSlotItemID = id; mc.setMouseClick(0); mc.mouseButtonClick = 0; sendWithdraw(1); }
 					}
 				}
 			}
 		}
 
-		// --- render ---
-		mc.getSurface().drawBoxAlpha(px, py, pw, ph, VG_BODY, VG_BODY_A);              // glass body
-		mc.getSurface().drawBoxAlpha(px, py, pw, VG_TITLE_H, VG_STRIP, VG_STRIP_A);    // title strip
-		mc.getSurface().drawLineHoriz(px, py + VG_TITLE_H, pw, VG_HAIRLINE);           // divider under title
-		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);                              // black outer frame
-		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER); // lavender inner rim
+		// --- input: inventory tray (deposit) ---
+		int invHover = -1;
+		int invCount = mc.getInventoryItemCount();
+		for (int r = 0; r < invRows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int slot = r * cols + c;
+				if (slot >= 30) break;
+				int cx = gx + c * cellW, cy = invGY + r * cellH;
+				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && slot < invCount && mc.getInventoryItemID(slot) != -1) {
+					invHover = slot;
+					int id = mc.getInventoryItemID(slot);
+					if (rclick) { openVgMenu(id, mx, my); mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false; }
+					else if (click) {
+						int ci = vgFindCurrentIndex(id);
+						if (ci >= 0) { this.selectedBankSlot = ci; selectedBankSlotItemID = id; mc.setMouseClick(0); mc.mouseButtonClick = 0; sendDeposit(1); }
+					}
+				}
+			}
+		}
+
+		// ---- render: panel + title ----
+		mc.getSurface().drawBoxAlpha(px, py, pw, ph, VG_BODY, VG_BODY_A);
+		mc.getSurface().drawBoxAlpha(px, py, pw, titleH, VG_STRIP, VG_STRIP_A);
+		mc.getSurface().drawLineAlpha(px, py + titleH, px + pw, py + titleH, VG_HAIRLINE, 120);
+		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);
+		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER);
 		drawString("Bank", px + 10, py + 16, 5, VG_TITLE_TEXT);
 		String counter = bankItems.size() + " / 1608";
 		drawString(counter, px + pw - 40 - mc.getSurface().stringWidth(1, counter), py + 15, 1, VG_LABEL);
 		drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
 
-		for (int r = 0; r < rows; r++) {
+		// ---- render: bank grid ----
+		for (int r = 0; r < bankRows; r++) {
 			for (int c = 0; c < cols; c++) {
-				int idx = r * cols + c;
-				int cx = gx + c * cellW, cy = gy + r * cellH;
-				boolean hovered = idx == hoverSlot;
-				boolean selected = idx == this.selectedBankSlot && idx < currentItems.size();
+				int idx = (vgScrollRow + r) * cols + c;
+				int cx = gx + c * cellW, cy = bankGY + r * cellH;
 				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
-				if (hovered) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
-				mc.getSurface().drawBoxBorder(cx, cellW, cy, cellH, selected ? VG_SEL_RING : (hovered ? VG_HOVER_BORDER : VG_SLOT_BORDER));
-				if (idx < currentItems.size()) drawVoidGlassItem(currentItems.get(idx), cx, cy, cellW, cellH);
+				if (r * cols + c == bankHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
+				if (idx < bankItems.size()) drawVoidGlassCell(bankItems.get(idx).getItem(), bankItems.get(idx).getItem().getAmount(), true, cx, cy, cellW, cellH);
 			}
 		}
+		drawVgGridLines(gx, bankGY, cols, bankRows, cellW, cellH);
+		if (bankHover >= 0) mc.getSurface().drawBoxBorder(gx + (bankHover % cols) * cellW, cellW, bankGY + (bankHover / cols) * cellH, cellH, VG_HOVER_BORDER);
+		if (maxScroll > 0) {
+			mc.getSurface().drawBoxAlpha(sbX, sbY, sbW, sbH, 0x0C0620, 120);
+			mc.getSurface().drawBoxAlpha(sbX, thumbY, sbW, thumbH, VG_FRAME_INNER, 160);
+		}
+
+		// ---- render: inventory divider + tray ----
+		mc.getSurface().drawLineAlpha(px + 6, invLabelY + invLabelH - 2, px + pw - 6, invLabelY + invLabelH - 2, VG_HAIRLINE, 120);
+		drawString("Inventory", px + 10, invLabelY + 12, 1, VG_LABEL);
+		for (int r = 0; r < invRows; r++) {
+			for (int c = 0; c < cols; c++) {
+				int slot = r * cols + c;
+				if (slot >= 30) break;
+				int cx = gx + c * cellW, cy = invGY + r * cellH;
+				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
+				if (slot == invHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
+				if (slot < invCount && mc.getInventoryItemID(slot) != -1)
+					drawVoidGlassCell(mc.getInventoryItem(slot), mc.getInventoryItemAmount(slot), false, cx, cy, cellW, cellH);
+			}
+		}
+		drawVgGridLines(gx, invGY, cols, invRows, cellW, cellH);
+		if (invHover >= 0) mc.getSurface().drawBoxBorder(gx + (invHover % cols) * cellW, cellW, invGY + (invHover / cols) * cellH, cellH, VG_HOVER_BORDER);
+
+		// ---- render: action bar (deposit all) ----
+		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
+		mc.getSurface().drawBoxBorder(daX, daW, daY, actionH, VG_FRAME_INNER);
+		String da = "Deposit all inventory";
+		drawString(da, daX + (daW - mc.getSurface().stringWidth(1, da)) / 2, daY + 15, 1, VG_GOLD);
+
 		if (vgMenu) drawVoidGlassMenu(mx, my);
 		return true;
 	}
 
-	private void openVgMenu(int slot, int mx, int my) {
-		Item it = currentItems.get(slot);
-		int id = it.getCatalogID();
+	private void vgDoMenu(int row) {
+		boolean dep = vgMenuDep.get(row);
+		int amt = vgMenuAmt.get(row);
+		selectedBankSlotItemID = vgMenuItemID;
+		if (dep) {
+			int ci = vgFindCurrentIndex(vgMenuItemID);
+			if (ci < 0) return;
+			this.selectedBankSlot = ci;
+		}
+		if (amt == VG_X) {
+			mc.showItemModX(dep ? InputXPrompt.bankDepositX : InputXPrompt.bankWithdrawX,
+				dep ? InputXAction.BANK_DEPOSIT : InputXAction.BANK_WITHDRAW, true);
+		} else if (dep) sendDeposit(amt); else sendWithdraw(amt);
+	}
+
+	private int vgFindCurrentIndex(int itemID) {
+		for (int i = 0; i < currentItems.size(); i++)
+			if (currentItems.get(i).getCatalogID() == itemID) return i;
+		return -1;
+	}
+
+	private void sendVgDepositAll() {
+		mc.packetHandler.getClientStream().newPacket(24);
+		mc.packetHandler.getClientStream().finishPacket();
+		mc.setMouseClick(0); mc.setMouseButtonDown(0);
+	}
+
+	private void drawVgGridLines(int gx, int gy, int cols, int rows, int cw, int ch) {
+		for (int c = 0; c <= cols; c++)
+			mc.getSurface().drawLineAlpha(gx + c * cw, gy, gx + c * cw, gy + rows * ch, VG_GRID_LINE, VG_GRID_LINE_A);
+		for (int r = 0; r <= rows; r++)
+			mc.getSurface().drawLineAlpha(gx, gy + r * ch, gx + cols * cw, gy + r * ch, VG_GRID_LINE, VG_GRID_LINE_A);
+	}
+
+	private void drawVoidGlassCell(Item it, int amount, boolean bankSide, int cx, int cy, int cellW, int cellH) {
+		if (it == null || it.getCatalogID() == -1) return;
+		ItemDef def = it.getItemDef();
+		if (def == null) return;
+		int ix = cx + (cellW - 48) / 2, iy = cy + 1 + (cellH - 34) / 2;
+		mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix, iy, 48, 32,
+			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+		if (amount > 1 || def.isStackable()) {
+			String s = String.valueOf(amount);
+			int col = bankSide ? (amount >= 100000 ? VG_GOLD : VG_GREEN) : VG_CYAN;
+			drawString(s, cx + 3, cy + 11, 1, 0x000000);
+			drawString(s, cx + 2, cy + 10, 1, col);
+		}
+	}
+
+	private void openVgMenu(int id, int mx, int my) {
 		vgMenuLabels.clear(); vgMenuDep.clear(); vgMenuAmt.clear();
 		Item banked = getBankItemByID(id);
 		int bAmt = banked != null ? banked.getAmount() : 0;
@@ -278,7 +390,7 @@ public class BankInterface {
 		}
 		if (vgMenuLabels.isEmpty()) return;
 		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
-		vgMenu = true; vgMenuSlot = slot; vgMenuItemID = id;
+		vgMenu = true; vgMenuItemID = id;
 		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
 		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
 	}
@@ -302,29 +414,6 @@ public class BankInterface {
 			boolean hov = mx >= vgMenuX && mx < vgMenuX + mw && my >= ry && my < ry + VG_MENU_ROW_H;
 			if (hov) mc.getSurface().drawBoxAlpha(vgMenuX + 1, ry, mw - 2, VG_MENU_ROW_H, VG_HOVER, 90);
 			drawString(vgMenuLabels.get(i), vgMenuX + 6, ry + 12, 1, vgMenuDep.get(i) ? VG_CYAN : VG_GREEN);
-		}
-	}
-
-	private void drawVoidGlassItem(Item it, int cx, int cy, int cellW, int cellH) {
-		if (it.getCatalogID() == -1) return;
-		if (!(it.getAmount() > 0 || mc.getInventoryCount(it.getCatalogID()) > 0)) return;
-		ItemDef def = it.getItemDef();
-		if (def == null) return;
-		int ix = cx + (cellW - 48) / 2, iy = cy + 1 + (cellH - 34) / 2;
-		mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), ix, iy, 48, 32,
-			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
-		Item banked = getBankItemByID(it.getCatalogID());
-		int amt = banked != null ? banked.getAmount() : 0;
-		if (amt > 0) {
-			String s = String.valueOf(amt);
-			drawString(s, cx + 3, cy + 11, 1, 0x000000);
-			drawString(s, cx + 2, cy + 10, 1, amt >= 100000 ? VG_GOLD : VG_GREEN);
-		}
-		int held = mc.getInventoryCount(it.getCatalogID());
-		if (held > 0) {
-			String h = String.valueOf(held);
-			int hx = cx + cellW - 3 - mc.getSurface().stringWidth(1, h);
-			drawString(h, hx, cy + cellH - 4, 1, VG_CYAN);
 		}
 	}
 
