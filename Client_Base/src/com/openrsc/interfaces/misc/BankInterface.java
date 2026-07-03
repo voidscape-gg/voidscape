@@ -7,10 +7,12 @@ import orsc.Config;
 import orsc.enumerations.InputXAction;
 import orsc.graphics.gui.InputXPrompt;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.two.Fonts;
 import orsc.mudclient;
 import orsc.util.BankUtil;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 import static orsc.Config.*;
 
@@ -150,6 +152,10 @@ public class BankInterface {
 	private boolean vgScrollDrag = false;
 	private int vgInvScrollRow = 0;
 	private boolean vgInvScrollDrag = false;
+	private String vgSearch = "";
+	private String vgLastQuery = "";
+	private boolean vgSearchFocus = false;
+	private int vgCaretTick = 0;
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
@@ -189,7 +195,22 @@ public class BankInterface {
 		int invGY = invLabelY + invLabelH;
 		int actionY = invGY + invRows * cellH + pad;
 
-		int bankTotalRows = (bankItems.size() + cols - 1) / cols;
+		// live search filter over the bank grid (name contains, case-insensitive)
+		String vq = vgSearch.trim().toLowerCase(Locale.ROOT);
+		ArrayList<BankItem> vis;
+		if (vq.isEmpty()) {
+			vis = bankItems;
+		} else {
+			vis = new ArrayList<>();
+			for (BankItem bi : bankItems) {
+				if (bi == null || bi.getItem() == null) continue;
+				ItemDef d = bi.getItem().getItemDef();
+				if (d != null && d.getName() != null && d.getName().toLowerCase(Locale.ROOT).contains(vq)) vis.add(bi);
+			}
+		}
+		if (!vq.equals(vgLastQuery)) { vgLastQuery = vq; vgScrollRow = 0; }
+
+		int bankTotalRows = (vis.size() + cols - 1) / cols;
 		int maxScroll = Math.max(0, bankTotalRows - bankRows);
 		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
 
@@ -250,6 +271,15 @@ public class BankInterface {
 		boolean overClose = mx >= closeX && mx <= closeX + 14 && my >= closeY && my <= closeY + 14;
 		if (click && overClose) { mc.setMouseClick(0); bankClose(); return false; }
 
+		// --- input: search box focus ---
+		int sx = px + 58, sy = py + 4, sh2 = 16;
+		int sw = Math.min(170, pw - 58 - 100);
+		boolean overSearch = mx >= sx && mx < sx + sw && my >= sy && my < sy + sh2;
+		if (click) {
+			if (overSearch) { vgSearchFocus = true; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; }
+			else vgSearchFocus = false;
+		}
+
 		// --- input: deposit-all button ---
 		int daW = Math.min(170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
 		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
@@ -261,9 +291,9 @@ public class BankInterface {
 			for (int c = 0; c < cols; c++) {
 				int idx = (vgScrollRow + r) * cols + c;
 				int cx = gx + c * cellW, cy = bankGY + r * cellH;
-				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && idx < bankItems.size()) {
+				if (mx >= cx && mx < cx + cellW && my >= cy && my < cy + cellH && idx < vis.size()) {
 					bankHover = r * cols + c;
-					int id = bankItems.get(idx).getItem().getCatalogID();
+					int id = vis.get(idx).getItem().getCatalogID();
 					if (id != -1) {
 						if (rclick) { openVgMenu(id, mx, my); mc.setMouseClick(0); mc.mouseButtonClick = 0; rclick = false; }
 						else if (click) { selectedBankSlotItemID = id; mc.setMouseClick(0); mc.mouseButtonClick = 0; sendWithdraw(1); }
@@ -299,9 +329,18 @@ public class BankInterface {
 		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);
 		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER);
 		drawString("Bank", px + 10, py + 16, 5, VG_TITLE_TEXT);
-		String counter = bankItems.size() + " / 1608";
+		String counter = vq.isEmpty() ? bankItems.size() + " / 1608" : vis.size() + " found";
 		drawString(counter, px + pw - 40 - mc.getSurface().stringWidth(1, counter), py + 15, 1, VG_LABEL);
 		drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
+
+		// search box (title strip)
+		mc.getSurface().drawBoxAlpha(sx, sy, sw, sh2, 0x0C0620, 150);
+		mc.getSurface().drawBoxBorder(sx, sw, sy, sh2, vgSearchFocus ? VG_FRAME_INNER : VG_SLOT_BORDER);
+		vgCaretTick++;
+		String disp = vgSearch;
+		if (vgSearchFocus && (vgCaretTick / 25) % 2 == 0) disp = disp + "|";
+		if (disp.isEmpty()) drawString("Search", sx + 5, sy + 12, 1, 0x8474A8);
+		else drawString(disp, sx + 5, sy + 12, 1, VG_TITLE_TEXT);
 
 		// ---- render: bank grid ----
 		for (int r = 0; r < bankRows; r++) {
@@ -310,7 +349,7 @@ public class BankInterface {
 				int cx = gx + c * cellW, cy = bankGY + r * cellH;
 				mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_SLOT, VG_SLOT_A);
 				if (r * cols + c == bankHover) mc.getSurface().drawBoxAlpha(cx, cy, cellW, cellH, VG_HOVER, VG_HOVER_A);
-				if (idx < bankItems.size()) drawVoidGlassCell(bankItems.get(idx).getItem(), bankItems.get(idx).getItem().getAmount(), true, cx, cy, cellW, cellH);
+				if (idx < vis.size()) drawVoidGlassCell(vis.get(idx).getItem(), vis.get(idx).getItem().getAmount(), true, cx, cy, cellW, cellH);
 			}
 		}
 		drawVgGridLines(gx, bankGY, cols, bankRows, cellW, cellH);
@@ -349,6 +388,30 @@ public class BankInterface {
 
 		if (vgMenu) drawVoidGlassMenu(mx, my);
 		return true;
+	}
+
+	// Keyboard entry for the Void Glass search box; returns true when the key was consumed.
+	// Called from mudclient's key dispatcher while the bank dialog is open.
+	public boolean vgHandleKey(int key) {
+		if (!voidGlassBank() || !mc.isShowDialogBank()) return false;
+		if (key == 27) {
+			if (vgSearchFocus || !vgSearch.isEmpty()) { vgSearch = ""; vgSearchFocus = false; }
+			else bankClose();
+			return true;
+		}
+		if (!vgSearchFocus) return false;
+		if (key == '\b') {
+			if (!vgSearch.isEmpty()) vgSearch = vgSearch.substring(0, vgSearch.length() - 1);
+			return true;
+		}
+		if (key == 10 || key == 13) { vgSearchFocus = false; return true; }
+		if (vgSearch.length() < 18 && Fonts.inputFilterChars.indexOf((char) key) >= 0) vgSearch += (char) key;
+		return true;
+	}
+
+	public void vgResetSearch() {
+		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
+		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false;
 	}
 
 	private void vgDoMenu(int row) {

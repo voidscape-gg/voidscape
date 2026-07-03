@@ -2395,6 +2395,7 @@ public class PacketHandler {
 
 	private void showBank() {
 		mc.setShowDialogBank(true);
+		mc.getBank().vgResetSearch();
 		mc.setNewBankItemCount(packetsIncoming.getShort());
 		mc.setBankItemsMax(packetsIncoming.getShort());
 		mc.getBank().resetBank();

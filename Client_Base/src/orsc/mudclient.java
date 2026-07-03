@@ -24096,6 +24096,9 @@ public final class mudclient implements Runnable {
 						auctionHouse.keyDown(key);
 						return;
 					}
+					if (this.isShowDialogBank() && this.combatTimeout == 0 && bank.vgHandleKey(key)) {
+						return;
+					}
 					if (S_WANT_CUSTOM_BANKS && this.isShowDialogBank() && this.combatTimeout == 0 && (key == 27 || this.controlPressed || bank.bank.focusOn(bank.bankSearch))) {
 						bank.keyDown(key);
 						return;
