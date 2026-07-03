@@ -52,6 +52,8 @@ const sha256Cache = new Map();
 const subscriptionXpBonus = 1;
 const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
 const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || signupIpDailyLimit));
+const loginIpFailureLimit = Math.max(1, Number(process.env.PORTAL_LOGIN_IP_FAILURE_LIMIT || 10));
+const loginFailureWindowMs = Math.max(1, Number(process.env.PORTAL_LOGIN_FAILURE_WINDOW_MINUTES || 15)) * 60 * 1000;
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
 const defaultAbuseHashSalt = "voidscape-portal-dev";
 const abuseHashSaltInput = process.env.PORTAL_ABUSE_HASH_SALT || "";
@@ -790,16 +792,32 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/login") {
 		const payload = await readJson(request);
+		const ip = clientIp(request);
 		const result = await updateStore(async (store) => {
+			if (!isLocalIp(ip)) {
+				const since = Date.now() - loginFailureWindowMs;
+				if (countAbuseSignals(store, "login_failure_ip", ip, since) >= loginIpFailureLimit) {
+					throw new HttpError(429, "rate_limited");
+				}
+			}
 			const emailCanonical = canonicalEmail(payload.email || "");
 			const account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical);
 			if (!account || !(await verifyPassword(String(payload.password || ""), account.passwordHash))) {
-				throw new HttpError(401, "invalid_credentials");
+				// updateStore only persists when the mutator resolves, so the failure
+				// signal must ride a returned marker; the 401 is thrown outside.
+				recordAbuseSignal(store, {
+					signalType: "login_failure_ip",
+					signalValue: ip,
+					bucket: dailyBucket(),
+					metadata: { local: isLocalIp(ip) }
+				});
+				return { loginFailed: true };
 			}
 			const token = createSession(store, account.id);
 			audit(store, "account_login", { accountId: account.id });
 			return { token, ...(await accountState(store, account)) };
 		});
+		if (result && result.loginFailed) throw new HttpError(401, "invalid_credentials");
 		json(response, 200, result);
 		return;
 	}

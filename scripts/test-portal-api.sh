@@ -717,6 +717,29 @@ launch_login_after_recovery="$(curl -fsS -X POST "http://127.0.0.1:${launch_port
 grep -q '"token":' <<<"$launch_login_after_recovery" || { echo "launch-signup recovered password should support returning login"; exit 1; }
 launch_token="$launch_recovered_token"
 
+# VS-049: per-IP login throttle. X-Forwarded-For from a loopback peer is trusted by
+# clientIp(), so a synthetic remote IP can accrue failures while the battery's own
+# loopback logins stay exempt.
+for _ in {1..10}; do
+	expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 203.0.113.77' \
+		-d '{"email":"launch-guy@example.com","password":"WrongPass1"}'
+done
+expect_status 429 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 203.0.113.77' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}'
+launch_other_ip_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 203.0.113.78' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
+grep -q '"token":' <<<"$launch_other_ip_login" || { echo "login throttle must be per-IP; a clean IP should still log in"; exit 1; }
+launch_local_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
+grep -q '"token":' <<<"$launch_local_login" || { echo "loopback without x-forwarded-for should stay exempt from the login throttle"; exit 1; }
+
 launch_player_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
 if [[ "$launch_player_count" != "1" ]]; then
 	echo "launch-signup registration should create one normal User-ranked OpenRSC player"

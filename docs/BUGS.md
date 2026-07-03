@@ -36,9 +36,13 @@ to resume from these two files alone. Keep every entry self-contained.
   server still up on 43596; voidbot daemon down (restart needed). Ryan invoked
   `/loop /fix-bugs` — the loop resumes per Next action (Intake triage first, canHold
   priority); the P3/P4-tail deprioritization ruling stands. This session so far:
-  VS-048 triaged from Intake → fixed → verified → committed (canHold over-cap merge
-  rejection; open cap-ruling question for Ryan inside the entry). Server restarted on
-  the fixed build (port 43596); smoke 26/26.
+  VS-048 triaged → fixed → verified → committed (canHold over-cap merge rejection;
+  open cap-ruling question for Ryan). VS-049 (portal login throttle, P2 launch
+  surface) triaged → fixed → verified → committed. Intake triage pass: 3 bullets
+  closed (integrity export = fixture artifacts; ::quickbank = VS-027 pacing;
+  death-testability = resolved by qanpc1/F0.8), VS-050 filed
+  blocked(WIP-collision), VS-051 filed confirmed P4. Server on the VS-048 build
+  (port 43596); smoke 26/26; portal batteries green.
 - **Last session:** 2026-07-03 — 10 commits, 8 bugs verified: VS-041 (dae8a471,
   voidbot Patch18 gate), VS-047 (546fa5cd, smoke gate 26/26 restored), **VS-008
   (32406401, P3→shipped: SEND_BANK_UPDATE short slot, CLIENT bumped 10120→10121 —
@@ -109,10 +113,14 @@ half-remembered is fine, triage will chase it down.)_
 - `::item` into a full inventory misleading message → promoted to **VS-043**.
 - Over-deposit of an unheld item is a silent no-op — wave-2 could NOT re-verify (bank
   wouldn't open via banker dialogue in the daemon = VS-046 below); still open.
-- NEW wave-2 lower-confidence items: `::quickbank` admin command is a no-op (inventory
-  unchanged; tmp/qa/S-F, S-C2); banker-dialogue bank won't open in the voidbot daemon
-  (npc-talk→menu-reply closes without opening bank — blocks daemon bank tests; call it
-  VS-046, tmp/qa/S-C2 F3); equipping from inventory while banking closes the bank
+- ~~`::quickbank` admin command is a no-op~~ → **CLOSED 2026-07-03: was the VS-027
+  rapid-admin drop** — VS-047's diagnosis pinned exactly this (quickbank fired ~0.3s
+  after ::item → dropped); with 1.2s pacing the smoke gate's quickbank section passes
+  26/26 (twice today). Not a bug of its own.
+- NEW wave-2 lower-confidence items: banker-dialogue bank won't open in the voidbot
+  daemon (npc-talk→menu-reply closes without opening bank — blocks daemon bank tests;
+  workaround in use: `npc-command --id 95 --which 1` opens it fine; tmp/qa/S-C2 F3);
+  equipping from inventory while banking closes the bank
   (server hideBank — possibly intended; tmp/qa/S-D2); `state skills` omits custom skills
   (runecraft/harvesting) so their xp can't be asserted (voidbot gap; tmp/qa/S-F);
   artisan XP-per-action ratios looked off vs def exp but the
@@ -127,19 +135,24 @@ half-remembered is fine, triage will chase it down.)_
 - `wait xp-gained` without --skill crashes with raw KeyError (tmp/qa/S-C F8)
 - Rested XP wording: docs say per-second, in-game message says per-minute (S-H F4)
 - Undead Siege mid-run logout gives no payout/forfeit feedback (tmp/qa/S-I)
-- Death items-kept untestable by fleet: admin accounts skip dropOnDeath()
-  (`Player.java` ~2770) — campaign needs a non-privileged bot account (tmp/qa/S-A §4)
+- ~~Death items-kept untestable by fleet~~ → **CLOSED 2026-07-03: resolved by F0.8** —
+  qanpc1 (non-privileged) is provisioned by `scripts/qa-provision-accounts.sh` and the
+  VS-003 server fix was live-verified with a real qanpc1 death. Gap gone.
 - S-V needs-eyes minors: Options panel bleeds through Advanced Settings modal;
   amount labels collide with panel border at slot 0 (bank "500", loot "3"); bestiary
   level column mixes "lv N" and "#id" for same-named NPCs; world-map window overlaps
   minimap + search box covers area label; `/dev/ui-panel "account"` returns ok but
   renders nothing (tmp/qa/S-V findings 3,5,6,7,8)
-- S-W minors: dry-run email backfill preview hardcodes existing:0/queued:0; Google
-  OAuth garbage credential → misleading `invalid_username`; no login throttle after
-  12 failed passwords (tmp/qa/S-W/probes/30,36)
-- S-W integrity export flags 7 high-severity rows (missing_skill_row ×6,
-  missing_table ×1) on the dev DB — verify these are fixture artifacts, not real
-  (tmp/qa/S-W/integrity-findings.json)
+- ~~S-W integrity export 7 high-severity rows~~ → **CLOSED 2026-07-03: all fixture
+  artifacts.** The S-W battery runs against a hermetic throwaway DB
+  (`test-portal-api.sh` mktemp `openrsc-fixture.db`) that deliberately creates
+  skeletal players 77 "SmokeHero" / 78 "TakenHero" without stats rows and omits the
+  `bank` table; the integrity export scanned THAT. Live dev DB checked 2026-07-03:
+  players 77/78 don't exist, `bank` table present, wbtest has all stats rows. The
+  scanner behaved correctly on a skeleton.
+- S-W minors triaged 2026-07-03 → **VS-049** (no login throttle, P2, fixing),
+  **VS-050** (dry-run backfill preview counts, P4, WIP-blocked), **VS-051** (OAuth
+  error ordering, P4). Bullets removed; see the entries.
 - Housekeeping: qabot04's bank left at 1607 stacks for retests (over the live 192 cap
   — see VS-048 in the Fixed archive). 2026-07-03: its inventory carries the VS-008
   probe withdrawals (3× noted 1000, 2× noted 100/302/1546/2 — noted staffs now 50×);
@@ -449,6 +462,37 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   intended/authentic.
 - Portal `launch-live` endpoint has no date gate — discretionary by design (admin-gated).
 
+### VS-050 — Backfill dry-run preview reports queued:0/existing:0 instead of previewing
+- Status: blocked(WIP-collision — handler lives only in the uncommitted Resend queue
+  workstream) · Severity: P4 · Area: web-portal (admin API)
+- Evidence: S-W probe 30 — `POST /api/admin/emails/signup-confirmations {dryRun:true}`
+  returns `eligible:4, selected:4, queued:0, existing:0`. Code-confirmed in
+  `queueAdminBulkEmail` (dev-server.mjs, WIP hunk ~1110-1182): the dry-run branch
+  returns literal `queued: 0, existing: 0`, while the real branch walks `selected`
+  counting created-vs-existing. The "preview" can't tell an admin how many emails a
+  real run would actually send vs skip.
+- Fix sketch (for whoever commits the Resend WIP): in the dry-run branch, compute the
+  would-be created/existing split (peek `queueAccountEmail`'s dedup criteria) instead
+  of hardcoding 0/0.
+- Verify: dry-run against a store where some accounts already have events →
+  queued+existing preview matches the subsequent real run's counts.
+- Log: 2026-07-03 triaged from Intake (S-W). Blocked until the Resend workstream
+  commits — my hunk can't be staged without folding in Ryan's WIP (§7).
+
+### VS-051 — /api/accounts/google validates username before the credential
+- Status: confirmed · Severity: P4 · Area: web-portal
+- Evidence: S-W probe 36 — garbage Google credential → 400 `invalid_username`
+  (misleading; the credential is the problem). Code-pinned:
+  `googleProfileFromCredential` (dev-server.mjs:4790, committed region) calls
+  `requireReservationUsername(payload.username || ...)` as its FIRST statement, before
+  `invalid_google_token`/JWT checks ever run — so a credential-less or garbage-cred
+  request with no username dies on the username check.
+- Repro: `POST /api/accounts/google {credential:"garbage"}` → 400 invalid_username
+  (expect 401 invalid_google_token).
+- Verify: reorder credential validation first; probe returns 401 invalid_google_token;
+  test-portal-api.sh green.
+- Log: 2026-07-03 triaged from Intake (S-W), code-confirmed.
+
 ### VS-038 — Death Match has no voluntary forfeit (logout blocked, ladder outside arena)
 - Status: reported · Severity: P3 · Area: server-plugin (minigame)
 - Evidence: from the VS-026 diagnosis — the forfeit ladder (object 5 at 984,668) is in
@@ -505,6 +549,28 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-049 — Portal login had no throttle: unlimited password guessing per IP (FIXED)
+- Status: verified · Severity: P2 · Area: web-portal (launch surface)
+- Evidence: S-W probe — 12 straight failed passwords against
+  `POST /api/accounts/login`, all 401, no slowdown/429. Code-confirmed: the login
+  handler had no attempt-counting while the founder-reservation route above it used
+  the full abuse-signal stack.
+- Fix (dev-server.mjs): failed logins record a `login_failure_ip` abuse signal;
+  non-local IPs exceeding `PORTAL_LOGIN_IP_FAILURE_LIMIT` (default 10) failures within
+  `PORTAL_LOGIN_FAILURE_WINDOW_MINUTES` (default 15) get `429 rate_limited` — checked
+  BEFORE password verification (no oracle: correct password also 429s while
+  throttled). Loopback without XFF stays exempt (mirrors founder route; battery
+  ergonomics). Gotcha handled: `updateStore` persists only on resolve, so the signal
+  rides a returned marker and the 401 throws outside the transaction.
+- Verified 2026-07-03: `scripts/test-portal-api.sh` green including new VS-049 probes
+  (10×401 from synthetic XFF IP → 11th attempt 429 with the CORRECT password →
+  different IP logs in fine → loopback exempt); `scripts/test-portal-schema.sh` green;
+  `scripts/build.sh` green (no Java touched). Logs tmp/vs049-portal-api.log,
+  tmp/vs049-portal-schema.log.
+- Log: 2026-07-03 triaged from Intake (S-W), code-confirmed, fixed, verified,
+  committed same day. Note: dev-server.mjs + test-portal-api.sh carry unrelated
+  Resend-queue WIP — only the VS-049 hunks were staged.
 
 ### VS-048 — Bank over configured cap rejected ALL deposits, including zero-slot merges (FIXED)
 - Status: verified · Severity: P3 · Area: server-core (bank container)
