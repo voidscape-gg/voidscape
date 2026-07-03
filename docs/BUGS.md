@@ -27,9 +27,12 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** none
-- **Session preflight 2026-07-03:** branch `codex/ui-loot-checkpoint-20260613` (scratch
-  checkpoint branch — standing Question for Ryan: where should bug fixes land?); dirty
-  files all match the §7 Collisions list; pre-change `scripts/build.sh` green.
+- **Branch (ruled 2026-07-03):** work lands on **`main`** — Ryan approved
+  fast-forwarding local main to the checkpoint branch head (origin/main was a strict
+  ancestor, 132 ahead / 0 behind; `codex/ui-loot-checkpoint-20260613` left intact at
+  the same commit). Commit future fixes on main; pushing origin/main is Ryan's call.
+- **Session preflight 2026-07-03:** dirty files all match the §7 Collisions list;
+  pre-change `scripts/build.sh` green.
 - **Last session:** 2026-07-03 — 10 commits, 8 bugs verified: VS-041 (dae8a471,
   voidbot Patch18 gate), VS-047 (546fa5cd, smoke gate 26/26 restored), **VS-008
   (32406401, P3→shipped: SEND_BANK_UPDATE short slot, CLIENT bumped 10120→10121 —
