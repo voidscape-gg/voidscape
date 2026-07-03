@@ -92,9 +92,11 @@ ok    "dismiss input box (soft-lock-fix path)" "$("$VB" input-reply --text '')"
 # ---- 4. kill an npc (real NPC_ATTACK), tracked by the specific instance ----
 echo "[4] kill"
 "$VB" admin "::teleport $SPOT_X $SPOT_Y" >/dev/null   # back to this run's own arena
-"$VB" admin "::setstat attack 90"   >/dev/null
-"$VB" admin "::setstat strength 90" >/dev/null
-"$VB" admin "::setstat hits 90"     >/dev/null
+sleep 1.2
+# ::setstat takes LEVEL then STAT (VS-047); pace admin commands >=1.2s or they drop (VS-027)
+"$VB" admin "::setstat 90 attack"   >/dev/null; sleep 1.2
+"$VB" admin "::setstat 90 strength" >/dev/null; sleep 1.2
+"$VB" admin "::setstat 90 hits"     >/dev/null; sleep 1.2
 "$VB" admin "::heal"                >/dev/null
 # spawn + detect in a short retry loop (the bit-packed NPC stream can drop a frame)
 RAT_SI=""; SPAWN_OK="no"
@@ -149,6 +151,7 @@ matched "bones back in inventory" "$("$VB" wait inventory-contains --id 20 --amo
 echo "[6] bank"
 ok    "spawn coins" "$("$VB" admin "::item 10 500")"
 matched "coins in inventory" "$("$VB" wait inventory-contains --id 10 --amount 500 --timeout 10)"
+sleep 1.2   # pace admin commands >=1.2s or the second drops (VS-027)
 ok    "open bank (::quickbank)" "$("$VB" admin "::quickbank")"
 matched "bank open" "$("$VB" wait bank-open --timeout 10)"
 BEFORE=$("$VB" state bank | "$PY" -c 'import sys,json

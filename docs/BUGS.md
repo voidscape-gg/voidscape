@@ -58,11 +58,11 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action (top open confirmed, launch surfaces first):** VS-041 DONE 2026-07-03 →
-  next is the smoke.sh ::setstat Intake bullet (quick tooling fix, restores the 26/26
-  smoke gate), then VS-008 (P3 server one-byte bank slot), VS-002 (deferred, needs MySQL
-  env), VS-042/043, P3 tail. Also: E2 (doors) to unblock a quests wave. VS-003: await
-  Ryan's ruling.
+- **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 DONE
+  2026-07-03 (voidbot decoder trust + 26/26 smoke gate restored) → next is VS-008
+  (P3 server one-byte bank slot; qabot04's bank is still filled for the retest), then
+  VS-042/043, P3 tail. VS-002 deferred (needs MySQL env). Also: E2 (doors) to unblock
+  a quests wave. VS-003: await Ryan's ruling.
 
 ---
 
@@ -121,15 +121,6 @@ half-remembered is fine, triage will chase it down.)_
   (tmp/qa/S-W/integrity-findings.json)
 - Housekeeping: qabot04's bank left at ~1608 stacks for VS-008 retests; two Blessed
   ashes on the ground near (137,644) (tmp/qa/S-D end state)
-- tests/smoke.sh fails 3/26 (2026-07-03, twice, during VS-041 verify): `::setstat attack
-  90` in smoke.sh uses the broken natural arg order (the known ::setstat LEVEL-STAT
-  bullet above) so it silently no-ops → wbtest fights at attack 3 → chicken outlives the
-  4×8s npc-dead window ("chicken died" FAIL) → bot still in combat at section 6 →
-  ::quickbank ignored → "bank open" + "bank coins delta" cascade-FAIL. Verified manually:
-  same kill succeeds with a 60s window and quickbank opens right after (attack-3 kill +
-  bank-open exit 0); quickbank itself works under both old and new voidbotd code. Fix =
-  correct smoke.sh's setstat arg order (and/or widen the kill window); distinct from the
-  ::setstat server-side UX bullet.
 
 ---
 
@@ -587,6 +578,21 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-047 — tests/smoke.sh: setstat arg order + admin pacing broke the gate (FIXED)
+- Status: verified · Severity: P2 · Area: tooling (smoke gate) · found during VS-041 verify
+- Two defects: (1) smoke's `::setstat attack 90` used STAT-first order but `changeMaxStat`
+  (Admins.java:3746-3757) parses `[level] [stat]` → parseInt("attack") threw → all three
+  setstats silently no-op'd → the account fought at attack 3, chicken kill luck-dependent,
+  in-combat state cascading into the bank section. (2) `::item 10 500` → `::quickbank`
+  fired ~0.3s apart when the account already held coins (instant wait) → VS-027 rapid-
+  admin drop → bank never opened (consistent 4/4 runs; works standalone).
+- Fix: LEVEL-first setstat order + `sleep 1.2` VS-027 pacing (after arena teleport,
+  between setstats, before quickbank).
+- Verified 2026-07-03: standalone tests/smoke.sh 26/26 (tmp/vs047-smoke-verify.log;
+  failing runs tmp/vs047-smoke.log). Server-side UX half (misleading error on the natural
+  arg order) remains an Intake bullet.
+- Log: 2026-07-03 triaged from Intake, confirmed, fixed, verified, committed same day.
 
 ### VS-041 — voidbot inventory decoder desynced for item ids 44/45 (FIXED)
 - Status: verified · Severity: P2 · Area: tooling (voidbot) · found wave-2 S-C2
