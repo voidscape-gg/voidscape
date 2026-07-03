@@ -32,10 +32,17 @@ suspicious-player flag). SQLite bank-preset persistence was broken for everyone
 sqlite-jdbc — fixed for ALL callers) and `bank_presets.xml` double-quoted hex params
 (stored literal quotes). Presets now survive relogin.
 
-**Open / for Ryan:** (1) drag-to-reorder + Arrange mode not implemented on the new bank
-(server BANK_SWAP/BANK_INSERT still WANT_CUSTOM_BANKS-gated) — does he want them?
-(2) cert-mode deposit skipped (`want_cert_deposit: false`). (3) The old phase-1 loop
-questions still pending: VS-003 noted-items-on-death ruling, runecraft on/off.
+**2026-07-03 (Ryan's follow-ups, shipped commit 9e1e8c2f):** drag-to-reorder + Arrange
+chip (Off/Swap/Insert; sub-ops 2/3, gates accept custom_ui; drag disabled while
+searching; client resets bank view state only on FRESH opens since insert triggers a
+showBank resend). Small screen: top-tab row hides while banking at the small HUD,
+topSafe→8, small tier 9 cols → Classic = 3 bank + 3 inv rows (3+2 with page tabs),
+near-full-height panel. All verified live (swap/insert round-trips, withdraw with
+arrange off, MID regression).
+
+**Open / for Ryan:** (1) cert-mode deposit skipped (`want_cert_deposit: false`).
+(2) The old phase-1 loop questions still pending: VS-003 noted-items-on-death ruling,
+runecraft on/off.
 
 **Verify loop (still valid):** `scripts/dev/bank-verify.sh <viewport 0-5>` (5=Classic
 512, 2=800×600, 4=1024×768) builds + fresh-relaunches the workbench skin-on + opens the

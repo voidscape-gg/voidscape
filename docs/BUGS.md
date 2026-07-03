@@ -50,10 +50,11 @@ to resume from these two files alone. Keep every entry self-contained.
   live search, page tabs, loadouts, deposit-all, note mode, right-click quantities,
   noted two-layer icons. VS-044 + VS-040 resolved (Fixed archive). Two server bugs
   found+fixed along the way: VS-045 (custom_ui opcode gates) and VS-046 (SQLite preset
-  persistence / executeQuery closed-ResultSet — general DB-layer fix). NOT implemented
-  (needs Ryan's call whether wanted on the new bank): drag-to-reorder + Arrange
-  mode (server BANK_SWAP/BANK_INSERT are still WANT_CUSTOM_BANKS-gated), cert-mode
-  deposit (want_cert_deposit is false anyway).
+  persistence / executeQuery closed-ResultSet — general DB-layer fix). 2026-07-03:
+  Ryan requested + shipped (9e1e8c2f): drag-to-reorder/Arrange mode (swap+insert,
+  gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
+  9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
+  (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 (P2 tooling — fix
   voidbot's Patch18/based_config_data mismatch so 44/45 inventories decode; gates QA
   trust). Then VS-008 (P3 server one-byte bank slot), VS-002 (deferred, needs MySQL env),
