@@ -36,6 +36,8 @@ Subsystem-specific guidance lives in `<subsystem>/CLAUDE.md` (e.g. `server/CLAUD
 | What config should dev/staging/prod use? | `docs/CONFIG-MATRIX.md` |
 | How do I operate or roll back a server? | `docs/OPERATIONS.md` |
 | What must pass before inviting players? | `docs/RELEASE-CHECKLIST.md` |
+| What's broken / how are bugs tracked and fixed? | `docs/BUGS.md` (ledger) + `docs/BUGFIX-LOOP.md` (loop) |
+| How do we playthrough-QA the whole game (bot fleet)? | `docs/QA-CAMPAIGN.md` |
 
 ---
 
@@ -54,6 +56,8 @@ Subsystem-specific guidance lives in `<subsystem>/CLAUDE.md` (e.g. `server/CLAUD
 ## Workflow
 
 - **For new features, use `/feature <description>`** — runs discovery → plan → slices with user gates. Don't start coding a multi-subsystem feature without it.
+- **For bug fixing, use `/fix-bugs`** — works the ledger `docs/BUGS.md` per `docs/BUGFIX-LOOP.md` (triage → repro → fix → verify → document). Report bugs by appending raw bullets to the ledger's **Intake** section.
+- **For playthrough QA, use `/qa-campaign`** — parallel voidbot suites per `docs/QA-CAMPAIGN.md`; findings feed the BUGS.md Intake.
 - For a substantive change: read the relevant `docs/recipes/` or `docs/subsystems/` doc first.
 - The build is the test. `scripts/build.sh` should pass before claiming work done.
 - For UI / client changes: actually run the client and test the feature. Type-checking ≠ working.
@@ -81,6 +85,11 @@ Use **voidbot** for every interaction with the game. Never screenshot the client
 send mouse or keyboard input, never compute click coordinates. Verify outcomes with
 `voidbot wait` and `voidbot state`, not by looking at the screen. If an action has no
 command, extend voidbot first (`docs/bot-api.md` is the spec), then continue.
+
+One sanctioned exception: for client-UI verification, the AI workbench
+(`scripts/run-workbench-client.sh`, HTTP on 127.0.0.1:18787; spec
+`docs/subsystems/ai-workbench.md`) is the channel for client UI state and screenshots —
+"never screenshot" bans ad-hoc screen-looking, not the workbench.
 
 `tools/voidbot/voidbot` is a headless client: a daemon holds a logged-in session and
 decodes server packets into live state; the CLI issues actions, queries state, and blocks
