@@ -30,13 +30,21 @@ to resume from these two files alone. Keep every entry self-contained.
 - **Session preflight 2026-07-03:** branch `codex/ui-loot-checkpoint-20260613` (scratch
   checkpoint branch — standing Question for Ryan: where should bug fixes land?); dirty
   files all match the §7 Collisions list; pre-change `scripts/build.sh` green.
-- **Last session:** 2026-07-02 — big run, 13 items committed. Verified fixes: wave-2
-  tooling gate (VS-020/021/022/023/024, f89e872), VS-033 (bfab2e9), **VS-026 (P1,
-  f29c301)**, VS-037 (eefd499), **VS-028 (P2, ca1f7fb)**, **VS-030 (P2, e6145c2c)**,
-  VS-029 (P3, 8d433060). Plus F0.8 non-priv account (2f167e18) and **VS-003 fixed but
-  runtime-display verification pending (b6c8841f)**. Re-verified VS-027 (decoder artifact,
-  P2→P3) and VS-002 (latent MySQL-only; naive fix breaks SQLite — reverted, P2→P3). Filed
-  VS-038, VS-040. Server on latest build.
+- **Last session:** 2026-07-03 — 10 commits, 8 bugs verified: VS-041 (dae8a471,
+  voidbot Patch18 gate), VS-047 (546fa5cd, smoke gate 26/26 restored), **VS-008
+  (32406401, P3→shipped: SEND_BANK_UPDATE short slot, CLIENT bumped 10120→10121 —
+  packet-shape change, all presets + voidbot moved together)**, VS-042 (bb3ea249,
+  Cook's Range mostly authentic; cook-absent feedback added), VS-031 (529ca8ab,
+  voidbot bank compaction), VS-043 (821817e9, ::item full-inv message), VS-025
+  (cc5f9489, exit 2 + bot-api roadmap markers), VS-032 (bc692ece, stale voidbot
+  login trailer — real client was never at risk). Tooling: npc_say decoding
+  (7ae57e62) — NPC overhead chat now observable. VS-034 diagnosed deeply, not fixed
+  (see its Log). New Intake: Bank.canHold mis-rejections (2 datapoints). Also
+  restored a WIP-deleted committed DIVERGENCE entry (arrange-mode) in the working
+  tree. Server running latest build on port 43596; smoke 26/26.
+- **Previous session (2026-07-02):** 13 items committed — wave-2 tooling gate
+  (VS-020..024), VS-033, VS-026 (P1), VS-037, VS-028, VS-030, VS-029, F0.8, VS-003
+  (partial, reopened). Details in Fixed archive.
 - **Wave 2 DONE (2026-07-02):** 5 suites. E1/artisan skills verified (smelt/smith/cook/
   firemaking/fletch/gem-cut all work). Decoder artifacts settled (VS-027 deposits +
   item-command-slot = artifacts; VS-021 fixed; VS-008 server-half REAL). New: VS-041
@@ -59,10 +67,12 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 DONE 2026-07-03 (9 commits: 8 fixes +
-  npc_say extension) → next: VS-034 (dialog busy-state, P3, player-facing), VS-009
-  (bank value sort), then P4 tail / triage the Intake backlog (canHold, spawnnpc
-  coords, over-deposit bullets — several now have fresh datapoints from today). VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 DONE 2026-07-03 → next: **VS-034**
+  (dialog busy-state, P3, player-facing — deep diagnosis already in its Log: trace the
+  stale-cleanup dialog_close race + extend the PluginHandler stop to non-NPC dialog
+  scripts), then VS-009 (bank value sort), P4 tail, and triage the Intake backlog
+  (canHold, spawnnpc coords, over-deposit bullets — several have fresh 2026-07-03
+  datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
   to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
   10121 — a fielded 10120 client build will be version-rejected by the updated
   dev/staging server (expected; the launcher updates clients).
@@ -410,6 +420,22 @@ half-remembered is fine, triage will chase it down.)_
 - Repro: talk to Fred (77) → walk away with menu open → re-talk → timeout.
 - Verify: NPC promptly re-talkable after abandon/cancel, or an explicit busy message.
 - Log: 2026-07-02 wave-1 (S-G): players will read this as "NPC broken".
+  2026-07-03 reproduced live + machinery mapped (timeboxed stop, no code change):
+  (1) First re-talk after a goto-abandon times out silently (no message, no npc_say).
+  (2) BUT the event log shows the re-talk actually re-ran Fred's full dialogue and
+  opened its menu — which something then CLOSED ~5s later (unexplained dialog_close;
+  suspect the cancelled first multi()'s late cleanup/hideMenu stomping the new menu).
+  (3) Machinery: every non-excluded inbound packet runs
+  PayloadProcessorManager.checkIfShouldCancelMenu → player.cancelMenuHandler()
+  (menuHandler=null, busy=false, canceledMenuHandler=true); PluginHandler:317 stops
+  the old dialogue plugin only when the NEXT plugin launches AND
+  `getScriptContext().getInteractingNpc() != null` — so menus from OBJECT scripts
+  (cook's range batch menu, VS-042 observation) are NEVER stopped and block the
+  player until script timeout. (4) multi() exits only on option/attack/5min/
+  other-player-wants+20s/menuHandler==null (Functions.java:319-384). Next step: tick-
+  trace the double-cancel race (old plugin's resetMenuHandler vs new menu), and extend
+  the PluginHandler stop to non-NPC dialog scripts. Also note `::spawnnpc 77 1 1`
+  spawns despawn quickly — spawn fresh per attempt when reproducing.
 
 ### VS-035 — Void Rush queue: no in-game cancel; one-entry-per-IP starves solo/single-IP play
 - Status: confirmed · Severity: P3 · Area: server-plugin (minigame)
