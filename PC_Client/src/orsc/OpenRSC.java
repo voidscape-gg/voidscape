@@ -16,6 +16,7 @@ public class OpenRSC extends ORSCApplet {
 
 	public static void main(String[] args) {
 		boolean loadedScalingScalar = false;
+		boolean loadedViewportPreset = false;
 
 		// MUST do this before anything else runs in order to override OS-level dpi settings
 		// (not applicable to macOS, which implements OS-scaling in a different fashion)
@@ -68,6 +69,7 @@ public class OpenRSC extends ORSCApplet {
 				String viewportPresetString = props.getProperty("viewport_preset");
 				if (viewportPresetString != null && !viewportPresetString.isEmpty()) {
 					ScaledWindow.setViewportPresetIndex(Integer.parseInt(viewportPresetString));
+					loadedViewportPreset = true;
 				}
 			} catch (Exception e) {
 				System.out.println("Something went wrong loading scaling settings");
@@ -76,6 +78,11 @@ public class OpenRSC extends ORSCApplet {
 		}
 
 		scaledWindow = ScaledWindow.getInstance();
+		// Voidscape: first run only — no persisted window settings — size the
+		// window to the display. Any saved viewport preset or scaling scalar wins.
+		if (!loadedScalingScalar && !loadedViewportPreset) {
+			scaledWindow.applyFirstRunViewportPreset();
+		}
 		scaledWindow.applyStartupScalingDefaults(loadedScalingScalar);
 		SwingUtilities.invokeLater(OpenRSC::createAndShowGUI);
 	}

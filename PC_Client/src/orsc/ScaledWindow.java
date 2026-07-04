@@ -235,6 +235,40 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 		});
 	}
 
+	/**
+	 * Voidscape: first run only (no persisted window settings) — pick the
+	 * largest viewport preset whose window fits the usable screen, so large
+	 * displays don't boot into the 640x480-class default. Uses the same fit
+	 * math as {@link #largestIntegerScalarThatFits}: preset dimensions compared
+	 * against {@link #getMaximumEffectiveWindowSize()}, which already accounts
+	 * for window insets. Persisted settings always win — the caller must only
+	 * invoke this when clientSettings.conf carried no viewport_preset and no
+	 * scaling_scalar.
+	 */
+	public void applyFirstRunViewportPreset() {
+		Dimension maxEffectiveWindowSize = getMaximumEffectiveWindowSize();
+		int bestIndex = -1;
+		long bestArea = -1L;
+		for (int i = 0; i < VIEWPORT_PRESETS.length; i++) {
+			int width = VIEWPORT_PRESETS[i][0];
+			int height = VIEWPORT_PRESETS[i][1];
+			if (width <= maxEffectiveWindowSize.width && height <= maxEffectiveWindowSize.height) {
+				long area = (long) width * height;
+				if (area > bestArea) {
+					bestArea = area;
+					bestIndex = i;
+				}
+			}
+		}
+
+		if (bestIndex >= 0 && bestIndex != viewportPresetIndex) {
+			setViewportPresetIndex(bestIndex);
+			setMinimumSize(new Dimension(minViewportWidth(), minViewportHeight()));
+			refreshAvailableScalars();
+			System.out.println("Voidscape first run: viewport preset " + getViewportPresetLabel());
+		}
+	}
+
 	public void applyStartupScalingDefaults(boolean hasSavedScalingScalar) {
 		if (hasSavedScalingScalar) {
 			mudclient.windowScaleMode = false;

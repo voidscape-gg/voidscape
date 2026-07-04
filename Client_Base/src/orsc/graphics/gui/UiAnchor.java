@@ -51,4 +51,15 @@ public final class UiAnchor {
 		int maxY = Math.max(8, gameHeight - dialogHeight - bottomPad);
 		return Math.min(maxY, Math.max(y, topClearance));
 	}
+
+	/**
+	 * Y that vertically centers a card of the given height, but never above the
+	 * given top clearance. Pre-game (login flow) cards pass their historic top
+	 * offset as the clearance: at the classic 334px game height the center sits
+	 * above the clearance, so the legacy layout is preserved exactly, while
+	 * taller windows center the card properly.
+	 */
+	public static int centeredCardY(int gameHeight, int cardHeight, int topClearance) {
+		return Math.max(topClearance, (gameHeight - cardHeight) / 2);
+	}
 }

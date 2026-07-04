@@ -787,6 +787,12 @@ public final class mudclient implements Runnable {
 	private int cinematicSlowOrbitFrame = 0;
 	public ORSCharacter localPlayer = new ORSCharacter();
 	public MessageTab messageTabSelected = MessageTab.ALL;
+	// One chat gesture zone, in game coordinates measured up from getGameHeight():
+	// the classic chat panel band (message list top at gameHeight-65 plus the
+	// entry row). The middle-mouse drag-scroll, the wheel-scroll capture and the
+	// classic scrollbar click suppression all test against this single constant;
+	// the wheel path historically used a separate 75px component-coordinate zone.
+	public static final int CHAT_PANEL_GESTURE_ZONE_HEIGHT = 66;
 	private boolean voidscapeChatHidden = false;
 	private String voidscapeMobileSidePanelKey = "";
 	private long voidscapeLastAllChatClickMillis = 0L;
@@ -1021,6 +1027,7 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_CATEGORY_VISUALS = 2;
 	private static final int ADVANCED_CATEGORY_CHAT = 3;
 	private static final int ADVANCED_CATEGORY_INTERFACE = 4;
+	private static final int ADVANCED_CATEGORY_DISPLAY = 5;
 	private static final int ADVANCED_ACTION_GROUND_ITEMS = 1000;
 	private static final int ADVANCED_ACTION_HIDE_BONES = 1001;
 	private static final int ADVANCED_ACTION_EXPERIENCE_COUNTER = 1002;
@@ -1028,6 +1035,9 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_ACTION_PENDING_INPUT_MARKER = 1004;
 	private static final int ADVANCED_ACTION_SCREENSHOT = 1005;
 	private static final int ADVANCED_ACTION_CAMERA_INTERPOLATION = 1006;
+	private static final int ADVANCED_ACTION_SCREEN_SIZE = 1007;
+	private static final int ADVANCED_ACTION_UI_SCALE = 1008;
+	private static final int ADVANCED_ACTION_SCALE_FILTER = 1009;
 	private int settingTab = SETTINGS_PROFILE_TAB;
 	private boolean settingsAdvancedMode = false;
 	private boolean showAdvancedSettingsWindow = false;
@@ -3365,12 +3375,21 @@ public final class mudclient implements Runnable {
 	// Voidscape login-home button geometry. The hit region (addButton) and the
 	// visual button (drawVoidscapeButton) both read these so the workbench
 	// accessors can never point at a coordinate the renderer moved.
+	private int voidscapeLoginHomeFrameY() {
+		// 512x334: max(118, (334-185)/2 = 74) == 118, the historic Y.
+		return UiAnchor.centeredCardY(this.getGameHeight(), voidscapeLoginHomeFrameHeight(), 118);
+	}
+
+	private int voidscapeLoginHomeFrameHeight() {
+		return 185;
+	}
+
 	private int voidscapeLoginHomeNewUserY() {
-		return 181;
+		return voidscapeLoginHomeFrameY() + 63;
 	}
 
 	private int voidscapeLoginHomeExistingUserY() {
-		return 223;
+		return voidscapeLoginHomeFrameY() + 105;
 	}
 
 	private int voidscapeLoginHomeButtonWidth() {
@@ -3387,8 +3406,19 @@ public final class mudclient implements Runnable {
 		return 46;
 	}
 
+	// Pre-game cards center vertically via UiAnchor.centeredCardY with their
+	// historic top offset as the clearance, so the classic 512x334 layout is
+	// byte-identical (center falls above the clearance there) and taller
+	// windows center the card. All inner rows hang off the frame Y so the card
+	// moves as a unit; the login panels are recreated on resize (main loop),
+	// keeping panel hit regions and draws in lockstep. Android keeps its fixed
+	// top anchor: the soft keyboard owns the lower half of the screen there.
 	private int voidscapeExistingFrameY() {
-		return isAndroid() ? 6 : 93;
+		if (isAndroid()) {
+			return 6;
+		}
+		// 512x334: max(93, (334-232)/2 = 51) == 93, the historic Y.
+		return UiAnchor.centeredCardY(this.getGameHeight(), voidscapeExistingFrameHeight(), 93);
 	}
 
 	private int voidscapeExistingFrameHeight() {
@@ -3396,35 +3426,35 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeExistingTitleY() {
-		return isAndroid() ? 25 : 112;
+		return voidscapeExistingFrameY() + 19;
 	}
 
 	private int voidscapeExistingStatus1Y() {
-		return isAndroid() ? 42 : 125;
+		return voidscapeExistingFrameY() + (isAndroid() ? 36 : 32);
 	}
 
 	private int voidscapeExistingStatus2Y() {
-		return isAndroid() ? 54 : 139;
+		return voidscapeExistingFrameY() + (isAndroid() ? 48 : 46);
 	}
 
 	private int voidscapeExistingUserY() {
-		return isAndroid() ? 87 : 170;
+		return voidscapeExistingFrameY() + (isAndroid() ? 81 : 77);
 	}
 
 	private int voidscapeExistingPassY() {
-		return isAndroid() ? 132 : 212;
+		return voidscapeExistingFrameY() + (isAndroid() ? 126 : 119);
 	}
 
 	private int voidscapeExistingToggleY() {
-		return isAndroid() ? 174 : 243;
+		return voidscapeExistingFrameY() + (isAndroid() ? 168 : 150);
 	}
 
 	private int voidscapeExistingActionY() {
-		return isAndroid() ? 209 : 272;
+		return voidscapeExistingFrameY() + (isAndroid() ? 203 : 179);
 	}
 
 	private int voidscapeExistingForgotY() {
-		return isAndroid() ? 238 : 305;
+		return voidscapeExistingFrameY() + (isAndroid() ? 232 : 212);
 	}
 
 	private int voidscapeExistingFieldHeight() {
@@ -3432,8 +3462,10 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeNewFrameY() {
-		if (!isAndroid()) return wantEmail() ? 66 : 78;
-		return wantEmail() ? 2 : 12;
+		if (isAndroid()) return wantEmail() ? 2 : 12;
+		// 512x334: email max(66, (334-270)/2 = 32) == 66; no email
+		// max(78, (334-251)/2 = 41) == 78 — the historic Ys.
+		return UiAnchor.centeredCardY(this.getGameHeight(), voidscapeNewFrameHeight(), wantEmail() ? 66 : 78);
 	}
 
 	private int voidscapeNewFrameHeight() {
@@ -3450,31 +3482,38 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeNewUserY() {
-		if (!isAndroid()) return 153;
+		// Desktop offsets keep the historic absolutes at the 334 baseline:
+		// email 66+87 == 153, no email 78+75 == 153.
+		if (!isAndroid()) return voidscapeNewFrameY() + (wantEmail() ? 87 : 75);
 		return wantEmail() ? 52 : 61;
 	}
 
 	private int voidscapeNewPasswordY() {
-		if (!isAndroid()) return wantEmail() ? 205 : 215;
+		// email 66+139 == 205, no email 78+137 == 215.
+		if (!isAndroid()) return voidscapeNewFrameY() + (wantEmail() ? 139 : 137);
 		return wantEmail() ? 84 : 96;
 	}
 
 	private int voidscapeNewEmailY() {
-		return isAndroid() ? 116 : 251;
+		// email-only row: 66+185 == 251.
+		return isAndroid() ? 116 : voidscapeNewFrameY() + 185;
 	}
 
 	private int voidscapeNewStatus1Y() {
-		if (!isAndroid()) return wantEmail() ? 281 : 268;
+		// email 66+215 == 281, no email 78+190 == 268.
+		if (!isAndroid()) return voidscapeNewFrameY() + (wantEmail() ? 215 : 190);
 		return wantEmail() ? 145 : 131;
 	}
 
 	private int voidscapeNewStatus2Y() {
-		if (!isAndroid()) return wantEmail() ? 294 : 282;
+		// email 66+228 == 294, no email 78+204 == 282.
+		if (!isAndroid()) return voidscapeNewFrameY() + (wantEmail() ? 228 : 204);
 		return wantEmail() ? 157 : 143;
 	}
 
 	private int voidscapeNewActionY() {
-		if (!isAndroid()) return wantEmail() ? 316 : 307;
+		// email 66+250 == 316, no email 78+229 == 307.
+		if (!isAndroid()) return voidscapeNewFrameY() + (wantEmail() ? 250 : 229);
 		return wantEmail() ? 184 : 168;
 	}
 
@@ -4555,6 +4594,40 @@ public final class mudclient implements Runnable {
 		return -1;
 	}
 
+	// Classic chat-tab strip geometry. The 512px-wide tab sprite draws anchored
+	// at the strip origin, and both the label centres and the click ranges are
+	// fixed offsets inside that strip art, so the hit-tests derive from the same
+	// geometry as the draw calls (same accessor pattern as the login-home
+	// buttons) instead of a parallel set of magic ranges.
+	private static final int[] CLASSIC_CHAT_TAB_LABEL_CENTER_X = {56, 156, 256, 356, 456};
+	private static final int[] CLASSIC_CHAT_TAB_HIT_MIN_X = {15, 110, 215, 315, 417};
+	private static final int[] CLASSIC_CHAT_TAB_HIT_MAX_X = {96, 194, 295, 395, 497};
+
+	private int classicChatTabStripX() {
+		return halfGameWidth() - 256;
+	}
+
+	private int classicChatTabStripY() {
+		return getGameHeight() - 4;
+	}
+
+	private int classicChatTabLabelY() {
+		return getGameHeight() + 6;
+	}
+
+	private int classicChatTabLabelX(int tab) {
+		return classicChatTabStripX() + CLASSIC_CHAT_TAB_LABEL_CENTER_X[tab];
+	}
+
+	private boolean classicChatTabRowHit(int y) {
+		return y > classicChatTabStripY();
+	}
+
+	private boolean classicChatTabHit(int tab, int x) {
+		return x > classicChatTabStripX() + CLASSIC_CHAT_TAB_HIT_MIN_X[tab]
+			&& x < classicChatTabStripX() + CLASSIC_CHAT_TAB_HIT_MAX_X[tab];
+	}
+
 	private void drawChatMessageTabs(int var1) {
 		try {
 			if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
@@ -4563,14 +4636,16 @@ public final class mudclient implements Runnable {
 			}
 			this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, getGameHeight(), getGameWidth(), 10, 0, 0, 0, false, 0, 1);
 			if (S_WANT_CLANS) {
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABS.getDef()), halfGameWidth() - 256,
-					this.getGameHeight() - 4);
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABS.getDef()), classicChatTabStripX(),
+					classicChatTabStripY());
 			} else {
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABSCLAN.getDef()), halfGameWidth() - 256,
-					this.getGameHeight() - 4);
+				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABSCLAN.getDef()), classicChatTabStripX(),
+					classicChatTabStripY());
 			}
 
 			if (var1 == 5) {
+				// Label centres: strip + 56/156/256/356/456 == the historic
+				// halfGameWidth() -200/-100/+0/+100/+200 anchors.
 				int color = GenUtil.buildColor(255, 255, 255);
 				if (this.messageTabSelected == MessageTab.ALL) {
 					color = GenUtil.buildColor(255, 200, 50);
@@ -4578,8 +4653,8 @@ public final class mudclient implements Runnable {
 				if (this.messageTabActivity_Game % 30 > 15) {
 					color = GenUtil.buildColor(255, 50, 50);
 				}
-				this.getSurface().drawColoredStringCentered(halfGameWidth() - 200, "All messages", color, 0, 0,
-					6 + this.getGameHeight());
+				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(0), "All messages", color, 0, 0,
+					classicChatTabLabelY());
 
 				color = GenUtil.buildColor(255, 255, 255);
 				if (this.messageTabSelected == MessageTab.CHAT) {
@@ -4588,8 +4663,8 @@ public final class mudclient implements Runnable {
 				if (this.messageTabActivity_Chat % 30 > 15) {
 					color = GenUtil.buildColor(255, 50, 50);
 				}
-				this.getSurface().drawColoredStringCentered(halfGameWidth() - 100, "Chat history", color, 0, 0,
-					this.getGameHeight() + 6);
+				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(1), "Chat history", color, 0, 0,
+					classicChatTabLabelY());
 
 				color = GenUtil.buildColor(255, 255, 255);
 				if (this.messageTabSelected == MessageTab.QUEST) {
@@ -4598,8 +4673,8 @@ public final class mudclient implements Runnable {
 				if (this.messageTabActivity_Quest % 30 > 15) {
 					color = GenUtil.buildColor(255, 50, 50);
 				}
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Quest history", color, 0, 0,
-					6 + this.getGameHeight());
+				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(2), "Quest history", color, 0, 0,
+					classicChatTabLabelY());
 
 				color = GenUtil.buildColor(255, 255, 255);
 				if (this.messageTabSelected == MessageTab.PRIVATE) {
@@ -4608,8 +4683,8 @@ public final class mudclient implements Runnable {
 				if (this.messageTabActivity_Private % 30 > 15) {
 					color = GenUtil.buildColor(255, 50, 50);
 				}
-				this.getSurface().drawColoredStringCentered(halfGameWidth() + 100, "Private history", color, 0, 0,
-					this.getGameHeight() + 6);
+				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(3), "Private history", color, 0, 0,
+					classicChatTabLabelY());
 				if (S_WANT_CLANS) {
 					color = GenUtil.buildColor(255, 255, 255);
 					if (this.messageTabSelected == MessageTab.CLAN) {
@@ -4618,10 +4693,10 @@ public final class mudclient implements Runnable {
 					if (this.messageTabActivity_Clan % 30 > 15) {
 						color = GenUtil.buildColor(255, 50, 50);
 					}
-					this.getSurface().drawColoredStringCentered(halfGameWidth() + 200, "Clan history", color, 0, 0, 6 + this.getGameHeight());
+					this.getSurface().drawColoredStringCentered(classicChatTabLabelX(4), "Clan history", color, 0, 0, classicChatTabLabelY());
 				} else {
 					color = GenUtil.buildColor(255, 255, 255);
-					this.getSurface().drawColoredStringCentered(halfGameWidth() + 200, "Report Abuse", color, 0, 0, 6 + this.getGameHeight());
+					this.getSurface().drawColoredStringCentered(classicChatTabLabelX(4), "Report Abuse", color, 0, 0, classicChatTabLabelY());
 				}
 			}
 		} catch (RuntimeException var3) {
@@ -11876,28 +11951,59 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeLoginBackground() {
 		ensureVoidscapeLoginAssetsLoaded();
-		if (this.voidscapeLoginBackground != null) {
-			this.getSurface().drawSprite(this.voidscapeLoginBackground, 0, 0, this.getGameWidth(), this.getGameHeight(), 5924);
+		int gameWidth = this.getGameWidth();
+		int gameHeight = this.getGameHeight();
+		int artWidth = this.voidscapeLoginBackground == null ? 0 : this.voidscapeLoginBackground.getWidth();
+		int artHeight = this.voidscapeLoginBackground == null ? 0 : this.voidscapeLoginBackground.getHeight();
+		if (artWidth > 0 && artHeight > 0) {
+			// Cover-fit: scale preserving the art's aspect ratio, centered, with
+			// the overflow cropped to the same 0..gameHeight region the historic
+			// stretch covered. When the window aspect matches the art this
+			// reduces to exactly the old full-stretch draw (drawWidth==gameWidth,
+			// drawHeight==gameHeight at 0,0). Overflow rounds up so no 1px gap.
+			int drawWidth = gameWidth;
+			int drawHeight = gameHeight;
+			if ((long) gameWidth * artHeight >= (long) gameHeight * artWidth) {
+				drawHeight = (int) (((long) gameWidth * artHeight + artWidth - 1) / artWidth);
+			} else {
+				drawWidth = (int) (((long) gameHeight * artWidth + artHeight - 1) / artHeight);
+			}
+			int drawX = (gameWidth - drawWidth) / 2;
+			int drawY = (gameHeight - drawHeight) / 2;
+			// Temp clip crops the overflow at the game-height line so the 12px
+			// footer strip stays untouched. Bottom is gameHeight + 1 because the
+			// scaled-sprite bottom clip is off-by-one (y + h >= clipBottom trims
+			// to clipBottom - y - 1): with an exact gameHeight clip the matching-
+			// aspect draw would lose its last row and no longer be byte-identical.
+			this.getSurface().setClip(0, gameWidth, gameHeight + 1, 0);
+			this.getSurface().drawSprite(this.voidscapeLoginBackground, drawX, drawY, drawWidth, drawHeight, 5924);
+			this.getSurface().setClip(0, gameWidth, gameHeight + 12, 0);
+		} else if (this.voidscapeLoginBackground != null) {
+			this.getSurface().drawSprite(this.voidscapeLoginBackground, 0, 0, gameWidth, gameHeight, 5924);
 		} else {
-			this.getSurface().drawVerticalGradient(0, 0, this.getGameWidth(), this.getGameHeight(), 0x111318, 0x020203);
+			this.getSurface().drawVerticalGradient(0, 0, gameWidth, gameHeight, 0x111318, 0x020203);
 		}
-		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 10);
+		this.getSurface().drawBoxAlpha(0, 0, gameWidth, gameHeight, 0, 10);
 	}
 
 	private void drawVoidscapeLoginHome() {
 		int cx = halfGameWidth();
-		drawVoidscapeFrame(cx - 97, 118, 194, 185);
-		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", UiSkin.GOLD_TITLE, 1, 143);
-		drawVoidscapeCenteredText(cx, "Relive the classic.", UiSkin.TEXT_BODY, 1, 160);
+		int frameY = voidscapeLoginHomeFrameY();
+		// Offsets keep the historic absolutes at the 334 baseline (frameY 118):
+		// title 118+25 == 143, subtitle +42 == 160, status +149/+163 == 267/281,
+		// tagline +153 == 271.
+		drawVoidscapeFrame(cx - 97, frameY, 194, voidscapeLoginHomeFrameHeight());
+		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", UiSkin.GOLD_TITLE, 1, frameY + 25);
+		drawVoidscapeCenteredText(cx, "Relive the classic.", UiSkin.TEXT_BODY, 1, frameY + 42);
 		drawVoidscapeButton(cx, voidscapeLoginHomeNewUserY(), voidscapeLoginHomeButtonWidth(),
 			voidscapeLoginHomeButtonHeight(), "Create Account", true);
 		drawVoidscapeButton(cx, voidscapeLoginHomeExistingUserY(), voidscapeLoginHomeButtonWidth(),
 			voidscapeLoginHomeButtonHeight(), "Existing User", false);
 		if (this.voidscapeLoginHomeStatus1.length() > 0) {
-			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus1, 0xffd98a, 0, 267);
-			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus2, 0xe6e3d8, 0, 281);
+			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus1, 0xffd98a, 0, frameY + 149);
+			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus2, 0xe6e3d8, 0, frameY + 163);
 		} else {
-			drawVoidscapeCenteredText(cx, "The void awaits.", 0xb66cff, 1, 271);
+			drawVoidscapeCenteredText(cx, "The void awaits.", 0xb66cff, 1, frameY + 153);
 		}
 	}
 
@@ -16800,6 +16906,11 @@ public final class mudclient implements Runnable {
 		drawAdvancedCategory(railX + 6, railY + categoryStep * 2, railWidth - 12, "Visuals", ADVANCED_CATEGORY_VISUALS);
 		drawAdvancedCategory(railX + 6, railY + categoryStep * 3, railWidth - 12, "Chat", ADVANCED_CATEGORY_CHAT);
 		drawAdvancedCategory(railX + 6, railY + categoryStep * 4, railWidth - 12, "Interface", ADVANCED_CATEGORY_INTERFACE);
+		if (!isAndroid()) {
+			// Desktop-only display group: window presets / UI scale / scale
+			// filter live in ScaledWindow-backed plumbing that Android lacks.
+			drawAdvancedCategory(railX + 6, railY + categoryStep * 5, railWidth - 12, "Display", ADVANCED_CATEGORY_DISPLAY);
+		}
 
 		int contentX = x + railWidth + 18;
 		int contentY = y + 45;
@@ -16870,6 +16981,21 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Country flag", "Show your IP country in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
 				drawAdvancedToggle(x, rowY, width, "Party invites", "Receive party invitations", !C_PARTY_INV, 36);
 				break;
+			case ADVANCED_CATEGORY_DISPLAY:
+				// Display group: viewport preset, UI scale and scale filter as one
+				// coherent block, reusing the existing desktop settings plumbing
+				// (cycleDesktopScreenSizePreset / enableWindowScaleMode /
+				// cycleScalingType) — no new persistence or packets.
+				this.getSurface().drawString("Display", x, rowY, UiSkin.GOLD_HEADER, 1);
+				rowY += 22;
+				if (!isAndroid()) {
+					rowY = drawAdvancedCycle(x, rowY, width, "Screen size",
+						ScaledWindow.getBaseViewportWidth() + "x" + ScaledWindow.getBaseViewportHeight(),
+						ADVANCED_ACTION_SCREEN_SIZE);
+					rowY = drawAdvancedCycle(x, rowY, width, "UI scale", getUiScaleValueLabel(), ADVANCED_ACTION_UI_SCALE);
+					drawAdvancedCycle(x, rowY, width, "Scale filter", getScaleFilterName(), ADVANCED_ACTION_SCALE_FILTER);
+				}
+				break;
 			case ADVANCED_CATEGORY_INTERFACE:
 				this.getSurface().drawString("Interface", x, rowY, 0xd9b6ff, 1);
 				rowY += 22;
@@ -16891,6 +17017,28 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "XP drops", "Show XP gained beside the screen", C_EXPERIENCE_DROPS, 25);
 				drawAdvancedToggle(x, rowY, width, "Hide combat XP drops", "Keep kill XP from floating up", C_HIDE_COMBAT_XP_DROPS, 49);
 				break;
+		}
+	}
+
+	// Plain-text value labels for the Display group rows (the legacy settings
+	// list keeps its own @col@-coded variants).
+	private String getUiScaleValueLabel() {
+		if (windowScaleMode) {
+			return "Window";
+		}
+		return scalingType == ScalingAlgorithm.INTEGER_SCALING
+			? (int) renderingScalar + "x"
+			: renderingScalar + "x";
+	}
+
+	private String getScaleFilterName() {
+		switch (scalingType) {
+			case BILINEAR_INTERPOLATION:
+				return "Soft";
+			case BICUBIC_INTERPOLATION:
+				return "Smooth";
+			default:
+				return "Crisp";
 		}
 	}
 
@@ -17010,6 +17158,24 @@ public final class mudclient implements Runnable {
 				break;
 			case ADVANCED_ACTION_SCREENSHOT:
 				captureScreenshot();
+				break;
+			case ADVANCED_ACTION_SCREEN_SIZE:
+				if (!isAndroid()) {
+					cycleDesktopScreenSizePreset();
+				}
+				break;
+			case ADVANCED_ACTION_UI_SCALE:
+				// Mirrors the legacy DESKTOP_UI_SCALE_BUTTON click: return to
+				// window-follow scaling (drag the window to scale the UI). The
+				// fine +/- fixed-scalar stepper stays in the legacy settings list.
+				if (!isAndroid() && !windowScaleMode) {
+					enableWindowScaleMode();
+				}
+				break;
+			case ADVANCED_ACTION_SCALE_FILTER:
+				if (!isAndroid()) {
+					cycleScalingType();
+				}
 				break;
 			case 34:
 				C_INV_COUNT = !C_INV_COUNT;
@@ -23894,28 +24060,28 @@ public final class mudclient implements Runnable {
 						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 							handleVoidscapeChatTabClick();
-						} else if (mouseY > (getGameHeight() - 4)) { // Chat Tab Selection
+						} else if (classicChatTabRowHit(mouseY)) { // Chat Tab Selection
 							final MessageTab androidSmokeBeforeMessageTab = this.messageTabSelected;
-							if (mouseX > 15 + (halfGameWidth() - 256) && mouseX < 96 + (halfGameWidth() - 256)
+							if (classicChatTabHit(0, mouseX)
 								&& lastMouseButtonDown == 1) {
 								this.messageTabSelected = MessageTab.ALL;
 							}
-							if (mouseX > 110 + (halfGameWidth() - 256) && mouseX < 194 + (halfGameWidth() - 256)
+							if (classicChatTabHit(1, mouseX)
 								&& lastMouseButtonDown == 1) {
 								this.messageTabSelected = MessageTab.CHAT;
 								this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] = 999999;
 							}
-							if (mouseX > 215 + (halfGameWidth() - 256) && mouseX < 295 + (halfGameWidth() - 256)
+							if (classicChatTabHit(2, mouseX)
 							&& lastMouseButtonDown == 1) {
 							this.messageTabSelected = MessageTab.QUEST;
 							this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] = 999999;
 						}
-						if (mouseX > 315 + (halfGameWidth() - 256) && mouseX < 395 + (halfGameWidth() - 256)
+						if (classicChatTabHit(3, mouseX)
 							&& lastMouseButtonDown == 1) {
 							this.messageTabSelected = MessageTab.PRIVATE;
 							this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] = 999999;
 						}
-						if (mouseX > 417 + (halfGameWidth() - 256) && mouseX < 497 + (halfGameWidth() - 256)
+						if (classicChatTabHit(4, mouseX)
 							&& lastMouseButtonDown == 1) {
 							if (S_WANT_CLANS) {
 								this.messageTabSelected = MessageTab.CLAN;
@@ -23959,7 +24125,7 @@ public final class mudclient implements Runnable {
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							if ((!useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat()) && this.messageTabSelected != MessageTab.ALL && this.mouseX >= 494
-								&& this.mouseY >= this.getGameHeight() - 66) {
+								&& this.mouseY >= this.getGameHeight() - CHAT_PANEL_GESTURE_ZONE_HEIGHT) {
 								this.lastMouseButtonDown = 0;
 							}
 

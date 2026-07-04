@@ -412,9 +412,13 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		if (null != g) {
 			g.translate(mudclient.screenOffsetX, mudclient.screenOffsetY);
 			Font font = new Font("Helvetica", 1, 15);
-			short width = 512;
+			// Center on the real applet size (kept equal to the game buffer by
+			// ScaledWindow) instead of the historic hardcoded 512x344, so the
+			// "Connection lost" box lands mid-window at every preset. Falls back
+			// to the mudclient dimensions if the peer has no size yet.
+			int width = this.getWidth() > 0 ? this.getWidth() : mudclient.getGameWidth();
+			int height = this.getHeight() > 0 ? this.getHeight() : mudclient.getGameHeight() + 12;
 			g.setColor(Color.black);
-			short height = 344;
 			g.fillRect(width / 2 - 140, height / 2 - 25, 280, 50);
 			g.setColor(Color.white);
 			g.drawRect(width / 2 - 140, height / 2 - 25, 280, 50);
@@ -721,7 +725,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				if (mudclient.mouseLastProcessedX != 0 && mudclient.mouseLastProcessedY != 0) {
 					int distanceX = (mudclient.mouseX - mudclient.mouseLastProcessedX)/2;
 					int distanceY = (mudclient.mouseY - mudclient.mouseLastProcessedY)/2;
-					boolean touchedMessagePanelArea = mudclient.getGameHeight() - Math.max(mudclient.mouseY, mudclient.mouseLastProcessedY) <= 66;
+					boolean touchedMessagePanelArea = mudclient.getGameHeight() - Math.max(mudclient.mouseY, mudclient.mouseLastProcessedY)
+						<= orsc.mudclient.CHAT_PANEL_GESTURE_ZONE_HEIGHT;
 
 					boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 					boolean mayBeScrollable = mudclient.showUiTab != 0;
@@ -799,7 +804,13 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		public final synchronized void mouseWheelMoved(MouseWheelEvent e) {
 			updateControlShiftState(e);
 
-			boolean touchedMessagePanelArea = getHeight() - e.getY() <= 75;
+			// Same game-coordinate chat gesture zone as the drag path above:
+			// e.getY() is already mapped into game coordinates by ScaledWindow,
+			// so test against the game height, not the component height (the old
+			// component-height test was effectively a 63px game band: 75 minus
+			// the 12px footer included in the applet height).
+			boolean touchedMessagePanelArea = mudclient.getGameHeight() - e.getY()
+				<= orsc.mudclient.CHAT_PANEL_GESTURE_ZONE_HEIGHT;
 
 			boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 			boolean mayBeScrollable = mudclient.showUiTab != 0;
