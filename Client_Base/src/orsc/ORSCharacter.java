@@ -52,8 +52,6 @@ public final class ORSCharacter {
 	public int waypointIndexCurrent;
 	public int[] waypointsX = new int[10];
 	public int[] waypointsZ = new int[10];
-	public String clanTag;
-	public String partyTag;
 	public boolean isInvisible = false;
 	public boolean isInvulnerable = false;
 	int icon = 0;

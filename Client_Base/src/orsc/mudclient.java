@@ -17,8 +17,6 @@ import com.openrsc.data.DataOperations;
 import com.openrsc.interfaces.NComponent;
 import com.openrsc.interfaces.NCustomComponent;
 import com.openrsc.interfaces.misc.*;
-import com.openrsc.interfaces.misc.clan.Clan;
-import com.openrsc.interfaces.misc.party.Party;
 import orsc.buffers.RSBuffer;
 import orsc.buffers.RSBufferUtils;
 import orsc.buffers.RSBuffer_Bits;
@@ -735,7 +733,7 @@ public final class mudclient implements Runnable {
 	public int mouseButtonItemCountIncrement = 0;
 	public boolean authenticSettings = !(
 		isAndroid() ||
-			S_WANT_CLANS || S_WANT_KILL_FEED
+			S_WANT_KILL_FEED
 			|| S_FOG_TOGGLE || S_GROUND_ITEM_TOGGLE
 			|| S_AUTO_MESSAGE_SWITCH_TOGGLE || S_BATCH_PROGRESSION
 			|| S_SIDE_MENU_TOGGLE || S_INVENTORY_COUNT_TOGGLE
@@ -761,13 +759,9 @@ public final class mudclient implements Runnable {
 	public static List<Float> interpolationScalars = null;
 	public int resizeWidth;
 	public int resizeHeight;
-	public Clan clan;
-	public Party party;
 	public boolean PAUSED;
 	public boolean gotInitialConfigs = false;
 	public ArrayList<String> skillGuideChosenTabs;
-	public String clanKickPlayer;
-	public String partyKickPlayer;
 	public boolean cameraAllowPitchModification = true;
 	public boolean isFirstPersonView = false;
 	public final static int DEFAULT_CAMERA_PITCH = 912;
@@ -916,7 +910,6 @@ public final class mudclient implements Runnable {
 	private int controlSettingPanel;
 	private int controlPlayerTaskInfoPanel;
 	private int controlSocialPanel;
-	private int controlClanPanel;
 	private int currentRegionMaxX;
 	private int currentRegionMaxZ;
 	private int currentRegionMinX;
@@ -1099,7 +1092,6 @@ public final class mudclient implements Runnable {
 	private int messageTabActivity_Chat = 0;
 	private int messageTabActivity_Game = 0;
 	private int messageTabActivity_Private = 0;
-	private int messageTabActivity_Clan = 0;
 	private int messageTabActivity_Quest = 0;
 	private int midRegionBaseX;
 	private int midRegionBaseZ;
@@ -1117,10 +1109,6 @@ public final class mudclient implements Runnable {
 	private int objectAnimationNumberTorch = 0;
 	private boolean optionCameraModeAuto = false;
 	private boolean optionMouseButtonOne = false;
-	private boolean clanInviteBlockSetting = false;
-	private boolean partyInviteBlockSetting = false;
-	private int controlPartyPanel;
-	private Panel panelParty;
 	private Panel panelAppearance;
 	private Panel panelLogin;
 	private Panel panelLoginWelcome;
@@ -1169,14 +1157,12 @@ public final class mudclient implements Runnable {
 	private int panelMessageEntry;
 	private int panelMessagePrivate;
 	private int panelMessageQuest;
-	private int panelMessageClan;
 	private Panel panelMessageTabs;
 	private Panel panelPlayerInfo;
 	private Panel panelQuestInfo;
 	private Panel panelPlayerTaskInfo;
 	private Panel panelSettings;
 	private Panel panelSocial;
-	private Panel panelClan;
 	private SocialPopupMode panelSocialPopup_Mode = SocialPopupMode.NONE;
 	private int panelSocialTab = 0;
 	private PasswordChangeMode panelPasswordChange_Mode = PasswordChangeMode.NONE;
@@ -1359,7 +1345,6 @@ public final class mudclient implements Runnable {
 	private NComponent mainComponent;
 	private NCustomComponent experienceOverlay;
 	private ProgressBarInterface batchProgressBar;
-	private PartyGUI partyMenu;
 	private BankPinInterface bankPinInterface;
 	private FishingTrawlerInterface fishingTrawlerInterface;
 	private String skillGuideChosen;
@@ -1923,28 +1908,6 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	public final void addPartyInv(String player) {
-		try {
-			String var3 = StringUtil.displayNameToKey(player);
-			if (null != var3) {
-				int var4;
-
-				if (!var3.equals(StringUtil.displayNameToKey(this.localPlayer.accountName))) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(12);
-					this.packetHandler.getClientStream().bufferBits.putByte(9);
-					this.packetHandler.getClientStream().bufferBits.putString(player);
-					this.packetHandler.getClientStream().finishPacket();
-				} else {
-					this.showMessage(false, null, "You can't invite yourself to a party.",
-						MessageType.GAME, 0, null);
-				}
-			}
-		} catch (RuntimeException var5) {
-			throw GenUtil.makeThrowable(var5, "client.PC(" + "dummy" + ',' + (player != null ? "{...}" : "null") + ')');
-		}
-	}
-
 	public final void addIgnore(String player) {
 		try {
 
@@ -2342,43 +2305,8 @@ public final class mudclient implements Runnable {
 					"@whi@" + name + level);
 				this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_FOLLOW, "Follow",
 					"@whi@" + name + level);
-				if (S_WANT_PARTIES) {
-					if (party.inParty()) {
-						String dn = StringUtil.displayNameToKey(player.displayName);
-						String v0 = StringUtil.displayNameToKey(party.username[0]);
-						String v1 = StringUtil.displayNameToKey(party.username[1]);
-						String v2 = StringUtil.displayNameToKey(party.username[2]);
-						String v3 = StringUtil.displayNameToKey(party.username[3]);
-						String v4 = StringUtil.displayNameToKey(party.username[4]);
-						if (dn.equals(StringUtil.displayNameToKey(v0)) && party.partyMembersTotal[0] > 1) {
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						} else if (dn.equals(StringUtil.displayNameToKey(v1)) && party.partyMembersTotal[0] > 1) {
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						} else if (dn.equals(StringUtil.displayNameToKey(v2)) && party.partyMembersTotal[0] > 2) {
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						} else if (dn.equals(StringUtil.displayNameToKey(v3)) && party.partyMembersTotal[0] > 3) {
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						} else if (dn.equals(StringUtil.displayNameToKey(v4)) && party.partyMembersTotal[0] > 4) {
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						} else {
-							this.menuCommon.addCharacterItem(player.serverIndex, MenuItemAction.PLAYER_PARTY_INVITE, "Invite to party",
-								"@whi@" + name + level);
-							this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-								MenuItemAction.REPORT_ABUSE, player.accountName);
-						}
-					} else {
-						this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-							MenuItemAction.REPORT_ABUSE, player.accountName);
-					}
-				} else {
-					this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
-						MenuItemAction.REPORT_ABUSE, player.accountName);
-				}
+				this.menuCommon.addItem_With2Strings("Report abuse", "@whi@" + name + level, player.getStaffName(),
+					MenuItemAction.REPORT_ABUSE, player.accountName);
 				if (modMenu) {
 					this.menuCommon.addItem_With2Strings("Summon", "@whi@" + name, player.displayName,
 						MenuItemAction.MOD_SUMMON_PLAYER, player.accountName);
@@ -3553,7 +3481,6 @@ public final class mudclient implements Runnable {
 				MESSAGE_COMMAND_INPUT_MAX, false, true);
 			this.panelMessageQuest = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessagePrivate = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
-			this.panelMessageClan = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessageTabs.setFocus(this.panelMessageEntry);
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "client.JC(" + var1 + ')');
@@ -4635,13 +4562,8 @@ public final class mudclient implements Runnable {
 				return;
 			}
 			this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, getGameHeight(), getGameWidth(), 10, 0, 0, 0, false, 0, 1);
-			if (S_WANT_CLANS) {
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABS.getDef()), classicChatTabStripX(),
-					classicChatTabStripY());
-			} else {
-				this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABSCLAN.getDef()), classicChatTabStripX(),
-					classicChatTabStripY());
-			}
+			this.getSurface().drawSprite(spriteSelect(GUIPARTS.CHATTABSCLAN.getDef()), classicChatTabStripX(),
+				classicChatTabStripY());
 
 			if (var1 == 5) {
 				// Label centres: strip + 56/156/256/356/456 == the historic
@@ -4685,19 +4607,8 @@ public final class mudclient implements Runnable {
 				}
 				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(3), "Private history", color, 0, 0,
 					classicChatTabLabelY());
-				if (S_WANT_CLANS) {
-					color = GenUtil.buildColor(255, 255, 255);
-					if (this.messageTabSelected == MessageTab.CLAN) {
-						color = GenUtil.buildColor(255, 200, 50);
-					}
-					if (this.messageTabActivity_Clan % 30 > 15) {
-						color = GenUtil.buildColor(255, 50, 50);
-					}
-					this.getSurface().drawColoredStringCentered(classicChatTabLabelX(4), "Clan history", color, 0, 0, classicChatTabLabelY());
-				} else {
-					color = GenUtil.buildColor(255, 255, 255);
-					this.getSurface().drawColoredStringCentered(classicChatTabLabelX(4), "Report Abuse", color, 0, 0, classicChatTabLabelY());
-				}
+				color = GenUtil.buildColor(255, 255, 255);
+				this.getSurface().drawColoredStringCentered(classicChatTabLabelX(4), "Report Abuse", color, 0, 0, classicChatTabLabelY());
 			}
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "client.QB(" + var1 + ')');
@@ -8686,19 +8597,7 @@ public final class mudclient implements Runnable {
 									this.panelMessageTabs.setText(this.panelMessageEntry, "::wiki ");
 								}
 							}
-							/*if (S_WANT_CLANS) {
-								uiX += uiWidth + 15;
-								this.getSurface().drawBoxAlpha(uiX, uiY, uiWidth, uiHeight, 0x659CDE, 160);
-								this.getSurface().drawBoxBorder(uiX, uiWidth, uiY, uiHeight, 0);
-								this.getSurface().drawString("@whi@Clan", uiX + 12, uiY + 20, 0xffffff, 1);
-								if (this.mouseButtonClick != 0) {
-									if (this.mouseX >= uiX && this.mouseX <= uiX + uiWidth && this.mouseY >= uiY && this.mouseY <= uiY + uiHeight) {
-										this.mouseButtonClick = 0;
-										this.panelMessageTabs.setText(this.panelMessageEntry, "::c ");
-									}
-								}
-							}
-							uiX += uiWidth + 15;
+							/*uiX += uiWidth + 15;
 							this.getSurface().drawBoxAlpha(uiX, uiY, uiWidth, uiHeight, 0xff0000, 160);
 							this.getSurface().drawBoxBorder(uiX, uiWidth, uiY, uiHeight, 0);
 							this.getSurface().drawString("@whi@Online", uiX + 12, uiY + 20, 0xffffff, 1);
@@ -8813,7 +8712,6 @@ public final class mudclient implements Runnable {
 					this.panelMessageTabs.hide(this.panelMessageChat);
 					this.panelMessageTabs.hide(this.panelMessageQuest);
 					this.panelMessageTabs.hide(this.panelMessagePrivate);
-					this.panelMessageTabs.hide(this.panelMessageClan);
 					this.panelMessageTabs.hide(this.panelMessageEntry);
 					if (!voidscapeChatHidden) {
 						this.panelMessageTabs.show(this.panelMessageEntry);
@@ -8824,8 +8722,6 @@ public final class mudclient implements Runnable {
 						this.panelMessageTabs.show(this.panelMessageQuest);
 					} else if (!voidscapeChatHidden && this.messageTabSelected == MessageTab.PRIVATE) {
 						this.panelMessageTabs.show(this.panelMessagePrivate);
-					} else if (!voidscapeChatHidden && this.messageTabSelected == MessageTab.CLAN) {
-						this.panelMessageTabs.show(this.panelMessageClan);
 					}
 
 					if (!voidscapeChatHidden) {
@@ -9548,8 +9444,6 @@ public final class mudclient implements Runnable {
 		marker.accountName = this.localPlayer.accountName;
 		marker.displayName = this.localPlayer.displayName;
 		marker.title = this.localPlayer.title;
-		marker.clanTag = this.localPlayer.clanTag;
-		marker.partyTag = this.localPlayer.partyTag;
 		marker.groupID = this.localPlayer.groupID;
 		marker.serverIndex = this.localPlayer.serverIndex;
 		marker.colourBottom = this.localPlayer.colourBottom;
@@ -11764,48 +11658,6 @@ public final class mudclient implements Runnable {
 					} catch (NumberFormatException var13) {
 						System.out.println("Drop X number format exception: " + var13);
 					}
-				} else if (this.inputX_Action == InputXAction.INVITE_CLAN_PLAYER) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(11);
-					this.packetHandler.getClientStream().bufferBits.putByte(2);
-					this.packetHandler.getClientStream().bufferBits.putString(str);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.KICK_CLAN_PLAYER) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(11);
-					this.packetHandler.getClientStream().bufferBits.putByte(5);
-					this.packetHandler.getClientStream().bufferBits.putString(clanKickPlayer);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.CLAN_DELEGATE_LEADERSHIP) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(11);
-					this.packetHandler.getClientStream().bufferBits.putByte(6);
-					this.packetHandler.getClientStream().bufferBits.putString(clanKickPlayer);
-					this.packetHandler.getClientStream().bufferBits.putByte(1);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.CLAN_LEAVE) {
-					clan.getClanInterface().sendClanLeave();
-				} else if (this.inputX_Action == InputXAction.INVITE_PARTY_PLAYER) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(12);
-					this.packetHandler.getClientStream().bufferBits.putByte(9);
-					this.packetHandler.getClientStream().bufferBits.putString(str);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.KICK_PARTY_PLAYER) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(12);
-					this.packetHandler.getClientStream().bufferBits.putByte(5);
-					this.packetHandler.getClientStream().bufferBits.putString(partyKickPlayer);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.PARTY_DELEGATE_LEADERSHIP) {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(12);
-					this.packetHandler.getClientStream().bufferBits.putByte(6);
-					this.packetHandler.getClientStream().bufferBits.putString(partyKickPlayer);
-					this.packetHandler.getClientStream().bufferBits.putByte(1);
-					this.packetHandler.getClientStream().finishPacket();
-				} else if (this.inputX_Action == InputXAction.PARTY_LEAVE) {
-					party.getPartyInterface().sendPartyLeave();
 				} else if (this.inputX_Action == InputXAction.SERVER_PROMPT) {
 					this.packetHandler.getClientStream().newPacket(199);
 					this.packetHandler.getClientStream().bufferBits.putByte(9);
@@ -13720,8 +13572,6 @@ public final class mudclient implements Runnable {
 					} else {
 						this.getSurface().drawShadowText(staffName, (width - this.getSurface().stringWidth(0, staffName)) / 2 + x + 1, nameLineY, 0xffff00, 0, false);
 					}
-					if (labelOverlayEnabled && player.clanTag != null)
-						this.getSurface().drawColoredString((width - this.getSurface().stringWidth(0, "< " + player.clanTag + " >")) / 2 + x + 1, hasPlayerTitle ? y + 1 : y - 5, "< " + player.clanTag + " >", 0, 0x7CADDA, 0);
 				}
 
 				final int prayerOverheadBubbleItem = getPrayerOverheadBubbleItem(player);
@@ -14629,10 +14479,6 @@ public final class mudclient implements Runnable {
 					ironmanInterface.onRender(getSurface());
 				} else if (achievementInterface.isVisible() && combatTimeout == 0) {
 					achievementInterface.onRender(getSurface());
-				} else if (clan.getClanInterface().isVisible() && !C_CUSTOM_UI) {
-					clan.getClanInterface().onRender(getSurface());
-				} else if (party.getPartyInterface().isVisible()) {
-					party.getPartyInterface().onRender(getSurface());
 				} else if (this.shouldDrawShopDialog() && !C_CUSTOM_UI) {
 					this.drawDialogShop();
 				} else if (S_WANT_SKILL_MENUS && skillGuideInterface.isVisible() && !C_CUSTOM_UI) {
@@ -14742,14 +14588,6 @@ public final class mudclient implements Runnable {
 						this.drawLostOnDeath();
 						interfaceOpen = true;
 					}
-					if (clan.getClanInterface().isVisible()) {
-						clan.getClanInterface().onRender(getSurface());
-						interfaceOpen = true;
-					}
-					if (party.getPartyInterface().isVisible()) {
-						party.getPartyInterface().onRender(getSurface());
-						interfaceOpen = true;
-					}
 					if (this.isShowDialogBank() && this.combatTimeout == 0) {
 						this.showUiTab = 0;
 						this.drawDialogBank();
@@ -14853,17 +14691,13 @@ public final class mudclient implements Runnable {
 				|| this.messageTabSelected == MessageTab.QUEST
 				&& this.panelMessageTabs.isClicked(this.panelMessageQuest)
 				|| this.messageTabSelected == MessageTab.PRIVATE
-				&& this.panelMessageTabs.isClicked(this.panelMessagePrivate)
-				|| this.messageTabSelected == MessageTab.CLAN
-				&& this.panelMessageTabs.isClicked(this.panelMessageClan)) {
+				&& this.panelMessageTabs.isClicked(this.panelMessagePrivate)) {
 				int control =
 					(
 						(this.messageTabSelected == MessageTab.CHAT ? this.panelMessageChat
 							:
 							this.messageTabSelected == MessageTab.QUEST ? this.panelMessageQuest
-								:
-								(this.messageTabSelected == MessageTab.CLAN ? this.panelMessageClan
-									: this.panelMessagePrivate)
+								: this.panelMessagePrivate
 						));
 				int index = this.panelMessageTabs.getControlClickedListIndex(control);
 				if (index >> 16 == 2 || this.optionMouseButtonOne && index >> 16 == 1) {
@@ -15671,65 +15505,7 @@ public final class mudclient implements Runnable {
 				this.cameraAutoMoveX = -88;
 			}
 
-			// if clans are enabled
-			if (S_WANT_CLANS) {
-				int socialTabFont = voidSkin ? 1 : 4;
-				int socialTabTextY = var4 + (voidSkin ? 15 : 16);
-				int socialTabPad = voidSkin ? voidscapeRightPanelSubHeaderPad() : 0;
-				int socialTabX = var3 + socialTabPad;
-				int socialTabW = var5 - socialTabPad * 2;
-				int socialThird = socialTabW / 3;
-				int socialIgnoreW = socialTabW - socialThird * 2;
-				int clanTab;
-				int colorB;
-				int colorA = colorB = clanTab = voidSkin ? vBoxBg : GenUtil.buildColor(160, 160, 160);
-				if (this.panelSocialTab == 1) {
-					clanTab = voidSkin ? vSel : GenUtil.buildColor(220, 220, 220);
-					if (C_CUSTOM_UI)
-						var4 -= 19;
-					if (clan.inClan()) {
-						this.getSurface().drawBoxAlpha(var3, 24 + var4, var5, 49,
-							voidSkin ? vBoxBg : GenUtil.buildColor(220, 220, 220), voidSkin ? vBodyAlpha : 192);
-						this.getSurface().drawLineHoriz(var3, var4 + 72, var5, voidSkin ? vLine : 0);
-						this.getSurface().drawBoxAlpha(var3, var4 + var6 - 16 + 34, var5, 49,
-							voidSkin ? vBoxBg : GenUtil.buildColor(220, 220, 220), voidSkin ? vBodyAlpha : 192);
-					} else {
-						this.getSurface().drawBoxAlpha(var3, var4 + var6 - 30, var5, 49,
-							voidSkin ? vBoxBg : GenUtil.buildColor(220, 220, 220), voidSkin ? vBodyAlpha : 192);
-					}
-				} else if (this.panelSocialTab == 0) {
-					colorA = voidSkin ? vSel : GenUtil.buildColor(220, 220, 220);
-				} else {
-					colorB = voidSkin ? vSel : GenUtil.buildColor(220, 220, 220);
-				}
-
-				this.getSurface().drawBoxAlpha(voidSkin ? socialTabX : var3, var4,
-					voidSkin ? socialThird : 65, 24, colorA, voidSkin ? vTabAlpha : 128);
-				this.getSurface().drawBoxAlpha(voidSkin ? socialTabX + socialThird : var3 + var5 / 2 - 32,
-					var4, voidSkin ? socialThird : 65, 24, clanTab, voidSkin ? vTabAlpha : 128);
-				this.getSurface().drawBoxAlpha(voidSkin ? socialTabX + socialThird * 2 : var3 + var5 / 2 + 33,
-					var4, voidSkin ? socialIgnoreW : 65, 24, colorB, voidSkin ? vTabAlpha : 128);
-				this.getSurface().drawBoxAlpha(var3, (this.panelSocialTab == 1 && clan.inClan() ? 49 : 0) + 24 + var4,
-					var5, (this.panelSocialTab == 1 ? 127 : var6 - 24),
-					voidSkin ? vBoxBg : GenUtil.buildColor(220, 220, 220), voidSkin ? vBodyAlpha : 128);
-				this.getSurface().drawLineHoriz(voidSkin ? socialTabX : var3, var4 + 24,
-					voidSkin ? socialTabW : var5, voidSkin ? vLine : 0);
-				this.getSurface().drawLineVert(voidSkin ? socialTabX + socialThird : var5 / 2 + var3 - 33,
-					0 + var4, voidSkin ? vLine : 0, 24);
-				this.getSurface().drawLineVert(voidSkin ? socialTabX + socialThird * 2 : var5 / 2 + var3 + 33,
-					0 + var4, voidSkin ? vLine : 0, 24);
-				this.getSurface().drawLineHoriz(var3,
-					var4 + var6 - 16 + (this.panelSocialTab == 1 ? clan.inClan() ? 34 : -15 : 0),
-					var5, voidSkin ? vLine : 0);
-				this.getSurface().drawColoredStringCentered(voidSkin ? socialTabX + socialThird / 2 : var3 + var5 / 4 - 16,
-					"Friends", voidSkin ? vText : 0, 0, socialTabFont, socialTabTextY);
-				this.getSurface().drawColoredStringCentered(voidSkin ? socialTabX + socialThird + socialThird / 2 : var5 / 4 + var3 + var5 / 2 - 33 - 16,
-					"Clan", voidSkin ? vText : 0, 0, socialTabFont, socialTabTextY);
-				this.getSurface().drawColoredStringCentered(voidSkin ? socialTabX + socialThird * 2 + socialIgnoreW / 2 : var5 / 4 + var3 + var5 / 2 + 16,
-					"Ignore", voidSkin ? vText : 0, 0, socialTabFont, socialTabTextY);
-				this.panelSocial.clearList(this.controlSocialPanel);
-				this.panelClan.clearList(this.controlClanPanel);
-			} else { // clans disabled
+			{
 				int socialTabFont = voidSkin ? 1 : 4;
 				int socialTabTextY = var4 + (voidSkin ? 15 : 16);
 				int socialTabPad = voidSkin ? voidscapeRightPanelSubHeaderPad() : 0;
@@ -15808,109 +15584,6 @@ public final class mudclient implements Runnable {
 				}
 
 				this.panelSocial.drawPanel();
-			}
-
-			// clan tab
-			if (this.panelSocialTab == 1) {
-				int listX = var3 + 3;
-				int listY = 75;
-
-				if (C_CUSTOM_UI)
-					listY = var4 + 39;
-
-				int buttonColorA = 0x0A2B56, buttonColorB = 0x0A2B56;
-
-				if (clan.inClan()) {
-					this.getSurface().drawString("Clan: @cla@" + clan.getClanName(), listX, listY, 0xFFFFFF, 1);
-					listY += 14;
-					this.getSurface().drawString("Tag: @cla@< " + clan.getClanTag() + " >", listX, listY, 0xFFFFFF, 1);
-					listY += 14;
-					this.getSurface().drawString("Leader: @yel@" + clan.getClanLeaderUsername(), listX, listY, 0xFFFFFF, 1);
-					for (index = 0; index < SocialLists.clanListCount; ++index) {
-
-						if ((clan.onlineClanMember[index]) == 0) {
-							colorKey = "@whi@";
-						} else {
-							colorKey = "@gre@";
-						}
-
-						String clanIsh = clan.username[index];
-						var12 = 0;
-
-						for (int var13 = clan.username[index].length(); this.getSurface().stringWidth(1,
-							clanIsh) > 120; clanIsh = clan.username[index].substring(0, var13 - var12) + "...") {
-							++var12;
-						}
-						this.panelClan.setListEntry(this.controlClanPanel, index, (clan.clanRank[index] == 0 ? "     " : "") + colorKey + clanIsh + "          ", 0,
-							null, null);
-					}
-					if (this.mouseX > var3 + 20 && this.mouseX < var3 + 94 && this.mouseY > var6 + (var4 + 26)
-						&& this.mouseY < var6 + var4 + 60) {
-						buttonColorA = 0x263751;
-						if (getMouseClick() == 1) {
-							if (!C_CUSTOM_UI)
-								this.showUiTab = 0;
-							String[] inputXMessage = new String[]{"Are you sure you want to leave the clan?"};
-							this.showItemModX(inputXMessage, InputXAction.CLAN_LEAVE, false);
-							setMouseClick(0);
-						}
-					}
-					this.getSurface().drawBoxAlpha(listX + 17, listY + 141, 74, 34, buttonColorA, 192);
-					this.getSurface().drawBoxBorder(listX + 17, 74, listY + 141, 34, 0xBFA086);
-					this.getSurface().drawString("Leave Clan", listX + 17 + (74 / 2 - this.getSurface().stringWidth(0, "Leave Clan") / 2), listY + 141 + 34 / 2 + 4, 0xffffff, 0);
-
-
-					if (this.mouseX > var3 + 88 + 13 && this.mouseX < var3 + 88 + 88 && this.mouseY > var6 + (var4 + 26)
-						&& this.mouseY < var6 + var4 + 60) {
-						buttonColorB = 0x263751;
-						if (getMouseClick() == 1) {
-							clan.showClanSetupInterface(clan.inClan());
-							if (!C_CUSTOM_UI)
-								this.showUiTab = 0;
-							setMouseClick(0);
-						}
-					}
-					this.getSurface().drawBoxAlpha(listX + 17 + 82, listY + 141, 74, 34, buttonColorB, 192);
-					this.getSurface().drawBoxBorder(listX + 17 + 82, 74, listY + 141, 34, 0xBFA086);
-					this.getSurface().drawString("Clan Setup", listX + 14 + 85 + (74 / 2 - this.getSurface().stringWidth(0, "Clan Setup") / 2), listY + 141 + 34 / 2 + 4, 0xffffff, 0);
-
-				} else {
-					this.getSurface().drawString("You are not currently in a Clan", listX + 10, listY, 0xFFFFFF, 1);
-					listY += 28;
-					this.getSurface().drawWrappedCenteredString("Click on Clan Setup to create your own clan.% %If you are looking to join an existing Clan, click on Clan Search.", listX + 94, listY, 196 - 12, 1, 0xF38F30, true);
-					if (this.mouseX > var3 + 20 && this.mouseX < var3 + 94 && this.mouseY > var6 + (var4 - 23)
-						&& this.mouseY < var6 + var4 + 12) {
-						buttonColorA = 0x263751;
-						if (getMouseClick() == 1) {
-							clan.showClanSetupInterface(clan.inClan());
-							clan.getClanInterface().clanActivePanel = 3;
-							clan.getClanInterface().resetAll();
-							clan.getClanInterface().sendClanSearch();
-							if (!C_CUSTOM_UI)
-								this.showUiTab = 0;
-							setMouseClick(0);
-						}
-					}
-					this.getSurface().drawBoxAlpha(listX + 17, listY + 93, 74, 34, buttonColorA, 192);
-					this.getSurface().drawBoxBorder(listX + 17, 74, listY + 93, 34, 0xBFA086);
-					this.getSurface().drawString("Clan Search", listX + 17 + (74 / 2 - this.getSurface().stringWidth(0, "Clan Search") / 2), listY + 93 + 34 / 2 + 4, 0xffffff, 0);
-
-					if (this.mouseX > var3 + 88 + 13 && this.mouseX < var3 + 88 + 88 && this.mouseY > var6 + (var4 - 23)
-						&& this.mouseY < var6 + var4 + 12) {
-						buttonColorB = 0x263751;
-						if (getMouseClick() == 1) {
-							clan.showClanSetupInterface(clan.inClan());
-							if (!C_CUSTOM_UI)
-								this.showUiTab = 0;
-							setMouseClick(0);
-						}
-					}
-					this.getSurface().drawBoxAlpha(listX + 17 + 82, listY + 93, 74, 34, buttonColorB, 192);
-					this.getSurface().drawBoxBorder(listX + 17 + 82, 74, listY + 93, 34, 0xBFA086);
-					this.getSurface().drawString("Clan Setup", listX + 14 + 85 + (74 / 2 - this.getSurface().stringWidth(0, "Clan Setup") / 2), listY + 93 + 34 / 2 + 4, 0xffffff, 0);
-				}
-
-				this.panelClan.drawPanel();
 			}
 
 			this.m_nj = -1;
@@ -15993,39 +15666,12 @@ public final class mudclient implements Runnable {
 					this.panelSocial.handleMouse(voidSkin ? this.getMouseX() : (var3 - 199 + this.getSurface().width2), voidSkin ? this.getMouseY() : (var15 + 36),
 						this.currentMouseButtonDown, this.lastMouseButtonDown);
 					if (var15 <= 24 && this.mouseButtonClick == 1) {
-						if (S_WANT_CLANS) {
-							int firstTabEnd = voidSkin ? var5 / 3 : 65;
-							int ignoreTabStart = voidSkin ? (var5 * 2) / 3 : 132;
-							if (var3 < firstTabEnd && (this.panelSocialTab == 2 || this.panelSocialTab == 1)) {
-								this.panelSocialTab = 0; // Show Friends Tab (Clicked)
-								this.panelSocial.resetList(this.controlSocialPanel);
-							} else if (var3 >= ignoreTabStart && var3 < var5 && (this.panelSocialTab == 1 || this.panelSocialTab == 0)) {
-								this.panelSocialTab = 2; // Show Ignore Tab (Clicked)
-								this.panelSocial.resetList(this.controlSocialPanel);
-							}
-						} else {
-							if (var3 < var5 / 2 && (this.panelSocialTab == 2 || this.panelSocialTab == 1)) {
-								this.panelSocialTab = 0; // Show Friends Tab (Clicked)
-								this.panelSocial.resetList(this.controlSocialPanel);
-							} else if (var3 > var5 / 2 && (this.panelSocialTab == 1 || this.panelSocialTab == 0)) {
-								this.panelSocialTab = 2; // Show Ignore Tab (Clicked)
-								this.panelSocial.resetList(this.controlSocialPanel);
-							}
-						}
-					}
-				}
-				// handle clan tab
-				if (S_WANT_CLANS) {
-					int firstTabEnd = voidSkin ? var5 / 3 : 65;
-					int ignoreTabStart = voidSkin ? (var5 * 2) / 3 : 132;
-					if (var3 >= firstTabEnd && var15 >= 0 && var3 < ignoreTabStart && var15 < 26) {
-						this.panelClan.handleMouse(voidSkin ? this.getMouseX() : (var3 - 199 + this.getSurface().width2), voidSkin ? this.getMouseY() : (var15 + 36),
-							this.currentMouseButtonDown, this.lastMouseButtonDown);
-						if (var15 <= 24 && this.mouseButtonClick == 1) {
-							if (var3 >= firstTabEnd && var3 < ignoreTabStart && (this.panelSocialTab == 2 || this.panelSocialTab == 0)) {
-								this.panelSocialTab = 1; // Show Clan Tab (Clicked)
-								this.panelClan.resetList(this.controlClanPanel);
-							}
+						if (var3 < var5 / 2 && (this.panelSocialTab == 2 || this.panelSocialTab == 1)) {
+							this.panelSocialTab = 0; // Show Friends Tab (Clicked)
+							this.panelSocial.resetList(this.controlSocialPanel);
+						} else if (var3 > var5 / 2 && (this.panelSocialTab == 1 || this.panelSocialTab == 0)) {
+							this.panelSocialTab = 2; // Show Ignore Tab (Clicked)
+							this.panelSocial.resetList(this.controlSocialPanel);
 						}
 					}
 				}
@@ -16083,49 +15729,6 @@ public final class mudclient implements Runnable {
 					}
 
 					this.mouseButtonClick = 0;
-				}
-
-				// clan interactions
-				else if (var3 >= 0 && var15 >= 0 && var3 < var5 && var15 < 295 && this.panelSocialTab == 1 && S_WANT_CLANS) {
-					this.panelClan.handleMouse(var3 - 199 + this.getSurface().width2, var15 + 36,
-						this.currentMouseButtonDown, this.lastMouseButtonDown);
-					if (this.mouseButtonClick >= 1 && this.panelSocialTab == 1) {
-						index = this.panelClan.getControlSelectedListIndex(this.controlClanPanel);
-						if (index >= 0 && this.mouseX < maxWidth) {
-							if (mouseButtonClick == 2) {
-								if (StringUtil.displayNameToKey(clan.username[index]).equals(StringUtil.displayNameToKey(this.localPlayer.accountName))) {
-									return;
-								}
-								if (clan.isClanLeader() || clan.isAllowed(0)) { // Kick From Clan
-									this.menuCommon.addItem_With2Strings("Kick user",
-										"@whi@" + clan.username[index], clan.username[index],
-										MenuItemAction.CLAN_MENU_KICK, clan.username[index]);
-								}
-								boolean isOnFriendList = false;
-								boolean isOnline = false;
-
-								for (int i = 0; i < SocialLists.friendListCount; ++i) {
-									if (StringUtil.displayNameToKey(clan.username[index]).equals(StringUtil.displayNameToKey(SocialLists.friendList[i]))) {
-										isOnFriendList = true;
-										if ((4 & SocialLists.friendListOnlineStatus[i]) != 0) {
-											isOnline = true;
-										}
-										break;
-									}
-								}
-								if (isOnFriendList) {
-									if (isOnline) {
-										this.menuCommon.addItem_With2Strings("Message", "@whi@" + clan.username[index], clan.username[index],
-											MenuItemAction.CHAT_MESSAGE, clan.username[index]);
-									}
-								} else {
-									this.menuCommon.addItem_With2Strings("Add friend", "@whi@" + clan.username[index], clan.username[index],
-										MenuItemAction.CHAT_ADD_FRIEND, clan.username[index]);
-
-								}
-							}
-						}
-					}
 				}
 			}
 		} catch (RuntimeException npcLevel) {
@@ -16638,22 +16241,6 @@ public final class mudclient implements Runnable {
 							break;
 						}
 					}
-					for (int var17 = 0; var17 < SocialLists.clanListCount; ++var17) {
-						if (var16.equals(StringUtil.displayNameToKey(clan.username[var17]))
-							&& (clan.onlineClanMember[var17]) == 1) {
-							var15 = 0xFF00FF;
-							surface.drawCircle(var12 + posX + var4 / 2, posY - mZ + var5 / 2, 2, var15, 255, 0);
-						}
-					}
-					for (int var17 = 0; var17 < SocialLists.partyListCount; ++var17) {
-						if (var16.equals(StringUtil.displayNameToKey(party.username[var17]))
-							&& (party.onlinePartyMember[var17]) == 1) {
-							if (party.inParty()) {
-								var15 = 0x0B5394;
-								surface.drawCircle(var12 + posX + var4 / 2, posY - mZ + var5 / 2, 2, var15, 255, 0);
-							}
-						}
-					}
 				}
 
 				this.drawMinimapEntity(var15, var12 + posX + var4 / 2, (byte) -67, posY - mZ + var5 / 2);
@@ -17031,10 +16618,9 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Chat box", "Show bottom chat background/frame", C_CHAT_OVERLAY, ADVANCED_ACTION_CHAT_OVERLAY);
 				rowY = drawAdvancedToggle(x, rowY, width, "Auto message switch", "Jump to active message tabs", C_MESSAGE_TAB_SWITCH, 29);
 				rowY = drawAdvancedToggle(x, rowY, width, "Kill feed", "Show world kill messages", C_KILL_FEED, 31);
-				rowY = drawAdvancedToggle(x, rowY, width, "Name and clan tags", "Show extra overhead labels", C_NAME_CLAN_TAG_OVERLAY, 35);
+				rowY = drawAdvancedToggle(x, rowY, width, "Name tags", "Show overhead name labels", C_NAME_CLAN_TAG_OVERLAY, 35);
 				rowY = drawAdvancedToggle(x, rowY, width, "Global friend block", "Hide global friend messages", C_BLOCK_GLOBAL_FRIEND, 41);
-				rowY = drawAdvancedToggle(x, rowY, width, "Country flag", "Show your IP country in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
-				drawAdvancedToggle(x, rowY, width, "Party invites", "Receive party invitations", !C_PARTY_INV, 36);
+				drawAdvancedToggle(x, rowY, width, "Country flag", "Show your IP country in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
 				break;
 			case ADVANCED_CATEGORY_DISPLAY:
 				// Display group: viewport preset, UI scale and scale filter as one
@@ -17239,10 +16825,6 @@ public final class mudclient implements Runnable {
 			case 35:
 				C_NAME_CLAN_TAG_OVERLAY = !C_NAME_CLAN_TAG_OVERLAY;
 				sendGameSetting(35, C_NAME_CLAN_TAG_OVERLAY ? 1 : 0);
-				break;
-			case 36:
-				C_PARTY_INV = !C_PARTY_INV;
-				sendGameSetting(36, C_PARTY_INV ? 1 : 0);
 				break;
 			case 41:
 				C_BLOCK_GLOBAL_FRIEND = !C_BLOCK_GLOBAL_FRIEND;
@@ -19293,7 +18875,7 @@ public final class mudclient implements Runnable {
 		if (index == 1) return "Chat";
 		if (index == 2) return "Quest";
 		if (index == 3) return "PM";
-		return S_WANT_CLANS ? "Clan" : "Rpt";
+		return "Rpt";
 	}
 
 	private MessageTab voidscapeChatTabMessageTab(int index) {
@@ -19301,7 +18883,7 @@ public final class mudclient implements Runnable {
 		if (index == 1) return MessageTab.CHAT;
 		if (index == 2) return MessageTab.QUEST;
 		if (index == 3) return MessageTab.PRIVATE;
-		return MessageTab.CLAN;
+		return null; // tab 4 is Report Abuse, not a message tab
 	}
 
 	private String voidscapeChatTabIconAsset(int index, boolean active) {
@@ -19361,9 +18943,6 @@ public final class mudclient implements Runnable {
 		for (int i = 0; i < VOIDSCAPE_CHAT_TAB_COUNT; i++) {
 			int[] r = voidscapeChatTabRect(i);
 			boolean active = this.messageTabSelected == voidscapeChatTabMessageTab(i);
-			if (i == 4 && !S_WANT_CLANS) {
-				active = false;
-			}
 			boolean over = this.mouseX >= r[0] && this.mouseX < r[0] + r[2]
 				&& this.mouseY >= r[1] && this.mouseY < r[1] + r[3];
 			drawVoidscapeSkinSprite(active || over ? "top-tab-active.png" : "top-tab-normal.png",
@@ -19377,7 +18956,7 @@ public final class mudclient implements Runnable {
 				r[0] + (r[2] - iconSize) / 2, r[1] + (this.getGameHeight() <= 520 ? 5 : 6),
 				iconSize, iconSize);
 
-			if (!S_WANT_CLANS && i == 4) {
+			if (i == 4) {
 				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", 0xFF4040, 0, 5,
 					r[1] + r[3] - (this.getGameHeight() <= 520 ? 8 : 10));
 				continue;
@@ -19396,9 +18975,9 @@ public final class mudclient implements Runnable {
 			drawVoidscapeMobilePanelDock();
 			return;
 		}
-		String[] labels = new String[]{"All", "Chat", "Quest", "PM", S_WANT_CLANS ? "Clan" : "Rpt"};
+		String[] labels = new String[]{"All", "Chat", "Quest", "PM", "Rpt"};
 		MessageTab[] tabs = new MessageTab[]{MessageTab.ALL, MessageTab.CHAT, MessageTab.QUEST,
-			MessageTab.PRIVATE, MessageTab.CLAN};
+			MessageTab.PRIVATE};
 		// Shared tab treatment (UI-STYLE-GUIDE §4.4): same active-sprite +
 		// tint + label recipe as the mobile dock — PURPLE_SELECT active fill,
 		// GOLD_HOT active label, TEXT_BODY idle with the shared activity flash
@@ -19418,7 +18997,7 @@ public final class mudclient implements Runnable {
 				active || over ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
 				active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 72));
 			int labelY = r[1] + (voidscapeCompactHud() ? 21 : 24);
-			if (!S_WANT_CLANS && i == 4) {
+			if (i == 4) {
 				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", UiSkin.FLASH, 0, 5,
 					r[1] + (voidscapeCompactHud() ? 22 : 25));
 				continue;
@@ -19474,11 +19053,6 @@ public final class mudclient implements Runnable {
 				resetVoidscapeAllChatDoubleClick();
 				this.messageTabSelected = MessageTab.PRIVATE;
 				this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] = 999999;
-			} else if (S_WANT_CLANS) {
-				this.voidscapeChatHidden = false;
-				resetVoidscapeAllChatDoubleClick();
-				this.messageTabSelected = MessageTab.CLAN;
-				this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] = 999999;
 			} else {
 				this.voidscapeChatHidden = false;
 				resetVoidscapeAllChatDoubleClick();
@@ -19517,8 +19091,6 @@ public final class mudclient implements Runnable {
 				return this.panelMessageQuest;
 			case PRIVATE:
 				return this.panelMessagePrivate;
-			case CLAN:
-				return this.panelMessageClan;
 			default:
 				return -1;
 		}
@@ -19556,15 +19128,13 @@ public final class mudclient implements Runnable {
 		if ((index == 0 && this.messageTabSelected == MessageTab.ALL)
 			|| (index == 1 && this.messageTabSelected == MessageTab.CHAT)
 			|| (index == 2 && this.messageTabSelected == MessageTab.QUEST)
-			|| (index == 3 && this.messageTabSelected == MessageTab.PRIVATE)
-			|| (index == 4 && S_WANT_CLANS && this.messageTabSelected == MessageTab.CLAN)) {
+			|| (index == 3 && this.messageTabSelected == MessageTab.PRIVATE)) {
 			color = UiSkin.GOLD_HOT;
 		}
 		if ((index == 0 && this.messageTabActivity_Game % 30 > 15)
 			|| (index == 1 && this.messageTabActivity_Chat % 30 > 15)
 			|| (index == 2 && this.messageTabActivity_Quest % 30 > 15)
-			|| (index == 3 && this.messageTabActivity_Private % 30 > 15)
-			|| (index == 4 && this.messageTabActivity_Clan % 30 > 15)) {
+			|| (index == 3 && this.messageTabActivity_Private % 30 > 15)) {
 			color = UiSkin.FLASH;
 		}
 		return color;
@@ -20949,16 +20519,6 @@ public final class mudclient implements Runnable {
 				+ (this.settingsBlockDuel == 2 ? "@red@<off>" : this.settingsBlockDuel == 1 ? "@yel@<friends>" : "@gre@<on>"), 0xFFFFFF);
 		}
 
-		if (party.inParty()) {
-			y += 14;
-			int textColor = 0xFFFFFF;
-			if (this.mouseX > x && this.mouseX < x + boxWidth && this.mouseY > y - 12
-				&& this.mouseY < y + 4) {
-				textColor = 0xFFFF00;
-			}
-			this.getSurface().drawString("Leave Party", (baseX + 3), y, textColor, 1);
-		}
-
 		// skip tutorial or exit the black hole menu option
 		int logoutColor;
 		if (this.insideTutorial) {
@@ -21583,53 +21143,6 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		// if clans are enabled
-		if (S_WANT_CLANS) {
-			// if floating name tags are enabled
-			if (S_SHOW_FLOATING_NAMETAGS) {
-				// name and clan tag overlay
-				if (!C_NAME_CLAN_TAG_OVERLAY) {
-					this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-						"@whi@Name and Clan Tag - @red@Off", 16, null, null);
-				} else {
-					this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-						"@whi@Name and Clan Tag - @gre@On", 16, null, null);
-				}
-			}
-
-			// clan invite blocking
-			if (!this.clanInviteBlockSetting) {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Clan Invitation - @red@Block", 17, null, null);
-			} else {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Clan Invitation - @gre@Receive", 17, null, null);
-			}
-
-			if (C_PARTY_INV) {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Party Invitation - @red@Block", 19, null, null);
-			} else {
-				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-					"@whi@Party Invitation - @gre@Receive", 19, null, null);
-			}
-
-			//Only display this setting if we're on a non-authentic client.
-			if (!authenticSettings) {
-				if (!C_WANT_NATURE_RUNE_PROTECTION) {
-					this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-						"@whi@Nat Rune Alch Protection - @red@Off", 47, null, null);
-				} else {
-					this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-						"@whi@Nat Rune Alch Protection - @gre@On", 47, null, null);
-				}
-			}
-
-			// report abuse - keep at bottom of list since it's not a toggle
-			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
-				"@whi@Report Abuse", 18, null, null);
-		}
-
 		// items on death menu option OR logout text if not enabled
 		y = 275;
 		if (C_CUSTOM_UI)
@@ -22092,47 +21605,6 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		// if clans are enabled
-		if (S_WANT_CLANS) {
-			// floating clan name tag overlay - byte index 35
-			if (S_SHOW_FLOATING_NAMETAGS) {
-				if (settingIndex == 16 && this.mouseButtonClick == 1) {
-					C_NAME_CLAN_TAG_OVERLAY = !C_NAME_CLAN_TAG_OVERLAY;
-					this.packetHandler.getClientStream().newPacket(111);
-					this.packetHandler.getClientStream().bufferBits.putByte(35);
-					boolean setting = C_NAME_CLAN_TAG_OVERLAY;
-					this.packetHandler.getClientStream().bufferBits.putByte(setting ? 1 : 0);
-					this.packetHandler.getClientStream().finishPacket();
-				}
-			}
-
-			// clan invite blocking - byte index 11
-			if (settingIndex == 17 && this.mouseButtonClick == 1) {
-				this.clanInviteBlockSetting = !this.clanInviteBlockSetting;
-				this.packetHandler.getClientStream().newPacket(111);
-				this.packetHandler.getClientStream().bufferBits.putByte(11);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.clanInviteBlockSetting ? 0 : 1);
-				this.packetHandler.getClientStream().finishPacket();
-			}
-
-			// report abuse
-			if (settingIndex == 18 && this.mouseButtonClick == 1) {
-				this.inputTextFinal = "";
-				this.inputTextCurrent = "";
-				this.reportAbuse_State = 1;
-			}
-
-			// party invite blocking
-			if (settingIndex == 19 && this.mouseButtonClick == 1) {
-				this.partyInviteBlockSetting = !this.partyInviteBlockSetting;
-				C_PARTY_INV = !C_PARTY_INV;
-				this.packetHandler.getClientStream().newPacket(111);
-				this.packetHandler.getClientStream().bufferBits.putByte(36);
-				this.packetHandler.getClientStream().bufferBits.putByte(this.partyInviteBlockSetting ? 1 : 0);
-				this.packetHandler.getClientStream().finishPacket();
-			}
-		}
-
 		// nature rune protection toggle - byte index 47
 		if (settingIndex == 47 && this.mouseButtonClick == 1 && S_WANT_NATURE_RUNE_PROTECTION) {
 			C_WANT_NATURE_RUNE_PROTECTION = !C_WANT_NATURE_RUNE_PROTECTION;
@@ -22277,17 +21749,6 @@ public final class mudclient implements Runnable {
 		if (settingsChanged) {
 			this.createPacket64(this.settingsBlockChat, this.settingsBlockPrivate,
 				this.settingsBlockTrade, this.settingsBlockDuel);
-		}
-
-		// handle leave party click
-		if (S_WANT_PARTIES) {
-			if (party.inParty()) {
-				yFromTopDistance += 14;
-				if (this.mouseX > var6 && this.mouseX < var6 + var5
-					&& yFromTopDistance - 5 < this.mouseY && this.mouseY < yFromTopDistance + 10 && this.mouseButtonClick == 1) {
-					this.sendCommandString("leaveparty");
-				}
-			}
 		}
 
 		// skip tutorial button or exit blackhole button
@@ -23355,19 +22816,16 @@ public final class mudclient implements Runnable {
 			panelMessageTabs.reposition(panelMessageEntry, chatX, entryY, chatW, 14);
 			panelMessageTabs.reposition(panelMessageQuest, chatX, chatY, chatW, chatH);
 			panelMessageTabs.reposition(panelMessagePrivate, chatX, chatY, chatW, chatH);
-			panelMessageTabs.reposition(panelMessageClan, chatX, chatY, chatW, chatH);
 		} else if (useVoidscapeDesktopClassicChat()) {
 			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 14, 14);
 			panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 			panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
-			panelMessageTabs.reposition(panelMessageClan, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		} else {
 			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 300, 14);
 			panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 			panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
-			panelMessageTabs.reposition(panelMessageClan, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 		}
 	}
 
@@ -23385,7 +22843,6 @@ public final class mudclient implements Runnable {
 		panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 14, 14);
 		panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
-		panelMessageTabs.reposition(panelMessageClan, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 	}
 
 	boolean reposition() {
@@ -23405,7 +22862,6 @@ public final class mudclient implements Runnable {
 		clientPort.resized();
 		int var3 = this.getSurface().width2 - 199;
 		byte var12 = 36;
-		panelClan.reposition(controlClanPanel, var3, var12 + 72, 196, 128);
 		panelPlayerTaskInfo.reposition(controlPlayerTaskInfoPanel, var3, 24 + var12 + 27, 196, 224);
 		if (!authenticSettings && C_CUSTOM_UI) {
 			repositionCustomUI();
@@ -23758,22 +23214,6 @@ public final class mudclient implements Runnable {
 
 			if (this.combatTimeout > 0) {
 				--this.combatTimeout;
-			}
-
-			if (party.pMemDTimeout[0] > 0) {
-				--party.pMemDTimeout[0];
-			}
-			if (party.pMemDTimeout[1] > 0) {
-				--party.pMemDTimeout[1];
-			}
-			if (party.pMemDTimeout[2] > 0) {
-				--party.pMemDTimeout[2];
-			}
-			if (party.pMemDTimeout[3] > 0) {
-				--party.pMemDTimeout[3];
-			}
-			if (party.pMemDTimeout[4] > 0) {
-				--party.pMemDTimeout[4];
 			}
 
 			if (this.showAppearanceChange) {
@@ -24138,14 +23578,9 @@ public final class mudclient implements Runnable {
 						}
 						if (classicChatTabHit(4, mouseX)
 							&& lastMouseButtonDown == 1) {
-							if (S_WANT_CLANS) {
-								this.messageTabSelected = MessageTab.CLAN;
-								this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] = 999999;
-							} else {
-								this.inputTextFinal = "";
-								this.inputTextCurrent = "";
-								this.reportAbuse_State = 1;
-							}
+							this.inputTextFinal = "";
+							this.inputTextCurrent = "";
+							this.reportAbuse_State = 1;
 						}
 						logAndroidSmokeChatTabSelection(androidSmokeBeforeMessageTab);
 
@@ -24172,10 +23607,6 @@ public final class mudclient implements Runnable {
 							auctionHouse.myAuctions.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							auctionHouse.auctionMenu.handleMouse(this.mouseX, this.mouseY,
-								this.currentMouseButtonDown, this.lastMouseButtonDown);
-							clan.getClanInterface().clanSetupPanel.handleMouse(this.mouseX, this.mouseY,
-								this.currentMouseButtonDown, this.lastMouseButtonDown);
-							party.getPartyInterface().partySetupPanel.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
 							bank.bank.handleMouse(this.mouseX, this.mouseY,
 								this.currentMouseButtonDown, this.lastMouseButtonDown);
@@ -24602,18 +24033,6 @@ public final class mudclient implements Runnable {
 					}
 					if (S_WANT_CUSTOM_BANKS && this.isShowDialogBank() && this.combatTimeout == 0 && (key == 27 || this.controlPressed || bank.bank.focusOn(bank.bankSearch))) {
 						bank.keyDown(key);
-						return;
-					}
-					if (clan.getClanInterface().isVisible() && (clan.getClanInterface().clanSetupPanel.focusOn(clan.getClanInterface().clanName_field)
-						|| clan.getClanInterface().clanSetupPanel.focusOn(clan.getClanInterface().clanTag_field)
-						|| clan.getClanInterface().clanSetupPanel.focusOn(clan.getClanInterface().clanSearch_field))) {
-						clan.getClanInterface().keyDown(key);
-						return;
-					}
-					if (party.getPartyInterface().isVisible() && (party.getPartyInterface().partySetupPanel.focusOn(party.getPartyInterface().partyName_field)
-						|| party.getPartyInterface().partySetupPanel.focusOn(party.getPartyInterface().partyTag_field)
-						|| party.getPartyInterface().partySetupPanel.focusOn(party.getPartyInterface().partySearch_field))) {
-						party.getPartyInterface().keyDown(key);
 						return;
 					}
 					if (this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
@@ -26005,14 +25424,6 @@ public final class mudclient implements Runnable {
 					this.packetHandler.getClientStream().finishPacket();
 					break;
 				}
-				case PLAYER_PARTY_INVITE: {
-					this.packetHandler.getClientStream().newPacket(199);
-					this.packetHandler.getClientStream().bufferBits.putByte(12);
-					this.packetHandler.getClientStream().bufferBits.putByte(2);
-					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
-					this.packetHandler.getClientStream().finishPacket();
-					break;
-				}
 				case PLAYER_FOLLOW: {
 					this.packetHandler.getClientStream().newPacket(165);
 					this.packetHandler.getClientStream().bufferBits.putShort(indexOrX);
@@ -26150,26 +25561,6 @@ public final class mudclient implements Runnable {
 					int clickX = indexOrX + midRegionBaseX;
 					int clickY = idOrZ + midRegionBaseZ;
 					sendCommandString("teleport " + (clickX) + " " + (clickY));
-					break;
-				}
-				case CLAN_MENU_KICK: {
-					String playerName = var9;
-					playerName = playerName.replaceAll(" ", "_");
-					kickClanPlayer(playerName);
-					String[] kickMessage = new String[]{"Are you sure you want to kick " + playerName + " from clan?"};
-					this.showItemModX(kickMessage, InputXAction.KICK_CLAN_PLAYER, false);
-					if (!C_CUSTOM_UI)
-						this.showUiTab = 0;
-					break;
-				}
-				case PARTY_MENU_KICK: {
-					String playerName = var9;
-					playerName = playerName.replaceAll(" ", "_");
-					kickPartyPlayer(playerName);
-					String[] kickMessage = new String[]{"Are you sure you want to kick " + playerName + " from party?"};
-					this.showItemModX(kickMessage, InputXAction.KICK_PARTY_PLAYER, false);
-					if (!C_CUSTOM_UI)
-						this.showUiTab = 0;
 					break;
 				}
 				default:
@@ -28252,8 +27643,6 @@ public final class mudclient implements Runnable {
 			for (NComponent n : mainComponent.subComponents())
 				n.setVisible(false);
 
-			clan.putClan(false);
-			party.putParty(false);
 			if (S_EXPERIENCE_DROPS_TOGGLE)
 				experienceOverlay.setVisible(true);
 			this.getSurface().blackScreen(true);
@@ -28311,11 +27700,7 @@ public final class mudclient implements Runnable {
 			this.setShowDialogBank(false);
 			this.auctionHouse.setVisible(false);
 			this.achievementInterface.setVisible(false);
-			clan.getClanInterface().setVisible(false);
-			party.getPartyInterface().setVisible(false);
 			SocialLists.friendListCount = 0;
-			SocialLists.clanListCount = 0;
-			SocialLists.partyListCount = 0;
 			this.reportAbuse_State = 0;
 
 			for (int j = 0; j < messagesArray.length; ++j) {
@@ -28573,9 +27958,6 @@ public final class mudclient implements Runnable {
 				if (type == MessageType.QUEST && this.messageTabSelected != MessageTab.QUEST) {
 					this.messageTabActivity_Quest = 200;
 				}
-				if (type == MessageType.CLAN_CHAT && this.messageTabSelected != MessageTab.CLAN) {
-					this.messageTabActivity_Clan = 200;
-				}
 
 				if (type == MessageType.GAME || type == MessageType.INVENTORY) {
 					this.messageTabActivity_Game = 200;
@@ -28626,10 +28008,8 @@ public final class mudclient implements Runnable {
 				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] == this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
 					- 4, crownID, sender, formerName, this.panelMessagePrivate);
 			}
-			if (type == MessageType.CLAN_CHAT) {
-				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageClan]
-					- 4, crownID, sender, formerName, this.panelMessageClan);
-			}
+			// CLAN_CHAT (wire type 9) intentionally has no dedicated tab any more:
+			// it still lands in MessageHistory above, so it shows on the All tab.
 
 			if (type == MessageType.PRIVATE_RECIEVE || type == MessageType.PRIVATE_SEND) {
 				int crown = crownID;
@@ -28725,8 +28105,6 @@ public final class mudclient implements Runnable {
 				return this.panelMessageTabs.controlListCurrentSize[this.panelMessageQuest] > 4;
 			case PRIVATE:
 				return this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate] > 4;
-			case CLAN:
-				return this.panelMessageTabs.controlListCurrentSize[this.panelMessageClan] > 4;
 			default:
 				return false;
 		}
@@ -28826,14 +28204,6 @@ public final class mudclient implements Runnable {
 
 	public final void resetBatchProgressBar() {
 		batchProgressBar.resetProgressBar();
-	}
-
-	public final void hidePartyMenu() {
-		partyMenu.hide();
-	}
-
-	public final void showPartyMenu() {
-		partyMenu.show();
 	}
 
 	public final void initializeBatchProgressVariables(int repeatFor, int delay) {
@@ -29507,14 +28877,6 @@ public final class mudclient implements Runnable {
 
 	public void setSettingsBlockGlobal(int block) {
 		this.settingsBlockGlobal = block;
-	}
-
-	public void setClanInviteBlockSetting(boolean block) {
-		this.clanInviteBlockSetting = block;
-	}
-
-	public void setPartyInviteBlockSetting(boolean block) {
-		this.partyInviteBlockSetting = block;
 	}
 
 	public boolean checkPrayerOn(int i) {
@@ -30259,7 +29621,6 @@ public final class mudclient implements Runnable {
 			System.out.println(S_SPAWN_AUCTION_NPCS + " 4");
 			System.out.println(S_SPAWN_IRON_MAN_NPCS + " 5");
 			System.out.println(S_SHOW_FLOATING_NAMETAGS + " 6");
-			System.out.println(S_WANT_CLANS + " 7");
 			System.out.println(S_WANT_KILL_FEED + " 8");
 			System.out.println(S_FOG_TOGGLE + " 9");
 			System.out.println(S_GROUND_ITEM_TOGGLE + " 10");
@@ -30364,9 +29725,6 @@ public final class mudclient implements Runnable {
 				fishingTrawlerInterface = new FishingTrawlerInterface(this);
 				mainComponent.addComponent(fishingTrawlerInterface);
 
-				partyMenu = new PartyGUI(this);
-				mainComponent.addComponent(partyMenu.getComponent());
-
 				if (S_BATCH_PROGRESSION) {
 					batchProgressBar = new ProgressBarInterface(this);
 					mainComponent.addComponent(batchProgressBar.getComponent());
@@ -30376,8 +29734,6 @@ public final class mudclient implements Runnable {
 				mainComponent.addComponent(onlineList);
 
 				achievementInterface = new AchievementGUI(this);
-				clan = new Clan(this);
-				party = new Party(this);
 
 				if (S_EXPERIENCE_DROPS_TOGGLE) {
 					experienceOverlay = new NCustomComponent(this) {
@@ -30462,9 +29818,6 @@ public final class mudclient implements Runnable {
 				this.controlMagicPanel = this.panelMagic.addScrollingList(var3, 24 + var12, 196, 90, 500, 1, true);
 				this.panelSocial = new Panel(this.getSurface(), 5);
 				this.controlSocialPanel = this.panelSocial.addScrollingList(var3, var12 + 40, 196, 126, 500, 1,
-					true);
-				this.panelClan = new Panel(this.getSurface(), 5);
-				this.controlClanPanel = this.panelClan.addScrollingList(var3, var12 + 72, 196, 128, 500, 1,
 					true);
 				this.panelPlayerInfo = new Panel(this.getSurface(), 5);
 				this.controlPlayerInfoPanel = this.panelPlayerInfo.addScrollingList(var3, 24 + var12, 196, 263, 500,
@@ -30759,9 +30112,6 @@ public final class mudclient implements Runnable {
 
 							if (this.messageTabActivity_Private > 0) {
 								--this.messageTabActivity_Private;
-							}
-							if (this.messageTabActivity_Clan > 0) {
-								--this.messageTabActivity_Clan;
 							}
 
 							if (this.messageTabActivity_Quest > 0) {
@@ -31583,10 +30933,6 @@ public final class mudclient implements Runnable {
 		if (this.worldMapPanel != null && this.worldMapPanel.isVisible()) return false;
 		if (this.isWebOverlayDialogVisible()) return false;
 		if (this.auctionHouse != null && this.auctionHouse.isVisible()) return false;
-		if (this.clan != null && this.clan.getClanInterface() != null
-			&& this.clan.getClanInterface().isVisible()) return false;
-		if (this.party != null && this.party.getPartyInterface() != null
-			&& this.party.getPartyInterface().isVisible()) return false;
 		return true;
 	}
 
@@ -31636,16 +30982,6 @@ public final class mudclient implements Runnable {
 			resetVoidscapeAllChatDoubleClick();
 			if (this.panelMessageTabs != null) {
 				this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] = 999999;
-			}
-			return true;
-		}
-		if ("clan".equals(key)) {
-			if (!S_WANT_CLANS) return false;
-			this.messageTabSelected = MessageTab.CLAN;
-			this.voidscapeChatHidden = false;
-			resetVoidscapeAllChatDoubleClick();
-			if (this.panelMessageTabs != null) {
-				this.panelMessageTabs.controlScrollAmount[this.panelMessageClan] = 999999;
 			}
 			return true;
 		}
@@ -31733,12 +31069,6 @@ public final class mudclient implements Runnable {
 		if ("ignore".equals(key) || "ignores".equals(key)) {
 			this.showUiTab = Config.FRIENDS_TAB;
 			this.panelSocialTab = 2;
-			return workbenchFinishVoidscapeUiPanel();
-		}
-		if ("clan".equals(key)) {
-			if (!S_WANT_CLANS) return false;
-			this.showUiTab = Config.FRIENDS_TAB;
-			this.panelSocialTab = 1;
 			return workbenchFinishVoidscapeUiPanel();
 		}
 		if ("magic".equals(key) || "spellbook".equals(key)) {
@@ -32333,8 +31663,6 @@ public final class mudclient implements Runnable {
 		else if (showUiTab == Config.FRIENDS_TAB) { // Friend list and ignore list.
 			if (this.panelSocialTab == 2 || this.panelSocialTab == 0) {
 				panelSocial.scrollMethodList(controlSocialPanel, x);
-			} else if (this.panelSocialTab == 1) {
-				panelClan.scrollMethodList(controlClanPanel, x);
 			}
 		} else if (skillGuideInterface.isVisible() && uiTabPlayerInfoSubTab == 0) {
 			skillGuideInterface.skillGuide.scrollMethodList(skillGuideInterface.skillGuideScroll, x);
@@ -32350,18 +31678,6 @@ public final class mudclient implements Runnable {
 			} else if (auctionHouse.activeInterface == 1) {
 				auctionHouse.myAuctions.scrollMethodList(auctionHouse.myAuctionScrollHandle, x);
 			}
-		} else if (clan.getClanInterface().isVisible()) {
-			if (clan.getClanInterface().clanActivePanel == 3) {
-				clan.getClanInterface().clanSetupPanel.scrollMethodList(clan.getClanInterface().clanSearchScroll, x);
-			} else {
-				clan.getClanInterface().clanSetupPanel.scrollMethodList(clan.getClanInterface().clanGUIScroll, x);
-			}
-		} else if (party.getPartyInterface().isVisible()) {
-			if (party.getPartyInterface().partyActivePanel == 3) {
-				party.getPartyInterface().partySetupPanel.scrollMethodList(party.getPartyInterface().partySearchScroll, x);
-			} else {
-				party.getPartyInterface().partySetupPanel.scrollMethodList(party.getPartyInterface().partyGUIScroll, x);
-			}
 		} else if (experienceConfigInterface.isVisible() && experienceConfigInterface.selectSkillMenu) {
 			experienceConfigInterface.experienceConfig.scrollMethodList(experienceConfigInterface.experienceConfigScroll, x);
 		} else if (messageTabSelected == MessageTab.QUEST && !this.controlPressed)
@@ -32370,8 +31686,6 @@ public final class mudclient implements Runnable {
 			panelMessageTabs.scrollMethodList(panelMessageChat, x);
 		else if (this.messageTabSelected == MessageTab.PRIVATE && !this.controlPressed)
 			panelMessageTabs.scrollMethodList(panelMessagePrivate, x);
-		else if (this.messageTabSelected == MessageTab.CLAN && !this.controlPressed)
-			panelMessageTabs.scrollMethodList(panelMessageClan, x);
 	}
 
 	public boolean isShowDialogBank() {
@@ -32392,14 +31706,6 @@ public final class mudclient implements Runnable {
 	public void addXpNotification(int skill, int receivedXp, boolean b) {
 		XPNotification n = new XPNotification(skill, receivedXp, b);
 		this.xpNotifications.add(n);
-	}
-
-	private void kickClanPlayer(String player) {
-		this.clanKickPlayer = player;
-	}
-
-	private void kickPartyPlayer(String player) {
-		this.partyKickPlayer = player;
 	}
 
 	public void setVolumeFunction(int b) {
@@ -32562,10 +31868,6 @@ public final class mudclient implements Runnable {
 
 	public void setGlobalChatCountryFlags(boolean b) {
 		C_GLOBAL_CHAT_COUNTRY_FLAGS = b;
-	}
-
-	public void setBlockPartyInv(boolean b) {
-		C_PARTY_INV = b;
 	}
 
 	public void setAndroidInvToggle(boolean b) {

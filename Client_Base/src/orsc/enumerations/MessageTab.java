@@ -1,7 +1,7 @@
 package orsc.enumerations;
 
 public enum MessageTab {
-	ALL(0), CHAT(1), QUEST(2), PRIVATE(3), CLAN(4);
+	ALL(0), CHAT(1), QUEST(2), PRIVATE(3);
 	private static final MessageTab[] map;
 
 	static {

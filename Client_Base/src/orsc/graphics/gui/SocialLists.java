@@ -12,7 +12,4 @@ public class SocialLists {
 	public static String[] ignoreListArg0 = new String[100];
 	public static String[] ignoreListArg1 = new String[100];
 	public static String[] ignoreListOld = new String[100];
-
-	public static int clanListCount = 0;
-	public static int partyListCount = 0;
 }

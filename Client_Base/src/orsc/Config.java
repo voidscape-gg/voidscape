@@ -56,6 +56,8 @@ public class Config {
 	public static boolean C_GROUND_ITEM_NAMES = true;
 	public static boolean C_WANT_NATURE_RUNE_PROTECTION = true; // Important that nature rune protection is true by default, otherwise we might have some very unhappy players!
 	public static boolean C_MESSAGE_TAB_SWITCH = false;
+	// Historic name kept for config-file compatibility (reflection matches field names);
+	// clans are gone, so this now only controls the overhead *name* label overlay.
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
 	public static boolean C_CHAT_OVERLAY = true;
@@ -63,7 +65,6 @@ public class Config {
 	public static boolean C_KILL_FEED = true;
 	public static int C_FIGHT_MENU = 1;
 	public static boolean C_INV_COUNT = true;
-	public static boolean C_PARTY_INV = false;
 	public static int C_ZOOM;
 	public static boolean C_CUSTOM_UI = false; // Enables a osrs style UI
 	public static boolean C_HIDE_LOGIN_BOX = false;
@@ -143,6 +144,9 @@ public class Config {
 	// they will also change the options menu to
 	// 2-tabs (3 on android). (Not enough room for
 	// additional options on the 1-tab layout.)
+	// Clans/parties were removed from this client. S_WANT_CLANS / S_WANT_PARTIES stay
+	// declared only so config-file parsing (reflection over field names) keeps working;
+	// nothing reads them any more — the client behaves as if they are permanently false.
 	public static boolean S_WANT_CLANS = false;
 	public static boolean S_WANT_KILL_FEED = false;
 	public static boolean S_FOG_TOGGLE = true;

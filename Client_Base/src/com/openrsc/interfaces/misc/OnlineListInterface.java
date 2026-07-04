@@ -284,12 +284,6 @@ public class OnlineListInterface extends NComponent {
 								getClient().addIgnore(username);
 							}
 						});
-						rightClickMenu.createOption("Invite to Party", new MenuAction() {
-							@Override
-							public void action() {
-								getClient().addPartyInv(username);
-							}
-						});
 
 						if (getClient().getLocalPlayer().isMod())
 							rightClickMenu.createSubMenuOption("Staff >", null, staffMenu);

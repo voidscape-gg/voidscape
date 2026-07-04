@@ -219,10 +219,9 @@ public class PacketHandler {
 				// Fishing Trawler
 			else if (opcode == 133) fishingTrawlerUpdate();
 
-				// Clan Options
-			else if (opcode == 112) updateClan();
-
-			else if (opcode == 116) updateParty();
+			// Clan (112) and party (116) opcodes are gone with the clan/party UI:
+			// unhandled opcodes fall through to handleUnknownPacket, which is safe
+			// because each packet is length-framed and drained per read.
 
         /*else if(opcode == 50) { // Achievements
           int achievementStatus = this.packetsIncoming.getByte();
@@ -753,113 +752,6 @@ public class PacketHandler {
 		}
 	}
 
-	private void updateClan() {
-		int actionType = packetsIncoming.getByte();
-		//Clan clan = new Clan(mc);
-		switch (actionType) {
-			case 0: // Send clan
-				mc.clan.setClanName(packetsIncoming.readString());
-				mc.clan.setClanTag(packetsIncoming.readString());
-				mc.clan.setClanLeaderUsername(packetsIncoming.readString());
-				boolean isLeader = packetsIncoming.getByte() == 1;
-				mc.clan.setClanLeader(isLeader);
-				SocialLists.clanListCount = packetsIncoming.getByte();
-				for (int id = 0; id < SocialLists.clanListCount; id++) {
-					mc.clan.username[id] = packetsIncoming.readString();
-					mc.clan.clanRank[id] = packetsIncoming.getByte();
-					mc.clan.onlineClanMember[id] = packetsIncoming.getByte();
-				}
-				mc.clan.putClan(true);
-
-				break;
-			case 1: // Leave clan
-				mc.clan.putClan(false);
-				mc.clan.update();
-				break;
-			case 2: // Sent invitation
-				mc.clan.getClanInterface().initializeInvite(packetsIncoming.readString(), packetsIncoming.readString());
-				break;
-			case 3: // Settings
-				mc.clan.setClanSetting(0, packetsIncoming.getByte());
-				mc.clan.setClanSetting(1, packetsIncoming.getByte());
-				mc.clan.setClanSetting(2, packetsIncoming.getByte());
-				mc.clan.allowed[0] = packetsIncoming.getByte() == 1;
-				mc.clan.allowed[1] = packetsIncoming.getByte() == 1;
-				break;
-			case 4: // Clan search visual
-				mc.clan.getClanInterface().resetClans();
-				int clanCount = packetsIncoming.getShort();
-				for (int i = 0; i < clanCount; i++) {
-					int clanID = packetsIncoming.getShort();
-					String clanName = packetsIncoming.readString();
-					String clanTag = packetsIncoming.readString();
-					int members = packetsIncoming.getByte();
-					int canJoin = packetsIncoming.getByte();
-					int clanPoints = packetsIncoming.get32();
-					int clanRank = packetsIncoming.getShort();
-					mc.clan.getClanInterface().addClan(clanID, clanName, clanTag, members, canJoin, clanPoints, clanRank);
-				}
-				break;
-		}
-	}
-
-	private void updateParty() {
-		int actionType = packetsIncoming.getByte();
-		switch (actionType) {
-			case 0: // Send party
-				mc.party.setPartyLeaderUsername(packetsIncoming.readString());
-				boolean isLeader = packetsIncoming.getByte() == 1;
-				mc.party.setPartyLeader(isLeader);
-				SocialLists.partyListCount = packetsIncoming.getByte();
-				for (int id = 0; id < SocialLists.partyListCount; id++) {
-					mc.party.username[id] = packetsIncoming.readString();
-					mc.party.partyRank[id] = packetsIncoming.getByte();
-					mc.party.onlinePartyMember[id] = packetsIncoming.getByte();
-					mc.party.curHp[id] = packetsIncoming.getByte();
-					mc.party.maxHp[id] = packetsIncoming.getByte();
-					mc.party.cbLvl[id] = packetsIncoming.getByte();
-					mc.party.skull[id] = packetsIncoming.getByte();
-					mc.party.pMemD[id] = packetsIncoming.getByte();
-					mc.party.shareLoot[id] = packetsIncoming.getByte();
-					mc.party.partyMembersTotal[id] = packetsIncoming.getByte();
-					mc.party.inCombat[id] = packetsIncoming.getByte();
-					mc.party.shareExp[id] = packetsIncoming.getByte();
-					mc.party.expShared[id] = packetsIncoming.getLong(0);
-				}
-				mc.party.putParty(true);
-				mc.showPartyMenu();
-
-				break;
-			case 1: // Leave party
-				mc.party.putParty(false);
-				mc.party.update();
-				mc.hidePartyMenu();
-				break;
-			case 2: // Sent invitation
-				mc.party.getPartyInterface().initializeInvite(packetsIncoming.readString(), packetsIncoming.readString());
-				break;
-			case 3: // Settings
-				mc.party.setPartySetting(0, packetsIncoming.getByte());
-				mc.party.setPartySetting(1, packetsIncoming.getByte());
-				mc.party.setPartySetting(2, packetsIncoming.getByte());
-				mc.party.allowed[0] = packetsIncoming.getByte() == 1;
-				mc.party.allowed[1] = packetsIncoming.getByte() == 1;
-				break;
-			case 4: // Party search visual
-				mc.party.getPartyInterface().resetPartys();
-				int partyCount = packetsIncoming.getShort();
-				for (int i = 0; i < partyCount; i++) {
-					int partyID = packetsIncoming.getShort();
-					int members = packetsIncoming.getByte();
-					int canJoin = packetsIncoming.getByte();
-					int partyPoints = packetsIncoming.get32();
-					int partyRank = packetsIncoming.getShort();
-					mc.party.getPartyInterface().addParty(partyID, members, canJoin, partyPoints, partyRank);
-				}
-				break;
-		}
-	}
-
 	private void announceKill() {
 		if (!Config.S_WANT_KILL_FEED) return;
 		String killed = packetsIncoming.readString();
@@ -874,11 +766,11 @@ public class PacketHandler {
 		int messageType = packetsIncoming.getUnsignedByte();
 		String message = packetsIncoming.readString();
 		String sender = null;
-		String clan = null;
+		String formerName = null;
 		String colour = null;
 		if ((messageType & 1) != 0) {
 			sender = packetsIncoming.readString();
-			clan = packetsIncoming.readString();
+			formerName = packetsIncoming.readString();
 		}
 		if ((messageType & 2) != 0) {
 			colour = packetsIncoming.readString();
@@ -891,8 +783,7 @@ public class PacketHandler {
 			return;
 		}
 
-		// Why is clan being sent into former name?
-		mc.showMessage(true, sender, message, type, crown, clan, colour);
+		mc.showMessage(true, sender, message, type, crown, formerName, colour);
 	}
 
 	private void sendConnectionMessage() {
@@ -1384,7 +1275,8 @@ public class PacketHandler {
 		props.setProperty("S_SPAWN_AUCTION_NPCS", spawnAuctionNpcs == 1 ? "true" : "false"); // 4
 		props.setProperty("S_SPAWN_IRON_MAN_NPCS", spawnIronManNpcs == 1 ? "true" : "false"); // 5
 		props.setProperty("S_SHOW_FLOATING_NAMETAGS", showFloatingNametags == 1 ? "true" : "false"); // 6
-		props.setProperty("S_WANT_CLANS", wantClans == 1 ? "true" : "false"); // 7
+		// S_WANT_CLANS (byte 7) is still parsed above for stream alignment, but the
+		// value is deliberately not applied: the clan UI was removed from this client.
 		props.setProperty("S_WANT_KILL_FEED", wantKillFeed == 1 ? "true" : "false"); // 8
 		props.setProperty("S_FOG_TOGGLE", fogToggle == 1 ? "true" : "false"); // 9
 		props.setProperty("S_GROUND_ITEM_TOGGLE", groundItemToggle == 1 ? "true" : "false"); // 10
@@ -1441,7 +1333,8 @@ public class PacketHandler {
 		props.setProperty("S_WANT_CUSTOM_LANDSCAPE", wantCustomLandscape == 1 ? "true" : "false"); //61
 		props.setProperty("S_WANT_EQUIPMENT_TAB", wantEquipmentTab == 1 ? "true" : "false"); //62
 		props.setProperty("S_WANT_BANK_PRESETS", wantBankPresets == 1 ? "true" : "false"); //63
-		props.setProperty("S_WANT_PARTIES", wantParties == 1 ? "true" : "false"); //64
+		// S_WANT_PARTIES (byte 64) is still parsed above for stream alignment, but the
+		// value is deliberately not applied: the party UI was removed from this client.
 		props.setProperty("S_MINING_ROCKS_EXTENDED", miningRocksExtended == 1 ? "true" : "false"); //65
 		props.setProperty("C_MOVE_PER_FRAME", String.valueOf(movePerFrame)); //66
 		props.setProperty("S_WANT_LEFTCLICK_WEBS", wantLeftclickWebs == 1 ? "true" : "false"); //67
@@ -1470,7 +1363,7 @@ public class PacketHandler {
 
 		mc.authenticSettings = !(
 			Config.isAndroid() ||
-				Config.S_WANT_CLANS || Config.S_WANT_KILL_FEED
+				Config.S_WANT_KILL_FEED
 				|| Config.S_FOG_TOGGLE || Config.S_GROUND_ITEM_TOGGLE
 				|| Config.S_AUTO_MESSAGE_SWITCH_TOGGLE || Config.S_BATCH_PROGRESSION
 				|| Config.S_SIDE_MENU_TOGGLE || Config.S_INVENTORY_COUNT_TOGGLE
@@ -2286,7 +2179,7 @@ public class PacketHandler {
 		mc.setOptionSoundDisabled(packetsIncoming.getUnsignedByte() == 1); // 2
 		mc.setCombatStyle(packetsIncoming.getUnsignedByte()); // ?
 		mc.setSettingsBlockGlobal(packetsIncoming.getUnsignedByte()); // 9
-		mc.setClanInviteBlockSetting(packetsIncoming.getUnsignedByte() == 1); // 11
+		packetsIncoming.getUnsignedByte(); // 11 — was clan-invite block; clans removed, byte still consumed
 		mc.setVolumeFunction(packetsIncoming.getUnsignedByte()); // 16
 		mc.setSwipeToRotateMode(packetsIncoming.getUnsignedByte()); // 17
 		mc.setSwipeToScrollMode(packetsIncoming.getUnsignedByte()); // 18
@@ -2307,7 +2200,7 @@ public class PacketHandler {
 		mc.setExperienceCounterToggle(packetsIncoming.getUnsignedByte()); // 33
 		mc.setHideInventoryCount(packetsIncoming.getUnsignedByte() == 1); // 34
 		mc.setHideNameTag(packetsIncoming.getUnsignedByte() == 1); // 35
-		mc.setBlockPartyInv(packetsIncoming.getUnsignedByte() == 1); // 36
+		packetsIncoming.getUnsignedByte(); // 36 — was party-invite block; parties removed, byte still consumed
 		mc.setAndroidInvToggle(packetsIncoming.getUnsignedByte() == 1); // 37
 		mc.setShowNPCKC(packetsIncoming.getUnsignedByte() == 1); // 38
 		mc.setCustomUI(packetsIncoming.getUnsignedByte() == 1); //39
@@ -2869,7 +2762,6 @@ public class PacketHandler {
 								(
 									((updateType == 7 && muted) ? "@whi@[MUTED]@yel@ " : "") +
 										((updateType == 7 && onTutorial) ? "@whi@[TUTORIAL]@yel@ " : "") +
-										(player.clanTag != null ? "@whi@[@cla@" + player.clanTag + "@whi@]@yel@ " : "") +
 										player.getStaffName()
 								),
 								player.message,
@@ -2886,7 +2778,7 @@ public class PacketHandler {
 						player.message = message;
 						player.messageTimeout = 150;
 						if (mc.getLocalPlayer() == player) {
-							mc.showMessage(false, (player.clanTag != null ? "@whi@[@cla@" + player.clanTag + "@whi@]@whi@ " + player.getStaffName() : player.getStaffName()), player.message, MessageType.QUEST, 0, player.accountName);
+							mc.showMessage(false, player.getStaffName(), player.message, MessageType.QUEST, 0, player.accountName);
 						}
 					}
 				}
@@ -2990,9 +2882,10 @@ public class PacketHandler {
 					player.level = packetsIncoming.getUnsignedByte();
 					player.skullVisible = packetsIncoming.getUnsignedByte();
 					if (packetsIncoming.getByte() == 1) {
-						player.clanTag = packetsIncoming.readString();
-					} else {
-						player.clanTag = null;
+						// Clan tag: clans were removed from this client, but the
+						// appearance packet still carries the flag byte (+ string),
+						// so it must be consumed to stay aligned.
+						packetsIncoming.readString();
 					}
 
 					player.isInvisible = packetsIncoming.getByte() > 0;
