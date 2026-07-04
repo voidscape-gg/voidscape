@@ -1091,6 +1091,7 @@ public final class mudclient implements Runnable {
 	private boolean menuVisible = false;
 	private int messageTabActivity_Chat = 0;
 	private int messageTabActivity_Game = 0;
+	private int messageTabActivity_Global = 0;
 	private int messageTabActivity_Private = 0;
 	private int messageTabActivity_Quest = 0;
 	private int midRegionBaseX;
@@ -1155,6 +1156,7 @@ public final class mudclient implements Runnable {
 	private Panel panelMagic;
 	private int panelMessageChat;
 	private int panelMessageEntry;
+	private int panelMessageGlobal;
 	private int panelMessagePrivate;
 	private int panelMessageQuest;
 	private Panel panelMessageTabs;
@@ -3480,6 +3482,7 @@ public final class mudclient implements Runnable {
 			this.panelMessageEntry = this.panelMessageTabs.addLeftTextEntry(7, 324, 498, 14, 1,
 				MESSAGE_COMMAND_INPUT_MAX, false, true);
 			this.panelMessageQuest = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
+			this.panelMessageGlobal = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessagePrivate = this.panelMessageTabs.addScrollingList2(5, 269, 502, 56, 20, 1, true);
 			this.panelMessageTabs.setFocus(this.panelMessageEntry);
 		} catch (RuntimeException var3) {
@@ -4555,10 +4558,129 @@ public final class mudclient implements Runnable {
 			&& x < classicChatTabStripX() + CLASSIC_CHAT_TAB_HIT_MAX_X[tab];
 	}
 
+	// Voidscape desktop chat-tab strip (UI-STYLE-GUIDE glass mandate §1.3):
+	// a code-drawn glass bar over the same strip row the classic sprite
+	// occupies (same y, same 16px height, full frame width), with a sixth
+	// Global tab. Draw AND hit both derive from voidscapeChatTabBand — the
+	// same lockstep pattern as the classic helpers above; no parallel magic
+	// ranges. Tab 5 (Report Abuse) maps to null: it opens the report flow
+	// instead of selecting a message tab.
+	private static final MessageTab[] VOIDSCAPE_DESKTOP_CHAT_TABS = {
+		MessageTab.ALL, MessageTab.CHAT, MessageTab.QUEST, MessageTab.GLOBAL, MessageTab.PRIVATE, null};
+	private static final String[] VOIDSCAPE_DESKTOP_CHAT_TAB_LABELS = {
+		"All messages", "Chat history", "Quest history", "Global chat", "Private history", "Report Abuse"};
+
+	private int voidscapeChatTabCount() {
+		return VOIDSCAPE_DESKTOP_CHAT_TABS.length;
+	}
+
+	/** Strip top: identical row geometry to the classic sprite strip. */
+	private int voidscapeChatTabStripY() {
+		return classicChatTabStripY();
+	}
+
+	/** Strip height: down to the surface bottom (surface is gameHeight + 12 tall). */
+	private int voidscapeChatTabStripHeight() {
+		return this.getGameHeight() + 12 - voidscapeChatTabStripY();
+	}
+
+	/** Equivalent of classicChatTabRowHit: gates clicks so world clicks near the bottom edge don't leak through. */
+	private boolean voidscapeChatTabRowHit(int y) {
+		return y > voidscapeChatTabStripY();
+	}
+
+	/** The [startX, endX) band of tab i: the full frame width split evenly, remainder-safe. */
+	private int[] voidscapeChatTabBand(int tab) {
+		int count = voidscapeChatTabCount();
+		int width = this.getGameWidth();
+		return new int[]{tab * width / count, (tab + 1) * width / count};
+	}
+
+	/** Same %30 flash cadence as the classic labels, driven by the shared activity counters. */
+	private boolean voidscapeChatTabFlashing(int tab) {
+		if (tab == 0) return this.messageTabActivity_Game % 30 > 15;
+		if (tab == 1) return this.messageTabActivity_Chat % 30 > 15;
+		if (tab == 2) return this.messageTabActivity_Quest % 30 > 15;
+		if (tab == 3) return this.messageTabActivity_Global % 30 > 15;
+		if (tab == 4) return this.messageTabActivity_Private % 30 > 15;
+		return false;
+	}
+
+	private boolean voidscapeChatTabIsSelected(int tab) {
+		MessageTab mapped = VOIDSCAPE_DESKTOP_CHAT_TABS[tab];
+		return mapped != null && this.messageTabSelected == mapped;
+	}
+
+	private void drawVoidscapeDesktopChatTabStrip() {
+		int stripY = voidscapeChatTabStripY();
+		int stripH = voidscapeChatTabStripHeight();
+		int width = this.getGameWidth();
+		int count = voidscapeChatTabCount();
+		// Opaque base coat (the BLUEBAR's job on the classic path) so the
+		// translucent segments never compound over stale sub-viewport pixels.
+		this.getSurface().drawBox(0, stripY, width, stripH, 0);
+		int labelY = stripY + 10;
+		for (int i = 0; i < count; i++) {
+			int[] band = voidscapeChatTabBand(i);
+			boolean selected = voidscapeChatTabIsSelected(i);
+			this.getSurface().drawBoxAlpha(band[0], stripY, band[1] - band[0], stripH,
+				selected ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
+				selected ? UiSkin.A_TAB_ACTIVE : 150);
+			if (i > 0) {
+				this.getSurface().drawLineVert(band[0], stripY + 1, UiSkin.VOID_LINE, stripH - 1);
+			}
+			int color = i == count - 1 ? UiSkin.DANGER_GLYPH
+				: (selected ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
+			if (voidscapeChatTabFlashing(i)) {
+				color = UiSkin.FLASH;
+			}
+			this.getSurface().drawColoredStringCentered((band[0] + band[1]) / 2,
+				VOIDSCAPE_DESKTOP_CHAT_TAB_LABELS[i], color, 0, UiSkin.FONT_SMALL, labelY);
+		}
+		// Glass rim hairline along the strip top.
+		this.getSurface().drawLineHoriz(0, stripY, width, UiSkin.GLASS_RIM);
+	}
+
+	// Click side of the strip. Caller has already gated on
+	// voidscapeChatTabRowHit; like the classic block, the whole row consumes
+	// the press even between tabs so it can't fall through to the world.
+	private void handleVoidscapeDesktopChatTabStripClick() {
+		final MessageTab beforeTab = this.messageTabSelected;
+		if (this.lastMouseButtonDown == 1) {
+			for (int i = 0; i < voidscapeChatTabCount(); i++) {
+				int[] band = voidscapeChatTabBand(i);
+				if (this.mouseX < band[0] || this.mouseX >= band[1]) {
+					continue;
+				}
+				MessageTab tab = VOIDSCAPE_DESKTOP_CHAT_TABS[i];
+				if (tab == null) {
+					// Report Abuse — same flow as the classic strip's fifth tab.
+					this.inputTextFinal = "";
+					this.inputTextCurrent = "";
+					this.reportAbuse_State = 1;
+				} else {
+					this.messageTabSelected = tab;
+					int control = activeMessageListControl();
+					if (control >= 0) {
+						this.panelMessageTabs.controlScrollAmount[control] = 999999;
+					}
+				}
+				break;
+			}
+		}
+		logAndroidSmokeChatTabSelection(beforeTab);
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+	}
+
 	private void drawChatMessageTabs(int var1) {
 		try {
 			if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 				drawVoidscapeChatMessageTabs(var1);
+				return;
+			}
+			if (useVoidscapeDesktopClassicChat()) {
+				drawVoidscapeDesktopChatTabStrip();
 				return;
 			}
 			this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, getGameHeight(), getGameWidth(), 10, 0, 0, 0, false, 0, 1);
@@ -8711,6 +8833,7 @@ public final class mudclient implements Runnable {
 					boolean LAST_FRAME_SHOWING_KEYBOARD = osConfig.F_SHOWING_KEYBOARD;
 					this.panelMessageTabs.hide(this.panelMessageChat);
 					this.panelMessageTabs.hide(this.panelMessageQuest);
+					this.panelMessageTabs.hide(this.panelMessageGlobal);
 					this.panelMessageTabs.hide(this.panelMessagePrivate);
 					this.panelMessageTabs.hide(this.panelMessageEntry);
 					if (!voidscapeChatHidden) {
@@ -8720,6 +8843,8 @@ public final class mudclient implements Runnable {
 						this.panelMessageTabs.show(this.panelMessageChat);
 					} else if (!voidscapeChatHidden && this.messageTabSelected == MessageTab.QUEST) {
 						this.panelMessageTabs.show(this.panelMessageQuest);
+					} else if (!voidscapeChatHidden && this.messageTabSelected == MessageTab.GLOBAL) {
+						this.panelMessageTabs.show(this.panelMessageGlobal);
 					} else if (!voidscapeChatHidden && this.messageTabSelected == MessageTab.PRIVATE) {
 						this.panelMessageTabs.show(this.panelMessagePrivate);
 					}
@@ -14712,6 +14837,8 @@ public final class mudclient implements Runnable {
 			if (this.messageTabSelected == MessageTab.CHAT && this.panelMessageTabs.isClicked(this.panelMessageChat)
 				|| this.messageTabSelected == MessageTab.QUEST
 				&& this.panelMessageTabs.isClicked(this.panelMessageQuest)
+				|| this.messageTabSelected == MessageTab.GLOBAL
+				&& this.panelMessageTabs.isClicked(this.panelMessageGlobal)
 				|| this.messageTabSelected == MessageTab.PRIVATE
 				&& this.panelMessageTabs.isClicked(this.panelMessagePrivate)) {
 				int control =
@@ -14719,6 +14846,7 @@ public final class mudclient implements Runnable {
 						(this.messageTabSelected == MessageTab.CHAT ? this.panelMessageChat
 							:
 							this.messageTabSelected == MessageTab.QUEST ? this.panelMessageQuest
+								: this.messageTabSelected == MessageTab.GLOBAL ? this.panelMessageGlobal
 								: this.panelMessagePrivate
 						));
 				int index = this.panelMessageTabs.getControlClickedListIndex(control);
@@ -19111,6 +19239,8 @@ public final class mudclient implements Runnable {
 				return this.panelMessageChat;
 			case QUEST:
 				return this.panelMessageQuest;
+			case GLOBAL:
+				return this.panelMessageGlobal;
 			case PRIVATE:
 				return this.panelMessagePrivate;
 			default:
@@ -22837,16 +22967,19 @@ public final class mudclient implements Runnable {
 			panelMessageTabs.reposition(panelMessageChat, chatX, chatY, chatW, chatH);
 			panelMessageTabs.reposition(panelMessageEntry, chatX, entryY, chatW, 14);
 			panelMessageTabs.reposition(panelMessageQuest, chatX, chatY, chatW, chatH);
+			panelMessageTabs.reposition(panelMessageGlobal, chatX, chatY, chatW, chatH);
 			panelMessageTabs.reposition(panelMessagePrivate, chatX, chatY, chatW, chatH);
 		} else if (useVoidscapeDesktopClassicChat()) {
 			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 14, 14);
 			panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
+			panelMessageTabs.reposition(panelMessageGlobal, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 			panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		} else {
 			panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 			panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 300, 14);
 			panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
+			panelMessageTabs.reposition(panelMessageGlobal, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 			panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 300, 56);
 		}
 	}
@@ -22864,6 +22997,9 @@ public final class mudclient implements Runnable {
 		panelMessageTabs.reposition(panelMessageChat, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		panelMessageTabs.reposition(panelMessageEntry, 7, getGameHeight() - 10, getGameWidth() - 14, 14);
 		panelMessageTabs.reposition(panelMessageQuest, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
+		// GLOBAL is unreachable on the authentic 5-tab strip, but keep the
+		// hidden list positioned sanely in case the skin is toggled mid-session.
+		panelMessageTabs.reposition(panelMessageGlobal, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 		panelMessageTabs.reposition(panelMessagePrivate, 5, getGameHeight() - 65, getGameWidth() - 10, 56);
 	}
 
@@ -23577,6 +23713,13 @@ public final class mudclient implements Runnable {
 						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
 							handleVoidscapeChatTabClick();
+						} else if (useVoidscapeDesktopClassicChat()) {
+							// Void desktop strip: same row gate as the classic
+							// path so bottom-edge world clicks stay blocked;
+							// bands come from the same helper the draw uses.
+							if (voidscapeChatTabRowHit(mouseY)) {
+								handleVoidscapeDesktopChatTabStripClick();
+							}
 						} else if (classicChatTabRowHit(mouseY)) { // Chat Tab Selection
 							final MessageTab androidSmokeBeforeMessageTab = this.messageTabSelected;
 							if (classicChatTabHit(0, mouseX)
@@ -27981,6 +28124,10 @@ public final class mudclient implements Runnable {
 					this.messageTabActivity_Quest = 200;
 				}
 
+				if (type == MessageType.GLOBAL_CHAT && this.messageTabSelected != MessageTab.GLOBAL) {
+					this.messageTabActivity_Global = 200;
+				}
+
 				if (type == MessageType.GAME || type == MessageType.INVENTORY) {
 					this.messageTabActivity_Game = 200;
 				}
@@ -28029,6 +28176,11 @@ public final class mudclient implements Runnable {
 			if (type == MessageType.GLOBAL_CHAT) {
 				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] == this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate]
 					- 4, crownID, sender, formerName, this.panelMessagePrivate);
+				// Additive: the dedicated Global history list (voidscape-skin
+				// sixth tab). Global chat keeps landing everywhere it did
+				// before — MessageHistory (All tab) and the Private list.
+				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageGlobal] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageGlobal]
+					- 4, crownID, sender, formerName, this.panelMessageGlobal);
 			}
 			// CLAN_CHAT (wire type 9) intentionally has no dedicated tab any more:
 			// it still lands in MessageHistory above, so it shows on the All tab.
@@ -28125,6 +28277,8 @@ public final class mudclient implements Runnable {
 				return this.panelMessageTabs.controlListCurrentSize[this.panelMessageChat] > 4;
 			case QUEST:
 				return this.panelMessageTabs.controlListCurrentSize[this.panelMessageQuest] > 4;
+			case GLOBAL:
+				return this.panelMessageTabs.controlListCurrentSize[this.panelMessageGlobal] > 4;
 			case PRIVATE:
 				return this.panelMessageTabs.controlListCurrentSize[this.panelMessagePrivate] > 4;
 			default:
@@ -30138,6 +30292,10 @@ public final class mudclient implements Runnable {
 
 							if (this.messageTabActivity_Quest > 0) {
 								--this.messageTabActivity_Quest;
+							}
+
+							if (this.messageTabActivity_Global > 0) {
+								--this.messageTabActivity_Global;
 							}
 
 							if (this.messageTabActivity_Game > 0) {
