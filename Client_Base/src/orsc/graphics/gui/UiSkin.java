@@ -245,6 +245,21 @@ public final class UiSkin {
 		g.drawLineVert(x + 1, y, PURPLE_EDGE, height);
 	}
 
+	/**
+	 * Top-center timer banner (style guide §1.3 "plaque / timer banner"): the
+	 * scout-timer recipe — measured width, VOID_BODY @A_MODAL backing,
+	 * PURPLE_EDGE accent strip, GOLD_TITLE text flipping to BAD when urgent —
+	 * stacked top-center by slot (22px pitch from y=8; scout timer owns slot 0).
+	 */
+	public static void timerBanner(GraphicsController g, int gameWidth, int slot, String label, boolean urgent) {
+		int width = Math.max(118, g.stringWidth(FONT_BODY, label) + 18);
+		int x = gameWidth / 2 - width / 2;
+		int y = 8 + slot * 22;
+		g.drawBoxAlpha(x, y, width, 18, VOID_BODY, A_MODAL);
+		g.drawBoxAlpha(x, y, width, 2, PURPLE_EDGE, 230);
+		g.drawColoredStringCentered(gameWidth / 2, label, urgent ? BAD : GOLD_TITLE, 0, FONT_BODY, y + 13);
+	}
+
 	// --- clip save/restore (single-level: GraphicsController has one global
 	// clip rect and no stack; nesting pushClip without popClip is a bug) ------
 	private static final int[] savedClip = new int[4];

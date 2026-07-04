@@ -109,6 +109,10 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Intake — dump raw bug reports here
 
+- Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
+- AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
+- handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
+
 Anyone (Ryan or an agent) can append raw, unstructured reports below, one bullet each.
 The loop's triage step converts each into a numbered entry and removes it from this list.
 

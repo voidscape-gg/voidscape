@@ -8325,15 +8325,16 @@ public final class mudclient implements Runnable {
 						centerX = this.systemUpdate / 50;
 						centerZ = centerX / 60;
 						centerX %= 60;
-						// halfGameWidth() == the legacy literal 256 on a 512 frame.
-						if (centerX < 10) {
-							this.getSurface().drawColoredStringCentered(halfGameWidth(),
-								"Time remaining: " + centerZ + ":0" + centerX, 0xFFFF00, 0, 1,
-								this.getGameHeight() - 7);
+						String updateLabel = "Time remaining: " + centerZ + (centerX < 10 ? ":0" : ":") + centerX;
+						if (useVoidscapeHudSkin()) {
+							// §1.3 timer banner: stacked top-center, below the
+							// scout timer when both are up; BAD in the last minute.
+							drawVoidscapeTimerPlaque(voidScoutTimerVisible() ? 1 : 0, updateLabel,
+								this.systemUpdate / 50 < 60);
 						} else {
+							// halfGameWidth() == the legacy literal 256 on a 512 frame.
 							this.getSurface().drawColoredStringCentered(halfGameWidth(),
-								"Time remaining: " + centerZ + ":" + centerX, 0xFFFF00, 0, 1,
-								this.getGameHeight() - 7);
+								updateLabel, 0xFFFF00, 0, 1, this.getGameHeight() - 7);
 						}
 					}
 					drawVoidScoutTimer();
@@ -8342,36 +8343,33 @@ public final class mudclient implements Runnable {
 						centerX = this.elixirTimer / 50;
 						centerZ = centerX / 60;
 						centerX %= 60;
-						if (inWild) {
-							if (centerX < 10) {
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
-									"EXP Elixir: " + centerZ + ":0" + centerX, 0x9139e7, 0, 0,
-									this.getGameHeight() - 62);
-							} else {
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
-									"EXP Elixir: " + centerZ + ":" + centerX, 0x9139e7, 0, 0,
-									this.getGameHeight() - 62);
-							}
-						} else if (!inWild) {
-							if (centerX < 10) {
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
-									"EXP Elixir: " + centerZ + ":0" + centerX, 0x9139e7, 0, 1,
-									this.getGameHeight() - 7);
-							} else {
-								this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
-									"EXP Elixir: " + centerZ + ":" + centerX, 0x9139e7, 0, 1,
-									this.getGameHeight() - 7);
-							}
+						String elixirLabel = "EXP Elixir: " + centerZ + (centerX < 10 ? ":0" : ":") + centerX;
+						if (useVoidscapeHudSkin()) {
+							// §1.3 timer banner: joins the top-center plaque stack
+							// (below scout timer / system update); BAD in the last 30s.
+							int elixirSlot = (voidScoutTimerVisible() ? 1 : 0)
+								+ (this.systemUpdate != 0 ? 1 : 0);
+							drawVoidscapeTimerPlaque(elixirSlot, elixirLabel, this.elixirTimer / 50 <= 30);
+						} else if (inWild) {
+							this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
+								elixirLabel, 0x9139e7, 0, 0, this.getGameHeight() - 62);
+						} else {
+							this.getSurface().drawColoredStringCentered(this.getGameWidth() - 53,
+								elixirLabel, 0x9139e7, 0, 1, this.getGameHeight() - 7);
 						}
 					}
 					if (C_KILL_FEED) {
 						killQueue.clean();
 						int Offset = 0;
+						// 507 was the 512-era right edge (512 - 5). The void skin
+						// anchors to the live frame width so wide viewports keep the
+						// feed flush right; the classic skin stays byte-identical.
+						int killFeedRight = useVoidscapeHudSkin() ? this.getGameWidth() - 5 : 507;
 						for (KillAnnouncer notify : killQueue.Kill) {
 							int picture_width = 20;
-							int width_killed = 507 - this.getSurface().stringWidth(1, notify.killedString);
-							int width_icon = 507 - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 5;
-							int width_killer = 507 - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 8 - this.getSurface().stringWidth(1, notify.killerString);
+							int width_killed = killFeedRight - this.getSurface().stringWidth(1, notify.killedString);
+							int width_icon = killFeedRight - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 5;
+							int width_killer = killFeedRight - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 8 - this.getSurface().stringWidth(1, notify.killerString);
 
 							this.getSurface().drawString(notify.killerString, width_killer, 50 + Offset, 0xffffff, 1);
 							switch (notify.killPicture) {
@@ -8411,7 +8409,7 @@ public final class mudclient implements Runnable {
 							centerZ = centerX / 6 + 1;
 							this.voidscapeWildLevel = centerZ;
 							if (!useVoidscapeHudSkin()) {
-								drawWildernessLevelIndicator(centerZ, false);
+								drawWildernessLevelIndicator(centerZ);
 							}
 							if (this.showUiWildWarn == 0) {
 								this.showUiWildWarn = 2;
@@ -8761,7 +8759,11 @@ public final class mudclient implements Runnable {
 					drawVoidscapeHudSkin();
 					this.getSurface().loggedIn = false;
 					this.drawChatMessageTabs(var1 - 8);
-					drawVoidscapeWildernessLevelIndicator();
+					// Void skin: the wilderness level already lives on the
+					// top-left location plaque (drawVoidscapeLocationPlaque);
+					// the second bottom-right skull copy was redundant and is
+					// gone (UI-STYLE-GUIDE slice 9). Classic skin still draws
+					// drawWildernessLevelIndicator from the wild-check block.
 					this.drawTrainingXpRateBadge();
 					drawVoidArenaCountdownOverlay();
 					drawFpsOverlay();
@@ -9465,20 +9467,26 @@ public final class mudclient implements Runnable {
 		this.voidScoutBodyPreviousPlayer = null;
 	}
 
+	/**
+	 * Top-center timer plaque: delegates to UiSkin.timerBanner (§4.4 — HUD
+	 * plaques consume the shared kit). Slot pitch stacks scout timer /
+	 * system update / elixir without overlap.
+	 */
+	private void drawVoidscapeTimerPlaque(int slot, String label, boolean urgent) {
+		UiSkin.timerBanner(this.getSurface(), this.getGameWidth(), slot, label, urgent);
+	}
+
+	private boolean voidScoutTimerVisible() {
+		return this.voidScoutActive && this.voidScoutExpiresAtMillis > 0L;
+	}
+
 	private void drawVoidScoutTimer() {
-		if (!this.voidScoutActive || this.voidScoutExpiresAtMillis <= 0L) return;
+		if (!voidScoutTimerVisible()) return;
 
 		final long remainingMillis = Math.max(0L, this.voidScoutExpiresAtMillis - System.currentTimeMillis());
 		final int remainingSeconds = (int) ((remainingMillis + 999L) / 1000L);
 		final String label = "Void Sparrow: 0:" + (remainingSeconds < 10 ? "0" : "") + remainingSeconds;
-		final int width = Math.max(118, this.getSurface().stringWidth(1, label) + 18);
-		final int x = this.getGameWidth() / 2 - width / 2;
-		final int y = 8;
-		final int color = remainingSeconds <= 5 ? UiSkin.BAD : UiSkin.GOLD_TITLE;
-
-		this.getSurface().drawBoxAlpha(x, y, width, 18, UiSkin.VOID_BODY, 218);
-		this.getSurface().drawBoxAlpha(x, y, width, 2, UiSkin.PURPLE_EDGE, 230);
-		this.getSurface().drawColoredStringCentered(this.getGameWidth() / 2, label, color, 0, 1, y + 13);
+		drawVoidscapeTimerPlaque(0, label, remainingSeconds <= 5);
 	}
 
 	private boolean isAndroidSmokeFilePresent(final String fileName) {
@@ -14251,6 +14259,15 @@ public final class mudclient implements Runnable {
 			skill = selectedSkill;
 		}
 		int textColor = getExperienceCounterColor();
+		// The counter and the training-rate badge show different data (running
+		// totals + til-level vs live XP/hr), so both stay; under the void skin
+		// the counter's chrome joins the badge palette (tokens). The text color
+		// is the player's synced counter-color setting, not chrome, and is kept
+		// in both skins. Classic grey backing stays byte-identical. Hit rects
+		// derive from the same x/width as the boxes and are unchanged.
+		boolean voidSkinCounter = useVoidscapeHudSkin();
+		int counterBg = voidSkinCounter ? UiSkin.VOID_BODY : 0x989898;
+		int counterBgAlpha = voidSkinCounter ? 188 : 90;
 		long totalXp = 0;
 		long timePassed = 0;
 		if (C_EXPERIENCE_COUNTER_MODE == 1 || skill < 0) {
@@ -14261,7 +14278,7 @@ public final class mudclient implements Runnable {
 			int stringWid = getSurface().stringWidth(3, "Total: " + totalXp);
 			int x = halfGameWidth() - (stringWid / 2) - 10;
 			int width = stringWid + 6;
-			this.getSurface().drawBoxAlpha(x, 0, width, 20, 0x989898, 90);
+			this.getSurface().drawBoxAlpha(x, 0, width, 20, counterBg, counterBgAlpha);
 			//this.getSurface().drawBoxBorder(x, width, 0, 20, 0x000000);
 
 			if (textColor == 0xFFFFFF) {
@@ -14292,7 +14309,7 @@ public final class mudclient implements Runnable {
 					timePassed = System.currentTimeMillis() - this.totalXpGainedStartTime;
 					xpPerHour = this.playerXpGainedTotal / (((double) timePassed) / 3600000);
 				}
-				this.getSurface().drawBoxAlpha(x, 19, width, 31, 0x989898, 90);
+				this.getSurface().drawBoxAlpha(x, 19, width, 31, counterBg, counterBgAlpha);
 				//this.getSurface().drawBoxBorder(x, width, 19, 31, 0x000000);
 
 				if (textColor == 0xFFFFFF) {
@@ -14307,7 +14324,7 @@ public final class mudclient implements Runnable {
 			int stringWid = getSurface().stringWidth(3, skillNames[skill] + ": " + playerStatBase[skill] + ": " + playerExperience[skill]);
 			int x = (getGameWidth() / 2) - (stringWid / 2) - 10;
 			int width = stringWid + 6;
-			this.getSurface().drawBoxAlpha(x, 0, width, 20, 0x989898, 90);
+			this.getSurface().drawBoxAlpha(x, 0, width, 20, counterBg, counterBgAlpha);
 			//this.getSurface().drawBoxBorder(x, width, 0, 20, 0x000000);
 
 			int tilLvl = 0, baseTilLvl = 0, progressWidth = 0;
@@ -14318,8 +14335,8 @@ public final class mudclient implements Runnable {
 				progress = ((double) tilLvl) / ((double) baseTilLvl) / 0.9;
 				progressWidth = (int) (progress * width);
 
-				this.getSurface().drawBox(x, 19, width - progressWidth, 2, 0x00FF00);
-				this.getSurface().drawBox(x + width - progressWidth, 19, progressWidth, 2, 0xFF0000);
+				this.getSurface().drawBox(x, 19, width - progressWidth, 2, voidSkinCounter ? UiSkin.GOOD : 0x00FF00);
+				this.getSurface().drawBox(x + width - progressWidth, 19, progressWidth, 2, voidSkinCounter ? UiSkin.BAD : 0xFF0000);
 			}
 
 			if (textColor == 0xFFFFFF) {
@@ -14350,7 +14367,7 @@ public final class mudclient implements Runnable {
 					timePassed = System.currentTimeMillis() - this.xpGainedStartTime[skill];
 					xpPerHour = this.playerStatXpGained[skill] / (((double) timePassed) / 3600000);
 				}
-				this.getSurface().drawBoxAlpha(x, 20, width, 61, 0x989898, 90);
+				this.getSurface().drawBoxAlpha(x, 20, width, 61, counterBg, counterBgAlpha);
 				//this.getSurface().drawBoxBorder(x, width, 19, 61, 0x000000);
 
 				if (textColor == 0xFFFFFF) {
@@ -18442,20 +18459,11 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private void drawVoidscapeWildernessLevelIndicator() {
-		if (!useVoidscapeHudSkin() || !inWild || this.voidscapeWildLevel <= 0) {
-			return;
-		}
-		drawWildernessLevelIndicator(this.voidscapeWildLevel, true);
-	}
-
-	private void drawWildernessLevelIndicator(int level, boolean avoidVoidscapeChatTabs) {
+	// Classic skin only: the void skin shows the wilderness level on the
+	// location plaque instead (its old duplicate bottom-right copy is gone).
+	private void drawWildernessLevelIndicator(int level) {
 		int x = this.getGameWidth() - 59;
 		int y = this.getGameHeight() - 56;
-		if (avoidVoidscapeChatTabs) {
-			y = Math.min(y, voidscapeChatTabTop() - 56);
-			y = Math.max(64, y);
-		}
 		this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), x, y);
 		this.getSurface().drawColoredStringCentered(x + 12, "Wilderness", 0xFFFF00, 0, 1, y + 36);
 		this.getSurface().drawColoredStringCentered(x + 12, "Level: " + level, 0xFFFF00, 0, 1, y + 49);
@@ -19155,7 +19163,7 @@ public final class mudclient implements Runnable {
 			}
 			String label = fitVoidscapeText(voidscapeChatTabLabel(i), r[2] - 10, 0);
 			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label,
-				active ? 0xFFD968 : getVoidscapeChatTabColor(i), 0, 0,
+				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, 0,
 				r[1] + r[3] - (this.getGameHeight() <= 520 ? 8 : 10));
 		}
 		drawVoidscapeAccountButton();
@@ -19170,30 +19178,33 @@ public final class mudclient implements Runnable {
 		String[] labels = new String[]{"All", "Chat", "Quest", "PM", S_WANT_CLANS ? "Clan" : "Rpt"};
 		MessageTab[] tabs = new MessageTab[]{MessageTab.ALL, MessageTab.CHAT, MessageTab.QUEST,
 			MessageTab.PRIVATE, MessageTab.CLAN};
+		// Shared tab treatment (UI-STYLE-GUIDE §4.4): same active-sprite +
+		// tint + label recipe as the mobile dock — PURPLE_SELECT active fill,
+		// GOLD_HOT active label, TEXT_BODY idle with the shared activity flash
+		// (getVoidscapeChatTabColor). The literal brown fills and on/off state
+		// text are gone. Geometry (voidscapeChatTabRect) is untouched, so the
+		// click path in handleVoidscapeChatTabClick stays in lockstep.
 		for (int i = 0; i < VOIDSCAPE_CHAT_TAB_COUNT; i++) {
 			int[] r = voidscapeChatTabRect(i);
 			boolean active = i < tabs.length && this.messageTabSelected == tabs[i];
 			boolean over = this.mouseX >= r[0] && this.mouseX < r[0] + r[2]
 				&& this.mouseY >= r[1] && this.mouseY < r[1] + r[3];
-			drawVoidscapeSkinSprite("top-tab-normal.png", r[0], r[1], r[2], r[3]);
+			drawVoidscapeSkinSprite(active || over ? "top-tab-active.png" : "top-tab-normal.png",
+				r[0], r[1], r[2], r[3]);
 			int inset = voidscapeCompactHud() ? 8 : 10;
 			this.getSurface().drawBoxAlpha(r[0] + inset, r[1] + 7, Math.max(1, r[2] - inset * 2),
-				Math.max(1, r[3] - 14), over ? 0x3A332B : 0x211C18, over ? 88 : 72);
+				Math.max(1, r[3] - 14),
+				active || over ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
+				active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 72));
+			int labelY = r[1] + (voidscapeCompactHud() ? 21 : 24);
 			if (!S_WANT_CLANS && i == 4) {
-				int bangX = r[0] + r[2] / 2;
-				int bangY = r[1] + (voidscapeCompactHud() ? 22 : 25);
-				this.getSurface().drawColoredStringCentered(bangX - 1, "!", 0x6B0A0A, 0, 5, bangY + 1);
-				this.getSurface().drawColoredStringCentered(bangX + 1, "!", 0x6B0A0A, 0, 5, bangY + 1);
-				this.getSurface().drawColoredStringCentered(bangX, "!", 0xFF4040, 0, 5, bangY);
+				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", UiSkin.FLASH, 0, 5,
+					r[1] + (voidscapeCompactHud() ? 22 : 25));
 				continue;
 			}
 			String label = fitVoidscapeText(labels[i], r[2] - 12, 0);
-			String state = active ? "on" : "off";
-			int labelY = r[1] + (voidscapeCompactHud() ? 15 : 17);
-			int stateY = r[1] + (voidscapeCompactHud() ? 26 : 30);
-			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label, 0xEFE3B6, 0, 0, labelY);
-			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, state,
-				active ? 0x44FF44 : 0xFF4040, 0, 0, stateY);
+			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label,
+				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, 0, labelY);
 		}
 		drawVoidscapeAccountButton();
 		drawVoidscapeAccountMenu();
@@ -19320,20 +19331,20 @@ public final class mudclient implements Runnable {
 	}
 
 	private int getVoidscapeChatTabColor(int index) {
-		int color = 0xE7DEBC;
+		int color = UiSkin.TEXT_BODY;
 		if ((index == 0 && this.messageTabSelected == MessageTab.ALL)
 			|| (index == 1 && this.messageTabSelected == MessageTab.CHAT)
 			|| (index == 2 && this.messageTabSelected == MessageTab.QUEST)
 			|| (index == 3 && this.messageTabSelected == MessageTab.PRIVATE)
 			|| (index == 4 && S_WANT_CLANS && this.messageTabSelected == MessageTab.CLAN)) {
-			color = 0xFFD968;
+			color = UiSkin.GOLD_HOT;
 		}
 		if ((index == 0 && this.messageTabActivity_Game % 30 > 15)
 			|| (index == 1 && this.messageTabActivity_Chat % 30 > 15)
 			|| (index == 2 && this.messageTabActivity_Quest % 30 > 15)
 			|| (index == 3 && this.messageTabActivity_Private % 30 > 15)
 			|| (index == 4 && this.messageTabActivity_Clan % 30 > 15)) {
-			color = 0xFF4D4D;
+			color = UiSkin.FLASH;
 		}
 		return color;
 	}
@@ -24300,20 +24311,13 @@ public final class mudclient implements Runnable {
 				}
 			}
 
-			if (this.currentViewMode == GameMode.GAME && this.voidScoutActive && key == 27) {
-				sendVoidScoutCancel();
+			// UI-STYLE-GUIDE §4.5: the modality table owns ESC. It subsumes the
+			// old standalone void-scout / farm-sim / inputX ESC branches (same
+			// close paths, same relative priority). Only consume the key when a
+			// modal actually closed; every other ESC behavior below still runs.
+			if (this.currentViewMode == GameMode.GAME && key == 27 && closeTopVoidscapeModal()) {
 				return;
 			}
-
-			if (this.currentViewMode == GameMode.GAME && this.showDialogFarmSim && key == 27) {
-				closeFarmSimDialog();
-				return;
-			}
-
-		if (this.currentViewMode == GameMode.GAME && key == 27 && this.inputX_Action != InputXAction.ACT_0) {
-			cancelInputX();
-			return;
-		}
 
 			if (var1 > 105) {
 				if (this.currentViewMode == GameMode.GAME) {
@@ -24495,6 +24499,13 @@ public final class mudclient implements Runnable {
 				this.zeroMF();
 				return true;
 			}
+			// UI-STYLE-GUIDE §4.5: the modality table also drives Android back.
+			// Runs after the keyboard branch above (first back dismisses the
+			// keyboard, second back closes the modal — standard Android UX) and
+			// keeps the legacy inputX/world-map branches at the top intact.
+			if (this.currentViewMode == GameMode.GAME && closeTopVoidscapeModal()) {
+				return true;
+			}
 			if (this.currentViewMode == GameMode.GAME) {
 				if (this.topMouseMenuVisible) {
 					this.topMouseMenuVisible = false;
@@ -24505,6 +24516,240 @@ public final class mudclient implements Runnable {
 		} catch (RuntimeException ex) {
 			throw GenUtil.makeThrowable(ex, "client.androidBack()");
 		}
+	}
+
+	/**
+	 * The voidscape modality table (docs/UI-STYLE-GUIDE.md §4.5): one ordered
+	 * registry of every modal/overlay state, walked highest priority first.
+	 * Closes the FIRST open modal via that modal's existing close path — the
+	 * same statements its X/close/decline code runs, including any packet a
+	 * close must send — and returns true. Returns false when no modal is open
+	 * (callers must NOT consume the key) or when the top modal refuses to
+	 * close (welcome screen while a recovery-set countdown is pending, the
+	 * points-to-gp / experience-config skill submenu); a refusing top modal
+	 * blocks the walk so nothing ever closes underneath it.
+	 *
+	 * Priority order is seeded from getWebOverlayDialogName() (the web
+	 * client's overlay enumeration) plus the states that list omits: void
+	 * scout targeting (kept above everything, matching its old ESC
+	 * precedence), the account add form (its old ESC slot: after inputX),
+	 * bank PIN, bestiary drop table, auction house, the InterfaceChrome
+	 * fleet windows, and the world map.
+	 *
+	 * Wired into ESC (handleKeyPress) and the Android back button
+	 * (handleAndroidBackButton). Mouse-wheel capture routing is deferred
+	 * (§4.5 names it; not attempted in this slice).
+	 */
+	private boolean closeTopVoidscapeModal() {
+		if (this.currentViewMode != GameMode.GAME) {
+			return false;
+		}
+		if (this.voidScoutActive) {
+			sendVoidScoutCancel();
+			return true;
+		}
+		if (this.showDialogMessage) {
+			// closeWelcomeDialogAt refuses while the recovery-set countdown is
+			// showing (the dialog offers explicit keep/cancel choices instead).
+			if (this.welcomeRecoverySetDays > 0) {
+				return false;
+			}
+			this.showDialogMessage = false;
+			return true;
+		}
+		if (this.showDialogServerMessage) {
+			this.showDialogServerMessage = false;
+			return true;
+		}
+		if (this.showDialogFarmSim) {
+			closeFarmSimDialog();
+			return true;
+		}
+		if (this.showUiWildWarn == 1) {
+			this.showUiWildWarn = 2;
+			return true;
+		}
+		if (this.showDialogTradeConfirm) {
+			this.showDialogTradeConfirm = false;
+			this.packetHandler.getClientStream().newPacket(230);
+			this.packetHandler.getClientStream().finishPacket();
+			return true;
+		}
+		if (this.showDialogTrade) {
+			this.showDialogTrade = false;
+			this.packetHandler.getClientStream().newPacket(230);
+			this.packetHandler.getClientStream().finishPacket();
+			return true;
+		}
+		if (this.showDialogDuelConfirm) {
+			this.showDialogDuelConfirm = false;
+			this.packetHandler.getClientStream().newPacket(197);
+			this.packetHandler.getClientStream().finishPacket();
+			return true;
+		}
+		if (this.showDialogDuel) {
+			this.showDialogDuel = false;
+			this.packetHandler.getClientStream().newPacket(197);
+			this.packetHandler.getClientStream().finishPacket();
+			return true;
+		}
+		if (this.showDialogVoidArenaDeathMatch) {
+			sendVoidArenaDeathMatchAction(VOIDSCAPE_VOID_ARENA_ACTION_DECLINE);
+			this.showDialogVoidArenaDeathMatch = false;
+			return true;
+		}
+		if (this.panelPasswordChange_Mode != PasswordChangeMode.NONE) {
+			this.panelPasswordChange_Mode = PasswordChangeMode.NONE;
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+			}
+			return true;
+		}
+		if (this.reportAbuse_State != 0) {
+			this.reportAbuse_State = 0;
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+			}
+			return true;
+		}
+		if (this.panelSocialPopup_Mode != SocialPopupMode.NONE) {
+			this.panelSocialPopup_Mode = SocialPopupMode.NONE;
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+			}
+			return true;
+		}
+		if (this.inputX_Action != InputXAction.ACT_0) {
+			cancelInputX();
+			return true;
+		}
+		if (this.voidscapeAccountAddFormOpen) {
+			closeVoidscapeAccountAddForm();
+			this.voidscapeAccountMenuOpen = true;
+			return true;
+		}
+		if (this.bankPinInterface != null && this.bankPinInterface.isVisible()) {
+			// BankPinInterface's exit button: cancel packet, then hide.
+			this.packetHandler.getClientStream().newPacket(199);
+			this.packetHandler.getClientStream().bufferBits.putByte(8);
+			this.packetHandler.getClientStream().bufferBits.putByte(1);
+			this.packetHandler.getClientStream().bufferBits.putString("cancel");
+			this.packetHandler.getClientStream().finishPacket();
+			this.bankPinInterface.hide();
+			return true;
+		}
+		if (this.isShowDialogBank() && this.combatTimeout == 0) {
+			// Void Glass bank: staged ESC (clear search first, then bankClose +
+			// packet 212). Custom/classic bank: CustomBankInterface.keyDown(27)
+			// steps its sub-states then runs the same resetVar() + bankClose()
+			// the X / outside-click paths use.
+			if (!bank.vgHandleKey(27)) {
+				bank.keyDown(27);
+			}
+			return true;
+		}
+		if (this.shouldDrawShopDialog()) {
+			this.packetHandler.getClientStream().newPacket(166);
+			this.packetHandler.getClientStream().finishPacket();
+			this.showDialogShop = false;
+			return true;
+		}
+		if (this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
+			&& this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY
+			&& this.bestiaryRequestedNpcId >= 0) {
+			bestiaryReturnToSearch(false);
+			if (this.bestiarySearchPanel != null) {
+				this.bestiarySearchPanel.setFocus(-1);
+			}
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				clientPort.closeKeyboard();
+			}
+			return true;
+		}
+		if (this.auctionHouse != null && this.auctionHouse.isVisible()) {
+			// AuctionHouse.auctionClose() is private; mirror its statements
+			// (close packet + hide). resetAllVariables() is private too, so
+			// field resets are skipped — same as the server-driven close.
+			this.packetHandler.getClientStream().newPacket(199);
+			this.packetHandler.getClientStream().bufferBits.putByte(10);
+			this.packetHandler.getClientStream().bufferBits.putByte(4);
+			this.packetHandler.getClientStream().finishPacket();
+			this.auctionHouse.setVisible(false);
+			return true;
+		}
+		if (this.showAdvancedSettingsWindow) {
+			this.showAdvancedSettingsWindow = false;
+			return true;
+		}
+		if (this.optionsMenuShow) {
+			// The click-away dismissal path: packet 116 with option -1.
+			sendOptionsMenuChoice(-1);
+			return true;
+		}
+		// InterfaceChrome fleet — each entry mirrors its own X-close statements.
+		if (this.skillGuideInterface != null && this.skillGuideInterface.isVisible()) {
+			this.skillGuideInterface.skillGuide.resetScrollIndex(this.skillGuideInterface.skillGuideScroll);
+			this.skillGuideInterface.curTab = 0;
+			this.skillGuideInterface.setVisible(false);
+			return true;
+		}
+		if (this.questGuideInterface != null && this.questGuideInterface.isVisible()) {
+			this.questGuideInterface.questGuide.resetScrollIndex(this.questGuideInterface.questGuideScroll);
+			this.questGuideInterface.setVisible(false);
+			return true;
+		}
+		if (this.doSkillInterface != null && this.doSkillInterface.isVisible()) {
+			this.doSkillInterface.setVisible(false);
+			return true;
+		}
+		if (this.lostOnDeathInterface != null && this.lostOnDeathInterface.isVisible()) {
+			this.lostOnDeathInterface.setVisible(false);
+			return true;
+		}
+		if (this.ironmanInterface != null && this.ironmanInterface.isVisible()) {
+			// Its X refuses while the (private) deactivation confirm submenu is
+			// open; that guard is not reachable from here, so ESC/back close
+			// outright — same end state as cancel-then-close.
+			this.ironmanInterface.setVisible(false);
+			return true;
+		}
+		if (this.pointsToGpInterface != null && this.pointsToGpInterface.isVisible()) {
+			if (this.pointsToGpInterface.selectSkillMenu) {
+				return false; // X refuses while the skill submenu is open
+			}
+			this.packetHandler.getClientStream().newPacket(212);
+			this.packetHandler.getClientStream().finishPacket();
+			this.pointsToGpInterface.setVisible(false);
+			return true;
+		}
+		if (this.experienceConfigInterface != null && this.experienceConfigInterface.isVisible()) {
+			if (this.experienceConfigInterface.selectSkillMenu) {
+				return false; // X refuses while the skill submenu is open
+			}
+			this.experienceConfigInterface.setVisible(false);
+			return true;
+		}
+		if (this.territorySignupInterface != null && this.territorySignupInterface.isVisible()) {
+			this.territorySignupInterface.setVisible(false);
+			return true;
+		}
+		if (this.pointInterface != null && this.pointInterface.isVisible()) {
+			this.pointInterface.setVisible(false);
+			return true;
+		}
+		if (this.onlineList != null && this.onlineList.isVisible()) {
+			this.onlineList.setVisible(false);
+			return true;
+		}
+		if (this.achievementInterface != null && this.achievementInterface.isVisible()) {
+			this.achievementInterface.hide();
+			return true;
+		}
+		if (this.worldMapPanel.isVisible()) {
+			this.worldMapPanel.setVisible(false);
+			return true;
+		}
+		return false;
 	}
 
 	private boolean voidscapeLoginFieldClicked(int cx, int cy, int width, int height) {
