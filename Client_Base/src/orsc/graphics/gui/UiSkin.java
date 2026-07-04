@@ -89,6 +89,9 @@ public final class UiSkin {
 
 	// --- geometry constants --------------------------------------------------
 	public static final int TITLE_BAR_H = 24;
+	/** Standard modal widths (style guide §1.5); clamp via {@link #modalWidth}. */
+	public static final int MODAL_W_MESSAGE = 400;
+	public static final int MODAL_W_GRID = 468;
 
 	// --- world-color exemption (style guide §1.1): a UI palette sweep must
 	// never touch these — they are scene colors, not chrome.
@@ -151,6 +154,27 @@ public final class UiSkin {
 		g.drawBoxAlpha(x + 1, y + 1, width - 2, (height - 2) * 2 / 5, GLASS_SHEEN, A_SHEEN);
 		g.drawBorder(x, y, width, height, 0);
 		g.drawBorder(x + 1, y + 1, width - 2, height - 2, GLASS_RIM);
+	}
+
+	/** Preferred modal width clamped to the frame (style guide §1.5: gameWidth - 16). */
+	public static int modalWidth(int gameWidth, int preferredWidth) {
+		return Math.min(preferredWidth, gameWidth - 16);
+	}
+
+	/**
+	 * Standard modal dialog: glass card (text-tier alpha) plus, when a title is
+	 * given, the InterfaceChrome.window header strip (VOID_HEADER @190 + GOLD_LINE
+	 * seam + centered GOLD_TITLE font-4 title) — but no close button: the legacy
+	 * black-box dialogs this replaces carry their own button/answer flows.
+	 * Draw-only; callers keep hit-tests derived from the same x/y/width/height.
+	 */
+	public static void modal(GraphicsController g, int x, int y, int width, int height, String title) {
+		glassPanel(g, x, y, width, height, A_GLASS_TEXT);
+		if (title != null) {
+			g.drawBoxAlpha(x + 1, y + 1, width - 2, TITLE_BAR_H - 1, VOID_HEADER, 190);
+			g.drawLineHoriz(x + 2, y + TITLE_BAR_H - 1, width - 4, GOLD_LINE);
+			g.drawColoredStringCentered(x + width / 2, title, GOLD_TITLE, 0, FONT_TITLE, y + 17);
+		}
 	}
 
 	/** Header strip + gold seam + centered title, for panels that manage their own body. */

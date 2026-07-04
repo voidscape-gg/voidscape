@@ -4781,8 +4781,25 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	// Slice 7 (docs/UI-STYLE-GUIDE.md): shared anchor for the classic trade/duel
+	// offer and confirm dialogs. All four are a 468x262 surface the original
+	// client pinned at (22, 36) — exactly the centered position on the 512x334
+	// frame ((512-468)/2 = 22, (334-262)/2 = 36) — so deriving the anchor keeps
+	// them pixel-identical at the classic size and merely re-centers on wider
+	// frames. Every draw call AND mouse hit range in each dialog derives from
+	// these two values so paint and clicks move in lockstep.
+	private int tradeDuelDialogX() {
+		return UiAnchor.centeredDialogX(this.getGameWidth(), 468);
+	}
+
+	private int tradeDuelDialogY() {
+		return UiAnchor.centeredDialogY(this.getGameHeight(), 262, 0, 8);
+	}
+
 	private void drawDialogDuel() {
 		try {
+			int dialogX = tradeDuelDialogX();
+			int dialogY = tradeDuelDialogY();
 
 			int clickedIndex = -1;
 			if (this.mouseButtonClick != 0 && this.menuDuel_Visible) {
@@ -4859,17 +4876,17 @@ public final class mudclient implements Runnable {
 				if (this.mouseButtonClick == 1 && this.mouseButtonItemCountIncrement == 0) {
 					this.mouseButtonItemCountIncrement = 1;
 				}
-				if (getMouseY() >= 239 + 36 && getMouseY() <= 257 + 36) {
+				if (getMouseY() >= 239 + dialogY && getMouseY() <= 257 + dialogY) {
 					if (mouseButtonClick != 0 && S_WANT_EQUIPMENT_TAB) {
-						if (getMouseX() >= 22 + 320 && getMouseX() <= 22 + 348) {
+						if (getMouseX() >= dialogX + 320 && getMouseX() <= dialogX + 348) {
 							stakeOfferEquipMode = false;
-						} else if (getMouseX() >= 22 + 348 && getMouseX() <= 22 + 376)
+						} else if (getMouseX() >= dialogX + 348 && getMouseX() <= dialogX + 376)
 							stakeOfferEquipMode = true;
 						mouseButtonClick = 0;
 					}
 				}
-				int mouseX_Local = this.mouseX - 22;
-				int mouseY_Local = this.mouseY - 36;
+				int mouseX_Local = this.mouseX - dialogX;
+				int mouseY_Local = this.mouseY - dialogY;
 				if (mouseX_Local >= 0 && mouseY_Local >= 0 && mouseX_Local < 468 && mouseY_Local < 262) {
 					if (this.mouseButtonItemCountIncrement > 0) {
 						if (mouseX_Local > 216 && mouseY_Local > 30 && mouseX_Local < 462 && mouseY_Local < 235) {
@@ -5086,8 +5103,8 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.showDialogDuel) {
-				byte xr = 22;
-				byte yr = 36;
+				int xr = dialogX;
+				int yr = dialogY;
 				this.getSurface().drawBox(xr, yr, 468, 12, 13175581);
 				int colorA = 10000536;
 				this.getSurface().drawBoxAlpha(xr, 12 + yr, 468, 18, colorA, 160);
@@ -5342,8 +5359,8 @@ public final class mudclient implements Runnable {
 	private void drawDialogDuelConfirm() {
 		try {
 
-			byte xr = 22;
-			byte yr = 36;
+			int xr = tradeDuelDialogX();
+			int yr = tradeDuelDialogY();
 			this.getSurface().drawBox(xr, yr, 468, 16, 192);
 			int color = 10000536;
 			this.getSurface().drawBoxAlpha(xr, yr + 16, 468, 246, color, 160);
@@ -5868,9 +5885,20 @@ public final class mudclient implements Runnable {
 	private void drawDialogLogout() {
 		try {
 
-			this.getSurface().drawBox((getGameWidth() - 260) / 2, (getGameHeight() - 60) / 2, 260, 60, 0);
-			this.getSurface().drawBoxBorder((getGameWidth() - 260) / 2, 260, (getGameHeight() - 60) / 2, 60, 0xFFFFFF);
-			this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Logging out...", 0xFFFFFF, 0, 5, (getGameHeight() - 60) / 2 + 36);
+			// Paint geometry: derived once, shared by both skins (no hit rects here).
+			int dialogWidth = 260;
+			int dialogHeight = 60;
+			int dialogX = UiAnchor.centeredDialogX(getGameWidth(), dialogWidth);
+			int dialogY = (getGameHeight() - dialogHeight) / 2;
+			if (useVoidscapeHudSkin()) {
+				UiSkin.modal(this.getSurface(), dialogX, dialogY, dialogWidth, dialogHeight, null);
+				this.getSurface().drawColoredStringCentered(dialogX + dialogWidth / 2, "Logging out...", UiSkin.GOLD_TITLE, 0, 5, dialogY + 36);
+			} else {
+				this.getSurface().drawBox(dialogX, dialogY, dialogWidth, dialogHeight, 0);
+				this.getSurface().drawBoxBorder(dialogX, dialogWidth, dialogY, dialogHeight, 0xFFFFFF);
+				// dialogX + dialogWidth / 2 == (getGameWidth() - 256) / 2 + 256 / 2 at every width.
+				this.getSurface().drawColoredStringCentered(dialogX + dialogWidth / 2, "Logging out...", 0xFFFFFF, 0, 5, dialogY + 36);
+			}
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "client.SD(" + "dummy" + ')');
 		}
@@ -6401,25 +6429,35 @@ public final class mudclient implements Runnable {
 	private void drawDialogServerMessage(byte var1) {
 		try {
 
-			short var2 = 400;
 			if (var1 != -115) {
 				this.m_qd = 64;
 			}
 
+			// Paint and hit lockstep: box + text + close band all derive from
+			// serverMessageBoxX()/serverMessageDialogWidth(), the same helpers
+			// isServerMessageCloseHit()/closeServerMessageDialogAt() consult.
+			int var2 = serverMessageDialogWidth();
 			short var3 = (short)serverMessageDialogHeight();
-			int xr = (getGameWidth() - var2) / 2;
+			int xr = serverMessageBoxX();
 			int yr = (getGameHeight() - var3) / 2;
-
-			this.getSurface().drawBox(xr, yr, var2, var3, 0);
-			this.getSurface().drawBoxBorder(xr, var2, yr, var3, 0xFFFFFF);
-			this.getSurface().drawWrappedCenteredString(this.serverMessage, xr + 256 - 56, yr + 17, var2 - 40, 1,
-				0xFFFFFF, true);
-			int var4 = serverMessageCloseTextY();
+			int centerX = xr + var2 / 2; // == xr + 256 - 56 at the legacy 400 width
 
 			boolean closeHover = isServerMessageCloseHit(this.mouseX, this.mouseY);
-			int var5 = closeHover ? 0xFF0000 : 0xFFFFFF;
-
-			this.getSurface().drawColoredStringCentered(xr + 256 - 56, "Click here to close window", var5, 0, 1, var4);
+			int var4 = serverMessageCloseTextY();
+			if (useVoidscapeHudSkin()) {
+				UiSkin.modal(this.getSurface(), xr, yr, var2, var3, null);
+				this.getSurface().drawWrappedCenteredString(this.serverMessage, centerX, yr + 17, var2 - 40, 1,
+					UiSkin.TEXT_BODY, true);
+				this.getSurface().drawColoredStringCentered(centerX, "Click here to close window",
+					closeHover ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY, 0, 1, var4);
+			} else {
+				this.getSurface().drawBox(xr, yr, var2, var3, 0);
+				this.getSurface().drawBoxBorder(xr, var2, yr, var3, 0xFFFFFF);
+				this.getSurface().drawWrappedCenteredString(this.serverMessage, centerX, yr + 17, var2 - 40, 1,
+					0xFFFFFF, true);
+				this.getSurface().drawColoredStringCentered(centerX, "Click here to close window",
+					closeHover ? 0xFF0000 : 0xFFFFFF, 0, 1, var4);
+			}
 
 			if (this.mouseButtonClick == 1 && closeHover) {
 				this.showDialogServerMessage = false;
@@ -6892,6 +6930,8 @@ public final class mudclient implements Runnable {
 
 	private void drawDialogTrade() {
 		try {
+			int dialogX = tradeDuelDialogX();
+			int dialogY = tradeDuelDialogY();
 
 			int clickOp = -1;
 			if (this.mouseButtonClick != 0 && this.menuTrade_Visible) {
@@ -6904,8 +6944,8 @@ public final class mudclient implements Runnable {
 						this.mouseButtonItemCountIncrement = 1;
 					}
 
-					int mouseLX = this.mouseX - 22;
-					int mouseLY = this.mouseY - 36;
+					int mouseLX = this.mouseX - dialogX;
+					int mouseLY = this.mouseY - dialogY;
 					if (mouseLX >= 0 && mouseLY >= 0 && mouseLX < 468 && mouseLY < 262) {
 						if (this.mouseButtonItemCountIncrement > 0) {
 							if (mouseLX > 216 && mouseLY > 30 && mouseLX < 462 && mouseLY < 235) {
@@ -7138,8 +7178,8 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.showDialogTrade) {
-				byte xr = 22;
-				byte yr = 36;
+				int xr = dialogX;
+				int yr = dialogY;
 				this.getSurface().drawBox(xr, yr, 468, 12, 192);
 				int color = 10000536;
 				this.getSurface().drawBoxAlpha(xr, yr + 12, 468, 18, color, 160);
@@ -7345,13 +7385,28 @@ public final class mudclient implements Runnable {
 			int var2 = welcomeDialogHeight();
 			int welcomeWindowX = welcomeDialogX();
 			int welcomeWindowY = welcomeDialogY();
+			// Paint + hit lockstep: every text center and click band below derives
+			// from welcomeWindowX/welcomeWidth (the legacy 106..406 bands were the
+			// 512-frame values of welcomeWindowX + 50 .. welcomeWindowX + 350).
+			int welcomeWidth = 400;
+			int centerX = welcomeWindowX + welcomeWidth / 2; // == welcomeWindowX + 256 - 56
+			boolean voidSkin = useVoidscapeHudSkin();
+			int bodyColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+			int warnColor = voidSkin ? UiSkin.BAD : 0xFF8000;
+			int hotColor = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
+			String welcomeTitle = "Welcome to " + getServerName() + " " + this.localPlayer.accountName;
 
-			this.getSurface().drawBox(welcomeWindowX, welcomeWindowY, 400, var2, 0);
 			int var3 = welcomeWindowY;
-			this.getSurface().drawBoxBorder(welcomeWindowX, 400, welcomeWindowY, var2, 0xFFFFFF);
+			if (voidSkin) {
+				UiSkin.modal(this.getSurface(), welcomeWindowX, welcomeWindowY, welcomeWidth, var2, welcomeTitle);
+			} else {
+				this.getSurface().drawBox(welcomeWindowX, welcomeWindowY, welcomeWidth, var2, 0);
+				this.getSurface().drawBoxBorder(welcomeWindowX, welcomeWidth, welcomeWindowY, var2, 0xFFFFFF);
+			}
 			var3 += 20;
-			this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Welcome to " + getServerName() + " " + this.localPlayer.accountName,
-				0xFFFF00, 0, 4, var3);
+			if (!voidSkin) {
+				this.getSurface().drawColoredStringCentered(centerX, welcomeTitle, 0xFFFF00, 0, 4, var3);
+			}
 			var3 += 30;
 			String var4;
 			if (this.welcomeLastLoggedInDays == 0) {
@@ -7363,21 +7418,24 @@ public final class mudclient implements Runnable {
 			}
 
 			if (!this.welcomeLastLoggedInIp.equalsIgnoreCase("0.0.0.0")) {
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "You last logged in " + var4, 0xFFFFFF, 0, 1, var3);
+				this.getSurface().drawColoredStringCentered(centerX, "You last logged in " + var4, bodyColor, 0, 1, var3);
 				var3 += 15;
 				if (this.welcomeLastLoggedInHost == null) {
 					this.welcomeLastLoggedInHost = getHostnameFromIP();
 				}
 
 				if (shouldShowLastLoginHost()) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "from: " + this.welcomeLastLoggedInHost, 0xFFFFFF,
+					this.getSurface().drawColoredStringCentered(centerX, "from: " + this.welcomeLastLoggedInHost, bodyColor,
 						var1 ^ -4853, 1, var3);
 				}
 				var3 += 15;
 				var3 += 15;
 			}
 
-			int var5 = 0xFFFFFF;
+			// Legacy option bands 106..406 expressed against the dialog frame
+			// (identical values on a 512 frame, correct on wider frames).
+			int optionBandLeft = welcomeWindowX + 50;
+			int optionBandRight = welcomeWindowX + 350;
 			if (this.welcomeRecoverySetDays > 0) {
 				if (this.welcomeRecoverySetDays == 14) {
 					var4 = "Earlier today";
@@ -7387,104 +7445,97 @@ public final class mudclient implements Runnable {
 					var4 = 14 - this.welcomeRecoverySetDays + " days ago";
 				}
 
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, var4 + " you requested new recovery questions", 0xFF8000, 0, 1, var3);
+				this.getSurface().drawColoredStringCentered(centerX, var4 + " you requested new recovery questions", warnColor, 0, 1, var3);
 				var3 += 15;
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "If you do not remember making this request then", 0xFF8000, 0, 1, var3);
+				this.getSurface().drawColoredStringCentered(centerX, "If you do not remember making this request then", warnColor, 0, 1, var3);
 				var3 += 15;
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "cancel it and change your password immediately!", 0xFF8000, 0, 1, var3);
+				this.getSurface().drawColoredStringCentered(centerX, "cancel it and change your password immediately!", warnColor, 0, 1, var3);
 				var3 += 15;
 				var3 += 15;
-				var5 = 0xFFFFFF;
-				if (this.mouseY > var3 - 12 && this.mouseY <= var3 && this.mouseX > 106
-					&& this.mouseX < 406) {
-					var5 = 0xFF0000;
-				}
+				boolean cancelRequestHover = this.mouseY > var3 - 12 && this.mouseY <= var3
+					&& this.mouseX > optionBandLeft && this.mouseX < optionBandRight;
 
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "No that wasn't me - Cancel the request!", var5, 0, 1, var3);
-				if (var5 == 0xFF0000 && this.mouseButtonClick == 1) {
+				this.getSurface().drawColoredStringCentered(centerX, "No that wasn't me - Cancel the request!",
+					cancelRequestHover ? hotColor : bodyColor, 0, 1, var3);
+				if (cancelRequestHover && this.mouseButtonClick == 1) {
 					this.packetHandler.getClientStream().newPacket(196);
 					this.packetHandler.getClientStream().finishPacket();
 					this.showDialogMessage = false;
 				}
 
 				var3 += 15;
-				var5 = 0xFFFFFF;
-				if (this.mouseY > var3 - 12 && this.mouseY <= var3 && this.mouseX > 106
-					&& this.mouseX < 406) {
-					var5 = 0xFF0000;
-				}
+				boolean keepRequestHover = this.mouseY > var3 - 12 && this.mouseY <= var3
+					&& this.mouseX > optionBandLeft && this.mouseX < optionBandRight;
 
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "That's ok, activate the new questions in " + this.welcomeRecoverySetDays + " days time", var5, 0, 1, var3);
-				if (var5 == 0xFF0000 && this.mouseButtonClick == 1) {
+				this.getSurface().drawColoredStringCentered(centerX, "That's ok, activate the new questions in " + this.welcomeRecoverySetDays + " days time",
+					keepRequestHover ? hotColor : bodyColor, 0, 1, var3);
+				if (keepRequestHover && this.mouseButtonClick == 1) {
 					this.showDialogMessage = false;
 				}
 			} else {
 				var3 += 7;
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Security tip of the day", 0xFF0000, 0, 1, var3);
+				this.getSurface().drawColoredStringCentered(centerX, "Security tip of the day", voidSkin ? UiSkin.BAD : 0xFF0000, 0, 1, var3);
 				var3 += 15;
 				if (this.welcomeTipOfDay == 0) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Don't tell ANYONE your password or recovery questions!", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Don't tell ANYONE your password or recovery questions!", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Not even people claiming to be Jagex staff.", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Not even people claiming to be Jagex staff.", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				if (this.welcomeTipOfDay == 1) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Never enter your password or recovery questions into ANY", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Never enter your password or recovery questions into ANY", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "website other than this one - Not even if it looks similar.", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "website other than this one - Not even if it looks similar.", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				if (this.welcomeTipOfDay == 2) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Don't use RuneScape cheats, helpers, or automaters.", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Don't use RuneScape cheats, helpers, or automaters.", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "These programs WILL steal your password.", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "These programs WILL steal your password.", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				if (this.welcomeTipOfDay == 3) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Watch out for fake emails, and fake staff. Real staff", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Watch out for fake emails, and fake staff. Real staff", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "will NEVER ask you for your password or recovery questions!", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "will NEVER ask you for your password or recovery questions!", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				if (this.welcomeTipOfDay == 4) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Use a password your friends won't guess. Do NOT use your name!", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Use a password your friends won't guess. Do NOT use your name!", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Choose a unique password which you haven't used anywhere else", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Choose a unique password which you haven't used anywhere else", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				if (this.welcomeTipOfDay == 5) {
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "If possible only play runescape from your own computer", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "If possible only play runescape from your own computer", bodyColor, 0, 1, var3);
 					var3 += 15;
-					this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Other machines could have been tampered with to steal your pass", 0xFFFFFF, 0, 1, var3);
+					this.getSurface().drawColoredStringCentered(centerX, "Other machines could have been tampered with to steal your pass", bodyColor, 0, 1, var3);
 					var3 += 15;
 				}
 
 				var3 += 22;
 
+				boolean closeHover = isWelcomeDialogCloseHit(this.mouseX, this.mouseY);
 				if (isAndroid()) {
-
-					this.getSurface().drawBoxAlpha(welcomeDialogCloseX(), welcomeDialogCloseY(), welcomeDialogCloseWidth(), welcomeDialogCloseHeight(), 3158064, 160);
-					this.getSurface().drawBoxBorder(welcomeDialogCloseX(), welcomeDialogCloseWidth(), welcomeDialogCloseY(), welcomeDialogCloseHeight(), 4210752);
-					if (isWelcomeDialogCloseHit(this.mouseX, this.mouseY)) {
-						var5 = 0xFF0000;
-					}
-
-				} else {
-
-					if (isWelcomeDialogCloseHit(this.mouseX, this.mouseY)) {
-						var5 = 0xFF0000;
+					if (voidSkin) {
+						this.getSurface().drawBoxAlpha(welcomeDialogCloseX(), welcomeDialogCloseY(), welcomeDialogCloseWidth(), welcomeDialogCloseHeight(), UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+						this.getSurface().drawBoxBorder(welcomeDialogCloseX(), welcomeDialogCloseWidth(), welcomeDialogCloseY(), welcomeDialogCloseHeight(), closeHover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE);
+					} else {
+						this.getSurface().drawBoxAlpha(welcomeDialogCloseX(), welcomeDialogCloseY(), welcomeDialogCloseWidth(), welcomeDialogCloseHeight(), 3158064, 160);
+						this.getSurface().drawBoxBorder(welcomeDialogCloseX(), welcomeDialogCloseWidth(), welcomeDialogCloseY(), welcomeDialogCloseHeight(), 4210752);
 					}
 				}
 
-				this.getSurface().drawColoredStringCentered(welcomeWindowX + 256 - 56, "Click here to close window", var5, var1 ^ var1, 1, var3);
-				logAndroidSmokeWelcomeDialog(welcomeWindowX, welcomeWindowY, 400, var2);
+				this.getSurface().drawColoredStringCentered(centerX, "Click here to close window",
+					closeHover ? hotColor : bodyColor, var1 ^ var1, 1, var3);
+				logAndroidSmokeWelcomeDialog(welcomeWindowX, welcomeWindowY, welcomeWidth, var2);
 				if (this.mouseButtonClick == 1) {
-					if (var5 == 0xFF0000) {
+					if (closeHover) {
 						this.showDialogMessage = false;
 					}
 
@@ -7516,37 +7567,51 @@ public final class mudclient implements Runnable {
 	private void drawDialogWildWarn(int var1) {
 		try {
 
-			this.getSurface().drawBox(halfGameWidth() - 170, halfGameHeight() - 90, 340, 180, 0);
+			// Paint + hit lockstep: the backdrop, the outside-click dismissal, and the
+			// mouse-leave dismissal all derive from dialogX/dialogY/dialogWidth/dialogHeight.
+			// Classic geometry (340x180 centered) is unchanged; the voidscape skin widens
+			// to the standard message-modal width.
+			boolean voidSkin = useVoidscapeHudSkin();
+			int dialogWidth = voidSkin ? UiSkin.modalWidth(getGameWidth(), UiSkin.MODAL_W_MESSAGE) : 340;
+			int dialogHeight = 180;
+			int dialogX = halfGameWidth() - dialogWidth / 2;
+			int dialogY = halfGameHeight() - 90;
+			int bodyColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+
+			if (voidSkin) {
+				UiSkin.modal(this.getSurface(), dialogX, dialogY, dialogWidth, dialogHeight, "Warning! Proceed with caution");
+			} else {
+				this.getSurface().drawBox(dialogX, dialogY, dialogWidth, dialogHeight, 0);
+			}
 			if (var1 <= 90) {
 				this.loadGameConfig(true);
 			}
-			this.getSurface().drawBoxBorder(halfGameWidth() - 170, 340, halfGameHeight() - 90, 180, 0xFFFFFF);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Warning! Proceed with caution", 0xFF0000, 0, 4, halfGameHeight() - 70);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "If you go much further north you will enter the", 0xFFFFFF, 0, 1, halfGameHeight() - 44);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "wilderness. This a very dangerous area where", 0xFFFFFF, 0, 1, halfGameHeight() - 31);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "other players can attack you!", 0xFFFFFF, 0, 1, halfGameHeight() - 18);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "The further north you go the more dangerous it", 0xFFFFFF, 0, 1, halfGameHeight() + 4);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "becomes, but the more treasure you will find.", 0xFFFFFF, 0, 1, halfGameHeight() + 17);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "In the wilderness an indicator at the bottom-right", 0xFFFFFF, 0, 1, halfGameHeight() + 39);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "of the screen will show the current level of danger", 0xFFFFFF, 0, 1, halfGameHeight() + 52);
-			int var3 = 0xFFFFFF;
-			boolean closeHover = isWildWarningCloseHit(this.mouseX, this.mouseY);
-			if (closeHover) {
-				var3 = 0xFF0000;
+			if (!voidSkin) {
+				this.getSurface().drawBoxBorder(dialogX, dialogWidth, dialogY, dialogHeight, 0xFFFFFF);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Warning! Proceed with caution", 0xFF0000, 0, 4, halfGameHeight() - 70);
 			}
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "If you go much further north you will enter the", bodyColor, 0, 1, halfGameHeight() - 44);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "wilderness. This a very dangerous area where", bodyColor, 0, 1, halfGameHeight() - 31);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "other players can attack you!", bodyColor, 0, 1, halfGameHeight() - 18);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "The further north you go the more dangerous it", bodyColor, 0, 1, halfGameHeight() + 4);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "becomes, but the more treasure you will find.", bodyColor, 0, 1, halfGameHeight() + 17);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "In the wilderness an indicator at the bottom-right", bodyColor, 0, 1, halfGameHeight() + 39);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "of the screen will show the current level of danger", bodyColor, 0, 1, halfGameHeight() + 52);
+			boolean closeHover = isWildWarningCloseHit(this.mouseX, this.mouseY);
+			int var3 = closeHover ? (voidSkin ? UiSkin.GOLD_HOT : 0xFF0000) : bodyColor;
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Click here to close window", var3, 0, 1, halfGameHeight() + 74);
 			if (this.mouseButtonClick != 0) {
 				if (closeHover) {
 					this.showUiWildWarn = 2;
 				}
 				this.mouseButtonClick = 0;
-				if (this.mouseX < halfGameWidth() - 170 || this.mouseX > halfGameWidth() + 170 || this.mouseY < halfGameHeight() - 90 || this.mouseY > halfGameHeight() + 90) {
+				if (this.mouseX < dialogX || this.mouseX > dialogX + dialogWidth || this.mouseY < dialogY || this.mouseY > dialogY + dialogHeight) {
 					this.showUiWildWarn = 2;
 				}
 			}
 
 			this.mouseButtonClick = 0;
-			if (this.mouseX < halfGameWidth() - 170 || this.mouseX > halfGameWidth() + 170 || this.mouseY < halfGameHeight() - 90 || this.mouseY > halfGameHeight() + 90) {
+			if (this.mouseX < dialogX || this.mouseX > dialogX + dialogWidth || this.mouseY < dialogY || this.mouseY > dialogY + dialogHeight) {
 				this.showUiWildWarn = 2;
 			}
 
@@ -7556,9 +7621,23 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawDialogueChangePassword() {
+		// Paint + hit lockstep: the outside-click dismissal derives from the same
+		// dialogX/dialogY/dialogWidth/dialogHeight as the backdrop. (The legacy
+		// check used the 512-era literals 106..406 x 150..210, which never matched
+		// the drawn box vertically — especially with the Android keyboard offset.)
+		boolean voidSkin = useVoidscapeHudSkin();
+		int dialogWidth = 300;
+		int dialogHeight = 60;
+		int dialogX = UiAnchor.centeredDialogX(getGameWidth(), dialogWidth);
+		int dialogY;
+		if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+			dialogY = (getGameHeight() - dialogHeight) / 2 - 70;
+		} else {
+			dialogY = (getGameHeight() - dialogHeight) / 2;
+		}
 		if (this.mouseButtonClick != 0) {
 			this.mouseButtonClick = 0;
-			if (this.mouseX < 106 || this.mouseY < 150 || this.mouseX > 406 || this.mouseY > 210) {
+			if (this.mouseX < dialogX || this.mouseY < dialogY || this.mouseX > dialogX + dialogWidth || this.mouseY > dialogY + dialogHeight) {
 				this.panelPasswordChange_Mode = PasswordChangeMode.NONE;
 				if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
 					clientPort.closeKeyboard();
@@ -7567,19 +7646,19 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		int y;
-		if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
-			y = (getGameHeight() - 60) / 2 - 70;
+		int y = dialogY;
+		if (voidSkin) {
+			UiSkin.modal(this.getSurface(), dialogX, y, dialogWidth, dialogHeight, null);
 		} else {
-			y = (getGameHeight() - 60) / 2;
+			this.getSurface().drawBox(dialogX, y, dialogWidth, dialogHeight, 0);
+			this.getSurface().drawBoxBorder(dialogX, dialogWidth, y, dialogHeight, 0xFFFFFF);
 		}
-		this.getSurface().drawBox((getGameWidth() - 300) / 2, y, 300, 60, 0);
-		this.getSurface().drawBoxBorder((getGameWidth() - 300) / 2, 300, y, 60, 0xFFFFFF);
+		int pwTextColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 		y += 22;
 		String var2;
 		int var3;
 		if (this.panelPasswordChange_Mode == PasswordChangeMode.OLD_PASSWORD) {
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Please enter your current password", 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Please enter your current password", pwTextColor, 0, 4, y);
 			y += 25;
 			var2 = "*";
 
@@ -7587,7 +7666,7 @@ public final class mudclient implements Runnable {
 				var2 = "X" + var2;
 			}
 
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, pwTextColor, 0, 4, y);
 			if (this.inputTextFinal.length() > 0) {
 				this.oldPassword = this.inputTextFinal;
 				this.inputTextCurrent = "";
@@ -7596,7 +7675,7 @@ public final class mudclient implements Runnable {
 				return;
 			}
 		} else if (this.panelPasswordChange_Mode == PasswordChangeMode.NEW_PASSWORD) {
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Please enter your new password", 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Please enter your new password", pwTextColor, 0, 4, y);
 			y += 25;
 			var2 = "*";
 
@@ -7604,7 +7683,7 @@ public final class mudclient implements Runnable {
 				var2 = "X" + var2;
 			}
 
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, pwTextColor, 0, 4, y);
 			if (this.inputTextFinal.length() > 0) {
 				this.newPassword = this.inputTextFinal;
 				this.inputTextCurrent = "";
@@ -7621,7 +7700,7 @@ public final class mudclient implements Runnable {
 				return;
 			}
 		} else if (this.panelPasswordChange_Mode == PasswordChangeMode.CONFIRM_PASSWORD) {
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Enter password again to confirm", 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Enter password again to confirm", pwTextColor, 0, 4, y);
 			y += 25;
 			var2 = "*";
 
@@ -7629,7 +7708,7 @@ public final class mudclient implements Runnable {
 				var2 = "X" + var2;
 			}
 
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, 0xFFFFFF, 0, 4, y);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), var2, pwTextColor, 0, 4, y);
 			if (this.inputTextFinal.length() > 0) {
 				if (this.inputTextFinal.equalsIgnoreCase(this.newPassword)) {
 					this.panelPasswordChange_Mode = PasswordChangeMode.PASSWORD_REQ_SENT;
@@ -7642,29 +7721,29 @@ public final class mudclient implements Runnable {
 			}
 		} else {
 			if (this.panelPasswordChange_Mode == PasswordChangeMode.PASSWORD_MISMATCH) {
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Passwords do not match!", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Passwords do not match!", pwTextColor, 0, 4, y);
 				y += 25;
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Press any key to close", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Press any key to close", pwTextColor, 0, 4, y);
 				return;
 			}
 
 			if (this.panelPasswordChange_Mode == PasswordChangeMode.PASSWORD_REQ_SENT) {
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Ok, your request has been sent", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Ok, your request has been sent", pwTextColor, 0, 4, y);
 				y += 25;
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Press any key to close", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Press any key to close", pwTextColor, 0, 4, y);
 				return;
 			}
 
 			if (this.panelPasswordChange_Mode == PasswordChangeMode.NEED_LONGER_PASSWORD) {
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Password must be at", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Password must be at", pwTextColor, 0, 4, y);
 				y += 25;
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "least 5 letters long", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "least 5 letters long", pwTextColor, 0, 4, y);
 			}
 
 			if (this.panelPasswordChange_Mode == PasswordChangeMode.PASSWORD_NOT_EQ_USER) {
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Your password must not be", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Your password must not be", pwTextColor, 0, 4, y);
 				y += 25;
-				this.getSurface().drawColoredStringCentered(halfGameWidth(), "the same as your username", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "the same as your username", pwTextColor, 0, 4, y);
 			}
 		}
 
@@ -8246,12 +8325,13 @@ public final class mudclient implements Runnable {
 						centerX = this.systemUpdate / 50;
 						centerZ = centerX / 60;
 						centerX %= 60;
+						// halfGameWidth() == the legacy literal 256 on a 512 frame.
 						if (centerX < 10) {
-							this.getSurface().drawColoredStringCentered(256,
+							this.getSurface().drawColoredStringCentered(halfGameWidth(),
 								"Time remaining: " + centerZ + ":0" + centerX, 0xFFFF00, 0, 1,
 								this.getGameHeight() - 7);
 						} else {
-							this.getSurface().drawColoredStringCentered(256,
+							this.getSurface().drawColoredStringCentered(halfGameWidth(),
 								"Time remaining: " + centerZ + ":" + centerX, 0xFFFF00, 0, 1,
 								this.getGameHeight() - 7);
 						}
@@ -11141,50 +11221,67 @@ public final class mudclient implements Runnable {
 					this.inputTextCurrent = str;
 				}
 
-				//int xr = (getGameWidth() - var2) / 2;
-				//int yr = (getGameHeight() - var3) / 2;
+				// Paint + hit lockstep: everything below derives from xr/yr/halfW.
+				// halfW replaces the legacy literal 200, which only matched the
+				// default 400 width — prompts widened by long lines drew their
+				// text and OK/Cancel hit bands off the true center.
+				boolean voidSkin = useVoidscapeHudSkin();
 				int xr = (getGameWidth() - this.inputX_Width) / 2;
 				int yr = (getGameHeight() - this.inputX_Height) / 2;
-				this.getSurface().drawBox(xr, yr, this.inputX_Width, this.inputX_Height, 0);
-				this.getSurface().drawBoxBorder(xr, this.inputX_Width, yr, this.inputX_Height, 0xFFFFFF);
+				int halfW = this.inputX_Width / 2;
 				int lineHeightBase = this.getSurface().fontHeight(1);
 				int inputLineHeight = this.getSurface().fontHeight(4);
 				int lineHeight = lineHeightBase + 2;
+				int inputBaseline = yr + 5 + lineHeight * this.inputX_Lines.length + 3 + inputLineHeight;
+				int promptColor = voidSkin ? UiSkin.GOLD_TITLE : 0xFFFF00;
+				int idleColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+				int hotColor = voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00;
+
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), xr, yr, this.inputX_Width, this.inputX_Height, null);
+					if (this.inputX_Focused) {
+						UiSkin.textField(this.getSurface(), xr + 12, inputBaseline - inputLineHeight - 2,
+							this.inputX_Width - 24, inputLineHeight + 8, true);
+					}
+				} else {
+					this.getSurface().drawBox(xr, yr, this.inputX_Width, this.inputX_Height, 0);
+					this.getSurface().drawBoxBorder(xr, this.inputX_Width, yr, this.inputX_Height, 0xFFFFFF);
+				}
 
 				for (int i = 0; i < this.inputX_Lines.length; ++i) {
-					this.getSurface().drawColoredStringCentered(200 + xr, this.inputX_Lines[i], 0xFFFF00, 0, 1,
+					this.getSurface().drawColoredStringCentered(halfW + xr, this.inputX_Lines[i], promptColor, 0, 1,
 						lineHeight * i + 5 + yr + lineHeightBase);
 				}
 
 				if (this.inputX_Focused) {
-					this.getSurface().drawColoredStringCentered(200 + xr, this.inputTextCurrent + "*", 0xFFFFFF, 0, 4,
-						yr + 5 + lineHeight * this.inputX_Lines.length + 3 + inputLineHeight);
+					this.getSurface().drawColoredStringCentered(halfW + xr, this.inputTextCurrent + "*", idleColor, 0, 4,
+						inputBaseline);
 				}
 
 				int okLineY = lineHeightBase + 8 + yr + inputLineHeight + 2 + this.inputX_Lines.length * lineHeight;
 
-				int color = 0xFFFFFF;
-				if (this.mouseX > xr + 200 - 26 && this.mouseX < xr + 200 - 8 && okLineY - lineHeightBase < this.mouseY
+				int color = idleColor;
+				if (this.mouseX > xr + halfW - 26 && this.mouseX < xr + halfW - 8 && okLineY - lineHeightBase < this.mouseY
 					&& this.mouseY < okLineY) {
-					color = 0xFFFF00;
+					color = hotColor;
 					if (this.mouseButtonClick != 0) {
 						this.inputX_OK = true;
 						this.mouseButtonClick = 0;
 						this.inputTextFinal = this.inputTextCurrent;
 					}
 				}
-				this.getSurface().drawString("OK", 200 + xr - 26, okLineY, color, 1);
+				this.getSurface().drawString("OK", halfW + xr - 26, okLineY, color, 1);
 
-				color = 0xFFFFFF;
-				if (this.mouseX > xr + 208 && this.mouseX < xr + 208 + 40 && this.mouseY > okLineY - lineHeightBase
+				color = idleColor;
+				if (this.mouseX > xr + halfW + 8 && this.mouseX < xr + halfW + 48 && this.mouseY > okLineY - lineHeightBase
 					&& this.mouseY < okLineY) {
-					color = 0xFFFF00;
+					color = hotColor;
 					if (this.mouseButtonClick != 0) {
 						this.mouseButtonClick = 0;
 						cancelInputX();
 					}
 				}
-				this.getSurface().drawString("Cancel", 200 + xr + 8, okLineY, color, 1);
+				this.getSurface().drawString("Cancel", halfW + xr + 8, okLineY, color, 1);
 
 				if (this.mouseButtonClick == 1 && (this.mouseX < xr || this.inputX_Width + xr < this.mouseX
 					|| this.mouseY < yr || this.mouseY > this.inputX_Height + yr)) {
@@ -13677,24 +13774,35 @@ public final class mudclient implements Runnable {
 
 				int var3 = this.getSurface().fontHeight(1);
 				int var4 = this.getSurface().fontHeight(4);
-				short var5 = 400;
+				// Paint + hit lockstep: box, texts, OK/Cancel/mute bands all derive
+				// from var7 (dialog x), y (dialog y), and halfGameWidth().
+				boolean voidSkin = useVoidscapeHudSkin();
+				int var5 = UiSkin.modalWidth(getGameWidth(), UiSkin.MODAL_W_MESSAGE);
 				int var6 = (var2 > 0 ? 5 + var3 : 0) + 70;
-				int var7 = (getGameWidth() - var5) / 2;
+				int var7 = UiAnchor.centeredDialogX(getGameWidth(), var5);
+				int centerX = var7 + var5 / 2; // == (getGameWidth() - 256) / 2 + 256 / 2 at the legacy 400 width
+				int promptColor = voidSkin ? UiSkin.GOLD_TITLE : 0xFFFF00;
+				int idleColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+				int hotColor = voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00;
 				int y;
 				if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
 					y = (getGameHeight() - var6) / 2 - 70;
 				} else {
 					y = (getGameHeight() - var6) / 2;
 				}
-				this.getSurface().drawBox(var7, y, var5, var6, 0);
-				this.getSurface().drawBoxBorder(var7, var5, y, var6, 0xFFFFFF);
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Enter the name of the player you wish to report:",
-					0xFFFF00, 0, 1, 5 + y + var3);
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), var7, y, var5, var6, null);
+				} else {
+					this.getSurface().drawBox(var7, y, var5, var6, 0);
+					this.getSurface().drawBoxBorder(var7, var5, y, var6, 0xFFFFFF);
+				}
+				this.getSurface().drawColoredStringCentered(centerX, "Enter the name of the player you wish to report:",
+					promptColor, 0, 1, 5 + y + var3);
 				int var9 = var3 + 2;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, this.inputTextCurrent + "*", 0xFFFFFF, 0, 4,
+				this.getSurface().drawColoredStringCentered(centerX, this.inputTextCurrent + "*", idleColor, 0, 4,
 					var4 + y + 5 + var9 + 3);
 				int var10 = var3 + var4 + 8 + y + var9 + 2;
-				int var11 = 0xFFFFFF;
+				int var11 = idleColor;
 				if (var2 > 0) {
 					String var12 = this.reportAbuse_isMute ? "[X]" : "[ ]";
 					if (var2 > 1) {
@@ -13711,27 +13819,27 @@ public final class mudclient implements Runnable {
 							this.mouseButtonClick = 0;
 						}
 
-						var11 = 0xFFFF00;
+						var11 = hotColor;
 					}
 
-					this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, var12, var11, 0, 1, var10);
+					this.getSurface().drawColoredStringCentered(centerX, var12, var11, 0, 1, var10);
 					var10 += 10 + var3;
 				}
 
-				var11 = 0xFFFFFF;
+				var11 = idleColor;
 				if (this.mouseX > getGameWidth() / 2 - 46 && this.mouseX < getGameWidth() / 2 - 28 && var10 - var3 < this.mouseY && var10 > this.mouseY) {
 					if (this.mouseButtonClick != 0) {
 						this.inputTextFinal = this.inputTextCurrent;
 						this.mouseButtonClick = 0;
 					}
 
-					var11 = 0xFFFF00;
+					var11 = hotColor;
 				}
 
 				this.getSurface().drawString("OK", getGameWidth() / 2 - 46, var10, var11, 1);
-				var11 = 0xFFFFFF;
+				var11 = idleColor;
 				if (this.mouseX > getGameWidth() / 2 + 8 && this.mouseX < getGameWidth() / 2 + 48 && this.mouseY > var10 - var3 && var10 > this.mouseY) {
-					var11 = 0xFFFF00;
+					var11 = hotColor;
 					if (this.mouseButtonClick != 0) {
 						this.mouseButtonClick = 0;
 						this.reportAbuse_State = 0;
@@ -13760,16 +13868,34 @@ public final class mudclient implements Runnable {
 	private void drawPopupSocial() {
 		try {
 
-			int x = 106;
-			int y = 145;
-
-			if (isAndroid())
-				y = 75;
+			// Paint + hit lockstep: dialog geometry is computed once, up front, and
+			// feeds BOTH the click checks and the draw calls. The legacy code hit-tested
+			// against 512-era literals (x=106/406, y=145, and a decompiler-mangled
+			// "mouseY > +70" that dismissed the popup on ANY click) while painting at
+			// (gameWidth-w)/2 x (gameHeight-70)/2 — permanently out of lockstep.
+			boolean voidSkin = useVoidscapeHudSkin();
+			int dialogWidth = this.panelSocialPopup_Mode == SocialPopupMode.MESSAGE_FRIEND ? 500 : 300;
+			int dialogHeight = 70;
+			int dialogX = UiAnchor.centeredDialogX(getGameWidth(), dialogWidth);
+			int dialogY;
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
+				dialogY = (getGameHeight() - dialogHeight) / 2 - 70;
+			} else {
+				dialogY = (getGameHeight() - dialogHeight) / 2;
+			}
+			// Cancel line: drawn centered at halfGameWidth() with baseline dialogY + 63;
+			// this band is both the hover highlight and the click target.
+			int cancelLeft = halfGameWidth() - 21;
+			int cancelRight = halfGameWidth() + 19;
+			int cancelTop = dialogY + 50;
+			int cancelBottom = dialogY + 68;
+			int promptColor = voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF;
+			int inputColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 
 			if (this.mouseButtonClick != 0) {
 				this.mouseButtonClick = 0;
-				if (this.panelSocialPopup_Mode == SocialPopupMode.ADD_FRIEND
-					&& (this.mouseX < x || this.mouseY < y || this.mouseX > 406 || this.mouseY > +70)) {
+				if (this.mouseX < dialogX || this.mouseY < dialogY
+					|| this.mouseX > dialogX + dialogWidth || this.mouseY > dialogY + dialogHeight) {
 					this.panelSocialPopup_Mode = SocialPopupMode.NONE;
 					if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
 						clientPort.closeKeyboard();
@@ -13777,25 +13903,8 @@ public final class mudclient implements Runnable {
 					return;
 				}
 
-				if (this.panelSocialPopup_Mode == SocialPopupMode.MESSAGE_FRIEND
-					&& (this.mouseX < 6 || this.mouseY < y || this.mouseX > 506 || this.mouseY > +70)) {
-					this.panelSocialPopup_Mode = SocialPopupMode.NONE;
-					if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
-						clientPort.closeKeyboard();
-					}
-					return;
-				}
-
-				if (this.panelSocialPopup_Mode == SocialPopupMode.ADD_IGNORE
-					&& (this.mouseX < x || this.mouseY < y || this.mouseX > 406 || this.mouseY > +70)) {
-					this.panelSocialPopup_Mode = SocialPopupMode.NONE;
-					if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
-						clientPort.closeKeyboard();
-					}
-					return;
-				}
-
-				if (this.mouseX > x + 130 && this.mouseX < x + 270 && this.mouseY > y + 48 && this.mouseY < y + 68) {
+				if (this.mouseX > cancelLeft && this.mouseX < cancelRight
+					&& this.mouseY > cancelTop && this.mouseY < cancelBottom) {
 					this.panelSocialPopup_Mode = SocialPopupMode.NONE;
 					if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
 						clientPort.closeKeyboard();
@@ -13803,19 +13912,19 @@ public final class mudclient implements Runnable {
 					return;
 				}
 			}
-			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
-				y = (getGameHeight() - 70) / 2 - 70;
-			} else {
-				y = (getGameHeight() - 70) / 2;
-			}
+			int y = dialogY;
 			if (this.panelSocialPopup_Mode == SocialPopupMode.ADD_FRIEND) {
-				this.getSurface().drawBox((getGameWidth() - 300) / 2, y, 300, 70, 0);
-				this.getSurface().drawBoxBorder((getGameWidth() - 300) / 2, 300, y, 70, 0xFFFFFF);
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), dialogX, y, dialogWidth, dialogHeight, null);
+				} else {
+					this.getSurface().drawBox(dialogX, y, dialogWidth, dialogHeight, 0);
+					this.getSurface().drawBoxBorder(dialogX, dialogWidth, y, dialogHeight, 0xFFFFFF);
+				}
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Enter name to add to friends list", 0xFFFFFF, 0, 4,
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Enter name to add to friends list", promptColor, 0, 4,
 					y);
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, this.inputTextCurrent + "*", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), this.inputTextCurrent + "*", inputColor, 0, 4, y);
 				String localKey = StringUtil.displayNameToKey(this.localPlayer.accountName);
 				if (null != localKey && this.inputTextFinal.length() > 0) {
 					String friend = this.inputTextFinal.trim();
@@ -13831,13 +13940,17 @@ public final class mudclient implements Runnable {
 				}
 			}
 			if (this.panelSocialPopup_Mode == SocialPopupMode.MESSAGE_FRIEND) {
-				this.getSurface().drawBox((getGameWidth() - 500) / 2, y, 500, 70, 0);
-				this.getSurface().drawBoxBorder((getGameWidth() - 500) / 2, 500, y, 70, 0xFFFFFF);
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), dialogX, y, dialogWidth, dialogHeight, null);
+				} else {
+					this.getSurface().drawBox(dialogX, y, dialogWidth, dialogHeight, 0);
+					this.getSurface().drawBoxBorder(dialogX, dialogWidth, y, dialogHeight, 0xFFFFFF);
+				}
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Enter message to send to " + this.chatMessageTarget,
-					0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Enter message to send to " + this.chatMessageTarget,
+					promptColor, 0, 4, y);
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, this.chatMessageInput + "*", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), this.chatMessageInput + "*", inputColor, 0, 4, y);
 				if (this.chatMessageInputCommit.length() > 0) {
 					String var3 = this.chatMessageInputCommit;
 					this.chatMessageInput = "";
@@ -13851,12 +13964,16 @@ public final class mudclient implements Runnable {
 			}
 
 			if (this.panelSocialPopup_Mode == SocialPopupMode.ADD_IGNORE) {
-				this.getSurface().drawBox((getGameWidth() - 300) / 2, y, 300, 70, 0);
-				this.getSurface().drawBoxBorder((getGameWidth() - 300) / 2, 300, y, 70, 0xFFFFFF);
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), dialogX, y, dialogWidth, dialogHeight, null);
+				} else {
+					this.getSurface().drawBox(dialogX, y, dialogWidth, dialogHeight, 0);
+					this.getSurface().drawBoxBorder(dialogX, dialogWidth, y, dialogHeight, 0xFFFFFF);
+				}
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Enter name to add to ignore list", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), "Enter name to add to ignore list", promptColor, 0, 4, y);
 				y += 20;
-				this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, this.inputTextCurrent + "*", 0xFFFFFF, 0, 4, y);
+				this.getSurface().drawColoredStringCentered(halfGameWidth(), this.inputTextCurrent + "*", inputColor, 0, 4, y);
 				String localKey = StringUtil.displayNameToKey(this.localPlayer.accountName);
 				if (localKey != null && this.inputTextFinal.length() > 0) {
 					String ignore = this.inputTextFinal.trim();
@@ -13872,11 +13989,11 @@ public final class mudclient implements Runnable {
 				}
 			}
 
-			int color = 0xFFFFFF;
-			if (this.mouseX > (getGameWidth() - 256) / 2 + 107 && this.mouseX < (getGameWidth() - 256) / 2 + 147 && this.mouseY > y + 10 && this.mouseY < y + 28) {
-				color = 0xFFFF00;
-			}
-			this.getSurface().drawColoredStringCentered((getGameWidth() - 256) / 2 + 256 / 2, "Cancel", color, 0, 1, y + 23);
+			// Same band the click check above consumed (cancelLeft/Right/Top/Bottom).
+			boolean cancelHover = this.mouseX > cancelLeft && this.mouseX < cancelRight
+				&& this.mouseY > cancelTop && this.mouseY < cancelBottom;
+			int color = cancelHover ? (voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00) : (voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Cancel", color, 0, 1, y + 23);
 		} catch (RuntimeException var5) {
 			throw GenUtil.makeThrowable(var5, "client.GB(" + "dummy" + ')');
 		}
@@ -13924,8 +14041,8 @@ public final class mudclient implements Runnable {
 	private void drawTradeConfirmDialog(int var1) {
 		try {
 
-			byte var2 = 22;
-			byte var3 = 36;
+			int var2 = tradeDuelDialogX();
+			int var3 = tradeDuelDialogY();
 			this.getSurface().drawBox(var2, var3, 468, 16, 192);
 			int var4 = 10000536;
 			this.getSurface().drawBoxAlpha(var2, var3 + 16, 468, 246, var4, 160);
@@ -25600,20 +25717,45 @@ public final class mudclient implements Runnable {
 
 	private void handleReportAbuseClick() {
 		try {
+			// Paint + hit lockstep: the backdrop, the three option columns, the
+			// outside-click dismissal, and the cancel band all derive from
+			// panelX/panelY/panelWidth (legacy 512-era literals: box (31,35) 450x275,
+			// columns 36/186/336, centers 106/256/406). The classic skin keeps
+			// 450 wide; the voidscape skin uses the standard grid-modal width.
+			boolean voidSkin = useVoidscapeHudSkin();
+			int panelWidth = voidSkin ? UiSkin.modalWidth(getGameWidth(), UiSkin.MODAL_W_GRID) : 450;
+			int panelX = UiAnchor.centeredDialogX(getGameWidth(), panelWidth);
+			int panelY = 35;
+			int panelHeight = 275;
+			int panelCenter = panelX + panelWidth / 2;
+			int reportCol1 = panelCenter - 150;
+			int reportCol3 = panelCenter + 150;
+			int reportBox1 = reportCol1 - 70;
+			int reportBox2 = panelCenter - 70;
+			int reportBox3 = reportCol3 - 70;
+			int bodyColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+			int warnColor = voidSkin ? UiSkin.BAD : 16744448;
+			int instrColor = voidSkin ? UiSkin.GOLD_HEADER : 0xFFFF00;
+			int headColor = voidSkin ? UiSkin.GOLD_TITLE : 0xFF0000;
+			int hotColor = voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00;
+			int optSelColor = voidSkin ? UiSkin.GOLD_HOT : 16744448;
+			int optSelFill = voidSkin ? UiSkin.PURPLE_SELECT : 3158064;
+			int optBorder = voidSkin ? UiSkin.VOID_LINE : 4210752;
+
 			this.reportAbuse_AbuseType = 0;
 
 			boolean var2 = true;
-			if (this.mouseX >= 36 && this.mouseX < 176) {
+			if (this.mouseX >= reportBox1 && this.mouseX < reportBox1 + 140) {
 				this.reportAbuse_AbuseType = 1;
-			} else if (this.mouseX >= 186 && this.mouseX < 326) {
+			} else if (this.mouseX >= reportBox2 && this.mouseX < reportBox2 + 140) {
 				this.reportAbuse_AbuseType = 7;
-			} else if (this.mouseX >= 336 && this.mouseX < 476) {
+			} else if (this.mouseX >= reportBox3 && this.mouseX < reportBox3 + 140) {
 				this.reportAbuse_AbuseType = 12;
 			} else {
 				var2 = false;
 			}
 
-			int yFromTopDistance = 156;
+			int yFromTopDistance = panelY + 121;
 			int color;
 			if (var2) {
 				var2 = false;
@@ -25666,243 +25808,247 @@ public final class mudclient implements Runnable {
 				yFromTopDistance += 15;
 				if (this.mouseButtonClick != 0) {
 					this.mouseButtonClick = 0;
-					if (this.mouseX < 31 || this.mouseY < 35 || this.mouseX > 481 || this.mouseY > 310) {
+					if (this.mouseX < panelX || this.mouseY < panelY || this.mouseX > panelX + panelWidth || this.mouseY > panelY + panelHeight) {
 						this.reportAbuse_State = 0;
 						return;
 					}
 
-					if (this.mouseX > 66 && this.mouseX < 446 && this.mouseY >= yFromTopDistance - 15 && this.mouseY < yFromTopDistance + 5) {
+					if (this.mouseX > panelCenter - 190 && this.mouseX < panelCenter + 190 && this.mouseY >= yFromTopDistance - 15 && this.mouseY < yFromTopDistance + 5) {
 						this.reportAbuse_State = 0;
 						return;
 					}
 				}
 
-				this.getSurface().drawBox(31, 35, 450, 275, 0);
-				this.getSurface().drawBoxBorder(31, 450, 35, 275, 0xFFFFFF);
-				byte var7 = 50;
-				this.getSurface().drawColoredStringCentered(256,
-					"This form is for reporting players who are breaking our rules", 0xFFFFFF, 0, 1, var7);
+				if (voidSkin) {
+					UiSkin.modal(this.getSurface(), panelX, panelY, panelWidth, panelHeight, null);
+				} else {
+					this.getSurface().drawBox(panelX, panelY, panelWidth, panelHeight, 0);
+					this.getSurface().drawBoxBorder(panelX, panelWidth, panelY, panelHeight, 0xFFFFFF);
+				}
+				int var7 = panelY + 15;
+				this.getSurface().drawColoredStringCentered(panelCenter,
+					"This form is for reporting players who are breaking our rules", bodyColor, 0, 1, var7);
 				yFromTopDistance = var7 + 15;
-				this.getSurface().drawColoredStringCentered(256,
-					"Using it sends a snapshot of the last 60 seconds of activity to us", 0xFFFFFF, 0, 1, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter,
+					"Using it sends a snapshot of the last 60 seconds of activity to us", bodyColor, 0, 1, yFromTopDistance);
 				yFromTopDistance += 15;
-				this.getSurface().drawColoredStringCentered(256, "If you misuse this form, you will be banned.",
-					16744448, 0, 1, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "If you misuse this form, you will be banned.",
+					warnColor, 0, 1, yFromTopDistance);
 				yFromTopDistance += 15;
 				yFromTopDistance += 10;
-				this.getSurface().drawColoredStringCentered(256,
-					"Click on the most suitable option from the Rules of " + SERVER_NAME + ".", 0xFFFF00, 0, 1, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter,
+					"Click on the most suitable option from the Rules of " + SERVER_NAME + ".", instrColor, 0, 1, yFromTopDistance);
 				yFromTopDistance += 15;
-				this.getSurface().drawColoredStringCentered(256,
-					"This will send a report to our Player Support team for investigation.", 0xFFFF00, 0, 1, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter,
+					"This will send a report to our Player Support team for investigation.", instrColor, 0, 1, yFromTopDistance);
 				yFromTopDistance += 18;
-				this.getSurface().drawColoredStringCentered(106, "Honour", 0xFF0000, 0, 4, yFromTopDistance);
-				this.getSurface().drawColoredStringCentered(256, "Respect", 0xFF0000, 0, 4, yFromTopDistance);
-				this.getSurface().drawColoredStringCentered(406, "Security", 0xFF0000, 0, 4, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Honour", headColor, 0, 4, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Respect", headColor, 0, 4, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol3, "Security", headColor, 0, 4, yFromTopDistance);
 				yFromTopDistance += 18;
 				if (this.reportAbuse_AbuseType == 1) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 30, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 30, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 30, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 30, optBorder);
 				if (this.reportAbuse_AbuseType == 7) {
-					this.getSurface().drawBox(186, yFromTopDistance - 12, 140, 30, 3158064);
+					this.getSurface().drawBox(reportBox2, yFromTopDistance - 12, 140, 30, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(186, 140, yFromTopDistance - 12, 30, 4210752);
+				this.getSurface().drawBoxBorder(reportBox2, 140, yFromTopDistance - 12, 30, optBorder);
 				if (this.reportAbuse_AbuseType == 12) {
-					this.getSurface().drawBox(336, yFromTopDistance - 12, 140, 30, 3158064);
+					this.getSurface().drawBox(reportBox3, yFromTopDistance - 12, 140, 30, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(336, 140, yFromTopDistance - 12, 30, 4210752);
+				this.getSurface().drawBoxBorder(reportBox3, 140, yFromTopDistance - 12, 30, optBorder);
 				if (this.reportAbuse_AbuseType == 1) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Buying or", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Buying or", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType == 7) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Seriously offensive", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Seriously offensive", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 12) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(406, "Asking for or providing", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol3, "Asking for or providing", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 12;
 				if (this.reportAbuse_AbuseType != 1) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "selling an account", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "selling an account", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 7) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "language", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "language", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 12) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(406, "contact information", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol3, "contact information", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 20;
 				if (this.reportAbuse_AbuseType == 2) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 8) {
-					this.getSurface().drawBox(186, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox2, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(186, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox2, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 13) {
-					this.getSurface().drawBox(336, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox3, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(336, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox3, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 2) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Encouraging rule-breaking", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Encouraging rule-breaking", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType == 8) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Solicitation", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Solicitation", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 13) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(406, "Breaking real-world laws", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol3, "Breaking real-world laws", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 20;
 				if (this.reportAbuse_AbuseType == 3) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 9) {
-					this.getSurface().drawBox(186, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox2, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(186, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox2, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 14) {
-					this.getSurface().drawBox(336, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox3, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(336, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox3, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 3) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Staff impersonation", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Staff impersonation", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 9) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Disruptive behaviour", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Disruptive behaviour", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 14) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(406, "Advertising websites", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol3, "Advertising websites", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 20;
 				if (this.reportAbuse_AbuseType == 4) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 10) {
-					this.getSurface().drawBox(186, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox2, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(186, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox2, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType != 4) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Macroing or use of bots", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Macroing or use of bots", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType == 10) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Offensive account name", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Offensive account name", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 20;
 				if (this.reportAbuse_AbuseType == 5) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 11) {
-					this.getSurface().drawBox(186, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox2, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(186, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox2, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType == 5) {
-					color = 16744448;
+					color = optSelColor;
 				} else {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Scamming", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Scamming", color, 0, 0, yFromTopDistance);
 				if (this.reportAbuse_AbuseType != 11) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Real-life threats", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Real-life threats", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 20;
 				if (this.reportAbuse_AbuseType == 6) {
-					this.getSurface().drawBox(36, yFromTopDistance - 12, 140, 18, 3158064);
+					this.getSurface().drawBox(reportBox1, yFromTopDistance - 12, 140, 18, optSelFill);
 				}
 
-				this.getSurface().drawBoxBorder(36, 140, yFromTopDistance - 12, 18, 4210752);
+				this.getSurface().drawBoxBorder(reportBox1, 140, yFromTopDistance - 12, 18, optBorder);
 				if (this.reportAbuse_AbuseType != 6) {
-					color = 0xFFFFFF;
+					color = bodyColor;
 				} else {
-					color = 16744448;
+					color = optSelColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(106, "Exploiting a bug", color, 0, 0, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(reportCol1, "Exploiting a bug", color, 0, 0, yFromTopDistance);
 				yFromTopDistance += 18;
 				yFromTopDistance += 15;
-				color = 0xFFFFFF;
-				if (this.mouseX > 196 && this.mouseX < 316 && this.mouseY > yFromTopDistance - 15 && this.mouseY < 5 + yFromTopDistance) {
-					color = 0xFFFF00;
+				color = bodyColor;
+				if (this.mouseX > panelCenter - 60 && this.mouseX < panelCenter + 60 && this.mouseY > yFromTopDistance - 15 && this.mouseY < 5 + yFromTopDistance) {
+					color = hotColor;
 				}
 
-				this.getSurface().drawColoredStringCentered(256, "Click here to cancel", color, 0, 1, yFromTopDistance);
+				this.getSurface().drawColoredStringCentered(panelCenter, "Click here to cancel", color, 0, 1, yFromTopDistance);
 			}
 		} catch (RuntimeException var6) {
 			throw GenUtil.makeThrowable(var6, "client.ID(" + "dummy" + ')');
@@ -26745,7 +26891,8 @@ public final class mudclient implements Runnable {
 					return false;
 				} else {
 					if (!this.showAppearanceChange) {
-						this.getSurface().drawColoredStringCentered(256, "Loading... Please wait", 0xFFFFFF, 0, 1, 192);
+						// halfGameWidth() == the legacy literal 256 on a 512 frame.
+						this.getSurface().drawColoredStringCentered(halfGameWidth(), "Loading... Please wait", 0xFFFFFF, 0, 1, 192);
 						this.drawChatMessageTabs(5);
 						// this.getSurface().draw(this.graphics, this.screenOffsetX,
 						// 256, this.screenOffsetY);
@@ -29188,8 +29335,13 @@ public final class mudclient implements Runnable {
 		return this.serverMessageBoxTop ? 300 : 100;
 	}
 
+	private int serverMessageDialogWidth() {
+		// == 400 on every frame >= 416px wide (identical to the legacy literal at 512).
+		return UiSkin.modalWidth(getGameWidth(), UiSkin.MODAL_W_MESSAGE);
+	}
+
 	private int serverMessageBoxX() {
-		return (getGameWidth() - 400) / 2;
+		return UiAnchor.centeredDialogX(getGameWidth(), serverMessageDialogWidth());
 	}
 
 	private int serverMessageCloseTextY() {
@@ -29197,9 +29349,10 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean isServerMessageCloseHit(int x, int y) {
-		int boxX = serverMessageBoxX();
+		// Center-relative: identical to the legacy boxX+50..boxX+350 band at width 400.
+		int centerX = serverMessageBoxX() + serverMessageDialogWidth() / 2;
 		int closeY = serverMessageCloseTextY();
-		return x > boxX + 50 && x < boxX + 350
+		return x > centerX - 150 && x < centerX + 150
 			&& y >= closeY - 16 && y <= closeY + 9;
 	}
 
