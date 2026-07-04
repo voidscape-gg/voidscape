@@ -152,7 +152,7 @@ Each ships as an isolated commit with both-skin before/after screenshot pairs (p
 
 ## 9. Adoption roadmap
 
-Ten ordered slices, each independently shippable and workbench-verified. Full per-slice goals/files/verification live with the program owner; summary:
+**Status: ALL TEN SLICES COMPLETE (2026-07-04).** Every slice below shipped, built green, and was workbench-verified (trade/duel flows exercised live with two accounts; see DIVERGENCE.md for per-slice entries). Post-program additions on the same system: the left vitals stack (FPS/Hits/Prayer glass bars, RSCRevolution palette via VITAL_* tokens), the six-tab glass chat strip with the Global history tab, and the clan/party client-code removal. Remaining backlog: §7 items (dead legacy login path deletion, 16:9 viewport presets), mobile chat dock Global tab, wheel-capture routing in the modality table, and the reconnect-box software-renderer move.
 
 | # | Slice | Core outcome |
 |---|---|---|
