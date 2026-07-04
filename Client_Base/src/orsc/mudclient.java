@@ -8925,7 +8925,7 @@ public final class mudclient implements Runnable {
 			drawVoidscapeSkinSprite("top-tab-normal.png", x, y, width, height);
 			this.getSurface().drawBoxAlpha(x + 6, y + 5, width - 12, height - 10, 0x050805, 70);
 			this.getSurface().drawColoredStringCentered(x + width / 2, label, 0xD8FFE8, 0, 1, y + 20);
-			drawVoidscapeMobileVitalsOverlay(x, y + height + 4);
+			drawVoidscapeVitalsBars(x + width - VOID_VITALS_BAR_W, y + height + 4);
 			return;
 		}
 		int x = 7;
@@ -8936,29 +8936,41 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxAlpha(x, y, width, 16, UiSkin.VOID_BODY, 150);
 		this.getSurface().drawBoxBorder(x, width, y, 16, UiSkin.VOID_LINE);
 		this.getSurface().drawString(label, x + 6, y + 12, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-		drawVoidscapeMobileVitalsOverlay(x, y + 18);
+		drawVoidscapeVitalsBars(x, y + 18);
 	}
 
-	private void drawVoidscapeMobileVitalsOverlay(int x, int y) {
-		if (!voidscapeShowMobileVitalsOverlay()) {
+	private static final int VOID_VITALS_BAR_W = 110;
+	private static final int VOID_VITALS_BAR_H = 16;
+
+	/**
+	 * Hits + Prayer as stacked translucent glass bars (all void-skin platforms;
+	 * replaces the old text-only mobile vitals overlay). Fill width tracks the
+	 * current/max fraction; hits flip to the danger color at 30%.
+	 */
+	private void drawVoidscapeVitalsBars(int x, int y) {
+		if (!useVoidscapeHudSkin() || this.currentViewMode != GameMode.GAME
+			|| this.playerStatCurrent == null || this.playerStatCurrent.length <= 5
+			|| this.playerStatBase == null || this.playerStatBase.length <= 5) {
 			return;
 		}
-		String hits = "Hits: " + this.playerStatCurrent[3] + "/" + this.playerStatBase[3];
-		String prayer = "Prayer: " + this.playerStatCurrent[5] + "/" + this.playerStatBase[5];
-		int vitalsWidth = Math.max(this.getSurface().stringWidth(1, hits),
-			this.getSurface().stringWidth(1, prayer)) + 12;
-		int vitalsHeight = 28;
-		this.getSurface().drawBoxAlpha(x, y, vitalsWidth, vitalsHeight, 0x050805, 150);
-		this.getSurface().drawBoxBorder(x, vitalsWidth, y, vitalsHeight, 0x264836);
-		this.getSurface().drawString(hits, x + 6, y + 12, 0xF0DFA3, 1);
-		this.getSurface().drawString(prayer, x + 6, y + 24, 0xF0DFA3, 1);
+		drawVoidscapeVitalBar(x, y, "Hits", this.playerStatCurrent[3], this.playerStatBase[3], true);
+		drawVoidscapeVitalBar(x, y + VOID_VITALS_BAR_H + 2, "Prayer",
+			this.playerStatCurrent[5], this.playerStatBase[5], false);
 	}
 
-	private boolean voidscapeShowMobileVitalsOverlay() {
-		return useVoidscapeHudSkin() && Config.isWeb() && isAndroid()
-			&& this.currentViewMode == GameMode.GAME
-			&& this.playerStatCurrent != null && this.playerStatCurrent.length > 5
-			&& this.playerStatBase != null && this.playerStatBase.length > 5;
+	private void drawVoidscapeVitalBar(int x, int y, String label, int current, int max, boolean warnWhenLow) {
+		int safeMax = Math.max(1, max);
+		boolean low = warnWhenLow && current * 100 / safeMax <= 30;
+		int fillW = Math.max(0, Math.min(VOID_VITALS_BAR_W - 2, (VOID_VITALS_BAR_W - 2) * current / safeMax));
+		this.getSurface().drawBoxAlpha(x, y, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H,
+			UiSkin.GLASS_BODY, UiSkin.A_GLASS_TEXT);
+		if (fillW > 0) {
+			this.getSurface().drawBoxAlpha(x + 1, y + 1, fillW, VOID_VITALS_BAR_H - 2,
+				low ? UiSkin.BAD : (warnWhenLow ? UiSkin.GOOD : UiSkin.PURPLE_BRIGHT), 96);
+		}
+		this.getSurface().drawBorder(x, y, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H, UiSkin.GLASS_RIM);
+		this.getSurface().drawString(label + " " + current + "/" + max, x + 5, y + 12,
+			UiSkin.TEXT_BODY, UiSkin.FONT_SMALL);
 	}
 
 	public void toggleTerrainEditorMode() {
