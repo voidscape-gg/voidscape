@@ -8923,20 +8923,29 @@ public final class mudclient implements Runnable {
 			int x = this.getGameWidth() - width - 7;
 			int y = 7;
 			drawVoidscapeSkinSprite("top-tab-normal.png", x, y, width, height);
-			this.getSurface().drawBoxAlpha(x + 6, y + 5, width - 12, height - 10, 0x050805, 70);
-			this.getSurface().drawColoredStringCentered(x + width / 2, label, 0xD8FFE8, 0, 1, y + 20);
+			this.getSurface().drawBoxAlpha(x + 6, y + 5, width - 12, height - 10, UiSkin.VOID_BODY, 70);
+			this.getSurface().drawColoredStringCentered(x + width / 2, label, UiSkin.TEXT_BODY, 0, 1, y + 20);
 			drawVoidscapeVitalsBars(x + width - VOID_VITALS_BAR_W, y + height + 4);
 			return;
 		}
 		int x = 7;
-		int y = useVoidscapeHudSkin()
-			? voidscapeLocationPlaqueY() + voidscapeLocationPlaqueHeight() + 8
-			: 42;
+		if (useVoidscapeHudSkin()) {
+			// Left vitals stack (RSCRevolution-style placement): FPS chip in the
+			// same glass-bar card as Hits/Prayer, anchored ~38% down the frame so
+			// the stack scales with window height (y=126 at the classic 334).
+			int stackY = this.getGameHeight() * 38 / 100;
+			this.getSurface().drawBoxAlpha(x, stackY, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H,
+				UiSkin.GLASS_BODY, UiSkin.A_GLASS_TEXT);
+			this.getSurface().drawBorder(x, stackY, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H, UiSkin.GLASS_RIM);
+			this.getSurface().drawString(label, x + 5, stackY + 12, UiSkin.TEXT_BODY, UiSkin.FONT_SMALL);
+			drawVoidscapeVitalsBars(x, stackY + VOID_VITALS_BAR_H + 2);
+			return;
+		}
+		int y = 42;
 		int width = this.getSurface().stringWidth(1, label) + 12;
 		this.getSurface().drawBoxAlpha(x, y, width, 16, UiSkin.VOID_BODY, 150);
 		this.getSurface().drawBoxBorder(x, width, y, 16, UiSkin.VOID_LINE);
 		this.getSurface().drawString(label, x + 6, y + 12, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-		drawVoidscapeVitalsBars(x, y + 18);
 	}
 
 	private static final int VOID_VITALS_BAR_W = 110;
