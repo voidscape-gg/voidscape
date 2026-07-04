@@ -11,10 +11,10 @@ import static orsc.osConfig.F_ANDROID_BUILD;
 
 public final class Menu {
 	private static final int ANDROID_MIN_LINE_HEIGHT = 28;
-	private static final int VOIDSCAPE_UI_TINT = 0x3C3125;
-	private static final int VOIDSCAPE_UI_LINE = 0x6E5737;
-	private static final int VOIDSCAPE_UI_PURPLE = 0x4B2472;
-	private static final int VOIDSCAPE_UI_GOLD = 0xF6DA7D;
+	private static final int VOIDSCAPE_UI_TINT = 0x3C3125; // menu-specific tint — no UiSkin token, see docs/UI-STYLE-GUIDE.md
+	private static final int VOIDSCAPE_UI_LINE = UiSkin.GOLD_LINE;
+	private static final int VOIDSCAPE_UI_PURPLE = UiSkin.PURPLE_SELECT;
+	private static final int VOIDSCAPE_UI_GOLD = UiSkin.GOLD_RING;
 	private static final int VOIDSCAPE_MENU_ALPHA = 132;
 	private static final int VOIDSCAPE_MENU_LINE_ALPHA = 116;
 	private static final int VOIDSCAPE_MENU_HEADER_ALPHA = 96;

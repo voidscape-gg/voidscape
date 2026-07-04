@@ -6,6 +6,7 @@ import com.openrsc.client.entityhandling.instances.Item;
 import orsc.Config;
 import orsc.enumerations.InputXAction;
 import orsc.graphics.gui.InputXPrompt;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 import orsc.util.BankUtil;
 
@@ -48,9 +49,9 @@ public final class CustomBankInterface extends BankInterface {
 	private static final int UI_HEADER = 0x0B0710;
 	private static final int UI_SLOT = 0x3C3125;
 	private static final int UI_SLOT_HOVER = 0x58452F;
-	private static final int UI_GRID_LINE = 0x6E5737;
+	private static final int UI_GRID_LINE = UiSkin.GOLD_LINE;
 	private static final int UI_PANEL_BODY_ALPHA = 46;
-	private static final int UI_HOVER_GLOW = 0xF6DA7D;
+	private static final int UI_HOVER_GLOW = UiSkin.GOLD_RING;
 	private static final int UI_TOOLBAR_BG = 0x08050C;
 	private static final int UI_TOOLBAR_ALPHA = 142;
 	private static final int UI_TOOLBAR_DIVIDER_ALPHA = 104;
@@ -58,10 +59,10 @@ public final class CustomBankInterface extends BankInterface {
 	private static final int UI_MENU_HEADER_ALPHA = 96;
 	private static final int UI_MENU_LINE_ALPHA = 116;
 	private static final int UI_MENU_HOVER_ALPHA = 58;
-	private static final int UI_PURPLE = 0x6A4FA0;
+	private static final int UI_PURPLE = UiSkin.PURPLE_EDGE;
 	private static final int UI_PURPLE_DARK = 0x241A36;
 	private static final int UI_PURPLE_ACTIVE = 0x5B24A3;
-	private static final int UI_GOLD = 0xF6DA7D;
+	private static final int UI_GOLD = UiSkin.GOLD_RING;
 	private static final int UI_MUTED = 0xA99BBF;
 	private static final int UI_GREEN = 0x40FF48;
 	private static final int UI_CYAN = 0x00FFFF;
@@ -121,6 +122,14 @@ public final class CustomBankInterface extends BankInterface {
 			int spaciousWidth = Math.min(BANK_PANEL_WIDTH_SPACIOUS, mc.getGameWidth() - 32);
 			width = Math.max(bankGridWidth() + 56, spaciousWidth);
 			height = spaciousPanelHeight();
+		} else if (narrowDesktopLayout()) {
+			// Narrow desktop frames (e.g. Classic 512): the fixed compact grid is wider than the
+			// viewport, so the old Math.max defeated the clamp (panelX went negative, panel
+			// overhung both edges). Clamp the panel to the viewport and center it; the grid uses
+			// native 49px cells here (bankSlotWidth) so all 10 columns fit inside the clamped
+			// panel instead of anchoring off-screen. (UI-STYLE-GUIDE §9)
+			width = mc.getGameWidth() - 16;
+			height = compactPanelHeight();
 		} else {
 			width = Math.min(BANK_PANEL_WIDTH, Math.max(bankGridWidth() + 20, mc.getGameWidth() - 30));
 			height = compactPanelHeight();
@@ -129,7 +138,7 @@ public final class CustomBankInterface extends BankInterface {
 		if (androidLayout()) {
 			x = Math.max(4, x);
 			y = Math.max(4, (mc.getGameHeight() - height) / 2);
-		} else if (smallDesktopWebLayout()) {
+		} else if (smallDesktopWebLayout() || narrowDesktopLayout()) {
 			x = Math.max(4, Math.min(x, mc.getGameWidth() - width - 4));
 			// The location plaque + top tabs are hidden while banking, so the panel can use
 			// the freed top space (small margin) instead of clearing the tab row.
@@ -161,6 +170,13 @@ public final class CustomBankInterface extends BankInterface {
 		return !androidLayout() && !smallDesktopWebLayout() && mc.getGameWidth() >= 700 && mc.getGameHeight() >= 520;
 	}
 
+	/** Narrow desktop frames without the small-HUD web preset (e.g. Classic 512): the fixed
+	 *  compact grid is wider than the viewport, so the panel is clamped to gameWidth and the grid
+	 *  falls back to native 49px cells so its 10 columns stay inside the clamped panel. */
+	private boolean narrowDesktopLayout() {
+		return !androidLayout() && !smallDesktopWebLayout() && mc.getGameWidth() <= 560;
+	}
+
 	private int contentX() {
 		return x + 20;
 	}
@@ -174,7 +190,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int controlRowYOffset() {
-		if (androidLayout() || smallDesktopWebLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return 42;
 		}
 		return spaciousLayout() ? 58 : 54;
@@ -189,7 +205,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int bankGridYOffset() {
-		if (smallDesktopWebLayout()) {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return 64; // grid starts below the tab/search row (controlRowYOffset 42 + row height)
 		}
 		if (androidLayout()) {
@@ -208,7 +224,9 @@ public final class CustomBankInterface extends BankInterface {
 
 	/** Number of bank rows visible at once (fewer in the compact web layout; scroll shows the rest). */
 	private int bankRows() {
-		return smallDesktopWebLayout() ? BANK_ROWS_WEB : BANK_ROWS;
+		// Narrow desktop shares the web tier's 3-row window: 4 full-height rows +
+		// inventory strip total ~376px, which cannot fit a 334px Classic frame.
+		return smallDesktopWebLayout() || narrowDesktopLayout() ? BANK_ROWS_WEB : BANK_ROWS;
 	}
 
 	/** Items per bank page/scroll window = columns x visible rows. */
@@ -221,7 +239,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int actionRowYOffset() {
-		if (androidLayout() || smallDesktopWebLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return bankGridYOffset() + bankGridHeight() + 4;
 		}
 		return bankGridYOffset() + bankGridHeight() + (spaciousLayout() ? 17 : 8);
@@ -232,7 +250,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int inventoryGridYOffset() {
-		if (androidLayout() || smallDesktopWebLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return actionRowYOffset() + actionButtonHeight() + 4;
 		}
 		return actionRowYOffset() + actionButtonHeight() + (spaciousLayout() ? 13 : 8);
@@ -247,7 +265,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int compactPanelHeight() {
-		if (smallDesktopWebLayout()) {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return inventoryGridYOffset() + inventoryGridHeight() + 2;
 		}
 		if (androidLayout()) {
@@ -263,11 +281,16 @@ public final class CustomBankInterface extends BankInterface {
 		if (androidLayout()) {
 			return BANK_SLOT_WIDTH_ANDROID;
 		}
+		if (narrowDesktopLayout()) {
+			// Native 49px cells: 10 columns = 490px, which fits inside the viewport-clamped panel
+			// (gameWidth - 16). The wider 56px compact cell would overhang a narrow frame.
+			return BANK_SLOT_WIDTH_WEB;
+		}
 		return spaciousLayout() ? BANK_SLOT_WIDTH_SPACIOUS : BANK_SLOT_WIDTH_COMPACT;
 	}
 
 	private int bankSlotHeight() {
-		if (smallDesktopWebLayout()) {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return BANK_SLOT_HEIGHT_WEB;
 		}
 		if (androidLayout()) {
@@ -898,6 +921,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private void drawGridPanel(int gx, int gy, int gw, int gh) {
+		// Owner direction 2026-07-04: grids stay translucent glass — no opaque backing.
 		mc.getSurface().drawBoxAlpha(gx, gy, gw, gh, UI_SLOT, UI_PANEL_BODY_ALPHA);
 	}
 

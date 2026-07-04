@@ -1390,6 +1390,29 @@ public final class mudclient implements Runnable {
 		clientPort = handler;
 		F_CACHE_DIR = clientPort.getCacheLocation();
 
+		// Bridge UiSkin's chrome helpers to the PNG skin-asset pipeline; a
+		// missing asset returns false so UiSkin's code-drawn fallback runs.
+		UiSkin.setSpriteHook(new UiSkin.SpriteHook() {
+			@Override
+			public boolean nineSlice(String asset, int x, int y, int width, int height,
+									 int corner, int topCenterW, int bottomCenterW) {
+				if (getVoidscapeSkinSprite(asset) == null) {
+					return false;
+				}
+				drawVoidscapeNineSlice(asset, x, y, width, height, corner, topCenterW, bottomCenterW);
+				return true;
+			}
+
+			@Override
+			public boolean threeSliceH(String asset, int x, int y, int width, int height, int cap, int centerW) {
+				if (getVoidscapeSkinSprite(asset) == null) {
+					return false;
+				}
+				drawVoidscapeThreeSliceH(asset, x, y, width, height, cap, centerW);
+				return true;
+			}
+		});
+
 		for (int i = 0; i < S_PLAYER_INVENTORY_SLOTS; ++i) {
 			inventory[i] = new Item();
 		}
@@ -2144,6 +2167,24 @@ public final class mudclient implements Runnable {
 
 	public void workbenchReloadEntitySprites() {
 		loadEntitiesAuthentic();
+	}
+
+	// Login-screen click targets for the workbench, derived from the same
+	// helpers the login renderer and hit regions use (never hardcoded twice).
+	public int workbenchLoginHomeExistingUserX() {
+		return halfGameWidth();
+	}
+
+	public int workbenchLoginHomeExistingUserY() {
+		return voidscapeLoginHomeExistingUserY();
+	}
+
+	public int workbenchExistingUserOkX() {
+		return halfGameWidth() - voidscapeExistingActionOffsetX();
+	}
+
+	public int workbenchExistingUserOkY() {
+		return voidscapeExistingActionY();
 	}
 
 	private boolean isServerPlayerInsideVoidArenaLobby(ORSCharacter player) {
@@ -3252,8 +3293,10 @@ public final class mudclient implements Runnable {
 		boolean preservedLoginPassFocused = preserveExistingLogin && this.panelLogin.focusOn(this.controlLoginPass);
 
 		this.panelLoginWelcome = new Panel(this.getSurface(), 8);
-		this.loginButtonNewUser = this.panelLoginWelcome.addButton(cx, 181, 176, 34);
-		this.loginButtonExistingUser = this.panelLoginWelcome.addButton(cx, 223, 176, 34);
+		this.loginButtonNewUser = this.panelLoginWelcome.addButton(cx, voidscapeLoginHomeNewUserY(),
+			voidscapeLoginHomeButtonWidth(), voidscapeLoginHomeButtonHeight());
+		this.loginButtonExistingUser = this.panelLoginWelcome.addButton(cx, voidscapeLoginHomeExistingUserY(),
+			voidscapeLoginHomeButtonWidth(), voidscapeLoginHomeButtonHeight());
 
 		this.panelLogin = new Panel(this.getSurface(), 50);
 		this.controlLoginStatus1 = this.panelLogin.addCenteredText(cx, voidscapeExistingStatus1Y(), "", 1, true);
@@ -3274,8 +3317,8 @@ public final class mudclient implements Runnable {
 			}
 		}
 
-		this.m_be = this.panelLogin.addButton(cx - 46, voidscapeExistingActionY(), 84, 28);
-		this.m_Xi = this.panelLogin.addButton(cx + 46, voidscapeExistingActionY(), 84, 28);
+		this.m_be = this.panelLogin.addButton(cx - voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28);
+		this.m_Xi = this.panelLogin.addButton(cx + voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28);
 		this.lostPasswordButtonIdx = this.panelLogin.addButton(cx, voidscapeExistingForgotY(), 176, 25);
 		this.panelLogin.setFocus(this.controlLoginUser);
 
@@ -3317,6 +3360,31 @@ public final class mudclient implements Runnable {
 			this.menuNewUserSubmit = this.menuNewUser.addButton(cx + 67, voidscapeNewActionY(), 86, 28);
 			this.menuNewUserCancel = this.menuNewUser.addButton(cx + 159, voidscapeNewActionY(), 86, 28);
 		}
+	}
+
+	// Voidscape login-home button geometry. The hit region (addButton) and the
+	// visual button (drawVoidscapeButton) both read these so the workbench
+	// accessors can never point at a coordinate the renderer moved.
+	private int voidscapeLoginHomeNewUserY() {
+		return 181;
+	}
+
+	private int voidscapeLoginHomeExistingUserY() {
+		return 223;
+	}
+
+	private int voidscapeLoginHomeButtonWidth() {
+		return 176;
+	}
+
+	private int voidscapeLoginHomeButtonHeight() {
+		return 34;
+	}
+
+	// Horizontal offset of the Ok/Cancel (and Add) action buttons from the
+	// centre of the existing-user form. Shared by the hit region and the render.
+	private int voidscapeExistingActionOffsetX() {
+		return 46;
 	}
 
 	private int voidscapeExistingFrameY() {
@@ -3997,7 +4065,7 @@ public final class mudclient implements Runnable {
 		drawVoidscapeLoginBackground();
 		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 56);
 		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
-		drawVoidscapeCenteredText(cx, "DESIGN YOUR CHARACTER", 0xf3d46b, 1, panelY + 22);
+		drawVoidscapeCenteredText(cx, "DESIGN YOUR CHARACTER", UiSkin.GOLD_TITLE, 1, panelY + 22);
 
 		int previewCenterX = panelX + 128;
 		int dividerX = panelX + 252;
@@ -4276,11 +4344,11 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeAppearanceSelector(int cx, int cy, String topLabel, String bottomLabel) {
 		int boxX = cx - 27;
 		int boxY = cy - 20;
-		this.getSurface().drawBoxAlpha(boxX, boxY, 54, 40, 0x0b0e13, 228);
-		this.getSurface().drawBoxBorder(boxX, 54, boxY, 40, 0x070809);
-		this.getSurface().drawBoxBorder(boxX + 1, 52, boxY + 1, 38, 0x59636d);
-		drawVoidscapeCenteredText(cx, topLabel, 0xf3d46b, 0, cy - 6);
-		drawVoidscapeCenteredText(cx, bottomLabel, 0xe6e3d8, 0, cy + 8);
+		this.getSurface().drawBoxAlpha(boxX, boxY, 54, 40, UiSkin.VOID_BOX, 228);
+		this.getSurface().drawBoxBorder(boxX, 54, boxY, 40, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(boxX + 1, 52, boxY + 1, 38, UiSkin.GOLD_LINE);
+		drawVoidscapeCenteredText(cx, topLabel, UiSkin.GOLD_TITLE, 0, cy - 6);
+		drawVoidscapeCenteredText(cx, bottomLabel, UiSkin.TEXT_BODY, 0, cy + 8);
 		drawVoidscapeAppearanceArrow(cx - 42, cy, true);
 		drawVoidscapeAppearanceArrow(cx + 42, cy, false);
 	}
@@ -4378,22 +4446,22 @@ public final class mudclient implements Runnable {
 		}
 
 		this.getSurface().drawBoxAlpha(x, y, VOID_COLOSSUS_BOSS_HUD_WIDTH, VOID_COLOSSUS_BOSS_HUD_HEIGHT,
-			0x09040F, 210);
+			UiSkin.VOID_BODY, 210);
 		this.getSurface().drawBoxBorder(x, VOID_COLOSSUS_BOSS_HUD_WIDTH, y, VOID_COLOSSUS_BOSS_HUD_HEIGHT,
-			0x6F3DC4);
-		this.getSurface().drawLineHoriz(x + 1, y + 1, VOID_COLOSSUS_BOSS_HUD_WIDTH - 2, 0x1C0B32);
+			UiSkin.PURPLE_EDGE);
+		this.getSurface().drawLineHoriz(x + 1, y + 1, VOID_COLOSSUS_BOSS_HUD_WIDTH - 2, UiSkin.SHADOW_B);
 		this.getSurface().drawColoredStringCentered(x + VOID_COLOSSUS_BOSS_HUD_WIDTH / 2,
-			def.getName() + " (level-" + VOID_COLOSSUS_COMBAT_LEVEL + ")", 0xFF4040, 0, 1, y + 14);
+			def.getName() + " (level-" + VOID_COLOSSUS_COMBAT_LEVEL + ")", UiSkin.FLASH, 0, UiSkin.FONT_BODY, y + 14);
 		int barX = x + 9;
 		int barY = y + 24;
-		this.getSurface().drawBoxAlpha(barX, barY, barWidth, 13, 0x140819, 230);
-		this.getSurface().drawBoxAlpha(barX, barY, fill, 13, 0x8F2BFF, 230);
+		this.getSurface().drawBoxAlpha(barX, barY, barWidth, 13, UiSkin.VOID_BOX, 230);
+		this.getSurface().drawBoxAlpha(barX, barY, fill, 13, UiSkin.PURPLE_BRIGHT, 230);
 		if (fill > 3) {
-			this.getSurface().drawBoxAlpha(barX, barY, Math.max(1, fill / 3), 13, 0xC35CFF, 170);
+			this.getSurface().drawBoxAlpha(barX, barY, Math.max(1, fill / 3), 13, UiSkin.PURPLE_BLOOM, 170);
 		}
-		this.getSurface().drawBoxBorder(barX, barWidth, barY, 13, 0x2A173A);
+		this.getSurface().drawBoxBorder(barX, barWidth, barY, 13, UiSkin.VOID_LINE);
 		this.getSurface().drawColoredStringCentered(x + VOID_COLOSSUS_BOSS_HUD_WIDTH / 2,
-			currentHp + " / " + maxHp, 0xFFFFFF, 0, 0, y + 35);
+			currentHp + " / " + maxHp, UiSkin.TEXT_BODY, 0, UiSkin.FONT_SMALL, y + 35);
 	}
 
 	private void drawCharacterOverlay() {
@@ -5449,9 +5517,9 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidArenaChoice(int x, int y, int width, int height, String text, boolean selected, boolean disabled) {
 		boolean hover = !disabled && voidArenaDialogHit(x, y, width, height);
-		int fill = selected ? 0x342244 : (hover ? 0x2a2532 : 0x17151b);
-		int border = disabled ? 0x555555 : (selected ? 0xb8914f : 0x6f5a86);
-		int textColor = disabled ? 0x777777 : (selected ? 0xffd66b : 0xffffff);
+		int fill = selected ? UiSkin.PURPLE_SELECT : (hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX);
+		int border = disabled ? UiSkin.TEXT_DIM : (selected ? UiSkin.GOLD_LINE : UiSkin.PURPLE_EDGE);
+		int textColor = disabled ? UiSkin.TEXT_DIM : (selected ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 230);
 		this.getSurface().drawBoxBorder(x, width, y, height, border);
 		this.getSurface().drawColoredStringCentered(x + width / 2, text, textColor, 0, 1, y + height / 2 + 4);
@@ -5459,13 +5527,13 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidArenaToggleRow(int x, int y, int width, String label, boolean value) {
 		boolean hover = voidArenaDialogHit(x, y - 10, width, 20);
-		int fill = hover ? 0x25202d : 0x151318;
+		int fill = hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
 		this.getSurface().drawBoxAlpha(x, y - 10, width, 20, fill, 190);
-		this.getSurface().drawBoxBorder(x, width, y - 10, 20, 0x3d3348);
-		this.getSurface().drawString(label, x + 8, y + 4, 0xffffff, 1);
+		this.getSurface().drawBoxBorder(x, width, y - 10, 20, UiSkin.VOID_LINE);
+		this.getSurface().drawString(label, x + 8, y + 4, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
 		String state = value ? "ON" : "OFF";
 		this.getSurface().drawString(state, x + width - this.getSurface().stringWidth(1, state) - 8,
-			y + 4, value ? 0x66ff66 : 0xff5555, 1);
+			y + 4, value ? UiSkin.GOOD : UiSkin.BAD, UiSkin.FONT_BODY);
 	}
 
 	private void drawVoidArenaSetupState(int x, int y, int width, String leftLabel, boolean leftReady,
@@ -5478,18 +5546,16 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidArenaDeathMatchDialogX() {
-		return Math.max(8, (this.getGameWidth() - 468) / 2);
+		return UiAnchor.centeredDialogX(this.getGameWidth(), 468);
 	}
 
 	private int voidArenaDeathMatchDialogY() {
 		int dialogHeight = 224;
-		int y = Math.max(8, Math.min(36, (this.getGameHeight() - dialogHeight) / 2));
 		if (useVoidscapeHudSkin()) {
 			int topClearance = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 6 : 8);
-			int maxY = Math.max(8, this.getGameHeight() - dialogHeight - 8);
-			y = Math.min(maxY, Math.max(y, topClearance));
+			return UiAnchor.centeredDialogY(this.getGameHeight(), dialogHeight, topClearance, 8);
 		}
-		return y;
+		return Math.max(8, Math.min(36, (this.getGameHeight() - dialogHeight) / 2));
 	}
 
 	private void drawVoidArenaLegacyCheckbox(int x, int y, boolean checked, boolean disabled) {
@@ -5784,11 +5850,11 @@ public final class mudclient implements Runnable {
 		int boxH = 54;
 		int x = this.halfGameWidth() - boxW / 2;
 		int y = this.halfGameHeight() - boxH / 2 - 22;
-		this.getSurface().drawBoxAlpha(x, y, boxW, boxH, 0x07070a, 185);
-		this.getSurface().drawBoxBorder(x, boxW, y, boxH, 0xb8914f);
-		this.getSurface().drawBoxBorder(x + 2, boxW - 4, y + 2, boxH - 4, 0x5f4a78);
+		this.getSurface().drawBoxAlpha(x, y, boxW, boxH, UiSkin.VOID_BODY, 185);
+		this.getSurface().drawBoxBorder(x, boxW, y, boxH, UiSkin.GOLD_LINE);
+		this.getSurface().drawBoxBorder(x + 2, boxW - 4, y + 2, boxH - 4, UiSkin.PURPLE_EDGE);
 		this.getSurface().drawColoredStringCentered(this.halfGameWidth(), text,
-			showStart ? 0x66ff66 : 0xffd66b, 0, 5, y + 36);
+			showStart ? UiSkin.GOOD : UiSkin.GOLD_HOT, 0, 5, y + 36);
 	}
 
 	private void drawDialogLogout() {
@@ -6104,20 +6170,18 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeTitleFrame(int x, int y, int width, int height) {
 		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 118);
-		this.getSurface().drawBox(x, y, width, height, 0);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0xffffff);
-		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x333333);
-		this.getSurface().drawLineHoriz(x + 8, y + 7, width - 16, 0x777777);
-		this.getSurface().drawLineHoriz(x + 8, y + height - 8, width - 16, 0x222222);
+		UiSkin.glassPanel(this.getSurface(), x, y, width, height, UiSkin.A_GLASS_TEXT);
+		this.getSurface().drawLineHoriz(x + 8, y + 7, width - 16, UiSkin.GOLD_LINE);
+		this.getSurface().drawLineHoriz(x + 8, y + height - 8, width - 16, UiSkin.SHADOW_B);
 	}
 
 	private boolean drawVoidscapeTitleButton(int x, int y, int width, int height, String label, int option, boolean close) {
 		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
-		int fill = hover ? 0x262626 : 0x101010;
-		int border = hover ? 0xffff00 : 0x777777;
+		int fill = hover ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX;
+		int border = hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE;
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 235);
 		this.getSurface().drawBoxBorder(x, width, y, height, border);
-		this.getSurface().drawColoredStringCentered(x + width / 2, label, close ? 0xff8080 : 0xffffff, 0, 1, y + height / 2 + 4);
+		this.getSurface().drawColoredStringCentered(x + width / 2, label, close ? UiSkin.DANGER_GLYPH : UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, y + height / 2 + 4);
 		if (hover && this.mouseButtonClick == 1) {
 			sendOptionsMenuChoice(option);
 			return true;
@@ -6127,11 +6191,11 @@ public final class mudclient implements Runnable {
 
 	private boolean drawVoidscapeTitleTab(int x, int y, int width, String label, int option, boolean selected) {
 		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + 22;
-		int fill = selected ? 0x2b1b36 : hover ? 0x222222 : 0x090909;
-		int border = selected ? 0xd9b6ff : hover ? 0xffff00 : 0x555555;
+		int fill = selected ? UiSkin.PURPLE_SELECT : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
+		int border = selected ? UiSkin.PURPLE_FOCUS : hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE;
 		this.getSurface().drawBoxAlpha(x, y, width, 22, fill, 238);
 		this.getSurface().drawBoxBorder(x, width, y, 22, border);
-		this.getSurface().drawColoredStringCentered(x + width / 2, label, selected ? 0xd9b6ff : 0xffffff, 0, 1, y + 15);
+		this.getSurface().drawColoredStringCentered(x + width / 2, label, selected ? UiSkin.GOLD_TITLE : UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, y + 15);
 		if (hover && !selected && option >= 0 && this.mouseButtonClick == 1) {
 			sendOptionsMenuChoice(option);
 			return true;
@@ -6143,11 +6207,11 @@ public final class mudclient implements Runnable {
 		boolean disabled = label.startsWith("No titles in this category");
 		boolean active = label.startsWith("* ");
 		boolean hover = !disabled && this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
-		int fill = active ? 0x241c0b : hover ? 0x202020 : 0x070707;
-		int border = active ? 0xd0a030 : hover ? 0xffff00 : 0x2f2f2f;
+		int fill = active ? UiSkin.PURPLE_SELECT : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
+		int border = active ? UiSkin.GOLD_LINE : hover ? UiSkin.GOLD_HOT : UiSkin.VOID_LINE;
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 218);
 		this.getSurface().drawBoxBorder(x, width, y, height, border);
-		this.getSurface().drawString(label, x + 6, y + 13, disabled ? 0x777777 : 0xffffff, 1);
+		this.getSurface().drawString(label, x + 6, y + 13, disabled ? UiSkin.TEXT_DIM : UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
 		if (hover && this.mouseButtonClick == 1) {
 			sendOptionsMenuChoice(option);
 			return true;
@@ -6250,8 +6314,8 @@ public final class mudclient implements Runnable {
 		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
 
 		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
-		drawVoidscapeCenteredText(cx, "CHOOSE YOUR PATH", 0xf3d46b, 1, panelY + 24);
-		drawVoidscapeCenteredText(cx, "One choice per account. Each path grants 2x XP and a starter kit.", 0xe6e3d8, 0, panelY + 42);
+		drawVoidscapeCenteredText(cx, "CHOOSE YOUR PATH", UiSkin.GOLD_TITLE, 1, panelY + 24);
+		drawVoidscapeCenteredText(cx, "One choice per account. Each path grants 2x XP and a starter kit.", UiSkin.TEXT_BODY, 0, panelY + 42);
 
 		int cardGap = 8;
 		int cardWidth = (panelWidth - 36 - cardGap * 2) / 3;
@@ -6278,29 +6342,29 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapePathCard(int index, int x, int y, int width, int height, String title, String multiplier, String skillsTop, String skillsBottom, String kitLine, int itemId, int accent) {
 		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
-		int fill = hover ? 0x252d35 : 0x14181e;
+		int fill = hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 242);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0x070809);
-		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, hover ? 0xf3d46b : 0x59636d);
+		this.getSurface().drawBoxBorder(x, width, y, height, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE);
 		this.getSurface().drawLineHoriz(x + 4, y + 4, width - 8, accent);
 
 		int artX = x + 8;
 		int artY = y + 11;
 		int artW = width - 16;
 		int artH = Math.max(54, Math.min(78, height / 3));
-		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, 0x05070a, 206);
-		this.getSurface().drawBoxBorder(artX, artW, artY, artH, 0x0b0d10);
+		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, UiSkin.FIELD_BG, 206);
+		this.getSurface().drawBoxBorder(artX, artW, artY, artH, UiSkin.SHADOW_B);
 		this.getSurface().drawBoxBorder(artX + 1, artW - 2, artY + 1, artH - 2, accent);
 		drawVoidscapePathItemIcon(itemId, artX, artY, artW, artH, accent);
 
-		drawVoidscapeCenteredText(x + width / 2, title, 0xf3d46b, 0, artY + artH + 17);
-		drawVoidscapeCenteredText(x + width / 2, multiplier, 0xffffff, 1, artY + artH + 37);
-		drawVoidscapeCenteredText(x + width / 2, skillsTop, 0xd9d5cb, 0, artY + artH + 54);
+		drawVoidscapeCenteredText(x + width / 2, title, UiSkin.GOLD_TITLE, 0, artY + artH + 17);
+		drawVoidscapeCenteredText(x + width / 2, multiplier, UiSkin.TEXT_BODY, 1, artY + artH + 37);
+		drawVoidscapeCenteredText(x + width / 2, skillsTop, UiSkin.TEXT_BODY, 0, artY + artH + 54);
 		if (skillsBottom.length() > 0) {
-			drawVoidscapeCenteredText(x + width / 2, skillsBottom, 0xd9d5cb, 0, artY + artH + 68);
+			drawVoidscapeCenteredText(x + width / 2, skillsBottom, UiSkin.TEXT_BODY, 0, artY + artH + 68);
 		}
-		drawVoidscapeCenteredText(x + width / 2, kitLine, 0x9fd7ff, 0, y + height - 30);
-		drawVoidscapeCenteredText(x + width / 2, "(" + (index + 1) + ")", hover ? 0xf3d46b : 0x9aa2a9, 0, y + height - 12);
+		drawVoidscapeCenteredText(x + width / 2, kitLine, UiSkin.TEXT_LABEL, 0, y + height - 30);
+		drawVoidscapeCenteredText(x + width / 2, "(" + (index + 1) + ")", hover ? UiSkin.GOLD_HOT : UiSkin.TEXT_DIM, 0, y + height - 12);
 	}
 
 	private void drawVoidscapePathItemIcon(int itemId, int x, int y, int width, int height, int accent) {
@@ -6417,16 +6481,12 @@ public final class mudclient implements Runnable {
 		int closeSize = farmSimCloseSize();
 		boolean closeHover = isFarmSimCloseHit(this.mouseX, this.mouseY);
 
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x08080A, 235);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0xD8C27A);
-		this.getSurface().drawLineHoriz(x, y + 56, width, 0x3B3148);
-		this.getSurface().drawString(bestiaryFitText(this.farmSimTitle, width - 58, 1), x + 12, y + 20, 0xF3D46B, 1);
-		this.getSurface().drawString(bestiaryFitText(this.farmSimSubtitle, width - 24, 0), x + 12, y + 36, 0xD9D5CB, 0);
-		this.getSurface().drawString(bestiaryFitText(this.farmSimDetails, width - 24, 0), x + 12, y + 51, 0x9FD7FF, 0);
-		this.getSurface().drawBoxAlpha(closeX, closeY, closeSize, closeSize, closeHover ? 0x6E1E1E : 0x221A24, 220);
-		this.getSurface().drawBoxBorder(closeX, closeSize, closeY, closeSize, closeHover ? 0xFF7070 : 0x7D6F8B);
-		this.getSurface().drawColoredStringCentered(closeX + closeSize / 2, "X", closeHover ? 0xFF7070 : 0xFFFFFF,
-			0, 1, closeY + closeSize / 2 + 4);
+		UiSkin.glassPanel(this.getSurface(), x, y, width, height, UiSkin.A_GLASS_TEXT);
+		this.getSurface().drawLineHoriz(x, y + 56, width, UiSkin.VOID_LINE);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimTitle, width - 58, 1), x + 12, y + 20, UiSkin.GOLD_TITLE, 1);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimSubtitle, width - 24, 0), x + 12, y + 36, UiSkin.TEXT_BODY, 0);
+		this.getSurface().drawString(bestiaryFitText(this.farmSimDetails, width - 24, 0), x + 12, y + 51, UiSkin.TEXT_LABEL, 0);
+		UiSkin.closeButton(this.getSurface(), closeX, closeY, closeSize, closeHover);
 
 		if (this.mouseButtonClick == 1 && closeHover) {
 			closeFarmSimDialog();
@@ -8524,7 +8584,16 @@ public final class mudclient implements Runnable {
 									double boost = this.getGameHeight();
 									if (isAndroid() && osConfig.F_SHOWING_KEYBOARD)
 										boost = (boost / 2.5) + 8;
-									this.getSurface().drawColoredString(7, (int) boost - centerX * 12 - 18, var17,
+									int lineY = (int) boost - centerX * 12 - 18;
+									// While banking, older lines that would climb over the Void
+									// Glass panel's action rows are dropped, not drawn on top.
+									if (isShowDialogBank() && this.bank != null) {
+										int vgBottom = this.bank.getVoidGlassPanelBottomY();
+										if (vgBottom > 0 && lineY - 10 < vgBottom + 4) {
+											continue;
+										}
+									}
+									this.getSurface().drawColoredString(7, lineY, var17,
 										1, 0xFFFF00, MessageHistory.messageHistoryCrownID[centerX]);
 								}
 							}
@@ -8756,9 +8825,9 @@ public final class mudclient implements Runnable {
 			? voidscapeLocationPlaqueY() + voidscapeLocationPlaqueHeight() + 8
 			: 42;
 		int width = this.getSurface().stringWidth(1, label) + 12;
-		this.getSurface().drawBoxAlpha(x, y, width, 16, 0x050805, 150);
-		this.getSurface().drawBoxBorder(x, width, y, 16, 0x264836);
-		this.getSurface().drawString(label, x + 6, y + 12, 0xD8FFE8, 1);
+		this.getSurface().drawBoxAlpha(x, y, width, 16, UiSkin.VOID_BODY, 150);
+		this.getSurface().drawBoxBorder(x, width, y, 16, UiSkin.VOID_LINE);
+		this.getSurface().drawString(label, x + 6, y + 12, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
 		drawVoidscapeMobileVitalsOverlay(x, y + 18);
 	}
 
@@ -9317,10 +9386,10 @@ public final class mudclient implements Runnable {
 		final int width = Math.max(118, this.getSurface().stringWidth(1, label) + 18);
 		final int x = this.getGameWidth() / 2 - width / 2;
 		final int y = 8;
-		final int color = remainingSeconds <= 5 ? 0xff6060 : 0xf3d46b;
+		final int color = remainingSeconds <= 5 ? UiSkin.BAD : UiSkin.GOLD_TITLE;
 
-		this.getSurface().drawBoxAlpha(x, y, width, 18, 0x07040b, 218);
-		this.getSurface().drawBoxAlpha(x, y, width, 2, 0x7d28c7, 230);
+		this.getSurface().drawBoxAlpha(x, y, width, 18, UiSkin.VOID_BODY, 218);
+		this.getSurface().drawBoxAlpha(x, y, width, 2, UiSkin.PURPLE_EDGE, 230);
 		this.getSurface().drawColoredStringCentered(this.getGameWidth() / 2, label, color, 0, 1, y + 13);
 	}
 
@@ -11705,10 +11774,12 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeLoginHome() {
 		int cx = halfGameWidth();
 		drawVoidscapeFrame(cx - 97, 118, 194, 185);
-		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", 0xf3d46b, 1, 143);
-		drawVoidscapeCenteredText(cx, "Relive the classic.", 0xffffff, 1, 160);
-		drawVoidscapeButton(cx, 181, 176, 34, "Create Account", true);
-		drawVoidscapeButton(cx, 223, 176, 34, "Existing User", false);
+		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", UiSkin.GOLD_TITLE, 1, 143);
+		drawVoidscapeCenteredText(cx, "Relive the classic.", UiSkin.TEXT_BODY, 1, 160);
+		drawVoidscapeButton(cx, voidscapeLoginHomeNewUserY(), voidscapeLoginHomeButtonWidth(),
+			voidscapeLoginHomeButtonHeight(), "Create Account", true);
+		drawVoidscapeButton(cx, voidscapeLoginHomeExistingUserY(), voidscapeLoginHomeButtonWidth(),
+			voidscapeLoginHomeButtonHeight(), "Existing User", false);
 		if (this.voidscapeLoginHomeStatus1.length() > 0) {
 			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus1, 0xffd98a, 0, 267);
 			drawVoidscapeCenteredText(cx, this.voidscapeLoginHomeStatus2, 0xe6e3d8, 0, 281);
@@ -11777,7 +11848,7 @@ public final class mudclient implements Runnable {
 		boolean hideFieldLabels = shouldHideExistingFieldLabels();
 		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
 		drawVoidscapeCenteredText(cx, this.voidscapeAddAccountPending ? "ADD ACCOUNT" : "EXISTING USER",
-			0xf3d46b, 1, voidscapeExistingTitleY());
+			UiSkin.GOLD_TITLE, 1, voidscapeExistingTitleY());
 		drawVoidscapeField(cx, voidscapeExistingUserY(), 210, voidscapeExistingFieldHeight(),
 			hideFieldLabels ? "" : "Username", this.panelLogin.focusOn(this.controlLoginUser));
 		drawVoidscapeField(cx, voidscapeExistingPassY(), 210, voidscapeExistingFieldHeight(),
@@ -11789,9 +11860,9 @@ public final class mudclient implements Runnable {
 		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
 			drawVoidscapeButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24, "Save", false);
 		}
-		drawVoidscapeButton(cx - 46, voidscapeExistingActionY(), 84, 28,
+		drawVoidscapeButton(cx - voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28,
 			this.voidscapeAddAccountPending ? "Add" : "Ok", true);
-		drawVoidscapeButton(cx + 46, voidscapeExistingActionY(), 84, 28, "Cancel", false);
+		drawVoidscapeButton(cx + voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28, "Cancel", false);
 		drawVoidscapeButton(cx, voidscapeExistingForgotY(), 176, 25, isAndroid() ? "Recover account" : "Forgot password", false);
 	}
 
@@ -12432,9 +12503,9 @@ public final class mudclient implements Runnable {
 		int panelY = voidscapeNewFrameY();
 		int panelH = voidscapeNewFrameHeight();
 		drawVoidscapeFrame(cx - 203, panelY, 406, panelH);
-		drawVoidscapeCenteredText(cx, "START A NEW GAME", 0xf3d46b, 1, voidscapeNewTitleY());
+		drawVoidscapeCenteredText(cx, "START A NEW GAME", UiSkin.GOLD_TITLE, 1, voidscapeNewTitleY());
 		if (!isAndroid()) {
-			drawVoidscapeCenteredText(cx, "Username: 2-12 letters, numbers, or spaces", 0xffd98a, 0, voidscapeNewHintY());
+			drawVoidscapeCenteredText(cx, "Username: 2-12 letters, numbers, or spaces", UiSkin.GOLD_HOT, 0, voidscapeNewHintY());
 		}
 		drawVoidscapeField(cx, voidscapeNewUserY(), 214, 23, "Username", this.menuNewUser.focusOn(this.menuNewUserUsername));
 
@@ -12468,46 +12539,43 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeFrame(int x, int y, int width, int height) {
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x101216, 232);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0x0a0b0d);
-		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x7f8992);
-		this.getSurface().drawBoxBorder(x + 3, width - 6, y + 3, height - 6, 0x2f363d);
-		this.getSurface().drawLineHoriz(x + 6, y + 6, width - 12, 0xc3ccd2);
-		this.getSurface().drawLineHoriz(x + 6, y + height - 7, width - 12, 0x050506);
+		UiSkin.glassPanel(this.getSurface(), x, y, width, height, UiSkin.A_GLASS_TEXT);
+		this.getSurface().drawLineHoriz(x + 6, y + 6, width - 12, UiSkin.GOLD_LINE);
+		this.getSurface().drawLineHoriz(x + 6, y + height - 7, width - 12, UiSkin.SHADOW_B);
 	}
 
 	private void drawVoidscapeButton(int cx, int cy, int width, int height, String text, boolean primary) {
 		int x = cx - width / 2;
 		int y = cy - height / 2;
 		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
-		int fill = hover ? 0x3b444d : 0x252b32;
+		int fill = hover ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX;
 		if (primary && !hover) {
-			fill = 0x303842;
+			fill = UiSkin.VOID_LINE;
 		}
 
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 245);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0x070809);
-		this.getSurface().drawLineHoriz(x + 2, y + 2, width - 4, 0xaeb8c0);
-		this.getSurface().drawLineVert(x + 2, y + 2, 0x87939c, height - 4);
-		this.getSurface().drawLineHoriz(x + 2, y + height - 3, width - 4, 0x050607);
-		this.getSurface().drawLineVert(x + width - 3, y + 2, 0x070809, height - 4);
+		this.getSurface().drawBoxBorder(x, width, y, height, UiSkin.SHADOW_B);
+		this.getSurface().drawLineHoriz(x + 2, y + 2, width - 4, UiSkin.GOLD_BEVEL);
+		this.getSurface().drawLineVert(x + 2, y + 2, UiSkin.GOLD_LINE, height - 4);
+		this.getSurface().drawLineHoriz(x + 2, y + height - 3, width - 4, UiSkin.SHADOW_B);
+		this.getSurface().drawLineVert(x + width - 3, y + 2, UiSkin.SHADOW_B, height - 4);
 		if (hover || primary) {
-			this.getSurface().drawBoxBorder(x + 3, width - 6, y + 3, height - 6, 0x9a7a31);
+			this.getSurface().drawBoxBorder(x + 3, width - 6, y + 3, height - 6, UiSkin.GOLD_LINE);
 		}
-		int font = height < 28 ? 1 : 4;
-		int textY = font == 4 ? cy + 4 : cy + 3;
-		drawVoidscapeCenteredText(cx, text, 0xf1d56c, font, textY);
+		int font = height < 28 ? UiSkin.FONT_BODY : UiSkin.FONT_TITLE;
+		int textY = font == UiSkin.FONT_TITLE ? cy + 4 : cy + 3;
+		drawVoidscapeCenteredText(cx, text, UiSkin.GOLD_TITLE, font, textY);
 	}
 
 	private void drawVoidscapeField(int cx, int cy, int width, int height, String label, boolean focused) {
 		int x = cx - width / 2;
 		int y = cy - height / 2;
 		if (label != null) {
-			drawVoidscapeCenteredText(cx, label, 0xe6e3d8, isAndroid() ? 0 : 1, y + (isAndroid() ? -5 : -7));
+			drawVoidscapeCenteredText(cx, label, UiSkin.TEXT_BODY, isAndroid() ? UiSkin.FONT_SMALL : UiSkin.FONT_BODY, y + (isAndroid() ? -5 : -7));
 		}
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x07090c, 218);
-		this.getSurface().drawBoxBorder(x, width, y, height, focused ? 0xb68aff : 0x56606a);
-		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x12171d);
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.FIELD_BG, UiSkin.A_FIELD);
+		this.getSurface().drawBoxBorder(x, width, y, height, focused ? UiSkin.PURPLE_FOCUS : UiSkin.FIELD_BORDER_IDLE);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, UiSkin.SHADOW_B);
 	}
 
 	private void drawVoidscapePanelSkippingControls(Panel panel, int... controls) {
@@ -14026,10 +14094,10 @@ public final class mudclient implements Runnable {
 		int y = trainingXpRateBadgeY(height);
 
 		if (useVoidscapeHudSkin()) {
-			this.getSurface().drawBoxAlpha(x, y, width, height, 0x080510, 188);
-			this.getSurface().drawBoxBorder(x, width, y, height, 0x8C6F3D);
-			this.getSurface().drawLineHoriz(x + 2, y + 1, Math.max(1, width - 4), 0xD9B24D);
-			this.getSurface().drawString(label, x + 7, y + 15, 0xEBDCB0, font);
+			this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.VOID_BODY, 188);
+			this.getSurface().drawBoxBorder(x, width, y, height, UiSkin.GOLD_BEVEL);
+			this.getSurface().drawLineHoriz(x + 2, y + 1, Math.max(1, width - 4), UiSkin.GOLD_LINE);
+			this.getSurface().drawString(label, x + 7, y + 15, UiSkin.TEXT_BODY, font);
 		} else {
 			this.getSurface().drawBoxAlpha(x, y, width, height, 0, 130);
 			this.getSurface().drawBoxBorder(x, width, y, height, 0xFFFFFF);
@@ -15105,9 +15173,9 @@ public final class mudclient implements Runnable {
 				if (C_CUSTOM_UI && !useVoidscapeHudSkin())
 					yOffset -= 45;
 				this.getSurface().drawBoxAlpha(xOffset, yOffset, 245, 204,
-					useVoidscapeHudSkin() ? 0x130E1A : this.clearBox, useVoidscapeHudSkin() ? 200 : 128);
+					useVoidscapeHudSkin() ? UiSkin.VOID_BOX : this.clearBox, useVoidscapeHudSkin() ? 200 : 128);
 				this.getSurface().drawBoxAlpha(xOffset, yOffset + 228, 245, 45,
-					useVoidscapeHudSkin() ? 0x130E1A : this.clearBox, useVoidscapeHudSkin() ? 200 : 128);
+					useVoidscapeHudSkin() ? UiSkin.VOID_BOX : this.clearBox, useVoidscapeHudSkin() ? 200 : 128);
 				Sprite todraw = null;
 
 				if (S_ITEMS_ON_DEATH_MENU) {
@@ -15220,20 +15288,20 @@ public final class mudclient implements Runnable {
 				yOffset += useVoidscapeHudSkin() && this.tabEquipmentIndex == 0
 					? (this.m_cl / 5 * voidCellH) + 24
 					: 228;
-				int voidSelBox = 0x4B2472;
-				int voidClearBox = 0x130E1A;
+				int voidSelBox = UiSkin.PURPLE_SELECT;
+				int voidClearBox = UiSkin.VOID_BOX;
 				this.getSurface().drawBoxAlpha(xOffset, yOffset - 24, equipmentTabLeftWidth, 24,
 					useVoidscapeHudSkin() ? (this.tabEquipmentIndex == 1 ? voidSelBox : voidClearBox) : (this.tabEquipmentIndex == 1 ? selectedBox : clearBox),
 					useVoidscapeHudSkin() ? 200 : 128);
 				this.getSurface().drawBoxAlpha(xOffset + equipmentTabLeftWidth, yOffset - 24, equipmentTabRightWidth, 24,
 					useVoidscapeHudSkin() ? (this.tabEquipmentIndex == 0 ? voidSelBox : voidClearBox) : (this.tabEquipmentIndex == 0 ? selectedBox : clearBox),
 					useVoidscapeHudSkin() ? 200 : 128);
-				int voidTabText = useVoidscapeHudSkin() ? 0xE7DEBC : 0;
+				int voidTabText = useVoidscapeHudSkin() ? UiSkin.TEXT_BODY : 0;
 				this.getSurface().drawColoredStringCentered(xOffset + equipmentTabLeftWidth / 2, "Equipment", voidTabText, 0, 4, yOffset - 7);
 				this.getSurface().drawColoredStringCentered(xOffset + equipmentTabLeftWidth + equipmentTabRightWidth / 2, "Inventory", voidTabText, 0, 4, yOffset - 7);
 
-				this.getSurface().drawLineHoriz(xOffset, yOffset - 24, equipmentTabStripWidth, useVoidscapeHudSkin() ? 0x2E2140 : 0);
-				this.getSurface().drawLineVert(xOffset + equipmentTabLeftWidth, yOffset - 24, useVoidscapeHudSkin() ? 0x2E2140 : 0, 24);
+				this.getSurface().drawLineHoriz(xOffset, yOffset - 24, equipmentTabStripWidth, useVoidscapeHudSkin() ? UiSkin.VOID_LINE : 0);
+				this.getSurface().drawLineVert(xOffset + equipmentTabLeftWidth, yOffset - 24, useVoidscapeHudSkin() ? UiSkin.VOID_LINE : 0, 24);
 
 				//Handle ui clicks
 				if (this.mouseButtonClick == 1 && !this.topMouseMenuVisible) {
@@ -15275,7 +15343,7 @@ public final class mudclient implements Runnable {
 			short var5 = 196;
 			short var6 = 182;
 			boolean voidSkin = useVoidscapeHudSkin();
-			int vBoxBg = 0x130E1A, vLine = 0x2E2140, vSel = 0x4B2472, vText = 0xE7DEBC;
+			int vBoxBg = UiSkin.VOID_BOX, vLine = UiSkin.VOID_LINE, vSel = UiSkin.PURPLE_SELECT, vText = UiSkin.TEXT_BODY;
 			int vBodyAlpha = voidSkin ? voidscapeGlassPanelBodyAlpha() : 128;
 			int vTabAlpha = voidSkin ? 218 : 128;
 			if (voidSkin) {
@@ -15790,7 +15858,7 @@ public final class mudclient implements Runnable {
 			} else {
 				var7 = GenUtil.buildColor(220, 220, 220);
 			}
-			int vBoxBg = 0x130E1A, vLine = 0x2E2140, vSel = 0x4B2472, vText = 0xE7DEBC, vDim = 0x8E7EA7;
+			int vBoxBg = UiSkin.VOID_BOX, vLine = UiSkin.VOID_LINE, vSel = UiSkin.PURPLE_SELECT, vText = UiSkin.TEXT_BODY, vDim = UiSkin.TEXT_DIM;
 			int boxAlpha = voidSkin ? voidscapeGlassPanelBodyAlpha() : 128;
 			int tabAlpha = voidSkin ? 218 : 128;
 			int footerAlpha = voidSkin ? voidscapeGlassPanelFooterAlpha() : boxAlpha;
@@ -16356,10 +16424,10 @@ public final class mudclient implements Runnable {
 				if (useVoidscapeHudSkin()) {
 					// Themed button: section-header bar chrome + gold label, purple tint on hover.
 					this.getSurface().drawBoxAlpha(btnX + 2, btnY + 2, btnW - 4, btnH - 4,
-						overButton ? 0x4B2472 : 0x130E1A, 220);
+						overButton ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 220);
 					drawVoidscapeThreeSliceH("right-panel-section.png", btnX, btnY, btnW, btnH, 20, 0);
 					this.getSurface().drawColoredStringCentered(btnX + btnW / 2,
-						"World Map", overButton ? 0xFFE9A8 : 0xE4D08D, 0, 1, btnY + btnH / 2 + 4);
+						"World Map", overButton ? UiSkin.GOLD_HOT : UiSkin.GOLD_HEADER, 0, UiSkin.FONT_BODY, btnY + btnH / 2 + 4);
 				} else {
 					int bg = overButton ? 0x808040 : 0x404040;
 					this.getSurface().drawBox(btnX, btnY, btnW, btnH, bg);
@@ -16565,17 +16633,16 @@ public final class mudclient implements Runnable {
 		}
 
 		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 128);
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x111018, 238);
-		this.getSurface().drawBoxBorder(x, width, y, height, 0x08070c);
-		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, 0x7557b8);
-		this.getSurface().drawBoxAlpha(x + 2, y + 2, width - 4, 26, 0x2d1b48, 238);
-		this.getSurface().drawString("Advanced settings", x + 12, y + 18, 0xFFFFFF, 1);
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.GLASS_BODY, UiSkin.A_GLASS_TEXT);
+		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, (height - 2) * 2 / 5, UiSkin.GLASS_SHEEN, UiSkin.A_SHEEN);
+		this.getSurface().drawBoxBorder(x, width, y, height, 0);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, UiSkin.GLASS_RIM);
+		this.getSurface().drawBoxAlpha(x + 2, y + 2, width - 4, 26, UiSkin.VOID_HEADER, 190);
+		this.getSurface().drawString("Advanced settings", x + 12, y + 18, UiSkin.GOLD_TITLE, UiSkin.FONT_BODY);
 
 		int closeX = x + width - 24;
 		boolean closeHover = this.mouseX >= closeX && this.mouseX < closeX + 18 && this.mouseY >= y + 6 && this.mouseY < y + 24;
-		this.getSurface().drawBoxAlpha(closeX, y + 6, 18, 18, closeHover ? 0x684f91 : 0x22182f, 230);
-		this.getSurface().drawBoxBorder(closeX, 18, y + 6, 18, closeHover ? 0xd9c6ff : 0x6e5b8e);
-		this.getSurface().drawColoredStringCentered(closeX + 9, "X", 0xFFFFFF, 0, 1, y + 20);
+		UiSkin.closeButton(this.getSurface(), closeX, y + 6, 18, closeHover);
 		if (closeHover && this.mouseButtonClick == 1) {
 			this.showAdvancedSettingsWindow = false;
 			this.mouseButtonClick = 0;
@@ -16584,7 +16651,7 @@ public final class mudclient implements Runnable {
 
 		int railX = x + 8;
 		int railY = y + 39;
-		this.getSurface().drawBoxAlpha(railX, railY - 5, railWidth, height - 48, 0x0b0d13, 196);
+		this.getSurface().drawBoxAlpha(railX, railY - 5, railWidth, height - 48, UiSkin.VOID_HEADER, 196);
 		int categoryStep = tinyClassic ? 28 : 31;
 		drawAdvancedCategory(railX + 6, railY, railWidth - 12, "Gameplay", ADVANCED_CATEGORY_GAMEPLAY);
 		drawAdvancedCategory(railX + 6, railY + categoryStep, railWidth - 12, "Loot", ADVANCED_CATEGORY_LOOT);
@@ -16595,7 +16662,7 @@ public final class mudclient implements Runnable {
 		int contentX = x + railWidth + 18;
 		int contentY = y + 45;
 		int contentWidth = width - railWidth - 28;
-		this.getSurface().drawBoxAlpha(contentX - 6, contentY - 12, contentWidth + 4, height - 58, 0x171521, 176);
+		this.getSurface().drawBoxAlpha(contentX - 6, contentY - 12, contentWidth + 4, height - 58, UiSkin.VOID_BOX, 176);
 		drawAdvancedSettingsCategory(contentX, contentY, contentWidth);
 
 		if (inside) {
@@ -16609,12 +16676,12 @@ public final class mudclient implements Runnable {
 		int font = tinyClassic ? 0 : 1;
 		int height = tinyClassic ? 24 : 26;
 		boolean hover = this.mouseX >= x && this.mouseX < x + width && this.mouseY >= y - 11 && this.mouseY < y - 11 + height;
-		int fill = selected ? 0x5c3a93 : hover ? 0x2d2441 : 0x151722;
-		int border = selected ? 0xd9b6ff : 0x4d435f;
+		int fill = selected ? UiSkin.PURPLE_SELECT : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
+		int border = selected ? UiSkin.PURPLE_FOCUS : UiSkin.VOID_LINE;
 		this.getSurface().drawBoxAlpha(x, y - 11, width, height, fill, 222);
 		this.getSurface().drawBoxBorder(x, width, y - 11, height, border);
 		this.getSurface().drawString(fitVoidscapeText(label, width - 10, font), x + 6, y + (tinyClassic ? 5 : 6),
-			selected ? 0xFFFFFF : 0xc8bfd5, font);
+			selected ? UiSkin.GOLD_TITLE : UiSkin.TEXT_LABEL, font);
 		if (hover && this.mouseButtonClick == 1) {
 			this.advancedSettingsCategory = category;
 			this.mouseButtonClick = 0;
@@ -17001,12 +17068,12 @@ public final class mudclient implements Runnable {
 			boolean advancedSel = this.showAdvancedSettingsWindow;
 			int tabY = var4 - 24;
 			int tabH = 22;
-			this.getSurface().drawBoxAlpha(tabX, tabY, half, tabH, advancedSel ? 0x130E1A : 0x4B2472, 210);
-			this.getSurface().drawBoxAlpha(tabX + half, tabY, tabW - half, tabH, advancedSel ? 0x4B2472 : 0x130E1A, 210);
-			this.getSurface().drawLineHoriz(tabX, tabY + tabH, tabW, 0x2E2140);
-			this.getSurface().drawLineVert(tabX + half, tabY, 0x2E2140, tabH);
-			this.getSurface().drawColoredStringCentered(tabX + half / 2, "Profile", 0xE7DEBC, 0, 1, tabY + 15);
-			this.getSurface().drawColoredStringCentered(tabX + half + (tabW - half) / 2, "Settings", 0xE7DEBC, 0, 1, tabY + 15);
+			this.getSurface().drawBoxAlpha(tabX, tabY, half, tabH, advancedSel ? UiSkin.VOID_BOX : UiSkin.PURPLE_SELECT, 210);
+			this.getSurface().drawBoxAlpha(tabX + half, tabY, tabW - half, tabH, advancedSel ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 210);
+			this.getSurface().drawLineHoriz(tabX, tabY + tabH, tabW, UiSkin.VOID_LINE);
+			this.getSurface().drawLineVert(tabX + half, tabY, UiSkin.VOID_LINE, tabH);
+			this.getSurface().drawColoredStringCentered(tabX + half / 2, "Profile", UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, tabY + 15);
+			this.getSurface().drawColoredStringCentered(tabX + half + (tabW - half) / 2, "Settings", UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, tabY + 15);
 			return;
 		}
 		int gearTabWidth = 40;
@@ -18444,10 +18511,10 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, headerH - 1, 0x0D0914, 222);
 		this.getSurface().drawBoxAlpha(x + 1, y + headerH, width - 2, height - headerH - 1, 0x0B0810,
 			voidscapeStructuredPanelBodyAlpha());
-		this.getSurface().drawLineHoriz(x, y, width, 0x8C6F3D);
-		this.getSurface().drawLineHoriz(x, y + height - 1, width, 0x2F2434);
-		this.getSurface().drawLineVert(x, y, 0x8C6F3D, height);
-		this.getSurface().drawLineVert(x + width - 1, y, 0x2F2434, height);
+		this.getSurface().drawLineHoriz(x, y, width, UiSkin.GOLD_BEVEL);
+		this.getSurface().drawLineHoriz(x, y + height - 1, width, UiSkin.SHADOW_A);
+		this.getSurface().drawLineVert(x, y, UiSkin.GOLD_BEVEL, height);
+		this.getSurface().drawLineVert(x + width - 1, y, UiSkin.SHADOW_A, height);
 		this.getSurface().drawLineHoriz(x + 2, y + headerH - 1, width - 4, 0x6E5737);
 		this.getSurface().drawLineHoriz(x + 2, y + headerH, width - 4, 0x18111E);
 		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, 0x271F2D);
@@ -18816,6 +18883,15 @@ public final class mudclient implements Runnable {
 		}
 		int yLine = voidscapeChatEntryY() - 8;
 		int yTop = voidscapeChatListY();
+		if (isShowDialogBank() && this.bank != null) {
+			// While banking, keep chat below the Void Glass panel instead of climbing
+			// over its action rows. Uses the panel's real rendered bottom — its row
+			// floors can push it past the overlay safe band on short frames.
+			int vgBottom = this.bank.getVoidGlassPanelBottomY();
+			if (vgBottom > 0) {
+				yTop = Math.max(yTop, vgBottom + 4);
+			}
+		}
 		int drawnLines = 0;
 		int maxLines = voidscapeLooseLandscapeChatLineLimit();
 		for (int i = 0; i < messagesArray.length && yLine > yTop && drawnLines < maxLines; ++i) {
@@ -19165,20 +19241,20 @@ public final class mudclient implements Runnable {
 		int bodyY = y + headerH;
 		int bodyH = gridH + bottomPad;
 
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x050308, 52);
-		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, headerH - 1, 0x0D0914, 218);
-		this.getSurface().drawBoxAlpha(x + 1, bodyY, width - 2, bodyH - 1, 0x0B0810,
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.VOID_SCRIM, 52);
+		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, headerH - 1, UiSkin.VOID_HEADER, UiSkin.A_HEADER);
+		this.getSurface().drawBoxAlpha(x + 1, bodyY, width - 2, bodyH - 1, UiSkin.VOID_BODY,
 			voidscapeInventoryPanelBodyAlpha());
 
-		this.getSurface().drawLineHoriz(x, y, width, 0x8C6F3D);
-		this.getSurface().drawLineHoriz(x, y + height - 1, width, 0x2F2434);
-		this.getSurface().drawLineVert(x, y, 0x8C6F3D, height);
-		this.getSurface().drawLineVert(x + width - 1, y, 0x2F2434, height);
-		this.getSurface().drawLineHoriz(x + 2, bodyY - 1, width - 4, 0x6E5737);
-		this.getSurface().drawLineHoriz(x + 2, bodyY, width - 4, 0x18111E);
+		this.getSurface().drawLineHoriz(x, y, width, UiSkin.GOLD_BEVEL);
+		this.getSurface().drawLineHoriz(x, y + height - 1, width, UiSkin.SHADOW_A);
+		this.getSurface().drawLineVert(x, y, UiSkin.GOLD_BEVEL, height);
+		this.getSurface().drawLineVert(x + width - 1, y, UiSkin.SHADOW_A, height);
+		this.getSurface().drawLineHoriz(x + 2, bodyY - 1, width - 4, UiSkin.GOLD_LINE);
+		this.getSurface().drawLineHoriz(x + 2, bodyY, width - 4, UiSkin.SHADOW_B);
 
-		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, 0x271F2D);
-		this.getSurface().drawColoredStringCentered(x + width / 2, "INVENTORY", 0xF0DFA3, 0, 4,
+		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, UiSkin.BORDER_INNER);
+		this.getSurface().drawColoredStringCentered(x + width / 2, "INVENTORY", UiSkin.GOLD_TITLE, 0, UiSkin.FONT_TITLE,
 			y + (voidscapeCompactHud() ? 18 : 20));
 		drawVoidscapeMobileSidePanelConnector(x, y, width, height);
 	}
@@ -19195,20 +19271,20 @@ public final class mudclient implements Runnable {
 		int width = contentW;
 		int height = headerH + contentH;
 
-		this.getSurface().drawBoxAlpha(x, y, width, height, 0x050308, 50);
-		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, headerH - 1, 0x0D0914, 218);
-		this.getSurface().drawBoxAlpha(x + 1, y + headerH, width - 2, contentH - 1, 0x0B0810,
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.VOID_SCRIM, UiSkin.A_SCRIM);
+		this.getSurface().drawBoxAlpha(x + 1, y + 1, width - 2, headerH - 1, UiSkin.VOID_HEADER, UiSkin.A_HEADER);
+		this.getSurface().drawBoxAlpha(x + 1, y + headerH, width - 2, contentH - 1, UiSkin.VOID_BODY,
 			Math.max(0, Math.min(255, bodyAlpha)));
 
-		this.getSurface().drawLineHoriz(x, y, width, 0x8C6F3D);
-		this.getSurface().drawLineHoriz(x, y + height - 1, width, 0x2F2434);
-		this.getSurface().drawLineVert(x, y, 0x8C6F3D, height);
-		this.getSurface().drawLineVert(x + width - 1, y, 0x2F2434, height);
-		this.getSurface().drawLineHoriz(x + 2, y + headerH - 1, width - 4, 0x6E5737);
-		this.getSurface().drawLineHoriz(x + 2, y + headerH, width - 4, 0x18111E);
-		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, 0x271F2D);
+		this.getSurface().drawLineHoriz(x, y, width, UiSkin.GOLD_BEVEL);
+		this.getSurface().drawLineHoriz(x, y + height - 1, width, UiSkin.SHADOW_A);
+		this.getSurface().drawLineVert(x, y, UiSkin.GOLD_BEVEL, height);
+		this.getSurface().drawLineVert(x + width - 1, y, UiSkin.SHADOW_A, height);
+		this.getSurface().drawLineHoriz(x + 2, y + headerH - 1, width - 4, UiSkin.GOLD_LINE);
+		this.getSurface().drawLineHoriz(x + 2, y + headerH, width - 4, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(x + 2, width - 4, y + 2, height - 4, UiSkin.BORDER_INNER);
 		if (title != null) {
-			this.getSurface().drawColoredStringCentered(x + width / 2, title, 0xF0DFA3, 0, 4,
+			this.getSurface().drawColoredStringCentered(x + width / 2, title, UiSkin.GOLD_TITLE, 0, UiSkin.FONT_TITLE,
 				y + (voidscapeCompactHud() ? 18 : 20));
 		}
 		drawVoidscapeMobileSidePanelConnector(x, y, width, height);
@@ -19250,11 +19326,11 @@ public final class mudclient implements Runnable {
 		int bodyH = fillBottom - bodyTop;
 		int clampedBodyAlpha = Math.max(0, Math.min(255, bodyAlpha));
 		this.getSurface().drawBoxAlpha(x + underlaySideInset, y + headerTop, width - underlaySideInset * 2,
-			underlayH, 0x08050C, clampedBodyAlpha);
+			underlayH, UiSkin.VOID_BODY, clampedBodyAlpha);
 		if (clampedBodyAlpha >= 255) {
 			drawVoidscapeSkinSprite("right-panel-bg.png", x + 19, y + bodyTop, width - 38, bodyH);
 		} else if (clampedBodyAlpha > 0) {
-			this.getSurface().drawBoxAlpha(x + 19, y + bodyTop, width - 38, bodyH, 0x3C3125, clampedBodyAlpha);
+			this.getSurface().drawBoxAlpha(x + 19, y + bodyTop, width - 38, bodyH, UiSkin.TINT_PARCHMENT, clampedBodyAlpha);
 		}
 		if (thinFrame) {
 			// Nine-slice keeps the filigree corners/gem crisp at every panel size.
@@ -19274,7 +19350,7 @@ public final class mudclient implements Runnable {
 			} else {
 				drawVoidscapeSkinSprite("right-panel-title.png", titleX, titleY, titleW, titleH);
 			}
-			this.getSurface().drawColoredStringCentered(x + width / 2, title, 0xF0DFA3, 0, 4,
+			this.getSurface().drawColoredStringCentered(x + width / 2, title, UiSkin.GOLD_TITLE, 0, UiSkin.FONT_TITLE,
 				y + (thinFrame ? 34 : 39));
 		}
 	}
@@ -19323,7 +19399,7 @@ public final class mudclient implements Runnable {
 			boolean active = this.uiTabPlayerInfoSubTab == tab;
 			boolean hover = this.mouseX >= tabX && this.mouseX < tabX + currentTabW
 				&& this.mouseY >= toggleY && this.mouseY < toggleY + toggleH;
-			this.getSurface().drawBoxAlpha(tabX, toggleY, currentTabW, toggleH, active ? 0x4B2472 : 0x130E1A, 235);
+			this.getSurface().drawBoxAlpha(tabX, toggleY, currentTabW, toggleH, active ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 235);
 			int iconSize = Math.max(14, Math.min(18, Math.min(currentTabW - 8, toggleH - 6)));
 			if (voidscapeClassicWebSmallHud()) {
 				iconSize = Math.max(12, Math.min(15, Math.min(currentTabW - 8, toggleH - 5)));
@@ -19434,12 +19510,15 @@ public final class mudclient implements Runnable {
 		this.panelQuestInfo.clearList(this.controlQuestInfoPanel);
 		int index = 0;
 		this.panelQuestInfo.setListEntry(this.controlQuestInfoPanel, index++,
-			"@whi@Quest-list (green=completed)", 0, null, null);
+			"@hdr@Quest-list (green=completed)", 0, null, null);
 		for (int q = 0; q < questNames.length; ++q) {
 			if (this.questNames[q] != null) {
+				// Void skin: incomplete quests read as parchment body text, not a
+				// wall of red — completed stays green, started stays yellow. The
+				// classic builder keeps the authentic red.
 				this.panelQuestInfo.setListEntry(this.controlQuestInfoPanel, index++,
 					(questStages[q] < 0 ? "@gre@"
-						: questStages[q] > 0 && Config.S_WANT_QUEST_STARTED_INDICATOR ? "@yel@" : "@red@")
+						: questStages[q] > 0 && Config.S_WANT_QUEST_STARTED_INDICATOR ? "@yel@" : "@bod@")
 						+ this.questNames[q],
 					0, null, null);
 			}
@@ -20362,9 +20441,8 @@ public final class mudclient implements Runnable {
 		if (boxY + boxH > this.getGameHeight() - 4) {
 			boxY = this.getGameHeight() - 4 - boxH;
 		}
-		this.getSurface().drawBoxAlpha(boxX, boxY, boxW, boxH, 0x05030A, 232);
-		this.getSurface().drawBoxBorder(boxX, boxW, boxY, boxH, 0x6A4FA0);
-		this.getSurface().drawString(skillNameLong[skill], boxX + 8, boxY + 16, 0xFFD968, 1);
+		UiSkin.tooltip(this.getSurface(), boxX, boxY, boxW, boxH);
+		this.getSurface().drawString(skillNameLong[skill], boxX + 8, boxY + 16, UiSkin.GOLD_HOT, UiSkin.FONT_BODY);
 		long xp = this.playerExperience[skill] & 0xffffffffL;
 		int nextLevelExp = this.experienceArray[0];
 		for (int level = 0; level < S_PLAYER_LEVEL_LIMIT - 1; ++level) {
@@ -20372,10 +20450,10 @@ public final class mudclient implements Runnable {
 				nextLevelExp = this.experienceArray[level + 1];
 			}
 		}
-		this.getSurface().drawString("XP", boxX + 8, boxY + 34, 0x8E7EA7, 1);
-		this.getSurface().drawString(formatExactLong(xp), boxX + 52, boxY + 34, 0xE7DEBC, 1);
-		this.getSurface().drawString("Next", boxX + 8, boxY + 50, 0x8E7EA7, 1);
-		this.getSurface().drawString(formatExactLong(nextLevelExp), boxX + 52, boxY + 50, 0xE7DEBC, 1);
+		this.getSurface().drawString("XP", boxX + 8, boxY + 34, UiSkin.TEXT_DIM, UiSkin.FONT_BODY);
+		this.getSurface().drawString(formatExactLong(xp), boxX + 52, boxY + 34, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		this.getSurface().drawString("Next", boxX + 8, boxY + 50, UiSkin.TEXT_DIM, UiSkin.FONT_BODY);
+		this.getSurface().drawString(formatExactLong(nextLevelExp), boxX + 52, boxY + 50, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
 	}
 
 	private String voidscapeSkillIconName(int skill) {

@@ -32,6 +32,27 @@ public final class AuctionHouse {
 	private static final int COLOR_SELECTED = 0x6b8e23;
 	private static final int COLOR_GOLD = 0xc1b575;
 
+	// Layout geometry shared by the draw code and the workbench accessors so a
+	// coordinate can never be hardcoded twice and drift. Every magic offset the
+	// renderer uses for a hit-testable control lives here.
+	private static final int TAB_BUTTON_X_OFFSET = 2;
+	private static final int TAB_BUTTON_Y_OFFSET = 14;
+	private static final int TAB_BUTTON_WIDTH = 80;
+	private static final int TAB_BUTTON_HEIGHT = 21;
+	private static final int TAB_BUTTON_PITCH = 82;
+	private static final int CATEGORY_RAIL_X_OFFSET = 3;
+	private static final int CATEGORY_RAIL_Y_OFFSET = 62;
+	private static final int CATEGORY_TILE_INSET_X = 5;
+	private static final int CATEGORY_TILE_INSET_Y = 23;
+	private static final int CATEGORY_TILE_COL_PITCH = 38;
+	private static final int CATEGORY_TILE_ROW_PITCH = 39;
+	private static final int CATEGORY_TILE_WIDTH = 35;
+	private static final int CATEGORY_TILE_HEIGHT = 36;
+	private static final int LIST_X_OFFSET = 94;
+	private static final int LIST_Y_OFFSET = 102;
+	private static final int LIST_WIDTH = 392;
+	private static final int LIST_ROW_HEIGHT = 36;
+
 	public int auctionScrollHandle;
 	public int auctionSearchHandle;
 	public Panel auctionMenu;
@@ -119,8 +140,8 @@ public final class AuctionHouse {
 	}
 
 	public void reposition() {
-		x = (mc.getGameWidth() - width) / 2;
-		y = (mc.getGameHeight() - height) / 2;
+		x = originX();
+		y = originY();
 
 		auctionMenu.reposition(auctionScrollHandle, x + 94, y + 100, 394, 184);
 		auctionMenu.reposition(auctionSearchHandle, x + 314, y + 48, 172, 18);
@@ -130,6 +151,97 @@ public final class AuctionHouse {
 		myAuctions.reposition(textField_amount, x + 60, y + 209, 70, 18);
 		myAuctions.reposition(textField_price, x + 60, y + 130, 70, 18);
 		myAuctions.reposition(textField_priceEach, x + 60, y + 169, 70, 18);
+	}
+
+	// Origin of the whole window (top-left of the title bar), centered the same
+	// way reposition() places it. The draw code reads x/y after reposition()
+	// runs; the workbench accessors re-derive it here so both share one formula.
+	private int originX() {
+		return (mc.getGameWidth() - width) / 2;
+	}
+
+	private int originY() {
+		return (mc.getGameHeight() - height) / 2;
+	}
+
+	private int tabButtonLeftX(int index) {
+		return x + TAB_BUTTON_X_OFFSET + index * TAB_BUTTON_PITCH;
+	}
+
+	private int tabButtonTopY() {
+		return y + TAB_BUTTON_Y_OFFSET;
+	}
+
+	private int categoryRailX() {
+		return x + CATEGORY_RAIL_X_OFFSET;
+	}
+
+	private int categoryRailY() {
+		return y + CATEGORY_RAIL_Y_OFFSET;
+	}
+
+	private int categoryTileLeftX(int filter) {
+		return categoryRailX() + CATEGORY_TILE_INSET_X + (filter % 2) * CATEGORY_TILE_COL_PITCH;
+	}
+
+	private int categoryTileTopY(int filter) {
+		return categoryRailY() + CATEGORY_TILE_INSET_Y + (filter / 2) * CATEGORY_TILE_ROW_PITCH;
+	}
+
+	private int listLeftX() {
+		return x + LIST_X_OFFSET;
+	}
+
+	private int listTopY() {
+		return y + LIST_Y_OFFSET;
+	}
+
+	// Re-center x/y for a workbench read without the panel-control side effects
+	// of reposition(). Writes the same values reposition() would, so it is safe
+	// to call off the render thread and never changes what is drawn.
+	private void ensureWorkbenchLayout() {
+		x = originX();
+		y = originY();
+	}
+
+	public int workbenchPanelX() {
+		ensureWorkbenchLayout();
+		return x;
+	}
+
+	public int workbenchPanelY() {
+		ensureWorkbenchLayout();
+		return y;
+	}
+
+	public int workbenchTabCenterX(int index) {
+		ensureWorkbenchLayout();
+		return tabButtonLeftX(index) + TAB_BUTTON_WIDTH / 2;
+	}
+
+	public int workbenchTabCenterY() {
+		ensureWorkbenchLayout();
+		return tabButtonTopY() + TAB_BUTTON_HEIGHT / 2;
+	}
+
+	public int workbenchCategoryCenterX(int filter) {
+		ensureWorkbenchLayout();
+		return categoryTileLeftX(filter) + CATEGORY_TILE_WIDTH / 2;
+	}
+
+	public int workbenchCategoryCenterY(int filter) {
+		ensureWorkbenchLayout();
+		return categoryTileTopY(filter) + CATEGORY_TILE_HEIGHT / 2;
+	}
+
+	public int workbenchFirstRowCenterX() {
+		ensureWorkbenchLayout();
+		return listLeftX() + LIST_WIDTH / 2;
+	}
+
+	public int workbenchFirstRowCenterY() {
+		ensureWorkbenchLayout();
+		return listTopY() + LIST_ROW_HEIGHT / 2;
 	}
 
 	private boolean inBounds(int x, int y, int rectX, int rectY, int width, int height)
@@ -152,7 +264,7 @@ public final class AuctionHouse {
 		drawItemSprite(10, x + 4, y - 1, 18, 14);
 		graphics.drawString("Auction House", x + 24, y + 10, 0xffffff, 1);
 
-		drawButton(graphics, x + 2, y + 14, 80, 21, "Browse", activeInterface == 0, new ButtonHandler() {
+		drawButton(graphics, tabButtonLeftX(0), tabButtonTopY(), TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, "Browse", activeInterface == 0, new ButtonHandler() {
 			@Override
 			void handle() {
 				activeInterface = 0;
@@ -160,7 +272,7 @@ public final class AuctionHouse {
 				myAuctions.setFocus(-1);
 			}
 		});
-		drawButton(graphics, x + 84, y + 14, 80, 21, "My Auctions", activeInterface == 1, new ButtonHandler() {
+		drawButton(graphics, tabButtonLeftX(1), tabButtonTopY(), TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, "My Auctions", activeInterface == 1, new ButtonHandler() {
 			@Override
 			void handle() {
 				activeInterface = 1;
@@ -168,7 +280,7 @@ public final class AuctionHouse {
 				myAuctions.setFocus(-1);
 			}
 		});
-		drawButton(graphics, x + 166, y + 14, 80, 21, "Intel", activeInterface == 2, new ButtonHandler() {
+		drawButton(graphics, tabButtonLeftX(2), tabButtonTopY(), TAB_BUTTON_WIDTH, TAB_BUTTON_HEIGHT, "Intel", activeInterface == 2, new ButtonHandler() {
 			@Override
 			void handle() {
 				activeInterface = 2;
@@ -620,8 +732,8 @@ public final class AuctionHouse {
 	}
 
 	private void drawCategoryRail(GraphicsController graphics) {
-		int railX = x + 3;
-		int railY = y + 62;
+		int railX = categoryRailX();
+		int railY = categoryRailY();
 		int railWidth = 86;
 		int railHeight = 226;
 		graphics.drawBoxAlpha(railX, railY, railWidth, railHeight, 0, 72);
@@ -630,21 +742,19 @@ public final class AuctionHouse {
 		graphics.drawString("Browse", railX + 23, railY + 14, 0xffffff, 1);
 
 		for (int i = 0; i < CATEGORY_LABELS.length; i++) {
-			int tileX = railX + 5 + (i % 2) * 38;
-			int tileY = railY + 23 + (i / 2) * 39;
-			drawCategoryTile(graphics, i, tileX, tileY);
+			drawCategoryTile(graphics, i, categoryTileLeftX(i), categoryTileTopY(i));
 		}
 	}
 
 	private void drawCategoryTile(GraphicsController graphics, final int filter, int tileX, int tileY) {
 		boolean selected = selectedFilter == filter;
-		boolean hover = inBounds(mc.getMouseX(), mc.getMouseY(), tileX, tileY, 35, 36);
+		boolean hover = inBounds(mc.getMouseX(), mc.getMouseY(), tileX, tileY, CATEGORY_TILE_WIDTH, CATEGORY_TILE_HEIGHT);
 		int fill = selected ? COLOR_SELECTED : (hover ? COLOR_HOVER : COLOR_PANEL_SOFT);
-		graphics.drawBoxAlpha(tileX, tileY, 35, 36, fill, selected ? 218 : 176);
-		graphics.drawBoxBorder(tileX, 35, tileY, 36, selected ? 0xd6c47f : 0x303840);
+		graphics.drawBoxAlpha(tileX, tileY, CATEGORY_TILE_WIDTH, CATEGORY_TILE_HEIGHT, fill, selected ? 218 : 176);
+		graphics.drawBoxBorder(tileX, CATEGORY_TILE_WIDTH, tileY, CATEGORY_TILE_HEIGHT, selected ? 0xd6c47f : 0x303840);
 		drawItemSprite(CATEGORY_ICON_IDS[filter], tileX + 3, tileY + 2, 29, 20);
 		String label = CATEGORY_SHORT_LABELS[filter];
-		graphics.drawString(label, tileX + (35 / 2 - graphics.stringWidth(0, label) / 2), tileY + 32,
+		graphics.drawString(label, tileX + (CATEGORY_TILE_WIDTH / 2 - graphics.stringWidth(0, label) / 2), tileY + 32,
 			selected ? 0xffff99 : 0xffffff, 0);
 		if (hover && mc.getMouseClick() == 1) {
 			setBrowseFilter(filter);
@@ -901,10 +1011,10 @@ public final class AuctionHouse {
 			auctionMenu.clearList(auctionScrollHandle);
 			auctionMenu.hide(textField_buyAmount);
 			auctionMenu.show(auctionScrollHandle);
-			int rowHeight = 36;
-			int listX = x + 94;
-			int listY = y + 102;
-			int listWidth = 392;
+			int rowHeight = LIST_ROW_HEIGHT;
+			int listX = listLeftX();
+			int listY = listTopY();
+			int listWidth = LIST_WIDTH;
 			int listHeight = 186;
 			graphics.drawBoxAlpha(listX, listY - 22, listWidth, 18, COLOR_SELECTED, 196);
 			graphics.drawString(CATEGORY_LABELS[selectedFilter], listX + 8, listY - 8, 0xffffff, 1);

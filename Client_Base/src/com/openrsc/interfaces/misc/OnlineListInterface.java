@@ -9,6 +9,8 @@ import orsc.mudclient;
 
 public class OnlineListInterface extends NComponent {
 
+	private static final int LEGACY_GREY_BG = 0x989898; // tokenized in slice 5
+
 	public int scroll;
 	public Panel panel;
 	private NRightClickMenu rightClickMenu;
@@ -22,7 +24,7 @@ public class OnlineListInterface extends NComponent {
 		panel = new Panel(client.getSurface(), 1);
 		scroll = panel.addScrollingList2(getX(), getY() + 20, getWidth(), getHeight() - 20, 500, 1, true);
 
-		setBackground(10000536, 10000536, 128);
+		setBackground(LEGACY_GREY_BG, LEGACY_GREY_BG, 128);
 		setSize(408, 246);
 		updateLocation();
 		setInputListener(new InputListener() {

@@ -1,5 +1,6 @@
 package orsc;
 
+import orsc.graphics.gui.UiSkin;
 import orsc.util.Utils;
 
 import java.awt.*;
@@ -960,7 +961,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 				boolean error = state.toLowerCase(Locale.ENGLISH).contains("unable")
 					|| state.toLowerCase(Locale.ENGLISH).contains("failed")
 					|| state.toLowerCase(Locale.ENGLISH).contains("error");
-				int accent = error ? 0xd45b5b : 0x9b62ff;
+				int accent = error ? UiSkin.BAD : UiSkin.PURPLE_FOCUS;
 				int panelWidth = Math.min(340, Math.max(240, width - 64));
 				int panelHeight = 96;
 				int x = Math.max(16, (width - panelWidth) / 2);

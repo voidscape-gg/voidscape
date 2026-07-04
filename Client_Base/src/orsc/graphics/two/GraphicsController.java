@@ -7,6 +7,7 @@ import com.openrsc.client.entityhandling.defs.extras.AnimationDef;
 import com.openrsc.client.model.Sprite;
 import orsc.Config;
 import orsc.MiscFunctions;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.SpriteArchive.*;
 import orsc.mudclient;
 import orsc.util.CacheArchive;
@@ -243,6 +244,22 @@ public class GraphicsController {
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "ua.JA(" + "dummy" + ')');
 		}
+	}
+
+	public final int getClipLeft() {
+		return this.clipLeft;
+	}
+
+	public final int getClipRight() {
+		return this.clipRight;
+	}
+
+	public final int getClipTop() {
+		return this.clipTop;
+	}
+
+	public final int getClipBottom() {
+		return this.clipBottom;
 	}
 
 	public final void spriteClipping(Sprite sprite, byte var2, int height, int var4, int width, int var6, int var7) {
@@ -1614,7 +1631,9 @@ public class GraphicsController {
 
 			int mixOld = 256 - alpha;
 			int n3 = alpha * (color >> 16 & 255);
-			int n2 = ((color & '\uffc4') >> 8) * alpha;
+			// 0xFF00, not the decompiler artifact '\uffc4' (0xFFC4): the old mask let
+			// two blue bits bleed into the green blend of every translucent box.
+			int n2 = ((color & 0xFF00) >> 8) * alpha;
 			int n1 = alpha * (color & 255);
 			int lineStride = this.width2 - width;
 			byte var16 = 1;
@@ -1842,6 +1861,15 @@ public class GraphicsController {
 		}
 	}
 
+	/**
+	 * drawBoxBorder with conventional (x, y, width, height) argument order.
+	 * Not an overload: drawBoxBorder's (x, width, y, height) signature has the
+	 * identical erasure, so a same-name overload is impossible.
+	 */
+	public final void drawBorder(int x, int y, int width, int height, int color) {
+		this.drawBoxBorder(x, width, y, height, color);
+	}
+
 	public final void drawBoxBorder(int x, int width, int y, int height, int color) {
 		try {
 			this.drawLineHoriz(x, y, width, color);
@@ -1863,13 +1891,13 @@ public class GraphicsController {
 			int srcB = (255 & color >> 8) * alpha;
 			int srcG = alpha * (color & 255);
 			int startY = y - radius;
-			if (startY < 0) {
-				startY = 0;
+			if (startY < this.clipTop) {
+				startY = this.clipTop;
 			}
 
 			int endY = y + radius;
-			if (this.height2 <= endY) {
-				endY = this.height2 - 1;
+			if (this.clipBottom <= endY) {
+				endY = this.clipBottom - 1;
 			}
 
 			byte yStep = 1;
@@ -1885,13 +1913,13 @@ public class GraphicsController {
 				int dy = py - y;
 				int horizHalf = (int) Math.sqrt((double) (radius * radius - dy * dy));
 				int startX = x - horizHalf;
-				if (startX < 0) {
-					startX = 0;
+				if (startX < this.clipLeft) {
+					startX = this.clipLeft;
 				}
 
 				int endX = x + horizHalf;
-				if (this.width2 <= endX) {
-					endX = this.width2 - 1;
+				if (this.clipRight <= endX) {
+					endX = this.clipRight - 1;
 				}
 
 				int rowStart = startX + this.width2 * py;
@@ -2012,6 +2040,14 @@ public class GraphicsController {
 							color = 0x7CADDA;
 						} else if (key.equalsIgnoreCase("pin")) {
 							color = 0xFF8ED9;
+						} else if (key.equalsIgnoreCase("hdr")) {
+							color = UiSkin.GOLD_TITLE;
+						} else if (key.equalsIgnoreCase("acc")) {
+							color = UiSkin.GOLD_HOT;
+						} else if (key.equalsIgnoreCase("dis")) {
+							color = UiSkin.TEXT_DIM;
+						} else if (key.equalsIgnoreCase("bod")) {
+							color = UiSkin.TEXT_BODY;
 						}
 						i += 4;
 					} else {
@@ -2649,8 +2685,11 @@ public class GraphicsController {
 			textX -= (textWidth / 2);
 			textY += (textHeight / 2);
 		}
-		drawString(text, textX - 1, textY, 0x0F0F0F, fontSize);
-		drawString(text, textX, textY - 1, 0x0F0F0F, fontSize);
+		// One shadow convention everywhere: same (+1,0)/(0,+1) offsets as the
+		// automatic in-game pass, pure black (color 0 also suppresses that
+		// pass, so shadowed text is never double-shadowed when logged in).
+		drawString(text, textX + 1, textY, 0, fontSize);
+		drawString(text, textX, textY + 1, 0, fontSize);
 
 		drawString(text, textX, textY, textColor, fontSize);
 	}

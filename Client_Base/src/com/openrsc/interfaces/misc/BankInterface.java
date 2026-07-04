@@ -7,6 +7,7 @@ import orsc.Config;
 import orsc.enumerations.InputXAction;
 import orsc.graphics.gui.InputXPrompt;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.Fonts;
 import orsc.mudclient;
 import orsc.util.BankUtil;
@@ -128,6 +129,7 @@ public class BankInterface {
 	// Translucent purple GLASS colorway (see-through). Slice 1: centered HUD-safe glass slab
 	// + native-icon grid + amounts + left-click withdraw/deposit. Chrome/tabs/search/loadouts
 	// come in later slices. Classic bank (skin off) is untouched for preservation.
+	// VG hero-surface palette — intentionally richer than UiSkin base tokens (docs/UI-STYLE-GUIDE.md §1.1)
 	private static final int VG_BODY = 0x160B2C, VG_BODY_A = 112;      // glass panel body (more see-through)
 	private static final int VG_GRID_LINE = 0x8A6BD8, VG_GRID_LINE_A = 36; // thin subtle grid lines
 	private static final int VG_STRIP = 0x2A1A4D, VG_STRIP_A = 55;     // title chrome strip (over body)
@@ -135,9 +137,9 @@ public class BankInterface {
 	private static final int VG_FRAME_INNER = 0x8A6BD8;               // lavender inner rim
 	private static final int VG_SLOT = 0x3A2A5E, VG_SLOT_A = 60;       // slot glass
 	private static final int VG_SLOT_BORDER = 0x6E5CA8;               // slot hairline border
-	private static final int VG_HOVER = 0x8F2BFF, VG_HOVER_A = 70;     // hover bloom
-	private static final int VG_HOVER_BORDER = 0xC35CFF;
-	private static final int VG_SEL_RING = 0xF6DA7D;                  // gold selected ring
+	private static final int VG_HOVER = UiSkin.PURPLE_BRIGHT, VG_HOVER_A = 70;     // hover bloom
+	private static final int VG_HOVER_BORDER = UiSkin.PURPLE_BLOOM;
+	private static final int VG_SEL_RING = UiSkin.GOLD_RING;                  // gold selected ring
 	private static final int VG_TITLE_TEXT = 0xF2ECFF, VG_LABEL = 0xB6A6D6;
 	private static final int VG_GREEN = 0x54FF6A, VG_CYAN = 0x66E0FF, VG_GOLD = 0xF6DA7D;
 	private static final int VG_INNER_PAD = 10, VG_SCROLL_GUTTER = 8, VG_SIDE_MARGIN = 8, VG_TITLE_H = 24;
@@ -169,6 +171,13 @@ public class BankInterface {
 
 	private boolean voidGlassBank() {
 		return Config.C_CUSTOM_UI && !Config.isAndroid();
+	}
+
+	private int vgLastPanelBottom = -1;
+
+	/** Bottom Y of the Void Glass panel as last rendered, or -1 if it hasn't drawn. */
+	public int getVoidGlassPanelBottomY() {
+		return vgLastPanelBottom;
 	}
 
 	private int vgTier() { int gw = mc.getGameWidth(); return gw < 700 ? 0 : (gw < 940 ? 1 : 2); }
@@ -213,6 +222,9 @@ public class BankInterface {
 		int ph = fixed + bankRows * cellH;
 		int px = (gw - pw) / 2;
 		int py = topSafe + Math.max(0, (availH - ph) / 2);
+		// The row-count floors can push ph past the safe band on short frames
+		// (Classic 512x334), so publish the real bottom for the chat clamp.
+		vgLastPanelBottom = py + ph;
 		int gx = px + VG_INNER_PAD;
 		int bankGY = py + titleH + tabRowH + pad;
 		int gridH = bankRows * cellH;
@@ -429,6 +441,8 @@ public class BankInterface {
 		}
 
 		// ---- render: panel + title ----
+		// Owner direction 2026-07-04: the glass stays see-through — no opaque
+		// backing behind the grids; the translucency IS the look.
 		mc.getSurface().drawBoxAlpha(px, py, pw, ph, VG_BODY, VG_BODY_A);
 		mc.getSurface().drawBoxAlpha(px + 1, py + titleH, pw - 2, (ph - titleH) * 2 / 5, 0xBFA8FF, 12); // glass sheen
 		mc.getSurface().drawBoxAlpha(px, py, pw, titleH, VG_STRIP, VG_STRIP_A);

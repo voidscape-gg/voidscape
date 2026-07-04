@@ -80,9 +80,9 @@ public final class WorldMapPanel {
 	private static final int MOBILE_WEB_MIN_BOTTOM_MARGIN = 44;
 	private static final int MOBILE_WEB_MIN_X_MARGIN = 8;
 
-	private static final int COLOR_WIN_BG = 0x141420;
+	private static final int COLOR_WIN_BG = UiSkin.VOID_BODY;
 	private static final int COLOR_WIN_BORDER = 0xC0C0C0;
-	private static final int COLOR_TITLE_BG = 0x2828A0;
+	private static final int COLOR_TITLE_BG = UiSkin.VOID_HEADER;
 	private static final int COLOR_TAB_BG = 0x404040;
 	private static final int COLOR_TAB_BG_ACTIVE = 0x808040;
 	private static final int COLOR_BTN_OUTLINE = 0x000000;

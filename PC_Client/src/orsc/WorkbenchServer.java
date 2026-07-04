@@ -750,7 +750,7 @@ final class WorkbenchServer {
 		sendCommand("quickauction");
 		waitForAuctionHouseVisible();
 		sleep(500);
-		clearWorkbenchBlockingUi();
+		clearWorkbenchOverlayDialogs();
 		sleep(300);
 
 		captures.add(captureOnce("scenario-auction-browse"));
@@ -1022,10 +1022,8 @@ final class WorkbenchServer {
 	}
 
 	private static void clickAuctionTab(int tab) throws IOException {
-		int[] origin = auctionHouseOrigin();
-		int x = origin[0] + 42 + (tab * 82);
-		int y = origin[1] + 24;
-		clickGame(x, y, "left");
+		AuctionHouse auctionHouse = requireAuctionHouse();
+		clickGame(auctionHouse.workbenchTabCenterX(tab), auctionHouse.workbenchTabCenterY(), "left");
 	}
 
 	private static void clearWorkbenchBlockingUi() throws IOException {
@@ -1046,6 +1044,21 @@ final class WorkbenchServer {
 		});
 	}
 
+	// Dismiss welcome / server-message / shop / bank dialogs that stack on top
+	// of an interface after an admin command, WITHOUT closing the Auction House.
+	// clearWorkbenchBlockingUi() closes the AH, so calling it after the AH is
+	// open (as the auction scenario used to) blanks the very window under test.
+	private static void clearWorkbenchOverlayDialogs() throws IOException {
+		final mudclient client = requireClient();
+		runOnEdt(() -> {
+			client.setShowDialogServerMessage(false);
+			client.setShowDialogMessage(false);
+			client.setWelcomeScreenShown(false);
+			client.setShowDialogBank(false);
+			client.setShowDialogShop(false);
+		});
+	}
+
 	private static boolean isLoggedIn() {
 		mudclient client = ORSCApplet.getMudclientForWorkbench();
 		ORSCharacter player = client == null ? null : client.getLocalPlayer();
@@ -1054,36 +1067,32 @@ final class WorkbenchServer {
 
 	private static void clickSavedUserLogin() throws IOException {
 		mudclient client = requireClient();
-		int centerX = client.getGameWidth() / 2;
-		clickGame(centerX, 224, "left");
+		clickGame(client.workbenchLoginHomeExistingUserX(), client.workbenchLoginHomeExistingUserY(), "left");
 		sleep(350);
-		clickGame(centerX - 46, 273, "left");
+		clickGame(client.workbenchExistingUserOkX(), client.workbenchExistingUserOkY(), "left");
 	}
 
 	private static void clickAuctionCategory(int filter) throws IOException {
-		int[] origin = auctionHouseOrigin();
-		int railX = origin[0] + 3;
-		int railY = origin[1] + 62;
-		int tileX = railX + 5 + (filter % 2) * 38;
-		int tileY = railY + 23 + (filter / 2) * 39;
-		clickGame(tileX + 17, tileY + 18, "left");
+		AuctionHouse auctionHouse = requireAuctionHouse();
+		clickGame(auctionHouse.workbenchCategoryCenterX(filter), auctionHouse.workbenchCategoryCenterY(filter), "left");
 	}
 
 	private static void clickFirstAuctionRow() throws IOException {
-		int[] origin = auctionHouseOrigin();
-		clickGame(origin[0] + 290, origin[1] + 120, "left");
-	}
-
-	private static int[] auctionHouseOrigin() throws IOException {
-		mudclient client = requireClient();
-		int width = 490;
-		int height = 326 - 47;
-		return new int[]{(client.getGameWidth() - width) / 2, (client.getGameHeight() - height) / 2};
+		AuctionHouse auctionHouse = requireAuctionHouse();
+		clickGame(auctionHouse.workbenchFirstRowCenterX(), auctionHouse.workbenchFirstRowCenterY(), "left");
 	}
 
 	private static AuctionHouse getAuctionHouse() {
 		mudclient client = ORSCApplet.getMudclientForWorkbench();
 		return client == null ? null : client.getAuctionHouse();
+	}
+
+	private static AuctionHouse requireAuctionHouse() throws IOException {
+		AuctionHouse auctionHouse = getAuctionHouse();
+		if (auctionHouse == null) {
+			throw new IOException("Auction House is not available");
+		}
+		return auctionHouse;
 	}
 
 	private static void requireLoggedInAdmin() throws IOException {
