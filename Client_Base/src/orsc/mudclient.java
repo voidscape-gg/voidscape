@@ -5180,61 +5180,76 @@ public final class mudclient implements Runnable {
 			if (this.showDialogDuel) {
 				int xr = dialogX;
 				int yr = dialogY;
-				this.getSurface().drawBox(xr, yr, 468, 12, 13175581);
-				int colorA = 10000536;
-				this.getSurface().drawBoxAlpha(xr, 12 + yr, 468, 18, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr, 30 + yr, 8, 248, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr + 205, 30 + yr, 11, 248, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr + 462, 30 + yr, 6, 248, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr + 8, yr + 99, 197, 24, colorA, 160);
-				this.getSurface().drawBoxAlpha(8 + xr, 192 + yr, 197, 23, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr + 8, yr + 258, 197, 20, colorA, 160);
-				this.getSurface().drawBoxAlpha(xr + 216, yr + 235, 246, 43, colorA, 160);
-				int colorB = 13684944;
+				boolean voidSkin = useVoidscapeHudSkin();
+				if (voidSkin) {
+					// Void skin: the classic flat fills collapse into one glass card
+					// over the same union rect; title strip on the same 12px band.
+					UiSkin.glassPanel(this.getSurface(), xr, yr, 468, 278, UiSkin.A_GLASS_TEXT);
+					this.getSurface().drawBoxAlpha(xr, yr, 468, 12, UiSkin.VOID_HEADER, 190);
+				} else {
+					this.getSurface().drawBox(xr, yr, 468, 12, 13175581);
+					int colorA = 10000536;
+					this.getSurface().drawBoxAlpha(xr, 12 + yr, 468, 18, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr, 30 + yr, 8, 248, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr + 205, 30 + yr, 11, 248, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr + 462, 30 + yr, 6, 248, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr + 8, yr + 99, 197, 24, colorA, 160);
+					this.getSurface().drawBoxAlpha(8 + xr, 192 + yr, 197, 23, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr + 8, yr + 258, 197, 20, colorA, 160);
+					this.getSurface().drawBoxAlpha(xr + 216, yr + 235, 246, 43, colorA, 160);
+				}
+				int colorB = voidSkin ? UiSkin.VOID_BOX : 13684944;
 				this.getSurface().drawBoxAlpha(8 + xr, yr + 30, 197, 69, colorB, 160);
 				this.getSurface().drawBoxAlpha(xr + 8, 123 + yr, 197, 69, colorB, 160);
 				this.getSurface().drawBoxAlpha(8 + xr, yr + 215, 197, 43, colorB, 160);
 				this.getSurface().drawBoxAlpha(216 + xr, yr + 30, 246, 205, colorB, 160);
 
+				int gridLine = voidSkin ? UiSkin.VOID_LINE : 0;
 				for (int i = 0; i < 3; ++i) {
-					this.getSurface().drawLineHoriz(xr + 8, yr + 30 + i * 34, 197, 0);
+					this.getSurface().drawLineHoriz(xr + 8, yr + 30 + i * 34, 197, gridLine);
 				}
 
 				for (int i = 0; i < 3; ++i) {
-					this.getSurface().drawLineHoriz(8 + xr, i * 34 + yr + 123, 197, 0);
+					this.getSurface().drawLineHoriz(8 + xr, i * 34 + yr + 123, 197, gridLine);
 				}
 
 				for (int i = 0; i < 7; ++i) {
-					this.getSurface().drawLineHoriz(216 + xr, i * 34 + yr + 30, 246, 0);
+					this.getSurface().drawLineHoriz(216 + xr, i * 34 + yr + 30, 246, gridLine);
 				}
 
 				for (int i = 0; i < 6; ++i) {
 					if (i < 5) {
-						this.getSurface().drawLineVert(i * 49 + 8 + xr, yr + 30, 0, 69);
-						this.getSurface().drawLineVert(i * 49 + xr + 8, yr + 123, 0, 69);
+						this.getSurface().drawLineVert(i * 49 + 8 + xr, yr + 30, gridLine, 69);
+						this.getSurface().drawLineVert(i * 49 + xr + 8, yr + 123, gridLine, 69);
 					}
 
-					this.getSurface().drawLineVert(i * 49 + xr + 216, yr + 30, 0, 205);
+					this.getSurface().drawLineVert(i * 49 + xr + 216, yr + 30, gridLine, 205);
 				}
 
-				this.getSurface().drawLineHoriz(xr + 8, 215 + yr, 197, 0);
-				this.getSurface().drawLineHoriz(xr + 8, yr + 257, 197, 0);
-				this.getSurface().drawLineVert(8 + xr, yr + 215, 0, 43);
-				this.getSurface().drawLineVert(xr + 204, yr + 215, 0, 43);
+				this.getSurface().drawLineHoriz(xr + 8, 215 + yr, 197, gridLine);
+				this.getSurface().drawLineHoriz(xr + 8, yr + 257, 197, gridLine);
+				this.getSurface().drawLineVert(8 + xr, yr + 215, gridLine, 43);
+				this.getSurface().drawLineVert(xr + 204, yr + 215, gridLine, 43);
 				this.getSurface().drawString("Preparing to duel with: " + this.duelConfirmOpponentName, 1 + xr, yr + 10,
-					0xFFFFFF, 1);
-				this.getSurface().drawString("Your Stake", xr + 9, 27 + yr, 0xFFFFFF, 4);
-				this.getSurface().drawString("Opponent's Stake", 9 + xr, 120 + yr, 0xFFFFFF, 4);
-				this.getSurface().drawString("Duel Options", xr + 9, yr + 212, 0xFFFFFF, 4);
-				this.getSurface().drawString("Your Inventory", xr + 216, yr + 27, 0xFFFFFF, 4);
-				this.getSurface().drawString("No retreating", 1 + 8 + xr, 215 + yr + 16, 0xFFFF00, 3);
-				this.getSurface().drawString("No magic", 1 + 8 + xr, 250 + yr, 0xFFFF00, 3);
-				this.getSurface().drawString("No prayer", 8 + xr + 102, yr + 231, 0xFFFF00, 3);
-				this.getSurface().drawString("No weapons", 102 + 8 + xr, 35 + yr + 215, 0xFFFF00, 3);
+					voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF, 1);
+				int sectionColor = voidSkin ? UiSkin.GOLD_HEADER : 0xFFFFFF;
+				this.getSurface().drawString("Your Stake", xr + 9, 27 + yr, sectionColor, 4);
+				this.getSurface().drawString("Opponent's Stake", 9 + xr, 120 + yr, sectionColor, 4);
+				this.getSurface().drawString("Duel Options", xr + 9, yr + 212, sectionColor, 4);
+				this.getSurface().drawString("Your Inventory", xr + 216, yr + 27, sectionColor, 4);
+				int optionLabelColor = voidSkin ? UiSkin.TEXT_BODY : 0xFFFF00;
+				this.getSurface().drawString("No retreating", 1 + 8 + xr, 215 + yr + 16, optionLabelColor, 3);
+				this.getSurface().drawString("No magic", 1 + 8 + xr, 250 + yr, optionLabelColor, 3);
+				this.getSurface().drawString("No prayer", 8 + xr + 102, yr + 231, optionLabelColor, 3);
+				this.getSurface().drawString("No weapons", 102 + 8 + xr, 35 + yr + 215, optionLabelColor, 3);
 
 				if (S_WANT_EQUIPMENT_TAB) {
-					this.getSurface().drawBoxAlpha(xr + 320, 239 + yr, 28, 28, stakeOfferEquipMode ? clearBox : selectedBox, 160);
-					this.getSurface().drawBoxAlpha(xr + 348, 239 + yr, 28, 28, stakeOfferEquipMode ? selectedBox : clearBox, 160);
+					this.getSurface().drawBoxAlpha(xr + 320, 239 + yr, 28, 28,
+						voidSkin ? (stakeOfferEquipMode ? UiSkin.VOID_BOX : UiSkin.PURPLE_SELECT)
+							: (stakeOfferEquipMode ? clearBox : selectedBox), 160);
+					this.getSurface().drawBoxAlpha(xr + 348, 239 + yr, 28, 28,
+						voidSkin ? (stakeOfferEquipMode ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX)
+							: (stakeOfferEquipMode ? selectedBox : clearBox), 160);
 					this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.BANK_EQUIP_BAG.getDef()), xr + 320, 239 + yr, 28, 28, 0, 0, 0, false, 0, 0);
 					this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.BANK_EQUIP_HELM.getDef()), xr + 348, 239 + yr, 28, 28, 0, 0, 0, false, 0, 0);
 				}
@@ -5252,7 +5267,7 @@ public final class mudclient implements Runnable {
 							0, 1);
 						if (item.isStackable()) {
 							this.getSurface().drawString("" + getInventoryItemSize(count), xI + 1,
-								10 + yI, 0xFFFF00, 1);
+								10 + yI, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 						}
 						count++;
 					}
@@ -5291,27 +5306,29 @@ public final class mudclient implements Runnable {
 						}
 						if (def.isStackable()) {
 							this.getSurface().drawString("" + getInventoryItemSize(itm), xI + 1,
-								10 + yI, 0xFFFF00, 1);
+								10 + yI, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 						}
 					}
 				}
-				this.getSurface().drawBoxBorder(xr + 93, 11, 215 + yr + 6, 11, 0xFFFF00);
+				int checkboxBorder = voidSkin ? UiSkin.GOLD_LINE : 0xFFFF00;
+				int checkboxTick = voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00;
+				this.getSurface().drawBoxBorder(xr + 93, 11, 215 + yr + 6, 11, checkboxBorder);
 				if (this.duelSettingsRetreat) {
-					this.getSurface().drawBox(xr + 95, 8 + 215 + yr, 7, 7, 0xFFFF00);
+					this.getSurface().drawBox(xr + 95, 8 + 215 + yr, 7, 7, checkboxTick);
 				}
 
-				this.getSurface().drawBoxBorder(93 + xr, 11, 25 + yr + 215, 11, 0xFFFF00);
+				this.getSurface().drawBoxBorder(93 + xr, 11, 25 + yr + 215, 11, checkboxBorder);
 				if (this.duelSettingsMagic) {
-					this.getSurface().drawBox(xr + 95, 215 + yr + 27, 7, 7, 0xFFFF00);
+					this.getSurface().drawBox(xr + 95, 215 + yr + 27, 7, 7, checkboxTick);
 				}
 
-				this.getSurface().drawBoxBorder(191 + xr, 11, 6 + 215 + yr, 11, 0xFFFF00);
+				this.getSurface().drawBoxBorder(191 + xr, 11, 6 + 215 + yr, 11, checkboxBorder);
 				if (this.duelSettingsPrayer) {
-					this.getSurface().drawBox(xr + 193, 8 + yr + 215, 7, 7, 0xFFFF00);
+					this.getSurface().drawBox(xr + 193, 8 + yr + 215, 7, 7, checkboxTick);
 				}
-				this.getSurface().drawBoxBorder(xr + 191, 11, yr + 215 + 25, 11, 0xFFFF00);
+				this.getSurface().drawBoxBorder(xr + 191, 11, yr + 215 + 25, 11, checkboxBorder);
 				if (this.duelSettingsWeapons) {
-					this.getSurface().drawBox(193 + xr, 215 + yr + 27, 7, 7, 0xFFFF00);
+					this.getSurface().drawBox(193 + xr, 215 + yr + 27, 7, 7, checkboxTick);
 				}
 
 				if (!this.duelOfferAccepted) {
@@ -5320,13 +5337,13 @@ public final class mudclient implements Runnable {
 
 				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), xr + 394, yr + 238);
 				if (this.duelOffsetOpponentAccepted) {
-					this.getSurface().drawColoredStringCentered(xr + 341, "Other player", 0xFFFFFF, 0, 1, 246 + yr);
-					this.getSurface().drawColoredStringCentered(341 + xr, "has accepted", 0xFFFFFF, 0, 1, 256 + yr);
+					this.getSurface().drawColoredStringCentered(xr + 341, "Other player", voidSkin ? UiSkin.GOOD : 0xFFFFFF, 0, 1, 246 + yr);
+					this.getSurface().drawColoredStringCentered(341 + xr, "has accepted", voidSkin ? UiSkin.GOOD : 0xFFFFFF, 0, 1, 256 + yr);
 				}
 
 				if (this.duelOfferAccepted) {
-					this.getSurface().drawColoredStringCentered(35 + 217 + xr, "Waiting for", 0xFFFFFF, 0, 1, yr + 246);
-					this.getSurface().drawColoredStringCentered(252 + xr, "other player", 0xFFFFFF, 0, 1, 256 + yr);
+					this.getSurface().drawColoredStringCentered(35 + 217 + xr, "Waiting for", voidSkin ? UiSkin.GOLD_HOT : 0xFFFFFF, 0, 1, yr + 246);
+					this.getSurface().drawColoredStringCentered(252 + xr, "other player", voidSkin ? UiSkin.GOLD_HOT : 0xFFFFFF, 0, 1, 256 + yr);
 				}
 
 				for (int itmOffer = 0; this.duelOfferItemsCount > itmOffer; ++itmOffer) {
@@ -5364,14 +5381,14 @@ public final class mudclient implements Runnable {
 
 					if (def.isStackable()) {
 						this.getSurface().drawString("" + getDuelItemSize(itmOffer), 1 + xI,
-							10 + yI, 0xFFFF00, 1);
+							10 + yI, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 
 					if (xI < this.mouseX && this.mouseX < 48 + xI && yI < this.mouseY && 32 + yI > this.mouseY) {
 						this.getSurface().drawString(
 							def.getName() + ": @whi@"
 								+ def.getDescription(),
-							8 + xr, yr + 273, 0xFFFF00, 1);
+							8 + xr, yr + 273, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 				}
 
@@ -5410,14 +5427,14 @@ public final class mudclient implements Runnable {
 
 					if (def.isStackable()) {
 						this.getSurface().drawString("" + getDuelOpponentItemCount(itmOffer), 1 + xI,
-							10 + yI, 0xFFFF00, 1);
+							10 + yI, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 
 					if (this.mouseX > xI && 48 + xI > this.mouseX && yI < this.mouseY && this.mouseY < yI + 32) {
 						this.getSurface().drawString(
 							def.getName() + ": @whi@"
 								+ def.getDescription(),
-							xr + 8, 273 + yr, 0xFFFF00, 1);
+							xr + 8, 273 + yr, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 				}
 
@@ -5436,12 +5453,20 @@ public final class mudclient implements Runnable {
 
 			int xr = tradeDuelDialogX();
 			int yr = tradeDuelDialogY();
-			this.getSurface().drawBox(xr, yr, 468, 16, 192);
-			int color = 10000536;
-			this.getSurface().drawBoxAlpha(xr, yr + 16, 468, 246, color, 160);
+			boolean voidSkin = useVoidscapeHudSkin();
+			if (voidSkin) {
+				// Void skin: glass card over the same 468x262 rect the classic
+				// flat fills covered; title strip on the same 16px band.
+				UiSkin.glassPanel(this.getSurface(), xr, yr, 468, 262, UiSkin.A_GLASS_TEXT);
+				this.getSurface().drawBoxAlpha(xr, yr, 468, 16, UiSkin.VOID_HEADER, 190);
+			} else {
+				this.getSurface().drawBox(xr, yr, 468, 16, 192);
+				int color = 10000536;
+				this.getSurface().drawBoxAlpha(xr, yr + 16, 468, 246, color, 160);
+			}
 			this.getSurface().drawColoredStringCentered(xr + 234,
-				"Please confirm your duel with @yel@" + this.duelOpponentName, 0xFFFFFF, 0, 1, yr + 12);
-			this.getSurface().drawColoredStringCentered(xr + 117, "Your stake:", 0xFFFF00, 0, 1, yr + 30);
+				"Please confirm your duel with @yel@" + this.duelOpponentName, voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF, 0, 1, yr + 12);
+			this.getSurface().drawColoredStringCentered(xr + 117, "Your stake:", voidSkin ? UiSkin.GOLD_HEADER : 0xFFFF00, 0, 1, yr + 30);
 
 			String var6;
 			Item item;
@@ -5454,14 +5479,14 @@ public final class mudclient implements Runnable {
 					var6 = var6 + (item.getNoted() ? " (Noted)" : "") + " x " + StringUtil.formatItemCount(this.getDuelConfirmItemCount(var5));
 				}
 
-				this.getSurface().drawColoredStringCentered(xr + 117, var6, 0xFFFFFF, 0, 1, 42 + yr + var5 * 12);
+				this.getSurface().drawColoredStringCentered(xr + 117, var6, voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, 42 + yr + var5 * 12);
 			}
 
 			if (this.duelConfirmItemsCount == 0) {
-				this.getSurface().drawColoredStringCentered(xr + 117, "Nothing!", 0xFFFFFF, 0, 1, 42 + yr);
+				this.getSurface().drawColoredStringCentered(xr + 117, "Nothing!", voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, 42 + yr);
 			}
 
-			this.getSurface().drawColoredStringCentered(351 + xr, "Your opponent's stake:", 0xFFFF00, 0, 1, 30 + yr);
+			this.getSurface().drawColoredStringCentered(351 + xr, "Your opponent's stake:", voidSkin ? UiSkin.GOLD_HEADER : 0xFFFF00, 0, 1, 30 + yr);
 
 			for (int var5 = 0; var5 < this.duelOpponentConfirmItemsCount; ++var5) {
 				item = this.getDuelOpponentConfirmItem(var5);
@@ -5471,48 +5496,50 @@ public final class mudclient implements Runnable {
 					var6 = var6 + (item.getNoted() ? " (Noted)" : "") + " x " + StringUtil.formatItemCount(this.getDuelOpponentConfirmItemCount(var5));
 				}
 
-				this.getSurface().drawColoredStringCentered(xr + 351, var6, 0xFFFFFF, 0, 1, var5 * 12 + 42 + yr);
+				this.getSurface().drawColoredStringCentered(xr + 351, var6, voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, var5 * 12 + 42 + yr);
 			}
 
 			if (this.duelOpponentConfirmItemsCount == 0) {
-				this.getSurface().drawColoredStringCentered(351 + xr, "Nothing!", 0xFFFFFF, 0, 1, 42 + yr);
+				this.getSurface().drawColoredStringCentered(351 + xr, "Nothing!", voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, 42 + yr);
 			}
 
+			int ruleAllowed = voidSkin ? UiSkin.GOOD : '\uff00';
+			int ruleDenied = voidSkin ? UiSkin.BAD : 0xFF0000;
 			if (this.duelOptionRetreat == 0) {
-				this.getSurface().drawColoredStringCentered(xr + 234, "You can retreat from this duel", '\uff00', 0, 1,
+				this.getSurface().drawColoredStringCentered(xr + 234, "You can retreat from this duel", ruleAllowed, 0, 1,
 					yr + 180);
 			} else {
-				this.getSurface().drawColoredStringCentered(234 + xr, "No retreat is possible!", 0xFF0000, 0, 1,
+				this.getSurface().drawColoredStringCentered(234 + xr, "No retreat is possible!", ruleDenied, 0, 1,
 					180 + yr);
 			}
 
 			if (this.duelOptionMagic == 0) {
-				this.getSurface().drawColoredStringCentered(234 + xr, "Magic may be used", '\uff00', 0, 1, yr + 192);
+				this.getSurface().drawColoredStringCentered(234 + xr, "Magic may be used", ruleAllowed, 0, 1, yr + 192);
 			} else {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Magic cannot be used", 0xFF0000, 0, 1, 192 + yr);
+				this.getSurface().drawColoredStringCentered(xr + 234, "Magic cannot be used", ruleDenied, 0, 1, 192 + yr);
 			}
 
 			if (this.duelOptionPrayer == 0) {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Prayer may be used", '\uff00', 0, 1, 204 + yr);
+				this.getSurface().drawColoredStringCentered(xr + 234, "Prayer may be used", ruleAllowed, 0, 1, 204 + yr);
 			} else {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Prayer cannot be used", 0xFF0000, 0, 1,
+				this.getSurface().drawColoredStringCentered(xr + 234, "Prayer cannot be used", ruleDenied, 0, 1,
 					yr + 204);
 			}
 
 			if (this.duelOptionWeapons != 0) {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Weapons cannot be used", 0xFF0000, 0, 1,
+				this.getSurface().drawColoredStringCentered(xr + 234, "Weapons cannot be used", ruleDenied, 0, 1,
 					216 + yr);
 			} else {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Weapons may be used", '\uff00', 0, 1, yr + 216);
+				this.getSurface().drawColoredStringCentered(xr + 234, "Weapons may be used", ruleAllowed, 0, 1, yr + 216);
 			}
 
 			this.getSurface().drawColoredStringCentered(xr + 234, "If you are sure click 'Accept' to begin the duel",
-				0xFFFFFF, 0, 1, yr + 230);
+				voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, yr + 230);
 			if (!this.duelConfirmed) {
 				this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), 83 + xr, 238 + yr);
 				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), xr - 35 + 352, yr + 238);
 			} else {
-				this.getSurface().drawColoredStringCentered(xr + 234, "Waiting for other player...", 0xFFFF00, 0, 1,
+				this.getSurface().drawColoredStringCentered(xr + 234, "Waiting for other player...", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 1,
 					yr + 250);
 			}
 
@@ -6786,31 +6813,41 @@ public final class mudclient implements Runnable {
 			}
 			int xr = (getGameWidth() - 408) / 2;
 			int yr = (getGameHeight() - 246) / 2;
+			boolean voidSkin = useVoidscapeHudSkin();
 
-			this.getSurface().drawBox(xr, yr, 408, 12, 192);
-			int color = 10000536;
-			this.getSurface().drawBoxAlpha(xr, 12 + yr, 408, 17, color, 160);
-			this.getSurface().drawBoxAlpha(xr, yr + 29, 8, 170, color, 160);
-			this.getSurface().drawBoxAlpha(xr + 399, 29 + yr, 9, 170, color, 160);
-			this.getSurface().drawBoxAlpha(xr, 199 + yr, 408, 47, color, 160);
+			if (voidSkin) {
+				// Void skin: the classic flat fills collapse into one glass card
+				// over the same 408x246 rect; title strip on the same 12px band.
+				UiSkin.glassPanel(this.getSurface(), xr, yr, 408, 246, UiSkin.A_GLASS_TEXT);
+				this.getSurface().drawBoxAlpha(xr, yr, 408, 12, UiSkin.VOID_HEADER, 190);
+			} else {
+				this.getSurface().drawBox(xr, yr, 408, 12, 192);
+				int color = 10000536;
+				this.getSurface().drawBoxAlpha(xr, 12 + yr, 408, 17, color, 160);
+				this.getSurface().drawBoxAlpha(xr, yr + 29, 8, 170, color, 160);
+				this.getSurface().drawBoxAlpha(xr + 399, 29 + yr, 9, 170, color, 160);
+				this.getSurface().drawBoxAlpha(xr, 199 + yr, 408, 47, color, 160);
+			}
 			this.getSurface().drawString(pointShop ? "Undead Siege Supplies" : "Buying and selling items",
-				xr + 1, yr + 10, 0xFFFFFF, 1);
+				xr + 1, yr + 10, voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF, 1);
 
-			int color2 = 0xFFFFFF;
+			int color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 			if (this.mouseX > 320 + xr && yr <= this.mouseY && this.mouseX < xr + 408 && this.mouseY < yr + 12) {
-				color2 = 0xFF0000;
+				color2 = voidSkin ? UiSkin.DANGER_GLYPH : 0xFF0000;
 			}
 			this.getSurface().b(xr + 406, "Close window", yr + 10, color2, -92, 1);
 
+			int stockLegendColor = voidSkin ? UiSkin.GOOD : '\uff00';
+			int ownedLegendColor = voidSkin ? UiSkin.TEXT_LABEL : '\uffff';
 			if (pointShop) {
-				this.getSurface().drawString("Supply stock in green", 2 + xr, 24 + yr, '\uff00', 1);
-				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
-				this.getSurface().drawString("Your points: " + this.undeadSiegeShopPoints, 292 + xr, 24 + yr, 0xFFFF00, 1);
+				this.getSurface().drawString("Supply stock in green", 2 + xr, 24 + yr, stockLegendColor, 1);
+				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, ownedLegendColor, 1);
+				this.getSurface().drawString("Your points: " + this.undeadSiegeShopPoints, 292 + xr, 24 + yr, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 			} else {
-				this.getSurface().drawString("Shops stock in green", 2 + xr, 24 + yr, '\uff00', 1);
-				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, '\uffff', 1);
+				this.getSurface().drawString("Shops stock in green", 2 + xr, 24 + yr, stockLegendColor, 1);
+				this.getSurface().drawString("Number you own in blue", xr + 135, yr + 24, ownedLegendColor, 1);
 				this.getSurface().drawString("Your money: " + this.getInventoryCount(10) + "gp",
-					280 + xr, 24 + yr, 0xFFFF00, 1);
+					280 + xr, 24 + yr, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 			}
 			{
 				int slot = 0;
@@ -6819,12 +6856,12 @@ public final class mudclient implements Runnable {
 						int sx = column * 49 + 7 + xr;
 						int sy = yr + 28 + row * 34;
 						if (this.shopSelectedItemIndex == slot) {
-							this.getSurface().drawBoxAlpha(sx, sy, 49, 34, 0xFF0000, 160);
+							this.getSurface().drawBoxAlpha(sx, sy, 49, 34, voidSkin ? UiSkin.PURPLE_SELECT : 0xFF0000, 160);
 						} else {
-							this.getSurface().drawBoxAlpha(sx, sy, 49, 34, 13684944, 160);
+							this.getSurface().drawBoxAlpha(sx, sy, 49, 34, voidSkin ? UiSkin.VOID_BOX : 13684944, 160);
 						}
 
-						this.getSurface().drawBoxBorder(sx, 50, sy, 35, 0);
+						this.getSurface().drawBoxBorder(sx, 50, sy, 35, voidSkin ? UiSkin.VOID_LINE : 0);
 
 						if (this.shopCategoryID[slot] != -1) {
 							if (S_WANT_BANK_NOTES && this.getInventoryCount(this.shopCategoryID[slot], this.shopItemNoted[slot]) > 0
@@ -6850,9 +6887,9 @@ public final class mudclient implements Runnable {
 
 							ItemDef def = EntityHandler.getItemDef(this.shopCategoryID[slot]);
 
-							this.getSurface().drawString("" + this.shopItemCount[slot], 1 + sx, 10 + sy, '\uff00', 1);
+							this.getSurface().drawString("" + this.shopItemCount[slot], 1 + sx, 10 + sy, stockLegendColor, 1);
 							this.getSurface().b(47 + sx, "" + this.getInventoryCount(this.shopCategoryID[slot], this.shopItemNoted[slot]),
-								10 + sy, '\uffff', -80, 1);
+								10 + sy, ownedLegendColor, -80, 1);
 						}
 
 						++slot;
@@ -6860,14 +6897,14 @@ public final class mudclient implements Runnable {
 				}
 			}
 
-			this.getSurface().drawLineHoriz(5 + xr, yr + 222, 398, 0);
+			this.getSurface().drawLineHoriz(5 + xr, yr + 222, 398, voidSkin ? UiSkin.GOLD_LINE : 0);
 			if (this.shopSelectedItemIndex != -1) {
 				int id = this.shopCategoryID[this.shopSelectedItemIndex];
 				if (id != -1) {
 					int count = this.getShopItemCount(this.shopSelectedItemIndex);
 					if (count <= 0) {
 						this.getSurface().drawColoredStringCentered(204 + xr,
-							"This item is not currently available to buy", 0xFFFF00, 0, 3, 214 + yr);
+							"This item is not currently available to buy", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 3, 214 + yr);
 					} else {
 						int cost = this.shopItemPriceOverride[this.shopSelectedItemIndex] >= 0
 							? this.shopItemPriceOverride[this.shopSelectedItemIndex]
@@ -6875,46 +6912,46 @@ public final class mudclient implements Runnable {
 								this.shopItemPrice[this.shopSelectedItemIndex], this.shopBuyPriceMod, -30910, true, 1,
 								count, this.shopPriceMultiplier);
 						this.getSurface().drawString(
-							EntityHandler.getItemDef(id).getName() + ": buy for " + cost
+							EntityHandler.getItemDef(id).getName() + ": " + (voidSkin ? "@acc@" : "") + "buy for " + cost
 								+ (pointShop ? " points" : "gp each"), 2 + xr,
-							yr + 214, 0xFFFF00, 1);
+							yr + 214, voidSkin ? UiSkin.TEXT_BODY : 0xFFFF00, 1);
 						boolean mouseInRow = 204 + yr <= this.mouseY && yr + 215 >= this.mouseY;
-						this.getSurface().drawString("Buy:", xr + 285, 214 + yr, 0xFFFFFF, 3);
+						this.getSurface().drawString("Buy:", xr + 285, 214 + yr, voidSkin ? UiSkin.TEXT_LABEL : 0xFFFFFF, 3);
 
-						color2 = 0xFFFFFF;
+						color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 						if (mouseInRow && this.mouseX > 318 + xr && this.mouseX < xr + 330) {
-							color2 = 0xFF0000;
+							color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 						}
 						this.getSurface().drawString("1", xr + 320, 214 + yr, color2, 3);
 
 						if (!pointShop && count >= 5) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && this.mouseX > 333 + xr && this.mouseX < 345 + xr) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("5", 335 + xr, 214 + yr, color2, 3);
 						}
 
 						if (!pointShop && count >= 10) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && 348 + xr < this.mouseX && this.mouseX < xr + 365) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("10", 350 + xr, 214 + yr, color2, 3);
 						}
 
 						if (!pointShop && count >= 50) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && this.mouseX > 368 + xr && 385 + xr > this.mouseX) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("50", xr + 370, 214 + yr, color2, 3);
 						}
 
 						if (!pointShop) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && this.mouseX > xr + 388 && this.mouseX < 400 + xr) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("X", 390 + xr, 214 + yr, color2, 3);
 						}
@@ -6923,61 +6960,61 @@ public final class mudclient implements Runnable {
 					int invCount = this.getInventoryCount(id);
 					if (pointShop) {
 						this.getSurface().drawColoredStringCentered(xr + 204,
-							"Close window to save points", 0xFFFF00, 0, 3, 239 + yr);
+							"Close window to save points", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 3, 239 + yr);
 					} else if (invCount <= 0) {
 						this.getSurface().drawColoredStringCentered(xr + 204,
-							"You do not have any of this item to sell", 0xFFFF00, 0, 3, 239 + yr);
+							"You do not have any of this item to sell", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 3, 239 + yr);
 					} else {
 
 						int sellCost = GenUtil.computeItemCost(EntityHandler.getItemDef(id).getBasePrice(),
 							this.shopItemPrice[this.shopSelectedItemIndex], this.shopSellPriceMod, -30910, false, 1,
 							count, this.shopPriceMultiplier);
 						this.getSurface().drawString(
-							EntityHandler.getItemDef(id, this.getShopItemNoted(this.shopSelectedItemIndex)).getName() + ": sell for " + sellCost + "gp each", 2 + xr,
-							yr + 239, 0xFFFF00, 1);
+							EntityHandler.getItemDef(id, this.getShopItemNoted(this.shopSelectedItemIndex)).getName() + ": " + (voidSkin ? "@acc@" : "") + "sell for " + sellCost + "gp each", 2 + xr,
+							yr + 239, voidSkin ? UiSkin.TEXT_BODY : 0xFFFF00, 1);
 						boolean mouseInRow = this.mouseY >= yr + 229 && yr + 240 >= this.mouseY;
 
-						color2 = 0xFFFFFF;
-						this.getSurface().drawString("Sell:", xr + 285, yr + 239, 0xFFFFFF, 3);
+						color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
+						this.getSurface().drawString("Sell:", xr + 285, yr + 239, voidSkin ? UiSkin.TEXT_LABEL : 0xFFFFFF, 3);
 						if (mouseInRow && xr + 318 < this.mouseX && this.mouseX < xr + 330) {
-							color2 = 0xFF0000;
+							color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 						}
 						this.getSurface().drawString("1", xr + 320, 239 + yr, color2, 3);
 
 						if (invCount >= 5) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && xr + 333 < this.mouseX && this.mouseX < xr + 345) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("5", 335 + xr, 239 + yr, color2, 3);
 						}
 
 						if (invCount >= 10) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && 348 + xr < this.mouseX && 365 + xr > this.mouseX) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("10", xr + 350, 239 + yr, color2, 3);
 						}
 
 						if (invCount >= 50) {
-							color2 = 0xFFFFFF;
+							color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 							if (mouseInRow && this.mouseX > xr + 368 && 385 + xr > this.mouseX) {
-								color2 = 0xFF0000;
+								color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 							}
 							this.getSurface().drawString("50", xr + 370, 239 + yr, color2, 3);
 						}
 
-						color2 = 0xFFFFFF;
+						color2 = voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF;
 						if (mouseInRow && this.mouseX > 388 + xr && xr + 400 > this.mouseX) {
-							color2 = 0xFF0000;
+							color2 = voidSkin ? UiSkin.GOLD_HOT : 0xFF0000;
 						}
 						this.getSurface().drawString("X", xr + 390, yr + 239, color2, 3);
 					}
 				}
 			} else {
 				this.getSurface().drawColoredStringCentered(204 + xr,
-					pointShop ? "Select a supply to buy" : "Select an object to buy or sell", 0xFFFF00, 0, 3,
+					pointShop ? "Select a supply to buy" : "Select an object to buy or sell", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 3,
 					214 + yr);
 			}
 			logAndroidSmokeShopState(xr, yr);
@@ -7255,62 +7292,72 @@ public final class mudclient implements Runnable {
 			if (this.showDialogTrade) {
 				int xr = dialogX;
 				int yr = dialogY;
-				this.getSurface().drawBox(xr, yr, 468, 12, 192);
-				int color = 10000536;
-				this.getSurface().drawBoxAlpha(xr, yr + 12, 468, 18, color, 160);
-				this.getSurface().drawBoxAlpha(xr, yr + 30, 8, 248, color, 160);
+				boolean voidSkin = useVoidscapeHudSkin();
+				if (voidSkin) {
+					// Void skin: the classic flat fills collapse into one glass card
+					// over the same union rect; title strip on the same 12px band.
+					UiSkin.glassPanel(this.getSurface(), xr, yr, 468, 278, UiSkin.A_GLASS_TEXT);
+					this.getSurface().drawBoxAlpha(xr, yr, 468, 12, UiSkin.VOID_HEADER, 190);
+				} else {
+					this.getSurface().drawBox(xr, yr, 468, 12, 192);
+					int color = 10000536;
+					this.getSurface().drawBoxAlpha(xr, yr + 12, 468, 18, color, 160);
+					this.getSurface().drawBoxAlpha(xr, yr + 30, 8, 248, color, 160);
 
-				this.getSurface().drawBoxAlpha(xr + 205, yr + 30, 11, 248, color, 160);
-				this.getSurface().drawBoxAlpha(xr + 462, 30 + yr, 6, 248, color, 160);
-				this.getSurface().drawBoxAlpha(xr + 8, yr + 133, 197, 22, color, 160);
-				this.getSurface().drawBoxAlpha(xr + 8, yr + 258, 197, 20, color, 160);
-				this.getSurface().drawBoxAlpha(xr + 216, yr + 235, 246, 43, color, 160);
-				int id = 13684944;
+					this.getSurface().drawBoxAlpha(xr + 205, yr + 30, 11, 248, color, 160);
+					this.getSurface().drawBoxAlpha(xr + 462, 30 + yr, 6, 248, color, 160);
+					this.getSurface().drawBoxAlpha(xr + 8, yr + 133, 197, 22, color, 160);
+					this.getSurface().drawBoxAlpha(xr + 8, yr + 258, 197, 20, color, 160);
+					this.getSurface().drawBoxAlpha(xr + 216, yr + 235, 246, 43, color, 160);
+				}
+				int id = voidSkin ? UiSkin.VOID_BOX : 13684944;
 				this.getSurface().drawBoxAlpha(xr + 8, yr + 30, 197, 103, id, 160);
 				this.getSurface().drawBoxAlpha(8 + xr, yr + 155, 197, 103, id, 160);
 				this.getSurface().drawBoxAlpha(216 + xr, 30 + yr, 246, 205, id, 160);
 
+				int gridLine = voidSkin ? UiSkin.VOID_LINE : 0;
 				for (int var7 = 0; var7 < 4; ++var7) {
-					this.getSurface().drawLineHoriz(8 + xr, 30 + yr + var7 * 34, 197, 0);
+					this.getSurface().drawLineHoriz(8 + xr, 30 + yr + var7 * 34, 197, gridLine);
 				}
 
 				for (int var7 = 0; var7 < 4; ++var7) {
-					this.getSurface().drawLineHoriz(xr + 8, var7 * 34 + 155 + yr, 197, 0);
+					this.getSurface().drawLineHoriz(xr + 8, var7 * 34 + 155 + yr, 197, gridLine);
 				}
 
 				for (int var7 = 0; var7 < 7; ++var7) {
-					this.getSurface().drawLineHoriz(216 + xr, yr + 30 + var7 * 34, 246, 0);
+					this.getSurface().drawLineHoriz(216 + xr, yr + 30 + var7 * 34, 246, gridLine);
 				}
 
 				for (int var7 = 0; var7 < 6; ++var7) {
 					if (~var7 > -6) {
-						this.getSurface().drawLineVert(xr + 8 + var7 * 49, 30 + yr, 0, 103);
+						this.getSurface().drawLineVert(xr + 8 + var7 * 49, 30 + yr, gridLine, 103);
 					}
 
 					if (var7 < 5) {
-						this.getSurface().drawLineVert(var7 * 49 + 8 + xr, 155 + yr, 0, 103);
+						this.getSurface().drawLineVert(var7 * 49 + 8 + xr, 155 + yr, gridLine, 103);
 					}
 
-					this.getSurface().drawLineVert(216 + xr + var7 * 49, yr + 30, 0, 205);
+					this.getSurface().drawLineVert(216 + xr + var7 * 49, yr + 30, gridLine, 205);
 				}
 
-				this.getSurface().drawString("Trading with: " + this.tradeRecipientName, xr + 1, 10 + yr, 0xFFFFFF, 1);
-				this.getSurface().drawString("Your Offer", xr + 9, yr + 27, 0xFFFFFF, 4);
-				this.getSurface().drawString("Opponent's Offer", xr + 9, yr + 152, 0xFFFFFF, 4);
-				this.getSurface().drawString("Your Inventory", xr + 216, yr + 27, 0xFFFFFF, 4);
+				this.getSurface().drawString("Trading with: " + this.tradeRecipientName, xr + 1, 10 + yr, voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF, 1);
+				int sectionColor = voidSkin ? UiSkin.GOLD_HEADER : 0xFFFFFF;
+				this.getSurface().drawString("Your Offer", xr + 9, yr + 27, sectionColor, 4);
+				this.getSurface().drawString("Opponent's Offer", xr + 9, yr + 152, sectionColor, 4);
+				this.getSurface().drawString("Your Inventory", xr + 216, yr + 27, sectionColor, 4);
 				if (!this.tradeAccepted) {
 					this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), xr + 217, yr + 238);
 				}
 
 				this.getSurface().drawSprite(spriteSelect(GUIPARTS.DECLINEBUTTON.getDef()), xr + 394, yr + 238);
 				if (this.tradeRecipientAccepted) {
-					this.getSurface().drawColoredStringCentered(xr + 341, "Other player", 0xFFFFFF, 0, 1, 246 + yr);
-					this.getSurface().drawColoredStringCentered(xr + 341, "has accepted", 0xFFFFFF, 0, 1, 256 + yr);
+					this.getSurface().drawColoredStringCentered(xr + 341, "Other player", voidSkin ? UiSkin.GOOD : 0xFFFFFF, 0, 1, 246 + yr);
+					this.getSurface().drawColoredStringCentered(xr + 341, "has accepted", voidSkin ? UiSkin.GOOD : 0xFFFFFF, 0, 1, 256 + yr);
 				}
 
 				if (this.tradeAccepted) {
-					this.getSurface().drawColoredStringCentered(xr + 217 + 35, "Waiting for", 0xFFFFFF, 0, 1, yr + 246);
-					this.getSurface().drawColoredStringCentered(xr + 252, "other player", 0xFFFFFF, 0, 1, 256 + yr);
+					this.getSurface().drawColoredStringCentered(xr + 217 + 35, "Waiting for", voidSkin ? UiSkin.GOLD_HOT : 0xFFFFFF, 0, 1, yr + 246);
+					this.getSurface().drawColoredStringCentered(xr + 252, "other player", voidSkin ? UiSkin.GOLD_HOT : 0xFFFFFF, 0, 1, 256 + yr);
 				}
 
 				for (int slot = 0; slot < this.inventoryItemCount; ++slot) {
@@ -7348,7 +7395,7 @@ public final class mudclient implements Runnable {
 
 					if (def.isStackable()) {
 						this.getSurface().drawString("" + getInventoryItemSize(slot), 1 + sX,
-							10 + sY, 0xFFFF00, 1);
+							10 + sY, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 				}
 
@@ -7387,14 +7434,14 @@ public final class mudclient implements Runnable {
 
 					if (def.isStackable()) {
 						this.getSurface().drawString("" + getTradeItemSize(slot), 1 + sx,
-							10 + sy, 0xFFFF00, 1);
+							10 + sy, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 
 					if (sx < this.mouseX && 48 + sx > this.mouseX && sy < this.mouseY && this.mouseY < sy + 32) {
 						this.getSurface().drawString(
 							def.getName() + ": @whi@"
 								+ def.getDescription(),
-							8 + xr, 273 + yr, 0xFFFF00, 1);
+							8 + xr, 273 + yr, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 				}
 
@@ -7433,14 +7480,14 @@ public final class mudclient implements Runnable {
 
 					if (def.isStackable()) {
 						this.getSurface().drawString("" + getTradeRecipientItemCount(slot), 1 + sx,
-							10 + sy, 0xFFFF00, 1);
+							10 + sy, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 
 					if (sx < this.mouseX && this.mouseX < sx + 48 && this.mouseY > sy && sy + 32 > this.mouseY) {
 						this.getSurface().drawString(
 							def.getName() + ": @whi@"
 								+ def.getDescription(),
-							xr + 8, yr + 273, 0xFFFF00, 1);
+							xr + 8, yr + 273, voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 1);
 					}
 				}
 
@@ -14157,12 +14204,20 @@ public final class mudclient implements Runnable {
 
 			int var2 = tradeDuelDialogX();
 			int var3 = tradeDuelDialogY();
-			this.getSurface().drawBox(var2, var3, 468, 16, 192);
-			int var4 = 10000536;
-			this.getSurface().drawBoxAlpha(var2, var3 + 16, 468, 246, var4, 160);
+			boolean voidSkin = useVoidscapeHudSkin();
+			if (voidSkin) {
+				// Void skin: glass card over the same 468x262 rect the classic
+				// flat fills covered; title strip on the same 16px band.
+				UiSkin.glassPanel(this.getSurface(), var2, var3, 468, 262, UiSkin.A_GLASS_TEXT);
+				this.getSurface().drawBoxAlpha(var2, var3, 468, 16, UiSkin.VOID_HEADER, 190);
+			} else {
+				this.getSurface().drawBox(var2, var3, 468, 16, 192);
+				int var4 = 10000536;
+				this.getSurface().drawBoxAlpha(var2, var3 + 16, 468, 246, var4, 160);
+			}
 			this.getSurface().drawColoredStringCentered(234 + var2,
-				"Please confirm your trade with @yel@" + this.tradeRecipientConfirmName, 0xFFFFFF, 0, 1, var3 + 12);
-			this.getSurface().drawColoredStringCentered(var2 + 117, "You are about to give:", 0xFFFF00, 0, 1,
+				"Please confirm your trade with @yel@" + this.tradeRecipientConfirmName, voidSkin ? UiSkin.GOLD_TITLE : 0xFFFFFF, 0, 1, var3 + 12);
+			this.getSurface().drawColoredStringCentered(var2 + 117, "You are about to give:", voidSkin ? UiSkin.GOLD_HEADER : 0xFFFF00, 0, 1,
 				30 + var3);
 
 			int var5;
@@ -14177,14 +14232,14 @@ public final class mudclient implements Runnable {
 					var6 = var6 + (item.getNoted() ? " (Noted)" : "") + " x " + StringUtil.formatItemCount(this.getTradeConfirmItemCount(var5));
 				}
 
-				this.getSurface().drawColoredStringCentered(var2 + 117, var6, 0xFFFFFF, 0, 1, var5 * 12 + 42 + var3);
+				this.getSurface().drawColoredStringCentered(var2 + 117, var6, voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, var5 * 12 + 42 + var3);
 			}
 
 			if (this.tradeConfirmItemsCount == 0) {
-				this.getSurface().drawColoredStringCentered(var2 + 117, "Nothing!", 0xFFFFFF, 0, 1, 42 + var3);
+				this.getSurface().drawColoredStringCentered(var2 + 117, "Nothing!", voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, 42 + var3);
 			}
 
-			this.getSurface().drawColoredStringCentered(351 + var2, "In return you will receive:", 0xFFFF00, 0, 1,
+			this.getSurface().drawColoredStringCentered(351 + var2, "In return you will receive:", voidSkin ? UiSkin.GOLD_HEADER : 0xFFFF00, 0, 1,
 				30 + var3);
 
 			for (var5 = 0; var5 < this.tradeRecipientConfirmItemsCount; ++var5) {
@@ -14195,21 +14250,21 @@ public final class mudclient implements Runnable {
 					var6 = var6 + (item.getNoted() ? " (Noted)" : "") + " x " + StringUtil.formatItemCount(this.getTradeRecipientConfirmItemCount(var5));
 				}
 
-				this.getSurface().drawColoredStringCentered(351 + var2, var6, 0xFFFFFF, 0, 1, 42 + var3 + var5 * 12);
+				this.getSurface().drawColoredStringCentered(351 + var2, var6, voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, 42 + var3 + var5 * 12);
 			}
 
 			if (this.tradeRecipientConfirmItemsCount == 0) {
-				this.getSurface().drawColoredStringCentered(351 + var2, "Nothing!", 0xFFFFFF, 0, 1, var3 + 42);
+				this.getSurface().drawColoredStringCentered(351 + var2, "Nothing!", voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, var3 + 42);
 			}
 
-			this.getSurface().drawColoredStringCentered(var2 + 234, "Are you sure you want to do this?", '\uffff', 0, 4,
+			this.getSurface().drawColoredStringCentered(var2 + 234, "Are you sure you want to do this?", voidSkin ? UiSkin.GOLD_HOT : '\uffff', 0, 4,
 				200 + var3);
 			this.getSurface().drawColoredStringCentered(var2 + 234,
-				"There is NO WAY to reverse a trade if you change your mind.", 0xFFFFFF, 0, 1, var3 + 215);
+				"There is NO WAY to reverse a trade if you change your mind.", voidSkin ? UiSkin.BAD : 0xFFFFFF, 0, 1, var3 + 215);
 			this.getSurface().drawColoredStringCentered(234 + var2, "Remember that not all players are trustworthy",
-				0xFFFFFF, 0, 1, var3 + 230);
+				voidSkin ? UiSkin.TEXT_BODY : 0xFFFFFF, 0, 1, var3 + 230);
 			if (this.tradeConfirmAccepted) {
-				this.getSurface().drawColoredStringCentered(234 + var2, "Waiting for other player...", 0xFFFF00, 0, 1,
+				this.getSurface().drawColoredStringCentered(234 + var2, "Waiting for other player...", voidSkin ? UiSkin.GOLD_HOT : 0xFFFF00, 0, 1,
 					250 + var3);
 			} else {
 				this.getSurface().drawSprite(spriteSelect(GUIPARTS.ACCEPTBUTTON.getDef()), var2 - 35 + 118, 238 + var3);
