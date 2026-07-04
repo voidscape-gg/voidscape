@@ -3,6 +3,7 @@ package com.openrsc.interfaces.misc;
 import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.entityhandling.defs.ItemDef;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 import java.util.ArrayList;
@@ -18,7 +19,6 @@ public final class DoSkillInterface {
 	private String title = "";
 	private boolean visible, rightClickMenu = false;
 	private mudclient mc;
-	private int panelColour, textColour, bordColour;
 	private int x, y, autoHeight;
 
 	public DoSkillInterface(mudclient mc) {
@@ -46,19 +46,10 @@ public final class DoSkillInterface {
 	public void onRender() {
 		reposition();
 
-		panelColour = 0x989898;
-		textColour = 0xFFFFFF;
-		bordColour = 0x000000;
-
 		doSkillPanel.handleMouse(mc.getMouseX(), mc.getMouseY(), mc.getMouseButtonDown(), mc.getLastMouseDown());
 
-		// Draws the background
-		mc.getSurface().drawBoxAlpha(x, y, width, autoHeight - y, panelColour, 160);
-		mc.getSurface().drawBoxBorder(x, width, y, autoHeight - y, bordColour);
-
-		// Draws the title
-		drawStringCentered(title.isEmpty() ? mc.getSkillToDo() : title, x, y + 28, 5, textColour);
-
+		// Size the card before drawing so the chrome and the close hit-test
+		// share the same geometry.
 		int itemAmount = doSkillItems.size();
 		switch (itemAmount) {
 			case 1:
@@ -76,14 +67,17 @@ public final class DoSkillInterface {
 		}
 		reposition();
 
-		this.drawButton(x + width - 35, y + 5, 30, 30, "X", 5, false, new ButtonHandler() {
-			@Override
-			void handle() {
-				setVisible(false);
-			}
-		});
-
-		mc.getSurface().drawLineHoriz(x + 1, y + 40, width - 2, 0);
+		// Glass window chrome; close hit-test shares InterfaceChrome's coordinates.
+		int closeX = InterfaceChrome.closeX(x, width);
+		int closeY = InterfaceChrome.closeY(y);
+		boolean closeHover = UiSkin.hit(closeX, closeY, InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE,
+			mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), x, y, width, autoHeight - y,
+			title.isEmpty() ? mc.getSkillToDo() : title, closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			setVisible(false);
+			mc.setMouseClick(0);
+		}
 
 		drawSkillItems();
 	}
@@ -121,12 +115,12 @@ public final class DoSkillInterface {
 				curX, spriteY, 48, 32, def.getPictureMask(), 0,
 				def.getBlueMask(),false, 0, 1);
 
-			int stringWidth = drawStringWrapped(skillDetail, curX, textY, 2, textColour);
+			int stringWidth = drawStringWrapped(skillDetail, curX, textY, 2, UiSkin.TEXT_BODY);
 
 			// Different size highlight box based on if there is text, and the length of the text
 			int boxWidth = skillDetail.isEmpty() ? 48 : (stringWidth < 48 ? 54 : stringWidth + 10);
 			int boxHeight = skillDetail.isEmpty() ? 38 : (lotsaText ? 64 : 52);
-			int boxColor = 16711680;
+			int boxColor = UiSkin.PURPLE_SELECT;
 
 			// Grays out box if player does not have required level to do
 			if (mc.getPlayerStatCurrent(skillDoing.equals("Cooking") ? 7 : skillDoing.equals("Fletching") ? 9 : skillDoing.equals("Crafting") ? 12 : skillDoing.equals("Smithing") ? 13 : 15) < levelReq) {
@@ -135,7 +129,7 @@ public final class DoSkillInterface {
 
 			if (mc.getMouseX() >= curX - (boxWidth - 48) / 2 && mc.getMouseX() <= boxWidth + curX - (boxWidth - 48) / 2 && mc.getMouseY() >= spriteY - 2 && mc.getMouseY() <= spriteY + boxHeight
 				&& !rightClickMenu) {
-				mc.getSurface().drawBoxAlpha(curX - (boxWidth - 48) / 2, spriteY - 2, boxWidth, boxHeight, boxColor, 92);
+				mc.getSurface().drawBoxAlpha(curX - (boxWidth - 48) / 2, spriteY - 2, boxWidth, boxHeight, boxColor, UiSkin.A_HOVER_ROW);
 				if (mc.mouseButtonClick == 1 && boxColor != 0x000000) {
 					setVisible(false);
 					itemSelected = curItem.getItemID();
@@ -176,12 +170,11 @@ public final class DoSkillInterface {
 
 			if (mc.getMouseX() >= rightClickMenuX && mc.getMouseX() <= rightClickMenuX + menuWidth && mc.getMouseY() >= rightClickMenuY && mc.getMouseY() <= rightClickMenuY + menuHeight) {
 				if (rightClickMenu) {
-					mc.getSurface().drawBoxAlpha(rightClickMenuX, rightClickMenuY, menuWidth, 15, 0x000000, 255);
-					mc.getSurface().drawBoxAlpha(rightClickMenuX, rightClickMenuY + 15, menuWidth, menuHeight - 15, 0x5C5548, 255);
-					mc.getSurface().drawBoxBorder(rightClickMenuX, menuWidth, rightClickMenuY, menuHeight, 0x000000);
+					UiSkin.tooltip(mc.getSurface(), rightClickMenuX, rightClickMenuY, menuWidth, menuHeight);
+					mc.getSurface().drawBoxAlpha(rightClickMenuX + 1, rightClickMenuY + 1, menuWidth - 2, 14, UiSkin.VOID_HEADER, UiSkin.A_HEADER);
 
 
-					drawString(itemName, rightClickMenuX + 1, rightClickMenuY + 11, 2, 0xFFFFFF);
+					drawString(itemName, rightClickMenuX + 1, rightClickMenuY + 11, 2, UiSkin.GOLD_TITLE);
 
 					int hovering = 0;
 					for (int f = 1; f <= 6; f++) {
@@ -211,17 +204,17 @@ public final class DoSkillInterface {
 
 						switch (f) {
 							case 1:
-								drawString("Make-1", rightClickMenuX + 1, rightClickMenuY + 26, 2, hovering == 1 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Make-1", rightClickMenuX + 1, rightClickMenuY + 26, 2, hovering == 1 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 							case 2:
-								drawString("Make-5", rightClickMenuX + 1, rightClickMenuY + 41, 2, hovering == 2 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Make-5", rightClickMenuX + 1, rightClickMenuY + 41, 2, hovering == 2 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 							case 3:
-								drawString("Make-10", rightClickMenuX + 1, rightClickMenuY + 56, 2, hovering == 3 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Make-10", rightClickMenuX + 1, rightClickMenuY + 56, 2, hovering == 3 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 							case 4:
-								drawString("Make-X", rightClickMenuX + 1, rightClickMenuY + 71, 2, hovering == 4 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Make-X", rightClickMenuX + 1, rightClickMenuY + 71, 2, hovering == 4 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 							case 5:
-								drawString("Make-All", rightClickMenuX + 1, rightClickMenuY + 86, 2, hovering == 5 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Make-All", rightClickMenuX + 1, rightClickMenuY + 86, 2, hovering == 5 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 							case 6:
-								drawString("Cancel", rightClickMenuX + 1, rightClickMenuY + 101, 2, hovering == 6 ? 0xFF0000 : 0xFFFFFF);
+								drawString("Cancel", rightClickMenuX + 1, rightClickMenuY + 101, 2, hovering == 6 ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 								break;
 							default:
 								break;
@@ -265,21 +258,12 @@ public final class DoSkillInterface {
 	}
 
 	private void drawButton(int x, int y, int width, int height, String text, int font, boolean checked, ButtonHandler handler) {
-		int bgBtnColour = 0x333333; // grey
-		if (checked) {
-			bgBtnColour = 16711680; // red
+		boolean hover = InterfaceChrome.button(mc.getSurface(), x, y, width, height, text, font, checked, false,
+			mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			if (!checked)
-				bgBtnColour = 16711680; // blue
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		mc.getSurface().drawBoxAlpha(x, y, width, height, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(x, width, y, height, 0x242424);
-		mc.getSurface().drawString(text, x + (width / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1, y + height / 2 + 5, textColour, font);
 	}
 
 	public void populateSkillItems() {

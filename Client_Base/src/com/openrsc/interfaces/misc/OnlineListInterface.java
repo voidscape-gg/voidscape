@@ -5,11 +5,10 @@ import com.openrsc.interfaces.MenuAction;
 import com.openrsc.interfaces.NComponent;
 import com.openrsc.interfaces.NRightClickMenu;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 public class OnlineListInterface extends NComponent {
-
-	private static final int LEGACY_GREY_BG = 0x989898; // tokenized in slice 5
 
 	public int scroll;
 	public Panel panel;
@@ -24,7 +23,7 @@ public class OnlineListInterface extends NComponent {
 		panel = new Panel(client.getSurface(), 1);
 		scroll = panel.addScrollingList2(getX(), getY() + 20, getWidth(), getHeight() - 20, 500, 1, true);
 
-		setBackground(LEGACY_GREY_BG, LEGACY_GREY_BG, 128);
+		setBackground(UiSkin.GLASS_BODY, UiSkin.GLASS_BODY, 128);
 		setSize(408, 246);
 		updateLocation();
 		setInputListener(new InputListener() {
@@ -40,13 +39,13 @@ public class OnlineListInterface extends NComponent {
 
 		});
 		NComponent title = new NComponent(client);
-		title.setBackground(3093151, 0x7e8d09, 192);
+		title.setBackground(UiSkin.VOID_HEADER, UiSkin.VOID_HEADER, 192);
 		title.setLocation(0, 0);
 		title.setSize(408, 20);
 
 		titleText = new NComponent(client);
 		titleText.setText("Online Players");
-		titleText.setFontColor(0xFFFFFF, 0xFFFFFF);
+		titleText.setFontColor(UiSkin.GOLD_TITLE, UiSkin.GOLD_TITLE);
 		titleText.setTextSize(1);
 		titleText.setLocation(2, 1);
 
@@ -65,13 +64,13 @@ public class OnlineListInterface extends NComponent {
 				return true;
 			}
 		});
-		close.setFontColor(0xFFFFFF, 0xFF0000);
+		close.setFontColor(UiSkin.TEXT_BODY, UiSkin.DANGER_GLYPH);
 		title.addComponent(close);
 		addComponent(title);
 		addComponent(titleText);
 
 		userListContainer = new NComponent(client);
-		userListContainer.setFontColor(0xFFFFFF, 0xFFFFFF);
+		userListContainer.setFontColor(UiSkin.TEXT_BODY, UiSkin.TEXT_BODY);
 		userListContainer.setLocation(1, 21);
 		userListContainer.setSize(getWidth() - 3, getHeight());
 		addComponent(userListContainer);
@@ -109,7 +108,7 @@ public class OnlineListInterface extends NComponent {
 		}
 		final NComponent userComponent = new NComponent(getClient());
 		userComponent.setText(isLast ? text : text + ", ");
-		userComponent.setFontColor(0xFFFFFF, 0xFF0000);
+		userComponent.setFontColor(UiSkin.TEXT_BODY, UiSkin.GOLD_HOT);
 		userComponent.setTextSize(1);
 		userComponent.setLocation(currentX, currentY);
 		userComponent.setSize(textWidth, textHeight);

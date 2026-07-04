@@ -2,6 +2,7 @@ package com.openrsc.interfaces.misc;
 
 import orsc.Config;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.GraphicsController;
 import orsc.enumerations.InputXAction;
 import orsc.graphics.gui.InputXPrompt;
@@ -10,18 +11,6 @@ import orsc.mudclient;
 import java.util.Arrays;
 
 public final class PointInterface {
-	// Classic RSC style colours
-	private static final int WINDOW_BG = 0x3A2A10;      // dark brown
-	private static final int WINDOW_BG_SHADE = 0x2A1C08; // darker shade
-	private static final int WINDOW_BORDER = 0x000000;   // black
-	private static final int TITLE_BG = 0x4A3620;       // mid brown
-	private static final int TITLE_TEXT = 0xFFFF00;     // yellow
-	private static final int CONTENT_TEXT = 0xFFFFFF;   // white
-	private static final int GRID_LINE = 0x000000;      // black lines
-	private static final int BUTTON_BG = 0x333333;      // neutral
-	private static final int BUTTON_HOVER_BG = 0x6580B7;// hover blue
-	private static final int BUTTON_ACTIVE_BG = 0x871E1E;// active / checked red tone
-
 	// Layout constants
 	private static final int STAT_ROW_HEIGHT = 40;
 	private static final int HEADER_HEIGHT = 29;
@@ -48,11 +37,6 @@ public final class PointInterface {
 	private boolean visible = false;
 	private mudclient mc;
 	private int x, y;
-	private int panelColour;
-	private int textColour;
-	private int bordColour;
-	private int lineColour;
-	private int pColour;
 
 	// Arrays to drive rendering
 	private static final int[] SKILL_IDS = {ATTACK, DEFENSE, STRENGTH, RANGED, PRAYER, MAGIC};
@@ -91,22 +75,17 @@ public final class PointInterface {
 
 	private void drawExperienceConfig() {
 		reposition();
-		panelColour = WINDOW_BG;
-		textColour = CONTENT_TEXT;
-		bordColour = WINDOW_BORDER;
-		lineColour = GRID_LINE;
-		pColour = WINDOW_BG_SHADE;
 
 		experienceConfig.handleMouse(mc.getMouseX(), mc.getMouseY(), mc.getMouseButtonDown(), mc.getLastMouseDown());
 
-		// Window background & border
-		mc.getSurface().drawBoxAlpha(x, y, width, height, pColour, 160);
-		mc.getSurface().drawBoxBorder(x, width, y, height, bordColour);
-
-		// Title bar (now taller to include two lines)
-		mc.getSurface().drawBoxAlpha(x, y, width, TITLE_BAR_HEIGHT, TITLE_BG, 220);
-		// Title line
-		drawStringCentered("Skill Points Manager", x, y + 14, 2, TITLE_TEXT);
+		// Glass window card + title strip + gold title + X close
+		boolean closeHover = UiSkin.hit(InterfaceChrome.closeX(x, width), InterfaceChrome.closeY(y),
+			InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE, mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), x, y, width, height, "Skill Points Manager", closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			setVisible(false);
+			mc.setMouseClick(0);
+		}
 
 		// Header labels (second line within title bar) now centered per column
 		int statColStart = x;
@@ -127,7 +106,7 @@ public final class PointInterface {
 		drawHeaderCentered("+/- Levels", modColStart, modColEnd, headerLabelY);
 
 		// Bottom line of title/header area
-		mc.getSurface().drawLineHoriz(x, y + TITLE_BAR_HEIGHT, width, lineColour);
+		mc.getSurface().drawLineHoriz(x, y + TITLE_BAR_HEIGHT, width, UiSkin.VOID_LINE);
 
 		// Removed vertical separator lines in header area for cleaner look
 		// Clear scrolling list
@@ -150,7 +129,7 @@ public final class PointInterface {
 			int levelsPlusY = pointsMinusY;
 
 			// Background strip for row (subtle shading)
-			mc.getSurface().drawBoxAlpha(x + 1, baseY - 20, width - 2, STAT_ROW_HEIGHT - 4, (i % 2 == 0 ? WINDOW_BG : WINDOW_BG_SHADE), 90);
+			mc.getSurface().drawBoxAlpha(x + 1, baseY - 20, width - 2, STAT_ROW_HEIGHT - 4, (i % 2 == 0 ? UiSkin.VOID_BOX : UiSkin.VOID_BODY), 90);
 
 			// Data
 			int expToNext = getExpToNextLevel(skillIdFinal);
@@ -158,10 +137,10 @@ public final class PointInterface {
 			long totalExp = mc.getPlayerExperience(skillIdFinal);
 
 			// Labels & values
-			this.drawString(label + ":", x + PADDING_LEFT, baseY, 3, textColour);
-			this.drawString("" + level, x + COL_LEVEL_X_OFFSET + 7, baseY, 3, textColour);
-			this.drawString("" + expToNext, x + COL_POINTS_X_OFFSET + 10, baseY, 3, textColour);
-			this.drawString("" + totalExp, x + COL_TOTAL_EXP_X_OFFSET + 6, baseY, 3, textColour);
+			this.drawString(label + ":", x + PADDING_LEFT, baseY, 3, UiSkin.TEXT_BODY);
+			this.drawString("" + level, x + COL_LEVEL_X_OFFSET + 7, baseY, 3, UiSkin.TEXT_BODY);
+			this.drawString("" + expToNext, x + COL_POINTS_X_OFFSET + 10, baseY, 3, UiSkin.TEXT_BODY);
+			this.drawString("" + totalExp, x + COL_TOTAL_EXP_X_OFFSET + 6, baseY, 3, UiSkin.TEXT_BODY);
 
 			// Points +/- buttons
 			drawButton(COL_POINTS_MINUS_X + x, pointsMinusY, 20, 20, "@red@-", 6, false, new ButtonHandler() {
@@ -198,16 +177,11 @@ public final class PointInterface {
 
 		int lastRowBaseY = y + rowStartOffset + (SKILL_IDS.length - 1) * STAT_ROW_HEIGHT;
 		int bottomLineY = lastRowBaseY + (Config.S_WANT_OPENPK_PRESETS ? 11 : 14);
-		mc.getSurface().drawLineHoriz(x, bottomLineY, width, lineColour);
+		mc.getSurface().drawLineHoriz(x, bottomLineY, width, UiSkin.VOID_LINE);
 		if (Config.S_WANT_OPENPK_PRESETS) {
 			int secondLineY = bottomLineY + 34;
-			mc.getSurface().drawLineHoriz(x, secondLineY, width, lineColour);
+			mc.getSurface().drawLineHoriz(x, secondLineY, width, UiSkin.VOID_LINE);
 		}
-
-		// Close button adjusted (still at top right)
-		drawCloseButton(x + width - 32, y + 4, 30, 20, "X", 2, new ButtonHandler() {
-			@Override void handle() { setVisible(false); }
-		});
 
 		if (Config.S_WANT_OPENPK_PRESETS) {
 			int presetY = bottomLineY + 6;
@@ -262,39 +236,40 @@ public final class PointInterface {
 		return nextLevelExp - mc.getPlayerExperience(skillId);
 	}
 
-	private void drawHeaderLabel(String text, int x, int y) {
-		this.drawString(text, x, y + 1, 2, TITLE_TEXT);
-	}
-
 	private void drawHeaderCentered(String text, int startX, int endX, int baselineY) {
 		int w = mc.getSurface().stringWidth(2, text);
 		int cx = startX + ((endX - startX) - w) / 2;
-		this.drawString(text, cx, baselineY + 1, 2, TITLE_TEXT);
+		this.drawString(text, cx, baselineY + 1, 2, UiSkin.GOLD_HEADER);
 	}
 
 	// Added helper used for footer alignment
 	private void drawCenteredInSegment(String text, int segStart, int segWidth, int baselineY) {
 		int w = mc.getSurface().stringWidth(2, text);
 		int cx = segStart + (segWidth - w) / 2;
-		this.drawString(text, cx, baselineY, 2, textColour);
+		this.drawString(text, cx, baselineY, 2, UiSkin.TEXT_BODY);
 	}
 
 	private void drawSelectSkillMenu() {
 		reposition();
-		mc.getSurface().drawBoxAlpha(x + 90, y + 5, 166, height - 10, panelColour, 160);
-		mc.getSurface().drawBoxBorder(x + 90, 166, y + 5, height - 10, bordColour);
-		this.drawStringCentered("Select a skill to track", x - 12, y + 22, 3, TITLE_TEXT);
-		mc.getSurface().drawLineHoriz(x + 90, y + 30, 166, lineColour);
-		drawCloseButton(x + 237, y + 6, 18, 18, "X", 2, new ButtonHandler() {
-			@Override void handle() {
-				experienceConfig.resetScrollIndex(experienceConfigScroll);
-				selectSkillMenu = false;
-			}
-		});
+		int menuX = x + 90;
+		int menuY = y + 5;
+		int menuWidth = 166;
+		int menuHeight = height - 10;
+		boolean closeHover = UiSkin.hit(InterfaceChrome.closeX(menuX, menuWidth), InterfaceChrome.closeY(menuY),
+			InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE, mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), menuX, menuY, menuWidth, menuHeight, null, closeHover);
+		// Title drawn at body font, centered in the strip left of the close button (font 4 would overflow 166px)
+		mc.getSurface().drawColoredStringCentered(menuX + (menuWidth - InterfaceChrome.CLOSE_SIZE - 4) / 2,
+			"Select a skill to track", UiSkin.GOLD_TITLE, 0, UiSkin.FONT_BODY, menuY + 17);
+		if (closeHover && mc.getMouseClick() == 1) {
+			experienceConfig.resetScrollIndex(experienceConfigScroll);
+			selectSkillMenu = false;
+			mc.setMouseClick(0);
+		}
 		String[] skillNames = mc.getSkillNamesLong();
 		experienceConfig.clearList(experienceConfigScroll);
 		for (int i = 0; i < mudclient.skillCount; i++) {
-			experienceConfig.setListEntry(experienceConfigScroll, i, "@whi@" + skillNames[i], 0, (String) null, (String) null);
+			experienceConfig.setListEntry(experienceConfigScroll, i, "@bod@" + skillNames[i], 0, (String) null, (String) null);
 		}
 		int index = experienceConfig.getControlSelectedListIndex(experienceConfigScroll);
 		if (index >= 0 && mc.mouseButtonClick == 1) {
@@ -308,71 +283,41 @@ public final class PointInterface {
 	}
 
 	private void drawString(String str, int x, int y, int font, int color) {
-		if (color == 0xFFFFFF) {
-			mc.getSurface().drawShadowText(str, x, y, color, font, false);
-		} else {
-			mc.getSurface().drawString(str, x, y, color, font);
-		}
-	}
-
-	private void drawStringCentered(String str, int x, int y, int font, int color) {
-		int stringWid = mc.getSurface().stringWidth(font, str);
-		drawString(str, x + (width / 2) - (stringWid / 2), y, font, color);
+		mc.getSurface().drawString(str, x, y, color, font);
 	}
 
 	private void drawCloseButton(int x, int y, int width, int height, String text, int font, ButtonHandler handler) {
-		int bgBtnColour = BUTTON_BG;
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			bgBtnColour = BUTTON_HOVER_BG;
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
+		boolean hover = InterfaceChrome.button(mc.getSurface(), x, y, width, height, text, font,
+			false, false, mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		mc.getSurface().drawBoxAlpha(x, y, width, height, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(x, width, y, height, 0x242424);
-		int textY = y + (height - BUTTON_FONT_HEIGHT_APPROX) / 2 + BUTTON_FONT_HEIGHT_APPROX - 2; // refined centering
-		mc.getSurface().drawString(text, x + (width / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1, textY, textColour, font);
 	}
 
 	private void drawButton(int bx, int by, int w, int h, String text, int font, boolean checked, ButtonHandler handler) {
-		if (mc.inputX_Action != InputXAction.ACT_0 || mc.isInputXConsumeNextClick()) {
-			mc.getSurface().drawBoxAlpha(bx, by, w, h, BUTTON_BG, 192);
-			mc.getSurface().drawBoxBorder(bx, w, by, h, 0x242424);
-			int baseTextY = by + (h - BUTTON_FONT_HEIGHT_APPROX) / 2 + BUTTON_FONT_HEIGHT_APPROX - 2;
-			int textY = baseTextY;
-			if (text.indexOf('+') >= 0) textY += BUTTON_PLUS_ADDITIONAL_OFFSET;
-			mc.getSurface().drawString(text,
-					bx + (w / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1,
-					textY, textColour, font);
-			return;
-		}
-
-		int bgBtnColour = BUTTON_BG;
-		if (checked) bgBtnColour = BUTTON_ACTIVE_BG;
-
-		boolean inside = mc.getMouseX() >= bx && mc.getMouseY() >= by &&
+		// Token recolor of the old grey kit; keeps the custom '+'/'-' baseline
+		// nudges UiSkin.button can't reproduce. Frozen while an InputX prompt is up.
+		boolean frozen = mc.inputX_Action != InputXAction.ACT_0 || mc.isInputXConsumeNextClick();
+		boolean inside = !frozen && mc.getMouseX() >= bx && mc.getMouseY() >= by &&
 				mc.getMouseX() <= bx + w && mc.getMouseY() <= by + h && !selectSkillMenu;
 
-		if (inside) {
-			if (!checked) bgBtnColour = BUTTON_HOVER_BG;
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0); // consume click
-			}
+		if (inside && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0); // consume click
 		}
 
-		mc.getSurface().drawBoxAlpha(bx, by, w, h, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(bx, w, by, h, 0x242424);
+		mc.getSurface().drawBoxAlpha(bx, by, w, h, checked ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 192);
+		int border = frozen ? UiSkin.VOID_LINE : (inside && !checked ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE);
+		mc.getSurface().drawBoxBorder(bx, w, by, h, border);
 
-		int baseTextY = by + (h - BUTTON_FONT_HEIGHT_APPROX) / 2 + BUTTON_FONT_HEIGHT_APPROX - 2;
-		int textY = baseTextY;
+		int textY = by + (h - BUTTON_FONT_HEIGHT_APPROX) / 2 + BUTTON_FONT_HEIGHT_APPROX - 2;
 		if (text.indexOf('+') >= 0) {
 			textY += BUTTON_PLUS_ADDITIONAL_OFFSET; // lower '+' slightly
 		}
 		mc.getSurface().drawString(text,
 				bx + (w / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1,
-				textY, textColour, font);
+				textY, UiSkin.TEXT_BODY, font);
 	}
 
 

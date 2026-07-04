@@ -3714,6 +3714,10 @@ public final class mudclient implements Runnable {
 					}
 
 					if (var9 != null) {
+						if (useVoidscapeHudSkin()) {
+							UiSkin.tooltip(this.getSurface(), 2, 2,
+								this.getSurface().stringWidth(1, var9) + 10, 16);
+						}
 						this.getSurface().drawString(var9, 6, 14, 0xFFFF00, 1);
 					}
 				}
@@ -3750,6 +3754,10 @@ public final class mudclient implements Runnable {
 					}
 
 					if (null != var11) {
+						if (useVoidscapeHudSkin()) {
+							UiSkin.tooltip(this.getSurface(), 2, 2,
+								this.getSurface().stringWidth(1, var11) + 10, 16);
+						}
 						this.getSurface().drawString(var11, 6, 14, 0xFFFF00, 1);
 					}
 

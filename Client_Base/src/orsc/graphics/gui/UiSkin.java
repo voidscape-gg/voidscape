@@ -207,10 +207,10 @@ public final class UiSkin {
 		}
 	}
 
-	/** Tooltip backing (skill-tooltip recipe). Caller draws its own content rows. */
+	/** Tooltip backing — glass card, text-tier alpha. Caller draws its own content rows. */
 	public static void tooltip(GraphicsController g, int x, int y, int width, int height) {
-		g.drawBoxAlpha(x, y, width, height, VOID_BODY, A_TOOLTIP);
-		g.drawBorder(x, y, width, height, PURPLE_EDGE);
+		g.drawBoxAlpha(x, y, width, height, GLASS_BODY, A_GLASS_TEXT);
+		g.drawBorder(x, y, width, height, GLASS_RIM);
 	}
 
 	/** HUD plaque backing (scout-timer recipe): dark backing + left accent strip. */

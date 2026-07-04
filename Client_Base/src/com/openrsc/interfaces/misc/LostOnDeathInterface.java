@@ -4,6 +4,7 @@ import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.entityhandling.defs.ItemDef;
 import orsc.Config;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 import java.text.NumberFormat;
@@ -24,7 +25,6 @@ public final class LostOnDeathInterface {
 	private ArrayList<OnDeathItem> onDeathItems;
 	private boolean visible;
 	private mudclient mc;
-	private int panelColour, textColour, bordColour;
 	private int x, y;
 
 	public LostOnDeathInterface(mudclient mc) {
@@ -46,32 +46,25 @@ public final class LostOnDeathInterface {
 	public void onRender() {
 		reposition();
 
-		panelColour = 0x989898;
-		textColour = 0xFFFFFF;
-		bordColour = 0x000000;
-
 		lostOnDeathPanel.handleMouse(mc.getMouseX(), mc.getMouseY(), mc.getMouseButtonDown(), mc.getLastMouseDown());
 
-		// Draws the background
-		mc.getSurface().drawBoxAlpha(x, y, width, height, panelColour, 160);
-		mc.getSurface().drawBoxBorder(x, width, y, height, bordColour);
+		// Glass window chrome; close hit-test shares InterfaceChrome's coordinates.
+		int closeX = InterfaceChrome.closeX(x, width);
+		int closeY = InterfaceChrome.closeY(y);
+		boolean closeHover = UiSkin.hit(closeX, closeY, InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE,
+			mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), x, y, width, height, "Items on Death", closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			setVisible(false);
+			mc.setMouseClick(0);
+		}
 
-		// Draws the title
-		drawStringCentered("Items on Death", x, y + 28, 5, textColour);
+		mc.getSurface().drawLineHoriz(x + 1, y + 40, width - 1, UiSkin.VOID_LINE);
+		mc.getSurface().drawLineVert(x + 145, y + 40, UiSkin.VOID_LINE, height - 40);
+		mc.getSurface().drawLineHoriz(x + 1, y + 88, width - 1, UiSkin.VOID_LINE);
 
-		this.drawButton(x + width - 35, y + 5, 30, 30, "X", 5, false, new ButtonHandler() {
-			@Override
-			void handle() {
-				setVisible(false);
-			}
-		});
-
-		mc.getSurface().drawLineHoriz(x + 1, y + 40, width - 1, 0);
-		mc.getSurface().drawLineVert(x + 145, y + 40, 2, height - 40);
-		mc.getSurface().drawLineHoriz(x + 1, y + 88, width - 1, 0);
-
-		drawString("Items kept on death", x + 5, y + 70, 3, textColour);
-		drawString("Items lost on death", x + 5, y + 115, 3, textColour);
+		drawString("Items kept on death", x + 5, y + 70, 3, UiSkin.GOLD_HEADER);
+		drawString("Items lost on death", x + 5, y + 115, 3, UiSkin.GOLD_HEADER);
 
 		drawItemsLost();
 	}
@@ -122,8 +115,8 @@ public final class LostOnDeathInterface {
 					curX + 1, curY + 10, 1, '\uffff');
 			}
 
-			drawString("Amount lost on death:", x + 5, y + 200, 3, textColour);
-			drawString(this.getLossTotal(), x + 5, y + 220, 3, textColour);
+			drawString("Amount lost on death:", x + 5, y + 200, 3, UiSkin.TEXT_BODY);
+			drawString(this.getLossTotal(), x + 5, y + 220, 3, UiSkin.GOLD_HOT);
 
 			if (((i - movedAtFlag + 1) % 6) == 0) {
 				curX = x + 160;
@@ -228,21 +221,12 @@ public final class LostOnDeathInterface {
 	}
 
 	private void drawButton(int x, int y, int width, int height, String text, int font, boolean checked, ButtonHandler handler) {
-		int bgBtnColour = 0x333333; // grey
-		if (checked) {
-			bgBtnColour = 16711680; // red
+		boolean hover = InterfaceChrome.button(mc.getSurface(), x, y, width, height, text, font, checked, false,
+			mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			if (!checked)
-				bgBtnColour = 16711680; // blue
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		mc.getSurface().drawBoxAlpha(x, y, width, height, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(x, width, y, height, 0x242424);
-		mc.getSurface().drawString(text, x + (width / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1, y + height / 2 + 5, textColour, font);
 	}
 
 	public boolean isVisible() {
