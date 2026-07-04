@@ -63,6 +63,12 @@ public final class UiSkin {
 	public static int GLASS_RIM = colorProperty("voidscape.ui.GLASS_RIM", 0x8A6BD8);
 	public static int GLASS_SHEEN = colorProperty("voidscape.ui.GLASS_SHEEN", 0xBFA8FF);
 
+	// --- vitals stack fills (owner request 2026-07-04: match the RSCRevolution
+	// vitals panel hues — red hits, blue prayer, grey meta/FPS).
+	public static int VITAL_HITS = colorProperty("voidscape.ui.VITAL_HITS", 0xB23A2A);
+	public static int VITAL_PRAYER = colorProperty("voidscape.ui.VITAL_PRAYER", 0x3D5FCC);
+	public static int VITAL_META = colorProperty("voidscape.ui.VITAL_META", 0xC4CBD4);
+
 	// --- alpha ladder (0-256 blend weights, see style guide §1.2) -----------
 	public static final int A_SCRIM = 50;
 	public static final int A_HEADER = 218;

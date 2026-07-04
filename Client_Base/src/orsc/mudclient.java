@@ -8936,6 +8936,9 @@ public final class mudclient implements Runnable {
 			int stackY = this.getGameHeight() * 38 / 100;
 			this.getSurface().drawBoxAlpha(x, stackY, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H,
 				UiSkin.GLASS_BODY, UiSkin.A_GLASS_TEXT);
+			// FPS wears the fatigue-bar grey from the reference (subtle full wash).
+			this.getSurface().drawBoxAlpha(x + 1, stackY + 1, VOID_VITALS_BAR_W - 2,
+				VOID_VITALS_BAR_H - 2, UiSkin.VITAL_META, 56);
 			this.getSurface().drawBorder(x, stackY, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H, UiSkin.GLASS_RIM);
 			this.getSurface().drawString(label, x + 5, stackY + 12, UiSkin.TEXT_BODY, UiSkin.FONT_SMALL);
 			drawVoidscapeVitalsBars(x, stackY + VOID_VITALS_BAR_H + 2);
@@ -8962,20 +8965,18 @@ public final class mudclient implements Runnable {
 			|| this.playerStatBase == null || this.playerStatBase.length <= 5) {
 			return;
 		}
-		drawVoidscapeVitalBar(x, y, "Hits", this.playerStatCurrent[3], this.playerStatBase[3], true);
+		drawVoidscapeVitalBar(x, y, "Hits", this.playerStatCurrent[3], this.playerStatBase[3], UiSkin.VITAL_HITS);
 		drawVoidscapeVitalBar(x, y + VOID_VITALS_BAR_H + 2, "Prayer",
-			this.playerStatCurrent[5], this.playerStatBase[5], false);
+			this.playerStatCurrent[5], this.playerStatBase[5], UiSkin.VITAL_PRAYER);
 	}
 
-	private void drawVoidscapeVitalBar(int x, int y, String label, int current, int max, boolean warnWhenLow) {
+	private void drawVoidscapeVitalBar(int x, int y, String label, int current, int max, int fillColor) {
 		int safeMax = Math.max(1, max);
-		boolean low = warnWhenLow && current * 100 / safeMax <= 30;
 		int fillW = Math.max(0, Math.min(VOID_VITALS_BAR_W - 2, (VOID_VITALS_BAR_W - 2) * current / safeMax));
 		this.getSurface().drawBoxAlpha(x, y, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H,
 			UiSkin.GLASS_BODY, UiSkin.A_GLASS_TEXT);
 		if (fillW > 0) {
-			this.getSurface().drawBoxAlpha(x + 1, y + 1, fillW, VOID_VITALS_BAR_H - 2,
-				low ? UiSkin.BAD : (warnWhenLow ? UiSkin.GOOD : UiSkin.PURPLE_BRIGHT), 96);
+			this.getSurface().drawBoxAlpha(x + 1, y + 1, fillW, VOID_VITALS_BAR_H - 2, fillColor, 120);
 		}
 		this.getSurface().drawBorder(x, y, VOID_VITALS_BAR_W, VOID_VITALS_BAR_H, UiSkin.GLASS_RIM);
 		this.getSurface().drawString(label + " " + current + "/" + max, x + 5, y + 12,

@@ -5154,3 +5154,7 @@ New always-on vitals readout for the void skin (all platforms), replacing the ol
 ### 2026-07-04 - Vitals stack: FPS chip joins the glass-bar style; stack moved to the RSCRevolution position
 
 Follow-up to the vitals panel: the desktop FPS chip now uses the identical glass-bar card as Hits/Prayer (same width/height/rim/small font), and the three-bar stack anchors at 38% of frame height on the left (y=126 at classic 334 — matching the reference layout's placement) instead of hugging the location plaque. The anchor is proportional, so the stack keeps its relative position on larger windows. Classic-skin FPS chip unchanged at its historic spot; mobile-shell chip recolored onto tokens (a missed slice-1 site). Verified by workbench capture. Client rendering only.
+
+### 2026-07-04 - Vitals stack recolored to the RSCRevolution palette
+
+Owner request: the vitals fills now match the reference — red hits, blue prayer, and the FPS card wears the fatigue-bar grey as a subtle full wash. Three new UiSkin tokens (VITAL_HITS 0xB23A2A, VITAL_PRAYER 0x3D5FCC, VITAL_META 0xC4CBD4, live-tunable like all tokens); the hits low-health green-to-red flip is gone since hits is now constitutively red. Glass backing/rim unchanged. Verified by workbench capture. Client rendering only.
