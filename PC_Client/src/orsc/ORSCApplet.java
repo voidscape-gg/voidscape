@@ -886,7 +886,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				mudclient.lastMouseAction = 0;
 
 				if (keyCode == 112) mudclient.interlace = !mudclient.interlace;
-				if (keyCode == 113) Config.C_SIDE_MENU_OVERLAY = !Config.C_SIDE_MENU_OVERLAY;
+				if (keyCode == KeyEvent.VK_F2) mudclient.toggleVitalsHud();
 				if (keyCode == KeyEvent.VK_F3) C_LAST_ZOOM = 75;
 				if (keyCode == KeyEvent.VK_F4) mudclient.toggleFirstPersonView();
 				if (keyCode == KeyEvent.VK_F5) mudclient.toggleCinematicHud();

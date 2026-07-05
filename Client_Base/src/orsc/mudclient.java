@@ -378,14 +378,13 @@ public final class mudclient implements Runnable {
 		"Combat", "Pack", "Magic", "Map", "Social", "Options"
 	};
 	private static final int VOIDSCAPE_TOP_TAB_Y = 3;
-	private static final int VOIDSCAPE_SKILL_ROW_H = 15;
+	private static final int VOIDSCAPE_SKILL_ROW_H = 17;
 	private static final int VOIDSCAPE_COMBAT_SKILLS = 7;
 	private static final int[] VOIDSCAPE_TOP_ICON_SIZES = {20, 24, 30, 32, 34, 36, 40, 42};
 	private static final int[] VOIDSCAPE_ACCOUNT_ICON_SIZES = {46, 54, 62, 72};
 	private static final int[] VOIDSCAPE_BOTTOM_CHAT_ICON_SIZES = {20, 22, 24, 28, 32};
 	private static final int[] VOIDSCAPE_PANEL_ICON_SIZES = {16, 20, 24};
 	private static final int[] VOIDSCAPE_SKILL_ICON_SIZES = {12, 14};
-	private static final int[] VOIDSCAPE_EQUIPMENT_ICON_SIZES = {14};
 	private static final int[] VOIDSCAPE_BANK_ICON_SIZES = {14, 16, 18, 20, 22, 24, 28};
 	private static final String[] VOIDSCAPE_SKIN_ASSETS = new String[]{
 		"chat-all.png", "chat-frame.png", "chat-history.png", "chat-tab-active.png",
@@ -779,6 +778,7 @@ public final class mudclient implements Runnable {
 	private int cinematicCameraMode = CINEMATIC_CAMERA_CLASSIC;
 	private int cinematicCameraOffsetDelta = 0;
 	private boolean cinematicHudHidden = false;
+	private boolean vitalsHudHidden = false;
 	private final CinematicCameraPoint cinematicCameraPointA = new CinematicCameraPoint();
 	private final CinematicCameraPoint cinematicCameraPointB = new CinematicCameraPoint();
 	private boolean cinematicCameraPathPlaying = false;
@@ -9120,6 +9120,9 @@ public final class mudclient implements Runnable {
 
 	private void drawFpsOverlay() {
 		if (this.getSurface() == null) {
+			return;
+		}
+		if (this.vitalsHudHidden && useVoidscapeHudSkin()) {
 			return;
 		}
 		if (isShowDialogBank()) {
@@ -17739,9 +17742,6 @@ public final class mudclient implements Runnable {
 		if (asset.startsWith("skill-")) {
 			return nearestAssetSize(VOIDSCAPE_SKILL_ICON_SIZES, size);
 		}
-		if (asset.startsWith("equip-")) {
-			return nearestAssetSize(VOIDSCAPE_EQUIPMENT_ICON_SIZES, size);
-		}
 		if (asset.startsWith("bank-chest")
 			|| asset.startsWith("bank-deposit-arrow")
 			|| asset.startsWith("bank-loadouts-shirt")
@@ -18164,6 +18164,10 @@ public final class mudclient implements Runnable {
 		if (this.showUiTab == Config.INVENTORY_TAB) {
 			return Math.max(voidscapeRightPanelBaseWidth(), voidscapeInventoryPanelWidth());
 		}
+		if (voidscapeUseStatsPanelLayout()) {
+			return Math.max(voidscapeRightPanelBaseWidth(),
+				voidscapeStatsPanelVisualWidth() + voidscapeRightPanelReadableInset() * 2);
+		}
 		if (this.showUiTab == Config.MAGIC_AND_PRAYER_TAB && voidscapeUseTouchMagicPrayerPanel()) {
 			return Math.max(voidscapeRightPanelBaseWidth(),
 				voidscapeMagicPrayerPanelVisualWidth() + voidscapeRightPanelReadableInset() * 2);
@@ -18291,40 +18295,23 @@ public final class mudclient implements Runnable {
 		if (voidscapeClassicWebSmallHud()) {
 			return 13;
 		}
-		return voidscapePanelSizeClass() <= 1 ? 13 : VOIDSCAPE_SKILL_ROW_H;
-	}
-
-	private boolean voidscapeStatsShowEquipment() {
-		return this.getGameWidth() >= 896 && this.getGameHeight() >= 650;
-	}
-
-	private boolean voidscapeStatsUseSingleColumnSummary() {
-		if (voidscapeClassicWebSmallHud()) {
-			return false;
-		}
-		return voidscapePanelSizeClass() <= 1;
+		return VOIDSCAPE_SKILL_ROW_H;
 	}
 
 	private int voidscapeRightPanelHeight() {
-		if (this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
-			&& (this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_LOOT
-			|| this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_BESTIARY)) {
+		if (this.showUiTab == Config.SKILLS_AND_QUESTS_TAB) {
 			return voidscapeChatTabTop() - voidscapeRightPanelY() - 8;
 		}
-		// Snug to content: compact presets prioritize game view and hide the optional equipment
-		// summary; larger presets keep the fuller stats panel.
-		int rightRows = Math.max(VOIDSCAPE_COMBAT_SKILLS, skillCount - VOIDSCAPE_COMBAT_SKILLS);
+		// Fallback estimate for legacy callers; the active player-info panel returns full height above.
+		int rightRows = voidscapeSkillVisibleRows();
 		int rowH = voidscapeSkillRowHeight();
-		int statRows = voidscapeClassicWebSmallHud() ? 3 : (voidscapeStatsUseSingleColumnSummary() ? 6 : 4);
+		int statRows = 3;
 		int lineH = voidscapeStatsLineHeight();
 		int sectionH = voidscapeSectionHeaderHeight();
 		int contentTop = voidscapeGlassRightPanelContentTop();
 		int statsBottom = contentTop + (voidscapeClassicWebSmallHud() ? 6 : 8) + sectionH + statRows * lineH;
 		int skillsBottom = statsBottom + (voidscapeClassicWebSmallHud() ? 4 : 6) + sectionH + rightRows * rowH;
 		int contentBottom = skillsBottom + (voidscapeClassicWebSmallHud() ? 5 : 8);
-		if (voidscapeStatsShowEquipment()) {
-			contentBottom += 22 + (3 * 17);
-		}
 		// Never reach into the chat tab row at the bottom of the screen.
 		int maxHeight = voidscapeChatTabTop() - voidscapeRightPanelY() - 8;
 		return Math.min(contentBottom + (voidscapeClassicWebSmallHud() ? 10 : 14), maxHeight);
@@ -18443,10 +18430,34 @@ public final class mudclient implements Runnable {
 		if (this.showUiTab == Config.INVENTORY_TAB) {
 			return voidscapeInventoryPanelWidth();
 		}
+		if (voidscapeUseStatsPanelLayout()) {
+			return voidscapeStatsPanelVisualWidth();
+		}
 		if (this.showUiTab == Config.MAGIC_AND_PRAYER_TAB && voidscapeUseTouchMagicPrayerPanel()) {
 			return voidscapeMagicPrayerPanelVisualWidth();
 		}
 		return voidscapeStandardPanelVisualWidth();
+	}
+
+	private boolean voidscapeUseStatsPanelLayout() {
+		return this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
+			&& this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_SKILLS
+			&& !voidscapeClassicWebSmallHud();
+	}
+
+	private int voidscapeStatsPanelVisualWidth() {
+		switch (voidscapePanelSizeClass()) {
+			case 0:
+				return 268;
+			case 1:
+				return 276;
+			case 2:
+				return 284;
+			case 3:
+				return 292;
+			default:
+				return 300;
+		}
 	}
 
 	private int voidscapeStandardPanelVisualWidth() {
@@ -19870,6 +19881,8 @@ public final class mudclient implements Runnable {
 			totalLevel += this.playerStatBase[i];
 			totalXp += this.playerExperience[i] & 0xffffffffL;
 		}
+		int footerH = voidscapeStatsFooterHeight();
+		int footerY = footerH > 0 ? contentY + panelBodyH - footerH - 6 : -1;
 		int sectionH = voidscapeSectionHeaderHeight();
 		int statsY = statsHeaderY + sectionH - 1;
 		int lineH = voidscapeStatsLineHeight();
@@ -19885,43 +19898,40 @@ public final class mudclient implements Runnable {
 			drawVoidscapeStatLine(rightX, statsY + lineH, colW, "CB", Integer.toString(combatLevel), 0xE7DEBC, 0);
 			drawVoidscapeStatLine(rightX, statsY + lineH * 2, colW, "QP", Integer.toString(this.questPoints), 0x6FE38A, 0);
 			statRows = 3;
-		} else if (voidscapeStatsUseSingleColumnSummary()) {
-			drawVoidscapeStatLine(innerX, statsY, innerW, "Combat XP", formatXpRate(this.profileEffectiveCombatRateTenths), 0x6FE38A, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH, innerW, "Skill XP", formatXpRate(this.profileEffectiveSkillingRateTenths), 0xC680FF, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 2, innerW, "Total Lvl", Integer.toString(totalLevel), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 3, innerW, "Total XP", formatCompactLong(totalXp), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 4, innerW, "Combat Lvl", Integer.toString(combatLevel), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 5, innerW, "Quests", Integer.toString(this.questPoints), 0x6FE38A, 1);
-			statRows = 6;
 		} else {
 			int colGap = Math.max(12, voidscapeStatsColumnGap());
 			int colW = (innerW - colGap) / 2;
 			int rightX = innerX + colW + colGap;
-			drawVoidscapeStatLine(innerX, statsY, colW, "Combat XP", formatXpRate(this.profileEffectiveCombatRateTenths), 0x6FE38A, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH, colW, "Skill XP", formatXpRate(this.profileEffectiveSkillingRateTenths), 0xC680FF, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 2, colW, "Total Lvl", Integer.toString(totalLevel), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 3, colW, "Total XP", formatCompactLong(totalXp), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(rightX, statsY, colW, "Combat", Integer.toString(combatLevel), 0xE7DEBC, 1);
-			drawVoidscapeStatLine(rightX, statsY + lineH, colW, "Quests", Integer.toString(this.questPoints), 0x6FE38A, 1);
-			statRows = 4;
+			drawVoidscapeStatLine(innerX, statsY, colW, "Total Lvl", Integer.toString(totalLevel), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+			drawVoidscapeStatLine(rightX, statsY, colW, "Combat", Integer.toString(combatLevel), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+			drawVoidscapeStatLine(innerX, statsY + lineH, colW, "Total XP",
+				voidscapeStatsTotalXpValue(totalXp, colW, UiSkin.FONT_BODY), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+			drawVoidscapeStatLine(rightX, statsY + lineH, colW, "Quests", Integer.toString(this.questPoints), UiSkin.GOOD, UiSkin.FONT_BODY);
+			drawVoidscapeStatNote(innerX, statsY + lineH * 2, innerW,
+				"XP rates  " + formatXpRate(this.profileEffectiveCombatRateTenths) + " combat - "
+					+ formatXpRate(this.profileEffectiveSkillingRateTenths) + " skilling");
+			statRows = 3;
 		}
 
 		int skillsHeaderY = statsY + lineH * statRows + (voidscapeClassicWebSmallHud() ? 4 : 6);
 		drawVoidscapeSectionHeader("SKILLS", innerX, skillsHeaderY, innerW);
 		int skillsY = skillsHeaderY + sectionH - 1;
+		int skillsBottomY = footerY > 0 ? footerY - 5 : y + height - 10;
 		int hoveredSkill = findVoidscapeHoveredSkill(innerX, skillsY, innerW);
 		int hoveredLockSkill = findVoidscapeHoveredSkillLock(innerX, skillsY, innerW);
-		drawVoidscapeSkillRows(innerX, skillsY, innerW, hoveredSkill, hoveredLockSkill);
-
-		int rightSkillRows = Math.max(VOIDSCAPE_COMBAT_SKILLS, skillCount - VOIDSCAPE_COMBAT_SKILLS);
-		if (voidscapeStatsShowEquipment()) {
-			int equipY = skillsY + rightSkillRows * voidscapeSkillRowHeight() + 8;
-			drawVoidscapeSectionHeader("EQUIPMENT STATUS", innerX, equipY, innerW);
-			drawVoidscapeEquipmentRows(innerX, equipY + 22, innerW);
+		if (this.mouseY >= skillsBottomY) {
+			hoveredSkill = -1;
+			hoveredLockSkill = -1;
 		}
-
-		if (hoveredSkill != -1) {
-			drawVoidscapeHoveredSkillTooltip(hoveredSkill);
+		if (footerY > 0) {
+			UiSkin.pushClip(this.getSurface(), innerX - 3, skillsY - 1, innerW + 6,
+				Math.max(1, skillsBottomY - skillsY + 1));
+			drawVoidscapeSkillRows(innerX, skillsY, innerW, hoveredSkill, hoveredLockSkill);
+			UiSkin.popClip(this.getSurface());
+			drawVoidscapeStatsFooter(innerX + 6, footerY, innerW - 12, footerH, hoveredSkill,
+				totalXp, totalLevel, combatLevel);
+		} else {
+			drawVoidscapeSkillRows(innerX, skillsY, innerW, hoveredSkill, hoveredLockSkill);
 		}
 
 		if (mustTrackMouse && hoveredLockSkill != -1 && this.mouseButtonClick == 1) {
@@ -20649,7 +20659,7 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeSectionHeader(String label, int x, int y, int width) {
 		int height = voidscapeSectionHeaderHeight();
 		drawVoidscapeThreeSliceH("right-panel-section.png", x, y, width, height, 20, 0);
-		this.getSurface().drawColoredStringCentered(x + width / 2, label, 0xE4D08D, 0, 1,
+		this.getSurface().drawColoredStringCentered(x + width / 2, label, UiSkin.GOLD_HEADER, 0, UiSkin.FONT_BODY,
 			y + (voidscapeClassicWebSmallHud() ? 13 : 16));
 	}
 
@@ -20660,17 +20670,52 @@ public final class mudclient implements Runnable {
 	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor, int font) {
 		int pad = voidscapeRightPanelListPad();
 		int baselineY = y + (voidscapeClassicWebSmallHud() ? 9 : 10);
-		this.getSurface().drawString(label, x + pad, baselineY, 0xB7ABC8, font);
+		this.getSurface().drawString(label, x + pad, baselineY, UiSkin.TEXT_LABEL, font);
 		int valueWidth = this.getSurface().stringWidth(font, value);
 		this.getSurface().drawString(value, x + width - valueWidth - pad, baselineY, valueColor, font);
 	}
 
+	private void drawVoidscapeStatNote(int x, int y, int width, String value) {
+		int pad = voidscapeRightPanelListPad();
+		int baselineY = y + 9;
+		this.getSurface().drawString(fitVoidscapeText(value, width - pad * 2, UiSkin.FONT_SMALL),
+			x + pad, baselineY, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
+	}
+
+	private String voidscapeStatsTotalXpValue(long totalXp, int width, int font) {
+		String exact = formatExactLong(totalXp);
+		int pad = voidscapeRightPanelListPad();
+		int requiredWidth = this.getSurface().stringWidth(font, "Total XP")
+			+ this.getSurface().stringWidth(font, exact) + pad * 2 + 4;
+		if (voidscapePanelSizeClass() == 0 && requiredWidth > width) {
+			return formatCompactLong(totalXp);
+		}
+		return exact;
+	}
+
+	private int voidscapeStatsFooterHeight() {
+		return voidscapeClassicWebSmallHud() ? 0 : 52;
+	}
+
 	private int voidscapeSkillColumn(int skill) {
-		return skill < VOIDSCAPE_COMBAT_SKILLS ? 0 : 1;
+		return skill < voidscapeSkillLeftColumnCount() ? 0 : 1;
 	}
 
 	private int voidscapeSkillRowIndex(int skill) {
-		return skill < VOIDSCAPE_COMBAT_SKILLS ? skill : skill - VOIDSCAPE_COMBAT_SKILLS;
+		int leftColumnCount = voidscapeSkillLeftColumnCount();
+		return skill < leftColumnCount ? skill : skill - leftColumnCount;
+	}
+
+	private int voidscapeSkillLeftColumnCount() {
+		if (voidscapeClassicWebSmallHud()) {
+			return VOIDSCAPE_COMBAT_SKILLS;
+		}
+		return (skillCount + 1) / 2;
+	}
+
+	private int voidscapeSkillVisibleRows() {
+		int leftColumnCount = voidscapeSkillLeftColumnCount();
+		return Math.max(leftColumnCount, skillCount - leftColumnCount);
 	}
 
 	private int voidscapeStatsColumnGap() {
@@ -20731,45 +20776,93 @@ public final class mudclient implements Runnable {
 		int columnGap = voidscapeStatsColumnGap();
 		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
-		boolean tinyClassic = voidscapeClassicWebSmallHud() && rowH < 13;
+		boolean compactWeb = voidscapeClassicWebSmallHud();
+		int font = compactWeb ? UiSkin.FONT_SMALL : UiSkin.FONT_BODY;
+		boolean[] columnReservesLock = new boolean[]{false, false};
+		if (!compactWeb) {
+			for (int i = 0; i < skillCount; i++) {
+				if (isVoidscapeSkillExperienceLockable(i)) {
+					int column = Math.min(1, Math.max(0, voidscapeSkillColumn(i)));
+					columnReservesLock[column] = true;
+				}
+			}
+		}
+		int[] levelColumnWidth = new int[]{0, 0};
+		if (!compactWeb) {
+			for (int i = 0; i < skillCount; i++) {
+				int column = Math.min(1, Math.max(0, voidscapeSkillColumn(i)));
+				levelColumnWidth[column] = Math.max(levelColumnWidth[column],
+					this.getSurface().stringWidth(font, voidscapeSkillLevelText(i, false)));
+			}
+		}
 		for (int i = 0; i < skillCount; i++) {
-			int rowX = startX + voidscapeSkillColumn(i) * (columnWidth + columnGap);
+			int column = Math.min(1, Math.max(0, voidscapeSkillColumn(i)));
+			int rowX = startX + column * (columnWidth + columnGap);
 			int rowY = startY + voidscapeSkillRowIndex(i) * rowH;
 			if (i == hoveredSkill) {
 				this.getSurface().drawBoxAlpha(rowX - 2, rowY - 1,
-					columnWidth - (tinyClassic ? 2 : 6), rowH, 0x4B2472, 116);
+					columnWidth - (compactWeb ? 2 : 6), rowH, UiSkin.PURPLE_SELECT, UiSkin.A_HOVER_ROW);
 			}
 			int current = this.playerStatCurrent[i];
 			int base = this.playerStatBase[i];
-			int nameColor = i == hoveredSkill ? 0xFFD968 : 0xE7DEBC;
-			if (current > base) {
-				nameColor = 0x6FE38A;
-			} else if (current < base) {
-				nameColor = 0xFF6B6B;
+			int nameColor = i == hoveredSkill ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY;
+			String level = voidscapeSkillLevelText(i, compactWeb);
+			int levelColor;
+			if (compactWeb) {
+				levelColor = UiSkin.GOLD_HOT;
+				if (current > base) {
+					nameColor = UiSkin.GOOD;
+				} else if (current < base) {
+					nameColor = UiSkin.BAD;
+				}
+			} else if (current == base) {
+				levelColor = UiSkin.GOLD_HOT;
+			} else {
+				levelColor = current > base ? UiSkin.GOOD : UiSkin.BAD;
 			}
-			// Compact two-column rows: small icon + name left, level right. Smaller font (0) keeps the
-			// name and the level from converging within the narrow column.
-			int iconSize = tinyClassic ? 10 : (rowH <= 13 ? 12 : 14);
+			int iconSize = compactWeb ? 12 : 14;
 			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(voidscapeSkillIconName(i), iconSize),
 				rowX, rowY, iconSize, iconSize);
-			String level = current + "/" + base;
-			int levelWidth = this.getSurface().stringWidth(0, level);
-			int levelRight = rowX + columnWidth - (tinyClassic ? 2 : 8);
+			int levelWidth = this.getSurface().stringWidth(font, level);
+			int levelRight = rowX + columnWidth - (compactWeb ? 2 : 8);
 			if (isVoidscapeSkillExperienceLockable(i)) {
 				int lockSize = voidscapeSkillLockSize(rowH);
 				int lockX = voidscapeSkillLockX(rowX, columnWidth, lockSize);
 				int lockY = rowY + Math.max(0, (rowH - lockSize) / 2);
-				drawVoidscapeSkillLockIcon(lockX, lockY, lockSize, isVoidscapeSkillExperienceLocked(i), hoveredLockSkill == i);
-				levelRight = lockX - (tinyClassic ? 1 : 3);
+				boolean locked = isVoidscapeSkillExperienceLocked(i);
+				if (compactWeb || locked || hoveredSkill == i || hoveredLockSkill == i) {
+					drawVoidscapeSkillLockIcon(lockX, lockY, lockSize, locked, hoveredLockSkill == i);
+				}
+				levelRight = lockX - (compactWeb ? 1 : 3);
+			} else if (!compactWeb && columnReservesLock[column]) {
+				int lockSize = voidscapeSkillLockSize(rowH);
+				levelRight = voidscapeSkillLockX(rowX, columnWidth, lockSize) - 3;
 			}
-			int nameX = rowX + iconSize + (tinyClassic ? 3 : 4);
-			int nameW = Math.max(8, levelRight - levelWidth - nameX - 2);
-			String name = tinyClassic ? voidscapeTinySkillName(i) : this.getSkillNames()[i];
-			this.getSurface().drawString(fitVoidscapeText(name, nameW, 0), nameX,
-				rowY + rowH - (tinyClassic ? 2 : 3), nameColor, 0);
-			this.getSurface().drawString(level, levelRight - levelWidth,
-				rowY + rowH - (tinyClassic ? 2 : 3), 0xFFD968, 0);
+			int nameX = rowX + iconSize + (compactWeb ? 3 : 4);
+			int levelX = compactWeb ? levelRight - levelWidth : levelRight - levelColumnWidth[column];
+			int nameW = Math.max(8, levelX - nameX - 3);
+			String name = compactWeb ? voidscapeTinySkillName(i) : voidscapeSkillDisplayName(i);
+			int textY = compactWeb ? rowY + rowH - 2 : rowY + 13;
+			this.getSurface().drawString(fitVoidscapeText(name, nameW, font), nameX, textY, nameColor, font);
+			this.getSurface().drawString(level, levelX, textY, levelColor, font);
+			if (!compactWeb) {
+				int barX = nameX;
+				int barW = Math.max(1, levelRight - nameX);
+				drawVoidscapeSkillProgressBar(barX, rowY + rowH - 3, barW, 2, voidscapeSkillProgress(i));
+			}
 		}
+	}
+
+	private String voidscapeSkillLevelText(int skill, boolean compactWeb) {
+		int current = this.playerStatCurrent[skill];
+		int base = this.playerStatBase[skill];
+		if (compactWeb) {
+			return current + "/" + base;
+		}
+		if (current == base) {
+			return base + "/" + S_PLAYER_LEVEL_LIMIT;
+		}
+		return current + "/" + base;
 	}
 
 	private String voidscapeTinySkillName(int skill) {
@@ -20820,7 +20913,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeSkillLockIcon(int x, int y, int size, boolean locked, boolean hover) {
-		int color = locked ? 0xFF6B6B : hover ? 0xF0DFA3 : 0x8E7EA7;
+		int color = locked ? UiSkin.BAD : hover ? UiSkin.GOLD_TITLE : UiSkin.TEXT_DIM;
 		int bodyY = y + size / 2;
 		int bodyH = Math.max(4, size - size / 2);
 		if (locked) {
@@ -20832,56 +20925,101 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawLineVert(x + 2, y + 1, color, Math.max(1, size / 2));
 			this.getSurface().drawLineVert(x + size - 2, y + 1, color, 2);
 		}
-		this.getSurface().drawBoxAlpha(x + 1, bodyY, Math.max(3, size - 2), bodyH, locked ? 0x3A1017 : 0x171421,
+		this.getSurface().drawBoxAlpha(x + 1, bodyY, Math.max(3, size - 2), bodyH, locked ? UiSkin.DANGER_HOVER : UiSkin.VOID_BOX,
 			locked ? 210 : 150);
 		this.getSurface().drawBoxBorder(x + 1, Math.max(3, size - 2), bodyY, bodyH, color);
 	}
 
-	private void drawVoidscapeEquipmentRows(int x, int y, int width) {
-		String[] icons = new String[]{"equip-armour.png", "equip-aim.png", "equip-power.png",
-			"equip-magic.png", "equip-prayer.png"};
-		String[] labels = new String[]{"Armour", "Weapon Aim", "Weapon Power", "Magic", "Prayer"};
-		int columnGap = voidscapeStatsColumnGap();
-		int columnWidth = (width - columnGap) / 2;
-		int leftRows = 3;
-		int count = Math.min(this.playerStatEquipment.length, icons.length);
-		for (int i = 0; i < count; i++) {
-			int col = i < leftRows ? 0 : 1;
-			int row = i < leftRows ? i : i - leftRows;
-			int rowX = x + col * (columnWidth + columnGap);
-			int rowY = y + row * 17;
-			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(icons[i], 14), rowX, rowY - 2, 14, 14);
-			this.getSurface().drawString(labels[i], rowX + 18, rowY + 8, 0x8E7EA7, 0);
-			String value = Integer.toString(this.playerStatEquipment[i]);
-			int valueWidth = this.getSurface().stringWidth(0, value);
-			this.getSurface().drawString(value, rowX + columnWidth - valueWidth - 8, rowY + 8, 0xE7DEBC, 0);
+	private static final class VoidscapeSkillProgress {
+		final long xp;
+		final long nextXp;
+		final long toNext;
+		final int permille;
+
+		VoidscapeSkillProgress(long xp, long nextXp, long toNext, int permille) {
+			this.xp = xp;
+			this.nextXp = nextXp;
+			this.toNext = toNext;
+			this.permille = permille;
 		}
 	}
 
-	private void drawVoidscapeHoveredSkillTooltip(int skill) {
-		int boxW = 134;
-		int boxH = 58;
-		int boxX = this.mouseX + 14;
-		int boxY = this.mouseY + 6;
-		if (boxX + boxW > this.getGameWidth() - 4) {
-			boxX = this.mouseX - boxW - 14;
+	private VoidscapeSkillProgress voidscapeSkillProgress(int skill) {
+		long xp = skill >= 0 && skill < this.playerExperience.length ? (this.playerExperience[skill] & 0xffffffffL) : 0L;
+		if (this.experienceArray == null || this.experienceArray.length == 0) {
+			return new VoidscapeSkillProgress(xp, 0L, 0L, 1000);
 		}
-		if (boxY + boxH > this.getGameHeight() - 4) {
-			boxY = this.getGameHeight() - 4 - boxH;
-		}
-		UiSkin.tooltip(this.getSurface(), boxX, boxY, boxW, boxH);
-		this.getSurface().drawString(skillNameLong[skill], boxX + 8, boxY + 16, UiSkin.GOLD_HOT, UiSkin.FONT_BODY);
-		long xp = this.playerExperience[skill] & 0xffffffffL;
-		int nextLevelExp = this.experienceArray[0];
-		for (int level = 0; level < S_PLAYER_LEVEL_LIMIT - 1; ++level) {
-			if (this.experienceArray[level] <= this.playerExperience[skill]) {
-				nextLevelExp = this.experienceArray[level + 1];
+		int lastIndex = Math.min(S_PLAYER_LEVEL_LIMIT - 1, this.experienceArray.length - 1);
+		long previousXp = 0L;
+		long nextXp = this.experienceArray[0] & 0xffffffffL;
+		for (int level = 0; level < lastIndex; ++level) {
+			long threshold = this.experienceArray[level] & 0xffffffffL;
+			if (threshold <= xp) {
+				previousXp = threshold;
+				nextXp = this.experienceArray[level + 1] & 0xffffffffL;
+			} else {
+				break;
 			}
 		}
-		this.getSurface().drawString("XP", boxX + 8, boxY + 34, UiSkin.TEXT_DIM, UiSkin.FONT_BODY);
-		this.getSurface().drawString(formatExactLong(xp), boxX + 52, boxY + 34, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-		this.getSurface().drawString("Next", boxX + 8, boxY + 50, UiSkin.TEXT_DIM, UiSkin.FONT_BODY);
-		this.getSurface().drawString(formatExactLong(nextLevelExp), boxX + 52, boxY + 50, UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		long capXp = this.experienceArray[lastIndex] & 0xffffffffL;
+		boolean capped = xp >= capXp || (skill >= 0 && skill < this.playerStatBase.length
+			&& this.playerStatBase[skill] >= S_PLAYER_LEVEL_LIMIT);
+		if (capped) {
+			return new VoidscapeSkillProgress(xp, capXp, 0L, 1000);
+		}
+		long span = Math.max(1L, nextXp - previousXp);
+		long gained = Math.max(0L, Math.min(span, xp - previousXp));
+		int permille = (int) Math.max(0L, Math.min(1000L, gained * 1000L / span));
+		return new VoidscapeSkillProgress(xp, nextXp, Math.max(0L, nextXp - xp), permille);
+	}
+
+	private void drawVoidscapeSkillProgressBar(int x, int y, int width, int height, VoidscapeSkillProgress progress) {
+		if (width <= 0 || height <= 0) {
+			return;
+		}
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.GLASS_SHEEN, 32);
+		int fillW = Math.max(0, Math.min(width, (int) ((long) width * progress.permille / 1000L)));
+		if (fillW > 0) {
+			this.getSurface().drawBoxAlpha(x, y, fillW, height, UiSkin.GLASS_RIM, 218);
+		}
+	}
+
+	private void drawVoidscapeStatsFooter(int x, int y, int width, int height, int hoveredSkill,
+										  long totalXp, int totalLevel, int combatLevel) {
+		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.VOID_BOX, 218);
+		this.getSurface().drawBorder(x, y, width, height, UiSkin.VOID_LINE);
+		this.getSurface().drawLineHoriz(x + 1, y + 1, width - 2, UiSkin.PURPLE_EDGE);
+		int pad = 8;
+		if (hoveredSkill >= 0 && hoveredSkill < skillCount) {
+			VoidscapeSkillProgress progress = voidscapeSkillProgress(hoveredSkill);
+			String level = "level " + this.playerStatBase[hoveredSkill];
+			int levelWidth = this.getSurface().stringWidth(UiSkin.FONT_BODY, level);
+			this.getSurface().drawString(fitVoidscapeText(voidscapeSkillDisplayName(hoveredSkill),
+					width - pad * 3 - levelWidth, UiSkin.FONT_BODY),
+				x + pad, y + 14, UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
+			this.getSurface().drawString(level, x + width - pad - levelWidth, y + 14,
+				UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
+			String xpLine = "XP " + formatExactLong(progress.xp) + "  next " + formatExactLong(progress.nextXp);
+			this.getSurface().drawString(fitVoidscapeText(xpLine, width - pad * 2, UiSkin.FONT_SMALL),
+				x + pad, y + 27, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
+			this.getSurface().drawString(formatExactLong(progress.toNext) + " to go",
+				x + pad, y + 40, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
+			drawVoidscapeSkillProgressBar(x + pad, y + height - 5, width - pad * 2, 4, progress);
+			return;
+		}
+		this.getSurface().drawString("Total XP " + formatExactLong(totalXp), x + pad, y + 14,
+			UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
+		this.getSurface().drawString("Skill total " + totalLevel, x + pad, y + 29,
+			UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		this.getSurface().drawString("Combat level " + combatLevel, x + pad, y + 44,
+			UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+	}
+
+	private String voidscapeSkillDisplayName(int skill) {
+		if (skillNameLong != null && skill >= 0 && skill < skillNameLong.length) {
+			return skillNameLong[skill];
+		}
+		return skill >= 0 && skill < this.getSkillNames().length ? this.getSkillNames()[skill] : "";
 	}
 
 	private String voidscapeSkillIconName(int skill) {
@@ -32549,6 +32687,12 @@ public final class mudclient implements Runnable {
 	public void toggleCinematicHud() {
 		this.cinematicHudHidden = !this.cinematicHudHidden;
 		this.showCinematicMessage("Cinematic HUD " + (this.cinematicHudHidden ? "hidden" : "shown"));
+	}
+
+	public void toggleVitalsHud() {
+		this.vitalsHudHidden = !this.vitalsHudHidden;
+		this.showMessage(false, null, "Vitals HUD " + (this.vitalsHudHidden ? "hidden" : "shown"),
+			MessageType.GAME, 0, null);
 	}
 
 	public void saveCinematicCameraPointA() {
