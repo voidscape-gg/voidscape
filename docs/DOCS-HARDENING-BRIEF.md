@@ -83,14 +83,15 @@ Check `docs/recipes/` for coverage; add/upgrade, each as numbered steps + verifi
 - `carve-custom-terrain.md` — derive from `scripts/patch-void-enclave-landscape.py` +
   the Tutorial Isle work in commit `f7cd9872` as the worked example (sector math, tile
   bytes, safe-zone + client rects + worldmap + loc-JSON registration checklist).
-- `add-gated-area.md` — walk-handler gating pattern (`VoidTutorialIsle`,
-  `VoidStarterIntro.blocksUnseenIntroPath`), leave-blocks, stage cache keys.
+- `add-gated-area.md` — walk-handler gating pattern
+  (`VoidStarterIntro.blocksUnseenIntroPath`), leave-blocks, stage cache keys.
 - `qa-fresh-accounts.md` — voidbot `register` + `design-character` + workbench
   `--user/--pass`; onboarding flags are one-way so it's one fresh account per run;
   gotchas: staged `goto` on islands, batch actions swallowing commands, cook prompts
   are menus. (Seed: memory file `project-fresh-account-e2e-testing.md`.)
-- `add-scripted-fight.md` — instanced NPC fight with safe death
-  (`VoidGuidedFight` as the canonical example; suppress-default-death attribute).
+- `add-scripted-fight.md` — instanced NPC fight with safe death; use current
+  minigame combat code as the worked example and call out suppress-default-death
+  attributes when relevant.
 - Verify the existing `add-npc.md` / `add-item.md` / `add-quest.md` against current
   code (they predate several conventions above).
 

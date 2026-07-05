@@ -5,15 +5,16 @@ import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidStarterIntro;
 import com.openrsc.server.content.VoidVeteranTour;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.plugins.triggers.PostLoginReadyTrigger;
 import com.openrsc.server.plugins.triggers.VoidWelcomeTrigger;
 
 import static com.openrsc.server.plugins.Functions.multi;
 
 /**
- * The 3-way welcome choice shown when a new character lands on Void Island,
+ * The welcome choice shown when a new character lands on Void Island,
  * plus login resume for every onboarding track.
  */
-public final class VoidWelcome implements VoidWelcomeTrigger {
+public final class VoidWelcome implements VoidWelcomeTrigger, PostLoginReadyTrigger {
 	private static final String RUNNING_ATTRIBUTE = "void_welcome_running";
 
 	@Override
@@ -27,6 +28,16 @@ public final class VoidWelcome implements VoidWelcomeTrigger {
 		showWelcomeMenu(player);
 	}
 
+	@Override
+	public boolean blockPostLoginReady(Player player) {
+		return true;
+	}
+
+	@Override
+	public void onPostLoginReady(Player player) {
+		handleLogin(player);
+	}
+
 	public static void showWelcomeMenu(Player player) {
 		if (!VoidOnboarding.needsWelcome(player) || player.getAttribute(RUNNING_ATTRIBUTE, false)) {
 			return;
@@ -36,27 +47,19 @@ public final class VoidWelcome implements VoidWelcomeTrigger {
 		player.resetPath();
 		try {
 			int choice = multi(player, null, false,
-				VoidOnboarding.OPTION_NEW,
 				VoidOnboarding.OPTION_VETERAN,
 				VoidOnboarding.OPTION_SKIP);
 
 			switch (choice) {
 				case 0:
-					VoidOnboarding.setTrack(player, VoidOnboarding.TRACK_GUIDED);
-					player.save();
+					VoidOnboarding.setTrack(player, VoidOnboarding.TRACK_VETERAN);
 					VoidStarterIntro.playLore(player);
 					continueAfterLore(player);
 					break;
 				case 1:
-					VoidOnboarding.setTrack(player, VoidOnboarding.TRACK_VETERAN);
-					player.save();
-					VoidStarterIntro.playLore(player);
-					continueAfterLore(player);
-					break;
-				case 2:
 					VoidOnboarding.setTrack(player, VoidOnboarding.TRACK_SKIP);
 					player.getCache().store(VoidStarterIntro.SEEN_CACHE_KEY, true);
-					player.save();
+					player.save(false, true);
 					VoidPath.openPathChoice(player, null);
 					break;
 				default:
@@ -79,9 +82,6 @@ public final class VoidWelcome implements VoidWelcomeTrigger {
 		}
 
 		switch (VoidOnboarding.getTrack(player)) {
-			case VoidOnboarding.TRACK_GUIDED:
-				VoidGuidedTour.start(player);
-				break;
 			case VoidOnboarding.TRACK_VETERAN:
 				VoidVeteranTour.start(player);
 				break;
@@ -95,8 +95,19 @@ public final class VoidWelcome implements VoidWelcomeTrigger {
 		if (player.isChangingAppearance() || VoidPath.hasChosen(player)) {
 			return;
 		}
+
+		boolean retiredGuided = VoidOnboarding.retireGuidedState(player);
+		if (retiredGuided) {
+			player.save(false, true);
+		}
+
 		if (!VoidPath.inStarterIsland(player.getX(), player.getY())) {
-			return;
+			int track = VoidOnboarding.getTrack(player);
+			if (retiredGuided || track == VoidOnboarding.TRACK_SKIP || track == VoidOnboarding.TRACK_VETERAN) {
+				player.teleport(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y, true);
+			} else {
+				return;
+			}
 		}
 
 		switch (VoidOnboarding.getTrack(player)) {
@@ -108,13 +119,6 @@ public final class VoidWelcome implements VoidWelcomeTrigger {
 				break;
 			case VoidOnboarding.TRACK_SKIP:
 				VoidPath.openPathChoice(player, null);
-				break;
-			case VoidOnboarding.TRACK_GUIDED:
-				if (VoidStarterIntro.needsIntro(player)) {
-					VoidStarterIntro.prompt(player);
-				} else {
-					VoidGuidedTour.resume(player);
-				}
 				break;
 			case VoidOnboarding.TRACK_VETERAN:
 				if (VoidStarterIntro.needsIntro(player)) {

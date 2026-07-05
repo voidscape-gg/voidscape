@@ -112,7 +112,6 @@ to resume from these two files alone. Keep every entry self-contained.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
-- Onboarding guided track: one E2E account (e2eloss2) reached stage DONE after an ambush loss without an observed win/escape message — unreproducible in 4 later runs (win/loss/retry/resume all behaved correctly). Suspect the escape branch (leash/timeout counts as "survived" by design) fired unobserved between polls; re-check with server-side logging if a player ever reports skipping the rogue retry. Found during void-island onboarding E2E, 2026-07-04.
 
 Anyone (Ryan or an agent) can append raw, unstructured reports below, one bullet each.
 The loop's triage step converts each into a numbered entry and removes it from this list.

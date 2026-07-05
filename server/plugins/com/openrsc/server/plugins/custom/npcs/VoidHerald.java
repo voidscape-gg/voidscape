@@ -2,6 +2,7 @@ package com.openrsc.server.plugins.custom.npcs;
 
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.content.VoidPath;
+import com.openrsc.server.content.VoidVeteranTour;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeNpcDialogue;
@@ -26,6 +27,11 @@ public final class VoidHerald implements TalkNpcTrigger {
 
 		if (VoidPath.hasChosen(player)) {
 			handleActivityMenu(player, npc);
+			return;
+		}
+
+		if (VoidVeteranTour.needsRequiredTour(player)) {
+			npcsay(player, npc, "The Archivist waits south of here", "Hear what changed, then return to choose your path");
 			return;
 		}
 

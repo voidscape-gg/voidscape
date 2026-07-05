@@ -59,7 +59,7 @@ LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 # Three chambers south-to-north joined at the guide lane (x=40):
 #   C1 "The Landing" (camp) -> gate y=31 -> C2 "The Ring" (spar) -> gate y=23
 #   -> C3 "The Scar" (ambush). Gate gaps at the lane stay physically open;
-# passage is script-gated by void_guided_stage (VoidTutorialIsle.java).
+# passage used to be script-gated by the retired guided onboarding runtime.
 TUTORIAL_ISLE_LANE_X = 40
 TUTORIAL_ISLE_RING_Y = 27
 TUTORIAL_ISLE_PAD_Y = 37

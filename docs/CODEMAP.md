@@ -122,10 +122,9 @@ server/
 │   │   ├── PlayerTitle.java        # Voidscape player-title catalog, unlock checks, active title cache
 │   │   ├── ProgressionMilestones.java # level/total milestone rewards
 │   │   ├── RestedExperience.java   # offline rested-XP pool accrual and spending
-│   │   ├── VoidOnboarding.java     # tracks the Void Island welcome-menu track choice (guided/veteran/skip)
+│   │   ├── VoidOnboarding.java     # tracks the Void Island welcome-menu track choice (veteran/skip; retires old guided cache)
 │   │   ├── VoidPath.java           # Void Island starter path state, kits, and early XP boosts
 │   │   ├── VoidStarterIntro.java   # council-lore intro sequence gating the path picker
-│   │   ├── VoidTutorialIsle.java   # gated three-chamber Tutorial Isle (camp/spar/scout) for the guided track
 │   │   ├── VoidVeteranTour.java    # Void Archivist "what's new" tour: rested-XP + loot-beam demos, topic menu
 │   │
 │   └── …                           # (login, util, services, …)
@@ -138,7 +137,7 @@ server/
 │   │   └── minigames/
 │   ├── custom/                     # OpenRSC additions / non-authentic content
 │   │   ├── npcs/                   # custom NPC dialogue / shops (VoidArchivist, VoidHerald, …)
-│   │   ├── onboarding/             # Void Island welcome flow (VoidWelcome, VoidGuidedTour, VoidGuidedFight)
+│   │   ├── onboarding/             # Void Island welcome flow (VoidWelcome)
 │   │   └── …                       # commands/, items/, itemactions/, minigames/, misc/, quests/, skills/
 │   ├── RuneScript.java             # static dialogue / delay helpers (legacy name)
 │   ├── Functions.java              # quest / NPC / item utilities

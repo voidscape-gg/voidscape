@@ -274,12 +274,11 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().WANT_VOID_COLOSSUS) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidColossusArena.json", type);
 				}
-				loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidArena.json", type);
-				loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidIsland.json", type);
-				loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidTutorialIsle.json", type);
-				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
-					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidDungeon.json", type);
-				}
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidArena.json", type);
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidIsland.json", type);
+					if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
+						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidDungeon.json", type);
+					}
 				return;
 			}
 			case NPC: {
@@ -299,11 +298,10 @@ public final class WorldPopulator {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 				}
 				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsKaramjaFishmonger.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidSubscriptions.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidTutorialIsle.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidArena.json");
-				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidSubscriptions.json");
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidArena.json");
+					if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsDeathMatchArena.json");
 				}

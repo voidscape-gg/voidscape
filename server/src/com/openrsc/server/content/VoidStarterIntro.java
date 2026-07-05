@@ -52,10 +52,6 @@ public final class VoidStarterIntro {
 		if (needsIntro(player)) {
 			return Point.location(INTRO_X, INTRO_Y);
 		}
-		Point tutorial = VoidTutorialIsle.resumePoint(player);
-		if (tutorial != null) {
-			return tutorial;
-		}
 		return Point.location(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y);
 	}
 
@@ -109,12 +105,12 @@ public final class VoidStarterIntro {
 					player.message("@yel@" + line.text);
 				}
 			}
-			player.message("@mag@The council lowers their scythes. The path north lies open.");
-			player.getCache().store(SEEN_CACHE_KEY, true);
-			player.save();
-		} finally {
-			player.setAttribute(RUNNING_ATTRIBUTE, false);
-		}
+				player.message("@mag@The council lowers their scythes. The path north lies open.");
+				player.getCache().store(SEEN_CACHE_KEY, true);
+				player.save(false, true);
+			} finally {
+				player.setAttribute(RUNNING_ATTRIBUTE, false);
+			}
 	}
 
 	public static boolean blocksUnseenIntroPath(Player player, Point firstStep, List<Point> relativeSteps) {

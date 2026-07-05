@@ -5,6 +5,7 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.container.Item;
+import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -67,6 +68,14 @@ public final class VoidPath {
 		if (player == null || hasChosen(player)) {
 			return false;
 		}
+		if (VoidVeteranTour.needsRequiredTour(player)) {
+			if (npc != null) {
+				npcsay(player, npc, "The Archivist waits south of here. Hear what changed, then return to me.");
+			} else {
+				player.message("@mag@Speak to the Void Archivist before choosing a path.");
+			}
+			return false;
+		}
 
 		if (npc != null) {
 			npcsay(player, npc,
@@ -84,10 +93,23 @@ public final class VoidPath {
 		}
 
 		int path = choice == 0 ? WARRIOR : choice == 1 ? FORAGER : ARCANIST;
+		boolean kitAlreadyGranted = player.getCache().hasKey(STARTER_KIT_CACHE_KEY);
+		if (!kitAlreadyGranted && !canGrantStarterKit(player, path)) {
+			return false;
+		}
+
 		choose(player, path);
-		boolean kitGranted = grantStarterKit(player, path);
+		boolean kitGranted = !kitAlreadyGranted && grantStarterKit(player, path);
+		if (!kitAlreadyGranted && !kitGranted) {
+			player.getCache().remove(CACHE_KEY);
+			ActionSender.sendGameSettings(player);
+			player.save(false, true);
+			player.message("@red@Your starter kit could not be placed in your backpack. Try again.");
+			return false;
+		}
+
 		ActionSender.sendGameSettings(player);
-		player.save();
+		player.save(false, true);
 		player.message(name(path) + " chosen. " + boostedSkillSummary(path) + " now earn " + boostLimitSummary() + ".");
 		if (kitGranted) {
 			player.message("Your starter kit has been placed in your backpack.");
@@ -106,9 +128,14 @@ public final class VoidPath {
 		if (player == null || path < WARRIOR || path > ARCANIST || player.getCache().hasKey(STARTER_KIT_CACHE_KEY)) {
 			return false;
 		}
+		if (!canGrantStarterKit(player, path)) {
+			return false;
+		}
 
 		for (StarterItem item : starterKit(path)) {
-			addStarterItem(player, item.itemId, item.amount);
+			if (!addStarterItem(player, item.itemId, item.amount)) {
+				return false;
+			}
 		}
 		player.getCache().set(STARTER_KIT_CACHE_KEY, path);
 		ActionSender.sendInventory(player);
@@ -120,7 +147,7 @@ public final class VoidPath {
 	}
 
 	public static boolean inStarterIsland(int x, int y) {
-		return Point.inVoidIsland(x, y) || Point.inVoidTutorialIsle(x, y) || inLegacyVoidIsland(x, y);
+		return Point.inVoidIsland(x, y) || inLegacyVoidIsland(x, y);
 	}
 
 	public static boolean blocksLeavingStarterIsland(Player player, int destinationX, int destinationY) {
@@ -146,7 +173,8 @@ public final class VoidPath {
 	public static boolean shouldRouteToVoidIsland(Player player) {
 		return player != null
 			&& !hasChosen(player)
-			&& (inLegacyVoidIsland(player)
+			&& (VoidOnboarding.hasRetiredGuidedState(player)
+				|| inLegacyVoidIsland(player)
 				|| player.getLocation().inVoidIsland()
 				|| player.getLocation().inVoidTutorialIsle()
 				|| VoidStarterIntro.inIntroArea(player)
@@ -251,15 +279,47 @@ public final class VoidPath {
 		}
 	}
 
-	private static void addStarterItem(Player player, int itemId, int amount) {
+	private static boolean canGrantStarterKit(Player player, int path) {
+		if (player == null || !player.getWorld().getPlayers().contains(player)) {
+			return false;
+		}
+		Inventory inventory = player.getCarriedItems().getInventory();
+		int requiredSlots = 0;
+		for (StarterItem item : starterKit(path)) {
+			ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(item.itemId);
+			if (itemDef == null) {
+				player.message("@red@Starter kit item " + item.itemId + " is not available. Contact staff.");
+				return false;
+			}
+			if (player.getConfig().RESTRICT_ITEM_ID >= 0 && player.getConfig().RESTRICT_ITEM_ID < item.itemId) {
+				player.message("@red@This world cannot grant one of the starter kit items.");
+				return false;
+			}
+			if (player.getClientLimitations().maxItemId < item.itemId) {
+				player.message("@red@Your client cannot receive one of the starter kit items.");
+				return false;
+			}
+			requiredSlots += inventory.getRequiredSlots(item.itemId, item.amount, false);
+		}
+		if (inventory.size() + requiredSlots > Inventory.MAX_SIZE) {
+			player.message("@red@Clear " + (inventory.size() + requiredSlots - Inventory.MAX_SIZE)
+				+ " backpack slot(s) before choosing a path.");
+			return false;
+		}
+		return true;
+	}
+
+	private static boolean addStarterItem(Player player, int itemId, int amount) {
 		ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
 		if (itemDef != null && !itemDef.isStackable() && amount > 1) {
 			for (int i = 0; i < amount; i++) {
-				player.getCarriedItems().getInventory().add(new Item(itemId), false);
+				if (!player.getCarriedItems().getInventory().add(new Item(itemId), false)) {
+					return false;
+				}
 			}
-			return;
+			return true;
 		}
-		player.getCarriedItems().getInventory().add(new Item(itemId, amount), false);
+		return player.getCarriedItems().getInventory().add(new Item(itemId, amount), false);
 	}
 
 	private static boolean matches(int skill, Skill... boostedSkills) {

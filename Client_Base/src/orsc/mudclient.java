@@ -6179,13 +6179,11 @@ public final class mudclient implements Runnable {
 	// Contract: option prefixes come from server VoidOnboarding.OPTION_* constants.
 	private boolean isVoidscapeWelcomeMenu() {
 		return this.useVoidscapeLogin()
-			&& this.optionsMenuCount == 3
+			&& this.optionsMenuCount == 2
 			&& this.optionsMenuText[0] != null
 			&& this.optionsMenuText[1] != null
-			&& this.optionsMenuText[2] != null
-			&& this.optionsMenuText[0].startsWith("I'm new to Classic")
-			&& this.optionsMenuText[1].startsWith("I've played Classic")
-			&& this.optionsMenuText[2].startsWith("Skip the intro");
+			&& this.optionsMenuText[0].startsWith("I've played Classic")
+			&& this.optionsMenuText[1].startsWith("Skip the intro");
 	}
 
 	private boolean isVoidscapeTitleMenu() {
@@ -6499,7 +6497,7 @@ public final class mudclient implements Runnable {
 
 		int cx = halfGameWidth();
 		int panelWidth = Math.min(470, this.getGameWidth() - 20);
-		int panelHeight = Math.min(284, this.getGameHeight() - 20);
+		int panelHeight = Math.min(268, this.getGameHeight() - 20);
 		int panelX = cx - panelWidth / 2;
 		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
 
@@ -6544,19 +6542,18 @@ public final class mudclient implements Runnable {
 		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", UiSkin.GOLD_TITLE, 1, panelY + 24);
 		drawVoidscapeCenteredText(cx, "How would you like to begin?", UiSkin.TEXT_BODY, 0, panelY + 42);
 
-		int cardGap = 8;
-		int cardWidth = (panelWidth - 36 - cardGap * 2) / 3;
+		int cardGap = 10;
+		int cardWidth = (panelWidth - 36 - cardGap) / 2;
 		int cardHeight = panelHeight - 72;
 		int cardY = panelY + 56;
 		int firstCardX = panelX + 18;
 
-		drawVoidscapeWelcomeCard(0, firstCardX, cardY, cardWidth, cardHeight, "New to Classic", "Guided island start", "Learn to fight & skill", "Recommended", 66, 0x4ba074);
-		drawVoidscapeWelcomeCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Classic Veteran", "Tour what's new", "in Voidscape", "For returning players", 523, 0x8e64d7);
-		drawVoidscapeWelcomeCard(2, firstCardX + (cardWidth + cardGap) * 2, cardY, cardWidth, cardHeight, "Skip", "Pick a path now", "Start in Lumbridge", "Fastest start", 10, 0x9a9a9a);
+		drawVoidscapeWelcomeCard(0, firstCardX, cardY, cardWidth, cardHeight, "Classic Veteran", "Tour what's new", "in Voidscape", "For returning players", 523, 0x8e64d7);
+		drawVoidscapeWelcomeCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Skip", "Pick a path now", "Start in Lumbridge", "Fastest start", 10, 0x9a9a9a);
 
 		if (this.mouseButtonClick != 0) {
 			int choice = -1;
-			for (int i = 0; i < 3; i++) {
+			for (int i = 0; i < this.optionsMenuCount; i++) {
 				int x = firstCardX + i * (cardWidth + cardGap);
 				if (this.mouseX >= x && this.mouseX <= x + cardWidth && this.mouseY >= cardY && this.mouseY <= cardY + cardHeight) {
 					choice = i;

@@ -34,36 +34,34 @@ public final class VoidVeteranTour {
 		player.message("@mag@The Void Archivist waits on the path north. Speak to them before you reach the Herald.");
 	}
 
+	public static boolean needsRequiredTour(Player player) {
+		return player != null
+			&& !VoidPath.hasChosen(player)
+			&& VoidOnboarding.getTrack(player) == VoidOnboarding.TRACK_VETERAN
+			&& !player.getCache().hasKey(TOUR_SEEN_CACHE_KEY);
+	}
+
 	public static void run(Player player, Npc archivist) {
 		if (player == null || archivist == null || player.getAttribute(RUNNING_ATTRIBUTE, false)) {
-			return;
-		}
-
-		// Guided-track players get their teaching on the Tutorial Isle — the
-		// Archivist must not launch the veteran tour at them mid-onboarding.
-		if (!VoidPath.hasChosen(player)
-			&& VoidOnboarding.getTrack(player) == VoidOnboarding.TRACK_GUIDED) {
-			if (VoidTutorialIsle.getStage(player) < VoidTutorialIsle.STAGE_DONE) {
-				npcsay(player, archivist, "Your teacher waits on the proving grounds, survivor");
-			}
-			npcsay(player, archivist,
-				"Choose your path with the Herald - then find me in Lumbridge");
 			return;
 		}
 
 		player.setAttribute(RUNNING_ATTRIBUTE, true);
 		player.resetPath();
 		try {
-			if (!player.getCache().hasKey(TOUR_SEEN_CACHE_KEY)) {
+			if (VoidOnboarding.getTrack(player) == VoidOnboarding.TRACK_VETERAN
+				&& !player.getCache().hasKey(TOUR_SEEN_CACHE_KEY)) {
 				npcsay(player, archivist,
 					"Ah - a survivor who remembers the old world",
 					"Then I will skip the basics and show you what the void changed");
 				restedDemo(player, archivist);
 				beamDemo(player, archivist);
 				player.getCache().store(TOUR_SEEN_CACHE_KEY, true);
-				player.save();
-			} else {
+				player.save(false, true);
+			} else if (player.getCache().hasKey(TOUR_SEEN_CACHE_KEY)) {
 				npcsay(player, archivist, "Welcome back. Ask, and I will answer");
+			} else {
+				npcsay(player, archivist, "The archive is open. Ask, and I will answer");
 			}
 			topicMenu(player, archivist);
 		} finally {
@@ -96,7 +94,7 @@ public final class VoidVeteranTour {
 
 		player.getCache().store(RESTED_GIFT_CACHE_KEY, true);
 		RestedExperience.grantFull(player);
-		player.save();
+		player.save(false, true);
 		player.message("@gre@You feel rested.");
 		player.message(RestedExperience.status(player));
 		npcsay(player, npc, "Consider your pool filled - a welcome-back gift. Check it anytime with ::rested");

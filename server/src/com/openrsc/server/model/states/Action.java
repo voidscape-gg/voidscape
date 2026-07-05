@@ -37,6 +37,7 @@ public enum Action {
 	playerdeath(EntityType.NONE, "playerdeath"),
 	playerkilledplayer(EntityType.PLAYER, "playerkilledplayer"),
 	playerlogin(EntityType.NONE, "playerlogin"),
+	postloginready(EntityType.NONE, "postloginready"),
 	playerlogout(EntityType.NONE, "playerlogout"),
 	voidwelcome(EntityType.NONE, "voidwelcome"),
 	playerrangenpc(EntityType.NPC, "playerrangenpc"),

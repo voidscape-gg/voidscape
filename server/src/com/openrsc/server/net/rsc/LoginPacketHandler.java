@@ -11,6 +11,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.*;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
+import com.openrsc.server.plugins.triggers.PostLoginReadyTrigger;
 import com.openrsc.server.util.rsc.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -78,6 +79,17 @@ public class LoginPacketHandler {
 	private void routeUnchosenStarterPlayer(Player loadedPlayer) {
 		if (VoidPath.shouldRouteToVoidIsland(loadedPlayer)) {
 			loadedPlayer.setInitialLocation(VoidStarterIntro.entryPoint(loadedPlayer));
+		}
+	}
+
+	private void completeLogin(Server server, Player loadedPlayer) {
+		boolean reconnecting = loadedPlayer.isReconnecting();
+		if (!reconnecting) {
+			server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+		}
+		ActionSender.sendLogin(loadedPlayer);
+		if (!reconnecting && loadedPlayer.getWorld().getPlayers().contains(loadedPlayer)) {
+			server.getPluginHandler().handlePlugin(PostLoginReadyTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
 		}
 	}
 
@@ -235,10 +247,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -320,10 +329,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+										completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -405,10 +411,7 @@ public class LoginPacketHandler {
 
 									initializePcapLogger(loadedPlayer, attachment);
 
-									if (!loadedPlayer.isReconnecting()) {
-										server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-									}
-									ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 								}
 							};
 							server.getLoginExecutor().add(request);
@@ -475,10 +478,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -585,10 +585,7 @@ public class LoginPacketHandler {
 
 							initializePcapLogger(loadedPlayer, attachment);
 
-							if (!loadedPlayer.isReconnecting()) {
-								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-							}
-							ActionSender.sendLogin(loadedPlayer);
+							completeLogin(server, loadedPlayer);
 						}
 					};
 					server.getLoginExecutor().add(request);
