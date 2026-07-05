@@ -106,9 +106,9 @@ Starter paths:
 
 | Path | Boost | Starter kit |
 |---|---|---|
-| Warrior | 2x Attack, Defense, Strength | Iron 2-handed sword, 10 cooked meat, bronze plate body, bronze medium helmet, bronze legs |
-| Forager | 2x Fishing, Cooking, Mining | Net, fishing rod, 50 bait, bronze pickaxe, tinderbox, 100 coins, 2 cooked meat, 2 bread |
-| Arcanist | 2x Ranged, Magic | Shortbow, 50 bronze arrows, blue wizard hat, wizard robe, 100 air runes, 50 mind runes, 25 fire runes, 2 bread |
+| Warrior | 2x Attack, Defense, Strength | Shared Classic basics plus iron short sword and 5 extra cooked meat |
+| Forager | 2x Fishing, Cooking, Mining | Shared Classic basics plus fishing rod, 25 bait, hammer, 50 coins |
+| Arcanist | 2x Ranged, Magic | Shared Classic basics plus 50 air runes, 30 mind runes, 15 fire runes, shortbow, 50 bronze arrows, blue wizard hat |
 
 ## Player Commands
 

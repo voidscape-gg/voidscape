@@ -10,6 +10,9 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static com.openrsc.server.plugins.Functions.multi;
 import static com.openrsc.server.plugins.Functions.npcsay;
 
@@ -133,7 +136,7 @@ public final class VoidPath {
 		}
 
 		for (StarterItem item : starterKit(path)) {
-			if (!addStarterItem(player, item.itemId, item.amount)) {
+			if (!addStarterItem(player, item)) {
 				return false;
 			}
 		}
@@ -232,11 +235,11 @@ public final class VoidPath {
 	public static String starterKitSummary(int path) {
 		switch (path) {
 			case WARRIOR:
-				return "iron 2-handed sword, bronze plate body, bronze medium helmet, bronze legs, and food";
+				return "classic tools, basic runes, bronze sword and shield, iron short sword, and extra food";
 			case FORAGER:
-				return "fishing gear, bait, a pickaxe, tinderbox, 100 coins, and food";
+				return "classic tools, basic runes, bronze sword and shield, fishing rod, bait, hammer, and coins";
 			case ARCANIST:
-				return "shortbow, arrows, runes, wizard gear, and food";
+				return "classic tools, basic runes, bronze sword and shield, extra runes, shortbow, arrows, and wizard hat";
 			default:
 				return "no starter kit";
 		}
@@ -245,38 +248,33 @@ public final class VoidPath {
 	private static StarterItem[] starterKit(int path) {
 		switch (path) {
 			case WARRIOR:
-				return new StarterItem[] {
-					new StarterItem(ItemId.IRON_2_HANDED_SWORD.id()),
-					new StarterItem(ItemId.COOKEDMEAT.id(), 10),
-					new StarterItem(ItemId.BRONZE_PLATE_MAIL_BODY.id()),
-					new StarterItem(ItemId.MEDIUM_BRONZE_HELMET.id()),
-					new StarterItem(ItemId.BRONZE_PLATE_MAIL_LEGS.id())
-				};
+				return starterKitWithBonus(
+					new StarterItem(ItemId.IRON_SHORT_SWORD.id()),
+					new StarterItem(ItemId.COOKEDMEAT.id(), 5));
 			case FORAGER:
-				return new StarterItem[] {
-					new StarterItem(ItemId.NET.id()),
+				return starterKitWithBonus(
 					new StarterItem(ItemId.FISHING_ROD.id()),
-					new StarterItem(ItemId.FISHING_BAIT.id(), 50),
-					new StarterItem(ItemId.BRONZE_PICKAXE.id()),
-					new StarterItem(ItemId.TINDERBOX.id()),
-					new StarterItem(ItemId.COINS.id(), 100),
-					new StarterItem(ItemId.COOKEDMEAT.id(), 2),
-					new StarterItem(ItemId.BREAD.id(), 2)
-				};
+					new StarterItem(ItemId.FISHING_BAIT.id(), 25),
+					new StarterItem(ItemId.HAMMER.id()),
+					new StarterItem(ItemId.COINS.id(), 50));
 			case ARCANIST:
-				return new StarterItem[] {
+				return starterKitWithBonus(
+					new StarterItem(ItemId.AIR_RUNE.id(), 50),
+					new StarterItem(ItemId.MIND_RUNE.id(), 30),
+					new StarterItem(ItemId.FIRE_RUNE.id(), 15),
 					new StarterItem(ItemId.SHORTBOW.id()),
 					new StarterItem(ItemId.BRONZE_ARROWS.id(), 50),
-					new StarterItem(ItemId.BLUE_WIZARDSHAT.id()),
-					new StarterItem(ItemId.WIZARDS_ROBE.id()),
-					new StarterItem(ItemId.AIR_RUNE.id(), 100),
-					new StarterItem(ItemId.MIND_RUNE.id(), 50),
-					new StarterItem(ItemId.FIRE_RUNE.id(), 25),
-					new StarterItem(ItemId.BREAD.id(), 2)
-				};
+					new StarterItem(ItemId.BLUE_WIZARDSHAT.id()));
 			default:
 				return new StarterItem[0];
 		}
+	}
+
+	private static StarterItem[] starterKitWithBonus(StarterItem... bonusItems) {
+		StarterItem[] kit = new StarterItem[CLASSIC_STARTER_ITEMS.length + bonusItems.length];
+		System.arraycopy(CLASSIC_STARTER_ITEMS, 0, kit, 0, CLASSIC_STARTER_ITEMS.length);
+		System.arraycopy(bonusItems, 0, kit, CLASSIC_STARTER_ITEMS.length, bonusItems.length);
+		return kit;
 	}
 
 	private static boolean canGrantStarterKit(Player player, int path) {
@@ -285,7 +283,11 @@ public final class VoidPath {
 		}
 		Inventory inventory = player.getCarriedItems().getInventory();
 		int requiredSlots = 0;
+		Set<Integer> plannedStackableItems = new HashSet<>();
 		for (StarterItem item : starterKit(path)) {
+			if (!shouldGrantStarterItem(player, item)) {
+				continue;
+			}
 			ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(item.itemId);
 			if (itemDef == null) {
 				player.message("@red@Starter kit item " + item.itemId + " is not available. Contact staff.");
@@ -299,7 +301,13 @@ public final class VoidPath {
 				player.message("@red@Your client cannot receive one of the starter kit items.");
 				return false;
 			}
-			requiredSlots += inventory.getRequiredSlots(item.itemId, item.amount, false);
+			if (itemDef.isStackable()) {
+				if (!inventory.hasCatalogID(item.itemId, false) && plannedStackableItems.add(item.itemId)) {
+					requiredSlots++;
+				}
+			} else {
+				requiredSlots += inventory.getRequiredSlots(item.itemId, item.amount, false);
+			}
 		}
 		if (inventory.size() + requiredSlots > Inventory.MAX_SIZE) {
 			player.message("@red@Clear " + (inventory.size() + requiredSlots - Inventory.MAX_SIZE)
@@ -309,7 +317,12 @@ public final class VoidPath {
 		return true;
 	}
 
-	private static boolean addStarterItem(Player player, int itemId, int amount) {
+	private static boolean addStarterItem(Player player, StarterItem item) {
+		if (!shouldGrantStarterItem(player, item)) {
+			return true;
+		}
+		int itemId = item.itemId;
+		int amount = item.amount;
 		ItemDefinition itemDef = player.getWorld().getServer().getEntityHandler().getItemDef(itemId);
 		if (itemDef != null && !itemDef.isStackable() && amount > 1) {
 			for (int i = 0; i < amount; i++) {
@@ -320,6 +333,11 @@ public final class VoidPath {
 			return true;
 		}
 		return player.getCarriedItems().getInventory().add(new Item(itemId, amount), false);
+	}
+
+	private static boolean shouldGrantStarterItem(Player player, StarterItem item) {
+		return !item.skipIfOwned
+			|| (!player.getCarriedItems().hasCatalogID(item.itemId) && !player.getBank().hasItemId(item.itemId));
 	}
 
 	private static boolean matches(int skill, Skill... boostedSkills) {
@@ -334,14 +352,39 @@ public final class VoidPath {
 	private static final class StarterItem {
 		private final int itemId;
 		private final int amount;
+		private final boolean skipIfOwned;
 
 		private StarterItem(int itemId) {
 			this(itemId, 1);
 		}
 
 		private StarterItem(int itemId, int amount) {
+			this(itemId, amount, false);
+		}
+
+		private StarterItem(int itemId, boolean skipIfOwned) {
+			this(itemId, 1, skipIfOwned);
+		}
+
+		private StarterItem(int itemId, int amount, boolean skipIfOwned) {
 			this.itemId = itemId;
 			this.amount = amount;
+			this.skipIfOwned = skipIfOwned;
 		}
 	}
+
+	private static final StarterItem[] CLASSIC_STARTER_ITEMS = new StarterItem[] {
+		new StarterItem(ItemId.BRONZE_AXE.id(), true),
+		new StarterItem(ItemId.TINDERBOX.id(), true),
+		new StarterItem(ItemId.COOKEDMEAT.id()),
+		new StarterItem(ItemId.NET.id(), true),
+		new StarterItem(ItemId.BRONZE_PICKAXE.id(), true),
+		new StarterItem(ItemId.BRONZE_LONG_SWORD.id(), true),
+		new StarterItem(ItemId.WOODEN_SHIELD.id(), true),
+		new StarterItem(ItemId.AIR_RUNE.id(), 12, true),
+		new StarterItem(ItemId.MIND_RUNE.id(), 8, true),
+		new StarterItem(ItemId.WATER_RUNE.id(), 3, true),
+		new StarterItem(ItemId.EARTH_RUNE.id(), 2, true),
+		new StarterItem(ItemId.BODY_RUNE.id(), 1, true)
+	};
 }

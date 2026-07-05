@@ -49,9 +49,10 @@ Void Island is carved out as a safe zone even though its coordinates sit inside 
 
 ## Paths
 
-- Warrior's Path grants 2x XP in Attack, Defense, and Strength until each boosted skill reaches level 50. Starter kit: iron 2-handed sword, 10 cooked meat, bronze plate body, bronze medium helmet, and bronze legs.
-- Forager's Path grants 2x XP in Fishing, Cooking, and Mining until each boosted skill reaches level 50. Starter kit: net, fishing rod, 50 fishing bait, bronze pickaxe, tinderbox, 100 coins, 2 cooked meat, and 2 bread.
-- Arcanist's Path grants 2x XP in Ranged and Magic until each boosted skill reaches level 50. Starter kit: shortbow, 50 bronze arrows, blue wizard hat, wizard robe, 100 air runes, 50 mind runes, 25 fire runes, and 2 bread.
+- All paths top up a shared Classic starter kit: bronze axe, tinderbox, net, bronze pickaxe, bronze long sword, wooden shield, one extra cooked meat, and the tutorial's basic rune bundle (12 air, 8 mind, 3 water, 2 earth, 1 body). Items a player already owns in inventory/equipment/bank are not duplicated for the one-per-player basics.
+- Warrior's Path grants 2x XP in Attack, Defense, and Strength until each boosted skill reaches level 50. Path bonus: iron short sword and 5 extra cooked meat.
+- Forager's Path grants 2x XP in Fishing, Cooking, and Mining until each boosted skill reaches level 50. Path bonus: fishing rod, 25 fishing bait, hammer, and 50 coins.
+- Arcanist's Path grants 2x XP in Ranged and Magic until each boosted skill reaches level 50. Path bonus: 50 air runes, 30 mind runes, 15 fire runes, shortbow, 50 bronze arrows, and blue wizard hat.
 
 ## Herald Flow
 
