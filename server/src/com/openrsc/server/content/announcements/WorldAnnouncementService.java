@@ -98,6 +98,18 @@ public final class WorldAnnouncementService {
 		announce(newPlayerJoinedMessage(player), true);
 	}
 
+	public void announceUniqueTitleClaim(Player player, String titleName) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (player == null || titleName == null || titleName.isEmpty()) return;
+		announce(uniqueTitleClaimMessage(player, titleName), false);
+	}
+
+	public void announceUniqueTitleTransfer(Player player, String titleName, String previousOwner) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (player == null || titleName == null || titleName.isEmpty()) return;
+		announce(uniqueTitleTransferMessage(player, titleName, previousOwner), false);
+	}
+
 	private void announce(String message, boolean force) {
 		if (!force && !world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
 		world.sendWorldMessage(message);
@@ -123,6 +135,17 @@ public final class WorldAnnouncementService {
 	private String newPlayerJoinedMessage(Player player) {
 		return "@mag@[Void Herald] @gre@Welcome @whi@" + player.getUsername()
 			+ "@gre@ to Voidscape. @whi@This is their first time in the world.";
+	}
+
+	private String uniqueTitleClaimMessage(Player player, String titleName) {
+		return "@mag@[Void Herald] @whi@" + player.getUsername()
+			+ " has claimed a @yel@unique title@whi@: @yel@" + titleName + "@whi@!";
+	}
+
+	private String uniqueTitleTransferMessage(Player player, String titleName, String previousOwner) {
+		String previous = previousOwner == null || previousOwner.isEmpty() ? "" : " from " + previousOwner;
+		return "@mag@[Void Herald] @whi@" + player.getUsername()
+			+ " now holds @yel@" + titleName + "@whi@" + previous + ".";
 	}
 
 	private String newPlayerAnnouncementCacheKey(Player player) {

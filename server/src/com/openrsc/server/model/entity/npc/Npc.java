@@ -5,6 +5,7 @@ import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.FarmSim;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.ItemProvenanceEvent;
@@ -410,6 +411,7 @@ public class Npc extends Mob {
 		ActionSender.sendSound(owner, "victory");
 		owner.getWorld().getServer().getAchievementSystem().checkAndIncSlayNpcTasks(owner, this);
 		owner.incNpcKills();
+		PlayerTitle.checkGiantKiller(owner, getDef().combatLevel);
 		BalanceTelemetry.recordNpcKill(owner, this);
 		FarmSim.recordNpcKill(owner, this);
 
@@ -828,6 +830,9 @@ public class Npc extends Mob {
 	}
 
 	private void recordNpcDrop(Player owner, int itemId, int amount, boolean noted, boolean rare, String destination) {
+		if (owner != null && itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
+			PlayerTitle.checkDragonMediumDrop(owner);
+		}
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
 		owner.addBestiaryDrop(getID(), itemId, amount);
 		final ItemProvenanceEvent event = new ItemProvenanceEvent();

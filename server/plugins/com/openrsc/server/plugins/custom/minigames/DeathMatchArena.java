@@ -473,7 +473,6 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 		if (DataConversions.random(1, VOID_GEAR_CHANCE) == 1) {
 			Item voidGear = new Item(rollWeightedItem(VOID_KNIGHT_VOID_REWARDS), 1);
 			giveReward(player, voidGear);
-			PlayerTitle.unlock(player, PlayerTitle.VOID_TOUCHED);
 			player.message("@mag@The Void Knight's core collapses into void gear.");
 			broadcastRareReward(player, voidGear);
 		}

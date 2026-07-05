@@ -2851,6 +2851,8 @@ public class PacketHandler {
 					packetsIncoming.get32();
 					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_CLIENT_VERSION)
 						packetsIncoming.readString();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_TIER_CLIENT_VERSION)
+						packetsIncoming.getUnsignedByte();
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION)
 						packetsIncoming.getUnsignedByte();
 				} else {
@@ -2897,6 +2899,11 @@ public class PacketHandler {
 						}
 					} else {
 						player.title = null;
+					}
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_TIER_CLIENT_VERSION) {
+						player.titleTier = packetsIncoming.getUnsignedByte();
+					} else {
+						player.titleTier = 0;
 					}
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION) {
 						player.hairStyle = packetsIncoming.getUnsignedByte();

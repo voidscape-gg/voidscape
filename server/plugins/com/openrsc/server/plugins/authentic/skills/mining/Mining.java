@@ -6,6 +6,7 @@ import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.external.GameObjectDef;
 import com.openrsc.server.external.ObjectMiningDef;
@@ -273,6 +274,7 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 						}
 						player.incExp(Skill.MINING.id(), def.getExp() * 2, true);
 						give(player, ore.getCatalogId(), 1);
+						recordMinedOre(player, ore.getCatalogId(), 2);
 					} else {
 						if (ore.getCatalogId() == ItemId.CLAY.id()
 							&& EnchantedCrowns.shouldActivate(player, ItemId.CROWN_OF_DEW)) {
@@ -284,6 +286,7 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 						}
 						player.playerServerMessage(MessageType.QUEST, "You manage to obtain some " + ore.getDef(player.getWorld()).getName().toLowerCase());
 						player.incExp(Skill.MINING.id(), def.getExp(), true);
+						recordMinedOre(player, ore.getCatalogId(), 1);
 
 						if (EnchantedCrowns.shouldActivate(player, ItemId.CROWN_OF_THE_ITEMS)) {
 							player.playerServerMessage(MessageType.QUEST, "Your crown shines and an extra item appears on the ground");
@@ -400,6 +403,12 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 				break;
 		}
 		return bonus;
+	}
+
+	private void recordMinedOre(Player player, int oreId, int amount) {
+		if (oreId == ItemId.COAL.id()) {
+			PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_COAL_MINED, amount);
+		}
 	}
 
 	/**

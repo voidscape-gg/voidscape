@@ -1741,6 +1741,24 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public int queryAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException {
+		final String query = "SELECT COALESCE(SUM(`total_price`), 0) AS `seller_volume` FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX + "auction_sales` WHERE `seller`=? AND `sold_at` >= ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, sellerId);
+			statement.setLong(2, since);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return (int) Math.min(Integer.MAX_VALUE, result.getLong("seller_volume"));
+				}
+			}
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+		return 0;
+	}
+
+	@Override
 	public void queryInsertItemProvenanceEvent(final ItemProvenanceEvent event) throws GameDatabaseException {
 		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().insertItemProvenanceEvent)) {
 			statement.setLong(1, event.itemID);

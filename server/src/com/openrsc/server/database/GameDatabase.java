@@ -231,6 +231,7 @@ public abstract class GameDatabase {
 	public abstract void querySetSoldOut(final AuctionItem auctionItem) throws GameDatabaseException;
 	public abstract void queryUpdateAuction(final AuctionItem auctionItem) throws GameDatabaseException;
 	public abstract void queryInsertAuctionSale(final AuctionSale auctionSale) throws GameDatabaseException;
+	public abstract int queryAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException;
 	public abstract AuctionItemSummary[] queryAuctionItemSummaries(final long since) throws GameDatabaseException;
 	public abstract AuctionItemSummary[] queryHotAuctionItems(final long since, final int limit) throws GameDatabaseException;
 	public abstract AuctionSale[] queryRecentAuctionSales(final int limit) throws GameDatabaseException;
@@ -838,6 +839,10 @@ public abstract class GameDatabase {
 
 	public AuctionSale[] getRecentAuctionSales(final int limit) throws GameDatabaseException {
 		return queryRecentAuctionSales(limit);
+	}
+
+	public int getAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException {
+		return queryAuctionSellerVolumeSince(sellerId, since);
 	}
 
 	public int seedAuctionWorkbenchFixture(final int playerId) throws GameDatabaseException {

@@ -2732,6 +2732,8 @@ public final class Player extends Mob {
 
 				getWorld().sendKilledUpdate(getUsernameHash(), player.getUsernameHash(), killTypeId);
 				player.incKills();
+				PlayerTitle.recordWildernessPlayerKill(player, this);
+				PlayerTitle.checkBronzeWeaponPlayerKill(player, isBronzeWeapon(player.getEquippedWeaponID()));
 				PlayerTitle.refreshAutomaticUnlocks(player);
 				incDeaths();
 				getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has PKed %s", getUsername())));
@@ -2842,6 +2844,24 @@ public final class Player extends Mob {
 			}
 		}
 		return -1;
+	}
+
+	private static boolean isBronzeWeapon(int itemId) {
+		return itemId == ItemId.BRONZE_DAGGER.id()
+			|| itemId == ItemId.POISONED_BRONZE_DAGGER.id()
+			|| itemId == ItemId.BRONZE_SHORT_SWORD.id()
+			|| itemId == ItemId.BRONZE_LONG_SWORD.id()
+			|| itemId == ItemId.BRONZE_2_HANDED_SWORD.id()
+			|| itemId == ItemId.BRONZE_SCIMITAR.id()
+			|| itemId == ItemId.BRONZE_AXE.id()
+			|| itemId == ItemId.BRONZE_MACE.id()
+			|| itemId == ItemId.BRONZE_BATTLE_AXE.id()
+			|| itemId == ItemId.BRONZE_SPEAR.id()
+			|| itemId == ItemId.POISONED_BRONZE_SPEAR.id()
+			|| itemId == ItemId.BRONZE_THROWING_DART.id()
+			|| itemId == ItemId.POISONED_BRONZE_THROWING_DART.id()
+			|| itemId == ItemId.BRONZE_THROWING_KNIFE.id()
+			|| itemId == ItemId.POISONED_BRONZE_THROWING_KNIFE.id();
 	}
 
 	public boolean loggedIn() {

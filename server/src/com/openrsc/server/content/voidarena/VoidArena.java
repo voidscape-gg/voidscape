@@ -1147,7 +1147,6 @@ public final class VoidArena {
 		sendDmKingSummary(player, summary);
 		sendDmKingRecordPayload(player, record);
 		broadcastDmKingRecord(record);
-		PlayerTitle.unlock(player, PlayerTitle.DM_KINGSLAYER);
 		if (!player.getCache().hasKey(DM_KING_BROADCAST_CACHE)) {
 			player.getCache().store(DM_KING_BROADCAST_CACHE, true);
 			savePlayerCache(player);
@@ -1849,14 +1848,7 @@ public final class VoidArena {
 		world.getServer().getDatabase().querySaveGlobalCacheInt(CURRENT_CHAMPION_PLAYER_CACHE, champion.playerId);
 		world.getServer().getDatabase().querySaveGlobalCacheInt(CURRENT_CHAMPION_RATING_CACHE, champion.rating);
 		world.getServer().getDatabase().querySaveGlobalCacheLong(CURRENT_CHAMPION_AWARDED_AT_CACHE, System.currentTimeMillis());
-		world.getServer().getDatabase().querySavePlayerCacheValue(
-			champion.playerId, 2, PlayerTitle.VOID_ARENA_CHAMPION.cacheKey(), Boolean.TRUE.toString());
-
-		Player onlineChampion = world.getPlayerID(champion.playerId);
-		if (onlineChampion != null) {
-			PlayerTitle.unlock(onlineChampion, PlayerTitle.VOID_ARENA_CHAMPION);
-		}
-		return true;
+		return PlayerTitle.grantContested(world, champion.playerId, PlayerTitle.VOID_ARENA_CHAMPION);
 	}
 
 	private boolean hasActiveSetupOrMatch() {

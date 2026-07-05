@@ -6204,8 +6204,8 @@ public final class mudclient implements Runnable {
 		return titleMenuOptionIndexStartsWith("Unlocked titles") >= 0
 			&& titleMenuOptionIndexStartsWith("All titles") >= 0
 			&& titleMenuOptionIndexStartsWith("Unique titles") >= 0
-			&& titleMenuOptionIndexStartsWith("Common titles") >= 0
-			&& titleMenuOptionIndexStartsWith("Rarest titles") >= 0;
+			&& titleMenuOptionIndexStartsWith("Renown titles") >= 0
+			&& titleMenuOptionIndexStartsWith("Feat titles") >= 0;
 	}
 
 	private boolean isVoidscapeTitleCatalogMenu() {
@@ -6224,8 +6224,8 @@ public final class mudclient implements Runnable {
 		return text.startsWith("All titles - page ")
 			|| text.startsWith("Unlocked titles - page ")
 			|| text.startsWith("Unique titles - page ")
-			|| text.startsWith("Common titles - page ")
-			|| text.startsWith("Rarest titles - page ");
+			|| text.startsWith("Renown titles - page ")
+			|| text.startsWith("Feat titles - page ");
 	}
 
 	private void drawVoidscapeTitleMenu() {
@@ -6287,9 +6287,9 @@ public final class mudclient implements Runnable {
 		int tabW = (panelWidth - 20) / 5;
 		if (drawVoidscapeTitleTab(tabX, tabY, tabW - 3, "All", titleMenuOptionIndexStartsWith("View all titles"), "all".equals(currentCategory))) return;
 		if (drawVoidscapeTitleTab(tabX + tabW, tabY, tabW - 3, "Unlocked", titleMenuOptionIndexStartsWith("View unlocked titles"), "unlocked".equals(currentCategory))) return;
-		if (drawVoidscapeTitleTab(tabX + tabW * 2, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
-		if (drawVoidscapeTitleTab(tabX + tabW * 3, tabY, tabW - 3, "Common", titleMenuOptionIndexStartsWith("View common titles"), "common".equals(currentCategory))) return;
-		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Rarest", titleMenuOptionIndexStartsWith("View rarest titles"), "rarest".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 2, tabY, tabW - 3, "Renown", titleMenuOptionIndexStartsWith("View renown titles"), "renown".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 3, tabY, tabW - 3, "Feat", titleMenuOptionIndexStartsWith("View feat titles"), "feat".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
 
 		int rowY = panelY + 78;
 		int rowH = 17;
@@ -6430,8 +6430,8 @@ public final class mudclient implements Runnable {
 			|| option.startsWith("View all titles")
 			|| option.startsWith("View unlocked titles")
 			|| option.startsWith("View unique titles")
-			|| option.startsWith("View common titles")
-			|| option.startsWith("View rarest titles")
+			|| option.startsWith("View renown titles")
+			|| option.startsWith("View feat titles")
 			|| option.startsWith("Change category")
 			|| option.startsWith("Close");
 	}
@@ -6446,19 +6446,20 @@ public final class mudclient implements Runnable {
 		if (option.startsWith("Progress:")) {
 			return 0xd9b6ff;
 		}
-		if (option.startsWith("Scope: unique")) {
+		if (option.startsWith("Tier: @yel@unique")) {
 			return 0xff8080;
 		}
-		if (option.startsWith("Scope: reusable")) {
-			return 0x80d8ff;
-		}
-		if (option.startsWith("Rarity: rare")) {
+		if (option.startsWith("Tier: @mag@feat")) {
 			return 0xd9b6ff;
 		}
-		if (option.startsWith("Rarity: uncommon")) {
+		if (option.startsWith("Tier: @whi@renown")) {
+			return 0x80d8ff;
+		}
+		if (option.startsWith("Lifecycle: first") || option.startsWith("Lifecycle: contested") || option.startsWith("Lifecycle: item-bound")
+			|| option.startsWith("Claim:") || option.startsWith("Holder:")) {
 			return 0xffe080;
 		}
-		if (option.startsWith("Rarity: common")) {
+		if (option.startsWith("Lifecycle: reusable")) {
 			return 0x80d8ff;
 		}
 		if (option.endsWith("active") || option.endsWith("unlocked")) {
@@ -6481,8 +6482,8 @@ public final class mudclient implements Runnable {
 	private String titleCatalogCommandFromHeader(String header) {
 		if (header.startsWith("Unlocked titles")) return "unlocked";
 		if (header.startsWith("Unique titles")) return "unique";
-		if (header.startsWith("Common titles")) return "common";
-		if (header.startsWith("Rarest titles")) return "rarest";
+		if (header.startsWith("Renown titles")) return "renown";
+		if (header.startsWith("Feat titles")) return "feat";
 		return "all";
 	}
 
@@ -13992,6 +13993,24 @@ public final class mudclient implements Runnable {
 		return palette[index];
 	}
 
+	private String formatPlayerTitleSuffix(String title) {
+		if (title == null || title.length() == 0) {
+			return "";
+		}
+		return title.regionMatches(true, 0, "the ", 0, 4) ? " " + title : ", " + title;
+	}
+
+	private int titleTierColor(int tier) {
+		switch (tier) {
+			case 2:
+				return 0xffd24a;
+			case 1:
+				return 0xb980ff;
+			default:
+				return 0xe8e8e8;
+		}
+	}
+
 	public final void drawPlayer(int index, int x, int y, int width, int height, int topPixelSkew, int var3,
 								 int overlayMovement) {
 		try {
@@ -14053,16 +14072,16 @@ public final class mudclient implements Runnable {
 				boolean labelOverlayEnabled = S_SHOW_FLOATING_NAMETAGS
 					&& ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI) || (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY));
 				boolean hasPlayerTitle = player.title != null && player.title.length() > 0;
-				if (player.displayName != null && (labelOverlayEnabled || hasPlayerTitle)) {
+				if (player.displayName != null && player.messageTimeout <= 0 && (labelOverlayEnabled || hasPlayerTitle)) {
 					String staffName = player.getStaffName();
-					int nameLineY = hasPlayerTitle ? y - 8 : y - 14;
+					int nameLineY = y - 14;
 					if (hasPlayerTitle) {
+						String titleSuffix = formatPlayerTitleSuffix(player.title);
 						int nameWidth = this.getSurface().stringWidth(0, staffName);
-						int gapWidth = this.getSurface().stringWidth(0, " ");
-						int titleWidth = this.getSurface().stringWidth(0, player.title);
-						int lineX = (width - nameWidth - gapWidth - titleWidth) / 2 + x + 1;
+						int titleWidth = this.getSurface().stringWidth(0, titleSuffix);
+						int lineX = (width - nameWidth - titleWidth) / 2 + x + 1;
 						this.getSurface().drawShadowText(staffName, lineX, nameLineY, 0xffff00, 0, false);
-						this.getSurface().drawShadowText(player.title, lineX + nameWidth + gapWidth, nameLineY, 0xff3030, 0, false);
+						this.getSurface().drawShadowText(titleSuffix, lineX + nameWidth, nameLineY, titleTierColor(player.titleTier), 0, false);
 					} else {
 						this.getSurface().drawShadowText(staffName, (width - this.getSurface().stringWidth(0, staffName)) / 2 + x + 1, nameLineY, 0xffff00, 0, false);
 					}

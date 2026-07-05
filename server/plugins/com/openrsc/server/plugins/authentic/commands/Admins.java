@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.authentic.commands;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.GameDatabaseException;
@@ -172,6 +173,10 @@ public final class Admins implements CommandTrigger {
 			wildernessHobgoblinDebug(player, command, args);
 		} else if (command.equalsIgnoreCase("balancereport") || command.equalsIgnoreCase("balancestats")) {
 			balanceReport(player, command, args);
+		} else if (command.equalsIgnoreCase("granttitle")) {
+			grantTitle(player, command, args);
+		} else if (command.equalsIgnoreCase("revoketitle")) {
+			revokeTitle(player, command, args);
 		} else if (command.equalsIgnoreCase("gatherstreak") || command.equalsIgnoreCase("resourcestreak")) {
 			seedGatheringStreak(player, command, args);
 		} else if (command.equalsIgnoreCase("announcepreview") || command.equalsIgnoreCase("worldannouncepreview")) {
@@ -1470,6 +1475,71 @@ public final class Admins implements CommandTrigger {
 		for (String line : BalanceTelemetry.report(player, mode)) {
 			player.playerServerMessage(MessageType.QUEST, line);
 		}
+	}
+
+	private void grantTitle(Player player, String command, String[] args) {
+		if (args.length < 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [title_id]");
+			return;
+		}
+
+		Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0].replace('.', ' ')));
+		if (targetPlayer == null) {
+			player.message(messagePrefix + "Invalid name or player is not online");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinTitleArgs(args, 1));
+		if (title == null) {
+			player.message(messagePrefix + "Unknown title id.");
+			return;
+		}
+
+		if (PlayerTitle.unlock(targetPlayer, title)) {
+			player.message(messagePrefix + "Granted title " + title.id() + " to " + targetPlayer.getUsername() + ".");
+			player.getWorld().getServer().getGameLogger().addQuery(
+				new StaffLog(player, 21, messagePrefix + "Granted title " + title.id() + " to " + targetPlayer.getUsername()));
+		} else {
+			player.message(messagePrefix + targetPlayer.getUsername() + " already has that title or it is not available.");
+		}
+	}
+
+	private void revokeTitle(Player player, String command, String[] args) {
+		if (args.length < 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [title_id]");
+			return;
+		}
+
+		Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0].replace('.', ' ')));
+		if (targetPlayer == null) {
+			player.message(messagePrefix + "Invalid name or player is not online");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinTitleArgs(args, 1));
+		if (title == null) {
+			player.message(messagePrefix + "Unknown title id.");
+			return;
+		}
+
+		if (PlayerTitle.revoke(targetPlayer, title)) {
+			player.message(messagePrefix + "Revoked title " + title.id() + " from " + targetPlayer.getUsername() + ".");
+			player.getWorld().getServer().getGameLogger().addQuery(
+				new StaffLog(player, 21, messagePrefix + "Revoked title " + title.id() + " from " + targetPlayer.getUsername()));
+		} else {
+			player.message(messagePrefix + targetPlayer.getUsername() + " does not have that title.");
+		}
+	}
+
+	private String joinTitleArgs(String[] args, int start) {
+		StringBuilder builder = new StringBuilder();
+		for (int i = start; i < args.length; i++) {
+			if (builder.length() > 0) {
+				builder.append(' ');
+			}
+			builder.append(args[i]);
+		}
+		return builder.toString();
 	}
 
 	private void seedGatheringStreak(Player player, String command, String[] args) {

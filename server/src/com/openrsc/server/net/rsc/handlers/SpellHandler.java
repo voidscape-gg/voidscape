@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.*;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
@@ -1134,6 +1135,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			int value = (int) (affectedItem.getDef(player.getWorld()).getDefaultPrice() * 0.6D * affectedItem.getAmount());
 			player.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), value)); // 60%
 			finalizeSpell(player, spell, "Alchemy spell successful");
+			PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_HIGH_ALCHS);
 		}
 	}
 

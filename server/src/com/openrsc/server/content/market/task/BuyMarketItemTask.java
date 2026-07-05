@@ -1,6 +1,7 @@
 package com.openrsc.server.content.market.task;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.market.MarketItem;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.external.ItemDefinition;
@@ -124,16 +125,17 @@ public class BuyMarketItemTask extends MarketTask {
 					playerBuyer.getWorld().getServer().getDatabase().savePlayerBank(playerBuyer);
 				}
 			});
-				if (!dbOk) {
-					rollbackDelivery(deliveryItem, toInventory, amount);
-					playerBuyer.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), auctionPrice));
-					ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
-					return;
-				}
-				recordAuctionBuyReceipt(finalItem, deliveryItem, finalAmount, toInventory, finalAuctionPrice, finalTax);
+			if (!dbOk) {
+				rollbackDelivery(deliveryItem, toInventory, amount);
+				playerBuyer.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), auctionPrice));
+				ActionSender.sendBox(playerBuyer, "@red@[Auction House - Error] % @whi@ The purchase could not be completed. Please try again.", false);
+				return;
+			}
+			recordAuctionBuyReceipt(finalItem, deliveryItem, finalAmount, toInventory, finalAuctionPrice, finalTax);
+			PlayerTitle.recordAuctionHouseSale(playerBuyer, finalSeller);
 
-				if (toInventory) {
-					ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
+			if (toInventory) {
+				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);
 			} else {
 				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your bank.", false);
 			}

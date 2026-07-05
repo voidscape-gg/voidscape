@@ -57,7 +57,7 @@ There are no hidden boss heals, forced damage, ranged attacks, special mechanics
 
 ## Rewards
 
-The first victory unlocks the reusable manual `DM Kingslayer` player title and sends a one-time global broadcast for that player. Repeat victories send personal completion feedback only.
+Victories send personal completion feedback and update Sir Charles' global W/L record. The old `DM Kingslayer` title was cut in the title overhaul; Void Arena seasonal champion rewards now use the contested `void_arena_champion` title.
 
 Each completed win, loss, or timeout also reports the leftover swordfish counts for the player and Sir Charles against their actual starting capacities plus Sir Charles' effective Fire Blast cadence in milliseconds and game ticks.
 
