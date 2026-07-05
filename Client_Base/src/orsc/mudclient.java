@@ -17933,6 +17933,10 @@ public final class mudclient implements Runnable {
 			&& this.getGameWidth() <= 560 && this.getGameHeight() <= 380;
 	}
 
+	private boolean voidscapeUseCompactStatsPanel() {
+		return voidscapeClassicWebSmallHud() || (useVoidscapeHudSkin() && isAndroid());
+	}
+
 	public boolean isVoidscapeClassicWebSmallHud() {
 		return voidscapeClassicWebSmallHud();
 	}
@@ -18292,7 +18296,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSkillRowHeight() {
-		if (voidscapeClassicWebSmallHud()) {
+		if (voidscapeUseCompactStatsPanel()) {
 			return 13;
 		}
 		return VOIDSCAPE_SKILL_ROW_H;
@@ -18442,7 +18446,7 @@ public final class mudclient implements Runnable {
 	private boolean voidscapeUseStatsPanelLayout() {
 		return this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
 			&& this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_SKILLS
-			&& !voidscapeClassicWebSmallHud();
+			&& !voidscapeUseCompactStatsPanel();
 	}
 
 	private int voidscapeStatsPanelVisualWidth() {
@@ -19872,7 +19876,8 @@ public final class mudclient implements Runnable {
 			return;
 		}
 
-		int statsHeaderY = contentY + (voidscapeClassicWebSmallHud() ? 6 : 8);
+		boolean compactStats = voidscapeUseCompactStatsPanel();
+		int statsHeaderY = contentY + (compactStats ? 6 : 8);
 		drawVoidscapeSectionHeader("STATS", innerX, statsHeaderY, innerW);
 		int combatLevel = this.localPlayer != null ? this.localPlayer.level : 0;
 		int totalLevel = 0;
@@ -19887,7 +19892,7 @@ public final class mudclient implements Runnable {
 		int statsY = statsHeaderY + sectionH - 1;
 		int lineH = voidscapeStatsLineHeight();
 		int statRows;
-		if (voidscapeClassicWebSmallHud()) {
+		if (compactStats) {
 			int colGap = Math.max(8, voidscapeStatsColumnGap());
 			int colW = (innerW - colGap) / 2;
 			int rightX = innerX + colW + colGap;
@@ -19913,7 +19918,7 @@ public final class mudclient implements Runnable {
 			statRows = 3;
 		}
 
-		int skillsHeaderY = statsY + lineH * statRows + (voidscapeClassicWebSmallHud() ? 4 : 6);
+		int skillsHeaderY = statsY + lineH * statRows + (compactStats ? 4 : 6);
 		drawVoidscapeSectionHeader("SKILLS", innerX, skillsHeaderY, innerW);
 		int skillsY = skillsHeaderY + sectionH - 1;
 		int skillsBottomY = footerY > 0 ? footerY - 5 : y + height - 10;
@@ -20649,18 +20654,18 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSectionHeaderHeight() {
-		return voidscapeClassicWebSmallHud() ? 18 : 23;
+		return voidscapeUseCompactStatsPanel() ? 18 : 23;
 	}
 
 	private int voidscapeStatsLineHeight() {
-		return voidscapeClassicWebSmallHud() ? 11 : 14;
+		return voidscapeUseCompactStatsPanel() ? 11 : 14;
 	}
 
 	private void drawVoidscapeSectionHeader(String label, int x, int y, int width) {
 		int height = voidscapeSectionHeaderHeight();
 		drawVoidscapeThreeSliceH("right-panel-section.png", x, y, width, height, 20, 0);
 		this.getSurface().drawColoredStringCentered(x + width / 2, label, UiSkin.GOLD_HEADER, 0, UiSkin.FONT_BODY,
-			y + (voidscapeClassicWebSmallHud() ? 13 : 16));
+			y + (voidscapeUseCompactStatsPanel() ? 13 : 16));
 	}
 
 	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor) {
@@ -20669,7 +20674,7 @@ public final class mudclient implements Runnable {
 
 	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor, int font) {
 		int pad = voidscapeRightPanelListPad();
-		int baselineY = y + (voidscapeClassicWebSmallHud() ? 9 : 10);
+		int baselineY = y + (voidscapeUseCompactStatsPanel() ? 9 : 10);
 		this.getSurface().drawString(label, x + pad, baselineY, UiSkin.TEXT_LABEL, font);
 		int valueWidth = this.getSurface().stringWidth(font, value);
 		this.getSurface().drawString(value, x + width - valueWidth - pad, baselineY, valueColor, font);
@@ -20694,7 +20699,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeStatsFooterHeight() {
-		return voidscapeClassicWebSmallHud() ? 0 : 52;
+		return voidscapeUseCompactStatsPanel() ? 0 : 52;
 	}
 
 	private int voidscapeSkillColumn(int skill) {
@@ -20707,7 +20712,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSkillLeftColumnCount() {
-		if (voidscapeClassicWebSmallHud()) {
+		if (voidscapeUseCompactStatsPanel()) {
 			return VOIDSCAPE_COMBAT_SKILLS;
 		}
 		return (skillCount + 1) / 2;
@@ -20776,7 +20781,7 @@ public final class mudclient implements Runnable {
 		int columnGap = voidscapeStatsColumnGap();
 		int columnWidth = (width - columnGap) / 2;
 		int rowH = voidscapeSkillRowHeight();
-		boolean compactWeb = voidscapeClassicWebSmallHud();
+		boolean compactWeb = voidscapeUseCompactStatsPanel();
 		int font = compactWeb ? UiSkin.FONT_SMALL : UiSkin.FONT_BODY;
 		boolean[] columnReservesLock = new boolean[]{false, false};
 		if (!compactWeb) {
@@ -20891,14 +20896,14 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSkillLockSize(int rowH) {
-		if (voidscapeClassicWebSmallHud() && rowH < 13) {
+		if (voidscapeUseCompactStatsPanel() && rowH < 13) {
 			return 8;
 		}
 		return rowH <= 13 ? 9 : 10;
 	}
 
 	private int voidscapeSkillLockX(int rowX, int columnWidth, int lockSize) {
-		if (voidscapeClassicWebSmallHud() && voidscapeSkillRowHeight() < 13) {
+		if (voidscapeUseCompactStatsPanel() && voidscapeSkillRowHeight() < 13) {
 			return rowX + columnWidth - lockSize - 1;
 		}
 		return rowX + columnWidth - lockSize - 5;

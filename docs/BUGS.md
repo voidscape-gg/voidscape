@@ -558,6 +558,25 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
 
+### VS-058 — Mobile landscape stats menu inherited the desktop stats detail panel (FIXED)
+- Status: verified · Severity: P2 · Area: client-ui / launch surface
+- Evidence: Ryan reported the deployed mobile web client stats menu looked terrible in
+  landscape, with APK likely affected too. Code inspection found the desktop stats
+  layout gate only excluded `voidscapeClassicWebSmallHud()`, while Android-profile
+  clients can use the Voidscape HUD skin without satisfying that small-web predicate.
+- Fix: added a shared `voidscapeUseCompactStatsPanel()` gate and routed stats row
+  height, desktop-detail eligibility, footer height, section sizing, lock placement, and
+  skill-row rendering through it. Desktop remains on the full-height aligned detail
+  layout; mobile web landscape and native Android stay on the compact skill list.
+- Verified 2026-07-05: `scripts/build.sh` green; `scripts/package-web-teavm.sh
+  --output-dir dist/web-teavm` green; `scripts/build-android.sh --debug` green; real
+  TeaVM mobile-landscape Skills screenshot captured at
+  `tmp/mobile-stats-menu-check-20260705-compact/mobile-landscape/04-skills.png`. The
+  full menu sweep later failed on desktop canvas visibility after the mobile/tablet
+  frames had already been captured, so the verified evidence is the targeted landscape
+  frame plus shared Android-profile code path.
+- Log: 2026-07-05 emergency launch-surface fix; documented in `docs/DIVERGENCE.md`.
+
 ### VS-057 — Live launcher client showed the legacy bank instead of Void Glass (FIXED)
 - Status: verified · Severity: P1 · Area: client-ui / launch config
 - Evidence: Ryan reported the freshly launched live desktop client still showing the old
