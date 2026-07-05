@@ -28,7 +28,6 @@ public final class ORSCharacter {
 	public int hitFeedbackAttackerType = HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
 	public int hitFeedbackAttackerServerIndex = -1;
 	public int hitFeedbackAttackerMaxHit = 0;
-	public int hitFeedbackStreak = 0;
 	public boolean hitFeedbackDebugLogged = false;
 	public int skull = 0;
 	public int wield = 0;
@@ -62,7 +61,6 @@ public final class ORSCharacter {
 		hitFeedbackAttackerType = HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
 		hitFeedbackAttackerServerIndex = -1;
 		hitFeedbackAttackerMaxHit = 0;
-		hitFeedbackStreak = 0;
 		hitFeedbackDebugLogged = false;
 	}
 

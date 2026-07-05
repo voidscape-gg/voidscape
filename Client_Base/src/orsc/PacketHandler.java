@@ -1968,7 +1968,6 @@ public class PacketHandler {
 						npc.healthCurrent = currentHits;
 						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
 							npc.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
-							mc.recordHitFeedback(npc);
 							debugHitFeedbackPacket("npc", npc, damage);
 						} else {
 							npc.clearHitFeedback();
@@ -2800,7 +2799,6 @@ public class PacketHandler {
 						player.damageTaken = damage;
 						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
 							player.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
-							mc.recordHitFeedback(player);
 							debugHitFeedbackPacket("player", player, damage);
 						} else {
 							player.clearHitFeedback();
@@ -2948,8 +2946,7 @@ public class PacketHandler {
 			+ " damage=" + damage
 			+ " attackerType=" + target.hitFeedbackAttackerType
 			+ " attackerIndex=" + target.hitFeedbackAttackerServerIndex
-			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit
-			+ " streak=" + target.hitFeedbackStreak);
+			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit);
 	}
 
 	private void drawGroundItems(int length) {
