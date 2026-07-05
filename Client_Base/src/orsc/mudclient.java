@@ -341,6 +341,7 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
 	private static final String ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG = "android-smoke-appearance-prompt.flag";
 	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
+	private static final String ANDROID_SMOKE_LOGIN_FLAG = "android-smoke-login.flag";
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
 	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
 	private static final String CLIENT_SETTING_CAMERA_INTERPOLATION = "camera_interpolation";
@@ -985,6 +986,8 @@ public final class mudclient implements Runnable {
 	private long lastAndroidSmokeGroundLootBeamLogMillis = 0L;
 	private long lastAndroidSmokeWelcomeDialogLogMillis = 0L;
 	private long lastAndroidSmokeAppearancePromptLogMillis = 0L;
+	private long lastAndroidSmokeLoginLogMillis = 0L;
+	private long lastAndroidSmokeChatTabLayoutLogMillis = 0L;
 	private int lastAndroidSmokeZoomLastZoom = -1;
 	private int lastAndroidSmokeZoomCameraZoom = -1;
 	private boolean loadingArea = false;
@@ -9811,6 +9814,10 @@ public final class mudclient implements Runnable {
 		return isAndroidSmokeFilePresent(ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG);
 	}
 
+	private boolean isAndroidSmokeLoginLoggingEnabled() {
+		return isAndroidSmokeFilePresent(ANDROID_SMOKE_LOGIN_FLAG);
+	}
+
 	private boolean isAndroidSmokeContextMenuLoggingEnabled() {
 		return isAndroidSmokeNpcTargetLoggingEnabled()
 			|| isAndroidSmokePlayerTargetLoggingEnabled()
@@ -9853,6 +9860,47 @@ public final class mudclient implements Runnable {
 			+ " closeY=" + (welcomeDialogCloseY() + welcomeDialogCloseHeight() / 2)
 			+ " mouseX=" + this.mouseX
 			+ " mouseY=" + this.mouseY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
+	}
+
+	private void logAndroidSmokeLoginState() {
+		if (!isAndroidSmokeLoginLoggingEnabled() || this.currentViewMode != GameMode.LOGIN) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeLoginLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeLoginLogMillis = now;
+
+		final int cx = halfGameWidth();
+		final String userText = panelTextOrEmpty(this.panelLogin, this.controlLoginUser);
+		final String status1 = panelTextOrEmpty(this.panelLogin, this.controlLoginStatus1);
+		final String status2 = panelTextOrEmpty(this.panelLogin, this.controlLoginStatus2);
+		final boolean userFocused = this.panelLogin != null && this.panelLogin.focusOn(this.controlLoginUser);
+		final boolean passFocused = this.panelLogin != null && this.panelLogin.focusOn(this.controlLoginPass);
+
+		System.out.println("ANDROID_SMOKE_LOGIN_STATE"
+			+ " screen=" + this.loginScreenNumber
+			+ " homeExistingX=" + cx
+			+ " homeExistingY=" + voidscapeLoginHomeExistingUserY()
+			+ " userX=" + cx
+			+ " userY=" + voidscapeExistingUserY()
+			+ " passX=" + cx
+			+ " passY=" + voidscapeExistingPassY()
+			+ " okX=" + (cx - voidscapeExistingActionOffsetX())
+			+ " okY=" + voidscapeExistingActionY()
+			+ " cancelX=" + (cx + voidscapeExistingActionOffsetX())
+			+ " cancelY=" + voidscapeExistingActionY()
+			+ " userLength=" + userText.length()
+			+ " passLength=" + getWebLoginPasswordLength()
+			+ " userFocused=" + userFocused
+			+ " passFocused=" + passFocused
+			+ " status1=" + androidSmokeLogToken(status1)
+			+ " status2=" + androidSmokeLogToken(status2)
+			+ " mouseX=" + this.mouseX
+			+ " mouseY=" + this.mouseY
+			+ " click=" + this.mouseButtonClick
+			+ " lastDown=" + this.lastMouseButtonDown
+			+ " currentDown=" + this.currentMouseButtonDown
 			+ " gameWidth=" + this.getGameWidth()
 			+ " gameHeight=" + this.getGameHeight());
 	}
@@ -9991,6 +10039,29 @@ public final class mudclient implements Runnable {
 			+ " mouseY=" + this.mouseY
 			+ " gameWidth=" + this.getGameWidth()
 			+ " gameHeight=" + this.getGameHeight());
+	}
+
+	private void logAndroidSmokeChatTabLayout() {
+		if (!isAndroidSmokeChatTabLoggingEnabled() || !useVoidscapeHudSkin() || useVoidscapeDesktopClassicChat()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeChatTabLayoutLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeChatTabLayoutLogMillis = now;
+
+		final StringBuilder layout = new StringBuilder("ANDROID_SMOKE_CHAT_TAB_LAYOUT")
+			.append(" selected=").append(this.messageTabSelected)
+			.append(" gameWidth=").append(this.getGameWidth())
+			.append(" gameHeight=").append(this.getGameHeight());
+		for (int i = 0; i < VOIDSCAPE_CHAT_TAB_COUNT; i++) {
+			int[] r = voidscapeChatTabRect(i);
+			layout.append(" tab").append(i).append('=')
+				.append(voidscapeChatTabLabel(i)).append(',')
+				.append(r[0]).append(',')
+				.append(r[1]).append(',')
+				.append(r[2]).append(',')
+				.append(r[3]);
+		}
+		System.out.println(layout.toString());
 	}
 
 	private void logAndroidSmokeChatSend(final String message) {
@@ -11593,8 +11664,8 @@ public final class mudclient implements Runnable {
 					}
 				} else if (this.inputX_Action == InputXAction.BANK_DEPOSIT) {
 					try {
-						if ((Config.S_WANT_CUSTOM_BANKS && this.bank.selectedInventorySlot >= 0) ||
-							(!Config.S_WANT_CUSTOM_BANKS && this.bank.selectedBankSlot >= 0)) {
+						if ((this.bank.useLegacyCustomBank() && this.bank.selectedInventorySlot >= 0) ||
+							(!this.bank.useLegacyCustomBank() && this.bank.selectedBankSlot >= 0)) {
 							if (str.length() > 10) {
 								str = str.substring(str.length() - 10);
 							}
@@ -12075,6 +12146,7 @@ public final class mudclient implements Runnable {
 			drawVoidscapeButton(halfGameWidth() + 46, 278, 86, 28, "Cancel", false);
 		}
 
+		logAndroidSmokeLoginState();
 		clientPort.draw();
 	}
 
@@ -18804,7 +18876,7 @@ public final class mudclient implements Runnable {
 	}
 
 	// --- Bottom chat geometry: single source of truth shared by draw + click + reposition. ---
-	private static final int VOIDSCAPE_CHAT_TAB_COUNT = 5;
+	private static final int VOIDSCAPE_CHAT_TAB_COUNT = 6;
 
 	private boolean voidscapeUseMobileBottomChatShell() {
 		return voidscapeUseMobilePanelShell();
@@ -18815,23 +18887,31 @@ public final class mudclient implements Runnable {
 			&& this.getGameWidth() > this.getGameHeight();
 	}
 
+	private boolean voidscapeUseMobileLooseChatMessages() {
+		return useVoidscapeHudSkin() && isAndroid();
+	}
+
 	private boolean voidscapeUseLooseChatMessages() {
-		return voidscapeUsePhoneLandscapeLooseChat() || voidscapeClassicWebSmallHud();
+		return voidscapeUseMobileLooseChatMessages() || voidscapeClassicWebSmallHud();
 	}
 
 	public boolean isVoidscapePhoneLandscapeLooseChat() {
 		return voidscapeUsePhoneLandscapeLooseChat();
 	}
 
+	public boolean isVoidscapeMobileLooseChatMessages() {
+		return voidscapeUseMobileLooseChatMessages();
+	}
+
 	private int voidscapeChatContentLeftInset() {
-		if (voidscapeUsePhoneLandscapeLooseChat()) {
+		if (voidscapeUseLooseChatMessages()) {
 			return 7;
 		}
 		return voidscapeUseMobileBottomChatShell() ? 78 : 20;
 	}
 
 	private int voidscapeChatContentRightInset() {
-		if (voidscapeUsePhoneLandscapeLooseChat()) {
+		if (voidscapeUseLooseChatMessages()) {
 			return Math.max(72, voidscapeBottomReservedWidth() + 8);
 		}
 		return voidscapeUseMobileBottomChatShell() ? 118 : 20;
@@ -18854,7 +18934,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeChatEntryY() {
-		if (voidscapeUsePhoneLandscapeLooseChat()) {
+		if (voidscapeUseLooseChatMessages()) {
 			return voidscapeChatTabTop() - 22;
 		}
 		return voidscapeChatFrameBottom() - 30;
@@ -19108,7 +19188,8 @@ public final class mudclient implements Runnable {
 		if (index == 0) return "All";
 		if (index == 1) return "Chat";
 		if (index == 2) return "Quest";
-		if (index == 3) return "PM";
+		if (index == 3) return "Global";
+		if (index == 4) return "PM";
 		return "Rpt";
 	}
 
@@ -19116,8 +19197,9 @@ public final class mudclient implements Runnable {
 		if (index == 0) return MessageTab.ALL;
 		if (index == 1) return MessageTab.CHAT;
 		if (index == 2) return MessageTab.QUEST;
-		if (index == 3) return MessageTab.PRIVATE;
-		return null; // tab 4 is Report Abuse, not a message tab
+		if (index == 3) return MessageTab.GLOBAL;
+		if (index == 4) return MessageTab.PRIVATE;
+		return null; // final tab is Report Abuse, not a message tab
 	}
 
 	private String voidscapeChatTabIconAsset(int index, boolean active) {
@@ -19125,7 +19207,8 @@ public final class mudclient implements Runnable {
 		if (index == 0) return "bottom-chat-all" + suffix;
 		if (index == 1) return "bottom-chat-history" + suffix;
 		if (index == 2) return "bottom-chat-quest" + suffix;
-		if (index == 3) return "bottom-chat-private" + suffix;
+		if (index == 3) return "bottom-chat-history" + suffix;
+		if (index == 4) return "bottom-chat-private" + suffix;
 		return "bottom-chat-report" + suffix;
 	}
 
@@ -19190,7 +19273,7 @@ public final class mudclient implements Runnable {
 				r[0] + (r[2] - iconSize) / 2, r[1] + (this.getGameHeight() <= 520 ? 5 : 6),
 				iconSize, iconSize);
 
-			if (i == 4) {
+			if (i == VOIDSCAPE_CHAT_TAB_COUNT - 1) {
 				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", 0xFF4040, 0, 5,
 					r[1] + r[3] - (this.getGameHeight() <= 520 ? 8 : 10));
 				continue;
@@ -19200,6 +19283,7 @@ public final class mudclient implements Runnable {
 				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, 0,
 				r[1] + r[3] - (this.getGameHeight() <= 520 ? 8 : 10));
 		}
+		logAndroidSmokeChatTabLayout();
 		drawVoidscapeAccountButton();
 		drawVoidscapeAccountMenu();
 	}
@@ -19209,37 +19293,28 @@ public final class mudclient implements Runnable {
 			drawVoidscapeMobilePanelDock();
 			return;
 		}
-		String[] labels = new String[]{"All", "Chat", "Quest", "PM", "Rpt"};
-		MessageTab[] tabs = new MessageTab[]{MessageTab.ALL, MessageTab.CHAT, MessageTab.QUEST,
-			MessageTab.PRIVATE};
-		// Shared tab treatment (UI-STYLE-GUIDE §4.4): same active-sprite +
-		// tint + label recipe as the mobile dock — PURPLE_SELECT active fill,
-		// GOLD_HOT active label, TEXT_BODY idle with the shared activity flash
-		// (getVoidscapeChatTabColor). The literal brown fills and on/off state
-		// text are gone. Geometry (voidscapeChatTabRect) is untouched, so the
-		// click path in handleVoidscapeChatTabClick stays in lockstep.
+		// Shared mobile tab treatment: the same glass-band language as the
+		// desktop Voidscape strip, but kept in the existing mobile-safe row.
+		// Geometry (voidscapeChatTabRect) is untouched, so draw/click stay in lockstep.
 		for (int i = 0; i < VOIDSCAPE_CHAT_TAB_COUNT; i++) {
 			int[] r = voidscapeChatTabRect(i);
-			boolean active = i < tabs.length && this.messageTabSelected == tabs[i];
+			boolean active = this.messageTabSelected == voidscapeChatTabMessageTab(i);
 			boolean over = this.mouseX >= r[0] && this.mouseX < r[0] + r[2]
 				&& this.mouseY >= r[1] && this.mouseY < r[1] + r[3];
-			drawVoidscapeSkinSprite(active || over ? "top-tab-active.png" : "top-tab-normal.png",
-				r[0], r[1], r[2], r[3]);
-			int inset = voidscapeCompactHud() ? 8 : 10;
-			this.getSurface().drawBoxAlpha(r[0] + inset, r[1] + 7, Math.max(1, r[2] - inset * 2),
-				Math.max(1, r[3] - 14),
+			this.getSurface().drawBoxAlpha(r[0], r[1], r[2], r[3],
 				active || over ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
-				active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 72));
-			int labelY = r[1] + (voidscapeCompactHud() ? 21 : 24);
-			if (i == 4) {
-				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", UiSkin.FLASH, 0, 5,
-					r[1] + (voidscapeCompactHud() ? 22 : 25));
-				continue;
+				active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 150));
+			this.getSurface().drawLineHoriz(r[0], r[1], r[2], UiSkin.GLASS_RIM);
+			this.getSurface().drawLineHoriz(r[0], r[1] + r[3] - 1, r[2], UiSkin.VOID_LINE);
+			if (i > 0) {
+				this.getSurface().drawLineVert(r[0], r[1] + 1, UiSkin.VOID_LINE, r[3] - 2);
 			}
-			String label = fitVoidscapeText(labels[i], r[2] - 12, 0);
+			String label = fitVoidscapeText(voidscapeChatTabLabel(i), r[2] - 8, 0);
 			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label,
-				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, 0, labelY);
+				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, i == VOIDSCAPE_CHAT_TAB_COUNT - 1 ? 5 : 0,
+				r[1] + (voidscapeCompactHud() ? 21 : 24));
 		}
+		logAndroidSmokeChatTabLayout();
 		drawVoidscapeAccountButton();
 		drawVoidscapeAccountMenu();
 	}
@@ -19283,6 +19358,11 @@ public final class mudclient implements Runnable {
 				this.messageTabSelected = MessageTab.QUEST;
 				this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] = 999999;
 			} else if (i == 3) {
+				this.voidscapeChatHidden = false;
+				resetVoidscapeAllChatDoubleClick();
+				this.messageTabSelected = MessageTab.GLOBAL;
+				this.panelMessageTabs.controlScrollAmount[this.panelMessageGlobal] = 999999;
+			} else if (i == 4) {
 				this.voidscapeChatHidden = false;
 				resetVoidscapeAllChatDoubleClick();
 				this.messageTabSelected = MessageTab.PRIVATE;
@@ -19364,13 +19444,15 @@ public final class mudclient implements Runnable {
 		if ((index == 0 && this.messageTabSelected == MessageTab.ALL)
 			|| (index == 1 && this.messageTabSelected == MessageTab.CHAT)
 			|| (index == 2 && this.messageTabSelected == MessageTab.QUEST)
-			|| (index == 3 && this.messageTabSelected == MessageTab.PRIVATE)) {
+			|| (index == 3 && this.messageTabSelected == MessageTab.GLOBAL)
+			|| (index == 4 && this.messageTabSelected == MessageTab.PRIVATE)) {
 			color = UiSkin.GOLD_HOT;
 		}
 		if ((index == 0 && this.messageTabActivity_Game % 30 > 15)
 			|| (index == 1 && this.messageTabActivity_Chat % 30 > 15)
 			|| (index == 2 && this.messageTabActivity_Quest % 30 > 15)
-			|| (index == 3 && this.messageTabActivity_Private % 30 > 15)) {
+			|| (index == 3 && this.messageTabActivity_Global % 30 > 15)
+			|| (index == 4 && this.messageTabActivity_Private % 30 > 15)) {
 			color = UiSkin.FLASH;
 		}
 		return color;
@@ -31231,18 +31313,27 @@ public final class mudclient implements Runnable {
 			}
 			return true;
 		}
-		if ("quest".equals(key) || "quests".equals(key)) {
-			this.messageTabSelected = MessageTab.QUEST;
-			this.voidscapeChatHidden = false;
-			resetVoidscapeAllChatDoubleClick();
-			if (this.panelMessageTabs != null) {
-				this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] = 999999;
+			if ("quest".equals(key) || "quests".equals(key)) {
+				this.messageTabSelected = MessageTab.QUEST;
+				this.voidscapeChatHidden = false;
+				resetVoidscapeAllChatDoubleClick();
+				if (this.panelMessageTabs != null) {
+					this.panelMessageTabs.controlScrollAmount[this.panelMessageQuest] = 999999;
+				}
+				return true;
 			}
-			return true;
-		}
-		if ("private".equals(key) || "pm".equals(key)) {
-			this.messageTabSelected = MessageTab.PRIVATE;
-			this.voidscapeChatHidden = false;
+			if ("global".equals(key) || "g".equals(key)) {
+				this.messageTabSelected = MessageTab.GLOBAL;
+				this.voidscapeChatHidden = false;
+				resetVoidscapeAllChatDoubleClick();
+				if (this.panelMessageTabs != null) {
+					this.panelMessageTabs.controlScrollAmount[this.panelMessageGlobal] = 999999;
+				}
+				return true;
+			}
+			if ("private".equals(key) || "pm".equals(key)) {
+				this.messageTabSelected = MessageTab.PRIVATE;
+				this.voidscapeChatHidden = false;
 			resetVoidscapeAllChatDoubleClick();
 			if (this.panelMessageTabs != null) {
 				this.panelMessageTabs.controlScrollAmount[this.panelMessagePrivate] = 999999;
@@ -31934,6 +32025,8 @@ public final class mudclient implements Runnable {
 			questGuideInterface.questGuide.scrollMethodList(questGuideInterface.questGuideScroll, x);
 		} else if (onlineList.isVisible()) {
 			onlineList.panel.scrollMethodList(onlineList.scroll, x);
+		} else if (isShowDialogBank() && bank != null && bank.vgApplyScroll(x)) {
+			return;
 		} else if (isShowDialogBank() && this.bankPage == 0)
 			bank.bank.scrollMethodList(bank.bankScroll, x);
 		else if (auctionHouse.isVisible()) {
@@ -31948,6 +32041,8 @@ public final class mudclient implements Runnable {
 			panelMessageTabs.scrollMethodList(panelMessageQuest, x);
 		else if (this.messageTabSelected == MessageTab.CHAT && !this.controlPressed)
 			panelMessageTabs.scrollMethodList(panelMessageChat, x);
+		else if (this.messageTabSelected == MessageTab.GLOBAL && !this.controlPressed)
+			panelMessageTabs.scrollMethodList(panelMessageGlobal, x);
 		else if (this.messageTabSelected == MessageTab.PRIVATE && !this.controlPressed)
 			panelMessageTabs.scrollMethodList(panelMessagePrivate, x);
 	}

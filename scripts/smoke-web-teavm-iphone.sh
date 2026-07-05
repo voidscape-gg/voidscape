@@ -19,9 +19,18 @@ OUT_DIR="${WEB_TEA_SMOKE_OUT:-$ROOT/tmp/web-teavm-smoke}"
 CHROME_PATH="${CHROME_PATH:-${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
 PLAYWRIGHT_CORE_DIR="${PLAYWRIGHT_CORE_DIR:-}"
 IGNORE_HTTPS_ERRORS="${WEB_TEA_SMOKE_IGNORE_HTTPS_ERRORS:-0}"
+AUTH_DB="${WEB_TEA_SMOKE_AUTH_DB:-}"
+BANK_SEARCH_TEXT="${WEB_TEA_SMOKE_BANK_SEARCH_TEXT:-coin}"
+BANK_ITEM_ID="${WEB_TEA_SMOKE_BANK_ITEM_ID:-10}"
+BANK_ITEM_AMOUNT="${WEB_TEA_SMOKE_BANK_ITEM_AMOUNT:-200}"
+BANK_INVENTORY_AMOUNT="${WEB_TEA_SMOKE_BANK_INVENTORY_AMOUNT:-1}"
+BANK_FIXTURE_BANK_SLOTS="${WEB_TEA_SMOKE_BANK_FIXTURE_BANK_SLOTS:-192}"
+BANK_FIXTURE_START_ITEM_ID="${WEB_TEA_SMOKE_BANK_FIXTURE_START_ITEM_ID:-11}"
+BANK_FIXTURE_ITEM_ID_BASE="${WEB_TEA_SMOKE_FIXTURE_ITEM_ID_BASE:-1000000}"
 ONLY_WORLD_MAP_SEARCH=0
 ONLY_CHAT=0
 ONLY_CONTEXT_MENU=0
+ONLY_BANK=0
 
 usage() {
 	cat <<'EOF'
@@ -48,9 +57,11 @@ Options:
   --only-world-map-search Login and run only the real world-map open/pan/zoom/search/walker/close proof.
   --only-chat             Login and run only the authenticated in-game mobile chat proof.
   --only-context-menu     Login and run only the real mobile long-press context-menu proof.
+  --only-bank             Login, open the real bank with ::quickbank, and run the mobile bank proof.
   -h, --help              Show this help.
 
 Requires a running Voidscape server with WebSockets enabled.
+--only-bank also requires WEB_TEA_SMOKE_AUTH_DB so the bank fixture can be seeded/restored.
 
 With --base-url, pass the deployed root/directory URL, for example:
   scripts/smoke-web-teavm-iphone.sh --base-url https://play.example.com/ --ws wss://play.example.com/ws/
@@ -137,6 +148,10 @@ while [[ $# -gt 0 ]]; do
 			ONLY_CONTEXT_MENU=1
 			shift
 			;;
+		--only-bank)
+			ONLY_BANK=1
+			shift
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -217,6 +232,253 @@ fi
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
+WEB_BANK_FIXTURE_PLAYER_ID=""
+WEB_BANK_FIXTURE_ACTIVE=0
+
+sql_escape() {
+	local value="$1"
+	value="${value//\'/\'\'}"
+	printf '%s' "$value"
+}
+
+require_web_bank_db() {
+	if [[ -z "$AUTH_DB" ]]; then
+		echo "ERROR: --only-bank requires WEB_TEA_SMOKE_AUTH_DB" >&2
+		exit 1
+	fi
+	if [[ ! -f "$AUTH_DB" ]]; then
+		echo "ERROR: WEB_TEA_SMOKE_AUTH_DB not found at $AUTH_DB" >&2
+		exit 1
+	fi
+	if ! command -v sqlite3 >/dev/null 2>&1; then
+		echo "ERROR: sqlite3 is required for --only-bank" >&2
+		exit 1
+	fi
+}
+
+read_web_bank_player_id() {
+	local safe_user player_id
+	safe_user="$(sql_escape "$AUTH_USER")"
+	player_id="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+		"select id from players where lower(username) = lower('$safe_user') limit 1;")"
+	if [[ -z "$player_id" ]]; then
+		echo "ERROR: no player row found for $AUTH_USER in $AUTH_DB" >&2
+		return 1
+	fi
+	echo "$player_id"
+}
+
+wait_web_bank_offline() {
+	local player_id="$1"
+	local timeout="${2:-45}"
+	local deadline=$((SECONDS + timeout))
+	local online
+
+	while (( SECONDS < deadline )); do
+		online="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+			"select online from players where id = $player_id limit 1;" 2>/dev/null || true)"
+		if [[ "$online" == "0" || -z "$online" ]]; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "WARNING: timed out waiting for $AUTH_USER to go offline before fixture restore" >&2
+	return 1
+}
+
+reset_web_bank_itemstatus_sequence() {
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
+		"update sqlite_sequence set seq = (select coalesce(max(itemID), 0) from itemstatuses) where name = 'itemstatuses';" \
+		>/dev/null 2>&1 || true
+}
+
+snapshot_web_bank_inventory() {
+	local player_id="$1"
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert itemstatuses" \
+		"select s.* from itemstatuses s join invitems i on i.itemID = s.itemID where i.playerID = $player_id order by i.slot;" \
+		> "$OUT_DIR/web-bank-inventory-itemstatuses.sql"
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert invitems" \
+		"select i.* from invitems i where i.playerID = $player_id order by i.slot;" \
+		> "$OUT_DIR/web-bank-inventory-items.sql"
+}
+
+snapshot_web_bank() {
+	local player_id="$1"
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert itemstatuses" \
+		"select s.* from itemstatuses s join bank b on b.itemID = s.itemID where b.playerID = $player_id order by b.slot;" \
+		> "$OUT_DIR/web-bank-itemstatuses.sql"
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert bank" \
+		"select b.* from bank b where b.playerID = $player_id order by b.slot;" \
+		> "$OUT_DIR/web-bank-items.sql"
+	sqlite3 -cmd '.timeout 5000' "$AUTH_DB" ".mode insert bankpresets" \
+		"select bp.* from bankpresets bp where bp.playerID = $player_id order by bp.slot;" \
+		> "$OUT_DIR/web-bank-presets.sql"
+}
+
+restore_web_bank_inventory() {
+	local player_id="$1"
+	if [[ ! -f "$OUT_DIR/web-bank-inventory-itemstatuses.sql" || ! -f "$OUT_DIR/web-bank-inventory-items.sql" ]]; then
+		return 0
+	fi
+
+	{
+		echo ".timeout 5000"
+		echo "BEGIN;"
+		echo "DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM invitems WHERE playerID = $player_id);"
+		echo "DELETE FROM invitems WHERE playerID = $player_id;"
+		cat "$OUT_DIR/web-bank-inventory-itemstatuses.sql"
+		cat "$OUT_DIR/web-bank-inventory-items.sql"
+		echo "UPDATE players SET online = 0 WHERE id = $player_id;"
+		echo "COMMIT;"
+	} | sqlite3 "$AUTH_DB"
+	reset_web_bank_itemstatus_sequence
+}
+
+restore_web_bank() {
+	local player_id="$1"
+	if [[ ! -f "$OUT_DIR/web-bank-itemstatuses.sql" || ! -f "$OUT_DIR/web-bank-items.sql" || ! -f "$OUT_DIR/web-bank-presets.sql" ]]; then
+		return 0
+	fi
+
+	{
+		echo ".timeout 5000"
+		echo "BEGIN;"
+		echo "DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM bank WHERE playerID = $player_id);"
+		echo "DELETE FROM bank WHERE playerID = $player_id;"
+		echo "DELETE FROM bankpresets WHERE playerID = $player_id;"
+		cat "$OUT_DIR/web-bank-itemstatuses.sql"
+		cat "$OUT_DIR/web-bank-items.sql"
+		cat "$OUT_DIR/web-bank-presets.sql"
+		echo "UPDATE players SET online = 0 WHERE id = $player_id;"
+		echo "COMMIT;"
+	} | sqlite3 "$AUTH_DB"
+	reset_web_bank_itemstatus_sequence
+}
+
+clear_web_bank_inventory() {
+	local player_id="$1"
+	sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM invitems WHERE playerID = $player_id);
+DELETE FROM invitems WHERE playerID = $player_id;
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+}
+
+clear_web_bank_and_presets() {
+	local player_id="$1"
+	sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM bank WHERE playerID = $player_id);
+DELETE FROM bank WHERE playerID = $player_id;
+DELETE FROM bankpresets WHERE playerID = $player_id;
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+}
+
+seed_web_bank_inventory_slot() {
+	local player_id="$1"
+	local slot="$2"
+	local catalog_id="$3"
+	local amount="$4"
+
+	sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+DELETE FROM itemstatuses WHERE itemID IN (
+	SELECT itemID FROM invitems WHERE playerID = $player_id AND slot = $slot
+);
+DELETE FROM invitems WHERE playerID = $player_id AND slot = $slot;
+INSERT INTO itemstatuses(itemID, catalogID, amount, noted, wielded, durability, kill_log)
+VALUES(
+	(
+		SELECT CASE
+			WHEN coalesce(max(itemID), 0) + 1 < $BANK_FIXTURE_ITEM_ID_BASE THEN $BANK_FIXTURE_ITEM_ID_BASE
+			ELSE coalesce(max(itemID), 0) + 1
+		END
+		FROM itemstatuses
+	),
+	$catalog_id, $amount, 0, 0, 100, NULL
+);
+INSERT INTO invitems(playerID, itemID, slot)
+VALUES($player_id, (SELECT max(itemID) FROM itemstatuses), $slot);
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+}
+
+seed_web_bank_slot() {
+	local player_id="$1"
+	local slot="$2"
+	local catalog_id="$3"
+	local amount="$4"
+
+	sqlite3 "$AUTH_DB" <<SQL
+.timeout 5000
+BEGIN;
+DELETE FROM itemstatuses WHERE itemID IN (
+	SELECT itemID FROM bank WHERE playerID = $player_id AND slot = $slot
+);
+DELETE FROM bank WHERE playerID = $player_id AND slot = $slot;
+INSERT INTO itemstatuses(itemID, catalogID, amount, noted, wielded, durability, kill_log)
+VALUES(
+	(
+		SELECT CASE
+			WHEN coalesce(max(itemID), 0) + 1 < $BANK_FIXTURE_ITEM_ID_BASE THEN $BANK_FIXTURE_ITEM_ID_BASE
+			ELSE coalesce(max(itemID), 0) + 1
+		END
+		FROM itemstatuses
+	),
+	$catalog_id, $amount, 0, 0, 100, NULL
+);
+INSERT INTO bank(playerID, itemID, slot)
+VALUES($player_id, (SELECT max(itemID) FROM itemstatuses), $slot);
+UPDATE players SET online = 0 WHERE id = $player_id;
+COMMIT;
+SQL
+}
+
+seed_web_bank_fixture() {
+	local player_id="$1"
+	local slot catalog_id
+
+	clear_web_bank_inventory "$player_id"
+	seed_web_bank_inventory_slot "$player_id" 0 "$BANK_ITEM_ID" "$BANK_INVENTORY_AMOUNT"
+	clear_web_bank_and_presets "$player_id"
+	seed_web_bank_slot "$player_id" 0 "$BANK_ITEM_ID" "$BANK_ITEM_AMOUNT"
+	for ((slot = 1; slot < BANK_FIXTURE_BANK_SLOTS; slot++)); do
+		catalog_id=$((BANK_FIXTURE_START_ITEM_ID + slot - 1))
+		seed_web_bank_slot "$player_id" "$slot" "$catalog_id" 1
+	done
+}
+
+setup_web_bank_fixture() {
+	require_web_bank_db
+	wait_web_bank_offline "$(read_web_bank_player_id)" 10 || true
+	WEB_BANK_FIXTURE_PLAYER_ID="$(read_web_bank_player_id)"
+	snapshot_web_bank_inventory "$WEB_BANK_FIXTURE_PLAYER_ID"
+	snapshot_web_bank "$WEB_BANK_FIXTURE_PLAYER_ID"
+	WEB_BANK_FIXTURE_ACTIVE=1
+	echo "TeaVM bank smoke seeding inventory slot 0 with item $BANK_ITEM_ID x$BANK_INVENTORY_AMOUNT"
+	echo "TeaVM bank smoke seeding $BANK_FIXTURE_BANK_SLOTS bank slots starting with item $BANK_ITEM_ID"
+	seed_web_bank_fixture "$WEB_BANK_FIXTURE_PLAYER_ID"
+}
+
+restore_web_bank_fixture() {
+	if [[ "$WEB_BANK_FIXTURE_ACTIVE" != "1" || -z "$WEB_BANK_FIXTURE_PLAYER_ID" ]]; then
+		return 0
+	fi
+	wait_web_bank_offline "$WEB_BANK_FIXTURE_PLAYER_ID" 45 || true
+	restore_web_bank_inventory "$WEB_BANK_FIXTURE_PLAYER_ID" || true
+	restore_web_bank "$WEB_BANK_FIXTURE_PLAYER_ID" || true
+	WEB_BANK_FIXTURE_ACTIVE=0
+}
+
 if [[ "$REMOTE_MODE" -eq 0 && "$WEB_PORT" == "0" ]]; then
 	WEB_PORT="$(python3 - <<'PY'
 import socket
@@ -236,12 +498,17 @@ if [[ "$REMOTE_MODE" -eq 0 ]]; then
 fi
 
 cleanup() {
+	restore_web_bank_fixture || true
 	if [[ "${HTTP_PID:-}" =~ ^[0-9]+$ ]]; then
 		kill "$HTTP_PID" >/dev/null 2>&1 || true
 		wait "$HTTP_PID" >/dev/null 2>&1 || true
 	fi
 }
 trap cleanup EXIT
+
+if [[ "$ONLY_BANK" -eq 1 ]]; then
+	setup_web_bank_fixture
+fi
 
 if [[ "$REMOTE_MODE" -eq 0 ]]; then
 	python3 - "$WEB_PORT" <<'PY'
@@ -268,7 +535,8 @@ fi
 
 export PLAYWRIGHT_CORE_DIR CHROME_PATH OUT_DIR AUTH_USER AUTH_PASS HOST WS_PORT WS_URL REMOTE_MODE IGNORE_HTTPS_ERRORS
 export PORTAL_URL PORTAL_ACCOUNT_URL PORTAL_RECOVERY_URL
-export ONLY_WORLD_MAP_SEARCH ONLY_CHAT ONLY_CONTEXT_MENU
+export ONLY_WORLD_MAP_SEARCH ONLY_CHAT ONLY_CONTEXT_MENU ONLY_BANK
+export BANK_SEARCH_TEXT
 if [[ "$REMOTE_MODE" -eq 1 ]]; then
 	export BASE_URL="$BASE_URL_OVERRIDE"
 else
@@ -296,7 +564,9 @@ const portalRecoveryUrl = process.env.PORTAL_RECOVERY_URL || '';
 const onlyWorldMapSearch = process.env.ONLY_WORLD_MAP_SEARCH === '1';
 const onlyChat = process.env.ONLY_CHAT === '1';
 const onlyContextMenu = process.env.ONLY_CONTEXT_MENU === '1';
-const focusedSmoke = onlyWorldMapSearch || onlyChat || onlyContextMenu;
+const onlyBank = process.env.ONLY_BANK === '1';
+const bankSearchText = process.env.BANK_SEARCH_TEXT || 'coin';
+const focusedSmoke = onlyWorldMapSearch || onlyChat || onlyContextMenu || onlyBank;
 let browser = null;
 
 function assert(condition, message) {
@@ -743,7 +1013,7 @@ function customHudChatTabFramePoint(canvas, index) {
   const accountSafeRight = gameWidth - bottomReservedWidth;
   const maxFrameWidth = Math.min(stableHomeX - 20, accountSafeRight - frameX);
   const frameWidth = Math.max(300, Math.min(660, maxFrameWidth));
-  const tabCount = 5;
+  const tabCount = 6;
   const margin = compact ? 4 : 6;
   const gap = compact ? 3 : 5;
   const tabHeight = compact ? 32 : 40;
@@ -835,7 +1105,7 @@ function safeCameraGesturePoints(frame) {
   };
 }
 
-const REQUIRED_CUSTOM_HUD_MESSAGE_TABS = ['ALL', 'CHAT', 'QUEST', 'PRIVATE'];
+const REQUIRED_CUSTOM_HUD_MESSAGE_TABS = ['ALL', 'CHAT', 'QUEST', 'GLOBAL', 'PRIVATE'];
 const REQUIRED_CUSTOM_HUD_TOP_TABS = [1, 2, 3, 4, 5, 6];
 
 async function waitForMessageTab(page, expected, label) {
@@ -1036,7 +1306,8 @@ async function proveCustomHudChatTabs(page) {
   const targets = [
     { index: 1, tab: 'CHAT' },
     { index: 2, tab: 'QUEST' },
-    { index: 3, tab: 'PRIVATE' },
+    { index: 3, tab: 'GLOBAL' },
+    { index: 4, tab: 'PRIVATE' },
     { index: 0, tab: 'ALL' }
   ];
   const steps = [];
@@ -2451,6 +2722,198 @@ async function proveAuthenticatedChat(page, consoleMessages) {
   };
 }
 
+function bankFromSnapshot(snapshot) {
+  return snapshot && snapshot.ui && snapshot.ui.bank ? snapshot.ui.bank : null;
+}
+
+async function waitForBankCondition(page, label, predicate, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  let snapshot = null;
+  let bank = null;
+  while (Date.now() < deadline) {
+    snapshot = await diagnosticsSnapshot(page);
+    bank = bankFromSnapshot(snapshot);
+    if (bank && predicate(bank, snapshot)) {
+      return { snapshot, bank };
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label} did not match: ${JSON.stringify({ bank, ui: snapshot && snapshot.ui, recentErrors: snapshot && snapshot.recentErrors })}`);
+}
+
+async function waitForBankOpen(page, label) {
+  return await waitForBankCondition(page, label, (bank) =>
+    bank.open === true
+      && bank.renderer === 'voidGlass'
+      && bank.itemCount > 0
+      && bank.bankSlotX > 0
+      && bank.inventorySlotX > 0
+      && bank.closeX > 0,
+    15000);
+}
+
+async function sendBankCommand(page) {
+  await clearQueueRecorder(page);
+  await openMobileKeyboard(page, 'bank quickbank command');
+  await page.keyboard.type('::quickbank', { delay: 15 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(1200);
+  const events = await recordedQueueEvents(page);
+  assert(events.includes('s,1'), `quickbank command should open keyboard: ${events.join(' ')}`);
+  assertTextEventsContain(events, '::quickbank', 'quickbank command');
+  assert(events.includes('k,1,10'), `quickbank command should enqueue Enter: ${events.join(' ')}`);
+  const opened = await waitForBankOpen(page, 'quickbank open');
+  const keyboardOpen = await page.evaluate(() => {
+    const snapshot = window.__voidscapeCollectDiagnostics();
+    return !!(snapshot && snapshot.keyboard && snapshot.keyboard.open);
+  });
+  if (keyboardOpen) {
+    await closeMobileKeyboardWithButton(page, 'bank quickbank keyboard cleanup');
+  }
+  return { events, opened: opened.bank };
+}
+
+async function tapBankDiagnosticPoint(page, bank, xKey, yKey, label) {
+  const x = Math.round(Number(bank[xKey]));
+  const y = Math.round(Number(bank[yKey]));
+  assert(Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0,
+    `${label} missing bank diagnostic point ${xKey}/${yKey}: ${JSON.stringify(bank)}`);
+  await pointerTapFrame(page, x, y);
+}
+
+async function proveAuthenticatedBank(page) {
+  const before = await waitForUiState(page);
+  assert(before.customUi && before.webBuild && before.androidProfile,
+    `authenticated bank proof requires shared mobile Voidscape UI: ${JSON.stringify(before)}`);
+  assert(!before.blockingDialog, `authenticated bank proof requires blocking dialogs closed: ${JSON.stringify(before)}`);
+  assert(before.bankRenderer === 'voidGlass',
+    `authenticated bank proof requires Void Glass renderer before opening: ${JSON.stringify(before)}`);
+
+  const command = await sendBankCommand(page);
+  const open = (await waitForBankOpen(page, 'bank open after quickbank')).bank;
+  const openScreenshot = path.join(outDir, 'iphone-bank-open.png');
+  await page.screenshot({ path: openScreenshot, fullPage: true });
+
+  await tapBankDiagnosticPoint(page, open, 'searchX', 'searchY', 'bank search focus');
+  await page.keyboard.type(bankSearchText, { delay: 15 });
+  const searched = await waitForBankCondition(page, 'bank search text', (bank) =>
+    bank.open === true && bank.renderer === 'voidGlass' && bank.search === bankSearchText && bank.matches > 0,
+    8000);
+  const searchScreenshot = path.join(outDir, 'iphone-bank-search.png');
+  await page.screenshot({ path: searchScreenshot, fullPage: true });
+
+  await tapBankDiagnosticPoint(page, searched.bank, 'searchClearX', 'searchClearY', 'bank search clear');
+  const cleared = await waitForBankCondition(page, 'bank search clear', (bank) =>
+    bank.open === true && bank.search === '' && bank.matches >= searched.bank.matches,
+    8000);
+
+  let scrolled = { bank: cleared.bank, skipped: true };
+  if ((cleared.bank.maxScroll || 0) > 0) {
+    const startY = Math.min(cleared.bank.bankSlotY + 180, cleared.snapshot.canvas.height - 20);
+    const endY = Math.max(cleared.bank.bankSlotY + 40, cleared.bank.bankSlotY + 10);
+    await pointerFrame(page, 'pointerdown', 256, startY, { buttons: 1, label: 'bank grid scroll start' });
+    await page.waitForTimeout(220);
+    await pointerFrame(page, 'pointermove', 256, Math.round((startY + endY) / 2), { buttons: 1 });
+    await page.waitForTimeout(220);
+    await pointerFrame(page, 'pointermove', 256, endY, { buttons: 1 });
+    await page.waitForTimeout(220);
+    await pointerFrame(page, 'pointerup', 256, endY, { buttons: 0 });
+    scrolled = await waitForBankCondition(page, 'bank grid drag scroll', (bank) =>
+      bank.open === true && bank.scroll > cleared.bank.scroll,
+      2500).catch(async () => {
+        const latest = (await waitForBankOpen(page, 'bank scroll fallback state')).bank;
+        await tapBankDiagnosticPoint(page, latest, 'scrollbarX', 'scrollDownY', 'bank scrollbar fallback');
+        return await waitForBankCondition(page, 'bank scrollbar fallback scroll', (bank) =>
+          bank.open === true && bank.scroll > latest.scroll,
+          8000);
+      });
+  }
+  const scrolledScreenshot = path.join(outDir, 'iphone-bank-scrolled.png');
+  await page.screenshot({ path: scrolledScreenshot, fullPage: true });
+
+  const beforeWithdrawItems = scrolled.bank.inventoryItems;
+  await tapBankDiagnosticPoint(page, scrolled.bank, 'bankSlotX', 'bankSlotY', 'bank withdraw slot');
+  const afterWithdraw = await waitForBankCondition(page, 'bank withdraw', (bank) =>
+    bank.open === true && bank.inventoryItems > beforeWithdrawItems,
+    12000);
+
+  await tapBankDiagnosticPoint(page, afterWithdraw.bank, 'loadoutsX', 'loadoutsY', 'bank loadout menu');
+  const loadoutMenu = await waitForBankCondition(page, 'bank loadout menu', (bank) =>
+    bank.open === true && bank.menuOpen === true && bank.menuKind === 1 && bank.loadoutSave0X > 0,
+    8000);
+  const loadoutScreenshot = path.join(outDir, 'iphone-bank-loadouts.png');
+  await page.screenshot({ path: loadoutScreenshot, fullPage: true });
+
+  await tapBankDiagnosticPoint(page, loadoutMenu.bank, 'loadoutSave0X', 'loadoutSave0Y', 'bank save loadout');
+  const afterSave = await waitForBankCondition(page, 'bank save loadout', (bank) =>
+    bank.open === true && bank.menuOpen === false,
+    12000);
+
+  const beforeDepositItems = afterSave.bank.inventoryItems;
+  await tapBankDiagnosticPoint(page, afterSave.bank, 'inventorySlotX', 'inventorySlotY', 'bank deposit inventory slot');
+  const afterDeposit = await waitForBankCondition(page, 'bank deposit', (bank) =>
+    bank.open === true && bank.inventoryItems < beforeDepositItems,
+    12000);
+
+  await tapBankDiagnosticPoint(page, afterDeposit.bank, 'depositAllX', 'depositAllY', 'bank deposit all');
+  const afterDepositAll = await waitForBankCondition(page, 'bank deposit all', (bank) =>
+    bank.open === true && bank.inventoryItems === 0,
+    12000);
+  const depositAllScreenshot = path.join(outDir, 'iphone-bank-deposit-all.png');
+  await page.screenshot({ path: depositAllScreenshot, fullPage: true });
+
+  await tapBankDiagnosticPoint(page, afterDepositAll.bank, 'loadoutsX', 'loadoutsY', 'bank loadout reload menu');
+  const reloadMenu = await waitForBankCondition(page, 'bank loadout reload menu', (bank) =>
+    bank.open === true && bank.menuOpen === true && bank.menuKind === 1 && bank.loadoutLoad0X > 0,
+    8000);
+  await tapBankDiagnosticPoint(page, reloadMenu.bank, 'loadoutLoad0X', 'loadoutLoad0Y', 'bank load loadout');
+  const afterLoad = await waitForBankCondition(page, 'bank load loadout', (bank) =>
+    bank.open === true && bank.inventoryItems > 0 && bank.menuOpen === false,
+    15000);
+  const loadedScreenshot = path.join(outDir, 'iphone-bank-loadout-loaded.png');
+  await page.screenshot({ path: loadedScreenshot, fullPage: true });
+
+  await tapBankDiagnosticPoint(page, afterLoad.bank, 'closeX', 'closeY', 'bank close');
+  const closed = await waitForBankCondition(page, 'bank close', (bank, snapshot) =>
+    bank.open === false && snapshot.ui && snapshot.ui.bankOpen === false,
+    8000);
+  const closedScreenshot = path.join(outDir, 'iphone-bank-closed.png');
+  await page.screenshot({ path: closedScreenshot, fullPage: true });
+
+  const snapshot = await diagnosticsSnapshot(page);
+  assert(snapshot.inGame === true, 'authenticated bank proof should leave the client in-game');
+  assert(snapshot.viewport.scrollX === 0 && snapshot.viewport.scrollY === 0,
+    `authenticated bank proof scrolled the page: ${JSON.stringify(snapshot.viewport)}`);
+  assert(snapshot.recentErrors.length === 0,
+    `authenticated bank diagnostics reported errors: ${snapshot.recentErrors.join('; ')}`);
+  return {
+    before,
+    command,
+    open,
+    searched: searched.bank,
+    cleared: cleared.bank,
+    scrolled: scrolled.bank,
+    afterWithdraw: afterWithdraw.bank,
+    loadoutMenu: loadoutMenu.bank,
+    afterSave: afterSave.bank,
+    afterDeposit: afterDeposit.bank,
+    afterDepositAll: afterDepositAll.bank,
+    reloadMenu: reloadMenu.bank,
+    afterLoad: afterLoad.bank,
+    closed: closed.bank,
+    screenshots: {
+      open: openScreenshot,
+      search: searchScreenshot,
+      scrolled: scrolledScreenshot,
+      loadouts: loadoutScreenshot,
+      depositAll: depositAllScreenshot,
+      loaded: loadedScreenshot,
+      closed: closedScreenshot
+    },
+    snapshot
+  };
+}
+
 async function readLaunchState(page, path) {
   await page.goto(pageUrl(path), { waitUntil: 'domcontentloaded', timeout: 30000 });
   await waitForClient(page);
@@ -2563,12 +3026,23 @@ async function performLoginAttempt(page, loginUrl) {
       window.__voidscapePortalNavigationMode = 'capture';
       window.__voidscapeOpenedUrls = [];
     });
+    // The login home card is vertically centered on tall mobile framebuffers
+    // (mudclient voidscapeLoginHomeFrameY: centeredCardY(gameHeight, 185, 118)),
+    // so derive tap points from the live frame height instead of desktop-layout
+    // constants. The Existing User recover screen keeps its fixed Android top
+    // anchor, so the recover taps below stay constant.
+    const homeState = await readPortalHandoff(page);
+    const homeFrameHeight = (homeState && homeState.snapshot && homeState.snapshot.client
+      && homeState.snapshot.client.gameHeight) || 346;
+    const homeFrameY = Math.max(118, Math.floor((homeFrameHeight - 185) / 2));
+    const createAccountY = homeFrameY + 63;
+    const existingUserY = homeFrameY + 105;
     await tapPortalButton(page, 'account', 'login Create Account', [
-      { x: 256, y: 181 },
-      { x: 256, y: 184 },
-      { x: 256, y: 178 }
+      { x: 256, y: createAccountY },
+      { x: 256, y: createAccountY + 3 },
+      { x: 256, y: createAccountY - 3 }
     ]);
-    await pointerTapFrame(page, 256, 223);
+    await pointerTapFrame(page, 256, existingUserY);
     await page.waitForTimeout(600);
     portalHandoff = await tapPortalButton(page, 'recovery', 'login Recover account', [
       { x: 256, y: 238 },
@@ -2841,9 +3315,11 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
     uiState = await waitForUiState(page);
 	  }
 	  assert(!uiState.blockingDialog, `blocking dialogs should be closed before normal control assertions: ${JSON.stringify(uiState)}`);
-	  assert(uiState.chatPanelHidden === false && uiState.chatAccessMode === 'canvas',
-	    `canvas chat should own the normal mobile HUD after login: ${JSON.stringify(uiState)}`);
-	  assert(uiState.mobilePanelShell === false && uiState.panelAccessMode === 'canvas'
+		  assert(uiState.chatPanelHidden === false && uiState.chatAccessMode === 'canvas',
+		    `canvas chat should own the normal mobile HUD after login: ${JSON.stringify(uiState)}`);
+		  assert(uiState.mobileLooseChat === true,
+		    `mobile web should use loose chat messages instead of the framed chat container: ${JSON.stringify(uiState)}`);
+		  assert(uiState.mobilePanelShell === false && uiState.panelAccessMode === 'canvas'
 	      && uiState.canvasTopTabsVisible === true && uiState.canvasPanelRailVisible === false
 	      && uiState.canvasPanelDockVisible === false,
 	    `Android-parity canvas tabs should own panel access after login: ${JSON.stringify(uiState)}`);
@@ -2984,6 +3460,53 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
         /Cannot read properties of null/i.test(entry)
       ),
       consoleTail: consoleMessages.slice(-20),
+      screenshot
+    };
+    fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
+    console.log(JSON.stringify(summary, null, 2));
+    assert(summary.unexpectedConsole.length === 0,
+      `unexpected console messages observed: ${summary.unexpectedConsole.join('; ')}`);
+    return;
+  }
+
+  if (onlyBank) {
+    await setDiagnosticsHitTesting(page, false);
+    const bank = await proveAuthenticatedBank(page);
+    const snapshot = await diagnosticsSnapshot(page);
+    const screenshot = path.join(outDir, 'iphone-bank-diagnostics.png');
+    await page.screenshot({ path: screenshot, fullPage: true });
+    await browser.close();
+
+    const summary = {
+      baseUrl,
+      remoteMode,
+      host,
+      wsPort,
+      wsUrl: explicitWs,
+      user,
+      focused: 'bank',
+      endpointPersistence,
+      diagnostics: {
+        hiddenByDefault: normal.diagnosticsButtonDisplay === 'none',
+        copyHiddenByDefault: normal.diagnosticsCopyButtonDisplay === 'none',
+        open: diagOpen.panelDisplay === 'block'
+      },
+      login: {
+        title: login.title,
+        canvas: login.canvas,
+        effectiveWs: login.snapshot.effectiveWs,
+        recentErrors: login.snapshot.recentErrors,
+        mobileKeyboard: login.mobileKeyboardLogin
+      },
+      initialDialogSafeShell,
+      bank,
+      snapshot,
+      failedRequests: failed,
+      unexpectedConsole: consoleMessages.filter((entry) =>
+        /sprite missing:null/i.test(entry) ||
+        /Cannot read properties of null/i.test(entry)
+      ),
+      consoleTail: consoleMessages.slice(-24),
       screenshot
     };
     fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
@@ -3148,7 +3671,8 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
   await page.waitForFunction(() => {
     if (typeof window.__voidscapeCollectDiagnostics !== 'function') return false;
     const snapshot = window.__voidscapeCollectDiagnostics();
-    return snapshot && snapshot.ui && snapshot.ui.phoneLandscapeLooseChat === true;
+	    return snapshot && snapshot.ui && snapshot.ui.phoneLandscapeLooseChat === true
+	      && snapshot.ui.mobileLooseChat === true;
   }, null, { timeout: 30000 });
   const landscapeUi = await diagnosticsSnapshot(page);
   const landscapeShell = await readMobileShell(page);
@@ -3188,7 +3712,8 @@ async function performLoginWithBusyRetry(page, loginUrl, consoleMessages) {
     await page.waitForFunction(() => {
       if (typeof window.__voidscapeCollectDiagnostics !== 'function') return false;
       const snapshot = window.__voidscapeCollectDiagnostics();
-      return snapshot && snapshot.ui && snapshot.ui.phoneLandscapeLooseChat === false;
+	      return snapshot && snapshot.ui && snapshot.ui.phoneLandscapeLooseChat === false
+	        && snapshot.ui.mobileLooseChat === true;
     }, null, { timeout: 30000 });
     const portraitReturnUi = await diagnosticsSnapshot(page);
     cleanScreenshots.portrait = await captureVisualArtifact(page, 'iphone-portrait-clean.png', {

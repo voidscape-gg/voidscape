@@ -4,26 +4,26 @@ Server core: boot sequence, tick loop, world singleton, entity hierarchy, schedu
 
 ## Entry point and boot sequence
 
-**Entry point**: `Server.main()` in `server/src/com/openrsc/server/Server.java:193`.
+**Entry point**: `Server.main()` in `server/src/com/openrsc/server/Server.java:198`.
 
 Boot order:
 
-1. **Configuration load** (`Server.java:249–251`): `ServerConfiguration.initConfig(confName)` loads the `*.conf` for the chosen preset.
-2. **Singletons** (`Server.java:255–292`): `RSCPacketFilter`, `PluginHandler`, `CombatScriptLoader`, `Constants`, `GameDatabase` (MySQL or SQLite), `World`, `GameEventHandler`, `GameStateUpdater`, `LoginExecutor`. Thread pools created for SQL, logging, online monitoring.
-3. **Database open + patching** (`Server.java:349–366`): opens the connection, runs `JDBCPatchApplier` migrations.
-4. **Asset loading** (`Server.java:370–404`):
+1. **Configuration load** (`Server.java:253–255`, constructor): `ServerConfiguration.initConfig(confName)` loads the `*.conf` for the chosen preset.
+2. **Singletons** (`Server.java:260–292`, constructor): `RSCPacketFilter`, `PluginHandler`, `CombatScriptLoader`, `Constants`, `GameDatabase` (MySQL or SQLite), `World`, `GameEventHandler`, `GameStateUpdater`, `LoginExecutor`. Thread pools created for SQL, logging, online monitoring.
+3. **Game thread schedule** (`Server.java:344–350`, start of `start()`): single-threaded `ScheduledExecutorService` runs `Server.run()` every **10ms** (the tick gate, not the tick itself — see below). This fires before the database is open, but ticks are effectively no-ops until the world/players exist.
+4. **Database open + patching** (`Server.java:358–375`): opens the connection, runs `JDBCPatchApplier` migrations.
+5. **Asset loading** (`Server.java:379–413`):
    - Prerendered captchas
    - Entity definitions (NPCs, items, scenery) via `EntityHandler.load()`
    - `GameStateUpdater.load()`, `GameEventHandler.load()`, `CombatScriptLoader.load()`, `World.load()`, `PluginHandler.load()`
-5. **Service startup** (`Server.java:410–426`): `LoginExecutor.start()`, `DiscordService.start()`, `GameLogger.start()`, `PcapLogger.start()`.
-6. **Network bind** (`Server.java:437–548`): Netty `ServerBootstrap` on configured TCP and (optional) WebSocket ports.
-7. **Game thread schedule** (`Server.java:335–341`): single-threaded `ScheduledExecutorService` runs `Server.run()` every **10ms** (the tick gate, not the tick itself — see below).
+6. **Service startup** (`Server.java:419–439`): `LoginExecutor.start()`, `DiscordService.start()`, `GameLogger.start()`, `PcapLogger.start()`, `RSCPacketFilter.load()`.
+7. **Network bind** (`Server.java:441–554`): `Crypto.init()`, then Netty `ServerBootstrap` on configured TCP and (optional) WebSocket ports.
 
 ## Tick loop
 
 The 10ms scheduler is a **gate**; the actual game tick fires when accumulated elapsed nanoseconds reach `GAME_TICK * 1_000_000` ns. Default `GAME_TICK = 640ms` (`ServerConfiguration.GAME_TICK`).
 
-`Server.run()` (`Server.java:651`) executes per-tick:
+`Server.run()` (`Server.java:660`) executes per-tick:
 
 1. Process non-player events (`GameEventHandler`)
 2. Update world state (`GameStateUpdater.updateWorld`)
@@ -36,7 +36,7 @@ The 10ms scheduler is a **gate**; the actual game tick fires when accumulated el
 6. Global message queue
 7. Internet reachability check
 8. Cleanup + housekeeping
-9. Advance tick counter (`Server.java:726`)
+9. Advance tick counter (`Server.java:735`)
 
 Each phase is benchmarked via `getServer().bench()`; lateness logged.
 
@@ -155,7 +155,7 @@ world.getServer().getGameEventHandler().add(event);
 ## Threading model
 
 - **Main game thread**: single `ScheduledExecutorService` ("GameThread") runs `Server.run()` every 10ms. `synchronized(running)` block in `run()` gates tick execution. No per-player locking — uses `AtomicReference` and `ConcurrentHashMap` for location/region.
-- **Event executor** (`GameEventHandler`): `ThreadPoolExecutor`, 1 thread by default. Configurable via `WANT_THREADING__BREAK_PID_ORDER` — if true, parallel execution; PID order **not** guaranteed (race risk on shared scenery).
+- **Event executor** (`GameEventHandler`): `ThreadPoolExecutor`, 1 thread by default. Configurable via `want_threading__break_pid_priority` (`WANT_THREADING__BREAK_PID_PRIORITY`) — if true, parallel execution; PID order **not** guaranteed (race risk on shared scenery).
 - **LoginExecutor**: separate `ScheduledExecutorService`, 50ms interval. Processes `LoginRequest`, `PlayerSaveRequest`, etc. — DB lookups happen off main thread.
 - **DB threads**: `sqlThreadPool` (1 thread, batched queries), `sqlLoggingThreadPool` (1 thread, game logs), `onlineMonitorThreadPool` (1 thread, reachability).
 - **Netty I/O threads**: Boss + Worker `NioEventLoopGroup`. Non-blocking; delegates parse to `PayloadProcessorManager`.
@@ -173,7 +173,7 @@ world.getServer().getGameEventHandler().add(event);
 - Synchronized via Guava `Multimaps.synchronizedMultimap()`
 
 Visibility (AOI):
-- `RegionManager.getVisibleRegions(Point)` — regions within `VIEW_DISTANCE` (default 8 × region size)
+- `RegionManager.getVisibleRegions(Point)` — regions within `VIEW_DISTANCE` (config key `view_distance`, default `2`; player/NPC visibility range is `VIEW_DISTANCE * 8` tiles)
 - `getLocalPlayers()`, `getLocalNpcs()`, `getLocalObjects()` — filter visible
 - Used in `GameStateUpdater.updatePlayers()` to build update packets
 
@@ -190,7 +190,7 @@ Entity registration:
 5. **LoginExecutor rate-limits logins.** `MAX_LOGINS_PER_SERVER_PER_TICK` caps logins per tick; queue backs up under load. Async, doesn't block game thread.
 6. **Tick cadence math is in nanoseconds.** Game loop checks `if (timeLate >= GAME_TICK * 1_000_000)`. The 10ms scheduler is separate; tick only fires after 640ms+. Lag → skipped ticks.
 7. **No transaction isolation across tick.** Player saves are queued but not atomic with mid-tick state changes. A crash mid-tick mid-save can lose data.
-8. **Parallel event mode is dangerous.** If `WANT_THREADING__BREAK_PID_ORDER` is true, plugin code that touches shared scenery/multi-access entities can race.
+8. **Parallel event mode is dangerous.** If `WANT_THREADING__BREAK_PID_PRIORITY` is true, plugin code that touches shared scenery/multi-access entities can race.
 9. **Netty backpressure.** If the main thread can't keep up, packets queue on I/O threads. Doesn't lose data but adds latency.
 
 ## Glossary candidates
@@ -200,7 +200,7 @@ Entity registration:
 - **Mob** — actor with combat/movement state (Player or NPC).
 - **DelayedEvent** — `GameTickEvent` that waits N ticks before `run()`.
 - **DuplicationStrategy** — policy for adding a second event with same owner (`ALLOW_MULTIPLE`, `ONE_PER_SERVER`, etc.).
-- **Region** — 8×8 tile grid; world is partitioned for visibility queries.
+- **Region** — 48×48 tile grid; world is partitioned for visibility queries.
 - **AOI** — Area of Interest. Set of entities visible to a player; computed via region overlap + range check.
 - **LoginExecutor** — async thread pool for login/save processing; decoupled from main game thread.
 - **UnregisterRequest** — deferred logout flag; prevents mid-tick player removal races.

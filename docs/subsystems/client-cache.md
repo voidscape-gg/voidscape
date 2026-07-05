@@ -28,20 +28,20 @@ This is PC-client presentation only. It does not change packets, opcodes, server
 
 ## Client_Base — shared core
 
-Path: `Client_Base/`. ~116 Java files.
+Path: `Client_Base/`. ~120 Java files.
 
 Single source of truth for all client platforms. Both PC_Client and Android_Client compile against this.
 
 Package structure:
 - `src/orsc/mudclient.java` — main game loop (80+ fields). Rendering, networking, entity updates, UI panels.
 - `src/orsc/Config.java` — static constants:
-  - `CLIENT_VERSION = 10070`
+  - `CLIENT_VERSION = 10122`
   - `SERVER_IP`, `SERVER_PORT`
   - Feature flags (`C_EXPERIENCE_DROPS`, `C_CUSTOM_UI`, …)
   - Server-defined config (`S_PLAYER_LEVEL_LIMIT`, `S_WANT_SKILL_MENUS`, …)
 - `src/orsc/net/` — network layer:
   - `Network_Base.java`, `Network_Socket.java`
-  - **`Opcodes.java` — client-side opcode enum**. `Out` (~40 client→server) with explicit int values; `In` is empty placeholder (server→client opcodes handled server-side only).
+  - **`Opcodes.java` — client-side opcode enum**. `Out` (~90 client→server) with explicit int values; `In` is empty placeholder (server→client opcodes handled server-side only).
 - `src/orsc/graphics/`:
   - `three/` — 3D rendering
   - `two/SpriteArchive/` — 2D sprite handling
@@ -52,14 +52,14 @@ Package structure:
 - `src/com/openrsc/` — entity defs: `ItemDef.java`, `NPCDef.java`, `SpellDef.java`, `AnimationDef.java`, …
 - `src/res/` — icon resources.
 
-Java target: 1.8. Android source uses the same target but requires the Android Gradle plugin to run on JDK 17; Android minSDK is 23.
+Java target: 1.8. Android source uses the same target but requires the Android Gradle plugin to run on JDK 17; Android minSDK is 26.
 
 ## Android_Client
 
 Path: `Android_Client/`.
 
-- Build: Gradle 7.3.0 (Android Gradle Plugin). Project file: `Open RSC Android Client/build.gradle`.
-- SDK: `minSdkVersion 23`, `targetSdkVersion 31`, `compileSdkVersion 31`.
+- Build: Gradle 8.13, Android Gradle Plugin 8.13.2. Project file: `Open RSC Android Client/build.gradle`.
+- SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 36`.
 - Entry: `src/main/java/com/openrsc/client/android/GameActivity.java` — Android `Activity`, implements `ClientPort`.
 - Android-specific packages:
   - `com.openrsc.android.render.RSCBitmapSurfaceView` — Canvas/bitmap rendering.
@@ -159,7 +159,7 @@ Sync mechanism: **manual, ordinal-dependent**.
 
 There is no codegen and no shared schema. Devs must keep both files aligned manually.
 
-`CLIENT_VERSION = 10070` in `Config.java` is checked by the server at login. Bump manually when protocol changes; mismatch → rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
+`CLIENT_VERSION = 10122` in `Config.java` is checked by the server at login. Bump manually when protocol changes; mismatch → rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
 
 ## Build outputs
 
@@ -199,7 +199,7 @@ Recompile Client_Base.
 ## Pitfalls / non-obvious
 
 1. **Opcode ordinal desync.** Server OpcodeOut transmitted by ordinal; client must use identical ordering. Always append, never insert mid-list. Same applies to OpcodeIn.
-2. **Silent version mismatch.** `CLIENT_VERSION = 10070` is not auto-bumped. If you change protocol but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
+2. **Silent version mismatch.** `CLIENT_VERSION = 10122` is not auto-bumped. If you change protocol but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
 3. **Cache directory is CWD-relative.** `./Cache` relative to the working directory at launch — not the JAR location. Running from different dirs picks up different caches. Use absolute path or `--dir`.
 4. **Android inherits Client_Base wholesale.** No separate Android opcode tracking. Bumping Client_Base requires APK rebuild.
 5. **Android packages cache from the repo at build time.** Keep `Client_Base/Cache` populated before building the APK; local runtime files are excluded from packaging by Gradle.

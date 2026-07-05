@@ -135,6 +135,11 @@ const launcherRuntimeFiles = new Set([
 	"launchersettings.conf",
 	"voidscapelauncher.properties"
 ]);
+const clientVersionOverride = process.env.PORTAL_CLIENT_VERSION
+	? configuredNonNegativeInteger("PORTAL_CLIENT_VERSION", process.env.PORTAL_CLIENT_VERSION)
+	: null;
+const clientVersionSourcePath = join(repoRoot, "Client_Base/src/orsc/Config.java");
+let clientVersionCache;
 
 function configuredDownloadPath(envName, fallbackPath) {
 	const configuredPath = process.env[envName];
@@ -2289,23 +2294,72 @@ async function launcherManifest(request) {
 		path: clientArtifact.filename,
 		url: `${origin}/downloads/${clientArtifact.slug}`,
 		sha256: await sha256File(clientArtifact.path),
+		size: clientStat.size,
 		mtimeMs: clientStat.mtimeMs
 	}];
 	entries.push(...await clientCacheManifestEntries(origin));
 
+	const clientVersion = await resolveClientVersion();
 	const latestMtime = Math.max(...entries.map((entry) => entry.mtimeMs));
-	const version = new Date(latestMtime).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+	const timestampLabel = compactUtcTimestamp(latestMtime);
+	const version = clientVersion === null ? timestampLabel : `${clientVersion}-${timestampLabel}`;
 	const lines = [
 		propertyLine("version", version),
 		propertyLine("baseUrl", `${origin}/downloads/cache/`)
 	];
+	if (clientVersion !== null) {
+		lines.push(propertyLine("clientVersion", clientVersion));
+	}
 	entries.forEach((entry, index) => {
 		const prefix = `file.${index + 1}`;
 		lines.push(propertyLine(`${prefix}.path`, entry.path));
 		lines.push(propertyLine(`${prefix}.sha256`, entry.sha256));
 		lines.push(propertyLine(`${prefix}.url`, entry.url));
+		lines.push(propertyLine(`${prefix}.size`, entry.size));
 	});
+	lines.push(...await launcherSelfUpdateLines(origin));
 	return `${lines.join("")}`;
+}
+
+async function launcherSelfUpdateLines(origin) {
+	const launcherArtifact = downloadArtifacts.find((entry) => entry.slug === "launcher");
+	let launcherStat;
+	try {
+		launcherStat = await stat(launcherArtifact.path);
+		if (!launcherStat.isFile()) return [];
+	} catch (error) {
+		return [];
+	}
+	return [
+		propertyLine("launcher.sha256", await sha256File(launcherArtifact.path, launcherStat)),
+		propertyLine("launcher.url", `${origin}/downloads/${launcherArtifact.slug}`),
+		propertyLine("launcher.size", launcherStat.size),
+		propertyLine("launcher.version", compactUtcTimestamp(launcherStat.mtimeMs))
+	];
+}
+
+function compactUtcTimestamp(epochMs) {
+	return new Date(epochMs).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+async function resolveClientVersion() {
+	if (clientVersionOverride !== null) {
+		return clientVersionOverride;
+	}
+	if (clientVersionCache === undefined) {
+		clientVersionCache = await clientVersionFromSource();
+	}
+	return clientVersionCache;
+}
+
+async function clientVersionFromSource() {
+	try {
+		const source = await readFile(clientVersionSourcePath, "utf8");
+		const match = /\bCLIENT_VERSION\s*=\s*(\d+)\s*;/.exec(source);
+		return match ? Number.parseInt(match[1], 10) : null;
+	} catch (error) {
+		return null;
+	}
 }
 
 async function clientCacheManifestEntries(origin) {
@@ -2332,6 +2386,7 @@ async function clientCacheManifestEntries(origin) {
 			path: relativePath,
 			url: `${origin}/downloads/cache/${encodeRelativeUrlPath(relativePath)}`,
 			sha256: await sha256File(filePath),
+			size: fileStat.size,
 			mtimeMs: fileStat.mtimeMs
 		});
 	}

@@ -12,6 +12,7 @@ import orsc.graphics.two.Fonts;
 import orsc.mudclient;
 import orsc.util.BankUtil;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -154,6 +155,10 @@ public class BankInterface {
 	private final ArrayList<Integer> vgMenuAmt = new ArrayList<>();
 	private int vgScrollRow = 0;
 	private boolean vgScrollDrag = false;
+	private boolean vgTouchScrollActive = false;
+	private boolean vgTouchScrolled = false;
+	private int vgTouchScrollLastY = 0;
+	private int vgTouchScrollAccum = 0;
 	private int vgInvScrollRow = 0;
 	private boolean vgInvScrollDrag = false;
 	private String vgSearch = "";
@@ -168,9 +173,224 @@ public class BankInterface {
 	private int vgBankStamp = 0; // bumped on every bankItems mutation
 	private int vgArrangeMode = 0; // 0 off, 1 swap, 2 insert (classic organizeMode semantics)
 	private int vgDragSlot = -1;   // real bank slot being dragged while arrange mode is on
+	private static final String ANDROID_SMOKE_BANK_FLAG = "android-smoke-bank.flag";
+	private static final long ANDROID_SMOKE_BANK_STATE_LOG_INTERVAL_MS = 1000L;
+	private long lastAndroidSmokeBankStateLogMillis = 0L;
+	private int lastAndroidSmokeBankScroll = Integer.MIN_VALUE;
+	private String lastAndroidSmokeBankSearch = null;
 
 	private boolean voidGlassBank() {
-		return Config.C_CUSTOM_UI && !Config.isAndroid();
+		return Config.C_CUSTOM_UI;
+	}
+
+	public boolean isVoidGlassBankActive() {
+		return voidGlassBank();
+	}
+
+	public String getBankRendererName() {
+		return voidGlassBank() ? "voidGlass" : "classic";
+	}
+
+	public String getBankDiagnosticsJson() {
+		final boolean open = mc != null && mc.isShowDialogBank();
+		final StringBuilder json = new StringBuilder(640);
+		json.append("{\"open\":").append(open)
+			.append(",\"renderer\":\"").append(jsonEscape(getBankRendererName())).append('"')
+			.append(",\"itemCount\":").append(bankItems.size())
+			.append(",\"max\":").append(mc != null ? mc.bankItemsMax : 0)
+			.append(",\"inventoryItems\":").append(mc != null ? countInventoryItems() : 0);
+
+		if (!open || !voidGlassBank() || mc == null) {
+			json.append('}');
+			return json.toString();
+		}
+
+		final int gw = mc.getGameWidth();
+		final int cols = vgCols();
+		final int cellW = vgCellW();
+		final int cellH = vgCellH();
+		final int topSafe = vgTopSafe();
+		final int botSafe = vgBotSafe();
+		final int availH = botSafe - topSafe;
+		final int titleH = vgTitleH();
+		final int invLabelH = 16;
+		final int actionH = vgActionH();
+		final int pad = 4;
+		final String query = vgSearch == null ? "" : vgSearch.trim().toLowerCase(Locale.ROOT);
+		final int bankPages = bankItems.isEmpty() ? 0
+			: Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
+		int page = vgPage;
+		if (!query.isEmpty() && page != 0) page = 0;
+		if (page > bankPages) page = 0;
+		final boolean tabsVisible = query.isEmpty() && bankPages > 1;
+		final int tabRowH = vgTabRowH(tabsVisible);
+		final int invRowsFull = vgInvRows();
+		final int chrome = titleH + tabRowH + pad + invLabelH + actionH + pad + pad;
+		final int totalRows = Math.max(2, (availH - chrome) / cellH);
+		final int invRows = Math.max(1, Math.min(invRowsFull, totalRows - 3));
+		final int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
+		final int fixed = chrome + invRows * cellH;
+		final int pw = vgPanelW();
+		final int ph = fixed + bankRows * cellH;
+		final int px = (gw - pw) / 2;
+		final int py = topSafe + Math.max(0, (availH - ph) / 2);
+		final int gx = px + VG_INNER_PAD;
+		final int bankGY = py + titleH + tabRowH + pad;
+		final int gridH = bankRows * cellH;
+		final int invLabelY = bankGY + gridH;
+		final int invGY = invLabelY + invLabelH;
+		final int actionY = invGY + invRows * cellH + pad;
+		final int matches = getVoidGlassVisibleBankItemCount(query, page);
+		final int bankTotalRows = (matches + cols - 1) / cols;
+		final int maxScroll = Math.max(0, bankTotalRows - bankRows);
+		final int scroll = Math.max(0, Math.min(maxScroll, vgScrollRow));
+		final int sbW = 6;
+		final int sbX = px + pw - VG_INNER_PAD + 1;
+		final int sbY = bankGY;
+		final int sbH = gridH;
+		final int closeW = vgMobileLayout() ? 54 : 14;
+		final int closeH = vgMobileLayout() ? 22 : 14;
+		final int closeX = px + pw - closeW - 4;
+		final int closeY = py + (titleH - closeH) / 2;
+		final int sx = px + (vgMobileLayout() ? 64 : 58);
+		final int sy = py + 4;
+		final int searchH = vgMobileLayout() ? 22 : 16;
+		final int sw = Math.min(vgMobileLayout() ? 184 : 170, Math.max(80, closeX - sx - 8));
+		final int searchClearW = vgMobileLayout() ? 30 : 14;
+		final int searchClearX = sx + sw - searchClearW;
+		final int depositAllW = Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD);
+		final int depositAllX = px + pw - VG_INNER_PAD - depositAllW;
+		final int loadoutW = vgMobileLayout() ? 38 : 26;
+		final int loadoutsX = S_WANT_BANK_PRESETS ? gx + loadoutW / 2 : -1;
+		final int loadoutsY = S_WANT_BANK_PRESETS ? actionY + actionH / 2 : -1;
+		final int menuRowH = vgMenuRowH();
+		int loadoutSaveX = -1;
+		int loadoutSaveY = -1;
+		int loadoutLoadX = -1;
+		int loadoutLoadY = -1;
+		if (vgMenu && vgMenuKind == 1) {
+			final int rowCenterX = vgMenuX + vgMenuWidth() / 2;
+			for (int row = 0; row < vgMenuAmt.size(); row++) {
+				final int action = vgMenuAmt.get(row);
+				if (action == 0) {
+					loadoutLoadX = rowCenterX;
+					loadoutLoadY = vgMenuRowCenterY(row);
+				} else if (action == 1) {
+					loadoutSaveX = rowCenterX;
+					loadoutSaveY = vgMenuRowCenterY(row);
+				}
+			}
+		}
+
+		json.append(",\"search\":\"").append(jsonEscape(vgSearch)).append('"')
+			.append(",\"searchFocused\":").append(vgSearchFocus)
+			.append(",\"matches\":").append(matches)
+			.append(",\"page\":").append(page)
+			.append(",\"scroll\":").append(scroll)
+			.append(",\"maxScroll\":").append(maxScroll)
+			.append(",\"visibleBankSlotStart\":").append(scroll * cols)
+			.append(",\"bankSlotX\":").append(gx + cellW / 2)
+			.append(",\"bankSlotY\":").append(bankGY + cellH / 2)
+			.append(",\"inventorySlotX\":").append(gx + cellW / 2)
+			.append(",\"inventorySlotY\":").append(invGY + cellH / 2)
+			.append(",\"searchX\":").append(sx + sw / 2)
+			.append(",\"searchY\":").append(sy + searchH / 2)
+			.append(",\"searchClearX\":").append(searchClearX + searchClearW / 2)
+			.append(",\"searchClearY\":").append(sy + searchH / 2)
+			.append(",\"closeX\":").append(closeX + closeW / 2)
+			.append(",\"closeY\":").append(closeY + closeH / 2)
+			.append(",\"closeW\":").append(closeW)
+			.append(",\"closeH\":").append(closeH)
+			.append(",\"depositAllX\":").append(depositAllX + depositAllW / 2)
+			.append(",\"depositAllY\":").append(actionY + actionH / 2)
+			.append(",\"loadoutsX\":").append(loadoutsX)
+			.append(",\"loadoutsY\":").append(loadoutsY)
+			.append(",\"loadoutW\":").append(loadoutW)
+			.append(",\"actionH\":").append(actionH)
+			.append(",\"menuOpen\":").append(vgMenu)
+			.append(",\"menuKind\":").append(vgMenuKind)
+			.append(",\"menuX\":").append(vgMenu ? vgMenuX : -1)
+			.append(",\"menuY\":").append(vgMenu ? vgMenuY : -1)
+			.append(",\"menuWidth\":").append(vgMenu ? vgMenuWidth() : 0)
+			.append(",\"menuRowH\":").append(menuRowH)
+			.append(",\"loadoutSave0X\":").append(loadoutSaveX)
+			.append(",\"loadoutSave0Y\":").append(loadoutSaveY)
+			.append(",\"loadoutLoad0X\":").append(loadoutLoadX)
+			.append(",\"loadoutLoad0Y\":").append(loadoutLoadY)
+			.append(",\"scrollbarX\":").append(sbX + sbW / 2)
+			.append(",\"scrollDownY\":").append(sbY + sbH - 4)
+			.append(",\"saveRequiresConfirm\":0")
+			.append('}');
+		return json.toString();
+	}
+
+	private int getVoidGlassVisibleBankItemCount(final String query, final int page) {
+		if (query == null || query.isEmpty()) {
+			if (page == 0) return bankItems.size();
+			final int from = (page - 1) * VG_PAGE_SIZE;
+			final int to = page == VG_PAGE_MAX ? bankItems.size() : Math.min(bankItems.size(), page * VG_PAGE_SIZE);
+			return from < bankItems.size() ? to - from : 0;
+		}
+
+		int matches = 0;
+		for (BankItem bankItem : bankItems) {
+			if (bankItem == null || bankItem.getItem() == null) continue;
+			final ItemDef def = bankItem.getItem().getItemDef();
+			if (def != null && def.getName() != null
+				&& def.getName().toLowerCase(Locale.ROOT).contains(query)) {
+				matches++;
+			}
+		}
+		return matches;
+	}
+
+	private int getVoidGlassMaxScroll() {
+		final String query = vgSearch == null ? "" : vgSearch.trim().toLowerCase(Locale.ROOT);
+		final int bankPages = bankItems.isEmpty() ? 0
+			: Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
+		int page = vgPage;
+		if (!query.isEmpty() && page != 0) page = 0;
+		if (page > bankPages) page = 0;
+		final boolean tabsVisible = query.isEmpty() && bankPages > 1;
+		final int topSafe = vgTopSafe();
+		final int botSafe = vgBotSafe();
+		final int availH = botSafe - topSafe;
+		final int chrome = vgTitleH() + vgTabRowH(tabsVisible) + 4 + 16 + vgActionH() + 4 + 4;
+		final int totalRows = Math.max(2, (availH - chrome) / vgCellH());
+		final int invRows = Math.max(1, Math.min(vgInvRows(), totalRows - 3));
+		final int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
+		final int visibleItems = getVoidGlassVisibleBankItemCount(query, page);
+		final int bankTotalRows = (visibleItems + vgCols() - 1) / vgCols();
+		return Math.max(0, bankTotalRows - bankRows);
+	}
+
+	public boolean vgApplyScroll(final int amount) {
+		if (!voidGlassBank() || mc == null || !mc.isShowDialogBank() || amount == 0) return false;
+
+		final int maxScroll = getVoidGlassMaxScroll();
+		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow + amount));
+		return true;
+	}
+
+	private String jsonEscape(final String value) {
+		if (value == null) return "";
+
+		final StringBuilder escaped = new StringBuilder(value.length());
+		for (int i = 0; i < value.length(); i++) {
+			final char ch = value.charAt(i);
+			if (ch == '"' || ch == '\\') {
+				escaped.append('\\').append(ch);
+			} else if (ch == '\n') {
+				escaped.append("\\n");
+			} else if (ch == '\r') {
+				escaped.append("\\r");
+			} else if (ch == '\t') {
+				escaped.append("\\t");
+			} else {
+				escaped.append(ch);
+			}
+		}
+		return escaped.toString();
 	}
 
 	private int vgLastPanelBottom = -1;
@@ -180,6 +400,11 @@ public class BankInterface {
 		return vgLastPanelBottom;
 	}
 
+	private boolean vgMobileLayout() { return Config.isAndroid(); }
+	private int vgTitleH() { return vgMobileLayout() ? 30 : VG_TITLE_H; }
+	private int vgActionH() { return vgMobileLayout() ? 30 : 22; }
+	private int vgTabRowH(boolean visible) { return visible ? (vgMobileLayout() ? 28 : 20) : 0; }
+	private int vgMenuRowH() { return vgMobileLayout() ? 28 : VG_MENU_ROW_H; }
 	private int vgTier() { int gw = mc.getGameWidth(); return gw < 700 ? 0 : (gw < 940 ? 1 : 2); }
 	private int vgCols() { int t = vgTier(); return t == 0 ? 9 : (t == 1 ? 10 : 12); }
 	private int vgCellW() { int t = vgTier(); return t == 0 ? 49 : (t == 1 ? 54 : 60); }
@@ -193,6 +418,163 @@ public class BankInterface {
 	private int vgPanelW() { return Math.min(vgCols() * vgCellW() + 2 * VG_INNER_PAD + VG_SCROLL_GUTTER, mc.getGameWidth() - 2 * VG_SIDE_MARGIN); }
 	private int vgInvRows() { int c = vgCols(); return (30 + c - 1) / c; }
 
+	private boolean isAndroidSmokeBankLoggingEnabled() {
+		if (!Config.isAndroid() || Config.isWeb()) return false;
+		return isFileInDirectory(Config.F_CACHE_DIR, ANDROID_SMOKE_BANK_FLAG)
+			|| isFileInDirectory(Config.F_ANDROID_SMOKE_DIR, ANDROID_SMOKE_BANK_FLAG);
+	}
+
+	private boolean isFileInDirectory(final String directory, final String fileName) {
+		return directory != null
+			&& !directory.isEmpty()
+			&& new File(directory, fileName).isFile();
+	}
+
+	private String androidSmokeLogToken(final String value) {
+		if (value == null) return "null";
+
+		final StringBuilder token = new StringBuilder(value.length());
+		for (int i = 0; i < value.length(); i++) {
+			final char ch = value.charAt(i);
+			if ((ch >= 'A' && ch <= 'Z')
+				|| (ch >= 'a' && ch <= 'z')
+				|| (ch >= '0' && ch <= '9')
+				|| ch == '_'
+				|| ch == '-'
+				|| ch == '.') {
+				token.append(ch);
+			} else {
+				token.append('_');
+			}
+		}
+		return token.toString();
+	}
+
+	private int countInventoryItems() {
+		int count = 0;
+		for (int slot = 0; slot < mc.getInventoryItemCount(); slot++) {
+			if (mc.getInventoryItemID(slot) != -1) count++;
+		}
+		return count;
+	}
+
+	private void logAndroidSmokeBankState(final String rawSearchItem, final int matches, final int visibleBankSlotStart,
+										  final int bankSlotX, final int bankSlotY,
+										  final int inventorySlotX, final int inventorySlotY,
+										  final int searchX, final int searchY,
+										  final int searchClearX, final int searchClearY,
+										  final int closeX, final int closeY,
+										  final int closeW, final int closeH,
+										  final int depositAllX, final int depositAllY,
+										  final int loadoutsX, final int loadoutsY,
+										  final int loadoutW, final int actionH,
+										  final int scrollbarX, final int scrollDownY,
+										  final int maxScroll) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		if (vgScrollRow != lastAndroidSmokeBankScroll) {
+			System.out.println("ANDROID_SMOKE_BANK_SCROLL"
+				+ " renderer=voidGlass"
+				+ " before=" + lastAndroidSmokeBankScroll
+				+ " after=" + vgScrollRow
+				+ " bankPage=" + vgPage
+				+ " visibleBankSlotStart=" + visibleBankSlotStart);
+			lastAndroidSmokeBankScroll = vgScrollRow;
+		}
+
+		final String search = rawSearchItem == null ? "" : rawSearchItem;
+		if (lastAndroidSmokeBankSearch == null || !lastAndroidSmokeBankSearch.equals(search)) {
+			System.out.println("ANDROID_SMOKE_BANK_SEARCH"
+				+ " renderer=voidGlass"
+				+ " query=" + androidSmokeLogToken(search)
+				+ " length=" + search.length()
+				+ " matches=" + matches
+				+ " bankPage=" + vgPage);
+			lastAndroidSmokeBankSearch = search;
+		}
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeBankStateLogMillis < ANDROID_SMOKE_BANK_STATE_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeBankStateLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_BANK_OPEN"
+			+ " renderer=voidGlass"
+			+ " bankItems=" + bankItems.size()
+			+ " max=" + mc.bankItemsMax
+			+ " inventoryItems=" + countInventoryItems()
+			+ " bankPage=" + vgPage
+			+ " scroll=" + vgScrollRow
+			+ " search=" + androidSmokeLogToken(search)
+			+ " searchFocused=" + vgSearchFocus
+			+ " matches=" + matches
+			+ " visibleBankSlotStart=" + visibleBankSlotStart
+			+ " bankSlotX=" + bankSlotX
+			+ " bankSlotY=" + bankSlotY
+			+ " inventorySlotX=" + inventorySlotX
+			+ " inventorySlotY=" + inventorySlotY
+			+ " searchX=" + searchX
+			+ " searchY=" + searchY
+			+ " searchClearX=" + searchClearX
+			+ " searchClearY=" + searchClearY
+			+ " closeX=" + closeX
+			+ " closeY=" + closeY
+			+ " closeW=" + closeW
+			+ " closeH=" + closeH
+			+ " depositAllX=" + depositAllX
+			+ " depositAllY=" + depositAllY
+			+ " loadoutsX=" + loadoutsX
+			+ " loadoutsY=" + loadoutsY
+			+ " loadoutW=" + loadoutW
+			+ " actionH=" + actionH
+			+ " menuRowH=" + vgMenuRowH()
+			+ " scrollbarX=" + scrollbarX
+			+ " scrollDownY=" + scrollDownY
+			+ " maxScroll=" + maxScroll
+			+ " saveRequiresConfirm=0"
+			+ " mouseX=" + mc.getMouseX()
+			+ " mouseY=" + mc.getMouseY());
+	}
+
+	private void logAndroidSmokeBankAction(final String action, final int catalogID, final int amount, final int slot) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_BANK_ACTION"
+			+ " renderer=voidGlass"
+			+ " action=" + action
+			+ " catalogID=" + catalogID
+			+ " amount=" + amount
+			+ " slot=" + slot
+			+ " bankItems=" + bankItems.size()
+			+ " inventoryItems=" + countInventoryItems()
+			+ " scroll=" + vgScrollRow
+			+ " bankPage=" + vgPage
+			+ " mouseX=" + mc.getMouseX()
+			+ " mouseY=" + mc.getMouseY());
+	}
+
+	private void logAndroidSmokeBankLoadoutsPanel(final boolean empty) {
+		if (!isAndroidSmokeBankLoggingEnabled()) return;
+
+		final int rowCenterX = vgMenuX + vgMenuWidth() / 2;
+		final int loadRow = empty ? -1 : 0;
+		final int saveRow = empty ? 0 : 1;
+		System.out.println("ANDROID_SMOKE_BANK_LOADOUT_PANEL"
+			+ " renderer=voidGlass"
+			+ " panelX=" + vgMenuX
+			+ " panelY=" + vgMenuY
+			+ " rowH=" + vgMenuRowH()
+			+ " saveRequiresConfirm=0"
+			+ " save0X=" + rowCenterX
+			+ " save0Y=" + vgMenuRowCenterY(saveRow)
+			+ " load0X=" + (loadRow >= 0 ? rowCenterX : -1)
+			+ " load0Y=" + (loadRow >= 0 ? vgMenuRowCenterY(loadRow) : -1));
+	}
+
+	private int vgMenuRowCenterY(final int row) {
+		int rowH = vgMenuRowH();
+		return vgMenuY + 2 + row * rowH + rowH / 2;
+	}
+
 	private boolean renderVoidGlassBank(int mx, int my) {
 		// While the X-amount prompt is up, skip the whole panel: in the custom-UI frame
 		// order the prompt is drawn BEFORE the bank, so anything we paint would cover it.
@@ -201,14 +583,14 @@ public class BankInterface {
 		int cols = vgCols(), cellW = vgCellW(), cellH = vgCellH();
 		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
 		int availH = botSafe - topSafe;
-		int titleH = VG_TITLE_H, invLabelH = 16, actionH = 22, pad = 4;
+		int titleH = vgTitleH(), invLabelH = 16, actionH = vgActionH(), pad = 4;
 		// page tabs (client-side slices of bankItems, 48 per tab like classic pages)
 		String vq = vgSearch.trim().toLowerCase(Locale.ROOT);
 		int bankPages = bankItems.isEmpty() ? 0 : Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
 		if (!vq.isEmpty() && vgPage != 0) vgPage = 0; // search always spans the whole bank
 		if (vgPage > bankPages) vgPage = 0;
 		boolean tabsVisible = vq.isEmpty() && bankPages > 1;
-		int tabRowH = tabsVisible ? 20 : 0;
+		int tabRowH = vgTabRowH(tabsVisible);
 
 		// Adaptive bank/inventory split: the bank grid keeps >=3 rows; the inventory
 		// tray takes the remainder (min 1) and scrolls when rows are hidden (Classic 512x334).
@@ -279,11 +661,12 @@ public class BankInterface {
 
 		// --- input: right-click quantity menu takes priority ---
 		if (vgMenu && (click || rclick)) {
-			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
+			int rowH = vgMenuRowH();
+			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * rowH + 4;
 			if (mx >= vgMenuX && mx < vgMenuX + mw && my >= vgMenuY && my < vgMenuY + mh) {
 				// guard the 2px header band: negative dividends truncate toward zero,
 				// which would fire row 0 on a double-click at the menu's top edge
-				int row = my < vgMenuY + 2 ? -1 : (my - vgMenuY - 2) / VG_MENU_ROW_H;
+				int row = my < vgMenuY + 2 ? -1 : (my - vgMenuY - 2) / rowH;
 				if (row >= 0 && row < vgMenuLabels.size()) vgDoMenu(row);
 			}
 			vgMenu = false; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
@@ -302,6 +685,40 @@ public class BankInterface {
 		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
 		thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
 
+		// --- input: mobile grid drag scroll ---
+		boolean overBankGrid = mx >= gx && mx < gx + cols * cellW && my >= bankGY && my < bankGY + gridH;
+		if (Config.isAndroid() && maxScroll > 0 && down && !vgMenu && !vgScrollDrag && !vgInvScrollDrag && overBankGrid) {
+			if (!vgTouchScrollActive) {
+				vgTouchScrollActive = true;
+				vgTouchScrolled = false;
+				vgTouchScrollLastY = my;
+				vgTouchScrollAccum = 0;
+			} else {
+				vgTouchScrollAccum += vgTouchScrollLastY - my;
+				vgTouchScrollLastY = my;
+				int rowDelta = vgTouchScrollAccum / cellH;
+				if (rowDelta != 0) {
+					vgScrollRow += rowDelta;
+					vgTouchScrollAccum -= rowDelta * cellH;
+					vgTouchScrolled = true;
+					mc.setMouseClick(0);
+					mc.mouseButtonClick = 0;
+					click = false;
+				}
+			}
+		} else if (!down) {
+			if (vgTouchScrolled && click) {
+				mc.setMouseClick(0);
+				mc.mouseButtonClick = 0;
+				click = false;
+			}
+			vgTouchScrollActive = false;
+			vgTouchScrolled = false;
+			vgTouchScrollAccum = 0;
+		}
+		vgScrollRow = Math.max(0, Math.min(maxScroll, vgScrollRow));
+		thumbY = maxScroll > 0 ? sbY + (sbH - thumbH) * vgScrollRow / maxScroll : sbY;
+
 		// --- input: inventory scrollbar drag / track click ---
 		if (!down) vgInvScrollDrag = false;
 		if (down && !vgMenu && !vgScrollDrag && maxInvScroll > 0 && mx >= sbX - 3 && mx <= sbX + sbW + 3 && my >= invSbY && my <= invSbY + invSbH) {
@@ -316,16 +733,27 @@ public class BankInterface {
 		invThumbY = maxInvScroll > 0 ? invSbY + (invSbH - invThumbH) * vgInvScrollRow / maxInvScroll : invSbY;
 
 		// --- input: close button ---
-		int closeX = px + pw - 18, closeY = py + 5;
-		boolean overClose = mx >= closeX && mx <= closeX + 14 && my >= closeY && my <= closeY + 14;
+		int closeW = vgMobileLayout() ? 54 : 14;
+		int closeH = vgMobileLayout() ? 22 : 14;
+		int closeX = px + pw - closeW - 4;
+		int closeY = py + (titleH - closeH) / 2;
+		boolean overClose = mx >= closeX && mx < closeX + closeW && my >= closeY && my < closeY + closeH;
 		if (click && overClose) { mc.setMouseClick(0); bankClose(); return false; }
 
 		// --- input: search box focus ---
-		int sx = px + 58, sy = py + 4, sh2 = 16;
-		int sw = Math.min(170, pw - 58 - 100);
+		int sx = px + (vgMobileLayout() ? 64 : 58), sy = py + 4, sh2 = vgMobileLayout() ? 22 : 16;
+		int sw = Math.min(vgMobileLayout() ? 184 : 170, Math.max(80, closeX - sx - 8));
+		int searchClearW = vgMobileLayout() ? 30 : 14;
+		int searchClearX = sx + sw - searchClearW;
+		boolean mobileSearchClear = Config.isAndroid();
+		boolean overSearchClear = mobileSearchClear && !vgSearch.isEmpty()
+			&& mx >= searchClearX && mx < sx + sw && my >= sy && my < sy + sh2;
 		boolean overSearch = mx >= sx && mx < sx + sw && my >= sy && my < sy + sh2;
 		if (click) {
-			if (overSearch) { vgSearchFocus = true; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; }
+			if (overSearchClear) {
+				clearVgSearch(false);
+				mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+			} else if (overSearch) { vgSearchFocus = true; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; }
 			else vgSearchFocus = false;
 		}
 
@@ -345,12 +773,12 @@ public class BankInterface {
 		}
 
 		// --- input: deposit-all button ---
-		int daW = Math.min(170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
+		int daW = Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
 		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
 		if (click && overDA) { mc.setMouseClick(0); mc.mouseButtonClick = 0; sendVgDepositAll(); click = false; }
 
 		// --- input: loadout chips (left of the action bar); any click opens the action menu ---
-		int loW = 26, loGap = 4, loY = actionY;
+		int loW = vgMobileLayout() ? 38 : 26, loGap = 4, loY = actionY;
 		int loHover = -1;
 		if (S_WANT_BANK_PRESETS) {
 			for (int p = 0; p < 3; p++) {
@@ -366,7 +794,7 @@ public class BankInterface {
 		}
 
 		// --- input: withdraw-as-note toggle (sendWithdraw appends swapNoteMode) ---
-		int noteW = 62, noteX = gx + (S_WANT_BANK_PRESETS ? 3 * (loW + loGap) + 6 : 0);
+		int noteW = vgMobileLayout() ? 60 : 62, noteX = gx + (S_WANT_BANK_PRESETS ? 3 * (loW + loGap) + 6 : 0);
 		boolean overNote = S_WANT_BANK_NOTES && mx >= noteX && mx < noteX + noteW && my >= loY && my < loY + actionH;
 		if (overNote && click) {
 			swapNoteMode = !swapNoteMode;
@@ -374,7 +802,7 @@ public class BankInterface {
 		}
 
 		// --- input: arrange-mode toggle (Off -> Swap -> Insert) ---
-		int arW = 78, arX = noteX + (S_WANT_BANK_NOTES ? noteW + 6 : 0);
+		int arW = vgMobileLayout() ? 72 : 78, arX = noteX + (S_WANT_BANK_NOTES ? noteW + 6 : 0);
 		boolean overAr = mx >= arX && mx < arX + arW && my >= loY && my < loY + actionH;
 		if (overAr && click) {
 			vgArrangeMode = (vgArrangeMode + 1) % 3;
@@ -449,10 +877,21 @@ public class BankInterface {
 		mc.getSurface().drawLineAlpha(px, py + titleH, px + pw, py + titleH, VG_HAIRLINE, 120);
 		mc.getSurface().drawBoxBorder(px, pw, py, ph, 0);
 		mc.getSurface().drawBoxBorder(px + 1, pw - 2, py + 1, ph - 2, VG_FRAME_INNER);
-		drawString("Bank", px + 10, py + 16, 5, VG_TITLE_TEXT);
+		int titleTextY = py + (titleH + 8) / 2;
+		int controlTextY = py + (titleH + 6) / 2;
+		drawString("Bank", px + 10, titleTextY, 5, VG_TITLE_TEXT);
 		String counter = vq.isEmpty() ? bankItems.size() + " / " + mc.bankItemsMax : vis.size() + " found";
-		drawString(counter, px + pw - 40 - mc.getSurface().stringWidth(1, counter), py + 15, 1, VG_LABEL);
-		drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
+		int counterRight = closeX - 6;
+		drawString(counter, counterRight - mc.getSurface().stringWidth(1, counter), controlTextY, 1, VG_LABEL);
+		if (vgMobileLayout()) {
+			mc.getSurface().drawBoxAlpha(closeX, closeY, closeW, closeH, overClose ? VG_HOVER : 0x341F5E, overClose ? 95 : 145);
+			mc.getSurface().drawBoxBorder(closeX, closeW, closeY, closeH, overClose ? VG_FRAME_INNER : VG_SLOT_BORDER);
+			String closeLabel = "Close";
+			drawString(closeLabel, closeX + (closeW - mc.getSurface().stringWidth(1, closeLabel)) / 2,
+				closeY + (closeH + 8) / 2, 1, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
+		} else {
+			drawString("X", closeX + 4, py + 16, 4, overClose ? 0xFF7A7A : VG_TITLE_TEXT);
+		}
 
 		// search box (title strip)
 		mc.getSurface().drawBoxAlpha(sx, sy, sw, sh2, 0x0C0620, 150);
@@ -460,8 +899,14 @@ public class BankInterface {
 		vgCaretTick++;
 		String disp = vgSearch;
 		if (vgSearchFocus && (vgCaretTick / 25) % 2 == 0) disp = disp + "|";
-		if (disp.isEmpty()) drawString("Search", sx + 5, sy + 12, 1, 0x8474A8);
-		else drawString(disp, sx + 5, sy + 12, 1, VG_TITLE_TEXT);
+		int searchTextY = sy + (sh2 + 8) / 2;
+		if (disp.isEmpty()) drawString("Search", sx + 5, searchTextY, 1, 0x8474A8);
+		else drawString(disp, sx + 5, searchTextY, 1, VG_TITLE_TEXT);
+		if (mobileSearchClear && !vgSearch.isEmpty()) {
+			String clearLabel = "x";
+			drawString(clearLabel, searchClearX + (searchClearW - mc.getSurface().stringWidth(1, clearLabel)) / 2,
+				searchTextY, 1, overSearchClear ? VG_GOLD : VG_LABEL);
+		}
 
 		// ---- render: page tabs ----
 		if (tabsVisible) {
@@ -473,7 +918,8 @@ public class BankInterface {
 				mc.getSurface().drawBoxBorder(tx, tabW, tabY, tabH, active ? VG_FRAME_INNER : VG_SLOT_BORDER);
 				if (active) mc.getSurface().drawBoxAlpha(tx + 1, tabY + tabH - 2, tabW - 2, 2, VG_SEL_RING, 200);
 				String lb = t == 0 ? "All" : (tabW < 44 ? "T" + t : "Tab " + t);
-				drawString(lb, tx + (tabW - mc.getSurface().stringWidth(1, lb)) / 2, tabY + 12, 1, active ? VG_TITLE_TEXT : VG_LABEL);
+				drawString(lb, tx + (tabW - mc.getSurface().stringWidth(1, lb)) / 2,
+					tabY + (tabH + 8) / 2, 1, active ? VG_TITLE_TEXT : VG_LABEL);
 			}
 		}
 
@@ -536,24 +982,30 @@ public class BankInterface {
 				mc.getSurface().drawBoxAlpha(lx, loY, loW, actionH, hovL ? VG_HOVER : 0x341F5E, hovL ? 95 : (filled ? 165 : 110));
 				mc.getSurface().drawBoxBorder(lx, loW, loY, actionH, filled ? VG_FRAME_INNER : VG_SLOT_BORDER);
 				String ll = "L" + (p + 1);
-				drawString(ll, lx + (loW - mc.getSurface().stringWidth(1, ll)) / 2, loY + 15, 1, filled ? VG_GOLD : VG_LABEL);
+				drawString(ll, lx + (loW - mc.getSurface().stringWidth(1, ll)) / 2,
+					loY + (actionH + 8) / 2, 1, filled ? VG_GOLD : VG_LABEL);
 			}
 		}
 		if (S_WANT_BANK_NOTES) {
 			mc.getSurface().drawBoxAlpha(noteX, loY, noteW, actionH, overNote ? VG_HOVER : 0x341F5E, overNote ? 95 : (swapNoteMode ? 165 : 110));
 			mc.getSurface().drawBoxBorder(noteX, noteW, loY, actionH, swapNoteMode ? VG_FRAME_INNER : VG_SLOT_BORDER);
-			String nl = swapNoteMode ? "Note: On" : "Note: Off";
-			drawString(nl, noteX + (noteW - mc.getSurface().stringWidth(1, nl)) / 2, loY + 15, 1, swapNoteMode ? VG_GREEN : VG_LABEL);
+			String nl = vgMobileLayout() ? (swapNoteMode ? "Note On" : "Note Off") : (swapNoteMode ? "Note: On" : "Note: Off");
+			drawString(nl, noteX + (noteW - mc.getSurface().stringWidth(1, nl)) / 2,
+				loY + (actionH + 8) / 2, 1, swapNoteMode ? VG_GREEN : VG_LABEL);
 		}
 		boolean arOn = vgArrangeMode > 0;
 		mc.getSurface().drawBoxAlpha(arX, loY, arW, actionH, overAr ? VG_HOVER : 0x341F5E, overAr ? 95 : (arOn ? 165 : 110));
 		mc.getSurface().drawBoxBorder(arX, arW, loY, actionH, arOn ? VG_FRAME_INNER : VG_SLOT_BORDER);
-		String al = vgArrangeMode == 0 ? "Arrange: Off" : (vgArrangeMode == 1 ? "Arrange: Swap" : "Arrange: Ins");
-		drawString(al, arX + (arW - mc.getSurface().stringWidth(1, al)) / 2, loY + 15, 1, arOn ? VG_GOLD : VG_LABEL);
+		String al = vgMobileLayout()
+			? (vgArrangeMode == 0 ? "Arr Off" : (vgArrangeMode == 1 ? "Arr Swap" : "Arr Ins"))
+			: (vgArrangeMode == 0 ? "Arrange: Off" : (vgArrangeMode == 1 ? "Arrange: Swap" : "Arrange: Ins"));
+		drawString(al, arX + (arW - mc.getSurface().stringWidth(1, al)) / 2,
+			loY + (actionH + 8) / 2, 1, arOn ? VG_GOLD : VG_LABEL);
 		mc.getSurface().drawBoxAlpha(daX, daY, daW, actionH, overDA ? VG_HOVER : 0x341F5E, overDA ? 95 : 165);
 		mc.getSurface().drawBoxBorder(daX, daW, daY, actionH, VG_FRAME_INNER);
-		String da = "Deposit all inventory";
-		drawString(da, daX + (daW - mc.getSurface().stringWidth(1, da)) / 2, daY + 15, 1, VG_GOLD);
+		String da = vgMobileLayout() ? "Deposit all" : "Deposit all inventory";
+		drawString(da, daX + (daW - mc.getSurface().stringWidth(1, da)) / 2,
+			daY + (actionH + 8) / 2, 1, VG_GOLD);
 
 		// ---- render: dragged item ghost (arrange mode) ----
 		if (vgDragSlot >= 0 && vgDragSlot < bankItems.size()) {
@@ -565,6 +1017,19 @@ public class BankInterface {
 		}
 
 		if (vgMenu) drawVoidGlassMenu(mx, my);
+		logAndroidSmokeBankState(vgSearch, vis.size(), vgScrollRow * cols,
+			gx + cellW / 2, bankGY + cellH / 2,
+			gx + cellW / 2, invGY + cellH / 2,
+			sx + sw / 2, sy + sh2 / 2,
+			searchClearX + searchClearW / 2, sy + sh2 / 2,
+			closeX + closeW / 2, closeY + closeH / 2,
+			closeW, closeH,
+			daX + daW / 2, daY + actionH / 2,
+			S_WANT_BANK_PRESETS ? gx + loW / 2 : -1,
+			S_WANT_BANK_PRESETS ? loY + actionH / 2 : -1,
+			loW, actionH,
+			sbX + sbW / 2, sbY + sbH - 4,
+			maxScroll);
 		return true;
 	}
 
@@ -574,7 +1039,7 @@ public class BankInterface {
 		if (!voidGlassBank() || !mc.isShowDialogBank()) return false;
 		if (mc.inputX_Action != InputXAction.ACT_0) return false; // X-amount prompt owns the keyboard
 		if (key == 27) {
-			if (vgSearchFocus || !vgSearch.isEmpty()) { vgSearch = ""; vgSearchFocus = false; }
+			if (vgSearchFocus || !vgSearch.isEmpty()) clearVgSearch(false);
 			else bankClose();
 			return true;
 		}
@@ -588,6 +1053,15 @@ public class BankInterface {
 			&& mc.getSurface().stringWidth(1, vgSearch + (char) key) <= 150) // pixel cap: box is 170px, drawString doesn't clip
 			vgSearch += (char) key;
 		return true;
+	}
+
+	private void clearVgSearch(boolean focus) {
+		vgSearch = "";
+		vgLastQuery = "";
+		vgSearchFocus = focus;
+		vgScrollRow = 0;
+		vgPage = 0;
+		vgVisCache = null;
 	}
 
 	public void vgResetSearch() {
@@ -627,6 +1101,7 @@ public class BankInterface {
 	private void sendVgDepositAll() {
 		mc.packetHandler.getClientStream().newPacket(24);
 		mc.packetHandler.getClientStream().finishPacket();
+		logAndroidSmokeBankAction("DEPOSIT_ALL", -1, Integer.MAX_VALUE, -1);
 		mc.setMouseClick(0); mc.setMouseButtonDown(0);
 	}
 
@@ -652,6 +1127,7 @@ public class BankInterface {
 			mc.packetHandler.getClientStream().bufferBits.putByte(slot);
 		}
 		mc.packetHandler.getClientStream().finishPacket();
+		logAndroidSmokeBankAction(action == 0 ? "LOAD_PRESET" : (action == 1 ? "SAVE_PRESET" : "CLEAR_PRESET"), -1, action, slot);
 	}
 
 	private boolean vgPresetEmpty(int slot) {
@@ -671,9 +1147,10 @@ public class BankInterface {
 		addVgMenu("Save current as loadout " + (slot + 1), true, 1);
 		if (!empty) addVgMenu("Clear loadout " + (slot + 1), true, 2);
 		vgMenuKind = 1; vgMenuPresetSlot = slot; vgMenu = true;
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
+		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * vgMenuRowH() + 4;
 		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
 		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
+		logAndroidSmokeBankLoadoutsPanel(empty);
 	}
 
 	private void drawVgGridLines(int gx, int gy, int cols, int rows, int cw, int ch) {
@@ -728,7 +1205,7 @@ public class BankInterface {
 			addVgMenu("Deposit All", true, VG_ALL);
 		}
 		if (vgMenuLabels.isEmpty()) return;
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
+		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * vgMenuRowH() + 4;
 		vgMenu = true; vgMenuKind = 0; vgMenuItemID = id;
 		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
 		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
@@ -745,14 +1222,15 @@ public class BankInterface {
 	}
 
 	private void drawVoidGlassMenu(int mx, int my) {
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * VG_MENU_ROW_H + 4;
+		int rowH = vgMenuRowH();
+		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * rowH + 4;
 		mc.getSurface().drawBoxAlpha(vgMenuX, vgMenuY, mw, mh, VG_MENU_CARD, 210);
 		mc.getSurface().drawBoxBorder(vgMenuX, mw, vgMenuY, mh, VG_FRAME_INNER);
 		for (int i = 0; i < vgMenuLabels.size(); i++) {
-			int ry = vgMenuY + 2 + i * VG_MENU_ROW_H;
-			boolean hov = mx >= vgMenuX && mx < vgMenuX + mw && my >= ry && my < ry + VG_MENU_ROW_H;
-			if (hov) mc.getSurface().drawBoxAlpha(vgMenuX + 1, ry, mw - 2, VG_MENU_ROW_H, VG_HOVER, 90);
-			drawString(vgMenuLabels.get(i), vgMenuX + 6, ry + 12, 1, vgMenuDep.get(i) ? VG_CYAN : VG_GREEN);
+			int ry = vgMenuY + 2 + i * rowH;
+			boolean hov = mx >= vgMenuX && mx < vgMenuX + mw && my >= ry && my < ry + rowH;
+			if (hov) mc.getSurface().drawBoxAlpha(vgMenuX + 1, ry, mw - 2, rowH, VG_HOVER, 90);
+			drawString(vgMenuLabels.get(i), vgMenuX + 6, ry + (rowH + 9) / 2, 1, vgMenuDep.get(i) ? VG_CYAN : VG_GREEN);
 		}
 	}
 
@@ -1184,6 +1662,7 @@ public class BankInterface {
 		this.selectedBankSlot = -1;
 		mc.packetHandler.getClientStream().newPacket(212);
 		mc.packetHandler.getClientStream().finishPacket();
+		if (voidGlassBank()) logAndroidSmokeBankAction("CLOSE", -1, 0, -1);
 	}
 
 	public void sendDeposit(int i) {
@@ -1206,6 +1685,7 @@ public class BankInterface {
 		}
 		mc.packetHandler.getClientStream().bufferBits.putInt(i);
 		mc.packetHandler.getClientStream().finishPacket();
+		if (voidGlassBank()) logAndroidSmokeBankAction("DEPOSIT", itemID, i, slot);
 		if (mc.getMouseButtonDownTime() == 0) {
 			mc.setMouseClick(0);
 			mc.setMouseButtonDown(0);
@@ -1236,6 +1716,7 @@ public class BankInterface {
 			mc.packetHandler.getClientStream().bufferBits.putByte(swapNoteMode ? 1 : 0);
 
 		mc.packetHandler.getClientStream().finishPacket();
+		if (voidGlassBank()) logAndroidSmokeBankAction("WITHDRAW", itemID, i, vgFindCurrentIndex(itemID));
 		if (mc.getMouseButtonDownTime() == 0) {
 			mc.setMouseClick(0);
 			mc.setMouseButtonDown(0);

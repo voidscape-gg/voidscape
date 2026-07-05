@@ -260,10 +260,11 @@ async function resetState(page) {
       androidProfile: true,
       webBuild: true,
       showUiTab: 0,
-      messageTab: 'ALL',
-      chatPanelHidden: false,
-      phoneLandscapeLooseChat: false,
-      chatAccessMode: 'canvas',
+	      messageTab: 'ALL',
+	      chatPanelHidden: false,
+	      phoneLandscapeLooseChat: false,
+	      mobileLooseChat: true,
+	      chatAccessMode: 'canvas',
       mobilePanelShell: false,
       canvasTopTabsVisible: true,
       canvasPanelRailVisible: false,
@@ -947,10 +948,11 @@ async function runMobileChatTraySmoke(page) {
       customUi: true,
       androidProfile: true,
       webBuild: true,
-      messageTab: 'ALL',
-      chatPanelHidden: true,
-      phoneLandscapeLooseChat: false,
-      chatAccessMode: 'collapsed-helper',
+	      messageTab: 'ALL',
+	      chatPanelHidden: true,
+	      phoneLandscapeLooseChat: false,
+	      mobileLooseChat: true,
+	      chatAccessMode: 'collapsed-helper',
       blockingDialog: false,
       blockingDialogName: '',
       updatedAt: Date.now()
@@ -992,7 +994,7 @@ async function runMobileChatTraySmoke(page) {
     `chat tray button should expose pressed state: ${JSON.stringify(state)}`);
   assertMinTouchTarget(state.buttonRect, 44, 44, 'chat tray trigger');
   assert(state.trayDisplay === 'grid', `chat tray should display as grid when open: ${JSON.stringify(state)}`);
-  const expectedShortcuts = ['all', 'chat', 'quest', 'private', 'compose'];
+  const expectedShortcuts = ['all', 'chat', 'quest', 'global', 'private', 'compose'];
   assert(state.shortcuts.length === expectedShortcuts.length,
     `chat tray should expose ${expectedShortcuts.length} shortcuts: ${JSON.stringify(state.shortcuts)}`);
   for (const shortcut of expectedShortcuts) {
@@ -1152,8 +1154,10 @@ async function runOverlaySuppressionSmoke(page) {
   });
   assert(normal.ui && normal.ui.panelAccessMode === 'canvas',
     `normal play should use shared canvas panel ownership: ${JSON.stringify(normal.ui)}`);
-  assert(normal.ui && normal.ui.chatAccessMode === 'canvas',
-    `normal play should use shared canvas chat ownership: ${JSON.stringify(normal.ui)}`);
+	  assert(normal.ui && normal.ui.chatAccessMode === 'canvas',
+	    `normal play should use shared canvas chat ownership: ${JSON.stringify(normal.ui)}`);
+	  assert(normal.ui && normal.ui.mobileLooseChat === true,
+	    `normal play should use mobile loose chat instead of a framed chat container: ${JSON.stringify(normal.ui)}`);
   assert(normal.controls.panelButton.display === 'none' && normal.controls.panelButton.visible === false,
     `normal play should hide redundant DOM panel button: ${JSON.stringify(normal.controls.panelButton)}`);
   assert(normal.controls.panelDrawer.display === 'none' && normal.controls.panelDrawer.visible === false,

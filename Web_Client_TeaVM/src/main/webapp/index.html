@@ -535,13 +535,17 @@
 			background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-24.png");
 		}
 
-		.mobile-chat-button[data-chat="quest"] .mobile-chat-icon {
-			background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-24.png");
-		}
+			.mobile-chat-button[data-chat="quest"] .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-24.png");
+			}
 
-		.mobile-chat-button[data-chat="private"] .mobile-chat-icon {
-			background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-24.png");
-		}
+			.mobile-chat-button[data-chat="global"] .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-24.png");
+			}
+
+			.mobile-chat-button[data-chat="private"] .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-24.png");
+			}
 
 		.mobile-chat-button[data-chat="compose"] .mobile-chat-icon {
 			width: auto;
@@ -570,13 +574,17 @@
 			background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-active-24.png");
 		}
 
-		.mobile-chat-button[data-chat="quest"]:active .mobile-chat-icon {
-			background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-active-24.png");
-		}
+			.mobile-chat-button[data-chat="quest"]:active .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-quest-active-24.png");
+			}
 
-		.mobile-chat-button[data-chat="private"]:active .mobile-chat-icon {
-			background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-active-24.png");
-		}
+			.mobile-chat-button[data-chat="global"]:active .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-history-active-24.png");
+			}
+
+			.mobile-chat-button[data-chat="private"]:active .mobile-chat-icon {
+				background-image: url("Cache/voidscape/ui/skin/bottom-chat-private-active-24.png");
+			}
 
 		#camera-controls {
 			position: fixed;
@@ -1093,6 +1101,11 @@
 				display: grid;
 			}
 
+			html.diagnostics body.desktop-launcher-only #diagnostics-button,
+			html.diagnostics body.desktop-launcher-only #diagnostics-copy-button {
+				display: flex !important;
+			}
+
 			.desktop-launcher-panel {
 				width: min(440px, calc(100vw - 48px));
 				box-sizing: border-box;
@@ -1219,14 +1232,15 @@
 		<button class="mobile-panel-button" type="button" data-panel="friends" aria-label="Open friends panel" tabindex="-1">Fr</button>
 		<button class="mobile-panel-button" type="button" data-panel="options" aria-label="Open options panel" tabindex="-1">Opt</button>
 	</div>
-	<button id="chat-button" class="mobile-control-button" type="button" aria-label="Open mobile chat shortcuts" aria-pressed="false" tabindex="-1"><span class="mobile-control-icon" aria-hidden="true"></span></button>
-	<div id="mobile-chat-tray" aria-label="Mobile chat shortcuts">
-		<button class="mobile-chat-button" type="button" data-chat="all" aria-label="Show all messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">All</span></button>
-		<button class="mobile-chat-button" type="button" data-chat="chat" aria-label="Show chat messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Chat</span></button>
-		<button class="mobile-chat-button" type="button" data-chat="quest" aria-label="Show quest messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Quest</span></button>
-		<button class="mobile-chat-button" type="button" data-chat="private" aria-label="Show private messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Priv</span></button>
-		<button class="mobile-chat-button" type="button" data-chat="compose" aria-label="Compose chat message" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true">Aa</span><span class="mobile-chat-label">Say</span></button>
-	</div>
+		<button id="chat-button" class="mobile-control-button" type="button" aria-label="Open mobile chat shortcuts" aria-pressed="false" tabindex="-1"><span class="mobile-control-icon" aria-hidden="true"></span></button>
+		<div id="mobile-chat-tray" aria-label="Mobile chat shortcuts">
+			<button class="mobile-chat-button" type="button" data-chat="all" aria-label="Show all messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">All</span></button>
+			<button class="mobile-chat-button" type="button" data-chat="chat" aria-label="Show chat messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Chat</span></button>
+			<button class="mobile-chat-button" type="button" data-chat="quest" aria-label="Show quest messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Quest</span></button>
+			<button class="mobile-chat-button" type="button" data-chat="global" aria-label="Show global messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Global</span></button>
+			<button class="mobile-chat-button" type="button" data-chat="private" aria-label="Show private messages" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true"></span><span class="mobile-chat-label">Priv</span></button>
+			<button class="mobile-chat-button" type="button" data-chat="compose" aria-label="Compose chat message" tabindex="-1"><span class="mobile-chat-icon" aria-hidden="true">Aa</span><span class="mobile-chat-label">Say</span></button>
+		</div>
 	<button id="inventory-button" class="mobile-control-button mobile-quick-button" type="button" data-panel="side-inventory" aria-label="Open inventory panel" tabindex="-1">Inv</button>
 	<button id="keyboard-button" class="mobile-control-button" type="button" aria-label="Show keyboard" aria-pressed="false" tabindex="-1">Aa</button>
 	<button id="magic-button" class="mobile-control-button mobile-quick-button" type="button" data-panel="side-magic" aria-label="Open magic panel" tabindex="-1">Mag</button>

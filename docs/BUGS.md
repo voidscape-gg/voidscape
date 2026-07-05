@@ -26,8 +26,8 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** VS-038 (Death Match voluntary forfeit) — per Ryan's 2026-07-03
-  redirect.
+- **Active bug:** VS-038 (Death Match voluntary forfeit) — restored after emergency
+  live-launch fix VS-057.
 - **Ryan's redirect (2026-07-03, mid-loop):** work **from VS-038 down**, impact-first
   — skip the "meh" tail. In scope, in order: VS-038 (Death Match forfeit), then
   player-facing Intake items (Undead Siege logout feedback, bank-add-while-open stale
@@ -558,6 +558,31 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-057 — Live launcher client showed the legacy bank instead of Void Glass (FIXED)
+- Status: verified · Severity: P1 · Area: client-ui / launch config
+- Evidence: Ryan reported the freshly launched live desktop client still showing the old
+  bank after the launcher downloaded `Open_RSC_Client.jar` client `10122` SHA-256
+  `848ee7e7d86d1b55d74fada341aebb0032c413f6334bdf5b8490ab4b5b53115f`. Bytecode
+  inspection confirmed that jar contained `BankInterface.renderVoidGlassBank()` gated on
+  `C_CUSTOM_UI && !Config.isAndroid()`, live server bytecode sent `Player.getCustomUI()`
+  in `SEND_GAME_SETTINGS`, and the live DB had no `custom_ui` overrides. The real fault
+  was production config drift: `/opt/voidscape/server/local.conf` had
+  `want_custom_banks: true`, so `CustomBankInterface.onRender()` used the legacy custom
+  bank renderer before the superclass Void Glass path could run.
+- Fix: `CustomBankInterface` now treats the legacy custom-bank renderer as active only
+  when `S_WANT_CUSTOM_BANKS` is true and desktop `C_CUSTOM_UI` is false; its
+  deposit/withdraw/hotkey paths use that same effective mode. Live config was reset to
+  `want_custom_banks: false`; cache/update permissions were normalized so the portal
+  manifest can read the full update channel.
+- Verified 2026-07-05: `scripts/build.sh` green; deployed package
+  `tmp/live-client-ui-configfix-20260705T044847Z`; hosted static manifest advertises
+  client SHA-256 `978d487522f6e206f1a50d209ae744377f0dabf118ca1b92560f4584c2e4c9a7`;
+  portal manifest sync and local launcher cache sync both pulled that jar; live server
+  config reports `want_custom_ui: true` and `want_custom_banks: false`; Ryan opened the
+  live bank after relaunch and confirmed "fixed." Production backup:
+  `/opt/voidscape/backups/ui-configfix-20260705T044939Z`.
+- Log: 2026-07-05 emergency launch-surface fix; documented in `docs/DIVERGENCE.md`.
 
 ### VS-056 — ::rested wording implied per-minute accrual; pool is per-second (FIXED)
 - Status: verified · Severity: P4 · Area: server-core (message string)

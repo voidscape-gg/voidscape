@@ -38,9 +38,9 @@ Voidscape's auction house is a fixed-price player-to-player marketplace gated be
 - Client-side NPCDef appended in `Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java` after Edgar (must be present or client renders the "Ana (not in a barrel)" sentinel)
 - Spawn loc in `server/conf/server/defs/locs/NpcLocsAuction.json` — single entry
 - Plugin in `server/plugins/.../custom/npcs/VoidAuctioneer.java`
-- `WorldPopulator.java:268` loads the spawn iff `spawn_auction_npcs: true` (not gated on `LOCATION_DATA == 2` in voidscape, unlike upstream)
+- `WorldPopulator.java` loads the spawn iff `spawn_auction_npcs: true` (not gated on `LOCATION_DATA == 2` in voidscape, unlike upstream)
 
-**Client UI**: `Client_Base/src/com/openrsc/interfaces/misc/AuctionHouse.java` — 490×326 panel, three tabs (Browse, My Auctions, Intel), sort cycle, search field (case-insensitive substring on item name), 10 icon category tiles, listing rows with item sprites, and a selected-listing detail card. Hardcodes outbound packet id 199 for AH operations.
+**Client UI**: `Client_Base/src/com/openrsc/interfaces/misc/AuctionHouse.java` — 490×279 panel, three tabs (Browse, My Auctions, Intel), sort cycle, search field (case-insensitive substring on item name), 10 icon category tiles, listing rows with item sprites, and a selected-listing detail card. Hardcodes outbound packet id 199 for AH operations.
 
 ## Key data shapes
 
@@ -69,7 +69,7 @@ The UI only displays item/amount/price/age summaries; player names are stored fo
 1. **Client NPCDef list is positional, not id-keyed.** Adding a server-side custom NPC requires a matching `npcs.add(...)` in `Client_Base/.../EntityHandler.java` at the right ordinal. Voidscape's pattern: append to `loadNPCDefinitions4()` after Edgar. Without it, the client falls back to "Ana (not in a barrel)" for the unknown id.
 2. **Schema gate**: upstream put the schema in `database/{mysql,sqlite}/addons/` which is **not** auto-applied. Voidscape moved it to `patches/` so `JDBCPatchApplier` runs it on first boot.
 3. **Per-unit price** is `total_price / amount_left` (re-derived each tick). Listing 10 items for 1000gp total = 100gp each, not "100gp per unit, total 1000gp". The UI shows both.
-4. **`queryPlayerAuctionCount` parameterized-SQL bug** (upstream): `seller='?'` was a literal string, never bound. Voidscape fixed to real `?`. Fix is in `MySqlQueries.java:203`.
+4. **`queryPlayerAuctionCount` parameterized-SQL bug** (upstream): `seller='?'` was a literal string, never bound. Voidscape fixed to real `?`. Fix is in `MySqlQueries.java` (`playerAuctionCount` query).
 5. **Auction mutations now save affected containers synchronously.** The market thread still mutates the live player object first, then commits the auction row and affected inventory/bank save inside one DB transaction. This is much stronger than the upstream autosave-dependent flow, but the ultimate persistence model is still not a true item-ledger service.
 6. **Price divisibility is enforced.** Since DB rows store remaining total price and derive per-unit price by integer division, listing creation rejects totals that do not divide evenly by quantity.
 7. **`Market.checkAndRemoveExpiredItems()` runs on the market thread (50ms tick)**. With voidscape's 7-day expiry, it actually fires now (was effectively dead with `TIME_LIMIT = MAX_VALUE`). It refunds `amount_left`, not original amount, and its refund + sellout update are transactional.
@@ -82,7 +82,7 @@ The UI only displays item/amount/price/age summaries; player names are stored fo
 
 | Knob | Where | Notes |
 |---|---|---|
-| Enable / disable | `server/local.conf` `spawn_auction_npcs` | False removes the NPC + blocks all opcode dispatch (`InterfaceOptionHandler.java:82`) |
+| Enable / disable | `server/local.conf` `spawn_auction_npcs` | False removes the NPC + blocks all opcode dispatch (`InterfaceOptionHandler.java`, `AUCTION` case) |
 | Listing cap | `NewMarketItemTask.MAX_LISTINGS_PER_PLAYER` | Constant, recompile to change |
 | Expiry | `MarketItem.TIME_LIMIT` | Seconds; voidscape = 7d |
 | Sale tax % | `BuyMarketItemTask` (`auctionPrice / 20`) | 5% by integer division — destroyed (gp sink), not redirected |

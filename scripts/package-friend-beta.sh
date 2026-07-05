@@ -157,6 +157,23 @@ sha256_file() {
 	shasum -a 256 "$1" | awk '{print $1}'
 }
 
+file_size() {
+	local size
+	if size="$(stat -f%z "$1" 2>/dev/null)" && [[ "$size" =~ ^[0-9]+$ ]]; then
+		printf '%s\n' "$size"
+	else
+		stat -c%s "$1"
+	fi
+}
+
+client_version() {
+	awk '/CLIENT_VERSION[[:space:]]*=/ {
+		gsub(/[^0-9]/, "", $0);
+		print $0;
+		exit
+	}' "$REPO_ROOT/Client_Base/src/orsc/Config.java"
+}
+
 is_runtime_file() {
 	case "$(basename "$1")" in
 		accounts.txt|credentials.txt|uid.dat|ip.txt|port.txt|hideIp.txt|config.txt|client.properties|discord_inuse.txt|launcherSettings.conf|voidscapeLauncher.properties)
@@ -204,21 +221,6 @@ while IFS= read -r -d '' source; do
 	cp "$source" "$UPDATE_DIR/$relative"
 done < <(find "$CLIENT_CACHE" -type f -print0)
 
-{
-	property_line "version" "$(date -u +%Y%m%d%H%M%S)"
-	property_line "baseUrl" "$BASE_URL/"
-	index=1
-	while IFS= read -r file; do
-		relative="${file#"$UPDATE_DIR"/}"
-		if [[ "$relative" == "manifest.properties" ]]; then
-			continue
-		fi
-		property_line "file.$index.path" "$relative"
-		property_line "file.$index.sha256" "$(sha256_file "$file")"
-		index=$((index + 1))
-	done < <(find "$UPDATE_DIR" -type f | LC_ALL=C sort)
-} > "$MANIFEST_FILE"
-
 if [[ -f "$LAUNCHER_RESOURCE" ]]; then
 	LAUNCHER_RESOURCE_EXISTED=1
 	LAUNCHER_RESOURCE_BACKUP="$(mktemp)"
@@ -251,6 +253,43 @@ fi
 
 (cd "$REPO_ROOT/PC_Launcher" && ant compile)
 cp "$REPO_ROOT/PC_Launcher/OpenRSC.jar" "$OUTPUT_DIR/VoidscapeLauncher.jar"
+mkdir -p "$UPDATE_DIR/launcher"
+cp "$REPO_ROOT/PC_Launcher/OpenRSC.jar" "$UPDATE_DIR/launcher/VoidscapeLauncher.jar"
+
+CLIENT_VERSION="$(client_version)"
+if ! [[ "$CLIENT_VERSION" =~ ^[0-9]+$ ]]; then
+	echo "ERROR: could not parse CLIENT_VERSION from Client_Base/src/orsc/Config.java." >&2
+	exit 1
+fi
+RELEASE_STAMP="$(date -u +%Y%m%d%H%M%S)"
+LAUNCHER_CHANNEL_JAR="$UPDATE_DIR/launcher/VoidscapeLauncher.jar"
+
+{
+	property_line "version" "$CLIENT_VERSION-$RELEASE_STAMP"
+	property_line "clientVersion" "$CLIENT_VERSION"
+	property_line "baseUrl" "$BASE_URL/"
+	index=1
+	while IFS= read -r file; do
+		relative="${file#"$UPDATE_DIR"/}"
+		if [[ "$relative" == "manifest.properties" ]]; then
+			continue
+		fi
+		# The launcher jar ships under launcher.* only; v1 launchers must not
+		# download it as a plain cache file.
+		if [[ "$relative" == launcher/* ]]; then
+			continue
+		fi
+		property_line "file.$index.path" "$relative"
+		property_line "file.$index.sha256" "$(sha256_file "$file")"
+		property_line "file.$index.size" "$(file_size "$file")"
+		index=$((index + 1))
+	done < <(find "$UPDATE_DIR" -type f | LC_ALL=C sort)
+	property_line "launcher.sha256" "$(sha256_file "$LAUNCHER_CHANNEL_JAR")"
+	property_line "launcher.url" "$BASE_URL/launcher/VoidscapeLauncher.jar"
+	property_line "launcher.size" "$(file_size "$LAUNCHER_CHANNEL_JAR")"
+	property_line "launcher.version" "$CLIENT_VERSION-$RELEASE_STAMP"
+} > "$MANIFEST_FILE"
+
 cp "$REPO_ROOT/docs/BETA-PLAYTEST-GUIDE.md" "$OUTPUT_DIR/BETA-PLAYTEST-GUIDE.md"
 
 cat <<EOF
@@ -267,6 +306,9 @@ Launcher endpoint:
 
 Launcher manifest:
   $BASE_URL/manifest.properties
+
+Launcher self-update entry (manifest launcher.sha256/url/size/version):
+  $BASE_URL/launcher/VoidscapeLauncher.jar
 
 After uploading the update folder, verify from another machine:
   curl -I "$BASE_URL/manifest.properties"

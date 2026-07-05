@@ -307,8 +307,8 @@ public class WebClientPort implements ClientPort {
 
 		private void publishUiState() {
 			if (client == null) {
-				publishUiState(false, false, false, false, 0, "", "", false, false, false, false, false, false, false, 0, 0, 0, 0,
-					false, false, "", false, "", "");
+				publishUiState(false, false, false, false, 0, "", "", false, false, false, false, false, false, false, false, 0, 0, 0, 0,
+					false, false, "", false, "", false, "", "{}", "");
 				return;
 			}
 		int menuWidth = 0;
@@ -320,13 +320,14 @@ public class WebClientPort implements ClientPort {
 		publishUiState(
 			Config.C_CUSTOM_UI,
 			Config.S_WANT_CUSTOM_UI,
-				Config.isAndroid(),
-				Config.isWeb(),
-				client.showUiTab,
-				client.getVoidscapeMobileSidePanelKey(),
-				String.valueOf(client.messageTabSelected),
+			Config.isAndroid(),
+			Config.isWeb(),
+			client.showUiTab,
+			client.getVoidscapeMobileSidePanelKey(),
+			String.valueOf(client.messageTabSelected),
 			client.isVoidscapeChatPanelHidden(),
 			client.isVoidscapePhoneLandscapeLooseChat(),
+			client.isVoidscapeMobileLooseChatMessages(),
 			client.isVoidscapeMobilePanelShell(),
 			client.isVoidscapeCanvasTopTabsVisible(),
 			client.isVoidscapeCanvasPanelRailVisible(),
@@ -338,11 +339,14 @@ public class WebClientPort implements ClientPort {
 			menuHeight,
 			osConfig.F_SHOWING_KEYBOARD,
 			client.isWebOverlayDialogVisible(),
-				client.getWebOverlayDialogName(),
-				client.hasVoidscapeMobileSpellShortcut(),
-				client.getVoidscapeMobileSpellShortcutLabel(),
-				client.getVoidscapeMobileSpellShortcutName());
-	}
+			client.getWebOverlayDialogName(),
+			client.hasVoidscapeMobileSpellShortcut(),
+			client.getVoidscapeMobileSpellShortcutLabel(),
+			client.isShowDialogBank(),
+			client.getBank() == null ? "" : client.getBank().getBankRendererName(),
+			client.getBank() == null ? "{\"open\":false}" : client.getBank().getBankDiagnosticsJson(),
+			client.getVoidscapeMobileSpellShortcutName());
+		}
 
 	private void publishLoginState() {
 		if (client == null) {
@@ -833,8 +837,6 @@ public class WebClientPort implements ClientPort {
 			|| (client.onlineList != null && client.onlineList.isVisible())
 			|| (Config.S_WANT_SKILL_MENUS && client.skillGuideInterface != null && client.skillGuideInterface.isVisible())
 			|| (Config.S_WANT_QUEST_MENUS && client.questGuideInterface != null && client.questGuideInterface.isVisible())
-			|| (client.clan != null && client.clan.getClanInterface() != null && client.clan.getClanInterface().isVisible())
-			|| (client.party != null && client.party.getPartyInterface() != null && client.party.getPartyInterface().isVisible())
 			|| (client.experienceConfigInterface != null && client.experienceConfigInterface.isVisible())
 			|| (client.ironmanInterface != null && client.ironmanInterface.isVisible())
 			|| (client.achievementInterface != null && client.achievementInterface.isVisible())
@@ -1495,7 +1497,7 @@ public class WebClientPort implements ClientPort {
 			"    const accountSafeRight = width - bottomReservedWidth;" +
 			"    const maxFrameWidth = Math.min(stableHomeX - 20, accountSafeRight - frameX);" +
 			"    const frameWidth = Math.max(300, Math.min(660, maxFrameWidth));" +
-			"    const tabCount = 5;" +
+			"    const tabCount = 6;" +
 			"    const margin = compact ? 4 : 6;" +
 			"    const gap = compact ? 3 : 5;" +
 			"    const tabHeight = compact ? 32 : 40;" +
@@ -1504,7 +1506,7 @@ public class WebClientPort implements ClientPort {
 			"    const avail = frameWidth - (margin * 2) - (gap * (tabCount - 1));" +
 			"    const minWidth = 42;" +
 			"    const baseWidth = Math.max(minWidth, Math.floor(avail / tabCount));" +
-			"    const keys = ['all', 'chat', 'quest', 'private', 'clan'];" +
+			"    const keys = ['all', 'chat', 'quest', 'global', 'private', 'report'];" +
 			"    for (let i = 0; i < tabCount; i++) {" +
 			"      const tabWidth = i === tabCount - 1 ? Math.max(minWidth, avail - baseWidth * (tabCount - 1)) : baseWidth;" +
 			"      const tabX = frameX + margin + i * (baseWidth + gap);" +
@@ -2327,9 +2329,10 @@ public class WebClientPort implements ClientPort {
 			"showUiTab",
 			"mobileSidePanelKey",
 			"messageTab",
-		"chatPanelHidden",
-		"phoneLandscapeLooseChat",
-		"mobilePanelShell",
+			"chatPanelHidden",
+			"phoneLandscapeLooseChat",
+			"mobileLooseChat",
+			"mobilePanelShell",
 		"canvasTopTabsVisible",
 		"canvasPanelRailVisible",
 		"canvasPanelDockVisible",
@@ -2343,10 +2346,16 @@ public class WebClientPort implements ClientPort {
 			"blockingDialogName",
 			"spellShortcutActive",
 			"spellShortcutLabel",
+			"bankOpen",
+			"bankRenderer",
+			"bankDiagnosticsJson",
 			"spellShortcutName"
 		}, script =
 			"var dialogOpen = !!blockingDialog;" +
 			"var previous = window.__voidscapeUiState || null;" +
+			"var bankState = null;" +
+			"try { bankState = bankDiagnosticsJson ? JSON.parse(String(bankDiagnosticsJson)) : null; }" +
+			"catch (error) { bankState = { open: !!bankOpen, renderer: String(bankRenderer || ''), parseError: String(error && error.message || error) }; }" +
 			"if (document.body) document.body.classList.toggle('dialog-open', dialogOpen);" +
 			"var chatAccessMode = (!!customUi && !!androidProfile && !!webBuild) ? (!!chatPanelHidden ? 'collapsed-helper' : 'canvas') : 'dom-helper';" +
 			"var panelAccessMode = (!!customUi && !!androidProfile && !!webBuild && !!canvasPanelDockVisible) ? 'canvas-dock' : ((!!customUi && !!androidProfile && !!webBuild && !!canvasPanelRailVisible) ? 'canvas-rail' : ((!!customUi && !!androidProfile && !!webBuild && !!mobilePanelShell) ? 'drawer' : 'canvas'));" +
@@ -2358,9 +2367,10 @@ public class WebClientPort implements ClientPort {
 			"  showUiTab: showUiTab | 0," +
 			"  mobileSidePanelKey: String(mobileSidePanelKey || '')," +
 			"  messageTab: String(messageTab || '')," +
-		"  chatPanelHidden: !!chatPanelHidden," +
-		"  phoneLandscapeLooseChat: !!phoneLandscapeLooseChat," +
-		"  chatAccessMode: chatAccessMode," +
+			"  chatPanelHidden: !!chatPanelHidden," +
+			"  phoneLandscapeLooseChat: !!phoneLandscapeLooseChat," +
+			"  mobileLooseChat: !!mobileLooseChat," +
+			"  chatAccessMode: chatAccessMode," +
 		"  mobilePanelShell: !!mobilePanelShell," +
 		"  canvasTopTabsVisible: !!canvasTopTabsVisible," +
 		"  canvasPanelRailVisible: !!canvasPanelRailVisible," +
@@ -2376,6 +2386,9 @@ public class WebClientPort implements ClientPort {
 			"  blockingDialogName: String(blockingDialogName || '')," +
 			"  spellShortcutActive: !!spellShortcutActive," +
 			"  spellShortcutLabel: String(spellShortcutLabel || '')," +
+			"  bankOpen: !!bankOpen," +
+			"  bankRenderer: String(bankRenderer || '')," +
+			"  bank: bankState," +
 			"  spellShortcutName: String(spellShortcutName || '')," +
 			"  updatedAt: Date.now()" +
 			"};" +
@@ -2443,6 +2456,7 @@ public class WebClientPort implements ClientPort {
 			String messageTab,
 		boolean chatPanelHidden,
 		boolean phoneLandscapeLooseChat,
+		boolean mobileLooseChat,
 		boolean mobilePanelShell,
 		boolean canvasTopTabsVisible,
 		boolean canvasPanelRailVisible,
@@ -2453,11 +2467,14 @@ public class WebClientPort implements ClientPort {
 		int menuWidth,
 		int menuHeight,
 		boolean keyboardShowing,
-		boolean blockingDialog,
-		String blockingDialogName,
-		boolean spellShortcutActive,
-		String spellShortcutLabel,
-		String spellShortcutName);
+			boolean blockingDialog,
+			String blockingDialogName,
+			boolean spellShortcutActive,
+			String spellShortcutLabel,
+			boolean bankOpen,
+			String bankRenderer,
+			String bankDiagnosticsJson,
+			String spellShortcutName);
 
 	@JSBody(params = {
 		"visible",

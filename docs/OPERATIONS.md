@@ -120,7 +120,7 @@ scripts/package-friend-beta.sh \
   --discord-url <optional-discord-invite>
 ```
 
-Upload or sync `dist/friend-beta/update/` to the URL used as `--base-url`, then share only `dist/friend-beta/VoidscapeLauncher.jar` with testers. The launcher embeds the game endpoint and manifest URL, downloads the PC client/cache on first Play, writes `ip.txt`/`port.txt` into its runtime cache, and launches the client.
+Upload or sync `dist/friend-beta/update/` to the URL used as `--base-url`, then share only `dist/friend-beta/VoidscapeLauncher.jar` with testers. The launcher embeds the game endpoint and manifest URL, syncs the PC client/cache from the manifest on startup and before Play, writes `ip.txt`/`port.txt` into its runtime cache, and launches the client. The channel also carries the launcher jar itself at `update/launcher/VoidscapeLauncher.jar`, so the jar you hand out self-updates and stays a working bootstrap forever.
 
 External smoke checks:
 
@@ -129,11 +129,13 @@ curl -I https://<server-host-or-ip>/voidscape/update/manifest.properties
 nc -vz <server-host-or-ip> 43596
 ```
 
-Newly created characters use the normal User rank. Promote only trusted testers manually with `make rank-sqlite` / `make rank-mysql` or in-game `::setrank` from an owner/admin account when admin-only beta checks are needed.
+Newly created characters use the normal User rank. Promote only trusted testers manually with `make rank-sqlite` / `make rank-mariadb` or in-game `::setrank` from an owner/admin account when admin-only beta checks are needed.
 
 ## Launcher updates
 
-Players should receive normal client/cache updates through the launcher, not by manually replacing the PC client jar.
+Players should receive normal client/cache updates through the launcher, not by manually replacing the PC client jar. The launcher syncs from the update manifest on every startup and again on Play; if the update server is unreachable, Play falls back to the already-verified local files so an offline player can still launch. Downloads retry three times with SHA-256 verification and an atomic move, aggregate byte progress comes from the manifest `file.N.size` keys, files removed from the manifest are pruned, and runtime files like credentials and endpoint settings are never touched. Verified-file state lives in `<cache>/.voidscape-sync-state.properties`; deleting that file forces a full re-verify. Plain-http manifests and downloads are refused for non-loopback hosts unless `voidscape.allowInsecureHttp=true` — never set that in production.
+
+The manifest is v2 `.properties` (strictly backward compatible with v1): `clientVersion` must equal the server's `client_version`, and `launcher.sha256` / `launcher.url` / `launcher.size` / `launcher.version` drive launcher self-update. When `launcher.sha256` differs from the running jar, the launcher downloads the new build to `<cache>/launcher/VoidscapeLauncher-<sha8>.jar`, verifies it, and re-execs into it (`--relaunched` guards against loops). The originally distributed jar stays untouched and keeps working as a bootstrap, so a launcher restart delivers both new client files and new launcher builds — which means publishing an update must also sync the new launcher jar into the channel (`dist/friend-beta/update/` includes it at `launcher/VoidscapeLauncher.jar` automatically; the portal serves it from `/downloads/launcher`).
 
 Portal-hosted deployment:
 
@@ -144,7 +146,7 @@ Portal-hosted deployment:
 
 ```bash
 curl -I https://<portal-host>/api/launcher/manifest.properties
-curl -I https://<portal-host>/downloads/pc-client
+curl -I https://<portal-host>/downloads/client-runtime
 ```
 
 Static beta deployment:
@@ -153,7 +155,15 @@ Static beta deployment:
 - Upload/sync the generated `dist/friend-beta/update/` folder.
 - Verify `curl -I https://<host>/voidscape/update/manifest.properties`.
 
-In both modes, the launcher checks the manifest on Play, verifies SHA-256 hashes, downloads only changed files, preserves runtime files like credentials and endpoint settings, and then launches the cached `Open_RSC_Client.jar`.
+### Publishing a client update
+
+1. Bump `CLIENT_VERSION` in `Client_Base/src/orsc/Config.java` and set the matching `client_version` in the live server conf (keys are tab-indented on the live box).
+2. `scripts/build.sh`.
+3. `scripts/package-friend-beta.sh ...` — regenerates `dist/friend-beta/update/` with the manifest, client files, and the new launcher jar at `launcher/VoidscapeLauncher.jar`.
+4. rsync `dist/friend-beta/update/` to a temp dir on the host, then `mv` the previous `/var/www/html/voidscape/update/` aside and the temp dir into place, so the swap is atomic and the previous dir doubles as the rollback copy. `chmod -R a+rX` the new tree.
+5. `scripts/verify-launch-staging.mjs` — it validates the update channel: manifest 200 and parse, required sha256/size fields, `clientVersion` equal to the deployed server `client_version`, and reachability probes for every manifest file plus the launcher self-update jar.
+
+Players get everything — new client files and the new launcher build — on their next launcher restart. For a local end-to-end regression of the whole pipeline (fresh install, idempotency, corruption repair, prune, self-update staging + loop guard, offline fallback, plain-http refusal), run `scripts/smoke-launcher-update.sh`.
 
 ## iPhone web client deployment
 

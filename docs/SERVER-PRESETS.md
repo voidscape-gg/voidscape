@@ -7,7 +7,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 ### `preservation.conf` — authentic RSC with minimal QoL
 - DB: `preservation`. Port: 43596. Era: ~RSC c.2010.
 - `member_world: true`, `want_fatigue: true`, `game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `auto_save: 120s`
-- `location_data: 1` (some custom content), `want_fixed_broken_mechanics: true`
+- `location_data: 1` (preservation + discontinued content, e.g. the Black Hole), `want_fixed_broken_mechanics: true`
 - Style: faithful to original. Fatigue is real. Slow grind.
 
 ### `default.conf` — generic hybrid
@@ -42,7 +42,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `uranium.conf` — bot-friendly authentic
 - DB: `uranium`. Port: 43235.
-- `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `want_fatigue: false`, `auto_save: 300s`
+- `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `want_fatigue: true`, `auto_save: 300s`
 - `max_connections_per_ip: 100`, `max_logins_per_second: 40`
 - `want_pcap_logging: false`
 - Style: anything goes. Pure grind for automation.
@@ -92,13 +92,12 @@ If `rsccabbage` ends up feeling closer to the actual goal after testing, we can 
 
 ## Active config selection
 
-`ServerConfiguration.java` resolution order:
+`Server.java` resolution order:
 
-1. **CLI arg** — `ant runserver -DconfFile=mypreset` loads `mypreset.conf`.
-2. **`local.conf`** — if it exists *and* you pass `-DconfFile=local`, it overrides.
-3. Otherwise, error: server tells you to provide `-DconfFile`.
+1. **CLI arg** — `ant runserver -DconfFile=mypreset` passes `mypreset.conf` to the server on startup; `-DconfFile=local` loads `local.conf` the same way.
+2. **No CLI arg** — falls back to `default.conf`; this is not an error.
 
-Voidscape convention: **always run via `local.conf`**. The `scripts/run-server.sh` wrapper enforces this.
+Voidscape convention: **always run via `local.conf`**. The `scripts/run-server.sh` wrapper enforces this (via the `runserverzgc` ant target, `-DconfFile=local`).
 
 `server/connections.conf` is loaded first regardless, for DB connection settings.
 
@@ -124,9 +123,9 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |
-| `client_version` | `10070` | Protocol version (must match client) |
+| `client_version` | `10122` | Protocol version (must match client) |
 | `enforce_custom_client_version` | `true` | Reject mismatched clients |
-| `location_data` | `1` | Item/NPC data set (0=strict authentic, 1=preservation, 2=custom, 4=openpk) |
+| `location_data` | `1` | Item/NPC/scenery data set (0=preservation baseline, 1=+discontinued, 2=+custom, 4=openpk) |
 | `character_creation_mode` | `0` | 0=standard, 1=ironman+1x, 2=classes+globalPK |
 
 DB credentials live in `server/connections.conf`:

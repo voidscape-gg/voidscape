@@ -108,6 +108,15 @@ public final class CustomBankInterface extends BankInterface {
 		}
 	}
 
+	public boolean useLegacyCustomBank() {
+		return Config.S_WANT_CUSTOM_BANKS && !Config.C_CUSTOM_UI;
+	}
+
+	@Override
+	public String getBankRendererName() {
+		return useLegacyCustomBank() ? "legacyCustom" : super.getBankRendererName();
+	}
+
 	private void updateLayout() {
 		if (smallDesktopWebLayout()) {
 			// Hug the grid (not the whole viewport) and center, so the panel isn't
@@ -450,7 +459,7 @@ public final class CustomBankInterface extends BankInterface {
 
 	@Override
 	public boolean onRender() {
-		if (!Config.S_WANT_CUSTOM_BANKS) return super.onRender();
+		if (!useLegacyCustomBank()) return super.onRender();
 
 		updateLayout();
 		bank.reposition(bankSearch, searchFieldX(), searchFieldY(), searchFieldWidth(), searchFieldHeight());
@@ -1688,7 +1697,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	public void sendDeposit(int i, boolean uncertMode) {
-		if (Config.S_WANT_CUSTOM_BANKS) {
+		if (useLegacyCustomBank()) {
 			if (selectedInventorySlot < 0 || selectedInventorySlot >= mc.getInventoryItemCount()) {
 				return;
 			}
@@ -1738,7 +1747,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	public void sendWithdraw(int i) {
-		if (Config.S_WANT_CUSTOM_BANKS) {
+		if (useLegacyCustomBank()) {
 			if (selectedBankSlot < 0 || selectedBankSlot >= bankItems.size()) {
 				return;
 			}
@@ -1783,6 +1792,7 @@ public final class CustomBankInterface extends BankInterface {
 
 
 	public void keyDown(int key) {
+		if (!useLegacyCustomBank()) return;
 		if (mc.inputX_Action == InputXAction.ACT_0) {
 			if (key == 27) {
 				if (pendingSavePresetSlot != -1) {

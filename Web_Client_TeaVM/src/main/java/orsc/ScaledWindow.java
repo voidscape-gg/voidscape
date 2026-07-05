@@ -34,6 +34,14 @@ public final class ScaledWindow {
 		return "Web 640x480";
 	}
 
+	public static int getBaseViewportWidth() {
+		return 640;
+	}
+
+	public static int getBaseViewportHeight() {
+		return 480;
+	}
+
 	public static String getViewportPresetLabel(int index) {
 		return getViewportPresetLabel();
 	}

@@ -16,7 +16,7 @@ For dev: **SQLite is recommended** (zero setup). MariaDB via Docker is for colla
 ## Schema and migrations
 
 Core schema files:
-- MySQL: `server/database/mysql/core.sql` (~575 lines)
+- MySQL: `server/database/mysql/core.sql` (~660 lines)
 - SQLite: `server/database/sqlite/core.sqlite` (text-based SQL)
 
 Migrations (cumulative patches applied chronologically):
@@ -26,11 +26,11 @@ Migrations (cumulative patches applied chronologically):
 - Applied automatically at boot via `JDBCPatchApplier`
 
 Versioned schema upgrades:
-- `server/database/mysql/upgrades/` (~13 files)
+- `server/database/mysql/upgrades/` (~11 files)
 - Format: `N_description_VERSION.sql` (e.g. `2_alter_redundant_columns_5.0.0.sql`)
 - Includes large conversions like `convert_core_4.3.0.sql` (228 KB)
 
-50+ tables: players, skills, inventory, equipment, social (friends/ignores), logging, security.
+~46 tables (core + patches): players, skills, inventory, equipment, social (friends/ignores), logging, security.
 
 ## Connection layer
 

@@ -114,7 +114,12 @@ public class VoidscapeLauncherWindow extends JFrame {
     setVisible(true);
     toFront();
     requestFocus();
-    updater.prepareAsync();
+    if (smokeModeEnabled() || launcher.Main.disabledUpdate) {
+      // Screenshot smokes must stay hermetic (no network); --no-update skips sync by request.
+      updater.prepareAsync();
+    } else {
+      updater.syncAsync();
+    }
     maybeCaptureSmokeAndExit();
   }
 
@@ -132,7 +137,7 @@ public class VoidscapeLauncherWindow extends JFrame {
 
   private void addSkinHitTargets(JPanel root) {
     playButton.setBounds(PLAY_X, PLAY_Y, PLAY_W, PLAY_H);
-    playButton.addActionListener(e -> updater.launchClient(this));
+    playButton.addActionListener(e -> updater.launchAsync(this));
     root.add(playButton);
 
     updateButton.setBounds(STATUS_X, STATUS_Y, STATUS_W, STATUS_H);
@@ -230,7 +235,7 @@ public class VoidscapeLauncherWindow extends JFrame {
     card.add(subtitle);
 
     playButton.setBounds(22, 76, 200, 56);
-    playButton.addActionListener(e -> updater.launchClient(this));
+    playButton.addActionListener(e -> updater.launchAsync(this));
     card.add(playButton);
 
     updateButton.setBounds(234, 76, 92, 56);
@@ -382,6 +387,8 @@ public class VoidscapeLauncherWindow extends JFrame {
     panel.add(settingsLine("Endpoint", VoidscapeLauncherConfig.endpointLabel()));
     panel.add(settingsLine("Manifest", blankLabel(VoidscapeLauncherConfig.manifestUrl())));
     panel.add(settingsLine("Portal", VoidscapeLauncherConfig.portalUrl()));
+    panel.add(settingsLine("Launcher build", VoidscapeLauncherConfig.launcherBuildLabel()));
+    panel.add(settingsLine("Client release", blankLabel(updater.lastVersionLabel())));
 
     int response = JOptionPane.showOptionDialog(this,
         panel,
@@ -438,12 +445,16 @@ public class VoidscapeLauncherWindow extends JFrame {
     Utils.openWebpage(url);
   }
 
-  private void maybeCaptureSmokeAndExit() {
+  private boolean smokeModeEnabled() {
     String output = System.getProperty("voidscape.launcher.smoke.out", "").trim();
-    boolean enabled = Boolean.getBoolean("voidscape.launcher.smoke") || output.length() > 0;
-    if (!enabled) {
+    return Boolean.getBoolean("voidscape.launcher.smoke") || output.length() > 0;
+  }
+
+  private void maybeCaptureSmokeAndExit() {
+    if (!smokeModeEnabled()) {
       return;
     }
+    String output = System.getProperty("voidscape.launcher.smoke.out", "").trim();
 
     int delayMs = parseIntProperty("voidscape.launcher.smoke.delayMs", 2200);
     smokeTimer = new Timer(delayMs, e -> {

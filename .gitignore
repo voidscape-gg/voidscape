@@ -102,6 +102,7 @@ local.properties
 
 server/logs/*.gz
 server/logs/*.log
+server/logs/gc.log.*
 server/logs/pcaps/*.gz
 server/logs/pcaps/**/*.gz
 

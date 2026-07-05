@@ -93,6 +93,22 @@ public final class VoidscapeLauncherConfig {
     return serverHost() + ":" + serverPort();
   }
 
+  /** Escape hatch for plain-http update channels on non-loopback hosts (never set in production). */
+  public static boolean allowInsecureHttp() {
+    return "true".equalsIgnoreCase(setting("voidscape.allowInsecureHttp", "VOIDSCAPE_ALLOW_INSECURE_HTTP", "false"));
+  }
+
+  /** Build label stamped into the jar manifest by ant; "dev" when running from classes. */
+  public static String launcherBuildLabel() {
+    String version = VoidscapeLauncherConfig.class.getPackage() == null
+        ? null
+        : VoidscapeLauncherConfig.class.getPackage().getImplementationVersion();
+    if (version == null || version.trim().length() == 0) {
+      return "dev";
+    }
+    return version.trim();
+  }
+
   private static String portalRoute(String route) {
     String url = portalBaseUrl();
     if (url == null || url.trim().length() == 0) {

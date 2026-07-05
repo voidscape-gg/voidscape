@@ -33,6 +33,12 @@ public class ScaledWindow {
 	public static String getViewportPresetLabel() {
 		return "Phone";
 	}
+	public static int getBaseViewportWidth() {
+		return 512;
+	}
+	public static int getBaseViewportHeight() {
+		return 346;
+	}
 	public static String getViewportPresetLabel(int index) {
 		return getViewportPresetLabel();
 	}

@@ -71,6 +71,7 @@ SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
 SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
 SMOKE_APPEARANCE_PROMPT_FLAG="$APP_SMOKE_FILES/android-smoke-appearance-prompt.flag"
 SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
+SMOKE_LOGIN_FLAG="$APP_SMOKE_FILES/android-smoke-login.flag"
 BUILD=1
 INSTALL=1
 ONLY_AUTH_ZOOM=0
@@ -136,13 +137,14 @@ AUTH_ZOOM_SWIPE_X="${ANDROID_SMOKE_ZOOM_SWIPE_X:-256}"
 AUTH_ZOOM_SWIPE_START_Y="${ANDROID_SMOKE_ZOOM_SWIPE_START_Y:-80}"
 AUTH_ZOOM_SWIPE_END_Y="${ANDROID_SMOKE_ZOOM_SWIPE_END_Y:-190}"
 AUTH_ZOOM_SWIPE_DURATION_MS="${ANDROID_SMOKE_ZOOM_SWIPE_DURATION_MS:-700}"
-AUTH_CHAT_TAB_Y="${ANDROID_SMOKE_CHAT_TAB_Y:-338}"
-AUTH_CHAT_TAB_SEQUENCE="${ANDROID_SMOKE_CHAT_TAB_SEQUENCE:-CHAT,QUEST,PRIVATE,ALL}"
-AUTH_CHAT_TAB_ALL_X="${ANDROID_SMOKE_CHAT_TAB_ALL_X:-55}"
-AUTH_CHAT_TAB_CHAT_X="${ANDROID_SMOKE_CHAT_TAB_CHAT_X:-152}"
-AUTH_CHAT_TAB_QUEST_X="${ANDROID_SMOKE_CHAT_TAB_QUEST_X:-255}"
-AUTH_CHAT_TAB_PRIVATE_X="${ANDROID_SMOKE_CHAT_TAB_PRIVATE_X:-355}"
-AUTH_CHAT_TAB_CLAN_X="${ANDROID_SMOKE_CHAT_TAB_CLAN_X:-457}"
+AUTH_CHAT_TAB_Y="${ANDROID_SMOKE_CHAT_TAB_Y:-}"
+AUTH_CHAT_TAB_SEQUENCE="${ANDROID_SMOKE_CHAT_TAB_SEQUENCE:-CHAT,QUEST,GLOBAL,PRIVATE,ALL}"
+AUTH_CHAT_TAB_ALL_X="${ANDROID_SMOKE_CHAT_TAB_ALL_X:-35}"
+AUTH_CHAT_TAB_CHAT_X="${ANDROID_SMOKE_CHAT_TAB_CHAT_X:-84}"
+AUTH_CHAT_TAB_QUEST_X="${ANDROID_SMOKE_CHAT_TAB_QUEST_X:-133}"
+AUTH_CHAT_TAB_GLOBAL_X="${ANDROID_SMOKE_CHAT_TAB_GLOBAL_X:-182}"
+AUTH_CHAT_TAB_PRIVATE_X="${ANDROID_SMOKE_CHAT_TAB_PRIVATE_X:-231}"
+AUTH_CHAT_TAB_REPORT_X="${ANDROID_SMOKE_CHAT_TAB_REPORT_X:-281}"
 AUTH_CHAT_MESSAGE="${ANDROID_SMOKE_CHAT_MESSAGE:-androidchat}"
 AUTH_CHAT_KEYBOARD_X="${ANDROID_SMOKE_CHAT_KEYBOARD_X:-291}"
 AUTH_CHAT_KEYBOARD_Y="${ANDROID_SMOKE_CHAT_KEYBOARD_Y:-19}"
@@ -160,7 +162,7 @@ AUTH_BANK_SCROLL_DURATION_MS="${ANDROID_SMOKE_BANK_SCROLL_DURATION_MS:-700}"
 AUTH_BANK_ITEM_ID="${ANDROID_SMOKE_BANK_ITEM_ID:-10}"
 AUTH_BANK_ITEM_AMOUNT="${ANDROID_SMOKE_BANK_ITEM_AMOUNT:-200}"
 AUTH_BANK_INVENTORY_AMOUNT="${ANDROID_SMOKE_BANK_INVENTORY_AMOUNT:-20}"
-AUTH_BANK_FIXTURE_BANK_SLOTS="${ANDROID_SMOKE_BANK_FIXTURE_BANK_SLOTS:-48}"
+AUTH_BANK_FIXTURE_BANK_SLOTS="${ANDROID_SMOKE_BANK_FIXTURE_BANK_SLOTS:-192}"
 AUTH_BANK_FIXTURE_START_ITEM_ID="${ANDROID_SMOKE_BANK_FIXTURE_START_ITEM_ID:-11}"
 AUTH_SHOP_NPC_ID="${ANDROID_SMOKE_SHOP_NPC_ID:-185}"
 AUTH_SHOP_NPC_ACTION="${ANDROID_SMOKE_SHOP_NPC_ACTION:-NPC_COMMAND1}"
@@ -257,9 +259,9 @@ Environment:
   ANDROID_SMOKE_ZOOM_SWIPE_START_Y   Optional zoom swipe start client y, default: 80
   ANDROID_SMOKE_ZOOM_SWIPE_END_Y     Optional zoom swipe end client y, default: 190
   ANDROID_SMOKE_ZOOM_SWIPE_DURATION_MS Optional zoom swipe duration, default: 700
-  ANDROID_SMOKE_CHAT_TAB_Y           Optional chat tab client y, default: 338
-  ANDROID_SMOKE_CHAT_TAB_SEQUENCE    Optional comma-separated tabs, default: CHAT,QUEST,PRIVATE,ALL
-  ANDROID_SMOKE_CHAT_TAB_*_X         Optional tab client x overrides for ALL/CHAT/QUEST/PRIVATE/CLAN
+  ANDROID_SMOKE_CHAT_TAB_Y           Optional chat tab client y; default is computed from the current framebuffer height
+  ANDROID_SMOKE_CHAT_TAB_SEQUENCE    Optional comma-separated tabs, default: CHAT,QUEST,GLOBAL,PRIVATE,ALL
+  ANDROID_SMOKE_CHAT_TAB_*_X         Optional tab client x overrides for ALL/CHAT/QUEST/GLOBAL/PRIVATE/REPORT
   ANDROID_SMOKE_CHAT_MESSAGE         Optional in-game chat message, default: androidchat
   ANDROID_SMOKE_CHAT_KEYBOARD_X/Y    Optional keyboard toggle client coordinate, default: 291,19
   ANDROID_SMOKE_CHAT_ENTRY_X/Y       Optional keyboard-open chat entry coordinate, default: 256,147
@@ -726,6 +728,14 @@ disable_android_smoke_appearance_prompt() {
     remove_smoke_files "$SMOKE_APPEARANCE_PROMPT_FLAG"
 }
 
+enable_android_smoke_login() {
+    touch_smoke_file "$SMOKE_LOGIN_FLAG"
+}
+
+disable_android_smoke_login() {
+    remove_smoke_files "$SMOKE_LOGIN_FLAG"
+}
+
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
     disable_android_smoke_player_targets
@@ -744,6 +754,7 @@ disable_android_smoke_targets() {
     disable_android_smoke_ground_loot
     disable_android_smoke_appearance_prompt
     disable_android_smoke_walk
+    disable_android_smoke_login
 }
 
 disable_android_smoke_targets
@@ -962,6 +973,16 @@ input_text() {
     "$ADB" shell input text "$text"
 }
 
+input_text_slow() {
+    local text="$1"
+    local i ch
+    for ((i = 0; i < ${#text}; i++)); do
+        ch="${text:i:1}"
+        input_text "$ch"
+        sleep 0.12
+    done
+}
+
 clear_focused_text_field() {
     local i
     for ((i = 0; i < 24; i++)); do
@@ -969,12 +990,79 @@ clear_focused_text_field() {
     done
 }
 
+login_log_tail() {
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_LOGIN_STATE" | tail -30 >&2 || true
+}
+
+wait_for_login_state() {
+    local expected_screen="$1"
+    local timeout="${2:-10}"
+    local deadline=$((SECONDS + timeout))
+    local line screen
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_LOGIN_STATE " | tail -20 | grep "screen=$expected_screen " | tail -1 || true)"
+        screen="$(extract_log_value "$line" screen)"
+        if [[ "$screen" == "$expected_screen" ]]; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android login screen $expected_screen" >&2
+    login_log_tail
+    return 1
+}
+
+tap_login_state_target() {
+    local expected_screen="$1"
+    local target_prefix="$2"
+    local timeout="${3:-8}"
+    local line client_x client_y
+
+    line="$(wait_for_login_state "$expected_screen" "$timeout" || true)"
+    client_x="$(extract_log_value "$line" "${target_prefix}X")"
+    client_y="$(extract_log_value "$line" "${target_prefix}Y")"
+    if [[ "$client_x" =~ ^[0-9]+$ && "$client_y" =~ ^[0-9]+$ ]]; then
+        echo "Android login target ${target_prefix} at client $client_x,$client_y"
+        tap_client_xy "$client_x" "$client_y"
+        return 0
+    fi
+
+    return 1
+}
+
+wait_for_login_lengths() {
+    local expected_user_length="$1"
+    local expected_pass_length="$2"
+    local timeout="${3:-10}"
+    local deadline=$((SECONDS + timeout))
+    local line user_length pass_length
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_LOGIN_STATE " | tail -20 | grep "screen=2 " | tail -1 || true)"
+        user_length="$(extract_log_value "$line" userLength)"
+        pass_length="$(extract_log_value "$line" passLength)"
+        if [[ "$user_length" == "$expected_user_length" && "$pass_length" == "$expected_pass_length" ]]; then
+            echo "Verified Android login text lengths: user=$user_length pass=$pass_length"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android login text lengths user=$expected_user_length pass=$expected_pass_length" >&2
+    login_log_tail
+    return 1
+}
+
 tap_existing_user_button() {
-    tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
+    enable_android_smoke_login
+    tap_login_state_target 0 homeExisting 8 || tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
 }
 
 tap_login_ok_button() {
-    tap_pct "$AUTH_OK_X_PCT" "$AUTH_OK_Y_PCT"
+    tap_login_state_target 2 ok 8 || tap_pct "$AUTH_OK_X_PCT" "$AUTH_OK_Y_PCT"
 }
 
 close_auth_intro_dialog_if_present() {
@@ -988,17 +1076,38 @@ close_auth_intro_dialog_if_present() {
 }
 
 enter_auth_credentials() {
-    tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
+    local line user_x user_y pass_x pass_y
+
+    enable_android_smoke_login
+    line="$(wait_for_login_state 2 12 || true)"
+    user_x="$(extract_log_value "$line" userX)"
+    user_y="$(extract_log_value "$line" userY)"
+    pass_x="$(extract_log_value "$line" passX)"
+    pass_y="$(extract_log_value "$line" passY)"
+
+    if [[ "$user_x" =~ ^[0-9]+$ && "$user_y" =~ ^[0-9]+$ ]]; then
+        echo "Android login username at client $user_x,$user_y"
+        tap_client_xy "$user_x" "$user_y"
+    else
+        tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
+    fi
     sleep 1
     clear_focused_text_field
-    input_text "$AUTH_USER"
+    input_text_slow "$AUTH_USER"
     sleep 1
-    tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
+    wait_for_login_lengths "${#AUTH_USER}" 0 12 || exit 1
+    if [[ "$pass_x" =~ ^[0-9]+$ && "$pass_y" =~ ^[0-9]+$ ]]; then
+        echo "Android login password at client $pass_x,$pass_y"
+        tap_client_xy "$pass_x" "$pass_y"
+    else
+        tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
+    fi
     sleep 1
     clear_focused_text_field
-    input_text "$AUTH_PASS"
+    input_text_slow "$AUTH_PASS"
     # adb text input does not require a visible IME; BACK can close GameActivity.
     sleep 1
+    wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || exit 1
 }
 
 submit_login_and_wait() {
@@ -1180,6 +1289,56 @@ process.stdout.write(crypto.createHash('sha512').update(salt + md5, 'utf8').dige
 NODE
 }
 
+auth_password_matches() {
+	local stored_hash="$1"
+	local salt="$2"
+	local password="$3"
+	local expected_hash
+
+	if [[ "$stored_hash" == "$password" ]]; then
+		return 0
+	fi
+
+	if [[ "$stored_hash" == '$2'* ]] && command -v python3 >/dev/null 2>&1; then
+		AUTH_SMOKE_HASH="$stored_hash" AUTH_SMOKE_SALT="$salt" AUTH_SMOKE_PASS="$password" python3 <<'PY'
+import hashlib
+import os
+import sys
+
+try:
+    import bcrypt
+except Exception:
+    sys.exit(2)
+
+stored = os.environ.get("AUTH_SMOKE_HASH", "")
+salt = os.environ.get("AUTH_SMOKE_SALT", "")
+password = os.environ.get("AUTH_SMOKE_PASS", "")
+if not stored or not password:
+    sys.exit(1)
+
+if salt:
+    md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+    candidate = hashlib.sha512((salt + md5).encode("utf-8")).hexdigest()
+else:
+    candidate = password
+
+try:
+    ok = bcrypt.checkpw(candidate.encode("utf-8"), stored.encode("utf-8"))
+except ValueError:
+    ok = False
+
+sys.exit(0 if ok else 1)
+PY
+		case "$?" in
+			0) return 0 ;;
+			1) return 1 ;;
+		esac
+	fi
+
+	expected_hash="$(auth_password_hash "$salt" "$password" || true)"
+	[[ -n "$expected_hash" && "$expected_hash" == "$stored_hash" ]]
+}
+
 preflight_auth_login_fixture() {
 	ensure_auth_login_defaults
 
@@ -1196,24 +1355,20 @@ preflight_auth_login_fixture() {
 		exit 1
 	fi
 
-	local safe_user row player_id saved_user saved_pass saved_salt online expected_hash
+	local safe_user row player_id saved_user saved_pass saved_salt online
 	safe_user="$(sql_escape "$AUTH_USER")"
-	row="$(sqlite3 -cmd '.timeout 5000' -noheader -separator $'\t' "$AUTH_DB" \
-		"select id, username, pass, salt, online from players where lower(username) = lower('$safe_user') limit 1;")"
+	row="$(sqlite3 -cmd '.timeout 5000' -noheader -separator '|' "$AUTH_DB" \
+		"select id, username, pass, coalesce(salt, ''), online from players where lower(username) = lower('$safe_user') limit 1;")"
 	if [[ -z "$row" ]]; then
 		echo "ERROR: no player row found for $AUTH_USER in $AUTH_DB" >&2
 		exit 1
 	fi
 
-	IFS=$'\t' read -r player_id saved_user saved_pass saved_salt online <<< "$row"
-	expected_hash="$(auth_password_hash "$saved_salt" "$AUTH_PASS" || true)"
-	if [[ "$saved_pass" != "$AUTH_PASS" && -n "$expected_hash" && "$expected_hash" != "$saved_pass" ]]; then
+	IFS='|' read -r player_id saved_user saved_pass saved_salt online <<< "$row"
+	if ! auth_password_matches "$saved_pass" "$saved_salt" "$AUTH_PASS"; then
 		echo "ERROR: password preflight failed for $saved_user in $AUTH_DB" >&2
 		echo "       This usually means the smoke script is pointed at the wrong DB or the wrong credentials." >&2
 		exit 1
-	fi
-	if [[ -z "$expected_hash" ]]; then
-		echo "WARNING: node is unavailable; skipping local password-hash preflight" >&2
 	fi
 
 	if [[ "$online" != "0" ]]; then
@@ -1738,14 +1893,65 @@ wait_for_chat_tab() {
     return 1
 }
 
+chat_tab_layout_key() {
+    local label
+    label="$(printf "%s" "$1" | tr '[:lower:]' '[:upper:]')"
+    case "$label" in
+        PM) echo "PRIVATE" ;;
+        RPT) echo "REPORT" ;;
+        *) echo "$label" ;;
+    esac
+}
+
+wait_for_chat_tab_layout() {
+    local timeout="${1:-8}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB_LAYOUT " | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android chat tab layout" >&2
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB" | tail -30 >&2 || true
+    return 1
+}
+
+chat_tab_layout_rect() {
+    local tab="$1"
+    local timeout="${2:-8}"
+    local line field payload label x y width height key
+    line="$(wait_for_chat_tab_layout "$timeout")" || return 1
+
+    for field in $line; do
+        [[ "$field" == tab[0-9]=* ]] || continue
+        payload="${field#*=}"
+        IFS=',' read -r label x y width height <<< "$payload"
+        key="$(chat_tab_layout_key "$label")"
+        if [[ "$key" == "$tab" ]]; then
+            printf "%s %s %s %s\n" "$x" "$y" "$width" "$height"
+            return 0
+        fi
+    done
+
+    echo "ERROR: Android chat tab layout did not include $tab: $line" >&2
+    return 1
+}
+
 chat_tab_client_x() {
     local tab="$1"
     case "$tab" in
         ALL) echo "$AUTH_CHAT_TAB_ALL_X" ;;
         CHAT) echo "$AUTH_CHAT_TAB_CHAT_X" ;;
         QUEST) echo "$AUTH_CHAT_TAB_QUEST_X" ;;
+        GLOBAL) echo "$AUTH_CHAT_TAB_GLOBAL_X" ;;
         PRIVATE) echo "$AUTH_CHAT_TAB_PRIVATE_X" ;;
-        CLAN) echo "$AUTH_CHAT_TAB_CLAN_X" ;;
+        REPORT) echo "$AUTH_CHAT_TAB_REPORT_X" ;;
         *)
             echo "ERROR: unknown Android chat tab '$tab'" >&2
             return 1
@@ -1753,12 +1959,41 @@ chat_tab_client_x() {
     esac
 }
 
+chat_tab_client_y() {
+    if [[ -n "${AUTH_CHAT_TAB_Y:-}" ]]; then
+        echo "$AUTH_CHAT_TAB_Y"
+        return
+    fi
+
+    local width height
+    read -r width height < <(screen_size)
+    awk -v sw="$width" -v sh="$height" 'BEGIN {
+        gw=512; gh=346; surfaceExtra=12;
+        scale=sw/gw;
+        portraitGh=sh/scale - surfaceExtra;
+        if (portraitGh > gh) {
+            gh=portraitGh;
+        } else if (sh/gh < scale) {
+            scale=sh/gh;
+        }
+        # Compact Android-profile chat tabs are 32px tall and start at gameHeight - 28.
+        printf "%d\n", gh - 12 + 0.5;
+    }'
+}
+
 tap_chat_tab() {
     local tab="$1"
-    local client_x
-    client_x="$(chat_tab_client_x "$tab")" || return 1
-    echo "Android chat tab $tab at client $client_x,$AUTH_CHAT_TAB_Y"
-    tap_client_xy "$client_x" "$AUTH_CHAT_TAB_Y"
+    local client_x client_y rect rect_x rect_y rect_w rect_h
+    if rect="$(chat_tab_layout_rect "$tab" 5 2>/dev/null)"; then
+        read -r rect_x rect_y rect_w rect_h <<< "$rect"
+        client_x=$((rect_x + rect_w / 2))
+        client_y=$((rect_y + rect_h / 2))
+    else
+        client_x="$(chat_tab_client_x "$tab")" || return 1
+        client_y="$(chat_tab_client_y)"
+    fi
+    echo "Android chat tab $tab at client $client_x,$client_y"
+    tap_client_xy "$client_x" "$client_y"
 }
 
 chat_message_log_token() {
@@ -2050,7 +2285,7 @@ wait_for_bank_search() {
         line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK_SEARCH " | tail -1 || true)"
         query="$(extract_log_value "$line" query)"
         matches="$(extract_log_value "$line" matches)"
-        if [[ "$query" == "$expected_token" ]]; then
+        if [[ -n "$line" && "$query" == "$expected_token" ]]; then
             if [[ -z "$expected_token" || ( "$matches" =~ ^[0-9]+$ && "$matches" -gt 0 ) ]]; then
                 echo "Verified Android bank search: $line" >&2
                 echo "$line"
@@ -2094,7 +2329,7 @@ wait_for_bank_action() {
     local line
 
     while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK_ACTION action=$expected " | tail -1 || true)"
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK_ACTION " | grep "action=$expected " | tail -1 || true)"
         if [[ -n "$line" ]]; then
             echo "Verified Android bank action $expected: $line"
             return 0
@@ -4065,12 +4300,11 @@ run_authenticated_context_menu_smoke() {
         enable_android_smoke_npc_targets
         tap_existing_user_button
         sleep 3
-        enter_auth_credentials
-        submit_login_and_wait || exit 1
-        sleep 8
-        tap_pct 50 72
-        sleep 2
-        wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
+	    enter_auth_credentials
+	    submit_login_and_wait || exit 1
+	    sleep 8
+	    close_welcome_dialog_if_present 8
+	    wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         screenshot 50-auth-before-context-long-press
         long_press_npc_target "$AUTH_NPC_ID" 1200 || exit 1
         local menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y
@@ -4287,13 +4521,12 @@ run_authenticated_chat_tab_smoke() {
         enable_android_smoke_npc_targets
         tap_existing_user_button
         sleep 3
-        enter_auth_credentials
-        submit_login_and_wait || exit 1
-        sleep 8
-        tap_pct 50 72
-        sleep 2
-        wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
-        screenshot 60-auth-before-chat-tabs
+	    enter_auth_credentials
+	    submit_login_and_wait || exit 1
+	    sleep 8
+	    close_welcome_dialog_if_present 8
+	    wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
+	    screenshot 60-auth-before-chat-tabs
 
         local raw_tabs tab screenshot_index
         IFS=',' read -ra raw_tabs <<< "$AUTH_CHAT_TAB_SEQUENCE"
@@ -4389,6 +4622,7 @@ run_authenticated_bank_smoke() {
         return
     fi
 
+    preflight_auth_login_fixture
     wait_auth_offline 45
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
@@ -4428,12 +4662,17 @@ run_authenticated_bank_smoke() {
         tap_client_xy "$bank_object_x" "$bank_object_y"
         wait_for_object_action "$AUTH_BANK_OBJECT_ID" "$AUTH_BANK_OBJECT_ACTION" 20 || exit 1
 
-        local bank_line bank_slot_x bank_slot_y inventory_slot_x inventory_slot_y
+        local bank_line bank_renderer save_requires_confirm bank_slot_x bank_slot_y inventory_slot_x inventory_slot_y
         local search_x search_y search_clear_x search_clear_y deposit_all_x deposit_all_y
+        local close_x close_y
         local loadouts_x loadouts_y loadout_save_x loadout_save_y loadout_load_x loadout_load_y
-        local confirm_save_x confirm_save_y panel_line modal_line
+        local confirm_save_x confirm_save_y scroll_x scroll_start_y scroll_end_y panel_line modal_line
 
         bank_line="$(wait_for_bank_open 30)" || exit 1
+        bank_renderer="$(extract_log_value "$bank_line" renderer)"
+        if [[ -z "$bank_renderer" ]]; then
+            bank_renderer="legacyCustom"
+        fi
         bank_slot_x="$(log_int_or_default "$bank_line" bankSlotX 30)"
         bank_slot_y="$(log_int_or_default "$bank_line" bankSlotY 72)"
         inventory_slot_x="$(log_int_or_default "$bank_line" inventorySlotX 30)"
@@ -4442,6 +4681,8 @@ run_authenticated_bank_smoke() {
         search_y="$(log_int_or_default "$bank_line" searchY 36)"
         search_clear_x="$(log_int_or_default "$bank_line" searchClearX 487)"
         search_clear_y="$(log_int_or_default "$bank_line" searchClearY 36)"
+        close_x="$(log_int_or_default "$bank_line" closeX 494)"
+        close_y="$(log_int_or_default "$bank_line" closeY 16)"
         deposit_all_x="$(log_int_or_default "$bank_line" depositAllX 124)"
         deposit_all_y="$(log_int_or_default "$bank_line" depositAllY 210)"
         loadouts_x="$(log_int_or_default "$bank_line" loadoutsX 331)"
@@ -4462,13 +4703,27 @@ run_authenticated_bank_smoke() {
         sleep 1
         screenshot 70-auth-bank-search
 
+        bank_line="$(wait_for_bank_open 5)" || exit 1
+        search_clear_x="$(log_int_or_default "$bank_line" searchClearX "$search_clear_x")"
+        search_clear_y="$(log_int_or_default "$bank_line" searchClearY "$search_clear_y")"
         "$ADB" logcat -c || true
         tap_client_xy "$search_clear_x" "$search_clear_y"
         wait_for_bank_search "" 20 >/dev/null || exit 1
         sleep 1
 
         "$ADB" logcat -c || true
-        swipe_client_xy "$AUTH_BANK_SCROLL_START_X" "$AUTH_BANK_SCROLL_START_Y" "$AUTH_BANK_SCROLL_START_X" "$AUTH_BANK_SCROLL_END_Y" "$AUTH_BANK_SCROLL_DURATION_MS"
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            scroll_x="$AUTH_BANK_SCROLL_START_X"
+            scroll_start_y=$((bank_slot_y + 180))
+            scroll_end_y=$((bank_slot_y + 40))
+            swipe_client_xy "$scroll_x" "$scroll_start_y" "$scroll_x" "$scroll_end_y" "$AUTH_BANK_SCROLL_DURATION_MS"
+        else
+            bank_line="$(wait_for_bank_open 5)" || exit 1
+            scroll_x="$(log_int_or_default "$bank_line" scrollbarX "$AUTH_BANK_SCROLL_START_X")"
+            scroll_start_y="$AUTH_BANK_SCROLL_START_Y"
+            scroll_end_y="$AUTH_BANK_SCROLL_END_Y"
+            swipe_client_xy "$scroll_x" "$scroll_start_y" "$scroll_x" "$scroll_end_y" "$AUTH_BANK_SCROLL_DURATION_MS"
+        fi
         wait_for_bank_scroll 20 >/dev/null || exit 1
         sleep 1
         screenshot 71-auth-bank-scrolled
@@ -4485,6 +4740,11 @@ run_authenticated_bank_smoke() {
         "$ADB" logcat -c || true
         tap_client_xy "$loadouts_x" "$loadouts_y"
         panel_line="$(wait_for_bank_loadouts_panel 15)" || exit 1
+        if [[ -z "$(extract_log_value "$panel_line" renderer)" && "$bank_renderer" == "legacyCustom" ]]; then
+            save_requires_confirm="1"
+        else
+            save_requires_confirm="$(log_int_or_default "$panel_line" saveRequiresConfirm "$(log_int_or_default "$bank_line" saveRequiresConfirm 1)")"
+        fi
         loadout_save_x="$(log_int_or_default "$panel_line" save0X "$loadout_save_x")"
         loadout_save_y="$(log_int_or_default "$panel_line" save0Y "$loadout_save_y")"
         loadout_load_x="$(log_int_or_default "$panel_line" load0X "$loadout_load_x")"
@@ -4494,15 +4754,21 @@ run_authenticated_bank_smoke() {
 
         "$ADB" logcat -c || true
         tap_client_xy "$loadout_save_x" "$loadout_save_y"
-        modal_line="$(wait_for_bank_modal SAVE_CONFIRM 0 15)" || exit 1
-        confirm_save_x="$(log_int_or_default "$modal_line" saveX "$confirm_save_x")"
-        confirm_save_y="$(log_int_or_default "$modal_line" saveY "$confirm_save_y")"
-        sleep 1
-        screenshot 74-auth-bank-save-modal
+        if [[ "$save_requires_confirm" == "0" ]]; then
+            wait_for_bank_action SAVE_PRESET 20 || exit 1
+            sleep 1
+            screenshot 74-auth-bank-save-action
+        else
+            modal_line="$(wait_for_bank_modal SAVE_CONFIRM 0 15)" || exit 1
+            confirm_save_x="$(log_int_or_default "$modal_line" saveX "$confirm_save_x")"
+            confirm_save_y="$(log_int_or_default "$modal_line" saveY "$confirm_save_y")"
+            sleep 1
+            screenshot 74-auth-bank-save-modal
 
-        "$ADB" logcat -c || true
-        tap_client_xy "$confirm_save_x" "$confirm_save_y"
-        wait_for_bank_action SAVE_PRESET 20 || exit 1
+            "$ADB" logcat -c || true
+            tap_client_xy "$confirm_save_x" "$confirm_save_y"
+            wait_for_bank_action SAVE_PRESET 20 || exit 1
+        fi
         sleep 3
         screenshot 75-auth-bank-save-loadout
 
@@ -4512,10 +4778,6 @@ run_authenticated_bank_smoke() {
         sleep 2
         screenshot 76-auth-bank-deposit
 
-        "$ADB" logcat -c || true
-        tap_client_xy "$bank_slot_x" "$bank_slot_y"
-        wait_for_bank_action WITHDRAW 20 || exit 1
-        sleep 1
         "$ADB" logcat -c || true
         tap_client_xy "$deposit_all_x" "$deposit_all_y"
         wait_for_bank_action DEPOSIT_ALL 20 || exit 1
@@ -4532,6 +4794,15 @@ run_authenticated_bank_smoke() {
         wait_for_bank_action LOAD_PRESET 20 || exit 1
         sleep 4
         screenshot 78-auth-bank-loadout-loaded
+
+        bank_line="$(wait_for_bank_open 5)" || exit 1
+        close_x="$(log_int_or_default "$bank_line" closeX "$close_x")"
+        close_y="$(log_int_or_default "$bank_line" closeY "$close_y")"
+        "$ADB" logcat -c || true
+        tap_client_xy "$close_x" "$close_y"
+        wait_for_bank_action CLOSE 20 || exit 1
+        sleep 1
+        screenshot 79-auth-bank-closed
 
         "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline 45 || exit 1

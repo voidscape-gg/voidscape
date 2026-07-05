@@ -56,8 +56,8 @@ Payload format depends on detected client version (`RSCProtocolDecoder.decode()`
 - **Client < 0 (custom)**: 2-byte length + opcode + payload.
 
 Opcode tables (server-only, authoritative):
-- `server/src/com/openrsc/server/net/rsc/enums/OpcodeIn.java` — ~130 inbound (LOGIN, LOGOUT, CHAT_MESSAGE, ATTACK, NPC_TALK_TO, ITEM_DROP, BANK_WITHDRAW, PRAYER_ACTIVATED, …)
-- `server/src/com/openrsc/server/net/rsc/enums/OpcodeOut.java` — ~100 outbound (SEND_LOGOUT, SEND_STATS, SEND_UPDATE_PLAYERS, SEND_INVENTORY, SEND_BOX, …)
+- `server/src/com/openrsc/server/net/rsc/enums/OpcodeIn.java` — ~95 inbound (LOGIN, LOGOUT, CHAT_MESSAGE, NPC_ATTACK, PLAYER_ATTACK, NPC_TALK_TO, ITEM_DROP, BANK_WITHDRAW, PRAYER_ACTIVATED, …)
+- `server/src/com/openrsc/server/net/rsc/enums/OpcodeOut.java` — ~105 outbound (SEND_LOGOUT, SEND_STATS, SEND_UPDATE_PLAYERS, SEND_INVENTORY, SEND_BOX, …)
 
 Both are enums. **The client-side mirror lives in `Client_Base/src/orsc/net/Opcodes.java`** — a separate enum that must stay in sync (see "Client/server contract" below).
 
@@ -69,7 +69,7 @@ Client version detection (`LoginPacketHandler.java:115–141`):
 
 Pattern: `PayloadGenerator + Struct`.
 
-1. **`ActionSender.getGenerator(Player)`** (`ActionSender.java:56–86`) — picks a version-specific generator:
+1. **`ActionSender.getGenerator(Player)`** (`ActionSender.java:77–106`) — picks a version-specific generator:
    - `Payload38Generator`, `Payload69Generator`, `Payload115Generator`, `Payload140Generator`, `Payload177Generator`, `Payload196Generator`, `Payload198Generator`, `Payload199Generator`, `Payload201Generator`, `Payload202Generator`, `Payload203Generator`, `Payload235Generator`, `PayloadCustomGenerator` (fallback).
 2. **`PacketBuilder.java`** — raw construction. `writeByte()`, `writeShort()`, `writeInt()`, `writeLong()`, `writeString()`, `writeZeroQuotedString()`. Bit-level: `startBitAccess()`, `writeBits()`, `finishBitAccess()`. `toPacket()` produces the `Packet`.
 3. **Common outbound** (via `ActionSender` + payload structs):
@@ -157,7 +157,7 @@ Files:
 
 ⚠ **Critical risk** — `OpcodeOut` is transmitted by **enum ordinal** on the server side. Inserting a new value mid-list shifts every subsequent ordinal; old clients then misinterpret packets. **Always append new opcodes at the end** of both `OpcodeOut.java` (server) and `Opcodes.java` (client). Same applies to `OpcodeIn`.
 
-**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10121`. Server's `client_version` config key (e.g. `10121`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes, client-visible cache files change, or a client binary update must be forced.
+**Protocol version** — `Client_Base/src/orsc/Config.java` `CLIENT_VERSION = 10122`. Server's `client_version` config key (e.g. `10122`) is checked at login. Mismatch -> reject when the preset enforces custom client versions. Bump manually when protocol changes, client-visible cache files change, or a client binary update must be forced.
 
 Voidscape custom-client packet notes:
 - `10116`: custom clients receive extended damage update type `10` inside existing `SEND_UPDATE_NPC` / `SEND_UPDATE_PLAYERS` appearance payloads when hit-feedback metadata is available. Type `10` starts with the old type `2` damage/current-hits/max-hits bytes, then appends attacker type byte (`0 unknown`, `1 player`, `2 NPC`), attacker server-index short, and attacker max-hit short. Server sends type `10` only to custom clients `>= 10116`; old type `2` remains unchanged and old-style/scripted damage renders as a plain hit-splat.
@@ -211,6 +211,7 @@ Voidscape custom-client packet notes:
 - `10111`: In-game beta referral capture. The custom `PLAYER_APPEARANCE_CHANGE` packet (`235`) appends an optional RSC string after the existing `hairStyle` byte for clients `>= 10111`; the string contains the inviter's in-game username from the Voidscape character designer. The server only reads this appended field for custom clients at or above the version gate and only credits it during true first-login appearance submission. No opcode or enum ordinal changed.
 - `10112`: Sir Charles Void Arena challenge. Adds client-visible Sir Charles NPC definitions for the lobby challenge NPC (`862`) and dynamic fight NPC (`863`) plus the lobby spawn; these definitions opt into client-side player-composite NPC rendering so player equipment appearance IDs, including rune large helmet, render through the same layered rules as player gear. Also renders the existing custom NPC item-bubble update used for Sir Charles' potion sip and consumes hidden `@vsarena@dmking|wins|losses` metadata for the Sir Charles `Challenge` row W/L label. No packet shape, opcode, enum ordinal, or cache archive changed.
 - `10112` follow-up: Beta FarmSim uses existing `SEND_SERVER_MESSAGE` with hidden `@vsfarmsim@v1|title|subtitle|details|itemId,amount;...` metadata. The client consumes the token before chat display and renders a modal drop projection with existing item sprites. This is a beta-tool UI contract only; no opcode, enum ordinal, packet shape, cache archive, or client-version bump changed.
+- `10122`: Void Island guided-onboarding welcome menu adds five new Void Council NPCs (`864-868`), defined on both server (`NpcDefsCustom.json`) and the positional client list in `EntityHandler.java`, append-only. No packet shape or opcode changed; the client version bump alone gates the new NPC defs.
 
 Payload format specs are encoded in version-specific parsers (`Payload38Parser`, `Payload69Parser`, …, `Payload235Parser`) and generators. Derived from reverse-engineered RSC, no formal schema.
 

@@ -54,7 +54,7 @@ System-level view of voidscape (and OpenRSC underneath): processes, data flow, l
 
 ## Boot sequence (server)
 
-1. `Server.main()` — `server/src/com/openrsc/server/Server.java:193`
+1. `Server.main()` — `server/src/com/openrsc/server/Server.java:198`
 2. Load config from `local.conf` (or whichever `-DconfFile=` selects).
 3. Construct singletons: `RSCPacketFilter`, `PluginHandler`, `CombatScriptLoader`, `Constants`, `GameDatabase`, `World`, `GameEventHandler`, `GameStateUpdater`, `LoginExecutor`. Spin up SQL/log/online-monitor thread pools.
 4. Open DB. Run `JDBCPatchApplier` migrations.
@@ -97,7 +97,7 @@ World.registerPlayer(player)
   │  PlayerList add, Region update, social alerts
   │
   ▼
-ActionSender.sendWelcomeInfo() + initial state packets
+ActionSender.sendLogin() — sendGameSettings, sendWorldInfo, sendLoginBox, + initial state packets
   │
   ▼
 Player in game tick rotation
@@ -196,14 +196,15 @@ PlayerService.savePlayer(player)
   │
   ▼
 database.atomically( () -> {
+    savePlayerBankPresets()
     savePlayerInventory()
     savePlayerEquipment()
     savePlayerBank()
+    savePlayerQuests()
+    savePlayerData()
     savePlayerSkills()
     savePlayerSocial()
-    savePlayerData()
-    savePlayerQuests()
-    savePlayerBankPresets()
+    // + savePlayerCastTime, savePlayerCache, savePlayerNpcKills, savePlayerBestiaryLoot
 })
   │
   ▼
@@ -284,7 +285,7 @@ Authoritative ref: `docs/subsystems/scripting-plugins.md`.
 | Thread | Work |
 |---|---|
 | Game thread (single) | Tick loop — world updates, packet handling, sends |
-| Event executor | Plugin/event runs (1 thread by default; multi if `WANT_THREADING__BREAK_PID_ORDER`) |
+| Event executor | Plugin/event runs (1 thread by default; multi if `WANT_THREADING__BREAK_PID_PRIORITY`) |
 | LoginExecutor | Async login + save (50ms tick) |
 | SQL pools | Logging (queries, chat, kills) |
 | Netty I/O | Boss + worker; non-blocking channel I/O |

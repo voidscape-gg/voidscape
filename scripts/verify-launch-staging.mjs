@@ -21,6 +21,7 @@ const warnings = [];
 let signupUser = args.signupUsername || generatedUsername();
 let signupEmail = args.signupEmail || `staging-${signupUser.toLowerCase()}@voidscape.gg`;
 let signupPassword = args.signupPassword || "Launchpass1";
+let serverClientVersion = "";
 
 try {
 	await main();
@@ -78,6 +79,7 @@ async function main() {
 	await verifyServerConfig();
 	await verifyPortalHealth();
 	await verifyPublicLaunchPayload();
+	await verifyLauncherUpdateChannel();
 	await verifyDisabledProviderSurfaces();
 	await verifyBadLaunchPassword();
 	if (args.runSignup) {
@@ -107,6 +109,7 @@ async function verifyServerConfig() {
 		member_world: configValue(text, "member_world"),
 		want_feature_websockets: configValue(text, "want_feature_websockets")
 	};
+	serverClientVersion = values.client_version;
 	assertCheck("server branded Voidscape", values.server_name === "Voidscape", String(values.server_name));
 	assertCheck("server welcome branded Voidscape", values.server_name_welcome === "Voidscape", String(values.server_name_welcome));
 	assertCheck("server client version", values.client_version === expectedClientVersion, `${values.client_version} vs expected ${expectedClientVersion}`);
@@ -155,6 +158,87 @@ async function verifyPublicLaunchPayload() {
 		assertCheck("android APK public link", Boolean(android.url) && android.url !== "#", JSON.stringify(android));
 		assertCheck("android APK hash", /^[0-9a-f]{64}$/.test(android.sha256 || ""), JSON.stringify(android));
 	}
+}
+
+async function verifyLauncherUpdateChannel() {
+	const manifest = await request("/api/launcher/manifest.properties", { expectJson: false });
+	assertCheck("launcher manifest status", manifest.status === 200, `HTTP ${manifest.status}`);
+	if (manifest.status !== 200) return;
+
+	const values = parsePropertiesText(manifest.text);
+	const files = [];
+	for (let index = 1; values[`file.${index}.path`]; index += 1) {
+		files.push({
+			key: `file.${index}`,
+			path: values[`file.${index}.path`],
+			sha256: values[`file.${index}.sha256`] || "",
+			url: values[`file.${index}.url`] || "",
+			size: values[`file.${index}.size`] || ""
+		});
+	}
+
+	assertCheck("launcher manifest version", Boolean(values.version), String(values.version || ""));
+	assertCheck("launcher manifest baseUrl", Boolean(values.baseUrl) && channelUrlOk(values.baseUrl), String(values.baseUrl || ""));
+	assertCheck("launcher manifest file entries", files.length > 0, `${files.length} contiguous file.N.path entries`);
+
+	const badHashes = files.filter((file) => !/^[0-9a-f]{64}$/i.test(file.sha256)).map((file) => `${file.key}.sha256`);
+	if (values["launcher.sha256"] && !/^[0-9a-f]{64}$/i.test(values["launcher.sha256"])) badHashes.push("launcher.sha256");
+	assertCheck("launcher manifest sha256 format", badHashes.length === 0, badHashes.join(", ") || "all sha256 values are present 64-hex strings");
+
+	const badSizes = files.filter((file) => !/^\d+$/.test(file.size)).map((file) => `${file.key}.size`);
+	if (values["launcher.size"] && !/^\d+$/.test(values["launcher.size"])) badSizes.push("launcher.size");
+	assertCheck("launcher manifest sizes", badSizes.length === 0, badSizes.join(", ") || "all v2 size values are present non-negative integers");
+
+	const badUrls = files.filter((file) => file.url && !channelUrlOk(file.url)).map((file) => `${file.key}.url`);
+	if (values["launcher.url"] && !channelUrlOk(values["launcher.url"])) badUrls.push("launcher.url");
+	assertCheck("launcher manifest urls https", badUrls.length === 0, badUrls.join(", ") || "all explicit urls are https (or allowed local http)");
+
+	if (values.clientVersion) {
+		const expected = serverClientVersion || args.expectedClientVersion || await readClientVersion();
+		assertCheck("launcher manifest client version", values.clientVersion === expected, `${values.clientVersion} vs expected ${expected}`);
+	} else {
+		warn("launcher manifest client version absent", "Pre-v2 manifest: clientVersion cannot be cross-checked against the server config.");
+	}
+
+	if (!values["launcher.sha256"] && !values["launcher.url"]) {
+		warn("launcher self-update absent", "Manifest has no launcher.sha256/launcher.url; this channel does not offer launcher self-update.");
+	} else {
+		assertCheck(
+			"launcher self-update pair",
+			Boolean(values["launcher.sha256"]) && Boolean(values["launcher.url"]) && Boolean(values["launcher.size"]),
+			`launcher.sha256=${values["launcher.sha256"] || "(absent)"} launcher.url=${values["launcher.url"] || "(absent)"} launcher.size=${values["launcher.size"] || "(absent)"}`
+		);
+	}
+
+	for (const file of files) {
+		const target = file.url || `${values.baseUrl || ""}${file.path}`;
+		if (channelUrlOk(target)) {
+			await probeChannelUrl(`launcher manifest file reachable: ${file.path}`, target);
+		} else {
+			fail(`launcher manifest file reachable: ${file.path}`, `Unresolvable file URL: ${target}`);
+		}
+	}
+	if (values["launcher.url"] && channelUrlOk(values["launcher.url"])) {
+		await probeChannelUrl("launcher self-update jar reachable", values["launcher.url"]);
+	}
+}
+
+async function probeChannelUrl(name, urlText) {
+	const head = await request(urlText, { method: "HEAD", expectJson: false });
+	if (head.status === 200 || head.status === 206) {
+		pass(name, `HEAD ${head.status} ${urlText}`);
+		return;
+	}
+	if (head.status === 405 || head.status === 501) {
+		const ranged = await request(urlText, {
+			method: "GET",
+			headers: { range: "bytes=0-0" },
+			expectJson: false
+		});
+		assertCheck(name, ranged.status === 200 || ranged.status === 206, `HEAD ${head.status}, ranged GET ${ranged.status} ${urlText}`);
+		return;
+	}
+	fail(name, `HEAD ${head.status} ${urlText}`);
 }
 
 async function verifyDisabledProviderSurfaces() {
@@ -469,6 +553,9 @@ function usage() {
 Verifies the production-like launch gate for a staged Voidscape deployment:
   - portal health uses public launch-signup mode, durable storage, and an OpenRSC DB bridge
   - /api/public exposes portal-first registration, packet registration off, hybrid member world, Google hidden by default
+  - /api/launcher/manifest.properties is a well-formed update channel (required keys,
+    64-hex sha256 values, https URLs, clientVersion matching the server config) and its
+	    every file entry plus the launcher self-update jar respond to HEAD
   - payment and Google provider surfaces are disabled/hidden unless explicitly allowed
   - launch signup rejects punctuation passwords and, with --run-signup, creates one real linked OpenRSC character plus a waiting starter card
   - /play static deployment matches dist/web-teavm/voidscape-web-build.json and optionally runs web login smoke
@@ -545,6 +632,31 @@ function normalizeBaseUrl(value, label) {
 	if (url.search || url.hash) throw new Error(`${label} URL must not include query or fragment.`);
 	if (!url.pathname.endsWith("/")) url.pathname += "/";
 	return url;
+}
+
+function parsePropertiesText(text) {
+	const values = {};
+	for (const rawLine of String(text || "").split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith("#") || line.startsWith("!")) continue;
+		const separator = line.indexOf("=");
+		if (separator <= 0) continue;
+		values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+	}
+	return values;
+}
+
+function channelUrlOk(value) {
+	let url;
+	try {
+		url = new URL(String(value || ""));
+	} catch {
+		return false;
+	}
+	if (url.protocol === "https:") return true;
+	return url.protocol === "http:"
+		&& Boolean(args.allowHttp)
+		&& (url.hostname === "127.0.0.1" || url.hostname === "localhost");
 }
 
 function configValue(text, key) {

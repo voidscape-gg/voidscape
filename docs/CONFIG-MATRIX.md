@@ -35,7 +35,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 |---|---|---|---|---|
 | `PORTAL_OPENRSC_DB` | `server/inc/sqlite/voidscape.db` when testing | staging DB bridge path or service DSN | production account/game write path | Local scaffold uses a SQLite file path; production should use the real portal/game persistence boundary. |
 | `PORTAL_ADMIN_TOKEN` | explicit local secret | secret manager | replace with staff identity/RBAC | Enables `/api/admin/*`; unset means admin endpoints return `admin_not_configured`. |
-| `PORTAL_STARTER_IP_DAILY_LIMIT` | `5` default, tests use `2` | tune from beta traffic | tune with logs and support policy | Limits only free starter-card grants from the same non-local IP bucket; accounts still register. |
+| `PORTAL_STARTER_IP_DAILY_LIMIT` | `10` default, tests use `2` | tune from beta traffic | tune with logs and support policy | Limits only free starter-card grants from the same non-local IP bucket; accounts still register. |
 | `PORTAL_ABUSE_HASH_SALT` | dev-only value | stable private secret | stable private secret | Rotating it loses the ability to compare old abuse-signal hashes. |
 | Google OAuth/provider config | hidden unless configured | optional later | optional later | Leave `PORTAL_GOOGLE_CLIENT_ID` unset for launch unless intentionally enabling Google Identity Services; redirect-style `/api/oauth/google/*` remains a placeholder. |
 | Payment provider config | none | sandbox checkout/webhooks | live checkout/webhooks | Production subscription-card checkout currently returns `501` until a provider is wired. |
@@ -73,8 +73,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
 | `more_shafts_per_better_log` | `true` | Lets higher-tier logs feed the player-made arrow economy instead of every log producing the same 10 shafts. |
 | Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days and the small XP bump; they do not unlock P2P areas because `member_world` is already global. Lumbridge vendor grants one starter card reserved by the portal account flow. |
-| `want_custom_banks` | `true` if shipping V2 bank | Enables the custom bank UI and loadout workflow. |
-| `want_bank_presets` | `true` if shipping loadouts | Requires `bankpresets` schema. |
+| `want_custom_banks` | `false` for Void Glass launch on desktop, `/play`, and Android | Leave off for the shipped Void Glass bank. `true` is only for older legacy custom-bank presets when custom UI is off; loadouts do not require it. |
+| `want_bank_presets` | `true` if shipping loadouts | Enables loadouts/presets for Void Glass and requires `bankpresets` schema. |
 | `want_bank_notes` / `want_cert_as_notes` | `true` if shipping notes | Controls note-style item handling and visuals. |
 | `want_leftclick_webs` | `true` | Supports Void Enclave web gates and vanilla web QoL. |
 | `perf_telemetry` | `true` in staging, optional production | Low-overhead visibility into tick health. |
@@ -101,8 +101,8 @@ These are positional in many loaders. Keep server and client append order aligne
 | Type | Current high-water mark | Notes |
 |---|---:|---|
 | Custom item ids | `1608` | Void ashes are current high-water mark. |
-| Custom NPC ids | `860` | Void Unicorn is current high-water mark. |
-| Custom scenery ids | `1309` | Colossus charge effect objects are current high-water mark. |
+| Custom NPC ids | `868` | Void Archivist is current high-water mark. |
+| Custom scenery ids | `1311` | Void portal arch is current high-water mark. |
 | Custom client version | `10122` | Current working tree value. |
 
 ## Pre-release config sign-off
