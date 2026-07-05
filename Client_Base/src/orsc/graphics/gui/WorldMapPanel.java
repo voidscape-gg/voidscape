@@ -53,11 +53,12 @@ import java.util.Map;
  */
 public final class WorldMapPanel {
 
-	public enum ClickResult { OUTSIDE, CLOSE, ZOOM, MAP_TILE, UI_BUTTON }
+	public enum ClickResult { OUTSIDE, CLOSE, ZOOM, MAP_TILE, WAYPOINT_WALK, WAYPOINT_SET, WAYPOINT_ARMED, UI_BUTTON }
 
 	private static final int FLOOR_COUNT = 4;
 	private static final int MAP_PNG_W = 2448;
 	private static final int MAP_PNG_H = 2736;
+	public static final int WAYPOINT_COUNT = 5;
 
 	// Discrete zoom levels (matching upstream rsc-world-map ZOOM_SCALES).
 	private static final float[] ZOOM_SCALES = { 0.5f, 1f, 2f, 4f };  // index = zoomLevel + 1
@@ -74,6 +75,11 @@ public final class WorldMapPanel {
 	private static final int BTN_W = 36;
 	private static final int BTN_H = 28;
 	private static final int RIGHT_COL_W = BTN_W + 16;
+	private static final int WAYPOINT_SET_W = 32;
+	private static final int WAYPOINT_BTN_MIN_W = 26;
+	private static final int WAYPOINT_BTN_MAX_W = 62;
+	private static final int WAYPOINT_BTN_H = 22;
+	private static final int WAYPOINT_GAP = 4;
 	private static final int CLOSE_LINK_W = 80;
 	private static final int MOBILE_WEB_MIN_TOP_MARGIN = 34;
 	private static final int MOBILE_WEB_PORTRAIT_MIN_TOP_MARGIN = 72;
@@ -137,13 +143,26 @@ public final class WorldMapPanel {
 	private int contentX, contentY, contentW, contentH;
 	private int closeLinkX, closeLinkY;
 	private int btnZoomInY, btnZoomOutY, btnResetY, btnTilesY, btnX;
+	private int waypointSetButtonX, waypointSetButtonY;
+	private int waypointButtonW = WAYPOINT_BTN_MIN_W;
+	private final int[] waypointButtonX = new int[WAYPOINT_COUNT];
+	private final int[] waypointButtonY = new int[WAYPOINT_COUNT];
+	private final Waypoint[] waypoints = new Waypoint[WAYPOINT_COUNT];
+	private boolean waypointEditMode;
+	private int waypointSetSlot = -1;
+	private int lastWaypointSlot = -1;
 
 	public boolean isVisible() { return visible; }
 	public boolean isSceneRouteVisible() { return sceneRouteVisible; }
 	public void setVisible(boolean v) {
 		this.visible = v;
 		if (v) panInitialized = false;  // re-center on next render
-		if (!v) { searchFocused = false; searchQuery = ""; }
+		if (!v) {
+			searchFocused = false;
+			searchQuery = "";
+			waypointEditMode = false;
+			waypointSetSlot = -1;
+		}
 	}
 	public boolean isSearchFocused() { return visible && searchFocused; }
 	public void toggleVisible() { setVisible(!this.visible); }
@@ -168,8 +187,23 @@ public final class WorldMapPanel {
 	public int getCloseCenterY() { return closeLinkY + TITLE_H / 2; }
 	public int getSearchCenterX() { return searchBoxX + searchBoxW / 2; }
 	public int getSearchCenterY() { return searchBoxY + searchBoxH / 2; }
+	public int getLastWaypointSlot() { return lastWaypointSlot; }
+	public boolean isWaypointSetArmed() { return waypointSetSlot >= 0; }
 	public boolean containsWindow(final int x, final int y) {
 		return visible && x >= winX && x < winX + winW && y >= winY && y < winY + winH;
+	}
+
+	public void setWaypoints(final Waypoint[] saved) {
+		for (int i = 0; i < WAYPOINT_COUNT; i++) {
+			setWaypoint(i, saved != null && i < saved.length ? saved[i] : null);
+		}
+	}
+
+	public void setWaypoint(final int slot, final Waypoint waypoint) {
+		if (slot < 0 || slot >= WAYPOINT_COUNT) return;
+		waypoints[slot] = waypoint == null || !waypoint.isSet()
+			? null
+			: new Waypoint(waypoint.worldX, waypoint.worldY, waypoint.name);
 	}
 
 	public void zoomIn()    { setZoomLevel(zoomLevel + 1, contentX + contentW / 2, contentY + contentH / 2); }
@@ -230,6 +264,20 @@ public final class WorldMapPanel {
 		btnZoomOutY = btnZoomInY + BTN_H + 4;
 		btnResetY = btnZoomOutY + BTN_H + 4;
 		btnTilesY = btnResetY + BTN_H + 4;
+
+		// Five saved auto-walk locations. The compact row keeps the controls
+		// usable on the mobile-web map without covering the search box.
+		waypointSetButtonX = contentX + 6;
+		waypointSetButtonY = contentY + 4;
+		int slotAreaRight = btnX - WAYPOINT_GAP;
+		int slotAreaLeft = waypointSetButtonX + WAYPOINT_SET_W + WAYPOINT_GAP;
+		int rawWaypointW = (slotAreaRight - slotAreaLeft - (WAYPOINT_COUNT - 1) * WAYPOINT_GAP) / WAYPOINT_COUNT;
+		waypointButtonW = Math.max(WAYPOINT_BTN_MIN_W, Math.min(WAYPOINT_BTN_MAX_W, rawWaypointW));
+		int waypointX = waypointSetButtonX + WAYPOINT_SET_W + WAYPOINT_GAP;
+		for (int i = 0; i < WAYPOINT_COUNT; i++) {
+			waypointButtonX[i] = waypointX + i * (waypointButtonW + WAYPOINT_GAP);
+			waypointButtonY[i] = waypointSetButtonY;
+		}
 
 		// Search box at bottom-left of content (overlay).
 		searchBoxW = 200;
@@ -380,6 +428,7 @@ public final class WorldMapPanel {
 		drawFlatButton(surface, btnX, btnZoomOutY, BTN_W, BTN_H, "-", zoomLevel > ZOOM_MIN_LEVEL);
 		drawFlatButton(surface, btnX, btnResetY, BTN_W, BTN_H, "Reset", true);
 		drawFlatButton(surface, btnX, btnTilesY, BTN_W, BTN_H, "Tiles", true, sceneRouteVisible);
+		drawWaypointButtons(surface);
 
 		// Search box overlay (bottom-left).
 		drawSearchBox(surface);
@@ -411,9 +460,7 @@ public final class WorldMapPanel {
 
 			if (mx >= closeLinkX && mx < closeLinkX + CLOSE_LINK_W
 				&& my >= closeLinkY && my < closeLinkY + TITLE_H - 4) {
-				visible = false;
-				searchFocused = false;
-				searchQuery = "";
+				setVisible(false);
 				return ClickResult.CLOSE;
 			}
 			if (mx >= btnX && mx < btnX + BTN_W) {
@@ -432,6 +479,27 @@ public final class WorldMapPanel {
 				if (my >= btnTilesY && my < btnTilesY + BTN_H) {
 					sceneRouteVisible = !sceneRouteVisible;
 					return ClickResult.UI_BUTTON;
+				}
+			}
+			if (mx >= waypointSetButtonX && mx < waypointSetButtonX + WAYPOINT_SET_W
+				&& my >= waypointSetButtonY && my < waypointSetButtonY + WAYPOINT_BTN_H) {
+				waypointEditMode = !waypointEditMode;
+				if (!waypointEditMode) waypointSetSlot = -1;
+				lastWaypointSlot = -1;
+				return ClickResult.UI_BUTTON;
+			}
+			for (int i = 0; i < WAYPOINT_COUNT; i++) {
+				if (mx >= waypointButtonX[i] && mx < waypointButtonX[i] + waypointButtonW
+					&& my >= waypointButtonY[i] && my < waypointButtonY[i] + WAYPOINT_BTN_H) {
+					lastWaypointSlot = i;
+					if (waypointEditMode || waypoints[i] == null || !waypoints[i].isSet()) {
+						waypointEditMode = true;
+						waypointSetSlot = i;
+						return ClickResult.WAYPOINT_ARMED;
+					}
+					outWorld[0] = waypoints[i].worldX;
+					outWorld[1] = waypoints[i].worldY;
+					return ClickResult.WAYPOINT_WALK;
 				}
 			}
 			if (clickedSearch) {
@@ -474,6 +542,12 @@ public final class WorldMapPanel {
 				float pngY = (my - panY) / scale();
 				outWorld[0] = pixelToWorldX(pngX);
 				outWorld[1] = pixelToWorldY(pngY) + currentFloor * 944;
+				if (waypointSetSlot >= 0) {
+					lastWaypointSlot = waypointSetSlot;
+					waypointSetSlot = -1;
+					waypointEditMode = false;
+					return ClickResult.WAYPOINT_SET;
+				}
 				return ClickResult.MAP_TILE;
 			}
 		}
@@ -571,6 +645,70 @@ public final class WorldMapPanel {
 		clampPan();
 	}
 
+	public String describeWorldTile(final int worldX, final int worldY) {
+		ensureAssetsLoaded();
+		if (worldY / 944 == 0 && !labels.isEmpty()) {
+			float pngX = worldToPngX(worldX);
+			float pngY = worldToPngY(worldY);
+			Label best = null;
+			float bestDist = 999999f;
+			for (Label lm : labels) {
+				float dx = lm.x - pngX;
+				float dy = lm.y - pngY;
+				float dist = dx * dx + dy * dy;
+				if (dist < bestDist) {
+					best = lm;
+					bestDist = dist;
+				}
+			}
+			if (best != null && bestDist <= 160f * 160f) {
+				String text = best.text.replace("\\n", " ").trim();
+				if (!text.isEmpty()) {
+					return text.length() > 36 ? text.substring(0, 36) : text;
+				}
+			}
+		}
+		return worldX + "," + worldY;
+	}
+
+	private void drawWaypointButtons(GraphicsController surface) {
+		boolean editing = waypointEditMode || waypointSetSlot >= 0;
+		drawFlatButton(surface, waypointSetButtonX, waypointSetButtonY,
+			WAYPOINT_SET_W, WAYPOINT_BTN_H, "Set", true, editing);
+		for (int i = 0; i < WAYPOINT_COUNT; i++) {
+			boolean set = waypoints[i] != null && waypoints[i].isSet();
+			boolean armed = i == waypointSetSlot;
+			drawFlatButton(surface, waypointButtonX[i], waypointButtonY[i],
+				waypointButtonW, WAYPOINT_BTN_H, waypointButtonLabel(i), true, set || armed, 0);
+			if (armed) {
+				surface.drawBoxBorder(waypointButtonX[i], waypointButtonW,
+					waypointButtonY[i], WAYPOINT_BTN_H, COLOR_PLAYER_MARKER);
+			}
+		}
+	}
+
+	private String waypointButtonLabel(final int slot) {
+		Waypoint waypoint = waypoints[slot];
+		if (waypoint == null || !waypoint.isSet()) {
+			return Integer.toString(slot + 1);
+		}
+		String label = compactWaypointName(waypoint.name);
+		return label.isEmpty() ? Integer.toString(slot + 1) : label;
+	}
+
+	private static String compactWaypointName(String name) {
+		if (name == null) return "";
+		String clean = name.replace("\\n", " ").trim();
+		String lower = clean.toLowerCase();
+		if ("void enclave".equals(lower)) return "Enclave";
+		if ("east ardougne".equals(lower) || "west ardougne".equals(lower)) return "Ardougne";
+		if ("barbarian village".equals(lower)) return "Barb.";
+		if ("draynor village".equals(lower)) return "Draynor";
+		if ("wizard's tower".equals(lower)) return "Wizard";
+		if ("champions guild".equals(lower) || "champions' guild".equals(lower)) return "Champions";
+		return clean;
+	}
+
 	private void drawSearchBox(GraphicsController surface) {
 		int border = searchFocused ? 0xFFFF40 : 0xC0C0C0;
 		surface.drawBox(searchBoxX, searchBoxY, searchBoxW, searchBoxH, 0x202020);
@@ -597,6 +735,10 @@ public final class WorldMapPanel {
 	}
 
 	private void drawFlatButton(GraphicsController surface, int x, int y, int w, int h, String label, boolean enabled, boolean active) {
+		drawFlatButton(surface, x, y, w, h, label, enabled, active, 1);
+	}
+
+	private void drawFlatButton(GraphicsController surface, int x, int y, int w, int h, String label, boolean enabled, boolean active, int font) {
 		boolean hover = enabled
 			&& lastMouseX >= x && lastMouseX < x + w
 			&& lastMouseY >= y && lastMouseY < y + h;
@@ -605,7 +747,19 @@ public final class WorldMapPanel {
 		surface.drawBox(x, y, w, h, bg);
 		surface.drawBoxBorder(x, w, y, h, 0xC0C0C0);
 		int textColor = enabled ? 0xFFFFFF : 0x808080;
-		surface.drawColoredStringCentered(x + w / 2, label, textColor, 0, 1, y + h / 2 + 4);
+		surface.drawColoredStringCentered(x + w / 2, fitButtonLabel(surface, label, w, font),
+			textColor, 0, font, y + h / 2 + (font == 0 ? 3 : 4));
+	}
+
+	private static String fitButtonLabel(GraphicsController surface, String label, int width, int font) {
+		String text = label == null ? "" : label.trim();
+		int maxWidth = Math.max(1, width - 6);
+		if (surface.stringWidth(font, text) <= maxWidth) return text;
+		for (int len = text.length() - 1; len > 0; len--) {
+			String candidate = text.substring(0, len) + ".";
+			if (surface.stringWidth(font, candidate) <= maxWidth) return candidate;
+		}
+		return text.isEmpty() ? "" : text.substring(0, 1);
 	}
 
 	/**
@@ -899,5 +1053,21 @@ public final class WorldMapPanel {
 		final int x, y;
 
 		Poi(String type, int x, int y) { this.type = type; this.x = x; this.y = y; }
+	}
+
+	public static final class Waypoint {
+		public final int worldX;
+		public final int worldY;
+		public final String name;
+
+		public Waypoint(int worldX, int worldY, String name) {
+			this.worldX = worldX;
+			this.worldY = worldY;
+			this.name = name == null ? "" : name;
+		}
+
+		public boolean isSet() {
+			return worldX >= 0 && worldY >= 0;
+		}
 	}
 }
