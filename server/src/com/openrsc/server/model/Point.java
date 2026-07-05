@@ -27,6 +27,11 @@ public class Point {
 		/* Void Island — non-PvP starter island. Strict bounds make the
 		 * playable starter island X=16..32, Y=17..42. */
 		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 15, 16, 33, 43));
+		/* Tutorial Isle — gated guided-track area west of Void Island.
+		 * Strict bounds make the interior X=33..46, Y=17..41. Without this the
+		 * isle computes deep-wilderness levels and the scoped safe-death
+		 * contract self-cancels (Player.getActiveScopedSafeDeathRespawn). */
+		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 32, 16, 47, 42));
 	}
 
 	protected short x, y;
@@ -62,6 +67,10 @@ public class Point {
 
 		else if (inVoidIsland()) {
 			return "Void Island";
+		}
+
+		else if (inVoidTutorialIsle()) {
+			return "Tutorial Isle";
 		}
 
 		else if (inVoidArena()) {
@@ -290,6 +299,14 @@ public class Point {
 
 	public static boolean inVoidIsland(int x, int y) {
 		return x >= 16 && x <= 32 && y >= 17 && y <= 42;
+	}
+
+	public boolean inVoidTutorialIsle() {
+		return inVoidTutorialIsle(x, y);
+	}
+
+	public static boolean inVoidTutorialIsle(int x, int y) {
+		return x >= 33 && x <= 46 && y >= 17 && y <= 41;
 	}
 
 	public boolean inVoidArena() {

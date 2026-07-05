@@ -38,6 +38,7 @@ public enum Action {
 	playerkilledplayer(EntityType.PLAYER, "playerkilledplayer"),
 	playerlogin(EntityType.NONE, "playerlogin"),
 	playerlogout(EntityType.NONE, "playerlogout"),
+	voidwelcome(EntityType.NONE, "voidwelcome"),
 	playerrangenpc(EntityType.NPC, "playerrangenpc"),
 	playerrangeplayer(EntityType.PLAYER, "playerrangeplayer"),
 	startup(EntityType.NONE, "startup"),

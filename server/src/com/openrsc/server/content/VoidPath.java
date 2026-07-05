@@ -5,12 +5,21 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.container.Item;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
+
+import static com.openrsc.server.plugins.Functions.multi;
+import static com.openrsc.server.plugins.Functions.npcsay;
 
 public final class VoidPath {
 	public static final String CACHE_KEY = "void_path";
 	public static final String STARTER_KIT_CACHE_KEY = "void_path_starter_kit";
+
+	// Client contract: mudclient.isVoidscapePathMenu matches these option prefixes.
+	public static final String OPTION_WARRIOR = "Warrior's Path - 2x XP: Attack, Defense, Strength to 50 + melee kit";
+	public static final String OPTION_FORAGER = "Forager's Path - 2x XP: Fishing, Cooking, Mining to 50 + gathering kit";
+	public static final String OPTION_ARCANIST = "Arcanist's Path - 2x XP: Ranged, Magic to 50 + arcane kit";
 	public static final int VOID_ISLAND_X = 24;
 	public static final int VOID_ISLAND_Y = 26;
 	private static final int LEGACY_VOID_ISLAND_MIN_X = 734;
@@ -47,6 +56,52 @@ public final class VoidPath {
 		player.getCache().set(CACHE_KEY, path);
 	}
 
+	/**
+	 * Runs the full path choice: preamble, menu, kit, teleport to Lumbridge.
+	 * Must be called from plugin context (blocking dialogue). Pass npc = null
+	 * for the NPC-less variant (skip track, login resume).
+	 *
+	 * @return true if a path was chosen.
+	 */
+	public static boolean openPathChoice(Player player, Npc npc) {
+		if (player == null || hasChosen(player)) {
+			return false;
+		}
+
+		if (npc != null) {
+			npcsay(player, npc,
+				"choose your path",
+				"each path gives 2x experience in its listed skills until level " + BOOST_LEVEL_CAP,
+				"I will also give you a starter kit suited to that path");
+		} else {
+			player.message("Choose your path: each gives 2x experience in its listed skills until level " + BOOST_LEVEL_CAP + ".");
+			player.message("A starter kit suited to your path will be placed in your backpack.");
+		}
+
+		int choice = multi(player, npc, false, OPTION_WARRIOR, OPTION_FORAGER, OPTION_ARCANIST);
+		if (choice < 0) {
+			return false;
+		}
+
+		int path = choice == 0 ? WARRIOR : choice == 1 ? FORAGER : ARCANIST;
+		choose(player, path);
+		boolean kitGranted = grantStarterKit(player, path);
+		ActionSender.sendGameSettings(player);
+		player.save();
+		player.message(name(path) + " chosen. " + boostedSkillSummary(path) + " now earn " + boostLimitSummary() + ".");
+		if (kitGranted) {
+			player.message("Your starter kit has been placed in your backpack.");
+		}
+		player.teleport(player.getConfig().RESPAWN_LOCATION_X, player.getConfig().RESPAWN_LOCATION_Y, true);
+		if (!BetaOnboardingGuide.showFirstTime(player)) {
+			ActionSender.sendBox(player, "@yel@" + name(path) + " chosen.% %"
+				+ "@whi@" + boostLimitSummary() + ": @gre@" + boostedSkillSummary(path) + "@whi@.%"
+				+ "@whi@Starter kit: @cya@" + starterKitSummary(path) + "@whi@.% %"
+				+ "@whi@You have arrived in Lumbridge. Open your backpack, equip anything useful, and start exploring.", true);
+		}
+		return true;
+	}
+
 	public static boolean grantStarterKit(Player player, int path) {
 		if (player == null || path < WARRIOR || path > ARCANIST || player.getCache().hasKey(STARTER_KIT_CACHE_KEY)) {
 			return false;
@@ -65,7 +120,7 @@ public final class VoidPath {
 	}
 
 	public static boolean inStarterIsland(int x, int y) {
-		return Point.inVoidIsland(x, y) || inLegacyVoidIsland(x, y);
+		return Point.inVoidIsland(x, y) || Point.inVoidTutorialIsle(x, y) || inLegacyVoidIsland(x, y);
 	}
 
 	public static boolean blocksLeavingStarterIsland(Player player, int destinationX, int destinationY) {
@@ -93,6 +148,7 @@ public final class VoidPath {
 			&& !hasChosen(player)
 			&& (inLegacyVoidIsland(player)
 				|| player.getLocation().inVoidIsland()
+				|| player.getLocation().inVoidTutorialIsle()
 				|| VoidStarterIntro.inIntroArea(player)
 				|| player.getLocation().inTutorialLanding()
 				|| player.getLocation().onTutorialIsland());

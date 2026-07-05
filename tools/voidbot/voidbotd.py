@@ -806,6 +806,25 @@ class Daemon:
                 c = a["command"].lstrip(":")
                 self.send("COMMAND", P.BitWriter().rsstr(c).b)
                 return {"ok": True, "sent": c}
+            if cmd == "design-character":
+                # PayloadCustomParser PLAYER_APPEARANCE_CHANGE wire order.
+                # Valid: headType 0/3/5/6/7, bodyType 1/4, hair 10-17,
+                # top/trousers 0-22, skin 0-4, hairStyle 0.
+                male = str(a.get("gender", "male")).lower() != "female"
+                w = (P.BitWriter()
+                     .u8(1 if male else 0)
+                     .u8(int(a.get("head", 0)))
+                     .u8(int(a.get("body", 1)))
+                     .u8(2)
+                     .u8(int(a.get("hair_colour", 10)))
+                     .u8(int(a.get("top_colour", 8)))
+                     .u8(int(a.get("trouser_colour", 14)))
+                     .u8(int(a.get("skin_colour", 0)))
+                     .u8(int(a.get("ironman", 0)))
+                     .u8(int(a.get("one_xp", 0)))
+                     .u8(int(a.get("hair_style", 0))))
+                self.send("PLAYER_APPEARANCE_CHANGE", w.b)
+                return {"ok": True}
             if cmd == "menu-reply":
                 self.send("QUESTION_DIALOG_ANSWER", P.BitWriter().u8(int(a["option"])).b)
                 return {"ok": True}

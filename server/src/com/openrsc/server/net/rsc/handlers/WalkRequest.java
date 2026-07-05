@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.handlers;
 
 
 import com.openrsc.server.content.VoidStarterIntro;
+import com.openrsc.server.content.VoidTutorialIsle;
 import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
 import com.openrsc.server.model.Path;
 import com.openrsc.server.model.Path.PathType;
@@ -106,6 +107,11 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 		if (VoidStarterIntro.blocksUnseenIntroPath(player, payload.firstStep, payload.steps)) {
 			player.resetPath();
 			player.message("@mag@The Void Council blocks the path north. Speak to one of them.");
+			return;
+		}
+		if (VoidTutorialIsle.blocksGatedTutorialPath(player, payload.firstStep, payload.steps)) {
+			player.resetPath();
+			player.message("@mag@The gate is sealed. Finish this chamber's lesson first.");
 			return;
 		}
 		player.cancelAutoWalk();

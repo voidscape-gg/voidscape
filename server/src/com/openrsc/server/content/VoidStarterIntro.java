@@ -49,7 +49,14 @@ public final class VoidStarterIntro {
 	}
 
 	public static Point entryPoint(Player player) {
-		return needsIntro(player) ? Point.location(INTRO_X, INTRO_Y) : Point.location(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y);
+		if (needsIntro(player)) {
+			return Point.location(INTRO_X, INTRO_Y);
+		}
+		Point tutorial = VoidTutorialIsle.resumePoint(player);
+		if (tutorial != null) {
+			return tutorial;
+		}
+		return Point.location(VoidPath.VOID_ISLAND_X, VoidPath.VOID_ISLAND_Y);
 	}
 
 	public static boolean isCouncil(Npc npc) {
@@ -78,7 +85,16 @@ public final class VoidStarterIntro {
 			return;
 		}
 
-		if (player.getAttribute(RUNNING_ATTRIBUTE, false)) {
+		playLore(player);
+	}
+
+	/**
+	 * Plays the six council lore lines and marks the intro seen. Safe to call
+	 * without a clicked NPC (welcome-menu tracks); missing council NPCs fall
+	 * back to plain messages.
+	 */
+	public static void playLore(Player player) {
+		if (!needsIntro(player) || player.getAttribute(RUNNING_ATTRIBUTE, false)) {
 			return;
 		}
 
@@ -87,7 +103,11 @@ public final class VoidStarterIntro {
 		try {
 			for (CouncilLine line : LINES) {
 				Npc npc = findCouncil(player, line);
-				npcsay(player, npc != null ? npc : clickedNpc, line.text);
+				if (npc != null) {
+					npcsay(player, npc, line.text);
+				} else {
+					player.message("@yel@" + line.text);
+				}
 			}
 			player.message("@mag@The council lowers their scythes. The path north lies open.");
 			player.getCache().store(SEEN_CACHE_KEY, true);

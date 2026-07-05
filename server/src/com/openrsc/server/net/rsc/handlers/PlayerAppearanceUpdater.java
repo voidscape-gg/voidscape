@@ -2,8 +2,10 @@ package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.content.PlayerClass;
 import com.openrsc.server.content.BetaReferralReward;
+import com.openrsc.server.content.VoidOnboarding;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidStarterIntro;
+import com.openrsc.server.plugins.triggers.VoidWelcomeTrigger;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.PlayerAppearance;
 import com.openrsc.server.model.container.Inventory;
@@ -130,7 +132,13 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 			if (!VoidPath.hasChosen(player)) {
 				Point entryPoint = VoidStarterIntro.entryPoint(player);
 				player.teleport(entryPoint.getX(), entryPoint.getY(), false);
-				VoidStarterIntro.prompt(player);
+				if (VoidOnboarding.needsWelcome(player)) {
+					// Blocking dialogue must run in plugin context, never here (packet context).
+					player.getWorld().getServer().getPluginHandler()
+						.handlePlugin(VoidWelcomeTrigger.class, player, new Object[]{player});
+				} else {
+					VoidStarterIntro.prompt(player);
+				}
 			}
 		}
 	}

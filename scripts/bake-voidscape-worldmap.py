@@ -61,6 +61,34 @@ def void_island_tiles() -> set[tuple[int, int]]:
     return land
 
 
+def tutorial_isle_tiles() -> set[tuple[int, int]]:
+    # Mask copied verbatim from patch-void-enclave-landscape.py
+    # (tutorial_isle_tiles) — keep the two in lockstep.
+    chambers = ((34, 45, 31, 40), (34, 45, 23, 30), (37, 43, 18, 22))
+    land = set()
+    for min_x, max_x, min_y, max_y in chambers:
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if x in (min_x, max_x) and y in (min_y, max_y):
+                    continue
+                land.add((x, y))
+    return land
+
+
+def draw_tutorial_isle(draw: ImageDraw.ImageDraw) -> None:
+    land = tutorial_isle_tiles()
+    for x, y in land:
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        pad = abs(x - 40) <= 1 and abs(y - 37) <= 1
+        ring = abs(x - 40) <= 1 and abs(y - 27) <= 1
+        scar = y <= 22
+        lane = x == 40
+        gate = y in (31, 23)
+        color = (VOID_EDGE if edge else VOID_ACCENT if (pad or ring) else VOID_DEEP if scar
+                 else VOID_PURPLE if (lane or gate) else VOID_MID)
+        draw_tile(draw, x, y, color)
+
+
 def catchsim_tiles(offset_x: int) -> set[tuple[int, int]]:
     min_x, max_x = 340 + offset_x, 382 + offset_x
     min_y, max_y = 52, 90
@@ -222,6 +250,7 @@ def point_row(kind: str, world_x: int, world_y: int) -> str:
 def bake_tsv() -> None:
     custom_labels = [
         label_row("Void\\nIsland", 24, 16, 10, 1),
+        label_row("Tutorial\\nIsle", 40, 15, 10, 1),
         label_row("Void\\nEnclave", 113, 315, 10, 1),
         label_row("PK Catching\\nSimulator", 409, 72, 10, 1),
         label_row("Void\\nAuctioneer", 217, 460, 8, 0),
@@ -247,6 +276,7 @@ def main() -> None:
     img = Image.open(PLANE_0).convert("RGBA")
     draw = ImageDraw.Draw(img)
     draw_void_island(draw)
+    draw_tutorial_isle(draw)
     draw_catchsim_islands(draw)
     draw_void_enclave(draw)
     img.save(PLANE_0)

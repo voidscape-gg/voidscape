@@ -6042,6 +6042,10 @@ public final class mudclient implements Runnable {
 	private void drawDialogOptionsMenu(int var1) {
 		try {
 
+			if (isVoidscapeWelcomeMenu()) {
+				drawVoidscapeWelcomeMenu();
+				return;
+			}
 			if (isVoidscapePathMenu()) {
 				drawVoidscapePathMenu();
 				return;
@@ -6167,6 +6171,18 @@ public final class mudclient implements Runnable {
 			&& this.optionsMenuText[0].startsWith("Warrior's Path - 2x XP:")
 			&& this.optionsMenuText[1].startsWith("Forager's Path - 2x XP:")
 			&& this.optionsMenuText[2].startsWith("Arcanist's Path - 2x XP:");
+	}
+
+	// Contract: option prefixes come from server VoidOnboarding.OPTION_* constants.
+	private boolean isVoidscapeWelcomeMenu() {
+		return this.useVoidscapeLogin()
+			&& this.optionsMenuCount == 3
+			&& this.optionsMenuText[0] != null
+			&& this.optionsMenuText[1] != null
+			&& this.optionsMenuText[2] != null
+			&& this.optionsMenuText[0].startsWith("I'm new to Classic")
+			&& this.optionsMenuText[1].startsWith("I've played Classic")
+			&& this.optionsMenuText[2].startsWith("Skip the intro");
 	}
 
 	private boolean isVoidscapeTitleMenu() {
@@ -6509,6 +6525,69 @@ public final class mudclient implements Runnable {
 			}
 			sendOptionsMenuChoice(choice);
 		}
+	}
+
+	private void drawVoidscapeWelcomeMenu() {
+		ensureVoidscapeLoginAssetsLoaded();
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(), 0, 138);
+
+		int cx = halfGameWidth();
+		int panelWidth = Math.min(470, this.getGameWidth() - 20);
+		int panelHeight = Math.min(284, this.getGameHeight() - 20);
+		int panelX = cx - panelWidth / 2;
+		int panelY = Math.max(10, (this.getGameHeight() - panelHeight) / 2);
+
+		drawVoidscapeFrame(panelX, panelY, panelWidth, panelHeight);
+		drawVoidscapeCenteredText(cx, "WELCOME TO VOIDSCAPE", UiSkin.GOLD_TITLE, 1, panelY + 24);
+		drawVoidscapeCenteredText(cx, "How would you like to begin?", UiSkin.TEXT_BODY, 0, panelY + 42);
+
+		int cardGap = 8;
+		int cardWidth = (panelWidth - 36 - cardGap * 2) / 3;
+		int cardHeight = panelHeight - 72;
+		int cardY = panelY + 56;
+		int firstCardX = panelX + 18;
+
+		drawVoidscapeWelcomeCard(0, firstCardX, cardY, cardWidth, cardHeight, "New to Classic", "Guided island start", "Learn to fight & skill", "Recommended", 66, 0x4ba074);
+		drawVoidscapeWelcomeCard(1, firstCardX + cardWidth + cardGap, cardY, cardWidth, cardHeight, "Classic Veteran", "Tour what's new", "in Voidscape", "For returning players", 523, 0x8e64d7);
+		drawVoidscapeWelcomeCard(2, firstCardX + (cardWidth + cardGap) * 2, cardY, cardWidth, cardHeight, "Skip", "Pick a path now", "Start in Lumbridge", "Fastest start", 10, 0x9a9a9a);
+
+		if (this.mouseButtonClick != 0) {
+			int choice = -1;
+			for (int i = 0; i < 3; i++) {
+				int x = firstCardX + i * (cardWidth + cardGap);
+				if (this.mouseX >= x && this.mouseX <= x + cardWidth && this.mouseY >= cardY && this.mouseY <= cardY + cardHeight) {
+					choice = i;
+					break;
+				}
+			}
+			sendOptionsMenuChoice(choice);
+		}
+	}
+
+	private void drawVoidscapeWelcomeCard(int index, int x, int y, int width, int height, String title, String line1, String line2, String footer, int itemId, int accent) {
+		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+		int fill = hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
+		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 242);
+		this.getSurface().drawBoxBorder(x, width, y, height, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE);
+		this.getSurface().drawLineHoriz(x + 4, y + 4, width - 8, accent);
+
+		int artX = x + 8;
+		int artY = y + 11;
+		int artW = width - 16;
+		int artH = Math.max(54, Math.min(78, height / 3));
+		this.getSurface().drawBoxAlpha(artX, artY, artW, artH, UiSkin.FIELD_BG, 206);
+		this.getSurface().drawBoxBorder(artX, artW, artY, artH, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(artX + 1, artW - 2, artY + 1, artH - 2, accent);
+		drawVoidscapePathItemIcon(itemId, artX, artY, artW, artH, accent);
+
+		drawVoidscapeCenteredText(x + width / 2, title, UiSkin.GOLD_TITLE, 0, artY + artH + 17);
+		drawVoidscapeCenteredText(x + width / 2, line1, UiSkin.TEXT_BODY, 0, artY + artH + 37);
+		if (line2.length() > 0) {
+			drawVoidscapeCenteredText(x + width / 2, line2, UiSkin.TEXT_BODY, 0, artY + artH + 51);
+		}
+		drawVoidscapeCenteredText(x + width / 2, footer, UiSkin.TEXT_LABEL, 0, y + height - 30);
+		drawVoidscapeCenteredText(x + width / 2, "(" + (index + 1) + ")", hover ? UiSkin.GOLD_HOT : UiSkin.TEXT_DIM, 0, y + height - 12);
 	}
 
 	private void drawVoidscapePathCard(int index, int x, int y, int width, int height, String title, String multiplier, String skillsTop, String skillsBottom, String kitLine, int itemId, int accent) {
@@ -8558,8 +8637,9 @@ public final class mudclient implements Runnable {
 						int serverY = this.playerLocalZ + this.worldOffsetZ + this.midRegionBaseZ - 1776;
 						boolean inVoidEnclave = serverX >= 98 && serverX <= 128 && serverY >= 300 && serverY <= 330;
 						boolean inVoidIsland = serverX >= 16 && serverX <= 32 && serverY >= 17 && serverY <= 42;
+						boolean inTutorialIsle = serverX >= 33 && serverX <= 46 && serverY >= 17 && serverY <= 41;
 
-						if (centerX > 0 && !inVoidEnclave && !inVoidIsland) {
+						if (centerX > 0 && !inVoidEnclave && !inVoidIsland && !inTutorialIsle) {
 							inWild = true;
 							centerZ = centerX / 6 + 1;
 							this.voidscapeWildLevel = centerZ;
@@ -9039,6 +9119,9 @@ public final class mudclient implements Runnable {
 		}
 		if (isShowDialogBank()) {
 			return; // hide the FPS counter while banking for clean space
+		}
+		if (this.optionsMenuShow) {
+			return; // hide the vitals stack under option menus / card pickers
 		}
 
 		String label = "FPS " + FPS;
@@ -18433,6 +18516,7 @@ public final class mudclient implements Runnable {
 		if (vInBounds(wx, wy, 303, 3298, 307, 3302)) return "Black Hole";
 		if (vInBounds(wx, wy, 64, 1639, 80, 1643)) return "Mod Room";
 		if (vInBounds(wx, wy, 16, 17, 32, 42)) return "Void Island";
+		if (vInBounds(wx, wy, 33, 17, 46, 41)) return "Tutorial Isle";
 		if (vInBounds(wx, wy, 582, 2910, 616, 2916)
 			|| vInBounds(wx, wy, 584, 2897, 590, 2909)
 			|| vInBounds(wx, wy, 592, 2897, 598, 2909)

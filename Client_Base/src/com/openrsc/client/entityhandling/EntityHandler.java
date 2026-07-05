@@ -2503,6 +2503,19 @@ public class EntityHandler {
 		sprites = new int[]{0, 0, 0, 0, 53, 18, 34, 42, 0, 0, 81, 0};
 		npcs.add(new NPCDef("Sir Charles", "A terribly British ranked death matcher.", "", "", 123, 123, 123, 123, true, sprites, 0, 0, 0, 0, 145, 220, 6, 6, 5, i++, true)); // 863
 
+		// voidscape: Void Island onboarding NPCs (server ids 864-868).
+		// Positional list — order must match NpcDefsCustom.json exactly.
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Guide", "A patient survivor who teaches the old ways.", "", 0, 0, 5, 0, false, sprites, 0, 3050327, 3151156, 12100313, 145, 220, 6, 6, 5, i++)); // 864
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Adept", "A survivor honing the old fighting forms.", "Spar", "", 0, 0, 5, 0, false, sprites, 0, 9132587, 2106401, 12100313, 145, 220, 6, 6, 5, i++)); // 865
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Adept", "A survivor honing the old fighting forms.", "", 3, 3, 6, 1, true, sprites, 0, 9132587, 2106401, 12100313, 145, 220, 6, 6, 5, i++)); // 866
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Rogue", "A scavenger who preys on lone survivors.", "", 18, 10, 12, 3, true, sprites, 0, 9109504, 1710618, 12100313, 145, 220, 6, 6, 5, i++)); // 867
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Archivist", "A keeper of everything the void changed.", "", 0, 0, 5, 0, false, sprites, 0, 2106401, 4915330, 12100313, 145, 220, 6, 6, 5, i++)); // 868
+
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
 			npcs.get(103).sprites = new int[]{3, 4, -1, -1, -1, -1, -1, 247, -1, -1, -1, -1};

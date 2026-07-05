@@ -2518,6 +2518,66 @@
     "sprites7": 34, "sprites8": 42, "sprites9": 0, "sprites10": 0, "sprites11": 81, "sprites12": 0,
     "hairColour": 0, "topColour": 0, "bottomColour": 0, "skinColour": 0,
     "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
+  },
+  {
+    "id": 864,
+    "name": "Void Guide",
+    "description": "A patient survivor who teaches the old ways.",
+    "command": "", "command2": "",
+    "attack": 0, "strength": 0, "hits": 5, "defense": 0,
+    "ranged": false, "combatlvl": 0, "isMembers": 0, "attackable": 0, "aggressive": 0, "respawnTime": 30,
+    "sprites1": 0, "sprites2": 1, "sprites3": 2, "sprites4": -1, "sprites5": 228, "sprites6": -1,
+    "sprites7": -1, "sprites8": -1, "sprites9": 46, "sprites10": -1, "sprites11": -1, "sprites12": -1,
+    "hairColour": 0, "topColour": 3050327, "bottomColour": 3151156, "skinColour": 12100313,
+    "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
+  },
+  {
+    "id": 865,
+    "name": "Void Adept",
+    "description": "A survivor honing the old fighting forms.",
+    "command": "Spar", "command2": "",
+    "attack": 0, "strength": 0, "hits": 5, "defense": 0,
+    "ranged": false, "combatlvl": 0, "isMembers": 0, "attackable": 0, "aggressive": 0, "respawnTime": 30,
+    "sprites1": 0, "sprites2": 1, "sprites3": 2, "sprites4": -1, "sprites5": -1, "sprites6": -1,
+    "sprites7": -1, "sprites8": -1, "sprites9": 46, "sprites10": -1, "sprites11": -1, "sprites12": -1,
+    "hairColour": 0, "topColour": 9132587, "bottomColour": 2106401, "skinColour": 12100313,
+    "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
+  },
+  {
+    "id": 866,
+    "name": "Void Adept",
+    "description": "A survivor honing the old fighting forms.",
+    "command": "", "command2": "",
+    "attack": 3, "strength": 3, "hits": 6, "defense": 1,
+    "ranged": false, "combatlvl": 4, "isMembers": 0, "attackable": 1, "aggressive": 0, "respawnTime": 30,
+    "sprites1": 0, "sprites2": 1, "sprites3": 2, "sprites4": -1, "sprites5": -1, "sprites6": -1,
+    "sprites7": -1, "sprites8": -1, "sprites9": 46, "sprites10": -1, "sprites11": -1, "sprites12": -1,
+    "hairColour": 0, "topColour": 9132587, "bottomColour": 2106401, "skinColour": 12100313,
+    "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
+  },
+  {
+    "id": 867,
+    "name": "Void Rogue",
+    "description": "A scavenger who preys on lone survivors.",
+    "command": "", "command2": "",
+    "attack": 18, "strength": 10, "hits": 12, "defense": 3,
+    "ranged": false, "combatlvl": 11, "isMembers": 0, "attackable": 1, "aggressive": 0, "respawnTime": 30,
+    "sprites1": 0, "sprites2": 1, "sprites3": 2, "sprites4": -1, "sprites5": 228, "sprites6": -1,
+    "sprites7": -1, "sprites8": -1, "sprites9": 46, "sprites10": -1, "sprites11": -1, "sprites12": -1,
+    "hairColour": 0, "topColour": 9109504, "bottomColour": 1710618, "skinColour": 12100313,
+    "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
+  },
+  {
+    "id": 868,
+    "name": "Void Archivist",
+    "description": "A keeper of everything the void changed.",
+    "command": "", "command2": "",
+    "attack": 0, "strength": 0, "hits": 5, "defense": 0,
+    "ranged": false, "combatlvl": 0, "isMembers": 0, "attackable": 0, "aggressive": 0, "respawnTime": 30,
+    "sprites1": 0, "sprites2": 1, "sprites3": 2, "sprites4": -1, "sprites5": 228, "sprites6": -1,
+    "sprites7": -1, "sprites8": -1, "sprites9": 46, "sprites10": -1, "sprites11": -1, "sprites12": -1,
+    "hairColour": 0, "topColour": 2106401, "bottomColour": 4915330, "skinColour": 12100313,
+    "camera1": 145, "camera2": 220, "walkModel": 6, "combatModel": 6, "combatSprite": 5, "canEdit": 0, "roundMode": 0
   }
 ]
 }

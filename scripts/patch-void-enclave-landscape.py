@@ -54,6 +54,21 @@ VOID_ISLAND_INTRO_CENTER_X = 24
 VOID_ISLAND_INTRO_CENTER_Y = 37
 LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 
+# Tutorial Isle: linear gated newbie area in the same ocean sector, west of
+# Void Island (2-tile water channels on both sides; ocean is the perimeter).
+# Three chambers south-to-north joined at the guide lane (x=40):
+#   C1 "The Landing" (camp) -> gate y=31 -> C2 "The Ring" (spar) -> gate y=23
+#   -> C3 "The Scar" (ambush). Gate gaps at the lane stay physically open;
+# passage is script-gated by void_guided_stage (VoidTutorialIsle.java).
+TUTORIAL_ISLE_LANE_X = 40
+TUTORIAL_ISLE_RING_Y = 27
+TUTORIAL_ISLE_PAD_Y = 37
+TUTORIAL_ISLE_C1 = (34, 45, 31, 40)  # (minX, maxX, minY, maxY) "The Landing"
+TUTORIAL_ISLE_C2 = (34, 45, 23, 30)  # "The Ring"
+TUTORIAL_ISLE_C3 = (37, 43, 18, 22)  # "The Scar"
+TUTORIAL_ISLE_GATE1_Y = 31
+TUTORIAL_ISLE_GATE2_Y = 23
+
 CATCHSIM_SECTORS = (
     # (sector name, sector base X, sector base Y, arena X offset, arena Y offset)
     ("h0x55y38", 336, 48, 0, 0),
@@ -420,6 +435,71 @@ def patch_void_island_sector(sector_bytes: bytes) -> bytes:
         buf[off + 4] = 0
         buf[off + 5] = 0
         buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
+def tutorial_isle_tiles():
+    """Land mask for the Tutorial Isle: three chamfered chamber rects."""
+    land = set()
+    for min_x, max_x, min_y, max_y in (TUTORIAL_ISLE_C1, TUTORIAL_ISLE_C2, TUTORIAL_ISLE_C3):
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if x in (min_x, max_x) and y in (min_y, max_y):
+                    continue  # chamfer corners for a less boxy silhouette
+                land.add((x, y))
+    return land
+
+
+def patch_tutorial_isle_sector(sector_bytes: bytes) -> bytes:
+    """Carve the gated Tutorial Isle into the Void Island ocean sector."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - VOID_ISLAND_SECTOR_BASE_X
+        ty = worldY - VOID_ISLAND_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {VOID_ISLAND_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    land = tutorial_isle_tiles()
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        arrival_pad = abs(x - TUTORIAL_ISLE_LANE_X) <= 1 and abs(y - TUTORIAL_ISLE_PAD_Y) <= 1
+        ring_center = abs(x - TUTORIAL_ISLE_LANE_X) <= 1 and abs(y - TUTORIAL_ISLE_RING_Y) <= 1
+        ring_halo = 4 <= (x - TUTORIAL_ISLE_LANE_X) ** 2 + (y - TUTORIAL_ISLE_RING_Y) ** 2 <= 9
+
+        buf[off + 0] = 52 if edge else 68
+        buf[off + 1] = (112 + ((x * 7 + y * 3) % 20)) & 0xFF
+        if y <= TUTORIAL_ISLE_C3[3]:
+            buf[off + 2] = FLOOR_V3_STONE  # the Scar: cracked stone
+        elif arrival_pad or ring_center:
+            buf[off + 2] = FLOOR_RITUAL
+        elif ring_halo or x == TUTORIAL_ISLE_LANE_X:
+            buf[off + 2] = FLOOR_MID
+        else:
+            buf[off + 2] = FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    # Gate fences: dir-0 (east-west) walls live in the verticalWall byte (5),
+    # boundary between (x, y-1) and (x, y). Lane tile stays open (script-gated);
+    # sigil panels flank the gap, low fences span the rest.
+    def fence_row(y, min_x, max_x):
+        for x in range(min_x, max_x + 1):
+            if x == TUTORIAL_ISLE_LANE_X:
+                continue
+            if (x, y) not in land or (x, y - 1) not in land:
+                continue  # chamfered corners fall back to ocean, no fence needed
+            door_id = VOID_V3_SIGIL if abs(x - TUTORIAL_ISLE_LANE_X) == 1 else LOW_FENCE
+            buf[tile_offset(x, y) + 5] = (door_id + 1) & 0xFF
+
+    fence_row(TUTORIAL_ISLE_GATE1_Y, TUTORIAL_ISLE_C1[0], TUTORIAL_ISLE_C1[1])
+    fence_row(TUTORIAL_ISLE_GATE2_Y, TUTORIAL_ISLE_C3[0], TUTORIAL_ISLE_C3[1])
 
     return bytes(buf)
 
@@ -1093,7 +1173,8 @@ def main():
     walls = enclave_walls()
     patched_sectors = {
         ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
-        VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
+        # Same sector: the Tutorial Isle is carved into the Void Island sector's ocean.
+        VOID_ISLAND_SECTOR: patch_tutorial_isle_sector(patch_void_island_sector(island_source)),
         DEATHMATCH_SECTOR: patch_deathmatch_sector(deathmatch_source),
         VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
         COLOSSUS_SECTOR: patch_colossus_sector(colossus_source),
@@ -1117,6 +1198,7 @@ def main():
     print(f"Restored {len(LEGACY_DEATHMATCH_SECTORS)} legacy deathmatch sector(s) to authentic terrain")
     print(f"Restored {len(LEGACY_VOIDARENA_SECTORS)} legacy void arena sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
+    print(f"Patched gated Tutorial Isle ({len(tutorial_isle_tiles())} tiles) into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
     print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
