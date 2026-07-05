@@ -13,6 +13,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
 | DB backend | Usually SQLite locally | MariaDB recommended for public | See `docs/OPERATIONS.md`. |
 | Custom content gate | `want_void_enclave: true` | likely `true` | Many Voidscape systems are loaded under this gate. |
+| Release-disabled Void boss/dungeon gates | `want_void_colossus: false`, `want_void_dungeon: false` | `false` until deliberately launched | Public traversal should not expose Colossus or Void Dungeon content before their release pass. |
 | Custom landscape | expected `true` | likely `true` | Required for Void Island, Enclave, arenas, and map edits. |
 | Item cap | `restrict_item_id: 9999` | `9999` | Required for custom item ids in the 1500+ range. |
 | Packet capture | `want_pcap_logging: false` | `false` | Enable only for targeted networking debug. |
@@ -62,6 +63,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Key | Expected value | Why it matters |
 |---|---:|---|
 | `want_void_enclave` | `true` | Loads the Enclave, several custom loc files, and related content. |
+| `want_void_colossus` | `false` for launch | Keeps Void Colossus rifts/arena content unloaded; stale entry handlers also deny access while the feature is off. |
+| `want_void_dungeon` | `false` for launch | Keeps Void Dungeon locs/NPCs unloaded; stale entry handlers deny access while preserving the dungeon exit path. |
 | `want_beta_onboarding_guide` | `false` for launch | Beta-only tester toolkit for teleports, stat presets, item kits, and FarmSim shortcuts. Keep enabled only during trusted beta windows. |
 | `production_command_lockdown` | `true` for launch | Owner-only guard for item/NPC spawning, stat/account mutation, forced teleport/movement, server lifecycle, bot/load-test, event/world reset, and QA fixture commands. |
 | `custom_landscape` | `true` | Enables custom patched terrain used by multiple systems. |
@@ -111,7 +114,7 @@ These are positional in many loaders. Keep server and client append order aligne
 - [x] XP rates decided: 10x combat / 2x skills, subscription adds +1x to each.
 - [ ] PvP/safe-zone policy decided.
 - [ ] Economy-affecting QoL toggles decided: notes, auction house, bank presets, batch skilling.
-- [x] Rift travel policy decided: ordinary Void Rifts go only to the Void Enclave; world-map autowalk remains the broad traversal QoL.
+- [x] Rift travel policy decided: ordinary Void Rifts form a five-hub network (Void Enclave, Edgeville, Varrock, Falador, Ardougne), with Lumbridge left to Home teleport and world-map autowalk/saved walks as the broad traversal QoL.
 - [x] Launch command policy decided: enable `production_command_lockdown: true`; keep moderation/read-only staff support available and make high-risk staff/dev commands owner-only.
 - [ ] Production database selected.
 - [ ] Public host/ports selected.

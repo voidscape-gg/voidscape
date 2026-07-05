@@ -36,6 +36,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 
 	private static final int VOID_KNIGHT_ID = NpcId.VOID_KNIGHT.id();
 	private static final int FIGHT_VOID_KNIGHT_ID = NpcId.VOID_KNIGHT_ARENA.id();
+	private static final boolean VOID_KNIGHT_RELEASE_ENABLED = false;
 	private static final String DYNAMIC_ATTRIBUTE = "deathmatch_void_knight_dynamic";
 	private static final String OWNER_ATTRIBUTE = "deathmatch_void_knight_owner";
 
@@ -277,6 +278,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		if (isEnclaveLadderDown(obj)) {
+			if (!VOID_KNIGHT_RELEASE_ENABLED) {
+				player.message("The Void Knight's chamber is sealed for now.");
+				return;
+			}
 			warnAndEnterBasement(player);
 		} else if (isBasementLadderUp(obj)) {
 			returnToEnclave(player);
@@ -353,6 +358,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	}
 
 	private synchronized void startChallenge(Player player) {
+		if (!VOID_KNIGHT_RELEASE_ENABLED) {
+			player.message("The Void Knight is not available yet.");
+			return;
+		}
 		if (sessions.containsKey(player.getUsernameHash())) {
 			player.message("You are already fighting the Void Knight.");
 			return;

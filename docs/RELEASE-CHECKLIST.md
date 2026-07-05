@@ -39,6 +39,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] `server_name`, welcome text, and Discord/community URLs are correct.
 - [ ] `member_world` is intentional and documented.
 - [ ] `want_beta_onboarding_guide: false` for public launch unless this is an explicitly trusted beta window.
+- [ ] `want_void_colossus: false` and `want_void_dungeon: false` for launch unless those systems have a dedicated release pass.
 - [ ] `production_command_lockdown: true` for public launch, then verified with owner and non-owner staff accounts.
 - [ ] XP rates and hit-XP timing flags are intentional and documented.
 - [ ] `restrict_item_id` allows the current custom item range.
@@ -106,13 +107,14 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] Void Island starter path can be chosen once, grants the matching starter kit once, and shows the post-choice welcome box.
 - [ ] Home teleport works and respects wilderness restrictions.
-- [ ] Edgeville Void Rift at `192 443` teleports only to the Void Enclave.
-- [ ] Starter-area Void Rift at `139 636` teleports only to the Void Enclave and does not show the old city destination menu.
+- [ ] Ordinary Void Rifts route only between the approved hubs: Void Enclave, Edgeville, Varrock, Falador, and Ardougne.
+- [ ] Starter-area Void Rift at `139 636` shows the same approved hub list and does not offer Lumbridge.
+- [ ] Void Arena can be entered only from the Void Enclave rift, and `::arena enter` tells players to use that rift instead of teleporting them.
+- [ ] World-map saved slots persist per account locally and use auto-walk, not teleport.
 - [ ] Void Enclave safe zone blocks PvP and amenities work: bank, altar, healing pool, waystones, store.
-- [ ] Void Dungeon entrance at `112 296` charges 100,000 coins, enters the shared Wilderness cave, and the exit rift returns to `112 297`.
+- [ ] Release-disabled content remains closed: Void Dungeon entrance, Void Colossus entrance, Void Knight ladder, Void Rush, and Undead Siege all deny public entry.
 - [ ] Void chest requires a Void Key and rolls rewards.
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
-- [ ] Death Match Arena starts, completes, rewards, and cleans up after logout/death.
 - [ ] Player titles command opens and active title appears in chat.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
 - [ ] Desktop, Android, and web clients send Create Account/recovery traffic to the portal-first account manager; packet registration remains disabled unless explicitly enabled for a private beta/dev build.

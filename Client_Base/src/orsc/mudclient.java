@@ -223,18 +223,10 @@ public final class mudclient implements Runnable {
 	private static final long COMBAT_STYLE_SYNC_GRACE_MILLIS = 2000L;
 	private static final int HIT_FEEDBACK_TIER_NORMAL = 0;
 	private static final int HIT_FEEDBACK_TIER_HIGH = 1;
-	private static final int HIT_FEEDBACK_TIER_HUGE = 2;
 	private static final int HIT_FEEDBACK_HIGH_PERCENT = 75;
-	private static final int HIT_FEEDBACK_HUGE_PERCENT = 90;
-	private static final int HIT_FEEDBACK_STREAK_SHINY = 2;
 	private static final int HIT_FEEDBACK_BASE_SPLAT_SIZE = 24;
 	private static final int HIT_FEEDBACK_ART_SPLAT_SIZE = 34;
-	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_SINGLE_DIGIT = 2;
-	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_DEFAULT = 1;
-	private static final int HIT_FEEDBACK_TEXT_X_OFFSET_LEADING_ONE = 0;
-	private static final int HIT_FEEDBACK_TEXT_Y_OFFSET = 0;
 	private static final String HIT_FEEDBACK_HIGH_SPLAT_ASSET = "hit-splat-high.png";
-	private static final String HIT_FEEDBACK_STREAK_SPLAT_ASSET = "hit-splat-streak.png";
 	private static final int SKILL_ATTACK = 0;
 	private static final int SKILL_DEFENSE = 1;
 	private static final int SKILL_STRENGTH = 2;
@@ -346,6 +338,7 @@ public final class mudclient implements Runnable {
 	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
 	private static final String CLIENT_SETTING_CAMERA_INTERPOLATION = "camera_interpolation";
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
+	private static final String WORLD_MAP_WAYPOINTS_FILE = "worldmap-waypoints.properties";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
 	private static final String VOIDSCAPE_FARMSIM_PREFIX = "@vsfarmsim@";
@@ -357,6 +350,10 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_TOP_TAB_SIZE = 32;
 	private static final int VOIDSCAPE_TOP_TAB_COUNT = 6;
 	private static final int VOIDSCAPE_ACCOUNT_MAX = 3;
+	private static final int WORLD_MAP_WAYPOINT_COUNT = WorldMapPanel.WAYPOINT_COUNT;
+	private static final int WORLD_MAP_DEFAULT_WAYPOINT_X = 217;
+	private static final int WORLD_MAP_DEFAULT_WAYPOINT_Y = 449;
+	private static final String WORLD_MAP_DEFAULT_WAYPOINT_NAME = "Edgeville";
 	private static final long VOIDSCAPE_ACCOUNT_STATS_SAVE_INTERVAL_MS = 3000L;
 	private static final long VOIDSCAPE_ACCOUNT_VALIDATE_TIMEOUT_MS = 8000L;
 	// Original OpenRSC tab order (left to right) with Voidscape art replacing the old sprites.
@@ -495,12 +492,17 @@ public final class mudclient implements Runnable {
 	private static final double REMOTE_ENTITY_MOVEMENT_FRAME_MILLIS = 20.0D;
 	private static final double REMOTE_ENTITY_MOVEMENT_MAX_ELAPSED_MILLIS = 80.0D;
 	private static final long PENDING_INPUT_MARKER_MILLIS = 1000L;
+	private static final long MINIMAP_CLICK_MARKER_MILLIS = 12_000L;
 	private long remoteEntityMoveLastNs = 0L;
 	private double remoteEntityMoveCarryPixels = 0.0D;
 	private boolean pendingInputMarkerActive = false;
 	private int pendingInputMarkerLocalX = -1;
 	private int pendingInputMarkerLocalZ = -1;
 	private long pendingInputMarkerStartMillis = 0L;
+	private boolean minimapClickMarkerActive = false;
+	private int minimapClickMarkerWorldX = -1;
+	private int minimapClickMarkerWorldZ = -1;
+	private long minimapClickMarkerStartMillis = 0L;
 
 	// World-map auto-walker route (slice 2). Populated by SEND_WORLD_WALK_ROUTE.
 	// Slice 5 renders this as a polyline overlay on the world map panel.
@@ -574,6 +576,9 @@ public final class mudclient implements Runnable {
 	// World-map auto-walker UI (slice 5). Opened via the "Map" button that
 	// appears below the minimap on hover.
 	public final orsc.graphics.gui.WorldMapPanel worldMapPanel = new orsc.graphics.gui.WorldMapPanel();
+	private final WorldMapPanel.Waypoint[] worldMapWaypoints = new WorldMapPanel.Waypoint[WORLD_MAP_WAYPOINT_COUNT];
+	private boolean worldMapWaypointsLoaded = false;
+	private String worldMapWaypointsAccountKey = "";
 	private final int[] playerClothingColors = new int[]{
 		0xFF0000, 16744448, 16769024, 10543104, '\ue000', '\u8000',
 		'\ua080', '\ub0ff', '\u80ff', 12528, 14680288, 3158064, 6307840, 8409088, 0xFFFFFF,
@@ -1252,7 +1257,6 @@ public final class mudclient implements Runnable {
 	private int statKills3 = 0;
 	private final ArrayList<BestiaryEntry> bestiaryEntries = new ArrayList<>();
 	private final HashMap<Integer, BestiaryEntry> bestiaryEntriesByNpcId = new HashMap<>();
-	private final HashMap<Long, Integer> hitFeedbackStreakByAttacker = new HashMap<>();
 	private int bestiarySelectedNpcId = -1;
 	private int bestiaryMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
 	private int bestiarySnapshotMode = VOIDSCAPE_BESTIARY_MODE_OBSERVED;
@@ -12310,6 +12314,138 @@ public final class mudclient implements Runnable {
 		return key == null ? value.trim().toLowerCase(Locale.ROOT) : key;
 	}
 
+	private File worldMapWaypointsFile() {
+		if (Config.F_CACHE_DIR != null && !Config.F_CACHE_DIR.trim().isEmpty()) {
+			return new File(Config.F_CACHE_DIR, WORLD_MAP_WAYPOINTS_FILE);
+		}
+		return new File(WORLD_MAP_WAYPOINTS_FILE);
+	}
+
+	private String currentWorldMapWaypointAccountKey() {
+		String user = getUsername();
+		if ((user == null || user.trim().isEmpty()) && this.localPlayer != null) {
+			user = this.localPlayer.accountName;
+		}
+		if ((user == null || user.trim().isEmpty()) && this.localPlayer != null) {
+			user = this.localPlayer.displayName;
+		}
+		String key = voidscapeAccountKey(user);
+		return key.isEmpty() ? "default" : key;
+	}
+
+	private void ensureWorldMapWaypointsLoaded() {
+		String accountKey = currentWorldMapWaypointAccountKey();
+		if (this.worldMapWaypointsLoaded && accountKey.equals(this.worldMapWaypointsAccountKey)) {
+			return;
+		}
+		Arrays.fill(this.worldMapWaypoints, null);
+		this.worldMapWaypointsLoaded = true;
+		this.worldMapWaypointsAccountKey = accountKey;
+
+		File file = worldMapWaypointsFile();
+		if (file.isFile()) {
+			Properties props = new Properties();
+			try (FileInputStream in = new FileInputStream(file)) {
+				props.load(in);
+				for (int i = 0; i < WORLD_MAP_WAYPOINT_COUNT; i++) {
+					String prefix = accountKey + ".slot." + i + ".";
+					int x = parseIntOrDefault(props.getProperty(prefix + "x"), -1);
+					int y = parseIntOrDefault(props.getProperty(prefix + "y"), -1);
+					String name = sanitizeWorldMapWaypointName(props.getProperty(prefix + "name", ""));
+					if (isValidWorldMapWaypoint(x, y)) {
+						if (name.isEmpty()) {
+							name = x + "," + y;
+						}
+						this.worldMapWaypoints[i] = new WorldMapPanel.Waypoint(x, y, name);
+					}
+				}
+			} catch (IOException ignored) {
+			}
+		}
+		if (this.worldMapWaypoints[0] == null) {
+			this.worldMapWaypoints[0] = new WorldMapPanel.Waypoint(
+				WORLD_MAP_DEFAULT_WAYPOINT_X,
+				WORLD_MAP_DEFAULT_WAYPOINT_Y,
+				WORLD_MAP_DEFAULT_WAYPOINT_NAME);
+		}
+		this.worldMapPanel.setWaypoints(this.worldMapWaypoints);
+	}
+
+	private boolean saveWorldMapWaypoints() {
+		Properties props = new Properties();
+		File file = worldMapWaypointsFile();
+		if (file.isFile()) {
+			try (FileInputStream in = new FileInputStream(file)) {
+				props.load(in);
+			} catch (IOException ignored) {
+			}
+		}
+
+		String prefix = this.worldMapWaypointsAccountKey + ".slot.";
+		for (String key : new ArrayList<String>(props.stringPropertyNames())) {
+			if (key.startsWith(prefix)) {
+				props.remove(key);
+			}
+		}
+		for (int i = 0; i < WORLD_MAP_WAYPOINT_COUNT; i++) {
+			WorldMapPanel.Waypoint waypoint = this.worldMapWaypoints[i];
+			if (waypoint == null || !waypoint.isSet()) {
+				continue;
+			}
+			String slotPrefix = prefix + i + ".";
+			props.setProperty(slotPrefix + "x", Integer.toString(waypoint.worldX));
+			props.setProperty(slotPrefix + "y", Integer.toString(waypoint.worldY));
+			props.setProperty(slotPrefix + "name", sanitizeWorldMapWaypointName(waypoint.name));
+		}
+
+		File parent = file.getParentFile();
+		if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+			return false;
+		}
+		try (FileOutputStream out = new FileOutputStream(file)) {
+			props.store(out, "Voidscape world-map waypoints");
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
+	private void saveWorldMapWaypoint(int slot, int worldX, int worldY) {
+		ensureWorldMapWaypointsLoaded();
+		if (slot < 0 || slot >= WORLD_MAP_WAYPOINT_COUNT || !isValidWorldMapWaypoint(worldX, worldY)) {
+			this.showMessage(false, null, "@red@World map: invalid waypoint.", MessageType.GAME, 0, null);
+			return;
+		}
+		String name = sanitizeWorldMapWaypointName(this.worldMapPanel.describeWorldTile(worldX, worldY));
+		if (name.isEmpty()) {
+			name = worldX + "," + worldY;
+		}
+		WorldMapPanel.Waypoint waypoint = new WorldMapPanel.Waypoint(worldX, worldY, name);
+		this.worldMapWaypoints[slot] = waypoint;
+		this.worldMapPanel.setWaypoint(slot, waypoint);
+		if (saveWorldMapWaypoints()) {
+			this.showMessage(false, null,
+				"@gre@World map: @whi@saved slot " + (slot + 1) + " (" + name + ").",
+				MessageType.GAME, 0, null);
+		} else {
+			this.showMessage(false, null,
+				"@red@World map: could not save waypoint.",
+				MessageType.GAME, 0, null);
+		}
+	}
+
+	private boolean isValidWorldMapWaypoint(int worldX, int worldY) {
+		return worldX >= 0 && worldX <= 944 && worldY >= 0 && worldY < 944 * 4;
+	}
+
+	private String sanitizeWorldMapWaypointName(String name) {
+		if (name == null) {
+			return "";
+		}
+		String clean = name.replace('\n', ' ').replace('\r', ' ').trim();
+		return clean.length() > 36 ? clean.substring(0, 36) : clean;
+	}
+
 	private String voidscapeAccountDisplayName(VoidscapeSavedAccount account) {
 		if (account == null) {
 			return "";
@@ -13221,6 +13357,65 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private void setMinimapClickMarker(int localX, int localZ) {
+		if (localX < 0 || localZ < 0 || localX >= 96 || localZ >= 96) {
+			clearMinimapClickMarker();
+			return;
+		}
+		this.minimapClickMarkerActive = true;
+		this.minimapClickMarkerWorldX = this.midRegionBaseX + localX;
+		this.minimapClickMarkerWorldZ = this.midRegionBaseZ + localZ;
+		this.minimapClickMarkerStartMillis = System.currentTimeMillis();
+	}
+
+	private void clearMinimapClickMarker() {
+		this.minimapClickMarkerActive = false;
+		this.minimapClickMarkerWorldX = -1;
+		this.minimapClickMarkerWorldZ = -1;
+		this.minimapClickMarkerStartMillis = 0L;
+	}
+
+	private void drawMinimapClickMarker(int posX, int posY, int width, int height, int scale, int trigA, int trigB) {
+		if (!this.minimapClickMarkerActive || this.localPlayer == null) {
+			return;
+		}
+
+		long ageMillis = System.currentTimeMillis() - this.minimapClickMarkerStartMillis;
+		int playerWorldX = this.midRegionBaseX + localPlayerTileX();
+		int playerWorldZ = this.midRegionBaseZ + localPlayerTileZ();
+		if (ageMillis >= MINIMAP_CLICK_MARKER_MILLIS
+			|| playerWorldX == this.minimapClickMarkerWorldX
+			&& playerWorldZ == this.minimapClickMarkerWorldZ) {
+			clearMinimapClickMarker();
+			return;
+		}
+
+		int sceneX = (this.minimapClickMarkerWorldX - this.midRegionBaseX) * this.tileSize + 64;
+		int sceneZ = (this.minimapClickMarkerWorldZ - this.midRegionBaseZ) * this.tileSize + 64;
+		int relX = (sceneX - this.localPlayer.currentX) * scale * 3 / 2048;
+		int relZ = (sceneZ - this.localPlayer.currentZ) * scale * 3 / 2048;
+		int screenOffsetX = trigB * relX + trigA * relZ >> 18;
+		int screenOffsetZ = trigB * relZ - trigA * relX >> 18;
+		int markerX = posX + width / 2 + screenOffsetX;
+		int markerY = posY + height / 2 - screenOffsetZ;
+		if (markerX < posX - 8 || markerX >= posX + width + 8
+			|| markerY < posY - 8 || markerY >= posY + height + 8) {
+			return;
+		}
+
+		int fade = (int)(MINIMAP_CLICK_MARKER_MILLIS - ageMillis);
+		int alpha = Math.max(90, Math.min(235, fade * 235 / (int)MINIMAP_CLICK_MARKER_MILLIS));
+		int radius = 4 + ((this.getFrameCounter() / 8) & 1);
+		this.getSurface().drawLineAlpha(markerX - radius - 1, markerY - radius - 1,
+			markerX + radius + 1, markerY + radius + 1, 0x240000, Math.min(210, alpha));
+		this.getSurface().drawLineAlpha(markerX - radius - 1, markerY + radius + 1,
+			markerX + radius + 1, markerY - radius - 1, 0x240000, Math.min(210, alpha));
+		this.getSurface().drawLineAlpha(markerX - radius, markerY - radius,
+			markerX + radius, markerY + radius, 0xFF5555, alpha);
+		this.getSurface().drawLineAlpha(markerX - radius, markerY + radius,
+			markerX + radius, markerY - radius, 0xFF5555, alpha);
+	}
+
 	private void drawMinimapEntity(int val, int x, byte var3, int y) {
 		try {
 			this.getSurface().setPixel(x, y, val);
@@ -13966,43 +14161,14 @@ public final class mudclient implements Runnable {
 		}
 		long scaledDamage = (long) target.damageTaken * 100L;
 		long scaledMax = (long) target.hitFeedbackAttackerMaxHit;
-		if (scaledDamage >= scaledMax * HIT_FEEDBACK_HUGE_PERCENT) {
-			return HIT_FEEDBACK_TIER_HUGE;
-		}
 		if (scaledDamage >= scaledMax * HIT_FEEDBACK_HIGH_PERCENT) {
 			return HIT_FEEDBACK_TIER_HIGH;
 		}
 		return HIT_FEEDBACK_TIER_NORMAL;
 	}
 
-	public void recordHitFeedback(ORSCharacter target) {
-		if (target == null || !target.hasHitFeedback()) {
-			return;
-		}
-		long attackerKey = hitFeedbackAttackerKey(target);
-		int tier = hitFeedbackTier(target);
-		if (tier == HIT_FEEDBACK_TIER_NORMAL) {
-			this.hitFeedbackStreakByAttacker.remove(attackerKey);
-			target.hitFeedbackStreak = 0;
-			return;
-		}
-
-		int streak = this.hitFeedbackStreakByAttacker.containsKey(attackerKey)
-			? this.hitFeedbackStreakByAttacker.get(attackerKey) + 1
-			: 1;
-		this.hitFeedbackStreakByAttacker.put(attackerKey, streak);
-		target.hitFeedbackStreak = streak;
-	}
-
-	private long hitFeedbackAttackerKey(ORSCharacter target) {
-		return ((long) target.hitFeedbackAttackerType << 32)
-			| (target.hitFeedbackAttackerServerIndex & 0xFFFFFFFFL);
-	}
-
 	private String hitFeedbackTierName(int tier) {
 		switch (tier) {
-			case HIT_FEEDBACK_TIER_HUGE:
-				return "HUGE";
 			case HIT_FEEDBACK_TIER_HIGH:
 				return "HIGH";
 			default:
@@ -14020,7 +14186,7 @@ public final class mudclient implements Runnable {
 			return;
 		}
 
-		Sprite hitSplatSprite = hitFeedbackSplatSprite(target.hitFeedbackStreak);
+		Sprite hitSplatSprite = getVoidscapeSkinSprite(HIT_FEEDBACK_HIGH_SPLAT_ASSET);
 		if (hitSplatSprite != null) {
 			int splatOffset = (HIT_FEEDBACK_ART_SPLAT_SIZE - HIT_FEEDBACK_BASE_SPLAT_SIZE) / 2;
 			this.getSurface().drawArgbSpriteClipping(hitSplatSprite, spriteX - splatOffset, spriteY - splatOffset,
@@ -14028,25 +14194,7 @@ public final class mudclient implements Runnable {
 		} else {
 			this.getSurface().drawSprite(spriteSelect(spriteDef), spriteX, spriteY);
 		}
-		String damageText = "" + target.damageTaken;
-		this.getSurface().drawColoredStringCentered(textX + hitFeedbackTextXOffset(damageText), damageText,
-			0xFFFFFF, 0, 3, textY + HIT_FEEDBACK_TEXT_Y_OFFSET);
-	}
-
-	private int hitFeedbackTextXOffset(String damageText) {
-		if (damageText.length() == 1) {
-			return HIT_FEEDBACK_TEXT_X_OFFSET_SINGLE_DIGIT;
-		}
-		if (damageText.charAt(0) == '1') {
-			return HIT_FEEDBACK_TEXT_X_OFFSET_LEADING_ONE;
-		}
-		return HIT_FEEDBACK_TEXT_X_OFFSET_DEFAULT;
-	}
-
-	private Sprite hitFeedbackSplatSprite(int streak) {
-		return getVoidscapeSkinSprite(streak >= HIT_FEEDBACK_STREAK_SHINY
-			? HIT_FEEDBACK_STREAK_SPLAT_ASSET
-			: HIT_FEEDBACK_HIGH_SPLAT_ASSET);
+		this.getSurface().drawColoredStringCentered(textX, "" + target.damageTaken, 0xFFFFFF, 0, 3, textY);
 	}
 
 	private void debugHitFeedbackRender(String targetKind, ORSCharacter target, int tier) {
@@ -14061,8 +14209,7 @@ public final class mudclient implements Runnable {
 			+ " attackerType=" + target.hitFeedbackAttackerType
 			+ " attackerIndex=" + target.hitFeedbackAttackerServerIndex
 			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit
-			+ " tier=" + hitFeedbackTierName(tier)
-			+ " streak=" + target.hitFeedbackStreak);
+			+ " tier=" + hitFeedbackTierName(tier));
 	}
 
 	private void drawPopupReport(boolean var1) {
@@ -14725,6 +14872,7 @@ public final class mudclient implements Runnable {
 			// Render happens at the *bottom* of drawUi so the dialog draws
 			// on top of side panels and chat tabs.
 			if (!voidRushUiLocked && this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+				ensureWorldMapWaypointsLoaded();
 				int[] outWorld = new int[2];
 				orsc.graphics.gui.WorldMapPanel.ClickResult result =
 					this.worldMapPanel.pollMouse(this.mouseX, this.mouseY,
@@ -14733,6 +14881,18 @@ public final class mudclient implements Runnable {
 				if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.MAP_TILE) {
 					this.sendWorldWalkRequest(outWorld[0], outWorld[1]);
 					logAndroidSmokeWorldMapState("MAP_TILE");
+				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.WAYPOINT_WALK) {
+					this.sendWorldWalkRequest(outWorld[0], outWorld[1]);
+					logAndroidSmokeWorldMapState("WAYPOINT_WALK");
+				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.WAYPOINT_SET) {
+					this.saveWorldMapWaypoint(this.worldMapPanel.getLastWaypointSlot(), outWorld[0], outWorld[1]);
+					logAndroidSmokeWorldMapState("WAYPOINT_SET");
+				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.WAYPOINT_ARMED) {
+					int slot = this.worldMapPanel.getLastWaypointSlot();
+					this.showMessage(false, null,
+						"@gre@World map: @whi@click a map tile to save slot " + (slot + 1) + ".",
+						MessageType.GAME, 0, null);
+					logAndroidSmokeWorldMapState("WAYPOINT_ARMED");
 				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.CLOSE) {
 					logAndroidSmokeWorldMapState("CLOSE");
 				} else if (result == orsc.graphics.gui.WorldMapPanel.ClickResult.ZOOM) {
@@ -14962,6 +15122,7 @@ public final class mudclient implements Runnable {
 			// World-map auto-walker (slice 5). Render at the very end so the
 			// dialog sits on top of side-panel tabs, minimap, and chat tabs.
 			if (!voidRushUiLocked && this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
+				ensureWorldMapWaypointsLoaded();
 				logAndroidSmokeWorldMapState("BEFORE_RENDER");
 				this.worldMapPanel.render(this.getSurface(),
 					this.getGameWidth(), this.getGameHeight(),
@@ -16549,6 +16710,7 @@ public final class mudclient implements Runnable {
 			}
 
 			this.getSurface().drawCircle(posX + var4 / 2, var5 / 2 + posY, 2, 0xFFFFFF, 255, -1057205208);
+			drawMinimapClickMarker(posX, posY, var4, var5, var6, var10, var11);
 			this.getSurface().drawMinimapSprite(spriteSelect(GUIPARTS.COMPASS.getDef()), posY + 19, posX + 19, 842218000, 128,
 				255 & this.cameraRotation + 128);
 			this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
@@ -16571,7 +16733,12 @@ public final class mudclient implements Runnable {
 					mX = var12 + this.localPlayer.currentX;
 					mZ = this.localPlayer.currentZ - mZ;
 					if (this.mouseButtonClick == 1) {
-						this.walkToActionSource(this.playerLocalX, this.playerLocalZ, mX / 128, (mZ / 128),
+						int destLocalX = mX / this.tileSize;
+						int destLocalZ = mZ / this.tileSize;
+						if (!this.voidScoutActive) {
+							setMinimapClickMarker(destLocalX, destLocalZ);
+						}
+						this.walkToActionSource(this.playerLocalX, this.playerLocalZ, destLocalX, destLocalZ,
 							false);
 					}
 					if (!Config.isAndroid() && Config.S_WANT_CUSTOM_SPRITES && this.mouseButtonClick == 2) {

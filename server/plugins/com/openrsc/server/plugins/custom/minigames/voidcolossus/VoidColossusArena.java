@@ -157,12 +157,19 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	@Override
 	public boolean blockOpLoc(Player player, GameObject obj, String command) {
-		return isHubRift(obj) || isArenaRift(obj);
+		if (isHubRift(obj)) {
+			return player.getConfig().WANT_VOID_COLOSSUS;
+		}
+		return isArenaRift(obj);
 	}
 
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		if (isHubRift(obj)) {
+			if (!player.getConfig().WANT_VOID_COLOSSUS) {
+				player.message("That rift is dormant for now.");
+				return;
+			}
 			if (!confirmTravel(player, "The rift hums with colossal fury beyond.",
 				"Face the Void Colossus alone?", "Enter the arena")) {
 				return;

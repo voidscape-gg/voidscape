@@ -46,6 +46,10 @@ public class VoidDungeon implements OpLocTrigger {
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		if (isWildernessRift(obj)) {
+			if (!player.getConfig().WANT_VOID_DUNGEON) {
+				player.message("The Void Dungeon rift is dormant for now.");
+				return;
+			}
 			if (!canUseRift(player)) {
 				return;
 			}

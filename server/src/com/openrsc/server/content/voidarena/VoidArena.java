@@ -363,7 +363,7 @@ public final class VoidArena {
 
 		String action = args[0].toLowerCase();
 		if (action.equals("enter")) {
-			enterLobby(player);
+			player.message("Use the Void Arena rift in the Void Enclave to enter.");
 			return;
 		}
 		if (action.equals("leave") || action.equals("exit")) {
@@ -401,6 +401,10 @@ public final class VoidArena {
 		}
 
 		showHelp(player);
+	}
+
+	public void enterFromVoidEnclaveRift(Player player) {
+		enterLobby(player);
 	}
 
 	public synchronized void challengeDmKing(Player player) {
@@ -682,6 +686,10 @@ public final class VoidArena {
 	}
 
 	private void leave(Player player) {
+		if (!VoidArenaConfig.isInsideVoidArena(player.getLocation())) {
+			player.message("You are not in the Void Arena.");
+			return;
+		}
 		if (activeMatches.containsKey(player.getUsernameHash())
 			|| activeDmKingChallenges.containsKey(player.getUsernameHash())) {
 			player.message("You cannot leave during an active Death Match.");
@@ -2021,7 +2029,7 @@ public final class VoidArena {
 
 	private void showHelp(Player player) {
 		player.playerServerMessage(MessageType.QUEST, "@mag@Void Arena commands:");
-		player.playerServerMessage(MessageType.QUEST, "@whi@::arena enter@mag@ - teleport to the ranked lobby");
+		player.playerServerMessage(MessageType.QUEST, "@whi@Void Enclave rift@mag@ - enter the ranked lobby");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena stats@mag@ - show your rating");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena top@mag@ - show the top ranked fighters");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena leave@mag@ - leave the lobby");
