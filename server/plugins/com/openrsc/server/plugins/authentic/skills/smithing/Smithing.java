@@ -375,7 +375,7 @@ public class Smithing implements UseLocTrigger {
 		if (def.getItemID() == ItemId.RUNE_PLATE_MAIL_BODY.id()) {
 			PlayerTitle.checkRunePlateSmith(player);
 		}
-		delay();
+		delay(3);
 
 		// Repeat
 		updatebatch();

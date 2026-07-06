@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-06 - Production batch delay normalization
+
+Normalized 1-tick batch pacing outliers so production batch skills sit in the intended 2-3 tick/item band instead of running far ahead of cooking, smelting, mining, woodcutting, and thieving. Standard smithing now waits 3 ticks per item because its output is guaranteed, while fletching, crafting production loops, and custom runecraft talisman production now use 2-tick batch delays where they previously used bare 1-tick pauses; existing 2+ tick gathering, cooking, smelting, firemaking, and herblaw loops were left alone. Files: `Smithing.java`, `Fletching.java`, `Crafting.java`, and custom `Runecraft.java`. No batching model, progress bar, XP rate, success roll, packet, opcode, schema, or client behavior changed; reversibility is restoring the previous bare `delay()` calls in those production batch methods.
+
 ### 2026-07-06 - Subscriber chat names render magenta
 
 Active Void subscribers now get magenta sender names in custom-client chat surfaces while preserving normal message colors. The server marks subscribed senders by OR-ing `0x40000000` into the existing custom-client icon int for public chat updates, generic server-routed chat rows, and received private/global messages; the client masks that bit before crown drawing and uses it only to format the display sender as `@mag@name@<normal>@`. This keeps raw sender/former-name metadata intact for ignore lists, logs, and click-to-message behavior. `CLIENT_VERSION`, tracked/local `client_version` configs, voidbot's default negotiated version, and protocol/config docs move to `10124` because stale clients would treat the flag bit as crown data. No opcode, payload length, DB schema, cache asset, subscription rule, or chat message text changed; reversibility is removing the icon flag helper/client masking and restoring version `10123`.

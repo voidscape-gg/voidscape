@@ -216,7 +216,7 @@ public class Fletching implements UseInvTrigger {
 			ActionSender.sendInventory(player);
 			player.incExp(Skill.FLETCHING.id(), experience * timesLooped, true);
 		}
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
@@ -296,7 +296,7 @@ public class Fletching implements UseInvTrigger {
 			ActionSender.sendInventory(player);
 			player.incExp(Skill.FLETCHING.id(), headDef.getExp() * skillCapeMultiplier * timesLooped, true);
 		}
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
@@ -352,7 +352,7 @@ public class Fletching implements UseInvTrigger {
 		player.message("You add a string to the bow");
 		player.getCarriedItems().getInventory().add(new Item(stringDef.getBowID(), 1));
 		player.incExp(Skill.FLETCHING.id(), stringDef.getExp(), true);
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
@@ -506,12 +506,12 @@ public class Fletching implements UseInvTrigger {
 		player.message("you chisel the pearls into small bolt tips");
 		give(player, ItemId.OYSTER_PEARL_BOLT_TIPS.id(), amount);
 		player.incExp(Skill.FLETCHING.id(), 100, true);
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchPearlCutting(player, pearl, amount);
 		}
 	}
@@ -571,7 +571,7 @@ public class Fletching implements UseInvTrigger {
 			player.incExp(Skill.FLETCHING.id(), 25 * skillCapeMultiplier * timesLooped, true);
 		}
 
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
