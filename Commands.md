@@ -892,7 +892,7 @@ Regular Player Commands
   - Alias: `::pk`
   - Send a simplified global-chat message. The custom client can show the sender's IP country flag beside the username.
   - `::pk` still routes to the legacy PK global channel when enabled.
-  - You can only send one global chat message per 15 seconds.
+  - Global chat has no send cooldown in Voidscape presets.
 - p
   - Usage: `::p [message]`
   - Send a message to party members chat.

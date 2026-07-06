@@ -5251,7 +5251,7 @@ public final class Player extends Mob {
 
 		if (getTotalLevel() < getConfig().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ && !isPlayerMod()) {
 			message("You can only send a message to global chat if you have at least " + getConfig().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ + " total level.");
-			message("Type @gre@::globalchat@whi@ or @gre@::gc@whi@ for more information.");
+			message("Type @gre@::g@whi@ for more information.");
 			return false;
 		}
 

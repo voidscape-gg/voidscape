@@ -27,6 +27,19 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-06 - Global chat opens to all players on `::g`
+
+Voidscape global chat now uses `::g` as the player-facing command/help entry point, with
+bare `::g` opening the global-chat help text instead of advertising the older `::gc`
+shortcut. The preservation/local presets set `global_message_total_level_req` to `0`, so
+speaking in global chat no longer has a total-skill requirement, the tracked presets that
+previously required global-rules acceptance now set `want_global_rules_agreement` to
+`false`, and the preservation/local presets set `global_message_cooldown` to `0`; mute,
+tutorial-island, and baby-mode gates still apply. Files:
+`RegularPlayer.java`, `Player.java`, `Social.java`, `server/*.conf`, and
+`server/local.conf`. Reversibility is restoring the old alias text, the previous preset
+requirement, the prior agreement-gate config, and the previous cooldown value.
+
 ### 2026-07-06 - Player-chosen global chat country flags
 
 Replaced IP-geolocated global chat flags with an explicit country picker on the character-design screen. Custom clients `>= 10125` append two ISO country-code bytes to `PLAYER_APPEARANCE_CHANGE` before the optional referral string, and `SEND_UNLOCKED_APPEARANCES` appends the current saved code so Makeover Mage re-entry preselects the player's stored flag; older appearance packet shapes remain accepted and preserve existing cache state. The server now reads/writes only `global_chat_country_code`, removes the async `api.country.is` lookup path and lookup config keys, keeps the existing show/hide setting, and reuses the `@flg@CC` chat token renderer. The shared client adds a curated `None` + country list, picker arrows, 59 MIT `lipis/flag-icons` assets, and chosen-flag settings copy; voidbot gained `design-character --country cc`. Files: `GlobalChatCountryFlags.java`, appearance parser/handler/structs, `PayloadCustomGenerator`, `ActionSender`, `mudclient.java`, `PacketHandler.java`, flag cache assets, tracked server configs, voidbot, and protocol/config docs. Reversibility is restoring the IP resolver/config keys, removing the two-byte appearance/unlocked-appearance trailers and picker UI, and downgrading `CLIENT_VERSION`/`client_version` to `10124`.

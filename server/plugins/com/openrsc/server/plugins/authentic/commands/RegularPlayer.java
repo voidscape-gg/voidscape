@@ -229,7 +229,7 @@ public final class RegularPlayer implements CommandTrigger {
 			bankPinOptOut(player);
 		} else if (command.equalsIgnoreCase("rename")) {
 			renameSelf(player, args);
-		} else if (command.equalsIgnoreCase("globalchat") || command.equalsIgnoreCase("gc")) {
+		} else if (command.equalsIgnoreCase("globalchat")) {
 			globalChatInfo(player);
 		}
 	}
@@ -1085,7 +1085,11 @@ public final class RegularPlayer implements CommandTrigger {
 
 		String rawMessage = String.join(" ", args).trim();
 		if (rawMessage.isEmpty()) {
-			player.message(badSyntaxPrefix + command + " <message>");
+			if (command.equalsIgnoreCase("g")) {
+				globalChatInfo(player);
+			} else {
+				player.message(badSyntaxPrefix + command + " <message>");
+			}
 			return;
 		}
 
