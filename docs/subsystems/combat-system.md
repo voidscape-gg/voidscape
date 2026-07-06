@@ -33,6 +33,7 @@ damage = damageNumerator / 640
 - `bonusConstant`: 8 (player), 0 (NPC).
 - `styleBonus`: +3 for matching aggressive/accurate/defensive, +1 for controlled.
 - Strength prayers: 1.05 (Burst of Strength), 1.10 (Superhuman), 1.15 (Ultimate Strength).
+- NPCs attacking players use an effective Attack/Strength floor of 15, then gain a small offence bonus from level 40 upward: `+1` per 8 levels, capped at `+12`.
 
 **Ranged max hit**:
 ```
@@ -54,6 +55,7 @@ else:
 ```
 - Melee accuracy: `(AttackLevel + bonusConstant + styleBonus) * (weaponAim + 64)`
 - Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (64 + armourPoints * 0.60)`
+- For NPCs attacking players, the same floor/scaling described under melee max hit is applied to the NPC Attack level before the accuracy roll.
 
 **Physical armour mitigation**:
 ```
@@ -68,7 +70,7 @@ damage = floor(damage * (1 - reduction))
 - **Defence cape**: blocks 50% of melee damage to player.
 - **Attack cape**: prevents zero hits (re-rolls misses).
 - **Strength cape**: +20% damage on hits ≥ 50% of max hit.
-- **PvP melee momentum**: player-vs-player melee hits at or above 75% of the target-adjusted max hit grant one momentum stack against that same target. The next successful melee hit rolls damage twice and keeps the higher roll, then consumes the stack; a miss or target swap clears it.
+- **PvP melee momentum**: player-vs-player melee hits at or above 68% of the target-adjusted max hit grant one momentum stack against that same target. The next successful melee hit rolls damage twice and keeps the higher roll, then consumes the stack; a miss or target swap clears it.
 - **Poison**: 10 levels; each tick reduces power by 2, deals `floor(power/10)` damage.
 - **Ring of Recoil**: reflects 10% of damage taken; breaks at 40 reflected total.
 

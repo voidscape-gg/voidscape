@@ -26,9 +26,13 @@ public class CombatFormula {
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR = 1200.0D;
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_CAP = 0.24D;
 	private static final double VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE = 0.92D;
+	private static final int NPC_VS_PLAYER_MELEE_FLOOR = 15;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL = 40;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_LEVELS_PER_POINT = 8;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_CAP = 12;
 	private static final String PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE = "pvpMeleeMomentumTarget";
 	private static final String PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE = "pvpMeleeMomentumStacks";
-	private static final double PVP_MELEE_MOMENTUM_BIG_HIT_RATIO = 0.75D;
+	private static final double PVP_MELEE_MOMENTUM_BIG_HIT_RATIO = 0.68D;
 	private static final int PVP_MELEE_MOMENTUM_MAX_STACKS = 1;
 
 	/**
@@ -278,7 +282,16 @@ public class CombatFormula {
 	}
 
 	private static int getMeleeDamage(final Mob source, final Mob victim) {
-		return (int) (getMeleeDamage(source) * voidMeleeMultiplier(source, victim));
+		int maxRoll = getMeleeDamage(source);
+		if (source instanceof Npc && victim instanceof Player) {
+			final int styleBonus = styleBonus(source, Skill.STRENGTH.id());
+			final double prayerBonus = addPrayers(source, Prayers.BURST_OF_STRENGTH,
+				Prayers.SUPERHUMAN_STRENGTH,
+				Prayers.ULTIMATE_STRENGTH);
+			final int effectiveStrength = npcVsPlayerMeleeLevel(source, Skill.STRENGTH.id());
+			maxRoll = (int)((Math.floor(effectiveStrength * prayerBonus) + styleBonus) * (source.getWeaponPowerPoints() + 64));
+		}
+		return (int) (maxRoll * voidMeleeMultiplier(source, victim));
 	}
 
 	/**
@@ -458,7 +471,28 @@ public class CombatFormula {
 	}
 
 	private static double getMeleeAccuracy(final Mob attacker, final Mob defender) {
-		return getMeleeAccuracy(attacker) * voidMeleeMultiplier(attacker, defender);
+		double accuracy = getMeleeAccuracy(attacker);
+		if (attacker instanceof Npc && defender instanceof Player) {
+			final int styleBonus = styleBonus(attacker, Skill.ATTACK.id());
+			final double prayerBonus = addPrayers(attacker, Prayers.CLARITY_OF_THOUGHT,
+				Prayers.IMPROVED_REFLEXES,
+				Prayers.INCREDIBLE_REFLEXES);
+			final int effectiveAttack = npcVsPlayerMeleeLevel(attacker, Skill.ATTACK.id());
+			accuracy = (Math.floor(effectiveAttack * prayerBonus) + styleBonus) * (attacker.getWeaponAimPoints() + 64);
+		}
+		return accuracy * voidMeleeMultiplier(attacker, defender);
+	}
+
+	private static int npcVsPlayerMeleeLevel(final Mob npc, final int skillId) {
+		final int skillLevel = npc.getSkills().getLevel(skillId);
+		int effectiveLevel = Math.max(NPC_VS_PLAYER_MELEE_FLOOR, skillLevel);
+		final int offenseLevel = Math.max(npc.getSkills().getLevel(Skill.ATTACK.id()), npc.getSkills().getLevel(Skill.STRENGTH.id()));
+		if (offenseLevel < NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL) {
+			return effectiveLevel;
+		}
+		final int bonus = Math.min(NPC_VS_PLAYER_OFFENCE_BONUS_CAP,
+			((offenseLevel - NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL) / NPC_VS_PLAYER_OFFENCE_BONUS_LEVELS_PER_POINT) + 1);
+		return effectiveLevel + bonus;
 	}
 
 	private static double voidMeleeMultiplier(final Mob attacker, final Mob defender) {
