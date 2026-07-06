@@ -49,6 +49,8 @@ public final class GameStateUpdater {
 	private static final byte HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
 	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
 	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
+	private static final long CLIENT_ACTIVITY_TIMEOUT_MS = 30000L;
+	private static final long ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS = 120000L;
 
 	private final Server server;
 	public final Server getServer() {
@@ -117,7 +119,7 @@ public final class GameStateUpdater {
 			player.setLastTimedEvent(curTime);
 		}
 
-		if (curTime - player.getLastClientActivity() >= 30000) {
+		if (curTime - player.getLastClientActivity() >= clientActivityTimeoutMs(player)) {
 			player.unregister(UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Client activity time-out");
 		}
 
@@ -140,6 +142,12 @@ public final class GameStateUpdater {
 				+ " mins! Please move to a new area");
 			player.setWarnedToMove(true);
 		}
+	}
+
+	private long clientActivityTimeoutMs(final Player player) {
+		return player.isUsingAndroidClient()
+			? ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS
+			: CLIENT_ACTIVITY_TIMEOUT_MS;
 	}
 
 	private boolean enforceCurrentClientVersion(final Player player) {

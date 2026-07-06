@@ -443,16 +443,18 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 const apkBuilt = process.argv[2] === '1';
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+const apkHasSidecar = process.argv[3] === '1';
 if (!android) throw new Error('public payload should keep an Android APK row for launch-open UI copy');
 if (apkBuilt) {
 	if (android.available !== true) throw new Error('built Android APK should be public in the launch-open chooser');
 	if (android.url !== '/downloads/android-apk') throw new Error('built Android APK should link to /downloads/android-apk');
 	if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('built Android APK should expose sha256');
+	if (apkHasSidecar && !Number.isInteger(android.clientVersion)) throw new Error('built Android APK sidecar should expose clientVersion');
 } else {
 	if (android.available === true) throw new Error('missing Android APK should not be marked available');
 	if (android.url !== '#') throw new Error('missing Android APK row should not link to a download');
 }
-" "$public_payload" "$([[ -f "$default_android_apk" ]] && printf 1 || printf 0)"
+" "$public_payload" "$([[ -f "$default_android_apk" ]] && printf 1 || printf 0)" "$([[ -f "${default_android_apk}.json" ]] && printf 1 || printf 0)"
 	grep -q '"blocked24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized integrity counts"; exit 1; }
 	grep -q '"staffMints24h": 2' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized item receipt counts"; exit 1; }
 	grep -q '"npcDrops24h": 1' <<<"$public_payload" || { echo "public-mode /api/public should expose sanitized npc drop receipt counts"; exit 1; }
@@ -559,6 +561,10 @@ trap cleanup EXIT
 android_public_port=$((PORT + 3))
 android_release_apk="$tmp_dir/voidscape-release.apk"
 dd if=/dev/zero of="$android_release_apk" bs=2048 count=1 >/dev/null 2>&1
+android_release_sha="$(shasum -a 256 "$android_release_apk" | awk '{print $1}')"
+cat >"${android_release_apk}.json" <<JSON
+{"clientVersion":10123,"sha256":"$android_release_sha","sizeBytes":2048,"builtAt":"2026-07-06T00:00:00.000Z","gitCommit":"test-fixture","buildType":"debug"}
+JSON
 	PORT="$android_public_port" \
 	PORTAL_DATA_DIR="$tmp_dir/android-public-store" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
@@ -584,6 +590,7 @@ const android = (payload.downloads || []).find((row) => row.slug === 'android-ap
 if (!android || android.available !== true) throw new Error('explicit public Android APK should be available');
 if (android.url !== '/downloads/android-apk') throw new Error('explicit public Android APK should link to /downloads/android-apk');
 if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('explicit public Android APK should expose sha256');
+if (android.clientVersion !== 10123) throw new Error('explicit public Android APK should expose sidecar clientVersion');
 " "$android_public_payload"
 expect_status 200 "http://127.0.0.1:${android_public_port}/downloads/android-apk"
 
@@ -639,6 +646,30 @@ grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-sign
 grep -q '"packetRegistration": false' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose portal-first registration"; exit 1; }
 grep -q '"oauth": {' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose OAuth config"; exit 1; }
 grep -q '"clientId": "test-google-client"' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the Google client id when configured"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+const downloads = Array.isArray(payload.downloads) ? payload.downloads : [];
+const webClient = downloads.find((row) => row && row.slug === 'web-client');
+if (!webClient || webClient.url !== 'https://voidscape.gg/play/?phone=1') {
+	throw new Error('web-client should force the phone shell, got ' + (webClient && webClient.url));
+}
+const bad = downloads.filter((row) => row && row.available && row.publicDownload && String(row.url || '').startsWith('http://'));
+if (bad.length) throw new Error('public downloads must not use http URLs: ' + bad.map((row) => row.slug).join(', '));
+for (const row of downloads) {
+	if (!row || !row.available || !row.publicDownload || row.slug === 'web-client') continue;
+	if (!String(row.url || '').startsWith('https://voidscape.gg/downloads/')) {
+		throw new Error(row.slug + ' should use the configured HTTPS public origin, got ' + row.url);
+	}
+}
+" "$launch_public_payload"
+if [[ -f "Client_Base/Open_RSC_Client.jar" ]]; then
+	launch_manifest="$(curl -fsS "http://127.0.0.1:${launch_port}/api/launcher/manifest.properties")"
+	grep -q '^baseUrl=https://voidscape\.gg/downloads/cache/$' <<<"$launch_manifest" || { echo "launch-signup launcher manifest should use the configured HTTPS cache origin"; exit 1; }
+	grep -q '^file\.1\.url=https://voidscape\.gg/downloads/client-runtime$' <<<"$launch_manifest" || { echo "launch-signup launcher manifest should use the configured HTTPS client URL"; exit 1; }
+	if [[ -f "PC_Launcher/OpenRSC.jar" ]]; then
+		grep -q '^launcher\.url=https://voidscape\.gg/downloads/launcher$' <<<"$launch_manifest" || { echo "launch-signup launcher self-update URL should use the configured HTTPS public origin"; exit 1; }
+	fi
+fi
 
 launch_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \

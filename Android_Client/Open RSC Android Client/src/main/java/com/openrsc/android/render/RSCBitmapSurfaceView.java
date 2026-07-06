@@ -40,14 +40,9 @@ import orsc.util.Utils;
 
 public abstract class RSCBitmapSurfaceView extends SurfaceView implements SurfaceHolder.Callback, ClientPort {
 
-	private final int client_width = 512;
-	private final int client_height = 334;
-	private static final int CLIENT_FULL_HEIGHT = 334 + 12;
-	private static final int MAX_PORTRAIT_FULL_HEIGHT = 1152;
-
 	protected final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
 	private final Object frameLock = new Object();
-	private Bitmap currentFrame = Bitmap.createBitmap(512, CLIENT_FULL_HEIGHT, Bitmap.Config.RGB_565);
+	private Bitmap currentFrame = Bitmap.createBitmap(AndroidClientViewport.BASE_WIDTH, AndroidClientViewport.BASE_FULL_HEIGHT, Bitmap.Config.RGB_565);
 
 	private final GameActivity gameActivity;
 	private boolean m_hb;
@@ -105,7 +100,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public boolean onKeyPreIme(int keyCode, @NonNull KeyEvent event) { // @NonNull?
-		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && osConfig.F_SHOWING_KEYBOARD) {
+		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && gameActivity.isKeyboardShowing()) {
 			if (event.getAction() == KeyEvent.ACTION_DOWN) {
 				gameActivity.closeKeyboard();
 			}
@@ -131,14 +126,14 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	private void drawLoadingScreen(String state, int percent) {
 		try {
-
-			int x = (this.client_width - 281) / 2;
-			int y = (this.client_height - 148) / 2;
-
 			Paint paint = new Paint();
 			paint.setTextSize(15);
 			paint.setTextAlign(Align.CENTER);
 			synchronized (frameLock) {
+				int contentWidth = currentFrame.getWidth();
+				int contentHeight = getFrameContentHeight();
+				int x = (contentWidth - 281) / 2;
+				int y = (contentHeight - 148) / 2;
 				Canvas canvas = new Canvas(currentFrame);
 				canvas.drawColor(0, Mode.CLEAR);
 
@@ -179,7 +174,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 					canvas.drawText("Classic adventure, rebuilt", x + 138, y + 44, paint);
 				} else {
 					paint.setColor(Color.rgb(132, 132, 152));
-					canvas.drawText("Voidscape", x + 138, client_height - 20, paint);
+					canvas.drawText("Voidscape", x + 138, contentHeight - 20, paint);
 				}
 			}
 		} catch (Exception var6) {
@@ -190,13 +185,13 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void showLoadingProgress(int percentage, String status) {
 		drawLoadingScreen(status, percentage);
-		int x = (this.client_width - 281) / 2;
-		x += 2;
-		int y = (this.client_height - 148) / 2;
-		y += 90;
 		int progress = percentage * 277 / 100;
 
 		synchronized (frameLock) {
+			int x = (currentFrame.getWidth() - 281) / 2;
+			x += 2;
+			int y = (getFrameContentHeight() - 148) / 2;
+			y += 90;
 			Canvas canvas = new Canvas(currentFrame);
 			Paint paint = new Paint();
 			paint.setColor(Color.rgb(132, 132, 132));
@@ -234,12 +229,12 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void drawLoadingError() {
 		drawLoadingScreen("Can't reach selected server", 0);
-		int x = (this.client_width - 281) / 2;
-		int y = (this.client_height - 148) / 2;
-		x += 2;
-		y += 90;
 
 		synchronized (frameLock) {
+			int x = (currentFrame.getWidth() - 281) / 2;
+			int y = (getFrameContentHeight() - 148) / 2;
+			x += 2;
+			y += 90;
 			Canvas canvas = new Canvas(currentFrame);
 			Paint paint = new Paint();
 			paint.setColor(Color.rgb(198, 198, 198));
@@ -271,18 +266,20 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 				paint.setColor(Color.rgb(220, 0, 0));
 			}
 
-			int x = 512 / 2 - 140;
-			int y = 334 / 2 - 25;
+				int centerX = currentFrame.getWidth() >> 1;
+				int centerY = getFrameContentHeight() >> 1;
+				int x = centerX - 140;
+				int y = centerY - 25;
 			paint.setStyle(Paint.Style.FILL);
 			canvas.drawRect(x, y, x + 280, y + 50, paint);
 			paint.setStyle(Paint.Style.STROKE);
 			paint.setColor(Color.WHITE);
-			canvas.drawRect(x, y, x + 280, y + 50, paint);
+				canvas.drawRect(x, y, x + 280, y + 50, paint);
 
-			paint.setTextAlign(Align.CENTER);
-			canvas.drawText(line1, client_width >> 1, (client_height >> 1) - 10, paint);
-			canvas.drawText(line2, client_width >> 1, 10 + (client_height >> 1), paint);
-			paint.setColor(Color.BLACK);
+				paint.setTextAlign(Align.CENTER);
+				canvas.drawText(line1, centerX, centerY - 10, paint);
+				canvas.drawText(line2, centerX, centerY + 10, paint);
+				paint.setColor(Color.BLACK);
 		}
 	}
 
@@ -330,19 +327,20 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		c.drawRGB(0, 0, 0);
 		int resizedWidth = c.getWidth();
 		int resizedHeight = c.getHeight();
-		float gameWidth = client.getGameWidth();
-		float gameHeight = client.getGameHeight() + 12;
+		int gameWidth = client.getGameWidth();
+		int gameHeight = client.getGameHeight() + 12;
 		if (gameWidth <= 0 || gameHeight <= 0) {
 			return;
 		}
-		float scale = Math.min(resizedWidth / gameWidth, resizedHeight / gameHeight);
-		float left = (resizedWidth - gameWidth * scale) / 2.0f;
-		float top = (resizedHeight - gameHeight * scale) / 2.0f;
-		c.translate(left, top);
-		c.scale(scale, scale);
+		AndroidClientViewport.Transform transform = AndroidClientViewport.transform(resizedWidth, resizedHeight, gameWidth, gameHeight);
+		int saveCount = c.save();
+		c.translate(transform.offsetX, transform.offsetY);
+		c.scale(transform.scale, transform.scale);
 		synchronized (frameLock) {
+			c.clipRect(0, 0, gameWidth, gameHeight);
 			c.drawBitmap(currentFrame, 0, 0, bitmapPaint);
 		}
+		c.restoreToCount(saveCount);
 	}
 
 	@Override
@@ -369,23 +367,18 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		if (surfaceWidth <= 0 || surfaceHeight <= 0) {
 			return;
 		}
-		int targetWidth = client_width;
-		int targetFullHeight = CLIENT_FULL_HEIGHT;
-		if (surfaceHeight > surfaceWidth) {
-			float aspect = (float) surfaceHeight / (float) surfaceWidth;
-			targetFullHeight = clamp(Math.round(targetWidth * aspect), CLIENT_FULL_HEIGHT, MAX_PORTRAIT_FULL_HEIGHT);
-		}
+		AndroidClientViewport.TargetSize target = AndroidClientViewport.targetForSurface(surfaceWidth, surfaceHeight);
 
 		mudclient client = gameActivity.getMudclient();
 		if (client != null) {
 			int currentFullHeight = client.getGameHeight() + 12;
-			if (client.getGameWidth() != targetWidth || currentFullHeight != targetFullHeight) {
-				client.resizeWidth = targetWidth;
-				client.resizeHeight = targetFullHeight;
+			if (client.getGameWidth() != target.width || currentFullHeight != target.fullHeight) {
+				client.resizeWidth = target.width;
+				client.resizeHeight = target.fullHeight;
 			}
 		}
 		synchronized (frameLock) {
-			ensureFrameBitmap(targetWidth, targetFullHeight);
+			ensureFrameBitmap(target.width, target.fullHeight);
 		}
 		postInvalidate();
 	}
@@ -400,8 +393,8 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		currentFrame = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
 	}
 
-	private int clamp(int value, int min, int max) {
-		return Math.max(min, Math.min(max, value));
+	private int getFrameContentHeight() {
+		return Math.max(1, currentFrame.getHeight() - 12);
 	}
 
 	@Override

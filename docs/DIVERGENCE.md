@@ -27,6 +27,15 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-06 - Auto camera restores OpenRSC easing
+
+Desktop, web mobile, and native Android auto camera rotation now use the upstream
+OpenRSC gradual `m_Wc` easing path again, and player-follow camera position always
+eases toward the local player instead of snapping when the client-side interpolation
+toggle is off. The mobile camera-pad nudge now changes the target camera angle only,
+letting the same classic auto-camera easing catch up. Files: shared `mudclient.java`.
+No packet/opcode, DB schema, cache asset, client version, or gameplay rule changed.
+
 ### 2026-07-06 - Global chat opens to all players on `::g`
 
 Voidscape global chat now uses `::g` as the player-facing command/help entry point, with
@@ -39,6 +48,83 @@ tutorial-island, and baby-mode gates still apply. Files:
 `RegularPlayer.java`, `Player.java`, `Social.java`, `server/*.conf`, and
 `server/local.conf`. Reversibility is restoring the old alias text, the previous preset
 requirement, the prior agreement-gate config, and the previous cooldown value.
+
+### 2026-07-06 - Android beta settings and APK release guard
+
+Native Android legacy settings now keeps the Options panel/logout row above the
+bottom chat dock in phone portrait and landscape, and Android smoke logging/assertions
+verify the logout row is visible, tappable, inside the panel, and not clipped by chat
+tabs before attempting logout. Pinch zoom sensitivity was raised moderately with a
+per-callback clamp so two-finger zoom reaches the useful range faster without changing
+desktop/web or one-finger touch behavior. Android APK builds now emit a sidecar metadata
+JSON next to the APK, the portal exposes the APK `clientVersion` when that sidecar is
+present, and `scripts/check-android-apk-release.sh` blocks APK promotion when metadata,
+source `CLIENT_VERSION`, APK hash/size, or the target server `client_version` disagree.
+No packet/opcode, DB schema, cache asset, or gameplay rule changed.
+
+### 2026-07-06 - Android mobile viewport parity
+
+Native Android now uses the TeaVM mobile sizing rule for its logical framebuffer:
+portrait keeps a `512px` width and grows full height to the device aspect, while
+landscape keeps a `346px` full height and widens logical width up to `1152px`
+so phone landscape fills the surface without non-uniform bitmap stretching.
+`RSCBitmapSurfaceView` and `InputImpl` share the new `AndroidClientViewport`
+helper so draw scale/offset and touch mapping stay aligned; loading/error/textbox
+surfaces center inside the live framebuffer, and touch sequences that start in
+capped letterbox space are ignored instead of clamping into edge game taps. Android
+smoke coordinate conversion mirrors the same formula, lifecycle smoke now verifies
+applied portrait/landscape framebuffer sizes from shared settings geometry logs,
+and rotation cleanup restores emulator/device rotation settings. Native Android
+stays on the shared canvas HUD/settings; no web DOM shell, packet/opcode, DB schema,
+cache asset, client version, or gameplay rule changed. Verification: `bash -n
+scripts/android-smoke.sh`, `git diff --check`, `scripts/build-android.sh --debug`,
+`scripts/build.sh`, and lifecycle smoke
+`tmp/android-viewport-lifecycle-20260706-wbtest-r18`.
+
+### 2026-07-06 - Android APK resume, pinch zoom, and portrait panel fixes
+
+Fixed Android APK launch-readiness issues from player screenshots. Native Android
+APK connections now receive a 120-second channel-close reconnect grace and native Android
+logged-in players get a 120-second silent client-activity timeout while desktop and web
+clients keep the existing 5-second channel grace and 30-second activity timeout; the
+shared client only sends the Android limitations bit for the native APK, so Android
+phone-mode `/play` does not inherit APK grace. That covers both background cases seen on
+phones: the socket closes and needs session-resume grace, or the process freezes with
+the socket still open and needs a longer activity window. Native Android touch input now
+uses `ScaleGestureDetector` for two-finger pinch zoom and removes zoom changes from the
+single-finger scroll path, leaving one-finger drags for camera rotate/pitch/scroll; slow
+pinch deltas keep accumulating instead of being consumed at zero distance, and the
+Android settings copy says "Pinch to Zoom." Pinch zoom keeps the old scrollable
+interface/bank guard so open menus do not zoom the world behind them. Native Android
+portrait right panels no longer reserve a 76px side rail that the native APK never draws;
+that ghost reserve now only applies if the mobile panel shell is actually active. Native
+Android portrait top menu tabs use the compact 44px cell size so the row no longer sits
+too far left on phone screenshots, and the final bottom chat tab is now a keyboard glyph
+that opens the soft keyboard instead of the desktop/web Report Abuse shortcut. Native
+Android portrait also paints a dark Voidscape scene backdrop behind the old RSC world
+renderer so the extra-tall framebuffer no longer exposes a giant pure-black clear area
+above the terrain horizon. Files:
+`RSCConnectionHandler.java`, `GameStateUpdater.java`, Android `InputImpl.java`, shared
+`mudclient.java`, Android smoke automation, Android docs, and the bug ledger. No
+packet/opcode shape, DB schema, cache asset, client version, XP formula, or desktop/web
+input behavior changed. Verification: `scripts/build.sh`, `scripts/build-android.sh
+--debug`, lifecycle smoke `/tmp/voidscape_android_vs061_lifecycle_native_only_rerun`, settings
+smoke `/tmp/voidscape_android_vs063_settings_no_ghost_rail`, and zoom smoke
+`/tmp/voidscape_android_vs062_zoom_no_fake_pinch`; chat-send smoke
+`/tmp/voidscape_android_keyboard_tab_chat_send_v3` proves the keyboard glyph opens the
+soft keyboard and sends chat through the normal packet path, and
+`/tmp/voidscape_android_vs065_backdrop_chat_send_v2` shows the portrait backdrop with a
+pixel-sampled `black_fraction: 0.0` in the old black-block area. Local ADB proves
+one-finger drags no longer zoom but cannot synthesize real pinch telemetry, so physical
+Android pinch QA remains the release-grade confirmation.
+
+### 2026-07-06 - Default skilling rate and first-login camera defaults
+
+Lowered Voidscape's default non-combat skilling XP rate from `2x` to `1.5x` while keeping combat at `10x`; subscription cards still add `+1x`, so the normal subscribed profile is now `11x` combat and `2.5x` skilling. Player-facing portal copy, the subscription-card redemption message, the Void Veteran tour, config docs, and progression/economy notes now report the new rates. Fresh characters now default to manual camera explicitly in the portal-created OpenRSC player insert, and all tracked MySQL/SQLite schema defaults plus the MySQL boot patch use `cameraauto = 0` so desktop, web, and Android clients receive manual camera on first login unless the player later changes it. No opcode, packet shape, client version, cache asset, or existing saved player setting changed; existing players keep their persisted camera preference.
+
+### 2026-07-06 - Android `/play` phone-mode fallback
+
+Hardened the TeaVM `/play` runtime-mode detector for Android browsers that expose a desktop-style user agent or large desktop-site layout viewport while still running on phone-sized touch hardware. The detector now considers physical `screen` dimensions as a fallback, so phone-sized primary-touch devices enter `mode:"phone"` and the Android-profile input shell unless the URL explicitly requests desktop or tablet mode. The portal also normalizes mobile web-client URLs to `https://voidscape.gg/play/?phone=1` for `/api/public` and launch-live email links, keeping shared Android browser links on the phone shell even when `PORTAL_WEB_CLIENT_URL` is configured as a bare `/play/`. Files: TeaVM `index.html`, web-client controls smoke, portal server/tests/docs, and the bug ledger. No packet, opcode, server gameplay rule, cache asset, client version, Android APK binary, or database schema changed. Verification: targeted local Playwright runtime probe, focused portal probe, live deployment backup `/opt/voidscape/backups/play-android-phone-mode-20260706T134847Z`, live `/play/` HTML and `/api/public` curl checks, live Android desktop-site Playwright probe, `scripts/build.sh`, `scripts/test-portal-schema.sh`, `node --check`, `bash -n`, and `git diff --check`; `scripts/test-portal-api.sh` still stops on the existing unrelated snapshot-title assertion before this regression block. Reversibility is restoring the old viewport-only detector and removing the portal `?phone=1` normalization.
 
 ### 2026-07-06 - Player-chosen global chat country flags
 
@@ -5275,3 +5361,7 @@ F2 now toggles the Voidscape vitals stack (the side FPS/Hits/Prayer HUD) on the 
 ### 2026-07-05 - Mobile and Android stats panel stay compact
 
 The full-height Voidscape stats detail panel is now desktop-only. Android-profile clients, including native Android and phone `/play` landscape, use the compact stats/skills layout instead of inheriting the wider desktop panel, footer, and progress-bar treatment that crowded the mobile right-side menu. Desktop keeps the `90/99` aligned skill-detail presentation from the prior stats pass; mobile keeps the same compact two-column skill list used by the rest of the touch HUD. Evidence: `scripts/build.sh` green before packaging, `scripts/package-web-teavm.sh --output-dir dist/web-teavm` green, `scripts/build-android.sh --debug` green, and the real TeaVM mobile-landscape Skills screenshot at `tmp/mobile-stats-menu-check-20260705-compact/mobile-landscape/04-skills.png` shows the compact panel. Client rendering only; no packet, opcode, server, DB, cache, or gameplay rule changed.
+
+### 2026-07-06 - Portal public downloads pin to the configured HTTPS origin
+
+Android Chrome surfaced the APK as "File can't be downloaded securely" for a player downloading from `voidscape.gg/#account`. The live endpoint already served `/downloads/android-apk` over HTTPS and redirected plain HTTP, but the portal still let generated download metadata depend on request-origin inference: `/api/public` used relative launcher/APK paths, and the launcher manifest built absolute runtime/cache/self-update URLs from forwarded headers. `PORTAL_PUBLIC_ORIGIN` now wins for `publicOrigin()` and for public download rows, so production emits `https://voidscape.gg/downloads/...` for APK, launcher, client runtime, cache, and self-update URLs even if the loopback proxy omits forwarded-proto headers. The portal README now documents `PORTAL_PUBLIC_ORIGIN` as the canonical public URL for emails and downloads, and `scripts/test-portal-api.sh` has a regression block that rejects available public `http://` download URLs. Evidence: live curl of the production APK/manifest showed HTTPS; a focused local public-mode probe with `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg` returned HTTPS public rows and manifest URLs; `scripts/build.sh` green. Full `scripts/test-portal-api.sh` remains blocked earlier by an unrelated snapshot-title assertion. Web portal only; no game protocol, client, DB schema, cache asset, or gameplay rule changed.

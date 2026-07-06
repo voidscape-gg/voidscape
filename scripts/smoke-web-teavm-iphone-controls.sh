@@ -1323,14 +1323,25 @@ async function runRuntimeModeSmoke(browser) {
 
   const phone = await probeRuntimeMode(browser, 'phone-auto', {
     viewport: { width: 390, height: 664 },
+    screen: { width: 390, height: 844 },
     deviceScaleFactor: 3,
     isMobile: true,
     hasTouch: true,
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
   }, 'modecheck=phone-auto', { mode: 'phone', phoneShell: true });
 
+  const androidDesktopSite = await probeRuntimeMode(browser, 'android-desktop-site', {
+    viewport: { width: 980, height: 1900 },
+    screen: { width: 412, height: 915 },
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+  }, 'modecheck=android-desktop-site', { mode: 'phone', phoneShell: true });
+
   const tablet = await probeRuntimeMode(browser, 'tablet-auto', {
     viewport: { width: 820, height: 1180 },
+    screen: { width: 820, height: 1180 },
     deviceScaleFactor: 2,
     isMobile: true,
     hasTouch: true,
@@ -1356,6 +1367,7 @@ async function runRuntimeModeSmoke(browser) {
   return {
     desktop: desktop.snapshot.runtimeMode,
     phone: phone.snapshot.runtimeMode,
+    androidDesktopSite: androidDesktopSite.snapshot.runtimeMode,
     tablet: tablet.snapshot.runtimeMode,
     desktopOverride: desktopOverride.snapshot.runtimeMode,
     phoneOverride: phoneOverride.snapshot.runtimeMode

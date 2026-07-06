@@ -26,8 +26,9 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** VS-038 (Death Match voluntary forfeit) — restored after emergency
-  live-launch fix VS-057.
+- **Active bug:** VS-064 (skilling-rate report needs a concrete symptom) — Android
+  APK resume/panel/backdrop fixes are smoke-verified; pinch zoom is code-fixed but
+  still needs physical touchscreen QA because local ADB did not emit pinch telemetry.
 - **Ryan's redirect (2026-07-03, mid-loop):** work **from VS-038 down**, impact-first
   — skip the "meh" tail. In scope, in order: VS-038 (Death Match forfeit), then
   player-facing Intake items (Undead Siege logout feedback, bank-add-while-open stale
@@ -523,6 +524,128 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Verify: bank inventory grid bottom <= voidscapeChatTabTop; workbench screenshot.
 - Log: 2026-07-02 split from VS-030 (residual third symptom).
 
+### VS-061 — Android APK disconnects after minimizing/backgrounding
+- Status: verified · Severity: P1 · Area: Android APK / server session
+- Evidence: Discord report 2026-07-06: "Everytime I minimize" with the Android
+  in-game screen showing "Connection lost! Please wait... Attempting to re-establish."
+  Code evidence: the native Android APK identifies itself in the login limitations byte,
+  and the server has a channel-close session-resume path, but
+  `RSCConnectionHandler.CHANNEL_CLOSED_RECONNECT_GRACE_MS` is only 5s for every client.
+  A normal phone app switch can freeze the client longer than that, causing the server
+  to unregister the player before the retained Android client can reconnect. Android
+  backgrounding can also freeze the socket without closing the channel, so the shared
+  30s `GameStateUpdater` client-activity timeout can unregister the player before
+  the APK resumes.
+- Repro: Android authenticated lifecycle smoke or physical Android: log in, background
+  the game for longer than 30s, resume, observe disconnect/login reset or failed
+  session resume.
+- Verify: `scripts/build.sh`; `scripts/build-android.sh --debug`; Android lifecycle
+  smoke backgrounds/resumes and stays in game or sees "Your previous session has been
+  resumed." Physical-device confirmation remains a release gate.
+- Fix: native Android APK clients now get both a 120s channel-close reconnect grace and
+  a 120s silent client-activity timeout while desktop/web clients keep the existing
+  5s/30s behavior. The shared client now only sends the Android limitations bit for
+  native Android, so Android-profile `/play` does not silently inherit APK reconnect
+  grace.
+- Verified 2026-07-06: `scripts/build.sh` green before Android smoke; after restarting
+  the local server on the current build, `scripts/android-smoke.sh --no-build
+  --only-auth-lifecycle --out /tmp/voidscape_android_vs061_lifecycle_native_only_rerun`
+  passed for `wbtest` against `10.0.2.2:43596`, including a 35s HOME background,
+  resume, duplicate relaunch, logout, and post-logout keyboard entry.
+  `scripts/build-android.sh --debug` passed again after the final Android input build.
+  Physical-device confirmation remains a release gate.
+- Log: 2026-07-06 triaged from Discord screenshots, fixed, and emulator-smoke verified.
+
+### VS-062 — Android one-finger camera drags also zoom
+- Status: fixed · Severity: P2 · Area: Android APK input
+- Evidence: Discord report 2026-07-06: "2 finger zoom better cuz with 1 when you try to
+  rotate camera it zooms too if bad angles ... If you only trying to rotate." Code
+  evidence: `InputImpl.onScroll()` updates `C_LAST_ZOOM` and camera rotation from the
+  same single-finger drag, so diagonal rotate gestures can change zoom.
+- Repro: Android authenticated zoom/camera smoke or device: drag diagonally in the
+  viewport with swipe zoom enabled; observe both camera rotation and `C_LAST_ZOOM`
+  changing.
+- Fix: native Android `InputImpl` now routes scale gestures through
+  `ScaleGestureDetector` and reserves one-finger drags for rotate/pitch/scroll; the
+  Android Options text says "Pinch to Zoom." Pinch zoom keeps the old scrollable
+  interface and bank guards so it cannot zoom the world behind open menus.
+- Verify: `scripts/build-android.sh --debug`; physical Android: one finger rotates/
+  pitches without changing zoom, and a two-finger pinch changes `C_LAST_ZOOM`.
+- Log: 2026-07-06 triaged from Discord screenshots; code fixed and APK build green.
+  Focused zoom smoke `scripts/android-smoke.sh --no-build --only-auth-zoom --out
+  /tmp/voidscape_android_vs062_zoom_no_fake_pinch` logs in, captures the in-game zoom
+  baseline, proves a one-finger viewport drag does not emit `ANDROID_SMOKE_ZOOM`, and
+  exits cleanly with the Android grace-aware offline timeout. ADB cannot synthesize a
+  reliable real two-finger pinch here; strict pinch assertion is only enabled by
+  `ANDROID_SMOKE_MANUAL_PINCH_SECONDS` plus `ANDROID_SMOKE_REQUIRE_PINCH=1` on a
+  physical device. Slow pinch deltas also keep accumulating instead of being consumed
+  at zero distance.
+
+### VS-063 — Android portrait right-side panels were shifted by a ghost side rail
+- Status: verified · Severity: P2 · Area: Android APK UI
+- Evidence: Discord screenshot 2026-07-06: right-side Options side view is cut off in
+  portrait. Code evidence: the prior fix reserved 76px for phone portrait side-rail
+  panels, but the native Android APK never draws that rail because
+  `voidscapeUseMobilePanelShell()` is false and `drawVoidscapeMobilePanelRail()` has no
+  native caller. That ghost reserve shifted right-side panels left over empty space and
+  made the screenshot look like the side view was cut off.
+- Repro: Android portrait, open the Options side panel, observe the panel content or
+  tab row shifted off its intended top-tab anchor.
+- Verify: `scripts/build-android.sh --debug`; authenticated Android settings smoke
+  screenshot/log shows Options anchored by the existing top-tab path with no empty
+  side-rail strip.
+- Fix: the phone portrait side-rail reserve now only applies when the mobile panel shell
+  is actually active; native Android keeps the normal top-tab panel anchor. The
+  side-panel connector/drawing path remains limited to real mobile-shell side-key tabs.
+- Verified 2026-07-06: `scripts/android-smoke.sh --no-build --only-auth-settings --out
+  /tmp/voidscape_android_vs063_settings_no_ghost_rail` passed, and
+  `/tmp/voidscape_android_vs063_settings_no_ghost_rail/99-auth-settings-open.png` shows
+  the Options panel fully inside the portrait viewport without a blank 76px rail strip.
+- Log: 2026-07-06 triaged from Discord screenshot, fixed, and emulator-smoke verified.
+
+### VS-064 — "Skilling 2x still" report needs a concrete symptom
+- Status: reported · Severity: P3 · Area: progression / XP rates
+- Evidence: Discord report 2026-07-06 includes "And the Skilling 2x still" without the
+  rest of the symptom. Current in-tree docs/config now say normal Voidscape target
+  rates are 10x combat / 1.5x base skilling, subscription adds +1x, and starter paths
+  grant selected 2x boosts below level 50, so the phrase alone is ambiguous between a
+  stale expectation, a starter-path boost, subscription math, or a broken
+  multiplier/display.
+- Repro: needs the affected account, skill/action, expected XP, observed XP/message,
+  and whether the starter path or subscription bonus was active.
+- Verify: isolate one skilling action with voidbot/server logs and compare base XP,
+  configured `skilling_exp_rate`, subscription, rested XP, wilderness/skull, and
+  starter path bonus.
+- Log: 2026-07-06 logged from Discord screenshot; not changing XP logic without a
+  specific failing observation.
+
+### VS-065 — Android portrait exposes black scene clear above the horizon
+- Status: verified · Severity: P2 · Area: Android APK UI
+- Evidence: Ryan screenshot 2026-07-06 shows a large pure-black rectangle between the
+  top menu tabs and the rendered world in the native Android emulator. Code evidence:
+  `drawGame()` clears the whole game framebuffer with `blackScreen(true)` before
+  `Scene.endScene()`. The old RSC camera/projection exposes empty headroom above the
+  horizon on tall portrait framebuffers, so that cleared area stays visible as a giant
+  black block.
+- Repro: native Android portrait, log in near Void Island, observe the upper scene area
+  above the water/terrain horizon is pure black.
+- Verify: Android authenticated chat-send/settings screenshot in portrait shows the
+  empty upper scene area painted as a dark Voidscape backdrop instead of a pure black
+  rectangle; `scripts/build.sh`; `scripts/build-android.sh --debug`.
+- Fix: native Android portrait now paints a lightweight dark Voidscape scene backdrop
+  immediately after the game-scene clear and before `Scene.endScene()` draws terrain,
+  sprites, and overlays. Projection, click targeting, desktop, web, Android landscape,
+  packets, opcodes, and gameplay state are unchanged.
+- Verified 2026-07-06: `scripts/build.sh` passed, `scripts/build-android.sh --debug`
+  passed, and `scripts/android-smoke.sh --no-build --only-auth-chat-send --out
+  /tmp/voidscape_android_vs065_backdrop_chat_send_v2` passed. Screenshot
+  `/tmp/voidscape_android_vs065_backdrop_chat_send_v2/65-auth-before-chat-send.png`
+  shows the old black area painted as a dark blue backdrop; a pixel sample of the old
+  black-block rectangle reported `black_fraction: 0.0`.
+- Log: 2026-07-06 triaged from Ryan emulator screenshot; fixing with a native-Android
+  portrait scene backdrop rather than changing projection/clipping math. 2026-07-06
+  fixed and smoke-verified.
+
 
 
 ## Watch list — not open bugs, but recurrence risks and burned areas
@@ -557,6 +680,66 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-060 — Android `/play` could fall into non-phone mode with desktop-style browser UA (FIXED)
+- Status: verified · Severity: P1 · Area: TeaVM web client / launch surface
+- Evidence: Ryan reported that a friend on Android could reach `/play` after the APK
+  link fix, but could not click anything and the client appeared to turn off. Live
+  server logs around the report showed the account did enter the web game session and
+  then reset the connection, pointing away from a download failure and toward the
+  mobile web shell/input mode. Code inspection found the `/play/` runtime detector
+  relied on phone UA or a small viewport; Android Chrome "Desktop site" and some
+  desktop-style Android browser UAs can expose a large layout viewport while still
+  reporting phone-sized touch hardware, causing the page to use tablet/desktop behavior
+  instead of the Android-profile phone shell.
+- Fix: `/play/` now falls back to physical `screen` dimensions when deciding whether a
+  primary-touch device is phone-sized, so desktop-style UAs on phone hardware still get
+  `mode: "phone"` and the Android-profile input path unless the URL explicitly asks for
+  desktop/tablet mode. The portal also normalizes bare `/play/` mobile web-client URLs
+  to `https://voidscape.gg/play/?phone=1` for `/api/public` and launch-live emails, so
+  site links force the phone shell.
+- Verified 2026-07-06: local targeted Playwright runtime probe passed desktop,
+  iPhone, iPad, explicit override, and Android desktop-site cases; the Android
+  desktop-site case resolved as `mode:"phone"` from `heuristic:phone-screen`. Focused
+  portal probe with `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` returned
+  `https://voidscape.gg/play/?phone=1`. Deployed live after backup
+  `/opt/voidscape/backups/play-android-phone-mode-20260706T134847Z`; live curl confirmed
+  `/play/` contains the new detector and `/api/public` returns the forced phone URL;
+  live Playwright probe against `https://voidscape.gg/play/` with a desktop-style Chrome
+  UA and phone-sized touch screen resolved `mode:"phone"`, `touchProfile:true`, and no
+  desktop launcher gate. `scripts/build.sh`, `scripts/test-portal-schema.sh`,
+  `node --check`, `bash -n`, and `git diff --check` passed for the touched files.
+  `scripts/test-portal-api.sh` still stops on the existing unrelated
+  `snapshot endpoint should resolve the active title` failure before reaching this
+  regression block.
+- Log: 2026-07-06 triaged from Android `/play` report, hardened, deployed, verified.
+
+### VS-059 — Public APK/launcher downloads could advertise inferred HTTP origins (FIXED)
+- Status: verified · Severity: P2 · Area: web-portal / launch surface
+- Evidence: user screenshot from Android Chrome on `voidscape.gg/#account` showed the
+  APK download gate "File can't be downloaded securely" for the 17.30 MB Android APK.
+  Live checks on 2026-07-06 showed the deployed `/downloads/android-apk` endpoint itself
+  served over HTTPS and `http://` redirected to HTTPS, but code inspection found the
+  launcher manifest generated absolute download URLs from inferred request origin and
+  `/api/public` advertised launcher/APK downloads as relative paths. A reverse proxy
+  missing `X-Forwarded-Proto`, or a visitor who initially lands on HTTP, could therefore
+  hand Chrome an insecure-looking download target.
+- Fix: when `PORTAL_PUBLIC_ORIGIN` is configured, the portal now treats it as the
+  canonical origin for public download metadata and launcher-manifest URLs. Public rows
+  now advertise `https://voidscape.gg/downloads/...`, and `publicOrigin()` no longer
+  downgrades generated manifest/cache/self-update URLs to loopback HTTP when production
+  has a configured public origin. The portal README documents this production
+  requirement, and the portal smoke now asserts no available public download uses
+  `http://`.
+- Verified 2026-07-06: live curl confirmed current production APK and manifest are HTTPS;
+  focused local public-mode probe with `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg`
+  returned HTTPS launcher/APK rows from `/api/public` and HTTPS `baseUrl`,
+  `file.1.url`, cache-file URLs, and `launcher.url` from
+  `/api/launcher/manifest.properties`; `scripts/build.sh` green. Full
+  `scripts/test-portal-api.sh` still fails an unrelated existing snapshot-title
+  assertion (`snapshot endpoint should resolve the active title`) before reaching the
+  new HTTPS regression block.
+- Log: 2026-07-06 triaged from user screenshot, hardened, focused-verified, documented.
 
 ### VS-058 — Mobile landscape stats menu inherited the desktop stats detail panel (FIXED)
 - Status: verified · Severity: P2 · Area: client-ui / launch surface

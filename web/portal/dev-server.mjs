@@ -77,8 +77,8 @@ const googleClientId = process.env.PORTAL_GOOGLE_CLIENT_ID || "";
 const googleJwksUrl = process.env.PORTAL_GOOGLE_JWKS_URL || "https://www.googleapis.com/oauth2/v3/certs";
 const googleIdentityProvider = "google";
 let googleJwksCache = { expiresAt: 0, keys: new Map() };
-const webClientUrl = process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/";
 const publicSiteOrigin = normalizedOrigin(process.env.PORTAL_PUBLIC_ORIGIN || "");
+const webClientUrl = mobileWebClientUrl(process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/");
 const discordInviteUrl = process.env.PORTAL_DISCORD_INVITE_URL || "https://discord.gg/f6uQmrRv4";
 const emailProvider = String(process.env.PORTAL_EMAIL_PROVIDER || "").trim().toLowerCase();
 const emailDryRun = process.env.PORTAL_EMAIL_DRY_RUN === "1";
@@ -1357,6 +1357,32 @@ function joinUrl(origin, path) {
 	return new URL(path, `${base}/`).toString();
 }
 
+function mobileWebClientUrl(value) {
+	const text = String(value || "").trim() || "https://voidscape.gg/play/";
+	try {
+		const parsed = new URL(text, `${publicSiteOrigin || "https://voidscape.gg"}/`);
+		const playPath = parsed.pathname.replace(/\/+$/g, "");
+		const isPlayClient = playPath === "/play" || playPath.endsWith("/play");
+		const hasExplicitMode = parsed.searchParams.has("phone")
+			|| parsed.searchParams.has("mobile")
+			|| parsed.searchParams.has("mode")
+			|| parsed.searchParams.has("tablet")
+			|| parsed.searchParams.has("desktop");
+		if (isPlayClient && !hasExplicitMode) {
+			parsed.searchParams.set("phone", "1");
+		}
+		return /^[a-z][a-z0-9+.-]*:/i.test(text)
+			? parsed.toString()
+			: `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch (error) {
+		return text;
+	}
+}
+
+function publicDownloadUrl(path) {
+	return publicSiteOrigin ? joinUrl(publicSiteOrigin, path) : path;
+}
+
 function adminEmailLimit(value) {
 	const limit = Number(value || 500);
 	if (!Number.isInteger(limit) || limit <= 0) return 500;
@@ -1593,7 +1619,7 @@ async function deliverQueuedEmail(emailEventId) {
 function buildEmailMessage(event, account, founder) {
 	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
 	const manageUrl = joinUrl(origin, "/");
-	const playUrl = joinUrl(origin, "/play/");
+	const playUrl = mobileWebClientUrl(joinUrl(origin, "/play/"));
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
 	if (event.type === launchLiveEmailType) {
@@ -2441,6 +2467,7 @@ async function sha256File(filePath, knownStat) {
 }
 
 function publicOrigin(request) {
+	if (publicSiteOrigin) return publicSiteOrigin;
 	const forwardedProto = firstHeaderValue(request.headers["x-forwarded-proto"]);
 	const forwardedHost = firstHeaderValue(request.headers["x-forwarded-host"]);
 	const proto = forwardedProto || (request.socket && request.socket.encrypted ? "https" : "http");
@@ -3739,17 +3766,19 @@ async function downloadState(options = {}) {
 		try {
 			const fileStat = await stat(artifact.path);
 			const sha256 = await sha256File(artifact.path, fileStat);
+			const metadata = await downloadArtifactMetadata(artifact);
 			rows.push({
 				slug: artifact.slug,
 				label: artifact.label,
 				state: `Built ${formatBytes(fileStat.size)}`,
-				url: `/downloads/${artifact.slug}`,
+				url: publicDownloadUrl(`/downloads/${artifact.slug}`),
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
-				sha256
+				sha256,
+				...metadata
 			});
 		} catch (error) {
 			rows.push({
@@ -3766,6 +3795,21 @@ async function downloadState(options = {}) {
 	return rows;
 }
 
+async function downloadArtifactMetadata(artifact) {
+	if (artifact.slug !== "android-apk") return {};
+	try {
+		const body = await readFile(`${artifact.path}.json`, "utf8");
+		const parsed = JSON.parse(body);
+		const clientVersion = Number(parsed.clientVersion);
+		if (Number.isInteger(clientVersion) && clientVersion >= 0) {
+			return { clientVersion };
+		}
+	} catch (error) {
+		// Sidecar metadata is optional; the release preflight enforces it for promotion.
+	}
+	return {};
+}
+
 async function buildProofState() {
 	const artifacts = await downloadState({ includePrivate: true, publicSurface: true });
 	const publicArtifacts = artifacts
@@ -3778,7 +3822,8 @@ async function buildProofState() {
 			publicDownload: true,
 			sizeBytes: nonNegativeInteger(artifact.sizeBytes),
 			updatedAt: validIsoTimestamp(artifact.updatedAt) || "",
-			sha256: safeSha256(artifact.sha256)
+			sha256: safeSha256(artifact.sha256),
+			...(nonNegativeInteger(artifact.clientVersion) ? { clientVersion: nonNegativeInteger(artifact.clientVersion) } : {})
 		}));
 	const manifest = await launcherManifestProof();
 	const source = await sourceProofState();
@@ -4290,7 +4335,7 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 	const rows = await sqliteWriteJson(`
 		BEGIN IMMEDIATE;
 		INSERT INTO players (
-			username, email, pass, salt, creation_date, creation_ip, group_id
+			username, email, pass, salt, creation_date, creation_ip, group_id, cameraauto
 		) VALUES (
 			${sqlString(username)},
 			${sqlString(email || "")},
@@ -4298,7 +4343,8 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 			${sqlString(passwordState.salt)},
 			${createdAt},
 			${sqlString(ip || "127.0.0.1")},
-			10
+			10,
+			0
 		);
 		INSERT INTO maxstats (playerID)
 			SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;

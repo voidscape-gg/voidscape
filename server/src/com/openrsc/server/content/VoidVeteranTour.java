@@ -129,7 +129,7 @@ public final class VoidVeteranTour {
 			switch (choice) {
 				case 0:
 					npcsay(player, npc,
-						"Combat experience flows ten times faster than the old world, skilling twice",
+						"Combat experience flows ten times faster than the old world, skilling one and a half times",
 						"Melee and ranged pay out on every hit, not just the kill",
 						"And fatigue died with the old world - no beds, no rest, just play",
 						"Stack that with rested XP - ::rested - and levels come quickly");

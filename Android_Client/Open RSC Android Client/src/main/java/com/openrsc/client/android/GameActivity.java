@@ -54,6 +54,7 @@ public class GameActivity extends Activity implements ClientPort {
 	private boolean checkedNetworks = true;
 
     private boolean hadSideMenu;
+	private boolean keyboardShowing;
 	private Object backCallback;
 
 	final BroadcastReceiver batteryReceiver = new BatteryReceiver();
@@ -85,13 +86,17 @@ public class GameActivity extends Activity implements ClientPort {
 		}
 	}
 
-	@Override
+	    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        osConfig.F_ANDROID_BUILD = true;
+        File externalSmokeDir = getExternalFilesDir(null);
+        Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
+
         gameView = new RSCBitmapSurfaceView(this) {
 
-			@Override
+				@Override
             public void setTitle(String title) {
 
             }
@@ -103,11 +108,7 @@ public class GameActivity extends Activity implements ClientPort {
         };
         setContentView(gameView);
 
-        osConfig.F_ANDROID_BUILD = true;
-        File externalSmokeDir = getExternalFilesDir(null);
-        Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
-
-		mudclient existingClient = retainedClient;
+			mudclient existingClient = retainedClient;
 		if (existingClient != null && existingClient.threadState >= 0 && existingClient.clientBaseThread != null
 			&& existingClient.clientBaseThread.isAlive()) {
 			setMudclient(existingClient);
@@ -436,12 +437,16 @@ public class GameActivity extends Activity implements ClientPort {
 
     public void drawKeyboard() {
 		if (gameView == null || mudclient == null) return;
+		if (keyboardShowing) {
+			return;
+		}
         InputMethodManager imm = (InputMethodManager) this
                 .getSystemService(Context.INPUT_METHOD_SERVICE);
 		if (imm == null) return;
-        gameView.requestFocus();
-        gameView.post(() -> imm.showSoftInput(gameView, InputMethodManager.SHOW_IMPLICIT));
-        osConfig.F_SHOWING_KEYBOARD = true;
+	        gameView.requestFocus();
+	        gameView.post(() -> imm.showSoftInput(gameView, InputMethodManager.SHOW_IMPLICIT));
+	        keyboardShowing = true;
+	        osConfig.F_SHOWING_KEYBOARD = true;
         if (Config.S_SIDE_MENU_TOGGLE) {
         	hadSideMenu = mudclient.getOptionSideMenu();
 			mudclient.setOptionSideMenu(false);
@@ -454,11 +459,16 @@ public class GameActivity extends Activity implements ClientPort {
 		if (imm != null) {
 			imm.hideSoftInputFromWindow(gameView.getWindowToken(), 0);
 		}
+		keyboardShowing = false;
         osConfig.F_SHOWING_KEYBOARD = false;
 		if (Config.S_SIDE_MENU_TOGGLE && mudclient != null) {
 			mudclient.setOptionSideMenu(hadSideMenu);
 		}
     }
+
+	public boolean isKeyboardShowing() {
+		return keyboardShowing;
+	}
 
 	@Override
 	public boolean openUrl(String url) {
@@ -500,6 +510,9 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public Sprite getBattery(int level) {
+		if (keyboardShowing) {
+			return null;
+		}
 		if (gameView != null) {
 			if (batteryCharging) {
 				return gameView.getBattery(8);
@@ -519,6 +532,9 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public Sprite getConnectivity(int level) {
+		if (keyboardShowing) {
+			return null;
+		}
 		if (gameView != null) {
 			if (!wifiAvailable && !cellularAvailable) return gameView.getConnectivity(0);
 			else if (wifiAvailable) return gameView.getConnectivity(2);
@@ -528,6 +544,9 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public String getConnectivityText() {
+		if (keyboardShowing) {
+			return "";
+		}
 		if (!wifiAvailable && !cellularAvailable) return "NONE";
 		else if (wifiAvailable) return "WIFI";
 		else return "CELL";

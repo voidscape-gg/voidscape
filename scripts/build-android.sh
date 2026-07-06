@@ -96,3 +96,58 @@ if [[ "${#GRADLE_ARGS[@]}" -eq 0 ]]; then
     GRADLE_ARGS=(assembleDebug)
 fi
 sh ./gradlew "${GRADLE_ARGS[@]}"
+
+client_version() {
+    awk '/CLIENT_VERSION[[:space:]]*=/ {
+        for (i = 1; i <= NF; i++) {
+            if ($i ~ /^[0-9]+;?$/) {
+                gsub(/;/, "", $i);
+                print $i;
+                exit;
+            }
+        }
+    }' "$REPO_ROOT/Client_Base/src/orsc/Config.java"
+}
+
+write_apk_metadata() {
+    local apk_path="$1"
+    local build_type="$2"
+    local version sha size commit built_at
+    [[ -f "$apk_path" ]] || return 0
+    version="$(client_version)"
+    if [[ ! "$version" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: could not parse CLIENT_VERSION from Client_Base/src/orsc/Config.java." >&2
+        exit 1
+    fi
+    sha="$(shasum -a 256 "$apk_path" | awk '{print $1}')"
+    size="$(wc -c < "$apk_path" | tr -d ' ')"
+    commit="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+    built_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    python3 - "$apk_path.json" "$version" "$sha" "$size" "$built_at" "$commit" "$build_type" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+meta_path, version, sha, size, built_at, commit, build_type = sys.argv[1:]
+Path(meta_path).write_text(json.dumps({
+    "clientVersion": int(version),
+    "sha256": sha,
+    "sizeBytes": int(size),
+    "builtAt": built_at,
+    "gitCommit": commit,
+    "buildType": build_type,
+}, indent=2) + "\n", encoding="utf-8")
+PY
+    echo "Wrote APK metadata: $apk_path.json"
+}
+
+for arg in "${GRADLE_ARGS[@]}"; do
+    case "$arg" in
+        *Release*)
+            write_apk_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/release/voidscape.apk" release
+            ;;
+        *Debug*)
+            write_apk_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk" debug
+            ;;
+    esac
+done

@@ -88,6 +88,9 @@ ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_PVP_STRESS=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
+ORIGINAL_ACCELEROMETER_ROTATION=""
+ORIGINAL_USER_ROTATION=""
+ROTATION_STATE_SAVED=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
@@ -133,10 +136,14 @@ AUTH_CAMERA_SWIPE_START_X="${ANDROID_SMOKE_CAMERA_SWIPE_START_X:-420}"
 AUTH_CAMERA_SWIPE_END_X="${ANDROID_SMOKE_CAMERA_SWIPE_END_X:-120}"
 AUTH_CAMERA_SWIPE_Y="${ANDROID_SMOKE_CAMERA_SWIPE_Y:-170}"
 AUTH_CAMERA_SWIPE_DURATION_MS="${ANDROID_SMOKE_CAMERA_SWIPE_DURATION_MS:-700}"
-AUTH_ZOOM_SWIPE_X="${ANDROID_SMOKE_ZOOM_SWIPE_X:-256}"
-AUTH_ZOOM_SWIPE_START_Y="${ANDROID_SMOKE_ZOOM_SWIPE_START_Y:-80}"
-AUTH_ZOOM_SWIPE_END_Y="${ANDROID_SMOKE_ZOOM_SWIPE_END_Y:-190}"
-AUTH_ZOOM_SWIPE_DURATION_MS="${ANDROID_SMOKE_ZOOM_SWIPE_DURATION_MS:-700}"
+AUTH_ZOOM_DRAG_X="${ANDROID_SMOKE_ZOOM_DRAG_X:-256}"
+AUTH_ZOOM_DRAG_START_Y="${ANDROID_SMOKE_ZOOM_DRAG_START_Y:-80}"
+AUTH_ZOOM_DRAG_END_Y="${ANDROID_SMOKE_ZOOM_DRAG_END_Y:-190}"
+AUTH_ZOOM_DRAG_DURATION_MS="${ANDROID_SMOKE_ZOOM_DRAG_DURATION_MS:-700}"
+AUTH_ZOOM_MANUAL_PINCH_SECONDS="${ANDROID_SMOKE_MANUAL_PINCH_SECONDS:-0}"
+AUTH_ZOOM_REQUIRE_PINCH="${ANDROID_SMOKE_REQUIRE_PINCH:-0}"
+AUTH_LIFECYCLE_BACKGROUND_SECONDS="${ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS:-35}"
+AUTH_OFFLINE_TIMEOUT="${ANDROID_SMOKE_AUTH_OFFLINE_TIMEOUT:-135}"
 AUTH_CHAT_TAB_Y="${ANDROID_SMOKE_CHAT_TAB_Y:-}"
 AUTH_CHAT_TAB_SEQUENCE="${ANDROID_SMOKE_CHAT_TAB_SEQUENCE:-CHAT,QUEST,GLOBAL,PRIVATE,ALL}"
 AUTH_CHAT_TAB_ALL_X="${ANDROID_SMOKE_CHAT_TAB_ALL_X:-35}"
@@ -145,6 +152,7 @@ AUTH_CHAT_TAB_QUEST_X="${ANDROID_SMOKE_CHAT_TAB_QUEST_X:-133}"
 AUTH_CHAT_TAB_GLOBAL_X="${ANDROID_SMOKE_CHAT_TAB_GLOBAL_X:-182}"
 AUTH_CHAT_TAB_PRIVATE_X="${ANDROID_SMOKE_CHAT_TAB_PRIVATE_X:-231}"
 AUTH_CHAT_TAB_REPORT_X="${ANDROID_SMOKE_CHAT_TAB_REPORT_X:-281}"
+AUTH_CHAT_TAB_KEYBOARD_X="${ANDROID_SMOKE_CHAT_TAB_KEYBOARD_X:-281}"
 AUTH_CHAT_MESSAGE="${ANDROID_SMOKE_CHAT_MESSAGE:-androidchat}"
 AUTH_CHAT_KEYBOARD_X="${ANDROID_SMOKE_CHAT_KEYBOARD_X:-291}"
 AUTH_CHAT_KEYBOARD_Y="${ANDROID_SMOKE_CHAT_KEYBOARD_Y:-19}"
@@ -255,15 +263,19 @@ Environment:
   ANDROID_SMOKE_CAMERA_SWIPE_END_X   Optional rotate swipe end client x, default: 120
   ANDROID_SMOKE_CAMERA_SWIPE_Y       Optional rotate swipe client y, default: 170
   ANDROID_SMOKE_CAMERA_SWIPE_DURATION_MS Optional rotate swipe duration, default: 700
-  ANDROID_SMOKE_ZOOM_SWIPE_X         Optional zoom swipe client x, default: 256
-  ANDROID_SMOKE_ZOOM_SWIPE_START_Y   Optional zoom swipe start client y, default: 80
-  ANDROID_SMOKE_ZOOM_SWIPE_END_Y     Optional zoom swipe end client y, default: 190
-  ANDROID_SMOKE_ZOOM_SWIPE_DURATION_MS Optional zoom swipe duration, default: 700
+  ANDROID_SMOKE_ZOOM_DRAG_X          Optional one-finger no-zoom drag client x, default: 256
+  ANDROID_SMOKE_ZOOM_DRAG_START_Y    Optional one-finger no-zoom drag start y, default: 80
+  ANDROID_SMOKE_ZOOM_DRAG_END_Y      Optional one-finger no-zoom drag end y, default: 190
+  ANDROID_SMOKE_ZOOM_DRAG_DURATION_MS Optional one-finger no-zoom drag duration, default: 700
+  ANDROID_SMOKE_MANUAL_PINCH_SECONDS Optional physical-device manual pinch window, default: 0
+  ANDROID_SMOKE_REQUIRE_PINCH         Set to 1 with a manual pinch window to require real pinch telemetry
+  ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS Optional --only-auth-lifecycle HOME wait, default: 35
+  ANDROID_SMOKE_AUTH_OFFLINE_TIMEOUT  Optional auth DB offline wait, default: 135
   ANDROID_SMOKE_CHAT_TAB_Y           Optional chat tab client y; default is computed from the current framebuffer height
   ANDROID_SMOKE_CHAT_TAB_SEQUENCE    Optional comma-separated tabs, default: CHAT,QUEST,GLOBAL,PRIVATE,ALL
-  ANDROID_SMOKE_CHAT_TAB_*_X         Optional tab client x overrides for ALL/CHAT/QUEST/GLOBAL/PRIVATE/REPORT
+  ANDROID_SMOKE_CHAT_TAB_*_X         Optional tab client x overrides for ALL/CHAT/QUEST/GLOBAL/PRIVATE/REPORT/KEYBOARD
   ANDROID_SMOKE_CHAT_MESSAGE         Optional in-game chat message, default: androidchat
-  ANDROID_SMOKE_CHAT_KEYBOARD_X/Y    Optional keyboard toggle client coordinate, default: 291,19
+  ANDROID_SMOKE_CHAT_KEYBOARD_X/Y    Optional legacy keyboard toggle fallback coordinate, default: 291,19
   ANDROID_SMOKE_CHAT_ENTRY_X/Y       Optional keyboard-open chat entry coordinate, default: 256,147
   ANDROID_SMOKE_BANK_OBJECT_ID       Optional bank chest object id, default: 942
   ANDROID_SMOKE_BANK_OBJECT_ACTION   Expected bank chest action, default: OBJECT_COMMAND1
@@ -736,6 +748,90 @@ disable_android_smoke_login() {
     remove_smoke_files "$SMOKE_LOGIN_FLAG"
 }
 
+save_android_rotation() {
+    if [[ "$ROTATION_STATE_SAVED" == "1" ]]; then
+        return 0
+    fi
+    ORIGINAL_ACCELEROMETER_ROTATION="$("$ADB" shell settings get system accelerometer_rotation 2>/dev/null | tr -d '\r' | tail -1 || true)"
+    ORIGINAL_USER_ROTATION="$("$ADB" shell settings get system user_rotation 2>/dev/null | tr -d '\r' | tail -1 || true)"
+    ROTATION_STATE_SAVED=1
+}
+
+restore_android_rotation() {
+    if [[ "$ROTATION_STATE_SAVED" != "1" ]]; then
+        return 0
+    fi
+    if [[ "$ORIGINAL_ACCELEROMETER_ROTATION" == "1" ]]; then
+        "$ADB" shell cmd window set-user-rotation free >/dev/null 2>&1 || true
+    elif [[ -n "$ORIGINAL_USER_ROTATION" && "$ORIGINAL_USER_ROTATION" != "null" ]]; then
+        "$ADB" shell cmd window set-user-rotation lock "$ORIGINAL_USER_ROTATION" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$ORIGINAL_ACCELEROMETER_ROTATION" && "$ORIGINAL_ACCELEROMETER_ROTATION" != "null" ]]; then
+        "$ADB" shell settings put system accelerometer_rotation "$ORIGINAL_ACCELEROMETER_ROTATION" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$ORIGINAL_USER_ROTATION" && "$ORIGINAL_USER_ROTATION" != "null" ]]; then
+        "$ADB" shell settings put system user_rotation "$ORIGINAL_USER_ROTATION" >/dev/null 2>&1 || true
+    fi
+}
+
+wait_for_screen_orientation() {
+    local expected="$1"
+    local timeout="${2:-20}"
+    local deadline=$((SECONDS + timeout))
+    local width height orientation
+
+    while (( SECONDS < deadline )); do
+        read -r width height < <(screen_size)
+        if [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]]; then
+            if (( width > height )); then
+                orientation="landscape"
+            else
+                orientation="portrait"
+            fi
+            if [[ "$orientation" == "$expected" ]]; then
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android screen orientation=$expected; last size=${width:-?}x${height:-?}" >&2
+    return 1
+}
+
+force_android_rotation() {
+    local rotation="$1"
+    local expected_orientation="portrait"
+    local attempt
+    if [[ "$rotation" == "1" || "$rotation" == "3" ]]; then
+        expected_orientation="landscape"
+    fi
+
+    save_android_rotation
+    "$ADB" shell cmd window set-user-rotation lock "$rotation" >/dev/null 2>&1 || true
+    "$ADB" shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || return 1
+    "$ADB" shell settings put system user_rotation "$rotation" >/dev/null 2>&1 || return 1
+    if wait_for_screen_orientation "$expected_orientation" 8; then
+        return 0
+    fi
+
+    for attempt in 1 2; do
+        "$ADB" emu rotate >/dev/null 2>&1 || true
+        if wait_for_screen_orientation "$expected_orientation" 8; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+force_android_portrait() {
+    force_android_rotation 0
+}
+
+force_android_landscape() {
+    force_android_rotation 1
+}
+
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
     disable_android_smoke_player_targets
@@ -757,8 +853,13 @@ disable_android_smoke_targets() {
     disable_android_smoke_login
 }
 
+android_smoke_cleanup() {
+    disable_android_smoke_targets
+    restore_android_rotation
+}
+
 disable_android_smoke_targets
-trap disable_android_smoke_targets EXIT
+trap android_smoke_cleanup EXIT
 
 "$ADB" logcat -c || true
 "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
@@ -768,12 +869,14 @@ adb_screencap_to_file() {
     local tmp="$output.tmp"
     local status=0
 
-    rm -f "$tmp"
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 20 "$ADB" exec-out screencap -p > "$tmp" || status=$?
-    else
-        "$ADB" exec-out screencap -p > "$tmp" || status=$?
-    fi
+	rm -f "$tmp"
+	if command -v timeout >/dev/null 2>&1; then
+	    timeout 20 "$ADB" exec-out screencap -p > "$tmp" || status=$?
+	elif command -v perl >/dev/null 2>&1; then
+	    perl -e 'alarm shift @ARGV; exec @ARGV' 20 "$ADB" exec-out screencap -p > "$tmp" || status=$?
+	else
+	    "$ADB" exec-out screencap -p > "$tmp" || status=$?
+	fi
 
     if [[ "$status" -ne 0 || ! -s "$tmp" ]]; then
         rm -f "$tmp"
@@ -823,29 +926,52 @@ long_press_pct() {
     "$ADB" shell input swipe "$x" "$y" "$x" "$y" "$duration_ms"
 }
 
+android_viewport_target_for_size() {
+    local width="$1"
+    local height="$2"
+    awk -v sw="$width" -v sh="$height" 'BEGIN {
+        baseW=512; baseFullH=346; maxLogical=1152;
+        if (sw <= 0 || sh <= 0) {
+            printf "%d %d %s %d\n", baseW, baseFullH, "landscape", 0;
+            exit;
+        }
+        if (sh > sw) {
+            raw=int(baseW * sh / sw + 0.5);
+            fullH=raw;
+            if (fullH < baseFullH) fullH=baseFullH;
+            if (fullH > maxLogical) fullH=maxLogical;
+            capped=0;
+            if (raw > maxLogical) capped=1;
+            printf "%d %d %s %d\n", baseW, fullH, "portrait", capped;
+        } else {
+            raw=int(baseFullH * sw / sh + 0.5);
+            width=raw;
+            if (width < baseW) width=baseW;
+            if (width > maxLogical) width=maxLogical;
+            capped=0;
+            if (raw > maxLogical) capped=1;
+            printf "%d %d %s %d\n", width, baseFullH, "landscape", capped;
+        }
+    }'
+}
+
 client_xy_to_screen_xy() {
     local client_x="$1"
     local client_y="$2"
-    local width height x y
+    local width height target_width target_full_height orientation capped x y
     read -r width height < <(screen_size)
     if [[ -z "${width:-}" || -z "${height:-}" ]]; then
         echo "ERROR: could not determine Android screen size for client input" >&2
         return 1
     fi
 
-    read -r x y < <(awk -v sw="$width" -v sh="$height" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
-        gw=512; gh=346; surfaceExtra=12; portrait=0;
-        scale=sw/gw;
-        portraitGh=sh/scale - surfaceExtra;
-        if (portraitGh > gh) {
-            gh=portraitGh;
-            portrait=1;
-        } else if (sh/gh < scale) {
-            scale=sh/gh;
-        }
+    read -r target_width target_full_height orientation capped < <(android_viewport_target_for_size "$width" "$height")
+    read -r x y < <(awk -v sw="$width" -v sh="$height" -v gw="$target_width" -v gh="$target_full_height" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
+        scaleX=sw/gw;
+        scaleY=sh/gh;
+        scale=scaleX < scaleY ? scaleX : scaleY;
         ox=(sw - gw*scale)/2;
         oy=(sh - gh*scale)/2;
-        if (portrait) oy=0;
         printf "%d %d\n", ox + cx*scale + 0.5, oy + cy*scale + 0.5;
     }')
     echo "$x $y"
@@ -1486,16 +1612,20 @@ run_authenticated_login_smoke() {
 	screenshot 03-auth-post-login
 
 	"$ADB" shell am force-stop $APP_ID || true
-	wait_auth_offline 45 || true
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 	echo "Android auth/login smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
 
 run_authenticated_lifecycle_smoke() {
 	preflight_auth_login_fixture
-	wait_auth_offline 45 || true
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 
 	"$ADB" shell am force-stop $APP_ID || true
 	"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+	force_android_portrait || {
+		echo "ERROR: Android lifecycle smoke could not force portrait rotation" >&2
+		exit 1
+	}
 	"$ADB" logcat -c || true
 
 	launch_authenticated_endpoint
@@ -1519,14 +1649,63 @@ run_authenticated_lifecycle_smoke() {
 	assert_game_activity_for_input "lifecycle game HUD" "03-lifecycle-lost-before-hud" || exit 1
 	screenshot 03-lifecycle-game-hud
 
-	"$ADB" shell input keyevent HOME
+	local viewport_settings_row viewport_camera viewport_mouse viewport_sound viewport_expected_camera viewport_expected_mouse viewport_line
+	local viewport_screen_width viewport_screen_height viewport_first_orientation viewport_second_orientation
+	viewport_settings_row="$(read_auth_settings)"
+	read -r viewport_camera viewport_mouse viewport_sound <<< "$viewport_settings_row"
+	viewport_expected_camera="$([[ "$viewport_camera" == "1" ]] && echo true || echo false)"
+	viewport_expected_mouse="$([[ "$viewport_mouse" == "1" ]] && echo true || echo false)"
+	enable_android_smoke_settings
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	read -r viewport_screen_width viewport_screen_height < <(screen_size)
+	if (( viewport_screen_width > viewport_screen_height )); then
+		viewport_first_orientation="landscape"
+		viewport_second_orientation="portrait"
+	else
+		viewport_first_orientation="portrait"
+		viewport_second_orientation="landscape"
+	fi
+	viewport_line="$(wait_for_viewport_settings_state "$viewport_first_orientation" "$viewport_expected_camera" "$viewport_expected_mouse" 30)" || exit 1
+	assert_android_viewport_from_log "$viewport_first_orientation" "$viewport_line" || exit 1
+	assert_settings_logout_visible "$viewport_line" || exit 1
+	screenshot "03a-lifecycle-${viewport_first_orientation}-viewport-settings"
+	"$ADB" shell input keyevent 43
 	sleep 2
+
+	"$ADB" logcat -c || true
+	if [[ "$viewport_second_orientation" == "landscape" ]]; then
+		force_android_landscape
+	else
+		force_android_portrait
+	fi || {
+		echo "ERROR: Android lifecycle smoke could not force $viewport_second_orientation rotation" >&2
+		exit 1
+	}
+	assert_game_activity_for_input "lifecycle $viewport_second_orientation viewport" "03b-lifecycle-lost-${viewport_second_orientation}" || exit 1
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	viewport_line="$(wait_for_viewport_settings_state "$viewport_second_orientation" "$viewport_expected_camera" "$viewport_expected_mouse" 30)" || exit 1
+	assert_android_viewport_from_log "$viewport_second_orientation" "$viewport_line" || exit 1
+	assert_settings_logout_visible "$viewport_line" || exit 1
+	screenshot "03b-lifecycle-${viewport_second_orientation}-viewport-settings"
+	"$ADB" shell input keyevent 43
+	disable_android_smoke_settings
+	force_android_portrait || {
+		echo "ERROR: Android lifecycle smoke could not restore portrait rotation after viewport checks" >&2
+		exit 1
+	}
+
+	"$ADB" shell input keyevent HOME
+	echo "Android lifecycle smoke backgrounding for ${AUTH_LIFECYCLE_BACKGROUND_SECONDS}s"
+	sleep "$AUTH_LIFECYCLE_BACKGROUND_SECONDS"
 	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 	wait_for_resumed_activity "GameActivity" 20 || {
 		assert_resumed_activity "GameActivity" || true
 		screenshot 04-lifecycle-resume-failed || true
 		exit 1
 	}
+	wait_auth_online 20 || exit 1
 	sleep 2
 	assert_no_android_runtime_crash "after launcher resume" || {
 		screenshot 04-lifecycle-resume-crash || true
@@ -1558,6 +1737,7 @@ run_authenticated_lifecycle_smoke() {
 	"$ADB" logcat -c || true
 	"$ADB" shell input keyevent 43
 	settings_line="$(wait_for_settings_state "$expected_camera" "$expected_mouse" 30)" || exit 1
+	assert_settings_logout_visible "$settings_line" || exit 1
 	sleep 2
 	screenshot 06-lifecycle-settings-open
 	logout_x="$(log_int_or_default "$settings_line" logoutX 385)"
@@ -1569,16 +1749,30 @@ run_authenticated_lifecycle_smoke() {
 		screenshot 07-lifecycle-logout-crash || true
 		exit 1
 	}
-	wait_auth_offline 45 || exit 1
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
 	screenshot 07-lifecycle-after-logout-login-home
-	tap_existing_user_button
+	enable_android_smoke_login
+	"$ADB" logcat -c || true
+	wait_for_login_state 0 15 >/dev/null || exit 1
+	tap_login_state_target 0 homeExisting 8 || tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
 	sleep 3
-	assert_soft_keyboard_visible
+	local post_logout_login_line
+	post_logout_login_line="$(wait_for_login_state 2 15)" || exit 1
+	if ! assert_soft_keyboard_visible; then
+		local login_user_x login_user_y
+		login_user_x="$(extract_log_value "$post_logout_login_line" userX)"
+		login_user_y="$(extract_log_value "$post_logout_login_line" userY)"
+		if [[ "$login_user_x" =~ ^[0-9]+$ && "$login_user_y" =~ ^[0-9]+$ ]]; then
+			tap_client_xy "$login_user_x" "$login_user_y"
+			sleep 2
+		fi
+		assert_soft_keyboard_visible
+	fi
 	screenshot 08-lifecycle-after-logout-keyboard
 
 	"$ADB" shell input keyevent BACK || true
 	"$ADB" shell am force-stop $APP_ID || true
-	wait_auth_offline 45 || true
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 	echo "Android auth/lifecycle smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
 
@@ -1849,6 +2043,7 @@ wait_for_zoom_state() {
 
 wait_for_zoom_change() {
     local timeout="${1:-20}"
+    local quiet="${2:-0}"
     local deadline=$((SECONDS + timeout))
     local line before_last_zoom after_last_zoom before_camera_zoom after_camera_zoom
 
@@ -1868,9 +2063,29 @@ wait_for_zoom_change() {
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for Android zoom gesture" >&2
-    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_ZOOM" | tail -30 >&2 || true
+    if [[ "$quiet" != "1" ]]; then
+        echo "ERROR: timed out waiting for Android zoom gesture" >&2
+        "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_ZOOM" | tail -30 >&2 || true
+    fi
     return 1
+}
+
+assert_no_zoom_change_logged() {
+    local timeout="${1:-4}"
+    local deadline=$((SECONDS + timeout))
+    local line
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_ZOOM" | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "ERROR: one-finger drag unexpectedly changed Android zoom: $line" >&2
+            return 1
+        fi
+        sleep 1
+    done
+
+    echo "Verified Android one-finger drag did not change zoom"
+    return 0
 }
 
 wait_for_chat_tab() {
@@ -1899,6 +2114,7 @@ chat_tab_layout_key() {
     case "$label" in
         PM) echo "PRIVATE" ;;
         RPT) echo "REPORT" ;;
+        KEY) echo "KEYBOARD" ;;
         *) echo "$label" ;;
     esac
 }
@@ -1952,6 +2168,7 @@ chat_tab_client_x() {
         GLOBAL) echo "$AUTH_CHAT_TAB_GLOBAL_X" ;;
         PRIVATE) echo "$AUTH_CHAT_TAB_PRIVATE_X" ;;
         REPORT) echo "$AUTH_CHAT_TAB_REPORT_X" ;;
+        KEYBOARD) echo "$AUTH_CHAT_TAB_KEYBOARD_X" ;;
         *)
             echo "ERROR: unknown Android chat tab '$tab'" >&2
             return 1
@@ -1965,20 +2182,11 @@ chat_tab_client_y() {
         return
     fi
 
-    local width height
+    local width height target_width target_full_height orientation capped
     read -r width height < <(screen_size)
-    awk -v sw="$width" -v sh="$height" 'BEGIN {
-        gw=512; gh=346; surfaceExtra=12;
-        scale=sw/gw;
-        portraitGh=sh/scale - surfaceExtra;
-        if (portraitGh > gh) {
-            gh=portraitGh;
-        } else if (sh/gh < scale) {
-            scale=sh/gh;
-        }
-        # Compact Android-profile chat tabs are 32px tall and start at gameHeight - 28.
-        printf "%d\n", gh - 12 + 0.5;
-    }'
+    read -r target_width target_full_height orientation capped < <(android_viewport_target_for_size "$width" "$height")
+    # Compact Android-profile chat tabs are 32px tall and start at gameHeight - 28.
+    echo $((target_full_height - 12))
 }
 
 tap_chat_tab() {
@@ -2038,6 +2246,84 @@ log_int_or_default() {
     else
         echo "$default"
     fi
+}
+
+assert_android_viewport_from_log() {
+    local expected_orientation="$1"
+    local line="$2"
+    local target_width game_height target_full_height surface_width surface_height
+    local expected_width expected_full_height formula_orientation expected_capped
+
+    target_width="$(extract_log_value "$line" gameWidth)"
+    game_height="$(extract_log_value "$line" gameHeight)"
+    if [[ ! "$target_width" =~ ^[0-9]+$ || ! "$game_height" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Android settings log did not include gameWidth/gameHeight: $line" >&2
+        settings_log_tail
+        return 1
+    fi
+
+    target_full_height=$((game_height + 12))
+    read -r surface_width surface_height < <(screen_size)
+    read -r expected_width expected_full_height formula_orientation expected_capped < <(android_viewport_target_for_size "$surface_width" "$surface_height")
+
+    if [[ "$formula_orientation" != "$expected_orientation" ]]; then
+        echo "ERROR: Android screen ${surface_width}x${surface_height} produced $formula_orientation, expected $expected_orientation" >&2
+        settings_log_tail
+        return 1
+    fi
+    if [[ "$target_width" != "$expected_width" || "$target_full_height" != "$expected_full_height" ]]; then
+        echo "ERROR: Android applied viewport mismatch: got ${target_width}x${target_full_height}, expected ${expected_width}x${expected_full_height}" >&2
+        settings_log_tail
+        return 1
+    fi
+
+    echo "Verified Android $expected_orientation applied viewport: target=${target_width}x${target_full_height} screen=${surface_width}x${surface_height}"
+}
+
+android_viewport_log_matches() {
+    local expected_orientation="$1"
+    local line="$2"
+    local target_width game_height target_full_height surface_width surface_height
+    local expected_width expected_full_height formula_orientation expected_capped
+
+    target_width="$(extract_log_value "$line" gameWidth)"
+    game_height="$(extract_log_value "$line" gameHeight)"
+    [[ "$target_width" =~ ^[0-9]+$ && "$game_height" =~ ^[0-9]+$ ]] || return 1
+
+    target_full_height=$((game_height + 12))
+    read -r surface_width surface_height < <(screen_size)
+    read -r expected_width expected_full_height formula_orientation expected_capped < <(android_viewport_target_for_size "$surface_width" "$surface_height")
+    [[ "$formula_orientation" == "$expected_orientation" \
+        && "$target_width" == "$expected_width" \
+        && "$target_full_height" == "$expected_full_height" ]]
+}
+
+wait_for_viewport_settings_state() {
+    local expected_orientation="$1"
+    local expected_camera="$2"
+    local expected_mouse="$3"
+    local timeout="${4:-30}"
+    local deadline=$((SECONDS + timeout))
+    local line visible setting_tab camera_auto mouse_one
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_SETTINGS " | tail -1 || true)"
+        visible="$(extract_log_value "$line" visible)"
+        setting_tab="$(extract_log_value "$line" settingTab)"
+        camera_auto="$(extract_log_value "$line" cameraAuto)"
+        mouse_one="$(extract_log_value "$line" mouseOne)"
+        if [[ "$visible" == "true" && "$setting_tab" == "1" \
+            && "$camera_auto" == "$expected_camera" && "$mouse_one" == "$expected_mouse" ]] \
+            && android_viewport_log_matches "$expected_orientation" "$line"; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android settings viewport orientation=$expected_orientation" >&2
+    settings_log_tail
+    return 1
 }
 
 ground_loot_log_tail() {
@@ -3133,6 +3419,14 @@ wait_for_settings_state() {
     local expected_camera="$1"
     local expected_mouse="$2"
     local timeout="${3:-20}"
+    wait_for_settings_tab_state 0 "$expected_camera" "$expected_mouse" "$timeout"
+}
+
+wait_for_settings_tab_state() {
+    local expected_tab="$1"
+    local expected_camera="$2"
+    local expected_mouse="$3"
+    local timeout="${4:-20}"
     local deadline=$((SECONDS + timeout))
     local line visible setting_tab camera_auto mouse_one
 
@@ -3142,7 +3436,7 @@ wait_for_settings_state() {
         setting_tab="$(extract_log_value "$line" settingTab)"
         camera_auto="$(extract_log_value "$line" cameraAuto)"
         mouse_one="$(extract_log_value "$line" mouseOne)"
-        if [[ "$visible" == "true" && "$setting_tab" == "1" \
+        if [[ "$visible" == "true" && "$setting_tab" == "$expected_tab" \
             && "$camera_auto" == "$expected_camera" && "$mouse_one" == "$expected_mouse" ]]; then
             echo "$line"
             return 0
@@ -3150,7 +3444,7 @@ wait_for_settings_state() {
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for Android settings cameraAuto=$expected_camera mouseOne=$expected_mouse" >&2
+    echo "ERROR: timed out waiting for Android settings tab=$expected_tab cameraAuto=$expected_camera mouseOne=$expected_mouse" >&2
     settings_log_tail
     return 1
 }
@@ -3159,6 +3453,14 @@ wait_for_settings_rendered() {
     local expected_camera="$1"
     local expected_mouse="$2"
     local timeout="${3:-20}"
+    wait_for_settings_tab_rendered 0 "$expected_camera" "$expected_mouse" "$timeout"
+}
+
+wait_for_settings_tab_rendered() {
+    local expected_tab="$1"
+    local expected_camera="$2"
+    local expected_mouse="$3"
+    local timeout="${4:-20}"
     local deadline=$((SECONDS + timeout))
     local line visible event setting_tab camera_auto mouse_one
 
@@ -3169,7 +3471,7 @@ wait_for_settings_rendered() {
         setting_tab="$(extract_log_value "$line" settingTab)"
         camera_auto="$(extract_log_value "$line" cameraAuto)"
         mouse_one="$(extract_log_value "$line" mouseOne)"
-        if [[ "$event" == "STATE" && "$visible" == "true" && "$setting_tab" == "1" \
+        if [[ "$event" == "STATE" && "$visible" == "true" && "$setting_tab" == "$expected_tab" \
             && "$camera_auto" == "$expected_camera" && "$mouse_one" == "$expected_mouse" ]]; then
             echo "$line"
             return 0
@@ -3177,9 +3479,57 @@ wait_for_settings_rendered() {
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for rendered Android settings cameraAuto=$expected_camera mouseOne=$expected_mouse" >&2
+    echo "ERROR: timed out waiting for rendered Android settings tab=$expected_tab cameraAuto=$expected_camera mouseOne=$expected_mouse" >&2
     settings_log_tail
     return 1
+}
+
+assert_settings_logout_visible() {
+    local line="$1"
+    local logout_visible logout_placement logout_top logout_bottom chat_tab_top panel_y panel_bottom game_height
+    logout_visible="$(extract_log_value "$line" logoutVisible)"
+    logout_placement="$(extract_log_value "$line" logoutPlacement)"
+    logout_top="$(extract_log_value "$line" logoutTop)"
+    logout_bottom="$(extract_log_value "$line" logoutBottom)"
+    chat_tab_top="$(extract_log_value "$line" chatTabTop)"
+    panel_y="$(extract_log_value "$line" panelY)"
+    panel_bottom="$(extract_log_value "$line" panelBottom)"
+    game_height="$(extract_log_value "$line" gameHeight)"
+
+    if [[ "$logout_visible" != "true" ]]; then
+        echo "ERROR: Android settings logout is not visible: $line" >&2
+        settings_log_tail
+        return 1
+    fi
+    if [[ ! "$logout_top" =~ ^-?[0-9]+$ || ! "$logout_bottom" =~ ^-?[0-9]+$ || ! "$chat_tab_top" =~ ^-?[0-9]+$ \
+        || ! "$panel_y" =~ ^-?[0-9]+$ || ! "$panel_bottom" =~ ^-?[0-9]+$ ]]; then
+        echo "ERROR: Android settings logout geometry missing numeric fields: $line" >&2
+        settings_log_tail
+        return 1
+    fi
+    if [[ "$logout_placement" == "corner" ]]; then
+        if [[ ! "$game_height" =~ ^-?[0-9]+$ ]]; then
+            echo "ERROR: Android corner logout geometry missing gameHeight: $line" >&2
+            settings_log_tail
+            return 1
+        fi
+        if (( logout_top < 0 || logout_bottom > game_height )); then
+            echo "ERROR: Android corner logout is outside viewport: logout=${logout_top}..${logout_bottom} gameHeight=$game_height" >&2
+            settings_log_tail
+            return 1
+        fi
+        return 0
+    fi
+    if (( logout_bottom > chat_tab_top - 4 )); then
+        echo "ERROR: Android settings logout overlaps chat dock: logoutBottom=$logout_bottom chatTabTop=$chat_tab_top" >&2
+        settings_log_tail
+        return 1
+    fi
+    if (( logout_top < panel_y || logout_bottom > panel_bottom )); then
+        echo "ERROR: Android settings logout is outside panel: logout=${logout_top}..${logout_bottom} panel=${panel_y}..${panel_bottom}" >&2
+        settings_log_tail
+        return 1
+    fi
 }
 
 tap_settings_logout() {
@@ -3189,6 +3539,7 @@ tap_settings_logout() {
     local line logout_x logout_y
 
     line="$(wait_for_settings_rendered "$expected_camera" "$expected_mouse" "$timeout")" || return 1
+    assert_settings_logout_visible "$line" || return 1
     logout_x="$(log_int_or_default "$line" logoutX 385)"
     logout_y="$(log_int_or_default "$line" logoutY 293)"
     tap_client_xy "$logout_x" "$logout_y"
@@ -4018,7 +4369,7 @@ run_authenticated_npc_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4049,7 +4400,7 @@ run_authenticated_npc_smoke() {
 
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
     return "$status"
@@ -4064,7 +4415,7 @@ run_authenticated_object_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4095,7 +4446,7 @@ run_authenticated_object_smoke() {
 
     disable_android_smoke_object_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
     return "$status"
@@ -4110,7 +4461,7 @@ run_authenticated_inventory_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local player_id status
     player_id="$(read_auth_player_id)"
     if [[ "$AUTH_INVENTORY_SLOT" == "$AUTH_ITEM_ON_ITEM_TARGET_SLOT" ]]; then
@@ -4156,7 +4507,7 @@ run_authenticated_inventory_smoke() {
 
     disable_android_smoke_inventory_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     sleep 1
     return "$status"
@@ -4171,7 +4522,7 @@ run_authenticated_item_on_object_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4211,7 +4562,7 @@ run_authenticated_item_on_object_smoke() {
     disable_android_smoke_inventory_targets
     disable_android_smoke_object_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -4227,7 +4578,7 @@ run_authenticated_item_on_npc_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4267,7 +4618,7 @@ run_authenticated_item_on_npc_smoke() {
     disable_android_smoke_inventory_targets
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -4283,7 +4634,7 @@ run_authenticated_context_menu_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4326,7 +4677,7 @@ run_authenticated_context_menu_smoke() {
 
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
     return "$status"
@@ -4341,7 +4692,7 @@ run_authenticated_edge_context_menu_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4386,7 +4737,7 @@ run_authenticated_edge_context_menu_smoke() {
 
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
     return "$status"
@@ -4397,7 +4748,7 @@ run_authenticated_camera_rotate_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position="" original_x="" original_y="" original_online="" status
     if [[ -n "$AUTH_DB" ]]; then
         original_position="$(read_auth_position)"
@@ -4421,7 +4772,7 @@ run_authenticated_camera_rotate_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
+        close_welcome_dialog_if_present 8
         sleep 2
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         screenshot 56-auth-before-camera-rotate
@@ -4435,7 +4786,7 @@ run_authenticated_camera_rotate_smoke() {
     disable_android_smoke_camera
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
     fi
@@ -4448,7 +4799,7 @@ run_authenticated_zoom_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position="" original_x="" original_y="" original_online="" status
     if [[ -n "$AUTH_DB" ]]; then
         original_position="$(read_auth_position)"
@@ -4472,22 +4823,35 @@ run_authenticated_zoom_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
+        close_welcome_dialog_if_present 8
         tap_pct 50 72
         sleep 2
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         wait_for_zoom_state 20 >/dev/null || exit 1
         screenshot 58-auth-before-zoom
         "$ADB" logcat -c || true
-        swipe_client_xy "$AUTH_ZOOM_SWIPE_X" "$AUTH_ZOOM_SWIPE_START_Y" "$AUTH_ZOOM_SWIPE_X" "$AUTH_ZOOM_SWIPE_END_Y" "$AUTH_ZOOM_SWIPE_DURATION_MS"
-        wait_for_zoom_change 20 || exit 1
-        sleep 2
-        screenshot 59-auth-after-zoom
+        swipe_client_xy "$AUTH_ZOOM_DRAG_X" "$AUTH_ZOOM_DRAG_START_Y" "$AUTH_ZOOM_DRAG_X" "$AUTH_ZOOM_DRAG_END_Y" "$AUTH_ZOOM_DRAG_DURATION_MS"
+        assert_no_zoom_change_logged 4 || exit 1
+        screenshot 59-auth-after-one-finger-no-zoom
+        if [[ "$AUTH_ZOOM_MANUAL_PINCH_SECONDS" =~ ^[0-9]+$ && "$AUTH_ZOOM_MANUAL_PINCH_SECONDS" -gt 0 ]]; then
+            echo "Android zoom smoke waiting ${AUTH_ZOOM_MANUAL_PINCH_SECONDS}s for a real physical two-finger pinch"
+            "$ADB" logcat -c || true
+            sleep "$AUTH_ZOOM_MANUAL_PINCH_SECONDS"
+            wait_for_zoom_change 10 || exit 1
+            sleep 2
+            screenshot 60-auth-after-manual-pinch-zoom
+        elif [[ "$AUTH_ZOOM_REQUIRE_PINCH" == "1" ]]; then
+            echo "ERROR: ANDROID_SMOKE_REQUIRE_PINCH=1 needs ANDROID_SMOKE_MANUAL_PINCH_SECONDS on a physical device; ADB input cannot synthesize a real pinch" >&2
+            exit 1
+        else
+            echo "WARNING: Android physical two-finger pinch QA was not run; set ANDROID_SMOKE_MANUAL_PINCH_SECONDS with ANDROID_SMOKE_REQUIRE_PINCH=1 on a real device."
+        fi
     ) || status=$?
 
     disable_android_smoke_zoom
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
     fi
@@ -4500,7 +4864,7 @@ run_authenticated_chat_tab_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position="" original_x="" original_y="" original_online="" status
     if [[ -n "$AUTH_DB" ]]; then
         original_position="$(read_auth_position)"
@@ -4547,7 +4911,7 @@ run_authenticated_chat_tab_smoke() {
     disable_android_smoke_chat_tabs
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
     fi
@@ -4560,7 +4924,7 @@ run_authenticated_chat_send_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position="" original_x="" original_y="" original_online="" status
     if [[ -n "$AUTH_DB" ]]; then
         original_position="$(read_auth_position)"
@@ -4584,11 +4948,15 @@ run_authenticated_chat_send_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        tap_pct 50 72
-        sleep 2
+        close_welcome_dialog_if_present 8
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         screenshot 65-auth-before-chat-send
-        tap_client_xy "$AUTH_CHAT_KEYBOARD_X" "$AUTH_CHAT_KEYBOARD_Y"
+        if tap_chat_tab KEYBOARD; then
+            echo "Opened Android keyboard from bottom chat keyboard tab"
+        else
+            echo "WARNING: keyboard tab layout unavailable; using legacy keyboard coordinate fallback" >&2
+            tap_client_xy "$AUTH_CHAT_KEYBOARD_X" "$AUTH_CHAT_KEYBOARD_Y"
+        fi
         sleep 2
         assert_soft_keyboard_visible || exit 1
         screenshot 66-auth-chat-keyboard-open
@@ -4605,7 +4973,7 @@ run_authenticated_chat_send_smoke() {
     disable_android_smoke_chat_send
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
         update_auth_position "$original_x" "$original_y" || true
     fi
@@ -4623,7 +4991,7 @@ run_authenticated_bank_smoke() {
     fi
 
     preflight_auth_login_fixture
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4805,14 +5173,14 @@ run_authenticated_bank_smoke() {
         screenshot 79-auth-bank-closed
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
         wait_for_bank_preset_saved "$player_id" 0 45 || exit 1
     ) || status=$?
 
     disable_android_smoke_bank
     disable_android_smoke_object_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     restore_auth_bank "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -4829,7 +5197,7 @@ run_authenticated_shop_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -4910,13 +5278,13 @@ run_authenticated_shop_smoke() {
         screenshot 84-auth-shop-no-scroll
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
     ) || status=$?
 
     disable_android_smoke_shop
     disable_android_smoke_npc_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -4932,7 +5300,7 @@ run_authenticated_equipment_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local player_id status
     player_id="$(read_auth_player_id)"
     snapshot_auth_inventory "$player_id"
@@ -5004,13 +5372,13 @@ run_authenticated_equipment_smoke() {
         fi
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
     ) || status=$?
 
     disable_android_smoke_inventory_targets
     disable_android_smoke_equipment
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     restore_auth_equipment "$player_id" || true
     sleep 1
@@ -5026,7 +5394,7 @@ run_authenticated_magic_prayer_smoke() {
         return
     fi
 
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
@@ -5070,7 +5438,7 @@ run_authenticated_magic_prayer_smoke() {
         screenshot 90-auth-after-self-cast
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
         if [[ "$AUTH_MAGIC_PRAYER_SPELL_ID" == "0" ]]; then
             local post_cast_position post_cast_x post_cast_y post_cast_online
             post_cast_position="$(read_auth_position || true)"
@@ -5117,12 +5485,12 @@ run_authenticated_magic_prayer_smoke() {
         screenshot 93-auth-prayer-deactivated
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
     ) || status=$?
 
     disable_android_smoke_magic_prayer
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_stats "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
     sleep 1
@@ -5136,7 +5504,7 @@ run_authenticated_world_map_smoke() {
 
     local status
     if [[ -n "$AUTH_DB" ]]; then
-        wait_auth_offline 45
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
         clear_auth_tutorial_appearance
     fi
 
@@ -5198,12 +5566,12 @@ run_authenticated_world_map_smoke() {
         screenshot 98-auth-world-map-closed
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || true
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     ) || status=$?
 
     disable_android_smoke_world_map
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     sleep 1
     return "$status"
 }
@@ -5217,7 +5585,7 @@ run_authenticated_settings_smoke() {
     fi
 
     local status original_settings original_camera original_mouse original_sound
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     clear_auth_tutorial_appearance
     original_settings="$(read_auth_settings)" || return 1
     read -r original_camera original_mouse original_sound <<< "$original_settings"
@@ -5241,8 +5609,11 @@ run_authenticated_settings_smoke() {
 
         "$ADB" logcat -c || true
         "$ADB" shell input keyevent 43
-        wait_for_settings_state true false 30 >/dev/null || exit 1
-        wait_for_settings_rendered true false 30 >/dev/null || exit 1
+        local settings_line
+        settings_line="$(wait_for_settings_state true false 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
+        settings_line="$(wait_for_settings_rendered true false 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
         sleep 1
         screenshot 99-auth-settings-open
 
@@ -5250,14 +5621,16 @@ run_authenticated_settings_smoke() {
         "$ADB" shell input keyevent 8
         sleep 1
         "$ADB" shell input keyevent 9
-        wait_for_settings_state false true 30 >/dev/null || exit 1
-        wait_for_settings_rendered false true 30 >/dev/null || exit 1
+        settings_line="$(wait_for_settings_state false true 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
+        settings_line="$(wait_for_settings_rendered false true 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
         sleep 1
         screenshot 100-auth-settings-changed
 
         tap_settings_logout false true 20 || exit 1
         sleep 10
-        wait_auth_offline 45 || exit 1
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
         wait_for_auth_settings_row 0 1 "$original_sound" 45 || exit 1
 
         "$ADB" logcat -c || true
@@ -5273,19 +5646,21 @@ run_authenticated_settings_smoke() {
 
         "$ADB" logcat -c || true
         "$ADB" shell input keyevent 43
-        wait_for_settings_state false true 30 >/dev/null || exit 1
-        wait_for_settings_rendered false true 30 >/dev/null || exit 1
+        settings_line="$(wait_for_settings_state false true 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
+        settings_line="$(wait_for_settings_rendered false true 30)" || exit 1
+        assert_settings_logout_visible "$settings_line" || exit 1
         sleep 1
         screenshot 101-auth-settings-reloaded
 
         tap_settings_logout false true 20 || exit 1
         sleep 10
-        wait_auth_offline 45 || true
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     ) || status=$?
 
     disable_android_smoke_settings
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_settings "$original_camera" "$original_mouse" "$original_sound" || true
     sleep 1
     return "$status"
@@ -5304,7 +5679,7 @@ run_authenticated_ground_loot_smoke() {
     fi
 
     local status player_id original_position original_x original_y original_online
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     clear_auth_tutorial_appearance
     player_id="$(read_auth_player_id)" || return 1
     original_position="$(read_auth_position)" || return 1
@@ -5350,12 +5725,12 @@ run_authenticated_ground_loot_smoke() {
         screenshot 102-auth-ground-loot-readable
 
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || true
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     ) || status=$?
 
     disable_android_smoke_ground_loot
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     restore_auth_ground_loot_cache "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
@@ -5386,7 +5761,7 @@ run_authenticated_wilderness_target_smoke() {
 
     local status original_position original_x original_y original_online original_group command
     local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     clear_auth_tutorial_appearance
     original_position="$(read_auth_position)" || return 1
     read -r original_x original_y original_online <<< "$original_position"
@@ -5444,7 +5819,7 @@ run_authenticated_wilderness_target_smoke() {
         wait_for_player_command STOP 10 || true
         sleep 2
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || true
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     ) || status=$?
 
     if [[ "$status" -ne 0 && -f "$OUT_DIR/auth-wilderness-command-sent.flag" ]]; then
@@ -5453,7 +5828,7 @@ run_authenticated_wilderness_target_smoke() {
     fi
     disable_android_smoke_player_targets
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     update_auth_position "$original_x" "$original_y" || true
     update_auth_group "$original_group" || true
     sleep 1
@@ -5477,7 +5852,7 @@ run_authenticated_pvp_stress_smoke() {
 
     local status original_position original_x original_y original_online original_group player_id command
     local fixture_position
-    wait_auth_offline 45
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     clear_auth_tutorial_appearance
     original_position="$(read_auth_position)" || return 1
     read -r original_x original_y original_online <<< "$original_position"
@@ -5582,7 +5957,7 @@ run_authenticated_pvp_stress_smoke() {
         wait_for_player_command STOP 10 || true
         sleep 1
         "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline 45 || true
+        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
         wait_for_auth_inventory_slot_not_catalog "$player_id" "$AUTH_PVP_STRESS_FOOD_SLOT" "$AUTH_PVP_STRESS_FOOD_ID" 30 || exit 1
         wait_for_auth_curstat_greater_than "$player_id" strength 20 30 || exit 1
         assert_auth_position_changed_after_logout "$fixture_position" || exit 1
@@ -5597,7 +5972,7 @@ run_authenticated_pvp_stress_smoke() {
     disable_android_smoke_player_targets
     disable_android_smoke_walk
     "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline 45 || true
+    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     restore_auth_stats "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true

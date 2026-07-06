@@ -390,6 +390,17 @@ scripts/build-android.sh
 ```
 
 Android requires a local SDK and JDK 17. See `docs/DEVELOPMENT.md`.
+The build writes `voidscape.apk.json` next to the APK; before promoting a public
+APK to `/downloads/android-apk`, run:
+
+```bash
+scripts/check-android-apk-release.sh --apk path/to/voidscape.apk --server-config path/to/local.conf
+```
+
+The preflight must pass so the APK sidecar hash/size and `clientVersion` match
+the APK bytes, `Client_Base/src/orsc/Config.java`, and the target server
+`client_version`. This prevents the Android “client has been updated” black-screen
+path caused by publishing an APK built for a different server version.
 
 Cache-backed changes need extra care:
 

@@ -48,7 +48,7 @@ public final class SubscriptionCard implements OpInvTrigger {
 			+ (accountWide ? "account" : "character") + " subscription time.%"
 			+ "@whi@Subscribed " + (accountWide ? "accounts" : "characters")
 			+ " gain @gre@+1x@whi@ combat and skilling XP.%"
-			+ "@whi@At base rates, that is @gre@11x@whi@ combat and @gre@3x@whi@ skilling XP.% %"
+			+ "@whi@At base rates, that is @gre@11x@whi@ combat and @gre@2.5x@whi@ skilling XP.% %"
 			+ "@lre@Time remaining: " + VoidSubscription.formatRemaining(remaining) + ".", true);
 		recordSubscriptionCardRedeem(player, item, removedItemID, accountWide, wasActive, expiresAt);
 		player.save(false, true);

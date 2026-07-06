@@ -49,7 +49,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Key | Dev/local | Staging | Production | Release note |
 |---|---:|---:|---:|---|
 | `game_tick` | `640` | `640` | `640` | Authentic RSC combat/movement feel. |
-| `combat_exp_rate` / `skilling_exp_rate` | `10` / `2` | `10` / `2` | `10` / `2` | Subscription adds +1x to each, normally 11x combat / 3x skills while active. |
+| `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
@@ -114,7 +114,7 @@ These are positional in many loaders. Keep server and client append order aligne
 ## Pre-release config sign-off
 
 - [x] F2P vs members default decided: hybrid/P2P-enabled world with F2P-feeling early progression.
-- [x] XP rates decided: 10x combat / 2x skills, subscription adds +1x to each.
+- [x] XP rates decided: 10x combat / 1.5x skills, subscription adds +1x to each.
 - [ ] PvP/safe-zone policy decided.
 - [ ] Economy-affecting QoL toggles decided: notes, auction house, bank presets, batch skilling.
 - [x] Rift travel policy decided: ordinary Void Rifts form a five-hub network (Void Enclave, Edgeville, Varrock, Falador, Ardougne), with Lumbridge left to Home teleport and world-map autowalk/saved walks as the broad traversal QoL.

@@ -71,7 +71,7 @@ want_fatigue: false
 # Keep authentic combat timing, with Voidscape's current progression rates
 game_tick: 640
 combat_exp_rate: 10
-skilling_exp_rate: 2
+skilling_exp_rate: 1.5
 
 # Optional: enable some custom-but-authentic-feeling content
 # location_data: 1   # already preservation default; bump to 2 if you want OpenRSC additions
@@ -118,7 +118,7 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `want_fatigue` | `false` | Stamina drain during skilling |
 | `game_tick` | `640` | Tick speed in ms (authentic = 640) |
 | `combat_exp_rate` | `10` | Combat XP multiplier |
-| `skilling_exp_rate` | `2` | Non-combat skill XP multiplier |
+| `skilling_exp_rate` | `1.5` | Non-combat skill XP multiplier |
 | `wilderness_boost` | `0` | Additive exp bonus in wilderness |
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |

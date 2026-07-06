@@ -1,2 +1,2 @@
 ALTER TABLE `players`
-ALTER `cameraauto` SET DEFAULT 1;
+ALTER `cameraauto` SET DEFAULT 0;

@@ -4,8 +4,8 @@ Voidscape subscription is an account-level timed XP boost unlocked by redeeming 
 
 ## Rates
 
-- Normal Voidscape target rates are 10x combat XP and 2x skilling XP.
-- Subscribed accounts add `+1x` to combat and skilling XP, so the normal effective rate is 11x combat XP and 3x skilling XP.
+- Normal Voidscape target rates are 10x combat XP and 1.5x skilling XP.
+- Subscribed accounts add `+1x` to combat and skilling XP, so the normal effective rate is 11x combat XP and 2.5x skilling XP.
 - Combat skills follow the same grouping as the existing server XP multiplier: Attack, Defense, Strength, Hits, Ranged, Prayer, Good Magic, Evil Magic, and Magic.
 - `Player.getExperienceMultiplier(...)` applies the subscription bonus before Wilderness and skull additive bonuses.
 
@@ -53,7 +53,7 @@ For a quick server-side test without the portal: insert a row (`INSERT INTO play
 
 Because cards are tradable, abuse prevention belongs before item creation: the portal grants at most one starter-card marker per web account, records account identity/risk signals, and can hold suspicious signups for staff review without changing the in-game item. Once a card exists, it behaves like any other tradable subscription card.
 
-The portal's Subscription view should therefore show two separate states: the account's current effective XP rates/subscription status, and whether a starter card is waiting at Lumbridge or already claimed. A fresh pre-release signup remains `Unsubscribed` at 10x combat / 2x skilling, while the reward wallet shows `1 card reserved in Lumbridge` until the in-game vendor gives the physical card.
+The portal's Subscription view should therefore show two separate states: the account's current effective XP rates/subscription status, and whether a starter card is waiting at Lumbridge or already claimed. A fresh pre-release signup remains `Unsubscribed` at 10x combat / 1.5x skilling, while the reward wallet shows `1 card reserved in Lumbridge` until the in-game vendor gives the physical card.
 
 ## Local Verification
 

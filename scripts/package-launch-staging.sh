@@ -433,6 +433,10 @@ PY
 	fi
 	cp "$ANDROID_APK" "$OUTPUT_DIR/android/voidscape-staging-$ANDROID_LABEL.apk"
 	cp "$ANDROID_APK" "$OUTPUT_DIR/android/voidscape-staging.apk"
+	if [[ -f "$ANDROID_APK.json" ]]; then
+		cp "$ANDROID_APK.json" "$OUTPUT_DIR/android/voidscape-staging-$ANDROID_LABEL.apk.json"
+		cp "$ANDROID_APK.json" "$OUTPUT_DIR/android/voidscape-staging.apk.json"
+	fi
 	restore_sources
 	trap restore_sources EXIT
 else

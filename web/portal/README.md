@@ -38,7 +38,7 @@ Returning players use the visible `Sign in` action in the landing nav, hero, or 
 
 The launch countdown defaults to **Saturday, July 11, 2026 at 11:00 AM Pacific / 2:00 PM Eastern / 7:00 PM UK** (`2026-07-11T18:00:00Z`). Set `PORTAL_LAUNCH_AT=2026-07-11T18:00:00Z` explicitly in production so the date is obvious in deployment config. `PORTAL_BETA_OPEN_AT` remains accepted as a backward-compatible fallback, but launch deployments should use `PORTAL_LAUNCH_AT`.
 
-Set `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` if the mobile browser client moves. Prelaunch landing copy mentions Web/Desktop/iOS/Android support, but the public page keeps the clickable funnel on reserving the account name until the world opens. Once `PORTAL_LAUNCH_AT` is in the past, the same landing switches into the launch-open surface: desktop launcher download, mobile web client, Android APK availability, live build proof, and account-management CTAs render from `/api/public` download metadata.
+Set `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/?phone=1` if the mobile browser client moves. Prelaunch landing copy mentions Web/Desktop/iOS/Android support, but the public page keeps the clickable funnel on reserving the account name until the world opens. Once `PORTAL_LAUNCH_AT` is in the past, the same landing switches into the launch-open surface: desktop launcher download, mobile web client, Android APK availability, live build proof, and account-management CTAs render from `/api/public` download metadata.
 
 The public site also serves `/privacy` and `/data-deletion`. Keep those reachable before enabling Google sign-in or Android distribution, and update the support mailbox if production support uses a different address.
 
@@ -57,7 +57,7 @@ Environment=PORT=8788
 Environment=PORTAL_PUBLIC_MODE=1
 Environment=PORTAL_LAUNCH_SIGNUP_MODE=1
 Environment=PORTAL_LAUNCH_AT=2026-07-11T18:00:00Z
-Environment=PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/
+Environment=PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/?phone=1
 Environment=PORTAL_DATA_DIR=/var/lib/voidscape-portal
 Environment=PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
 Environment=PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
@@ -204,10 +204,10 @@ Useful local API environment variables:
 - `PORTAL_PUBLIC_MODE=1` locks the server to the prelaunch signup surface (see "Launching the public prelaunch site").
 - `PORTAL_LAUNCH_SIGNUP_MODE=1` opens the public account-first launch flow while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden; use only with `PORTAL_PUBLIC_MODE=1`.
 - `PORTAL_GOOGLE_CLIENT_ID=...` enables the public Google Identity Services button and ID-token verification for launch signup. Without it, Google signup endpoints return `google_oauth_not_configured` and the button stays hidden. `PORTAL_GOOGLE_JWKS_URL` defaults to Google's public cert endpoint and exists only as a test/ops override.
-- `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg` sets the public origin used in outgoing emails. If unset, the portal derives it from request headers.
+- `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg` sets the canonical public origin used in outgoing emails, public download metadata, and launcher manifest URLs. Set it on production so APK/launcher links stay HTTPS even if the loopback reverse proxy omits forwarded-proto headers. If unset, the portal derives the origin from request headers.
 - `PORTAL_EMAIL_PROVIDER=resend` enables live email delivery through Resend when `PORTAL_RESEND_API_KEY` and `PORTAL_EMAIL_FROM` are configured. `PORTAL_EMAIL_REPLY_TO` defaults to `support@voidscape.gg`; `PORTAL_EMAIL_DRY_RUN=1` marks events sent without calling Resend; `PORTAL_REQUIRE_EMAIL=1` makes `/api/health.config.publicReady` fail until email delivery is configured.
 - `PORTAL_LAUNCH_AT=...` exposes a public-safe launch countdown through `/api/public`; use ISO-8601 with timezone.
-- `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/` controls the release mobile web-client URL used by API metadata and post-launch surfaces; the prelaunch landing does not link play/download actions.
+- `PORTAL_WEB_CLIENT_URL=https://voidscape.gg/play/?phone=1` controls the release mobile web-client URL used by API metadata and post-launch surfaces; the portal normalizes bare `/play/` values to include `?phone=1` so Android browser links force the phone shell. The prelaunch landing does not link play/download actions.
 - `PORTAL_ANDROID_APK=/path/to/voidscape.apk` overrides the APK served by `/downloads/android-apk`. If unset, the portal uses the standard Android build output when it exists. The prelaunch landing still hides download buttons until the countdown opens the post-launch chooser.
 - `PORTAL_BIND_HOST=127.0.0.1` sets the listen address; non-loopback binds require `PORTAL_DATA_DIR` (or `PORTAL_ALLOW_TMPDIR=1`).
 - `PORTAL_TRUST_PROXY=1` trusts `x-forwarded-for` from non-loopback peers (only set behind a real proxy).

@@ -1411,8 +1411,12 @@
 					var anyPointerFine = !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches);
 					var width = Math.max(1, window.innerWidth || (window.screen && window.screen.width) || 1);
 					var height = Math.max(1, window.innerHeight || (window.screen && window.screen.height) || 1);
+					var screenWidth = Math.max(1, (window.screen && (window.screen.availWidth || window.screen.width)) || width);
+					var screenHeight = Math.max(1, (window.screen && (window.screen.availHeight || window.screen.height)) || height);
 					var minViewport = Math.min(width, height);
 					var maxViewport = Math.max(width, height);
+					var minScreen = Math.min(screenWidth, screenHeight);
+					var maxScreen = Math.max(screenWidth, screenHeight);
 					var iPhone = /iPhone|iPod/i.test(ua);
 					var iPad = /iPad/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1 && /Safari/i.test(ua) && !/Chrome|Chromium|Edg\//i.test(ua));
 					var android = /Android/i.test(ua);
@@ -1422,12 +1426,14 @@
 					var touchDevice = maxTouchPoints > 0 || pointerCoarse || anyPointerCoarse;
 					var primaryTouch = pointerCoarse || (anyPointerCoarse && !pointerFine && !anyPointerFine);
 					var phoneViewport = minViewport <= 600 && maxViewport <= 1100;
+					var phoneScreen = minScreen <= 600 && maxScreen <= 1400;
 					var tabletViewport = minViewport > 600 && minViewport <= 1024 && maxViewport <= 1400;
+					var phoneSizedTouch = touchDevice && primaryTouch && (phoneViewport || phoneScreen);
 					var inferredMode = 'desktop';
 					var inferredSource = 'heuristic:desktop';
-					if (phoneUa || (touchDevice && primaryTouch && phoneViewport)) {
+					if (phoneUa || phoneSizedTouch) {
 						inferredMode = 'phone';
-						inferredSource = phoneUa ? 'heuristic:phone-ua' : 'heuristic:phone-viewport';
+						inferredSource = phoneUa ? 'heuristic:phone-ua' : (phoneViewport ? 'heuristic:phone-viewport' : 'heuristic:phone-screen');
 					} else if (tabletUa || (touchDevice && primaryTouch && tabletViewport)) {
 						inferredMode = 'tablet';
 						inferredSource = tabletUa ? 'heuristic:tablet-ua' : 'heuristic:tablet-viewport';
@@ -1452,6 +1458,12 @@
 							height: height,
 							min: minViewport,
 							max: maxViewport
+						},
+						screen: {
+							width: screenWidth,
+							height: screenHeight,
+							min: minScreen,
+							max: maxScreen
 						}
 					};
 				}

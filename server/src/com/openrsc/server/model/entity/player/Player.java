@@ -5021,7 +5021,7 @@ public final class Player extends Mob {
 	}
 
 	public boolean isUsingAndroidClient() {
-		return getClientLimitations().isAndroidClient;
+		return getClientLimitations() != null && getClientLimitations().isAndroidClient;
 	}
 
 	public PreferredLanguage getPreferredLanguage() {
