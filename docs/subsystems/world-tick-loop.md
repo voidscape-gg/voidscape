@@ -46,7 +46,7 @@ Each phase is benchmarked via `getServer().bench()`; lateness logged.
 
 Owns:
 - `PlayerList players` (capacity ~2000)
-- `EntityList<Npc> npcs` (capacity ~4000)
+- `EntityList<Npc> npcs` (capacity ~5000)
 - `RegionManager`
 - Ground items, objects, shops, quests, minigames, clans, parties
 - Combat odyssey data, fishing trawler instances

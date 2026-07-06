@@ -18,6 +18,8 @@ public final class VoidSubscription {
 	private static final int SIGNUP_CODE_MAX_LENGTH = 20;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
 	public static final int PROFILE_CLIENT_VERSION = 10055;
+	public static final int CHAT_NAME_CLIENT_VERSION = 10124;
+	public static final int CHAT_NAME_ICON_FLAG = 0x40000000;
 	public static final double COMBAT_EXP_BONUS = 1.0D;
 	public static final double SKILLING_EXP_BONUS = 1.0D;
 	public static final long DURATION_MILLIS = 7L * 24L * 60L * 60L * 1000L;
@@ -35,6 +37,14 @@ public final class VoidSubscription {
 		}
 		long expiresAt = getExpiresAt(player);
 		return expiresAt > System.currentTimeMillis();
+	}
+
+	public static int withChatNameFlag(Player viewer, Player sender, int icon) {
+		if (viewer == null || sender == null || !viewer.isUsingCustomClient()
+			|| viewer.getClientVersion() < CHAT_NAME_CLIENT_VERSION) {
+			return icon;
+		}
+		return isActive(sender) ? icon | CHAT_NAME_ICON_FLAG : icon;
 	}
 
 	public static long activate(Player player) {

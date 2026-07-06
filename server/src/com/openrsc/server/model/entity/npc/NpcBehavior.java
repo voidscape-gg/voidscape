@@ -61,14 +61,8 @@ public class NpcBehavior {
 			- (long) DataConversions.random(0, 5 * tickFactor - 1) * npc.getConfig().GAME_TICK;
 
 		switch (NpcId.getById(npc.getID())) {
-			case BANDIT_AGGRESSIVE:
-				aggroRadius = 2;
-				break;
 			case BLACK_KNIGHT:
 				aggroRadius = 10;
-				break;
-			case UNDEADONE:
-				aggroRadius = 3;
 				break;
 			default:
 				aggroRadius = npc.getWorld().getServer().getConfig().AGGRO_RANGE;

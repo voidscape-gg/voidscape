@@ -140,8 +140,8 @@ write_manifest() {
 	local include_sample="$1"
 	local launcher_jar="$2"
 	{
-		printf 'version=10123-%s\n' "$(date -u +%Y%m%d%H%M%S)"
-		printf 'clientVersion=10123\n'
+		printf 'version=10124-%s\n' "$(date -u +%Y%m%d%H%M%S)"
+		printf 'clientVersion=10124\n'
 		printf 'baseUrl=%s/\n' "$BASE_URL"
 		local index=1
 		local files=("Open_RSC_Client.jar" "video/fonts.bin")
@@ -159,7 +159,7 @@ write_manifest() {
 			printf 'launcher.sha256=%s\n' "$(sha256_file "$launcher_jar")"
 			printf 'launcher.url=%s/launcher/%s\n' "$BASE_URL" "$(basename "$launcher_jar")"
 			printf 'launcher.size=%s\n' "$(file_size "$launcher_jar")"
-			printf 'launcher.version=10123-smoke\n'
+			printf 'launcher.version=10124-smoke\n'
 		fi
 	} > "$CHANNEL_DIR/manifest.properties"
 }
@@ -184,7 +184,7 @@ run_sync "1-fresh-install"
 check "fresh install exits 0" [ "$SYNC_EXIT" -eq 0 ]
 check "fresh install reports updated" log_has "SYNC_OUTCOME updated"
 check "fresh install downloads 3 files" log_has "SYNC_DOWNLOADED 3"
-check "fresh install reports client version" log_has "SYNC_CLIENT_VERSION 10123"
+check "fresh install reports client version" log_has "SYNC_CLIENT_VERSION 10124"
 check "client jar matches channel hash" [ "$(sha256_file "$CACHE_DIR/Open_RSC_Client.jar")" = "$(sha256_file "$CHANNEL_DIR/Open_RSC_Client.jar")" ]
 check "nested cache file downloaded" [ -f "$CACHE_DIR/video/fonts.bin" ]
 check "sync state written" [ -f "$CACHE_DIR/.voidscape-sync-state.properties" ]

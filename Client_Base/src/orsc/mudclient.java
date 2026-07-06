@@ -28580,6 +28580,11 @@ public final class mudclient implements Runnable {
 
 	public final void showMessage(boolean crownEnabled, String sender, String message, MessageType type, int crownID,
 								  String formerName, String colourOverride) {
+		showMessage(crownEnabled, sender, message, type, crownID, formerName, colourOverride, null);
+	}
+
+	public final void showMessage(boolean crownEnabled, String sender, String message, MessageType type, int crownID,
+								  String formerName, String colourOverride, String displaySender) {
 		try {
 
 			if ((type == MessageType.PRIVATE_RECIEVE || type == MessageType.CHAT || type == MessageType.TRADE
@@ -28597,6 +28602,7 @@ public final class mudclient implements Runnable {
 			}
 
 			String colour = null != colourOverride ? colourOverride : type.color;
+			String formattedSender = displaySender != null ? displaySender : sender;
 
 			if (!crownEnabled)
 				crownID = 0;
@@ -28648,12 +28654,12 @@ public final class mudclient implements Runnable {
 			}
 			MessageHistory.messageHistoryType[0] = type;
 			MessageHistory.messageHistoryTimeout[0] = 300;
-			MessageHistory.messageHistorySender[0] = sender;
+			MessageHistory.messageHistorySender[0] = formattedSender;
 			MessageHistory.messageHistoryCrownID[0] = crownID;
 			MessageHistory.messageHistoryClan[0] = formerName;
 			MessageHistory.messageHistoryMessage[0] = message;
 			MessageHistory.messageHistoryColor[0] = colour;
-			String msg = colour + StringUtil.formatMessage(message, sender, type, colour);
+			String msg = colour + StringUtil.formatMessage(message, formattedSender, type, colour);
 
 			if (type == MessageType.CHAT) {
 				this.voidscapeAddWrapped(msg, this.panelMessageTabs.controlScrollAmount[this.panelMessageChat] == this.panelMessageTabs.controlListCurrentSize[this.panelMessageChat]

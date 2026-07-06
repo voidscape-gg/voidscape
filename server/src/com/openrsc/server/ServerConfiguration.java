@@ -44,6 +44,7 @@ public class ServerConfiguration {
 	int WS_SERVER_PORT;
 	public boolean WANT_FEATURE_WEBSOCKETS;
 	int IDLE_TIMER;
+	int IDLE_TIMER_SUBSCRIBER;
 	int AUTO_SAVE;
 	public int TIMED_EVENT_INTERVAL;
 	public int MILLISECONDS_BETWEEN_CASTS;
@@ -66,6 +67,7 @@ public class ServerConfiguration {
 	public double WILDERNESS_BOOST;
 	public double SKULL_BOOST;
 	public double NPC_RESPAWN_MULTIPLIER;
+	public int WILDERNESS_SPAWN_MULTIPLIER;
 	public int VIEW_DISTANCE;
 	public String LOGO_SPRITE_ID;
 	public int NPC_BLOCKING;
@@ -431,6 +433,7 @@ public class ServerConfiguration {
 		MILLISECONDS_BETWEEN_CASTS = tryReadInt("milliseconds_between_casts").orElse(GAME_TICK * 3 - 20);
 		WANT_CUSTOM_WALK_SPEED = tryReadBool("want_custom_walking_speed").orElse(false);
 		IDLE_TIMER = tryReadInt("idle_timer").orElse(300000); // 5 minutes
+		IDLE_TIMER_SUBSCRIBER = tryReadInt("idle_timer_subscriber").orElse(IDLE_TIMER);
 		AUTO_SAVE = tryReadInt("auto_save").orElse(30000); // 30 seconds
 		CLIENT_VERSION = tryReadInt("client_version").orElse(10009);
 		ENFORCE_CUSTOM_CLIENT_VERSION = tryReadBool("enforce_custom_client_version").orElse(true);
@@ -474,6 +477,7 @@ public class ServerConfiguration {
 		SKULL_BOOST = tryReadDouble("skull_boost").orElse(0.0);
 		IS_DOUBLE_EXP = tryReadBool("double_exp").orElse(false);
 		NPC_RESPAWN_MULTIPLIER = tryReadDouble("npc_respawn_multiplier").orElse(1.0);
+		WILDERNESS_SPAWN_MULTIPLIER = tryReadInt("wilderness_spawn_multiplier").orElse(1);
 		WANT_REGISTRATION_LIMIT = tryReadBool("want_registration_limit").orElse(false);
 		REGISTRATION_LIMIT_COUNT = tryReadInt("registration_limit_count").orElse(2);
 		PACKET_LIMIT = tryReadInt("packet_limit").orElse(100);

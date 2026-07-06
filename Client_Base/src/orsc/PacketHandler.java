@@ -33,6 +33,7 @@ import static orsc.Config.isAndroid;
 public class PacketHandler {
 
 	private static final int HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
+	private static final int SUBSCRIPTION_CHAT_ICON_FLAG = 0x40000000;
 	private static final boolean HIT_FEEDBACK_DEBUG = Boolean.getBoolean("voidscape.hitFeedbackDebug");
 
 	private final RSBuffer_Bits packetsIncoming = new RSBuffer_Bits(30000);
@@ -761,7 +762,9 @@ public class PacketHandler {
 	}
 
 	private void showMessage() {
-		int crown = packetsIncoming.get32();
+		int packedCrown = packetsIncoming.get32();
+		boolean subscriptionName = hasSubscriptionChatFlag(packedCrown);
+		int crown = unpackChatCrown(packedCrown);
 		MessageType type = MessageType.lookup(packetsIncoming.getUnsignedByte());
 		int messageType = packetsIncoming.getUnsignedByte();
 		String message = packetsIncoming.readString();
@@ -783,7 +786,27 @@ public class PacketHandler {
 			return;
 		}
 
-		mc.showMessage(true, sender, message, type, crown, formerName, colour);
+		mc.showMessage(true, sender, message, type, crown, formerName, colour,
+			subscriptionName ? subscriptionChatDisplaySender(sender, type, colour) : null);
+	}
+
+	private static boolean hasSubscriptionChatFlag(int icon) {
+		return (icon & SUBSCRIPTION_CHAT_ICON_FLAG) != 0;
+	}
+
+	private static int unpackChatCrown(int icon) {
+		return icon & ~SUBSCRIPTION_CHAT_ICON_FLAG;
+	}
+
+	private static String subscriptionChatDisplaySender(String sender, MessageType type, String colourOverride) {
+		if (sender == null || sender.length() == 0) {
+			return sender;
+		}
+		String resetColour = colourOverride != null && colourOverride.length() > 0 ? colourOverride : type.color;
+		if (sender.regionMatches(true, 0, "Global$", 0, 7) && sender.length() > 7) {
+			return sender.substring(0, 7) + "@mag@" + sender.substring(7) + resetColour;
+		}
+		return "@mag@" + sender + resetColour;
 	}
 
 	private void sendConnectionMessage() {
@@ -912,9 +935,12 @@ public class PacketHandler {
 	private void receivePrivateMessage() {
 		String sender = packetsIncoming.readString();
 		String formerName = packetsIncoming.readString();
-		int icon = packetsIncoming.get32();
+		int packedIcon = packetsIncoming.get32();
+		boolean subscriptionName = hasSubscriptionChatFlag(packedIcon);
+		int icon = unpackChatCrown(packedIcon);
 		String message = RSBufferUtils.getEncryptedString(packetsIncoming);
-		mc.showMessage(true, sender, message, MessageType.PRIVATE_RECIEVE, icon, formerName);
+		mc.showMessage(true, sender, message, MessageType.PRIVATE_RECIEVE, icon, formerName, null,
+			subscriptionName ? subscriptionChatDisplaySender(sender, MessageType.PRIVATE_RECIEVE, null) : null);
 	}
 
 	private void sendPrivateMessage() {
@@ -2729,7 +2755,9 @@ public class PacketHandler {
 				}
 			} else if (updateType == 1 || updateType == 6 || updateType == 7) {
 				if (updateType == 1 || updateType == 7) {
-					int crownID = packetsIncoming.get32();
+					int packedCrownID = packetsIncoming.get32();
+					boolean subscriptionName = hasSubscriptionChatFlag(packedCrownID);
+					int crownID = unpackChatCrown(packedCrownID);
 					boolean muted = false, onTutorial = false;
 					if (updateType == 7) {
 						muted = packetsIncoming.getUnsignedByte() > 0;
@@ -2756,17 +2784,21 @@ public class PacketHandler {
 						if (!var29) {
 							player.messageTimeout = 150;
 							player.message = message;
+							String statusPrefix = ((updateType == 7 && muted) ? "@whi@[MUTED]@yel@ " : "") +
+								((updateType == 7 && onTutorial) ? "@whi@[TUTORIAL]@yel@ " : "");
+							String sender = statusPrefix + player.getStaffName();
+							String displaySender = subscriptionName
+								? statusPrefix + subscriptionChatDisplaySender(player.getStaffName(), MessageType.CHAT, null)
+								: null;
 							mc.showMessage(
 								/*!Config.S_WANT_CUSTOM_RANK_DISPLAY*/ true,
-								(
-									((updateType == 7 && muted) ? "@whi@[MUTED]@yel@ " : "") +
-										((updateType == 7 && onTutorial) ? "@whi@[TUTORIAL]@yel@ " : "") +
-										player.getStaffName()
-								),
+								sender,
 								player.message,
 								MessageType.CHAT,
 								crownID,
-								player.accountName
+								player.accountName,
+								null,
+								displaySender
 							);
 						}
 					}

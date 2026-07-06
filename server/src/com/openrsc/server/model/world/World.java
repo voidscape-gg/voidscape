@@ -77,6 +77,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int NPC_CAPACITY = 5000;
 
 	/**
 	 * Avatar generator upon logout save to PNG.
@@ -134,7 +135,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public World(final Server server) {
 		this.server = server;
-		this.npcs = new EntityList<>(4000);
+		this.npcs = new EntityList<>(NPC_CAPACITY);
 		this.players = new PlayerList(2000);
 		this.sceneryLocs = new HashMap<>();
 		this.npcDrops = new NpcDrops(this);

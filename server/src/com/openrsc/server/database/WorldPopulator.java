@@ -10,6 +10,7 @@ import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.util.SystemUtil;
+import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -117,6 +118,7 @@ public final class WorldPopulator {
 				LOGGER.info("Void Enclave filter stripped {} pre-existing NPC spawns from inside the footprint", box(before - npclocs.size()));
 			}
 			loadCustomLocs(LocType.NPC);
+			applyWildernessSpawnMultiplier();
 			// NpcLocation[] npcLocations = getWorld().getServer().getDatabase().getNpcLocs();
 			// for (NpcLocation npcLocation : npcLocations) {
 			for (NPCLoc loc : npclocs) {
@@ -214,6 +216,62 @@ public final class WorldPopulator {
 	private static boolean inVoidEnclaveClearBounds(int x, int y) {
 		return x >= VOID_ENCLAVE_CLEAR_MIN_X && x <= VOID_ENCLAVE_CLEAR_MAX_X
 			&& y >= VOID_ENCLAVE_CLEAR_MIN_Y && y <= VOID_ENCLAVE_CLEAR_MAX_Y;
+	}
+
+	private void applyWildernessSpawnMultiplier() {
+		final int multiplier = Math.max(1, getWorld().getServer().getConfig().WILDERNESS_SPAWN_MULTIPLIER);
+		if (multiplier <= 1) {
+			return;
+		}
+
+		final ArrayList<NPCLoc> additions = new ArrayList<>();
+		for (NPCLoc loc : npclocs) {
+			if (!Point.inWilderness(loc.startX(), loc.startY())) {
+				continue;
+			}
+			if (!getWorld().getServer().getEntityHandler().getNpcDef(loc.id).isAttackable()) {
+				continue;
+			}
+			for (int copy = 1; copy < multiplier; copy++) {
+				additions.add(copyWildernessNpcLoc(loc));
+			}
+		}
+
+		npclocs.addAll(additions);
+		LOGGER.info("Wilderness density x{}: added {} spawns", box(multiplier), box(additions.size()));
+	}
+
+	private NPCLoc copyWildernessNpcLoc(final NPCLoc loc) {
+		final NPCLoc copy = new NPCLoc(loc.id, loc.startX, loc.startY,
+			loc.minX, loc.maxX, loc.minY, loc.maxY);
+		if (loc.minX > loc.maxX || loc.minY > loc.maxY) {
+			return copy;
+		}
+
+		final boolean hasAlternateStart = loc.minX < loc.maxX || loc.minY < loc.maxY;
+		for (int attempt = 0; attempt < 8; attempt++) {
+			final int startX = DataConversions.random(loc.minX, loc.maxX);
+			final int startY = DataConversions.random(loc.minY, loc.maxY);
+			if (Point.inWilderness(startX, startY)
+				&& (!hasAlternateStart || startX != loc.startX || startY != loc.startY)) {
+				copy.startX = startX;
+				copy.startY = startY;
+				return copy;
+			}
+		}
+
+		if (loc.minX < loc.maxX) {
+			final int startX = loc.startX < loc.maxX ? loc.startX + 1 : loc.startX - 1;
+			if (Point.inWilderness(startX, loc.startY)) {
+				copy.startX = startX;
+			}
+		} else if (loc.minY < loc.maxY) {
+			final int startY = loc.startY < loc.maxY ? loc.startY + 1 : loc.startY - 1;
+			if (Point.inWilderness(loc.startX, startY)) {
+				copy.startY = startY;
+			}
+		}
+		return copy;
 	}
 
 	private void loadCustomLocs(LocType type) {

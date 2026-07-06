@@ -5,6 +5,7 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
 import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.external.GameObjectLoc;
@@ -94,7 +95,9 @@ public final class GameStateUpdater {
 	 */
 	protected void updateTimeouts(final Player player) {
 		final long curTime = System.currentTimeMillis();
-		final int timeoutLimit = getServer().getConfig().IDLE_TIMER; // 5 minute idle log out
+		final int timeoutLimit = VoidSubscription.isActive(player)
+			? getServer().getConfig().IDLE_TIMER_SUBSCRIBER
+			: getServer().getConfig().IDLE_TIMER;
 		final int autoSave = getServer().getConfig().AUTO_SAVE; // 30 second autosave by default
 		final int timedEvents = getServer().getConfig().TIMED_EVENT_INTERVAL;
 		if (player.isRemoved() || player.getAttribute("dummyplayer", false)) {
@@ -806,7 +809,7 @@ public final class GameStateUpdater {
 
 						if (updateType == 1 || updateType == 7) {
 							if (cm.getSender() != null && cm.getSender() instanceof Player)
-								updatesMain.add((int) sender.getIcon());
+								updatesMain.add((int) VoidSubscription.withChatNameFlag(player, sender, sender.getIcon()));
 						}
 
 						if (updateType == 7) {

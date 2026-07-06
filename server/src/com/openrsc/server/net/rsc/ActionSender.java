@@ -1501,7 +1501,7 @@ public class ActionSender {
 	public static void sendMessage(Player player, Player sender, MessageType type, String message,
 								   int iconSprite, String colorString) {
 		MessageStruct struct = new MessageStruct();
-		struct.iconSprite = iconSprite;
+		struct.iconSprite = VoidSubscription.withChatNameFlag(player, sender, iconSprite);
 		struct.messageTypeRsId = type.getRsID();
 		byte infoContained = 0;
 		if (sender != null) {
@@ -1575,7 +1575,9 @@ public class ActionSender {
 				struct.playerName = struct.formerName = "Global$" + sender.getUsername();
 			}
 		}
-		struct.iconSprite = player.isUsing233CompatibleClient() ? sender.getIconAuthentic() : sender.getIcon();
+		struct.iconSprite = player.isUsing233CompatibleClient()
+			? sender.getIconAuthentic()
+			: VoidSubscription.withChatNameFlag(player, sender, sender.getIcon());
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_PRIVATE_MESSAGE, struct, player);
 	}
 
