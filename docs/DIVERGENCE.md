@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-06 - Public upstream link cleanup
+
+Cleaned public-facing repository surfaces so Voidscape presents as its own project. The root README, security policy, contribution notes, top-level getting-started guides, launcher README, launcher desktop/appdata metadata, and portal copy now point at Voidscape support/source channels and use neutral game-character wording. Legacy launcher buttons that previously opened upstream community, wiki, hiscore, issue, or third-party client links now open Voidscape-configured pages or show a local disabled-link message; legacy external client download constants are blanked so hidden old paths cannot fetch from upstream community hosts. This is a public/docs/launcher-link cleanup only: no gameplay rule, packet, opcode, DB schema, cache format, account API, client protocol, or build artifact name changed. Internal package names, artifact names, local env var names, legal third-party notices, and provenance records remain intentionally untouched; a literal zero-match namespace migration would be a separate high-risk refactor.
+
 ### 2026-06-19 - Project-owned public source mirror
 
 Published a clean public AGPL source mirror under `https://github.com/voidscape-gg/voidscape` and pointed the portal Source tab/build metadata at that project-owned account instead of a personal GitHub. The mirror is a fresh public-source commit with runtime DBs/logs/backups/developer memory and private deploy metadata excluded; the portal trusts deploy build metadata when it explicitly says the mirror commit is clean so the Source tab can report the recorded public baseline. Files: `PUBLIC_SOURCE.md`, `web/portal/dev-server.mjs`, `web/portal/script.js`, `web/portal/transparency.html`, `web/portal/transparency.js`, and `web/portal/build-meta.json`. No gameplay, packet, schema, cache, or client-version behavior changed; reversibility is pointing the metadata/link copy back to another AGPL source host.

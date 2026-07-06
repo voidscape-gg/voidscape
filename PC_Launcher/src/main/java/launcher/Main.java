@@ -29,7 +29,7 @@ public class Main {
         "	--portable uses ./Cache next to the current working directory\n" +
         "	--no-update, -n Disables Launcher autoupdate feature and prompt\n" +
         "Example:\n" +
-        "java -jar OpenRSC.jar -d /home/foo/.local/openrsc";
+        "java -jar OpenRSC.jar -d /home/foo/.local/voidscape";
 
     int argIndex = 0;
     while (argIndex < args.length) {

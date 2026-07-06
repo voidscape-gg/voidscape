@@ -10,7 +10,6 @@
 #     --host play.example.com \
 #     --port 43596 \
 #     --base-url https://play.example.com/voidscape/update \
-#     --discord-url https://discord.gg/example \
 #     --discord-application-id 123456789012345678
 
 set -euo pipefail

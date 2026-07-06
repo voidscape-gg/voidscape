@@ -1,4 +1,4 @@
-Voidscape desktop launcher and updater shell, hard-forked from the original OpenRSC PC launcher that was initially developed by Jaekr.
+Voidscape desktop launcher and updater shell.
 
 ## Voidscape layered skin
 
@@ -21,7 +21,6 @@ scripts/package-friend-beta.sh \
   --host play.example.com \
   --port 43596 \
   --base-url https://play.example.com/voidscape/update \
-  --discord-url https://discord.gg/example \
   --discord-application-id 123456789012345678
 ```
 
@@ -33,9 +32,9 @@ Configuration precedence is system properties, environment variables, sidecar `v
 voidscape.serverHost=play.example.com
 voidscape.serverPort=43596
 voidscape.manifestUrl=https://play.example.com/voidscape/update/manifest.properties
-voidscape.websiteUrl=
-voidscape.portalUrl=
-voidscape.discordUrl=https://discord.gg/example
+voidscape.websiteUrl=https://voidscape.gg
+voidscape.portalUrl=https://voidscape.gg
+voidscape.discordUrl=
 voidscape.discordApplicationId=123456789012345678
 voidscape.discordLargeImageKey=voidscape_logo
 voidscape.discordLargeImageText=Voidscape
@@ -44,8 +43,7 @@ voidscape.discordLargeImageText=Voidscape
 Discord rich presence uses the Discord application name for the activity title.
 Create a Discord developer application named `Voidscape`, upload a large image
 asset matching `voidscape.discordLargeImageKey`, then set
-`voidscape.discordApplicationId` so testers do not publish the inherited
-OpenRSC application in their status.
+`voidscape.discordApplicationId` so testers publish the Voidscape application in their status.
 
 The portal API can also host a live manifest at `/api/launcher/manifest.properties`. That manifest points at `/downloads/pc-client` and `/downloads/cache/...`, hashes every file with SHA-256, and is checked automatically when the player clicks Play. Static beta packaging still works for a tiny no-portal deployment; portal-hosted updates are the normal path once the account site is deployed.
 

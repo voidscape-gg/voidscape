@@ -1,27 +1,11 @@
-### Guide for running OpenRSC on MacOS
+# Voidscape macOS Getting Started
 
-## Step 1
+The supported macOS workflow is documented in `docs/DEVELOPMENT.md`. Install Java and Ant as described there, then use the wrapper scripts from the repository root:
 
-First, you will need to install Homebrew for Mac in Terminal via <a href="https://brew.sh">https://brew.sh </a>
-
-To do so, open Terminal, copy and paste the following, and then press enter:
-```
-/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-```
-
-You need install Java, to do it, copy and paste the following in Terminal and press enter:
-```
-brew tap AdoptOpenJDK/openjdk && brew install adoptopenjdk8
+```bash
+scripts/build.sh
+scripts/run-server.sh
+scripts/run-client.sh
 ```
 
-You need istall Apache Ant too, copy and paste the following in Terminal and press enter:
-```
-brew install ant
-```
-
-## Step 2
-
-You are now ready to use "Start-Linux.sh" (Skip the option for Install). Open Terminal, navigate to this folder, and execute:
-```
-./Start-Linux.sh
-```
+For launcher, Android, web client, and deployment tasks, use the matching `scripts/*.sh` entry point rather than calling build tools directly.

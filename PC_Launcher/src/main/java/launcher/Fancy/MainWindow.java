@@ -673,7 +673,7 @@ public class MainWindow extends JFrame {
 		ImageIcon icon = null;
 
 		switch (preferredClient) {
-			// these are listed in chronological order of compatibility with openrsc server
+			// These are listed in chronological order of compatibility with legacy servers.
 			case Settings.OPENRSC:
 			case ClientSettingsCard.OPENRSC:
 				icon = Utils.getImage("openrsc-client-small.png");

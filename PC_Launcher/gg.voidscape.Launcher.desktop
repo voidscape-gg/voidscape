@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Terminal=false
+Name=Voidscape
+GenericName=Voidscape Launcher
+Comment=Launcher for Voidscape
+Keywords=games;runescape;rsc;voidscape;
+Exec=voidscape
+Icon=gg.voidscape.Launcher
+Categories=Game;RolePlaying;

@@ -31,13 +31,11 @@ public class ClientDescriptions {
 		);
 
 		JLabel rscplusGeneralExplanation = new JLabel(
-			"<html><font color=\"white\">RSC+ was originally released in January 2016 alongside<br/>" +
-				"the last reopening of RuneScape Classic. It has many third party<br/>" +
-				"client features, similar to RuneLite for OSRS.<br/><br/>" +
-				"This client was used extensively during the preservation effort<br/>" +
-				"of RSC in 2018, and can be used to play \"replays\", recordings of RSC.<br/><br/>" +
-				"RSC+ is a good client which is modern, resizable, and includes many<br/>" +
-				"quality of life features without compromising gameplay integrity.</font></html>"
+			"<html><font color=\"white\">This legacy resizable client path is kept for players<br/>" +
+				"who prefer a larger local window and client-side convenience tools.<br/><br/>" +
+				"Voidscape's default launcher path remains the supported route.<br/>" +
+				"If a legacy option is unavailable or behaves unexpectedly,<br/>" +
+				"use the standard Voidscape client from Play.</font></html>"
 		);
 
 		JLabel webclientGeneralExplanation = new JLabel(
@@ -51,15 +49,10 @@ public class ClientDescriptions {
 		);
 
 		JLabel openrscNotRecommendedForAuthenticServers = new JLabel(
-			"<html><font color=\"white\">Open RSC is based off the work of many private server developers<br/>" +
-				"before us. This client is based off the one which was<br/>" +
-				"originally designed to be used with those servers.<br/><br/>" +
-				"Because of its long history, it is from a time when developers<br/>" +
-				"did not place as much (or any) focus on the Preservation aspect<br/>" +
-				"of RuneScape Classic private server development.<br/><br/>" +
-				"It is therefore <font color=\"red\">not recommended for use on this server,</font><br/>" +
-				"because you will encounter additional authenticity related bugs<br/>" +
-				"while using this client.</font></html>"
+			"<html><font color=\"white\">This legacy client path exists for compatibility testing.<br/><br/>" +
+				"It is <font color=\"red\">not recommended for normal Voidscape play,</font><br/>" +
+				"because the supported launcher path has the current Voidscape<br/>" +
+				"configuration, cache, and update behavior.</font></html>"
 		);
 
 		JLabel aposbotGeneralExplanation = new JLabel(
@@ -91,45 +84,29 @@ public class ClientDescriptions {
 		);
 
 		JLabel rsctimesGeneralExplanation = new JLabel(
-			"<html><font color=\"white\">RSC&times; is a 3rd party client based on mudclient38 and RSC+.<br/>" +
+			"<html><font color=\"white\">RSC&times; is a 3rd party client based on mudclient38<br/>" +
 				"It was introduced for use on the 2001scape server and<br/>" +
 				"implements modern client features, such as resizable mode,<br/>" +
 				"onto the mudclient38 client.</font></html>"
 		);
 
 		JLabel openrscNotRecommendedForAuthentic2001Servers = new JLabel(
-			"<html><font color=\"white\">Open RSC is based off the work of many private server developers<br/>" +
-				"before us. This client is based off the one which was<br/>" +
-				"originally designed to be used with those servers.<br/><br/>" +
-				"Because of its long history, it is from a time when developers<br/>" +
-				"did not place as much (or any) focus on the preservation aspect<br/>" +
-				"of RuneScape Classic private server development.<br/><br/>" +
-				"It is <font color=\"red\">not recommended for use on this server,</font><br/>" +
-				"because you will encounter additional authenticity related bugs<br/>" +
-				"while using this client, and it's also not designed to<br/>" +
-				"emulate 2001 behaviours.</font></html>"
+			"<html><font color=\"white\">This legacy client path exists for compatibility testing.<br/><br/>" +
+				"It is <font color=\"red\">not recommended for normal Voidscape play,</font><br/>" +
+				"because it is not the supported client route for this server<br/>" +
+				"and may not match the current rules or cache.</font></html>"
 		);
 
 		JLabel openrscClientRSCCabbageExplanation = new JLabel(
-			"<html><font color=\"white\">The Open RSC client is the only client which is designed<br/>" +
-				"to correctly handle all the behaviours and extensions<br/>" +
-				"on the RSC Cabbage server. Runecrafting, Harvesting,<br/>" +
-				"batching, and many other features are not possible<br/>" +
-				"to correctly represent with any other client, since<br/>" +
-				"they did not exist in the client originally.<br/><br/>" +
-				"The Open RSC client is resizable, and includes many other<br/>" +
-				"quality of life features without compromising gameplay integrity.</font></html>"
+			"<html><font color=\"white\">This client path is kept for legacy server compatibility.<br/>" +
+				"Voidscape players should use the standard Play button so the<br/>" +
+				"launcher can apply the current host, cache, and update settings.</font></html>"
 		);
 
 		JLabel openrscClientRSCColeslawExplanation = new JLabel(
-			"<html><font color=\"white\">The Open RSC client is the base official client designed<br/>" +
-				"to correctly handle all the behaviours and extensions<br/>" +
-				"on the RSC Cabbage server. It also of course can connect<br/>" +
-				"to the RSC Coleslaw server, and is the base for IdleRSC.<br/>" +
-				"It's recommended to use this client if IdleRSC is temporarily<br/>" +
-				"broken, or you are having issues.<br/><br/>" +
-				"The Open RSC client is resizable, and includes many other<br/>" +
-				"quality of life features without compromising gameplay integrity.</font></html>"
+			"<html><font color=\"white\">This client path is kept for legacy server compatibility.<br/>" +
+				"If another legacy option is unavailable, use the standard<br/>" +
+				"Voidscape launcher path instead of an unsupported client.</font></html>"
 		);
 
 		JLabel idlerscGeneralExplanation = new JLabel(
@@ -138,7 +115,7 @@ public class ClientDescriptions {
 				"This would eventually be fixed when RSC Uranium came out with support<br/>" +
 				"for APOS, but IdleRSC remains the only botting client compatible with<br/>" +
 				"RSC Coleslaw features (such as Runecrafting &amp; Harvesting).<br/><br/>" +
-				"IdleRSC uses code injection and reflection to hook into the Open RSC<br/>" +
+				"IdleRSC uses code injection and reflection to hook into a legacy<br/>" +
 				"client. It has its own custom scripting API and also is backwards <br/>" +
 				"compatibile with APOS and SBot scripts.<br/><br/>" +
 				"</font><font color=\"yellow\">\"The RSC botting scene WILL NEVER DIE!<br/>" +
@@ -147,12 +124,9 @@ public class ClientDescriptions {
 		);
 
 		JLabel openrscClientOpenPKExplanation = new JLabel(
-			"<html><font color=\"white\">The Open RSC client is the only client which is designed<br/>" +
-				"to correctly handle all the behaviours and extensions<br/>" +
-				"on the OpenPK server. Special shop interfaces are used<br/>" +
-				"to convert points &lt;-&gt; XP, and there are lots of objects<br/>" +
-				"that would have to be converted to work in a regular cache<br/>" +
-				"if a more authentic client were to be made compatible.</font></html>"
+			"<html><font color=\"white\">This client path is kept for legacy server compatibility.<br/>" +
+				"Special interfaces and object data may not match the current<br/>" +
+				"Voidscape cache, so the supported launcher path is preferred.</font></html>"
 		);
 
 		JLabel webclient2001scapeExplanation = new JLabel(

@@ -16,10 +16,10 @@ public class ClientSettingsCard {
 	public String[] clientNames;
 	public int activeExplanation;
 
-	public static final String RSCPLUS = "RSC+";
+	public static final String RSCPLUS = "Legacy Resizable Client";
 	public static final String WINRUNE = "WinRune";
 	public static final String WEBCLIENT = "Web Client";
-	public static final String OPENRSC = "Open RSC Client";
+	public static final String OPENRSC = "Voidscape Client";
 	public static final String MUD38 = "Mudclient 38";
 	public static final String IDLERSC = "IdleRSC";
 	public static final String RSCTIMES = "RSCx"; // RSC×

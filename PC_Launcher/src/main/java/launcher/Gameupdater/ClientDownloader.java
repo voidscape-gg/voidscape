@@ -57,6 +57,9 @@ public class ClientDownloader {
   public static Double getRemoteVersionNumber(String versionStringVarName) {
     try {
       double extraVersion = 0.0;
+      if (Defaults._VERSION_UPDATE_URL == null || Defaults._VERSION_UPDATE_URL.trim().isEmpty()) {
+        return extraVersion;
+      }
       URL updateURL = new URL(Defaults._VERSION_UPDATE_URL);
 
       // Open connection

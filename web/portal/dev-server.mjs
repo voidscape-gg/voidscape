@@ -3441,7 +3441,7 @@ async function openRscCharacterSnapshot(username) {
 		gear: equipment.length ? equipment.map((item) => item.name) : ["No wielded equipment saved"],
 		equipment,
 		source: "openrsc-sqlite",
-		sourceLabel: "OpenRSC SQLite"
+		sourceLabel: "Game SQLite"
 	};
 }
 
@@ -3593,7 +3593,7 @@ function pathLabel(value) {
 		1: "Warrior",
 		2: "Forager",
 		3: "Arcanist"
-	}[Number(value)] || "OpenRSC save";
+	}[Number(value)] || "Game save";
 }
 
 function pathImage(value, player) {

@@ -147,7 +147,7 @@ public class Utils {
 		sb.append(System.getProperty("os.arch"));
 		sb.append("; ");
 		sb.append(System.getProperty("os.version"));
-		sb.append(") OpenRSCLauncher/");
+		sb.append(") VoidscapeLauncher/");
 		sb.append(String.format("%8.6f", Defaults._CURRENT_VERSION));
 		return sb.toString();
 	}
