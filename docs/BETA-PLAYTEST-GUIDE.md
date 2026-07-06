@@ -125,7 +125,7 @@ These do not require admin rank.
 | `::farmsim` | Project your sampled NPC kills into a one-hour expected-loot popup with item sprites and quantities. |
 | `::farmsim 30m` | Project the same sample over another duration from 5 minutes to 4 hours. |
 | `::farmsim status` | Show what NPCs are currently in your FarmSim sample. |
-| `::g <message>` | Send simplified global chat with your IP country flag beside your name. |
+| `::g <message>` | Send simplified global chat with your chosen country flag beside your name. |
 | `::rested` | Show rested-XP pool and cap status. |
 | `::titles` | Open the title catalogue UI. |
 | `::titles unlocked` | Show unlocked titles. |

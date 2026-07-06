@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10124` | `10124` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10125` | `10125` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
@@ -26,7 +26,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10124` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10125` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_packet_register` | `false` by server default and current launch config | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
 
@@ -76,8 +76,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `want_world_announcements` | `true` if Void Herald social broadcasts are live | Master switch for milestone and skulled-Wilderness PK world messages. |
 | `want_world_milestone_announcements` | `true` if milestones should be public | Announces selected skill and total-level milestones. |
 | `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
-| `want_global_chat_country_flags` | `true` if global chat is live | Server resolves public player IPs to country codes and lets players hide their own flag in settings. |
-| `global_chat_local_country_code` | empty in release, `CA` locally if desired | Dev-only localhost override for testing flag rendering without a public IP. |
+| `want_global_chat_country_flags` | `true` if global chat is live | Shows player-chosen country flags in global chat and lets players hide their own flag in settings. |
 | `more_shafts_per_better_log` | `true` | Lets higher-tier logs feed the player-made arrow economy instead of every log producing the same 10 shafts. |
 | Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days and the small XP bump; they do not unlock P2P areas because `member_world` is already global. Lumbridge vendor grants one starter card reserved by the portal account flow. |
 | `want_custom_banks` | `false` for Void Glass launch on desktop, `/play`, and Android | Leave off for the shipped Void Glass bank. `true` is only for older legacy custom-bank presets when custom UI is off; loadouts do not require it. |
@@ -110,7 +109,7 @@ These are positional in many loaders. Keep server and client append order aligne
 | Custom item ids | `1608` | Void ashes are current high-water mark. |
 | Custom NPC ids | `868` | Void Archivist is current high-water mark. |
 | Custom scenery ids | `1311` | Void portal arch is current high-water mark. |
-| Custom client version | `10124` | Current working tree value. |
+| Custom client version | `10125` | Current working tree value. |
 
 ## Pre-release config sign-off
 

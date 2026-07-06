@@ -6,7 +6,7 @@ import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.clan.ClanInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
@@ -1130,7 +1130,7 @@ public final class RegularPlayer implements CommandTrigger {
 	}
 
 	private String formatGlobalChatLine(Player player, String message) {
-		return GlobalChatIpFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
+		return GlobalChatCountryFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
 	}
 
 	private void sendMessageParty(Player player, String command, String[] args) {

@@ -1,7 +1,7 @@
 package com.openrsc.server.net.rsc.generators.impl;
 
 import com.openrsc.server.constants.ItemId;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
@@ -413,7 +413,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					builder.writeByte((byte) gs.hdVignette);
 					builder.writeByte((byte) gs.hdWaterShimmer);
 					builder.writeByte((byte) gs.hdSunlight);
-					if (player.getClientVersion() >= GlobalChatIpFlags.CLIENT_VERSION) {
+					if (player.getClientVersion() >= GlobalChatCountryFlags.CLIENT_VERSION) {
 						builder.writeByte((byte) gs.globalChatCountryFlags);
 					}
 					break;
@@ -1063,6 +1063,16 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						builder.writeBits(uas.unlockedBottomColours[i] ? 1 : 0, 1);
 					}
 					builder.finishBitAccess();
+					if (player.getClientVersion() >= GlobalChatCountryFlags.COUNTRY_PICKER_CLIENT_VERSION) {
+						String code = GlobalChatCountryFlags.normalizeCountryCode(uas.selectedCountryCode);
+						if (code.length() == 2 && GlobalChatCountryFlags.isValidCountryCode(code)) {
+							builder.writeByte((byte) code.charAt(0));
+							builder.writeByte((byte) code.charAt(1));
+						} else {
+							builder.writeByte((byte) 0);
+							builder.writeByte((byte) 0);
+						}
+					}
 					break;
 
 				case SEND_WORLD_WALK_ROUTE:

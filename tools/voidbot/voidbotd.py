@@ -823,8 +823,16 @@ class Daemon:
                      .u8(int(a.get("ironman", 0)))
                      .u8(int(a.get("one_xp", 0)))
                      .u8(int(a.get("hair_style", 0))))
+                if P.CLIENT_VERSION >= 10125:
+                    country = str(a.get("country", "")).strip().upper()
+                    if country in ("", "NONE"):
+                        w.u8(0).u8(0)
+                    elif len(country) == 2 and country.isalpha():
+                        w.u8(ord(country[0])).u8(ord(country[1]))
+                    else:
+                        return {"ok": False, "error": "country must be two letters or none"}
                 self.send("PLAYER_APPEARANCE_CHANGE", w.b)
-                return {"ok": True}
+                return {"ok": True, "country": a.get("country", "none")}
             if cmd == "menu-reply":
                 self.send("QUESTION_DIALOG_ANSWER", P.BitWriter().u8(int(a["option"])).b)
                 return {"ok": True}

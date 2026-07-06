@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.content.PlayerClass;
 import com.openrsc.server.content.BetaReferralReward;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.VoidOnboarding;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidStarterIntro;
@@ -105,6 +106,10 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 			if (oldWorn[i] == oldAppearance[i]) {
 				player.updateWornItems(i, newAppearance[i]);
 			}
+		}
+
+		if (payload.countryCodePresent) {
+			GlobalChatCountryFlags.setSelectedCountryCode(player, payload.countryCode);
 		}
 
 		if (player.getLastLogin() == 0L || tutorialAppearance) {

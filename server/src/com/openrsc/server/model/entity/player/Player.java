@@ -3,7 +3,7 @@ package com.openrsc.server.model.entity.player;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.EnchantedCrowns;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.content.VoidPath;
@@ -3818,7 +3818,7 @@ public final class Player extends Mob {
 	}
 
 	public boolean getGlobalChatCountryFlags() {
-		return GlobalChatIpFlags.shouldShow(this);
+		return GlobalChatCountryFlags.shouldShow(this);
 	}
 
 	public Boolean getHideFog() {

@@ -7,7 +7,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
 import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
@@ -1176,7 +1176,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	private String formatGlobalQuestMessage(GlobalMessage gm) {
 		StringBuilder returnMessage = new StringBuilder();
-		returnMessage.append(GlobalChatIpFlags.flagTokenFor(gm.getPlayer()));
+		returnMessage.append(GlobalChatCountryFlags.flagTokenFor(gm.getPlayer()));
 		returnMessage.append("@gre@");
 		returnMessage.append(gm.getPlayer().getUsername());
 		returnMessage.append(": @whi@");

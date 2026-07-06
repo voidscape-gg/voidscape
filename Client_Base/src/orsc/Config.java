@@ -20,13 +20,14 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10124;
+	public static final int CLIENT_VERSION = 10125;
 	public static final int PLAYER_TITLE_CLIENT_VERSION = 10052;
 	public static final int PLAYER_TITLE_TIER_CLIENT_VERSION = 10123;
 	public static final int SHOP_PRICE_OVERRIDE_CLIENT_VERSION = 10054;
 	public static final int SUBSCRIPTION_PROFILE_CLIENT_VERSION = 10055;
 	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
 	public static final int GLOBAL_CHAT_COUNTRY_FLAGS_CLIENT_VERSION = 10069;
+	public static final int COUNTRY_PICKER_CLIENT_VERSION = 10125;
 	public static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
 	public static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
 	public static final int MAX_MODERN_HAIR_STYLE = 0;

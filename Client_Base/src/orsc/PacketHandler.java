@@ -147,7 +147,7 @@ public class PacketHandler {
 			if (andStart == 1) {
 				var3.setDaemon(true);
 				var3.start();
-			}
+		}
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "e.S(" + andStart + ',' + (proc != null ? "{...}" : "null") + ')');
 		}
@@ -531,7 +531,7 @@ public class PacketHandler {
 			else if (opcode == 129) gotCombatStylePacket();
 
 				// sync unlocked hair/skin/clothing colours & styles
-			else if (opcode == 250) gotUnlockedPlayerAppearancesPacket();
+			else if (opcode == 250) gotUnlockedPlayerAppearancesPacket(length);
 
 			else handleUnknownPacket(opcode);
 
@@ -1624,7 +1624,7 @@ public class PacketHandler {
 		mc.applyServerCombatStyle(packetsIncoming.getUnsignedByte());
 	}
 
-	private void gotUnlockedPlayerAppearancesPacket() {
+	private void gotUnlockedPlayerAppearancesPacket(int length) {
 		int unlockedHairStyles = packetsIncoming.get32();
 		int unlockedBodyTypes = packetsIncoming.get32();
 		int unlockedSkinColours = packetsIncoming.get32();
@@ -1680,17 +1680,20 @@ public class PacketHandler {
 		for (int i = 0; i < unlockedSkinColours; i++) {
 			mc.unlockedSkinColours[i] = (packetsIncoming.getBitMask(1) == 1);
 		}
-		/*
 		for (int i = 0; i < unlockedHairColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
 		for (int i = 0; i < unlockedTopColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
 		for (int i = 0; i < unlockedBottomColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
-		 */
+		packetsIncoming.endBitAccess();
+		if (Config.CLIENT_VERSION >= Config.COUNTRY_PICKER_CLIENT_VERSION
+			&& length - packetsIncoming.packetEnd >= 2) {
+			mc.setAppearanceCountryCodeFromServer(packetsIncoming.getUnsignedByte(), packetsIncoming.getUnsignedByte());
+		}
 	}
 
 	private void updateInventoryItem() {

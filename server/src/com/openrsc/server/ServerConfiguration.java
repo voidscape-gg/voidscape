@@ -132,9 +132,6 @@ public class ServerConfiguration {
 	public boolean WANT_GLOBAL_RULES_AGREEMENT;
 	public String[] GLOBAL_RULES;
 	public boolean WANT_GLOBAL_CHAT_COUNTRY_FLAGS;
-	public String GLOBAL_CHAT_COUNTRY_LOOKUP_URL;
-	public int GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS;
-	public String GLOBAL_CHAT_LOCAL_COUNTRY_CODE;
 	public int GLOBAL_MESSAGE_COOLDOWN;
 	public int GLOBAL_MESSAGE_TOTAL_LEVEL_REQ;
 	public int GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ;
@@ -623,15 +620,12 @@ public class ServerConfiguration {
 		SHOW_TUTORIAL_SKIP_OPTION = tryReadBool("show_tutorial_skip_option").orElse(true);
 		SKIP_TUTORIAL_GIVES_ITEMS = tryReadBool("skip_tutorial_gives_items").orElse(false);
 		WANT_GLOBAL_CHAT = tryReadBool("want_global_chat").orElse(false);
-		WANT_GLOBAL_FRIEND = tryReadBool("want_global_friend").orElse(false);
-		WANT_GLOBAL_RULES_AGREEMENT = tryReadBool("want_global_rules_agreement").orElse(false);
-		WANT_GLOBAL_CHAT_COUNTRY_FLAGS = tryReadBool("want_global_chat_country_flags").orElse(true);
-		GLOBAL_CHAT_COUNTRY_LOOKUP_URL = tryReadString("global_chat_country_lookup_url").orElse("https://api.country.is/%s");
-		GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS = tryReadInt("global_chat_country_lookup_timeout_ms").orElse(1500);
-		GLOBAL_CHAT_LOCAL_COUNTRY_CODE = tryReadString("global_chat_local_country_code").orElse("");
-		if (WANT_GLOBAL_RULES_AGREEMENT) {
-			readGlobalRules("globalrules.txt");
-		}
+			WANT_GLOBAL_FRIEND = tryReadBool("want_global_friend").orElse(false);
+			WANT_GLOBAL_RULES_AGREEMENT = tryReadBool("want_global_rules_agreement").orElse(false);
+			WANT_GLOBAL_CHAT_COUNTRY_FLAGS = tryReadBool("want_global_chat_country_flags").orElse(true);
+			if (WANT_GLOBAL_RULES_AGREEMENT) {
+				readGlobalRules("globalrules.txt");
+			}
 		WANT_EXPERIENCE_ELIXIRS = tryReadBool("want_experience_elixirs").orElse(false);
 		WANT_KEYBOARD_SHORTCUTS = tryReadInt("want_keyboard_shortcuts").orElse(0);
 		WANT_CUSTOM_RANK_DISPLAY = tryReadBool("want_custom_rank_display").orElse(false);

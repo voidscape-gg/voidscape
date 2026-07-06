@@ -2740,6 +2740,13 @@ public class GraphicsController {
 		}
 	}
 
+	public void drawCountryFlagIcon(String countryCode, int x, int y) {
+		if (countryCode == null || countryCode.length() != 2) {
+			return;
+		}
+		drawCountryFlagToken(countryCode.toUpperCase(Locale.ENGLISH), x, y + COUNTRY_FLAG_HEIGHT - 2);
+	}
+
 	private int[] buildCountryFlagIcon(String countryCode) {
 		int[] asset = loadCountryFlagAsset(countryCode);
 		if (asset != null) {

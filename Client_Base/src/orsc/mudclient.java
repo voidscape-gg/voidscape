@@ -905,6 +905,8 @@ public final class mudclient implements Runnable {
 	private int controlButtonAppearanceHeadPlus;
 	private int controlButtonAppearanceHairStyle1 = -1;
 	private int controlButtonAppearanceHairStyle2 = -1;
+	private int controlButtonAppearanceCountry1 = -1;
+	private int controlButtonAppearanceCountry2 = -1;
 	private int controlAppearanceReferralName = -1;
 	private int controlLoginPass;
 	private int controlLoginStatus1;
@@ -1062,7 +1064,24 @@ public final class mudclient implements Runnable {
 	private int appearanceSkinColour = VOIDSCAPE_SKIN_COLOUR_MIN;
 	private int appearanceHairColour = VOIDSCAPE_HAIR_COLOUR_MIN;
 	private static final int MODERN_HAIR_BASE_HEAD_TYPE = 0;
+	private static final String[] COUNTRY_FLAG_CODES = {
+		"", "US", "CA", "GB", "AU", "NZ", "IE", "DE", "FR", "NL",
+		"BE", "DK", "NO", "SE", "FI", "IS", "ES", "PT", "IT", "CH",
+		"AT", "PL", "CZ", "SK", "HU", "RO", "BG", "GR", "TR", "UA",
+		"LT", "LV", "EE", "BR", "AR", "CL", "CO", "MX", "JP", "KR",
+		"CN", "HK", "TW", "SG", "MY", "PH", "ID", "TH", "VN", "IN",
+		"PK", "BD", "ZA", "EG", "MA", "NG", "KE", "IL", "AE", "SA"
+	};
+	private static final String[] COUNTRY_FLAG_NAMES = {
+		"None", "USA", "Canada", "UK", "Australia", "New Zealand", "Ireland", "Germany", "France", "Netherlands",
+		"Belgium", "Denmark", "Norway", "Sweden", "Finland", "Iceland", "Spain", "Portugal", "Italy", "Switzerland",
+		"Austria", "Poland", "Czechia", "Slovakia", "Hungary", "Romania", "Bulgaria", "Greece", "Turkey", "Ukraine",
+		"Lithuania", "Latvia", "Estonia", "Brazil", "Argentina", "Chile", "Colombia", "Mexico", "Japan", "S. Korea",
+		"China", "Hong Kong", "Taiwan", "Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam", "India",
+		"Pakistan", "Bangladesh", "S. Africa", "Egypt", "Morocco", "Nigeria", "Kenya", "Israel", "UAE", "Saudi Arabia"
+	};
 	private int appearanceHairStyle = 0;
+	private int appearanceCountryIndex = 0;
 	private int characterBottomColour = VOIDSCAPE_CLOTHING_COLOUR_MAX;
 	private int controlButtonAppearanceSkin2;
 	private int m_nj = -1;
@@ -2895,6 +2914,8 @@ public final class mudclient implements Runnable {
 			this.panelAppearance = new Panel(this.getSurface(), 100);
 			this.controlButtonAppearanceHairStyle1 = -1;
 			this.controlButtonAppearanceHairStyle2 = -1;
+			this.controlButtonAppearanceCountry1 = -1;
+			this.controlButtonAppearanceCountry2 = -1;
 			this.controlAppearanceReferralName = -1;
 			this.syncAppearanceHairStyleFromLocalPlayer();
 			this.ensureVoidscapeAppearanceColoursSelected();
@@ -2959,6 +2980,16 @@ public final class mudclient implements Runnable {
 			this.controlButtonAppearanceBottom1 = this.panelAppearance.addButton(var6 - (40 - var4), yFromTopDistance, 20, 20);
 			this.panelAppearance.addSprite(var6 + var4 + 40, yFromTopDistance, spriteSelect(GUIPARTS.RIGHTARROW.getDef()));
 			this.controlButtonAppearanceBottom2 = this.panelAppearance.addButton(40 + var4 + var6, yFromTopDistance, 20, 20);
+			if (type == 0) {
+				int countryX = 426;
+				int countryY = yFromTopDistance - 50;
+				this.panelAppearance.addDecoratedBox(countryX, countryY, 74, 41);
+				this.panelAppearance.addCenteredText(countryX, countryY - 10, "Country", 1, true);
+				this.panelAppearance.addSprite(countryX - 52, countryY, spriteSelect(GUIPARTS.LEFTARROW.getDef()));
+				this.controlButtonAppearanceCountry1 = this.panelAppearance.addButton(countryX - 52, countryY, 20, 20);
+				this.panelAppearance.addSprite(countryX + 52, countryY, spriteSelect(GUIPARTS.RIGHTARROW.getDef()));
+				this.controlButtonAppearanceCountry2 = this.panelAppearance.addButton(countryX + 52, countryY, 20, 20);
+			}
 			yFromTopDistance += 82;
 			yFromTopDistance -= 35;
 			this.panelAppearance.addButtonBackground(var6 * factor, yFromTopDistance, 200, 30);
@@ -3004,6 +3035,8 @@ public final class mudclient implements Runnable {
 		this.panelAppearance = new Panel(this.getSurface(), 100);
 		this.controlButtonAppearanceHairStyle1 = -1;
 		this.controlButtonAppearanceHairStyle2 = -1;
+		this.controlButtonAppearanceCountry1 = -1;
+		this.controlButtonAppearanceCountry2 = -1;
 		this.syncAppearanceHairStyleFromLocalPlayer();
 		this.ensureVoidscapeAppearanceColoursSelected();
 		if (var1 != -24595) {
@@ -3035,11 +3068,13 @@ public final class mudclient implements Runnable {
 		this.controlButtonAppearanceBottom1 = this.panelAppearance.addButton(rightX - arrowOffset, rowY, 20, 20);
 		this.controlButtonAppearanceBottom2 = this.panelAppearance.addButton(rightX + arrowOffset, rowY, 20, 20);
 
-		this.controlButtonAppearanceHairStyle1 = -1;
-		this.controlButtonAppearanceHairStyle2 = -1;
+		rowY += 62;
+		this.controlButtonAppearanceCountry1 = this.panelAppearance.addButton(leftX - arrowOffset, rowY, 20, 20);
+		this.controlButtonAppearanceCountry2 = this.panelAppearance.addButton(leftX + arrowOffset, rowY, 20, 20);
 
-		this.controlAppearanceReferralName = this.panelAppearance.addCenteredTextEntry(panelX + 382,
-			274, 200, 12, 20, 0, false, true);
+		this.controlAppearanceReferralName = this.panelAppearance.addCenteredTextEntry(
+			voidscapeAppearanceReferralFieldCenterX(), voidscapeAppearanceReferralFieldCenterY(),
+			voidscapeAppearanceReferralFieldWidth(), 12, voidscapeAppearanceReferralFieldHeight(), 0, false, true);
 		if (referralName.length() > 0) {
 			this.panelAppearance.setText(this.controlAppearanceReferralName, referralName);
 		}
@@ -3939,13 +3974,16 @@ public final class mudclient implements Runnable {
 		try {
 
 			this.getSurface().interlace = false;
-			if (this.useVoidscapeLogin() && type == 0) {
-				this.drawVoidscapeAppearancePanel();
-				drawVoidscapePanelSkippingControls(this.panelAppearance, this.controlAppearanceReferralName);
-			} else {
-				this.getSurface().blackScreen(true);
-				this.panelAppearance.drawPanel();
-			}
+				if (this.useVoidscapeLogin() && type == 0) {
+					this.drawVoidscapeAppearancePanel();
+					drawVoidscapePanelSkippingControls(this.panelAppearance, this.controlAppearanceReferralName);
+				} else {
+					this.getSurface().blackScreen(true);
+					this.panelAppearance.drawPanel();
+					if (type == 0) {
+						drawClassicAppearanceCountrySelector();
+					}
+				}
 			boolean voidscapeAppearance = this.useVoidscapeLogin() && type == 0;
 			short var2 = 140;
 			int var5 = var2 + 116;
@@ -4067,12 +4105,14 @@ public final class mudclient implements Runnable {
 		rowY += 62;
 		drawVoidscapeAppearanceSelector(leftX, rowY, "Body", "Type");
 		drawVoidscapeAppearanceSelector(rightX, rowY, "Top", this.clothingColorLabel(this.characterTopColour));
-		rowY += 62;
-		drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", this.skinColorLabel(this.appearanceSkinColour));
-		drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
-		int acceptX = panelX + 382;
-		int acceptY = Math.min(this.getGameHeight() - 21, 316);
-		drawVoidscapeButton(acceptX, acceptY, 220, 30, "Accept", true);
+			rowY += 62;
+			drawVoidscapeAppearanceSelector(leftX, rowY, "Skin", this.skinColorLabel(this.appearanceSkinColour));
+			drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
+			rowY += 62;
+			drawVoidscapeCountrySelector(leftX, rowY);
+			int acceptX = panelX + 382;
+			int acceptY = Math.min(this.getGameHeight() - 21, 316);
+			drawVoidscapeButton(acceptX, acceptY, 220, 30, "Accept", true);
 		logAndroidSmokeAppearancePrompt(panelX, panelY, panelWidth, panelHeight, acceptX, acceptY);
 	}
 
@@ -4081,7 +4121,7 @@ public final class mudclient implements Runnable {
 		int cy = voidscapeAppearanceReferralFieldCenterY();
 		int width = voidscapeAppearanceReferralFieldWidth();
 		int height = voidscapeAppearanceReferralFieldHeight();
-		drawVoidscapeField(cx, cy, width, height, "Invited by (optional)",
+		drawVoidscapeField(cx, cy, width, height, "Invited by",
 			this.panelAppearance.focusOn(this.controlAppearanceReferralName));
 		drawVoidscapeFieldValue(this.panelAppearance, this.controlAppearanceReferralName, cx, cy, width, 0, false);
 	}
@@ -4089,7 +4129,7 @@ public final class mudclient implements Runnable {
 	private int voidscapeAppearanceReferralFieldCenterX() {
 		int panelWidth = Math.min(500, this.getGameWidth() - 12);
 		int panelX = halfGameWidth() - panelWidth / 2;
-		return panelX + 382;
+		return panelX + 423;
 	}
 
 	private int voidscapeAppearanceReferralFieldCenterY() {
@@ -4097,7 +4137,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeAppearanceReferralFieldWidth() {
-		return 200;
+		return 118;
 	}
 
 	private int voidscapeAppearanceReferralFieldHeight() {
@@ -4133,6 +4173,80 @@ public final class mudclient implements Runnable {
 			return "";
 		}
 		return referralName.trim();
+	}
+
+	private void drawClassicAppearanceCountrySelector() {
+		int cx = 426;
+		int cy = 219;
+		String code = currentAppearanceCountryCode();
+		if (code.length() == 2) {
+			this.getSurface().drawCountryFlagIcon(code, cx - 28, cy + 2);
+			this.getSurface().drawColoredStringCentered(cx + 12, currentAppearanceCountryLabel(), 0xFFFFFF, 0, 0, cy + 12);
+		} else {
+			this.getSurface().drawColoredStringCentered(cx, "None", 0xFFFFFF, 0, 0, cy + 12);
+		}
+	}
+
+	private void drawVoidscapeCountrySelector(int cx, int cy) {
+		int boxX = cx - 42;
+		int boxY = cy - 20;
+		this.getSurface().drawBoxAlpha(boxX, boxY, 84, 40, UiSkin.VOID_BOX, 228);
+		this.getSurface().drawBoxBorder(boxX, 84, boxY, 40, UiSkin.SHADOW_B);
+		this.getSurface().drawBoxBorder(boxX + 1, 82, boxY + 1, 38, UiSkin.GOLD_LINE);
+		drawVoidscapeCenteredText(cx, "Country", UiSkin.GOLD_TITLE, 0, cy - 7);
+		String code = currentAppearanceCountryCode();
+		if (code.length() == 2) {
+			this.getSurface().drawCountryFlagIcon(code, cx - 34, cy + 3);
+			this.getSurface().drawString(currentAppearanceCountryLabel(), cx - 15, cy + 11, UiSkin.TEXT_BODY, 0);
+		} else {
+			drawVoidscapeCenteredText(cx, "None", UiSkin.TEXT_BODY, 0, cy + 9);
+		}
+		drawVoidscapeAppearanceArrow(cx - 42, cy, true);
+		drawVoidscapeAppearanceArrow(cx + 42, cy, false);
+	}
+
+	private String currentAppearanceCountryCode() {
+		this.appearanceCountryIndex = normalizeAppearanceCountryIndex(this.appearanceCountryIndex);
+		return COUNTRY_FLAG_CODES[this.appearanceCountryIndex];
+	}
+
+	private String currentAppearanceCountryLabel() {
+		this.appearanceCountryIndex = normalizeAppearanceCountryIndex(this.appearanceCountryIndex);
+		return COUNTRY_FLAG_NAMES[this.appearanceCountryIndex];
+	}
+
+	private int normalizeAppearanceCountryIndex(int index) {
+		if (index < 0 || index >= COUNTRY_FLAG_CODES.length) {
+			return 0;
+		}
+		return index;
+	}
+
+	private void previousAppearanceCountry() {
+		this.appearanceCountryIndex = normalizeAppearanceCountryIndex(this.appearanceCountryIndex);
+		this.appearanceCountryIndex = this.appearanceCountryIndex <= 0
+			? COUNTRY_FLAG_CODES.length - 1
+			: this.appearanceCountryIndex - 1;
+	}
+
+	private void nextAppearanceCountry() {
+		this.appearanceCountryIndex = normalizeAppearanceCountryIndex(this.appearanceCountryIndex);
+		this.appearanceCountryIndex = (this.appearanceCountryIndex + 1) % COUNTRY_FLAG_CODES.length;
+	}
+
+	public void setAppearanceCountryCodeFromServer(int first, int second) {
+		if (first == 0 && second == 0) {
+			this.appearanceCountryIndex = 0;
+			return;
+		}
+		String code = ("" + (char) first + (char) second).toUpperCase(Locale.ENGLISH);
+		for (int i = 1; i < COUNTRY_FLAG_CODES.length; i++) {
+			if (COUNTRY_FLAG_CODES[i].equals(code)) {
+				this.appearanceCountryIndex = i;
+				return;
+			}
+		}
+		this.appearanceCountryIndex = 0;
 	}
 
 	private String modernHairStyleLabel() {
@@ -17111,7 +17225,7 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Kill feed", "Show world kill messages", C_KILL_FEED, 31);
 				rowY = drawAdvancedToggle(x, rowY, width, "Name tags", "Show overhead name labels", C_NAME_CLAN_TAG_OVERLAY, 35);
 				rowY = drawAdvancedToggle(x, rowY, width, "Global friend block", "Hide global friend messages", C_BLOCK_GLOBAL_FRIEND, 41);
-				drawAdvancedToggle(x, rowY, width, "Country flag", "Show your IP country in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
+				drawAdvancedToggle(x, rowY, width, "Country flag", "Show your chosen flag in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
 				break;
 			case ADVANCED_CATEGORY_DISPLAY:
 				// Display group: viewport preset, UI scale and scale filter as one
@@ -23648,14 +23762,26 @@ public final class mudclient implements Runnable {
 			consumeVoidscapeAppearanceClick();
 			return true;
 		}
-		if (isVoidscapeAppearanceArrowHit(rightX, rowY, false)) {
-			this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
-			consumeVoidscapeAppearanceClick();
-			return true;
-		}
+			if (isVoidscapeAppearanceArrowHit(rightX, rowY, false)) {
+				this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
+				consumeVoidscapeAppearanceClick();
+				return true;
+			}
 
-		int acceptX = panelX + 382;
-		int acceptY = Math.min(this.getGameHeight() - 21, 316);
+			rowY += 62;
+			if (isVoidscapeAppearanceArrowHit(leftX, rowY, true)) {
+				previousAppearanceCountry();
+				consumeVoidscapeAppearanceClick();
+				return true;
+			}
+			if (isVoidscapeAppearanceArrowHit(leftX, rowY, false)) {
+				nextAppearanceCountry();
+				consumeVoidscapeAppearanceClick();
+				return true;
+			}
+
+			int acceptX = panelX + 382;
+			int acceptY = Math.min(this.getGameHeight() - 21, 316);
 		if (isVoidscapeRectHit(acceptX, acceptY, 220, 30, 12)) {
 			submitVoidscapeAppearance();
 			consumeVoidscapeAppearanceClick();
@@ -23734,11 +23860,19 @@ public final class mudclient implements Runnable {
 		this.packetHandler.getClientStream().bufferBits.putByte(this.characterBottomColour);
 		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceSkinColour);
 		this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode1));
-		this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
-		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
-		if (this.useVoidscapeLogin()) {
-			this.packetHandler.getClientStream().bufferBits.putString(this.currentAppearanceReferralName());
-		}
+			this.packetHandler.getClientStream().bufferBits.putByte(this.panelAppearance.getControlClickedListIndex(this.playerMode2));
+			this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHairStyle);
+			String countryCode = currentAppearanceCountryCode();
+			if (countryCode.length() == 2) {
+				this.packetHandler.getClientStream().bufferBits.putByte(countryCode.charAt(0));
+				this.packetHandler.getClientStream().bufferBits.putByte(countryCode.charAt(1));
+			} else {
+				this.packetHandler.getClientStream().bufferBits.putByte(0);
+				this.packetHandler.getClientStream().bufferBits.putByte(0);
+			}
+			if (this.useVoidscapeLogin()) {
+				this.packetHandler.getClientStream().bufferBits.putString(this.currentAppearanceReferralName());
+			}
 		this.packetHandler.getClientStream().finishPacket();
 		this.getSurface().blackScreen(true);
 		this.showAppearanceChange = false;
@@ -23803,11 +23937,19 @@ public final class mudclient implements Runnable {
 				this.characterBottomColour = previousVoidscapeClothingColour(this.characterBottomColour);
 			}
 
-			if (this.panelAppearance.isClicked(this.controlButtonAppearanceBottom2)) {
-				this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
-			}
+				if (this.panelAppearance.isClicked(this.controlButtonAppearanceBottom2)) {
+					this.characterBottomColour = nextVoidscapeClothingColour(this.characterBottomColour);
+				}
 
-			if (this.controlButtonAppearanceHairStyle1 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle1)) {
+				if (this.controlButtonAppearanceCountry1 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceCountry1)) {
+					previousAppearanceCountry();
+				}
+
+				if (this.controlButtonAppearanceCountry2 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceCountry2)) {
+					nextAppearanceCountry();
+				}
+
+				if (this.controlButtonAppearanceHairStyle1 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle1)) {
 				this.appearanceHairStyle = (Config.MAX_MODERN_HAIR_STYLE + 1 + this.appearanceHairStyle - 1)
 					% (Config.MAX_MODERN_HAIR_STYLE + 1);
 				if (this.appearanceHairStyle > 0) {

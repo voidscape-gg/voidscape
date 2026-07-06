@@ -8,7 +8,7 @@ import com.openrsc.server.content.clan.ClanPlayer;
 import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
@@ -2367,8 +2367,7 @@ public class ActionSender {
                 }
 
                 sendGameSettings(player);
-				GlobalChatIpFlags.resolvePlayerAsync(player);
-				sendWorldInfo(player);
+					sendWorldInfo(player);
                 sendQuestInfo(player);
                 sendPlayerOnTutorial(player);
 				if (!resumedSession) {
@@ -2765,11 +2764,12 @@ public class ActionSender {
 		struct.unlockedHairStyles = new boolean[0];
 		struct.unlockedBodyTypes = new boolean[0];
 		struct.unlockedSkinColours = player.getUnlockedSkinColours();
-		struct.unlockedHairColours = new boolean[0];
-		struct.unlockedTopColours = new boolean[0];
-		struct.unlockedBottomColours = new boolean[0];
-		tryFinalizeAndSendPacket(OpcodeOut.SEND_UNLOCKED_APPEARANCES, struct, player);
-	}
+			struct.unlockedHairColours = new boolean[0];
+			struct.unlockedTopColours = new boolean[0];
+			struct.unlockedBottomColours = new boolean[0];
+			struct.selectedCountryCode = GlobalChatCountryFlags.selectedCountryCode(player);
+			tryFinalizeAndSendPacket(OpcodeOut.SEND_UNLOCKED_APPEARANCES, struct, player);
+		}
 
 	public static void sendIronManMode(Player player) {
 		IronManStruct struct = new IronManStruct();
