@@ -1,4 +1,4 @@
-Voidscape desktop launcher and updater shell, hard-forked from the original OpenRSC PC launcher that was initially developed by Jaekr.
+Voidscape desktop launcher and updater shell.
 
 ## Voidscape layered skin
 
@@ -44,8 +44,7 @@ voidscape.discordLargeImageText=Voidscape
 Discord rich presence uses the Discord application name for the activity title.
 Create a Discord developer application named `Voidscape`, upload a large image
 asset matching `voidscape.discordLargeImageKey`, then set
-`voidscape.discordApplicationId` so testers do not publish the inherited
-OpenRSC application in their status.
+`voidscape.discordApplicationId` so testers publish the Voidscape application in their status.
 
 The portal API can also host a live manifest at `/api/launcher/manifest.properties`. That manifest points at `/downloads/client-runtime`, `/downloads/cache/...`, and `/downloads/launcher` for self-update, hashes every file with SHA-256, and is checked automatically on startup and on Play. Static beta packaging still works for a tiny no-portal deployment; portal-hosted updates are the normal path once the account site is deployed.
 

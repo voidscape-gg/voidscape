@@ -1,34 +1,15 @@
-### Guide for running OpenRSC on Windows
+# Voidscape Windows Getting Started
 
-## Install Java Development Kit (JDK)
+Voidscape development is standardized around the wrapper scripts and documentation in `docs/DEVELOPMENT.md`.
 
-The OpenRSC project recommends developers download Open JDK. A MSI installer for Windows is the simplest option. Any Java version 8 or later will work.
+On Windows, use the maintained scripts and launcher packaging flow where possible, or run the project from a Unix-like shell environment with Java and Ant available.
 
-<a href="https://adoptopenjdk.net/releases.html?variant=openjdk13&jvmVariant=hotspot">Download Adopt OpenJDK</a>
+For local development, start with:
 
-## Starting the game
+```bash
+scripts/build.sh
+scripts/run-server.sh
+scripts/run-client.sh
+```
 
-You are now ready to launch "Start-Windows.cmd"
-
-Once open, press 1 and then press enter. This is for the option of "Start the game"
-
-A new window will open stating that the game will start up in 10 seconds. For launch builds, create your account through the Voidscape account portal first, then log into the client with the character username and game password created there.
-
-If you become stuck on Tutorial Island or just wish to skip it, there is a link in the in-game options menu above the log out that reads "skip tutorial".
-
-## Changing game features and configuration
-
-At this point, you may wish to use different game features than the default RSC ones. This requires you to fully exit the game client, and the game server (use choice #2 to exit in the command prompt window) to fully shut it down.
-
-
-Now navigate to "core -> server" and delete the existing file named "local.conf", then make a copy of "rsccabbage.conf", renaming the duplicate file "local.conf". Same applies for "preservation.conf" and the other files in that directory. If "local.conf" exists, the game server will override the settings that are in "default.conf". Think of "preservation.conf" and "rsccabbage.conf" as ready to go config presets.
-
-Depending on server configuration, your server port may differ. If 43594 is instead now 43595 because "rsccabbage.conf" is being used, and you do not wish to edit it any, you will need to go into "core -> Client_Base -> Cache" and edit "port.txt" to reflect the new port being used by the game server.
-
-Developers should avoid editing "default.conf" and instead make a copy the chosen .conf file, rename it to "local.conf" and use that instead. That way, they always have working config to fall back on if something doesn't work the way they expect.
-
-Last but not least, always restart the game server after fully exiting it when you have made changes to your "local.conf" in order to have them be applied. An already running server will not read any changes to the file.
-
-## Changing a player's role
-
-Are you ready to set a player role as an admin, moderator, or back to a player? It is possible to set the role / group ID while in-game using a command, but you can also use the main menu option of "Change a player's in-game role"
+For account-first launch testing, create the account through the Voidscape portal and then log in with the generated character username and game password.

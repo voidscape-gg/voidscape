@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop">
-  <id>vet.rsc.OpenRSC.Launcher</id>
-  <launchable type="desktop-id">vet.rsc.OpenRSC.Launcher.desktop</launchable>
-  <name>OpenRSC</name>
-  <developer_name>OpenRSC</developer_name>
-  <summary>Launcher for OpenRSC Servers</summary>
+  <id>gg.voidscape.Launcher</id>
+  <launchable type="desktop-id">gg.voidscape.Launcher.desktop</launchable>
+  <name>Voidscape</name>
+  <developer_name>Voidscape</developer_name>
+  <summary>Launcher for Voidscape</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
-  <url type="homepage">https://rsc.vet/</url>
+  <url type="homepage">https://voidscape.gg/</url>
 
   <description>
-    <p>OpenRSC is a free &amp; open-source project to replicate and/or extend various Classic (2001-2004) RSC servers</p>
+    <p>Voidscape is a RuneScape Classic server with a dedicated launcher, updater, and account portal.</p>
   </description>
 
   <screenshots>
@@ -41,7 +41,7 @@
       <description>
         <p>Improved auto-updater on custom clients</p>
         <p>Change default Uranium client to APOS</p>
-        <p>Fix links so they all point to rsc.vet</p>
+        <p>Update launcher links for the Voidscape public release.</p>
         <p>Update some server ports</p>
         <p>Improve settings and general launcher UX</p>
         <p>Remove update prompt for Flatpak installs</p>

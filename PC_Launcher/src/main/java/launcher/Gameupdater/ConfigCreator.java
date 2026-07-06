@@ -38,7 +38,7 @@ public class ConfigCreator {
 		props.put("url", "game.openrsc.com");
 		props.put("name", "RSC Preservation");
 		props.put("servertype", "1");
-		props.put("hiscores_url", "https\\://rsc.vet/player/preservation/%USERNAME%");
+		props.put("hiscores_url", "https\\://voidscape.gg/#characters");
 
 		createPropsConfig(config, props);
 	}
@@ -51,7 +51,7 @@ public class ConfigCreator {
 		props.put("url", "game.openrsc.com");
 		props.put("name", "RSC Uranium");
 		props.put("servertype", "1");
-		props.put("hiscores_url", "https\\://rsc.vet/player/uranium/%USERNAME%");
+		props.put("hiscores_url", "https\\://voidscape.gg/#characters");
 
 		createPropsConfig(config, props);
 	}
@@ -64,7 +64,7 @@ public class ConfigCreator {
 		props.put("url", "game.openrsc.com");
 		props.put("name", "2001scape");
 		props.put("servertype", "1");
-		props.put("hiscores_url", "https\\://rsc.vet/player/2001scape/%USERNAME%");
+		props.put("hiscores_url", "https\\://voidscape.gg/#characters");
 
 		createPropsConfig(config, props);
 	}

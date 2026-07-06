@@ -8,12 +8,14 @@ import launcher.Settings;
 import launcher.Utils.ClientLauncher;
 import launcher.Utils.Logger;
 import launcher.Utils.Utils;
+import launcher.Voidscape.VoidscapeLauncherConfig;
 import launcher.popup.PopupFrame;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
+import javax.swing.JOptionPane;
 
 public class ButtonListener implements ActionListener {
   public static PopupFrame settingsFrame;
@@ -24,7 +26,7 @@ public class ButtonListener implements ActionListener {
     final String action = event.getActionCommand().toLowerCase();
     switch (action) {
       case "openrsc_sword_logo": {
-        Utils.openWebpage("https://rsc.vet");
+        openWebsite();
         return;
       }
 
@@ -36,98 +38,91 @@ public class ButtonListener implements ActionListener {
       }
 
       case "uranium_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=RSC_Uranium");
+        openWebsite();
         return;
       }
       case "preservation_wiki": {
-        // Utils.openWebpage("https://classic.runescape.wiki");
-        // Goes to a warning nag screen on how to edit the RSC wiki, to not put PS info
-        // in it.
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=RSC_Preservation");
+        openWebsite();
         return;
       }
       case "coleslaw_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=RSC_Coleslaw");
+        openWebsite();
         return;
       }
       case "cabbage_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=RSC_Cabbage");
+        openWebsite();
         return;
       }
       case "2001scape_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=2001scape");
+        openWebsite();
         return;
       }
       case "kale_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=RSC_Kale");
+        openWebsite();
         return;
       }
       case "openpk_wiki": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=Open_PK");
+        openWebsite();
         return;
       }
 
       case "openrsc-forums": {
-        Utils.openWebpage("https://rsc.vet/board");
+        openWebsite();
         return;
       }
 
       case "reddit": {
-        Utils.openWebpage("https://old.reddit.com/r/rsc");
+        showLegacyLinkDisabled("Legacy subreddit link");
         return;
       }
 
       case "bugs":
       case "cockroach": { // bug report
-        Utils.openWebpage("https://gitlab.com/openrsc/openrsc/-/issues");
+        openSupport();
         return;
       }
       case "chat":
       case "libera": {
-        // could have used ircs://, but it's more likely helpful to show users the web
-        // client
-        // and let experienced IRC users just connect using their own client manually
-        // Utils.openWebpage("ircs://irc.libera.chat:6697/#openrsc");
-        Utils.openWebpage("https://web.libera.chat/#openrsc");
+        openDiscord();
         return;
       }
       case "discord": {
-        Utils.openWebpage("https://openrsc.com/discord");
+        openDiscord();
         return;
       }
 
       case "preservation_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/preservation");
+        openWebsite();
         return;
       }
 
       case "cabbage_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/cabbage");
+        openWebsite();
         return;
       }
 
       case "uranium_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/uranium");
+        openWebsite();
         return;
       }
 
       case "coleslaw_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/coleslaw");
+        openWebsite();
         return;
       }
 
       case "2001scape_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/2001scape");
+        openWebsite();
         return;
       }
 
       case "openpk_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/openpk");
+        openWebsite();
         return;
       }
 
       case "kale_hiscores": {
-        Utils.openWebpage("https://rsc.vet/hiscores/kale");
+        openWebsite();
         return;
       }
 
@@ -223,7 +218,7 @@ public class ButtonListener implements ActionListener {
           }
         }
 
-        // re-download openrsc client
+        // Re-download the legacy bundled client.
         Launcher.updater.updateOpenRSCClient();
         return;
       }
@@ -251,7 +246,7 @@ public class ButtonListener implements ActionListener {
 
       case "question_mark":
       case "about_our_servers_button": {
-        Utils.openWebpage("https://rsc.vet/wiki/index.php?title=Open_RuneScape_Classic_Wiki");
+        openWebsite();
         return;
       }
 
@@ -269,42 +264,42 @@ public class ButtonListener implements ActionListener {
       }
 
       case "rune-large": {
-        Utils.openWebpage("https://github.com/RSCPlus/WinRune");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "rscplus-large": {
-        Utils.openWebpage("https://github.com/RSCPlus/rscplus");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "rsctimes-large": {
-        Utils.openWebpage("https://github.com/RSCPlus/rsctimes");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "openrsc-large": {
-        Utils.openWebpage("https://gitlab.com/openrsc/openrsc/-/tree/develop/Client_Base");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "aposbot-large": {
-        Utils.openWebpage("https://gitlab.com/openrsc/APOS");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "mudclient38-large": {
-        Utils.openWebpage("https://github.com/RSCPlus/mudclient38-recreated");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "idlersc-large": {
-        Utils.openWebpage("https://gitlab.com/openrsc/idlersc");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
       case "webbrowser-large": {
-        Utils.openWebpage("https://github.com/2003scape/mudclient177-deob-teavm");
+        showLegacyLinkDisabled("Legacy client source link");
         return;
       }
 
@@ -312,5 +307,32 @@ public class ButtonListener implements ActionListener {
         break;
     }
     Logger.Error("unhandled button: " + action);
+  }
+
+  private static void openWebsite() {
+    openConfiguredUrl(VoidscapeLauncherConfig.websiteUrl(), "Voidscape website");
+  }
+
+  private static void openDiscord() {
+    openConfiguredUrl(VoidscapeLauncherConfig.discordUrl(), "Voidscape Discord");
+  }
+
+  private static void openSupport() {
+    Utils.openWebpage("mailto:support@voidscape.gg");
+  }
+
+  private static void openConfiguredUrl(String url, String label) {
+    if (url != null && url.trim().length() > 0) {
+      Utils.openWebpage(url.trim());
+      return;
+    }
+    JOptionPane.showMessageDialog(null, label + " is not configured for this launcher build.",
+        "Voidscape Launcher", JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private static void showLegacyLinkDisabled(String label) {
+    JOptionPane.showMessageDialog(null,
+        label + " is not available in the Voidscape launcher. Visit voidscape.gg or contact support@voidscape.gg.",
+        "Voidscape Launcher", JOptionPane.INFORMATION_MESSAGE);
   }
 }

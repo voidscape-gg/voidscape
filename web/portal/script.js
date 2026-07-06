@@ -458,21 +458,21 @@
 		loadSnapshot.addEventListener("click", async function () {
 			var name = normalizeName((snapshotName && snapshotName.value) || (characterName && characterName.value) || "");
 			if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
-				characterMessage.textContent = "Enter a 2-12 character name to load from OpenRSC.";
+				characterMessage.textContent = "Enter a 2-12 character name to load from the game database.";
 				if (snapshotName) snapshotName.focus();
 				return;
 			}
 			loadSnapshot.disabled = true;
-			characterMessage.textContent = "Loading saved OpenRSC character state...";
+			characterMessage.textContent = "Loading saved game character state...";
 			try {
 				var result = await apiRequest("/api/openrsc/characters/" + encodeURIComponent(name));
 				upsertSnapshotCharacter(result.character);
-				characterMessage.textContent = result.character.name + " loaded from the configured OpenRSC SQLite database.";
+				characterMessage.textContent = result.character.name + " loaded from the configured game database.";
 			} catch (error) {
 				if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 					characterMessage.textContent = "Start the portal with PORTAL_OPENRSC_DB=/path/to/voidscape.db to load saved characters.";
 				} else if (error.status === 404) {
-					characterMessage.textContent = "No OpenRSC character named " + name + " was found.";
+					characterMessage.textContent = "No game character named " + name + " was found.";
 				} else if (error.status === 409) {
 					characterMessage.textContent = "Roster is full. Open a slot before loading another saved character.";
 				} else {
@@ -514,7 +514,7 @@
 				} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 					characterMessage.textContent = "Start the portal with PORTAL_OPENRSC_DB=/path/to/voidscape.db to link saved characters.";
 				} else if (error.status === 404) {
-					characterMessage.textContent = "No OpenRSC character named " + name + " was found.";
+					characterMessage.textContent = "No game character named " + name + " was found.";
 				} else if (error.status === 409) {
 					characterMessage.textContent = error.code === "character_limit_reached"
 						? "Roster is full. Open a slot before linking another character."
@@ -2103,7 +2103,7 @@
 		var normalized = {
 			id: character.id,
 			name: character.name,
-			path: character.path || "OpenRSC save",
+			path: character.path || "Game save",
 			image: character.image || "assets/rsc-knight.png",
 			combat: character.combat || 3,
 			total: character.total || "27",

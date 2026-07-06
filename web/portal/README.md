@@ -6,10 +6,10 @@ Static click-through prototype for the Voidscape pre-release landing, account-ma
 
 The launch landing has two public modes:
 
-- `PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1` is the ad-facing launch flow. A visitor enters username, email, and an 8-20 letter/number password; the portal creates the web account immediately, creates the first real OpenRSC character with the same username and password, links it to slot 1 of 10, reserves one starter Subscription card for the Lumbridge vendor, and queues a confirmation email when email delivery is configured. In launch-signup mode, `PORTAL_OPENRSC_DB` must point at the game SQLite DB so signup cannot silently fall back to a preview-only roster card. The account dashboard reads the `starter_card:<webAccountId>` game marker so a card shows as waiting until the vendor marks it claimed. If `PORTAL_GOOGLE_CLIENT_ID` is configured, the same form also shows Google sign-in: Google owns the web login, while the submitted password becomes the first character login until the clients support web-account SSO.
+- `PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1` is the ad-facing launch flow. A visitor enters username, email, and an 8-20 letter/number password; the portal creates the web account immediately, creates the first real game character with the same username and password, links it to slot 1 of 10, reserves one starter Subscription card for the Lumbridge vendor, and queues a confirmation email when email delivery is configured. In launch-signup mode, `PORTAL_OPENRSC_DB` must point at the game SQLite DB so signup cannot silently fall back to a preview-only roster card. The account dashboard reads the `starter_card:<webAccountId>` game marker so a card shows as waiting until the vendor marks it claimed. If `PORTAL_GOOGLE_CLIENT_ID` is configured, the same form also shows Google sign-in: Google owns the web login, while the submitted password becomes the first character login until the clients support web-account SSO.
 - `PORTAL_PUBLIC_MODE=1` without launch signup keeps the older code-only reservation flow. A visitor enters an email + desired username, the username is reserved, and a one-time `VOID-XXXX-XXXX` signup code is shown on-screen. The code is written into the game DB as a global `player_cache` row (`signup_code:<CODE>` = 1) when `PORTAL_OPENRSC_DB` is set. In-game, the player talks to the Void Subscription Vendor in Lumbridge, types the code into the popup he opens (custom client 10087+), and receives one tradable Subscription card.
 
-One reservation/code is minted per canonical email in code-only mode; re-signing up with the same email shows the same code. Username reservation checks the founder ledger, existing portal roster cards, and the configured OpenRSC `players` table before showing a name as reserved; an existing OpenRSC player may refresh the reservation only with the same canonical email. If the signup credits another founder's invite code during beta, the referrer also receives one additional referral reward code per credited referral. Referral reward codes use the same `signup_code:<CODE>` ledger and vendor redemption path. Codes are bearer tokens; anyone who knows the email can re-view the signup code, which is accepted for prelaunch stakes. Codes are minted only on the code-only public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
+One reservation/code is minted per canonical email in code-only mode; re-signing up with the same email shows the same code. Username reservation checks the founder ledger, existing portal roster cards, and the configured game `players` table before showing a name as reserved; an existing game character may refresh the reservation only with the same canonical email. If the signup credits another founder's invite code during beta, the referrer also receives one additional referral reward code per credited referral. Referral reward codes use the same `signup_code:<CODE>` ledger and vendor redemption path. Codes are bearer tokens; anyone who knows the email can re-view the signup code, which is accepted for prelaunch stakes. Codes are minted only on the code-only public route; registered portal accounts keep using the account-bound `starter_card:<id>` marker instead.
 
 Signup-list export (token-gated):
 
@@ -149,7 +149,7 @@ python3 -m http.server 8788 --directory web/portal
 
 - reserved username/email flow, including the Google-first pre-release username flow
 - normal portal register/sign-in UI in non-public mode, backed by `POST /api/accounts/register` and `POST /api/accounts/login`
-- account-first public launch signup mode that creates a web account and first real OpenRSC character in one step when `PORTAL_OPENRSC_DB` is configured
+- account-first public launch signup mode that creates a web account and first real game character in one step when `PORTAL_OPENRSC_DB` is configured
 - invite-code referrals that mint one referral reward subscription-card code per credited beta invite, plus a dev-only referral simulation shortcut
 - legacy public status, rates, news, highscores, market intel, and activity feed payloads for API compatibility; the current prelaunch landing uses platform-support proof copy instead of public play/download CTAs
 - local download endpoints for built PC client and launcher jars when `scripts/build.sh` has produced them
@@ -159,18 +159,18 @@ python3 -m http.server 8788 --directory web/portal
 - bearer sessions stored as token hashes
 - account security controls for password rotation, recovery-code generation, recovery-code password reset, and ending other sessions
 - privacy-preserving abuse signals for starter-card grants; account creation stays active, but the free starter card is held for review after repeated grants from the same non-local IP bucket
-- username-reservation hardening across founder reservations, portal roster cards, and existing OpenRSC player rows, so public code-only signups cannot squat names that are already created
+- username-reservation hardening across founder reservations, portal roster cards, and existing game player rows, so public code-only signups cannot squat names that are already created
 - token-gated local admin endpoints for account lookup, status review/lock, subscription grants/clears, starter-card grants/revokes, and session revocation
 - explicit redirect-style Google OAuth and payment checkout stubs that return `501` until those provider flows are configured
 - account roster reads
 - API-enforced 10-character cap
 - character creation previews with title/location/gear/appearance state when no game DB is configured
-- OpenRSC SQLite-backed character creation when `PORTAL_OPENRSC_DB` is configured, including `players`, `curstats`, `maxstats`, `experience`, `capped_experience`, and `web_account_id` cache rows
-- launch signup that asks for an 8-20 character password, creates the web account and first linked OpenRSC save immediately, then shows the account as 1 of 10 character slots used
-- character link challenges for proving ownership of existing OpenRSC saves
+- game SQLite-backed character creation when `PORTAL_OPENRSC_DB` is configured, including `players`, `curstats`, `maxstats`, `experience`, `capped_experience`, and `web_account_id` cache rows
+- launch signup that asks for an 8-20 character password, creates the web account and first linked game save immediately, then shows the account as 1 of 10 character slots used
+- character link challenges for proving ownership of existing game saves
 - subscription-card redemption previews
 - starter reward wallet state for the free weekly subscription-card prize
-- optional read-only OpenRSC SQLite character snapshots for saved character state
+- optional read-only game SQLite character snapshots for saved character state
 
 Run the API smoke test:
 
@@ -241,11 +241,11 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 - Recovery-code password reset through `POST /api/accounts/recover-password`; one code is consumed, existing sessions are revoked, and a fresh session is issued
 - Local prototype persistence through `localStorage`, with API-backed state when served through `scripts/run-portal.sh`
 - Web character creation only asks for username and game password; starter path, spawn choice, appearance, and onboarding remain in-game
-- Character renders use the OpenRSC avatar PNG generated by the game server on logout when available, with an RSC sprite fallback before the first in-game save/logout
+- Character renders use the avatar PNG generated by the game server on logout when available, with an RSC sprite fallback before the first in-game save/logout
 - Optional saved-character snapshot loading when `PORTAL_OPENRSC_DB` points to a local SQLite database
 - Account reads refresh linked/created character snapshots from `PORTAL_OPENRSC_DB`, so logout-saved appearance, equipment, levels, and avatar image update the dashboard
-- Optional starter-card bridge into `PORTAL_OPENRSC_DB` through account-level OpenRSC `player_cache` markers for the Lumbridge Subscription Vendor
-- Dev-safe saved-character link challenges that merge a verified OpenRSC save into the web-account roster
+- Optional starter-card bridge into `PORTAL_OPENRSC_DB` through account-level game `player_cache` markers for the Lumbridge Subscription Vendor
+- Dev-safe saved-character link challenges that merge a verified game save into the web-account roster
 - Local staff API for account review, support grants, starter-card correction, and session revocation
 - Staff tab for local token-gated account lookup, status/subscription/starter-card/session actions, roster review, audit events, and abuse-signal context
 - Portal account schema contract for web accounts, up to 10 linked game characters, starter-card rewards, account-wide subscription expiry, and audit/abuse tracking
@@ -258,7 +258,7 @@ The production schema draft lives in `web/portal/schema/` with SQLite and MySQL/
 - Production-hosted game-database account creation outside the local `PORTAL_OPENRSC_DB` bridge
 - Real in-game `::link` command or signed game-server verification callback
 - Real founder-pass email verification, Turnstile, email delivery, or production referral risk scoring
-- Production-safe OpenRSC character ownership/linking
+- Production-safe game character ownership/linking
 - Production admin identity/RBAC beyond the local bearer token
 
 The generated concept references used for earlier prototype passes live locally in `.codex-artifacts/` and are excluded from git status through `.git/info/exclude`. The shipped pre-release landing assets live in `web/portal/assets/prelaunch/`; foreground layers are chroma-keyed PNGs and the animated background is an audio-free H.264 MP4 with a poster image.

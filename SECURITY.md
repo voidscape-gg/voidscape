@@ -1,16 +1,14 @@
 # Security Policy
 
-## Supported Versions
+Voidscape security and abuse-sensitive reports should be sent privately to:
 
-Due to the nature of the volunteer effort to develop the project, staff cannot support major verions prior to the current release.
+support@voidscape.gg
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.x     | :white_check_mark: |
-| <4.x.x  | :x:                |
+Use a clear subject such as `Voidscape security report` and include:
 
-## Reporting a Vulnerability
+- affected account or character name, if relevant
+- steps to reproduce
+- expected and actual behavior
+- whether the issue can affect items, account access, moderation, payments, or service availability
 
-Depending on severity, please create a bug report on https://gitlab.com/openrsc/openrsc/-/issues
-
-If there is a high risk of abuse in-game, please join the Discord and ask to speak with a staff member about a security issue. https://openrsc.com/discord
+Please do not publish exploit details publicly before staff have had a chance to investigate and mitigate them.

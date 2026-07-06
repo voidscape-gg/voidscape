@@ -1,14 +1,7 @@
 # Security Policy
 
-## Supported Versions
+Voidscape launcher security reports should be sent privately to:
 
-Due to the nature of the volunteer effort to develop the project, staff cannot support major verions prior to the current release.
+support@voidscape.gg
 
-| Version | Supported          |
-| ------- | ------------------ |
-| current | :white_check_mark: |
-| prior   | :x:                |
-
-## Reporting a Vulnerability
-
-Depending on severity, please create a bug report on https://gitlab.com/open-runescape-classic/core/-/issues
+Include the launcher version, operating system, where the launcher was downloaded from, and any relevant logs or screenshots. Mark reports that involve update integrity, credential handling, or remote code execution clearly in the subject line.

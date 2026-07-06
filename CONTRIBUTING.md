@@ -1,117 +1,33 @@
-# Contributing to OpenRSC
+# Contributing To Voidscape
 
-We'd love for you to contribute to our source code and to make OpenRSC even better than it is
-today! Here are the guidelines we'd like you to follow:
+Voidscape is developed as a focused private-server project. Contributions should preserve the classic RuneScape feel, keep scope tight, and use the existing build/test workflow.
 
-* [Merge Request Submission Guidelines](#submit-pr)
-* [Suggested Developer Software](#software)
-* [Developer Installation Process](#install)
-* [Before You Start](#pre)
-* [Code Standards](#standards)
-* [Manual Install Script](#manual)
+## Before You Start
 
-## <a name="submit-pr"></a> Merge Request Submission Guidelines
-Before you submit your merge request consider the following guidelines:
+- Read `AGENTS.md` and the relevant subsystem guide in `docs/subsystems/`.
+- Read `docs/DEVELOPMENT.md` for the supported build and run commands.
+- Use scripts in `scripts/` instead of ad hoc build commands.
+- Keep changes narrow; do not bundle unrelated refactors with feature or bug work.
+- For non-trivial changes, update `docs/DIVERGENCE.md`.
 
-* Search [GitLab](https://gitlab.com/openrsc/openrsc/merge_requests) for an open or closed Merge Request
-  that relates to your submission. You don't want to duplicate effort.
-* Create a [fork](https://gitlab.com/openrsc/openrsc/-/forks/new) of this repository.
-* Create the [development environment](#install)
-* Make your changes in a new git branch:
+## Local Workflow
 
-    ```shell
-    git checkout -b my-fix-branch develop
-    ```
+```bash
+scripts/build.sh
+scripts/run-server.sh
+scripts/run-client.sh
+```
 
-* Create your patch commit.
-* Commit your changes using a descriptive commit message.
+For game interaction, use `tools/voidbot/voidbot`. For UI verification, use the AI workbench described in `docs/subsystems/ai-workbench.md`.
 
-    ```shell
-    git commit -a
-    ```
-  Note: the optional commit `-a` command line option will automatically "add" and "rm" edited files.
+## Pull Requests And Patches
 
-* Push your branch to GitLab:
+- Work from a short, descriptive branch name.
+- Use imperative commit messages that explain why the change exists.
+- Include focused tests or smoke evidence for the behavior touched.
+- Do not commit runtime artifacts, logs, generated jars, database dumps, or local credentials.
+- Keep public/account/security wording pointed at Voidscape support channels.
 
-    ```shell
-    git push origin my-fix-branch
-    ```
+## Support
 
-* In GitLab, send a merge request to `Game`.
-
-
-* If we suggest changes, then:
-
-  * Make the required updates.
-  * Commit your changes to your branch (e.g. `my-fix-branch`).
-  * Push the changes to your GitLab repository (this will update your Merge Request).
-
-    You can also amend the initial commits and force push them to the branch.
-
-    ```shell
-    git rebase develop -i
-    git push origin my-fix-branch -f
-    ```
-
-    This is generally easier to follow, but separate commits are useful if the Merge Request contains
-    iterations that might be interesting to see side-by-side.
-
-#### After your merge request is merged
-
-After your merge request is merged, you can safely delete your branch and merge the changes
-from the main (upstream) repository:
-
-* Delete the remote branch on GitLab either through the GitLab web UI or your local shell as follows:
-
-    ```shell
-    git push origin --delete my-fix-branch
-    ```
-
-* Check out the develop branch:
-
-    ```shell
-    git checkout develop -f
-    ```
-
-* Delete the local branch:
-
-    ```shell
-    git branch -D my-fix-branch
-    ```
-
-* Update your develop with the latest upstream version:
-
-    ```shell
-    git pull --ff upstream develop
-    ```
-
-## <a name="software"></a> Suggested Developer Software
-
-**IntelliJ IDEA Community** https://www.jetbrains.com/idea/download/
-
-**Git Fork** https://git-fork.com/
-
-**MariaDB** https://mariadb.org/download/
-
-**Sublime Text Editor** https://www.sublimetext.com/
-
-## <a name="install"></a> Developer Installation Process
-
-You will need to either use the set up script for Windows or Linux/Mac that comes in the repository or do it all manually.
-
-If you choose to install everything manually and not use the set up scripts, the following are required to be installed to ensure we are all using the same development environment tools:
-
-**MariaDB**, **OpenJDK**, **PHPMyAdmin**, **NGINX** or **Apache web server**, **PHP**, **Git Fork** or **git**
-
-## <a name="pre"></a> Before You Start:
-
-1. Download RSC+ to use for replaying authentic content: https://github.com/RSCPlus/rscplus
-2. Clone the Game repo and set up as you wish: https://orsc.dev/open-rsc/Game
-3. Download any replays you need: https://orsc.dev/open-rsc/RSC-Plus-Replays
-
-## <a name="standards"></a> Code Standards:
-
-- Use single TABs, coupled with <tabspace>
-- Claim or make tickets before working on features
-- Make PRs from your local fork into the main repo
-- Squash merge commits by using git pull --rebase before making your PRs
+For account, privacy, or security-sensitive coordination, email `support@voidscape.gg`.

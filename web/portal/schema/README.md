@@ -1,6 +1,6 @@
 # Voidscape Portal Schema
 
-These SQL files define the future website/account-management data model. They are not auto-applied by the OpenRSC game server.
+These SQL files define the future website/account-management data model. They are not auto-applied by the game server.
 
 Use them when standing up the production portal database or a local web-account integration test:
 
