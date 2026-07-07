@@ -219,6 +219,7 @@ public class ObjectCooking implements UseLocTrigger {
 				player.message(cookedMessage(player, cookedFood, isOvenFood(item)));
 				player.incExp(Skill.COOKING.id(), cookingDef.getExp(), true);
 				PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_COOK_STREAK);
+				PlayerTitle.recordSwordfishCooked(player, cookedFood.getCatalogId());
 			} else {
 				player.getCarriedItems().getInventory().add(new Item(cookingDef.getBurnedId()));
 				PlayerTitle.resetCounter(player, PlayerTitle.COUNTER_COOK_STREAK);

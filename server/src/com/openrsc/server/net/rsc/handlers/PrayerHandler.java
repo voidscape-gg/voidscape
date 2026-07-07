@@ -57,7 +57,13 @@ public class PrayerHandler implements PayloadProcessor<PrayerStruct, OpcodeIn> {
 			case RAPID_HEAL: // TODO
 			case PROTECT_ITEMS:
 			case PARALYZE_MONSTER:
+				break;
 			case PROTECT_FROM_MISSILES:
+				deactivatePrayer(prayers, PROTECT_FROM_MAGIC, false);
+				break;
+			case PROTECT_FROM_MAGIC:
+				deactivatePrayer(prayers, PROTECT_FROM_MISSILES, false);
+				break;
 			default:
 				break;
 		}
@@ -74,9 +80,9 @@ public class PrayerHandler implements PayloadProcessor<PrayerStruct, OpcodeIn> {
 	public void process(final PrayerStruct payload, final Player player) throws Exception {
 		final int prayerID = payload.prayerID;
 
-		if (prayerID < THICK_SKIN || prayerID > PROTECT_FROM_MISSILES) {
+		if (prayerID < THICK_SKIN || prayerID > PROTECT_FROM_MAGIC) {
 			player.setSuspiciousPlayer(true,
-				String.format("prayerID < %d or prayerID > %d", THICK_SKIN, PROTECT_FROM_MISSILES));
+				String.format("prayerID < %d or prayerID > %d", THICK_SKIN, PROTECT_FROM_MAGIC));
 			return;
 		}
 

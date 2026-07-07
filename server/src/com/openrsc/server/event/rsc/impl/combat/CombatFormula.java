@@ -1,6 +1,7 @@
 package com.openrsc.server.event.rsc.impl.combat;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.SkillCapes;
@@ -70,14 +71,18 @@ public class CombatFormula {
 	 * @return The randomized value.
 	 */
 	public static int calculateMagicDamage(final double spellPower) {
-		return calculateMagicDamage(spellPower, null);
+		return calculateMagicDamage(spellPower, null, null);
 	}
 
 	public static int calculateMagicDamage(final double spellPower, final Mob victim) {
+		return calculateMagicDamage(spellPower, null, victim);
+	}
+
+	public static int calculateMagicDamage(final double spellPower, final Mob source, final Mob victim) {
 		//Given that melee max hit is fractional, it was likely that spell power values ending in "5" were supposed to hit their max hit more often.
 		//TODO: More research to see if that was the case. For now, we can just make it uniform after flooring.
 		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(spellPower) + 1);
-		return applyMagicDamageReduction(damage, victim);
+		return applyMagicDamageReduction(damage, source, victim);
 	}
 
 	/**
@@ -108,7 +113,7 @@ public class CombatFormula {
 		boolean hasChargeBenefit = source.isCharged() && hasCapeEquipped;
 		int godSpellMax = hasChargeBenefit ? 25 : 18;
 
-		return calculateMagicDamage(godSpellMax, victim);
+		return calculateMagicDamage(godSpellMax, source, victim);
 	}
 
 	/**
@@ -121,9 +126,13 @@ public class CombatFormula {
 	}
 
 	public static int calculateIbanSpellDamage(final Mob victim) {
+		return calculateIbanSpellDamage(null, victim);
+	}
+
+	public static int calculateIbanSpellDamage(final Player source, final Mob victim) {
 		// TODO: Remove this code and roll it into calculateMagicDamage
 		// Source for max damage: http://web.archive.org/web/20041226185618/http://www.rsinn.com/forum/showthread.php?t=2469
-		return calculateMagicDamage(15, victim);
+		return calculateMagicDamage(15, source, victim);
 	}
 
 	/**
@@ -349,11 +358,24 @@ public class CombatFormula {
 		return Math.max(1, (int)Math.floor(damage * (1.0D - reduction)));
 	}
 
-	private static int applyMagicDamageReduction(final int damage, final Mob victim) {
+	private static int applyMagicDamageReduction(final int damage, final Mob source, final Mob victim) {
 		if (damage <= 0 || !(victim instanceof Player)) {
 			return damage;
 		}
+		final Player playerVictim = (Player) victim;
+		if (isProtectFromMagicBlockableSource(source)
+			&& playerVictim.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
+			return 0;
+		}
 		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
+	}
+
+	private static boolean isProtectFromMagicBlockableSource(final Mob source) {
+		if (!(source instanceof Npc)) {
+			return false;
+		}
+		final int npcId = ((Npc) source).getID();
+		return npcId != NpcId.DM_KING.id() && npcId != NpcId.DM_KING_ARENA.id();
 	}
 
 	private static int applyPlayerAttackDamageFloor(final Mob source, final Mob victim, final int damage) {
@@ -427,7 +449,7 @@ public class CombatFormula {
 	}
 
 	public static int calculateMagicMaxHit(final double spellPower, final Mob victim) {
-		return applyMagicDamageReduction((int)Math.floor(spellPower), victim);
+		return applyMagicDamageReduction((int)Math.floor(spellPower), null, victim);
 	}
 
 	private static void clearPvpMeleeMomentum(final Mob source) {

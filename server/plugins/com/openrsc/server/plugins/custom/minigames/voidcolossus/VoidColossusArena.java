@@ -48,8 +48,6 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	private static final int VOID_RIFT_ID = 1306;
 	static final int VOID_COLOSSUS_OBJECT_ID = 1307;
-	private static final int HUB_RIFT_X = 113;
-	private static final int HUB_RIFT_Y = 321;
 	private static final int HUB_ARRIVAL_X = 113;
 	private static final int HUB_ARRIVAL_Y = 322;
 	private static final int ARENA_RIFT_X = 553;
@@ -157,25 +155,12 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	@Override
 	public boolean blockOpLoc(Player player, GameObject obj, String command) {
-		if (isHubRift(obj)) {
-			return player.getConfig().WANT_VOID_COLOSSUS;
-		}
 		return isArenaRift(obj);
 	}
 
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
-		if (isHubRift(obj)) {
-			if (!player.getConfig().WANT_VOID_COLOSSUS) {
-				player.message("That rift is dormant for now.");
-				return;
-			}
-			if (!confirmTravel(player, "The rift hums with colossal fury beyond.",
-				"Face the Void Colossus alone?", "Enter the arena")) {
-				return;
-			}
-			enterInstance(player);
-		} else if (isArenaRift(obj)) {
+		if (isArenaRift(obj)) {
 			if (!confirmTravel(player, "The rift leads back to the safety of the Void Enclave.",
 				"Leave the arena?", "Leave the arena")) {
 				return;
@@ -442,10 +427,6 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		if (playerInstance.containsKey(player.getUsernameHash())) {
 			exitInstance(player, false);
 		}
-	}
-
-	private boolean isHubRift(GameObject obj) {
-		return obj.getID() == VOID_RIFT_ID && obj.getX() == HUB_RIFT_X && obj.getY() == HUB_RIFT_Y;
 	}
 
 	private boolean isArenaRift(GameObject obj) {

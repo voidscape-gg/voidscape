@@ -29,7 +29,7 @@ public class PrayerDrainEvent extends GameTickEvent {
 
 		int totalDrainRate = 0;
 
-		for (int i = Prayers.THICK_SKIN; i <= Prayers.PROTECT_FROM_MISSILES; i++) {
+		for (int i = Prayers.THICK_SKIN; i <= Prayers.PROTECT_FROM_MAGIC; i++) {
 			if (!prayers.isPrayerActivated(i)) continue;
 			final PrayerDef prayerDef = entityHandler.getPrayerDef(i);
 			assert prayerDef != null;

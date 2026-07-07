@@ -2625,6 +2625,17 @@ public final class Player extends Mob {
 		return 0;
 	}
 
+	public int getCustomOverheadType() {
+		int overheadType = getSkullType();
+		if (getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MISSILES)) {
+			overheadType |= 4;
+		}
+		if (getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
+			overheadType |= 8;
+		}
+		return overheadType;
+	}
+
 	public boolean isSleeping() {
 		return sleeping;
 	}
@@ -4630,9 +4641,10 @@ public final class Player extends Mob {
 		getWorld().unregisterItem(item);
 		this.playSound("takeobject");
 		getCarriedItems().getInventory().add(itemFinal);
-		getWorld().getServer().getGameLogger().addQuery(new GenericLog(this.getWorld(), this.getUsername() + " picked up " + item.getDef().getName() + " x"
-			+ item.getAmount() + " at " + this.getLocation().toString()));
-		recordGroundItemPickup(item, itemFinal);
+			getWorld().getServer().getGameLogger().addQuery(new GenericLog(this.getWorld(), this.getUsername() + " picked up " + item.getDef().getName() + " x"
+				+ item.getAmount() + " at " + this.getLocation().toString()));
+			PlayerTitle.recordHerbPickup(this, itemFinal.getCatalogId(), itemFinal.getAmount());
+			recordGroundItemPickup(item, itemFinal);
 
 		return true;
 	}

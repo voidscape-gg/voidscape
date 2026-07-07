@@ -6458,8 +6458,8 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeTitleCatalogMenu() {
-		int panelWidth = Math.min(468, this.getGameWidth() - 16);
-		int panelHeight = Math.min(318, this.getGameHeight() - 24);
+		int panelWidth = Math.min(isAndroid() ? 560 : 520, this.getGameWidth() - 16);
+		int panelHeight = Math.min(isAndroid() ? 350 : 306, this.getGameHeight() - 24);
 		int panelX = (this.getGameWidth() - panelWidth) / 2;
 		int panelY = (this.getGameHeight() - panelHeight) / 2;
 		int cx = panelX + panelWidth / 2;
@@ -6467,10 +6467,13 @@ public final class mudclient implements Runnable {
 		String currentCategory = titleCatalogCommandFromHeader(header);
 
 		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
-		drawVoidscapeCenteredText(cx, "Voidscape Titles", 0xffff00, 4, panelY + 22);
-		drawVoidscapeCenteredText(cx, header, 0xffffff, 1, panelY + 39);
+		this.getSurface().drawBoxAlpha(panelX + 2, panelY + 2, panelWidth - 4, 22, UiSkin.VITAL_PRAYER, 222);
+		this.getSurface().drawLineHoriz(panelX + 3, panelY + 24, panelWidth - 6, UiSkin.GOLD_LINE);
+		drawVoidscapeCenteredText(cx, "Achievement Titles", UiSkin.GOLD_TITLE, UiSkin.FONT_TITLE, panelY + 17);
+		drawVoidscapeCenteredText(cx, titleCatalogSummaryText(header), UiSkin.TEXT_BODY, UiSkin.FONT_SMALL, panelY + 38);
 
-		int tabY = panelY + 50;
+		int tabY = panelY + 45;
+		int tabH = voidscapeTitleTabHeight();
 		int tabX = panelX + 10;
 		int tabW = (panelWidth - 20) / 5;
 		if (drawVoidscapeTitleTab(tabX, tabY, tabW - 3, "All", titleMenuOptionIndexStartsWith("View all titles"), "all".equals(currentCategory))) return;
@@ -6479,35 +6482,57 @@ public final class mudclient implements Runnable {
 		if (drawVoidscapeTitleTab(tabX + tabW * 3, tabY, tabW - 3, "Feat", titleMenuOptionIndexStartsWith("View feat titles"), "feat".equals(currentCategory))) return;
 		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
 
-		int rowY = panelY + 78;
-		int rowH = 17;
+		int tableX = panelX + 12;
+		int tableW = panelWidth - 24;
+		int tierW = isAndroid() ? 78 : 70;
+		int holderW = isAndroid() ? 94 : 88;
+		int ageW = isAndroid() ? 58 : 52;
+		int titleW = Math.max(132, tableW - tierW - holderW - ageW);
+		int headerY = tabY + tabH + 16;
+		this.getSurface().drawBoxAlpha(tableX, headerY - 12, tableW, 16, UiSkin.VOID_HEADER, 220);
+		this.getSurface().drawLineHoriz(tableX, headerY + 4, tableW, UiSkin.GOLD_LINE);
+		this.getSurface().drawString("Achievement", tableX + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+		this.getSurface().drawColoredStringCentered(tableX + titleW + tierW / 2, "Tier", UiSkin.GOLD_HEADER, 0, UiSkin.FONT_SMALL, headerY);
+		this.getSurface().drawString("Player", tableX + titleW + tierW + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+		this.getSurface().drawString("Age", tableX + titleW + tierW + holderW + 4, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+
+		int rowY = headerY + 8;
+		int rowH = isAndroid() ? 23 : 17;
+		int firstRow = -1;
+		int lastRow = -1;
 		for (int i = 1; i < this.optionsMenuCount; i++) {
 			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
 			if (isVoidscapeTitleNavigationOption(option)) {
 				continue;
 			}
-			if (drawVoidscapeTitleRow(panelX + 16, rowY, panelWidth - 32, rowH, option, i)) {
+			if (firstRow < 0) firstRow = i;
+			lastRow = i;
+			if (drawVoidscapeTitleRow(tableX, rowY, tableW, rowH, option, i, titleW, tierW, holderW, ageW)) {
 				return;
 			}
-			rowY += rowH;
+				rowY += rowH;
+			}
+
+			int navY = panelY + panelHeight - 29;
+			int pageY = navY - 8;
+			int prev = titleMenuOptionIndexStartsWith("< Previous page");
+			int next = titleMenuOptionIndexStartsWith("Next page");
+			int change = titleMenuOptionIndexStartsWith("Change category");
+			int close = titleMenuOptionIndexStartsWith("Close");
+			if (firstRow >= 0) {
+				String pageText = titleCatalogPageText(header, firstRow, lastRow);
+				this.getSurface().drawColoredStringCentered(cx, pageText, UiSkin.TEXT_DIM, 0, UiSkin.FONT_SMALL, pageY);
+			}
+			int buttonW = isAndroid() ? 104 : 82;
+			int x = panelX + 14;
+			if (prev >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Previous", prev, false)) return;
+			x += buttonW + 7;
+			if (next >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Next", next, false)) return;
+			if (change >= 0 && drawVoidscapeTitleButton(cx - 51, navY, 102, 22, "Categories", change, false)) return;
+			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, navY, 72, 22, "Close", close, true)) return;
+
+			handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
 		}
-
-		int navY = panelY + panelHeight - 32;
-		int prev = titleMenuOptionIndexStartsWith("< Previous page");
-		int next = titleMenuOptionIndexStartsWith("Next page");
-		int change = titleMenuOptionIndexStartsWith("Change category");
-		int close = titleMenuOptionIndexStartsWith("Close");
-		int buttonW = 94;
-		int x = panelX + 14;
-		if (prev >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Previous", prev, false)) return;
-		x += buttonW + 7;
-		if (next >= 0 && drawVoidscapeTitleButton(x, navY, buttonW, 22, "Next", next, false)) return;
-		x += buttonW + 7;
-		if (change >= 0 && drawVoidscapeTitleButton(x, navY, buttonW + 24, 22, "Categories", change, false)) return;
-		if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, navY, 72, 22, "Close", close, true)) return;
-
-		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
-	}
 
 	private void drawVoidscapeTitleDetailMenu() {
 		int panelWidth = Math.min(438, this.getGameWidth() - 16);
@@ -6569,34 +6594,115 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
-	private boolean drawVoidscapeTitleTab(int x, int y, int width, String label, int option, boolean selected) {
-		boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + 22;
-		int fill = selected ? UiSkin.PURPLE_SELECT : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
-		int border = selected ? UiSkin.PURPLE_FOCUS : hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE;
-		this.getSurface().drawBoxAlpha(x, y, width, 22, fill, 238);
-		this.getSurface().drawBoxBorder(x, width, y, 22, border);
-		this.getSurface().drawColoredStringCentered(x + width / 2, label, selected ? UiSkin.GOLD_TITLE : UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, y + 15);
-		if (hover && !selected && option >= 0 && this.mouseButtonClick == 1) {
-			sendOptionsMenuChoice(option);
-			return true;
+		private int voidscapeTitleTabHeight() {
+			return isAndroid() ? 24 : 19;
+		}
+
+		private boolean drawVoidscapeTitleTab(int x, int y, int width, String label, int option, boolean selected) {
+			int height = voidscapeTitleTabHeight();
+			boolean hover = this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+			int fill = selected ? UiSkin.VITAL_PRAYER : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
+			int border = selected ? UiSkin.GOLD_HOT : hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE;
+			int font = isAndroid() ? UiSkin.FONT_BODY : UiSkin.FONT_SMALL;
+			this.getSurface().drawBoxAlpha(x, y, width, height, fill, selected ? 232 : 218);
+			this.getSurface().drawBoxBorder(x, width, y, height, border);
+			this.getSurface().drawColoredStringCentered(x + width / 2, label, selected ? UiSkin.GOLD_TITLE : UiSkin.TEXT_BODY, 0, font, y + height / 2 + 4);
+			if (hover && !selected && option >= 0 && this.mouseButtonClick == 1) {
+				sendOptionsMenuChoice(option);
+				return true;
 		}
 		return false;
 	}
 
-	private boolean drawVoidscapeTitleRow(int x, int y, int width, int height, String label, int option) {
-		boolean disabled = label.startsWith("No titles in this category");
-		boolean active = label.startsWith("* ");
-		boolean hover = !disabled && this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
-		int fill = active ? UiSkin.PURPLE_SELECT : hover ? UiSkin.VOID_LINE : UiSkin.VOID_BOX;
-		int border = active ? UiSkin.GOLD_LINE : hover ? UiSkin.GOLD_HOT : UiSkin.VOID_LINE;
-		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 218);
-		this.getSurface().drawBoxBorder(x, width, y, height, border);
-		this.getSurface().drawString(label, x + 6, y + 13, disabled ? UiSkin.TEXT_DIM : UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+	private boolean drawVoidscapeTitleRow(int x, int y, int width, int height, String label, int option,
+										 int titleW, int tierW, int holderW, int ageW) {
+		String[] cells = parseVoidscapeTitleCells(label);
+		boolean structured = cells != null;
+			boolean disabled = label.startsWith("No titles in this category");
+			boolean active = structured ? "1".equals(cells[7]) : label.startsWith("* ");
+			boolean hover = !disabled && this.mouseX >= x && this.mouseX <= x + width && this.mouseY >= y && this.mouseY <= y + height;
+			int fill = active ? UiSkin.PURPLE_SELECT : hover ? UiSkin.PURPLE_SELECT : option % 2 == 0 ? UiSkin.VOID_BOX : UiSkin.VOID_BODY;
+			int border = active ? UiSkin.GOLD_LINE : hover ? UiSkin.GOLD_HOT : UiSkin.VOID_LINE;
+			this.getSurface().drawBoxAlpha(x, y, width, height, fill, active ? 190 : hover ? 116 : 158);
+			this.getSurface().drawLineHoriz(x, y + height - 1, width, border);
+			if (active || hover) {
+				this.getSurface().drawBoxBorder(x, width, y, height, border);
+			}
+			if (structured) {
+				int textY = y + height / 2 + 4;
+				int tierX = x + titleW;
+				int holderX = tierX + tierW;
+				int ageX = holderX + holderW;
+				int titleColor = active ? UiSkin.GOLD_TITLE : "locked".equals(cells[6]) || "held".equals(cells[6]) ? UiSkin.TEXT_DIM : UiSkin.TEXT_BODY;
+				this.getSurface().drawString(fitVoidscapeText(cells[0], titleW - 10, UiSkin.FONT_BODY), x + 6, textY, titleColor, UiSkin.FONT_BODY);
+				drawVoidscapeTitleTierPill(tierX + 5, y + 2, tierW - 10, height - 4, cells[1], parseTitleInt(cells[2]), "1".equals(cells[3]));
+				int holderColor = "Open".equals(cells[4]) ? UiSkin.GOLD_HOT : "-".equals(cells[4]) ? UiSkin.TEXT_DIM : UiSkin.GOOD;
+				this.getSurface().drawString(fitVoidscapeText(cells[4], holderW - 10, UiSkin.FONT_SMALL), holderX + 6, textY,
+					holderColor, UiSkin.FONT_SMALL);
+				this.getSurface().drawString(fitVoidscapeText(cells[5], ageW - 8, UiSkin.FONT_SMALL), ageX + 4, textY, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
+			} else {
+				this.getSurface().drawString(titleRowDisplayText(label), x + 6, y + 13, disabled ? UiSkin.TEXT_DIM : UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		}
 		if (hover && this.mouseButtonClick == 1) {
 			sendOptionsMenuChoice(option);
 			return true;
 		}
 		return false;
+		}
+
+		private void drawVoidscapeTitleTierPill(int x, int y, int width, int height, String label, int tier, boolean record) {
+			int fill = record ? UiSkin.GOLD_LINE : tier == 2 ? UiSkin.GOLD_LINE : tier == 1 ? UiSkin.PURPLE_SELECT : UiSkin.VITAL_META;
+			int border = record ? UiSkin.GOLD_HOT : tier == 2 ? UiSkin.GOLD_HOT : tier == 1 ? UiSkin.PURPLE_FOCUS : UiSkin.FIELD_BORDER_IDLE;
+			int text = record || tier == 0 ? UiSkin.VOID_BODY : UiSkin.GOLD_TITLE;
+			this.getSurface().drawBoxAlpha(x, y, width, height, fill, record ? 235 : 220);
+			this.getSurface().drawBoxBorder(x, width, y, height, border);
+			this.getSurface().drawColoredStringCentered(x + width / 2, fitVoidscapeText(label, width - 6, UiSkin.FONT_SMALL),
+				text, 0, UiSkin.FONT_SMALL, y + height / 2 + 4);
+		}
+
+	private String[] parseVoidscapeTitleCells(String label) {
+		int marker = label == null ? -1 : label.indexOf("~vstitle~");
+		if (marker < 0) {
+			return null;
+		}
+		String[] cells = label.substring(marker + "~vstitle~".length()).split("\\|", -1);
+		return cells.length >= 8 ? cells : null;
+	}
+
+	private String titleRowDisplayText(String label) {
+		int marker = label == null ? -1 : label.indexOf("~vstitle~");
+		return marker < 0 ? label : label.substring(0, marker).trim();
+	}
+
+		private int parseTitleInt(String value) {
+			try {
+				return Integer.parseInt(value);
+			} catch (NumberFormatException ex) {
+				return 0;
+			}
+		}
+
+		private String titleCatalogSummaryText(String header) {
+			if (header == null) {
+				return "";
+			}
+			int showingStart = header.indexOf(" - showing ");
+			int unlockedStart = header.indexOf(" - unlocked ");
+			if (showingStart >= 0 && unlockedStart > showingStart) {
+				return header.substring(0, showingStart) + header.substring(unlockedStart);
+			}
+			return header;
+		}
+
+		private String titleCatalogPageText(String header, int firstRow, int lastRow) {
+			int pageStart = header == null ? -1 : header.indexOf("page ");
+			String page = pageStart < 0 ? "" : header.substring(pageStart).split(" - ")[0];
+		int showingStart = header == null ? -1 : header.indexOf("showing ");
+		if (showingStart >= 0) {
+			String showing = header.substring(showingStart + "showing ".length()).split(" - ")[0];
+			return page + " (" + showing + ")";
+		}
+		return page;
 	}
 
 	private void handleVoidscapeTitlePanelMiss(int panelX, int panelY, int panelWidth, int panelHeight) {

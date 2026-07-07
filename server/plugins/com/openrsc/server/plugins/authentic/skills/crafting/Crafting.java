@@ -6,6 +6,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.external.ItemCraftingDef;
 import com.openrsc.server.external.ItemGemDef;
 import com.openrsc.server.model.Point;
@@ -1351,10 +1352,11 @@ public class Crafting implements UseInvTrigger,
                     gemName = StringUtils.capitalize(gemName);
                 }
             }
-			player.message("You cut the " + gemName);
-			player.playSound("chisel");
-			player.incExp(Skill.CRAFTING.id(), gemDef.getExp(), true);
-		}
+				player.message("You cut the " + gemName);
+				player.playSound("chisel");
+				player.incExp(Skill.CRAFTING.id(), gemDef.getExp(), true);
+				PlayerTitle.recordGemCut(player);
+			}
 
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {

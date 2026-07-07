@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.external.ObjectWoodcuttingDef;
 import com.openrsc.server.model.container.Item;
@@ -120,9 +121,10 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 					GuaranteedResources.recordAttempt(player, GuaranteedResources.WOODCUTTING, def.getLogId(), true);
 					GuaranteedResources.notifyIfGuaranteed(player, guaranteed);
 				}
-				player.getCarriedItems().getInventory().add(log);
-				player.playerServerMessage(MessageType.QUEST, "You get some wood");
-				rollVoidSparrow(player, def);
+					player.getCarriedItems().getInventory().add(log);
+					player.playerServerMessage(MessageType.QUEST, "You get some wood");
+					PlayerTitle.recordMagicLogsCut(player, log.getCatalogId());
+					rollVoidSparrow(player, def);
 				if (isOldWoodcut) {
 					player.incExp(Skill.WOODCUTTING.id(), getExpRetro(player.getSkills().getMaxStat(Skill.WOODCUTTING.id()), 25), true);
 				} else {

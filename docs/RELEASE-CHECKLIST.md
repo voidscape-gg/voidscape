@@ -115,7 +115,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Release-disabled content remains closed: Void Dungeon entrance, Void Colossus entrance, Void Knight ladder, Void Rush, and Undead Siege all deny public entry.
 - [ ] Void chest requires a Void Key and rolls rewards.
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
-- [ ] Player titles command opens and active title appears in chat.
+- [ ] Player titles command opens the achievement board and active title appears beside the overhead name.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
 - [ ] Desktop and Android `Create Account` open in-client username/password character creation, then prefill Existing User; their recovery buttons still open the portal. Web `/play` keeps Create Account/recovery portal-first, and launch configs keep packet registration enabled with email disabled.
 - [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, marks the portal reward as claimed, and redeemed cards apply the intended account-wide XP rates.

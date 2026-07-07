@@ -46,6 +46,7 @@ public final class GameStateUpdater {
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
+	private static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
 	private static final byte HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
 	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
 	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
@@ -1072,7 +1073,9 @@ public final class GameStateUpdater {
 						updatesMain.add((char) appearance.getTrouserColour());
 						updatesMain.add((char) appearance.getSkinColour(playerNeedingAppearanceUpdate.getClientLimitations().maxSkinColor));
 						updatesMain.add((byte) playerNeedingAppearanceUpdate.getCombatLevel());
-						updatesMain.add((byte) playerNeedingAppearanceUpdate.getSkullType());
+						updatesMain.add((byte) (isCustomClient && player.getClientVersion() >= OVERHEAD_PRAYER_CLIENT_VERSION
+							? playerNeedingAppearanceUpdate.getCustomOverheadType()
+							: playerNeedingAppearanceUpdate.getSkullType()));
 					}
 
 					if (isCustomClient) {

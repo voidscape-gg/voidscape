@@ -26,8 +26,37 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-068 world-map autowalk hardening is verified locally; next
-  loop should resume Ryan's redirect / remaining Intake priority.
+- **Active bug:** none — VS-071 verified locally; next loop can triage Intake or resume
+  the next prioritized open item.
+- **Session preflight 2026-07-07 (VS-071):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files before this fix include the verified
+  VS-069/VS-070 hunks, `docs/DIVERGENCE.md`, `docs/subsystems/combat-system.md`,
+  `server/inc/sqlite/preservation.db` runtime state, `DiscordService.java` WIP, and
+  untracked brief/config files. Stage only VS-071 hunks if committing.
+  Result: VS-071 fixed and verified by JSON validation, `scripts/build.sh`, and live
+  voidbot traversal; evidence in `tmp/vs071-ardougne-rift.txt`.
+- **Ryan's redirect (2026-07-07, mid-VS-069):** pause VS-069 rift work and fix the
+  level-43 prayer behavior first.
+- **Session preflight 2026-07-07 (VS-070):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files before this fix: `docs/DIVERGENCE.md`
+  (known collision plus Discord redaction entry), `server/inc/sqlite/preservation.db`
+  (runtime artifact), `server/src/com/openrsc/server/net/DiscordService.java`
+  (unlisted WIP; do not touch), plus untracked brief/config files
+  `.claude/launch.json`, `CODEX-*.md`, and `docs/TITLE-OVERHAUL-BRIEF.md`.
+  Stage only VS-070 hunks if committing.
+  Result: VS-070 fixed and verified by `scripts/build.sh` plus source call-site
+  inspection; live voidbot verification deferred because prayer/cast commands are not
+  implemented.
+- **VS-069 completion 2026-07-07:** verified on the rebuilt local server with voidbot;
+  evidence in `tmp/vs069-void-arena-rift.txt`. Active bug remains VS-070 per Ryan's
+  later redirect.
+- **Session preflight 2026-07-07 (VS-069):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files before this fix:
+  `docs/DIVERGENCE.md` (known collision), `server/inc/sqlite/preservation.db`
+  (runtime artifact), `server/src/com/openrsc/server/net/DiscordService.java`
+  (unlisted WIP; do not touch), plus untracked brief/config files
+  `.claude/launch.json`, `CODEX-*.md`, and `docs/TITLE-OVERHAUL-BRIEF.md`.
+  Stage only VS-069 hunks if committing.
 - **Ryan's redirect (2026-07-03, mid-loop):** work **from VS-038 down**, impact-first
   — skip the "meh" tail. In scope, in order: VS-038 (Death Match forfeit), then
   player-facing Intake items (Undead Siege logout feedback, bank-add-while-open stale
@@ -716,8 +745,6 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   route-quality-verified, and smoke-verified; medium route count 79 and arrival passed
   without idle/stall.
 
-
-
 ## Watch list — not open bugs, but recurrence risks and burned areas
 
 - **smoke.sh first run after a fresh server restart can fail 1-3 checks; rerun is
@@ -750,6 +777,84 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-071 — Ardougne Void Rift sits outside the useful market area (FIXED)
+- Status: verified · Severity: P3 · Area: server-content / traversal
+- Evidence: Ryan reported 2026-07-07 that the Ardougne Void Rift was in a random
+  caged-off spot and should be in the middle of Ardougne market. Code/data evidence:
+  `VoidRift` and `SceneryLocsVoidRift.json` put the Ardougne hub at `(591,621)` with
+  arrivals at `(588,621)`, while the Ardougne market stall cluster is around
+  `(544..566,583..599)`.
+- Repro: source/data inspection confirmed the mismatch; local stall locs place the
+  market ring around baker/spice/fur/gem/silver/silk stalls, not near `(591,621)`.
+- Fix: moved the Ardougne Void Rift object to `(552,592)` and changed the Ardougne
+  arrival tile to `(552,594)`, central to the market cluster without placing the portal
+  directly on a stall or NPC start.
+- Verified 2026-07-07: JSON validation passed for `SceneryLocsVoidRift.json` and
+  `scripts/build.sh` passed. A rebuilt local server loaded 7 Void Rift scenery entries.
+  voidbot opened the Falador rift `(316,552)`, selected `Ardougne`, arrived at
+  `(552,594)`, then used the moved Ardougne rift `(552,592)` and saw the normal network
+  menu `Void Enclave`, `Edgeville`, `Varrock`, `Falador`, `Stay here`. Evidence:
+  `tmp/vs071-ardougne-rift.txt`.
+- Log: 2026-07-07 filed from Ryan's report, fixed, build-verified, and
+  voidbot-verified.
+
+### VS-070 — Protect from Magic blocks player spells instead of NPC-only magic (FIXED)
+- Status: verified · Severity: P2 · Area: server-combat / prayer
+- Evidence: Ryan reported 2026-07-07 that the newest level-43 prayer should not stop
+  spells from players, only NPC/boss magic. Current client definitions already exposed
+  "Protect from magic" at prayer id 14, but the server-side prayer definition/state was
+  still capped at Protect from Missiles id 13, so the client/server prayer contract was
+  inconsistent. Historical implementation in `a1b96685` applied Protect from Magic in
+  `CombatFormula.applyMagicDamageReduction(damage, victim)` with no source/caster
+  context, so player-cast spells against protected players would roll to zero too.
+- Repro: code evidence was conclusive for the broken contract: client prayer list had id
+  14, server `PrayerHandler` rejected ids above 13, and the old damage helper could not
+  distinguish player-cast PvP spells from NPC/boss magic.
+- Fix: restored server prayer id 14, activation/drain support, missile/magic mutual
+  exclusion, and custom-client overhead bit `8`; made magic damage source-aware so
+  player-origin spell paths pass a `Player` source and keep normal damage while ordinary
+  NPC/boss magic can be blocked. The Void Knight boss' direct Fire Blast script also
+  checks Protect from Magic before applying damage. Sir Charles is an explicit exception:
+  both his lobby `DM_KING` id and arena `DM_KING_ARENA` id bypass Protect from Magic, so
+  his Fire Blast remains unblockable. Client display text now says "Blocks most NPC magic
+  attacks."
+- Verified 2026-07-07: `scripts/build.sh` passed; source inspection shows
+  `SpellHandler` and Void Colossus player spell paths pass `Player` sources, while DM
+  King passes the boss `Npc` source and `CombatFormula` excludes Sir Charles ids from
+  the protection block; `VoidKnightBoss.castIfReady` gates Fire Blast damage on
+  `PROTECT_FROM_MAGIC`. Live voidbot verification deferred because
+  `prayer-on/off`, `cast-player`, and `cast-npc` are not implemented yet.
+- Log: 2026-07-07 triaged directly from Ryan's report, fixed, build-verified, and
+  documented in `docs/DIVERGENCE.md`.
+
+### VS-069 — Void Enclave rift can route to closed Void Colossus and Void Arena lacks an exit rift (FIXED)
+- Status: verified · Severity: P2 · Area: server-content / minigame traversal
+- Evidence: Ryan reported 2026-07-07 that the Void Rift portal inside the Void Enclave
+  should lead to the Void Arena deathmatch lobby where Sir Charles is, but instead led
+  to Colossus, which should be closed off. Code evidence: `VoidRift` and
+  `VoidColossusArena` both claimed object `1306` at `(113,321)`, and
+  `PluginHandler.handlePlugin` invokes every blocking `OpLocTrigger`, so enabling
+  `want_void_colossus` let the unreleased Colossus handler run on the approved Void
+  Arena rift. `SceneryLocsVoidColossusArena.json` also duplicated that hub rift. The
+  Void Arena lobby had a bank chest but no portal/rift object wired to `VoidArena.leave`.
+- Repro: conclusive code evidence plus live report; local `want_void_colossus:false`
+  masked the conflict, but the handler/data collision was deterministic when the
+  Colossus gate was enabled or stale loc data existed.
+- Fix: `VoidColossusArena` no longer claims the Enclave hub rift and
+  `SceneryLocsVoidColossusArena.json` no longer duplicates `(113,321)`. `VoidRift`
+  keeps `(113,321)` as the Void Arena entrance and now handles a new Void Arena lobby
+  rift at `(600,2911)` by calling the existing `VoidArena.leave` validation. The beta
+  guide labels `(113,321)` as the Void Arena rift instead of a Colossus rift.
+- Verified 2026-07-07: post-fix `scripts/build.sh` passed; JSON validation passed for
+  the touched loc files; rebuilt local server loaded `SceneryLocsVoidArena.json` with
+  18 scenery locations. voidbot used object `1306` at `(113,321)`, accepted
+  `Enter Void Arena`, arrived at `(600,2914)`, and observed Sir Charles id `862` in
+  the lobby. voidbot then used the new object `1306` at `(600,2911)`, accepted
+  `Return to Void Enclave`, and arrived at `(113,318)`. Evidence:
+  `tmp/vs069-void-arena-rift.txt`.
+- Log: 2026-07-07 filed from Ryan's report, code-confirmed, fixed, build-verified,
+  and voidbot-verified. Active loop state remains VS-070 after Ryan's later redirect.
 
 ### VS-066 — Wilderness castle rats leaked outside their rooms (FIXED)
 - Status: verified · Severity: P3 · Area: server-content / NPC locs

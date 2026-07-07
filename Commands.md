@@ -876,11 +876,12 @@ Regular Player Commands
 - titles
   - Usage: `::titles`
   - Usage: `::titles list [page]`
+  - Usage: `::titles unlocked|renown|feat|unique [page]`
   - Usage: `::title <title id or name>`
   - Usage: `::title clear`
   - Usage: `::titles count`
   - Alias: `::title`
-  - Opens the unlocked player-title menu, browses the 100-title catalog with Next/Previous page buttons, equips an unlocked title, clears the active title, or shows unlock count. Unique titles show their holder and are limited to one unique title per account; reusable titles can be earned by anyone.
+  - Opens the achievement-style player-title board, browses the catalog with Next/Previous page buttons, equips an unlocked title, clears the active title, or shows unlock count. Unique and first-to record titles show their holder when claimed; reusable titles can be earned by anyone.
 - event
   - Usage: `::event`
   - Join the currently running server PK Event.

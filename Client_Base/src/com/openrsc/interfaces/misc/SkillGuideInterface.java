@@ -424,6 +424,7 @@ public final class SkillGuideInterface {
 				skillMenuEntries.add(new SkillMenuItem(44, "34", "Incredible reflexes - Increases your attack by 15%"));
 				skillMenuEntries.add(new SkillMenuItem(44, "37", "Paralyze monster - Stops monsters from fighting back"));
 				skillMenuEntries.add(new SkillMenuItem(44, "40", "Protect from missiles - 100% protection from ranged attacks"));
+				skillMenuEntries.add(new SkillMenuItem(44, "43", "Protect from magic - Blocks most NPC magic attacks"));
 			} else if (curTab == 1) {
 				skillMenuEntries.add(new SkillMenuItem(388, "31", "Monastery"));
 				if (Config.S_WANT_CUSTOM_SPRITES) {

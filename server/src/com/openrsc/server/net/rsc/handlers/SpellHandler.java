@@ -666,10 +666,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		// don't display a message if message is null (example superheat)
 		if (message != null) {
 			player.playerServerMessage(MessageType.QUEST, message.trim().isEmpty() ? "Cast spell successfully" : message);
+			}
+			if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
+			PlayerTitle.recordSpellCast(player);
+			player.setCastTimer();
 		}
-		if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
-		player.setCastTimer();
-	}
 
 	public void godSpellObject(Player player, Mob affectedMob, Spells spellEnum) {
 		switch (spellEnum) {
@@ -1652,7 +1653,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							getPlayer().playerServerMessage(MessageType.QUEST, "This spell can only be used on skeletons, zombies and ghosts");
 							return;
 						}
-						int damaga = CombatFormula.calculateMagicDamage(Constants.CRUMBLE_UNDEAD_MAX, affectedMob);
+						int damaga = CombatFormula.calculateMagicDamage(Constants.CRUMBLE_UNDEAD_MAX, getPlayer(), affectedMob);
 						if (!checkAndRemoveRunes(getPlayer(), spell, capeActivated)) {
 							return;
 						}
@@ -1682,7 +1683,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							int casts = getPlayer().getCache().getInt(spell.getName() + "_casts");
 							getPlayer().getCache().set(spell.getName() + "_casts", casts - 1);
 						}
-						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateIbanSpellDamage(affectedMob), 4, setChasing));
+						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateIbanSpellDamage(getPlayer(), affectedMob), 4, setChasing));
 						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 					case CLAWS_OF_GUTHIX:
@@ -1762,7 +1763,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 						double maxR = getPlayer().getWorld().getServer().getConstants().getSpellDamages().getSpellDamage(spellEnum, entityType, SpellDamages.MagicType.GOODEVILMAGIC);
 
-						int damageR = CombatFormula.calculateMagicDamage(maxR, affectedMob);
+						int damageR = CombatFormula.calculateMagicDamage(maxR, getPlayer(), affectedMob);
 
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damageR, 1, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
@@ -1833,7 +1834,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							max += 1;
 						}
 
-						int damage = CombatFormula.calculateMagicDamage(max, affectedMob);
+						int damage = CombatFormula.calculateMagicDamage(max, getPlayer(), affectedMob);
 
 						int projectileType = projectileTypeForSpell(spellEnum);
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, projectileType, setChasing));

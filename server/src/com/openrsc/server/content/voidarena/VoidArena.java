@@ -407,6 +407,10 @@ public final class VoidArena {
 		enterLobby(player);
 	}
 
+	public boolean leaveThroughVoidArenaRift(Player player) {
+		return leave(player);
+	}
+
 	public synchronized void challengeDmKing(Player player) {
 		if (!canStartDmKingChallenge(player, true)) {
 			return;
@@ -685,20 +689,22 @@ public final class VoidArena {
 		player.message("Right-click another player here and choose Death Match.");
 	}
 
-	private void leave(Player player) {
+	private boolean leave(Player player) {
 		if (!VoidArenaConfig.isInsideVoidArena(player.getLocation())) {
 			player.message("You are not in the Void Arena.");
-			return;
+			return false;
 		}
 		if (activeMatches.containsKey(player.getUsernameHash())
 			|| activeDmKingChallenges.containsKey(player.getUsernameHash())) {
 			player.message("You cannot leave during an active Death Match.");
-			return;
+			return false;
 		}
 		sendRatingClear(player);
 		restoreHits(player);
 		player.setInstanceId(0);
 		player.teleportFromVoidArena(VoidArenaConfig.EXIT_X, VoidArenaConfig.EXIT_Y, true);
+		player.message("The void folds around you and returns you to the Void Enclave.");
+		return true;
 	}
 
 	private void requestChallenge(Player challenger, Player target) {
@@ -2402,7 +2408,7 @@ public final class VoidArena {
 			if (!canCastAt(player)) {
 				return false;
 			}
-			int damage = CombatFormula.calculateMagicDamage(DM_KING_FIRE_BLAST_POWER, player);
+			int damage = CombatFormula.calculateMagicDamage(DM_KING_FIRE_BLAST_POWER, king, player);
 			world.getServer().getGameEventHandler().add(new ProjectileEvent(world, king, player,
 				damage, DM_KING_FIRE_BLAST_PROJECTILE, false));
 			castsUsed++;

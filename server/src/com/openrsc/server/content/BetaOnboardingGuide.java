@@ -31,7 +31,7 @@ public final class BetaOnboardingGuide {
 		new Destination("Void Dungeon inside - 72,3252", 72, 3252),
 		new Destination("Void Knight chamber - 984,667", 984, 667),
 		new Destination("Void Arena lobby - 600,2914", 600, 2914),
-		new Destination("Void Colossus rift - 113,321", 113, 321)
+		new Destination("Void Arena rift - 113,321", 113, 321)
 	};
 
 	private static final BetaItem[] CARD_KEY_KIT = {
@@ -425,7 +425,7 @@ public final class BetaOnboardingGuide {
 			+ "@whi@Commands: @gre@::coords@whi@, @gre@::rested@whi@, @gre@::titles@whi@, @gre@::codes@whi@.%"
 			+ "@whi@Coords: Lumbridge @gre@120 648@whi@, Vendor @gre@126 649@whi@, Edgeville @gre@217 449@whi@.%"
 			+ "@whi@Coords: Enclave @gre@113 314@whi@, Dungeon @gre@112 296@whi@, Arena @gre@600 2914@whi@.%"
-			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Colossus rift @gre@113 321@whi@.% %"
+			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Arena rift @gre@113 321@whi@.% %"
 			+ "@whi@Items: Subscription card @gre@1602@whi@, Void Key @gre@1601@whi@.%"
 			+ "@whi@Items: Void Scimitar @gre@1593@whi@, Void Bow @gre@1594@whi@, Void Amulet @gre@1595@whi@, Void Mace @gre@1596@whi@.";
 	}

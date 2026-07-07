@@ -27,6 +27,49 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-07 - Ardougne Void Rift moves into the market (VS-071)
+
+Moved the Ardougne Void Rift from the fenced-off edge location `(591,621)` to the market
+cluster at `(552,592)`, and changed its arrival tile from `(588,621)` to `(552,594)` so
+players materialize beside the market rift instead of outside the useful stall area.
+Evidence: `tmp/vs071-ardougne-rift.txt`; `scripts/build.sh` and JSON validation passed,
+and voidbot verified Falador rift -> Ardougne arrival plus the moved Ardougne rift's
+normal travel menu. Files: `VoidRift.java` and `SceneryLocsVoidRift.json`. No packet,
+opcode, DB schema, client version, cache asset, item/NPC definition, or travel-menu
+contract changed; reversibility is restoring the old Ardougne rift/arrival coordinates.
+
+### 2026-07-07 - Achievement-style `::titles` board and first-to records
+
+Redesigned `::titles` as an achievement-board table while keeping the existing options
+menu transport: server rows now embed structured `~vstitle~` metadata with readable
+fallback text, and the custom client renders achievement/title, tier pill, holder/player,
+and claim-age columns with the existing title category tabs and ordinary option-index
+replies. Added first-to server-record titles for swordfish cooked, coal mined, magic
+logs cut, herbs picked up, gems cut, total level 1700, agility 30, and spells cast.
+Their progress uses short player-cache keys and the existing first-unique global
+owner/date cache, with hooks in the authoritative skill, pickup, and spell paths. Files:
+`PlayerTitle.java`, `RegularPlayer.java`, title-related skill hooks, `mudclient.java`,
+and title/player-command docs. No opcode, packet shape, DB schema, client-version gate,
+or legacy achievement packet path changed; reversibility is removing the record enum
+entries/hooks and restoring the previous title catalog row renderer.
+
+### 2026-07-07 - Void Arena rift owns the Enclave portal and has a lobby exit (VS-069)
+
+The Void Enclave rift at `(113,321)` now belongs only to the Void Arena path, so it
+opens the ranked/deathmatch lobby where Sir Charles lives instead of also being claimed
+by the unreleased Void Colossus handler. `VoidColossusArena` no longer blocks that hub
+rift, `SceneryLocsVoidColossusArena.json` no longer duplicates it, and the beta guide
+labels `(113,321)` as the Void Arena rift. The Void Arena lobby now has a Void Rift
+object at `(600,2911)` that prompts `Return to Void Enclave` and calls the existing
+`VoidArena.leave` validation, so active fights still cannot use it as an escape. Evidence:
+`tmp/vs069-void-arena-rift.txt`; post-fix `scripts/build.sh` passed and voidbot verified
+Enclave `(113,321)` -> lobby `(600,2914)` with Sir Charles present, then lobby
+`(600,2911)` -> Enclave `(113,318)`. Files: `VoidRift.java`, `VoidArena.java`,
+`VoidColossusArena.java`, `BetaOnboardingGuide.java`, and the Void Arena/Colossus loc
+JSON. No packet, opcode, DB schema, client version, cache asset, item/NPC definition, or
+combat rule changed; reversibility is restoring the Colossus hub-rift claim/loc and
+removing the lobby exit rift.
+
 ### 2026-07-07 - World-map autowalk cancel/route QA hardening (VS-068)
 
 World-map autowalk now clears the same pending interface/action/path state as a normal
@@ -5428,3 +5471,7 @@ The full-height Voidscape stats detail panel is now desktop-only. Android-profil
 ### 2026-07-06 - Portal public downloads pin to the configured HTTPS origin
 
 Android Chrome surfaced the APK as "File can't be downloaded securely" for a player downloading from `voidscape.gg/#account`. The live endpoint already served `/downloads/android-apk` over HTTPS and redirected plain HTTP, but the portal still let generated download metadata depend on request-origin inference: `/api/public` used relative launcher/APK paths, and the launcher manifest built absolute runtime/cache/self-update URLs from forwarded headers. `PORTAL_PUBLIC_ORIGIN` now wins for `publicOrigin()` and for public download rows, so production emits `https://voidscape.gg/downloads/...` for APK, launcher, client runtime, cache, and self-update URLs even if the loopback proxy omits forwarded-proto headers. The portal README now documents `PORTAL_PUBLIC_ORIGIN` as the canonical public URL for emails and downloads, and `scripts/test-portal-api.sh` has a regression block that rejects available public `http://` download URLs. Evidence: live curl of the production APK/manifest showed HTTPS; a focused local public-mode probe with `PORTAL_PUBLIC_ORIGIN=https://voidscape.gg` returned HTTPS public rows and manifest URLs; `scripts/build.sh` green. Full `scripts/test-portal-api.sh` remains blocked earlier by an unrelated snapshot-title assertion. Web portal only; no game protocol, client, DB schema, cache asset, or gameplay rule changed.
+
+### 2026-07-07 - Protect from Magic is NPC-only magic protection
+
+Restored the server-side level-43 Protect from Magic contract to match the client prayer list, then narrowed its combat effect to NPC/boss-origin magic only. The prayer definition/state now includes id 14, prayer drain and activation validation include it, Protect from Missiles and Protect from Magic remain mutually exclusive, and custom-client overhead bit `8` is sent again for clients that understand the 10117 overhead bitmask. `CombatFormula` now has source-aware magic damage helpers: player-origin spells pass the casting `Player` and keep normal PvP magic damage scaling, while ordinary NPC magic can be blocked by the prayer. The Void Knight boss' direct Fire Blast script also checks Protect from Magic before applying damage. Sir Charles is an explicit exception: both the lobby `DM_KING` id and arena `DM_KING_ARENA` id bypass Protect from Magic, so his Fire Blast remains unblockable. Client prayer text and the Prayer skill guide say "Blocks most NPC magic attacks" so the UI no longer promises PvP spell immunity or Sir Charles immunity. Evidence: `scripts/build.sh` green; call-site inspection shows `SpellHandler`/Void Colossus player spells pass `Player` sources, DM King passes an `Npc` source, `CombatFormula` excludes Sir Charles ids from the protection block, and `VoidKnightBoss.castIfReady` gates Fire Blast damage on `PROTECT_FROM_MAGIC`. Gameplay/prayer rule and display text only; no opcode, packet length, DB schema, cache asset, or XP/drop behavior changed.

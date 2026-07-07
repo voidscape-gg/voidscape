@@ -354,7 +354,11 @@ public final class RegularPlayer implements CommandTrigger {
 		while (true) {
 			PlayerTitle activeTitle = PlayerTitle.active(player);
 			List<String> options = new ArrayList<>();
+			int start = page * TITLE_CATALOG_PAGE_SIZE;
+			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
+			String showing = titles.isEmpty() ? "0-0 of 0" : (start + 1) + "-" + end + " of " + titles.size();
 			options.add(view.label() + " - page " + (page + 1) + "/" + totalPages
+				+ " - showing " + showing
 				+ " - unlocked " + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length);
 
 			int allViewOption = -1;
@@ -375,8 +379,6 @@ public final class RegularPlayer implements CommandTrigger {
 				options.add("View unique titles");
 			}
 
-			int start = page * TITLE_CATALOG_PAGE_SIZE;
-			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
 			int firstTitleOption = options.size();
 			for (int i = start; i < end; i++) {
 				options.add(titleCatalogOption(player, titles.get(i), activeTitle));
@@ -466,7 +468,23 @@ public final class RegularPlayer implements CommandTrigger {
 
 	private String titleCatalogOption(Player player, PlayerTitle title, PlayerTitle activeTitle) {
 		String prefix = title == activeTitle ? "* " : "";
-		return prefix + title.displayName() + " - " + titleCatalogTier(title) + " - " + titleCatalogState(player, title, activeTitle);
+		String fallback = prefix + title.displayName() + " - " + titleCatalogTier(title) + " - " + titleCatalogState(player, title, activeTitle);
+		if (!player.isUsingCustomClient()) {
+			return fallback;
+		}
+		return fallback + " ~vstitle~"
+			+ safeTitleCell(title.tableTitle()) + "|"
+			+ safeTitleCell(title.tableTierLabel()) + "|"
+			+ title.tier().code() + "|"
+			+ (title.recordTitle() ? "1" : "0") + "|"
+			+ safeTitleCell(title.tableHolder(player)) + "|"
+			+ safeTitleCell(title.tableAge(player)) + "|"
+			+ safeTitleCell(titleCatalogStatePlain(player, title, activeTitle)) + "|"
+			+ (title == activeTitle ? "1" : "0");
+	}
+
+	private String safeTitleCell(String value) {
+		return value == null ? "" : value.replace("|", "/").replace("~vstitle~", "");
 	}
 
 	private String titleCatalogTier(PlayerTitle title) {
@@ -483,6 +501,20 @@ public final class RegularPlayer implements CommandTrigger {
 		if (title.unique()) {
 			String owner = PlayerTitle.ownerName(player, title);
 			return owner == null ? "@yel@open@whi@" : "@yel@held by " + owner + "@whi@";
+		}
+		return "locked";
+	}
+
+	private String titleCatalogStatePlain(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "active";
+		}
+		if (title.isUnlocked(player)) {
+			return "unlocked";
+		}
+		if (title.unique()) {
+			String owner = PlayerTitle.ownerName(player, title);
+			return owner == null ? "open" : "held";
 		}
 		return "locked";
 	}

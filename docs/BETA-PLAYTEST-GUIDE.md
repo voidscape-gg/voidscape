@@ -130,8 +130,8 @@ These do not require admin rank.
 | `::titles` | Open the title catalogue UI. |
 | `::titles unlocked` | Show unlocked titles. |
 | `::titles unique` | Show unique one-owner titles and owners. |
-| `::titles rarest` | Show the rarest title page. |
-| `::titles count` | Show unlocked count out of the 100-title catalog. |
+| `::titles renown` / `::titles feat` | Show tier-filtered title pages. |
+| `::titles count` | Show unlocked count out of the title catalog. |
 | `::title <id or name>` | Equip an unlocked title. |
 | `::title clear` | Remove active title. |
 | `::lootbeam list` | Show current rare-drop beam settings. |
@@ -275,7 +275,7 @@ Ask each tester to try a few of these instead of everyone doing the same route.
 | Starter kits | Confirm the chosen path gives the right gear once and does not repeat on relog. |
 | Subscription cards | Buy from the Lumbridge vendor, redeem, and check the wrench/profile XP-rate display. |
 | Auction House UI | Use the Edgeville auctioneer or `::quickauction`; browse categories, inspect item cards, seed fixture data if needed. |
-| Titles | Open `::titles`, page through categories, click a title for requirements, equip one, and confirm overhead name stays one line. |
+| Titles | Open `::titles`, page through categories, click a title or first-to record row for requirements/holder details, equip one, and confirm overhead name stays one line. |
 | Rare drop beam | Toggle client loot beams, add/remove items with `::lootbeam`, and spawn/drop beam-worthy items for visuals. |
 | FarmSim projections | Use `::farmkit`, kill a few NPCs in one area, run `::farmsim`, screenshot the item-sprite popup, and report whether the projected hour feels fair. |
 | Appearance colors | Create or change appearance; verify only Voidscape hair colors appear, classic clothing colors remain, muted Voidscape clothing colors are appended, and grounded skin tones render cleanly. |

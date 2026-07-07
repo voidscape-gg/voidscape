@@ -17,23 +17,29 @@ public class VoidRift implements OpLocTrigger {
 	private static final int CITY_RIFT_Y = 636;
 	private static final int VOID_ARENA_RIFT_X = 113;
 	private static final int VOID_ARENA_RIFT_Y = 321;
+	private static final int VOID_ARENA_EXIT_RIFT_X = 600;
+	private static final int VOID_ARENA_EXIT_RIFT_Y = 2911;
 	private static final RiftDestination[] DESTINATIONS = new RiftDestination[] {
 		new RiftDestination("Void Enclave", 116, 312, 113, 314),
 		new RiftDestination("Edgeville", 192, 443, 194, 443),
 		new RiftDestination("Varrock", 123, 502, 120, 504),
 		new RiftDestination("Falador", 316, 552, 312, 552),
-		new RiftDestination("Ardougne", 591, 621, 588, 621)
+		new RiftDestination("Ardougne", 552, 592, 552, 594)
 	};
 
 	@Override
 	public boolean blockOpLoc(Player player, GameObject obj, String command) {
-		return isVoidArenaRift(obj) || isVoidRift(obj);
+		return isVoidArenaEntranceRift(obj) || isVoidArenaExitRift(obj) || isVoidRift(obj);
 	}
 
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
-		if (isVoidArenaRift(obj)) {
+		if (isVoidArenaEntranceRift(obj)) {
 			enterVoidArena(player);
+			return;
+		}
+		if (isVoidArenaExitRift(obj)) {
+			exitVoidArena(player);
 			return;
 		}
 		if (!isVoidRift(obj)) return;
@@ -89,16 +95,32 @@ public class VoidRift implements OpLocTrigger {
 		player.getWorld().getVoidArena().enterFromVoidEnclaveRift(player);
 	}
 
+	private void exitVoidArena(Player player) {
+		player.message("The Void Rift opens back toward the Void Enclave.");
+		int option = multi(player, "Return to Void Enclave", "Stay here");
+		if (option != 0) {
+			player.message("You step away from the rift.");
+			return;
+		}
+		player.getWorld().getVoidArena().leaveThroughVoidArenaRift(player);
+	}
+
 	private boolean isVoidRift(GameObject obj) {
 		if (obj.getID() != VOID_RIFT_ID) return false;
 		if (obj.getX() == CITY_RIFT_X && obj.getY() == CITY_RIFT_Y) return true;
 		return destinationForRift(obj) != null;
 	}
 
-	private boolean isVoidArenaRift(GameObject obj) {
+	private boolean isVoidArenaEntranceRift(GameObject obj) {
 		return obj.getID() == VOID_RIFT_ID
 			&& obj.getX() == VOID_ARENA_RIFT_X
 			&& obj.getY() == VOID_ARENA_RIFT_Y;
+	}
+
+	private boolean isVoidArenaExitRift(GameObject obj) {
+		return obj.getID() == VOID_RIFT_ID
+			&& obj.getX() == VOID_ARENA_EXIT_RIFT_X
+			&& obj.getY() == VOID_ARENA_EXIT_RIFT_Y;
 	}
 
 	private RiftDestination destinationForRift(GameObject obj) {

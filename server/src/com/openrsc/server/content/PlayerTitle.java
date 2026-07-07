@@ -2,6 +2,7 @@ package com.openrsc.server.content;
 
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -72,6 +73,14 @@ public enum PlayerTitle {
 	WARLORD_WASTES("warlord_wastes", "Warlord of the Wastes", "Most wilderness kills this month, minimum 10.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
 	VOID_ARENA_CHAMPION("void_arena_champion", "the Void Arena Champion", "#1 in the current Void Arena ranked season.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
 	MAGNATE("magnate", "the Magnate", "Top auction-house trade volume this season.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
+	FIRST_SWORDFISH("first_swfish", "the Swordfish Sovereign", "First 50,000 Swordfish Cooked.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_swfish"),
+	FIRST_COAL("first_coal25k", "the Coal Pioneer", "First 25,000 Coal Mined.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 25000, "title_coal_mined"),
+	FIRST_MAGIC_LOGS("first_mlogs", "the Elder Feller", "First 50,000 Magic Logs Cut.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_mlogs"),
+	FIRST_HERBS("first_herbs", "the Herb Harvester", "First 25,000 Herbs Picked Up.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 25000, "title_herbs"),
+	FIRST_GEMS("first_gems", "the Gemsetter", "First 10,000 Gems Cut.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 10000, "title_gems"),
+	FIRST_TOTAL_1700("first_t1700", "the Seventeen-Hundred", "First Total Level 1700.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.TOTAL_LEVEL, 1700),
+	FIRST_AGILITY_30("first_agil30", "the First-Footed", "First 30 Agility.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.SKILL_LEVEL, 30, Skill.AGILITY),
+	FIRST_SPELLS("first_spells", "the Spellstorm", "First 50,000 Spells Cast.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_spells"),
 	RELIC_KEEPER("relic_keeper", "the Relic-Keeper", "Hold the one-of-one Voidscape relic. Staff-granted until the relic exists.", Tier.UNIQUE, UniqueKind.ITEM_BOUND, RequirementType.MANUAL);
 
 	public static final String ACTIVE_TITLE_CACHE = "player_title_active";
@@ -84,6 +93,11 @@ public enum PlayerTitle {
 	public static final String COUNTER_HIGH_ALCHS = "title_high_alchs";
 	public static final String COUNTER_GNOMEBALL_GOALS = "title_gnomeball_goals";
 	public static final String COUNTER_EDGEVILLE_PKS = "title_edgeville_pks";
+	public static final String COUNTER_SWORDFISH_COOKED = "title_swfish";
+	public static final String COUNTER_MAGIC_LOGS = "title_mlogs";
+	public static final String COUNTER_HERBS_PICKED_UP = "title_herbs";
+	public static final String COUNTER_GEMS_CUT = "title_gems";
+	public static final String COUNTER_SPELLS_CAST = "title_spells";
 
 	private static final String UNLOCK_CACHE_PREFIX = "pt_u_";
 	private static final String LEGACY_UNLOCK_CACHE_PREFIX = "player_title_unlocked_";
@@ -133,6 +147,14 @@ public enum PlayerTitle {
 
 	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold) {
 		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, null, null, null);
+	}
+
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold, Skill skill) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, skill, null, null);
+	}
+
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold, String counterKey) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, null, null, counterKey);
 	}
 
 	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType,
@@ -217,6 +239,44 @@ public enum PlayerTitle {
 			default:
 				return unlockHint;
 		}
+	}
+
+	public boolean recordTitle() {
+		return firstUnique() && id.startsWith("first_");
+	}
+
+	public String tableTitle() {
+		if (recordTitle()) {
+			return trimTrailingPeriod(unlockHint);
+		}
+		return displayName;
+	}
+
+	public String tableTierLabel() {
+		return recordTitle() ? "Legend" : titleCase(tierLabel());
+	}
+
+	public String tableHolder(Player player) {
+		if (!unique()) {
+			return isUnlocked(player) ? player.getUsername() : "-";
+		}
+		String owner = ownerName(player, this);
+		return owner == null ? "Open" : owner;
+	}
+
+	public String tableAge(Player player) {
+		if (!firstUnique()) {
+			return contested() ? "season" : "-";
+		}
+		long epochSeconds = firstClaimEpochSeconds(player, this);
+		if (epochSeconds <= 0) {
+			return "open";
+		}
+		long days = Math.max(0L, (System.currentTimeMillis() / 1000L - epochSeconds) / 86400L);
+		if (days == 0) {
+			return "today";
+		}
+		return days + "d ago";
 	}
 
 	public String requirementProgress(Player player) {
@@ -441,6 +501,32 @@ public enum PlayerTitle {
 		return value;
 	}
 
+	public static void recordSwordfishCooked(Player player, int itemId) {
+		if (itemId == ItemId.SWORDFISH.id()) {
+			incrementCounter(player, COUNTER_SWORDFISH_COOKED);
+		}
+	}
+
+	public static void recordMagicLogsCut(Player player, int itemId) {
+		if (itemId == ItemId.MAGIC_LOGS.id()) {
+			incrementCounter(player, COUNTER_MAGIC_LOGS);
+		}
+	}
+
+	public static void recordGemCut(Player player) {
+		incrementCounter(player, COUNTER_GEMS_CUT);
+	}
+
+	public static void recordSpellCast(Player player) {
+		incrementCounter(player, COUNTER_SPELLS_CAST);
+	}
+
+	public static void recordHerbPickup(Player player, int itemId, int amount) {
+		if (amount > 0 && isHerb(itemId)) {
+			incrementCounter(player, COUNTER_HERBS_PICKED_UP, amount);
+		}
+	}
+
 	public static void resetCounter(Player player, String counterKey) {
 		if (player != null && counterKey != null && !counterKey.isEmpty()) {
 			player.getCache().set(counterKey, 0);
@@ -594,11 +680,19 @@ public enum PlayerTitle {
 		if (player == null || title == null || !title.firstUnique()) {
 			return "";
 		}
+		long epochSeconds = firstClaimEpochSeconds(player, title);
+		return epochSeconds <= 0 ? "" : new SimpleDateFormat("yyyy-MM-dd").format(new Date(epochSeconds * 1000L));
+	}
+
+	private static long firstClaimEpochSeconds(Player player, PlayerTitle title) {
+		if (player == null || title == null || !title.firstUnique()) {
+			return 0L;
+		}
 		long epochSeconds = loadGlobalLong(player, FIRST_DATE_CACHE_PREFIX + title.id());
 		if (epochSeconds <= 0 && player.getCache().hasKey(FIRST_DATE_CACHE_PREFIX + title.id())) {
 			epochSeconds = cacheLong(player, FIRST_DATE_CACHE_PREFIX + title.id());
 		}
-		return epochSeconds <= 0 ? "" : new SimpleDateFormat("yyyy-MM-dd").format(new Date(epochSeconds * 1000L));
+		return epochSeconds;
 	}
 
 	public static int currentContestedScore(Player player, PlayerTitle title) {
@@ -1019,6 +1113,31 @@ public enum PlayerTitle {
 		return value;
 	}
 
+	private static String trimTrailingPeriod(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.endsWith(".") ? value.substring(0, value.length() - 1) : value;
+	}
+
+	private static String titleCase(String value) {
+		if (value == null || value.isEmpty()) {
+			return "";
+		}
+		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+	}
+
+	private static boolean isHerb(int itemId) {
+		return itemId == ItemId.UNIDENTIFIED_GUAM_LEAF.id()
+			|| itemId == ItemId.UNIDENTIFIED_MARRENTILL.id()
+			|| itemId == ItemId.UNIDENTIFIED_TARROMIN.id()
+			|| itemId == ItemId.UNIDENTIFIED_HARRALANDER.id()
+			|| itemId == ItemId.GUAM_LEAF.id()
+			|| itemId == ItemId.MARRENTILL.id()
+			|| itemId == ItemId.TARROMIN.id()
+			|| itemId == ItemId.HARRALANDER.id();
+	}
+
 	public enum Tier {
 		RENOWN(0, "renown", "@whi@"),
 		FEAT(1, "feat", "@mag@"),
@@ -1032,6 +1151,10 @@ public enum PlayerTitle {
 			this.code = code;
 			this.label = label;
 			this.chatColor = chatColor;
+		}
+
+		public int code() {
+			return code;
 		}
 	}
 

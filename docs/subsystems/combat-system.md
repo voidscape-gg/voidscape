@@ -106,7 +106,13 @@ Defensive (Defence):
 - Rock Skin (×1.10)
 - Steel Skin (×1.15)
 
-Utility: Rapid Restore, Rapid Heal, Protect Items, Paralyze Monster, Protect from Missiles.
+Utility:
+- Rapid Restore
+- Rapid Heal
+- Protect Items
+- Paralyze Monster
+- Protect from Missiles
+- Protect from Magic: blocks most NPC/boss-origin magic damage against players only. Player-cast PvP spells still use normal magic damage scaling, Void Knight boss Fire Blast is blockable, and Sir Charles' Void Arena magic is deliberately unblockable.
 
 Drain rate: `server/src/com/openrsc/server/event/rsc/impl/PrayerDrainEvent.java`.
 
