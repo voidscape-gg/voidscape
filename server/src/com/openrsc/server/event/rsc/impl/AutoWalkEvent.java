@@ -36,6 +36,8 @@ public class AutoWalkEvent extends GameTickEvent {
 
 	/** How many tiles to feed the WalkingQueue per refill. Stays comfortably below {@code Path.MAXIMUM_SIZE}. */
 	private static final int CHUNK_SIZE = 40;
+	private static final int REASON_NO_PATH = 1;
+	private static final int REASON_BUSY = 6;
 
 	/**
 	 * Recovery cap when re-pathfinding mid-route.
@@ -74,7 +76,7 @@ public class AutoWalkEvent extends GameTickEvent {
 			return;
 		}
 		if (player.isBusy()) {
-			player.cancelAutoWalk();
+			fail(player, REASON_BUSY);
 			return;
 		}
 
@@ -90,7 +92,7 @@ public class AutoWalkEvent extends GameTickEvent {
 				return;
 			}
 			if (!repathFromCurrent(player) || remaining.isEmpty()) {
-				player.cancelAutoWalk();
+				fail(player, REASON_NO_PATH);
 				return;
 			}
 		}
@@ -110,7 +112,7 @@ public class AutoWalkEvent extends GameTickEvent {
 				return; // let the teleport settle; resume walking next tick
 			}
 			if (!repathFromCurrent(player) || remaining.isEmpty()) {
-				player.cancelAutoWalk();
+				fail(player, REASON_NO_PATH);
 				return;
 			}
 		}
@@ -184,5 +186,10 @@ public class AutoWalkEvent extends GameTickEvent {
 
 	private boolean isAtGoal(final Player player) {
 		return player.getX() == goal.getX() && player.getY() == goal.getY();
+	}
+
+	private void fail(final Player player, final int reason) {
+		ActionSender.sendWorldWalkRoute(player, false, reason, java.util.Collections.emptyList());
+		player.cancelAutoWalk();
 	}
 }

@@ -120,6 +120,7 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `combat_exp_rate` | `10` | Combat XP multiplier |
 | `skilling_exp_rate` | `1.5` | Non-combat skill XP multiplier |
 | `wilderness_boost` | `0` | Additive exp bonus in wilderness |
+| `wilderness_npc_blocking` | `0` | Wilderness-only override for `npc_blocking`; `0` prevents aggressive NPC body-blocking while preserving normal-world collision |
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |

@@ -251,6 +251,7 @@ def bake_tsv() -> None:
     custom_labels = [
         label_row("Void\\nIsland", 24, 16, 10, 1),
         label_row("Tutorial\\nIsle", 40, 15, 10, 1),
+        label_row("Void\\nDungeon", 112, 292, 10, 1),
         label_row("Void\\nEnclave", 113, 315, 10, 1),
         label_row("PK Catching\\nSimulator", 409, 72, 10, 1),
         label_row("Void\\nAuctioneer", 217, 460, 8, 0),
@@ -266,6 +267,7 @@ def bake_tsv() -> None:
         point_row("combat-practice", 214, 437),
         point_row("bank", 105, 316),           # Enclave bank shrine
         point_row("altar", 112, 305),          # Enclave altar
+        point_row("dungeon", 112, 296),        # Void Dungeon rift
         point_row("combat-practice", 409, 72),
     ]
     points = strip_custom_block(POINTS)

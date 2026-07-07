@@ -127,6 +127,7 @@ class GameState:
         self.npc_seen = {}          # server_index -> {id,x,y,t}; smooths decode flicker
         self.ground_items = []      # [{id,x,y}]
         self.messages = []          # [{seq,t,text,type}]
+        self.world_walk_route = None  # {ok,reason,count,route}
         self.events = []            # [{seq,t,kind,...}]
         self._seq = 0
 
@@ -327,6 +328,8 @@ class Daemon:
                 st.shop_open = False
         elif name == "GROUNDITEM_HANDLER":
             self._decode_grounditems(p)
+        elif name == "WORLD_WALK_ROUTE":
+            self._decode_world_walk_route(p)
         elif name == "FATIGUE":
             if len(p) >= 2:
                 with st.lock:
@@ -654,6 +657,30 @@ class Daemon:
             count = len(ground)
         self.st.event("grounditems", count=count)
 
+    def _decode_world_walk_route(self, p):
+        if len(p) < 4:
+            self.st.event("decode_error", opcode=100, error="short world-walk route")
+            return
+        ok = p[0] != 0
+        reason = p[1]
+        count = int.from_bytes(p[2:4], "big")
+        route = []
+        off = 4
+        for _ in range(count):
+            if off + 4 > len(p):
+                self.st.event("decode_error", opcode=100, error="truncated world-walk route")
+                return
+            route.append({"x": int.from_bytes(p[off:off + 2], "big"),
+                          "y": int.from_bytes(p[off + 2:off + 4], "big")})
+            off += 4
+        data = {"ok": ok, "reason": reason, "count": count, "route": route}
+        with self.st.lock:
+            self.st.world_walk_route = data
+        self.st.event("world_walk_route", ok=ok, reason=reason, count=count,
+                      first=route[0] if route else None,
+                      last=route[-1] if route else None,
+                      route=route)
+
     # ---------------- command dispatch ----------------
     def _slot_amount(self, slot):
         with self.st.lock:
@@ -936,6 +963,7 @@ class Daemon:
                            "input_open": st.input_open, "input_prompt": st.input_prompt},
                 "npcs": list(st.npcs),
                 "ground_items": list(st.ground_items),
+                "world_walk_route": st.world_walk_route,
                 "messages": st.messages[-30:],
             }
         if section in (None, "all"):
@@ -943,7 +971,9 @@ class Daemon:
         aliases = {"position": "position", "pos": "position", "inventory": "inventory",
                    "inv": "inventory", "stats": "skills", "skills": "skills",
                    "npcs": "npcs", "ground-items": "ground_items", "bank": "bank",
-                   "dialog": "dialog", "messages": "messages", "shop": "shop"}
+                   "dialog": "dialog", "messages": "messages", "shop": "shop",
+                   "world-walk-route": "world_walk_route",
+                   "world_walk_route": "world_walk_route"}
         key = aliases.get(section, section)
         return {key: full.get(key)}
 

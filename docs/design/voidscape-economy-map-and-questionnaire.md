@@ -104,7 +104,7 @@ Current implementation:
   - Surface rift at `(112,296)`.
   - Entry fee: `100,000` coins.
   - Arrival: `(72,3252)`.
-  - Exit rift: `(72,3250)`.
+  - Exit rifts: `(72,3250)`, `(68,3204)`, `(68,2308)`, and `(78,2251)`.
   - Return: `(112,297)`.
 - Void Dungeon NPCs:
   - `853` Void Knight.

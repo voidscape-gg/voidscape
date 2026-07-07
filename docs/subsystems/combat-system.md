@@ -173,6 +173,8 @@ XP distribution:
 - `WildernessLocation` objects with bounds and `WildState` (`MEMBERS_WILD`, `F2P_WILD`).
 - Helpers: `inWilderness()`, `inFreeWild()`, `wildernessLevel()`.
 - Multi-combat check: combine `getLocation().inWilderness()` with aggression flags.
+- NPC movement blocking uses global `npc_blocking` unless a Wilderness tile is being checked, where `wilderness_npc_blocking` can override it. Voidscape launch configs set the Wilderness override to `0`, so aggressive NPCs still aggro and fight there but do not body-block player movement.
+- NPC auto-aggro also respects explicit retreat immunity: when a retreat stamps a player's `ranAwayTimer`, aggressive NPCs wait for `Player.canBeReattacked()` before auto-aggro can pick that player again. Ordinary combat completion still uses the normal combat-timer path so AFK training can keep flowing. Scripted force-chase targets bypass this gate.
 
 **Retreating**:
 - NPC behavior states `State.RETREAT` and `State.TACKLE_RETREAT` in `server/src/com/openrsc/server/model/entity/npc/NpcBehavior.java`.

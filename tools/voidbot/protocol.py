@@ -1,4 +1,4 @@
-"""voidbot wire protocol for the voidscape custom RSC client (client_version 10125).
+"""voidbot wire protocol for the voidscape custom RSC client (client_version 10126).
 
 Empirically validated 2026-06-10 against a live capture (see docs/bot-api.md and
 the project memory voidbot-protocol-spec). The custom client is the server's
@@ -79,6 +79,7 @@ IN = {
     103: "VOID_SCOUT_STATE",
     114: "FATIGUE", 117: "FALL_ASLEEP", 120: "RECEIVE_PM",
     123: "REMOVE_INVENTORY_SLOT", 128: "CONCLUDE_TRADE", 131: "SEND_MESSAGE",
+    100: "WORLD_WALK_ROUTE",
     137: "EXIT_SHOP", 149: "UPDATE_FRIEND", 153: "EQUIP_STATS", 156: "SET_STATS",
     159: "UPDATE_STAT", 165: "CLOSE_CONNECTION", 172: "CONFIRM_DUEL",
     176: "DIALOGUE_DUEL", 182: "WELCOME", 183: "DENY_LOGOUT",
@@ -99,7 +100,7 @@ LOGIN_TRAILER = bytes.fromhex(
 # Login client version. Matches the real client (Client_Base/src/orsc/Config.java
 # CLIENT_VERSION); env-overridable so QA can probe server version gates (e.g. paths
 # gated to specific client versions).
-CLIENT_VERSION = int(os.environ.get("VOIDBOT_CLIENT_VERSION", "10125"))
+CLIENT_VERSION = int(os.environ.get("VOIDBOT_CLIENT_VERSION", "10126"))
 
 
 class BitWriter:

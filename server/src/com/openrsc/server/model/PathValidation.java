@@ -698,7 +698,7 @@ public class PathValidation {
 		 * NPC blocking config controlled
 		 */
 		if (npc != null && !npc.killed && !npc.isRemoved()) {
-			final int npcBlocking = mob.getConfig().NPC_BLOCKING;
+			final int npcBlocking = effectiveNpcBlocking(mob, x, y);
 			if (npcBlocking == 0) { // No NPC blocks
 				return false;
 			} else if (npcBlocking == 1) { // 2 * combat level + 1 blocks AND aggressive
@@ -719,6 +719,16 @@ public class PathValidation {
 			return player != null;
 		}
 		return false;
+	}
+
+	private static int effectiveNpcBlocking(Mob mob, int x, int y) {
+		if (Point.inWilderness(x, y)) {
+			final int wildernessNpcBlocking = mob.getConfig().WILDERNESS_NPC_BLOCKING;
+			if (wildernessNpcBlocking >= 0) {
+				return wildernessNpcBlocking;
+			}
+		}
+		return mob.getConfig().NPC_BLOCKING;
 	}
 
 }

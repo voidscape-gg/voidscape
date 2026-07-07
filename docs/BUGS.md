@@ -26,9 +26,8 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** VS-064 (skilling-rate report needs a concrete symptom) — Android
-  APK resume/panel/backdrop fixes are smoke-verified; pinch zoom is code-fixed but
-  still needs physical touchscreen QA because local ADB did not emit pinch telemetry.
+- **Active bug:** none — VS-068 world-map autowalk hardening is verified locally; next
+  loop should resume Ryan's redirect / remaining Intake priority.
 - **Ryan's redirect (2026-07-03, mid-loop):** work **from VS-038 down**, impact-first
   — skip the "meh" tail. In scope, in order: VS-038 (Death Match forfeit), then
   player-facing Intake items (Undead Siege logout feedback, bank-add-while-open stale
@@ -121,8 +120,6 @@ _(Ryan: paste anything from "chat sometimes overlaps" to "X quest broken";
 half-remembered is fine, triage will chase it down.)_
 
 **Wave-1 oddity tail (un-triaged; each cites its report):**
-- goto to unreachable tile stalls silently mid-route; reissue no-ops while walk-step
-  crosses fine — no failure feedback for WORLD_WALK (tmp/qa/S-A §2)
 - ~~`item-command` acts on the LAST stack~~ → **wave-2 RESOLVED: was a decoder artifact**
   (now honors the requested slot; tmp/qa/S-C2). Removed.
 - Equipping a non-wieldable item silently ignored — wave-2: REAL but EXPECTED (authentic
@@ -649,6 +646,75 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Log: 2026-07-06 triaged from Ryan emulator screenshot; fixing with a native-Android
   portrait scene backdrop rather than changing projection/clipping math. 2026-07-06
   fixed and smoke-verified.
+
+### VS-067 — Aggressive NPCs can immediately re-aggro after player retreat
+- Status: verified · Severity: P2 · Area: server-combat / NPC aggro
+- Evidence: Ryan reported 2026-07-07 that Void Dungeon NPCs instantly attack again
+  after retreating from combat, despite the expected retreat cooldown. Code evidence:
+  `WalkRequest`/`AutoWalkEvent` stamp `Player.setRanAwayTimer()` when a player legally
+  retreats from NPC combat, but shared `NpcBehavior.canAggro()` only checks
+  `combatTimer` and never consults `Player.canBeReattacked()`. The local upstream
+  snapshot at `fc74d38e2e` has the same omission in `NpcBehavior`, so this is inherited
+  OpenRSC behavior exposed by Voidscape's dense Wilderness/Void Dungeon packs rather
+  than a Void NPC definition-only defect.
+- Repro: enter combat with any aggressive NPC, legally retreat after the three-round
+  gate, remain inside another aggressive NPC's aggro radius, and observe NPC auto-aggro
+  can resume before the player's `pvp_reattack_timer` window is respected. Ordinary
+  combat completion should remain fast for AFK training.
+- Verify: `scripts/build.sh`; with voidbot, retreat from an aggressive NPC and confirm
+  no NPC auto-aggro starts until `ranAwayTimer + pvp_reattack_timer` has elapsed, while
+  killing/finishing an NPC still allows normal aggressive NPC training flow.
+- Log: 2026-07-07 triaged from Ryan report; agents assigned current-code, upstream, and
+  scope checks. Fix plan: make shared NPC auto-aggro respect the target player's existing
+  retreat reattack immunity unless the NPC is an explicit force-chase target. 2026-07-07
+  Ryan clarified ordinary combat completion should stay quickly eligible for AFK XP flow;
+  narrowed fix to `Player.canBeReattacked()`/`ranAwayTimer`, not a blanket post-kill
+  cooldown. 2026-07-07 code updated and `scripts/build.sh` passed; Ryan live-tested the
+  rebuilt server/client in the Void Dungeon and confirmed the retreat behavior works great.
+
+### VS-068 — World-map autowalk could OK-then-stall and lacked route-level QA
+- Status: verified · Severity: P2 · Area: server-pathfinding / voidbot QA
+- Evidence: Ryan reported the world autowalker "sometimes works, sometimes doesnt",
+  including random stops and route-efficiency concerns. Existing Intake had "goto to
+  unreachable tile stalls silently mid-route; reissue no-ops while walk-step crosses
+  fine". Code archaeology found two concrete risks: `WORLD_WALK_REQUEST` did not clear
+  an existing normal walking queue or interface/action state like `WalkRequest` does,
+  so an OK route could wait behind stale movement; and `AutoWalkEvent` mid-route
+  cancellation paths cleared the event without sending a failure route ack. QA gap:
+  voidbot sent real `WORLD_WALK_REQUEST` packets but did not decode
+  `SEND_WORLD_WALK_ROUTE` opcode `100`, so automated tests could only infer route
+  behavior from movement.
+- Repro: pre-fix code evidence plus live probes. `tmp/autowalk/routes/short-route.json`
+  proved route ack decoding after tooling was added; `tmp/autowalk/routes/unreachable-0-0-02-route.json`
+  proved unreachable targets now return `ok:false reason=1` and do not move; the new
+  smoke's stale-walk case issues `walk-step 145 648` then immediately `goto 116 648`
+  and requires arrival within 15 seconds, catching the old delayed-queue behavior.
+- Verify: `scripts/build.sh`; `python3 -m py_compile tools/voidbot/protocol.py
+  tools/voidbot/voidbotd.py tools/voidbot/cli.py`; `VOIDBOT_CTRL_PORT=18931
+  OUT=tmp/world-autowalk-smoke scripts/smoke-world-autowalk.sh` passed 8/8; and
+  `VOIDBOT_CTRL_PORT=18933 VOIDBOT_USER=qabot04 OUT=tmp/world-autowalk-smoke-medium
+  WORLD_AUTOWALK_LONG=1 scripts/smoke-world-autowalk.sh` passed 10/10 with a
+  79-tile medium route. Follow-up verify after vendoring the route graph:
+  `VOIDBOT_CTRL_PORT=18936 OUT=tmp/world-autowalk-routes
+  scripts/check-world-autowalk-routes.sh` passed 8/8; it caught and then verified the
+  fix for a Lumbridge -> Draynor repeated-tile loop, with the final route at 182 tiles
+  / 1.309x Chebyshev lower bound.
+- Fix: `WorldWalkRequest` now cancels prior autowalk, resets action/interface state,
+  and clears the old walking queue before installing a fresh `AutoWalkEvent`. Running
+  autowalks send `SEND_WORLD_WALK_ROUTE` failure acks for busy/no-path cancels before
+  clearing themselves. voidbot now exposes `state world-walk-route` and
+  `world_walk_route` events, `scripts/smoke-world-autowalk.sh` is the reusable
+  walking regression harness, and `scripts/check-world-autowalk-routes.sh` is the
+  route-quality harness. `/Users/s/RSCRevolution2/waypoints.rev` was vendored to
+  `server/conf/server/data/waypoints.rev` so clean checkouts load the efficient-route
+  guide; `WorldPathfinder` prunes repeated-tile cycles after waypoint stitching.
+- Log: 2026-07-07 triaged from Ryan report and existing Intake; agents split code,
+  waypoint-data, and QA-matrix archaeology. Local server confirmed `WaypointGraph`
+  loads `/Users/s/RSCRevolution2/waypoints.rev` (16,038 nodes, 114,072 directed edges)
+  when present; follow-up vendored the same graph into the repo and boot confirmed
+  `Loaded waypoint graph from conf/server/data/waypoints.rev`. 2026-07-07 fixed, built,
+  route-quality-verified, and smoke-verified; medium route count 79 and arrival passed
+  without idle/stall.
 
 
 

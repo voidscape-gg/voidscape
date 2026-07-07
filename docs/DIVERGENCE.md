@@ -27,6 +27,44 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-07 - World-map autowalk cancel/route QA hardening (VS-068)
+
+World-map autowalk now clears the same pending interface/action/path state as a normal
+walk packet before installing `AutoWalkEvent`, so a new map `goto` replaces stale
+normal walking immediately instead of waiting for the old queue to drain. Mid-route
+autowalk cancellations caused by a newly busy player or an unrecoverable repath now
+send a `SEND_WORLD_WALK_ROUTE` failure ack before clearing the event, giving clients and
+voidbot observable feedback instead of a silent stop. voidbot decodes the existing
+route ack opcode `100` into `state world-walk-route` and `world_walk_route` events, and
+`scripts/smoke-world-autowalk.sh` covers route ack, unreachable rejection, stale-walk
+replacement, and an optional medium route. The RSCRevolution waypoint graph is now
+vendored at `server/conf/server/data/waypoints.rev` (16,038 nodes / 57,036 undirected
+edges; SHA-256 `9376d3455b197c0b5151d6d78013026aff16cade7bf88c26e1985c5d4f8bfcd1`)
+so clean checkouts get the efficient-route guide instead of relying on
+`~/RSCRevolution2/waypoints.rev`; boot logs confirmed the server loads the repo copy.
+`WorldPathfinder` also prunes repeated-tile cycles after waypoint stitching, fixing a
+Lumbridge -> Draynor loop caught by the new `scripts/check-world-autowalk-routes.sh`
+route-quality matrix. Evidence: `tmp/world-autowalk-routes` (8/8),
+`tmp/world-autowalk-smoke` (8/8), `tmp/world-autowalk-smoke-medium` (10/10), plus
+`scripts/build.sh`, `bash -n` for the route/smoke scripts, and `git diff --check`.
+Files: `WorldWalkRequest.java`, `AutoWalkEvent.java`, `WorldPathfinder.java`,
+`server/conf/server/data/waypoints.rev`, `tools/voidbot`, `docs/bot-api.md`, route/smoke
+scripts, and `docs/BUGS.md`. No opcode, packet shape, DB schema, client version,
+NPC/item definition, or route graph format changed; reversibility is removing the
+reset/failure-ack calls, the loop-prune pass, the vendored graph, and the QA scripts.
+
+### 2026-07-07 - NPC auto-aggro respects retreat reattack immunity
+
+Fixed VS-067: aggressive NPC auto-aggro now honors explicit retreat immunity. `NpcBehavior.canAggro()` still allows normal combat completion to flow through the existing combat-timer path for AFK training, but when a legal retreat or PvP escape stamps a player's `ranAwayTimer`, NPC auto-aggro waits for `Player.canBeReattacked()` before picking that player again; explicit force-chase scripted NPCs still bypass the gate. The local upstream snapshot at `fc74d38e2e` has the same omission, so this is an inherited OpenRSC behavior tightened for Voidscape's denser Wilderness/Void Dungeon packs. Files: `NpcBehavior.java`, `docs/subsystems/combat-system.md`, and `docs/BUGS.md`. No packet/opcode, DB schema, cache asset, client version, NPC definition, spawn loc, or drop table changed; reversibility is restoring the old combat-timer-only `canAggro()` predicate.
+
+### 2026-07-07 - Wilderness NPC body-blocking disabled
+
+Added a Wilderness-specific NPC movement-blocking override so Voidscape can keep authentic `npc_blocking: 2` in the normal world while treating NPC blocking as `0` on Wilderness tiles. Aggressive Wilderness NPCs still aggro and fight, but players can path through them instead of being trapped by piles in dense AFK camps and the Void Dungeon. Files: `ServerConfiguration`, `PathValidation`, server preset configs, `docs/CONFIG-MATRIX.md`, `docs/SERVER-PRESETS.md`, and `docs/subsystems/combat-system.md`. No packet/opcode, DB schema, cache asset, client version, NPC definition, spawn loc, or drop-table change; reversibility is setting `wilderness_npc_blocking` back to `2` or omitting the key to inherit `npc_blocking`.
+
+### 2026-07-07 - Two-floor Void Dungeon room redesign and map entrance key
+
+Redesigned the generated Void Dungeon from the compact single-floor cave into a two-floor room layout with NPCs grouped by kind: entry-floor spider, wolf, and unicorn rooms; upper-gallery ogre, giant, knight, wizard, and Void Demon rooms. The generator now validates that each floor is a connected walkable area and that NPC starts, roam rectangles, stairs, and exit rifts stay inside the generated mask, emits 12 rooms / 10 corridors / 53 NPC spawns, and adds strategic exit rifts at the entrance, lower checkpoint, upper landing, and boss room. `VoidDungeon.java` handles all dungeon exit rifts and the exact ladder pair so the floor transition does not fall through to generic floor-wrap ladder math. The surface world map now keys the Void Dungeon entrance with a searchable label and dungeon POI at `(112,296)`. Files: `scripts/gen-void-dungeon.py`, generated Void Dungeon loc JSON/floor mask, `scripts/patch-void-enclave-landscape.py` outputs for `Custom_Landscape.orsc`, world-map overlay assets, `VoidDungeon.java`, client/server version metadata, voidbot version docs, and cache docs. `CLIENT_VERSION`/`client_version` move to `10126` because the landscape/world-map cache is client-visible; no opcode, packet shape, DB schema, NPC/item definitions, drop tables, or release config gate changed, and `want_void_dungeon` remains false until intentionally launched.
+
 ### 2026-07-07 - Wilderness NPC respawn targets for AFK camps
 
 Voidscape now applies a Wilderness-only respawn target map when the boot-time `wilderness_spawn_multiplier` feature is active. Attackable NPCs whose spawn loc starts in Wilderness respawn much faster by tier: tiny trash in roughly 12-18 seconds, low roamers in 20-25 seconds, mid training/resource mobs in 25-35 seconds, demons and similar high combat mobs in 40-45 seconds, and dragons/black demons/Chronozon in 50-60 seconds. The override is implemented in `Npc` as the fastest applicable multiplier, so existing explicit speedups such as the hobgoblin pressure scaler cannot slow the new Wilderness baseline. Files: `Npc.java` and `docs/subsystems/dynamic-wilderness-spawns.md`. No NPC definition JSON, spawn loc JSON, drop table, packet/opcode, DB schema, client cache, or client version changed; safe-area copies keep their normal definition respawn timers.

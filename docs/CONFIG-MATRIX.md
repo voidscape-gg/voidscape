@@ -6,7 +6,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10125` | `10125` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10126` | `10126` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
@@ -26,7 +26,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10125` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10126` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_email` | `false` for the launch preset | `false` | `false` | Desktop and Android in-client character creation asks only for username/password. The web portal may still collect email for web accounts. |
 | `want_packet_register` | `true` for the launch preset, `false` when omitted | `true` | `true` | Enables desktop and native Android in-client character creation through the existing register packet. `/play` web signup remains portal-first. |
@@ -56,6 +56,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |
 | `aggro_range` | `4` | `4` | `4` | Voidscape default aggressive-NPC scan radius; authentic presets remain at the Java/default 1-tile behavior unless configured otherwise. |
+| `wilderness_npc_blocking` | `0` | `0` | `0` | Wilderness override for `npc_blocking`; aggressive NPCs still aggro/fight, but do not body-block movement on Wilderness tiles. |
 | `wilderness_spawn_multiplier` | `1.5` | `1.5` | `1.5` | Boot-time multiplier for attackable wilderness NPC spawn locs; decimal values add a deterministic proportional subset; default `1` disables it for authentic presets. |
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
 | `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
@@ -111,7 +112,7 @@ These are positional in many loaders. Keep server and client append order aligne
 | Custom item ids | `1608` | Void ashes are current high-water mark. |
 | Custom NPC ids | `868` | Void Archivist is current high-water mark. |
 | Custom scenery ids | `1311` | Void portal arch is current high-water mark. |
-| Custom client version | `10125` | Current working tree value. |
+| Custom client version | `10126` | Current working tree value. |
 
 ## Pre-release config sign-off
 

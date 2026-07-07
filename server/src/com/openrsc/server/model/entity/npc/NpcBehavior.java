@@ -452,6 +452,7 @@ public class NpcBehavior {
 		int numTicks = target.getCombatState() == CombatState.RUNNING ? 5 : (int)(Math.ceil(640.0 / target.getConfig().GAME_TICK) - 1);
 
 		boolean targetCombatTimeoutExceeded = checkCombatTimer(target.getCombatTimer(), numTicks);
+		boolean targetReattackTimerElapsed = !isPlayer || ((Player) target).canBeReattacked();
 
 		boolean isAggressive = aggressiveCheck(target);
 
@@ -463,7 +464,7 @@ public class NpcBehavior {
 			&& !outOfBounds
 			&& (!targetInCombat || forceChase)
 			&& lastLogin
-			&& (targetCombatTimeoutExceeded || forceChase);
+			&& ((targetCombatTimeoutExceeded && targetReattackTimerElapsed) || forceChase);
 	}
 
 	private boolean grandTreeGnome(final Npc npc) {

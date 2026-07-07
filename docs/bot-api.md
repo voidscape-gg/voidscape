@@ -152,14 +152,17 @@ ACCOUNT_LOGGEDIN, so one account per daemon. Account pool + provisioning:
 - `voidbot logout`
 
 **Queries** — `voidbot state <section>` where section ∈
-`all | position | inventory | skills | npcs | ground-items | bank | dialog | shop | messages`
+`all | position | inventory | skills | npcs | ground-items | bank | dialog | shop | messages |
+world-walk-route`
 
 **Waits** — `voidbot wait <condition> [--timeout N] [args]`, conditions:
 `logged-in | position --x --y | near --x --y --radius | inventory-contains --id --amount |
 inventory-lacks --id | message --regex | dialog-open | input-open | bank-open |
 npc-present --id | npc-dead (--id|--server_index) | ground-item --id | xp-gained --skill`
 
-**Events** — `voidbot events --since <seq>` (timestamped game-event log).
+**Events** — `voidbot events --since <seq>` (timestamped game-event log). A
+`WORLD_WALK_REQUEST` response emits `world_walk_route` with `ok`, `reason`, `count`,
+and the decoded route tiles.
 
 NPC overhead chat (SEND_UPDATE_NPC type 1, wire 104) is decoded: each line emits an
 `npc_say` event (`server_index`, `text`, `recipient`) and is mirrored into
@@ -188,7 +191,7 @@ respawns is best-effort.
 - **C2S** `[u16 BE len][opcode][payload]`, len excludes the 2 length bytes.
 - **S2C** `[u16 BE len][opcode][payload]`, len **includes** the 2 length bytes; the
   login response is a single raw (unframed) byte (`& 0x40` ⇒ success).
-- LOGIN body: `reconnect:u8 | clientVersion:u32(10125, env VOIDBOT_CLIENT_VERSION) | username\n | encVer:u8(1) |
+- LOGIN body: `reconnect:u8 | clientVersion:u32(10126, env VOIDBOT_CLIENT_VERSION) | username\n | encVer:u8(1) |
   u16 rsaPwLen + RSA(addCharacters(pw,20)+"\n") | u16 rsaDetailsLen + RSA("dir/jar\n") |
   UID:8 + limitations-trailer` (trailer constant for this client build).
 - Outbound opcode values: `Client_Base/src/orsc/net/Opcodes.java` `Out`. Inbound names:
