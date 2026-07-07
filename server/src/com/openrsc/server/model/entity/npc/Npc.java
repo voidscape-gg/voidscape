@@ -35,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -54,6 +55,7 @@ public class Npc extends Mob {
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final String RESPAWN_MULTIPLIER_ATTRIBUTE = "voidscape_respawn_multiplier";
+	private static final Map<Integer, Integer> WILDERNESS_RESPAWN_SECONDS = createWildernessRespawnSeconds();
 
 	private long healTimer = 0;
 	private boolean shouldRespawn = true;
@@ -1137,11 +1139,97 @@ public class Npc extends Mob {
 	}
 
 	private double getRespawnMultiplier() {
+		double multiplier = Math.max(0.05D, getConfig().NPC_RESPAWN_MULTIPLIER);
+		final Integer wildernessRespawnSeconds = getWildernessRespawnSeconds();
+		if (wildernessRespawnSeconds != null && def.respawnTime() > 0) {
+			multiplier = Math.min(multiplier, Math.max(0.05D, wildernessRespawnSeconds / (double)def.respawnTime()));
+		}
 		final Object override = getAttribute(RESPAWN_MULTIPLIER_ATTRIBUTE, null);
 		if (override instanceof Number) {
-			return Math.max(0.05D, ((Number) override).doubleValue());
+			multiplier = Math.min(multiplier, Math.max(0.05D, ((Number) override).doubleValue()));
 		}
-		return getConfig().NPC_RESPAWN_MULTIPLIER;
+		return multiplier;
+	}
+
+	private Integer getWildernessRespawnSeconds() {
+		if (loc == null || getConfig().WILDERNESS_SPAWN_MULTIPLIER <= 1.0D) {
+			return null;
+		}
+		if (!Point.inWilderness(loc.startX(), loc.startY())) {
+			return null;
+		}
+		return WILDERNESS_RESPAWN_SECONDS.get(loc.getId());
+	}
+
+	private static Map<Integer, Integer> createWildernessRespawnSeconds() {
+		final Map<Integer, Integer> respawns = new HashMap<>();
+
+		addWildernessRespawn(respawns, 29, 12);  // Rat
+		addWildernessRespawn(respawns, 34, 12);  // spider
+		addWildernessRespawn(respawns, 854, 12); // Void Spider
+		addWildernessRespawn(respawns, 19, 15);  // Rat
+		addWildernessRespawn(respawns, 23, 15);  // Giant Spider
+		addWildernessRespawn(respawns, 47, 18);  // Rat
+		addWildernessRespawn(respawns, 367, 18); // Dungeon Rat
+		addWildernessRespawn(respawns, 860, 18); // Void Unicorn
+		addWildernessRespawn(respawns, 43, 20);  // Giant bat
+		addWildernessRespawn(respawns, 57, 20);  // Darkwizard
+		addWildernessRespawn(respawns, 70, 20);  // Scorpion
+		addWildernessRespawn(respawns, 137, 20); // Pirate
+		addWildernessRespawn(respawns, 251, 20); // Thug
+		addWildernessRespawn(respawns, 342, 20); // Rogue
+		addWildernessRespawn(respawns, 856, 20); // Void Wolf
+		addWildernessRespawn(respawns, 859, 20); // Void Wizard
+		addWildernessRespawn(respawns, 41, 22);  // zombie
+		addWildernessRespawn(respawns, 46, 22);  // skeleton
+		addWildernessRespawn(respawns, 53, 22);  // Ghost
+		addWildernessRespawn(respawns, 45, 24);  // skeleton
+		addWildernessRespawn(respawns, 60, 25);  // Darkwizard
+		addWildernessRespawn(respawns, 61, 25);  // Giant
+		addWildernessRespawn(respawns, 67, 25);  // Hobgoblin
+		addWildernessRespawn(respawns, 74, 25);  // Giant Spider
+		addWildernessRespawn(respawns, 99, 25);  // Deadly Red spider
+		addWildernessRespawn(respawns, 136, 25); // King Scorpion
+		addWildernessRespawn(respawns, 188, 25); // Bear
+		addWildernessRespawn(respawns, 189, 25); // Black Knight
+		addWildernessRespawn(respawns, 232, 25); // Bandit
+		addWildernessRespawn(respawns, 234, 25); // Bandit
+		addWildernessRespawn(respawns, 263, 25); // Ice spider
+		addWildernessRespawn(respawns, 270, 25); // Chaos Druid
+		addWildernessRespawn(respawns, 292, 25); // Poison Spider
+		addWildernessRespawn(respawns, 295, 25); // Animated axe
+		addWildernessRespawn(respawns, 343, 25); // Shadow spider
+		addWildernessRespawn(respawns, 855, 25); // Void Giant
+		addWildernessRespawn(respawns, 858, 25); // Void Ogre
+		addWildernessRespawn(respawns, 68, 25);  // zombie
+		addWildernessRespawn(respawns, 104, 30); // Moss Giant
+		addWildernessRespawn(respawns, 158, 30); // Ice warrior
+		addWildernessRespawn(respawns, 195, 30); // skeleton
+		addWildernessRespawn(respawns, 243, 30); // Grey wolf
+		addWildernessRespawn(respawns, 584, 30); // Earth warrior
+		addWildernessRespawn(respawns, 853, 30); // Void Knight
+		addWildernessRespawn(respawns, 135, 35); // Ice Giant
+		addWildernessRespawn(respawns, 190, 35); // chaos Dwarf
+		addWildernessRespawn(respawns, 236, 35); // Donny the lad
+		addWildernessRespawn(respawns, 237, 35); // Black Heather
+		addWildernessRespawn(respawns, 238, 35); // Speedy Keith
+		addWildernessRespawn(respawns, 22, 40);  // Lesser Demon
+		addWildernessRespawn(respawns, 344, 40); // Fire Giant
+		addWildernessRespawn(respawns, 184, 45); // Greater Demon
+		addWildernessRespawn(respawns, 789, 45); // Battle mage
+		addWildernessRespawn(respawns, 790, 45); // Battle mage
+		addWildernessRespawn(respawns, 791, 45); // Battle mage
+		addWildernessRespawn(respawns, 857, 45); // Void Demon
+		addWildernessRespawn(respawns, 201, 50); // Red Dragon
+		addWildernessRespawn(respawns, 290, 50); // Black Demon
+		addWildernessRespawn(respawns, 291, 60); // Black Dragon
+		addWildernessRespawn(respawns, 315, 60); // Chronozon
+
+		return Collections.unmodifiableMap(respawns);
+	}
+
+	private static void addWildernessRespawn(final Map<Integer, Integer> respawns, final int npcId, final int seconds) {
+		respawns.put(npcId, seconds);
 	}
 
 	public void teleport(final int x, final int y) {

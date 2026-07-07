@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-07 - Wilderness NPC respawn targets for AFK camps
+
+Voidscape now applies a Wilderness-only respawn target map when the boot-time `wilderness_spawn_multiplier` feature is active. Attackable NPCs whose spawn loc starts in Wilderness respawn much faster by tier: tiny trash in roughly 12-18 seconds, low roamers in 20-25 seconds, mid training/resource mobs in 25-35 seconds, demons and similar high combat mobs in 40-45 seconds, and dragons/black demons/Chronozon in 50-60 seconds. The override is implemented in `Npc` as the fastest applicable multiplier, so existing explicit speedups such as the hobgoblin pressure scaler cannot slow the new Wilderness baseline. Files: `Npc.java` and `docs/subsystems/dynamic-wilderness-spawns.md`. No NPC definition JSON, spawn loc JSON, drop table, packet/opcode, DB schema, client cache, or client version changed; safe-area copies keep their normal definition respawn timers.
+
 ### 2026-07-07 - Castle rat roam bounds stay inside rooms
 
 The Wilderness castle dungeon-rat clusters added for AFK training now use tight room-sized roam bounds instead of broad `11x11` rectangles that allowed rats to path outside the castle walls. This keeps the requested rat density at `(249,359)` and `(263,359)` while preventing exterior leakage seen in live mobile screenshots. File: `server/conf/server/defs/locs/NpcLocs.json`. No NPC IDs, counts, loot, packet/opcode, DB schema, cache asset, or client behavior changed; reversibility is restoring the previous wider roam rectangles if the castle collision layout is later revised.

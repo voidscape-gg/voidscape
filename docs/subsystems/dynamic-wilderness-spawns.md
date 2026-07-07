@@ -8,6 +8,22 @@ Voidscape can adapt specific wilderness training spots to real player pressure w
 
 The copied locs keep the original roam bounds and jitter their starting tile inside those bounds. Non-attackable wilderness service/quest NPCs are skipped.
 
+## Wilderness respawn targets
+
+When `wilderness_spawn_multiplier` is above `1`, Voidscape also applies a Wilderness-only respawn target map to attackable NPCs whose spawn loc starts in Wilderness. This is a content-balance layer for AFK training camps: it does not edit `NpcDefs.json`, so safe-area copies of the same NPC ID keep their normal respawn timers. If another runtime respawn multiplier is present, the fastest applicable multiplier wins; this prevents the hobgoblin pressure scaler from accidentally making the new Wilderness baseline slower.
+
+Current target bands:
+
+| NPC type | Target respawn |
+|---|---:|
+| Tiny trash: rats, spiders, Void spider | 12-18s |
+| Low Wilderness roamers: thugs, rogues, pirates, scorpions, bats, low skeletons/zombies/ghosts | 20-25s |
+| Mid camps/resources: hobgoblins, giants, moss giants, earth warriors, chaos druids, wolves, ice warriors | 25-35s |
+| Demons, fire giants, battle mages, Void demon | 40-45s |
+| Dragons, black demons, Chronozon | 50-60s |
+
+Implementation map: `Npc.WILDERNESS_RESPAWN_SECONDS`.
+
 ## Wilderness hobgoblins
 
 Current scope: level-32 hobgoblins in the surface wilderness starter zone around `(217,255)`.
