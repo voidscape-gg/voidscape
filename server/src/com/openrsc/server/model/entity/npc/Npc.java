@@ -479,7 +479,10 @@ public class Npc extends Mob {
 		/* 3. Roll wilderness-only Void Key bonus drop. */
 		rollVoidKeyDrop(owner);
 
-		/* 4. Get the rest of the mob's drops. */
+		/* 4. Roll wilderness-only training bonus drops. */
+		rollWildernessBonusDrop(owner);
+
+		/* 5. Get the rest of the mob's drops. */
 		DropTable drops = getWorld().npcDrops.getDropTable(this.getID());
 		if (drops == null) {
 			// Some enemies have no drops
@@ -489,7 +492,7 @@ public class Npc extends Mob {
 		}
 		drops = drops.clone(drops.getDescription());
 
-		/* 5. Drop items that should always drop, that are not bones. */
+		/* 6. Drop items that should always drop, that are not bones. */
 		ArrayList<Item> invariableItems = drops.invariableItems(owner);
 		for (Item item : invariableItems) {
 			if (!worldAllowsDrop(item)) {
@@ -510,7 +513,7 @@ public class Npc extends Mob {
 			recordNpcDrop(owner, item.getCatalogId(), amount, item.getNoted(), isRareDrop(item), "ground");
 		}
 
-		/* 6. Roll for drops. */
+		/* 7. Roll for drops. */
 		boolean ringOfWealth = false;
 		if (getConfig().WANT_NEW_RARE_DROP_TABLES) {
 			ringOfWealth = owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_WEALTH.id());
@@ -591,6 +594,32 @@ public class Npc extends Mob {
 
 	private int getVoidKeyDropDenominator() {
 		return Math.max(128, 1200 - getDef().combatLevel * 6);
+	}
+
+	private void rollWildernessBonusDrop(Player owner) {
+		if (owner == null
+			|| !getLocation().inWilderness()
+			|| getLocation().isInSafeZone()) {
+			return;
+		}
+
+		DropTable bonusDrops = getWorld().npcDrops.getWildernessBonusDropTable(this.getID());
+		if (bonusDrops == null || bonusDrops.getTotalWeight() <= 0) {
+			return;
+		}
+
+		bonusDrops = bonusDrops.clone(bonusDrops.getDescription());
+		ArrayList<Item> items = bonusDrops.rollItem(false, owner);
+		for (Item item : items) {
+			if (item == null || !worldAllowsDrop(item)) {
+				continue;
+			}
+			if (getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogId()).isStackable()) {
+				dropStackItem(item, owner);
+			} else {
+				dropStandardItem(item, owner);
+			}
+		}
 	}
 
 	private boolean worldAllowsDrop(Item item) {

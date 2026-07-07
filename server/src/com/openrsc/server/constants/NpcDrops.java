@@ -15,6 +15,7 @@ public class NpcDrops {
 	private final ServerConfiguration config;
 
 	private final HashMap<Integer, DropTable> npcDrops;
+	private final HashMap<Integer, DropTable> wildernessBonusDrops;
 	private final HashSet<Integer> bonelessNpcs;
 	private final HashSet<Integer> batBonedNpcs;
 	private final HashSet<Integer> bigBoneNpcs;
@@ -37,6 +38,7 @@ public class NpcDrops {
 		this.config = world.getServer().getConfig();
 
 		this.npcDrops = new HashMap<>();
+		this.wildernessBonusDrops = new HashMap<>();
 		this.bonelessNpcs = new HashSet<>();
 		this.batBonedNpcs = new HashSet<>();
 		this.bigBoneNpcs = new HashSet<>();
@@ -59,6 +61,7 @@ public class NpcDrops {
 
 		createBoneDrops();
 		createMobDrops();
+		createWildernessBonusDrops();
 
 		if (config.WANT_CUSTOM_QUESTS) {
 			// TODO: Find a better config for this.
@@ -74,6 +77,7 @@ public class NpcDrops {
 
 	public void unload() {
 		npcDrops.clear();
+		wildernessBonusDrops.clear();
 		bonelessNpcs.clear();
 		batBonedNpcs.clear();
 		bigBoneNpcs.clear();
@@ -250,6 +254,97 @@ public class NpcDrops {
 
 	private void createMobDrops() {
 		generateNpcDrops();
+	}
+
+	private void createWildernessBonusDrops() {
+		DropTable lowTrainingBonus = new DropTable("Wilderness Low Training Bonus");
+		lowTrainingBonus.addItemDrop(ItemId.COINS.id(), 60, 18);
+		lowTrainingBonus.addItemDrop(ItemId.COINS.id(), 140, 8);
+		lowTrainingBonus.addItemDrop(ItemId.LIMPWURT_ROOT.id(), 1, 10);
+		lowTrainingBonus.addItemDrop(ItemId.CHAOS_RUNE.id(), 4, 6);
+		lowTrainingBonus.addItemDrop(ItemId.LAW_RUNE.id(), 2, 4);
+		lowTrainingBonus.addItemDrop(ItemId.NATURE_RUNE.id(), 3, 4);
+		lowTrainingBonus.addItemDrop(ItemId.STEEL_ARROWS.id(), 30, 4);
+		lowTrainingBonus.addItemDrop(ItemId.IRON_BAR.id(), 2, 4, true);
+		lowTrainingBonus.addItemDrop(ItemId.LOBSTER.id(), 1, 3);
+		lowTrainingBonus.addItemDrop(ItemId.MITHRIL_ARROWS.id(), 20, 2);
+		lowTrainingBonus.addEmptyDrop(128 - lowTrainingBonus.getTotalWeight());
+
+		DropTable midResourceBonus = new DropTable("Wilderness Resource Bonus");
+		midResourceBonus.addTableDrop(herbDropTable, 16);
+		midResourceBonus.addItemDrop(ItemId.COINS.id(), 180, 18);
+		midResourceBonus.addItemDrop(ItemId.COINS.id(), 450, 6);
+		midResourceBonus.addItemDrop(ItemId.NATURE_RUNE.id(), 8, 7);
+		midResourceBonus.addItemDrop(ItemId.LAW_RUNE.id(), 5, 6);
+		midResourceBonus.addItemDrop(ItemId.CHAOS_RUNE.id(), 10, 6);
+		midResourceBonus.addItemDrop(ItemId.DEATH_RUNE.id(), 4, 3);
+		midResourceBonus.addItemDrop(ItemId.COAL.id(), 5, 7, true);
+		midResourceBonus.addItemDrop(ItemId.MITHRIL_ORE.id(), 3, 4, true);
+		midResourceBonus.addItemDrop(ItemId.MITHRIL_BAR.id(), 2, 3, true);
+		midResourceBonus.addItemDrop(ItemId.RED_SPIDERS_EGGS.id(), 2, 3);
+		midResourceBonus.addItemDrop(ItemId.SNAPE_GRASS.id(), 1, 3);
+		midResourceBonus.addItemDrop(ItemId.WHITE_BERRIES.id(), 1, 2);
+		midResourceBonus.addEmptyDrop(128 - midResourceBonus.getTotalWeight());
+
+		DropTable highCombatBonus = new DropTable("Wilderness High Combat Bonus");
+		highCombatBonus.addItemDrop(ItemId.COINS.id(), 500, 18);
+		highCombatBonus.addItemDrop(ItemId.COINS.id(), 1200, 5);
+		highCombatBonus.addItemDrop(ItemId.CHAOS_RUNE.id(), 20, 10);
+		highCombatBonus.addItemDrop(ItemId.DEATH_RUNE.id(), 8, 6);
+		highCombatBonus.addItemDrop(ItemId.BLOOD_RUNE.id(), 6, 4);
+		highCombatBonus.addItemDrop(ItemId.LAW_RUNE.id(), 10, 4);
+		highCombatBonus.addItemDrop(ItemId.RUNE_ARROWS.id(), 20, 3);
+		highCombatBonus.addItemDrop(ItemId.ADAMANTITE_BAR.id(), 2, 4, true);
+		highCombatBonus.addItemDrop(ItemId.LOBSTER.id(), 2, 5);
+		highCombatBonus.addItemDrop(ItemId.SWORDFISH.id(), 2, 4);
+		highCombatBonus.addItemDrop(ItemId.FULL_STRENGTH_POTION.id(), 1, 2);
+		highCombatBonus.addTableDrop(rareDropTable, 3);
+		highCombatBonus.addItemDrop(ItemId.RUNE_DAGGER.id(), 1, 1);
+		highCombatBonus.addItemDrop(ItemId.RUNE_SHORT_SWORD.id(), 1, 1);
+		highCombatBonus.addItemDrop(ItemId.RUNE_AXE.id(), 1, 1);
+		highCombatBonus.addItemDrop(ItemId.RUNE_SQUARE_SHIELD.id(), 1, 1);
+		highCombatBonus.addEmptyDrop(128 - highCombatBonus.getTotalWeight());
+
+		DropTable dragonRareBonus = new DropTable("Wilderness Dragon Rare Bonus");
+		dragonRareBonus.addItemDrop(ItemId.DRAGONSTONE.id(), 1, 5);
+		dragonRareBonus.addItemDrop(ItemId.DRAGON_SWORD_TIP.id(), 1, 2);
+		dragonRareBonus.addItemDrop(ItemId.DRAGON_SWORD_BLADE.id(), 1, 2);
+		dragonRareBonus.addEmptyDrop(128 - dragonRareBonus.getTotalWeight());
+
+		DropTable dragonBonus = new DropTable("Wilderness Dragon Bonus");
+		dragonBonus.addItemDrop(ItemId.COINS.id(), 900, 18);
+		dragonBonus.addItemDrop(ItemId.COINS.id(), 2000, 4);
+		dragonBonus.addItemDrop(ItemId.FIRE_RUNE.id(), 150, 8);
+		dragonBonus.addItemDrop(ItemId.LAW_RUNE.id(), 12, 6);
+		dragonBonus.addItemDrop(ItemId.DEATH_RUNE.id(), 10, 4);
+		dragonBonus.addItemDrop(ItemId.BLOOD_RUNE.id(), 10, 3);
+		dragonBonus.addItemDrop(ItemId.ADAMANTITE_BAR.id(), 3, 5, true);
+		dragonBonus.addItemDrop(ItemId.ADAMANTITE_ORE.id(), 3, 4, true);
+		dragonBonus.addItemDrop(ItemId.SHARK.id(), 2, 5);
+		dragonBonus.addItemDrop(ItemId.SWORDFISH.id(), 3, 3);
+		dragonBonus.addItemDrop(ItemId.FULL_RESTORE_PRAYER_POTION.id(), 1, 2);
+		dragonBonus.addTableDrop(dragonRareBonus, 4);
+		dragonBonus.addTableDrop(rareDropTable, 2);
+		dragonBonus.addItemDrop(ItemId.RUNE_LONG_SWORD.id(), 1, 1);
+		dragonBonus.addItemDrop(ItemId.RUNE_SCIMITAR.id(), 1, 1);
+		dragonBonus.addItemDrop(ItemId.RUNE_KITE_SHIELD.id(), 1, 1);
+		dragonBonus.addEmptyDrop(128 - dragonBonus.getTotalWeight());
+
+		addWildernessBonus(lowTrainingBonus,
+			NpcId.HOBGOBLIN_LVL32, NpcId.SKELETON_LVL54, NpcId.DARK_WARRIOR,
+			NpcId.BLACK_KNIGHT_AGGRESSIVE, NpcId.BANDIT_AGGRESSIVE, NpcId.BANDIT_PACIFIST);
+		addWildernessBonus(midResourceBonus,
+			NpcId.GIANT, NpcId.MOSS_GIANT, NpcId.MOSS_GIANT2, NpcId.CHAOS_DWARF,
+			NpcId.CHAOS_DRUID, NpcId.EARTH_WARRIOR);
+		addWildernessBonus(highCombatBonus,
+			NpcId.LESSER_DEMON, NpcId.GREATER_DEMON, NpcId.BLACK_DEMON, NpcId.FIRE_GIANT);
+		addWildernessBonus(dragonBonus, NpcId.RED_DRAGON, NpcId.BLACK_DRAGON);
+	}
+
+	private void addWildernessBonus(final DropTable table, final NpcId... npcIds) {
+		for (NpcId npcId : npcIds) {
+			this.wildernessBonusDrops.put(npcId.id(), table);
+		}
 	}
 
 	private void generateBonelessNpcs() {
@@ -1374,26 +1469,30 @@ public class NpcDrops {
 		this.npcDrops.put(NpcId.ZOMBIE_ENTRANA.id(), currentNpcDrops);
 
 		currentNpcDrops = new DropTable("Bandit (Aggressive) (232) Bandit (Not Aggressive) (234)");
-		currentNpcDrops.addTableDrop(herbDropTable, 37);
+		currentNpcDrops.addTableDrop(herbDropTable, 12);
 		currentNpcDrops.addTableDrop(rareDropTable, 3);
-		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 35, 26);
-		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 12, 13);
-		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 53, 10);
-		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 1, 7);
-		currentNpcDrops.addItemDrop(ItemId.COAL.id(), 1, 6);
-		currentNpcDrops.addItemDrop(ItemId.IRON_SCIMITAR.id(), 1, 4);
-		currentNpcDrops.addItemDrop(ItemId.WATER_RUNE.id(), 6, 3);
-		currentNpcDrops.addItemDrop(ItemId.CHAOS_RUNE.id(), 4, 3);
-		currentNpcDrops.addItemDrop(ItemId.AIR_RUNE.id(), 7, 2);
-		currentNpcDrops.addItemDrop(ItemId.DEATH_RUNE.id(), 1, 2);
-		currentNpcDrops.addItemDrop(ItemId.LAW_RUNE.id(), 2, 2);
-		currentNpcDrops.addItemDrop(ItemId.STEEL_SQUARE_SHIELD.id(), 1, 2);
-		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 80, 2);
-		currentNpcDrops.addItemDrop(ItemId.STEEL_AXE.id(), 1, 1);
-		currentNpcDrops.addItemDrop(ItemId.LONGBOW.id(), 1, 1);
-		currentNpcDrops.addItemDrop(ItemId.BLOOD_RUNE.id(), 1, 1);
-		currentNpcDrops.addItemDrop(ItemId.MIND_RUNE.id(), 1, 1);
-		currentNpcDrops.addItemDrop(ItemId.NATURE_RUNE.id(), 1, 1);
+		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 120, 10);
+		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 300, 5);
+		currentNpcDrops.addItemDrop(ItemId.NATURE_RUNE.id(), 10, 8);
+		currentNpcDrops.addItemDrop(ItemId.LAW_RUNE.id(), 8, 8);
+		currentNpcDrops.addItemDrop(ItemId.CHAOS_RUNE.id(), 20, 8);
+		currentNpcDrops.addItemDrop(ItemId.DEATH_RUNE.id(), 8, 5);
+		currentNpcDrops.addItemDrop(ItemId.BLOOD_RUNE.id(), 5, 3);
+		currentNpcDrops.addItemDrop(ItemId.COAL.id(), 8, 8, true);
+		currentNpcDrops.addItemDrop(ItemId.IRON_ORE.id(), 8, 6, true);
+		currentNpcDrops.addItemDrop(ItemId.MITHRIL_ORE.id(), 4, 5, true);
+		currentNpcDrops.addItemDrop(ItemId.ADAMANTITE_ORE.id(), 2, 3, true);
+		currentNpcDrops.addItemDrop(ItemId.STEEL_BAR.id(), 5, 6, true);
+		currentNpcDrops.addItemDrop(ItemId.MITHRIL_BAR.id(), 3, 4, true);
+		currentNpcDrops.addItemDrop(ItemId.ADAMANTITE_BAR.id(), 1, 2, true);
+		currentNpcDrops.addItemDrop(ItemId.UNCUT_SAPPHIRE.id(), 1, 4);
+		currentNpcDrops.addItemDrop(ItemId.UNCUT_EMERALD.id(), 1, 3);
+		currentNpcDrops.addItemDrop(ItemId.UNCUT_RUBY.id(), 1, 2);
+		currentNpcDrops.addItemDrop(ItemId.UNCUT_DIAMOND.id(), 1, 1);
+		currentNpcDrops.addItemDrop(ItemId.MITHRIL_ARROWS.id(), 40, 4);
+		currentNpcDrops.addItemDrop(ItemId.LOBSTER.id(), 2, 4);
+		currentNpcDrops.addItemDrop(ItemId.IRON_SCIMITAR.id(), 1, 3);
+		currentNpcDrops.addItemDrop(ItemId.LONGBOW.id(), 1, 2);
 		currentNpcDrops.addEmptyDrop(128 - currentNpcDrops.getTotalWeight());
 		this.npcDrops.put(NpcId.BANDIT_AGGRESSIVE.id(), currentNpcDrops);
 		this.npcDrops.put(NpcId.BANDIT_PACIFIST.id(), currentNpcDrops);
@@ -1452,7 +1551,6 @@ public class NpcDrops {
 		currentNpcDrops.addItemDrop(ItemId.RED_FIREBIRD_FEATHER.id(), 1, 0);
 		this.npcDrops.put(NpcId.FIREBIRD.id(), currentNpcDrops);
 
-		// TODO CHAOS DRUID DOUBLE HERB DROP
 		currentNpcDrops = new DropTable("Chaos Druid (270)");
 		currentNpcDrops.addTableDrop(herbDropTable, 35);
 		currentNpcDrops.addTableDrop(rareDropTable, 1);
@@ -1470,6 +1568,7 @@ public class NpcDrops {
 		currentNpcDrops.addItemDrop(ItemId.COINS.id(), 35, 1);
 		currentNpcDrops.addItemDrop(ItemId.SNAPE_GRASS.id(), 1, 1);
 		currentNpcDrops.addItemDrop(ItemId.UNHOLY_SYMBOL_MOULD.id(), 1, 1);
+		// Zero-weight nested tables intentionally roll one herb plus one normal-table drop.
 		DropTable chaosDruidDouble = new DropTable("Chaos Druid Double Drop (270)");
 		chaosDruidDouble.addTableDrop(herbDropTable, 0);
 		chaosDruidDouble.addTableDrop(currentNpcDrops.clone("Chaos Druid (270)"), 0);
@@ -1774,7 +1873,6 @@ public class NpcDrops {
 		currentNpcDrops.addEmptyDrop(128 - currentNpcDrops.getTotalWeight());
 		this.npcDrops.put(NpcId.JOGRE.id(), currentNpcDrops);
 
-		// TODO: Fix up drop table (especially with double-drops)
 		currentNpcDrops = new DropTable("Chaos Druid Warrior (555)");
 		currentNpcDrops.addTableDrop(herbDropTable, 34);
 		currentNpcDrops.addTableDrop(rareDropTable, 1);
@@ -1795,6 +1893,7 @@ public class NpcDrops {
 		currentNpcDrops.addItemDrop(ItemId.LIMPWURT_ROOT.id(), 1, 1);
 		currentNpcDrops.addItemDrop(ItemId.LIMPWURT_ROOT.id(), 3, 1);
 		currentNpcDrops.addItemDrop(ItemId.VIAL.id(), 1, 1);
+		// Zero-weight nested tables intentionally roll one herb plus one normal-table drop.
 		chaosDruidDouble = new DropTable("Chaos Druid Warrior Double Drop (555)");
 		chaosDruidDouble.addTableDrop(herbDropTable, 0);
 		chaosDruidDouble.addTableDrop(currentNpcDrops.clone("Chaos Druid Warrior (555)"), 0);
@@ -1802,7 +1901,6 @@ public class NpcDrops {
 		currentNpcDrops.addEmptyDrop(128 - currentNpcDrops.getTotalWeight());
 		this.npcDrops.put(NpcId.CHAOS_DRUID_WARRIOR.id(), currentNpcDrops);
 
-		// TODO: Fix up drop table (especially with double-drops)
 		currentNpcDrops = new DropTable("Salarin the Twisted (567)");
 		currentNpcDrops.addTableDrop(herbDropTable, 34);
 		currentNpcDrops.addTableDrop(rareDropTable, 1);
@@ -1819,6 +1917,7 @@ public class NpcDrops {
 		currentNpcDrops.addItemDrop(ItemId.FIRE_RUNE.id(), 36, 1);
 		currentNpcDrops.addItemDrop(ItemId.SNAPE_GRASS.id(), 1, 1);
 		currentNpcDrops.addItemDrop(ItemId.VIAL.id(), 1, 1);
+		// Zero-weight nested tables intentionally roll one herb plus one normal-table drop.
 		chaosDruidDouble = new DropTable("Salarin the Twisted Double Drop (567)");
 		chaosDruidDouble.addTableDrop(herbDropTable, 0);
 		chaosDruidDouble.addTableDrop(currentNpcDrops.clone("Salarin the Twisted (567)"), 0);
@@ -2140,6 +2239,10 @@ public class NpcDrops {
 
 	public DropTable getDropTable(int npcId) {
 		return this.npcDrops.getOrDefault(npcId, null);
+	}
+
+	public DropTable getWildernessBonusDropTable(int npcId) {
+		return this.wildernessBonusDrops.getOrDefault(npcId, null);
 	}
 
 	public HashMap<Integer, DropTable> getDrops() {

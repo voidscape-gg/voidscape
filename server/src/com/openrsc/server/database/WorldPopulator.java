@@ -219,12 +219,12 @@ public final class WorldPopulator {
 	}
 
 	private void applyWildernessSpawnMultiplier() {
-		final int multiplier = Math.max(1, getWorld().getServer().getConfig().WILDERNESS_SPAWN_MULTIPLIER);
-		if (multiplier <= 1) {
+		final double multiplier = Math.max(1.0, getWorld().getServer().getConfig().WILDERNESS_SPAWN_MULTIPLIER);
+		if (multiplier <= 1.0) {
 			return;
 		}
 
-		final ArrayList<NPCLoc> additions = new ArrayList<>();
+		final ArrayList<NPCLoc> eligibleLocs = new ArrayList<>();
 		for (NPCLoc loc : npclocs) {
 			if (!Point.inWilderness(loc.startX(), loc.startY())) {
 				continue;
@@ -232,13 +232,32 @@ public final class WorldPopulator {
 			if (!getWorld().getServer().getEntityHandler().getNpcDef(loc.id).isAttackable()) {
 				continue;
 			}
-			for (int copy = 1; copy < multiplier; copy++) {
+			eligibleLocs.add(loc);
+		}
+
+		final int wholeMultiplier = (int) Math.floor(multiplier);
+		final int guaranteedCopies = Math.max(0, wholeMultiplier - 1);
+		final double fractionalCopies = multiplier - wholeMultiplier;
+		final ArrayList<NPCLoc> additions = new ArrayList<>();
+		for (NPCLoc loc : eligibleLocs) {
+			for (int copy = 0; copy < guaranteedCopies; copy++) {
 				additions.add(copyWildernessNpcLoc(loc));
+			}
+		}
+		if (fractionalCopies > 0.0) {
+			double fractionalProgress = 0.0;
+			for (NPCLoc loc : eligibleLocs) {
+				fractionalProgress += fractionalCopies;
+				if (fractionalProgress + 1.0e-9 >= 1.0) {
+					additions.add(copyWildernessNpcLoc(loc));
+					fractionalProgress -= 1.0;
+				}
 			}
 		}
 
 		npclocs.addAll(additions);
-		LOGGER.info("Wilderness density x{}: added {} spawns", box(multiplier), box(additions.size()));
+		LOGGER.info("Wilderness density x{}: added {} spawns from {} eligible locs",
+			box(multiplier), box(additions.size()), box(eligibleLocs.size()));
 	}
 
 	private NPCLoc copyWildernessNpcLoc(final NPCLoc loc) {

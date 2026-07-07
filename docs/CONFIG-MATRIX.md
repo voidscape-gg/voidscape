@@ -56,7 +56,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |
 | `aggro_range` | `4` | `4` | `4` | Voidscape default aggressive-NPC scan radius; authentic presets remain at the Java/default 1-tile behavior unless configured otherwise. |
-| `wilderness_spawn_multiplier` | `2` | `2` | `2` | Boot-time multiplier for attackable wilderness NPC spawn locs; default `1` disables it for authentic presets. |
+| `wilderness_spawn_multiplier` | `1.5` | `1.5` | `1.5` | Boot-time multiplier for attackable wilderness NPC spawn locs; decimal values add a deterministic proportional subset; default `1` disables it for authentic presets. |
 | `want_fatigue` | `false` | `false` | `false` | Foundational QoL divergence. |
 | `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |

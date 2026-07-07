@@ -67,7 +67,7 @@ public class ServerConfiguration {
 	public double WILDERNESS_BOOST;
 	public double SKULL_BOOST;
 	public double NPC_RESPAWN_MULTIPLIER;
-	public int WILDERNESS_SPAWN_MULTIPLIER;
+	public double WILDERNESS_SPAWN_MULTIPLIER;
 	public int VIEW_DISTANCE;
 	public String LOGO_SPRITE_ID;
 	public int NPC_BLOCKING;
@@ -474,7 +474,7 @@ public class ServerConfiguration {
 		SKULL_BOOST = tryReadDouble("skull_boost").orElse(0.0);
 		IS_DOUBLE_EXP = tryReadBool("double_exp").orElse(false);
 		NPC_RESPAWN_MULTIPLIER = tryReadDouble("npc_respawn_multiplier").orElse(1.0);
-		WILDERNESS_SPAWN_MULTIPLIER = tryReadInt("wilderness_spawn_multiplier").orElse(1);
+		WILDERNESS_SPAWN_MULTIPLIER = tryReadDouble("wilderness_spawn_multiplier").orElse(1.0);
 		WANT_REGISTRATION_LIMIT = tryReadBool("want_registration_limit").orElse(false);
 		REGISTRATION_LIMIT_COUNT = tryReadInt("registration_limit_count").orElse(2);
 		PACKET_LIMIT = tryReadInt("packet_limit").orElse(100);

@@ -270,13 +270,17 @@ half-remembered is fine, triage will chase it down.)_
   and is broken outright — see VS-026 (P1).
 
 ### VS-006 — NPC drop tables flagged wrong around double-drops
-- Status: reported · Severity: P2 · Area: server-content
-- Evidence: `server/src/com/openrsc/server/constants/NpcDrops.java:1777` and `:1805` —
-  "// TODO: Fix up drop table (especially with double-drops)".
-- Repro: unknown — needs reading the drop-table code to pin what "fix up" means, then a
-  statistical kill loop via voidbot (or direct unit-style invocation) on affected NPCs.
-- Verify: depends on finding; likely distribution check over N kills vs intended table.
-- Log: 2026-07-02 seeded from survey.
+- Status: fixed · Severity: P2 · Area: server-content
+- Evidence: chaos druid, chaos druid warrior, and Salarin use zero-weight nested
+  double-drop tables; `DropTable.rollItem` has an explicit only-tables branch for this
+  shape, and `invariableItems` skips table drops because their item id is `NOTHING`.
+- Repro: code audit found the intended behavior: the double-drop branch rolls one herb
+  plus one normal-table drop when its weighted parent entry is selected.
+- Verify: build green; no TODO remains; optional future statistical loop can confirm
+  observed rates but is not required for the vague TODO cleanup.
+- Log: 2026-07-02 seeded from survey. 2026-07-07 audit: documented the intended
+  zero-weight nested-table behavior and removed the vague TODOs while adding the
+  Wilderness loot layer; `scripts/build.sh` is green.
 
 ### VS-009 — Bank value-sorting deliberately broken; falls back to catalog-ID order
 - Status: confirmed · Severity: P3 · Area: server-core

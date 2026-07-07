@@ -2,6 +2,12 @@
 
 Voidscape can adapt specific wilderness training spots to real player pressure without changing static NPC location data.
 
+## Global wilderness density
+
+`wilderness_spawn_multiplier` is a boot-time density pass for attackable NPC locs whose start tile is in the wilderness. `1` leaves authentic loc data unchanged. Decimal values are supported: the whole-number part adds guaranteed extra copies, and the fractional part adds a deterministic proportional subset of eligible locs. The Voidscape local/default launch target is `1.5`, so roughly every two eligible wilderness NPC locs produce one additional live copy.
+
+The copied locs keep the original roam bounds and jitter their starting tile inside those bounds. Non-attackable wilderness service/quest NPCs are skipped.
+
 ## Wilderness hobgoblins
 
 Current scope: level-32 hobgoblins in the surface wilderness starter zone around `(217,255)`.
