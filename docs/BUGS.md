@@ -685,6 +685,27 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
 
+### VS-066 — Wilderness castle rats leaked outside their rooms (FIXED)
+- Status: verified · Severity: P3 · Area: server-content / NPC locs
+- Evidence: Ryan supplied live mobile screenshots on 2026-07-07 showing dungeon rats
+  outside the Wilderness castle walls after the new AFK rat clusters shipped. Code/data
+  evidence: the eight `id: 367` dungeon-rat locs centered at `(249,359)` and `(263,359)`
+  had broad `11x11` roam boxes (`244..254/354..364` and `258..268/354..364`) that
+  overlapped exterior tiles.
+- Repro: inspect the rat loc records in `server/conf/server/defs/locs/NpcLocs.json`;
+  the starts are in the intended rooms, but their min/max rectangles include exterior
+  castle tiles visible in the screenshots.
+- Fix: shrink the two rat-cluster roam boxes to tight room-sized bounds around their
+  start tiles: `247..251/357..361` and `261..265/357..361`. NPC count, NPC ID, loot,
+  Wilderness multiplier behavior, and client behavior are unchanged.
+- Verified 2026-07-07: `scripts/build.sh` passed before the fix; JSON validation and
+  cluster query confirmed all eight castle rats remain present with the tightened
+  bounds. Live hotfix deploy copied the updated `NpcLocs.json`, restarted
+  `voidscape.service`, and confirmed the service active with the expected Wilderness
+  density boot log.
+- Log: 2026-07-07 triaged directly from Ryan's screenshots as a loc-bound content bug,
+  fixed by data-only roam-bound tightening, and deployed live after backup.
+
 ### VS-060 — Android `/play` could fall into non-phone mode with desktop-style browser UA (FIXED)
 - Status: verified · Severity: P1 · Area: TeaVM web client / launch surface
 - Evidence: Ryan reported that a friend on Android could reach `/play` after the APK

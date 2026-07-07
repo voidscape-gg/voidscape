@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-07 - Castle rat roam bounds stay inside rooms
+
+The Wilderness castle dungeon-rat clusters added for AFK training now use tight room-sized roam bounds instead of broad `11x11` rectangles that allowed rats to path outside the castle walls. This keeps the requested rat density at `(249,359)` and `(263,359)` while preventing exterior leakage seen in live mobile screenshots. File: `server/conf/server/defs/locs/NpcLocs.json`. No NPC IDs, counts, loot, packet/opcode, DB schema, cache asset, or client behavior changed; reversibility is restoring the previous wider roam rectangles if the castle collision layout is later revised.
+
 ### 2026-07-07 - Wilderness AFK camps and scoped loot premiums
 
 Reduced Voidscape's global wilderness density target from `2x` to `1.5x` and made `wilderness_spawn_multiplier` decimal-capable: whole-number copies are guaranteed and fractional density adds a deterministic proportional subset of eligible attackable wilderness NPC locs. Added modest base spawns for AFK-friendly Wilderness camps around moss giants, lava-strip demons/knights/dwarves, bandits/dark warriors, Bone Yard skeletons, red dragons, Edgeville Dungeon Wilderness, the deep dungeon band, and Lava Maze Dungeon; the hobgoblin valley remains handled by its existing static locs plus pressure scaler. NPC death now rolls a scoped Wilderness-only bonus table for selected training NPCs after the Void Key roll, using only existing items and preserving safe-area tables. The chaos druid double-drop TODOs were audited and replaced with explicit comments for the intended herb-plus-normal-roll helper. Files: `ServerConfiguration`, `WorldPopulator`, `NpcLocs.json`, `NpcDrops`, `Npc`, `server/local.conf`, config/spawn docs, and the bug ledger. No packet, opcode, DB schema, client version, cache asset, NPC/item definition, or loc JSON format changed; reversibility is restoring `wilderness_spawn_multiplier: 2`, removing the appended locs and bonus-table lookup, and reverting decimal multiplier support if no other preset uses it.
