@@ -1187,6 +1187,11 @@ tap_existing_user_button() {
     tap_login_state_target 0 homeExisting 8 || tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
 }
 
+tap_create_account_button() {
+    enable_android_smoke_login
+    tap_login_state_target 0 homeNew 8 || tap_pct 50 52
+}
+
 tap_login_ok_button() {
     tap_login_state_target 2 ok 8 || tap_pct "$AUTH_OK_X_PCT" "$AUTH_OK_Y_PCT"
 }
@@ -6222,9 +6227,10 @@ screenshot 16-recover-account-handoff
 "$ADB" shell input keyevent BACK
 sleep 1
 screenshot 17-existing-user-back-home
-tap_pct 50 52
-sleep 4
-screenshot 18-create-account-handoff
+tap_create_account_button
+wait_for_login_state 1 10 || exit 1
+sleep 1
+screenshot 18-create-account-form
 
 "$ADB" shell input keyevent BACK
 sleep 1

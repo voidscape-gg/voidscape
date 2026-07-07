@@ -27,6 +27,19 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-06 - Desktop and Android create characters in-client
+
+Desktop and native Android `Create Account` now opens the shared in-client
+username/password character-creation form instead of the account portal, reusing
+the existing pre-login register packet and server `CharacterCreateRequest`. A
+successful create returns to Existing User with the new credentials prefilled;
+the web `/play` signup and recovery flows remain portal-first. Launch staging
+and the preservation preset now enable packet registration and disable email for
+this flow. Files: shared `mudclient.java`, `server/preservation.conf`, launch
+packaging/verification scripts, workbench/voidbot QA helpers, and
+account/config/Android docs. No new opcode, packet shape, DB schema, cache
+asset, gameplay rule, or client version changed.
+
 ### 2026-07-06 - Auto camera restores OpenRSC easing
 
 Desktop, web mobile, and native Android auto camera rotation now use the upstream

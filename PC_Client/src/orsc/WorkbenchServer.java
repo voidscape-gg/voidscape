@@ -490,14 +490,32 @@ final class WorkbenchServer {
 		} else {
 			json.append("\"available\":true,");
 			json.append("\"state\":").append(client.getGameState()).append(",");
+			json.append("\"loginScreenNumber\":").append(client.getLoginScreenNumber()).append(",");
 			json.append("\"width\":").append(client.getGameWidth()).append(",");
 			json.append("\"height\":").append(client.getGameHeight()).append(",");
 			appendString(json, "inputXAction", client.inputX_Action == null ? "" : client.inputX_Action.name()).append(",");
 			appendString(json, "inputTextCurrent", client.inputTextCurrent).append(",");
+			appendString(json, "loginExistingUser", client.getWebLoginUserText()).append(",");
+			json.append("\"loginExistingPasswordLength\":").append(client.getWebLoginPasswordLength()).append(",");
+			appendString(json, "loginStatus1", client.getWebLoginStatus1Text()).append(",");
+			appendString(json, "loginStatus2", client.getWebLoginStatus2Text()).append(",");
 			json.append("\"worldReskinMode\":").append(client.workbenchWorldReskinMode()).append(",");
 			appendString(json, "worldReskinModeName", client.workbenchWorldReskinModeName()).append(",");
-			json.append("\"worldReskinActive\":").append(client.workbenchVoidWorldReskinActive());
+			json.append("\"worldReskinActive\":").append(client.workbenchVoidWorldReskinActive()).append(",");
+			appendLoginTargets(json, client);
 		}
+		json.append("}");
+	}
+
+	private static void appendLoginTargets(StringBuilder json, mudclient client) {
+		json.append("\"loginTargets\":{");
+		appendPoint(json, "homeNew", client.workbenchLoginHomeNewUserX(), client.workbenchLoginHomeNewUserY()).append(",");
+		appendPoint(json, "homeExisting", client.workbenchLoginHomeExistingUserX(), client.workbenchLoginHomeExistingUserY()).append(",");
+		appendPoint(json, "existingOk", client.workbenchExistingUserOkX(), client.workbenchExistingUserOkY()).append(",");
+		appendPoint(json, "newUser", client.workbenchNewUserX(), client.workbenchNewUserY()).append(",");
+		appendPoint(json, "newPassword", client.workbenchNewPasswordX(), client.workbenchNewPasswordY()).append(",");
+		appendPoint(json, "newConfirm", client.workbenchNewConfirmX(), client.workbenchNewConfirmY()).append(",");
+		appendPoint(json, "newSubmit", client.workbenchNewSubmitX(), client.workbenchNewSubmitY());
 		json.append("}");
 	}
 

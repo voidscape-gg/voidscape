@@ -311,10 +311,11 @@ class Connection:
         except OSError: pass
 
 
-def build_register(username: str, password: str, email: str) -> bytes:
+def build_register(username: str, password: str, email=None) -> bytes:
     """REGISTER_ACCOUNT body for the custom-client path (server classifies our framing
     as authenticClient == -1 -> the plain-strings branch in LoginPacketHandler ~L750):
-    three 0x0A-terminated strings. Password travels plaintext — loopback dev use only.
+    username/password and optional email as 0x0A-terminated strings.
+    Password travels plaintext — loopback dev use only.
     Server replies with ONE raw byte: 0=created, 2=name taken, 4=packet registration
     disabled (want_packet_register: false), 5=throttled/recently-registered/error,
     6=bad email or DB failure, 7=username not 2-12 chars, 8=disallowed name or bad
@@ -323,7 +324,8 @@ def build_register(username: str, password: str, email: str) -> bytes:
     w.u8(OUT["REGISTER_ACCOUNT"])
     w.rsstr(username)
     w.rsstr(password)
-    w.rsstr(email)
+    if email is not None:
+        w.rsstr(email)
     return bytes(w.b)
 
 

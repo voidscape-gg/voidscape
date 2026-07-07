@@ -2176,6 +2176,14 @@ public final class mudclient implements Runnable {
 		return halfGameWidth();
 	}
 
+	public int workbenchLoginHomeNewUserX() {
+		return halfGameWidth();
+	}
+
+	public int workbenchLoginHomeNewUserY() {
+		return voidscapeLoginHomeNewUserY();
+	}
+
 	public int workbenchLoginHomeExistingUserY() {
 		return voidscapeLoginHomeExistingUserY();
 	}
@@ -2186,6 +2194,38 @@ public final class mudclient implements Runnable {
 
 	public int workbenchExistingUserOkY() {
 		return voidscapeExistingActionY();
+	}
+
+	public int workbenchNewUserX() {
+		return halfGameWidth();
+	}
+
+	public int workbenchNewUserY() {
+		return voidscapeNewUserY();
+	}
+
+	public int workbenchNewPasswordX() {
+		return halfGameWidth() - 63;
+	}
+
+	public int workbenchNewPasswordY() {
+		return voidscapeNewPasswordY();
+	}
+
+	public int workbenchNewConfirmX() {
+		return halfGameWidth() + 63;
+	}
+
+	public int workbenchNewConfirmY() {
+		return voidscapeNewPasswordY();
+	}
+
+	public int workbenchNewSubmitX() {
+		return halfGameWidth() + 67;
+	}
+
+	public int workbenchNewSubmitY() {
+		return voidscapeNewActionY();
 	}
 
 	private boolean isServerPlayerInsideVoidArenaLobby(ORSCharacter player) {
@@ -9944,6 +9984,8 @@ public final class mudclient implements Runnable {
 
 		System.out.println("ANDROID_SMOKE_LOGIN_STATE"
 			+ " screen=" + this.loginScreenNumber
+			+ " homeNewX=" + cx
+			+ " homeNewY=" + voidscapeLoginHomeNewUserY()
 			+ " homeExistingX=" + cx
 			+ " homeExistingY=" + voidscapeLoginHomeExistingUserY()
 			+ " userX=" + cx
@@ -25798,15 +25840,14 @@ public final class mudclient implements Runnable {
 					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
-					if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
-						openCreateAccountPortal();
-					} else if (isAndroid() || Config.isWeb()) {
-						showVoidscapeLoginHomeStatus("Account portal not set", "Use voidscape.gg to create.");
+					if (Config.isWeb()) {
+						if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
+							openCreateAccountPortal();
+						} else {
+							showVoidscapeLoginHomeStatus("Account portal not set", "Use voidscape.gg to create.");
+						}
 					} else {
-						loginScreenNumber = 1;
-						this.menuNewUser.setText(this.menuNewUserStatus, "Please fill in all fields");
-						this.menuNewUser.setText(this.menuNewUserStatus2, "and click submit.");
-						menuNewUser.setFocus(menuNewUserUsername);
+						openInClientCreateAccountForm();
 					}
 				}
 			}
@@ -25824,13 +25865,37 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private void openInClientCreateAccountForm() {
+		clearVoidscapeLoginHomeStatus();
+		this.loginScreenNumber = 1;
+		this.enterPressed = false;
+		if (this.menuNewUser != null) {
+			this.menuNewUser.setText(this.menuNewUserUsername, "");
+			this.menuNewUser.setText(this.menuNewUserPassword, "");
+			this.menuNewUser.setText(this.menuNewUserConfirmPassword, "");
+			if (wantEmail()) {
+				this.menuNewUser.setText(this.menuNewUserEmail, "");
+			}
+			this.menuNewUser.setText(this.menuNewUserStatus, "Please fill in all fields");
+			this.menuNewUser.setText(this.menuNewUserStatus2, "and click submit.");
+			this.menuNewUser.setFocus(this.menuNewUserUsername);
+		}
+		if (isAndroid()) {
+			clientPort.drawKeyboard();
+		}
+	}
+
 	private void sendRegister(String user, String pass, String confirm, String email) {
 		this.m_Zb = 1500;
-		username = user;
-		user = DataOperations.addCharacters(user, 20);
-		password = pass;
-		pass = DataOperations.addCharacters(pass, 20);
-		confirm = DataOperations.addCharacters(confirm, 20);
+		String rawUser = user == null ? "" : user.trim();
+		String rawPass = pass == null ? "" : pass;
+		String rawConfirm = confirm == null ? "" : confirm;
+		username = rawUser;
+		user = DataOperations.addCharacters(rawUser, 20);
+		password = rawPass;
+		pass = DataOperations.addCharacters(rawPass, 20);
+		confirm = DataOperations.addCharacters(rawConfirm, 20);
+		email = email == null ? "" : email.trim();
 
 		if (user.trim().length() == 0) {
 			showLoginScreenStatus("Please fill in all requested", "information to continue!");
@@ -25856,8 +25921,9 @@ public final class mudclient implements Runnable {
 			showLoginScreenStatus("Password is too long, please use", "password with length of 4-20");
 			return;
 		}
-		if (!isValidEmailAddress(email)) {
+		if (wantEmail() && !isValidEmailAddress(email)) {
 			showLoginScreenStatus("Invalid email address", "please use a valid email address");
+			return;
 		}
 		try {
 			if ((Config.SERVER_IP != null)) {
@@ -25883,10 +25949,19 @@ public final class mudclient implements Runnable {
 
 			System.out.println("Registration response:" + registerResponse);
 			if (registerResponse == 0) {
-				// panelLogin.setText(controlLoginUser, username.replaceAll("[^=,\\da-zA-Z\\s]|(?<!,)\\s", " ").trim());
-				// panelLogin.setText(controlLoginPass, password);
-
-				showLoginScreenStatus("Account created", "you can now login with your user");
+				String loginUser = rawUser.replaceAll("[^=,\\da-zA-Z\\s]|(?<!,)\\s", " ").trim();
+				this.loginScreenNumber = 2;
+				if (this.panelLogin != null) {
+					this.panelLogin.setText(this.controlLoginUser, loginUser);
+					this.panelLogin.setText(this.controlLoginPass, rawPass);
+					this.panelLogin.setFocus(this.controlLoginPass);
+				}
+				this.setUsername(loginUser);
+				this.password = rawPass;
+				if (isAndroid()) {
+					clientPort.closeKeyboard();
+				}
+				showLoginScreenStatus("Account created", "Press Ok to log in.");
 				return;
 			}
 			if (registerResponse == -1) {
@@ -25902,7 +25977,7 @@ public final class mudclient implements Runnable {
 				return;
 			}
 			if (registerResponse == 4) {
-				showLoginScreenStatus("Registration disabled", "try registering from website.");
+				showLoginScreenStatus("Registration is not enabled", "on this server.");
 				return;
 			}
 			if (registerResponse == 5) {

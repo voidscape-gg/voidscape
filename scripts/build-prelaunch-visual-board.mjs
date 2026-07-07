@@ -49,7 +49,7 @@ const fromRoot = (...parts) => path.join(root, ...parts);
 
 const globalReviewFocus = [
   "Start with portal/account on desktop and mobile: CTA placement, signup form visibility, account manager, character roster, starter-card state, and security panel.",
-  "Compare client entry points: browser /play, desktop launcher, desktop Java, iPhone Simulator, and Android APK should all point players toward the portal-first account flow.",
+  "Compare client entry points: browser /play stays portal-first, while desktop Java and Android APK create username/password characters in-client.",
   "Treat Android and iPhone physical devices as manual release gates. The screenshots here are emulator/Simulator evidence, not permission to publish direct APK links.",
   "After any final hosted file sync or service restart, run VERIFY-STAGING.sh from that exact synced bundle before player-facing links go live.",
 ];

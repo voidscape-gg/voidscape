@@ -33,7 +33,7 @@ scripts/verify-launch-staging.mjs \
   --run-signup
 ```
 
-The verifier checks durable portal storage, the OpenRSC DB bridge, portal-first registration, packet registration off, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json` or the package's `play/voidscape-web-build.json`.
+The verifier checks durable portal storage, the OpenRSC DB bridge, web portal-first registration metadata, desktop/native packet registration enabled with email disabled, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json` or the package's `play/voidscape-web-build.json`.
 
 ## Current public host layout
 
@@ -230,7 +230,7 @@ The packaged web client `CLIENT_VERSION` must match the live server's expected `
 
 Explicit `?host=&port=` and `?ws=` endpoint choices are saved in browser storage so iPhone Home Screen launches from the manifest `?mobile=1` start URL keep using the intended game server. Use `?endpoint=reset` or `?resetEndpoint=1` to clear the saved endpoint when moving a tester between environments. In Safari dev tools, `window.__voidscapeEndpoint` shows whether the current endpoint came from `query`, `stored`, or `default`, and `window.__voidscapeEffectiveWebSocketUrl` shows the actual socket URL.
 
-The mobile login `Create Account` and `Recover account` buttons are also runtime-configured. Use a generic portal URL when both flows live on the same portal host:
+The `/play` mobile login `Create Account` and `Recover account` buttons are also runtime-configured. Use a generic portal URL when both web flows live on the same portal host:
 
 ```text
 https://<host>/index.html?mobile=1&portal=https://<portal-host>/

@@ -103,6 +103,7 @@ async function verifyServerConfig() {
 		server_name_welcome: configValue(text, "server_name_welcome"),
 		client_version: configValue(text, "client_version"),
 		enforce_custom_client_version: configValue(text, "enforce_custom_client_version"),
+		want_email: configValue(text, "want_email"),
 		want_packet_register: configValue(text, "want_packet_register"),
 		want_pcap_logging: configValue(text, "want_pcap_logging"),
 		production_command_lockdown: configValue(text, "production_command_lockdown"),
@@ -114,7 +115,8 @@ async function verifyServerConfig() {
 	assertCheck("server welcome branded Voidscape", values.server_name_welcome === "Voidscape", String(values.server_name_welcome));
 	assertCheck("server client version", values.client_version === expectedClientVersion, `${values.client_version} vs expected ${expectedClientVersion}`);
 	assertCheck("server enforces custom client version", values.enforce_custom_client_version === "true", String(values.enforce_custom_client_version));
-	assertCheck("server packet registration disabled", values.want_packet_register === "false", String(values.want_packet_register));
+	assertCheck("server registration email disabled", values.want_email === "false", String(values.want_email));
+	assertCheck("server packet registration enabled", values.want_packet_register === "true", String(values.want_packet_register));
 	assertCheck("server pcap logging disabled", values.want_pcap_logging === "false", String(values.want_pcap_logging));
 	assertCheck("server command lockdown enabled", values.production_command_lockdown === "true", String(values.production_command_lockdown));
 	assertCheck("server member world enabled globally", values.member_world === "true", String(values.member_world));
@@ -141,7 +143,7 @@ async function verifyPublicLaunchPayload() {
 	assertCheck("launch signup mode", body.launchSignupMode === true, JSON.stringify(body));
 	assertCheck("launch timestamp", iso(body.launch && body.launch.openAt) === iso(args.launchAt || "2026-07-11T18:00:00.000Z"), String(body.launch && body.launch.openAt));
 	assertCheck("portal-first registration", body.worldRules && body.worldRules.registration === "portal-first", JSON.stringify(body.worldRules || null));
-	assertCheck("packet registration off", body.worldRules && body.worldRules.packetRegistration === false, JSON.stringify(body.worldRules || null));
+	assertCheck("public web packet registration off", body.worldRules && body.worldRules.packetRegistration === false, JSON.stringify(body.worldRules || null));
 	assertCheck("hybrid member world", body.worldRules && body.worldRules.memberWorld === true, JSON.stringify(body.worldRules || null));
 	assertCheck("subscription does not grant members", body.worldRules && body.worldRules.subscriptionGrantsMembers === false, JSON.stringify(body.worldRules || null));
 	assertCheck("no fake public player count", body.status && body.status.playersOnline === 0, JSON.stringify(body.status || null));
@@ -552,7 +554,7 @@ function usage() {
 
 Verifies the production-like launch gate for a staged Voidscape deployment:
   - portal health uses public launch-signup mode, durable storage, and an OpenRSC DB bridge
-  - /api/public exposes portal-first registration, packet registration off, hybrid member world, Google hidden by default
+  - /api/public exposes web portal-first registration metadata, hybrid member world, Google hidden by default
   - /api/launcher/manifest.properties is a well-formed update channel (required keys,
     64-hex sha256 values, https URLs, clientVersion matching the server config) and its
 	    every file entry plus the launcher self-update jar respond to HEAD
@@ -560,7 +562,7 @@ Verifies the production-like launch gate for a staged Voidscape deployment:
   - launch signup rejects punctuation passwords and, with --run-signup, creates one real linked OpenRSC character plus a waiting starter card
   - /play static deployment matches dist/web-teavm/voidscape-web-build.json and optionally runs web login smoke
   - deployed server config copy is Voidscape-branded, disables pcap logging,
-    has production_command_lockdown: true, and has want_packet_register: false
+    has production_command_lockdown: true, want_email: false, and want_packet_register: true
 
 Required for the full gate:
   --portal-url URL              Staged portal URL, e.g. https://staging.voidscape.gg/

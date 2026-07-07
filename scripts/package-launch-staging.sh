@@ -274,7 +274,8 @@ updates = {
     "member_world": "true",
     "want_pcap_logging": "false",
     "production_command_lockdown": "true",
-    "want_packet_register": "false",
+    "want_email": "false",
+    "want_packet_register": "true",
 }
 
 for key, value in updates.items():
@@ -516,7 +517,8 @@ or merge its release-critical values into the real private config:
 - \`client_version: $VERSION\`
 - \`enforce_custom_client_version: true\`
 - \`production_command_lockdown: true\`
-- \`want_packet_register: false\`
+- \`want_email: false\`
+- \`want_packet_register: true\`
 - \`want_pcap_logging: false\`
 - \`member_world: true\`
 - \`want_feature_websockets: true\`

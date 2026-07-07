@@ -77,20 +77,24 @@ case "${1:-}" in
     shift
     HOST="${VOIDBOT_HOST:-127.0.0.1}"
     GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
-    USER=""; PASS=""; EMAIL=""
+    USER=""; PASS=""; EMAIL=""; NO_EMAIL=0
     while [ $# -gt 0 ]; do
       case "$1" in
         --user) USER="$2"; shift 2;;
         --pass) PASS="$2"; shift 2;;
         --email) EMAIL="$2"; shift 2;;
+        --no-email) NO_EMAIL=1; shift;;
         --game-port) GAME_PORT="$2"; shift 2;;
         --host) HOST="$2"; shift 2;;
         *) shift;;
       esac
     done
     [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"register needs --user and --pass"}'; exit 2; }
+    EXTRA=()
+    [ "$NO_EMAIL" -eq 1 ] && EXTRA+=(--no-email)
+    [ -n "$EMAIL" ] && EXTRA+=(--email "$EMAIL")
     exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
-        --user "$USER" --pass "$PASS" ${EMAIL:+--email "$EMAIL"}
+        --user "$USER" --pass "$PASS" "${EXTRA[@]}"
     ;;
   stop)
     "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" shutdown || true

@@ -117,7 +117,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
 - [ ] Player titles command opens and active title appears in chat.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
-- [ ] Desktop, Android, and web clients send Create Account/recovery traffic to the portal-first account manager; packet registration remains disabled unless explicitly enabled for a private beta/dev build.
+- [ ] Desktop and Android `Create Account` open in-client username/password character creation, then prefill Existing User; their recovery buttons still open the portal. Web `/play` keeps Create Account/recovery portal-first, and launch configs keep packet registration enabled with email disabled.
 - [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, marks the portal reward as claimed, and redeemed cards apply the intended account-wide XP rates.
 - [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.

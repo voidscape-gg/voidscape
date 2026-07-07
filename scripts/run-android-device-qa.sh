@@ -111,7 +111,7 @@ scripts/validate-android-device-qa-report.py "$REPORT"
 
 - [ ] Fresh install reaches the branded Voidscape splash/ready screen without Android system dialogs covering app UI.
 - [ ] Play reaches the intended game endpoint and the selected server is understandable.
-- [ ] Create Account opens the portal account route in the browser.
+- [ ] Create Account opens the in-client username/password character creation form, creates a fresh test character, and returns to Existing User with credentials prefilled.
 - [ ] Recover account opens the portal security/recovery route in the browser.
 - [ ] Existing-user login accepts username/password with the soft keyboard.
 - [ ] Portrait gameplay framing is acceptable: HUD is not clipped, touch targets are reachable, and unused vertical space is not release-blocking.

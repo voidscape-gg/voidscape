@@ -28,7 +28,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
 | `client_version` | `10125` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
-| `want_packet_register` | `false` by server default and current launch config | `false` for launch rehearsal | `false` | Portal-first release: public account and character creation happen through the website, then launcher/Android/web clients use the created character login. |
+| `want_email` | `false` for the launch preset | `false` | `false` | Desktop and Android in-client character creation asks only for username/password. The web portal may still collect email for web accounts. |
+| `want_packet_register` | `true` for the launch preset, `false` when omitted | `true` | `true` | Enables desktop and native Android in-client character creation through the existing register packet. `/play` web signup remains portal-first. |
 
 ## Portal account API
 
@@ -60,7 +61,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
 | `production_command_lockdown` | `true` for prelaunch/public rehearsal | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
-| `want_packet_register` | `false` in tracked presets and as the Java default when omitted | `false` | `false` | Disables client packet registration so launch players enter through the portal signup/character flow first. |
+| `want_email` | `false` for launch preset and staging bundle | `false` | `false` | Keeps desktop/native Android character creation email-free; portal web accounts remain separate. |
+| `want_packet_register` | `true` for launch preset and staging bundle; Java default remains `false` when omitted | `true` | `true` | Enables desktop/native Android in-client character creation while web `/play` continues to use portal signup. |
 
 ## Content gates
 

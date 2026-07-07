@@ -1114,9 +1114,12 @@ class Daemon:
 
 def do_register(args):
     """One-shot account registration; prints one JSON object, returns exit code."""
-    email = args.email or (args.user + "@voidscape.test")
+    if args.no_email and args.email:
+        print(json.dumps({"ok": False, "error": "--email and --no-email are mutually exclusive"}))
+        return 2
+    email = None if args.no_email else (args.email or (args.user + "@voidscape.test"))
     detail = {0: "created", 2: "username already taken",
-              4: "packet registration disabled (set want_packet_register: true in server/local.conf)",
+              4: "packet registration disabled (set want_packet_register: true in the active server config)",
               5: "throttled/recently-registered/server error",
               6: "invalid email or DB failure",
               7: "username must be 2-12 chars",
@@ -1149,6 +1152,7 @@ def main():
     ap.add_argument("--register", action="store_true",
                     help="one-shot: register the account and exit (no daemon)")
     ap.add_argument("--email", default=None, help="email for --register (default <user>@voidscape.test)")
+    ap.add_argument("--no-email", action="store_true", help="omit the optional register email field")
     args = ap.parse_args()
     if args.register:
         sys.exit(do_register(args))
