@@ -27,6 +27,33 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-08 - Android app-switch resume hides stale-socket reconnects (VS-061)
+
+Native Android reconnects now carry their reconnect/Android identity into the server
+login request so a valid APK reconnect can reclaim the same account even when the old
+Android socket still appears active to Netty or the phone resumes from a different IP.
+The resumed session detaches and closes the stale channel, clears any pending unregister,
+updates the logged-in IP bookkeeping, and refreshes client activity. The server also
+falls back to the existing encrypted login-details value `Android/` when the newer
+trailing Android limitations byte is absent, covering same-version APKs built before the
+previous Android-bit hardening. The native APK also exposes foreground/background state
+through `ClientPort`; while backgrounded, the shared client skips socket polling and
+resets the read-timeout counter so ordinary app switches do not burn the client-side
+connection timer. On foreground resume, the APK suppresses the short reconnect text box
+for the resume window because Android may have closed the old socket even though the
+server accepts an immediate session resume. Files: `LoginRequest.java`,
+`LoginPacketHandler.java`, `Player.java`, `ClientPort.java`, `Network_Base.java`,
+`mudclient.java`, and `GameActivity.java`. Evidence: `scripts/build.sh` green,
+`scripts/build-android.sh --debug` green, and focused manual emulator proof at
+`tmp/vs061-manual-switch-after-overlay-suppress`: after login, a 30s switch to Android
+Settings, and launcher return, `GameActivity` resumed, `wbtest` stayed online
+(`549 607 1`), and `04-after-resume.png` showed the game view with no reconnect overlay.
+The older focused Android lifecycle smoke still has an unrelated Settings-tab harness
+mismatch (`settingTab=0` while the harness expected `1`). Ryan's physical Android retest
+also passed, confirming the real app-switch path. No opcode, packet ordinal, database
+schema, gameplay rule, cache asset, desktop client behavior, or `/play` web-client
+behavior changed.
+
 ### 2026-07-07 - Ardougne Void Rift moves into the market (VS-071)
 
 Moved the Ardougne Void Rift from the fenced-off edge location `(591,621)` to the market

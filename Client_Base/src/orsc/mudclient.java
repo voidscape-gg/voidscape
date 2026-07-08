@@ -2558,6 +2558,14 @@ public final class mudclient implements Runnable {
 		try {
 
 			long var2 = GenUtil.currentTimeMillis();
+			if (isNativeAndroidClient() && clientPort.isAppInBackground()) {
+				this.lastWrite = var2;
+				if (this.packetHandler.getClientStream() != null) {
+					this.packetHandler.getClientStream().resetReadTimeout();
+				}
+				return;
+			}
+
 			if (this.packetHandler.getClientStream().hasFinishedPackets()) {
 				this.lastWrite = var2;
 			}
@@ -28261,7 +28269,7 @@ public final class mudclient implements Runnable {
 							this.showLoginScreenStatus("Please wait...", "Connecting to server");
 							if (isAndroid())
 								clientPort.closeKeyboard(); // close the keyboard if still open
-						} else {
+						} else if (!isNativeAndroidClient() || !clientPort.shouldSuppressReconnectOverlay()) {
 							this.drawTextBox("Attempting to re-establish", (byte) -64,
 								"Connection lost! Please wait...");
 						}

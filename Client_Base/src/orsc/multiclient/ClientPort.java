@@ -29,6 +29,14 @@ public interface ClientPort {
 	default void pollInput() {
 	}
 
+	default boolean isAppInBackground() {
+		return false;
+	}
+
+	default boolean shouldSuppressReconnectOverlay() {
+		return false;
+	}
+
 	void crashed();
 
 	void drawLoadingError();

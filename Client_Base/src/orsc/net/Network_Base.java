@@ -141,6 +141,10 @@ public class Network_Base {
 		}
 	}
 
+	public final void resetReadTimeout() {
+		this.packetReadAttempts = 0;
+	}
+
 	public final void newPacket(int opcode) {
 		try {
 			// (4/5) of write buffer is filled; flush

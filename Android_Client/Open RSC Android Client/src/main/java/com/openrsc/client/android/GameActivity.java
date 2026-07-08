@@ -43,6 +43,8 @@ public class GameActivity extends Activity implements ClientPort {
     private RSCBitmapSurfaceView gameView;
 
 	private boolean loadedReceivers = false;
+	private volatile boolean appInBackground = false;
+	private volatile long suppressReconnectOverlayUntilMillis = 0L;
 	private int batteryLevel;
 	private int batteryScale;
 	private boolean batteryCharging;
@@ -271,9 +273,29 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
     @Override
+	protected void onPause() {
+		appInBackground = true;
+		super.onPause();
+	}
+
+	@Override
 	public void onResume() {
     	super.onResume();
+		if (appInBackground) {
+			suppressReconnectOverlayUntilMillis = System.currentTimeMillis() + 15000L;
+		}
+		appInBackground = false;
 		refreshInteractiveState();
+	}
+
+	@Override
+	public boolean isAppInBackground() {
+		return appInBackground;
+	}
+
+	@Override
+	public boolean shouldSuppressReconnectOverlay() {
+		return System.currentTimeMillis() < suppressReconnectOverlayUntilMillis;
 	}
 
 	@Override

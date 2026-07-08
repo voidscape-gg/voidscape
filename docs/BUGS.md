@@ -26,8 +26,27 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-071 verified locally; next loop can triage Intake or resume
-  the next prioritized open item.
+- **Active bug:** none — VS-061 verified on emulator and physical Android; next loop
+  can triage Intake or resume the next prioritized open item.
+- **Session preflight 2026-07-08 (VS-061 reopen):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files before this fix include Android APK
+  docs/build/script files, `Client_Base/src/orsc/mudclient.java`,
+  `Web_Client_TeaVM/src/main/java/com/voidscape/webclient/WebClientPort.java`, portal
+  WIP, subscription/content files, `server/src/com/openrsc/server/GameStateUpdater.java`,
+  `server/src/com/openrsc/server/ServerConfiguration.java`, `DiscordService.java` WIP,
+  runtime `server/inc/sqlite/preservation.db`, deleted Android legacy drawables, and
+  untracked launch/portal scripts/assets. Stage only VS-061 hunks if committing.
+  Result: server-side Android reconnect takeover fixed, and the APK now pauses shared
+  client socket polling while backgrounded and suppresses the short resume reconnect
+  overlay. `scripts/build.sh` and `scripts/build-android.sh --debug` passed. Focused
+  Android lifecycle smoke reached authenticated in-game state at
+  `tmp/vs061-android-lifecycle-reopen` and server logs showed `Login details for
+  wbtest: Android/`, but the smoke stopped before HOME/resume because Settings stayed
+  on `settingTab=0` while the harness expected `1`. A focused manual emulator runner
+  then verified a 30s switch to Android Settings and launcher return at
+  `tmp/vs061-manual-switch-after-overlay-suppress`: `GameActivity` resumed, `wbtest`
+  stayed online, and the final screenshot had no reconnect overlay. Ryan's physical
+  Android retest also passed.
 - **Session preflight 2026-07-07 (VS-071):** branch `main`; pre-change
   `scripts/build.sh` green. Existing dirty files before this fix include the verified
   VS-069/VS-070 hunks, `docs/DIVERGENCE.md`, `docs/subsystems/combat-system.md`,
@@ -141,6 +160,11 @@ to resume from these two files alone. Keep every entry self-contained.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
+- Android `--only-auth-lifecycle` smoke times out before HOME/resume because it waits
+  for Settings `settingTab=1`, but the current authenticated APK reports
+  `ANDROID_SMOKE_SETTINGS ... visible=true showUiTab=6 settingTab=0 ...` after the
+  smoke opens Settings. Reproduced during VS-061 reopen verification at
+  `tmp/vs061-android-lifecycle-reopen`.
 
 Anyone (Ryan or an agent) can append raw, unstructured reports below, one bullet each.
 The loop's triage step converts each into a numbered entry and removes it from this list.
@@ -565,7 +589,8 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   to unregister the player before the retained Android client can reconnect. Android
   backgrounding can also freeze the socket without closing the channel, so the shared
   30s `GameStateUpdater` client-activity timeout can unregister the player before
-  the APK resumes.
+  the APK resumes. Reopened 2026-07-08 from Ryan's Android APK report: "it still dcs
+  when you switch apps", with an in-game screenshot again showing the reconnect overlay.
 - Repro: Android authenticated lifecycle smoke or physical Android: log in, background
   the game for longer than 30s, resume, observe disconnect/login reset or failed
   session resume.
@@ -576,7 +601,16 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   a 120s silent client-activity timeout while desktop/web clients keep the existing
   5s/30s behavior. The shared client now only sends the Android limitations bit for
   native Android, so Android-profile `/play` does not silently inherit APK reconnect
-  grace.
+  grace. Reopened fix: custom login now preserves the reconnect byte on `LoginRequest`
+  and tags the request as Android from either the trailing limitations byte or the
+  existing encrypted `Android/` login-details fallback. A valid native Android reconnect
+  can reclaim its own prior Android session across IP changes or while the old socket
+  still appears active, and the server detaches/closes the stale channel while updating
+  logged-in IP bookkeeping. The native APK also marks `GameActivity` background/resume
+  state through `ClientPort`; while backgrounded, the shared client skips socket polling
+  and resets its read-timeout counter, and for the short foreground-resume window it
+  suppresses the reconnect text box because Android may close the old socket even though
+  the server accepts an immediate session resume.
 - Verified 2026-07-06: `scripts/build.sh` green before Android smoke; after restarting
   the local server on the current build, `scripts/android-smoke.sh --no-build
   --only-auth-lifecycle --out /tmp/voidscape_android_vs061_lifecycle_native_only_rerun`
@@ -585,6 +619,23 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   `scripts/build-android.sh --debug` passed again after the final Android input build.
   Physical-device confirmation remains a release gate.
 - Log: 2026-07-06 triaged from Discord screenshots, fixed, and emulator-smoke verified.
+  2026-07-08 reopened after real-device recurrence; inspect Android lifecycle handling,
+  server Android grace detection, and whether the app is still closing/tearing down the
+  shared client on `Activity` stop despite the server-side grace. 2026-07-08 code fixed
+  server-side active/stale-channel and IP-change Android reconnect bypasses, plus
+  login-details fallback for same-version APKs missing the trailing Android bit.
+  `scripts/build.sh` and `scripts/build-android.sh --debug` passed. Focused lifecycle
+  smoke installed the APK, logged in `wbtest`, and captured in-game HUD under
+  `tmp/vs061-android-lifecycle-reopen`; server log showed `Login details for wbtest:
+  Android/`. Smoke did not reach HOME/resume because it timed out waiting for Settings
+  `settingTab=1` while the client reported `settingTab=0`. Manual emulator follow-up
+  reproduced that the APK still painted the reconnect overlay after resume, then verified
+  the final client-side fix at `tmp/vs061-manual-switch-after-overlay-suppress`: after
+  login, switching to Android Settings for 30s, and relaunching Voidscape, `GameActivity`
+  was foreground, `wbtest` remained online (`549 607 1`), and `04-after-resume.png`
+  showed the game view with no "Connection lost" overlay. A hidden successful reconnect
+  response (`86`) can still occur because Android may close the background socket;
+  Ryan's physical Android retest also passed, confirming the real app-switch path.
 
 ### VS-062 — Android one-finger camera drags also zoom
 - Status: fixed · Severity: P2 · Area: Android APK input

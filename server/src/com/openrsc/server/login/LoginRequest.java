@@ -36,6 +36,7 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 	private int clientVersion;
 	private boolean authenticClient;
 	private boolean reconnecting;
+	private boolean androidClient;
 	private boolean isSimLogin;
 	private int[] nonces;
 	private UsernameChangeType usernameChangeType = UsernameChangeType.NOT_RENAMED;
@@ -50,6 +51,7 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 		this.setClientVersion(clientVersion);
 		this.setUsernameHash(DataConversions.usernameToHash(username));
 		this.reconnecting = reconnecting;
+		this.androidClient = false;
 		this.isSimLogin = false;
 		this.nonces = nonces;
 	}
@@ -64,6 +66,7 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 		this.setClientVersion(clientVersion);
 		this.setUsernameHash(DataConversions.usernameToHash(username));
 		this.reconnecting = false;
+		this.androidClient = false;
 		this.isSimLogin = true;
 	}
 
@@ -121,6 +124,18 @@ public abstract class LoginRequest extends LoginExecutorProcess{
 
 	private void setClientVersion(final int clientVersion) {
 		this.clientVersion = clientVersion;
+	}
+
+	public boolean isReconnectRequest() {
+		return reconnecting;
+	}
+
+	public boolean isAndroidClient() {
+		return androidClient;
+	}
+
+	public void setAndroidClient(final boolean androidClient) {
+		this.androidClient = androidClient;
 	}
 
 	public abstract void loginValidated(int response);

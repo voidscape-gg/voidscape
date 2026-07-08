@@ -495,7 +495,8 @@ public class LoginPacketHandler {
 
 					final String username = getString(packet.getBuffer()).trim();
 					String password = "";
-						if (clientVersion < 10010) {
+					String loginDetails = "";
+					if (clientVersion < 10010) {
 						password = getString(packet.getBuffer()).trim();
 					} else {
 						byte loginEncryptionVersion = packet.readByte(); //0 = none, 1 = RSA, 2 = SSL/TLS
@@ -511,11 +512,10 @@ public class LoginPacketHandler {
 							} catch (Exception e) {
 								LOGGER.error("error parsing password in login block", e);
 							}
-							String loginDetails = "";
 							int rsaDetailsLength = packet.readUnsignedShort();
 							byte[] loginDetailsBlock = Crypto.decryptRSA(packet.readBytes(rsaDetailsLength), 0, rsaDetailsLength);
 							try {
-								 loginDetails = new String(loginDetailsBlock, "UTF8").trim();
+								loginDetails = new String(loginDetailsBlock, "UTF8").trim();
 							} catch (Exception e) {
 								LOGGER.error("error parsing details in login block", e);
 							}
@@ -554,8 +554,11 @@ public class LoginPacketHandler {
 					if (packet.getReadableBytes() > 0) {
 						cl.isAndroidClient = (packet.readUnsignedByte() & 0xFF) != 0;
 					}
+					if (!cl.isAndroidClient && isNativeAndroidLoginDetails(loginDetails)) {
+						cl.isAndroidClient = true;
+					}
 
-					final LoginRequest request = new LoginRequest(server, channel, username, password, false, clientVersion, opcode == OpcodeIn.RELOGIN, null) {
+					final LoginRequest request = new LoginRequest(server, channel, username, password, false, clientVersion, reconnecting, null) {
 						@Override
 						public void loginValidated(int response) {
 							loginResponse = response;
@@ -588,6 +591,7 @@ public class LoginPacketHandler {
 							completeLogin(server, loadedPlayer);
 						}
 					};
+					request.setAndroidClient(cl.isAndroidClient);
 					server.getLoginExecutor().add(request);
 					break;
 
@@ -984,6 +988,12 @@ public class LoginPacketHandler {
 					break;
 				}
 		}
+	}
+
+	private boolean isNativeAndroidLoginDetails(final String loginDetails) {
+		return loginDetails != null
+			&& (loginDetails.equalsIgnoreCase("Android")
+				|| loginDetails.regionMatches(true, 0, "Android/", 0, "Android/".length()));
 	}
 
 	public int getVersion(int retrievedVersion, Player player) {

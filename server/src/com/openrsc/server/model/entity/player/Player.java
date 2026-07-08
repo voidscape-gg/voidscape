@@ -911,7 +911,8 @@ public final class Player extends Mob {
 		if (!loggedIn() || isRemoved() || isSaving() || isLoggingOut() || isUnregistering()) {
 			return false;
 		}
-		if (!getCurrentIP().equals(request.getIpAddress())) {
+		final boolean androidReconnectResume = isAndroidReconnectResume(request);
+		if (!getCurrentIP().equals(request.getIpAddress()) && !androidReconnectResume) {
 			return false;
 		}
 
@@ -923,7 +924,7 @@ public final class Player extends Mob {
 			return true;
 		}
 		if (currentChannel.isOpen() && currentChannel.isActive()) {
-			return false;
+			return androidReconnectResume;
 		}
 		return hasUnregisterRequest() || getUnregisterEvent() != null
 			|| !currentChannel.isOpen() || !currentChannel.isActive();
@@ -935,6 +936,7 @@ public final class Player extends Mob {
 		}
 
 		Channel previousChannel = getChannel();
+		String previousIP = getCurrentIP();
 		if (previousChannel != null && previousChannel != request.getChannel()) {
 			try {
 				if (previousChannel.hasAttr(RSCConnectionHandler.attachment)) {
@@ -946,6 +948,11 @@ public final class Player extends Mob {
 			} catch (Exception e) {
 				LOGGER.debug("Unable to detach stale channel for resumed player {}", username, e);
 			}
+			try {
+				previousChannel.close();
+			} catch (Exception e) {
+				LOGGER.debug("Unable to close stale channel for resumed player {}", username, e);
+			}
 		}
 
 		if (getUnregisterEvent() != null) {
@@ -955,6 +962,9 @@ public final class Player extends Mob {
 		unsetUnregisterRequest();
 		setUnregistering(false);
 
+		if (previousIP != null && !previousIP.equals(request.getIpAddress())) {
+			getWorld().getServer().getPacketFilter().removeLoggedInPlayer(previousIP, usernameHash);
+		}
 		channel = request.getChannel();
 		currentIP = ((InetSocketAddress) request.getChannel().remoteAddress()).getAddress().getHostAddress();
 		clientVersion = request.getClientVersion();
@@ -963,6 +973,10 @@ public final class Player extends Mob {
 		setReconnecting(true);
 		clearClientSessionState();
 		return true;
+	}
+
+	private boolean isAndroidReconnectResume(final LoginRequest request) {
+		return isUsingAndroidClient() && request.isAndroidClient() && request.isReconnectRequest();
 	}
 
 	private void clearClientSessionState() {
