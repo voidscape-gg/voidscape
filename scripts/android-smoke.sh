@@ -91,6 +91,7 @@ ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_PVP_STRESS=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
+ONLY_AUTH_CREDENTIALS=0
 ONLY_BOOTSTRAP=0
 ORIGINAL_ACCELEROMETER_ROTATION=""
 ORIGINAL_USER_ROTATION=""
@@ -223,7 +224,7 @@ PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -243,6 +244,7 @@ Environment:
                                     Optional: do not write the requested endpoint before auth smoke launch
   ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
   --only-bootstrap                 Focused offline bundled-cache install/repair/skip and endpoint smoke
+  --only-auth-credentials          Focused opt-in encrypted saved-login, persistence, and forget smoke
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
@@ -553,6 +555,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --only-auth-login)
             ONLY_AUTH_LOGIN=1
+            shift
+            ;;
+        --only-auth-credentials)
+            ONLY_AUTH_CREDENTIALS=1
             shift
             ;;
         --only-auth-lifecycle)
@@ -934,7 +940,7 @@ disable_android_smoke_targets
 trap android_smoke_cleanup EXIT
 
 "$ADB" logcat -c || true
-"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt $APP_FILES/accounts.txt" 2>/dev/null || true
 
 adb_screencap_to_file() {
     local output="$1"
@@ -1276,6 +1282,51 @@ wait_for_login_lengths() {
     return 1
 }
 
+wait_for_login_remember_state() {
+	local expected="$1"
+	local timeout="${2:-12}"
+	local deadline=$((SECONDS + timeout))
+	local line actual
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep 'ANDROID_SMOKE_LOGIN_STATE ' \
+			| tail -20 \
+			| grep 'screen=2 ' \
+			| tail -1 || true)"
+		actual="$(extract_log_value "$line" rememberRequested)"
+		if [[ "$actual" == "$expected" ]]; then
+			echo "Verified Android remember-login state: $actual"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: expected Android remember-login state $expected" >&2
+	login_log_tail
+	return 1
+}
+
+wait_for_login_response_code() {
+	local expected="$1"
+	local timeout="${2:-30}"
+	local deadline=$((SECONDS + timeout))
+	local line code
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep 'login response:' | tail -1 || true)"
+		if [[ "$line" =~ login\ response:([0-9]+) ]]; then
+			code="${BASH_REMATCH[1]}"
+			if [[ "$code" == "$expected" ]]; then
+				echo "Verified Android login response: $code"
+				return 0
+			fi
+			echo "ERROR: expected Android login response $expected, got $code" >&2
+			return 1
+		fi
+		sleep 1
+	done
+	echo "ERROR: timed out waiting for Android login response $expected" >&2
+	return 1
+}
+
 tap_existing_user_button() {
     enable_android_smoke_login
     tap_login_state_target 0 homeExisting 8 || tap_pct "$AUTH_EXISTING_USER_X_PCT" "$AUTH_EXISTING_USER_Y_PCT"
@@ -1457,6 +1508,23 @@ launch_authenticated_endpoint() {
 	else
 		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
 	fi
+}
+
+launch_authenticated_endpoint_preserving_credentials() {
+	enable_android_smoke_network
+	if [[ "$AUTH_USE_BUNDLED_ENDPOINT" == "1" ]]; then
+		launch_to_login_home 0
+		return
+	fi
+	PENDING_SERVER_HOST="$AUTH_HOST"
+	PENDING_SERVER_PORT="$AUTH_PORT"
+	launch_wrapper 0
+	wait_for_wrapper_ready
+	tap_play_button
+	ensure_game_activity_from_wrapper 120 || return 1
+	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || return 1
+	sleep 5
+	dismiss_fullscreen_education
 }
 
 dismiss_fullscreen_education() {
@@ -1682,6 +1750,105 @@ assert_no_android_runtime_crash() {
 	return 0
 }
 
+assert_no_plaintext_saved_logins() {
+	local path
+	for path in files/credentials.txt files/accounts.txt; do
+		if "$ADB" shell run-as "$APP_ID" test -e "$path" 2>/dev/null; then
+			echo "ERROR: plaintext saved-login file still exists: $path" >&2
+			return 1
+		fi
+	done
+}
+
+assert_no_credential_envelope() {
+	if "$ADB" shell run-as "$APP_ID" test -e no_backup/voidscape-credentials.v1.bin 2>/dev/null; then
+		echo "ERROR: credentials were persisted before successful authentication" >&2
+		return 1
+	fi
+	assert_no_plaintext_saved_logins
+}
+
+assert_encrypted_credential_envelope() {
+	local deadline=$((SECONDS + 15))
+	local envelope="$OUT_DIR/credential-envelope.bin"
+	local size hash
+	while (( SECONDS < deadline )); do
+		if "$ADB" shell run-as "$APP_ID" test -s no_backup/voidscape-credentials.v1.bin 2>/dev/null; then
+			break
+		fi
+		sleep 1
+	done
+	if ! "$ADB" shell run-as "$APP_ID" test -s no_backup/voidscape-credentials.v1.bin 2>/dev/null; then
+		echo "ERROR: encrypted saved-login envelope was not created" >&2
+		return 1
+	fi
+	if "$ADB" shell run-as "$APP_ID" test -e no_backup/voidscape-credentials.v1.cleared 2>/dev/null; then
+		echo "ERROR: credential tombstone remained beside a saved-login envelope" >&2
+		return 1
+	fi
+	assert_no_plaintext_saved_logins
+	"$ADB" exec-out run-as "$APP_ID" cat no_backup/voidscape-credentials.v1.bin > "$envelope"
+	AUTH_SMOKE_USER="$AUTH_USER" AUTH_SMOKE_PASS="$AUTH_PASS" python3 - "$envelope" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+payload = Path(sys.argv[1]).read_bytes()
+for label, value in (("username", os.environ["AUTH_SMOKE_USER"]), ("password", os.environ["AUTH_SMOKE_PASS"])):
+    if value.encode("utf-8") in payload:
+        raise SystemExit(f"ERROR: encrypted credential envelope exposes the {label} in plaintext")
+PY
+	size="$(wc -c < "$envelope" | tr -d ' ')"
+	hash="$(shasum -a 256 "$envelope" | awk '{print $1}')"
+	echo "Verified encrypted credential envelope: size=$size sha256=$hash"
+}
+
+credential_envelope_device_hash() {
+	"$ADB" exec-out run-as "$APP_ID" cat no_backup/voidscape-credentials.v1.bin \
+		| shasum -a 256 \
+		| awk '{print $1}'
+}
+
+assert_credential_envelope_survives_reconnect() {
+	local before_hash after_hash settings_launch_output
+	before_hash="$(credential_envelope_device_hash)"
+	"$ADB" logcat -c || true
+	settings_launch_output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
+	if ! grep -q "Status: ok" <<< "$settings_launch_output"; then
+		echo "ERROR: credential smoke could not switch to Android Settings" >&2
+		return 1
+	fi
+	sleep "$AUTH_LIFECYCLE_BACKGROUND_SECONDS"
+	"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" >/dev/null
+	wait_for_resumed_activity "GameActivity" 30 || return 1
+	wait_for_log_pattern 'VOIDSCAPE_NETWORK_WRITER event=start active=' 30 || return 1
+	wait_for_successful_login 30 || return 1
+	wait_auth_online 20 || return 1
+	after_hash="$(credential_envelope_device_hash)"
+	if [[ -z "$before_hash" || "$after_hash" != "$before_hash" ]]; then
+		echo "ERROR: saved-login envelope changed or disappeared during reconnect" >&2
+		echo "  before: $before_hash" >&2
+		echo "  after:  $after_hash" >&2
+		return 1
+	fi
+	echo "Verified encrypted saved login survived a real app-switch reconnect: $after_hash"
+}
+
+assert_credential_store_cleared() {
+	local deadline=$((SECONDS + 15))
+	while (( SECONDS < deadline )); do
+		if ! "$ADB" shell run-as "$APP_ID" test -e no_backup/voidscape-credentials.v1.bin 2>/dev/null \
+			&& "$ADB" shell run-as "$APP_ID" test -s no_backup/voidscape-credentials.v1.cleared 2>/dev/null; then
+			assert_no_plaintext_saved_logins
+			echo "Verified saved-login forget tombstone"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: saved-login store was not cleared authoritatively" >&2
+	return 1
+}
+
 run_authenticated_login_smoke() {
 	preflight_auth_login_fixture
 
@@ -1715,6 +1882,87 @@ run_authenticated_login_smoke() {
 	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 	echo "Android auth/login smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
+}
+
+run_authenticated_credential_smoke() {
+	local wrong_pass="${AUTH_PASS}x"
+	local remember_line remember_state
+
+	preflight_auth_login_fixture
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	"$ADB" shell pm clear "$APP_ID" >/dev/null
+	"$ADB" logcat -c || true
+
+	launch_authenticated_endpoint_preserving_credentials
+	tap_existing_user_button
+	sleep 2
+	enter_auth_credentials
+	tap_login_state_target 2 remember 8 || {
+		echo "ERROR: Android credential smoke could not tap Remember" >&2
+		exit 1
+	}
+	wait_for_login_remember_state true 12 || exit 1
+	assert_no_credential_envelope || exit 1
+	screenshot 00-credentials-remember-pending
+
+	tap_login_state_target 2 pass 8 || exit 1
+	clear_focused_text_field
+	input_text_slow "$wrong_pass"
+	wait_for_login_lengths "${#AUTH_USER}" "${#wrong_pass}" 12 || exit 1
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent ENTER
+	wait_for_login_response_code 3 30 || exit 1
+	wait_for_login_state 2 20 >/dev/null || exit 1
+	assert_no_credential_envelope || exit 1
+	screenshot 01-credentials-wrong-password-not-saved
+
+	tap_login_state_target 2 pass 8 || exit 1
+	clear_focused_text_field
+	input_text_slow "$AUTH_PASS"
+	wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || exit 1
+	remember_line="$(wait_for_login_state 2 10)" || exit 1
+	remember_state="$(extract_log_value "$remember_line" rememberRequested)"
+	if [[ "$remember_state" != "true" ]]; then
+		tap_login_state_target 2 remember 8 || exit 1
+		wait_for_login_remember_state true 12 || exit 1
+	fi
+	submit_login_and_wait || exit 1
+	wait_auth_online 20 || exit 1
+	assert_encrypted_credential_envelope || exit 1
+	sleep 3
+	close_auth_intro_dialog_if_present
+	screenshot 02-credentials-saved-after-login
+	assert_credential_envelope_survives_reconnect || exit 1
+	screenshot 02a-credentials-after-reconnect
+	logout_authenticated_smoke_session || exit 1
+
+	"$ADB" logcat -c || true
+	launch_authenticated_endpoint_preserving_credentials
+	tap_existing_user_button
+	wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 20 || exit 1
+	wait_for_login_remember_state true 12 || exit 1
+	screenshot 03-credentials-restored-after-restart
+	tap_login_state_target 2 remember 8 || exit 1
+	wait_for_login_remember_state false 12 || exit 1
+	"$ADB" logcat -c || true
+	tap_login_state_target 2 ok 8 || exit 1
+	wait_for_successful_login 45 || exit 1
+	wait_auth_online 20 || exit 1
+	assert_credential_store_cleared || exit 1
+	sleep 3
+	close_auth_intro_dialog_if_present
+	logout_authenticated_smoke_session || exit 1
+
+	"$ADB" logcat -c || true
+	launch_authenticated_endpoint_preserving_credentials
+	tap_existing_user_button
+	wait_for_login_lengths 0 0 20 || exit 1
+	wait_for_login_remember_state false 12 || exit 1
+	screenshot 04-credentials-forgotten-after-restart
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
+	echo "Android encrypted credential smoke passed for $AUTH_USER"
 }
 
 run_authenticated_lifecycle_smoke() {
@@ -6487,22 +6735,28 @@ run_bootstrap_smoke() {
 }
 
 launch_wrapper() {
+	local clear_saved_logins="${1:-1}"
+	local credential_clear_value=false
+	if [[ "$clear_saved_logins" == "1" ]]; then
+		credential_clear_value=true
+	fi
     "$ADB" shell am force-stop $APP_ID
     if [[ -n "$PENDING_SERVER_HOST" && -n "$PENDING_SERVER_PORT" ]]; then
         "$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater \
             -e voidscape.smoke.endpoint_host "$PENDING_SERVER_HOST" \
             -e voidscape.smoke.endpoint_port "$PENDING_SERVER_PORT" \
-            --ez voidscape.smoke.clear_credentials true >/dev/null
+            --ez voidscape.smoke.clear_credentials "$credential_clear_value" >/dev/null
         PENDING_SERVER_HOST=""
         PENDING_SERVER_PORT=""
     else
         "$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater \
-            --ez voidscape.smoke.clear_credentials true >/dev/null
+            --ez voidscape.smoke.clear_credentials "$credential_clear_value" >/dev/null
     fi
 }
 
 launch_to_login_home() {
-	launch_wrapper
+	local clear_saved_logins="${1:-1}"
+	launch_wrapper "$clear_saved_logins"
 	wait_for_wrapper_ready
 	tap_play_button
 	ensure_game_activity_from_wrapper
@@ -6511,6 +6765,12 @@ launch_to_login_home() {
 
 if [[ "$ONLY_BOOTSTRAP" -eq 1 ]]; then
 	run_bootstrap_smoke
+	exit 0
+fi
+
+if [[ "$ONLY_AUTH_CREDENTIALS" -eq 1 ]]; then
+	run_authenticated_credential_smoke
+	echo "Android encrypted credential smoke evidence written to $OUT_DIR"
 	exit 0
 fi
 

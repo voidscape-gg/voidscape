@@ -32,6 +32,9 @@ import orsc.graphics.two.SpriteArchive.Subspace;
 import orsc.graphics.two.SpriteArchive.Unpacker;
 import orsc.graphics.two.SpriteArchive.Workspace;
 import orsc.multiclient.ClientPort;
+import orsc.multiclient.CredentialSnapshot;
+import orsc.multiclient.CredentialStore;
+import orsc.multiclient.SavedCredentialAccount;
 import orsc.net.Network_Base;
 import orsc.net.Opcodes;
 import orsc.util.FastMath;
@@ -1156,6 +1159,11 @@ public final class mudclient implements Runnable {
 	private boolean settingsGearIconLoadAttempted = false;
 	private boolean voidscapeUiSkinLoadAttempted = false;
 	private boolean voidscapeSavedAccountsLoaded = false;
+	private boolean voidscapeCredentialStoreUnavailable = false;
+	private boolean voidscapeRememberLoginRequested = false;
+	private boolean voidscapeRememberLoginDecisionPending = false;
+	private long voidscapeCredentialStoreRetryAt = 0L;
+	private String voidscapeSelectedCredentialUsername = "";
 	private boolean voidscapeAccountMenuOpen = false;
 	private boolean voidscapeAccountDrawerCollapsed = false;
 	private boolean voidscapeAccountAddFormOpen = false;
@@ -3245,16 +3253,7 @@ public final class mudclient implements Runnable {
 			this.controlLoginPass = this.panelLogin.addCenteredTextEntry(halfGameWidth() - 46, halfGameHeight() + 146 + yOffsetLogin, 200, 20, 40, 4, true, false);
 
 			if (shouldOfferCredentialSave()) {
-				String cred = ClientPort.loadCredentials();
-				if (cred.length() > 0) {
-					String[] split = cred.split(",", 2);
-					if (split.length == 2) {
-						String user = split[0];
-						String pass = split[1];
-						this.panelLogin.setText(this.controlLoginUser, user);
-						this.panelLogin.setText(this.controlLoginPass, pass);
-					}
-				}
+				loadPreferredCredentialIntoLoginPanel();
 			}
 
 			this.panelLogin.addButtonBackground(halfGameWidth() + 154, halfGameHeight() + 83 + yOffsetLogin, 120, 25);
@@ -3290,7 +3289,7 @@ public final class mudclient implements Runnable {
 			}
 			if (shouldOfferCredentialSave()) {
 				this.panelLogin.addButtonBackground(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, 60, 40);
-				this.panelLogin.addCenteredText(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, "Save", 3, false);
+				this.panelLogin.addCenteredText(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, rememberLoginButtonText(), 3, false);
 				this.rememberButtonIdx = this.panelLogin.addButton(halfGameWidth() - 186, halfGameHeight() + 138 + yOffsetLogin, 60, 40);
 			}
 
@@ -3383,15 +3382,8 @@ public final class mudclient implements Runnable {
 		this.controlLoginPass = this.panelLogin.addCenteredTextEntry(cx, voidscapeExistingPassY(), 210, 20,
 			voidscapeExistingFieldHeight(), 1, true, true);
 
-		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
-			String cred = ClientPort.loadCredentials();
-			if (cred.length() > 0) {
-				String[] split = cred.split(",", 2);
-				if (split.length == 2) {
-					this.panelLogin.setText(this.controlLoginUser, split[0]);
-					this.panelLogin.setText(this.controlLoginPass, split[1]);
-				}
-			}
+		if (!preserveExistingLogin && !this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
+			loadPreferredCredentialIntoLoginPanel();
 		}
 
 		this.m_be = this.panelLogin.addButton(cx - voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28);
@@ -10123,6 +10115,10 @@ public final class mudclient implements Runnable {
 			+ " okY=" + voidscapeExistingActionY()
 			+ " cancelX=" + (cx + voidscapeExistingActionOffsetX())
 			+ " cancelY=" + voidscapeExistingActionY()
+			+ " rememberX=" + voidscapeExistingSaveX()
+			+ " rememberY=" + voidscapeExistingToggleY()
+			+ " rememberRequested=" + this.voidscapeRememberLoginRequested
+			+ " credentialStoreUnavailable=" + this.voidscapeCredentialStoreUnavailable
 			+ " userLength=" + userText.length()
 			+ " passLength=" + getWebLoginPasswordLength()
 			+ " userFocused=" + userFocused
@@ -12569,6 +12565,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private void drawVoidscapeExistingUser() {
+		reconcileRememberLoginIndicator();
 		int cx = halfGameWidth();
 		boolean hideFieldLabels = shouldHideExistingFieldLabels();
 		drawVoidscapeFrame(cx - 128, voidscapeExistingFrameY(), 256, voidscapeExistingFrameHeight());
@@ -12583,7 +12580,8 @@ public final class mudclient implements Runnable {
 			drawVoidscapeButton(cx + 54, voidscapeExistingToggleY(), 96, 24, text, false);
 		}
 		if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave()) {
-			drawVoidscapeButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24, "Save", false);
+			drawVoidscapeButton(voidscapeExistingSaveX(), voidscapeExistingToggleY(), 96, 24,
+				rememberLoginButtonText(), this.voidscapeRememberLoginRequested);
 		}
 		drawVoidscapeButton(cx - voidscapeExistingActionOffsetX(), voidscapeExistingActionY(), 84, 28,
 			this.voidscapeAddAccountPending ? "Add" : "Ok", true);
@@ -12593,6 +12591,126 @@ public final class mudclient implements Runnable {
 
 	private boolean shouldOfferCredentialSave() {
 		return isAndroid() || Remember();
+	}
+
+	private boolean usesSecureCredentialStore() {
+		return isNativeAndroidClient() && this.clientPort != null;
+	}
+
+	private CredentialStore credentialStore() {
+		if (this.clientPort == null || this.clientPort.getCredentialStore() == null) {
+			return CredentialStore.unsupported();
+		}
+		return this.clientPort.getCredentialStore();
+	}
+
+	private String rememberLoginButtonText() {
+		if (usesSecureCredentialStore() && this.voidscapeCredentialStoreUnavailable) {
+			return "Reset saved";
+		}
+		return this.voidscapeRememberLoginRequested ? "Remembered" : "Remember";
+	}
+
+	private void reconcileRememberLoginIndicator() {
+		if (!usesSecureCredentialStore() || this.voidscapeRememberLoginDecisionPending
+			|| this.panelLogin == null || this.controlLoginUser < 0) {
+			return;
+		}
+		ensureVoidscapeSavedAccountsLoaded();
+		String user = this.panelLogin.getControlText(this.controlLoginUser);
+		this.voidscapeRememberLoginRequested = findVoidscapeSavedAccount(user) != null;
+	}
+
+	private void loadPreferredCredentialIntoLoginPanel() {
+		this.voidscapeRememberLoginRequested = false;
+		this.voidscapeRememberLoginDecisionPending = false;
+		if (usesSecureCredentialStore()) {
+			ensureVoidscapeSavedAccountsLoaded();
+			if (this.voidscapeCredentialStoreUnavailable) {
+				this.panelLogin.setText(this.controlLoginStatus1, "");
+				this.panelLogin.setText(this.controlLoginStatus2,
+					"@yel@Saved login unavailable - enter password or reset");
+				return;
+			}
+			VoidscapeSavedAccount selected = findVoidscapeSavedAccount(
+				this.voidscapeSelectedCredentialUsername);
+			if (selected == null && !this.voidscapeSavedAccounts.isEmpty()) {
+				selected = this.voidscapeSavedAccounts.get(0);
+			}
+			if (selected != null && selected.username != null && selected.password != null) {
+				this.panelLogin.setText(this.controlLoginUser, selected.username);
+				this.panelLogin.setText(this.controlLoginPass, selected.password);
+				this.voidscapeRememberLoginRequested = true;
+			}
+			return;
+		}
+
+		String cred = ClientPort.loadCredentials();
+		if (cred.length() <= 0) {
+			return;
+		}
+		String[] split = cred.split(",", 2);
+		if (split.length == 2) {
+			this.panelLogin.setText(this.controlLoginUser, split[0]);
+			this.panelLogin.setText(this.controlLoginPass, split[1]);
+			this.voidscapeRememberLoginRequested = true;
+		}
+	}
+
+	private void handleRememberLoginAction() {
+		if (!usesSecureCredentialStore()) {
+			String user = this.panelLogin.getControlText(this.controlLoginUser);
+			String pass = this.panelLogin.getControlText(this.controlLoginPass);
+			boolean saved = saveVoidscapeCredentials(user, pass, true);
+			this.panelLogin.setText(this.controlLoginStatus1, "");
+			this.panelLogin.setText(this.controlLoginStatus2,
+				saved ? "@gre@Credentials Saved" : "@red@Unable to save");
+			return;
+		}
+
+		if (this.voidscapeCredentialStoreUnavailable) {
+			CredentialStore.Result cleared = credentialStore().clear();
+			if (cleared.getState() == CredentialStore.State.UNAVAILABLE) {
+				this.panelLogin.setText(this.controlLoginStatus1, "");
+				this.panelLogin.setText(this.controlLoginStatus2, "@red@Unable to reset saved logins");
+				return;
+			}
+			clearVoidscapeCredentialMemory();
+			this.voidscapeSavedAccountsLoaded = true;
+			this.panelLogin.setText(this.controlLoginStatus1, "");
+			this.panelLogin.setText(this.controlLoginStatus2, "@gre@Saved logins reset");
+			return;
+		}
+
+		boolean enabling = !this.voidscapeRememberLoginRequested;
+		String user = this.panelLogin.getControlText(this.controlLoginUser);
+		String pass = this.panelLogin.getControlText(this.controlLoginPass);
+		if (enabling && (user == null || user.trim().isEmpty() || pass == null || pass.isEmpty())) {
+			this.panelLogin.setText(this.controlLoginStatus1, "");
+			this.panelLogin.setText(this.controlLoginStatus2, "@yel@Enter login first");
+			return;
+		}
+		this.voidscapeRememberLoginRequested = enabling;
+		this.voidscapeRememberLoginDecisionPending = true;
+		this.panelLogin.setText(this.controlLoginStatus1, "");
+		this.panelLogin.setText(this.controlLoginStatus2, enabling
+			? "@gre@Will remember after a successful login"
+			: "@yel@This login won't be saved");
+	}
+
+	private void clearVoidscapeCredentialMemory() {
+		for (VoidscapeSavedAccount account : this.voidscapeSavedAccounts) {
+			account.password = "";
+		}
+		this.voidscapeSavedAccounts.clear();
+		this.voidscapeSelectedCredentialUsername = "";
+		this.voidscapeRememberLoginRequested = false;
+		this.voidscapeRememberLoginDecisionPending = false;
+		this.voidscapeCredentialStoreUnavailable = false;
+		this.voidscapeCredentialStoreRetryAt = 0L;
+		this.voidscapePendingSwitchUsername = "";
+		this.voidscapePendingSwitchPassword = "";
+		this.voidscapeAccountAddPendingPass = "";
 	}
 
 	private boolean shouldOfferHideIpToggle() {
@@ -12764,6 +12882,25 @@ public final class mudclient implements Runnable {
 		if (this.voidscapeSavedAccountsLoaded) {
 			return;
 		}
+		if (usesSecureCredentialStore()) {
+			long now = System.currentTimeMillis();
+			if (this.voidscapeCredentialStoreUnavailable && now < this.voidscapeCredentialStoreRetryAt) {
+				return;
+			}
+			CredentialStore.Result result = credentialStore().load();
+			if (result.getState() == CredentialStore.State.UNAVAILABLE) {
+				this.voidscapeCredentialStoreUnavailable = true;
+				this.voidscapeCredentialStoreRetryAt = now + 5000L;
+				return;
+			}
+			applyCredentialSnapshot(result.hasValue()
+				? result.getValue()
+				: CredentialSnapshot.empty());
+			this.voidscapeCredentialStoreUnavailable = false;
+			this.voidscapeCredentialStoreRetryAt = 0L;
+			this.voidscapeSavedAccountsLoaded = true;
+			return;
+		}
 		this.voidscapeSavedAccountsLoaded = true;
 		this.voidscapeSavedAccounts.clear();
 		File file = voidscapeAccountsFile();
@@ -12791,6 +12928,36 @@ public final class mudclient implements Runnable {
 		}
 		if (this.voidscapeSavedAccounts.isEmpty()) {
 			loadLegacyCredentialAsVoidscapeAccount();
+		}
+		sortVoidscapeSavedAccounts();
+	}
+
+	private void applyCredentialSnapshot(CredentialSnapshot snapshot) {
+		for (VoidscapeSavedAccount account : this.voidscapeSavedAccounts) {
+			account.password = "";
+		}
+		this.voidscapeSavedAccounts.clear();
+		this.voidscapeSelectedCredentialUsername = snapshot == null
+			|| snapshot.getSelectedUsername() == null
+			? ""
+			: snapshot.getSelectedUsername().trim();
+		if (snapshot == null) {
+			return;
+		}
+		for (SavedCredentialAccount saved : snapshot.getAccounts()) {
+			if (this.voidscapeSavedAccounts.size() >= VOIDSCAPE_ACCOUNT_MAX
+				|| saved.getUsername().trim().isEmpty() || saved.getPassword().isEmpty()) {
+				continue;
+			}
+			VoidscapeSavedAccount account = new VoidscapeSavedAccount();
+			account.username = saved.getUsername().trim();
+			account.password = saved.getPassword();
+			account.displayName = saved.getDisplayName().trim().isEmpty()
+				? account.username
+				: saved.getDisplayName().trim();
+			account.combatLevel = Math.max(0, saved.getCombatLevel());
+			account.lastUsed = Math.max(0L, saved.getLastUsedMillis());
+			this.voidscapeSavedAccounts.add(account);
 		}
 		sortVoidscapeSavedAccounts();
 	}
@@ -12855,6 +13022,12 @@ public final class mudclient implements Runnable {
 			return false;
 		}
 		ensureVoidscapeSavedAccountsLoaded();
+		if (usesSecureCredentialStore() && !this.voidscapeSavedAccountsLoaded) {
+			return false;
+		}
+		CredentialSnapshot previousSnapshot = usesSecureCredentialStore()
+			? credentialSnapshotFromMemory()
+			: null;
 		String cleanUser = username.trim();
 		VoidscapeSavedAccount account = findVoidscapeSavedAccount(cleanUser);
 		if (account == null) {
@@ -12871,13 +13044,36 @@ public final class mudclient implements Runnable {
 		}
 		if (markCurrent) {
 			account.lastUsed = System.currentTimeMillis();
-			ClientPort.saveCredentials(cleanUser + "," + password);
+			if (usesSecureCredentialStore()) {
+				this.voidscapeSelectedCredentialUsername = cleanUser;
+			} else {
+				ClientPort.saveCredentials(cleanUser + "," + password);
+			}
 		}
 		sortVoidscapeSavedAccounts();
-		return saveVoidscapeSavedAccounts();
+		boolean saved = saveVoidscapeSavedAccounts();
+		if (!saved && previousSnapshot != null) {
+			applyCredentialSnapshot(previousSnapshot);
+		}
+		return saved;
 	}
 
 	private boolean saveVoidscapeSavedAccounts() {
+		if (usesSecureCredentialStore()) {
+			if (!this.voidscapeSavedAccountsLoaded) {
+				return false;
+			}
+			CredentialSnapshot snapshot = credentialSnapshotFromMemory();
+			CredentialStore.Result result = credentialStore().replace(snapshot);
+			if (result.getState() == CredentialStore.State.UNAVAILABLE) {
+				return false;
+			}
+			applyCredentialSnapshot(result.hasValue()
+				? result.getValue()
+				: CredentialSnapshot.empty());
+			return true;
+		}
+
 		Properties props = new Properties();
 		int count = Math.min(this.voidscapeSavedAccounts.size(), VOIDSCAPE_ACCOUNT_MAX);
 		props.setProperty("count", Integer.toString(count));
@@ -12902,12 +13098,54 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private CredentialSnapshot credentialSnapshotFromMemory() {
+		ArrayList<SavedCredentialAccount> accounts = new ArrayList<>();
+		int count = Math.min(this.voidscapeSavedAccounts.size(), VOIDSCAPE_ACCOUNT_MAX);
+		for (int i = 0; i < count; i++) {
+			VoidscapeSavedAccount account = this.voidscapeSavedAccounts.get(i);
+			if (account.username == null || account.username.trim().isEmpty()
+				|| account.password == null || account.password.isEmpty()) {
+				continue;
+			}
+			accounts.add(new SavedCredentialAccount(
+				account.username.trim(),
+				account.password,
+				voidscapeAccountDisplayName(account),
+				Math.max(0, account.combatLevel),
+				Math.max(0L, account.lastUsed)));
+		}
+		String selected = this.voidscapeSelectedCredentialUsername == null
+			|| this.voidscapeSelectedCredentialUsername.trim().isEmpty()
+			? null
+			: this.voidscapeSelectedCredentialUsername.trim();
+		return new CredentialSnapshot(selected, accounts);
+	}
+
 	private void sortVoidscapeSavedAccounts() {
 		this.voidscapeSavedAccounts.sort((a, b) -> Long.compare(b.lastUsed, a.lastUsed));
 	}
 
 	private boolean removeVoidscapeSavedAccount(VoidscapeSavedAccount account) {
-		if (account == null || isCurrentVoidscapeAccount(account)) {
+		if (account == null) {
+			return false;
+		}
+		if (usesSecureCredentialStore()) {
+			boolean current = isCurrentVoidscapeAccount(account);
+			CredentialStore.Result result = credentialStore().forget(account.username);
+			if (result.getState() == CredentialStore.State.UNAVAILABLE) {
+				return false;
+			}
+			account.password = "";
+			applyCredentialSnapshot(result.hasValue()
+				? result.getValue()
+				: CredentialSnapshot.empty());
+			this.voidscapeSavedAccountsLoaded = true;
+			if (current) {
+				this.voidscapeRememberLoginRequested = false;
+			}
+			return true;
+		}
+		if (isCurrentVoidscapeAccount(account)) {
 			return false;
 		}
 		boolean removed = this.voidscapeSavedAccounts.remove(account);
@@ -12926,12 +13164,34 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
-	private void noteVoidscapeLoginSucceeded(String username, String password) {
+	private void noteVoidscapeLoginSucceeded(String username, String password, boolean reconnecting) {
 		ensureVoidscapeSavedAccountsLoaded();
 		VoidscapeSavedAccount existing = findVoidscapeSavedAccount(username);
-		boolean shouldRemember = this.voidscapeAddAccountPending || existing != null || this.voidscapeSavedAccounts.isEmpty();
-		if (shouldRemember) {
-			saveVoidscapeCredentials(username, password, true);
+		boolean credentialMutationCommitted = true;
+		if (usesSecureCredentialStore()) {
+			if (!reconnecting) {
+				if (this.voidscapeAddAccountPending
+					|| (this.voidscapeRememberLoginDecisionPending && this.voidscapeRememberLoginRequested)
+					|| (!this.voidscapeRememberLoginDecisionPending && existing != null)) {
+					credentialMutationCommitted = saveVoidscapeCredentials(username, password, true);
+				} else if (this.voidscapeRememberLoginDecisionPending && existing != null) {
+					credentialMutationCommitted = removeVoidscapeSavedAccount(existing);
+				}
+			}
+		} else {
+			boolean shouldRemember = this.voidscapeAddAccountPending
+				|| existing != null
+				|| this.voidscapeSavedAccounts.isEmpty();
+			if (shouldRemember) {
+				saveVoidscapeCredentials(username, password, true);
+			}
+		}
+		if (credentialMutationCommitted) {
+			this.voidscapeRememberLoginRequested = false;
+			this.voidscapeRememberLoginDecisionPending = false;
+		} else {
+			this.showMessage(false, null, "Saved login unchanged - storage unavailable",
+				MessageType.GAME, 0, null, "@red@");
 		}
 		this.voidscapeAddAccountPending = false;
 		this.voidscapeOpenExistingLoginAfterLogout = false;
@@ -12951,7 +13211,7 @@ public final class mudclient implements Runnable {
 			activeUser = this.localPlayer.accountName;
 		}
 		VoidscapeSavedAccount account = findVoidscapeSavedAccount(activeUser);
-		if (account == null && this.voidscapeSavedAccounts.isEmpty()
+		if (!usesSecureCredentialStore() && account == null && this.voidscapeSavedAccounts.isEmpty()
 			&& activeUser != null && !activeUser.trim().isEmpty() && this.password != null && !this.password.isEmpty()) {
 			saveVoidscapeCredentials(activeUser, this.password, true);
 			account = findVoidscapeSavedAccount(activeUser);
@@ -12994,12 +13254,30 @@ public final class mudclient implements Runnable {
 				MessageType.GAME, 0, null, "@cya@");
 			return;
 		}
-		this.voidscapePendingSwitchUsername = account.username;
-		this.voidscapePendingSwitchPassword = account.password;
+		String nextUsername = account.username;
+		String nextPassword = account.password;
+		CredentialSnapshot previousSnapshot = usesSecureCredentialStore()
+			? credentialSnapshotFromMemory()
+			: null;
 		account.lastUsed = System.currentTimeMillis();
-		ClientPort.saveCredentials(account.username + "," + account.password);
+		if (usesSecureCredentialStore()) {
+			this.voidscapeSelectedCredentialUsername = nextUsername;
+		} else if (!ClientPort.saveCredentials(nextUsername + "," + nextPassword)) {
+			this.showMessage(false, null, "Unable to save account switch",
+				MessageType.GAME, 0, null, "@red@");
+			return;
+		}
 		sortVoidscapeSavedAccounts();
-		saveVoidscapeSavedAccounts();
+		if (!saveVoidscapeSavedAccounts()) {
+			if (previousSnapshot != null) {
+				applyCredentialSnapshot(previousSnapshot);
+			}
+			this.showMessage(false, null, "Unable to save account switch",
+				MessageType.GAME, 0, null, "@red@");
+			return;
+		}
+		this.voidscapePendingSwitchUsername = nextUsername;
+		this.voidscapePendingSwitchPassword = nextPassword;
 		this.voidscapeAccountMenuOpen = false;
 		this.showUiTab = 0;
 		sendLogout(0);
@@ -19387,7 +19665,7 @@ public final class mudclient implements Runnable {
 		int arrowX = x + width - arrow - (voidscapeCompactHud() ? 10 : 13);
 		int removeSize = voidscapeAccountRemoveButtonSize();
 		int removeX = voidscapeAccountRemoveButtonX(x, width);
-		int actionX = current ? x + width - (voidscapeCompactHud() ? 12 : 16) : removeX;
+		int actionX = removeX;
 		int nameW = Math.max(20, actionX - textX - 8);
 		String name = fitVoidscapeText(voidscapeAccountDisplayName(account), nameW, 4);
 		int nameColor = current ? 0xF0DFA3 : 0xFFFFFF;
@@ -19395,8 +19673,10 @@ public final class mudclient implements Runnable {
 		String combat = account.combatLevel > 0 ? "Combat: " + account.combatLevel : "Combat: ?";
 		this.getSurface().drawString(fitVoidscapeText(combat, nameW, 1), textX,
 			y + (voidscapeCompactHud() ? 32 : 40), 0xC9BFA6, 1);
-		if (!current) {
+		if (usesSecureCredentialStore() || !current) {
 			drawVoidscapeAccountRemoveButton(removeX, y + (height - removeSize) / 2, removeSize);
+		}
+		if (!current) {
 			drawVoidscapeSkinSprite("account-switch-arrow.png", arrowX, y + (height - arrow) / 2, arrow, arrow);
 		}
 	}
@@ -25770,27 +26050,13 @@ public final class mudclient implements Runnable {
 							this.loginScreenNumber = 0;
 							this.voidscapeAddAccountPending = false;
 							this.voidscapeOpenExistingLoginAfterLogout = false;
+							this.voidscapeRememberLoginRequested = false;
+							this.voidscapeRememberLoginDecisionPending = false;
 							closeNativeAndroidLoginKeyboard();
 						}
 					if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
 						if (this.panelLogin.isClicked(this.rememberButtonIdx)) {
-							String savedUser = this.panelLogin.getControlText(this.controlLoginUser);
-							String savedPass = this.panelLogin.getControlText(this.controlLoginPass);
-							if (savedUser == null || savedUser.trim().length() == 0 || savedPass == null || savedPass.length() == 0) {
-								this.panelLogin.setText(this.controlLoginStatus1, "");
-								this.panelLogin.setText(this.controlLoginStatus2, "@yel@Enter login first");
-								return;
-							}
-
-							boolean temp = saveVoidscapeCredentials(savedUser, savedPass, true);
-
-							if (temp) {
-								this.panelLogin.setText(this.controlLoginStatus1, "");
-								this.panelLogin.setText(this.controlLoginStatus2, "@gre@Credentials Saved");
-							} else {
-								this.panelLogin.setText(this.controlLoginStatus1, "");
-								this.panelLogin.setText(this.controlLoginStatus2, "@red@Unable to save");
-							}
+							handleRememberLoginAction();
 						}
 					}
 
@@ -27596,8 +27862,12 @@ public final class mudclient implements Runnable {
 			VoidscapeSavedAccount account = this.voidscapeSavedAccounts.get(index);
 			boolean current = isCurrentVoidscapeAccount(account);
 			int accountRowY = rowY + index * rowStride;
-			if (!current && mouseOverVoidscapeAccountRemove(rowX, accountRowY, rowW, rowH)) {
-				removeVoidscapeSavedAccount(account);
+			if ((usesSecureCredentialStore() || !current)
+				&& mouseOverVoidscapeAccountRemove(rowX, accountRowY, rowW, rowH)) {
+				if (!removeVoidscapeSavedAccount(account)) {
+					this.showMessage(false, null, "Unable to forget saved login",
+						MessageType.GAME, 0, null, "@red@");
+				}
 			} else if (!current) {
 				startVoidscapeAccountSwitch(account);
 			}
@@ -28505,7 +28775,7 @@ public final class mudclient implements Runnable {
 								suffix += "[LAN]";
 							}
 							clientPort.setTitle(Config.getServerName() + " -- " + getUsername() + suffix);
-							noteVoidscapeLoginSucceeded(getUsername(), pass);
+							noteVoidscapeLoginSucceeded(getUsername(), pass, reconnecting);
 						} else {
 							if (loginResponse == 1) {
 								this.autoLoginTimeout = 0;

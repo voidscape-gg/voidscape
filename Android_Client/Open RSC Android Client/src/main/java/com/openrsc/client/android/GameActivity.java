@@ -21,6 +21,7 @@ import android.view.inputmethod.InputMethodManager;
 
 import com.openrsc.android.render.InputImpl;
 import com.openrsc.android.render.RSCBitmapSurfaceView;
+import com.openrsc.android.security.AndroidCredentialStore;
 import com.openrsc.client.R;
 import com.openrsc.client.model.Sprite;
 
@@ -33,6 +34,7 @@ import orsc.Config;
 import orsc.PacketHandler;
 import orsc.mudclient;
 import orsc.multiclient.ClientPort;
+import orsc.multiclient.CredentialStore;
 import orsc.osConfig;
 import orsc.soundPlayer;
 import orsc.util.Utils;
@@ -58,6 +60,7 @@ public class GameActivity extends Activity implements ClientPort {
 	private final Object networkLock = new Object();
 	private final Map<Network, Integer> validatedNetworks = new HashMap<>();
 	private volatile int connectivityKind = NETWORK_NONE;
+	private CredentialStore credentialStore = CredentialStore.unsupported();
 
     private boolean hadSideMenu;
 	private boolean keyboardShowing;
@@ -96,6 +99,7 @@ public class GameActivity extends Activity implements ClientPort {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 		Utils.attach(this);
+		credentialStore = new AndroidCredentialStore(this);
 
         osConfig.F_ANDROID_BUILD = true;
         File externalSmokeDir = getExternalFilesDir(null);
@@ -399,7 +403,12 @@ public class GameActivity extends Activity implements ClientPort {
 		});
 	}
 
-    @Override
+	@Override
+	public CredentialStore getCredentialStore() {
+		return credentialStore;
+	}
+
+	@Override
     public boolean drawLoading(int i) {
         if (gameView == null) return false;
         return gameView.drawLoading(i);

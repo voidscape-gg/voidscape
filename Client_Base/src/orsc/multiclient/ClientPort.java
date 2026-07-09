@@ -20,6 +20,10 @@ import orsc.util.CacheArchive;
 
 public interface ClientPort {
 
+	default CredentialStore getCredentialStore() {
+		return CredentialStore.unsupported();
+	}
+
 	boolean drawLoading(int i);
 
 	void showLoadingProgress(int percentage, String status);

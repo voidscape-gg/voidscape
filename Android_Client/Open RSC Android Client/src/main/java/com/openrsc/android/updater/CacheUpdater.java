@@ -25,6 +25,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.openrsc.android.security.AndroidCredentialStore;
 import com.openrsc.client.R;
 import com.openrsc.client.android.GameActivity;
 
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import orsc.multiclient.CredentialStore;
 import orsc.osConfig;
 
 public class CacheUpdater extends Activity {
@@ -149,9 +151,9 @@ public class CacheUpdater extends Activity {
 			Log.w("Voidscape", "Unable to apply smoke launch extras", e);
 		}
 		if (intent.getBooleanExtra(EXTRA_SMOKE_CLEAR_CREDENTIALS, false)) {
-			File credentials = new File(getFilesDir(), "credentials.txt");
-			if (credentials.isFile() && !credentials.delete()) {
-				Log.w("Voidscape", "Unable to delete smoke credentials file");
+			CredentialStore.Result cleared = new AndroidCredentialStore(this).clear();
+			if (cleared.getState() == CredentialStore.State.UNAVAILABLE) {
+				Log.w("Voidscape", "Unable to clear saved logins for Android smoke");
 			}
 		}
 	}
