@@ -26,8 +26,28 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-061 verified on emulator and physical Android; next loop
-  can triage Intake or resume the next prioritized open item.
+- **Active bug:** none — VS-072 fixed and focused-verified; full portal API/visual gates
+  are blocked by unrelated existing failures, so the entry remains Open as `fixed`
+  until those gates can run cleanly.
+- **Session preflight 2026-07-09 (VS-072):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files before this fix include Android APK
+  docs/build/script files, `Client_Base/src/orsc/mudclient.java`,
+  `Web_Client_TeaVM/src/main/java/com/voidscape/webclient/WebClientPort.java`,
+  portal launch WIP (`web/portal/dev-server.mjs`, `web/portal/script.js`,
+  `web/portal/api-smoke.mjs`, `scripts/test-portal-api.sh`, `web/portal/README.md`,
+  untracked `web/portal/portal.html` and related assets/styles), subscription/content
+  files, `server/src/com/openrsc/server/GameStateUpdater.java`,
+  `server/src/com/openrsc/server/ServerConfiguration.java`, `DiscordService.java` WIP,
+  runtime `server/inc/sqlite/preservation.db`, deleted Android legacy drawables, and
+  untracked launch/portal scripts/assets. Stage only VS-072 hunks if committing.
+  Result: added authenticated character delete route, selected-character UI action,
+  OpenRSC SQLite cleanup for portal-created saves, unlink-only handling for externally
+  linked saves, and regression assertions. `scripts/build.sh`,
+  `scripts/test-portal-schema.sh`, syntax checks, `git diff --check`, and focused
+  launch-mode delete probe passed. `scripts/test-portal-api.sh` still stops on the
+  pre-existing `snapshot endpoint should resolve the active title` fixture drift before
+  reaching VS-072 assertions; `scripts/smoke-portal-prelaunch-visual.sh` still stops on
+  pre-existing landing selector/sign-up locators before reaching account UI.
 - **Session preflight 2026-07-08 (VS-061 reopen):** branch `main`; pre-change
   `scripts/build.sh` green. Existing dirty files before this fix include Android APK
   docs/build/script files, `Client_Base/src/orsc/mudclient.java`,
@@ -232,6 +252,30 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
+
+### VS-072 — Website character manager cannot delete characters
+- Status: fixed · Severity: P1 · Area: web-portal / launch surface
+- Evidence: Ryan reported "big bug on the character manager on the website. you are
+  not able to delete characters." Code evidence matched: the Characters view rendered
+  selectable roster cards plus create controls only, frontend code only called
+  `POST /api/characters`, and the portal API had no authenticated delete route or
+  public launch-mode allowlist entry for character deletion.
+- Repro: create/sign in to a portal account with at least two characters; the character
+  manager exposes no delete control, and `DELETE /api/characters/:id` returns 404.
+- Verify: focused launch-mode probe against a throwaway OpenRSC SQLite DB creates a
+  first account character, creates a second character, deletes it through
+  `DELETE /api/characters/:id`, confirms the roster returns to one character, and
+  confirms no `players` row or orphaned `web_account_id` cache remains for the deleted
+  character. Standard gates: `scripts/build.sh` pass, `scripts/test-portal-schema.sh`
+  pass, JS/shell syntax pass, `git diff --check` pass. `scripts/test-portal-api.sh`
+  remains blocked by unrelated existing title-fixture drift before reaching the new
+  delete assertions; `scripts/smoke-portal-prelaunch-visual.sh` remains blocked by
+  unrelated existing landing selector/sign-up locators before reaching account UI.
+- Log: 2026-07-09 filed directly from Ryan's report; agents confirmed the root cause is
+  missing UI/API/test wiring. Fix in progress: add authenticated
+  `DELETE /api/characters/:id`, launch public-mode allowlist, selected-character UI
+  button, and regression coverage. 2026-07-09 code fixed and focused-verified; leave
+  Status `fixed` (not archived) until unrelated portal gates are green.
 
 ### VS-001 — Desktop client UI regressions after mobile-shell overhaul (umbrella)
 - Status: reported · Severity: P2 · Area: client-ui

@@ -1880,6 +1880,16 @@ h2 {
 	justify-self: stretch;
 }
 
+.character-danger-row {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 10px;
+}
+
+.character-danger-row .danger-button {
+	width: 100%;
+}
+
 .link-proof {
 	display: grid;
 	gap: 10px;

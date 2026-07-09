@@ -498,6 +498,7 @@ async function handleApi(request, response, url) {
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/recover-password")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/oauth/google/nonce")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/characters")
+			|| (launchSignupMode && method === "DELETE" && /^\/api\/characters\/\d+$/.test(url.pathname))
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/password")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/recovery-codes")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/sessions/revoke-others")
@@ -898,6 +899,26 @@ async function handleApi(request, response, url) {
 			return accountState(store, account);
 		});
 		json(response, 201, result);
+		return;
+	}
+
+	const deleteCharacterMatch = /^\/api\/characters\/(\d+)$/.exec(url.pathname);
+	if (method === "DELETE" && deleteCharacterMatch) {
+		const characterId = Number(deleteCharacterMatch[1]);
+		const result = await updateStore(async (store) => {
+			const account = requireAccount(request, store);
+			const deleted = await deleteAccountCharacter(store, account, characterId);
+			account.updatedAt = now();
+			audit(store, "character_deleted", {
+				accountId: account.id,
+				characterId: deleted.id,
+				playerId: deleted.playerId || null,
+				source: deleted.source || "portal-preview",
+				openRscDeleted: Boolean(deleted.openRscDeleted)
+			});
+			return accountState(store, account);
+		});
+		json(response, 200, result);
 		return;
 	}
 
@@ -2801,6 +2822,47 @@ async function createAccountCharacter(store, account, payload, request) {
 	return character;
 }
 
+async function deleteAccountCharacter(store, account, characterId) {
+	if (!Number.isInteger(characterId) || characterId <= 0) {
+		throw new HttpError(400, "invalid_character_id");
+	}
+	const index = store.characters.findIndex((character) =>
+		Number(character.id) === characterId && Number(character.accountId) === Number(account.id)
+	);
+	if (index < 0) {
+		throw new HttpError(404, "character_not_found");
+	}
+
+	const character = store.characters[index];
+	const deleted = {
+		id: character.id,
+		name: character.name,
+		playerId: character.playerId || null,
+		source: character.source || "portal-preview",
+		openRscDeleted: false
+	};
+
+	if (Number(character.playerId) > 0 && openRscDbPath) {
+		if (character.source === "openrsc-sqlite-created") {
+			deleted.openRscDeleted = await deleteOpenRscPlayer(character);
+		} else {
+			await unlinkOpenRscPlayerFromAccount(character.playerId, account.id);
+		}
+	}
+
+	store.characters.splice(index, 1);
+	store.linkChallenges.forEach((challenge) => {
+		if (challenge.accountId === account.id
+			&& normalizeUsername(challenge.username) === normalizeUsername(character.name)
+			&& challenge.status === "pending") {
+			challenge.status = "revoked";
+			challenge.revokedAt = now();
+			challenge.updatedAt = now();
+		}
+	});
+	return deleted;
+}
+
 async function accountState(store, account, currentSession) {
 	await syncAccountSubscriptionFromOpenRsc(account);
 	await refreshAccountCharactersFromOpenRsc(store, account);
@@ -4329,6 +4391,111 @@ async function linkOpenRscPlayerToAccount(playerId, accountId) {
 	`);
 }
 
+async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
+	if (!openRscDbPath || !playerId || !accountId) return;
+	await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		DELETE FROM player_cache
+			WHERE playerID = ${Number(playerId)}
+			  AND key = ${sqlString(openRscAccountIdCacheKey)}
+			  AND value = ${sqlString(accountId)};
+		COMMIT;
+		SELECT 1 AS ok;
+	`);
+}
+
+async function deleteOpenRscPlayer(character) {
+	const playerId = Number(character && character.playerId || 0);
+	const normalizedName = normalizeUsername(character && character.name || "");
+	if (!playerId || !normalizedName) {
+		throw new HttpError(400, "invalid_character_id");
+	}
+
+	const playerRows = await sqliteJson(`
+		SELECT id, online
+		FROM players
+		WHERE id = ${playerId}
+		  AND lower(username) = ${sqlString(normalizedName)}
+		LIMIT 1
+	`);
+	if (!playerRows.length) return false;
+	if (Number(playerRows[0].online || 0) !== 0) {
+		throw new HttpError(409, "character_online");
+	}
+
+	const tables = await openRscExistingTables([
+		"auctions",
+		"bankpresets",
+		"equipped",
+		"expired_auctions",
+		"voidarena_ranked_matches",
+		"voidarena_ranked_stats"
+	]);
+	const sql = [
+		"BEGIN IMMEDIATE;",
+		"CREATE TEMP TABLE portal_deleted_item_ids (itemID INTEGER PRIMARY KEY);",
+		`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM invitems WHERE playerID = ${playerId};`,
+		`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM bank WHERE playerID = ${playerId};`
+	];
+	if (tables.has("equipped")) {
+		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM equipped WHERE playerID = ${playerId};`);
+	}
+	if (tables.has("auctions")) {
+		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM auctions WHERE seller = ${playerId};`);
+	}
+	if (tables.has("expired_auctions")) {
+		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT item_id FROM expired_auctions WHERE playerID = ${playerId};`);
+	}
+	sql.push(
+		`DELETE FROM bank WHERE playerID = ${playerId};`,
+		`DELETE FROM invitems WHERE playerID = ${playerId};`,
+		`DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM portal_deleted_item_ids);`
+	);
+	if (tables.has("equipped")) {
+		sql.push(`DELETE FROM equipped WHERE playerID = ${playerId};`);
+	}
+	if (tables.has("auctions")) {
+		sql.push(`DELETE FROM auctions WHERE seller = ${playerId};`);
+	}
+	if (tables.has("expired_auctions")) {
+		sql.push(`DELETE FROM expired_auctions WHERE playerID = ${playerId};`);
+	}
+	if (tables.has("bankpresets")) {
+		sql.push(`DELETE FROM bankpresets WHERE playerID = ${playerId};`);
+	}
+	if (tables.has("voidarena_ranked_matches")) {
+		sql.push(`DELETE FROM voidarena_ranked_matches WHERE winnerID = ${playerId} OR loserID = ${playerId};`);
+	}
+	if (tables.has("voidarena_ranked_stats")) {
+		sql.push(`DELETE FROM voidarena_ranked_stats WHERE playerID = ${playerId};`);
+	}
+	sql.push(
+		`DELETE FROM bestiaryloot WHERE playerID = ${playerId};`,
+		`DELETE FROM capped_experience WHERE playerID = ${playerId};`,
+		`DELETE FROM curstats WHERE playerID = ${playerId};`,
+		`DELETE FROM experience WHERE playerID = ${playerId};`,
+		`DELETE FROM friends WHERE playerID = ${playerId} OR friend = ${playerId};`,
+		`DELETE FROM ignores WHERE playerID = ${playerId} OR "ignore" = ${playerId};`,
+		`DELETE FROM ironman WHERE playerID = ${playerId};`,
+		`DELETE FROM logins WHERE playerID = ${playerId};`,
+		`DELETE FROM maxstats WHERE playerID = ${playerId};`,
+		`DELETE FROM npckills WHERE playerID = ${playerId};`,
+		`DELETE FROM player_cache WHERE playerID = ${playerId};`,
+		`DELETE FROM player_change_recovery WHERE playerID = ${playerId};`,
+		`DELETE FROM player_contact_details WHERE playerID = ${playerId};`,
+		`DELETE FROM player_recovery WHERE playerID = ${playerId};`,
+		`DELETE FROM player_security_changes WHERE playerID = ${playerId};`,
+		`DELETE FROM quests WHERE playerID = ${playerId};`,
+		`DELETE FROM recovery_attempts WHERE playerID = ${playerId};`,
+		`DELETE FROM players WHERE id = ${playerId} AND lower(username) = ${sqlString(normalizedName)};`,
+		"DROP TABLE portal_deleted_item_ids;",
+		"COMMIT;",
+		"SELECT 1 AS ok;"
+	);
+	await sqliteWriteJson(sql.join("\n"));
+	return true;
+}
+
 async function createOpenRscPlayer({ accountId, username, email, password, ip }) {
 	const passwordState = legacyGamePasswordHash(password);
 	const createdAt = Math.floor(Date.now() / 1000);
@@ -4515,6 +4682,17 @@ async function sqliteWriteJson(query) {
 		}
 		throw error;
 	}
+}
+
+async function openRscExistingTables(names) {
+	if (!Array.isArray(names) || !names.length) return new Set();
+	const rows = await sqliteJson(`
+		SELECT name
+		FROM sqlite_master
+		WHERE type = 'table'
+		  AND name IN (${names.map(sqlString).join(", ")})
+	`);
+	return new Set(rows.map((row) => row.name));
 }
 
 async function loadItemDefinitions() {

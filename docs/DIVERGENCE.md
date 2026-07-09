@@ -27,6 +27,28 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-09 - Portal character manager deletion (VS-072)
+
+The website character manager now has an authenticated delete path for roster entries:
+`DELETE /api/characters/:id` is allowed in public launch-signup mode, checks bearer
+session ownership, removes the selected portal roster entry, revokes pending link
+challenges for that character, and audits `character_deleted`. Portal-created OpenRSC
+SQLite saves are hard-deleted only when the player is offline, including stats, cache,
+inventory/bank item ownership, friends/ignores, quests, security/recovery rows, ranked
+arena state, optional bank presets/equipped/auction rows, and owned item status rows;
+externally linked saves are unlink-only so the website cannot destroy a pre-existing
+game character. The Characters screen exposes a selected-character delete button with a
+confirmation prompt and online-character/session-expiry errors, injected by the tracked
+portal script when the current page markup does not already include it. Files touched:
+`web/portal/dev-server.mjs`, `web/portal/script.js`, `web/portal/styles.css`,
+`web/portal/api-smoke.mjs`, and `scripts/test-portal-api.sh`. Evidence: `scripts/build.sh`,
+`scripts/test-portal-schema.sh`, JS/shell syntax checks, `git diff --check`, and a
+focused launch-mode delete probe against a throwaway SQLite DB all passed. The full
+`scripts/test-portal-api.sh` gate still stops on unrelated existing title-fixture drift,
+and `scripts/smoke-portal-prelaunch-visual.sh` still stops on unrelated existing landing
+selector/sign-up locators before reaching account UI. No game opcodes, client packets,
+subscription rules, launcher behavior, or world content changed.
+
 ### 2026-07-08 - Android app-switch resume hides stale-socket reconnects (VS-061)
 
 Native Android reconnects now carry their reconnect/Android identity into the server

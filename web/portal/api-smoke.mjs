@@ -417,6 +417,30 @@ assert(linkedCharacter.title === "Crownless Conqueror", "verified link should pe
 assert(linkedCharacter.appearanceData.topColour === 8, "verified link should persist saved appearance data");
 assert(Array.isArray(linkedCharacter.equipment) && linkedCharacter.equipment.length === 2, "verified link should persist wielded equipment state");
 
+const deleteProbe = await api("/api/characters", {
+	method: "POST",
+	body: {
+		name: "DeleteMe",
+		path: "warrior",
+		gamePassword: "DeletePass1"
+	}
+});
+const deleteProbeCharacter = deleteProbe.characters.find((character) => character.name === "DeleteMe");
+assert(deleteProbeCharacter && deleteProbeCharacter.source === "openrsc-sqlite-created", "delete probe should create a real game row");
+assert(deleteProbe.characters.length === 2, "delete probe should use a second roster slot");
+const deletedProbe = await api(`/api/characters/${deleteProbeCharacter.id}`, {
+	method: "DELETE"
+});
+assert(deletedProbe.characters.length === 1, "deleting a character should free the roster slot");
+assert(!deletedProbe.characters.some((character) => character.name === "DeleteMe"), "deleted character should leave the account roster");
+const deletedSnapshot = await api("/api/openrsc/characters/DeleteMe", { expectStatus: 404 });
+assert(deletedSnapshot.error === "character_not_found", "deleting a portal-created character should remove the OpenRSC save");
+const deleteAgain = await api(`/api/characters/${deleteProbeCharacter.id}`, {
+	method: "DELETE",
+	expectStatus: 404
+});
+assert(deleteAgain.error === "character_not_found", "deleting a missing character should 404");
+
 for (let i = 2; i <= 10; i += 1) {
 	const roster = await api("/api/characters", {
 		method: "POST",

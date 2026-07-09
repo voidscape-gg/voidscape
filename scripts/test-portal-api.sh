@@ -884,6 +884,31 @@ if [[ "$launch_starter_marker_total_after_extra" != "$launch_starter_marker_tota
 	echo "second launch character creation should not mint additional starter-card markers"
 	exit 1
 fi
+launch_extra_id="$(node -e "
+const payload = JSON.parse(process.argv[1]);
+const extra = payload.characters.find((character) => character.name === 'LaunchAlt');
+if (!extra || !extra.id) throw new Error('second launch character should expose a portal id');
+process.stdout.write(String(extra.id));
+" "$launch_extra_character")"
+launch_delete_extra="$(curl -fsS -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
+	-H "authorization: Bearer ${launch_token}")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('deleting the second launch character should free the roster slot');
+if (payload.characters.some((character) => character.name === 'LaunchAlt')) throw new Error('deleted launch character should leave the account roster');
+if (!payload.characters.some((character) => character.name === 'LaunchGuy')) throw new Error('deleting the second launch character should keep the first character');
+if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('character deletion should leave the waiting starter card alone');
+" "$launch_delete_extra"
+launch_alt_after_delete="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt';")"
+if [[ "$launch_alt_after_delete" != "0" ]]; then
+	echo "deleting a launch-created character should remove the OpenRSC player row"
+	exit 1
+fi
+launch_alt_link_after_delete="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE key='web_account_id' AND playerID NOT IN (SELECT id FROM players);")"
+if [[ "$launch_alt_link_after_delete" != "0" ]]; then
+	echo "deleting a launch-created character should not leave orphaned web-account links"
+	exit 1
+fi
 
 launch_revoke="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
 	-H "x-portal-admin-token: ${public_admin_token}" \

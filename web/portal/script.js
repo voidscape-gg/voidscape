@@ -63,6 +63,7 @@
 	var activeCharacterGear = document.getElementById("active-character-gear");
 	var characterMessage = document.getElementById("character-message");
 	var queueCharacter = document.getElementById("queue-character");
+	var deleteCharacter = ensureDeleteCharacterButton();
 	var characterName = document.getElementById("character-name");
 	var characterPassword = document.getElementById("character-password");
 	var snapshotName = document.getElementById("snapshot-name");
@@ -450,6 +451,67 @@
 				}
 			} finally {
 				queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+			}
+		});
+	}
+
+	function ensureDeleteCharacterButton() {
+		var existing = document.getElementById("delete-character");
+		if (existing) return existing;
+		if (!queueCharacter && !characterMessage) return null;
+		var row = document.createElement("div");
+		row.className = "character-danger-row";
+		var button = document.createElement("button");
+		button.className = "danger-button";
+		button.type = "button";
+		button.id = "delete-character";
+		button.disabled = true;
+		button.textContent = "Delete selected";
+		row.appendChild(button);
+		if (characterMessage && characterMessage.parentNode) {
+			characterMessage.parentNode.insertBefore(row, characterMessage);
+		} else if (queueCharacter && queueCharacter.parentNode) {
+			queueCharacter.parentNode.insertAdjacentElement("afterend", row);
+		}
+		return button;
+	}
+
+	if (deleteCharacter) {
+		deleteCharacter.addEventListener("click", async function () {
+			var character = selectedRosterCharacter();
+			if (!character) {
+				characterMessage.textContent = "Select a character to delete.";
+				return;
+			}
+			if (!sessionToken) {
+				characterMessage.textContent = "Sign in on the Account page before deleting a character.";
+				activateView("dashboard");
+				return;
+			}
+			if (!window.confirm("Delete " + character.name + "? This cannot be undone.")) return;
+			deleteCharacter.disabled = true;
+			if (queueCharacter) queueCharacter.disabled = true;
+			characterMessage.textContent = "Deleting " + character.name + "...";
+			try {
+				var state = await apiRequest("/api/characters/" + encodeURIComponent(character.id), {
+					method: "DELETE"
+				});
+				applyAccountState(state);
+				characterMessage.textContent = character.name + " deleted.";
+			} catch (error) {
+				if (error.status === 401) {
+					clearSession();
+					characterMessage.textContent = "Session expired. Sign in again before deleting a character.";
+				} else if (error.status === 404) {
+					characterMessage.textContent = "That character was already removed.";
+					await refreshCharactersFromApi(true);
+				} else if (error.status === 409 && error.code === "character_online") {
+					characterMessage.textContent = "Log out of that character in-game before deleting it.";
+				} else {
+					characterMessage.textContent = "Character delete failed: " + (error.code || "api_error") + ".";
+				}
+			} finally {
+				updateCharacterControls();
 			}
 		});
 	}
@@ -2352,7 +2414,7 @@
 	function renderCharacters() {
 		rosterTitle.textContent = characters.length + " character" + (characters.length === 1 ? "" : "s");
 		if (slotBadge) slotBadge.textContent = Math.max(0, maxCharacters - characters.length) + " open";
-		queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+		updateCharacterControls();
 		if (characterMessage) {
 			if (!sessionToken) {
 				characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
@@ -2396,10 +2458,23 @@
 		updateDashboardHome();
 	}
 
-	function renderSelectedCharacter() {
-		var character = characters.find(function (entry) {
+	function selectedRosterCharacter() {
+		return characters.find(function (entry) {
 			return entry.name === selectedCharacter;
-		}) || characters[0];
+		}) || characters[0] || null;
+	}
+
+	function updateCharacterControls() {
+		if (queueCharacter) queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+		var character = selectedRosterCharacter();
+		if (deleteCharacter) {
+			deleteCharacter.disabled = !sessionToken || !character;
+			deleteCharacter.textContent = character ? "Delete " + character.name : "Delete selected";
+		}
+	}
+
+	function renderSelectedCharacter() {
+		var character = selectedRosterCharacter();
 		if (!character) return;
 		var gear = Array.isArray(character.gear) ? character.gear : [];
 		if (characterName && character.source === "founder-reserved" && (!characterName.value || characterName.value === "Voidborn")) {
