@@ -1,0 +1,6 @@
+Original low-poly RuneScape Classic scenery geometry: a low segmented
+gunmetal plinth surrounding a recessed near-black Void Rift, with six jagged
+voidstone supports leaning inward. Three supports rise into an asymmetric,
+broken crown. Use a restrained purple/gunmetal flat-color palette, a chunky
+silhouette readable from every camera quadrant, and no textures or external
+assets.

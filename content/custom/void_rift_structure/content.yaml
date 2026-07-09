@@ -1,0 +1,35 @@
+# Voidscape content pack.
+
+schema: voidscape-content/v1
+kind: model
+slug: void_rift_structure
+name: "Void Rift structure"
+description: "An original shattered voidstone basin and broken crown for Void Rift portals."
+status: prototype
+
+gameplay:
+  like: "voidriftportal"
+  notes: "Visual replacement for existing scenery id 1306; footprint and portal behavior remain unchanged."
+
+art:
+  style_brief: "../../../tools/voidscape-content/templates/voidscape-art-brief.md"
+  source_dir: "art/source"
+  working_dir: "art/working"
+  final_dir: "art/final"
+  selected_concept: "art/source/void_rift_structure.obj"
+
+integration:
+  server_defs: []
+  client_defs:
+    - "Client_Base/src/orsc/PacketHandler.java"
+  cache_files:
+    - "Client_Base/Cache/video/models.orsc"
+  spawn_files: []
+  drop_files: []
+  client_version_bump_required: true
+
+rollout:
+  beta_package_required: false
+  test_notes:
+    - "Import with Blender Z-up axis mapping and scale 128, then duplicate faces during OB3 import."
+    - "Verify the recessed core remains visible and clickable from every camera quadrant."
