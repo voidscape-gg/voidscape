@@ -22,7 +22,7 @@ import java.net.InetSocketAddress;
 public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implements AttributeMap {
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int CHANNEL_CLOSED_RECONNECT_GRACE_MS = 5000;
-	private static final int ANDROID_CHANNEL_CLOSED_RECONNECT_GRACE_MS = 120000;
+	private static final int ANDROID_CHANNEL_CLOSED_RECONNECT_GRACE_MS = 10 * 60 * 1000;
 
 	public static final AttributeKey<ConnectionAttachment> attachment = AttributeKey.valueOf("conn-attachment");
 

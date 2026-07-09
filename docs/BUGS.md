@@ -26,8 +26,18 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-073 verified and ready to commit; next, reopen VS-061 to
-  extend and verify Android app-switch continuity beyond the old two-minute boundary.
+- **Active bug:** none — VS-061 multi-minute app-switch fix verified and ready to
+  commit; resume the approved Android polish slices after this bug commit.
+- **Session preflight 2026-07-09 (VS-061 multi-minute reopen):** branch `main`;
+  `scripts/build.sh` and `scripts/build-android.sh --debug` green on the current tree.
+  VS-073 lifecycle automation fix committed as `dc8fbefe`; its 35-second focused run
+  passed at `tmp/android-apk-polish/lifecycle-short-fresh`. Existing collision in
+  `server/src/com/openrsc/server/GameStateUpdater.java` is an unrelated client-update
+  copy edit near line 157; stage only the Android timeout hunk near line 54.
+  Result: both Android-only grace windows now use ten minutes, the smoke switches to
+  Android Settings, and the 130-second focused run passed at
+  `tmp/android-apk-polish/lifecycle-130s-settings`. `scripts/build.sh`, Android debug
+  build, shell syntax, and diff checks are green.
 - **Session preflight 2026-07-09 (VS-073):** branch `main`; pre-change
   `scripts/build.sh` green. Existing dirty files include Android APK docs/build/script
   WIP, `Client_Base/src/orsc/mudclient.java`, portal/content/server WIP, runtime
@@ -644,9 +654,9 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 - Verify: `scripts/build.sh`; `scripts/build-android.sh --debug`; Android lifecycle
   smoke backgrounds/resumes and stays in game or sees "Your previous session has been
   resumed." Physical-device confirmation remains a release gate.
-- Fix: native Android APK clients now get both a 120s channel-close reconnect grace and
-  a 120s silent client-activity timeout while desktop/web clients keep the existing
-  5s/30s behavior. The shared client now only sends the Android limitations bit for
+- Fix: native Android APK clients now get both a ten-minute channel-close reconnect
+  grace and a ten-minute silent client-activity timeout while desktop/web clients keep
+  the existing 5s/30s behavior. The shared client now only sends the Android limitations bit for
   native Android, so Android-profile `/play` does not silently inherit APK reconnect
   grace. Reopened fix: custom login now preserves the reconnect byte on `LoginRequest`
   and tags the request as Android from either the trailing limitations byte or the
@@ -683,6 +693,19 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   showed the game view with no "Connection lost" overlay. A hidden successful reconnect
   response (`86`) can still occur because Android may close the background socket;
   Ryan's physical Android retest also passed, confirming the real app-switch path.
+  2026-07-09 reopened for the stronger multi-app requirement: the Android-only channel
+  and silent-activity grace windows are still hardcoded to 120 seconds, so a normal
+  switch lasting just over two minutes can unregister the player even though the app
+  process survives. Plan: raise both Android-only windows together to ten minutes,
+  switch the focused smoke into Android Settings rather than HOME alone, and verify a
+  130-second background interval crosses the old boundary without disconnecting.
+  The server was rebuilt/restarted with both ten-minute Android-only windows. The full
+  focused smoke at `tmp/android-apk-polish/lifecycle-130s-settings` switched into the
+  Android Settings app for 130 seconds, returned directly to the in-game session, then
+  passed duplicate launcher delivery, explicit logout, and post-logout keyboard entry.
+  `scripts/build.sh`, `scripts/build-android.sh --debug`, shell syntax, and diff checks
+  passed. Physical-device process-death recovery remains out of scope: Android can kill
+  the in-memory client, and this fix deliberately does not add a foreground service.
 
 ### VS-062 — Android one-finger camera drags also zoom
 - Status: fixed · Severity: P2 · Area: Android APK input

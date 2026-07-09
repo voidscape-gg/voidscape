@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-09 - Android app switches retain the session for ten minutes (VS-061)
+
+Native Android players now receive a ten-minute server activity timeout and channel-close reconnect grace instead of two minutes, matching the normal launch idle window so switching to another app does not unregister the player during ordinary multi-app use. Desktop and web clients keep their existing 30-second activity timeout and five-second reconnect grace, and Android process death still cannot preserve the in-memory client. The lifecycle smoke now switches into Android Settings rather than only pressing HOME; a focused run held `wbtest` there for 130 seconds—past the old boundary—then returned in game, survived duplicate launcher delivery, logged out normally, and reopened the keyboard. Evidence is under `tmp/android-apk-polish/lifecycle-130s-settings`. Files touched: `GameStateUpdater.java`, `RSCConnectionHandler.java`, and `scripts/android-smoke.sh`; no packet, opcode, DB schema, cache asset, APK client version, or non-Android timeout changed.
+
 ### 2026-07-09 - Android lifecycle smoke reaches the app-switch gate (VS-073)
 
 The authenticated Android lifecycle smoke now waits for the basic Settings tab that its own test hook opens (`settingTab=0`) instead of an unrelated Game tab, so it reaches and proves the real HOME/background/resume path again. The focused current-APK run passed portrait and landscape viewport checks, a 35-second background interval, foreground return with `wbtest` still in game, duplicate launcher delivery, explicit logout, and post-logout keyboard recovery; evidence is under `tmp/android-apk-polish/lifecycle-short-fresh`. This changes QA automation only (`scripts/android-smoke.sh`): no Android runtime behavior, game packet, opcode, server timeout, DB schema, cache asset, or client version changed.

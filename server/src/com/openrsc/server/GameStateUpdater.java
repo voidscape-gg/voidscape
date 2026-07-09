@@ -51,7 +51,7 @@ public final class GameStateUpdater {
 	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
 	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
 	private static final long CLIENT_ACTIVITY_TIMEOUT_MS = 30000L;
-	private static final long ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS = 120000L;
+	private static final long ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS = 10L * 60L * 1000L;
 
 	private final Server server;
 	public final Server getServer() {

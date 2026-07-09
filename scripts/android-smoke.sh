@@ -1701,8 +1701,14 @@ run_authenticated_lifecycle_smoke() {
 		exit 1
 	}
 
-	"$ADB" shell input keyevent HOME
-	echo "Android lifecycle smoke backgrounding for ${AUTH_LIFECYCLE_BACKGROUND_SECONDS}s"
+	local settings_launch_output
+	settings_launch_output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
+	if ! grep -q "Status: ok" <<< "$settings_launch_output"; then
+		echo "ERROR: Android lifecycle smoke could not switch to Android Settings" >&2
+		echo "$settings_launch_output" >&2
+		exit 1
+	fi
+	echo "Android lifecycle smoke switched to Android Settings for ${AUTH_LIFECYCLE_BACKGROUND_SECONDS}s"
 	sleep "$AUTH_LIFECYCLE_BACKGROUND_SECONDS"
 	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 	wait_for_resumed_activity "GameActivity" 20 || {
