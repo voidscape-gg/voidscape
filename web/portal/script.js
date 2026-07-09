@@ -184,6 +184,7 @@
 	var portalAuthSubmit = document.getElementById("portal-auth-submit");
 	var portalAuthMessage = document.getElementById("portal-auth-message");
 	var portalAuthModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-portal-auth-mode]"));
+	var accountLogout = ensureAccountLogoutButton();
 	var securityScore = document.getElementById("security-score");
 	var securityEmailCheck = document.getElementById("security-email-check");
 	var securityRecoveryCheck = document.getElementById("security-recovery-check");
@@ -452,6 +453,34 @@
 			} finally {
 				queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
 			}
+		});
+	}
+
+	function ensureAccountLogoutButton() {
+		var existing = document.getElementById("account-logout");
+		if (existing) return existing;
+		var panel = dashboardAccountName && dashboardAccountName.closest
+			? dashboardAccountName.closest(".account-home-panel")
+			: null;
+		var panelHead = panel ? panel.querySelector(".panel-head") : null;
+		if (!panelHead && portalAuthForm) {
+			panelHead = portalAuthForm.closest(".panel");
+		}
+		if (!panelHead) return null;
+		var button = document.createElement("button");
+		button.className = "ghost-button account-logout-button";
+		button.type = "button";
+		button.id = "account-logout";
+		button.hidden = true;
+		button.textContent = "Log out";
+		panelHead.appendChild(button);
+		return button;
+	}
+
+	if (accountLogout) {
+		accountLogout.addEventListener("click", function () {
+			clearSession("Signed out.");
+			activateView("dashboard");
 		});
 	}
 
@@ -2095,6 +2124,9 @@
 		if (queueCharacter) {
 			queueCharacter.disabled = !sessionToken || characters.length >= maxCharacters;
 		}
+		if (accountLogout) {
+			accountLogout.hidden = !(account && sessionToken);
+		}
 	}
 
 	function applyFounderState(apiFounder) {
@@ -2110,13 +2142,31 @@
 		renderFounder();
 	}
 
-	function clearSession() {
+	function clearSession(message) {
 		sessionToken = "";
 		localStorage.removeItem(sessionKey);
 		betaAccount = null;
+		characters = [];
+		selectedCharacter = "";
+		localStorage.removeItem(rosterKey);
+		localStorage.removeItem(selectedKey);
+		if (portalAuthPassword) portalAuthPassword.value = "";
+		if (accountName) accountName.textContent = "Voidscape";
+		if (accountEmail) accountEmail.textContent = "Sign in to manage game logins and launch rewards.";
+		if (dashboardAccountName) dashboardAccountName.textContent = "Voidscape account";
+		if (dashboardAccountEmail) dashboardAccountEmail.textContent = "Sign in to manage game logins and launch rewards.";
+		if (subDays) subDays.textContent = "Unsubscribed";
+		if (sidebarSubTime) sidebarSubTime.textContent = "Unsubscribed";
+		if (subTitle) subTitle.textContent = "Unsubscribed";
+		if (subMeterFill) subMeterFill.style.width = "0%";
+		if (dashboardSubscriptionState) dashboardSubscriptionState.textContent = "Unsubscribed";
+		if (dashboardCardState) dashboardCardState.textContent = "No card waiting";
+		if (dashboardSecurityState) dashboardSecurityState.textContent = "Not signed in";
 		renderPortalAuthState();
 		updatePrelaunchAuthCtas();
 		renderCharacters();
+		renderSelectedCharacter();
+		if (portalAuthMessage && message) portalAuthMessage.textContent = message;
 	}
 
 	function createLocalCharacter(name) {
@@ -2475,7 +2525,33 @@
 
 	function renderSelectedCharacter() {
 		var character = selectedRosterCharacter();
-		if (!character) return;
+		if (!character) {
+			if (activeCharacterTitle) activeCharacterTitle.textContent = "No character selected";
+			if (activeCharacterImage) {
+				activeCharacterImage.src = "assets/rsc-ranger.png";
+				activeCharacterImage.alt = "";
+			}
+			if (activeCharacterSource) activeCharacterSource.textContent = "Sign in";
+			if (activeCharacterDoll) {
+				activeCharacterDoll.className = "paper-doll";
+				activeCharacterDoll.innerHTML = "";
+			}
+			if (activeCharacterCombat) activeCharacterCombat.textContent = "-";
+			if (activeCharacterTotal) activeCharacterTotal.textContent = "-";
+			if (activeCharacterQuest) activeCharacterQuest.textContent = "-";
+			if (activeCharacterKills) activeCharacterKills.textContent = "-";
+			if (activeCharacterLocation) activeCharacterLocation.textContent = "Not signed in";
+			if (activeCharacterSubscription) activeCharacterSubscription.textContent = "Unsubscribed";
+			if (activeCharacterLastLogin) activeCharacterLastLogin.textContent = "Never";
+			if (dashboardActiveTitle) dashboardActiveTitle.textContent = "No title equipped";
+			if (activeCharacterGear) {
+				activeCharacterGear.innerHTML = [
+					"<strong>Equipped / appearance</strong>",
+					"<span>Sign in to view a character.</span>"
+				].join("");
+			}
+			return;
+		}
 		var gear = Array.isArray(character.gear) ? character.gear : [];
 		if (characterName && character.source === "founder-reserved" && (!characterName.value || characterName.value === "Voidborn")) {
 			characterName.value = character.name;
