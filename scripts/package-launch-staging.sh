@@ -424,7 +424,8 @@ for key, value in replacements.items():
 Path(path).write_text(text)
 PY
 	if [[ "$ANDROID_RELEASE" -eq 1 ]]; then
-		scripts/build-android.sh --release
+		# The staging endpoint rewrite above is intentionally dirty and must remain non-promotable.
+		VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1 scripts/build-android.sh --release
 		ANDROID_APK="$ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/release/voidscape.apk"
 		ANDROID_LABEL="release"
 	else

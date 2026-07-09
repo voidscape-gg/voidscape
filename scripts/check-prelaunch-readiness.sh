@@ -432,6 +432,8 @@ run_android_release_guard() {
 		record_check pass "$name" "release build succeeded; signing is configured or unsigned override is explicit" "$log"
 	elif grep -q "Voidscape release APK signing is not configured" "$log"; then
 		record_check pass "$name" "unsigned release is blocked until signing is configured" "$log"
+	elif grep -q "Android release inputs are dirty" "$log"; then
+		record_check pass "$name" "dirty Android inputs are blocked from release promotion" "$log"
 	else
 		record_check fail "$name" "unexpected release build failure" "$log"
 	fi

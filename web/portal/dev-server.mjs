@@ -108,8 +108,9 @@ const downloadArtifacts = [
 		slug: "android-apk",
 		label: "Android APK",
 		filename: "Voidscape-Android-Beta.apk",
-		path: configuredDownloadPath("PORTAL_ANDROID_APK", join(repoRoot, "Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk")),
-		contentType: "application/vnd.android.package-archive"
+		path: configuredDownloadPath("PORTAL_ANDROID_APK", ""),
+		contentType: "application/vnd.android.package-archive",
+		unavailableState: "Awaiting a promoted Android release"
 	}
 ];
 const funnelEvents = new Set([
@@ -3846,7 +3847,7 @@ async function downloadState(options = {}) {
 			rows.push({
 				slug: artifact.slug,
 				label: artifact.label,
-				state: "Run scripts/build.sh",
+				state: artifact.unavailableState || "Run scripts/build.sh",
 				url: "#",
 				available: false,
 				publicDownload: artifact.publicDownload !== false,

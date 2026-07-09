@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANDROID_DIR="$REPO_ROOT/Android_Client"
+PROVENANCE_TOOL="$SCRIPT_DIR/android-provenance.py"
+PROVENANCE_ASSET="$ANDROID_DIR/.gradle/voidscape-provenance-assets/voidscape-provenance.json"
 GRADLE_ARGS=()
 
 usage() {
@@ -22,6 +24,10 @@ Release signing can be supplied through environment:
   VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE=/path/to/voidscape-upload.jks
   VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD=...
   VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD=...
+
+Release builds also require clean Android/shared-client inputs. For a local or
+staging artifact that must never be promoted, set:
+  VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1
 
 or matching Gradle properties:
   voidscape.android.uploadKeystore.file
@@ -91,11 +97,63 @@ if [[ -z "${ANDROID_HOME:-}" && -z "${ANDROID_SDK_ROOT:-}" && ! -f "$ANDROID_DIR
     fi
 fi
 
+release_signing_requested() {
+    local arg
+    for arg in "${GRADLE_ARGS[@]}"; do
+        case "$arg" in
+            *Release*)
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+read_relevant_state() {
+    python3 "$PROVENANCE_TOOL" state --repo-root "$REPO_ROOT" --format tsv
+}
+
+if [[ ! -f "$PROVENANCE_TOOL" ]]; then
+    echo "ERROR: Android provenance helper not found: $PROVENANCE_TOOL" >&2
+    exit 1
+fi
+read -r SOURCE_COMMIT_BEFORE SOURCE_DIGEST_BEFORE SOURCE_DIRTY_BEFORE SOURCE_COMMIT_DIGEST_BEFORE < <(read_relevant_state)
+DIRTY_RELEASE_OVERRIDE=false
+
+if release_signing_requested && [[ "$SOURCE_DIRTY_BEFORE" == "true" ]]; then
+    if [[ "${VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE:-}" == "1" ]]; then
+        DIRTY_RELEASE_OVERRIDE=true
+        echo "WARNING: building a dirty release artifact for local/staging use only; do not promote it." >&2
+    else
+        echo "ERROR: Android release inputs are dirty. Commit/stash the relevant Android and shared-client changes first." >&2
+        echo "For a non-promotable local/staging experiment only, set VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1." >&2
+        exit 1
+    fi
+fi
+
+cleanup_provenance_asset() {
+    rm -f "$PROVENANCE_ASSET"
+}
+trap cleanup_provenance_asset EXIT
+python3 "$PROVENANCE_TOOL" write \
+    --repo-root "$REPO_ROOT" \
+    --output "$PROVENANCE_ASSET" \
+    --dirty-release-override "$DIRTY_RELEASE_OVERRIDE" >/dev/null
+
 cd "$ANDROID_DIR"
 if [[ "${#GRADLE_ARGS[@]}" -eq 0 ]]; then
     GRADLE_ARGS=(assembleDebug)
 fi
 sh ./gradlew "${GRADLE_ARGS[@]}"
+
+read -r SOURCE_COMMIT_AFTER SOURCE_DIGEST_AFTER SOURCE_DIRTY_AFTER SOURCE_COMMIT_DIGEST_AFTER < <(read_relevant_state)
+if [[ "$SOURCE_COMMIT_AFTER" != "$SOURCE_COMMIT_BEFORE" \
+    || "$SOURCE_DIGEST_AFTER" != "$SOURCE_DIGEST_BEFORE" \
+    || "$SOURCE_DIRTY_AFTER" != "$SOURCE_DIRTY_BEFORE" \
+    || "$SOURCE_COMMIT_DIGEST_AFTER" != "$SOURCE_COMMIT_DIGEST_BEFORE" ]]; then
+    echo "ERROR: Android artifact inputs changed while Gradle was running; refusing to write provenance metadata." >&2
+    exit 1
+fi
 
 client_version() {
     awk '/CLIENT_VERSION[[:space:]]*=/ {
@@ -121,22 +179,26 @@ write_apk_metadata() {
     fi
     sha="$(shasum -a 256 "$apk_path" | awk '{print $1}')"
     size="$(wc -c < "$apk_path" | tr -d ' ')"
-    commit="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+    commit="$SOURCE_COMMIT_BEFORE"
     built_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    python3 - "$apk_path.json" "$version" "$sha" "$size" "$built_at" "$commit" "$build_type" <<'PY'
+    python3 - "$apk_path.json" "$version" "$sha" "$size" "$built_at" "$commit" "$build_type" "$PROVENANCE_ASSET" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-meta_path, version, sha, size, built_at, commit, build_type = sys.argv[1:]
-Path(meta_path).write_text(json.dumps({
+meta_path, version, sha, size, built_at, commit, build_type, provenance_path = sys.argv[1:]
+provenance = json.loads(Path(provenance_path).read_text(encoding="utf-8"))
+metadata = {
     "clientVersion": int(version),
     "sha256": sha,
     "sizeBytes": int(size),
     "builtAt": built_at,
     "gitCommit": commit,
     "buildType": build_type,
-}, indent=2) + "\n", encoding="utf-8")
+    "artifactType": "apk",
+}
+metadata.update(provenance)
+Path(meta_path).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 PY
     echo "Wrote APK metadata: $apk_path.json"
 }

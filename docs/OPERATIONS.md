@@ -394,13 +394,17 @@ The build writes `voidscape.apk.json` next to the APK; before promoting a public
 APK to `/downloads/android-apk`, run:
 
 ```bash
-scripts/check-android-apk-release.sh --apk path/to/voidscape.apk --server-config path/to/local.conf
+scripts/check-android-apk-release.sh \
+  --apk path/to/voidscape.apk \
+  --server-config path/to/local.conf \
+  --expected-signer-sha256 "$VOIDSCAPE_ANDROID_EXPECTED_SIGNER_SHA256"
 ```
 
-The preflight must pass so the APK sidecar hash/size and `clientVersion` match
-the APK bytes, `Client_Base/src/orsc/Config.java`, and the target server
-`client_version`. This prevents the Android “client has been updated” black-screen
-path caused by publishing an APK built for a different server version.
+The preflight must pass so the signer, APK-embedded source provenance, sidecar
+hash/size, packaged version/SDK values, and `clientVersion` match the clean source
+checkout and target server. Set `PORTAL_ANDROID_APK` to that exact promoted file;
+the portal intentionally has no implicit local Android fallback. This prevents a
+debug, stale, dirty, wrongly signed, or server-incompatible APK from becoming public.
 
 Cache-backed changes need extra care:
 

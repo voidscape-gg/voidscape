@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 
 def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
+def provenanceAssetsDir = file("$rootDir/.gradle/voidscape-provenance-assets")
 def uploadKeystorePath = (
     findProperty("voidscape.android.uploadKeystore.file")
         ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE")
@@ -89,7 +90,7 @@ android {
     sourceSets {
         main.java.srcDirs += ['src/main/java', 'src/main/../../../../Client_Base/src']
         main.java.exclude 'tools/**'
-        main.assets.srcDirs += generatedAssetsDir
+        main.assets.srcDirs += [generatedAssetsDir, provenanceAssetsDir]
     }
     dependenciesInfo {
         includeInApk true
