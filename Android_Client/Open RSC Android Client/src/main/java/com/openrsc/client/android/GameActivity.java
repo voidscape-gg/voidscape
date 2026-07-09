@@ -26,17 +26,24 @@ import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 
 import orsc.Config;
 import orsc.PacketHandler;
 import orsc.mudclient;
 import orsc.multiclient.ClientPort;
 import orsc.osConfig;
+import orsc.soundPlayer;
+import orsc.util.Utils;
 
 public class GameActivity extends Activity implements ClientPort {
 
 	private static mudclient retainedClient;
+	private static final int NETWORK_NONE = 0;
+	private static final int NETWORK_CELLULAR = 1;
+	private static final int NETWORK_WIFI = 2;
+	private static final int NETWORK_OTHER = 3;
 
     private InputImpl inputImpl;
     private mudclient mudclient;
@@ -48,12 +55,9 @@ public class GameActivity extends Activity implements ClientPort {
 	private int batteryLevel;
 	private int batteryScale;
 	private boolean batteryCharging;
-	protected volatile boolean wifiAvailable = false;
-
-	protected volatile boolean cellularAvailable = false;
-	private HashSet<Network> cellularNetworks = new HashSet<>();
-	private HashSet<Network> wifiNetworks = new HashSet<>();
-	private boolean checkedNetworks = true;
+	private final Object networkLock = new Object();
+	private final Map<Network, Integer> validatedNetworks = new HashMap<>();
+	private volatile int connectivityKind = NETWORK_NONE;
 
     private boolean hadSideMenu;
 	private boolean keyboardShowing;
@@ -91,6 +95,7 @@ public class GameActivity extends Activity implements ClientPort {
 	    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+		Utils.attach(this);
 
         osConfig.F_ANDROID_BUILD = true;
         File externalSmokeDir = getExternalFilesDir(null);
@@ -139,6 +144,8 @@ public class GameActivity extends Activity implements ClientPort {
 	protected void onDestroy() {
 		unsetReceivers();
 		unregisterBackHandler();
+		soundPlayer.stopAll();
+		Utils.detach(this);
 		if (isFinishing() && !isChangingConfigurations()) {
 			shutdownClientThread();
 		}
@@ -208,38 +215,80 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public void networkChange(Network network, NetworkCapabilities networkCapabilities) {
-		boolean canDataConnect = false;
-		if (this.checkedNetworks) {
-			this.checkedNetworks = false;
-			this.cellularNetworks.clear();
-			this.wifiNetworks.clear();
+		if (network == null) {
+			return;
 		}
-		if (networkCapabilities != null) {
-			(networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ? this.cellularNetworks : this.wifiNetworks).add(network);
-		} else {
-			this.cellularNetworks.remove(network);
-			this.wifiNetworks.remove(network);
+		int kind = classifyNetwork(networkCapabilities);
+		synchronized (networkLock) {
+			validatedNetworks.remove(network);
+			if (kind != NETWORK_NONE) {
+				validatedNetworks.put(network, kind);
+			}
+			refreshConnectivityKindLocked();
 		}
-		this.wifiAvailable = !this.wifiNetworks.isEmpty();
-		if (!this.wifiAvailable && !this.cellularNetworks.isEmpty()) {
-			canDataConnect = true;
-		}
-		this.cellularAvailable = canDataConnect;
 	}
 
 	private void checkNetwork() {
-		this.cellularNetworks.clear();
-		this.wifiNetworks.clear();
 		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 		if (connectivityManager == null) {
+			clearNetworks();
 			return;
 		}
-		Network activeNetwork = connectivityManager.getActiveNetwork();
-		NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
-		if (networkCapabilities != null && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-			networkChange(activeNetwork, networkCapabilities);
+		Map<Network, Integer> snapshot = new HashMap<>();
+		try {
+			Network network = connectivityManager.getActiveNetwork();
+			int kind = network == null
+				? NETWORK_NONE
+				: classifyNetwork(connectivityManager.getNetworkCapabilities(network));
+			if (network != null && kind != NETWORK_NONE) {
+				snapshot.put(network, kind);
+			}
+		} catch (RuntimeException ignored) {
+			snapshot.clear();
 		}
-		this.checkedNetworks = true;
+		synchronized (networkLock) {
+			validatedNetworks.clear();
+			validatedNetworks.putAll(snapshot);
+			refreshConnectivityKindLocked();
+		}
+	}
+
+	private int classifyNetwork(NetworkCapabilities capabilities) {
+		if (capabilities == null
+			|| !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+			|| !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+			return NETWORK_NONE;
+		}
+		if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+			return NETWORK_WIFI;
+		}
+		if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+			return NETWORK_CELLULAR;
+		}
+		return NETWORK_OTHER;
+	}
+
+	private void clearNetworks() {
+		synchronized (networkLock) {
+			validatedNetworks.clear();
+			connectivityKind = NETWORK_NONE;
+		}
+	}
+
+	private void refreshConnectivityKindLocked() {
+		int next = NETWORK_NONE;
+		for (int kind : validatedNetworks.values()) {
+			if (kind == NETWORK_WIFI) {
+				next = NETWORK_WIFI;
+				break;
+			}
+			if (kind == NETWORK_CELLULAR) {
+				next = NETWORK_CELLULAR;
+			} else if (next == NETWORK_NONE) {
+				next = NETWORK_OTHER;
+			}
+		}
+		connectivityKind = next;
 	}
 
 	private void setReceivers() {
@@ -275,12 +324,14 @@ public class GameActivity extends Activity implements ClientPort {
     @Override
 	protected void onPause() {
 		appInBackground = true;
+		soundPlayer.suspendForBackground();
 		super.onPause();
 	}
 
 	@Override
 	public void onResume() {
     	super.onResume();
+		soundPlayer.resumeForeground();
 		if (appInBackground) {
 			suppressReconnectOverlayUntilMillis = System.currentTimeMillis() + 15000L;
 		}
@@ -438,7 +489,7 @@ public class GameActivity extends Activity implements ClientPort {
 
     @Override
     public void stopSoundPlayer() {
-        if (gameView != null) gameView.stopSoundPlayer();
+		soundPlayer.stopAll();
     }
 
     public mudclient getMudclient() {
@@ -558,9 +609,9 @@ public class GameActivity extends Activity implements ClientPort {
 			return null;
 		}
 		if (gameView != null) {
-			if (!wifiAvailable && !cellularAvailable) return gameView.getConnectivity(0);
-			else if (wifiAvailable) return gameView.getConnectivity(2);
-			else return gameView.getConnectivity(1);
+			if (connectivityKind == NETWORK_NONE) return gameView.getConnectivity(0);
+			if (connectivityKind == NETWORK_CELLULAR) return gameView.getConnectivity(1);
+			return gameView.getConnectivity(2);
 		}
 		return null;
 	}
@@ -569,9 +620,10 @@ public class GameActivity extends Activity implements ClientPort {
 		if (keyboardShowing) {
 			return "";
 		}
-		if (!wifiAvailable && !cellularAvailable) return "NONE";
-		else if (wifiAvailable) return "WIFI";
-		else return "CELL";
+		if (connectivityKind == NETWORK_NONE) return "NONE";
+		if (connectivityKind == NETWORK_WIFI) return "WIFI";
+		if (connectivityKind == NETWORK_CELLULAR) return "CELL";
+		return "NET";
 	}
 
     @Override

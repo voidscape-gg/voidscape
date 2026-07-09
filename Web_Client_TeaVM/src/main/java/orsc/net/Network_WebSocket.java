@@ -24,8 +24,8 @@ public final class Network_WebSocket extends Network_Base {
 		socket.onOpen(event -> open = true);
 		socket.onClose(event -> closed = true);
 		socket.onError(event -> {
-			errorHappened = true;
 			errorCode = "websocket error";
+			errorHappened = true;
 			closed = true;
 		});
 		socket.onMessage(this::appendMessage);

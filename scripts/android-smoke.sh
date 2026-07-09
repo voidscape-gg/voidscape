@@ -66,6 +66,8 @@ SMOKE_BANK_FLAG="$APP_SMOKE_FILES/android-smoke-bank.flag"
 SMOKE_SHOP_FLAG="$APP_SMOKE_FILES/android-smoke-shop.flag"
 SMOKE_EQUIPMENT_FLAG="$APP_SMOKE_FILES/android-smoke-equipment.flag"
 SMOKE_MAGIC_PRAYER_FLAG="$APP_SMOKE_FILES/android-smoke-magic-prayer.flag"
+SMOKE_AUDIO_FLAG="$APP_SMOKE_FILES/android-smoke-audio.flag"
+SMOKE_NETWORK_FLAG="$APP_SMOKE_FILES/android-smoke-network.flag"
 SMOKE_WORLD_MAP_FLAG="$APP_SMOKE_FILES/android-smoke-world-map.flag"
 SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
 SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
@@ -149,6 +151,7 @@ AUTH_ZOOM_MANUAL_PINCH_SECONDS="${ANDROID_SMOKE_MANUAL_PINCH_SECONDS:-0}"
 AUTH_ZOOM_REQUIRE_PINCH="${ANDROID_SMOKE_REQUIRE_PINCH:-0}"
 AUTH_LIFECYCLE_BACKGROUND_SECONDS="${ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS:-35}"
 AUTH_OFFLINE_TIMEOUT="${ANDROID_SMOKE_AUTH_OFFLINE_TIMEOUT:-135}"
+INPUT_CHAR_DELAY="${ANDROID_SMOKE_INPUT_CHAR_DELAY:-0.2}"
 AUTH_CHAT_TAB_Y="${ANDROID_SMOKE_CHAT_TAB_Y:-}"
 AUTH_CHAT_TAB_SEQUENCE="${ANDROID_SMOKE_CHAT_TAB_SEQUENCE:-CHAT,QUEST,GLOBAL,PRIVATE,ALL}"
 AUTH_CHAT_TAB_ALL_X="${ANDROID_SMOKE_CHAT_TAB_ALL_X:-35}"
@@ -717,6 +720,22 @@ disable_android_smoke_magic_prayer() {
     remove_smoke_files "$SMOKE_MAGIC_PRAYER_FLAG"
 }
 
+enable_android_smoke_audio() {
+	touch_smoke_file "$SMOKE_AUDIO_FLAG"
+}
+
+disable_android_smoke_audio() {
+	remove_smoke_files "$SMOKE_AUDIO_FLAG"
+}
+
+enable_android_smoke_network() {
+	touch_smoke_file "$SMOKE_NETWORK_FLAG"
+}
+
+disable_android_smoke_network() {
+	remove_smoke_files "$SMOKE_NETWORK_FLAG"
+}
+
 enable_android_smoke_world_map() {
     touch_smoke_file "$SMOKE_WORLD_MAP_FLAG"
 }
@@ -854,6 +873,8 @@ disable_android_smoke_targets() {
     disable_android_smoke_shop
     disable_android_smoke_equipment
     disable_android_smoke_magic_prayer
+	disable_android_smoke_audio
+	disable_android_smoke_network
     disable_android_smoke_world_map
     disable_android_smoke_settings
     disable_android_smoke_ground_loot
@@ -1114,7 +1135,7 @@ input_text_slow() {
     for ((i = 0; i < ${#text}; i++)); do
         ch="${text:i:1}"
         input_text "$ch"
-        sleep 0.12
+        sleep "$INPUT_CHAR_DELAY"
     done
 }
 
@@ -1354,6 +1375,7 @@ launch_game_with_endpoint() {
     local port="$2"
     "$ADB" shell am force-stop $APP_ID || true
     write_server_endpoint "$host" "$port"
+	enable_android_smoke_network
     launch_wrapper
     wait_for_wrapper_ready
     tap_play_button
@@ -1365,6 +1387,7 @@ launch_game_with_endpoint() {
 }
 
 launch_authenticated_endpoint() {
+	enable_android_smoke_network
 	if [[ "$AUTH_USE_BUNDLED_ENDPOINT" == "1" ]]; then
 		launch_to_login_home
 	else
@@ -1641,8 +1664,10 @@ run_authenticated_lifecycle_smoke() {
 		exit 1
 	}
 	"$ADB" logcat -c || true
+	enable_android_smoke_audio
 
 	launch_authenticated_endpoint
+	enable_android_smoke_audio
 	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || exit 1
 	screenshot 00-lifecycle-login-home
 
@@ -1711,12 +1736,14 @@ run_authenticated_lifecycle_smoke() {
 	}
 
 	local settings_launch_output
+	"$ADB" logcat -c || true
 	settings_launch_output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
 	if ! grep -q "Status: ok" <<< "$settings_launch_output"; then
 		echo "ERROR: Android lifecycle smoke could not switch to Android Settings" >&2
 		echo "$settings_launch_output" >&2
 		exit 1
 	fi
+	wait_for_audio_event stop-all 0 15 || exit 1
 	echo "Android lifecycle smoke switched to Android Settings for ${AUTH_LIFECYCLE_BACKGROUND_SECONDS}s"
 	sleep "$AUTH_LIFECYCLE_BACKGROUND_SECONDS"
 	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
@@ -1725,6 +1752,7 @@ run_authenticated_lifecycle_smoke() {
 		screenshot 04-lifecycle-resume-failed || true
 		exit 1
 	}
+	wait_for_audio_event resume 0 15 || exit 1
 	wait_auth_online 20 || exit 1
 	sleep 2
 	assert_no_android_runtime_crash "after launcher resume" || {
@@ -1770,6 +1798,8 @@ run_authenticated_lifecycle_smoke() {
 		exit 1
 	}
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+	wait_for_network_writer_count 0 20 || exit 1
+	wait_for_audio_event stop-all 0 15 || exit 1
 	screenshot 07-lifecycle-after-logout-login-home
 	enable_android_smoke_login
 	"$ADB" logcat -c || true
@@ -1793,6 +1823,7 @@ run_authenticated_lifecycle_smoke() {
 	"$ADB" shell input keyevent BACK || true
 	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
+	disable_android_smoke_audio
 	echo "Android auth/lifecycle smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
 }
 
@@ -3674,6 +3705,51 @@ wait_for_any_settings_rendered() {
 	return 1
 }
 
+wait_for_network_writer_count() {
+	local expected="$1"
+	local timeout="${2:-15}"
+	local deadline=$((SECONDS + timeout))
+	local line active
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "VOIDSCAPE_NETWORK_WRITER event=stop " | tail -1 || true)"
+		active="$(extract_log_value "$line" active)"
+		if [[ "$active" == "$expected" ]]; then
+			echo "Verified Android network writer cleanup: $line"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: Android network writers did not settle at active=$expected" >&2
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "VOIDSCAPE_NETWORK_WRITER" | tail -40 >&2 || true
+	return 1
+}
+
+wait_for_audio_event() {
+	local expected_event="$1"
+	local expected_active="$2"
+	local timeout="${3:-15}"
+	local deadline=$((SECONDS + timeout))
+	local line active
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_AUDIO event=$expected_event " | tail -1 || true)"
+		active="$(extract_log_value "$line" active)"
+		if [[ "$active" == "$expected_active"
+			|| ( "$expected_active" == "+" && "$active" =~ ^[0-9]+$ && "$active" -gt 0 ) ]]; then
+			echo "Verified Android audio lifecycle: $line"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: timed out waiting for Android audio event=$expected_event active=$expected_active" >&2
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_AUDIO" | tail -40 >&2 || true
+	return 1
+}
+
+wait_for_audio_cycle() {
+	wait_for_audio_event started + 15 || return 1
+	wait_for_audio_event completed 0 20
+}
+
 logout_authenticated_smoke_session() {
 	local line logout_x logout_y
 	enable_android_smoke_settings
@@ -3691,7 +3767,8 @@ logout_authenticated_smoke_session() {
 	logout_y="$(log_int_or_default "$line" logoutY 293)"
 	tap_client_xy "$logout_x" "$logout_y"
 	disable_android_smoke_settings
-	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || return 1
+	wait_for_network_writer_count 0 20
 }
 
 wait_for_auth_settings_row() {
@@ -5573,9 +5650,13 @@ run_authenticated_magic_prayer_smoke() {
 
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
+	local original_settings original_camera original_mouse original_sound
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
     player_id="$(read_auth_player_id)"
+	original_settings="$(read_auth_settings)" || return 1
+	read -r original_camera original_mouse original_sound <<< "$original_settings"
+	update_auth_settings "$original_camera" "$original_mouse" 0
     snapshot_auth_stats "$player_id"
     ensure_auth_magic_prayer_stats "$player_id"
     echo "Android magic/prayer smoke moving $AUTH_USER from $original_x,$original_y to $AUTH_NPC_PLAYER_X,$AUTH_NPC_PLAYER_Y"
@@ -5587,8 +5668,10 @@ run_authenticated_magic_prayer_smoke() {
         "$ADB" logcat -c || true
         "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_magic_prayer
+		enable_android_smoke_audio
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
         enable_android_smoke_magic_prayer
+		enable_android_smoke_audio
         tap_existing_user_button
         sleep 3
         enter_auth_credentials
@@ -5659,22 +5742,29 @@ run_authenticated_magic_prayer_smoke() {
         sleep 1
         screenshot 91-auth-prayer-tab-open
 
+		"$ADB" logcat -c || true
         tap_magic_prayer_row_until_action "$row_x" "$row_y" PRAYER_ACTIVATED "$AUTH_MAGIC_PRAYER_PRAYER_ID" || exit 1
+		wait_for_audio_cycle || exit 1
         sleep 1
         screenshot 92-auth-prayer-activated
 
+		"$ADB" logcat -c || true
         tap_magic_prayer_row_until_action "$row_x" "$row_y" PRAYER_DEACTIVATED "$AUTH_MAGIC_PRAYER_PRAYER_ID" || exit 1
+		wait_for_audio_cycle || exit 1
         sleep 1
         screenshot 93-auth-prayer-deactivated
 
 		logout_authenticated_smoke_session || exit 1
+		wait_for_audio_event stop-all 0 15 || exit 1
     ) || status=$?
 
     disable_android_smoke_magic_prayer
+	disable_android_smoke_audio
     "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_stats "$player_id" || true
     update_auth_position "$original_x" "$original_y" || true
+	update_auth_settings "$original_camera" "$original_mouse" "$original_sound" || true
     sleep 1
     return "$status"
 }

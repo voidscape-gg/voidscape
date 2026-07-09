@@ -32,6 +32,7 @@ import orsc.graphics.two.SpriteArchive.Subspace;
 import orsc.graphics.two.SpriteArchive.Unpacker;
 import orsc.graphics.two.SpriteArchive.Workspace;
 import orsc.multiclient.ClientPort;
+import orsc.net.Network_Base;
 import orsc.net.Opcodes;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
@@ -2618,9 +2619,7 @@ public final class mudclient implements Runnable {
 
 	final void closeConnection() {
 		try {
-
 			this.closeConnection(true);
-			clientPort.stopSoundPlayer();
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "client.SA(" + "dummy" + ')');
 		}
@@ -2628,13 +2627,26 @@ public final class mudclient implements Runnable {
 
 	public final void closeConnection(boolean sendPacket) {
 		try {
-
-			if (sendPacket && null != this.packetHandler.getClientStream()) {
+			Network_Base stream = this.packetHandler.getClientStream();
+			boolean logoutPacketQueued = false;
+			if (sendPacket && stream != null) {
 				try {
-					this.packetHandler.getClientStream().newPacket(31);
-					this.packetHandler.getClientStream().finishPacketAndFlush();
+					stream.newPacket(31);
+					stream.finishPacketAndFlush();
+					logoutPacketQueued = true;
 				} catch (IOException var4) {
 				}
+			}
+			if (stream != null) {
+				if (logoutPacketQueued) {
+					this.packetHandler.closeClientStreamAfterFlush(stream);
+				} else {
+					this.packetHandler.closeClientStream(stream);
+				}
+			}
+			try {
+				clientPort.stopSoundPlayer();
+			} catch (RuntimeException ignored) {
 			}
 
 			this.setUsername("");
@@ -27777,6 +27789,9 @@ public final class mudclient implements Runnable {
 
 	private void jumpToLogin() {
 		try {
+			if (this.packetHandler != null) {
+				this.packetHandler.closeClientStream();
+			}
 			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD) {
 				clientPort.closeKeyboard();
 			}

@@ -10,8 +10,8 @@ public class Network_Base {
 	private final int writeBufferSize = 5000;
 	public int m_d = 0;
 	public RSBuffer_Bits bufferBits;
-	String errorCode = "";
-	boolean errorHappened = false;
+	volatile String errorCode = "";
+	volatile boolean errorHappened = false;
 	private int packetReadAttempts = 0;
 	private int incomingPacketLength = 0;
 	private int readyPackets = 0;
@@ -88,8 +88,8 @@ public class Network_Base {
 			try {
 				++this.packetReadAttempts;
 				if (this.m_d > 0 && this.packetReadAttempts > this.m_d) {
-					this.errorHappened = true;
 					this.errorCode = "time-out";
+					this.errorHappened = true;
 					this.m_d += this.m_d;
 					return 0;
 				}
@@ -106,8 +106,8 @@ public class Network_Base {
 					return packetLength;
 				}
 			} catch (IOException var4) {
-				this.errorHappened = true;
 				this.errorCode = var4.getMessage();
+				this.errorHappened = true;
 			}
 
 			return 0;
@@ -152,8 +152,8 @@ public class Network_Base {
 				try {
 					this.flush(0, true);
 				} catch (IOException var4) {
-					this.errorHappened = true;
 					this.errorCode = var4.getMessage();
+					this.errorHappened = true;
 				}
 			}
 
@@ -178,6 +178,10 @@ public class Network_Base {
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "b.G(" + true + ')');
 		}
+	}
+
+	public void closeAfterFlush() {
+		close();
 	}
 
 	public void read(byte[] data, int offset, int count) throws IOException {

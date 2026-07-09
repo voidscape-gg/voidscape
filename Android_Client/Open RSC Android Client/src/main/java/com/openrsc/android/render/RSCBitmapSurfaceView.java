@@ -36,7 +36,6 @@ import orsc.graphics.two.MudClientGraphics;
 import orsc.mudclient;
 import orsc.multiclient.ClientPort;
 import orsc.osConfig;
-import orsc.util.Utils;
 
 public abstract class RSCBitmapSurfaceView extends SurfaceView implements SurfaceHolder.Callback, ClientPort {
 
@@ -52,7 +51,6 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	public RSCBitmapSurfaceView(Context c) {
 		super(c);
 		gameActivity = (GameActivity) c;
-		Utils.context = c;
 		SurfaceHolder holder = getHolder();
 		holder.addCallback(this);
 

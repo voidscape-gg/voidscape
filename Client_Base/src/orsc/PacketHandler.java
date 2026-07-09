@@ -37,7 +37,7 @@ public class PacketHandler {
 	private static final boolean HIT_FEEDBACK_DEBUG = Boolean.getBoolean("voidscape.hitFeedbackDebug");
 
 	private final RSBuffer_Bits packetsIncoming = new RSBuffer_Bits(30000);
-	private Network_Base clientStream;
+	private volatile Network_Base clientStream;
 	private mudclient mc;
 
 	private static final Map<Integer, String> incomingOpcodeMap = new HashMap<Integer, String>() {{
@@ -137,13 +137,66 @@ public class PacketHandler {
 	}
 
 	public void setClientStream(Network_Base clientStream) {
-		this.clientStream = clientStream;
+		Network_Base previous;
+		synchronized (this) {
+			previous = this.clientStream;
+			this.clientStream = clientStream;
+		}
+		if (previous != null && previous != clientStream) {
+			closeStream(previous, false);
+		}
+	}
+
+	public void closeClientStream() {
+		closeClientStream(null, false);
+	}
+
+	public void closeClientStream(Network_Base expected) {
+		closeClientStream(expected, false);
+	}
+
+	public void closeClientStreamAfterFlush() {
+		closeClientStream(null, true);
+	}
+
+	public void closeClientStreamAfterFlush(Network_Base expected) {
+		closeClientStream(expected, true);
+	}
+
+	private void closeClientStream(Network_Base expected, boolean afterFlush) {
+		Network_Base previous;
+		synchronized (this) {
+			if (expected != null && this.clientStream != expected) {
+				return;
+			}
+			previous = this.clientStream;
+			this.clientStream = null;
+		}
+		if (previous == null) {
+			return;
+		}
+		closeStream(previous, afterFlush);
+	}
+
+	private void closeStream(Network_Base stream, boolean afterFlush) {
+		try {
+			if (afterFlush) {
+				stream.closeAfterFlush();
+			} else {
+				stream.close();
+			}
+		} catch (RuntimeException error) {
+			System.err.println("Unable to close superseded client stream: " + error.getClass().getSimpleName());
+		}
 	}
 
 	public void startThread(int andStart, Runnable proc) {
 		try {
 
-			Thread var3 = new Thread(proc);
+			String name = proc instanceof Network_Socket
+				? "Voidscape-NetworkWriter-" + Integer.toHexString(System.identityHashCode(proc))
+				: "Voidscape-ClientWorker";
+			Thread var3 = new Thread(proc, name);
 			if (andStart == 1) {
 				var3.setDaemon(true);
 				var3.start();
@@ -155,14 +208,22 @@ public class PacketHandler {
 
 	public final Socket openSocket(int port, String host) throws IOException {
 		Socket s = new Socket();
-		int connectTimeout = isAndroid() ? 5000 : 10000;
-		int readTimeout = isAndroid() ? 10000 : 30000;
-		s.connect(new InetSocketAddress(InetAddress.getByName(host), port), connectTimeout);
-		//s.setSendBufferSize(25000);
-		//s.setReceiveBufferSize(25000);
-		s.setSoTimeout(readTimeout);
-		s.setTcpNoDelay(true);
-		return s;
+		try {
+			int connectTimeout = isAndroid() ? 5000 : 10000;
+			int readTimeout = isAndroid() ? 10000 : 30000;
+			s.connect(new InetSocketAddress(InetAddress.getByName(host), port), connectTimeout);
+			//s.setSendBufferSize(25000);
+			//s.setReceiveBufferSize(25000);
+			s.setSoTimeout(readTimeout);
+			s.setTcpNoDelay(true);
+			return s;
+		} catch (IOException | RuntimeException error) {
+			try {
+				s.close();
+			} catch (IOException ignored) {
+			}
+			throw error;
+		}
 	}
 
 	public final Network_Base openConnection(String host, int port) throws IOException {
