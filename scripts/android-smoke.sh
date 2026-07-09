@@ -91,9 +91,13 @@ ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_PVP_STRESS=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
+ONLY_BOOTSTRAP=0
 ORIGINAL_ACCELEROMETER_ROTATION=""
 ORIGINAL_USER_ROTATION=""
 ROTATION_STATE_SAVED=0
+ORIGINAL_WIFI_STATE=""
+ORIGINAL_MOBILE_DATA_STATE=""
+NETWORK_STATE_SAVED=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
@@ -219,7 +223,7 @@ PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -238,6 +242,7 @@ Environment:
   ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT=1
                                     Optional: do not write the requested endpoint before auth smoke launch
   ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
+  --only-bootstrap                 Focused offline bundled-cache install/repair/skip and endpoint smoke
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
@@ -488,6 +493,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --no-install)
             INSTALL=0
+            shift
+            ;;
+        --only-bootstrap)
+            ONLY_BOOTSTRAP=1
             shift
             ;;
         --only-auth-camera)
@@ -860,6 +869,38 @@ force_android_landscape() {
     force_android_rotation 1
 }
 
+save_android_network_state() {
+	if [[ "$NETWORK_STATE_SAVED" -eq 1 ]]; then
+		return
+	fi
+	ORIGINAL_WIFI_STATE="$("$ADB" shell settings get global wifi_on 2>/dev/null | tr -d '\r' || true)"
+	ORIGINAL_MOBILE_DATA_STATE="$("$ADB" shell settings get global mobile_data 2>/dev/null | tr -d '\r' || true)"
+	NETWORK_STATE_SAVED=1
+}
+
+disable_android_network_for_bootstrap() {
+	save_android_network_state
+	"$ADB" shell svc wifi disable >/dev/null 2>&1 || true
+	"$ADB" shell svc data disable >/dev/null 2>&1 || true
+}
+
+restore_android_network_state() {
+	if [[ "$NETWORK_STATE_SAVED" -ne 1 ]]; then
+		return
+	fi
+	if [[ "$ORIGINAL_WIFI_STATE" == "1" ]]; then
+		"$ADB" shell svc wifi enable >/dev/null 2>&1 || true
+	elif [[ "$ORIGINAL_WIFI_STATE" == "0" ]]; then
+		"$ADB" shell svc wifi disable >/dev/null 2>&1 || true
+	fi
+	if [[ "$ORIGINAL_MOBILE_DATA_STATE" == "1" ]]; then
+		"$ADB" shell svc data enable >/dev/null 2>&1 || true
+	elif [[ "$ORIGINAL_MOBILE_DATA_STATE" == "0" ]]; then
+		"$ADB" shell svc data disable >/dev/null 2>&1 || true
+	fi
+	NETWORK_STATE_SAVED=0
+}
+
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
     disable_android_smoke_player_targets
@@ -886,6 +927,7 @@ disable_android_smoke_targets() {
 android_smoke_cleanup() {
     disable_android_smoke_targets
     restore_android_rotation
+	restore_android_network_state
 }
 
 disable_android_smoke_targets
@@ -1061,8 +1103,30 @@ wait_for_text() {
     return 1
 }
 
+wait_for_log_pattern() {
+	local pattern="$1"
+	local timeout="${2:-30}"
+	local deadline=$((SECONDS + timeout))
+	while (( SECONDS < deadline )); do
+		if "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -E "$pattern" >/dev/null; then
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: timed out waiting for Android log pattern: $pattern" >&2
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | tail -120 >&2 || true
+	return 1
+}
+
 wait_for_wrapper_ready() {
-    wait_for_text "Play" 45 || sleep 2
+	if wait_for_text "Play" 45; then
+		return 0
+	fi
+	echo "ERROR: Android wrapper did not reach Ready to play / Play" >&2
+	"$ADB" shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+	"$ADB" shell cat /sdcard/window.xml 2>/dev/null | tr -d '\r' >&2 || true
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | tail -160 >&2 || true
+	return 1
 }
 
 tap_text() {
@@ -6252,6 +6316,176 @@ run_authenticated_pvp_stress_smoke() {
     return "$status"
 }
 
+app_file_sha256() {
+	local relative_path="$1"
+	"$ADB" exec-out run-as "$APP_ID" cat "files/$relative_path" \
+		| shasum -a 256 \
+		| awk '{print $1}'
+}
+
+assert_bundled_cache_file() {
+	local relative_path="$1"
+	local source_file="$REPO_ROOT/Client_Base/Cache/$relative_path"
+	local source_hash device_hash
+	[[ -s "$source_file" ]] || {
+		echo "ERROR: required source cache file is missing or empty: $source_file" >&2
+		return 1
+	}
+	source_hash="$(shasum -a 256 "$source_file" | awk '{print $1}')"
+	device_hash="$(app_file_sha256 "$relative_path")"
+	if [[ "$device_hash" != "$source_hash" ]]; then
+		echo "ERROR: installed cache hash mismatch for $relative_path" >&2
+		echo "  source: $source_hash" >&2
+		echo "  device: $device_hash" >&2
+		return 1
+	fi
+	echo "Verified bundled cache file: $relative_path sha256=$device_hash"
+}
+
+assert_cache_marker_present() {
+	if ! "$ADB" shell run-as "$APP_ID" grep -q 'cache.install_identity' \
+		shared_prefs/voidscape.bootstrap.xml 2>/dev/null; then
+		echo "ERROR: bundled-cache completion marker is missing" >&2
+		return 1
+	fi
+}
+
+assert_cache_marker_absent() {
+	if "$ADB" shell run-as "$APP_ID" grep -q 'cache.install_identity' \
+		shared_prefs/voidscape.bootstrap.xml 2>/dev/null; then
+		echo "ERROR: failed bundled-cache install left a completion marker" >&2
+		return 1
+	fi
+}
+
+assert_no_cache_temp_files() {
+	local leftovers
+	leftovers="$("$ADB" shell run-as "$APP_ID" find files -type f -print 2>/dev/null \
+		| tr -d '\r' \
+		| grep '\.voidscape-tmp$' || true)"
+	if [[ -n "$leftovers" ]]; then
+		echo "ERROR: cache bootstrap left temporary files:" >&2
+		printf '%s\n' "$leftovers" >&2
+		return 1
+	fi
+}
+
+cache_file_mtime() {
+	local relative_path="$1"
+	"$ADB" shell run-as "$APP_ID" stat -c %Y "files/$relative_path" 2>/dev/null | tr -d '\r'
+}
+
+assert_endpoint_state() {
+	local expected_host="$1"
+	local expected_port="$2"
+	local mirrored_host mirrored_port preferences
+	mirrored_host="$("$ADB" shell run-as "$APP_ID" cat files/ip.txt 2>/dev/null | tr -d '\r')"
+	mirrored_port="$("$ADB" shell run-as "$APP_ID" cat files/port.txt 2>/dev/null | tr -d '\r')"
+	preferences="$("$ADB" shell run-as "$APP_ID" cat shared_prefs/voidscape.bootstrap.xml 2>/dev/null | tr -d '\r')"
+	if [[ "$mirrored_host" != "$expected_host" || "$mirrored_port" != "$expected_port" \
+		|| "$preferences" != *"name=\"endpoint.host\">$expected_host</string>"* \
+		|| "$preferences" != *"name=\"endpoint.port\">$expected_port</string>"* ]]; then
+		echo "ERROR: endpoint transaction mismatch; expected $expected_host:$expected_port" >&2
+		echo "  mirrors: $mirrored_host:$mirrored_port" >&2
+		printf '%s\n' "$preferences" >&2
+		return 1
+	fi
+	echo "Verified canonical endpoint and mirrors: $expected_host:$expected_port"
+}
+
+start_bootstrap_wrapper() {
+	local fail_after="${1:--1}"
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	if [[ "$fail_after" -ge 0 ]]; then
+		"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
+			--ei voidscape.smoke.cache_fail_after_files "$fail_after" >/dev/null
+	else
+		"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" >/dev/null
+	fi
+}
+
+run_bootstrap_smoke() {
+	local marker_probe="video/Authentic_Sprites.orsc"
+	local before_mtime after_mtime
+	local endpoint_host="127.0.0.2"
+	local endpoint_port="45678"
+
+	disable_android_network_for_bootstrap
+	"$ADB" shell pm clear "$APP_ID" >/dev/null
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper 3
+	wait_for_text "Game data unavailable" 90 || {
+		echo "ERROR: injected cache failure did not reach the retry/close state" >&2
+		return 1
+	}
+	wait_for_log_pattern 'CACHE_BOOTSTRAP injected-failure copied=3' 10
+	assert_cache_marker_absent
+	assert_no_cache_temp_files
+	screenshot 00-bootstrap-injected-failure
+
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'CACHE_BOOTSTRAP install-complete identity=' 15
+	assert_cache_marker_present
+	assert_no_cache_temp_files
+	assert_bundled_cache_file "video/Authentic_Sprites.orsc"
+	assert_bundled_cache_file "video/models.orsc"
+	assert_bundled_cache_file "video/Authentic_Landscape.orsc"
+	assert_bundled_cache_file "video/library.orsc"
+	screenshot 01-bootstrap-recovered-ready
+
+	before_mtime="$(cache_file_mtime "$marker_probe")"
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'CACHE_BOOTSTRAP marker-hit identity=' 30
+	after_mtime="$(cache_file_mtime "$marker_probe")"
+	if [[ -z "$before_mtime" || "$after_mtime" != "$before_mtime" ]]; then
+		echo "ERROR: repeat launch rewrote bundled cache files ($before_mtime -> $after_mtime)" >&2
+		return 1
+	fi
+	echo "Verified repeat launch skipped bundled cache copy (mtime=$after_mtime)"
+
+	"$ADB" shell run-as "$APP_ID" dd if=/dev/null of=files/video/models.orsc >/dev/null 2>&1
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'CACHE_BOOTSTRAP repair-required identity=' 15
+	wait_for_log_pattern 'CACHE_BOOTSTRAP install-complete identity=' 90
+	assert_bundled_cache_file "video/models.orsc"
+	assert_cache_marker_present
+	assert_no_cache_temp_files
+	screenshot 02-bootstrap-required-file-repaired
+
+	"$ADB" logcat -c || true
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
+		-e voidscape.smoke.endpoint_host "$endpoint_host" \
+		-e voidscape.smoke.endpoint_port "$endpoint_port" >/dev/null
+	wait_for_wrapper_ready
+	assert_endpoint_state "$endpoint_host" "$endpoint_port"
+
+	printf '%s' 9 | "$ADB" shell run-as "$APP_ID" tee files/port.txt >/dev/null
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'ENDPOINT_BOOTSTRAP mirror-repair endpoint=127\.0\.0\.2:45678' 30
+	assert_endpoint_state "$endpoint_host" "$endpoint_port"
+
+	"$ADB" logcat -c || true
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
+		-e voidscape.smoke.endpoint_host 192.0.2.1 >/dev/null
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'Ignoring incomplete smoke server endpoint' 30
+	assert_endpoint_state "$endpoint_host" "$endpoint_port"
+	screenshot 03-bootstrap-endpoint-repaired
+
+	restore_android_network_state
+	echo "Android bootstrap smoke evidence written to $OUT_DIR"
+}
+
 launch_wrapper() {
     "$ADB" shell am force-stop $APP_ID
     if [[ -n "$PENDING_SERVER_HOST" && -n "$PENDING_SERVER_PORT" ]]; then
@@ -6274,6 +6508,11 @@ launch_to_login_home() {
 	ensure_game_activity_from_wrapper
 	dismiss_fullscreen_education
 }
+
+if [[ "$ONLY_BOOTSTRAP" -eq 1 ]]; then
+	run_bootstrap_smoke
+	exit 0
+fi
 
 if [[ "$ONLY_AUTH_LOGIN" -eq 1 ]]; then
 	run_authenticated_login_smoke
