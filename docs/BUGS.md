@@ -26,9 +26,18 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-072 fixed and focused-verified; full portal API/visual gates
-  are blocked by unrelated existing failures, so the entry remains Open as `fixed`
-  until those gates can run cleanly.
+- **Active bug:** none — VS-073 verified and ready to commit; next, reopen VS-061 to
+  extend and verify Android app-switch continuity beyond the old two-minute boundary.
+- **Session preflight 2026-07-09 (VS-073):** branch `main`; pre-change
+  `scripts/build.sh` green. Existing dirty files include Android APK docs/build/script
+  WIP, `Client_Base/src/orsc/mudclient.java`, portal/content/server WIP, runtime
+  `server/inc/sqlite/preservation.db`, deleted legacy Android drawables, and untracked
+  launch/portal files. `scripts/android-smoke.sh` and `docs/BUGS.md` were clean before
+  this fix; stage only VS-073 hunks if committing. Result: the one-line tab expectation
+  fix passed shell syntax, `git diff --check`, `scripts/build.sh`,
+  `scripts/build-android.sh --debug`, and the complete focused lifecycle smoke at
+  `tmp/android-apk-polish/lifecycle-short-fresh`, including a 35-second background,
+  in-game resume, duplicate relaunch, logout, and post-logout keyboard recovery.
 - **Session preflight 2026-07-09 (VS-072):** branch `main`; pre-change
   `scripts/build.sh` green. Existing dirty files before this fix include Android APK
   docs/build/script files, `Client_Base/src/orsc/mudclient.java`,
@@ -180,12 +189,6 @@ to resume from these two files alone. Keep every entry self-contained.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
-- Android `--only-auth-lifecycle` smoke times out before HOME/resume because it waits
-  for Settings `settingTab=1`, but the current authenticated APK reports
-  `ANDROID_SMOKE_SETTINGS ... visible=true showUiTab=6 settingTab=0 ...` after the
-  smoke opens Settings. Reproduced during VS-061 reopen verification at
-  `tmp/vs061-android-lifecycle-reopen`.
-
 Anyone (Ryan or an agent) can append raw, unstructured reports below, one bullet each.
 The loop's triage step converts each into a numbered entry and removes it from this list.
 
@@ -872,6 +875,25 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-073 — Android lifecycle smoke waited for the wrong Settings tab (FIXED)
+- Status: verified · Severity: P2 · Area: Android APK QA
+- Evidence: `scripts/android-smoke.sh --only-auth-lifecycle` opened the basic Settings
+  tab through `openAndroidSmokeSettingsFromInput()` (`SETTINGS_PROFILE_TAB`, value `0`)
+  but `wait_for_viewport_settings_state()` rejected every log row unless
+  `settingTab == 1`, preventing the smoke from reaching HOME/resume. The mismatch first
+  reproduced at `tmp/vs061-android-lifecycle-reopen`.
+- Fix: the viewport helper now expects tab `0`, matching the deliberate test hook and
+  the later lifecycle settings assertion.
+- Verify: `bash -n scripts/android-smoke.sh`, `git diff --check`, `scripts/build.sh`,
+  and `scripts/build-android.sh --debug` passed. The complete focused lifecycle run at
+  `tmp/android-apk-polish/lifecycle-short-fresh` passed portrait/landscape viewport
+  checks, a 35-second HOME background, authenticated in-game resume, duplicate launcher
+  delivery, explicit logout, and post-logout keyboard recovery.
+- Log: 2026-07-09 triaged from Intake, fixed, and emulator-smoke verified. An initial
+  run pointed at the wrong active-server DB; a second hit the deliberately retained
+  Android session-resume path. After the existing admin bot cleanly removed that stale
+  fixture, the fresh-session lifecycle run passed end to end.
 
 ### VS-071 — Ardougne Void Rift sits outside the useful market area (FIXED)
 - Status: verified · Severity: P3 · Area: server-content / traversal

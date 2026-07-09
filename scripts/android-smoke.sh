@@ -2317,7 +2317,7 @@ wait_for_viewport_settings_state() {
         setting_tab="$(extract_log_value "$line" settingTab)"
         camera_auto="$(extract_log_value "$line" cameraAuto)"
         mouse_one="$(extract_log_value "$line" mouseOne)"
-        if [[ "$visible" == "true" && "$setting_tab" == "1" \
+        if [[ "$visible" == "true" && "$setting_tab" == "0" \
             && "$camera_auto" == "$expected_camera" && "$mouse_one" == "$expected_mouse" ]] \
             && android_viewport_log_matches "$expected_orientation" "$line"; then
             echo "$line"

@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-09 - Android lifecycle smoke reaches the app-switch gate (VS-073)
+
+The authenticated Android lifecycle smoke now waits for the basic Settings tab that its own test hook opens (`settingTab=0`) instead of an unrelated Game tab, so it reaches and proves the real HOME/background/resume path again. The focused current-APK run passed portrait and landscape viewport checks, a 35-second background interval, foreground return with `wbtest` still in game, duplicate launcher delivery, explicit logout, and post-logout keyboard recovery; evidence is under `tmp/android-apk-polish/lifecycle-short-fresh`. This changes QA automation only (`scripts/android-smoke.sh`): no Android runtime behavior, game packet, opcode, server timeout, DB schema, cache asset, or client version changed.
+
 ### 2026-07-09 - Portal character manager deletion (VS-072)
 
 The website character manager now has an authenticated delete path for roster entries:
