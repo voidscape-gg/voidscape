@@ -986,6 +986,7 @@ public final class mudclient implements Runnable {
 	private long lastAndroidSmokeZoomLogMillis = 0L;
 	private long lastAndroidSmokeEquipmentLogMillis = 0L;
 	private long lastAndroidSmokeMagicPrayerLogMillis = 0L;
+	private long lastAndroidSmokeMagicPrayerLaunchLogMillis = 0L;
 	private long lastAndroidSmokeWorldMapLogMillis = 0L;
 	private long lastAndroidSmokeWorldMapButtonLogMillis = 0L;
 	private long lastAndroidSmokeSettingsLogMillis = 0L;
@@ -10114,6 +10115,7 @@ public final class mudclient implements Runnable {
 			+ " passLength=" + getWebLoginPasswordLength()
 			+ " userFocused=" + userFocused
 			+ " passFocused=" + passFocused
+			+ " keyboard=" + osConfig.F_SHOWING_KEYBOARD
 			+ " status1=" + androidSmokeLogToken(status1)
 			+ " status2=" + androidSmokeLogToken(status2)
 			+ " mouseX=" + this.mouseX
@@ -10223,6 +10225,34 @@ public final class mudclient implements Runnable {
 			+ " keyRight=" + this.keyRight
 			+ " mouseX=" + this.mouseX
 			+ " mouseY=" + this.mouseY);
+	}
+
+	public void logAndroidSmokeCameraGestureRoute(
+		final boolean routedToScroll,
+		final boolean scrollableInterface,
+		final boolean scrollableMessagePanel,
+		final int beforeRotation,
+		final int beforePitch,
+		final int beforeLastZoom,
+		final int beforeCameraZoom
+	) {
+		if (!isAndroidSmokeCameraLoggingEnabled() && !isAndroidSmokeZoomLoggingEnabled()) return;
+
+		System.out.println("ANDROID_SMOKE_CAMERA_GESTURE"
+			+ " route=" + (routedToScroll ? "scroll" : "camera")
+			+ " scrollableInterface=" + scrollableInterface
+			+ " scrollableMessagePanel=" + scrollableMessagePanel
+			+ " showUiTab=" + this.showUiTab
+			+ " beforeRotation=" + beforeRotation
+			+ " afterRotation=" + this.cameraRotation
+			+ " beforeAngle=" + this.cameraAngle
+			+ " afterAngle=" + this.cameraAngle
+			+ " beforePitch=" + beforePitch
+			+ " afterPitch=" + this.cameraPitch
+			+ " beforeLastZoom=" + beforeLastZoom
+			+ " afterLastZoom=" + osConfig.C_LAST_ZOOM
+			+ " beforeCameraZoom=" + beforeCameraZoom
+			+ " afterCameraZoom=" + this.cameraZoom);
 	}
 
 	private void logAndroidSmokeZoomState() {
@@ -10486,6 +10516,20 @@ public final class mudclient implements Runnable {
 			+ " prayerBase=" + this.playerStatBase[5]
 			+ " mouseX=" + this.mouseX
 			+ " mouseY=" + this.mouseY);
+	}
+
+	private void logAndroidSmokeMagicPrayerLaunchTarget(final int clientX, final int clientY) {
+		if (!isAndroidSmokeMagicPrayerLoggingEnabled()) return;
+
+		final long now = System.currentTimeMillis();
+		if (now - this.lastAndroidSmokeMagicPrayerLaunchLogMillis < ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) return;
+		this.lastAndroidSmokeMagicPrayerLaunchLogMillis = now;
+
+		System.out.println("ANDROID_SMOKE_MAGIC_PRAYER_LAUNCH"
+			+ " magicTabX=" + clientX
+			+ " magicTabY=" + clientY
+			+ " gameWidth=" + this.getGameWidth()
+			+ " gameHeight=" + this.getGameHeight());
 	}
 
 	private void logAndroidSmokeMagicPrayerAction(final String action, final int index) {
@@ -12505,7 +12549,7 @@ public final class mudclient implements Runnable {
 
 	private void showConnectionFailureStatus() {
 		if (isAndroid()) {
-			showLoginScreenStatus("Can't reach selected server.", "Check connection and reopen app.");
+			showLoginScreenStatus("Can't reach selected server.", "Check connection and try again.");
 		} else {
 			showLoginScreenStatus("Sorry! Unable to connect.",
 				"Check internet settings or try another world");
@@ -19159,6 +19203,8 @@ public final class mudclient implements Runnable {
 		// Order + icons: VOIDSCAPE_TOP_TAB_ORDER / VOIDSCAPE_TOP_TAB_ICONS
 		// (Options, Friends, Magic/Prayer, Stats, Minimap, Inventory).
 		int x = voidscapeTopTabsStartX();
+		int magicTabX = x + 2 * (voidscapeTopTabSize() + voidscapeTopTabGap()) + voidscapeTopTabSize() / 2;
+		logAndroidSmokeMagicPrayerLaunchTarget(magicTabX, VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() / 2);
 		for (int i = 0; i < VOIDSCAPE_TOP_TAB_COUNT; i++) {
 			int tabId = VOIDSCAPE_TOP_TAB_ORDER[i];
 			int tabX = x + i * (voidscapeTopTabSize() + voidscapeTopTabGap());
@@ -25295,6 +25341,12 @@ public final class mudclient implements Runnable {
 			if (this.currentViewMode == GameMode.GAME) {
 				if (this.topMouseMenuVisible) {
 					this.topMouseMenuVisible = false;
+					return true;
+				}
+				if (this.selectedSpell >= 0 || this.selectedItemInventoryIndex >= 0) {
+					this.selectedSpell = -1;
+					this.selectedItemInventoryIndex = -1;
+					logAndroidSmokeMagicPrayerAction("BACK_SELECTION_CLEARED", -1);
 				}
 				return true;
 			}
@@ -25558,31 +25610,39 @@ public final class mudclient implements Runnable {
 		return 0;
 	}
 
+	private void focusVoidscapeLoginField(Panel panel, int control) {
+		panel.setFocus(control);
+		this.enterPressed = false;
+		if (isNativeAndroidClient() && !osConfig.F_SHOWING_KEYBOARD) {
+			clientPort.drawKeyboard();
+		}
+	}
+
+	private void closeNativeAndroidLoginKeyboard() {
+		if (isNativeAndroidClient() && osConfig.F_SHOWING_KEYBOARD) {
+			clientPort.closeKeyboard();
+		}
+	}
+
 	private void focusVoidscapeNewUserFieldClick() {
 		int cx = halfGameWidth();
 		if (voidscapeLoginFieldClicked(cx, voidscapeNewUserY(), 214, 23)) {
-			this.menuNewUser.setFocus(this.menuNewUserUsername);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.menuNewUser, this.menuNewUserUsername);
 		} else if (voidscapeLoginFieldClicked(cx - 63, voidscapeNewPasswordY(), 120, 23)) {
-			this.menuNewUser.setFocus(this.menuNewUserPassword);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.menuNewUser, this.menuNewUserPassword);
 		} else if (voidscapeLoginFieldClicked(cx + 63, voidscapeNewPasswordY(), 120, 23)) {
-			this.menuNewUser.setFocus(this.menuNewUserConfirmPassword);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.menuNewUser, this.menuNewUserConfirmPassword);
 		} else if (wantEmail() && voidscapeLoginFieldClicked(cx, voidscapeNewEmailY(), 214, 23)) {
-			this.menuNewUser.setFocus(this.menuNewUserEmail);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.menuNewUser, this.menuNewUserEmail);
 		}
 	}
 
 	private void focusVoidscapeExistingFieldClick() {
 		int cx = halfGameWidth();
 		if (voidscapeLoginFieldClicked(cx, voidscapeExistingUserY(), 210, voidscapeExistingFieldHeight())) {
-			this.panelLogin.setFocus(this.controlLoginUser);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.panelLogin, this.controlLoginUser);
 		} else if (voidscapeLoginFieldClicked(cx, voidscapeExistingPassY(), 210, voidscapeExistingFieldHeight())) {
-			this.panelLogin.setFocus(this.controlLoginPass);
-			this.enterPressed = false;
+			focusVoidscapeLoginField(this.panelLogin, this.controlLoginPass);
 		}
 	}
 
@@ -25591,20 +25651,20 @@ public final class mudclient implements Runnable {
 		int y = 73;
 		for (int i = 0; i < 5; i++) {
 			if (voidscapeLoginFieldClicked(cx, y + 7, 310, 23)) {
-				this.panelRecovery.setFocus(this.controlPassAnswer[i]);
+				focusVoidscapeLoginField(this.panelRecovery, this.controlPassAnswer[i]);
 				return;
 			}
 			y += 28;
 		}
 		if (voidscapeLoginFieldClicked(cx, y + 8, 310, 24)) {
-			this.panelRecovery.setFocus(this.controlPreviousPassword);
+			focusVoidscapeLoginField(this.panelRecovery, this.controlPreviousPassword);
 			return;
 		}
 		y += 31;
 		if (voidscapeLoginFieldClicked(cx - 88, y + 8, 150, 24)) {
-			this.panelRecovery.setFocus(this.controlNewPassword);
+			focusVoidscapeLoginField(this.panelRecovery, this.controlNewPassword);
 		} else if (voidscapeLoginFieldClicked(cx + 88, y + 8, 150, 24)) {
-			this.panelRecovery.setFocus(this.controlConfirmation);
+			focusVoidscapeLoginField(this.panelRecovery, this.controlConfirmation);
 		}
 	}
 
@@ -25649,9 +25709,10 @@ public final class mudclient implements Runnable {
 					}
 					if (menuNewUser.isClicked(menuNewUserEmail))
 						menuNewUser.setFocus(menuNewUserSubmit);
-					if (menuNewUser.isClicked(menuNewUserCancel))
+					if (menuNewUser.isClicked(menuNewUserCancel)) {
 						loginScreenNumber = 0;
-					else if (menuNewUser.isClicked(menuNewUserSubmit) || this.enterPressed) {
+						closeNativeAndroidLoginKeyboard();
+					} else if (menuNewUser.isClicked(menuNewUserSubmit) || this.enterPressed) {
 						enterPressed = false;
 						if (wantEmail()) {
 							if (menuNewUser.getControlText(menuNewUserUsername) != null
@@ -25697,6 +25758,7 @@ public final class mudclient implements Runnable {
 							this.loginScreenNumber = 0;
 							this.voidscapeAddAccountPending = false;
 							this.voidscapeOpenExistingLoginAfterLogout = false;
+							closeNativeAndroidLoginKeyboard();
 						}
 					if (!this.voidscapeAddAccountPending && shouldOfferCredentialSave() && this.rememberButtonIdx >= 0) {
 						if (this.panelLogin.isClicked(this.rememberButtonIdx)) {
@@ -25941,6 +26003,7 @@ public final class mudclient implements Runnable {
 
 					if (this.panelRecovery.isClicked(this.passwordRecoverCancel)) {
 						this.loginScreenNumber = 0;
+						closeNativeAndroidLoginKeyboard();
 					}
 				}
 			} else {
@@ -29089,7 +29152,8 @@ public final class mudclient implements Runnable {
 
 	private void showLoginScreenStatus(String a, String b) {
 		try {
-			if (isAndroid() && (this.loginScreenNumber == 1 || this.loginScreenNumber == 2 || this.loginScreenNumber == 4)) {
+			if (isAndroid() && osConfig.F_SHOWING_KEYBOARD
+				&& (this.loginScreenNumber == 1 || this.loginScreenNumber == 2 || this.loginScreenNumber == 4)) {
 				clientPort.closeKeyboard();
 			}
 

@@ -74,6 +74,7 @@ SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
 SMOKE_LOGIN_FLAG="$APP_SMOKE_FILES/android-smoke-login.flag"
 BUILD=1
 INSTALL=1
+ONLY_AUTH_CAMERA=0
 ONLY_AUTH_ZOOM=0
 ONLY_AUTH_CHAT_TABS=0
 ONLY_AUTH_CHAT_SEND=0
@@ -136,6 +137,10 @@ AUTH_CAMERA_SWIPE_START_X="${ANDROID_SMOKE_CAMERA_SWIPE_START_X:-420}"
 AUTH_CAMERA_SWIPE_END_X="${ANDROID_SMOKE_CAMERA_SWIPE_END_X:-120}"
 AUTH_CAMERA_SWIPE_Y="${ANDROID_SMOKE_CAMERA_SWIPE_Y:-170}"
 AUTH_CAMERA_SWIPE_DURATION_MS="${ANDROID_SMOKE_CAMERA_SWIPE_DURATION_MS:-700}"
+AUTH_PANEL_SWIPE_X="${ANDROID_SMOKE_PANEL_SWIPE_X:-420}"
+AUTH_PANEL_SWIPE_START_Y="${ANDROID_SMOKE_PANEL_SWIPE_START_Y:-170}"
+AUTH_PANEL_SWIPE_END_Y="${ANDROID_SMOKE_PANEL_SWIPE_END_Y:-280}"
+AUTH_PANEL_SWIPE_DURATION_MS="${ANDROID_SMOKE_PANEL_SWIPE_DURATION_MS:-700}"
 AUTH_ZOOM_DRAG_X="${ANDROID_SMOKE_ZOOM_DRAG_X:-256}"
 AUTH_ZOOM_DRAG_START_Y="${ANDROID_SMOKE_ZOOM_DRAG_START_Y:-80}"
 AUTH_ZOOM_DRAG_END_Y="${ANDROID_SMOKE_ZOOM_DRAG_END_Y:-190}"
@@ -211,7 +216,7 @@ PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -480,6 +485,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --no-install)
             INSTALL=0
+            shift
+            ;;
+        --only-auth-camera)
+            ONLY_AUTH_CAMERA=1
             shift
             ;;
         --only-auth-zoom)
@@ -2024,13 +2033,62 @@ wait_for_camera_rotate() {
                     return 0
                 fi
             fi
-        done < <("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_ROTATE" | tail -20 || true)
+        done < <("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -E "ANDROID_SMOKE_CAMERA_(ROTATE|GESTURE)" | tail -30 || true)
         sleep 1
     done
 
     echo "ERROR: timed out waiting for Android camera rotate" >&2
-    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_ROTATE" | tail -30 >&2 || true
+    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -E "ANDROID_SMOKE_CAMERA_(ROTATE|GESTURE)" | tail -30 >&2 || true
     return 1
+}
+
+wait_for_camera_gesture_route() {
+	local expected="$1"
+	local timeout="${2:-10}"
+	local deadline=$((SECONDS + timeout))
+	local line route
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_GESTURE route=$expected " | tail -1 || true)"
+		route="$(extract_log_value "$line" route)"
+		if [[ "$route" == "$expected" ]]; then
+			echo "Verified Android camera gesture routing: $line"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: timed out waiting for Android camera gesture route=$expected" >&2
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA" | tail -40 >&2 || true
+	return 1
+}
+
+assert_camera_gesture_unchanged() {
+	local line before_rotation after_rotation before_angle after_angle before_pitch after_pitch saw_line=0
+	if "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -q "ANDROID_SMOKE_CAMERA_GESTURE route=camera "; then
+		echo "ERROR: panel swipe escaped scroll routing and reached the world camera" >&2
+		"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_GESTURE" | tail -40 >&2 || true
+		return 1
+	fi
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		saw_line=1
+		if [[ "$line" =~ beforeRotation=([0-9]+).*afterRotation=([0-9]+).*beforeAngle=([0-9]+).*afterAngle=([0-9]+).*beforePitch=([0-9]+).*afterPitch=([0-9]+) ]]; then
+			before_rotation="${BASH_REMATCH[1]}"
+			after_rotation="${BASH_REMATCH[2]}"
+			before_angle="${BASH_REMATCH[3]}"
+			after_angle="${BASH_REMATCH[4]}"
+			before_pitch="${BASH_REMATCH[5]}"
+			after_pitch="${BASH_REMATCH[6]}"
+			if (( before_rotation != after_rotation || before_angle != after_angle || before_pitch != after_pitch )); then
+				echo "ERROR: scroll-routed Android gesture changed the world camera: $line" >&2
+				return 1
+			fi
+		fi
+	done < <("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_GESTURE route=scroll " || true)
+	if (( saw_line == 0 )); then
+		echo "ERROR: no scroll-routed Android camera gesture evidence found" >&2
+		return 1
+	fi
+	echo "Verified scroll-routed Android gesture left the world camera unchanged."
 }
 
 wait_for_zoom_state() {
@@ -2097,6 +2155,29 @@ assert_no_zoom_change_logged() {
 
     echo "Verified Android one-finger drag did not change zoom"
     return 0
+}
+
+assert_one_finger_zoom_unchanged() {
+	local line before_last_zoom after_last_zoom before_camera_zoom after_camera_zoom saw_line=0
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		saw_line=1
+		if [[ "$line" =~ beforeLastZoom=([-0-9]+).*afterLastZoom=([-0-9]+).*beforeCameraZoom=([-0-9]+).*afterCameraZoom=([-0-9]+) ]]; then
+			before_last_zoom="${BASH_REMATCH[1]}"
+			after_last_zoom="${BASH_REMATCH[2]}"
+			before_camera_zoom="${BASH_REMATCH[3]}"
+			after_camera_zoom="${BASH_REMATCH[4]}"
+			if (( before_last_zoom != after_last_zoom || before_camera_zoom != after_camera_zoom )); then
+				echo "ERROR: one-finger Android gesture changed zoom: $line" >&2
+				return 1
+			fi
+		fi
+	done < <("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_GESTURE " || true)
+	if (( saw_line == 0 )); then
+		echo "ERROR: no Android one-finger gesture evidence found" >&2
+		return 1
+	fi
+	echo "Verified Android one-finger gesture left zoom unchanged."
 }
 
 wait_for_chat_tab() {
@@ -3162,7 +3243,22 @@ tap_magic_prayer_row_until_action() {
 }
 
 tap_magic_prayer_tab() {
-    tap_client_xy 394 19
+	local deadline=$((SECONDS + 20))
+	local line tab_x tab_y
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_MAGIC_PRAYER_LAUNCH " | tail -1 || true)"
+		tab_x="$(extract_log_value "$line" magicTabX)"
+		tab_y="$(extract_log_value "$line" magicTabY)"
+		if [[ "$tab_x" =~ ^[0-9]+$ && "$tab_y" =~ ^[0-9]+$ ]]; then
+			echo "Android Magic/Prayer tab at client $tab_x,$tab_y"
+			tap_client_xy "$tab_x" "$tab_y"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: timed out waiting for Android Magic/Prayer top-tab target" >&2
+	magic_prayer_log_tail
+	return 1
 }
 
 cast_selected_spell_on_self() {
@@ -3556,6 +3652,48 @@ tap_settings_logout() {
     tap_client_xy "$logout_x" "$logout_y"
 }
 
+wait_for_any_settings_rendered() {
+	local timeout="${1:-20}"
+	local deadline=$((SECONDS + timeout))
+	local line visible logout_visible
+
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep "ANDROID_SMOKE_SETTINGS " | tail -12 | grep "event=STATE " | tail -1 || true)"
+		visible="$(extract_log_value "$line" visible)"
+		logout_visible="$(extract_log_value "$line" logoutVisible)"
+		if [[ "$visible" == "true" && "$logout_visible" == "true" ]]; then
+			echo "$line"
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: timed out waiting for Android settings logout state" >&2
+	settings_log_tail
+	return 1
+}
+
+logout_authenticated_smoke_session() {
+	local line logout_x logout_y
+	enable_android_smoke_settings
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	line="$(wait_for_any_settings_rendered 20)" || {
+		disable_android_smoke_settings
+		return 1
+	}
+	assert_settings_logout_visible "$line" || {
+		disable_android_smoke_settings
+		return 1
+	}
+	logout_x="$(log_int_or_default "$line" logoutX 385)"
+	logout_y="$(log_int_or_default "$line" logoutY 293)"
+	tap_client_xy "$logout_x" "$logout_y"
+	disable_android_smoke_settings
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
+}
+
 wait_for_auth_settings_row() {
     local expected_camera="$1"
     local expected_mouse="$2"
@@ -3607,13 +3745,24 @@ select_inventory_item_for_use() {
 assert_soft_keyboard_visible() {
 	local state
 	state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
-	if grep -Eq "mInputShown=true|mIsInputViewShown=true|inputShown=true" <<< "$state"; then
+	if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
 		return 0
 	fi
 
 	echo "ERROR: expected Android soft keyboard to be visible" >&2
 	grep -E "mInputShown|mIsInputViewShown|inputShown" <<< "$state" >&2 || true
 	return 1
+}
+
+assert_soft_keyboard_hidden() {
+	local state
+	state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
+	if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
+		echo "ERROR: expected Android soft keyboard to be hidden" >&2
+		grep -E "mInputShown|mIsInputViewShown|inputShown" <<< "$state" >&2 || true
+		return 1
+	fi
+	return 0
 }
 
 sql_escape() {
@@ -4498,7 +4647,7 @@ run_authenticated_inventory_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+		close_auth_intro_dialog_if_present
         sleep 2
         tap_inventory_tab
         wait_for_inventory_target "$AUTH_INVENTORY_SLOT" 30 >/dev/null || exit 1
@@ -4783,15 +4932,33 @@ run_authenticated_camera_rotate_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+		close_auth_intro_dialog_if_present
         sleep 2
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         screenshot 56-auth-before-camera-rotate
         "$ADB" logcat -c || true
         swipe_client_xy "$AUTH_CAMERA_SWIPE_START_X" "$AUTH_CAMERA_SWIPE_Y" "$AUTH_CAMERA_SWIPE_END_X" "$AUTH_CAMERA_SWIPE_Y" "$AUTH_CAMERA_SWIPE_DURATION_MS"
+		wait_for_camera_gesture_route camera 10 || exit 1
         wait_for_camera_rotate 20 || exit 1
         sleep 2
         screenshot 57-auth-after-camera-rotate
+
+		enable_android_smoke_settings
+		"$ADB" logcat -c || true
+		"$ADB" shell input keyevent 43
+		wait_for_any_settings_rendered 20 >/dev/null || exit 1
+		"$ADB" logcat -c || true
+		swipe_client_xy "$AUTH_PANEL_SWIPE_X" "$AUTH_PANEL_SWIPE_START_Y" "$AUTH_PANEL_SWIPE_X" "$AUTH_PANEL_SWIPE_END_Y" "$AUTH_PANEL_SWIPE_DURATION_MS"
+		wait_for_camera_gesture_route scroll 10 || exit 1
+		assert_camera_gesture_unchanged || exit 1
+		sleep 2
+		if "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep -q "ANDROID_SMOKE_CAMERA_ROTATE"; then
+			echo "ERROR: Android settings-panel swipe also changed the world camera" >&2
+			"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CAMERA_ROTATE" | tail -20 >&2 || true
+			exit 1
+		fi
+		screenshot 57a-auth-settings-swipe-no-camera
+		logout_authenticated_smoke_session || exit 1
     ) || status=$?
 
     disable_android_smoke_camera
@@ -4834,14 +5001,14 @@ run_authenticated_zoom_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
-        tap_pct 50 72
+        close_auth_intro_dialog_if_present
         sleep 2
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
-        wait_for_zoom_state 20 >/dev/null || exit 1
         screenshot 58-auth-before-zoom
         "$ADB" logcat -c || true
         swipe_client_xy "$AUTH_ZOOM_DRAG_X" "$AUTH_ZOOM_DRAG_START_Y" "$AUTH_ZOOM_DRAG_X" "$AUTH_ZOOM_DRAG_END_Y" "$AUTH_ZOOM_DRAG_DURATION_MS"
+		wait_for_camera_gesture_route camera 10 || exit 1
+		assert_one_finger_zoom_unchanged || exit 1
         assert_no_zoom_change_logged 4 || exit 1
         screenshot 59-auth-after-one-finger-no-zoom
         if [[ "$AUTH_ZOOM_MANUAL_PINCH_SECONDS" =~ ^[0-9]+$ && "$AUTH_ZOOM_MANUAL_PINCH_SECONDS" -gt 0 ]]; then
@@ -4857,6 +5024,7 @@ run_authenticated_zoom_smoke() {
         else
             echo "WARNING: Android physical two-finger pinch QA was not run; set ANDROID_SMOKE_MANUAL_PINCH_SECONDS with ANDROID_SMOKE_REQUIRE_PINCH=1 on a real device."
         fi
+		logout_authenticated_smoke_session || exit 1
     ) || status=$?
 
     disable_android_smoke_zoom
@@ -5183,8 +5351,7 @@ run_authenticated_bank_smoke() {
         sleep 1
         screenshot 79-auth-bank-closed
 
-        "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+		logout_authenticated_smoke_session || exit 1
         wait_for_bank_preset_saved "$player_id" 0 45 || exit 1
     ) || status=$?
 
@@ -5288,8 +5455,7 @@ run_authenticated_shop_smoke() {
         sleep 1
         screenshot 84-auth-shop-no-scroll
 
-        "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+		logout_authenticated_smoke_session || exit 1
     ) || status=$?
 
     disable_android_smoke_shop
@@ -5428,7 +5594,7 @@ run_authenticated_magic_prayer_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+		close_auth_intro_dialog_if_present
         sleep 2
 
         tap_magic_prayer_tab
@@ -5444,12 +5610,18 @@ run_authenticated_magic_prayer_smoke() {
         sleep 1
         screenshot 89-auth-magic-spell-selected
 
+		"$ADB" logcat -c || true
+		"$ADB" shell input keyevent BACK
+		wait_for_magic_prayer_action BACK_SELECTION_CLEARED -1 20 || exit 1
+		sleep 1
+		screenshot 89a-auth-magic-spell-back-cleared
+		tap_magic_prayer_row_until_action "$row_x" "$row_y" SPELL_SELECTED "$AUTH_MAGIC_PRAYER_SPELL_ID" || exit 1
+
         cast_selected_spell_on_self "$AUTH_MAGIC_PRAYER_SPELL_ID" "$self_x" "$self_y" || exit 1
         sleep 8
         screenshot 90-auth-after-self-cast
 
-        "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+		logout_authenticated_smoke_session || exit 1
         if [[ "$AUTH_MAGIC_PRAYER_SPELL_ID" == "0" ]]; then
             local post_cast_position post_cast_x post_cast_y post_cast_online
             post_cast_position="$(read_auth_position || true)"
@@ -5471,7 +5643,7 @@ run_authenticated_magic_prayer_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+		close_auth_intro_dialog_if_present
         sleep 2
 
         tap_magic_prayer_tab
@@ -5495,8 +5667,7 @@ run_authenticated_magic_prayer_smoke() {
         sleep 1
         screenshot 93-auth-prayer-deactivated
 
-        "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+		logout_authenticated_smoke_session || exit 1
     ) || status=$?
 
     disable_android_smoke_magic_prayer
@@ -5576,8 +5747,7 @@ run_authenticated_world_map_smoke() {
         sleep 1
         screenshot 98-auth-world-map-closed
 
-        "$ADB" shell am force-stop $APP_ID || true
-        wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
+		logout_authenticated_smoke_session || exit 1
     ) || status=$?
 
     disable_android_smoke_world_map
@@ -6027,6 +6197,16 @@ if [[ "$ONLY_AUTH_LIFECYCLE" -eq 1 ]]; then
 	exit 0
 fi
 
+if [[ "$ONLY_AUTH_CAMERA" -eq 1 ]]; then
+    if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+        echo "ERROR: --only-auth-camera requires ANDROID_SMOKE_AUTH_USER and ANDROID_SMOKE_AUTH_PASS" >&2
+        exit 1
+    fi
+    run_authenticated_camera_rotate_smoke
+    echo "Android camera smoke screenshots written to $OUT_DIR"
+    exit 0
+fi
+
 if [[ "$ONLY_AUTH_ZOOM" -eq 1 ]]; then
     if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
         echo "ERROR: --only-auth-zoom requires ANDROID_SMOKE_AUTH_USER and ANDROID_SMOKE_AUTH_PASS" >&2
@@ -6197,11 +6377,23 @@ screenshot 07-existing-user-keyboard
 "$ADB" shell input text testuser
 "$ADB" shell input keyevent BACK
 sleep 1
-tap_pct 44 50
+tap_login_ok_button
 sleep 1
 screenshot 08-login-missing-password-error
 
-launch_to_login_home
+tap_login_state_target 2 pass 8 || exit 1
+sleep 2
+assert_soft_keyboard_visible || exit 1
+screenshot 08a-login-error-password-keyboard-reopened
+tap_login_state_target 2 cancel 8 || exit 1
+login_home_line="$(wait_for_login_state 0 10)" || exit 1
+[[ "$(extract_log_value "$login_home_line" keyboard)" == "false" ]] || {
+	echo "ERROR: Android login state still reports the keyboard open after Cancel" >&2
+	login_log_tail
+	exit 1
+}
+sleep 1
+assert_soft_keyboard_hidden || exit 1
 screenshot 09-login-home-after-error
 tap_existing_user_button
 sleep 3

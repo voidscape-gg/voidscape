@@ -14,9 +14,6 @@ import android.view.View.OnKeyListener;
 import android.view.View.OnTouchListener;
 import android.view.ScaleGestureDetector;
 
-import java.util.Timer;
-import java.util.TimerTask;
-
 import orsc.Config;
 import orsc.enumerations.MessageTab;
 import orsc.enumerations.MessageType;
@@ -119,12 +116,16 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 		boolean touchedMessagePanelArea = mudclient.getGameHeight() + 12 - Math.max(secondY, firstY) <= 130;
 		boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 		boolean shouldRouteSwipeToScroll = inScrollable || scrollableMessagePanel || mudclient.showUiTab != 0;
+		int beforeCameraRotation = mudclient.cameraRotation;
+		int beforeCameraPitch = mudclient.cameraPitch;
+		int beforeLastZoom = osConfig.C_LAST_ZOOM;
+		int beforeCameraZoom = mudclient.cameraZoom;
 
-		if (!inScrollable && mudclient.cameraAllowPitchModification) {
+		if (!shouldRouteSwipeToScroll && mudclient.cameraAllowPitchModification) {
 			mudclient.cameraPitch = (mudclient.cameraPitch + (int) (-distanceY * 10)) & 1023;
 		}
 
-		if (!inScrollable && osConfig.C_SWIPE_TO_ROTATE_MODE != 0) {
+		if (!shouldRouteSwipeToScroll && osConfig.C_SWIPE_TO_ROTATE_MODE != 0) {
 			// camera set to auto does not like manual like rotation
 			if (!mudclient.getOptionCameraModeAuto()) {
 				int dir = osConfig.C_SWIPE_TO_ROTATE_MODE == 2 ? -1 : 1;
@@ -147,6 +148,15 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 				mudclient.runScroll((int) (dir * distanceY));
 			}
 		}
+		mudclient.logAndroidSmokeCameraGestureRoute(
+			shouldRouteSwipeToScroll,
+			inScrollable,
+			scrollableMessagePanel,
+			beforeCameraRotation,
+			beforeCameraPitch,
+			beforeLastZoom,
+			beforeCameraZoom
+		);
 
         return true;
     }
@@ -207,9 +217,9 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 		int key = event.getUnicodeChar();
 		String chars = event.getCharacters();
-		checkSpecialKeys(keyCode, chars);
 
         if (event.getAction() == KeyEvent.ACTION_MULTIPLE) {
+			checkSpecialKeys(keyCode, chars);
             return handleAndroidTextInput(chars);
         }
 
@@ -220,9 +230,6 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
             if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
                 key = 10;
             }
-
-            checkSpecialKeys(keyCode, chars);
-
             if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isSearchFocused()) {
                 if (mudclient.handleAndroidSmokeWorldMapSearchKey((char) key, key)) {
                     return true;
@@ -274,6 +281,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
                 return true;
             }
 
+			checkSpecialKeys(keyCode, chars);
             if (key == 0 && handleAndroidTextInput(chars)) {
                 return true;
             }
@@ -339,68 +347,32 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 		if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || (chars != null && chars.equalsIgnoreCase("←"))) {
 			mudclient.keyLeft = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite rotation
-				@Override
-				public void run() {
-					mudclient.keyLeft = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.keyLeft = false, 100L);
 		}
 
 		if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || (chars != null && chars.equalsIgnoreCase("→"))) {
 			mudclient.keyRight = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite rotation
-				@Override
-				public void run() {
-					mudclient.keyRight = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.keyRight = false, 100L);
 		}
 
 		if (keyCode == KeyEvent.KEYCODE_DPAD_UP || (chars != null && chars.equalsIgnoreCase("↑"))) {
 			mudclient.keyUp = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite zooming
-				@Override
-				public void run() {
-					mudclient.keyUp = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.keyUp = false, 100L);
 		}
 
 		if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || (chars != null && chars.equalsIgnoreCase("↓"))) {
 			mudclient.keyDown = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite zooming
-				@Override
-				public void run() {
-					mudclient.keyDown = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.keyDown = false, 100L);
 		}
 
 		if (keyCode == KeyEvent.KEYCODE_PAGE_UP) {
 			mudclient.pageUp = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite scrolling
-				@Override
-				public void run() {
-					mudclient.pageUp = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.pageUp = false, 100L);
 		}
 
 		if (keyCode == KeyEvent.KEYCODE_PAGE_DOWN) {
 			mudclient.pageDown = true;
-			new Timer().schedule(new TimerTask() {
-				// debounce to avoid infinite scrolling
-				@Override
-				public void run() {
-					mudclient.pageDown = false;
-				}
-			}, 100);
+			view.postDelayed(() -> mudclient.pageDown = false, 100L);
 		}
 	}
 
