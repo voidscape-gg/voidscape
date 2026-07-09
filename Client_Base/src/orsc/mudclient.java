@@ -13165,6 +13165,9 @@ public final class mudclient implements Runnable {
 	}
 
 	private void noteVoidscapeLoginSucceeded(String username, String password, boolean reconnecting) {
+		if (!reconnecting) {
+			closeNativeAndroidLoginKeyboard();
+		}
 		ensureVoidscapeSavedAccountsLoaded();
 		VoidscapeSavedAccount existing = findVoidscapeSavedAccount(username);
 		boolean credentialMutationCommitted = true;
