@@ -315,14 +315,16 @@ async function assertPortalWiring(page, label) {
 			brokenWhitepaperTargets: whitepaperTargets.filter((row) => !row.targetExists || !row.inLanding),
 			brokenViewTargets: viewTargets.filter((row) => !row.targetExists || (!row.isView && !row.inLanding)),
 			policyLinks: links.filter((row) => ["/privacy", "/data-deletion", "/transparency"].includes(row.href)),
-			sourceLinks: links.filter((row) => /github\.com\/voidscape-gg\/voidscape/i.test(row.href))
+			sourceLinks: links.filter((row) => /github\.com\/voidscape-gg\/voidscape/i.test(row.href)),
+			sourcePublicationPending: /source publication pending/i.test(String(document.body.textContent || ""))
 		};
 	});
 	assertCheck(`${label} landing button targets exist`, wiring.brokenLandingScrollTargets.length === 0, JSON.stringify(wiring.brokenLandingScrollTargets));
 	assertCheck(`${label} whitepaper button targets exist`, wiring.brokenWhitepaperTargets.length === 0, JSON.stringify(wiring.brokenWhitepaperTargets));
 	assertCheck(`${label} account view targets exist`, wiring.brokenViewTargets.length === 0, JSON.stringify(wiring.brokenViewTargets));
 	assertCheck(`${label} policy links are present`, wiring.policyLinks.length >= 3, JSON.stringify(wiring.policyLinks));
-	assertCheck(`${label} AGPL source link is present`, wiring.sourceLinks.length >= 1, JSON.stringify(wiring.sourceLinks));
+	assertCheck(`${label} reports pending source publication`, wiring.sourcePublicationPending === true, JSON.stringify(wiring));
+	assertCheck(`${label} does not advertise the older source mirror`, wiring.sourceLinks.length === 0, JSON.stringify(wiring.sourceLinks));
 }
 
 async function assertPolicyPagesReachable(context, label) {

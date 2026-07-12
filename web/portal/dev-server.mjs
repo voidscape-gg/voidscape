@@ -44,7 +44,7 @@ if (testStoreFaultPhase) {
 }
 const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(dataDir, "integrity-summary.json");
 const buildMetadataPath = process.env.PORTAL_BUILD_META || join(rootDir, "build-meta.json");
-const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "https://github.com/voidscape-gg/voidscape";
+const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "";
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
 const legendsSeasonId = configuredSeasonId("PORTAL_LEGENDS_SEASON_ID", process.env.PORTAL_LEGENDS_SEASON_ID || "launch-2026");
 const gamePasswordHelperClasspath = process.env.PORTAL_GAME_PASSWORD_HELPER_CLASSPATH || join(repoRoot, "server/core.jar");
@@ -167,6 +167,7 @@ const googleIdentityProvider = "google";
 let googleJwksCache = { expiresAt: 0, keys: new Map() };
 const publicSiteOrigin = normalizedOrigin(process.env.PORTAL_PUBLIC_ORIGIN || "");
 const webClientUrl = mobileWebClientUrl(process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/");
+const androidPlayUrl = configuredAndroidPlayUrl("PORTAL_ANDROID_PLAY_URL", process.env.PORTAL_ANDROID_PLAY_URL);
 const discordInviteUrl = process.env.PORTAL_DISCORD_INVITE_URL || "https://discord.gg/f6uQmrRv4";
 const emailProvider = String(process.env.PORTAL_EMAIL_PROVIDER || "").trim().toLowerCase();
 const emailDryRun = process.env.PORTAL_EMAIL_DRY_RUN === "1";
@@ -245,6 +246,29 @@ let clientVersionCache;
 function configuredDownloadPath(envName, fallbackPath) {
 	const configuredPath = process.env[envName];
 	return configuredPath ? resolve(repoRoot, configuredPath) : fallbackPath;
+}
+
+function configuredAndroidPlayUrl(envName, value) {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		const parsed = new URL(text);
+		const ids = parsed.searchParams.getAll("id");
+		const pathname = parsed.pathname.replace(/\/+$/g, "");
+		if (parsed.protocol !== "https:"
+			|| parsed.hostname !== "play.google.com"
+			|| parsed.port
+			|| parsed.username
+			|| parsed.password
+			|| pathname !== "/store/apps/details"
+			|| ids.length !== 1
+			|| ids[0] !== "com.voidscape.gg") {
+			throw new Error("invalid listing");
+		}
+	} catch (error) {
+		throw new Error(`${envName} must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing`);
+	}
+	return "https://play.google.com/store/apps/details?id=com.voidscape.gg";
 }
 
 function configuredIsoTimestamp(envName, value) {
@@ -3323,7 +3347,13 @@ function buildEmailMessage(event, account, founder) {
 	const manageUrl = joinUrl(origin, "/");
 	const playUrl = mobileWebClientUrl(joinUrl(origin, "/play/"));
 	const launcherUrl = joinUrl(origin, "/downloads/launcher");
-	const androidUrl = joinUrl(origin, "/downloads/android-apk");
+	const androidApkUrl = joinUrl(origin, "/downloads/android-apk");
+	const androidPrimaryUrl = androidPlayUrl || androidApkUrl;
+	const androidPrimaryLabel = androidPlayUrl ? "Google Play" : "Android APK";
+	const androidEmailLinks = [
+		{ url: androidPrimaryUrl, label: androidPrimaryLabel },
+		...(androidPlayUrl ? [{ url: androidApkUrl, label: "Signed APK fallback" }] : [])
+	];
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
 	if (event.type === launchReminderEmailType) {
@@ -3336,7 +3366,9 @@ function buildEmailMessage(event, account, founder) {
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the Voidscape launcher.",
-				"Players can use the web client in a supported browser; Android players can also use the Android release.",
+				androidPlayUrl
+					? "Android players should install from Google Play; the signed APK is available as a direct fallback."
+					: "Players can use the web client in a supported browser; Android players can also use the Android release.",
 				"Eligible prelaunch accounts have a free 1-week subscription card reserved.",
 				"Never share your password or signup code. Voidscape staff will never ask for it."
 			],
@@ -3346,7 +3378,7 @@ function buildEmailMessage(event, account, founder) {
 			secondaryLabel: "Download launcher",
 			extraLinks: [
 				{ url: playUrl, label: "Web client" },
-				{ url: androidUrl, label: "Android APK" }
+				...androidEmailLinks
 			]
 		});
 	}
@@ -3361,12 +3393,16 @@ function buildEmailMessage(event, account, founder) {
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the launcher from the website.",
 				"Players can use the web client from the play page in a supported browser.",
+				androidPlayUrl
+					? "Android players should install from Google Play; the signed APK remains available as a direct fallback."
+					: "Android players can install the Android APK from the website.",
 				"Your starter subscription card is waiting for eligible prelaunch accounts."
 			],
 			primaryUrl: manageUrl,
 			primaryLabel: "Open Voidscape",
 			secondaryUrl: playUrl,
-			secondaryLabel: "Web client"
+			secondaryLabel: "Web client",
+			extraLinks: androidEmailLinks
 		});
 	}
 	return emailMessage({
@@ -5601,16 +5637,18 @@ function normalizeBuildManifest(input) {
 
 function normalizeBuildSource(input) {
 	if (!input || typeof input !== "object") {
-		return { status: "source_pending", repositoryUrl: sourceRepositoryUrl, commit: "", shortCommit: "", branch: "", dirty: false };
+		return { status: "source_pending", repositoryUrl: "", commit: "", shortCommit: "", branch: "", dirty: false };
 	}
+	const status = sanitizeIntegrityLabel(input.status, "source_pending");
+	const publicationPending = status === "publication_pending" || status === "source_pending";
 	const commit = safeCommitHash(input.commit);
 	return {
-		status: sanitizeIntegrityLabel(input.status, "source_pending"),
-		repositoryUrl: safeHttpUrl(input.repositoryUrl) || sourceRepositoryUrl,
-		commit,
-		shortCommit: String(input.shortCommit || commit.slice(0, 12)).slice(0, 16),
-		branch: sanitizeSourceText(input.branch, 64),
-		dirty: input.dirty === true,
+		status,
+		repositoryUrl: publicationPending ? "" : (safeHttpUrl(input.repositoryUrl) || safeHttpUrl(sourceRepositoryUrl)),
+		commit: publicationPending ? "" : commit,
+		shortCommit: publicationPending ? "" : String(input.shortCommit || commit.slice(0, 12)).slice(0, 16),
+		branch: publicationPending ? "" : sanitizeSourceText(input.branch, 64),
+		dirty: publicationPending ? false : input.dirty === true,
 		generatedAt: validIsoTimestamp(input.generatedAt) || ""
 	};
 }
@@ -5844,6 +5882,19 @@ async function downloadState(options = {}) {
 		external: true,
 		mobileOnly: true
 	}];
+	if (androidPlayUrl) {
+		rows.push({
+			slug: "android-play",
+			label: "Google Play",
+			state: "Recommended Android install",
+			url: androidPlayUrl,
+			available: true,
+			publicDownload: true,
+			external: true,
+			platform: "android",
+			platformPrimary: true
+		});
+	}
 	for (const artifact of downloadArtifacts) {
 		if (!includePrivate && artifact.publicDownload === false) {
 			continue;
@@ -5852,28 +5903,32 @@ async function downloadState(options = {}) {
 			const fileStat = await stat(artifact.path);
 			const sha256 = await sha256File(artifact.path, fileStat);
 			const metadata = await downloadArtifactMetadata(artifact);
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: artifact.label,
-				state: `Built ${formatBytes(fileStat.size)}`,
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? `Direct install fallback · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
 				url: publicDownloadUrl(`/downloads/${artifact.slug}`),
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
+				...(androidFallback ? { fallback: true, platform: "android" } : {}),
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
 				sha256,
 				...metadata
 			});
 		} catch (error) {
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: artifact.label,
-				state: artifact.unavailableState || "Run scripts/build.sh",
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? "Direct install fallback unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
 				url: "#",
 				available: false,
 				publicDownload: artifact.publicDownload !== false,
-				primary: artifact.slug === "launcher"
+				primary: artifact.slug === "launcher",
+				...(androidFallback ? { fallback: true, platform: "android" } : {})
 			});
 		}
 	}
@@ -5898,7 +5953,7 @@ async function downloadArtifactMetadata(artifact) {
 async function buildProofState() {
 	const artifacts = await downloadState({ includePrivate: true, publicSurface: true });
 	const publicArtifacts = artifacts
-		.filter((artifact) => artifact.publicDownload !== false)
+		.filter((artifact) => artifact.publicDownload !== false && artifact.external !== true)
 		.map((artifact) => ({
 			slug: artifact.slug,
 			label: artifact.label,
@@ -5978,6 +6033,18 @@ async function latestClientCacheManifestMtime() {
 
 async function sourceProofState() {
 	const metadata = await readBuildMetadata();
+	const metadataStatus = sanitizeIntegrityLabel(metadata.status, "source_pending");
+	if (metadataStatus === "publication_pending" || metadataStatus === "source_pending") {
+		return normalizeBuildSource({
+			status: metadataStatus,
+			repositoryUrl: "",
+			commit: "",
+			shortCommit: "",
+			branch: "",
+			dirty: false,
+			generatedAt: metadata.generatedAt || ""
+		});
+	}
 	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.commit || await gitValue(["rev-parse", "HEAD"]));
 	const branch = sanitizeSourceText(process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.branch || await gitValue(["branch", "--show-current"]), 64);
 	const dirty = metadata.dirty === true || (metadata.dirty !== false && await gitDirty());
@@ -10167,6 +10234,7 @@ function sanitizeFunnelHref(value) {
 	if (!text) return "";
 	if (text.startsWith("/downloads/") || text === "/transparency") return text;
 	if (text === "/play/" || text === "/play") return text;
+	if (androidPlayUrl && text === androidPlayUrl) return androidPlayUrl;
 	try {
 		const url = new URL(text);
 		const webUrl = new URL(webClientUrl);

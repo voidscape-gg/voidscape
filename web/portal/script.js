@@ -4054,13 +4054,24 @@
 			return;
 		}
 		if (trustSourceRepo) {
-			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
-			trustSourceRepo.textContent = source.repositoryUrl ? "View AGPL source" : titleStatus(source.status || "Source pending");
+			if (source.repositoryUrl) {
+				trustSourceRepo.href = source.repositoryUrl;
+				trustSourceRepo.target = "_blank";
+				trustSourceRepo.rel = "noreferrer";
+				trustSourceRepo.removeAttribute("aria-disabled");
+				trustSourceRepo.textContent = "View published source";
+			} else {
+				trustSourceRepo.removeAttribute("href");
+				trustSourceRepo.removeAttribute("target");
+				trustSourceRepo.removeAttribute("rel");
+				trustSourceRepo.setAttribute("aria-disabled", "true");
+				trustSourceRepo.textContent = "Source publication pending";
+			}
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
-				? (source.dirty ? "Baseline " : "Commit ") + source.shortCommit + (source.dirty ? " - live patch pending" : "")
-				: "Commit pending";
+				? "Build commit " + source.shortCommit + (source.dirty ? " - live patch pending" : "")
+				: (source.status === "publication_pending" ? "Build commit recorded privately" : "Build commit pending");
 			trustSourceCommit.textContent = commitText;
 			trustSourceCommit.title = source.commit || commitText;
 		}
@@ -4088,13 +4099,16 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var rows = ["Voidscape stays AGPL source-available."];
-		if (source.shortCommit && source.dirty) {
-			rows.push("Live files are based on commit " + source.shortCommit + "; newer deployed patches are marked until published.");
-		} else if (source.shortCommit) {
-			rows.push("Live source commit: " + source.shortCommit + ".");
+		var publicationPending = source.status === "publication_pending" || !source.repositoryUrl;
+		var rows = [];
+		if (publicationPending) {
+			rows.push("The release build commit is recorded privately for operator verification.");
+			rows.push("Publication of corresponding source for this release is pending.");
 		} else {
-			rows.push("Source commit metadata is waiting for the next publish.");
+			rows.push("A published source link is available for inspection.");
+			rows.push(source.shortCommit
+				? "Published source commit: " + source.shortCommit + "."
+				: "The published source commit is waiting for verification.");
 		}
 		rows.push(build.evidence || "Download hashes are generated from served files.");
 		if (manifest.status === "available") {
@@ -4279,8 +4293,9 @@
 	function downloadRank(row) {
 		if (isLauncherDownloadRow(row)) return 0;
 		if (isWebClientRow(row)) return 1;
-		if (row && row.slug === "android-apk") return 2;
-		return 3;
+		if (row && row.slug === "android-play") return 2;
+		if (row && row.slug === "android-apk") return 3;
+		return 4;
 	}
 
 	function downloadActionClass(row, available) {
@@ -4332,7 +4347,7 @@
 	function downloadFunnelEvent(row) {
 		if (!row) return "download";
 		if (isWebClientRow(row)) return "play_web";
-		if (row.slug === "android-apk") return "download_android";
+		if (row.slug === "android-play" || row.slug === "android-apk") return "download_android";
 		if (row.slug === "launcher" || isLauncherDownloadRow(row)) return "download_launcher";
 		return "download";
 	}
@@ -4393,6 +4408,7 @@
 		return row.publicDownload === true
 			|| isWebClientRow(row)
 			|| row.slug === "launcher"
+			|| row.slug === "android-play"
 			|| row.slug === "android-apk"
 			|| url.indexOf("/downloads/launcher") !== -1
 			|| url.indexOf("/downloads/android-apk") !== -1;

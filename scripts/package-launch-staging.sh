@@ -215,6 +215,12 @@ if ! git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	echo "ERROR: launch packages must be built from a Git worktree." >&2
 	exit 1
 fi
+FULL_COMMIT="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+if ! [[ "$FULL_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+	echo "ERROR: could not resolve the package source to one full Git commit." >&2
+	exit 1
+fi
+COMMIT="${FULL_COMMIT:0:12}"
 SOURCE_DIRTY=0
 if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]]; then
 	SOURCE_DIRTY=1
@@ -376,8 +382,6 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"/{server,client,portal,launcher,android,logs,ops/cutover,ops/nginx}
 
 VERSION="$(client_version)"
-COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-FULL_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 echo "==> Packaging server artifacts"
@@ -546,6 +550,10 @@ EOF
 
 echo "==> Packaging portal"
 bundle_copy_dir "$ROOT/web/portal" "$OUTPUT_DIR/portal/web-portal"
+# The tracked development metadata may describe an older public snapshot. Never
+# leave that file in a partially-created release bundle; authoritative metadata
+# is generated only after all builds and source-consistency checks complete.
+rm -f "$OUTPUT_DIR/portal/web-portal/build-meta.json"
 cat > "$OUTPUT_DIR/portal/portal.env.staging" <<EOF
 PORT=8788
 PORTAL_BIND_HOST=127.0.0.1
@@ -796,8 +804,57 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 	fi
 fi
 
+CURRENT_FULL_COMMIT="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+if [[ "$CURRENT_FULL_COMMIT" != "$FULL_COMMIT" ]]; then
+	echo "ERROR: Git HEAD changed during packaging; refusing ambiguous build metadata." >&2
+	exit 1
+fi
+
 PROMOTABLE_TEXT="$([[ "$BUNDLE_PROMOTABLE" -eq 1 ]] && echo true || echo false)"
 PROMOTION_BLOCKERS_TEXT="$(promotion_blockers_text)"
+SOURCE_DIRTY_TEXT="$([[ "$SOURCE_DIRTY" -eq 1 ]] && echo true || echo false)"
+
+# Generate public metadata only after validating the immutable private commit
+# captured before every build. Publication is deliberately pending: public
+# runtime state must expose neither that private commit nor the older mirror.
+python3 - \
+	"$OUTPUT_DIR/portal/web-portal/build-meta.json" \
+	"$FULL_COMMIT" \
+	"$COMMIT" \
+	"$SOURCE_DIRTY_TEXT" \
+	"$CREATED_AT" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+target, commit, short_commit, dirty_text, generated_at = sys.argv[1:]
+if not re.fullmatch(r"[0-9a-f]{40}", commit):
+    raise SystemExit("ERROR: portal build metadata requires a full 40-hex commit")
+if short_commit != commit[:12]:
+    raise SystemExit("ERROR: portal build metadata short commit is inconsistent")
+if dirty_text not in {"true", "false"}:
+    raise SystemExit("ERROR: portal build metadata dirty state is invalid")
+
+metadata = {
+    "branch": "",
+    "commit": "",
+    "dirty": False,
+    "generatedAt": generated_at,
+    "repositoryUrl": "",
+    "shortCommit": "",
+    "status": "publication_pending",
+}
+path = Path(target)
+path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+written = json.loads(path.read_text(encoding="utf-8"))
+if written != metadata:
+    raise SystemExit("ERROR: portal build metadata did not round-trip exactly")
+if (written["status"] != "publication_pending"
+        or any(written[key] for key in ("repositoryUrl", "commit", "shortCommit", "branch"))):
+    raise SystemExit("ERROR: unpublished source metadata must remain unlinked")
+PY
 
 if [[ -n "$ANDROID_BUNDLE_APK" && "$ANDROID_BUNDLE_APK" == "$OUTPUT_DIR/android/candidate/"* ]]; then
 	if [[ "$BUNDLE_PROMOTABLE" -eq 1 && "$ANDROID_RELEASE_CHECK" == "passed" ]]; then
@@ -942,9 +999,9 @@ cat > "$OUTPUT_DIR/DEPLOYMENT.md" <<EOF
 # Voidscape Launch Staging Bundle
 
 Created: $CREATED_AT
-Commit: $FULL_COMMIT
 Client version: $VERSION
 Source dirty: $([[ "$SOURCE_DIRTY" -eq 1 ]] && echo true || echo false)
+Source publication: pending (no current public-source URL)
 Promotable: $PROMOTABLE_TEXT
 Promotion blockers: $PROMOTION_BLOCKERS_TEXT
 Server/client build: $SERVER_CLIENT_BUILD_MODE
@@ -1056,6 +1113,7 @@ Created: $CREATED_AT
 Commit: $FULL_COMMIT
 Client version: $VERSION
 Source dirty: $([[ "$SOURCE_DIRTY" -eq 1 ]] && echo true || echo false)
+Source publication: pending (no current public-source URL)
 Promotable: $PROMOTABLE_TEXT
 Promotion blockers: $PROMOTION_BLOCKERS_TEXT
 Server/client build: $SERVER_CLIENT_BUILD_MODE
@@ -1181,20 +1239,18 @@ Use rollback only after stopping or draining player traffic.
    - \`curl -fsS $PORTAL_URL/api/public\`
    - \`scripts/verify-web-teavm-deployment.sh $WEB_URL --expected-build-manifest <previous-manifest> --deep-manifest\`
 
-## AGPL Source Disclosure
+## Source Publication Status
 
-Before public distribution, confirm the public source link shown by the portal
-points to the intended Voidscape source mirror for commit \`$FULL_COMMIT\` or a
-documented public-source commit that contains the corresponding AGPL-covered
-server/client changes.
+Publication of the release source is pending by owner decision. This private
+handoff and \`MANIFEST.txt\` record build commit \`$FULL_COMMIT\` for operator
+provenance. The public portal metadata deliberately contains no repository URL,
+commit, short commit, or branch. Do not present the older public mirror as the
+corresponding source for this build.
 
-Checklist:
-
-- Portal footer/source tab link is current.
-- Public source mirror excludes runtime DBs, logs, backups, private deploy files, and secrets.
-- Public source mirror includes license text and build/run instructions.
-- APK/launcher/web distribution pages link to the same source location or to the portal source page.
-- If the deployed private commit differs from the public-source commit, record the public-source commit:
+Source publication or disclosure is a separate reviewed task. Before adding a
+link, verify that it resolves to source corresponding to this release, excludes
+runtime DBs, logs, backups, private deploy files, and secrets, and includes the
+license plus build/run instructions. Record that later decision here:
 
 \`\`\`text
 Public source URL:
@@ -1209,6 +1265,8 @@ created_at=$CREATED_AT
 commit=$FULL_COMMIT
 short_commit=$COMMIT
 source_dirty=$([[ "$SOURCE_DIRTY" -eq 1 ]] && echo true || echo false)
+source_publication_status=publication_pending
+source_repository_url=none
 promotable=$PROMOTABLE_TEXT
 promotion_blockers=$PROMOTION_BLOCKERS_TEXT
 server_client_build_mode=$SERVER_CLIENT_BUILD_MODE
@@ -1230,6 +1288,7 @@ client_runtime_sha256=$(sha256_file "$OUTPUT_DIR/client/Open_RSC_Client.jar")
 client_cache_manifest_sha256=$(sha256_file "$OUTPUT_DIR/client/cache.SHA256")
 launcher_sha256=$(sha256_file "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar")
 web_build_manifest_sha256=$(sha256_file "$OUTPUT_DIR/play/voidscape-web-build.json")
+portal_build_meta_sha256=$(sha256_file "$OUTPUT_DIR/portal/web-portal/build-meta.json")
 native_portal_backfill_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/native-portal-backfill-sweep.sh")
 native_portal_backfill_service_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/voidscape-native-portal-backfill.service")
 nginx_admin_public_block_sha256=$(sha256_file "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf")

@@ -330,6 +330,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Keep public portal APK downloads wired to the configured APK artifact and verify `/api/public` publishes a hash when the file exists.
 - [x] Replace hardcoded public IP with stable `voidscape.gg` and migrate the exact previous public endpoint on upgrade.
 - [x] Decide Android update strategy: Google Play production is primary; a release-signed direct APK is the tested fallback.
+- [x] Keep the portal channel switch fail-closed: `PORTAL_ANDROID_PLAY_URL` is absent while a release is under review, and accepts only the canonical `https://play.google.com/store/apps/details?id=com.voidscape.gg` listing after approval. Once set, `/api/public` exposes Play as the primary Android action and the release-signed APK as an explicit fallback; when unset, the prior APK-only contract remains unchanged.
 - [ ] Add HTTPS remote cache/update endpoint only when versioned checksums are ready.
 - [ ] Ensure Android packaging excludes mutable local files and secrets.
 - [ ] Ensure AGPL source disclosure plan covers APK distribution.

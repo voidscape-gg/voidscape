@@ -21,10 +21,10 @@ Launch time: **2026-07-18 18:00 UTC / 11:00 AM Pacific**.
 
 - [x] Google Play has the exact signed AAB, Internal Testing is available, and the 100% Production rollout is in Google review with automatic publishing after approval.
 - [x] Production discovery confirms `voidscape.service` is inactive and disabled, public TCP `43596` is closed, SQLite integrity is `ok`, daily backups succeed, and portal signup remains live.
-- [ ] Make only the two required predeploy portal/package corrections:
+- [x] Make only the two required predeploy portal/package corrections:
   - stop presenting obsolete source commit `97484977...` as the current build; report publication as pending without pushing source;
   - support a validated Google Play listing as the primary Android choice after approval, with the signed APK clearly labeled as fallback.
-- [ ] Run focused portal/package tests, `scripts/build.sh`, and `git diff --check`; commit the minimal correction.
+- [x] Run focused portal/package tests, `scripts/build.sh`, `git diff --check`, and a real launch-open desktop/mobile browser smoke; commit the minimal correction.
 - [ ] Build one fresh promotable production bundle from the resulting clean commit:
 
   ```bash
@@ -115,5 +115,6 @@ Do not open the world if any of these are true:
 - Hosted launch gate: `tmp/launch-staging-hosted-c519a-final-signup-chrome-pass/summary.json`
 - Hosted TeaVM deep verification: `tmp/launch-staging-hosted-c519a-final-signup-chrome-pass/web-deployment/summary.json`
 - Android emulator campaign proof: `tmp/android-cracker-campaign-8b-accepted5`
+- Play/fallback plus publication-pending browser proof: `tmp/portal-play-source-pending-20260712T180009Z`
 - New production bundle/evidence: `tmp/launch-production-10132/`
 - Remote coordinated backup: `/opt/voidscape/backups/prep-10132-<UTC stamp>/`

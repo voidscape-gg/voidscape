@@ -24,6 +24,8 @@ grep -q 'write_sha256_tree "$OUTPUT_DIR/server/database" "$OUTPUT_DIR/server/dat
 grep -q 'server_database_manifest_sha256=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'server_database_file_count=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'promotable=$PROMOTABLE_TEXT' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'source_publication_status=publication_pending' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'portal_build_meta_sha256=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'android_apk_promotable=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'scripts/check-android-apk-release.sh' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'verify_exact_sha256_tree "\\$DEPLOYED_SERVER_DIR/database"' "$ROOT/scripts/package-launch-staging.sh"
@@ -38,6 +40,18 @@ if grep -q '/opt/voidscape/web/play' "$ROOT/scripts/package-launch-staging.sh"; 
 fi
 if grep -Eq 'legacy block (if|unless)|remove or disable the legacy' "$ROOT/scripts/package-launch-staging.sh"; then
 	echo "legacy sslip launch guard was made optional" >&2
+	exit 1
+fi
+node -e '
+const metadata = require(process.argv[1]);
+if (metadata.status !== "publication_pending") throw new Error("tracked source publication must remain pending");
+for (const key of ["repositoryUrl", "commit", "shortCommit", "branch"]) {
+	if (metadata[key] !== "") throw new Error(`pending source metadata leaked ${key}`);
+}
+' "$ROOT/web/portal/build-meta.json"
+if rg -n 'github\.com/voidscape-gg/voidscape|game code is public|public code version' \
+	"$ROOT/web/portal/transparency.html" "$ROOT/web/portal/transparency.js"; then
+	echo "transparency page claims an unpublished source mirror" >&2
 	exit 1
 fi
 

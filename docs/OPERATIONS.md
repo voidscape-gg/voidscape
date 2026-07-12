@@ -28,6 +28,12 @@ Android. To include a direct-download APK, use `--android-release` instead of
 `--skip-android`; the committed endpoint must already match and the APK release
 checker must pass. Skipped builds, debug APKs, dirty source, and temporary
 Android endpoint rewrites are rehearsal-only and produce `promotable=false`.
+The packager records the exact private build commit in `MANIFEST.txt`, replaces
+the portal's tracked development metadata, and reports source publication as
+pending without exposing a repository URL, commit, or branch through the public
+portal. Do not point that pending state at the older public mirror as though it
+corresponded to the current release. Source publication remains a separate
+reviewed task; this packaging contract is not a license-compliance determination.
 If a remote target is ready, add `--rsync-target
 user@host:/opt/voidscape-staging` to sync the bundle.
 

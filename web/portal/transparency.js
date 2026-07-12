@@ -86,7 +86,7 @@
 			"We do not show private account details on public pages."
 		]);
 
-		setText(trustSourceStatus, simpleStatus(build.status || "available"));
+		setText(trustSourceStatus, simpleStatus(build.source && build.source.status || "source_pending"));
 		renderTrustList(trustSourceList, sourceListItems(build, integrity, staff));
 		renderSourceBuildBoard(build);
 
@@ -116,13 +116,24 @@
 			return;
 		}
 		if (trustSourceRepo) {
-			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
-			trustSourceRepo.textContent = source.repositoryUrl ? "View public code" : simpleStatus(source.status || "source_pending");
+			if (source.repositoryUrl) {
+				trustSourceRepo.href = source.repositoryUrl;
+				trustSourceRepo.target = "_blank";
+				trustSourceRepo.rel = "noreferrer";
+				trustSourceRepo.removeAttribute("aria-disabled");
+				trustSourceRepo.textContent = "View published source";
+			} else {
+				trustSourceRepo.removeAttribute("href");
+				trustSourceRepo.removeAttribute("target");
+				trustSourceRepo.removeAttribute("rel");
+				trustSourceRepo.setAttribute("aria-disabled", "true");
+				trustSourceRepo.textContent = "Source publication pending";
+			}
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
-				? (source.dirty ? "Code version " : "Code version ") + source.shortCommit + (source.dirty ? " - live changes pending" : "")
-				: "Code version pending";
+				? "Build commit " + source.shortCommit + (source.dirty ? " - live changes pending" : "")
+				: (source.status === "publication_pending" ? "Build commit recorded privately" : "Build commit pending");
 			trustSourceCommit.textContent = commitText;
 			trustSourceCommit.title = source.commit || commitText;
 		}
@@ -150,13 +161,16 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var rows = ["The game code is public, so people can inspect what is being run."];
-		if (source.shortCommit && source.dirty) {
-			rows.push("The live server is based on public code version " + source.shortCommit + "; live-only changes are marked until published.");
-		} else if (source.shortCommit) {
-			rows.push("Current public code version: " + source.shortCommit + ".");
+		var publicationPending = source.status === "publication_pending" || !source.repositoryUrl;
+		var rows = [];
+		if (publicationPending) {
+			rows.push("The release build commit is recorded privately for operator verification.");
+			rows.push("Publication of corresponding source for this release is pending.");
 		} else {
-			rows.push("The public code version is waiting for the next update.");
+			rows.push("A published source link is available for inspection.");
+			rows.push(source.shortCommit
+				? "Published source commit: " + source.shortCommit + "."
+				: "The published source commit is waiting for verification.");
 		}
 		rows.push("Downloads are checked when they are served, so replacing a file changes the check.");
 		if (manifest.status === "available") {
@@ -400,6 +414,7 @@
 			recording: "Tracking",
 			recording_no_recent_staff_mints: "Tracking",
 			recording_no_staff_mints: "Tracking",
+			publication_pending: "Publication pending",
 			source_pending: "Waiting",
 			waiting_for_game_snapshot: "Waiting"
 		};

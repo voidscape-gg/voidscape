@@ -115,7 +115,9 @@ assert(Array.isArray(integrity.itemProvenance.recent), "integrity endpoint shoul
 assert(integrity.economyScans && integrity.economyScans.flagged >= 1, "integrity endpoint should expose economy scan findings");
 assert(integrity.build.status, "integrity endpoint should expose build evidence status");
 assert(Array.isArray(integrity.build.artifacts), "integrity endpoint should expose build artifact hashes");
-assert(integrity.build.source && integrity.build.source.repositoryUrl, "integrity endpoint should expose source metadata");
+assert(integrity.build.source && integrity.build.source.status === "publication_pending", "integrity endpoint should report pending source publication");
+assert(integrity.build.source.repositoryUrl === "", "pending source metadata must not advertise an older repository");
+assert(integrity.build.source.commit === "" && integrity.build.source.shortCommit === "" && integrity.build.source.branch === "", "pending source metadata must not expose private build provenance");
 
 const snapshot = await api("/api/openrsc/characters/SmokeHero");
 assert(snapshot.character.source === "openrsc-sqlite", "snapshot endpoint should report the OpenRSC source");

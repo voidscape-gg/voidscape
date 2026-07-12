@@ -78,6 +78,47 @@ cleanup() {
 }
 trap cleanup EXIT
 
+expect_invalid_android_play_url() {
+	local url="$1"
+	local slug="$2"
+	local log="$tmp_dir/android-play-invalid-${slug}.log"
+	local pid
+	PORT=0 \
+		PORTAL_DATA_DIR="$tmp_dir/android-play-invalid-${slug}" \
+		PORTAL_ANDROID_PLAY_URL="$url" \
+		node web/portal/dev-server.mjs >"$log" 2>&1 &
+	pid="$!"
+	for _ in {1..20}; do
+		if ! kill -0 "$pid" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 0.05
+	done
+	if kill -0 "$pid" >/dev/null 2>&1; then
+		kill "$pid" >/dev/null 2>&1 || true
+		wait "$pid" >/dev/null 2>&1 || true
+		echo "PORTAL_ANDROID_PLAY_URL should reject $url"
+		exit 1
+	fi
+	if wait "$pid" >/dev/null 2>&1; then
+		echo "invalid PORTAL_ANDROID_PLAY_URL should fail startup: $url"
+		exit 1
+	fi
+	grep -q 'must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing' "$log" || {
+		echo "invalid PORTAL_ANDROID_PLAY_URL should explain the accepted listing"
+		exit 1
+	}
+}
+
+expect_invalid_android_play_url "http://play.google.com/store/apps/details?id=com.voidscape.gg" "http"
+expect_invalid_android_play_url "https://example.com/store/apps/details?id=com.voidscape.gg" "host"
+expect_invalid_android_play_url "https://play.google.com/store/apps/details?id=com.example.wrong" "package"
+expect_invalid_android_play_url "https://play.google.com/store/apps/details?id=com.voidscape.gg&id=com.example.wrong" "duplicate-id"
+expect_invalid_android_play_url "https://play.google.com/apps/internaltest/4700211566888170922" "internal-test"
+expect_invalid_android_play_url "https://attacker@play.google.com/store/apps/details?id=com.voidscape.gg" "userinfo"
+expect_invalid_android_play_url "https://play.google.com:444/store/apps/details?id=com.voidscape.gg" "port"
+expect_invalid_android_play_url "https://play.google.com/store/apps/developer?id=com.voidscape.gg" "path"
+
 sqlite3 "$fixture_db" <<'SQL'
 CREATE TABLE players (
 	id INTEGER PRIMARY KEY,
@@ -630,8 +671,11 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 const apkBuilt = process.argv[2] === '1';
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
 const apkHasSidecar = process.argv[3] === '1';
+if (play) throw new Error('unset PORTAL_ANDROID_PLAY_URL must not expose a Google Play row');
 if (!android) throw new Error('public payload should keep an Android APK row for launch-open UI copy');
+if (android.label !== 'Android APK' || android.fallback === true) throw new Error('unset Play URL should preserve the existing APK-only contract');
 if (apkBuilt) {
 	if (android.available !== true) throw new Error('built Android APK should be public in the launch-open chooser');
 	if (android.url !== '/downloads/android-apk') throw new Error('built Android APK should link to /downloads/android-apk');
@@ -674,7 +718,11 @@ if (apkBuilt) {
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
 	grep -q 'href="/privacy"' <<<"$landing_html" || { echo "landing page should link to the privacy policy"; exit 1; }
 	grep -q 'href="/data-deletion"' <<<"$landing_html" || { echo "landing page should link to data deletion"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$landing_html" || { echo "landing page should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$landing_html" || { echo "landing page should report deferred source publication"; exit 1; }
+	if grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$landing_html"; then
+		echo "landing page must not advertise the older mirror as current source"
+		exit 1
+	fi
 	if grep -q 'Open-RSC/Core-Framework' <<<"$landing_html"; then
 		echo "landing page should not use upstream-only source disclosure"
 		exit 1
@@ -708,14 +756,14 @@ if (apkBuilt) {
 	expect_status 200 "http://127.0.0.1:${public_port}/data-deletion"
 	privacy_html="$(curl -fsS "http://127.0.0.1:${public_port}/privacy")"
 	grep -q 'Voidscape account data should stay boring and explainable.' <<<"$privacy_html" || { echo "/privacy should render the policy copy"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$privacy_html" || { echo "/privacy should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$privacy_html" || { echo "/privacy should report deferred source publication"; exit 1; }
 	if grep -q 'Open-RSC/Core-Framework' <<<"$privacy_html"; then
 		echo "/privacy should not use upstream-only source disclosure"
 		exit 1
 	fi
 	deletion_html="$(curl -fsS "http://127.0.0.1:${public_port}/data-deletion")"
 	grep -q 'Request account data deletion.' <<<"$deletion_html" || { echo "/data-deletion should render the deletion flow"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$deletion_html" || { echo "/data-deletion should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$deletion_html" || { echo "/data-deletion should report deferred source publication"; exit 1; }
 	if grep -q 'Open-RSC/Core-Framework' <<<"$deletion_html"; then
 		echo "/data-deletion should not use upstream-only source disclosure"
 		exit 1
@@ -758,6 +806,7 @@ JSON
 	PORTAL_ADMIN_TOKEN="$public_admin_token" \
 	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_ANDROID_PLAY_URL="https://play.google.com/store/apps/details?hl=en&id=com.voidscape.gg&utm_source=portal-smoke" \
 	PORTAL_ANDROID_APK="$android_release_apk" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-android-public-smoke.log 2>&1 &
 android_public_pid="$!"
@@ -774,11 +823,45 @@ android_public_payload="$(curl -fsS "http://127.0.0.1:${android_public_port}/api
 node -e "
 const payload = JSON.parse(process.argv[1]);
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
+if (!play || play.available !== true || play.platformPrimary !== true || play.platform !== 'android' || play.external !== true) {
+	throw new Error('configured Google Play listing should be the primary external Android choice without replacing the launcher global primary');
+}
+if (play.url !== 'https://play.google.com/store/apps/details?id=com.voidscape.gg') {
+	throw new Error('Google Play URL should be canonicalized, got ' + (play && play.url));
+}
 if (!android || android.available !== true) throw new Error('explicit public Android APK should be available');
+if (android.label !== 'Signed APK fallback' || android.fallback !== true) throw new Error('configured Play listing should relabel the signed APK as fallback');
 if (android.url !== '/downloads/android-apk') throw new Error('explicit public Android APK should link to /downloads/android-apk');
 if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('explicit public Android APK should expose sha256');
 if (android.clientVersion !== 10123) throw new Error('explicit public Android APK should expose sidecar clientVersion');
+if ((payload.downloads || []).indexOf(play) > (payload.downloads || []).indexOf(android)) throw new Error('Google Play should be exposed before its APK fallback');
+if ((payload.integrity && payload.integrity.build && payload.integrity.build.artifacts || []).some((row) => row.slug === 'android-play')) {
+	throw new Error('external Play listing must not appear as a file-hash build artifact');
+}
 " "$android_public_payload"
+android_landing_html="$(curl -fsS "http://127.0.0.1:${android_public_port}/")"
+grep -q 'id="ready-android-fallback"' <<<"$android_landing_html" || { echo "launch landing should render a distinct signed APK fallback action"; exit 1; }
+grep -q 'id="play-android-fallback"' <<<"$android_landing_html" || { echo "launch-open landing should render a distinct signed APK fallback action"; exit 1; }
+if grep -Eqi 'iOS|iPhone' <<<"$android_landing_html"; then
+	echo "Android channel chooser should not reintroduce deferred iPhone claims"
+	exit 1
+fi
+curl -fsS -X POST "http://127.0.0.1:${android_public_port}/api/funnel/click" \
+	-H 'content-type: application/json' \
+	-d '{"event":"download_android","target":"Google Play","href":"https://play.google.com/store/apps/details?id=com.voidscape.gg","page":"/"}' >/dev/null
+curl -fsS -X POST "http://127.0.0.1:${android_public_port}/api/funnel/click" \
+	-H 'content-type: application/json' \
+	-d '{"event":"download_android","target":"Tampered Play","href":"https://play.google.com/store/apps/details?id=com.voidscape.gg&utm_source=unexpected","page":"/"}' >/dev/null
+node -e "
+const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+const clicks = (store.audit || []).filter((row) => row.type === 'funnel_click').slice(-2);
+if (clicks.length !== 2) throw new Error('configured Android smoke should record two funnel clicks');
+if (clicks[0].metadata.href !== 'https://play.google.com/store/apps/details?id=com.voidscape.gg') {
+	throw new Error('funnel sanitizer should retain only the exact configured canonical Play URL');
+}
+if (clicks[1].metadata.href !== '') throw new Error('funnel sanitizer should reject modified Play URLs');
+" "$tmp_dir/android-public-store/dev-store.json"
 expect_status 200 "http://127.0.0.1:${android_public_port}/downloads/android-apk"
 
 kill "$android_public_pid" >/dev/null 2>&1 || true
@@ -799,6 +882,7 @@ PORT="$launch_port" \
 	PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=2 \
 	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
 	PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
+	PORTAL_ANDROID_PLAY_URL="https://play.google.com/store/apps/details?id=com.voidscape.gg" \
 	PORTAL_EMAIL_PROVIDER=resend \
 	PORTAL_EMAIL_DRY_RUN=1 \
 	PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>" \
@@ -859,7 +943,7 @@ if (!webClient || webClient.url !== 'https://voidscape.gg/play/?phone=1') {
 const bad = downloads.filter((row) => row && row.available && row.publicDownload && String(row.url || '').startsWith('http://'));
 if (bad.length) throw new Error('public downloads must not use http URLs: ' + bad.map((row) => row.slug).join(', '));
 for (const row of downloads) {
-	if (!row || !row.available || !row.publicDownload || row.slug === 'web-client') continue;
+	if (!row || !row.available || !row.publicDownload || row.external) continue;
 	if (!String(row.url || '').startsWith('https://voidscape.gg/downloads/')) {
 		throw new Error(row.slug + ' should use the configured HTTPS public origin, got ' + row.url);
 	}
@@ -945,6 +1029,16 @@ if (payload.dryRun !== true) throw new Error('launch-live dry run should not sen
 if (payload.eligible !== 1) throw new Error('launch-live dry run should exclude synthetic .invalid accounts');
 if (payload.queued !== 0 || payload.sent !== 0) throw new Error('launch-live dry run should queue/send nothing');
 " "$launch_live_email_dry"
+launch_live_email_send="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/launch-live" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.queued !== 1 || payload.sent !== 1 || payload.failed !== 0) {
+	throw new Error('configured Play launch-live email should build and deliver through the dry-run provider');
+}
+" "$launch_live_email_send"
 launch_48h_email_dry="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/launch-48h" \
 	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \

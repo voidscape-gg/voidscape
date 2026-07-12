@@ -70,10 +70,13 @@
 		readyWeb: document.getElementById("ready-web"),
 		readyLauncher: document.getElementById("ready-launcher"),
 		readyAndroid: document.getElementById("ready-android"),
+		readyAndroidCopy: document.getElementById("ready-android-copy"),
+		readyAndroidFallback: document.getElementById("ready-android-fallback"),
 		playBlock: document.getElementById("play-block"),
 		playLauncher: document.getElementById("play-launcher"),
 		playWeb: document.getElementById("play-web"),
-		playAndroid: document.getElementById("play-android")
+		playAndroid: document.getElementById("play-android"),
+		playAndroidFallback: document.getElementById("play-android-fallback")
 	};
 
 	setupCharacterSelect();
@@ -305,14 +308,25 @@
 	function updateDownloadLinks() {
 		var launcher = findDownload("launcher");
 		var web = findDownload("web-client");
-		var android = findDownload("android-apk");
+		var androidPlay = findDownload("android-play");
+		var androidApk = findDownload("android-apk");
+		var androidPrimary = androidPlay || androidApk;
 		setDownloadLink(els.readyLauncher, launcher, { hiddenWhenUnavailable: true, download: true });
-		setDownloadLink(els.readyAndroid, android, { hiddenWhenUnavailable: true, download: true });
+		setDownloadLink(els.readyAndroid, androidPrimary, { hiddenWhenUnavailable: true, download: true });
+		setDownloadLink(els.readyAndroidFallback, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyWeb, web, { hiddenWhenUnavailable: true });
 		if (els.readyWeb && !launchOpen) els.readyWeb.hidden = true;
 		setDownloadLink(els.playLauncher, launcher, { download: true });
 		setDownloadLink(els.playWeb, web, {});
-		setDownloadLink(els.playAndroid, android, { download: true });
+		setDownloadLink(els.playAndroid, androidPrimary, { download: true });
+		setDownloadLink(els.playAndroidFallback, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
+		if (els.readyAndroid) els.readyAndroid.textContent = androidPlay ? "Get it on Google Play" : "Get APK";
+		if (els.playAndroid) els.playAndroid.textContent = androidPlay ? "Google Play" : "Android APK";
+		if (els.readyAndroidCopy) {
+			els.readyAndroidCopy.textContent = androidPlay
+				? "Install from Google Play. The signed APK is available as a direct fallback."
+				: "Sideload the APK ahead of time and skip the launch-day fiddling.";
+		}
 	}
 
 	function setDownloadLink(anchor, row, options) {
@@ -329,6 +343,8 @@
 		anchor.hidden = false;
 		anchor.href = row.url;
 		anchor.removeAttribute("aria-disabled");
+		if (row.external) anchor.setAttribute("rel", "noopener");
+		else anchor.removeAttribute("rel");
 		if (options.download && !row.external) {
 			anchor.setAttribute("download", "");
 		} else {
