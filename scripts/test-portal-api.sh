@@ -618,8 +618,12 @@ grep -q '"mode": "hybrid-p2p-enabled"' <<<"$public_payload" || { echo "public-mo
 grep -q '"subscriptionGrantsMembers": false' <<<"$public_payload" || { echo "public-mode /api/public should expose subscription as non-membership-gating"; exit 1; }
 grep -q '"launch": {' <<<"$public_payload" || { echo "public-mode /api/public should expose launch countdown metadata"; exit 1; }
 grep -q '"openAt": "2099-07-18T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
-grep -q '"Mobile web client"' <<<"$public_payload" || { echo "public-mode /api/public should expose the mobile web client action"; exit 1; }
-grep -q '"iOS and Android browsers"' <<<"$public_payload" || { echo "public-mode /api/public should label the web client as mobile-only"; exit 1; }
+grep -q '"Web client"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web client action"; exit 1; }
+grep -q '"Supported browsers"' <<<"$public_payload" || { echo "public-mode /api/public should describe the web client without an iPhone launch claim"; exit 1; }
+if grep -Eqi 'iOS|iPhone' <<<"$public_payload"; then
+	echo "public-mode /api/public should not advertise deferred iPhone support"
+	exit 1
+fi
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
 node -e "
@@ -660,7 +664,11 @@ if (apkBuilt) {
 	fi
 	grep -q 'Reserve + claim free week' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
 	grep -q 'data-signin' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
-	grep -q 'web, desktop &amp; mobile' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
+	grep -q 'web, desktop &amp; Android' <<<"$landing_html" || { echo "landing page should explain launch platform support without play buttons"; exit 1; }
+	if grep -Eqi 'iOS|iPhone' <<<"$landing_html"; then
+		echo "landing page should not advertise deferred iPhone support"
+		exit 1
+	fi
 	grep -q 'href="/features"' <<<"$landing_html" || { echo "landing page should link to the full feature guide"; exit 1; }
 	grep -q 'href="/legends"' <<<"$landing_html" || { echo "landing page should link to the public Legends page"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
@@ -1170,7 +1178,7 @@ if [[ "$launch_extra_salt_after" != "$launch_extra_salt_before" ]]; then
 	echo "game-password reset must preserve the shared OpenRSC recovery salt"
 	exit 1
 fi
-node - "$launch_extra_password_after" <<'NODE'
+node -- - "$launch_extra_password_after" <<'NODE'
 const { spawnSync } = require("child_process");
 const [stored, salt] = process.argv[2].split("|");
 const encode = (value) => Buffer.from(value, "utf8").toString("base64url");
@@ -1562,7 +1570,7 @@ if [[ "$verify_before_accounts" != "0" ]]; then
 	echo "pending email verification signup must not create a portal account"
 	exit 1
 fi
-verify_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+verify_token="$(node -- - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
 const fs = require("fs");
 const { createHash, createDecipheriv } = require("crypto");
 const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -1633,7 +1641,7 @@ expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/characters" \
 
 # A clean signup IP gets one full additional-character allowance after the
 # initial character, proving the initial marker is subtracted from the bucket.
-pending_two_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+pending_two_token="$(node -- - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
 const fs = require("fs");
 const { createHash, createDecipheriv } = require("crypto");
 const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -1683,7 +1691,7 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.accepted !== true || payload.maskedEmail !== '') throw new Error('unknown username recovery should stay generic');
 " "$verify_unknown_reset"
-verify_reset_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+verify_reset_token="$(node -- - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
 const fs = require("fs");
 const { createHash, createDecipheriv } = require("crypto");
 const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -1985,7 +1993,7 @@ if [[ -z "$postseal_account_id" || "$postseal_reward_rows" != "0" ]]; then
 	exit 1
 fi
 
-legacy_before="$(node - "$legacy_store" <<'NODE'
+legacy_before="$(node -- - "$legacy_store" <<'NODE'
 const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
 const character = (store.characters || []).find((row) => row.name === "SmokeHero");
 const account = character && (store.accounts || []).find((row) => row.id === character.accountId);
@@ -2060,7 +2068,7 @@ grep -q '"verificationRequired": true' <<<"$legacy_taken_collision_request" || {
 legacy_claim_token_for_email() {
 	local email="$1"
 	local username="${2:-}"
-	node - "$legacy_store" "$public_abuse_salt" "$email" "$username" <<'NODE'
+	node -- - "$legacy_store" "$public_abuse_salt" "$email" "$username" <<'NODE'
 const fs = require("fs");
 const { createHash, createDecipheriv } = require("crypto");
 const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -2096,7 +2104,7 @@ NODE
 }
 
 legacy_claim_token="$(legacy_claim_token_for_email legacy-owner@example.com SmokeHero)"
-legacy_taken_collision_token="$(node - "$legacy_store" "$public_abuse_salt" <<'NODE'
+legacy_taken_collision_token="$(node -- - "$legacy_store" "$public_abuse_salt" <<'NODE'
 const fs = require("fs");
 const { createHash, createDecipheriv } = require("crypto");
 const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -2185,7 +2193,7 @@ const character = (state.characters || []).find((row) => row.id === before.chara
 if (!character || character.playerId !== before.playerId || character.source !== before.characterSource) throw new Error('claim must preserve the native character link and source');
 if (!state.rewards || state.rewards.starterSubscriptionCards !== 1) throw new Error('claim must preserve the starter-card promotion');
 " "$legacy_before" "$legacy_account_state"
-legacy_after="$(node - "$legacy_store" <<'NODE'
+legacy_after="$(node -- - "$legacy_store" <<'NODE'
 const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
 const character = store.characters.find((row) => row.name === "SmokeHero");
 const account = store.accounts.find((row) => row.id === character.accountId);
@@ -2237,7 +2245,7 @@ legacy_expired_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api
 	-d '{"username":"TakenHero","currentGamePassword":"fixture-pass","email":"expired-owner@example.com","newPassword":"ExpiredWeb1!"}')"
 grep -q '"verificationRequired": true' <<<"$legacy_expired_request" || { echo "expired claim fixture should queue verification"; exit 1; }
 legacy_expired_token="$(legacy_claim_token_for_email expired-owner@example.com TakenHero)"
-node - "$legacy_store" <<'NODE'
+node -- - "$legacy_store" <<'NODE'
 const fs = require("fs");
 const path = process.argv[2];
 const store = JSON.parse(fs.readFileSync(path, "utf8"));
@@ -2300,7 +2308,7 @@ expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-c
 	-H 'x-forwarded-for: 198.51.100.40' \
 	-d '{"token":"invalid-legacy-claim-token-value-1234567890"}'
 
-node - "$legacy_store" <<'NODE'
+node -- - "$legacy_store" <<'NODE'
 const fs = require("fs");
 const path = process.argv[2];
 const store = JSON.parse(fs.readFileSync(path, "utf8"));
@@ -2370,7 +2378,7 @@ fault_create_store_dir="$tmp_dir/fault-create-store"
 fault_create_token="fault-create-session-token"
 cp "$base_fixture_db" "$fault_create_db"
 mkdir -p "$fault_create_store_dir"
-node - "$fault_create_store_dir/dev-store.json" "$fault_create_token" "900" "fault-create@example.com" <<'NODE'
+node -- - "$fault_create_store_dir/dev-store.json" "$fault_create_token" "900" "fault-create@example.com" <<'NODE'
 const fs = require("fs");
 const { createHash } = require("crypto");
 const [path, token, accountIdText, email] = process.argv.slice(2);
@@ -2459,7 +2467,7 @@ INSERT INTO capped_experience (playerID) VALUES (90);
 INSERT INTO player_cache (playerID, type, key, value) VALUES (90, 0, 'web_account_id', '901');
 SQL
 mkdir -p "$fault_delete_store_dir"
-node - "$fault_delete_store_dir/dev-store.json" "$fault_delete_token" <<'NODE'
+node -- - "$fault_delete_store_dir/dev-store.json" "$fault_delete_token" <<'NODE'
 const fs = require("fs");
 const { createHash } = require("crypto");
 const [path, token] = process.argv.slice(2);

@@ -2256,7 +2256,7 @@
 								? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
 								: "Create your account and first character now.")
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
-				: "Launch is open. Create or manage your account, then download the launcher or use the mobile web client.";
+				: "Launch is open. Create or manage your account, then download the launcher, play in your browser, or use Android.";
 			}
 			if (previousStarterCardOpen !== launchStarterCardOpen) updateLaunchSignupCopy();
 		}
@@ -2273,10 +2273,10 @@
 		}
 			if (landingHeroProof) {
 				landingHeroProof.innerHTML = launchOpenActive
-					? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Mobile web is ready for iOS and Android.</span>"
+					? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Web and Android are ready.</span>"
 					: launchStarterCardOpen
-						? "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>"
-						: "<span>Create your account.</span><span>Choose your first character.</span><span>Web, Desktop, iOS, and Android.</span>";
+						? "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, and Android at launch.</span>"
+						: "<span>Create your account.</span><span>Choose your first character.</span><span>Web, Desktop, and Android.</span>";
 			}
 			if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
 			setText(landingNavPrimaryCta, launchOpenActive ? "Create Account" : "Reserve Name");
@@ -2284,11 +2284,11 @@
 			setText(landingPlatformPrimaryCta, launchOpenActive ? "Create or Manage Account" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
 			setText(landingFinalPrimaryCta, launchOpenActive ? "Create Account + Play" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
 		if (landingPlatformLabel) landingPlatformLabel.textContent = launchOpenActive ? "Play now" : "Launch platform support";
-		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Every platform.";
+		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Supported clients.";
 		if (landingPlatformCopy) {
 			landingPlatformCopy.textContent = launchOpenActive
-				? "Use the desktop launcher on PC, Mac, or Linux. On iOS and Android, use the mobile web client, or the Android APK when it is available. Your portal account and characters work across the supported clients."
-				: "Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.";
+				? "Use the desktop launcher on PC, Mac, or Linux, play in a supported browser, or use the Android release. Your portal account and characters work across the supported clients."
+				: "Voidscape will be available on Web, Desktop, and Android at launch. You can play in a supported browser if you prefer not to install a client.";
 		}
 		if (landingReservePrompt) {
 			var promptLabel = landingReservePrompt.querySelector("span");

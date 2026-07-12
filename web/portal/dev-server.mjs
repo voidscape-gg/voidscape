@@ -3336,7 +3336,7 @@ function buildEmailMessage(event, account, founder) {
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the Voidscape launcher.",
-				"Mobile players can use the web client; Android players can also use the APK.",
+				"Players can use the web client in a supported browser; Android players can also use the Android release.",
 				"Eligible prelaunch accounts have a free 1-week subscription card reserved.",
 				"Never share your password or signup code. Voidscape staff will never ask for it."
 			],
@@ -3345,7 +3345,7 @@ function buildEmailMessage(event, account, founder) {
 			secondaryUrl: launcherUrl,
 			secondaryLabel: "Download launcher",
 			extraLinks: [
-				{ url: playUrl, label: "Mobile web client" },
+				{ url: playUrl, label: "Web client" },
 				{ url: androidUrl, label: "Android APK" }
 			]
 		});
@@ -3356,17 +3356,17 @@ function buildEmailMessage(event, account, founder) {
 			account,
 			subject: "Voidscape is live",
 			heading: "Voidscape is live",
-			intro: `Your reserved name ${reservedName} is ready. The desktop launcher and mobile web client are live from the Voidscape site.`,
+			intro: `Your reserved name ${reservedName} is ready. The desktop launcher and web client are live from the Voidscape site.`,
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the launcher from the website.",
-				"Mobile players can use the web client from the play page.",
+				"Players can use the web client from the play page in a supported browser.",
 				"Your starter subscription card is waiting for eligible prelaunch accounts."
 			],
 			primaryUrl: manageUrl,
 			primaryLabel: "Open Voidscape",
 			secondaryUrl: playUrl,
-			secondaryLabel: "Mobile web client"
+			secondaryLabel: "Web client"
 		});
 	}
 	return emailMessage({
@@ -5836,8 +5836,8 @@ async function downloadState(options = {}) {
 	const includePrivate = options.includePrivate !== false;
 	const rows = [{
 		slug: "web-client",
-		label: "Mobile web client",
-		state: "iOS and Android browsers",
+		label: "Web client",
+		state: "Supported browsers",
 		url: webClientUrl,
 		available: true,
 		publicDownload: true,
