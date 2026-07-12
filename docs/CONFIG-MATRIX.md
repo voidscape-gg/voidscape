@@ -8,9 +8,9 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 |---|---:|---:|---|
 | Client version | `10132` | `10132` | Must match `Client_Base/src/orsc/Config.java`; recreate any older gitignored `server/local.conf` from the tracked launch preset before QA. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
-| Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
+| Server port | `43596` | `43596` | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `voidscape.gg` | `voidscape.gg:43596` | Release `9 / 1.0.8` defaults to DNS and migrates only the previous public pair `5.161.114.251:43596`; unrelated custom endpoints remain unchanged. |
-| WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
+| WebSocket port | `43496` | `43496` | Proxied publicly at `wss://voidscape.gg/play/ws/` only when launch ingress is open. |
 | DB backend | Usually SQLite locally | Single-host SQLite + portal JSON for launch | Owner accepted the short launch runway over a last-week MariaDB migration. A quiesced, consistent game-DB + portal-data backup/restore rehearsal remains mandatory before cutover. |
 | Custom content gate | `want_void_enclave: true` | likely `true` | Many Voidscape systems are loaded under this gate. |
 | Launch Void gates | `want_void_colossus: false`, `want_void_dungeon: true` | Colossus `false`; Dungeon `true` | The approved launch dungeon is the three-floor, boss-free build; Colossus remains unreachable. |
@@ -83,8 +83,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 |---|---:|---:|---:|---|
 | `game_tick` | `640` | `640` | `640` | Authentic RSC combat/movement feel. |
 | `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
-| `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
-| `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
+| `melee_gives_xp_hit` | `true` locally per divergence | `true` | `true` | Launch keeps the per-hit melee XP divergence from authentic death-time melee XP. |
+| `ranged_gives_xp_hit` | `true` locally per divergence | `true` | `true` | Launch keeps ranged paired with the melee decision. |
 | `launch_subscription_card_until` | unset | unset | unset | Disabled. Native and portal characters receive launch cards only through the reviewed, sealed final-roster cutover, never a runtime or post-launch creation window. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |

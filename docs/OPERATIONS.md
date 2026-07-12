@@ -96,7 +96,7 @@ Deploy notes:
 - Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
 - `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
 - For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
-- Restart with `systemctl restart voidscape voidscape-portal`, reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
+- During closed-world production preparation, restart only `voidscape-portal`; keep `voidscape` inactive and disabled. Start the game only at the final launch-day gate after closing public TCP/WSS ingress, completing the coordinated backup/card cutover, and preparing loopback voidbot verification. Reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
 
 ## Build and run
 

@@ -25,7 +25,7 @@ Launch time: **2026-07-18 18:00 UTC / 11:00 AM Pacific**.
   - stop presenting obsolete source commit `97484977...` as the current build; report publication as pending without pushing source;
   - support a validated Google Play listing as the primary Android choice after approval, with the signed APK clearly labeled as fallback.
 - [x] Run focused portal/package tests, `scripts/build.sh`, `git diff --check`, and a real launch-open desktop/mobile browser smoke; commit the minimal correction.
-- [ ] Build one fresh promotable production bundle from the resulting clean commit:
+- [x] Build one fresh promotable production bundle from the resulting clean commit:
 
   ```bash
   scripts/package-launch-staging.sh \
@@ -38,39 +38,40 @@ Launch time: **2026-07-18 18:00 UTC / 11:00 AM Pacific**.
     --output-dir tmp/launch-production-10132
   ```
 
-- [ ] Require `promotable=true`, fresh server/client/web builds, protocol `10132`, a checker-passed release APK, production URLs, and no promotion blockers in `MANIFEST.txt`.
-- [ ] Sync the bundle only to a versioned remote release directory such as `/opt/voidscape/releases/<commit>-10132/`; never use the bundle's `rsync --delete` directly on `/opt/voidscape`.
-- [ ] Take a live SQLite `.backup` rehearsal snapshot and record its SHA-256, player count, patch ledger, `PRAGMA integrity_check`, and `PRAGMA foreign_key_check`.
-- [ ] Boot the exact bundle against that copied database on high ports that are not allowed by UFW. Provision a rehearsal-only QA identity in the clone, then use voidbot for login, state, logout, restart, and relogin proof. Never expose production `43596` or `43496` during rehearsal.
-- [ ] Verify the clone receives the commerce and world-achievement patches, keeps all original player/cache rows, remains integrity-clean, and can be restored from the rehearsal backup. Archive the journal and voidbot JSON.
+- [x] Require `promotable=true`, fresh server/client/web builds, protocol `10132`, a checker-passed release APK, production URLs, and no promotion blockers in `MANIFEST.txt`.
+- [x] Sync the bundle only to a versioned remote release directory such as `/opt/voidscape/releases/<commit>-10132/`; never use the bundle's `rsync --delete` directly on `/opt/voidscape`.
+- [x] Take a live SQLite `.backup` rehearsal snapshot and record its SHA-256, player count, patch ledger, `PRAGMA integrity_check`, and `PRAGMA foreign_key_check`.
+- [x] Boot the exact bundle against that copied database on high ports that are not allowed by UFW. Provision a rehearsal-only QA identity in the clone, then use voidbot for login, state, logout, restart, and relogin proof. Never expose production `43596` or `43496` during rehearsal.
+- [x] Verify the clone receives the commerce and world-achievement patches, keeps all original player/cache rows, remains integrity-clean, and can be restored from the rehearsal backup. Archive the journal and voidbot JSON.
 
 ## P0 — brief production promotion
 
-- [ ] Confirm again that `voidscape.service` is inactive and disabled. Stop the portal briefly so the portal JSON and game DB have one coordinated backup point.
-- [ ] Create `/opt/voidscape/backups/prep-10132-<UTC stamp>/` containing:
+- [x] Confirm again that `voidscape.service` is inactive and disabled. Stop the portal briefly so the portal JSON and game DB have one coordinated backup point.
+- [x] Create `/opt/voidscape/backups/prep-10132-<UTC stamp>/` containing:
   - game SQLite backup;
   - portal app, portal JSON data, and `portal.env`;
   - server jars, helper jar, `local.conf`, `connections.conf`, `conf/`, and `database/`;
   - client/cache, launcher, `/play`, public downloads, nginx configuration, and relevant systemd units.
-- [ ] Verify the backup database and a restored copy before overwriting anything.
-- [ ] Atomically promote the checked server files, portal, TeaVM `/play`, client/cache, launcher channel, and signed `10132` APK fallback. Preserve the live DB, secrets, logs, avatars, and private `connections.conf`.
-- [ ] Merge production configuration instead of replacing secrets. Require:
+- [x] Verify the backup database and a restored copy before overwriting anything.
+- [x] Promote the checked server files, portal, TeaVM `/play`, client/cache, launcher channel, and signed `10132` APK fallback through validated same-filesystem staged swaps. Preserve the live DB, secrets, logs, avatars, and private `connections.conf`.
+- [x] Merge production configuration instead of replacing secrets. Require:
   - protocol `10132`, command lockdown, launch content gates, and packet registration;
   - `PORTAL_LAUNCH_AT=2026-07-18T18:00:00Z`;
   - `PORTAL_LAUNCH_FREE_CARD_HOURS=0`;
   - durable portal/game DB paths and working Resend/helper configuration;
   - no steady-state `PORTAL_ADMIN_TOKEN`;
   - no Play URL until Google approves it.
-- [ ] Disable the obsolete repeating native-backfill timer and stale beta-open/announcement timers. The final backfill is a reviewed one-shot launch operation.
-- [ ] Install the nginx `/api/admin/*` block for `voidscape.gg`, `www.voidscape.gg`, and the legacy sslip origin; require `404` with and without a token header.
-- [ ] Run `nginx -t`, restart only `voidscape-portal`, and reload nginx. Leave the game inactive and disabled.
-- [ ] Verify production while closed:
+- [x] Disable the obsolete repeating native-backfill timer and stale beta-open/announcement timers. The final backfill is a reviewed one-shot launch operation.
+- [x] Install the nginx `/api/admin/*` block for `voidscape.gg`, `www.voidscape.gg`, and the legacy sslip origin; require `404` with and without a token header.
+- [x] Run `nginx -t`, restart only `voidscape-portal`, and reload nginx. Leave the game inactive and disabled.
+- [x] Verify production while closed:
   - `/api/health` is public-ready with no issues and no admin token;
   - `/api/public` advertises Web/Desktop/Android only and the card cutoff equals launch time;
   - `/legends` works;
-  - launcher manifest, client/cache, TeaVM build, and APK all report protocol `10132` and expected hashes;
+  - launcher/API and legacy manifests plus TeaVM/APK metadata report protocol `10132`, and the served client/cache/launcher/APK hashes match the bundle;
   - TCP remains closed and WSS remains unavailable because the game service is stopped;
-  - portal signup resumes successfully.
+  - the public signup surface is available and the portal reports durable, readable storage.
+- [ ] Complete one real post-promotion production signup and email-verification pass with an owner-selected address. This deliberately remains separate because a synthetic signup would mutate the live production roster.
 
 ## P0 — final launch-day gate
 
@@ -116,5 +117,8 @@ Do not open the world if any of these are true:
 - Hosted TeaVM deep verification: `tmp/launch-staging-hosted-c519a-final-signup-chrome-pass/web-deployment/summary.json`
 - Android emulator campaign proof: `tmp/android-cracker-campaign-8b-accepted5`
 - Play/fallback plus publication-pending browser proof: `tmp/portal-play-source-pending-20260712T180009Z`
-- New production bundle/evidence: `tmp/launch-production-10132/`
-- Remote coordinated backup: `/opt/voidscape/backups/prep-10132-<UTC stamp>/`
+- Production bundle: clean commit `6bcdf8607c40848479b9456c1528d88465c26a10`, local `tmp/launch-production-10132/`, remote `/opt/voidscape/releases/6bcdf8607c40848479b9456c1528d88465c26a10-10132/`; `MANIFEST.txt` SHA-256 `9d50747b78f3ee17e8c3e7b39a5bcf1ae74c21f99481b34068689e814832a8ee`.
+- Production SQLite rehearsal: `/opt/voidscape/rehearsals/6bcdf860-10132-20260712T181144Z/`; input snapshot SHA-256 `580c484deb3671f2dbe60ed4f246dca7b0910aa4f0e9b9626da8797e1321e10a`; 48-file `REHEARSAL-SHA256SUMS` SHA-256 `75acf8ebde2c522f726d9da2ca0c8a08b1ff3b2918e4a28223033f02cc268853`.
+- Remote coordinated backup: `/opt/voidscape/backups/prep-10132-20260712T184726Z/`; `BACKUP-SHA256SUMS` SHA-256 `ed7a8fc003f91004d649176e681f0215d62057a33ad8d93debbc041efe2983e5`; manifest verification and byte-identical SQLite restore passed.
+- Closed production verification: `tmp/production-closed-verify-6bcdf860/`; deep TeaVM proof `tmp/web-teavm-deployment-verify/summary.json`; the deployed launch config is byte-identical to the bundle and passes all 50 policy checks.
+- Promotion evidence: `/opt/voidscape/deployments/prep-10132-6bcdf860/promotion-evidence/`; 547-file `PROMOTION-SHA256SUMS` SHA-256 `394c3ae70eba7db6eae346424fc8614eb31e2f785b7b253429a42dd4694d75bc`. The legacy `10126` launcher bridge downloaded all 531 entries, selected client `10132`, and staged the exact `10132` launcher. Commerce and achievement schemas are present and empty while the patch ledger intentionally remains at 15 until the first canonical server boot replays and records patches 16-17.
