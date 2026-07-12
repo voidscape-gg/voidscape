@@ -12,6 +12,20 @@ import com.openrsc.client.R;
 public class ApplicationUpdater extends Activity {
 
 	private static final long START_DELAY_MS = 350L;
+	private final Handler mainHandler = new Handler(Looper.getMainLooper());
+	private final Runnable openCacheUpdater = () -> {
+		if (isFinishing() || isDestroyed()) {
+			return;
+		}
+		Intent mainIntent = new Intent(ApplicationUpdater.this, CacheUpdater.class);
+		Bundle extras = getIntent() == null ? null : getIntent().getExtras();
+		if (extras != null) {
+			mainIntent.putExtras(extras);
+		}
+		mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+		startActivity(mainIntent);
+		finish();
+	};
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -33,15 +47,12 @@ public class ApplicationUpdater extends Activity {
 		TextView status = findViewById(R.id.textView1);
 		status.setText("Preparing game data");
 
-		new Handler(Looper.getMainLooper()).postDelayed(() -> {
-			Intent mainIntent = new Intent(ApplicationUpdater.this, CacheUpdater.class);
-			Bundle extras = getIntent() == null ? null : getIntent().getExtras();
-			if (extras != null) {
-				mainIntent.putExtras(extras);
-			}
-			mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
-			startActivity(mainIntent);
-			finish();
-		}, START_DELAY_MS);
+		mainHandler.postDelayed(openCacheUpdater, START_DELAY_MS);
+	}
+
+	@Override
+	protected void onDestroy() {
+		mainHandler.removeCallbacks(openCacheUpdater);
+		super.onDestroy();
 	}
 }

@@ -14,44 +14,74 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 
 import com.openrsc.android.render.InputImpl;
 import com.openrsc.android.render.RSCBitmapSurfaceView;
+import com.openrsc.android.security.AndroidCredentialStore;
 import com.openrsc.client.R;
 import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 
 import orsc.Config;
 import orsc.PacketHandler;
 import orsc.mudclient;
 import orsc.multiclient.ClientPort;
+import orsc.multiclient.CredentialStore;
 import orsc.osConfig;
+import orsc.soundPlayer;
+import orsc.util.Utils;
 
 public class GameActivity extends Activity implements ClientPort {
+
+	private static final Object RETAINED_CLIENT_LOCK = new Object();
+	private static final int MAX_KEYBOARD_SHOW_ATTEMPTS = 3;
+	private static final long KEYBOARD_SHOW_RETRY_DELAY_MS = 120L;
+	private static volatile mudclient retainedClient;
+	private static volatile GameActivity retainedClientOwner;
+	// Guarded by RETAINED_CLIENT_LOCK with the retained client/owner pair. These
+	// survive Activity replacement so a rotation cannot erase a real background
+	// interval before the replacement Activity resumes the same game session.
+	private static boolean retainedClientBackgrounded;
+	private static long retainedClientBackgroundedAtMillis;
+	private static final int NETWORK_NONE = 0;
+	private static final int NETWORK_CELLULAR = 1;
+	private static final int NETWORK_WIFI = 2;
+	private static final int NETWORK_OTHER = 3;
 
     private InputImpl inputImpl;
     private mudclient mudclient;
     private RSCBitmapSurfaceView gameView;
 
 	private boolean loadedReceivers = false;
+	private volatile boolean appInBackground = false;
+	private volatile long backgroundedAtMillis = 0L;
+	private volatile long suppressReconnectOverlayUntilMillis = 0L;
 	private int batteryLevel;
 	private int batteryScale;
 	private boolean batteryCharging;
-	protected volatile boolean wifiAvailable = false;
-
-	protected volatile boolean cellularAvailable = false;
-	private HashSet<Network> cellularNetworks = new HashSet<>();
-	private HashSet<Network> wifiNetworks = new HashSet<>();
-	private boolean checkedNetworks = true;
+	private final Object networkLock = new Object();
+	private final Map<Network, Integer> validatedNetworks = new HashMap<>();
+	private volatile int connectivityKind = NETWORK_NONE;
+	private CredentialStore credentialStore = CredentialStore.unsupported();
 
     private boolean hadSideMenu;
+	private final Object keyboardLock = new Object();
+	private volatile boolean keyboardRequested;
+	private volatile boolean keyboardShowing;
+	private boolean keyboardDismissRequested;
+	private boolean sideMenuHiddenForKeyboard;
+	private int keyboardRequestGeneration;
+	private int keyboardShowAttempts;
 	private Object backCallback;
 
 	final BroadcastReceiver batteryReceiver = new BatteryReceiver();
@@ -83,13 +113,20 @@ public class GameActivity extends Activity implements ClientPort {
 		}
 	}
 
-	@Override
+	    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+		configureMobileViewportWindow();
+		Utils.attach(this);
+		credentialStore = new AndroidCredentialStore(this);
+
+        osConfig.F_ANDROID_BUILD = true;
+        File externalSmokeDir = getExternalFilesDir(null);
+        Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
 
         gameView = new RSCBitmapSurfaceView(this) {
 
-			@Override
+				@Override
             public void setTitle(String title) {
 
             }
@@ -99,20 +136,33 @@ public class GameActivity extends Activity implements ClientPort {
 
             }
         };
-        setMudclient(new mudclient(this));
         setContentView(gameView);
 
-        mudclient.packetHandler = new PacketHandler(mudclient);
+		synchronized (RETAINED_CLIENT_LOCK) {
+			mudclient existingClient = retainedClient;
+			if (existingClient != null && existingClient.threadState >= 0
+				&& existingClient.clientBaseThread != null
+				&& existingClient.clientBaseThread.isAlive()) {
+				setMudclient(existingClient);
+			} else {
+				setMudclient(new mudclient(this));
+				mudclient.packetHandler = new PacketHandler(mudclient);
 
-        if (mudclient.threadState >= 0) mudclient.threadState = 0;
+				if (mudclient.threadState >= 0) mudclient.threadState = 0;
 
-        osConfig.F_ANDROID_BUILD = true;
-        File externalSmokeDir = getExternalFilesDir(null);
-        Config.F_ANDROID_SMOKE_DIR = externalSmokeDir == null ? "" : externalSmokeDir.getAbsolutePath();
+				mudclient.startMainThread();
+				retainedClient = mudclient;
+				retainedClientBackgrounded = false;
+				retainedClientBackgroundedAtMillis = 0L;
+			}
+			retainedClientOwner = this;
+			mudclient.clientPort = this;
+			appInBackground = retainedClientBackgrounded;
+			backgroundedAtMillis = retainedClientBackgroundedAtMillis;
+		}
 
-        mudclient.startMainThread();
-
-        setInputImpl(new InputImpl(mudclient, gameView));
+		setInputImpl(new InputImpl(mudclient, gameView));
+		gameView.refreshViewportMetrics();
 
 		//Utils.context = getApplicationContext();
 
@@ -122,11 +172,32 @@ public class GameActivity extends Activity implements ClientPort {
 		setReceivers();
     }
 
+	private void configureMobileViewportWindow() {
+		Window window = getWindow();
+		window.setSoftInputMode(
+			WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+				| WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+		);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+			WindowManager.LayoutParams attributes = window.getAttributes();
+			attributes.layoutInDisplayCutoutMode =
+				WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+			window.setAttributes(attributes);
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			window.setDecorFitsSystemWindows(false);
+		}
+	}
+
 	@Override
 	protected void onDestroy() {
 		unsetReceivers();
 		unregisterBackHandler();
-		shutdownClientThread();
+		soundPlayer.stopAll();
+		Utils.detach(this);
+		if (isFinishing() && !isChangingConfigurations()) {
+			shutdownClientThread();
+		}
 		inputImpl = null;
 		gameView = null;
 		super.onDestroy();
@@ -136,6 +207,18 @@ public class GameActivity extends Activity implements ClientPort {
 		mudclient client = mudclient;
 		if (client == null) {
 			return;
+		}
+		synchronized (RETAINED_CLIENT_LOCK) {
+			// A stale Activity may finish after a replacement has rebound the same
+			// retained client. Only the current owner may terminate that client.
+			if (retainedClient != client || retainedClientOwner != this) {
+				mudclient = null;
+				return;
+			}
+			retainedClientOwner = null;
+			retainedClient = null;
+			retainedClientBackgrounded = false;
+			retainedClientBackgroundedAtMillis = 0L;
 		}
 
 		client.threadState = -1;
@@ -152,6 +235,9 @@ public class GameActivity extends Activity implements ClientPort {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
+		}
+		if (client.clientPort == this) {
+			client.clientPort = null;
 		}
 		mudclient = null;
 	}
@@ -190,38 +276,80 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public void networkChange(Network network, NetworkCapabilities networkCapabilities) {
-		boolean canDataConnect = false;
-		if (this.checkedNetworks) {
-			this.checkedNetworks = false;
-			this.cellularNetworks.clear();
-			this.wifiNetworks.clear();
+		if (network == null) {
+			return;
 		}
-		if (networkCapabilities != null) {
-			(networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ? this.cellularNetworks : this.wifiNetworks).add(network);
-		} else {
-			this.cellularNetworks.remove(network);
-			this.wifiNetworks.remove(network);
+		int kind = classifyNetwork(networkCapabilities);
+		synchronized (networkLock) {
+			validatedNetworks.remove(network);
+			if (kind != NETWORK_NONE) {
+				validatedNetworks.put(network, kind);
+			}
+			refreshConnectivityKindLocked();
 		}
-		this.wifiAvailable = !this.wifiNetworks.isEmpty();
-		if (!this.wifiAvailable && !this.cellularNetworks.isEmpty()) {
-			canDataConnect = true;
-		}
-		this.cellularAvailable = canDataConnect;
 	}
 
 	private void checkNetwork() {
-		this.cellularNetworks.clear();
-		this.wifiNetworks.clear();
 		ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 		if (connectivityManager == null) {
+			clearNetworks();
 			return;
 		}
-		Network activeNetwork = connectivityManager.getActiveNetwork();
-		NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
-		if (networkCapabilities != null && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-			networkChange(activeNetwork, networkCapabilities);
+		Map<Network, Integer> snapshot = new HashMap<>();
+		try {
+			Network network = connectivityManager.getActiveNetwork();
+			int kind = network == null
+				? NETWORK_NONE
+				: classifyNetwork(connectivityManager.getNetworkCapabilities(network));
+			if (network != null && kind != NETWORK_NONE) {
+				snapshot.put(network, kind);
+			}
+		} catch (RuntimeException ignored) {
+			snapshot.clear();
 		}
-		this.checkedNetworks = true;
+		synchronized (networkLock) {
+			validatedNetworks.clear();
+			validatedNetworks.putAll(snapshot);
+			refreshConnectivityKindLocked();
+		}
+	}
+
+	private int classifyNetwork(NetworkCapabilities capabilities) {
+		if (capabilities == null
+			|| !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+			|| !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+			return NETWORK_NONE;
+		}
+		if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+			return NETWORK_WIFI;
+		}
+		if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+			return NETWORK_CELLULAR;
+		}
+		return NETWORK_OTHER;
+	}
+
+	private void clearNetworks() {
+		synchronized (networkLock) {
+			validatedNetworks.clear();
+			connectivityKind = NETWORK_NONE;
+		}
+	}
+
+	private void refreshConnectivityKindLocked() {
+		int next = NETWORK_NONE;
+		for (int kind : validatedNetworks.values()) {
+			if (kind == NETWORK_WIFI) {
+				next = NETWORK_WIFI;
+				break;
+			}
+			if (kind == NETWORK_CELLULAR) {
+				next = NETWORK_CELLULAR;
+			} else if (next == NETWORK_NONE) {
+				next = NETWORK_OTHER;
+			}
+		}
+		connectivityKind = next;
 	}
 
 	private void setReceivers() {
@@ -254,10 +382,89 @@ public class GameActivity extends Activity implements ClientPort {
 		}
 	}
 
-    @Override
+	@Override
+	protected void onPause() {
+		long now = System.currentTimeMillis();
+		boolean notifyClient = false;
+		appInBackground = true;
+		synchronized (RETAINED_CLIENT_LOCK) {
+			if (mudclient != null && retainedClient == mudclient
+				&& retainedClientOwner == this) {
+				if (!retainedClientBackgrounded
+					|| retainedClientBackgroundedAtMillis <= 0L) {
+					retainedClientBackgroundedAtMillis = now;
+				}
+				retainedClientBackgrounded = true;
+				backgroundedAtMillis = retainedClientBackgroundedAtMillis;
+				notifyClient = true;
+			} else {
+				backgroundedAtMillis = now;
+			}
+		}
+		if (notifyClient) {
+			mudclient.noteAndroidActivityPaused();
+		}
+		soundPlayer.suspendForBackground();
+		super.onPause();
+	}
+
+	@Override
 	public void onResume() {
     	super.onResume();
+		soundPlayer.resumeForeground();
+		boolean resumedFromBackground = false;
+		long backgroundDuration = 0L;
+		synchronized (RETAINED_CLIENT_LOCK) {
+			if (mudclient != null && retainedClient == mudclient
+				&& retainedClientOwner == this) {
+				resumedFromBackground = retainedClientBackgrounded || appInBackground;
+				long backgroundStart = retainedClientBackgroundedAtMillis > 0L
+					? retainedClientBackgroundedAtMillis : backgroundedAtMillis;
+				if (resumedFromBackground && backgroundStart > 0L) {
+					backgroundDuration = Math.max(0L,
+						System.currentTimeMillis() - backgroundStart);
+				}
+				retainedClientBackgrounded = false;
+				retainedClientBackgroundedAtMillis = 0L;
+			}
+			backgroundedAtMillis = 0L;
+			appInBackground = false;
+		}
+		if (resumedFromBackground) {
+			suppressReconnectOverlayUntilMillis = System.currentTimeMillis() + 15000L;
+			if (mudclient != null) {
+				mudclient.noteAndroidActivityResumedFromBackground(backgroundDuration);
+			}
+		}
 		refreshInteractiveState();
+	}
+
+	@Override
+	public boolean dispatchTouchEvent(MotionEvent event) {
+		if (mudclient != null && event != null) {
+			int action = event.getActionMasked();
+			if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_UP
+					|| action == MotionEvent.ACTION_CANCEL) {
+				mudclient.logAndroidSmokeTouchEvent("activity", action,
+					Math.round(event.getX()), Math.round(event.getY()), true, -1, -1);
+			}
+		}
+		return super.dispatchTouchEvent(event);
+	}
+
+	@Override
+	public boolean isAppInBackground() {
+		return appInBackground;
+	}
+
+	@Override
+	public boolean shouldSuppressReconnectOverlay() {
+		return System.currentTimeMillis() < suppressReconnectOverlayUntilMillis;
+	}
+
+	@Override
+	public void setAfkMonitorActive(boolean active) {
+		soundPlayer.setAfkSuspended(active);
 	}
 
 	@Override
@@ -265,6 +472,9 @@ public class GameActivity extends Activity implements ClientPort {
 		super.onWindowFocusChanged(hasFocus);
 		if (hasFocus) {
 			refreshInteractiveState();
+			if (keyboardRequested && !keyboardShowing) {
+				requestKeyboardOnUiThread();
+			}
 		}
 	}
 
@@ -272,6 +482,7 @@ public class GameActivity extends Activity implements ClientPort {
 		updateHideUi();
 		checkNetwork();
 		if (gameView != null) {
+			gameView.refreshViewportMetrics();
 			gameView.requestFocus();
 			gameView.postInvalidate();
 		}
@@ -310,7 +521,28 @@ public class GameActivity extends Activity implements ClientPort {
 		});
 	}
 
-    @Override
+	@Override
+	public CredentialStore getCredentialStore() {
+		return credentialStore;
+	}
+
+	@Override
+	public int getTouchTargetClientPixels(int dp) {
+		if (gameView != null) {
+			return gameView.getTouchTargetClientPixels(dp);
+		}
+		return ClientPort.super.getTouchTargetClientPixels(dp);
+	}
+
+	@Override
+	public int getKeyboardTopClientPixel() {
+		if (gameView != null) {
+			return gameView.getKeyboardTopClientPixel();
+		}
+		return ClientPort.super.getKeyboardTopClientPixel();
+	}
+
+	@Override
     public boolean drawLoading(int i) {
         if (gameView == null) return false;
         return gameView.drawLoading(i);
@@ -400,7 +632,7 @@ public class GameActivity extends Activity implements ClientPort {
 
     @Override
     public void stopSoundPlayer() {
-        if (gameView != null) gameView.stopSoundPlayer();
+		soundPlayer.stopAll();
     }
 
     public mudclient getMudclient() {
@@ -419,31 +651,178 @@ public class GameActivity extends Activity implements ClientPort {
         this.inputImpl = inputImpl;
     }
 
-    public void drawKeyboard() {
-		if (gameView == null || mudclient == null) return;
-        InputMethodManager imm = (InputMethodManager) this
-                .getSystemService(Context.INPUT_METHOD_SERVICE);
-		if (imm == null) return;
-        gameView.requestFocus();
-        gameView.post(() -> imm.showSoftInput(gameView, InputMethodManager.SHOW_IMPLICIT));
-        osConfig.F_SHOWING_KEYBOARD = true;
-        if (Config.S_SIDE_MENU_TOGGLE) {
-        	hadSideMenu = mudclient.getOptionSideMenu();
-			mudclient.setOptionSideMenu(false);
+	public void drawKeyboard() {
+		if (gameView == null || mudclient == null || isFinishing() || isDestroyed()) {
+			return;
 		}
-    }
+		synchronized (keyboardLock) {
+			if (keyboardRequested || keyboardShowing) {
+				return;
+			}
+			keyboardRequested = true;
+			keyboardDismissRequested = false;
+			keyboardShowAttempts = 0;
+			keyboardRequestGeneration++;
+			osConfig.F_SHOWING_KEYBOARD = true;
+			hideSideMenuForKeyboardLocked();
+		}
+		requestKeyboardOnUiThread();
+	}
 
-    public void closeKeyboard() {
-		if (gameView == null) return;
-		InputMethodManager imm = (InputMethodManager) getSystemService(Activity.INPUT_METHOD_SERVICE);
-		if (imm != null) {
-			imm.hideSoftInputFromWindow(gameView.getWindowToken(), 0);
+	private void requestKeyboardOnUiThread() {
+		runOnUiThread(() -> {
+			RSCBitmapSurfaceView view = gameView;
+			int requestGeneration;
+			synchronized (keyboardLock) {
+				if (!keyboardRequested || keyboardShowing || keyboardDismissRequested || view == null) {
+					return;
+				}
+				if (!view.isAttachedToWindow() || !view.hasWindowFocus()) {
+					// onWindowFocusChanged retries once the editor can connect to an IME.
+					return;
+				}
+				if (keyboardShowAttempts >= MAX_KEYBOARD_SHOW_ATTEMPTS) {
+					abandonKeyboardRequestLocked();
+					return;
+				}
+				keyboardShowAttempts++;
+				requestGeneration = keyboardRequestGeneration;
+			}
+
+			if (!view.requestFocus()) {
+				scheduleKeyboardRetry(view, requestGeneration);
+				return;
+			}
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (imm == null) {
+				synchronized (keyboardLock) {
+					if (requestGeneration == keyboardRequestGeneration) {
+						abandonKeyboardRequestLocked();
+					}
+				}
+				return;
+			}
+
+			imm.restartInput(view);
+			view.post(() -> {
+				synchronized (keyboardLock) {
+					if (!keyboardRequested || keyboardShowing || keyboardDismissRequested
+						|| requestGeneration != keyboardRequestGeneration) {
+						return;
+					}
+				}
+				if (!imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)) {
+					scheduleKeyboardRetry(view, requestGeneration);
+				}
+			});
+		});
+	}
+
+	private void scheduleKeyboardRetry(RSCBitmapSurfaceView view, int requestGeneration) {
+		view.postDelayed(() -> {
+			synchronized (keyboardLock) {
+				if (!keyboardRequested || keyboardShowing || keyboardDismissRequested
+					|| requestGeneration != keyboardRequestGeneration) {
+					return;
+				}
+			}
+			requestKeyboardOnUiThread();
+		}, KEYBOARD_SHOW_RETRY_DELAY_MS);
+	}
+
+	public void closeKeyboard() {
+		RSCBitmapSurfaceView view = gameView;
+		synchronized (keyboardLock) {
+			keyboardRequested = false;
+			keyboardDismissRequested = true;
+			keyboardShowAttempts = 0;
+			keyboardRequestGeneration++;
+			osConfig.F_SHOWING_KEYBOARD = false;
+			restoreSideMenuAfterKeyboardLocked();
 		}
-        osConfig.F_SHOWING_KEYBOARD = false;
+		if (view == null) {
+			return;
+		}
+		runOnUiThread(() -> {
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (imm != null && view.isAttachedToWindow()) {
+				imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+			}
+		});
+	}
+
+	/** Called from the SurfaceView's window-inset listener on the UI thread. */
+	public void onImeVisibilityChanged(boolean visible) {
+		if (!isUiThread()) {
+			runOnUiThread(() -> onImeVisibilityChanged(visible));
+			return;
+		}
+		boolean reassertDismiss = false;
+		synchronized (keyboardLock) {
+			keyboardShowing = visible;
+			keyboardShowAttempts = 0;
+			if (visible) {
+				if (keyboardDismissRequested) {
+					reassertDismiss = true;
+				} else {
+					keyboardRequested = true;
+					osConfig.F_SHOWING_KEYBOARD = true;
+					hideSideMenuForKeyboardLocked();
+				}
+			} else {
+				keyboardRequested = false;
+				keyboardDismissRequested = false;
+				keyboardRequestGeneration++;
+				osConfig.F_SHOWING_KEYBOARD = false;
+				restoreSideMenuAfterKeyboardLocked();
+			}
+		}
+		if (reassertDismiss) {
+			// A previously accepted show request can race a later close.
+			// Reassert the close now that the IME has actually appeared.
+			RSCBitmapSurfaceView view = gameView;
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (view != null && imm != null && view.isAttachedToWindow()) {
+				view.post(() -> imm.hideSoftInputFromWindow(view.getWindowToken(), 0));
+			}
+		}
+	}
+
+	private boolean isUiThread() {
+		return android.os.Looper.myLooper() == android.os.Looper.getMainLooper();
+	}
+
+	private void abandonKeyboardRequestLocked() {
+		keyboardRequested = false;
+		keyboardDismissRequested = false;
+		keyboardShowAttempts = 0;
+		keyboardRequestGeneration++;
+		osConfig.F_SHOWING_KEYBOARD = false;
+		restoreSideMenuAfterKeyboardLocked();
+	}
+
+	private void hideSideMenuForKeyboardLocked() {
+		if (!Config.S_SIDE_MENU_TOGGLE || sideMenuHiddenForKeyboard || mudclient == null) {
+			return;
+		}
+		hadSideMenu = mudclient.getOptionSideMenu();
+		mudclient.setOptionSideMenu(false);
+		sideMenuHiddenForKeyboard = true;
+	}
+
+	private void restoreSideMenuAfterKeyboardLocked() {
+		if (!sideMenuHiddenForKeyboard) {
+			return;
+		}
 		if (Config.S_SIDE_MENU_TOGGLE && mudclient != null) {
 			mudclient.setOptionSideMenu(hadSideMenu);
 		}
-    }
+		sideMenuHiddenForKeyboard = false;
+	}
+
+	public boolean isKeyboardShowing() {
+		return keyboardRequested || keyboardShowing;
+	}
 
 	@Override
 	public boolean openUrl(String url) {
@@ -485,6 +864,9 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public Sprite getBattery(int level) {
+		if (keyboardShowing) {
+			return null;
+		}
 		if (gameView != null) {
 			if (batteryCharging) {
 				return gameView.getBattery(8);
@@ -504,18 +886,25 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	public Sprite getConnectivity(int level) {
+		if (keyboardShowing) {
+			return null;
+		}
 		if (gameView != null) {
-			if (!wifiAvailable && !cellularAvailable) return gameView.getConnectivity(0);
-			else if (wifiAvailable) return gameView.getConnectivity(2);
-			else return gameView.getConnectivity(1);
+			if (connectivityKind == NETWORK_NONE) return gameView.getConnectivity(0);
+			if (connectivityKind == NETWORK_CELLULAR) return gameView.getConnectivity(1);
+			return gameView.getConnectivity(2);
 		}
 		return null;
 	}
 
 	public String getConnectivityText() {
-		if (!wifiAvailable && !cellularAvailable) return "NONE";
-		else if (wifiAvailable) return "WIFI";
-		else return "CELL";
+		if (keyboardShowing) {
+			return "";
+		}
+		if (connectivityKind == NETWORK_NONE) return "NONE";
+		if (connectivityKind == NETWORK_WIFI) return "WIFI";
+		if (connectivityKind == NETWORK_CELLULAR) return "CELL";
+		return "NET";
 	}
 
     @Override

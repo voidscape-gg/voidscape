@@ -11,6 +11,9 @@ public final class VoidSubscription {
 	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
 	public static final int STARTER_CARD_AVAILABLE = 1;
 	public static final int STARTER_CARD_CLAIMED = 2;
+	public static final String LAUNCH_CARD_CACHE_PREFIX = "launch_subcard_2026:";
+	public static final int LAUNCH_CARD_AVAILABLE = 1;
+	public static final int LAUNCH_CARD_CLAIMED = 2;
 	public static final String SIGNUP_CODE_CACHE_PREFIX = "signup_code:";
 	public static final int SIGNUP_CODE_AVAILABLE = 1;
 	public static final int SIGNUP_CODE_REDEEMED = 2;
@@ -18,6 +21,8 @@ public final class VoidSubscription {
 	private static final int SIGNUP_CODE_MAX_LENGTH = 20;
 	public static final int CARD_ITEM_ID = ItemId.SUBSCRIPTION_CARD.id();
 	public static final int PROFILE_CLIENT_VERSION = 10055;
+	public static final int CHAT_NAME_CLIENT_VERSION = 10124;
+	public static final int CHAT_NAME_ICON_FLAG = 0x40000000;
 	public static final double COMBAT_EXP_BONUS = 1.0D;
 	public static final double SKILLING_EXP_BONUS = 1.0D;
 	public static final long DURATION_MILLIS = 7L * 24L * 60L * 60L * 1000L;
@@ -37,25 +42,12 @@ public final class VoidSubscription {
 		return expiresAt > System.currentTimeMillis();
 	}
 
-	public static long activate(Player player) {
-		if (player == null) {
-			return 0L;
+	public static int withChatNameFlag(Player viewer, Player sender, int icon) {
+		if (viewer == null || sender == null || !viewer.isUsingCustomClient()
+			|| viewer.getClientVersion() < CHAT_NAME_CLIENT_VERSION) {
+			return icon;
 		}
-		String cacheKey = subscriptionCacheKey(player);
-		if (cacheKey.isEmpty()) {
-			return 0L;
-		}
-		long now = System.currentTimeMillis();
-		long base = Math.max(now, getSubscriptionExpiresAt(player, true));
-		long expiresAt = Long.MAX_VALUE - base < DURATION_MILLIS ? Long.MAX_VALUE : base + DURATION_MILLIS;
-		try {
-			player.getWorld().getServer().getDatabase()
-				.querySaveGlobalCacheLong(cacheKey, expiresAt);
-			cacheAccountExpiresAt(player, expiresAt);
-		} catch (Exception ex) {
-			return 0L;
-		}
-		return expiresAt;
+		return isActive(sender) ? icon | CHAT_NAME_ICON_FLAG : icon;
 	}
 
 	public static long getExpiresAt(Player player) {
@@ -157,6 +149,17 @@ public final class VoidSubscription {
 		return STARTER_CARD_CACHE_PREFIX + accountId;
 	}
 
+	public static String launchCardCacheKey(Player player) {
+		return player == null ? "" : launchCardCacheKey(player.getDatabaseID());
+	}
+
+	public static String launchCardCacheKey(int playerId) {
+		if (playerId <= 0) {
+			return "";
+		}
+		return LAUNCH_CARD_CACHE_PREFIX + playerId;
+	}
+
 	public static void refreshAccountSubscription(Player player) {
 		getSubscriptionExpiresAt(player, true);
 	}
@@ -175,7 +178,7 @@ public final class VoidSubscription {
 		return PLAYER_SUBSCRIPTION_CACHE_PREFIX + playerId;
 	}
 
-	private static String subscriptionCacheKey(Player player) {
+	static String subscriptionCacheKey(Player player) {
 		int accountId = getAccountId(player);
 		if (accountId > 0) {
 			return accountSubscriptionCacheKey(accountId);
@@ -199,15 +202,40 @@ public final class VoidSubscription {
 			Long expiresAt = player.getWorld().getServer().getDatabase()
 				.queryLoadGlobalCacheLong(cacheKey);
 			long value = expiresAt == null ? 0L : expiresAt;
-			cacheAccountExpiresAt(player, value);
-			return value;
+			return cacheAccountExpiresAt(player, value);
 		} catch (Exception ex) {
-			return cached == null ? 0L : cached;
+			final Long latest = player.getAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, null);
+			return latest == null ? 0L : latest;
 		}
 	}
 
-	private static void cacheAccountExpiresAt(Player player, long expiresAt) {
-		player.setAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, expiresAt);
-		player.setAttribute(ACCOUNT_SUBSCRIPTION_REFRESH_ATTRIBUTE, System.currentTimeMillis());
+	static long cacheAccountExpiresAt(Player player, long expiresAt) {
+		synchronized (player) {
+			final Long cached = player.getAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, null);
+			final long monotonicExpiry = monotonicSubscriptionExpiry(cached, expiresAt);
+			if (cached != null && monotonicExpiry == cached && expiresAt < cached) {
+				return cached;
+			}
+			player.setAttribute(ACCOUNT_SUBSCRIPTION_ATTRIBUTE, monotonicExpiry);
+			player.setAttribute(ACCOUNT_SUBSCRIPTION_REFRESH_ATTRIBUTE, System.currentTimeMillis());
+			return monotonicExpiry;
+		}
+	}
+
+	static long monotonicSubscriptionExpiry(Long cached, long observed) {
+		return cached == null ? observed : Math.max(cached, observed);
+	}
+
+	static void cacheCommittedSubscriptionExpiresAt(Player player, long expiresAt) {
+		final int accountId = getAccountId(player);
+		cacheAccountExpiresAt(player, expiresAt);
+		if (accountId <= 0) {
+			return;
+		}
+		for (Player online : player.getWorld().getPlayers()) {
+			if (online != player && getAccountId(online) == accountId) {
+				cacheAccountExpiresAt(online, expiresAt);
+			}
+		}
 	}
 }

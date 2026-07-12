@@ -8,6 +8,8 @@ import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.PlayerDeathContext;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.struct.EquipRequest;
 import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.plugins.DefaultHandler;
@@ -26,7 +28,7 @@ public class Default implements DefaultHandler,
 	OpInvTrigger, UseObjTrigger, UseInvTrigger, RemoveObjTrigger,
 	UseNpcTrigger, UseLocTrigger, UsePlayerTrigger, UseBoundTrigger, WearObjTrigger,
 	OpNpcTrigger, OpLocTrigger, TakeObjTrigger, AttackPlayerTrigger, TimedEventTrigger,
-	AttackNpcTrigger, PlayerDeathTrigger, KillNpcTrigger, PlayerLoginTrigger,
+	AttackNpcTrigger, PlayerDeathTrigger, PlayerDeathDropTrigger, KillNpcTrigger, PlayerLoginTrigger,
 	PlayerLogoutTrigger, SpellInvTrigger, SpellPlayerTrigger, SpellNpcTrigger,
 	SpellLocTrigger, EscapeNpcTrigger, PlayerKilledPlayerTrigger, PlayerRangePlayerTrigger,
 	PlayerRangeNpcTrigger, StartupTrigger, TalkNpcTrigger, OpBoundTrigger, WineFermentTrigger {
@@ -233,6 +235,9 @@ public class Default implements DefaultHandler,
 		}
 
 		player.startCombat(affectedMob);
+		if (player.getOpponent() == affectedMob && affectedMob.getOpponent() == player) {
+			WildernessRules.markVoidDungeonPvp(player, affectedMob);
+		}
 		if (config().WANT_PARTIES) {
 			if (player.getParty() != null) {
 				player.getParty().sendParty();
@@ -276,6 +281,16 @@ public class Default implements DefaultHandler,
 
 	@Override
 	public boolean blockPlayerDeath(Player player) {
+		return false;
+	}
+
+	@Override
+	public void onPlayerDeathDrop(Player player, PlayerDeathContext context) {
+		// No default actions
+	}
+
+	@Override
+	public boolean blockPlayerDeathDrop(Player player, PlayerDeathContext context) {
 		return false;
 	}
 

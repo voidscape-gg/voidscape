@@ -54,6 +54,21 @@ VOID_ISLAND_INTRO_CENTER_X = 24
 VOID_ISLAND_INTRO_CENTER_Y = 37
 LEGACY_VOID_ISLAND_SECTORS = ("h0x63y55",)
 
+# Tutorial Isle: linear gated newbie area in the same ocean sector, west of
+# Void Island (2-tile water channels on both sides; ocean is the perimeter).
+# Three chambers south-to-north joined at the guide lane (x=40):
+#   C1 "The Landing" (camp) -> gate y=31 -> C2 "The Ring" (spar) -> gate y=23
+#   -> C3 "The Scar" (ambush). Gate gaps at the lane stay physically open;
+# passage used to be script-gated by the retired guided onboarding runtime.
+TUTORIAL_ISLE_LANE_X = 40
+TUTORIAL_ISLE_RING_Y = 27
+TUTORIAL_ISLE_PAD_Y = 37
+TUTORIAL_ISLE_C1 = (34, 45, 31, 40)  # (minX, maxX, minY, maxY) "The Landing"
+TUTORIAL_ISLE_C2 = (34, 45, 23, 30)  # "The Ring"
+TUTORIAL_ISLE_C3 = (37, 43, 18, 22)  # "The Scar"
+TUTORIAL_ISLE_GATE1_Y = 31
+TUTORIAL_ISLE_GATE2_Y = 23
+
 CATCHSIM_SECTORS = (
     # (sector name, sector base X, sector base Y, arena X offset, arena Y offset)
     ("h0x55y38", 336, 48, 0, 0),
@@ -100,6 +115,16 @@ VOIDRUSH_ARENA_MIN_Y, VOIDRUSH_ARENA_MAX_Y = 56, 86
 VOIDRUSH_CENTER_X = 505
 VOIDRUSH_CENTER_Y = 71
 
+UNDEAD_SIEGE_SECTOR = "h0x60y39"
+UNDEAD_SIEGE_SECTOR_BASE_X = 576
+UNDEAD_SIEGE_SECTOR_BASE_Y = 96
+UNDEAD_SIEGE_CENTER_X = 600
+UNDEAD_SIEGE_CENTER_Y = 120
+UNDEAD_SIEGE_ISLAND_RADIUS_X = 21.0
+UNDEAD_SIEGE_ISLAND_RADIUS_Y = 20.0
+UNDEAD_SIEGE_HOUSE_MIN_X, UNDEAD_SIEGE_HOUSE_MAX_X = 587, 613
+UNDEAD_SIEGE_HOUSE_MIN_Y, UNDEAD_SIEGE_HOUSE_MAX_Y = 106, 133
+
 VOIDARENA_SECTOR = "h3x60y38"
 VOIDARENA_SECTOR_BASE_X = 576
 VOIDARENA_SECTOR_BASE_Y = 2880
@@ -131,9 +156,17 @@ VOIDARENA_SKY_SECTORS = (
 HIGHWALL = 7
 HIGH_DOOR = 8
 WALL = 0
+WINDOW = 3
 RAILINGS = 5
 DOOR = 2
 WEB = 24               # vanilla spider web — CutWeb.java handles cutting (kept for fallback)
+TIMBER_WALL = 14
+TIMBER_WINDOW = 15
+MOSSY_BRICKS = 18
+CRUMBLED_WALL = 41
+PLANKS_WINDOW = 126
+LOW_FENCE = 127
+PLANKS_TIMBER = 144
 VOID_WALL = 214        # voidbricks-textured sanctum wall (DoorDef slot 214)
 VOID_HIGHWALL = 215    # voidouter-textured perimeter wall, tall (DoorDef slot 215)
 VOID_SIGIL_WALL = 216  # voidsigilwall accent (DoorDef slot 216) — pentagram mural
@@ -154,6 +187,13 @@ FLOOR_RITUAL = 27     # Void Floor Accent (TileDef 26): bright magenta-purple �
 FLOOR_MID    = 28     # Void Floor Mid (TileDef 27): mid-purple — ring around ritual circle
 FLOOR_V3_STONE = 29   # Void V3 generated cracked-stone floor (TileDef 28 -> TextureDef 64)
 FLOOR_LAVA = 11       # Stock lava tile (TileDef 10 -> TextureDef 31); used as non-walkable backdrop.
+FLOOR_HOUSE = 3       # Stock building floor used by many RSC houses.
+FLOOR_HOUSE_DARK = 5  # Stock darker building floor.
+FLOOR_DIRT = 13       # Stock walkable dirt/ruins floor.
+FLOOR_ASH = 15        # Stock walkable muted ground.
+FLOOR_GRAVEL = 16     # Stock walkable stony ground.
+FLOOR_SIEGE_PLANKS = 30
+FLOOR_SIEGE_MOSSY_STONE = 31
 
 # === Enclave footprint ===
 ENCLAVE_MIN_X, ENCLAVE_MAX_X = 98, 128
@@ -187,46 +227,42 @@ def enclave_floor_tiles():
 
 
 def enclave_floor_overlay(x: int, y: int) -> int:
-    """Choose a floor overlay for the V3 generated ritual-court pattern."""
-    center_x, center_y = 113, 315
-    dx = abs(x - center_x)
-    dy = abs(y - center_y)
-    dist2 = dx * dx + dy * dy
+    """Choose restrained district floors and readable circulation inlays."""
+    # Small ritual accents identify the altar and both Rift pads without
+    # turning the whole courtyard into the old high-contrast purple cross.
+    if (y == 305 and 110 <= x <= 116) or (x == 113 and 303 <= y <= 307):
+        return FLOOR_RITUAL
+    if ((x in (115, 118) and 311 <= y <= 314)
+            or (y in (311, 314) and 115 <= x <= 118)):
+        return FLOOR_RITUAL
+    if ((x in (112, 115) and 320 <= y <= 323)
+            or (y in (320, 323) and 112 <= x <= 115)):
+        return FLOOR_RITUAL
+    if (x, y) in ((112, 314), (114, 314), (112, 316), (114, 316)):
+        return FLOOR_RITUAL
 
-    if (dx <= 1 and dy <= 1) or (dx == 0 and dy <= 4) or (dy == 0 and dx <= 4):
-        return FLOOR_RITUAL
-    if 8 <= dist2 <= 18:
+    # Mid-tone stone appears only at the four gate aprons. A continuous floor
+    # cross reads as oversized geometry at the classic camera scale.
+    if ((112 <= x <= 114 and 300 <= y <= 302)
+            or (112 <= x <= 114 and 329 <= y <= 330)
+            or (98 <= x <= 100 and 314 <= y <= 316)
+            or (126 <= x <= 128 and 314 <= y <= 316)):
         return FLOOR_MID
-    if x == center_x or y == center_y:
-        return FLOOR_MID
-    if (x, y) in (
-        (106, 306), (120, 306),
-        (105, 315), (121, 315),
-        (110, 326), (116, 326),
-    ):
-        return FLOOR_RITUAL
+
+    # Only the surviving roof wings use an indoor floor. Every open court keeps
+    # one cracked-stone ground language instead of rectangular floor patches.
+    if 303 <= y <= 308 and (107 <= x <= 110 or 117 <= x <= 120):
+        return FLOOR_INDOOR
     return FLOOR_V3_STONE
 
 
 def enclave_roof_tiles():
-    """Return tiles covered by V3 generated roofs when the client shows roofs."""
+    """Return the two surviving roof wings over the northern sanctuary."""
     roof = set()
-    # North sanctum.
-    for x in range(106, 121):
-        for y in range(304, 310):
-            roof.add((x, y))
-    # West bank/shop hut.
-    for x in range(102, 109):
-        for y in range(312, 320):
-            roof.add((x, y))
-    # East healing-pool hut.
-    for x in range(118, 125):
-        for y in range(312, 320):
-            roof.add((x, y))
-    # South ritual hall.
-    for x in range(108, 119):
-        for y in range(324, 329):
-            roof.add((x, y))
+    for min_x, max_x in ((107, 110), (117, 120)):
+        for x in range(min_x, max_x + 1):
+            for y in range(303, 309):
+                roof.add((x, y))
     return roof
 
 
@@ -267,44 +303,65 @@ def enclave_walls():
             (x + 1, y, x + 1, y, 1),
         ):
             if (nx, ny) not in floor and (wx, wy, direction) not in gates:
-                wall_id = VOID_V3_SIGIL if (wx, wy, direction) in gate_flanks else VOID_V3_BASTION
+                key = (wx, wy, direction)
+                surviving_bastion = (
+                    (wx <= 103 and wy <= 305)
+                    or (wx >= 123 and wy <= 305)
+                    or (wx >= 123 and wy >= 325)
+                )
+                near_gate = (
+                    (direction == 0 and wy in (300, 331) and abs(wx - 113) <= 4)
+                    or (direction == 1 and wx in (98, 129) and abs(wy - 315) <= 4)
+                )
+                if key in gate_flanks:
+                    wall_id = VOID_V3_SIGIL
+                elif surviving_bastion:
+                    wall_id = VOID_V3_BASTION
+                elif near_gate:
+                    wall_id = VOID_V3_WALL
+                else:
+                    wall_id = VOID_V3_ROOF_EDGE
                 b(wx, wy, direction, wall_id)
 
-    # North sanctum. Larger shrine with a five-tile south entrance.
-    for x in range(105, 122):
-        b(x, 303, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
-        if x < 111 or x > 115:
-            b(x, 310, 0, VOID_V3_WALL)
-    for y in range(303, 310):
-        b(105, y, 1, VOID_V3_WINDOW if y in (305, 307) else VOID_V3_WALL)
-        b(122, y, 1, VOID_V3_WINDOW if y in (305, 307) else VOID_V3_WALL)
+    # Hall of Oaths. Two roofed wings survive around a broken central aisle;
+    # the broad south mouth and fractures in both side walls keep it readable.
+    for x in list(range(106, 111)) + list(range(116, 121)):
+        b(x, 302, 0, VOID_V3_SIGIL if x in (108, 118) else VOID_V3_WALL)
+    for y in range(303, 309):
+        if y == 306:
+            continue
+        b(106, y, 1, VOID_V3_WINDOW if y in (304, 308) else VOID_V3_WALL)
+        b(121, y, 1, VOID_V3_WINDOW if y in (304, 308) else VOID_V3_WALL)
+    for x in list(range(106, 109)) + list(range(119, 121)):
+        b(x, 309, 0, VOID_V3_ROOF_EDGE)
 
-    # West bank/shop hut. Open east into the courtyard with a broad mouth.
-    for x in range(101, 109):
-        b(x, 311, 0, VOID_V3_SIGIL if x in (104, 105) else VOID_V3_WALL)
-        b(x, 320, 0, VOID_V3_WALL)
-    for y in range(311, 320):
-        b(101, y, 1, VOID_V3_WINDOW if y in (314, 317) else VOID_V3_WALL)
-        if y not in (315, 316):
-            b(109, y, 1, VOID_V3_WALL)
+    # Quartermaster Court. Low north/south remnants frame an open yard; the
+    # west gate corridor and the whole courtyard-facing east side stay open.
+    for x in range(100, 108):
+        b(x, 311, 0, VOID_V3_SIGIL if x == 103 else VOID_V3_ROOF_EDGE)
+        b(x, 320, 0, VOID_V3_SIGIL if x == 105 else VOID_V3_ROOF_EDGE)
+    for y in (311, 312, 319, 320):
+        b(100, y, 1, VOID_V3_WINDOW if y in (312, 319) else VOID_V3_ROOF_EDGE)
 
-    # East healing-pool hut. Open west into the courtyard.
-    for x in range(117, 125):
-        b(x, 311, 0, VOID_V3_SIGIL if x in (121, 122) else VOID_V3_WALL)
-        b(x, 320, 0, VOID_V3_WALL)
-    for y in range(311, 320):
-        if y not in (315, 316):
-            b(117, y, 1, VOID_V3_WALL)
-        b(125, y, 1, VOID_V3_WINDOW if y in (314, 317) else VOID_V3_WALL)
+    # Mend-and-Descent Court. The low arcade leaves both the central approach
+    # and the northern two-tile bypass to the east gate unobstructed.
+    for x in range(119, 127):
+        b(x, 310, 0, VOID_V3_SIGIL if x == 123 else VOID_V3_ROOF_EDGE)
+        b(x, 320, 0, VOID_V3_SIGIL if x == 121 else VOID_V3_ROOF_EDGE)
+    for y in (311, 312, 319, 320):
+        b(127, y, 1, VOID_V3_WINDOW if y in (312, 319) else VOID_V3_ROOF_EDGE)
 
-    # South ritual hall.
-    for x in range(107, 120):
-        if x < 111 or x > 115:
-            b(x, 323, 0, VOID_V3_WALL)
-        b(x, 329, 0, VOID_V3_SIGIL if x in (112, 113, 114) else VOID_V3_WALL)
-    for y in range(323, 329):
-        b(107, y, 1, VOID_V3_WINDOW if y == 326 else VOID_V3_WALL)
-        b(120, y, 1, VOID_V3_WINDOW if y == 326 else VOID_V3_WALL)
+    # Riftward Yard. Broken low walls frame two full bypasses around the Arena
+    # Rift and leave a five-tile opening toward the south gate.
+    for x in list(range(107, 110)) + list(range(118, 121)):
+        b(x, 323, 0, VOID_V3_ROOF_EDGE)
+    for y in range(324, 329):
+        if y == 326:
+            continue
+        b(107, y, 1, VOID_V3_WINDOW if y in (325, 327) else VOID_V3_ROOF_EDGE)
+        b(121, y, 1, VOID_V3_WINDOW if y in (325, 327) else VOID_V3_ROOF_EDGE)
+    for x in list(range(107, 111)) + list(range(116, 121)):
+        b(x, 329, 0, VOID_V3_SIGIL if x in (108, 118) else VOID_V3_ROOF_EDGE)
 
     return walls
 
@@ -395,6 +452,71 @@ def patch_void_island_sector(sector_bytes: bytes) -> bytes:
         buf[off + 4] = 0
         buf[off + 5] = 0
         buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    return bytes(buf)
+
+
+def tutorial_isle_tiles():
+    """Land mask for the Tutorial Isle: three chamfered chamber rects."""
+    land = set()
+    for min_x, max_x, min_y, max_y in (TUTORIAL_ISLE_C1, TUTORIAL_ISLE_C2, TUTORIAL_ISLE_C3):
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if x in (min_x, max_x) and y in (min_y, max_y):
+                    continue  # chamfer corners for a less boxy silhouette
+                land.add((x, y))
+    return land
+
+
+def patch_tutorial_isle_sector(sector_bytes: bytes) -> bytes:
+    """Carve the gated Tutorial Isle into the Void Island ocean sector."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - VOID_ISLAND_SECTOR_BASE_X
+        ty = worldY - VOID_ISLAND_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {VOID_ISLAND_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    land = tutorial_isle_tiles()
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        arrival_pad = abs(x - TUTORIAL_ISLE_LANE_X) <= 1 and abs(y - TUTORIAL_ISLE_PAD_Y) <= 1
+        ring_center = abs(x - TUTORIAL_ISLE_LANE_X) <= 1 and abs(y - TUTORIAL_ISLE_RING_Y) <= 1
+        ring_halo = 4 <= (x - TUTORIAL_ISLE_LANE_X) ** 2 + (y - TUTORIAL_ISLE_RING_Y) ** 2 <= 9
+
+        buf[off + 0] = 52 if edge else 68
+        buf[off + 1] = (112 + ((x * 7 + y * 3) % 20)) & 0xFF
+        if y <= TUTORIAL_ISLE_C3[3]:
+            buf[off + 2] = FLOOR_V3_STONE  # the Scar: cracked stone
+        elif arrival_pad or ring_center:
+            buf[off + 2] = FLOOR_RITUAL
+        elif ring_halo or x == TUTORIAL_ISLE_LANE_X:
+            buf[off + 2] = FLOOR_MID
+        else:
+            buf[off + 2] = FLOOR_INDOOR
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    # Gate fences: dir-0 (east-west) walls live in the verticalWall byte (5),
+    # boundary between (x, y-1) and (x, y). Lane tile stays open (script-gated);
+    # sigil panels flank the gap, low fences span the rest.
+    def fence_row(y, min_x, max_x):
+        for x in range(min_x, max_x + 1):
+            if x == TUTORIAL_ISLE_LANE_X:
+                continue
+            if (x, y) not in land or (x, y - 1) not in land:
+                continue  # chamfered corners fall back to ocean, no fence needed
+            door_id = VOID_V3_SIGIL if abs(x - TUTORIAL_ISLE_LANE_X) == 1 else LOW_FENCE
+            buf[tile_offset(x, y) + 5] = (door_id + 1) & 0xFF
+
+    fence_row(TUTORIAL_ISLE_GATE1_Y, TUTORIAL_ISLE_C1[0], TUTORIAL_ISLE_C1[1])
+    fence_row(TUTORIAL_ISLE_GATE2_Y, TUTORIAL_ISLE_C3[0], TUTORIAL_ISLE_C3[1])
 
     return bytes(buf)
 
@@ -617,6 +739,211 @@ def patch_colossus_sector(sector_bytes: bytes) -> bytes:
     return bytes(buf)
 
 
+def undead_siege_island_tiles():
+    """Return a broad but bounded island tile mask for the Undead Siege manor arena."""
+    land = set()
+    for x in range(UNDEAD_SIEGE_CENTER_X - 23, UNDEAD_SIEGE_CENTER_X + 24):
+        for y in range(UNDEAD_SIEGE_CENTER_Y - 22, UNDEAD_SIEGE_CENTER_Y + 23):
+            nx = abs(x - UNDEAD_SIEGE_CENTER_X) / UNDEAD_SIEGE_ISLAND_RADIUS_X
+            ny = abs(y - UNDEAD_SIEGE_CENTER_Y) / UNDEAD_SIEGE_ISLAND_RADIUS_Y
+            # The lower powers round the island enough to read as landmass, while
+            # the slight noise breaks up the perfect arena-disc silhouette.
+            wobble = ((x * 17 + y * 11) % 7 - 3) * 0.012
+            if (nx ** 3.2) + (ny ** 3.2) <= 1.0 + wobble:
+                land.add((x, y))
+    return land
+
+
+def undead_siege_house_tiles():
+    """Return the ruined house floor, including the front porch deck."""
+    house = {
+        (x, y)
+        for x in range(UNDEAD_SIEGE_HOUSE_MIN_X, UNDEAD_SIEGE_HOUSE_MAX_X + 1)
+        for y in range(UNDEAD_SIEGE_HOUSE_MIN_Y, UNDEAD_SIEGE_HOUSE_MAX_Y + 1)
+    }
+    for x in range(593, 608):
+        for y in range(132, 137):
+            house.add((x, y))
+    for x in range(596, 605):
+        for y in range(104, 109):
+            house.add((x, y))
+    return house
+
+
+def undead_siege_floor_overlay(x: int, y: int, house: bool, edge: bool) -> int:
+    if house:
+        porch_or_stoop = y >= 132 or y <= 108
+        central_stain = x == UNDEAD_SIEGE_CENTER_X and y == UNDEAD_SIEGE_CENTER_Y
+        north_south_hall = 598 <= x <= 602
+        east_west_hall = 116 <= y <= 124
+        if central_stain:
+            return FLOOR_INDOOR
+        if (x + y) % 17 == 0:
+            return FLOOR_SIEGE_MOSSY_STONE
+        if porch_or_stoop or north_south_hall or east_west_hall:
+            return FLOOR_SIEGE_PLANKS
+        return FLOOR_SIEGE_PLANKS
+    path = (
+        (598 <= x <= 602 and (101 <= y <= 109 or 131 <= y <= 139))
+        or (117 <= y <= 123 and (581 <= x <= 590 or 611 <= x <= 619))
+    )
+    if path:
+        return FLOOR_SIEGE_MOSSY_STONE
+    if edge:
+        return FLOOR_INDOOR
+    if (x * 3 + y * 5) % 11 == 0:
+        return FLOOR_SIEGE_MOSSY_STONE
+    return FLOOR_INDOOR
+
+
+def undead_siege_roof_tiles():
+    """Give the large manor a broken roof silhouette when roofs are enabled."""
+    roof = set()
+    for x in range(UNDEAD_SIEGE_HOUSE_MIN_X + 1, UNDEAD_SIEGE_HOUSE_MAX_X):
+        for y in range(UNDEAD_SIEGE_HOUSE_MIN_Y + 1, UNDEAD_SIEGE_HOUSE_MAX_Y):
+            if 597 <= x <= 603 and 116 <= y <= 124:
+                continue
+            if (x + y) % 13 == 0:
+                continue
+            roof.add((x, y))
+    return roof
+
+
+def undead_siege_walls():
+    """Yield (worldX, worldY, direction, doorDefId) for a zombie-house manor."""
+    walls = []
+    seen = set()
+
+    def b(x, y, direction, id_):
+        key = (x, y, direction)
+        if key in seen:
+            return
+        seen.add(key)
+        walls.append((x, y, direction, id_))
+
+    def segment_id(x, y, direction):
+        if (x + y + direction) % 11 == 0:
+            return CRUMBLED_WALL
+        if (x + y) % 7 == 0:
+            return TIMBER_WINDOW
+        if (x + y) % 5 == 0:
+            return MOSSY_BRICKS
+        return TIMBER_WALL
+
+    # North/south faces. Wide gaps are deliberate zombie entry breaches.
+    for x in range(UNDEAD_SIEGE_HOUSE_MIN_X, UNDEAD_SIEGE_HOUSE_MAX_X + 1):
+        if x not in range(597, 604):
+            b(x, UNDEAD_SIEGE_HOUSE_MIN_Y, 0, segment_id(x, UNDEAD_SIEGE_HOUSE_MIN_Y, 0))
+        if x not in range(596, 605):
+            b(x, UNDEAD_SIEGE_HOUSE_MAX_Y + 1, 0, segment_id(x, UNDEAD_SIEGE_HOUSE_MAX_Y + 1, 0))
+
+    # West/east faces.
+    for y in range(UNDEAD_SIEGE_HOUSE_MIN_Y, UNDEAD_SIEGE_HOUSE_MAX_Y + 1):
+        if y not in range(117, 124):
+            b(UNDEAD_SIEGE_HOUSE_MIN_X, y, 1, segment_id(UNDEAD_SIEGE_HOUSE_MIN_X, y, 1))
+        if y not in range(116, 123):
+            b(UNDEAD_SIEGE_HOUSE_MAX_X + 1, y, 1, segment_id(UNDEAD_SIEGE_HOUSE_MAX_X + 1, y, 1))
+
+    # Broken interior rooms around a broad central lane. Door gaps stay wide so
+    # the horde does not feel like it is fighting the pathfinder.
+    for x in range(590, 610):
+        if x not in range(597, 604):
+            b(x, 116, 0, PLANKS_TIMBER if x % 4 else TIMBER_WINDOW)
+        if x not in range(596, 605):
+            b(x, 125, 0, PLANKS_TIMBER if x % 3 else TIMBER_WINDOW)
+    for y in range(109, 132):
+        if y not in range(115, 119) and y not in range(123, 127):
+            b(596, y, 1, PLANKS_TIMBER if y % 4 else PLANKS_WINDOW)
+        if y not in range(114, 118) and y not in range(122, 126):
+            b(604, y, 1, PLANKS_TIMBER if y % 3 else PLANKS_WINDOW)
+
+    # Porch railings and a rear stoop make the house outline read from the
+    # isometric camera without enclosing the player.
+    for x in range(593, 608):
+        if x not in range(598, 603):
+            b(x, 137, 0, LOW_FENCE)
+        if x not in range(598, 603):
+            b(x, 104, 0, LOW_FENCE)
+    for y in range(132, 137):
+        b(593, y, 1, LOW_FENCE)
+        b(608, y, 1, LOW_FENCE)
+
+    # Low barricades around the shoreline prevent accidental arena exits while
+    # still letting the main play space feel like an outdoor ruin.
+    land = undead_siege_island_tiles()
+
+    def perimeter_id(x, y, direction):
+        if (x + y + direction) % 17 == 0:
+            return CRUMBLED_WALL
+        if (x * 3 + y + direction) % 13 == 0:
+            return RAILINGS
+        return LOW_FENCE
+
+    for x, y in sorted(land):
+        if (x, y - 1) not in land:
+            b(x, y, 0, perimeter_id(x, y, 0))
+        if (x, y + 1) not in land:
+            b(x, y + 1, 0, perimeter_id(x, y + 1, 0))
+        if (x - 1, y) not in land:
+            b(x, y, 1, perimeter_id(x, y, 1))
+        if (x + 1, y) not in land:
+            b(x + 1, y, 1, perimeter_id(x + 1, y, 1))
+
+    return walls
+
+
+def patch_undead_siege_sector(sector_bytes: bytes) -> bytes:
+    """Bake an ocean-isolated island and large ruined manor for Undead Siege."""
+    assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
+    buf = bytearray(sector_bytes)
+
+    def tile_offset(worldX, worldY):
+        tx = worldX - UNDEAD_SIEGE_SECTOR_BASE_X
+        ty = worldY - UNDEAD_SIEGE_SECTOR_BASE_Y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise ValueError(f"({worldX}, {worldY}) outside sector {UNDEAD_SIEGE_SECTOR}")
+        return (tx * 48 + ty) * 10
+
+    # Start with a dark, non-walkable void sea so the island silhouette reads
+    # even when the source sector was ordinary mainland terrain.
+    for tx in range(48):
+        for ty in range(48):
+            x = UNDEAD_SIEGE_SECTOR_BASE_X + tx
+            y = UNDEAD_SIEGE_SECTOR_BASE_Y + ty
+            off = (tx * 48 + ty) * 10
+            buf[off + 0] = 14 + ((x * 5 + y * 3) % 6)
+            buf[off + 1] = (42 + ((x * 7 + y * 11) % 18)) & 0xFF
+            buf[off + 2] = FLOOR_LAVA
+            buf[off + 3] = 0
+            buf[off + 4] = 0
+            buf[off + 5] = 0
+            buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    land = undead_siege_island_tiles()
+    house = undead_siege_house_tiles()
+    for x, y in land:
+        off = tile_offset(x, y)
+        edge = any((x + ox, y + oy) not in land for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        in_house = (x, y) in house
+
+        buf[off + 0] = 50 if edge else 66
+        buf[off + 1] = (104 + ((x * 5 + y * 11) % 28)) & 0xFF
+        buf[off + 2] = undead_siege_floor_overlay(x, y, in_house, edge)
+        buf[off + 3] = 0
+        buf[off + 4] = 0
+        buf[off + 5] = 0
+        buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+
+    for x, y in undead_siege_roof_tiles():
+        buf[tile_offset(x, y) + 3] = ROOF_STANDARD
+
+    for worldX, worldY, direction, doorDefId in undead_siege_walls():
+        off = tile_offset(worldX, worldY)
+        buf[off + (5 if direction == 0 else 4)] = (doorDefId + 1) & 0xFF
+
+    return bytes(buf)
+
+
 def voidarena_floor_tiles():
     """Return the four public fight cages plus the long northern spectator hall."""
     floor = {
@@ -778,13 +1105,15 @@ def patch_voidarena_sky_sector(sector_bytes: bytes, base_x: int, base_y: int) ->
     return bytes(buf)
 
 
-# === Void Dungeon floor (Floor 3 underground Wilderness black-void) ===
-# Gives the shared Void Dungeon a dark void floor + minimap instead of pure black. The walkable-tile
-# mask is emitted by scripts/gen-void-dungeon.py (server/conf/server/data/void_dungeon_floor.json), so
-# the floor always matches the generated room/corridor layout exactly. Sector name -> world base:
+# === Void Dungeon floors (three underground Wilderness stages) ===
+# Gives the shared Void Dungeon dark floor + minimap instead of pure black. The walkable-tile mask
+# and stage metadata are emitted together by scripts/gen-void-dungeon.py, so terrain patterns and
+# policy geometry always describe the same exact room/corridor union. Sector name -> world base:
 # sectionX = worldX//48 + 48, sectionY = (worldY%944)//48 + 37, height = worldY//944 (per
 # WorldLoader.loadSection). Only the dungeon's own tiles are touched; the rest stays black void.
 DUNGEON_FLOOR_MASK = REPO / "server/conf/server/data/void_dungeon_floor.json"
+DUNGEON_BOUNDARIES = REPO / "server/conf/server/defs/locs/BoundaryLocsVoidDungeon.json"
+RETIRED_DUNGEON_SECTORS = ("h1x50y44", "h1x50y45")
 
 
 def _tile_sector(x: int, y: int) -> str:
@@ -798,34 +1127,137 @@ def _sector_base(name: str) -> tuple:
     return (sx - 48) * 48, height * 944 + (sy - 37) * 48
 
 
-def load_dungeon_floor() -> dict:
-    """Read the generated walkable mask, grouped by sector name -> [(x,y), ...]. {} if absent."""
+def _dungeon_rect_tiles(rect: dict) -> set:
+    return {
+        (x, y)
+        for x in range(rect["minX"], rect["maxX"] + 1)
+        for y in range(rect["minY"], rect["maxY"] + 1)
+    }
+
+
+def load_dungeon_floor() -> tuple:
+    """Read and cross-check generated floor, stage, and baked-wall metadata."""
     if not DUNGEON_FLOOR_MASK.exists():
-        return {}
+        return {}, {}, {}
+
+    payload = json.loads(DUNGEON_FLOOR_MASK.read_text())
+    flat_tiles = {tuple(tile) for tile in payload["tiles"]}
+    stage_by_tile = {}
+    stages = {}
+
+    for stage in payload.get("stages", []):
+        key = stage["key"]
+        if key in stages:
+            raise RuntimeError(f"duplicate Void Dungeon stage metadata: {key}")
+        stages[key] = stage
+        stage_tiles = set()
+        for rect in stage["rectangles"]:
+            stage_tiles.update(_dungeon_rect_tiles(rect))
+        if len(stage_tiles) != stage["tileCount"]:
+            raise RuntimeError(
+                f"Void Dungeon stage {key} metadata has {len(stage_tiles)} tiles, "
+                f"expected {stage['tileCount']}"
+            )
+        for point in stage_tiles:
+            owner = stage_by_tile.setdefault(point, key)
+            if owner != key:
+                raise RuntimeError(
+                    f"Void Dungeon tile {point} belongs to both {owner} and {key}"
+                )
+
+    metadata_tiles = set(stage_by_tile)
+    if metadata_tiles != flat_tiles:
+        raise RuntimeError(
+            "Void Dungeon stage metadata differs from flat mask "
+            f"(missing {len(flat_tiles - metadata_tiles)}, extra {len(metadata_tiles - flat_tiles)})"
+        )
+
     by_sector = {}
-    for x, y in json.loads(DUNGEON_FLOOR_MASK.read_text())["tiles"]:
-        by_sector.setdefault(_tile_sector(x, y), []).append((x, y))
-    return by_sector
+    for x, y in sorted(flat_tiles):
+        by_sector.setdefault(_tile_sector(x, y), []).append((x, y, stage_by_tile[(x, y)]))
+
+    boundaries_by_sector = {}
+    boundary_keys = set()
+    boundary_payload = json.loads(DUNGEON_BOUNDARIES.read_text())
+    for boundary in boundary_payload.get("boundaries", []):
+        x = boundary["pos"]["X"]
+        y = boundary["pos"]["Y"]
+        direction = boundary["direction"]
+        key = (x, y, direction)
+        if key in boundary_keys:
+            raise RuntimeError(f"duplicate Void Dungeon baked boundary {key}")
+        boundary_keys.add(key)
+        adjacent = ((x, y), (x, y - 1)) if direction == 0 else ((x, y), (x - 1, y))
+        if not any(point in flat_tiles for point in adjacent):
+            raise RuntimeError(f"Void Dungeon boundary {key} does not border its floor mask")
+        boundaries_by_sector.setdefault(_tile_sector(x, y), []).append(
+            (x, y, direction, boundary["id"])
+        )
+    return by_sector, stages, boundaries_by_sector
 
 
-def patch_dungeon_sector(sector_bytes: bytes, sector_name: str, tiles: list) -> bytes:
-    """Bake a dark void floor (Colossus-plaza recipe: 2x2 FLOOR_INDOOR/FLOOR_V3_STONE checker) into the
-    given dungeon tiles within this sector. Walls are JSON boundaries, so no wall bytes."""
+def dungeon_floor_overlay(stage: dict, x: int, y: int) -> int:
+    """Choose a restrained, stage-specific pattern from existing Void floor tiles."""
+    pattern = stage["pattern"]
+    local_y = y % 944
+
+    if pattern == "riftworks_rubble":
+        # Cracked stone dominates, interrupted by old transverse work seams.
+        if local_y % 14 in (11, 12) and x % 5 != 0:
+            return FLOOR_INDOOR
+        if (x + 2 * local_y) % 19 == 0:
+            return FLOOR_MID
+        return FLOOR_V3_STONE
+
+    if pattern == "menagerie_symmetry":
+        # Mirrored side bays read against the continuous central circulation line.
+        distance = abs(x - 72)
+        if distance <= 1:
+            return FLOOR_MID
+        if distance % 12 in (5, 6) or local_y % 16 in (14, 15):
+            return FLOOR_V3_STONE
+        return FLOOR_INDOOR
+
+    if pattern == "sanctum_processional":
+        # A dark central nave culminates in the broad final demon seal.
+        if local_y <= 375:
+            radius = max(abs(x - 72), abs(local_y - 368))
+            if radius in (4, 5):
+                return FLOOR_RITUAL
+            if radius < 4:
+                return FLOOR_MID
+        if x in (71, 72, 73) and local_y >= 378:
+            return FLOOR_MID
+        return FLOOR_INDOOR if (local_y // 4) % 2 == 0 else FLOOR_V3_STONE
+
+    raise RuntimeError(f"unknown Void Dungeon floor pattern: {pattern}")
+
+
+def patch_dungeon_sector(
+        sector_bytes: bytes, sector_name: str, tiles: list, walls: list, stages: dict) -> bytes:
+    """Bake generated stage floors and perimeter walls into this sector."""
     assert len(sector_bytes) == 48 * 48 * 10, f"expected 23040 bytes, got {len(sector_bytes)}"
     buf = bytearray(sector_bytes)
     base_x, base_y = _sector_base(sector_name)
-    for x, y in tiles:
+    for x, y, stage_key in tiles:
         tx, ty = x - base_x, y - base_y
         if not (0 <= tx < 48 and 0 <= ty < 48):
             continue
+        stage = stages[stage_key]
         off = (tx * 48 + ty) * 10
-        buf[off + 0] = 66
-        buf[off + 1] = (106 + ((x * 9 + y * 7) % 26)) & 0xFF
-        buf[off + 2] = FLOOR_INDOOR if ((x // 2) + (y // 2)) % 2 == 0 else FLOOR_V3_STONE
+        buf[off + 0] = 64 + stage["id"]
+        buf[off + 1] = (106 + ((x * 9 + y * 7 + stage["id"] * 13) % 26)) & 0xFF
+        buf[off + 2] = dungeon_floor_overlay(stage, x, y)
         buf[off + 3] = 0
         buf[off + 4] = 0
         buf[off + 5] = 0
         buf[off + 6:off + 10] = b"\x00\x00\x00\x00"
+    for x, y, direction, boundary_id in walls:
+        tx, ty = x - base_x, y - base_y
+        if not (0 <= tx < 48 and 0 <= ty < 48):
+            raise RuntimeError(f"Void Dungeon boundary {(x, y)} is outside {sector_name}")
+        off = (tx * 48 + ty) * 10
+        buf[off + (5 if direction == 0 else 4)] = (boundary_id + 1) & 0xFF
     return bytes(buf)
 
 
@@ -838,10 +1270,13 @@ def main():
         deathmatch_source = z.read(DEATHMATCH_SECTOR)
         voidrush_source = z.read(VOIDRUSH_SECTOR)
         colossus_source = z.read(COLOSSUS_SECTOR)
+        undead_siege_source = z.read(UNDEAD_SIEGE_SECTOR)
         voidarena_source = z.read(VOIDARENA_SECTOR)
         voidarena_sky_sources = {sector: z.read(sector) for sector, _, _ in VOIDARENA_SKY_SECTORS}
-        dungeon_floor = load_dungeon_floor()
-        dungeon_sources = {sector: z.read(sector) for sector in dungeon_floor}
+        dungeon_floor, dungeon_stages, dungeon_boundaries = load_dungeon_floor()
+        dungeon_sectors = set(dungeon_floor) | set(dungeon_boundaries)
+        dungeon_sources = {sector: z.read(sector) for sector in dungeon_sectors}
+        retired_dungeon_sources = {sector: z.read(sector) for sector in RETIRED_DUNGEON_SECTORS}
         legacy_sources = {sector: z.read(sector) for sector in LEGACY_VOID_ISLAND_SECTORS}
         legacy_enclave_sources = {sector: z.read(sector) for sector in LEGACY_ENCLAVE_SECTORS}
         legacy_deathmatch_sources = {sector: z.read(sector) for sector in LEGACY_DEATHMATCH_SECTORS}
@@ -853,6 +1288,7 @@ def main():
     print(f"Read {len(deathmatch_source)} bytes from {AUTHENTIC.name}!{DEATHMATCH_SECTOR}")
     print(f"Read {len(voidrush_source)} bytes from {AUTHENTIC.name}!{VOIDRUSH_SECTOR}")
     print(f"Read {len(colossus_source)} bytes from {AUTHENTIC.name}!{COLOSSUS_SECTOR}")
+    print(f"Read {len(undead_siege_source)} bytes from {AUTHENTIC.name}!{UNDEAD_SIEGE_SECTOR}")
     print(f"Read {len(voidarena_source)} bytes from {AUTHENTIC.name}!{VOIDARENA_SECTOR}")
     for sector, source in voidarena_sky_sources.items():
         print(f"Read {len(source)} bytes from {AUTHENTIC.name}!{sector}")
@@ -861,16 +1297,22 @@ def main():
     walls = enclave_walls()
     patched_sectors = {
         ENCLAVE_SECTOR: patch_enclave_sector(enclave_source),
-        VOID_ISLAND_SECTOR: patch_void_island_sector(island_source),
+        # Same sector: the Tutorial Isle is carved into the Void Island sector's ocean.
+        VOID_ISLAND_SECTOR: patch_tutorial_isle_sector(patch_void_island_sector(island_source)),
         DEATHMATCH_SECTOR: patch_deathmatch_sector(deathmatch_source),
         VOIDRUSH_SECTOR: patch_voidrush_sector(voidrush_source),
         COLOSSUS_SECTOR: patch_colossus_sector(colossus_source),
+        UNDEAD_SIEGE_SECTOR: patch_undead_siege_sector(undead_siege_source),
         VOIDARENA_SECTOR: patch_voidarena_sector(voidarena_source),
     }
     for sector, base_x, base_y in VOIDARENA_SKY_SECTORS:
         patched_sectors[sector] = patch_voidarena_sky_sector(voidarena_sky_sources[sector], base_x, base_y)
-    for sector, tiles in dungeon_floor.items():
-        patched_sectors[sector] = patch_dungeon_sector(dungeon_sources[sector], sector, tiles)
+    for sector in dungeon_sectors:
+        patched_sectors[sector] = patch_dungeon_sector(
+            dungeon_sources[sector], sector, dungeon_floor.get(sector, []),
+            dungeon_boundaries.get(sector, []), dungeon_stages
+        )
+    patched_sectors.update(retired_dungeon_sources)
     for sector, base_x, base_y, offset_x, offset_y in CATCHSIM_SECTORS:
         patched_sectors[sector] = patch_catchsim_island_sector(
             catchsim_sources[sector], sector, base_x, base_y, offset_x, offset_y
@@ -884,13 +1326,28 @@ def main():
     print(f"Restored {len(LEGACY_DEATHMATCH_SECTORS)} legacy deathmatch sector(s) to authentic terrain")
     print(f"Restored {len(LEGACY_VOIDARENA_SECTORS)} legacy void arena sector(s) to authentic terrain")
     print(f"Patched isolated Void Island into sector {VOID_ISLAND_SECTOR}")
+    print(f"Patched gated Tutorial Isle ({len(tutorial_isle_tiles())} tiles) into sector {VOID_ISLAND_SECTOR}")
     print(f"Patched {len(CATCHSIM_SECTORS)} PK Catching Simulator islands")
     print(f"Patched Death Match basement and altar arena into sector {DEATHMATCH_SECTOR}")
     print(f"Patched Void Rush waiting room and arena floor into sector {VOIDRUSH_SECTOR}")
     print(f"Patched Void Colossus raid plaza into sector {COLOSSUS_SECTOR}")
+    print(f"Patched Undead Siege island manor into sector {UNDEAD_SIEGE_SECTOR}")
     print(f"Patched Void Arena underground lava fight hall into sector {VOIDARENA_SECTOR}")
     print(f"Patched {len(VOIDARENA_SKY_SECTORS)} Void Arena lava backdrop sector(s)")
-    print(f"Patched Void Dungeon dark floor ({sum(len(t) for t in dungeon_floor.values())} tiles) into sectors {', '.join(sorted(dungeon_floor))}")
+    dungeon_stage_counts = {
+        key: sum(1 for tiles in dungeon_floor.values() for _, _, stage_key in tiles if stage_key == key)
+        for key in dungeon_stages
+    }
+    dungeon_stage_summary = ", ".join(
+        f"{dungeon_stages[key]['name']}={dungeon_stage_counts[key]}"
+        for key in sorted(dungeon_stages, key=lambda item: dungeon_stages[item]["id"])
+    )
+    print(
+        f"Patched Void Dungeon floors ({sum(len(t) for t in dungeon_floor.values())} tiles; "
+        f"{sum(len(w) for w in dungeon_boundaries.values())} baked walls; "
+        f"{dungeon_stage_summary}) into sectors {', '.join(sorted(dungeon_sectors))}"
+    )
+    print(f"Restored {len(RETIRED_DUNGEON_SECTORS)} retired fourth-floor sector(s) to authentic terrain")
 
     # 3. Rebuild Custom_Landscape.orsc with this sector replaced. Apply to both the
     # server copy and the client cache copy (client reads its own when

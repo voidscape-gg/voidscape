@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape Features</title>
+	<meta name="description" content="Voidscape features: XP rates, skilling quality-of-life, combat changes, the three-floor Void Dungeon, Void Arena, Auction House, custom bank, Android, and prelaunch rewards.">
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="preload" as="image" href="assets/whitepaper/feature-void-dungeon-current.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body class="features-mode">
+	<main class="features-page" aria-label="Voidscape features">
+		<header class="features-nav">
+			<a class="features-brand" href="/" aria-label="Voidscape home">
+				<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+			</a>
+			<nav aria-label="Features navigation">
+				<a href="#progression">XP</a>
+					<a href="#combat">Combat</a>
+					<a href="#world">World</a>
+					<a href="#economy">Economy</a>
+					<a href="#interface">UI</a>
+					<a href="/npcs">Drops</a>
+					<a href="/transparency">Trust</a>
+				</nav>
+			<a class="features-download" href="/">Reserve</a>
+		</header>
+
+		<section class="features-hero" aria-labelledby="features-title">
+			<div class="features-hero-copy">
+				<p class="features-kicker">Prelaunch feature guide</p>
+				<h1 id="features-title">RuneScape Classic, expanded where it counts.</h1>
+				<p>Voidscape keeps the old combat timing, the social friction, the supply pressure, the risk, and the full world scale, then adds faster launch progression, a sharper client, the Void Enclave and three-floor Void Dungeon, real account tools, and transparency you can verify for yourself.</p>
+				<div class="features-hero-actions">
+					<a href="#progression">Start with XP rates</a>
+					<a href="#screenshots">See screenshots</a>
+				</div>
+			</div>
+		</section>
+
+		<section class="features-rate-band" id="progression" aria-labelledby="progression-title">
+			<div class="features-section-head">
+				<p class="features-kicker">XP and progression</p>
+				<h2 id="progression-title">Combat moves fast. Skilling still earns its weight.</h2>
+				<p>The launch rates stay deliberately simple: combat moves quickly enough to explore fights and builds, while skilling stays slow enough that supplies, gathering routes, and player markets still matter.</p>
+			</div>
+			<div class="features-rate-grid">
+				<article>
+					<span>Combat XP</span>
+					<strong>10x</strong>
+					<p>Melee, ranged, magic, hits, and prayer all progress at a pace built for active launch play.</p>
+				</article>
+				<article>
+					<span>Skilling XP</span>
+					<strong>1.5x</strong>
+					<p>Gathering and production run faster than stock Classic without flattening the economy.</p>
+				</article>
+				<article>
+					<span>Subscribed</span>
+					<strong>11x / 2.5x</strong>
+					<p>An active subscription adds +1x to your combat and skilling rates.</p>
+				</article>
+				<article>
+					<span>Rested XP</span>
+					<strong>1.5x</strong>
+					<p>Time offline banks up to 45 minutes of bonus training.</p>
+				</article>
+				<article>
+					<span>Game tick</span>
+					<strong>640ms</strong>
+					<p>Classic movement and combat cadence stay authentic.</p>
+				</article>
+				<article>
+					<span>Fatigue</span>
+					<strong>Off</strong>
+					<p>No fatigue wall cutting your skilling sessions short.</p>
+				</article>
+			</div>
+			<div class="features-showcase two-up" id="screenshots">
+				<figure>
+					<img src="assets/whitepaper/feature-xp-on-hit.png" loading="lazy" decoding="async" alt="Voidscape combat XP feedback in the current client.">
+					<figcaption><strong>XP on successful hits</strong><span>PvE melee and ranged can pay out progress as you fight, instead of making you wait for the kill.</span></figcaption>
+				</figure>
+				<figure>
+					<img src="assets/whitepaper/feature-combat-xp-locks-current.png" loading="lazy" decoding="async" alt="Combat XP and skills panel in the current Voidscape client.">
+					<figcaption><strong>Combat and skill rates</strong><span>The live stats panel keeps progression, totals, quests, and XP rates in view while you play.</span></figcaption>
+				</figure>
+			</div>
+			<div class="features-detail-grid">
+				<article class="feature-detail-card">
+					<img src="assets/whitepaper/feature-starter-paths-current.png" loading="lazy" decoding="async" alt="Void Island starter path choices: Warrior, Forager, and Arcanist.">
+					<h3>Starter paths</h3>
+					<p>Pick Warrior, Forager, or Arcanist on Void Island. Each path gives a focused early 2x boost to its starter skills until they hit level 50.</p>
+				</article>
+				<article class="feature-detail-card">
+					<img src="assets/whitepaper/feature-milestone-rewards-current.png" loading="lazy" decoding="async" alt="Void Herald on Void Island for progression announcements and milestones.">
+					<h3>Milestone rewards</h3>
+					<p>Skill and total-level milestones pay modest coin to mark your progress, without replacing shops, drops, trade, or skilling profit.</p>
+				</article>
+				<article class="feature-detail-card">
+					<img src="assets/whitepaper/feature-rested-xp-current.png" loading="lazy" decoding="async" alt="Rested XP command output in the current Voidscape client.">
+					<h3>Rested command</h3>
+					<p>Run <code>::rested</code> or <code>::restedxp</code> to check your current rested pool, its cap, and your earn rate.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="combat" aria-labelledby="combat-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Combat and PvP</p>
+				<h2 id="combat-title">Sharper fights that never lose Classic timing.</h2>
+				<p>Voidscape keeps the familiar turn rhythm, the inventory pressure, the retreats, the range checks, and the prayer decisions, then builds visual feedback and custom combat spaces around that base.</p>
+			</div>
+			<div class="features-card-grid four">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-overhead-prayers-current.png" loading="lazy" decoding="async" alt="Protect from Magic overhead bubble in the current Voidscape client.">
+					<h3>Overhead protection prayers</h3>
+					<p>Protect from Missiles and the new level 43 Protect from Magic both show overhead bubbles. Ranged uses arrows, magic uses a wizard hat, and only one runs at a time.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-magic-qol-current.png" loading="lazy" decoding="async" alt="Magic and prayer interface in the current Voidscape client.">
+					<h3>Magic and prayer polish</h3>
+					<p>Magic damage, spell pressure, prayer state, and protection feedback all read more clearly through PvM and PvP-style fights.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-pk-catching-current.png" loading="lazy" decoding="async" alt="PK Catching Simulator in the current Voidscape client.">
+					<h3>PK Catching Simulator</h3>
+					<p>Drill Classic catching and movement pressure without putting your normal gear at risk.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-arena-current.png" loading="lazy" decoding="async" alt="Void Arena lobby in the current Voidscape client.">
+					<h3>Void Arena</h3>
+					<p>Step into controlled deathmatch spaces, challenge other players, and run solo pressure fights from the arena lobby.</p>
+				</article>
+			</div>
+			<div class="features-bullet-columns">
+				<ul>
+					<li>Combat formula tuned around armour mitigation, with less all-or-nothing burst.</li>
+					<li>Tiered hit splats make your strong hits easy to read.</li>
+					<li>PvP melee momentum rewards sustained pressure on a single target.</li>
+				</ul>
+				<ul>
+					<li>Projectile kiting improvements cut the awkward extra steps during PvM ranged and spell casts.</li>
+					<li>Void Arena supports ranked-style deathmatch spaces and solo challenge fights.</li>
+					<li>DM King / Sir Charles gives a player-like solo pressure test across food, magic, melee, and prayer decisions.</li>
+				</ul>
+			</div>
+		</section>
+
+		<section class="features-section" id="skilling" aria-labelledby="skilling-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Skilling and supplies</p>
+				<h2 id="skilling-title">Skilling with less downtime and the market left intact.</h2>
+				<p>Skilling quality-of-life clears the worst stalls while keeping gathering routes, tool checks, depletion, and the value of player-made supplies.</p>
+			</div>
+			<div class="features-skill-strip" aria-label="Skilling icons">
+				<img src="assets/whitepaper/skill-mining.png" alt="Mining">
+				<img src="assets/whitepaper/skill-woodcut.png" alt="Woodcutting">
+				<img src="assets/whitepaper/skill-fishing.png" alt="Fishing">
+				<img src="assets/whitepaper/skill-smithing.png" alt="Smithing">
+				<img src="assets/whitepaper/skill-fletching.png" alt="Fletching">
+				<img src="assets/whitepaper/skill-firemaking.png" alt="Firemaking">
+				<img src="assets/whitepaper/skill-prayer.png" alt="Prayer">
+			</div>
+			<div class="features-detail-grid">
+				<article>
+					<h3>Guaranteed resource smoothing</h3>
+					<p>Mining, woodcutting, and normal fishing guard against long dry streaks and early node depletion, while keeping the normal action rhythm.</p>
+				</article>
+				<article>
+					<h3>Make-All menus</h3>
+					<p>Cooking and smelting get faster repeated-action menus for long supply sessions.</p>
+				</article>
+				<article>
+					<h3>Player supply loops</h3>
+					<p>Food, arrows, herblaw, firemaking ashes, and ranged supplies are tuned so skillers matter to fighters.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="world" aria-labelledby="world-title">
+			<div class="features-section-head">
+				<p class="features-kicker">World, dungeon, and PvP practice</p>
+				<h2 id="world-title">New ground built into the Classic world.</h2>
+				<p>Voidscape adds custom spaces for onboarding, repeatable dungeon PvM, and PvP practice, all still running on the old grid, pathing, inventory, and combat rules.</p>
+			</div>
+			<div class="features-card-grid large">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-island-intro-current.png" loading="lazy" decoding="async" alt="Void Island intro in the current Voidscape client.">
+					<h3>Void Island starter area</h3>
+					<p>A custom first-session island with starter choices, kits, and a cleaner early ramp.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-enclave-current.png" loading="lazy" decoding="async" alt="Void Enclave hub in the current Voidscape client.">
+					<h3>Void Enclave</h3>
+					<p>A custom hub with bank access, portals, Voidscape NPCs, and a wilderness-adjacent identity.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-dungeon-current.png" loading="lazy" decoding="async" alt="Void Dungeon in the current Voidscape client.">
+					<h3>Three-floor Void Dungeon</h3>
+					<p>A boss-free launch dungeon with three distinct floors, void-themed enemies, risk, and repeatable PvM routes.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-rift-current.png" loading="lazy" decoding="async" alt="Void Rift portal in the current Voidscape client.">
+					<h3>Void Rift travel</h3>
+					<p>Void rifts link custom content, portals, and launch routes across the world.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-void-arena-current.png" loading="lazy" decoding="async" alt="Void Arena lobby in the current Voidscape client.">
+					<h3>Void Arena</h3>
+					<p>Controlled deathmatch spaces and the Sir Charles solo challenge give fighters a focused place to practice pressure.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-pk-catching-current.png" loading="lazy" decoding="async" alt="PK Catching Simulator in the current Voidscape client.">
+					<h3>PK Catching Simulator</h3>
+					<p>Practice Classic catching, pathing, and movement pressure without risking your normal equipment.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="items" aria-labelledby="items-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Items and rewards</p>
+				<h2 id="items-title">New loot you can recognize on sight.</h2>
+				<p>Custom rewards land hardest when you can recognize them, trade around them, and remember exactly where they dropped.</p>
+			</div>
+			<div class="features-showcase two-up">
+				<figure>
+					<img src="assets/whitepaper/feature-void-gear-current.png" loading="lazy" decoding="async" alt="Voidscape custom gear in the current client.">
+					<figcaption><strong>Void gear</strong><span>Void Scimitar, Void Bow, Void Amulet, Void Mace, and other custom reward pieces.</span></figcaption>
+				</figure>
+				<figure>
+					<img src="assets/whitepaper/feature-void-chest-current.png" loading="lazy" decoding="async" alt="Void Chest reward interface in the current Voidscape client.">
+					<figcaption><strong>Void Key and Void Chest</strong><span>Reward chests and keys give you clear targets across the loot loops.</span></figcaption>
+				</figure>
+			</div>
+			<div class="features-detail-grid">
+				<article>
+					<h3>Rare drop beams</h3>
+					<p>Rare drops can fire a visible beam, so the big moments stand out in a busy world.</p>
+				</article>
+				<article>
+					<h3>Player titles</h3>
+					<p>Titles let your achievements, events, and prestige follow you into the world.</p>
+				</article>
+				<article>
+					<h3>Subscription cards</h3>
+					<p>Claim prelaunch starter cards and subscription cards in-game through the Lumbridge vendor flow.</p>
+				</article>
+			</div>
+			<div class="features-card-grid compact">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-rare-drop-beam-current.png" loading="lazy" decoding="async" alt="Rare drop beam in the current Voidscape client.">
+					<h3>Rare drop visibility</h3>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-player-titles-current.png" loading="lazy" decoding="async" alt="Player title interface in the current Voidscape client.">
+					<h3>Title collection</h3>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/subscription-card.png" loading="lazy" decoding="async" alt="Voidscape subscription card.">
+					<h3>Reward cards</h3>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="economy" aria-labelledby="economy-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Economy and collection</p>
+				<h2 id="economy-title">More ways to price your stock and chase the drops you want.</h2>
+				<p>Trading and banking tools cut interface friction while keeping old-school preparation and item pressure fully intact.</p>
+			</div>
+			<div class="features-card-grid">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-auction-house-current.png" loading="lazy" decoding="async" alt="Auction House in the current Voidscape client.">
+					<h3>Auction House</h3>
+					<p>List items, collect your proceeds, recover expired stock, and trade without needing both players online at once.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-market-intel-current.png" loading="lazy" decoding="async" alt="Auction House market intel in the current Voidscape client.">
+					<h3>Market intel</h3>
+					<p>Recent price and market data helps you understand value before you buy or sell.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-loot-tab-current.png" loading="lazy" decoding="async" alt="Loot tab in the current Voidscape client.">
+					<h3>Loot and Bestiary</h3>
+					<p>Track drops, browse NPC loot tables, and pull better in-client info while you farm.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="interface" aria-labelledby="interface-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Interface and travel</p>
+				<h2 id="interface-title">A sharper client around the same game.</h2>
+				<p>The desktop client adds modern conveniences where they cut repeated friction: banking, routing, account switching, scaling, labels, and visual feedback.</p>
+			</div>
+			<div class="features-card-grid large">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-custom-hud-current.png" loading="lazy" decoding="async" alt="Custom Voidscape HUD in the current client.">
+					<h3>Custom HUD</h3>
+					<p>A Voidscape skin with clearer panels, compact chrome, location labels, and readable chat.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-bank-loadouts-current.png" loading="lazy" decoding="async" alt="Bank loadouts in the current Voidscape client.">
+					<h3>Bank search and loadouts</h3>
+					<p>Search, tabs, organize tools, a wealth display, and loadouts speed up repeated prep.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-account-switcher-current.png" loading="lazy" decoding="async" alt="Account switcher in the current Voidscape client.">
+					<h3>Account switcher</h3>
+					<p>Swap saved local accounts from the client shell without wrestling login friction.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-world-map-route-current.png" loading="lazy" decoding="async" alt="World map route overlay in the current Voidscape client.">
+					<h3>World-map walking</h3>
+					<p>Click-to-walk map routing, route overlays, door and gate handling, and better stuck recovery.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-visual-settings.png" loading="lazy" decoding="async" alt="Visual settings interface in Voidscape.">
+					<h3>Visual settings</h3>
+					<p>Toggle client presentation details like custom UI, camera feel, overlays, and feedback.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-screenshot-capture-current.png" loading="lazy" decoding="async" alt="Exact F12 screenshot capture from the current Voidscape client.">
+					<h3>Exact screenshots</h3>
+					<p>Press F12 or use Options -> Screenshot to save a clean client-frame PNG for bug reports, guides, and feature captures.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-loot-beam-list-current.png" loading="lazy" decoding="async" alt="Rare drop beam settings in the current Voidscape client.">
+					<h3>Readable feedback</h3>
+					<p>XP drops, an FPS display, loot beam preferences, stronger hit splats, and clearer panels make normal play easier to read.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="android" aria-labelledby="android-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Desktop, Android, and account access</p>
+				<h2 id="android-title">Reserve now, then play on whatever device fits.</h2>
+				<p>Voidscape has a desktop launcher path, an Android APK path, portal-backed account setup, and starter-card reward flows that never make you join Discord just to try the game.</p>
+			</div>
+			<div class="features-card-grid">
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-login.png" loading="lazy" decoding="async" alt="Voidscape login screen.">
+					<h3>Desktop launcher</h3>
+					<p>The launcher keeps your PC client updated and points you at the current build.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-character-roster.png" loading="lazy" decoding="async" alt="Voidscape character roster in the account portal.">
+					<h3>Account portal</h3>
+					<p>Reserve names, manage characters, check your subscription state, and track starter-card rewards from the web portal.</p>
+				</article>
+				<article class="feature-card">
+					<img src="assets/whitepaper/feature-portal-signup-code.png" loading="lazy" decoding="async" alt="Voidscape portal signup code flow.">
+					<h3>Starter-card rewards</h3>
+					<p>Claim release-valid starter rewards and redeem subscription cards through the in-game vendor flow.</p>
+				</article>
+			</div>
+			<div class="features-detail-grid">
+				<article>
+					<h3>Android APK</h3>
+					<p>Android brings branded login, saved-account handling, touch context menus, portrait work, and repeated authenticated smoke coverage.</p>
+				</article>
+				<article>
+					<h3>Launch downloads</h3>
+					<p>Desktop and Android builds can be published directly when the launch gate opens. Discord stays optional, for community rewards and updates.</p>
+				</article>
+				<article>
+					<h3>Player commands</h3>
+					<p>Player-facing commands like <code>::bug</code>, <code>::coords</code>, <code>::online</code>, and <code>::rested</code> help you report issues and read the world around you.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-section" id="trust" aria-labelledby="trust-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Player trust</p>
+				<h2 id="trust-title">Private-server trust tools, visible from the outside.</h2>
+				<p>Voidscape runs a public transparency page for download checks, staff-action summaries, item history, and account integrity signals. The point is plain: you should never have to wonder whether someone is quietly rigging the world behind your back.</p>
+			</div>
+			<div class="features-trust-band">
+				<img src="assets/generated/security-account.png" loading="lazy" decoding="async" alt="Voidscape account security illustration.">
+				<div>
+					<h3>Transparency page</h3>
+					<p>The public trust systems are written in plain language: safer downloads, watched staff tools, item-origin receipts, and daily checks.</p>
+					<a href="/transparency">View transparency</a>
+				</div>
+			</div>
+		</section>
+
+		<section class="features-section features-map" id="feature-map" aria-labelledby="feature-map-title">
+			<div class="features-section-head">
+				<p class="features-kicker">Full feature map</p>
+				<h2 id="feature-map-title">Everything player-facing in the current build.</h2>
+				<p>This is the practical checklist: every system you can see, use, train through, fight in, or rely on while you test Voidscape.</p>
+			</div>
+			<div class="features-list-grid">
+				<article>
+					<h3>Progression</h3>
+					<ul>
+						<li>10x combat XP and 1.5x skilling XP</li>
+						<li>11x combat and 2.5x skilling while subscribed</li>
+						<li>1.5x rested XP pool up to 45 minutes</li>
+						<li>Starter paths with early 2x path boosts</li>
+						<li>Skill and total-level milestone coin rewards</li>
+						<li>Fatigue disabled for uninterrupted skilling</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Combat</h3>
+					<ul>
+						<li>Level 43 Protect from Magic</li>
+						<li>Protect from Magic and Missiles are mutually exclusive</li>
+						<li>Wizard-hat and arrow overhead protection bubbles</li>
+						<li>XP on successful PvE hits</li>
+						<li>Combat XP locks for account builds</li>
+						<li>Tiered hit splats and clearer combat feedback</li>
+					</ul>
+				</article>
+				<article>
+					<h3>World Content</h3>
+					<ul>
+						<li>Void Island starter area</li>
+						<li>Void Enclave hub and safe-zone amenities</li>
+						<li>Boss-free, three-floor Void Dungeon</li>
+						<li>Five-hub Void Rift travel network</li>
+						<li>Void Arena and Sir Charles solo challenge</li>
+						<li>PK Catching Simulator</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Skilling</h3>
+					<ul>
+						<li>Guaranteed-resource smoothing for mining, woodcutting, and fishing</li>
+						<li>Make-All cooking and smelting menus</li>
+						<li>Supply loops for food, arrows, ash, and herblaw</li>
+						<li>Visible batch progress and inventory count options</li>
+						<li>Player economy pressure preserved through slower skilling rates</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Items and Rewards</h3>
+					<ul>
+						<li>Void gear including scimitar, bow, mace, and amulet</li>
+						<li>Void Keys and Void Chest rewards</li>
+						<li>Rare drop beams with player settings</li>
+						<li>Player title collection and equip commands</li>
+						<li>Subscription cards and starter rewards</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Economy and UI</h3>
+					<ul>
+						<li>Auction House with listings, proceeds, expiry, and market intel</li>
+						<li>Loot and Bestiary panels</li>
+						<li>Bank search, tabs, wealth, organization, and loadouts</li>
+						<li>World-map walking with route overlays</li>
+						<li>Account switcher for saved local accounts</li>
+						<li>F12 and Options screenshot capture</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Access and Testing</h3>
+					<ul>
+						<li>Desktop launcher and Android APK paths</li>
+						<li>Portal character roster and reward-code flows</li>
+						<li>Player bug reports with <code>::bug</code></li>
+						<li>Useful player commands like <code>::coords</code>, <code>::online</code>, and <code>::rested</code></li>
+						<li>Global chat and party chat commands</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Trust</h3>
+					<ul>
+						<li>Public transparency page</li>
+						<li>Download and build checks</li>
+						<li>Staff-action summaries</li>
+						<li>Item-origin and account-integrity signals</li>
+						<li>Public AGPL source mirror</li>
+					</ul>
+				</article>
+			</div>
+		</section>
+
+		<section class="features-final" aria-label="Reserve Voidscape">
+			<p class="features-kicker">Prelaunch</p>
+			<h2>Reserve your name and be ready for launch day.</h2>
+			<div>
+				<a href="/">Reserve Name</a>
+				<a href="/transparency">View Trust Page</a>
+			</div>
+		</section>
+
+		<footer class="features-footer">
+			<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
+			<nav aria-label="Footer navigation">
+				<a href="/">Prelaunch</a>
+				<a href="/features">Features</a>
+				<a href="/transparency">Trust</a>
+				<a href="https://discord.gg/f6uQmrRv4" rel="noopener">Discord</a>
+				<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">Public Code</a>
+			</nav>
+		</footer>
+	</main>
+	<script src="presence.js" defer></script>
+	<script src="features.js" defer></script>
+</body>
+</html>

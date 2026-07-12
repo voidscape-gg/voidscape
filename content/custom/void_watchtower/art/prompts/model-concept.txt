@@ -1,0 +1,8 @@
+Original low-poly RuneScape Classic scenery geometry: an inhabited but ruined
+Void sentry tower on four asymmetric voidstone piers, with one pier snapped
+below a fractured open-center lookout. Use sparse gunmetal braces, an incomplete
+cage, jagged crenellations, inset violet sigils, and one small suspended beacon
+crystal. Keep a strong dark silhouette readable from every camera quadrant, but
+leave enough open space that the structure never becomes an opaque slab over a
+player. Use flat dark-gunmetal, voidstone, and restrained violet colors with no
+textures, UVs, transparency, or external assets.

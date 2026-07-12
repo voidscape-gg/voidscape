@@ -4,8 +4,11 @@
         delete from _PREFIX_bankpresets where playerID = {playerId}
     </query>
     <query key="bank.addBankPreset">
+        <!-- values are strings; fillParameters already single-quotes them, so no
+             extra quoting here (SQLite stored the double-quoted form verbatim,
+             quotes included, which broke hex-decoding on load) -->
         insert into _PREFIX_bankpresets (playerID, slot, inventory, equipment) values
-        ({playerId}, {slot}, "{inventory}", "{equipment}")
+        ({playerId}, {slot}, {inventory}, {equipment})
     </query>
     <query key="bank.getBankPresetsByPlayerId">
         select * from _PREFIX_bankpresets where playerID = {playerId}

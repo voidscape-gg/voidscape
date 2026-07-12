@@ -1,6 +1,30 @@
 apply plugin: 'com.android.application'
 
 def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
+def provenanceAssetsDir = file("$rootDir/.gradle/voidscape-provenance-assets")
+def uploadKeystorePath = (
+    findProperty("voidscape.android.uploadKeystore.file")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE")
+        ?: "${System.properties['user.home']}/.voidscape/android-signing/voidscape-upload.jks"
+).toString()
+def uploadStorePassword = (
+    findProperty("voidscape.android.uploadKeystore.storePassword")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD")
+)?.toString()
+def uploadKeyPassword = (
+    findProperty("voidscape.android.uploadKeystore.keyPassword")
+        ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD")
+)?.toString()
+def uploadSigningReady = file(uploadKeystorePath).isFile()
+    && uploadStorePassword != null
+    && uploadStorePassword.length() > 0
+    && uploadKeyPassword != null
+    && uploadKeyPassword.length() > 0
+def allowUnsignedRelease = (
+    findProperty("voidscape.android.allowUnsignedRelease")
+        ?: System.getenv("VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE")
+        ?: "false"
+).toString().toBoolean()
 
 tasks.register("syncVoidscapeCache", Sync) {
     from("${rootDir}/../Client_Base/Cache") {
@@ -26,12 +50,20 @@ allprojects {
 android {
     compileSdk 36
     defaultConfig {
-        applicationId "com.voidscape.client"
-        minSdk 26
+        applicationId "com.voidscape.gg"
+        minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 9
+        versionName "1.0.8"
         multiDexEnabled false
+    }
+    signingConfigs {
+        voidscapeUpload {
+            storeFile file(uploadKeystorePath)
+            storePassword uploadStorePassword ?: ""
+            keyAlias "voidscape-upload"
+            keyPassword uploadKeyPassword ?: ""
+        }
     }
     buildTypes {
         release {
@@ -40,6 +72,9 @@ android {
             jniDebuggable false
             multiDexEnabled = true
             minifyEnabled = false
+            if (uploadSigningReady) {
+                signingConfig signingConfigs.voidscapeUpload
+            }
         }
         debug {
             multiDexEnabled = true
@@ -55,7 +90,7 @@ android {
     sourceSets {
         main.java.srcDirs += ['src/main/java', 'src/main/../../../../Client_Base/src']
         main.java.exclude 'tools/**'
-        main.assets.srcDirs += generatedAssetsDir
+        main.assets.srcDirs += [generatedAssetsDir, provenanceAssetsDir]
     }
     dependenciesInfo {
         includeInApk true
@@ -71,6 +106,28 @@ android {
 
 tasks.named("preBuild").configure {
     dependsOn syncVoidscapeCache
+}
+
+tasks.register("verifyVoidscapeReleaseSigning") {
+    doLast {
+        if (!uploadSigningReady && !allowUnsignedRelease) {
+            throw new GradleException(
+                "Voidscape release artifact signing is not configured. Set " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE, " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD, and " +
+                    "VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD, or matching " +
+                    "voidscape.android.uploadKeystore.* Gradle properties. " +
+                    "For local unsigned release experiments only, set " +
+                    "VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1."
+            )
+        }
+    }
+}
+
+tasks.matching { task ->
+    task.name == "assembleRelease" || task.name == "bundleRelease"
+}.configureEach {
+    dependsOn tasks.named("verifyVoidscapeReleaseSigning")
 }
 
 dependencies {

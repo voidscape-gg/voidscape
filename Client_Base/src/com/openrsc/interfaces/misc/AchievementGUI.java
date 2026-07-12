@@ -3,10 +3,13 @@ package com.openrsc.interfaces.misc;
 import com.openrsc.client.entityhandling.EntityHandler;
 import orsc.Config;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.GraphicsController;
 import orsc.mudclient;
 
 public final class AchievementGUI {
+	private static final int FOOTER_H = 25;
+
 	public Panel achievementPanel;
 	private int x, y;
 	private int width, height;
@@ -33,29 +36,27 @@ public final class AchievementGUI {
 
 	public boolean onRender(GraphicsController graphics) {
 		reposition();
-		int boxColor = 0x989898;
-		int headerColor = 0x313439;
-		int textColor = 16777215;
-		// HEADER
-		//(mc.achievementProgress[getAchievement()] == 2 ? "@gre@" : "@yel@") + mc.achievementNames[getAchievement()]
-		graphics.drawBox(x, y, width, 15, headerColor);
-		graphics.drawColoredStringCentered(width / 2 + x, "Achievement:" + (mc.achievementProgress[getAchievement()] == 2 ? "@gre@ Completed" : ""), 16777215, 0, 1, y + 12);
+
+		// Glass card: title bar + content area (height) + close footer.
+		int cardHeight = InterfaceChrome.TITLE_H + height + FOOTER_H;
+		boolean closeHover = UiSkin.hit(InterfaceChrome.closeX(x, width), InterfaceChrome.closeY(y),
+			InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE, mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(graphics, x, y, width, cardHeight,
+			"Achievement:" + (mc.achievementProgress[getAchievement()] == 2 ? "@gre@ Completed" : ""), closeHover);
 
 		// CONTENT
-		graphics.drawBoxAlpha(x, y + 15, width, height, boxColor, 160);
-		graphics.drawColoredStringCentered(width / 2 + x, (mc.achievementProgress[getAchievement()] == 2 ? "@gre@" : "@yel@") + mc.achievementNames[getAchievement()], 16777215, 0, 5, y + 36);
-		graphics.drawWrappedCenteredString(mc.achievementDescs[getAchievement()], width / 2 + x, y + 55, width - 14, 1, textColor, true);
+		graphics.drawColoredStringCentered(width / 2 + x, (mc.achievementProgress[getAchievement()] == 2 ? "@gre@" : "@yel@") + mc.achievementNames[getAchievement()], UiSkin.TEXT_BODY, 0, 5, y + 40);
+		graphics.drawWrappedCenteredString(mc.achievementDescs[getAchievement()], width / 2 + x, y + 55, width - 14, 1, UiSkin.TEXT_BODY, true);
 
-		graphics.drawString("Rewards: ", x + 6, y + 135, textColor, 1);
-		graphics.drawString((mc.achievementProgress[getAchievement()] == 2 ? "@gr2@Congratulations! " + (Config.isAndroid() ? "tap" : "click") + " on each box to claim your rewards." : "@or1@You have not completed your achievement yet."), x + 63, y + 135, textColor, 0);
-		//(mc.achievementProgress[getAchievement()] == 2 ? "@gre@" : "@yel@")
+		graphics.drawString("Rewards: ", x + 6, y + 135, UiSkin.GOLD_HEADER, 1);
+		graphics.drawString((mc.achievementProgress[getAchievement()] == 2 ? "@gr2@Congratulations! " + (Config.isAndroid() ? "tap" : "click") + " on each box to claim your rewards." : "@or1@You have not completed your achievement yet."), x + 63, y + 135, UiSkin.TEXT_BODY, 0);
 		int rewardBoxX = 0;
 		int rewardBoxY = y + 143;
 		for (int box = 0; box < 12; box++) {
 			int sizeX = 48;
 			int sizeY = 34;
-			graphics.drawBoxAlpha(rewardBoxX + 74, rewardBoxY, sizeX, sizeY, boxColor, 160);
-			graphics.drawBoxBorder(rewardBoxX + 74 - 1, sizeX + 2, rewardBoxY - 1, sizeY + 2, 0);
+			graphics.drawBoxAlpha(rewardBoxX + 74, rewardBoxY, sizeX, sizeY, UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+			graphics.drawBoxBorder(rewardBoxX + 74 - 1, sizeX + 2, rewardBoxY - 1, sizeY + 2, UiSkin.VOID_LINE);
 			//rewardBox.setSprite(2150 + 130, 48, 32, 0);
 			graphics.drawSpriteClipping(mc.spriteSelect(EntityHandler.getItemDef(30)), rewardBoxX + 74, rewardBoxY, 48, 32, 0, 0, 0,false, 0, 1);
 
@@ -67,14 +68,23 @@ public final class AchievementGUI {
 			}
 		}
 
-		// CLOSE FOOTER
-		drawButton(graphics, x, height + 71, 375, 25, (Config.isAndroid() ? "Tap here to close" : "Click left mouse button to close"), false, new ButtonHandler() {
+		// CLOSE FOOTER — anchored to the card bottom (was drawn at absolute
+		// y = height + 71, which ignored the panel position and fell off-panel).
+		drawButton(graphics, x, y + cardHeight - FOOTER_H, width, FOOTER_H, (Config.isAndroid() ? "Tap here to close" : "Click left mouse button to close"), false, new ButtonHandler() {
 			@Override
 			void handle() {
 				setAchievement(-1);
 				hide();
 			}
 		});
+
+		// X-close dispatch last: setAchievement(-1) must not run before the
+		// content above indexes mc.achievement* arrays with getAchievement().
+		if (closeHover && mc.getMouseClick() == 1) {
+			setAchievement(-1);
+			hide();
+			mc.setMouseClick(0);
+		}
 
 		return true;
 	}
@@ -105,20 +115,11 @@ public final class AchievementGUI {
 
 	private void drawButton(GraphicsController graphics, int x, int y, int width, int height, String text,
 							boolean checked, ButtonHandler handler) {
-		int allColor = 0x313439;
-		if (checked) {
-			allColor = 0x659CDE;
+		boolean hover = InterfaceChrome.button(graphics, x, y, width, height, text, UiSkin.FONT_BODY, checked, false,
+			mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			if (!checked)
-				allColor = 0x263751;
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		graphics.drawBoxAlpha(x, y, width, height, allColor, 255);
-		graphics.drawLineHoriz(x, y, width, 0xBFA086);
-		graphics.drawString(text, x + (width / 2 - graphics.stringWidth(1, text) / 2), y + height / 2 + 5, 0xffffff, 1);
 	}
 }

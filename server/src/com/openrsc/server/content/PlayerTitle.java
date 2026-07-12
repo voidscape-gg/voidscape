@@ -1,172 +1,174 @@
 package com.openrsc.server.content;
 
+import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.World;
+import com.openrsc.server.plugins.QuestInterface;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public enum PlayerTitle {
-	FIRST_STEP("first_step", "First-Step", "Reach total level 50.", RequirementType.TOTAL_LEVEL, 50),
-	TRAILSPARK("trailspark", "Trail-Spark", "Reach total level 100.", RequirementType.TOTAL_LEVEL, 100),
-	WAYFARER("wayfarer", "Wayfarer of Old Roads", "Reach total level 250.", RequirementType.TOTAL_LEVEL, 250),
-	SEASONED("seasoned", "Weathered Wayfarer", "Reach total level 500.", RequirementType.TOTAL_LEVEL, 500),
-	TESTED("tested", "Iron-Tried", "Reach total level 750.", RequirementType.TOTAL_LEVEL, 750),
-	PROVEN("proven", "Oath-Proven", "Reach total level 1,000.", RequirementType.TOTAL_LEVEL, 1000),
-	RESOLUTE("resolute", "Grey Resolve", "Reach total level 1,250.", RequirementType.TOTAL_LEVEL, 1250),
-	ASCENDANT("ascendant", "Skyward Ascendant", "Reach total level 1,500.", RequirementType.TOTAL_LEVEL, 1500),
-	NEAR_MAXED("near_maxed", "Almost Maxed", "Reach total level 1,750.", RequirementType.TOTAL_LEVEL, 1750, TitleScope.UNIQUE),
-	MAXED("maxed", "Max-Caped", "Reach total level 1,782.", RequirementType.TOTAL_LEVEL, 1782, TitleScope.UNIQUE),
+	MASTER_AT_ARMS("master_at_arms", "the Master-at-Arms", "Reach level 99 Attack.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.ATTACK),
+	BULWARK("bulwark", "the Bulwark", "Reach level 99 Defence.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.DEFENSE),
+	TITAN("titan", "the Titan", "Reach level 99 Strength.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.STRENGTH),
+	DEATHLESS("deathless", "the Deathless", "Reach level 99 Hits.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.HITS),
+	HAWKEYED("hawkeyed", "the Hawk-Eyed", "Reach level 99 Ranged.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.RANGED),
+	HALLOWED("hallowed", "the Hallowed", "Reach level 99 Prayer.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.PRAYER),
+	ARCHMAGE("archmage", "the Archmage", "Reach level 99 Magic.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.MAGIC),
+	MASTER_CHEF("master_chef", "the Master Chef", "Reach level 99 Cooking.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.COOKING),
+	TREEFELLER("treefeller", "the Treefeller", "Reach level 99 Woodcutting.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.WOODCUTTING),
+	ARROWSMITH("arrowsmith", "the Arrowsmith", "Reach level 99 Fletching.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.FLETCHING),
+	OLD_SALT("old_salt", "the Old Salt", "Reach level 99 Fishing.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.FISHING),
+	FLAMEKEEPER("flamekeeper", "Keeper of the Flame", "Reach level 99 Firemaking.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.FIREMAKING),
+	ARTIFICER("artificer", "the Artificer", "Reach level 99 Crafting.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.CRAFTING),
+	FORGEMASTER("forgemaster", "the Forgemaster", "Reach level 99 Smithing.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.SMITHING),
+	DEEPDELVER("deepdelver", "the Deepdelver", "Reach level 99 Mining.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.MINING),
+	APOTHECARY("apothecary", "the Apothecary", "Reach level 99 Herblaw.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.HERBLAW),
+	FLEET_FOOTED("fleet_footed", "the Fleet-Footed", "Reach level 99 Agility.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.AGILITY),
+	LIGHT_FINGERED("light_fingered", "the Light-Fingered", "Reach level 99 Thieving.", Tier.RENOWN, RequirementType.SKILL_LEVEL, 99, Skill.THIEVING),
+	JACK_OF_TRADES("jack_of_trades", "Jack of All Trades", "Reach total level 1,500.", Tier.RENOWN, RequirementType.TOTAL_LEVEL, 1500),
+	MASTER_OF_ALL("master_of_all", "Master of All", "Reach total level 1,782.", Tier.RENOWN, RequirementType.TOTAL_LEVEL, 1782),
+	APEX("apex", "the Apex", "Reach combat level 123.", Tier.RENOWN, RequirementType.COMBAT_LEVEL, 123),
+	STORIED("storied", "the Storied", "Earn maximum quest points.", Tier.RENOWN, RequirementType.MAX_QUEST_POINTS),
+	TEN_THOUSAND_BLADES("ten_thousand_blades", "Ten-Thousand Blades", "Defeat 10,000 NPCs.", Tier.RENOWN, RequirementType.NPC_KILLS_TOTAL, 10000),
+	NEMESIS("nemesis", "the Nemesis", "Defeat the same NPC type 5,000 times.", Tier.RENOWN, RequirementType.NPC_KILLS_ANY, 5000),
+	WIDOWMAKER("widowmaker", "the Widowmaker", "Defeat 100 players in the wilderness.", Tier.RENOWN, RequirementType.PLAYER_KILLS, 100),
 
-	SPARRING_BLADE("sparring_blade", "Sparring Blade", "Reach combat level 20.", RequirementType.COMBAT_LEVEL, 20),
-	DUELIST("duelist", "Red-Steel Duelist", "Reach combat level 40.", RequirementType.COMBAT_LEVEL, 40),
-	IRONBLOOD("ironblood", "Ironblooded", "Reach combat level 60.", RequirementType.COMBAT_LEVEL, 60),
-	WARBRINGER("warbringer", "War-Bringer", "Reach combat level 80.", RequirementType.COMBAT_LEVEL, 80),
-	CONQUEROR("conqueror", "Crownless Conqueror", "Reach combat level 100.", RequirementType.COMBAT_LEVEL, 100, TitleScope.UNIQUE),
-	UNBROKEN("unbroken", "Unbroken Oath", "Reach combat level 110.", RequirementType.COMBAT_LEVEL, 110, TitleScope.UNIQUE),
-	WARLORD("warlord", "Warlord of the Edge", "Reach combat level 120.", RequirementType.COMBAT_LEVEL, 120, TitleScope.UNIQUE),
-	BLACK_HELM("black_helm", "Black-Helmed", "Reach combat level 123.", RequirementType.COMBAT_LEVEL, 123, TitleScope.UNIQUE),
+	DRAGONSLAYER("dragonslayer", "the Dragonslayer", "Complete Dragon Slayer.", Tier.FEAT, RequirementType.QUEST_COMPLETE, Quests.DRAGON_SLAYER),
+	HERO("hero", "the Hero", "Complete Hero's Quest.", Tier.FEAT, RequirementType.QUEST_COMPLETE, Quests.HEROS_QUEST),
+	LEGEND("legend", "the Legend", "Complete Legends Quest.", Tier.FEAT, RequirementType.QUEST_COMPLETE, Quests.LEGENDS_QUEST),
+	BLACK_KINGS_BANE("black_kings_bane", "the Black King's Bane", "Kill the King Black Dragon 100 times.", Tier.FEAT, RequirementType.NPC_KILLS_SET, 100, new int[] {477}),
+	DEMONSBANE("demonsbane", "the Demonsbane", "Slay 666 demons.", Tier.FEAT, RequirementType.NPC_KILLS_SET, 666, new int[] {22, 35, 181, 184, 290, 315, 568, 857}),
+	DRAGON_CROWNED("dragon_crowned", "Dragon-Crowned", "Receive a dragon medium helmet as your own drop.", Tier.FEAT, RequirementType.MANUAL),
+	RUNESMITH("runesmith", "the Runesmith", "Smith a rune plate mail body.", Tier.FEAT, RequirementType.MANUAL),
+	LOBSTER_BARON("lobster_baron", "the Lobster Baron", "Catch 5,000 lobsters.", Tier.FEAT, RequirementType.COUNTER, 5000, "title_lobsters"),
+	UNBURNT("unburnt", "the Unburnt", "Cook 1,000 food in a row without burning.", Tier.FEAT, RequirementType.COUNTER, 1000, "title_cook_streak"),
+	BONE_COLLECTOR("bone_collector", "the Bone Collector", "Bury 10,000 bones.", Tier.FEAT, RequirementType.COUNTER, 10000, "title_bones_buried"),
+	COAL_HEARTED("coal_hearted", "the Coal-Hearted", "Mine 10,000 coal.", Tier.FEAT, RequirementType.COUNTER, 10000, "title_coal_mined"),
+	GOLDSPINNER("goldspinner", "the Goldspinner", "Cast High Level Alchemy 10,000 times.", Tier.FEAT, RequirementType.COUNTER, 10000, "title_high_alchs"),
+	GNOME_BALLER("gnome_baller", "the Gnome-Baller", "Score 100 gnomeball goals.", Tier.FEAT, RequirementType.COUNTER, 100, "title_gnomeball_goals"),
+	GIANT_KILLER("giant_killer", "the Giant-Killer", "Kill an NPC of combat level at least twice yours, minimum NPC level 50.", Tier.FEAT, RequirementType.MANUAL),
+	UNTOUCHED("untouched", "the Untouched", "Reach combat level 90 without ever dying.", Tier.FEAT, RequirementType.ZERO_DEATH_COMBAT, 90),
+	EDGELORD("edgelord", "the Edgelord", "Defeat 50 players in wilderness levels 1-5.", Tier.FEAT, RequirementType.COUNTER, 50, "title_edgeville_pks"),
+	BRONZE_REAPER("bronze_reaper", "the Bronze Reaper", "Defeat a player while wielding a bronze weapon.", Tier.FEAT, RequirementType.MANUAL),
+	VOIDBANE("voidbane", "Voidbane", "Defeat the Void Knight in the Death Match Arena.", Tier.FEAT, RequirementType.MANUAL),
+	GRAVEWALKER("gravewalker", "the Gravewalker", "Clear wave 10 in Undead Siege.", Tier.FEAT, RequirementType.MANUAL),
+	FOUNDER("founder", "the Founder", "Reserved for early Voidscape supporters.", Tier.FEAT, RequirementType.MANUAL),
 
-	ERRAND_KNIGHT("errand_knight", "Errand Knight", "Earn 5 quest points.", RequirementType.QUEST_POINTS, 5),
-	TALE_SEEKER("tale_seeker", "Tale-Seeker", "Earn 15 quest points.", RequirementType.QUEST_POINTS, 15),
-	OATHBOUND("oathbound", "Oathbound", "Earn 30 quest points.", RequirementType.QUEST_POINTS, 30),
-	LOREMASTER("loremaster", "Lore-Sworn", "Earn 45 quest points.", RequirementType.QUEST_POINTS, 45),
-	CHRONICLER("chronicler", "Chronicler of Misthalin", "Earn 60 quest points.", RequirementType.QUEST_POINTS, 60),
-	LEGEND("legend", "Legend of Old Roads", "Earn 75 quest points.", RequirementType.QUEST_POINTS, 75, TitleScope.UNIQUE),
-	QUEST_CROWNED("quest_crowned", "Quest-Crowned", "Earn 90 quest points.", RequirementType.QUEST_POINTS, 90, TitleScope.UNIQUE),
-
-	FIRST_BLOOD("first_blood", "First Blood", "Defeat one player in the wilderness.", RequirementType.PLAYER_KILLS, 1),
-	RED_HANDED("red_handed", "Red-Handed", "Defeat 5 players in the wilderness.", RequirementType.PLAYER_KILLS, 5),
-	REAVER("reaver", "Edge Reaver", "Defeat 10 players in the wilderness.", RequirementType.PLAYER_KILLS, 10),
-	HUNTER("hunter", "Rogue Hunter", "Defeat 25 players in the wilderness.", RequirementType.PLAYER_KILLS, 25),
-	REAPER("reaper", "Grave-Reaper", "Defeat 50 players in the wilderness.", RequirementType.PLAYER_KILLS, 50),
-	DREADED("dreaded", "Dreadmarked", "Defeat 100 players in the wilderness.", RequirementType.PLAYER_KILLS, 100, TitleScope.UNIQUE),
-	WASTELAND_KING("wasteland_king", "Wasteland Crown", "Defeat 250 players in the wilderness.", RequirementType.PLAYER_KILLS, 250, TitleScope.UNIQUE),
-	RIVAL_ENDER("rival_ender", "Rival-Ender", "Defeat 500 players in the wilderness.", RequirementType.PLAYER_KILLS, 500, TitleScope.UNIQUE),
-	SKULLBREAKER("skullbreaker", "Skullbreaker", "Defeat 1,000 players in the wilderness.", RequirementType.PLAYER_KILLS, 1000, TitleScope.UNIQUE),
-
-	STRIDER("strider", "Trail Strider", "Defeat 10 NPCs.", RequirementType.NPC_KILLS_TOTAL, 10),
-	CULLER("culler", "Cullhand", "Defeat 25 NPCs.", RequirementType.NPC_KILLS_TOTAL, 25),
-	EXTERMINATOR("exterminator", "Pest-Cleanser", "Defeat 50 NPCs.", RequirementType.NPC_KILLS_TOTAL, 50),
-	CLEAVER("cleaver", "Bone-Cleaver", "Defeat 100 NPCs.", RequirementType.NPC_KILLS_TOTAL, 100),
-	GRINDER("grinder", "Grindstone", "Defeat 250 NPCs.", RequirementType.NPC_KILLS_TOTAL, 250),
-	RELENTLESS("relentless", "Relentless", "Defeat 500 NPCs.", RequirementType.NPC_KILLS_TOTAL, 500),
-	SLAYER("slayer", "Slayer of Many", "Defeat 1,000 NPCs.", RequirementType.NPC_KILLS_TOTAL, 1000),
-	BLOODLETTER("bloodletter", "Bloodletter", "Defeat 2,500 NPCs.", RequirementType.NPC_KILLS_TOTAL, 2500),
-	ENDLESS("endless", "Endless Hunt", "Defeat 5,000 NPCs.", RequirementType.NPC_KILLS_TOTAL, 5000, TitleScope.UNIQUE),
-	TEN_THOUSAND_BLADES("ten_thousand_blades", "Ten-Thousand Blades", "Defeat 10,000 NPCs.", RequirementType.NPC_KILLS_TOTAL, 10000, TitleScope.UNIQUE),
-
-	SPECIALIST("specialist", "Marked Specialist", "Defeat the same NPC type 50 times.", RequirementType.NPC_KILLS_ANY, 50),
-	STALKER("stalker", "Stalker of One Prey", "Defeat the same NPC type 100 times.", RequirementType.NPC_KILLS_ANY, 100),
-	BANE("bane", "Named Bane", "Defeat the same NPC type 250 times.", RequirementType.NPC_KILLS_ANY, 250),
-	OBLITERATOR("obliterator", "Obliterator", "Defeat the same NPC type 500 times.", RequirementType.NPC_KILLS_ANY, 500),
-	OBSESSION("obsession", "Single-Minded", "Defeat the same NPC type 1,000 times.", RequirementType.NPC_KILLS_ANY, 1000, TitleScope.UNIQUE),
-	TRUE_BANE("true_bane", "True Bane", "Defeat the same NPC type 2,000 times.", RequirementType.NPC_KILLS_ANY, 2000, TitleScope.UNIQUE),
-
-	BLADE("blade", "Steelhand", "Reach level 50 Attack.", RequirementType.SKILL_LEVEL, 50, Skill.ATTACK),
-	SHIELD("shield", "Shieldborne", "Reach level 50 Defence.", RequirementType.SKILL_LEVEL, 50, Skill.DEFENSE),
-	STRONG("strong", "Oak-Strong", "Reach level 50 Strength.", RequirementType.SKILL_LEVEL, 50, Skill.STRENGTH),
-	SURVIVOR("survivor", "Scar-Warden", "Reach level 50 Hits.", RequirementType.SKILL_LEVEL, 50, Skill.HITS),
-	MARKSMAN("marksman", "Longshot", "Reach level 50 Ranged.", RequirementType.SKILL_LEVEL, 50, Skill.RANGED),
-	DEVOUT("devout", "Candlekeeper", "Reach level 50 Prayer.", RequirementType.SKILL_LEVEL, 50, Skill.PRAYER),
-	ARCANE("arcane", "Spellscarred", "Reach level 50 Magic.", RequirementType.SKILL_LEVEL, 50, Skill.MAGIC),
-	FEASTKEEPER("feastkeeper", "Hearthkeeper", "Reach level 50 Cooking.", RequirementType.SKILL_LEVEL, 50, Skill.COOKING),
-	FORESTER("forester", "Axe-Woken", "Reach level 50 Woodcutting.", RequirementType.SKILL_LEVEL, 50, Skill.WOODCUTTING),
-	FLETCHER("fletcher", "Bowstring", "Reach level 50 Fletching.", RequirementType.SKILL_LEVEL, 50, Skill.FLETCHING),
-	ANGLER("angler", "Deep-Line", "Reach level 50 Fishing.", RequirementType.SKILL_LEVEL, 50, Skill.FISHING),
-	FIRESTARTER("firestarter", "Emberhand", "Reach level 50 Firemaking.", RequirementType.SKILL_LEVEL, 50, Skill.FIREMAKING),
-	ARTISAN("artisan", "Glass-Shaper", "Reach level 50 Crafting.", RequirementType.SKILL_LEVEL, 50, Skill.CRAFTING),
-	IRONHAND("ironhand", "Anvilhand", "Reach level 50 Smithing.", RequirementType.SKILL_LEVEL, 50, Skill.SMITHING),
-	PROSPECTOR("prospector", "Stone-Seeker", "Reach level 50 Mining.", RequirementType.SKILL_LEVEL, 50, Skill.MINING),
-	HERBALIST("herbalist", "Greenblood", "Reach level 50 Herblaw.", RequirementType.SKILL_LEVEL, 50, Skill.HERBLAW),
-	SWIFT("swift", "Quickstep", "Reach level 50 Agility.", RequirementType.SKILL_LEVEL, 50, Skill.AGILITY),
-	SHADOWHAND("shadowhand", "Shadowfinger", "Reach level 50 Thieving.", RequirementType.SKILL_LEVEL, 50, Skill.THIEVING),
-
-	SWORD_SAINT("sword_saint", "Sword Saint", "Reach level 90 Attack.", RequirementType.SKILL_LEVEL, 90, Skill.ATTACK, TitleScope.UNIQUE),
-	BULWARK("bulwark", "Wall of Iron", "Reach level 90 Defence.", RequirementType.SKILL_LEVEL, 90, Skill.DEFENSE, TitleScope.UNIQUE),
-	MOUNTAIN("mountain", "Storm-Shouldered", "Reach level 90 Strength.", RequirementType.SKILL_LEVEL, 90, Skill.STRENGTH, TitleScope.UNIQUE),
-	DEATHLESS("deathless", "Deathless", "Reach level 90 Hits.", RequirementType.SKILL_LEVEL, 90, Skill.HITS, TitleScope.UNIQUE),
-	SHARPSHOOTER("sharpshooter", "Eagle-Eyed", "Reach level 90 Ranged.", RequirementType.SKILL_LEVEL, 90, Skill.RANGED, TitleScope.UNIQUE),
-	SANCTIFIED("sanctified", "Sanctified Flame", "Reach level 90 Prayer.", RequirementType.SKILL_LEVEL, 90, Skill.PRAYER, TitleScope.UNIQUE),
-	ARCHMAGE("archmage", "Archmage of Ash", "Reach level 90 Magic.", RequirementType.SKILL_LEVEL, 90, Skill.MAGIC, TitleScope.UNIQUE),
-	BANQUET_LORD("banquet_lord", "Banquet Lord", "Reach level 90 Cooking.", RequirementType.SKILL_LEVEL, 90, Skill.COOKING, TitleScope.UNIQUE),
-	TIMBERMASTER("timbermaster", "Timber-King", "Reach level 90 Woodcutting.", RequirementType.SKILL_LEVEL, 90, Skill.WOODCUTTING, TitleScope.UNIQUE),
-	BOWYER("bowyer", "Master Bowyer", "Reach level 90 Fletching.", RequirementType.SKILL_LEVEL, 90, Skill.FLETCHING, TitleScope.UNIQUE),
-	DEEPCALLER("deepcaller", "Deepcaller", "Reach level 90 Fishing.", RequirementType.SKILL_LEVEL, 90, Skill.FISHING, TitleScope.UNIQUE),
-	FLAMEKEEPER("flamekeeper", "Flamekeeper", "Reach level 90 Firemaking.", RequirementType.SKILL_LEVEL, 90, Skill.FIREMAKING, TitleScope.UNIQUE),
-	MASTERWORK("masterwork", "Masterwork", "Reach level 90 Crafting.", RequirementType.SKILL_LEVEL, 90, Skill.CRAFTING, TitleScope.UNIQUE),
-	ANVIL_KING("anvil_king", "Anvil King", "Reach level 90 Smithing.", RequirementType.SKILL_LEVEL, 90, Skill.SMITHING, TitleScope.UNIQUE),
-	STONEBREAKER("stonebreaker", "Stonebreaker", "Reach level 90 Mining.", RequirementType.SKILL_LEVEL, 90, Skill.MINING, TitleScope.UNIQUE),
-	ALCHEMIST("alchemist", "White Alchemist", "Reach level 90 Herblaw.", RequirementType.SKILL_LEVEL, 90, Skill.HERBLAW, TitleScope.UNIQUE),
-	QUICKSTEP("quickstep", "Fleetfoot", "Reach level 90 Agility.", RequirementType.SKILL_LEVEL, 90, Skill.AGILITY, TitleScope.UNIQUE),
-	NIGHTFINGER("nightfinger", "Nightfinger", "Reach level 90 Thieving.", RequirementType.SKILL_LEVEL, 90, Skill.THIEVING, TitleScope.UNIQUE),
-
-	VOIDBANE("voidbane", "Voidbane", "Defeat the Void Knight in the Death Match Arena.", RequirementType.MANUAL),
-	VOID_ARENA_CHAMPION("void_arena_champion", "Void Arena Champion", "Finish first in a Void Arena ranked season.", RequirementType.MANUAL),
-	DM_KINGSLAYER("dm_kingslayer", "DM Kingslayer", "Defeat DM King in the Void Arena.", RequirementType.MANUAL),
-	VOIDWALKER("voidwalker", "Voidwalker", "Complete a major Voidscape encounter.", RequirementType.MANUAL),
-	VOID_TOUCHED("void_touched", "Void-Touched", "Earn a rare void-themed reward.", RequirementType.MANUAL),
-	AUCTIONEER("auctioneer", "Auctioneer", "Earn through auction house activity.", RequirementType.MANUAL),
-	MERCHANT("merchant", "Market-Marked", "Build a trade reputation through the auction house.", RequirementType.MANUAL),
-	RARESTRUCK("rarestruck", "Rarestruck", "Find a rare drop marked by a loot beam.", RequirementType.MANUAL),
-	BEAMCALLER("beamcaller", "Beamcaller", "Customize and trigger a loot beam.", RequirementType.MANUAL),
-	FOUNDER("founder", "Founder", "Reserved for early Voidscape supporters.", RequirementType.MANUAL),
-	OLD_GUARD("old_guard", "Old Guard", "Reserved for veteran accounts.", RequirementType.MANUAL),
-	VANQUISHER("vanquisher", "Vanquisher", "Win a high-stakes Voidscape challenge.", RequirementType.MANUAL, TitleScope.UNIQUE),
-	PATHFINDER("pathfinder", "Pathfinder", "Complete an exploration milestone.", RequirementType.MANUAL, TitleScope.UNIQUE),
-	RIFTBOUND("riftbound", "Riftbound", "Win a major rift event.", RequirementType.MANUAL, TitleScope.UNIQUE),
-	MARKET_MAKER("market_maker", "Market Maker", "Lead a major auction-house milestone.", RequirementType.MANUAL, TitleScope.UNIQUE),
-	RELIC_KEEPER("relic_keeper", "Relic-Keeper", "Hold a one-of-one Voidscape relic.", RequirementType.MANUAL, TitleScope.UNIQUE);
+	TRAILBLAZER("trailblazer", "the Trailblazer", "First player on the server to reach level 99 in any skill.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.SKILL_LEVEL, 99),
+	PARAGON("paragon", "the Paragon", "First player to reach max total level.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.TOTAL_LEVEL, 1782),
+	LOREKEEPER("lorekeeper", "the Lorekeeper", "First player to complete every quest.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.MAX_QUEST_POINTS),
+	COLOSSUSBANE("colossusbane", "Colossusbane", "First kill of the Void Colossus.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.MANUAL),
+	RIFTBOUND("riftbound", "Riftbound", "First to win the Void Rift event.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.MANUAL),
+	WARLORD_WASTES("warlord_wastes", "Warlord of the Wastes", "Most wilderness kills this month, minimum 10.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
+	VOID_ARENA_CHAMPION("void_arena_champion", "the Void Arena Champion", "#1 in the current Void Arena ranked season.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
+	MAGNATE("magnate", "the Magnate", "Top auction-house trade volume this season.", Tier.UNIQUE, UniqueKind.CONTESTED, RequirementType.MANUAL),
+	FIRST_SWORDFISH("first_swfish", "the Swordfish Sovereign", "First 50,000 Swordfish Cooked.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_swfish"),
+	FIRST_COAL("first_coal25k", "the Coal Pioneer", "First 25,000 Coal Mined.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 25000, "title_coal_mined"),
+	FIRST_MAGIC_LOGS("first_mlogs", "the Elder Feller", "First 50,000 Magic Logs Cut.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_mlogs"),
+	FIRST_HERBS("first_herbs", "the Herb Harvester", "First 25,000 Herbs Picked Up.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 25000, "title_herbs"),
+	FIRST_GEMS("first_gems", "the Gemsetter", "First 10,000 Gems Cut.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 10000, "title_gems"),
+	FIRST_TOTAL_1700("first_t1700", "the Seventeen-Hundred", "First Total Level 1700.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.TOTAL_LEVEL, 1700),
+	FIRST_AGILITY_30("first_agil30", "the First-Footed", "First 30 Agility.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.SKILL_LEVEL, 30, Skill.AGILITY),
+	FIRST_SPELLS("first_spells", "the Spellstorm", "First 50,000 Spells Cast.", Tier.UNIQUE, UniqueKind.FIRST, RequirementType.COUNTER, 50000, "title_spells"),
+	RELIC_KEEPER("relic_keeper", "the Relic-Keeper", "Hold the one-of-one Voidscape relic. Staff-granted until the relic exists.", Tier.UNIQUE, UniqueKind.ITEM_BOUND, RequirementType.MANUAL);
 
 	public static final String ACTIVE_TITLE_CACHE = "player_title_active";
 	public static final int OVERHEAD_TITLE_CLIENT_VERSION = 10052;
+	public static final int OVERHEAD_TITLE_TIER_CLIENT_VERSION = 10123;
+	public static final String COUNTER_LOBSTERS = "title_lobsters";
+	public static final String COUNTER_COOK_STREAK = "title_cook_streak";
+	public static final String COUNTER_BONES_BURIED = "title_bones_buried";
+	public static final String COUNTER_COAL_MINED = "title_coal_mined";
+	public static final String COUNTER_HIGH_ALCHS = "title_high_alchs";
+	public static final String COUNTER_GNOMEBALL_GOALS = "title_gnomeball_goals";
+	public static final String COUNTER_EDGEVILLE_PKS = "title_edgeville_pks";
+	public static final String COUNTER_SWORDFISH_COOKED = "title_swfish";
+	public static final String COUNTER_MAGIC_LOGS = "title_mlogs";
+	public static final String COUNTER_HERBS_PICKED_UP = "title_herbs";
+	public static final String COUNTER_GEMS_CUT = "title_gems";
+	public static final String COUNTER_SPELLS_CAST = "title_spells";
+
 	private static final String UNLOCK_CACHE_PREFIX = "pt_u_";
 	private static final String LEGACY_UNLOCK_CACHE_PREFIX = "player_title_unlocked_";
-	private static final String BLOCKED_UNIQUE_CACHE_PREFIX = "pt_b_";
-	private static final String UNIQUE_CLAIM_CACHE = "pt_unique_claim";
+	private static final String LEGACY_BLOCKED_UNIQUE_CACHE_PREFIX = "pt_b_";
+	private static final String LEGACY_UNIQUE_CLAIM_CACHE = "pt_unique_claim";
+	private static final String FIRST_DATE_CACHE_PREFIX = "pt_first_date_";
+	private static final String CONTESTED_TOKEN_CACHE_PREFIX = "title_contested_token_";
+	private static final String CONTESTED_MONTH_CACHE_PREFIX = "title_contested_month_";
+	private static final String CONTESTED_SCORE_CACHE_PREFIX = "title_contested_score_";
+	private static final String MIGRATION_CACHE = "pt_migration_10123";
+	private static final int WARLORD_MIN_MONTHLY_KILLS = 10;
 
 	private final String id;
 	private final String displayName;
 	private final String unlockHint;
+	private final Tier tier;
+	private final UniqueKind uniqueKind;
 	private final RequirementType requirementType;
 	private final int threshold;
 	private final Skill skill;
-	private final TitleScope scope;
+	private final int[] npcIds;
+	private final String counterKey;
 
-	PlayerTitle(String id, String displayName, String unlockHint) {
-		this(id, displayName, unlockHint, RequirementType.MANUAL, 0, null, TitleScope.REUSABLE);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, RequirementType requirementType) {
+		this(id, displayName, unlockHint, tier, null, requirementType, 0, null, null, null);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType) {
-		this(id, displayName, unlockHint, requirementType, 0, null, TitleScope.REUSABLE);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, RequirementType requirementType, int threshold) {
+		this(id, displayName, unlockHint, tier, null, requirementType, threshold, null, null, null);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType, TitleScope scope) {
-		this(id, displayName, unlockHint, requirementType, 0, null, scope);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, RequirementType requirementType, int threshold, Skill skill) {
+		this(id, displayName, unlockHint, tier, null, requirementType, threshold, skill, null, null);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType, int threshold) {
-		this(id, displayName, unlockHint, requirementType, threshold, null, TitleScope.REUSABLE);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, RequirementType requirementType, int threshold, int[] npcIds) {
+		this(id, displayName, unlockHint, tier, null, requirementType, threshold, null, npcIds, null);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType, int threshold, TitleScope scope) {
-		this(id, displayName, unlockHint, requirementType, threshold, null, scope);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, RequirementType requirementType, int threshold, String counterKey) {
+		this(id, displayName, unlockHint, tier, null, requirementType, threshold, null, null, counterKey);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType, int threshold, Skill skill) {
-		this(id, displayName, unlockHint, requirementType, threshold, skill, TitleScope.REUSABLE);
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, 0, null, null, null);
 	}
 
-	PlayerTitle(String id, String displayName, String unlockHint, RequirementType requirementType, int threshold, Skill skill, TitleScope scope) {
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, null, null, null);
+	}
+
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold, Skill skill) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, skill, null, null);
+	}
+
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType, int threshold, String counterKey) {
+		this(id, displayName, unlockHint, tier, uniqueKind, requirementType, threshold, null, null, counterKey);
+	}
+
+	PlayerTitle(String id, String displayName, String unlockHint, Tier tier, UniqueKind uniqueKind, RequirementType requirementType,
+				int threshold, Skill skill, int[] npcIds, String counterKey) {
 		this.id = id;
 		this.displayName = displayName;
 		this.unlockHint = unlockHint;
+		this.tier = tier;
+		this.uniqueKind = uniqueKind;
 		this.requirementType = requirementType;
 		this.threshold = threshold;
 		this.skill = skill;
-		this.scope = scope;
+		this.npcIds = npcIds;
+		this.counterKey = counterKey;
 	}
 
 	public String id() {
@@ -181,26 +183,100 @@ public enum PlayerTitle {
 		return unlockHint;
 	}
 
+	public Tier tier() {
+		return tier;
+	}
+
+	public String tierLabel() {
+		return tier.label;
+	}
+
+	public String tierColorToken() {
+		return tier.chatColor;
+	}
+
+	public UniqueKind uniqueKind() {
+		return uniqueKind;
+	}
+
+	public boolean unique() {
+		return tier == Tier.UNIQUE;
+	}
+
+	public boolean contested() {
+		return uniqueKind == UniqueKind.CONTESTED;
+	}
+
+	public boolean firstUnique() {
+		return uniqueKind == UniqueKind.FIRST;
+	}
+
 	public String catalogHint() {
 		switch (requirementType) {
 			case TOTAL_LEVEL:
-				return "Total " + threshold + ".";
+				return "Total " + formatNumber(threshold) + ".";
 			case COMBAT_LEVEL:
 				return "Combat " + threshold + ".";
-			case QUEST_POINTS:
-				return threshold + " quest points.";
 			case PLAYER_KILLS:
-				return threshold == 1 ? "1 Wilderness PK." : threshold + " Wilderness PKs.";
+				return threshold + " Wilderness PKs.";
 			case NPC_KILLS_TOTAL:
-				return threshold + " NPC kills.";
+				return formatNumber(threshold) + " NPC kills.";
 			case NPC_KILLS_ANY:
-				return threshold + " kills on one NPC type.";
+				return formatNumber(threshold) + " kills on one NPC type.";
+			case NPC_KILLS_SET:
+				return formatNumber(threshold) + " matching NPC kills.";
 			case SKILL_LEVEL:
-				return "Level " + threshold + " " + skillName(skill) + ".";
+				return skill == null ? "Any skill " + threshold + "." : "Level " + threshold + " " + skillName(skill) + ".";
+			case QUEST_COMPLETE:
+				return "Complete quest.";
+			case MAX_QUEST_POINTS:
+				return "Maximum quest points.";
+			case COUNTER:
+				return formatNumber(threshold) + " tracked actions.";
+			case ZERO_DEATH_COMBAT:
+				return "Combat " + threshold + ", zero deaths.";
 			case MANUAL:
 			default:
-				return manualCatalogHint();
+				return unlockHint;
 		}
+	}
+
+	public boolean recordTitle() {
+		return firstUnique() && id.startsWith("first_");
+	}
+
+	public String tableTitle() {
+		if (recordTitle()) {
+			return trimTrailingPeriod(unlockHint);
+		}
+		return displayName;
+	}
+
+	public String tableTierLabel() {
+		return recordTitle() ? "Legend" : titleCase(tierLabel());
+	}
+
+	public String tableHolder(Player player) {
+		if (!unique()) {
+			return isUnlocked(player) ? player.getUsername() : "-";
+		}
+		String owner = ownerName(player, this);
+		return owner == null ? "Open" : owner;
+	}
+
+	public String tableAge(Player player) {
+		if (!firstUnique()) {
+			return contested() ? "season" : "-";
+		}
+		long epochSeconds = firstClaimEpochSeconds(player, this);
+		if (epochSeconds <= 0) {
+			return "open";
+		}
+		long days = Math.max(0L, (System.currentTimeMillis() / 1000L - epochSeconds) / 86400L);
+		if (days == 0) {
+			return "today";
+		}
+		return days + "d ago";
 	}
 
 	public String requirementProgress(Player player) {
@@ -213,69 +289,35 @@ public enum PlayerTitle {
 				return "Progress: " + formatNumber(player.getTotalLevel()) + "/" + formatNumber(threshold) + " total level.";
 			case COMBAT_LEVEL:
 				return "Progress: " + player.getCombatLevel() + "/" + threshold + " combat level.";
-			case QUEST_POINTS:
-				return "Progress: " + player.getQuestPoints() + "/" + threshold + " quest points.";
 			case PLAYER_KILLS:
 				return "Progress: " + formatNumber(player.getKills()) + "/" + formatNumber(threshold) + " Wilderness PKs.";
 			case NPC_KILLS_TOTAL:
 				return "Progress: " + formatNumber(totalNpcKills(player)) + "/" + formatNumber(threshold) + " NPC kills.";
 			case NPC_KILLS_ANY:
 				return "Progress: " + formatNumber(highestSingleNpcKillCount(player)) + "/" + formatNumber(threshold) + " on one NPC type.";
+			case NPC_KILLS_SET:
+				return "Progress: " + formatNumber(npcKillsInSet(player)) + "/" + formatNumber(threshold) + " matching NPC kills.";
 			case SKILL_LEVEL:
+				if (skill == null) {
+					return "Progress: " + highestSkillLevel(player) + "/" + threshold + " highest skill.";
+				}
 				return "Progress: " + currentSkillLevel(player, skill) + "/" + threshold + " " + skillName(skill) + ".";
+			case QUEST_COMPLETE:
+				return player.getQuestStage(threshold) == Quests.QUEST_STAGE_COMPLETED ? "Progress: complete." : "Progress: incomplete.";
+			case MAX_QUEST_POINTS:
+				return "Progress: " + player.getQuestPoints() + "/" + maxQuestPoints(player) + " quest points.";
+			case COUNTER:
+				return "Progress: " + formatNumber(counterValue(player, counterKey)) + "/" + formatNumber(threshold) + ".";
+			case ZERO_DEATH_COMBAT:
+				return "Progress: combat " + player.getCombatLevel() + "/" + threshold + ", deaths " + player.getDeaths() + ".";
 			case MANUAL:
 			default:
-				return "Progress: manual unlock.";
-		}
-	}
-
-	public boolean unique() {
-		return scope == TitleScope.UNIQUE;
-	}
-
-	public String scopeLabel() {
-		return unique() ? "unique" : "reusable";
-	}
-
-	public String rarityLabel() {
-		if (unique()) {
-			return "unique";
-		}
-		int score = rarityScore();
-		if (score >= 10000) {
-			return "rare";
-		}
-		if (score >= 2500) {
-			return "uncommon";
-		}
-		return "common";
-	}
-
-	public int rarityScore() {
-		int score = unique() ? 100000 : 0;
-		switch (requirementType) {
-			case TOTAL_LEVEL:
-				return score + threshold;
-			case COMBAT_LEVEL:
-				return score + threshold * 20;
-			case QUEST_POINTS:
-				return score + threshold * 30;
-			case PLAYER_KILLS:
-				return score + threshold * 15;
-			case NPC_KILLS_TOTAL:
-				return score + threshold;
-			case NPC_KILLS_ANY:
-				return score + threshold * 5;
-			case SKILL_LEVEL:
-				return score + threshold * 30;
-			case MANUAL:
-			default:
-				return score + 5000;
+				return "Progress: awarded by event or staff.";
 		}
 	}
 
 	public boolean automatic() {
-		return requirementType != RequirementType.MANUAL;
+		return requirementType != RequirementType.MANUAL && uniqueKind != UniqueKind.CONTESTED && uniqueKind != UniqueKind.ITEM_BOUND;
 	}
 
 	public String cacheKey() {
@@ -286,18 +328,15 @@ public enum PlayerTitle {
 		return LEGACY_UNLOCK_CACHE_PREFIX + id;
 	}
 
-	private String blockedCacheKey() {
-		return BLOCKED_UNIQUE_CACHE_PREFIX + id;
-	}
-
 	public boolean isUnlocked(Player player) {
-		if (!hasUnlockCache(player)) {
+		migratePlayerCache(player);
+		if (player == null || !hasUnlockCache(player)) {
 			return false;
 		}
-		if (!unique()) {
-			return true;
+		if (uniqueKind == UniqueKind.CONTESTED) {
+			return ownsCurrentContestedToken(player, this);
 		}
-		return uniqueClaim(player) == this && !isClaimedByOther(player, this);
+		return true;
 	}
 
 	private boolean hasUnlockCache(Player player) {
@@ -314,16 +353,24 @@ public enum PlayerTitle {
 				return player.getTotalLevel() >= threshold;
 			case COMBAT_LEVEL:
 				return player.getCombatLevel() >= threshold;
-			case QUEST_POINTS:
-				return player.getQuestPoints() >= threshold;
 			case PLAYER_KILLS:
 				return player.getKills() >= threshold;
 			case NPC_KILLS_TOTAL:
 				return totalNpcKills(player) >= threshold;
 			case NPC_KILLS_ANY:
 				return highestSingleNpcKillCount(player) >= threshold;
+			case NPC_KILLS_SET:
+				return npcKillsInSet(player) >= threshold;
 			case SKILL_LEVEL:
-				return hasSkillLevel(player, skill, threshold);
+				return skill == null ? highestSkillLevel(player) >= threshold : hasSkillLevel(player, skill, threshold);
+			case QUEST_COMPLETE:
+				return player.getQuestStage(threshold) == Quests.QUEST_STAGE_COMPLETED;
+			case MAX_QUEST_POINTS:
+				return maxQuestPoints(player) > 0 && player.getQuestPoints() >= maxQuestPoints(player);
+			case COUNTER:
+				return counterValue(player, counterKey) >= threshold;
+			case ZERO_DEATH_COMBAT:
+				return player.getCombatLevel() >= threshold && player.getDeaths() == 0;
 			case MANUAL:
 			default:
 				return false;
@@ -331,48 +378,107 @@ public enum PlayerTitle {
 	}
 
 	public static synchronized boolean unlock(Player player, PlayerTitle title) {
+		migratePlayerCache(player);
 		if (player == null || title == null) {
 			return false;
 		}
-		if (title.hasUnlockCache(player)) {
-			if (title.unique() && uniqueClaim(player) == null) {
-				claimUnique(player, title);
-			}
+		if (title.uniqueKind == UniqueKind.CONTESTED) {
+			return grantContested(player.getWorld(), player, title);
+		}
+		if (title.isUnlocked(player)) {
 			return false;
 		}
 		if (title.unique()) {
-			PlayerTitle currentUnique = uniqueClaim(player);
-			if (currentUnique != null && currentUnique != title) {
-				player.getCache().store(title.blockedCacheKey(), true);
-				return false;
-			}
 			String owner = ownerName(player, title);
 			if (owner != null && !owner.equalsIgnoreCase(player.getUsername())) {
-				player.getCache().store(title.blockedCacheKey(), true);
 				return false;
 			}
 		}
 
 		player.getCache().store(title.cacheKey(), true);
-		if (title.unique()) {
-			claimUnique(player, title);
+		if (title.firstUnique()) {
+			stampFirstClaimDate(player, title);
 		}
-		player.message("@mag@Title unlocked: @red@" + title.displayName() + "@whi@.");
+		player.message("@mag@Title unlocked: " + title.tierColorToken() + title.displayName() + "@whi@.");
 		if (active(player) == null) {
 			setActive(player, title);
+		}
+		if (title.unique()) {
+			announceUniqueClaim(player, title);
 		}
 		return true;
 	}
 
+	public static synchronized boolean revoke(Player player, PlayerTitle title) {
+		migratePlayerCache(player);
+		if (player == null || title == null || !title.hasUnlockCache(player)) {
+			return false;
+		}
+		player.getCache().remove(title.cacheKey(), title.legacyCacheKey());
+		if (active(player) == title) {
+			setActive(player, null);
+		}
+		player.message("@mag@Title revoked: " + title.tierColorToken() + title.displayName() + "@whi@.");
+		return true;
+	}
+
+	public static synchronized boolean grantContested(World world, Player player, PlayerTitle title) {
+		migratePlayerCache(player);
+		if (world == null || player == null || title == null || title.uniqueKind != UniqueKind.CONTESTED) {
+			return false;
+		}
+
+		String previousOwner = ownerName(player, title);
+		if (previousOwner != null && previousOwner.equalsIgnoreCase(player.getUsername()) && title.isUnlocked(player)) {
+			return false;
+		}
+
+		int token = nextContestedToken(world, title);
+		player.getCache().set(title.cacheKey(), token);
+		if (active(player) == null) {
+			setActive(player, title);
+		} else {
+			player.getUpdateFlags().setAppearanceChanged(true);
+		}
+		player.message("@mag@Contested title awarded: " + title.tierColorToken() + title.displayName() + "@whi@.");
+
+		Player previous = onlinePlayerByName(world, previousOwner);
+		if (previous != null && previous.getUsernameHash() != player.getUsernameHash()) {
+			previous.getCache().remove(title.cacheKey());
+			if (active(previous) == title) {
+				setActive(previous, null);
+			}
+			previous.message("@mag@The contested title " + title.tierColorToken() + title.displayName() + "@whi@ has changed hands.");
+		}
+		world.getWorldAnnouncementService().announceUniqueTitleTransfer(player, title.displayName(), previousOwner);
+		return true;
+	}
+
+	public static synchronized boolean grantContested(World world, int playerId, PlayerTitle title) {
+		if (world == null || playerId <= 0 || title == null || title.uniqueKind != UniqueKind.CONTESTED) {
+			return false;
+		}
+		Player onlinePlayer = world.getPlayerID(playerId);
+		if (onlinePlayer != null) {
+			return grantContested(world, onlinePlayer, title);
+		}
+		int token = nextContestedToken(world, title);
+		try {
+			world.getServer().getDatabase().querySavePlayerCacheValue(playerId, 0, title.cacheKey(), String.valueOf(token));
+			return true;
+		} catch (GameDatabaseException ex) {
+			return false;
+		}
+	}
+
 	public static int refreshAutomaticUnlocks(Player player) {
+		migratePlayerCache(player);
 		if (player == null) {
 			return 0;
 		}
-		uniqueClaim(player);
 		int unlocked = 0;
 		for (PlayerTitle title : values()) {
-			if (title.automatic() && !title.hasUnlockCache(player)
-				&& !player.getCache().hasKey(title.blockedCacheKey()) && title.qualifies(player)) {
+			if (title.automatic() && !title.isUnlocked(player) && title.qualifies(player)) {
 				if (unlock(player, title)) {
 					unlocked++;
 				}
@@ -381,7 +487,109 @@ public enum PlayerTitle {
 		return unlocked;
 	}
 
+	public static int incrementCounter(Player player, String counterKey) {
+		return incrementCounter(player, counterKey, 1);
+	}
+
+	public static int incrementCounter(Player player, String counterKey, int amount) {
+		if (player == null || counterKey == null || counterKey.isEmpty() || amount <= 0) {
+			return 0;
+		}
+		int value = counterValue(player, counterKey) + amount;
+		player.getCache().set(counterKey, value);
+		checkCounterTitles(player, counterKey);
+		return value;
+	}
+
+	public static void recordSwordfishCooked(Player player, int itemId) {
+		if (itemId == ItemId.SWORDFISH.id()) {
+			incrementCounter(player, COUNTER_SWORDFISH_COOKED);
+		}
+	}
+
+	public static void recordMagicLogsCut(Player player, int itemId) {
+		if (itemId == ItemId.MAGIC_LOGS.id()) {
+			incrementCounter(player, COUNTER_MAGIC_LOGS);
+		}
+	}
+
+	public static void recordGemCut(Player player) {
+		incrementCounter(player, COUNTER_GEMS_CUT);
+	}
+
+	public static void recordSpellCast(Player player) {
+		incrementCounter(player, COUNTER_SPELLS_CAST);
+	}
+
+	public static void recordHerbPickup(Player player, int itemId, int amount) {
+		if (amount > 0 && isHerb(itemId)) {
+			incrementCounter(player, COUNTER_HERBS_PICKED_UP, amount);
+		}
+	}
+
+	public static void resetCounter(Player player, String counterKey) {
+		if (player != null && counterKey != null && !counterKey.isEmpty()) {
+			player.getCache().set(counterKey, 0);
+		}
+	}
+
+	public static int recordWildernessPlayerKill(Player killer, Player killed) {
+		if (killer == null || killed == null || !killed.getLocation().inWilderness()) {
+			return 0;
+		}
+
+		int month = currentMonth();
+		String monthlyCounter = monthlyPkCounterKey(month);
+		int monthlyKills = counterValue(killer, monthlyCounter) + 1;
+		killer.getCache().set(monthlyCounter, monthlyKills);
+
+		int wildernessLevel = Math.max(1, killed.getLocation().wildernessLevel());
+		if (wildernessLevel <= 5) {
+			incrementCounter(killer, COUNTER_EDGEVILLE_PKS);
+		}
+
+		updateWarlord(killer, month, monthlyKills);
+		return monthlyKills;
+	}
+
+	public static void recordAuctionHouseSale(Player context, int sellerId) {
+		if (context == null || sellerId <= 0) {
+			return;
+		}
+
+		int month = currentMonth();
+		int sellerVolume;
+		try {
+			sellerVolume = context.getWorld().getServer().getDatabase()
+				.getAuctionSellerVolumeSince(sellerId, monthStartEpochSeconds());
+		} catch (GameDatabaseException ex) {
+			return;
+		}
+		updateMagnate(context, month, sellerId, sellerVolume);
+	}
+
+	public static void checkGiantKiller(Player player, int npcCombatLevel) {
+		if (player != null && npcCombatLevel >= 50 && npcCombatLevel >= player.getCombatLevel() * 2) {
+			unlock(player, GIANT_KILLER);
+		}
+	}
+
+	public static void checkRunePlateSmith(Player player) {
+		unlock(player, RUNESMITH);
+	}
+
+	public static void checkDragonMediumDrop(Player player) {
+		unlock(player, DRAGON_CROWNED);
+	}
+
+	public static void checkBronzeWeaponPlayerKill(Player player, boolean wieldingBronzeWeapon) {
+		if (wieldingBronzeWeapon) {
+			unlock(player, BRONZE_REAPER);
+		}
+	}
+
 	public static List<PlayerTitle> unlocked(Player player) {
+		migratePlayerCache(player);
 		List<PlayerTitle> unlocked = new ArrayList<>();
 		if (player == null) {
 			return unlocked;
@@ -395,6 +603,7 @@ public enum PlayerTitle {
 	}
 
 	public static int unlockedCount(Player player) {
+		migratePlayerCache(player);
 		int count = 0;
 		if (player == null) {
 			return count;
@@ -408,6 +617,7 @@ public enum PlayerTitle {
 	}
 
 	public static PlayerTitle active(Player player) {
+		migratePlayerCache(player);
 		if (player == null || !player.getCache().hasKey(ACTIVE_TITLE_CACHE)) {
 			return null;
 		}
@@ -420,17 +630,18 @@ public enum PlayerTitle {
 		return title;
 	}
 
-	public static String activePrefix(Player player) {
-		PlayerTitle title = active(player);
-		return title == null ? "" : "@red@[" + title.displayName() + "]@whi@ ";
-	}
-
 	public static String activeOverhead(Player player) {
 		PlayerTitle title = active(player);
 		return title == null ? "" : title.displayName();
 	}
 
+	public static int activeOverheadTier(Player player) {
+		PlayerTitle title = active(player);
+		return title == null ? 0 : title.tier.code;
+	}
+
 	public static void setActive(Player player, PlayerTitle title) {
+		migratePlayerCache(player);
 		if (player == null) {
 			return;
 		}
@@ -448,53 +659,12 @@ public enum PlayerTitle {
 		player.getUpdateFlags().setAppearanceChanged(true);
 	}
 
-	public static PlayerTitle uniqueClaim(Player player) {
-		if (player == null) {
-			return null;
-		}
-
-		if (player.getCache().hasKey(UNIQUE_CLAIM_CACHE)) {
-			PlayerTitle claimed = byId(player.getCache().getString(UNIQUE_CLAIM_CACHE));
-			if (claimed != null && claimed.unique() && claimed.hasUnlockCache(player)) {
-				return claimed;
-			}
-			player.getCache().remove(UNIQUE_CLAIM_CACHE);
-		}
-
-		PlayerTitle active = activeRaw(player);
-		if (active != null && active.unique() && active.hasUnlockCache(player)) {
-			claimUnique(player, active);
-			return active;
-		}
-
-		for (PlayerTitle title : values()) {
-			if (title.unique() && title.hasUnlockCache(player)) {
-				claimUnique(player, title);
-				return title;
-			}
-		}
-		return null;
-	}
-
-	private static PlayerTitle activeRaw(Player player) {
-		if (player == null || !player.getCache().hasKey(ACTIVE_TITLE_CACHE)) {
-			return null;
-		}
-		return byId(player.getCache().getString(ACTIVE_TITLE_CACHE));
-	}
-
-	private static void claimUnique(Player player, PlayerTitle title) {
-		if (player != null && title != null && title.unique()) {
-			player.getCache().store(UNIQUE_CLAIM_CACHE, title.id());
-		}
-	}
-
 	public static String ownerName(Player player, PlayerTitle title) {
 		if (player == null || title == null || !title.unique()) {
 			return null;
 		}
 
-		String onlineOwner = onlineUniqueOwnerName(player, title);
+		String onlineOwner = onlineUniqueOwnerName(player.getWorld(), title);
 		return onlineOwner != null ? onlineOwner : databaseUniqueOwnerName(player, title);
 	}
 
@@ -504,6 +674,46 @@ public enum PlayerTitle {
 		}
 		String owner = ownerName(player, title);
 		return owner != null && !owner.equalsIgnoreCase(player.getUsername());
+	}
+
+	public static String firstClaimDate(Player player, PlayerTitle title) {
+		if (player == null || title == null || !title.firstUnique()) {
+			return "";
+		}
+		long epochSeconds = firstClaimEpochSeconds(player, title);
+		return epochSeconds <= 0 ? "" : new SimpleDateFormat("yyyy-MM-dd").format(new Date(epochSeconds * 1000L));
+	}
+
+	private static long firstClaimEpochSeconds(Player player, PlayerTitle title) {
+		if (player == null || title == null || !title.firstUnique()) {
+			return 0L;
+		}
+		long epochSeconds = loadGlobalLong(player, FIRST_DATE_CACHE_PREFIX + title.id());
+		if (epochSeconds <= 0 && player.getCache().hasKey(FIRST_DATE_CACHE_PREFIX + title.id())) {
+			epochSeconds = cacheLong(player, FIRST_DATE_CACHE_PREFIX + title.id());
+		}
+		return epochSeconds;
+	}
+
+	public static int currentContestedScore(Player player, PlayerTitle title) {
+		if (player == null || title == null || title.uniqueKind != UniqueKind.CONTESTED) {
+			return 0;
+		}
+		if (title == WARLORD_WASTES) {
+			int month = currentMonth();
+			if (loadGlobalInt(player, CONTESTED_MONTH_CACHE_PREFIX + title.id()) != month) {
+				return 0;
+			}
+			return loadGlobalInt(player, CONTESTED_SCORE_CACHE_PREFIX + title.id());
+		}
+		if (title == MAGNATE) {
+			int month = currentMonth();
+			if (loadGlobalInt(player, CONTESTED_MONTH_CACHE_PREFIX + title.id()) != month) {
+				return 0;
+			}
+			return loadGlobalInt(player, CONTESTED_SCORE_CACHE_PREFIX + title.id());
+		}
+		return 0;
 	}
 
 	public static PlayerTitle byId(String id) {
@@ -520,6 +730,90 @@ public enum PlayerTitle {
 			}
 		}
 		return null;
+	}
+
+	private static void checkCounterTitles(Player player, String counterKey) {
+		for (PlayerTitle title : values()) {
+			if (title.requirementType == RequirementType.COUNTER
+				&& counterKey.equals(title.counterKey)
+				&& !title.isUnlocked(player)
+				&& title.qualifies(player)) {
+				unlock(player, title);
+			}
+		}
+	}
+
+	private static void updateWarlord(Player killer, int month, int monthlyKills) {
+		if (monthlyKills < WARLORD_MIN_MONTHLY_KILLS) {
+			return;
+		}
+		int recordedMonth = loadGlobalInt(killer, CONTESTED_MONTH_CACHE_PREFIX + WARLORD_WASTES.id());
+		int leaderScore = recordedMonth == month ? loadGlobalInt(killer, CONTESTED_SCORE_CACHE_PREFIX + WARLORD_WASTES.id()) : 0;
+		if (monthlyKills < leaderScore) {
+			return;
+		}
+		String owner = ownerName(killer, WARLORD_WASTES);
+		if (monthlyKills == leaderScore && owner != null && !owner.equalsIgnoreCase(killer.getUsername())) {
+			return;
+		}
+		saveGlobalInt(killer, CONTESTED_MONTH_CACHE_PREFIX + WARLORD_WASTES.id(), month);
+		saveGlobalInt(killer, CONTESTED_SCORE_CACHE_PREFIX + WARLORD_WASTES.id(), monthlyKills);
+		if (owner == null || !owner.equalsIgnoreCase(killer.getUsername())) {
+			grantContested(killer.getWorld(), killer, WARLORD_WASTES);
+		}
+	}
+
+	private static void updateMagnate(Player context, int month, int sellerId, int sellerVolume) {
+		if (sellerVolume <= 0) {
+			return;
+		}
+		int recordedMonth = loadGlobalInt(context, CONTESTED_MONTH_CACHE_PREFIX + MAGNATE.id());
+		int leaderScore = recordedMonth == month ? loadGlobalInt(context, CONTESTED_SCORE_CACHE_PREFIX + MAGNATE.id()) : 0;
+		if (sellerVolume < leaderScore) {
+			return;
+		}
+		String sellerName = playerName(context, sellerId);
+		String owner = ownerName(context, MAGNATE);
+		if (sellerVolume == leaderScore && owner != null && (sellerName == null || !owner.equalsIgnoreCase(sellerName))) {
+			return;
+		}
+		saveGlobalInt(context, CONTESTED_MONTH_CACHE_PREFIX + MAGNATE.id(), month);
+		saveGlobalInt(context, CONTESTED_SCORE_CACHE_PREFIX + MAGNATE.id(), sellerVolume);
+		if (owner == null || sellerName == null || !owner.equalsIgnoreCase(sellerName)) {
+			grantContested(context.getWorld(), sellerId, MAGNATE);
+		}
+	}
+
+	private static void migratePlayerCache(Player player) {
+		if (player == null || player.getCache().hasKey(MIGRATION_CACHE)) {
+			return;
+		}
+
+		Set<String> keys = new HashSet<>(player.getCache().getCacheMap().keySet());
+		for (String key : keys) {
+			if (key.startsWith(UNLOCK_CACHE_PREFIX)) {
+				String id = key.substring(UNLOCK_CACHE_PREFIX.length());
+				if (!FOUNDER.id.equals(id)) {
+					player.getCache().remove(key);
+				}
+			} else if (key.startsWith(LEGACY_UNLOCK_CACHE_PREFIX)) {
+				String id = key.substring(LEGACY_UNLOCK_CACHE_PREFIX.length());
+				if (!FOUNDER.id.equals(id)) {
+					player.getCache().remove(key);
+				}
+			} else if (key.startsWith(LEGACY_BLOCKED_UNIQUE_CACHE_PREFIX) || key.equals(LEGACY_UNIQUE_CLAIM_CACHE)) {
+				player.getCache().remove(key);
+			}
+		}
+
+		PlayerTitle active = null;
+		if (player.getCache().hasKey(ACTIVE_TITLE_CACHE)) {
+			active = byId(player.getCache().getString(ACTIVE_TITLE_CACHE));
+		}
+		if (active != FOUNDER) {
+			player.getCache().remove(ACTIVE_TITLE_CACHE);
+		}
+		player.getCache().store(MIGRATION_CACHE, true);
 	}
 
 	private static int totalNpcKills(Player player) {
@@ -542,6 +836,20 @@ public enum PlayerTitle {
 		return highest;
 	}
 
+	private int npcKillsInSet(Player player) {
+		int total = 0;
+		if (npcIds == null) {
+			return total;
+		}
+		for (int npcId : npcIds) {
+			Integer kills = player.getKillCache().get(npcId);
+			if (kills != null) {
+				total += kills;
+			}
+		}
+		return total;
+	}
+
 	private static boolean hasSkillLevel(Player player, Skill skill, int level) {
 		return currentSkillLevel(player, skill) >= level;
 	}
@@ -557,64 +865,234 @@ public enum PlayerTitle {
 		return player.getSkills().getMaxStat(skillId);
 	}
 
-	private String manualCatalogHint() {
-		switch (this) {
-			case VOIDBANE:
-				return "Kill Void Knight.";
-			case VOIDWALKER:
-				return "Major Voidscape encounter.";
-			case VOID_TOUCHED:
-				return "Rare void-themed reward.";
-			case AUCTIONEER:
-				return "Auction House activity.";
-			case MERCHANT:
-				return "Auction House reputation.";
-			case RARESTRUCK:
-				return "Find a loot-beam drop.";
-			case BEAMCALLER:
-				return "Customize a loot beam.";
-			case FOUNDER:
-				return "Early supporter reward.";
-			case VANQUISHER:
-				return "High-stakes challenge win.";
-			case PATHFINDER:
-				return "Exploration milestone.";
-			case RIFTBOUND:
-				return "Major rift event.";
-			case MARKET_MAKER:
-				return "Auction-house milestone.";
-			case RELIC_KEEPER:
-				return "One-of-one relic.";
-			case OLD_GUARD:
-				return "Veteran account.";
-			default:
-				return unlockHint;
+	private static int highestSkillLevel(Player player) {
+		int highest = 0;
+		int count = player.getWorld().getServer().getConstants().getSkills().getSkillsCount();
+		for (int skillId = 0; skillId < count; skillId++) {
+			highest = Math.max(highest, player.getSkills().getMaxStat(skillId));
+		}
+		return highest;
+	}
+
+	private static int maxQuestPoints(Player player) {
+		int max = 0;
+		for (QuestInterface quest : player.getWorld().getQuests()) {
+			max += quest.getQuestPoints();
+		}
+		return max;
+	}
+
+	private static int counterValue(Player player, String counterKey) {
+		if (player == null || counterKey == null || !player.getCache().hasKey(counterKey)) {
+			return 0;
+		}
+		Object value = player.getCache().getCacheMap().get(counterKey);
+		if (value instanceof Integer) {
+			return (Integer) value;
+		}
+		if (value instanceof Long) {
+			return (int) Math.min(Integer.MAX_VALUE, (Long) value);
+		}
+		if (value instanceof String) {
+			try {
+				return Integer.parseInt((String) value);
+			} catch (NumberFormatException ignored) {
+				return 0;
+			}
+		}
+		return 0;
+	}
+
+	private static long cacheLong(Player player, String key) {
+		if (player == null || key == null || !player.getCache().hasKey(key)) {
+			return 0L;
+		}
+		Object value = player.getCache().getCacheMap().get(key);
+		if (value instanceof Long) {
+			return (Long) value;
+		}
+		if (value instanceof Integer) {
+			return ((Integer) value).longValue();
+		}
+		if (value instanceof String) {
+			try {
+				return Long.parseLong((String) value);
+			} catch (NumberFormatException ignored) {
+				return 0L;
+			}
+		}
+		return 0L;
+	}
+
+	private static void stampFirstClaimDate(Player player, PlayerTitle title) {
+		long epochSeconds = System.currentTimeMillis() / 1000L;
+		player.getCache().store(FIRST_DATE_CACHE_PREFIX + title.id(), epochSeconds);
+		saveGlobalLong(player, FIRST_DATE_CACHE_PREFIX + title.id(), epochSeconds);
+	}
+
+	private static void announceUniqueClaim(Player player, PlayerTitle title) {
+		if (player != null && title != null) {
+			player.getWorld().getWorldAnnouncementService().announceUniqueTitleClaim(player, title.displayName());
 		}
 	}
 
-	private static String skillName(Skill skill) {
-		if (skill == null || skill.name() == null) {
-			return "skill";
+	private static String onlineUniqueOwnerName(World world, PlayerTitle title) {
+		if (world == null || title == null) {
+			return null;
 		}
-		String value = skill.name().toLowerCase();
-		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
-	}
-
-	private static String onlineUniqueOwnerName(Player player, PlayerTitle title) {
-		for (Player candidate : player.getWorld().getPlayers()) {
-			if (uniqueClaim(candidate) == title) {
+		for (Player candidate : world.getPlayers()) {
+			migratePlayerCache(candidate);
+			if (directlyOwnsUnique(candidate, title)) {
 				return candidate.getUsername();
 			}
 		}
 		return null;
 	}
 
+	private static boolean directlyOwnsUnique(Player player, PlayerTitle title) {
+		if (player == null || title == null || !title.hasUnlockCache(player)) {
+			return false;
+		}
+		if (title.uniqueKind == UniqueKind.CONTESTED) {
+			return ownsCurrentContestedToken(player, title);
+		}
+		return true;
+	}
+
+	private static boolean ownsCurrentContestedToken(Player player, PlayerTitle title) {
+		int token = currentContestedToken(player, title);
+		return token > 0 && counterValue(player, title.cacheKey()) == token && !contestedSeasonExpired(player, title);
+	}
+
+	private static boolean contestedSeasonExpired(Player player, PlayerTitle title) {
+		if (title != WARLORD_WASTES) {
+			return false;
+		}
+		return loadGlobalInt(player, CONTESTED_MONTH_CACHE_PREFIX + title.id()) != currentMonth();
+	}
+
 	private static String databaseUniqueOwnerName(Player player, PlayerTitle title) {
 		try {
-			return player.getWorld().getServer().getDatabase().queryPlayerCacheOwner(UNIQUE_CLAIM_CACHE, title.id());
+			if (title.uniqueKind == UniqueKind.CONTESTED) {
+				int token = currentContestedToken(player, title);
+				if (token <= 0 || contestedSeasonExpired(player, title)) {
+					return null;
+				}
+				return player.getWorld().getServer().getDatabase().queryPlayerCacheOwner(title.cacheKey(), String.valueOf(token));
+			}
+			return player.getWorld().getServer().getDatabase().queryPlayerCacheOwner(title.cacheKey());
 		} catch (GameDatabaseException ex) {
 			return null;
 		}
+	}
+
+	private static int currentContestedToken(Player player, PlayerTitle title) {
+		return loadGlobalInt(player, CONTESTED_TOKEN_CACHE_PREFIX + title.id());
+	}
+
+	private static int nextContestedToken(World world, PlayerTitle title) {
+		int token = 1;
+		try {
+			Integer current = world.getServer().getDatabase().queryLoadGlobalCacheInt(CONTESTED_TOKEN_CACHE_PREFIX + title.id());
+			if (current != null && current > 0) {
+				token = current + 1;
+			}
+			world.getServer().getDatabase().querySaveGlobalCacheInt(CONTESTED_TOKEN_CACHE_PREFIX + title.id(), token);
+		} catch (GameDatabaseException ignored) {
+			token = (int) (System.currentTimeMillis() / 1000L);
+		}
+		return token;
+	}
+
+	private static Player onlinePlayerByName(World world, String username) {
+		if (world == null || username == null) {
+			return null;
+		}
+		for (Player candidate : world.getPlayers()) {
+			if (candidate.getUsername().equalsIgnoreCase(username)) {
+				return candidate;
+			}
+		}
+		return null;
+	}
+
+	private static String playerName(Player context, int playerId) {
+		if (context == null || playerId <= 0) {
+			return null;
+		}
+		Player onlinePlayer = context.getWorld().getPlayerID(playerId);
+		if (onlinePlayer != null) {
+			return onlinePlayer.getUsername();
+		}
+		try {
+			return context.getWorld().getServer().getDatabase().usernameFromId(playerId);
+		} catch (GameDatabaseException ex) {
+			return null;
+		}
+	}
+
+	private static int loadGlobalInt(Player player, String key) {
+		try {
+			Integer value = player.getWorld().getServer().getDatabase().queryLoadGlobalCacheInt(key);
+			return value == null ? 0 : value;
+		} catch (GameDatabaseException ex) {
+			return 0;
+		}
+	}
+
+	private static long loadGlobalLong(Player player, String key) {
+		try {
+			Long value = player.getWorld().getServer().getDatabase().queryLoadGlobalCacheLong(key);
+			return value == null ? 0L : value;
+		} catch (GameDatabaseException ex) {
+			return 0L;
+		}
+	}
+
+	private static void saveGlobalInt(Player player, String key, int value) {
+		try {
+			player.getWorld().getServer().getDatabase().querySaveGlobalCacheInt(key, value);
+		} catch (GameDatabaseException ignored) {
+		}
+	}
+
+	private static void saveGlobalLong(Player player, String key, long value) {
+		try {
+			player.getWorld().getServer().getDatabase().querySaveGlobalCacheLong(key, value);
+		} catch (GameDatabaseException ignored) {
+		}
+	}
+
+	private static int currentMonth() {
+		return Integer.parseInt(new SimpleDateFormat("yyyyMM").format(new Date()));
+	}
+
+	private static long monthStartEpochSeconds() {
+		Calendar calendar = Calendar.getInstance();
+		calendar.set(Calendar.DAY_OF_MONTH, 1);
+		calendar.set(Calendar.HOUR_OF_DAY, 0);
+		calendar.set(Calendar.MINUTE, 0);
+		calendar.set(Calendar.SECOND, 0);
+		calendar.set(Calendar.MILLISECOND, 0);
+		return calendar.getTimeInMillis() / 1000L;
+	}
+
+	private static String monthlyPkCounterKey(int month) {
+		return "title_pk_" + month;
+	}
+
+	private static String skillName(Skill skill) {
+		if (skill == null || skill.name() == null) {
+			return "skill";
+		}
+		if (skill == Skill.DEFENSE) {
+			return "Defence";
+		}
+		if (skill == Skill.HITS) {
+			return "Hits";
+		}
+		String value = skill.name().toLowerCase();
+		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
 	}
 
 	private static String normalize(String value) {
@@ -635,19 +1113,69 @@ public enum PlayerTitle {
 		return value;
 	}
 
+	private static String trimTrailingPeriod(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.endsWith(".") ? value.substring(0, value.length() - 1) : value;
+	}
+
+	private static String titleCase(String value) {
+		if (value == null || value.isEmpty()) {
+			return "";
+		}
+		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+	}
+
+	private static boolean isHerb(int itemId) {
+		return itemId == ItemId.UNIDENTIFIED_GUAM_LEAF.id()
+			|| itemId == ItemId.UNIDENTIFIED_MARRENTILL.id()
+			|| itemId == ItemId.UNIDENTIFIED_TARROMIN.id()
+			|| itemId == ItemId.UNIDENTIFIED_HARRALANDER.id()
+			|| itemId == ItemId.GUAM_LEAF.id()
+			|| itemId == ItemId.MARRENTILL.id()
+			|| itemId == ItemId.TARROMIN.id()
+			|| itemId == ItemId.HARRALANDER.id();
+	}
+
+	public enum Tier {
+		RENOWN(0, "renown", "@whi@"),
+		FEAT(1, "feat", "@mag@"),
+		UNIQUE(2, "unique", "@yel@");
+
+		private final int code;
+		private final String label;
+		private final String chatColor;
+
+		Tier(int code, String label, String chatColor) {
+			this.code = code;
+			this.label = label;
+			this.chatColor = chatColor;
+		}
+
+		public int code() {
+			return code;
+		}
+	}
+
+	public enum UniqueKind {
+		FIRST,
+		CONTESTED,
+		ITEM_BOUND
+	}
+
 	private enum RequirementType {
 		MANUAL,
 		TOTAL_LEVEL,
 		COMBAT_LEVEL,
-		QUEST_POINTS,
 		PLAYER_KILLS,
 		NPC_KILLS_TOTAL,
 		NPC_KILLS_ANY,
-		SKILL_LEVEL
-	}
-
-	private enum TitleScope {
-		REUSABLE,
-		UNIQUE
+		NPC_KILLS_SET,
+		SKILL_LEVEL,
+		QUEST_COMPLETE,
+		MAX_QUEST_POINTS,
+		COUNTER,
+		ZERO_DEATH_COMBAT
 	}
 }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Voidscape one-shot native game account to portal account cutover
+After=voidscape-portal.service
+Wants=voidscape-portal.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/voidscape
+EnvironmentFile=/etc/voidscape/portal.env
+ExecStart=/opt/voidscape/scripts/native-portal-backfill-sweep.sh --apply

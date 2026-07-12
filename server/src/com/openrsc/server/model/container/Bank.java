@@ -197,7 +197,12 @@ public class Bank {
 
 	public boolean canHold(Item item) {
 		synchronized(list) {
-			return (getPlayer().getWorld().getMaxBankSize() - list.size()) >= getRequiredSlots(item);
+			// A deposit that merges into an existing stack needs no new slot and must
+			// succeed even when the bank is at (or over, after a cap reduction) capacity —
+			// add() already accepts merges regardless of size.
+			final int requiredSlots = getRequiredSlots(item);
+			if (requiredSlots == 0) return true;
+			return (getPlayer().getWorld().getMaxBankSize() - list.size()) >= requiredSlots;
 		}
 	}
 

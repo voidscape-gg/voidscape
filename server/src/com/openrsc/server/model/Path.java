@@ -86,7 +86,6 @@ public class Path {
 
 			boolean canWalkX = PathValidation.checkAdjacent(mob, last, new Point(x - (diffX - moveX), y - diffY));
 			boolean canWalkY = PathValidation.checkAdjacent(mob, last, new Point(x - diffX, y - (diffY - moveY)));
-			boolean canWalkXY = PathValidation.checkAdjacent(mob, last, new Point(x - (diffX - moveX), y - (diffY - moveY)));
 
 			// last step of path, check if a player is there, blocking.
 			if (mob.getConfig().PLAYER_BLOCKING == 1) {
@@ -100,6 +99,8 @@ public class Path {
 			}
 
 			if (Math.abs(diffX) > 0 && Math.abs(diffY) > 0 && canWalkX && canWalkY) {
+				// Only probe the diagonal when it can actually be taken (cardinal steps never read it).
+				boolean canWalkXY = PathValidation.checkAdjacent(mob, last, new Point(x - (diffX - moveX), y - (diffY - moveY)));
 
 				// Can walk straight diagonally.
 				if (canWalkXY) {

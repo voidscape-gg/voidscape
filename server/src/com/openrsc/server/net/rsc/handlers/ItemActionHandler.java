@@ -65,8 +65,8 @@ public class ItemActionHandler implements PayloadProcessor<ItemCommandStruct, Op
 			return;
 		}
 
-		if (item.getDef(player.getWorld()).isMembersOnly() && !player.getConfig().MEMBER_WORLD) {
-			player.message("You need to be a member to use this object");
+		if (!player.canUseMembersItemHere(item)) {
+			player.sendCannotUseMembersHereMessage();
 			return;
 		}
 

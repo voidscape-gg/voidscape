@@ -6,7 +6,8 @@ Sprite binary format (Client_Base/src/com/openrsc/client/model/Sprite.java):
     width (i32), height (i32), requiresShift (u8),
     xShift (i32), yShift (i32), something1 (i32), something2 (i32)
   pixel data:
-    width * height int32, big-endian, ARGB packed: (A<<24)|(R<<16)|(G<<8)|B
+    width * height int32, big-endian. Legacy sprites use 0x00RRGGBB with
+    value 0 as transparent; opt-in ARGB sprites use (A<<24)|(R<<16)|(G<<8)|B.
 """
 from __future__ import annotations
 
@@ -34,9 +35,10 @@ def decode(data: bytes) -> tuple[Image.Image, dict]:
         raise ValueError(f'sprite truncated: header says {width}x{height}={n_pixels}px, '
                          f'need {HEADER_SIZE + pixel_bytes} bytes, got {len(data)}')
 
-    # On disk: each int32 BE is the pixel value. High byte is unused (always 0);
-    # **transparency is signaled by the int value 0**, not by the alpha byte.
-    # All non-zero values are opaque RGB.
+    # On disk: each int32 BE is the pixel value. Old sprites use the high byte
+    # as 0 and signal transparency with the all-zero sentinel. New opt-in ARGB
+    # sprites preserve alpha in the high byte. Non-zero legacy pixels remain
+    # opaque when extracted.
     src = data[HEADER_SIZE:HEADER_SIZE + pixel_bytes]
     rgba = bytearray(pixel_bytes)
     for i in range(0, pixel_bytes, 4):
@@ -47,7 +49,7 @@ def decode(data: bytes) -> tuple[Image.Image, dict]:
             rgba[i]     = src[i + 1]  # R
             rgba[i + 1] = src[i + 2]  # G
             rgba[i + 2] = src[i + 3]  # B
-            rgba[i + 3] = 255          # A (opaque)
+            rgba[i + 3] = src[i] if src[i] != 0 else 255
 
     img = Image.frombytes('RGBA', (width, height), bytes(rgba))
     sidecar = {

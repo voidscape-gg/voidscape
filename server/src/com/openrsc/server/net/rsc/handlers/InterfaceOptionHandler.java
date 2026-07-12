@@ -60,11 +60,12 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				player.setAttribute("swap_note", payload.value == 1);
 				break;
 			case BANK_SWAP:
-				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
+				// voidscape: the Void Glass bank (per-player custom_ui) has arrange mode too
+				if (!player.getConfig().WANT_CUSTOM_BANKS && !player.getCustomUI()) return;
 				handleBankSwap(player, payload);
 				break;
 			case BANK_INSERT:
-				if (!player.getConfig().WANT_CUSTOM_BANKS) return;
+				if (!player.getConfig().WANT_CUSTOM_BANKS && !player.getCustomUI()) return;
 				handleBankInsert(player, payload);
 				break;
 			case INVENTORY_SWAP:
@@ -107,7 +108,8 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				handlePoints(player, payload);
 				break;
 			case BANK_CLEAR_PRESET:
-				if (!(player.getConfig().WANT_BANK_PRESETS && player.getConfig().WANT_CUSTOM_BANKS)) return;
+				// voidscape: Void Glass bank players (per-player custom_ui) get presets too.
+				if (!(player.getConfig().WANT_BANK_PRESETS && (player.getConfig().WANT_CUSTOM_BANKS || player.getCustomUI()))) return;
 				handleBankClearPreset(player, payload);
 				break;
 			case ACCOUNT_VALIDATE:

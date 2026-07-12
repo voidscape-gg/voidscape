@@ -122,7 +122,10 @@ server/
 │   │   ├── PlayerTitle.java        # Voidscape player-title catalog, unlock checks, active title cache
 │   │   ├── ProgressionMilestones.java # level/total milestone rewards
 │   │   ├── RestedExperience.java   # offline rested-XP pool accrual and spending
+│   │   ├── VoidOnboarding.java     # tracks the Void Island welcome-menu track choice (veteran/skip; retires old guided cache)
 │   │   ├── VoidPath.java           # Void Island starter path state, kits, and early XP boosts
+│   │   ├── VoidStarterIntro.java   # council-lore intro sequence gating the path picker
+│   │   ├── VoidVeteranTour.java    # Void Archivist "what's new" tour: rested-XP + loot-beam demos, topic menu
 │   │
 │   └── …                           # (login, util, services, …)
 │
@@ -133,6 +136,9 @@ server/
 │   │   ├── quests/                 # quest implementations (free/, members/)
 │   │   └── minigames/
 │   ├── custom/                     # OpenRSC additions / non-authentic content
+│   │   ├── npcs/                   # custom NPC dialogue / shops (VoidArchivist, VoidHerald, …)
+│   │   ├── onboarding/             # Void Island welcome flow (VoidWelcome)
+│   │   └── …                       # commands/, items/, itemactions/, minigames/, misc/, quests/, skills/
 │   ├── RuneScript.java             # static dialogue / delay helpers (legacy name)
 │   ├── Functions.java              # quest / NPC / item utilities
 │   └── QuestInterface.java         # quest contract
@@ -161,7 +167,7 @@ server/
 │       ├── core.sqlite             # SQLite-format schema
 │       └── patches/, queries/      # SQLite equivalents
 │
-├── *.conf                          # Server presets (preservation, default, 2001scape, rsccabbage, openpk, uranium, rsccoleslaw, connections, default)
+├── *.conf                          # Historical presets plus tracked secret-free voidscape-launch.conf; local.conf remains ignored
 ├── globalrules.txt
 │
 ├── inc/                            # Runtime helper files (sqlite/ DB files, my.cnf, ant resources)
@@ -195,11 +201,15 @@ Client_Base/
     │   ├── graphics/
     │   │   ├── three/              # 3D rendering
     │   │   ├── two/SpriteArchive/  # sprite handling
-    │   │   └── gui/Panel.java, Menu.java
+    │   │   └── gui/Panel.java, Menu.java, UiSkin.java   # UiSkin = glass design-system tokens
     │   ├── enumerations/           # game data enums
     │   ├── buffers/RSBuffer*.java  # packet serialization
     │   └── multiclient/ClientPort.java   # platform abstraction
-    ├── com/openrsc/                # entity defs (ItemDef, NPCDef, SpellDef, AnimationDef)
+    ├── com/openrsc/
+    │   ├── client/entityhandling/  # EntityHandler + entity defs (ItemDef, NPCDef, SpellDef, AnimationDef)
+    │   ├── client/model/           # Sector, Sprite, Tile
+    │   ├── data/                   # cache decrypt/decode helpers
+    │   └── interfaces/misc/        # glass-skinned interface windows (InterfaceChrome, BankInterface, …)
     └── res/                        # icon resources
 ```
 
@@ -216,7 +226,7 @@ PC_Client/
 └── lib/discord-rpc.jar
 
 Android_Client/
-├── Open RSC Android Client/build.gradle  # AGP 7.3.0, minSDK 23, target/compile SDK 31
+├── Open RSC Android Client/build.gradle  # AGP 8.13.2, minSdk 26, targetSdk 35, compileSdk 36
 └── src/main/java/com/openrsc/client/android/
     ├── GameActivity.java           # ClientPort impl; main entry
     ├── render/RSCBitmapSurfaceView.java, InputImpl.java
@@ -255,32 +265,61 @@ docs/
 ├── COMBAT-TUNING-REPORT.md         # Current Voidscape combat formula rationale + metrics
 ├── GLOSSARY.md                     # RSC + OpenRSC terminology
 ├── OPERATIONS.md                   # Runbook: deploy, backups, logs, rollback
+├── PERFORMANCE.md                  # Server/game performance baseline + optimization notes
 ├── RELEASE-CHECKLIST.md            # Pre-release verification checklist
 ├── SERVER-PRESETS.md               # Each .conf's role + voidscape recommendation
+├── UI-STYLE-GUIDE.md               # Authoritative client UI design system (glass chrome, tokens)
+├── bot-api.md                      # voidbot headless game-interaction client — command + protocol spec
+├── BUGS.md                         # Bug ledger (living doc); intake + tracked bugs
+├── BUGFIX-LOOP.md                  # Protocol for working the bug ledger autonomously
+├── QA-CAMPAIGN.md                  # Parallel playthrough-QA campaign playbook
+├── ACCOUNT-MANAGEMENT-ARCHITECTURE.md  # Website account/character-ownership target architecture
+├── BETA-PLAYTEST-GUIDE.md          # Friend-beta playtest flow against the hosted server
+├── PRELAUNCH-FOUNDER-PASS.md       # Static founder-pass registration prototype notes
+├── PRELAUNCH-QA-HANDOFF.md         # Prelaunch QA handoff notes
+├── DOCS-HARDENING-BRIEF.md         # Pre-launch docs-hardening task brief
+├── iphone-web-client-next-chat-context.md  # Working notes for the iPhone web client effort
+├── void-dungeon-roster.md          # Void Dungeon NPC recolor roster (auto-generated + verified)
 ├── recipes/                        # Step-by-step playbooks
 │   ├── add-item.md
 │   ├── add-npc.md
 │   ├── add-quest.md
 │   ├── add-skill-action.md
+│   ├── add-custom-hairstyle.md
+│   ├── add-custom-wielded-sprite.md
+│   ├── add-right-click-action-npc.md
+│   ├── deploy-iphone-web-client.md
+│   ├── test-iphone-web-client-local.md
 │   ├── tweak-combat-formula.md
 │   └── add-admin-command.md
 └── subsystems/                     # Deep dives, one per major subsystem
     ├── ai-workbench.md
+    ├── android-client.md
+    ├── auction-house.md
+    ├── bounty-hunter.md
     ├── client-cache.md
-    ├── content-pipeline.md
     ├── combat-system.md
+    ├── content-pipeline.md
     ├── dynamic-wilderness-spawns.md
+    ├── iphone-web-client.md
     ├── networking-protocol.md
     ├── persistence-db.md
     ├── player-appearance-rendering.md
     ├── player-titles.md
+    ├── progression-balance.md
     ├── rare-drop-beams.md
     ├── scripting-plugins.md
+    ├── subscription-cards.md
+    ├── void-arena.md
+    ├── void-dungeon.md
+    ├── void-island-starter.md
     ├── world-announcements.md
     └── world-tick-loop.md
 
 scripts/
 ├── build.sh                        # Compile server + plugins + client
+├── check-launch-config.mjs         # Fail-closed public launch config policy
+├── check-prelaunch-readiness.sh    # Aggregate non-device launch gate report
 ├── combat-sim.sh                   # Run local combat formula/cadence simulator
 ├── content.sh                      # Scaffold/report/validate custom content packs
 ├── run-server.sh                   # Run server with voidscape's local.conf
@@ -290,11 +329,19 @@ scripts/
 └── fetch-upstream-snapshot.sh      # Recreate upstream/openrsc-snapshot/
 
 content/
-└── custom/                         # One folder per custom item/NPC/boss/arena/texture pack
+├── README.md                       # How custom content gets wired into server/client/cache
+├── custom/                         # One folder per custom item/NPC/boss/arena/texture pack
+├── ui/                             # UI art workspaces (menu redesign, topbar icons)
+└── website/                        # Website/marketing art assets (feature screenshots)
 
 tools/
 ├── combat-sim/                     # Combat simulator used by tuning docs
+├── content-studio/                 # Local browser GUI for the custom-content pipeline
+├── generate-drop-table-report.py   # Drop-table report generator
 ├── hairstyle-art/                  # Hair-art helper scripts
+├── rsc-mapgen/                     # Vendored world-map PNG generator (mapgen.jar)
+├── sheet2rsc/                      # Sprite-sheet → RSC frame conversion scripts
+├── voidbot/                        # Headless game-interaction client (see `docs/bot-api.md`)
 ├── voidscape-content/              # Content-pack CLI, validators, and ChatGPT art brief
 └── voidscim-art/                   # Legacy item-icon/wielded-sprite pipeline, bridged by content.sh
 
@@ -303,16 +350,32 @@ memory/
 ├── project_voidscape.md
 ├── reference_openrsc_upstream.md
 ├── reference_layout.md
-└── feedback_preferences.md
+├── feedback_preferences.md
+├── feedback_bugfix_autonomy.md
+├── feedback_ui_qa.md
+├── bug_loop.md
+├── qa_campaign.md
+├── content_pipeline.md
+├── android_emulation.md
+├── iphone_web_client.md
+├── beta_deployments.md
+├── discord_posting.md
+├── prelaunch_priorities.md
+├── prelaunch_readiness.md
+├── project_bank_ui_rebuild.md
+└── project_perf_pass2.md
 
 .agents/
 └── skills/
-    └── feature/SKILL.md            # Discovery-first feature workflow
+    ├── feature/SKILL.md            # Discovery-first feature workflow
+    ├── fix-bugs/SKILL.md           # Bug-ledger triage/repro/fix/verify loop
+    └── qa-campaign/SKILL.md        # Parallel playthrough-QA campaign
 
 .claude/
 ├── settings.json                   # Project-level Claude Code config (tracked)
 ├── settings.local.json             # Per-user overrides (gitignored)
-└── agents/                         # Custom subagent definitions (if any)
+├── scheduled_tasks.lock            # Cron/scheduled-agent lock file (gitignored)
+└── skills/                         # fix-bugs/, qa-campaign/ SKILL.md (gitignored; mirrors .agents/skills/)
 ```
 
 ## Quick "where do I edit X" cheat sheet

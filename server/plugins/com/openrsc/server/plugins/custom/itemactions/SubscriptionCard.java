@@ -1,5 +1,7 @@
 package com.openrsc.server.plugins.custom.itemactions;
 
+import com.openrsc.server.content.SubscriptionCardTransactions;
+import com.openrsc.server.content.SubscriptionCardTransactions.RedeemResult;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
@@ -21,30 +23,47 @@ public final class SubscriptionCard implements OpInvTrigger {
 	public void onOpInv(Player player, Integer invIndex, Item item, String command) {
 		if (!blockOpInv(player, invIndex, item, command)) return;
 
-		boolean accountWide = VoidSubscription.hasLinkedAccount(player);
-		boolean wasActive = VoidSubscription.isActive(player);
-
-		if (player.getCarriedItems().remove(item) == -1) {
+		final RedeemResult result = SubscriptionCardTransactions.redeem(player, item);
+		if (!result.isRedeemed()) {
+			handleFailure(player, result);
 			return;
 		}
 
-		long expiresAt = VoidSubscription.activate(player);
-		if (expiresAt <= 0L) {
-			player.getCarriedItems().getInventory().add(item);
-			ActionSender.sendInventory(player);
-			ActionSender.sendBox(player, "@mag@Subscription not redeemed% %"
-				+ "@whi@The account ledger could not be updated. Try again in a moment.", true);
-			return;
-		}
-		long remaining = expiresAt - System.currentTimeMillis();
+		final boolean accountWide = result.isAccountWide();
+		final long expiresAt = result.getExpiresAt();
+		final long remaining = expiresAt - System.currentTimeMillis();
 		ActionSender.sendInventory(player);
-		ActionSender.sendBox(player, "@mag@Subscription " + (wasActive ? "extended" : "activated") + "% %"
+		ActionSender.sendGameSettings(player);
+		ActionSender.sendBox(player, "@mag@Subscription " + (result.wasActive() ? "extended" : "activated") + "% %"
 			+ "@whi@This card adds @gre@7 days@whi@ of "
 			+ (accountWide ? "account" : "character") + " subscription time.%"
 			+ "@whi@Subscribed " + (accountWide ? "accounts" : "characters")
 			+ " gain @gre@+1x@whi@ combat and skilling XP.%"
-			+ "@whi@At base rates, that is @gre@11x@whi@ combat and @gre@3x@whi@ skilling XP.% %"
+			+ "@whi@At base rates, that is @gre@11x@whi@ combat and @gre@2.5x@whi@ skilling XP.% %"
 			+ "@lre@Time remaining: " + VoidSubscription.formatRemaining(remaining) + ".", true);
-		player.save(false, true);
+	}
+
+	private void handleFailure(Player player, RedeemResult result) {
+		switch (result.getStatus()) {
+			case CARD_NOT_FOUND:
+				return;
+			case BUSY:
+				ActionSender.sendBox(player, "@mag@Subscription not redeemed% %"
+					+ "@whi@Your character is still being saved. Try again in a moment.", true);
+				return;
+			case INTERRUPTED:
+				ActionSender.sendBox(player, "@mag@Subscription not redeemed% %"
+					+ "@whi@The redemption was interrupted. Your card was not consumed.", true);
+				return;
+			case UNCERTAIN:
+				// The coordinator fenced and closed the session without another save;
+				// only the authoritative database state may answer this outcome.
+				return;
+			case FAILED:
+			default:
+				ActionSender.sendBox(player, "@mag@Subscription not redeemed% %"
+					+ "@whi@The account ledger could not be updated. Your card was not consumed.%"
+					+ "@whi@Try again in a moment.", true);
+		}
 	}
 }

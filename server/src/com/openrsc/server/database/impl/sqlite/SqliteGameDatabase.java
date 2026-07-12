@@ -176,12 +176,20 @@ public class SqliteGameDatabase extends MySqlGameDatabase {
                     getBankPresetsQuery,
                     result -> {
                         while(result.next()) {
-                            PlayerBankPreset bankPreset = new PlayerBankPreset();
-                            bankPreset.slot = result.getInt("slot");
-                            bankPreset.inventory = Hex.decodeHex(result.getString("inventory"));
-                            bankPreset.equipment = Hex.decodeHex(result.getString("equipment"));
+                            try {
+                                PlayerBankPreset bankPreset = new PlayerBankPreset();
+                                bankPreset.slot = result.getInt("slot");
+                                bankPreset.inventory = Hex.decodeHex(result.getString("inventory"));
+                                bankPreset.equipment = Hex.decodeHex(result.getString("equipment"));
 
-                            list.add(bankPreset);
+                                list.add(bankPreset);
+                            } catch (final Exception decodeError) {
+                                // rows written by the old double-quoted INSERT carry literal
+                                // quotes and can't hex-decode; skip them rather than failing
+                                // the whole player load (which would block the login)
+                                LOGGER.warn("Skipping undecodable bank preset row for player "
+                                        + player.getUsername() + ": " + decodeError.getMessage());
+                            }
                         }
                     }
             );

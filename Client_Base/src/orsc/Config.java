@@ -3,10 +3,12 @@ package orsc;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
 import static orsc.osConfig.F_ANDROID_BUILD;
+import static orsc.osConfig.F_WEB_BUILD;
 
 public class Config {
 	private static Properties prop = new Properties();
@@ -18,15 +20,19 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10112;
+	public static final int CLIENT_VERSION = 10132;
 	public static final int PLAYER_TITLE_CLIENT_VERSION = 10052;
+	public static final int PLAYER_TITLE_TIER_CLIENT_VERSION = 10123;
 	public static final int SHOP_PRICE_OVERRIDE_CLIENT_VERSION = 10054;
 	public static final int SUBSCRIPTION_PROFILE_CLIENT_VERSION = 10055;
 	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
 	public static final int GLOBAL_CHAT_COUNTRY_FLAGS_CLIENT_VERSION = 10069;
+	public static final int COUNTRY_PICKER_CLIENT_VERSION = 10125;
+	public static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
+	public static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
 	public static final int MAX_MODERN_HAIR_STYLE = 0;
 	private static final int CACHE_VERSION = 4;
-	public static boolean MEMBER_WORLD = false;
+	public static boolean MEMBER_WORLD = true;
 	public static boolean DISPLAY_LOGO_SPRITE = false;
 	private static final boolean CUSTOM_CACHE_DIR_ENABLED = false;
 	private static final String CUSTOM_CACHE_DIR = System.getProperty("user.home") + File.separator + "OpenRSC";
@@ -52,6 +58,8 @@ public class Config {
 	public static boolean C_GROUND_ITEM_NAMES = true;
 	public static boolean C_WANT_NATURE_RUNE_PROTECTION = true; // Important that nature rune protection is true by default, otherwise we might have some very unhappy players!
 	public static boolean C_MESSAGE_TAB_SWITCH = false;
+	// Historic name kept for config-file compatibility (reflection matches field names);
+	// clans are gone, so this now only controls the overhead *name* label overlay.
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
 	public static boolean C_CHAT_OVERLAY = true;
@@ -59,7 +67,6 @@ public class Config {
 	public static boolean C_KILL_FEED = true;
 	public static int C_FIGHT_MENU = 1;
 	public static boolean C_INV_COUNT = true;
-	public static boolean C_PARTY_INV = false;
 	public static int C_ZOOM;
 	public static boolean C_CUSTOM_UI = false; // Enables a osrs style UI
 	public static boolean C_HIDE_LOGIN_BOX = false;
@@ -68,8 +75,12 @@ public class Config {
 	public static final int GAME_LOOK_CLASSIC = 0;
 	public static final int GAME_LOOK_HD = 1;
 	public static final int GAME_LOOK_VOIDSCAPE = 2;
+	public static final int WORLD_RESKIN_AUTO = 0;
+	public static final int WORLD_RESKIN_AUTHENTIC = 1;
+	public static final int WORLD_RESKIN_VOID = 2;
 	public static int C_GAME_LOOK_MODE = GAME_LOOK_CLASSIC;
 	public static boolean C_VOIDSCAPE_SCENE_OVERLAY = false;
+	public static int C_WORLD_RESKIN_MODE = defaultWorldReskinMode();
 	public static int C_HD_INTENSITY = 2;
 	public static int C_HD_SATURATION = 2;
 	public static boolean C_HD_BLOOM = true;
@@ -79,6 +90,21 @@ public class Config {
 	public static boolean C_RARE_DROP_BEAMS = true;
 	public static boolean C_HIDE_COMBAT_XP_DROPS = false;
 	public static boolean C_GLOBAL_CHAT_COUNTRY_FLAGS = true;
+
+	private static int defaultWorldReskinMode() {
+		String value = System.getProperty("voidscape.worldReskin", "auto");
+		if (value == null) {
+			return WORLD_RESKIN_AUTO;
+		}
+		value = value.trim().toLowerCase(Locale.ROOT);
+		if ("void".equals(value) || "2".equals(value)) {
+			return WORLD_RESKIN_VOID;
+		}
+		if ("authentic".equals(value) || "classic".equals(value) || "1".equals(value)) {
+			return WORLD_RESKIN_AUTHENTIC;
+		}
+		return WORLD_RESKIN_AUTO;
+	}
 
 	/* Experience Config Menu */
 	public static int C_EXPERIENCE_COUNTER = 1;
@@ -120,6 +146,9 @@ public class Config {
 	// they will also change the options menu to
 	// 2-tabs (3 on android). (Not enough room for
 	// additional options on the 1-tab layout.)
+	// Clans/parties were removed from this client. S_WANT_CLANS / S_WANT_PARTIES stay
+	// declared only so config-file parsing (reflection over field names) keeps working;
+	// nothing reads them any more — the client behaves as if they are permanently false.
 	public static boolean S_WANT_CLANS = false;
 	public static boolean S_WANT_KILL_FEED = false;
 	public static boolean S_FOG_TOGGLE = true;
@@ -181,6 +210,11 @@ public class Config {
 	}
 
 	static void initConfig() {
+		if (F_WEB_BUILD) {
+			F_CACHE_DIR = "Cache";
+			setConfigurationFromProperties();
+			return;
+		}
 		if (!F_ANDROID_BUILD) {
 			if (CUSTOM_CACHE_DIR_ENABLED) {
 				F_CACHE_DIR = CUSTOM_CACHE_DIR;
@@ -221,16 +255,17 @@ public class Config {
 						|| !prop.get(f.getName()).toString().equalsIgnoreCase(f.get(null).toString())) {
 						Class<?> t = f.getType();
 
+						Object fieldValue = f.get(null);
 						if (t == int.class) {
-							set(f.getName(), f.getInt(null));
+							set(f.getName(), fieldValue);
 						} else if (t == long.class) {
-							set(f.getName(), f.getLong(null));
+							set(f.getName(), fieldValue);
 						} else if (t == float.class) {
-							set(f.getName(), f.getFloat(null));
+							set(f.getName(), fieldValue);
 						} else if (t == double.class) {
-							set(f.getName(), f.getDouble(null));
+							set(f.getName(), fieldValue);
 						} else if (t == boolean.class) {
-							set(f.getName(), f.getBoolean(null));
+							set(f.getName(), fieldValue);
 						}
 					}
 				} catch (Exception e) {
@@ -312,6 +347,17 @@ public class Config {
 
 	public static boolean isAndroid() {
 		return F_ANDROID_BUILD;
+	}
+
+	public static boolean isWeb() {
+		return F_WEB_BUILD;
+	}
+
+	public static void exit(int status) {
+		if (F_WEB_BUILD) {
+			throw new IllegalStateException("Exit requested with status " + status);
+		}
+		System.exit(status);
 	}
 
 	static boolean Remember() {

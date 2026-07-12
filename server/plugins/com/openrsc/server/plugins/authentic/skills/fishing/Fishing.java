@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.external.EntityHandler;
 import com.openrsc.server.external.GameObjectDef;
 import com.openrsc.server.external.ObjectFishDef;
@@ -354,6 +355,9 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 
 				inventory.add(fish);
 				player.incExp(Skill.FISHING.id(), fishLst.get(0).getExp(), true);
+				if (fish.getCatalogId() == ItemId.RAW_LOBSTER.id()) {
+					PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_LOBSTERS);
+				}
 
 				if (EnchantedCrowns.shouldActivate(player, ItemId.CROWN_OF_THE_ITEMS)) {
 					player.playerServerMessage(MessageType.QUEST, "Your crown shines and an extra item appears on the ground");

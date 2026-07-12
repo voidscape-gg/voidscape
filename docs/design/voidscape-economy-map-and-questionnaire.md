@@ -26,8 +26,8 @@ The core design target is:
 
 Current implementation after approval:
 
-- Local config uses `combat_exp_rate: 10` and `skilling_exp_rate: 2`.
-- Subscription adds `+1x` to combat and skilling XP, so the normal subscribed rates are `11x` combat and `3x` skilling.
+- Local config uses `combat_exp_rate: 10` and `skilling_exp_rate: 1.5`.
+- Subscription adds `+1x` to combat and skilling XP, so the normal subscribed rates are `11x` combat and `2.5x` skilling.
 - Starter paths give `2x` XP only below level 50 in selected skills:
   - Warrior: Attack, Defense, Strength.
   - Forager: Fishing, Cooking, Mining.
@@ -104,7 +104,7 @@ Current implementation:
   - Surface rift at `(112,296)`.
   - Entry fee: `100,000` coins.
   - Arrival: `(72,3252)`.
-  - Exit rift: `(72,3250)`.
+  - Exit rifts: `(72,3250)`, `(68,3204)`, `(68,2308)`, and `(78,2251)`.
   - Return: `(112,297)`.
 - Void Dungeon NPCs:
   - `853` Void Knight.
@@ -542,8 +542,8 @@ This is my preferred minimal-change direction:
 
 1. Settle progression rates:
    - Base combat: `10x`.
-   - Base skilling: `2x`.
-   - Subscription: small account-wide boost, likely `11x / 3x`, or keep current floor only if we accept bigger subscription advantage.
+   - Base skilling: `1.5x`.
+   - Subscription: small account-wide boost, likely `11x / 2.5x`, or keep current floor only if we accept bigger subscription advantage.
 2. Make all Void item special effects Void-PvM-only.
 3. Restrict Void Amulet's stackable drop bonus to Void NPCs.
 4. Make Void Shortbow preserve arrow economy outside Void PvM.
@@ -569,7 +569,7 @@ Use this format when reviewing:
 ### A. Core Progression
 
 1. Base XP model:
-   - Recommendation: `10x` combat, `2x` skilling.
+   - Recommendation: `10x` combat, `1.5x` skilling.
    - Options:
      - [ ] Approve
      - [ ] Reject
@@ -577,7 +577,7 @@ Use this format when reviewing:
 
 2. Subscription rate model:
    - Recommendation: subscription adds a modest account-wide boost, preferably `+1x` to combat and skilling.
-   - Current implementation: subscribed accounts add `+1x`, normally `11x` combat and `3x` skilling.
+   - Current implementation: subscribed accounts add `+1x`, normally `11x` combat and `2.5x` skilling.
    - Options:
      - [x] Approve recommended `+1x`
      - [ ] Revisit later

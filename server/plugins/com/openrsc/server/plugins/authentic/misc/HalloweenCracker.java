@@ -88,7 +88,7 @@ public class HalloweenCracker implements UsePlayerTrigger, UseNpcTrigger {
 		ItemId.BLACK_THROWING_KNIFE.id(),
 	};
 
-	private static final int[] runePrizeWeights = {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 6, 6, 2};
+	private static final int[] runePrizeWeights = {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11};
 	private static final int[] runePrizeIds = {
 		ItemId.RUNE_LONG_SWORD.id(),
 		ItemId.RUNE_2_HANDED_SWORD.id(),
@@ -112,10 +112,6 @@ public class HalloweenCracker implements UsePlayerTrigger, UseNpcTrigger {
 		ItemId.RUNE_THROWING_KNIFE.id(),
 		ItemId.RUNE_SPEAR.id(),
 		ItemId.RUNE_PICKAXE.id(),
-
-		ItemId.DRAGON_AXE.id(),
-		ItemId.DRAGON_AXE.id(),
-		ItemId.DRAGON_MEDIUM_HELMET.id(),
 	};
 
 

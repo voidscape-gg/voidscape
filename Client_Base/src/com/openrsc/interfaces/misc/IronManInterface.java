@@ -3,6 +3,7 @@ package com.openrsc.interfaces.misc;
 
 import com.openrsc.client.entityhandling.EntityHandler;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.GraphicsController;
 import orsc.mudclient;
 
@@ -75,32 +76,37 @@ public final class IronManInterface {
 	}
 
 	private void drawIronmanInterface(GraphicsController graphics) {
-		graphics.drawBoxAlpha(x, y, width, height, 0x483E33, 255);
-		graphics.drawLineHoriz(x, y + 24, width, 0x2A2926);
-		graphics.drawBoxBorder(x, width, y, height, 0x2A2926);
-		graphics.drawColoredStringCentered(mc.getGameWidth() / 2, "Ironman Setup", 0xFF981F, 0, 3, y + 17);
+		boolean closeHover = UiSkin.hit(InterfaceChrome.closeX(x, width), InterfaceChrome.closeY(y),
+			InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE, mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(graphics, x, y, width, height, "Ironman Setup", closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			if (!deactivationMenu) {
+				setVisible(false);
+			}
+			mc.setMouseClick(0);
+		}
 
 		//content box
-		graphics.drawBoxAlpha(x + 5, y + 29, 380, 185, 0x534A3F, 255);
-		graphics.drawBoxBorder(x + 5, 380, y + 29, 185, 0x777775);
-		graphics.drawLineHoriz(x + 5, y + 48, 380, 0x777775);
-		graphics.drawLineHoriz(x + 5, y + 49, 380, 0x777775);
-		graphics.drawColoredStringCentered(mc.getGameWidth() / 2 - 46, "Ironman Mode", 0xFFFFFF, 0, 2, y + 43);
+		graphics.drawBoxAlpha(x + 5, y + 29, 380, 185, UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+		graphics.drawBoxBorder(x + 5, 380, y + 29, 185, UiSkin.VOID_LINE);
+		graphics.drawLineHoriz(x + 5, y + 48, 380, UiSkin.VOID_LINE);
+		graphics.drawLineHoriz(x + 5, y + 49, 380, UiSkin.VOID_LINE);
+		graphics.drawColoredStringCentered(mc.getGameWidth() / 2 - 46, "Ironman Mode", UiSkin.GOLD_HEADER, 0, 2, y + 43);
 
 
 		//deactivation box
-		graphics.drawBoxAlpha(x + 5, y + 221, 260, 38, 0x534A3F, 255);
-		graphics.drawBoxBorder(x + 5, 260, y + 221, 38, 0x777775);
+		graphics.drawBoxAlpha(x + 5, y + 221, 260, 38, UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+		graphics.drawBoxBorder(x + 5, 260, y + 221, 38, UiSkin.VOID_LINE);
 
 		//deactivation status
-		graphics.drawBoxAlpha(x + 5 + 259, y + 221, 121, 38, 0x534A3F, 255);
-		graphics.drawBoxBorder(x + 5 + 259, 121, y + 221, 38, 0x777775);
+		graphics.drawBoxAlpha(x + 5 + 259, y + 221, 121, 38, UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+		graphics.drawBoxBorder(x + 5 + 259, 121, y + 221, 38, UiSkin.VOID_LINE);
 
 		//Deactivation select text
-		graphics.drawString("Selected ", x + (width / 2 - graphics.stringWidth(1, "Selected ") / 2) + 56, y + 243, 0xFFFFFF, 0);
+		graphics.drawString("Selected ", x + (width / 2 - graphics.stringWidth(1, "Selected ") / 2) + 56, y + 243, UiSkin.TEXT_BODY, 0);
 
 		//Deactivation selected option display
-		graphics.drawString("- " + (getIronManMode() >= 1 ? this.iron_man_restriction == 0 ? "PIN." : "Permanent." : "None."), x + (width / 2) + 49 + 27, y + 243, 0xFF981F, 0);
+		graphics.drawString("- " + (getIronManMode() >= 1 ? this.iron_man_restriction == 0 ? "PIN." : "Permanent." : "None."), x + (width / 2) + 49 + 27, y + 243, UiSkin.GOLD_HOT, 0);
 
 		// iron helm, plate, legs sprites
 		graphics.drawSpriteClipping(mc.spriteSelect(EntityHandler.getItemDef(8)), x + 410, y + 60, 48, 32, 0, 0, 0, false, 0, 1);
@@ -108,14 +114,6 @@ public final class IronManInterface {
 		graphics.drawSpriteClipping(mc.spriteSelect(EntityHandler.getItemDef(6)), x + 425, y + 135, 48, 32, 0, 0, 0, true, 0, 1);
 
 
-		drawCloseButton(graphics, x + 457, y + 2, 21, 21, "X", new ButtonHandler() {
-			@Override
-			void handle() {
-				if (!deactivationMenu) {
-					setVisible(false);
-				}
-			}
-		});
 		int drawBoxX = x + 5;
 		int drawBoxY = y + 25;
 		int drawBoxWidth = 370;
@@ -157,7 +155,7 @@ public final class IronManInterface {
 				}
 			});
 
-			graphics.drawCircle(drawBoxX + 8 + 5, circleY, 8, 0x3A3026, 255, 0);
+			graphics.drawCircle(drawBoxX + 8 + 5, circleY, 8, UiSkin.VOID_BOX, 255, 0);
 			if (i == order[iron_man_mode]) {
 				graphics.drawSpriteClipping(mc.spriteSelect(EntityHandler.GUIparts.get(EntityHandler.GUIPARTS.CHECKMARK.id())), drawBoxX + 8, circleY - 5, 13, 10, 0, 0, 0, false, 0, 1);
 			}
@@ -178,18 +176,16 @@ public final class IronManInterface {
 	}
 
 	private void drawDeactivationMenu(GraphicsController graphics) {
-		graphics.drawBoxAlpha(x + (width / 2) - 190, y + (height / 2) - 44, 380, 90, 0x524B40, 255);
-		graphics.drawBoxBorder(x + (width / 2) - 190, 380, y + (height / 2) - 44, 90, 0x777775);
-		graphics.drawLineHoriz(x + (width / 2) - 190, y + (height / 2) - 24, 380, 0x777775);
+		int menuX = x + (width / 2) - 190;
+		int menuY = y + (height / 2) - 44;
+		boolean closeHover = UiSkin.hit(InterfaceChrome.closeX(menuX, 380), InterfaceChrome.closeY(menuY),
+			InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE, mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(graphics, menuX, menuY, 380, 90, "After leaving Tutorial Island...", closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			deactivationMenu = false;
+			mc.setMouseClick(0);
+		}
 
-		drawCloseButton(graphics, x + (width) - 72, y + (height / 2) - 43, 21, 19, "X", new ButtonHandler() {
-			@Override
-			void handle() {
-				deactivationMenu = false;
-			}
-		});
-
-		graphics.drawColoredStringCentered(mc.getGameWidth() / 2, "After leaving Tutorial Island...", 0xFFFFFF, 0, 2, y + (height / 2) - 30);
 		int drawBoxX = x + 50;
 		int drawBoxY = y + 85;
 		int drawBoxWidth = 370;
@@ -211,7 +207,7 @@ public final class IronManInterface {
 					mc.packetHandler.getClientStream().finishPacket();
 				}
 			});
-			graphics.drawCircle(drawBoxX + 8 + 5, circleY, 8, 0x3A3026, 255, 0);
+			graphics.drawCircle(drawBoxX + 8 + 5, circleY, 8, UiSkin.VOID_BOX, 255, 0);
 			if (i == this.iron_man_restriction) {
 				graphics.drawSpriteClipping(mc.spriteSelect(EntityHandler.GUIparts.get(EntityHandler.GUIPARTS.CHECKMARK.id())), drawBoxX + 8, circleY - 5, 13, 10, 0, 0, 0, false, 0, 1);
 			}
@@ -258,48 +254,26 @@ public final class IronManInterface {
 		this.visible = visible;
 	}
 
-	private void drawCloseButton(GraphicsController graphics, int x, int y, int width, int height, String text, ButtonHandler handler) {
-		int allColor = 0x5F523C;
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			allColor = 0x544838;
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		graphics.drawBoxAlpha(x, y, width, height, allColor, 192);
-		graphics.drawBoxBorder(x, width, y, height, 0);
-		graphics.drawString(text, x + (width / 2 - graphics.stringWidth(1, text) / 2), y + height / 2 + 5, 0, 4);
-	}
-
 	private void drawClickBox(GraphicsController graphics, int x, int y, int width, int wrapWidth, int height, String title, int titleY, String description, int descriptionX, int descriptionY, ButtonHandler handler) {
-		int allColor = 0x534A3F;
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height && !deactivationMenu) {
-			allColor = 0x675F56;
-			if (mc.getMouseClick() == 1) {
-
-				handler.handle();
-				mc.setMouseClick(0);
-			}
+		boolean hover = mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height && !deactivationMenu;
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		graphics.drawBoxAlpha(x, y, width, height, allColor, 192);
-		graphics.drawBoxBorder(x, width, y, height, 0x464644);
-		graphics.drawString(title, x + 20, y + titleY, 0xFFFFFF, 0);
-		graphics.drawWrappedCenteredString(description, x + descriptionX, y + titleY + descriptionY, wrapWidth, 0, 0xFF981F, true, false);
+		graphics.drawBoxAlpha(x, y, width, height, hover ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 192);
+		graphics.drawBoxBorder(x, width, y, height, hover ? UiSkin.GOLD_HOT : UiSkin.VOID_LINE);
+		graphics.drawString(title, x + 20, y + titleY, UiSkin.GOLD_HEADER, 0);
+		graphics.drawWrappedCenteredString(description, x + descriptionX, y + titleY + descriptionY, wrapWidth, 0, UiSkin.TEXT_BODY, true, false);
 	}
 
 	private void drawClickRestrictionBox(GraphicsController graphics, int x, int y, int width, int wrapWidth, int height, String title, int titleY, String description, int descriptionX, int descriptionY, ButtonHandler handler) {
-		int allColor = 0x534A3F;
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height && deactivationMenu) {
-			allColor = 0x675F56;
-			if (mc.getMouseClick() == 1) {
-
-				handler.handle();
-				mc.setMouseClick(0);
-			}
+		boolean hover = mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height && deactivationMenu;
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		graphics.drawBoxAlpha(x, y, width, height, allColor, 192);
-		graphics.drawString(title, x + 20, y + titleY, 0xFFFFFF, 0);
-		graphics.drawWrappedCenteredString(description, x + descriptionX, y + titleY + descriptionY, wrapWidth, 0, 0xFF981F, true, false);
+		graphics.drawBoxAlpha(x, y, width, height, hover ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX, 192);
+		graphics.drawString(title, x + 20, y + titleY, UiSkin.GOLD_HEADER, 0);
+		graphics.drawWrappedCenteredString(description, x + descriptionX, y + titleY + descriptionY, wrapWidth, 0, UiSkin.TEXT_BODY, true, false);
 	}
 }

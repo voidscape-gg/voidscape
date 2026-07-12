@@ -121,6 +121,10 @@ class Ruleset:
     magic_player_damage_scale: float = 1.0
     pvp_melee_momentum: bool = False
     pvp_melee_momentum_big_hit_ratio: float = 0.75
+    npc_vs_player_melee_floor: int = 0
+    npc_vs_player_bonus_start: int = 0
+    npc_vs_player_bonus_levels_per_point: int = 1
+    npc_vs_player_bonus_cap: int = 0
 
 
 RULESETS: Dict[str, Ruleset] = {
@@ -132,6 +136,11 @@ RULESETS: Dict[str, Ruleset] = {
         physical_mitigation_cap=0.24,
         magic_player_damage_scale=0.92,
         pvp_melee_momentum=True,
+        pvp_melee_momentum_big_hit_ratio=0.68,
+        npc_vs_player_melee_floor=15,
+        npc_vs_player_bonus_start=40,
+        npc_vs_player_bonus_levels_per_point=8,
+        npc_vs_player_bonus_cap=12,
     ),
 }
 
@@ -160,9 +169,27 @@ def style_bonus(mob: Combatant, skill: str) -> int:
     return 0
 
 
-def melee_accuracy(attacker: Combatant) -> float:
+def npc_vs_player_melee_level(attacker: Combatant, defender: Combatant, skill_level: int, rules: Ruleset) -> int:
+    if attacker.is_player or not defender.is_player:
+        return skill_level
+
+    effective = max(skill_level, rules.npc_vs_player_melee_floor)
+    if rules.npc_vs_player_bonus_cap <= 0 or rules.npc_vs_player_bonus_start <= 0:
+        return effective
+
+    offense_level = max(attacker.attack, attacker.strength)
+    if offense_level < rules.npc_vs_player_bonus_start:
+        return effective
+
+    levels_per_point = max(1, rules.npc_vs_player_bonus_levels_per_point)
+    bonus = ((offense_level - rules.npc_vs_player_bonus_start) // levels_per_point) + 1
+    return effective + min(rules.npc_vs_player_bonus_cap, bonus)
+
+
+def melee_accuracy(attacker: Combatant, defender: Combatant, rules: Ruleset) -> float:
+    attack_level = npc_vs_player_melee_level(attacker, defender, attacker.attack, rules)
     effective = (
-        math.floor(attacker.attack * attacker.attack_prayer)
+        math.floor(attack_level * attacker.attack_prayer)
         + attacker.player_bonus
         + style_bonus(attacker, SKILL_ATTACK)
     )
@@ -209,9 +236,10 @@ def hit_chance(accuracy: float, defence: float) -> float:
     return accuracy / (2.0 * (defence + 1.0))
 
 
-def melee_max_roll(attacker: Combatant) -> int:
+def melee_max_roll(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
+    strength_level = npc_vs_player_melee_level(attacker, defender, attacker.strength, rules)
     effective = (
-        math.floor(attacker.strength * attacker.strength_prayer)
+        math.floor(strength_level * attacker.strength_prayer)
         + attacker.player_bonus
         + style_bonus(attacker, SKILL_STRENGTH)
     )
@@ -252,13 +280,14 @@ def expected_damage(max_roll: int) -> Tuple[int, float]:
 
 
 def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) -> RollSummary:
-    attack_roll = melee_accuracy(attacker)
+    attack_roll = melee_accuracy(attacker, defender, rules)
     defence_roll = melee_defence(defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
-    max_hit, avg_on_hit = expected_damage(melee_max_roll(attacker))
+    max_roll = melee_max_roll(attacker, defender, rules)
+    max_hit, avg_on_hit = expected_damage(max_roll)
     reduction = physical_damage_reduction(defender, rules)
     if reduction > 0:
-        distribution = reduced_distribution(melee_max_roll(attacker), defender, rules)
+        distribution = reduced_distribution(max_roll, defender, rules)
         total = sum(distribution.values())
         max_hit = max(distribution.keys())
         avg_on_hit = sum(damage * count for damage, count in distribution.items()) / total
@@ -321,7 +350,7 @@ def roll_bucket_damage(max_roll: int, rng: random.Random) -> int:
 
 
 def melee_max_hit_against(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
-    max_roll = melee_max_roll(attacker)
+    max_roll = melee_max_roll(attacker, defender, rules)
     if max_roll <= 0:
         return 0
     return mitigate_physical_damage(((max_roll - 1) + 320) // 640, defender, rules)
@@ -340,7 +369,7 @@ def roll_melee_damage(
     rules: Ruleset,
     has_momentum: bool = False,
 ) -> Tuple[int, bool]:
-    chance = hit_chance(melee_accuracy(attacker), melee_defence(defender, rules))
+    chance = hit_chance(melee_accuracy(attacker, defender, rules), melee_defence(defender, rules))
     is_hit = rng.random() <= chance
 
     while attacker.attack_cape and not is_hit and rng.randint(1, 99) <= 35:
@@ -349,15 +378,16 @@ def roll_melee_damage(
     if not is_hit:
         return 0, False
 
-    damage = roll_bucket_damage(melee_max_roll(attacker), rng)
+    max_roll = melee_max_roll(attacker, defender, rules)
+    damage = roll_bucket_damage(max_roll, rng)
     if has_momentum:
-        damage = max(damage, roll_bucket_damage(melee_max_roll(attacker), rng))
+        damage = max(damage, roll_bucket_damage(max_roll, rng))
     damage = mitigate_physical_damage(damage, defender, rules)
 
     if defender.is_player and defender.defense_cape and damage > 0 and rng.randint(1, 99) <= 35:
         damage //= 2
 
-    maximum = (melee_max_roll(attacker) + 320) / 640.0
+    maximum = (max_roll + 320) / 640.0
     if attacker.strength_cape and damage >= maximum * 0.5 and rng.randint(1, 99) <= 35:
         damage = int(damage + maximum * 0.2)
 
@@ -618,6 +648,7 @@ def built_in_scenarios() -> Dict[str, Scenario]:
         )
 
     newbie = melee_player("newbie bronze short", 1, "bronze_short", "none", STYLE_ACCURATE)
+    newbie.hits = 10
     early = melee_player("10 melee iron scim", 10, "iron_scimitar", "iron")
     steel = melee_player("25 melee steel scim", 25, "steel_scimitar", "steel")
     mid_mith = melee_player("40 melee mithril scim", 40, "mithril_scimitar", "mithril")
@@ -850,6 +881,7 @@ def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int, 
             and scenario.attacker.is_player
             and scenario.defender.is_player
         )
+        result["pvp_melee_momentum_big_hit_ratio"] = rules.pvp_melee_momentum_big_hit_ratio
         result["cadence"] = scenario.cadence
         result["attacker_roll"] = asdict(summarize_melee(scenario.attacker, scenario.defender, rules))
         result["defender_roll"] = asdict(summarize_melee(scenario.defender, scenario.attacker, rules))
@@ -934,7 +966,8 @@ def print_text_result(result: Dict) -> None:
     if result["mode"] == "melee":
         print(f"cadence: {result['cadence']}")
         if result["pvp_melee_momentum"]:
-            print("pvp melee momentum: 75%+ hit rolls next successful hit twice")
+            threshold = result["pvp_melee_momentum_big_hit_ratio"] * 100.0
+            print(f"pvp melee momentum: {threshold:.0f}%+ hit rolls next successful hit twice")
         print_roll("attacker melee", result["attacker_roll"])
         print_roll("defender melee", result["defender_roll"])
         sim = result["simulation"]

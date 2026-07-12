@@ -412,9 +412,13 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		if (null != g) {
 			g.translate(mudclient.screenOffsetX, mudclient.screenOffsetY);
 			Font font = new Font("Helvetica", 1, 15);
-			short width = 512;
+			// Center on the real applet size (kept equal to the game buffer by
+			// ScaledWindow) instead of the historic hardcoded 512x344, so the
+			// "Connection lost" box lands mid-window at every preset. Falls back
+			// to the mudclient dimensions if the peer has no size yet.
+			int width = this.getWidth() > 0 ? this.getWidth() : mudclient.getGameWidth();
+			int height = this.getHeight() > 0 ? this.getHeight() : mudclient.getGameHeight() + 12;
 			g.setColor(Color.black);
-			short height = 344;
 			g.fillRect(width / 2 - 140, height / 2 - 25, 280, 50);
 			g.setColor(Color.white);
 			g.drawRect(width / 2 - 140, height / 2 - 25, 280, 50);
@@ -612,8 +616,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		if (url == null || url.trim().length() == 0) {
 			return false;
 		}
-		Utils.openWebpage(url.trim());
-		return true;
+		return Utils.openWebpage(url.trim());
 	}
 
 	@Override
@@ -647,17 +650,31 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		public final synchronized void mousePressed(MouseEvent var1) {
 			try {
 				if (var1.getButton() == MouseEvent.BUTTON2) {
+					mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
+					mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					if (mudclient.consumeChristmasCrackerPointerAt(mudclient.mouseX, mudclient.mouseY, false)) {
+						return;
+					}
 					mudclient.mouseLastProcessedX = mudclient.mouseX;
 					mudclient.mouseLastProcessedY = mudclient.mouseY;
 					return;
 				}
 				updateControlShiftState(var1);
-				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
-				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
+					mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					if (mudclient.consumeVoidscapeSubscriptionShopPointerAt(mudclient.mouseX, mudclient.mouseY,
+						!SwingUtilities.isRightMouseButton(var1))) {
+						return;
+					}
 
+					if (mudclient.consumeChristmasCrackerPointerAt(mudclient.mouseX, mudclient.mouseY,
+					!SwingUtilities.isRightMouseButton(var1))) {
+					return;
+				}
 				if (!SwingUtilities.isRightMouseButton(var1)
 					&& (mudclient.closeWelcomeDialogAt(mudclient.mouseX, mudclient.mouseY)
-					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY))) {
+					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY)
+					|| mudclient.closeFarmSimDialogAt(mudclient.mouseX, mudclient.mouseY))) {
 					return;
 				}
 
@@ -711,16 +728,21 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		public final synchronized void mouseDragged(MouseEvent var1) {
 			try {
 				updateControlShiftState(var1);
-				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
-				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
+					mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					if (mudclient.isVoidscapeSubscriptionShopOpen()) {
+						mudclient.consumeVoidscapeSubscriptionShopPointerAt(mudclient.mouseX, mudclient.mouseY, false);
+						return;
+					}
 
-				// World-map panel owns drag-pan when visible — don't rotate camera underneath.
+					// World-map panel owns drag-pan when visible — don't rotate camera underneath.
 				if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) return;
 
 				if (mudclient.mouseLastProcessedX != 0 && mudclient.mouseLastProcessedY != 0) {
 					int distanceX = (mudclient.mouseX - mudclient.mouseLastProcessedX)/2;
 					int distanceY = (mudclient.mouseY - mudclient.mouseLastProcessedY)/2;
-					boolean touchedMessagePanelArea = mudclient.getGameHeight() - Math.max(mudclient.mouseY, mudclient.mouseLastProcessedY) <= 66;
+					boolean touchedMessagePanelArea = mudclient.getGameHeight() - Math.max(mudclient.mouseY, mudclient.mouseLastProcessedY)
+						<= orsc.mudclient.CHAT_PANEL_GESTURE_ZONE_HEIGHT;
 
 					boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 					boolean mayBeScrollable = mudclient.showUiTab != 0;
@@ -797,8 +819,18 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		@Override
 		public final synchronized void mouseWheelMoved(MouseWheelEvent e) {
 			updateControlShiftState(e);
+			if (mudclient.isVoidscapeSubscriptionShopOpen()) {
+				e.consume();
+				return;
+			}
 
-			boolean touchedMessagePanelArea = getHeight() - e.getY() <= 75;
+			// Same game-coordinate chat gesture zone as the drag path above:
+			// e.getY() is already mapped into game coordinates by ScaledWindow,
+			// so test against the game height, not the component height (the old
+			// component-height test was effectively a 63px game band: 75 minus
+			// the 12px footer included in the applet height).
+			boolean touchedMessagePanelArea = mudclient.getGameHeight() - e.getY()
+				<= orsc.mudclient.CHAT_PANEL_GESTURE_ZONE_HEIGHT;
 
 			boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
 			boolean mayBeScrollable = mudclient.showUiTab != 0;
@@ -807,7 +839,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 			// Disables zoom while visible
 			boolean inScrollable = (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse.isVisible() || mudclient.onlineList.isVisible() || Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface.isVisible()
-				|| Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface.isVisible() || mudclient.clan.getClanInterface().isVisible() || mudclient.experienceConfigInterface.isVisible()
+				|| Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface.isVisible() || mudclient.experienceConfigInterface.isVisible()
 				|| mudclient.ironmanInterface.isVisible() || mudclient.achievementInterface.isVisible() || Config.S_WANT_SKILL_MENUS && mudclient.doSkillInterface.isVisible()
 				|| Config.S_ITEMS_ON_DEATH_MENU && mudclient.lostOnDeathInterface.isVisible() || mudclient.territorySignupInterface.isVisible()
 				|| mudclient.isShowDialogBank());
@@ -852,12 +884,17 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				int keyCode = var1.getKeyCode();
 
 				// voidscape: backtick saves an exact game-frame capture.
-				if (keyChar == '`') {
-					WorkbenchServer.captureFromHotkey(mudclient);
-					return;
-				}
+					if (keyChar == '`') {
+						WorkbenchServer.captureFromHotkey(mudclient);
+						return;
+					}
+					if (mudclient.isVoidscapeSubscriptionShopOpen()) {
+						int shopKey = keyCode == KeyEvent.VK_ESCAPE ? 27 : (int) keyChar;
+						mudclient.handleKeyPress((byte) 126, shopKey);
+						return;
+					}
 
-				// World-map search bar owns the keyboard while focused — consume
+					// World-map search bar owns the keyboard while focused — consume
 				// keys here so they don't also land in the chat input buffer.
 				if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isSearchFocused()) {
 					mudclient.worldMapPanel.handleSearchKey(keyChar, keyCode);
@@ -874,7 +911,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				mudclient.lastMouseAction = 0;
 
 				if (keyCode == 112) mudclient.interlace = !mudclient.interlace;
-				if (keyCode == 113) Config.C_SIDE_MENU_OVERLAY = !Config.C_SIDE_MENU_OVERLAY;
+				if (keyCode == KeyEvent.VK_F2) mudclient.toggleVitalsHud();
 				if (keyCode == KeyEvent.VK_F3) C_LAST_ZOOM = 75;
 				if (keyCode == KeyEvent.VK_F4) mudclient.toggleFirstPersonView();
 				if (keyCode == KeyEvent.VK_F5) mudclient.toggleCinematicHud();

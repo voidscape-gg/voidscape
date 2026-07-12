@@ -22,7 +22,9 @@ import com.openrsc.server.plugins.triggers.AttackPlayerTrigger;
 import com.openrsc.server.plugins.triggers.CommandTrigger;
 import com.openrsc.server.plugins.triggers.OpNpcTrigger;
 import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
+import com.openrsc.server.plugins.triggers.PlayerRangeNpcTrigger;
 import com.openrsc.server.plugins.triggers.PlayerRangePlayerTrigger;
+import com.openrsc.server.plugins.triggers.SpellNpcTrigger;
 import com.openrsc.server.plugins.triggers.SpellPlayerTrigger;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 import com.openrsc.server.util.rsc.CollisionFlag;
@@ -47,7 +49,8 @@ import static com.openrsc.server.plugins.Functions.multi;
 import static com.openrsc.server.plugins.Functions.npcsay;
 
 public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigger,
-		AttackPlayerTrigger, OpNpcTrigger, PlayerLoginTrigger, PlayerRangePlayerTrigger, SpellPlayerTrigger, TalkNpcTrigger {
+		AttackPlayerTrigger, OpNpcTrigger, PlayerLoginTrigger, PlayerRangeNpcTrigger, PlayerRangePlayerTrigger,
+		SpellNpcTrigger, SpellPlayerTrigger, TalkNpcTrigger {
 	private static final Logger LOGGER = LogManager.getLogger(PkCatchingSimulator.class);
 	private static final int TRAINER_NPC_ID = 840;
 	private static final int TRAINER_X = 214;
@@ -249,6 +252,26 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 	}
 
 	@Override
+	public boolean blockPlayerRangeNpc(Player player, Npc npc) {
+		return isSimulatorTarget(npc);
+	}
+
+	@Override
+	public void onPlayerRangeNpc(Player player, Npc npc) {
+		sendTargetActionDenied(player, npc);
+	}
+
+	@Override
+	public boolean blockSpellNpc(Player player, Npc npc) {
+		return isSimulatorTarget(npc);
+	}
+
+	@Override
+	public void onSpellNpc(Player player, Npc npc) {
+		sendTargetActionDenied(player, npc);
+	}
+
+	@Override
 	public boolean blockSpellPlayer(Player player, Player affectedPlayer, Spells spellEnum) {
 		return involvesSimulatorPlayer(player, affectedPlayer);
 	}
@@ -257,6 +280,17 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 	public void onSpellPlayer(Player player, Player affectedPlayer, Spells spellEnum) {
 		if (involvesSimulatorPlayer(player, affectedPlayer)) {
 			player.message("The PK Catching Simulator blocks real player combat.");
+		}
+	}
+
+	private void sendTargetActionDenied(Player player, Npc npc) {
+		if (player == null || !isSimulatorTarget(npc)) {
+			return;
+		}
+		if (isSimulatorTargetFor(player, npc)) {
+			player.message("Use melee attack clicks to tag the catching target.");
+		} else {
+			player.message("That catching target belongs to another drill.");
 		}
 	}
 
@@ -428,8 +462,12 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				setDelayTicks(1);
 			}
 
-			if (!player.loggedIn() || player.isRemoved() || session.target == null || session.target.isRemoved()) {
+			if (!player.loggedIn() || player.isRemoved()) {
 				finishSession(player, session, false, "", false);
+				return;
+			}
+			if (session.target == null || session.target.isRemoved()) {
+				finishSession(player, session, false, "The catching drill ended unexpectedly.", true);
 				return;
 			}
 

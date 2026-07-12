@@ -110,3 +110,31 @@ Magic is changed conservatively. It still matters because it ignores physical ar
 - Manually test Fire Wave, Iban Blast, and charged god spells against player and NPC targets.
 - Watch beta telemetry for dragon and demon deaths after the armour split, because NPC chip damage is slightly more frequent.
 - Revisit only after player behavior data; avoid stacking further global formula changes without telemetry.
+
+## 2026-07-06 Follow-Up: Early PvM Friction and PvP High-Roll Frequency
+
+Owner playtesting found that the first few combat levels had become too frictionless: rats could not damage a fresh level-3 starter at all, and low NPCs stopped mattering before the player had earned that comfort. This follow-up keeps player PvM kill speed unchanged, but makes NPC melee against players use an effective Attack/Strength floor of 15. Higher-level NPCs also gain a small target-scoped offence bonus against players from level 40 upward: `+1` effective Attack/Strength per 8 levels, capped at `+12`.
+
+PvP melee momentum now triggers at 68% of the target-adjusted max hit instead of 75%. It still grants only one target-bound stack, is consumed on the next successful melee hit, and clears on misses or target swaps. This nudges high follow-up rolls upward without raising max hit, global melee accuracy, ranged, or magic.
+
+Command:
+
+```bash
+scripts/combat-sim.sh --scenario pvm-newbie-rat --scenario pvm-newbie-goblin --scenario pvm-early-cow --scenario pvm-early-skeleton --scenario pvm-rune-lesser --scenario pvm-max-black-dragon --scenario pvp-mid-main-mirror --scenario pvp-max-rune-2h-2-2 --trials 50000 --seed 20260706
+```
+
+Key readouts after the follow-up:
+
+| Scenario | Result |
+|---|---:|
+| New player vs rat, damage taken per kill | 1.74 average; rat wins 0.07% |
+| New player vs goblin, damage taken per kill | 6.25 average; goblin wins 16.94% |
+| Level 10 iron vs cow, damage taken per kill | 1.50 average; cow wins 0% |
+| Steel player vs skeleton, damage taken per kill | 1.69 average; skeleton wins 0% |
+| Lesser demon vs rune player, hit chance / max hit | 21.07% / 7 |
+| Lesser demon damage taken per kill | 11.83 average |
+| Black dragon formula-only win rate | 30.88% |
+| Mid rune main mirror, average fight tick | 102.84 |
+| Max rune 2h 2-2 mirror, average fight tick | 66.01 |
+
+Interpretation: the first rat is still safe, but it can finally chip. Goblins and cows now ask a fresh starter to pay attention, while a level-10 player in iron gear comfortably farms cows. Demons and dragons are more credible on the defensive side without changing player outgoing PvM damage. PvP remains bounded by the existing one-stack momentum rule.

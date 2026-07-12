@@ -1,6 +1,7 @@
 package com.openrsc.interfaces.misc;
 
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.GraphicsController;
 import orsc.mudclient;
 
@@ -19,7 +20,6 @@ public final class QuestGuideInterface {
 	private boolean visible = false;
 	private ArrayList<QuestItem> questItems;
 	private mudclient mc;
-	private int panelColour, textColour, bordColour, lineColour;
 	private int x, y;
 
 	public QuestGuideInterface(mudclient mc) {
@@ -48,56 +48,47 @@ public final class QuestGuideInterface {
 		int x = (mc.getGameWidth() - width) / 2;
 		int y = (mc.getGameHeight() - height) / 2;
 
-		panelColour = 0x989898;
-		textColour = 0xffffff;
-		bordColour = 0x000000;
-		lineColour = 0x000000;
-
 		questGuide.handleMouse(mc.getMouseX(), mc.getMouseY(), mc.getMouseButtonDown(), mc.getLastMouseDown());
 
-		if (autoHeight - y > 320) {
-			mc.getSurface().drawBoxAlpha(x, y, width, height, panelColour, 90);
-			mc.getSurface().drawBoxBorder(x, width, y, height, bordColour);
-		} else {
-			mc.getSurface().drawBoxAlpha(x, y, width, autoHeight - y, panelColour, 90);
-			mc.getSurface().drawBoxBorder(x, width, y, autoHeight - y, bordColour);
+		// Glass window chrome; close hit-test shares InterfaceChrome's coordinates.
+		int windowHeight = (autoHeight - y > 320) ? height : autoHeight - y;
+		int closeX = InterfaceChrome.closeX(x, width);
+		int closeY = InterfaceChrome.closeY(y);
+		boolean closeHover = UiSkin.hit(closeX, closeY, InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE,
+			mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), x, y, width, windowHeight, mc.getQuestGuideChosen(), closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			questGuide.resetScrollIndex(questGuideScroll);
+			setVisible(false);
+			mc.setMouseClick(0);
 		}
-		drawStringCentered(mc.getQuestGuideChosen(), x, y + 28, 5, textColour);
 
-		this.drawButton(x + 394, y + 6, 30, 30, "X", 5, false, new ButtonHandler() {
-			@Override
-			void handle() {
-				questGuide.resetScrollIndex(questGuideScroll);
-				setVisible(false);
-			}
-		});
-
-		mc.getSurface().drawLineHoriz(x, y + 35, width, lineColour);
+		mc.getSurface().drawLineHoriz(x, y + 35, width, UiSkin.VOID_LINE);
 
 		questItems.clear();
 
 		if (mc.getQuestGuideProgress() == 0) {
 			String questStart = "I can start the quest by speaking to " + mc.getQuestGuideStartWho() + " " + mc.getQuestGuideStartWhere() + ".";
-			customAdd(questStart, 2, textColour);
+			customAdd(questStart, 2, UiSkin.TEXT_BODY);
 
-			customAdd("", 2, textColour);
-			customAdd("Requirements: ", 2, textColour);
+			customAdd("", 2, UiSkin.TEXT_BODY);
+			customAdd("Requirements: ", 2, UiSkin.GOLD_HEADER);
 
 			for (int i = 0; i < Array.getLength(mc.getQuestGuideRequirement()); i++) {
-				customAdd("  - " + mc.getQuestGuideRequirement()[i], 2, textColour);
+				customAdd("  - " + mc.getQuestGuideRequirement()[i], 2, UiSkin.TEXT_BODY);
 			}
 		} else if (mc.getQuestGuideProgress() > 0) {
-			customAdd("Quest progress coming soon...", 2, textColour);
+			customAdd("Quest progress coming soon...", 2, UiSkin.TEXT_BODY);
 		} else {
-			customAdd("Congratulations you have completed " + mc.getQuestGuideChosen() + ".", 2, textColour);
+			customAdd("Congratulations you have completed " + mc.getQuestGuideChosen() + ".", 2, UiSkin.TEXT_BODY);
 		}
 
 
-		customAdd("", 2, textColour);
-		customAdd("Rewards: ", 2, textColour);
+		customAdd("", 2, UiSkin.TEXT_BODY);
+		customAdd("Rewards: ", 2, UiSkin.GOLD_HEADER);
 
 		for (int i = 0; i < Array.getLength(mc.getQuestGuideReward()); i++) {
-			customAdd("  - " + mc.getQuestGuideReward()[i], 2, textColour);
+			customAdd("  - " + mc.getQuestGuideReward()[i], 2, UiSkin.TEXT_BODY);
 		}
 
 		questGuide.clearList(questGuideScroll);
@@ -128,7 +119,7 @@ public final class QuestGuideInterface {
 
 		// Temporary for tracking
 		drawString("Progress: " + asStringStage(mc.getQuestGuideProgress()) + " (" +
-				Integer.toString(mc.getQuestGuideProgress()) + ")", x + width - 150, trackY, 2, this.textColour);
+				Integer.toString(mc.getQuestGuideProgress()) + ")", x + width - 150, trackY, 2, UiSkin.TEXT_DIM);
 		trackY += 15;
 
 		autoHeight = trackY;
@@ -165,21 +156,12 @@ public final class QuestGuideInterface {
 	}
 
 	private void drawButton(int x, int y, int width, int height, String text, int font, boolean checked, ButtonHandler handler) {
-		int bgBtnColour = 0x333333; // grey
-		if (checked) {
-			bgBtnColour = 16711680; // red
+		boolean hover = InterfaceChrome.button(mc.getSurface(), x, y, width, height, text, font, checked, false,
+			mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			if (!checked)
-				bgBtnColour = 16711680; // blue
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		mc.getSurface().drawBoxAlpha(x, y, width, height, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(x, width, y, height, 0x242424);
-		mc.getSurface().drawString(text, x + (width / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1, y + height / 2 + 5, textColour, font);
 	}
 
 	public boolean isVisible() {

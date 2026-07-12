@@ -1,7 +1,9 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.*;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.event.MiniEvent;
@@ -27,6 +29,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.update.ChatMessage;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.struct.UnequipRequest;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
@@ -56,6 +59,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	private static final String NECKLACE = "necklace";
 	private static final String CROWN = "crown";
 	private static final String DEFAULT = "";
+	private static final int MAGIC_PROJECTILE = 1;
+	private static final int FIRE_BLAST_PROJECTILE = 9;
+	private static final int WIND_BLAST_PROJECTILE = 10;
+	private static final int WATER_BLAST_PROJECTILE = 11;
+	private static final int EARTH_BLAST_PROJECTILE = 12;
 	private static final int[] elementalRunes = new int[4];
 
 	/**
@@ -194,8 +202,8 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			return null;
 		}
 
-		if (spell.isMembers() && !player.getConfig().MEMBER_WORLD) {
-			player.message("You need to login to a members world to use this spell");
+		if (!WildernessRules.canUseSpell(player, spell)) {
+			player.sendCannotUseMembersHereMessage();
 			player.resetPath();
 			return null;
 		}
@@ -227,8 +235,14 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean spellSuccessCheck(Player player, SpellDef spell) {
+		return spellSuccessCheck(player, spell, null);
+	}
+
+	private boolean spellSuccessCheck(Player player, SpellDef spell, Mob affectedMob) {
 		// Check for failed spell.
-		if (!Formulae.castSpell(spell, player.getSkills().getLevel(getMagicId(player, spell)), player.getMagicPoints())) {
+		double accuracyMultiplier = VoidContent.voidSceptreMagicMultiplier(player, affectedMob);
+		if (!Formulae.castSpell(spell, player.getSkills().getLevel(getMagicId(player, spell)),
+			player.getMagicPoints(), accuracyMultiplier)) {
 			player.message("The spell fails! You may try again in 20 seconds");
 			player.playSound("spellfail");
 			player.setSpellFail();
@@ -255,6 +269,29 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			&& (player.getTrade().isTradeActive() || (player.getDuel().isDuelActive() && !player.inCombat()))) {
 			// prevent of changing inventory items via magic during trade & duels windows
 			return;
+		}
+
+		if (opcode == OpcodeIn.PLAYER_CAST_PVP) {
+			Player affectedPlayer = player.getWorld().getPlayer(payload.targetIndex);
+			if (affectedPlayer == null) {
+				player.resetPath();
+				return;
+			}
+			if (!player.sharesInstanceWith(affectedPlayer)) {
+				player.message("You cannot reach that target.");
+				player.resetPath();
+				return;
+			}
+			if (affectedPlayer == player) {
+				player.message("You can't attack yourself");
+				player.resetPath();
+				return;
+			}
+			if (!WildernessRules.canAttackVoidDungeonPvp(player, affectedPlayer)) {
+				player.message(WildernessRules.voidDungeonPvpMessage());
+				player.resetPath();
+				return;
+			}
 		}
 
 		player.resetAllExceptDueling();
@@ -313,7 +350,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 					if (spell == null) {
 						return;
 					}
-					if (!spellSuccessCheck(player, spell)) {
+					if (!spellSuccessCheck(player, spell, affectedNpc)) {
 						return;
 					}
 
@@ -447,7 +484,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 				return;
 			}
 
-			if (!spellSuccessCheck(player, spell)) {
+			Mob accuracyTarget = opcode == OpcodeIn.CAST_ON_NPC
+				? player.getWorld().getNpc(payload.targetIndex)
+				: null;
+			if (!spellSuccessCheck(player, spell, accuracyTarget)) {
 				return;
 			}
 
@@ -556,6 +596,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean checkCastOnPlayer(Player player, Player affectedPlayer, Spells spellEnum) {
+		if (!player.sharesInstanceWith(affectedPlayer)) {
+			player.message("You cannot reach that target.");
+			return true;
+		}
 		// Duel with "No Magic" selected.
 		if (player.getDuel().isDuelActive() && player.getDuel().getDuelSetting(1)) {
 			player.message("Magic cannot be used during this duel!");
@@ -568,6 +612,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 				player.message(voidArenaAttack.message);
 			}
 			return !voidArenaAttack.allowed;
+		}
+		if (!WildernessRules.canAttackVoidDungeonPvp(player, affectedPlayer)) {
+			player.message(WildernessRules.voidDungeonPvpMessage());
+			return true;
 		}
 
 		// Note: Blocking magic casts near mage arena is inauthentic
@@ -589,6 +637,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean checkCastOnNpc(Player player, Npc affectedNpc, SpellDef spell) {
+		if (!player.sharesInstanceWith(affectedNpc)) {
+			player.message("You cannot reach that target.");
+			return true;
+		}
 		NpcInteraction interaction = NpcInteraction.NPC_CAST_SPELL;
 
 		// Demon Slayer
@@ -640,12 +692,20 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private void finalizeMobSpell(Player player, SpellDef spell, Mob affectedMob, String message) {
-		finalizeSpell(player, spell, message, shouldAwardMobSpellExperience(player, affectedMob));
+		finalizeMobSpell(player, spell, affectedMob, message, shouldAwardMobSpellExperience(player, affectedMob));
+	}
+
+	private void finalizeMobSpell(Player player, SpellDef spell, Mob affectedMob, String message, boolean giveExp) {
+		if (affectedMob.isPlayer()) {
+			WildernessRules.markVoidDungeonPvp(player, (Player) affectedMob);
+		}
+		finalizeSpell(player, spell, message, giveExp);
 	}
 
 	private boolean shouldAwardMobSpellExperience(Player player, Mob affectedMob) {
 		return !(affectedMob instanceof Npc)
-			|| !player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob);
+			|| (!player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob)
+				&& !((Npc) affectedMob).shouldSuppressDefaultDeathRewards());
 	}
 
 	public static void finalizeSpell(Player player, SpellDef spell, String message) {
@@ -658,10 +718,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		// don't display a message if message is null (example superheat)
 		if (message != null) {
 			player.playerServerMessage(MessageType.QUEST, message.trim().isEmpty() ? "Cast spell successfully" : message);
+			}
+			if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
+			PlayerTitle.recordSpellCast(player);
+			player.setCastTimer();
 		}
-		if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
-		player.setCastTimer();
-	}
 
 	public void godSpellObject(Player player, Mob affectedMob, Spells spellEnum) {
 		switch (spellEnum) {
@@ -1127,6 +1188,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			int value = (int) (affectedItem.getDef(player.getWorld()).getDefaultPrice() * 0.6D * affectedItem.getAmount());
 			player.getCarriedItems().getInventory().add(new Item(ItemId.COINS.id(), value)); // 60%
 			finalizeSpell(player, spell, "Alchemy spell successful");
+			PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_HIGH_ALCHS);
 		}
 	}
 
@@ -1356,6 +1418,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private void handleMobCast(final Player player, final Mob affectedMob, Spells spellEnum, int spellType) {
+		if (!player.sharesInstanceWith(affectedMob)) {
+			player.message("You cannot reach that target.");
+			return;
+		}
 		if (player.getDuel().isDuelActive() && affectedMob.isPlayer()) {
 			Player aff = (Player) affectedMob;
 			if (!player.getDuel().getDuelRecipient().getUsername().toLowerCase()
@@ -1397,9 +1463,14 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			return;
 		}
 
-		player.setFollowing(affectedMob);
-		player.setWalkToAction(new WalkToMobAction(player, affectedMob, 4, false, ActionType.ATTACKMAGIC) {
+		final int spellRange = player.getConfig().SPELL_RANGE_DISTANCE;
+		player.setFollowing(affectedMob, spellRange);
+		player.setWalkToAction(new WalkToMobAction(player, affectedMob, spellRange, false, ActionType.ATTACKMAGIC) {
 			public void executeInternal() {
+				if (!getPlayer().sharesInstanceWith(affectedMob)) {
+					getPlayer().resetPath();
+					return;
+				}
 				if (!PathValidation.checkPath(getPlayer().getWorld(), getPlayer().getLocation(), affectedMob.getLocation())) {
 					getPlayer().playerServerMessage(MessageType.QUEST, "I can't get a clear shot from here");
 					getPlayer().resetPath();
@@ -1642,7 +1713,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							getPlayer().playerServerMessage(MessageType.QUEST, "This spell can only be used on skeletons, zombies and ghosts");
 							return;
 						}
-						int damaga = CombatFormula.calculateMagicDamage(Constants.CRUMBLE_UNDEAD_MAX, affectedMob);
+						int damaga = CombatFormula.calculateMagicDamage(Constants.CRUMBLE_UNDEAD_MAX, getPlayer(), affectedMob);
 						if (!checkAndRemoveRunes(getPlayer(), spell, capeActivated)) {
 							return;
 						}
@@ -1672,7 +1743,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							int casts = getPlayer().getCache().getInt(spell.getName() + "_casts");
 							getPlayer().getCache().set(spell.getName() + "_casts", casts - 1);
 						}
-						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateIbanSpellDamage(affectedMob), 4, setChasing));
+						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateIbanSpellDamage(getPlayer(), affectedMob), 4, setChasing));
 						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 					case CLAWS_OF_GUTHIX:
@@ -1739,7 +1810,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							godSpellObject(getPlayer(), affectedMob, spellEnum);
 						}
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateGodSpellDamage(getPlayer(), affectedMob), 1, setChasing));
-						finalizeSpell(getPlayer(), spell, DEFAULT, giveExp && shouldAwardMobSpellExperience(getPlayer(), affectedMob));
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT, giveExp && shouldAwardMobSpellExperience(getPlayer(), affectedMob));
 						break;
 
 					case CHILL_BOLT:
@@ -1752,7 +1823,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 
 						double maxR = getPlayer().getWorld().getServer().getConstants().getSpellDamages().getSpellDamage(spellEnum, entityType, SpellDamages.MagicType.GOODEVILMAGIC);
 
-						int damageR = CombatFormula.calculateMagicDamage(maxR, affectedMob);
+						int damageR = CombatFormula.calculateMagicDamage(maxR, getPlayer(), affectedMob);
 
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damageR, 1, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
@@ -1823,15 +1894,31 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							max += 1;
 						}
 
-						int damage = CombatFormula.calculateMagicDamage(max, affectedMob);
+						int damage = CombatFormula.calculateMagicDamage(max, getPlayer(), affectedMob);
 
-						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, 1, setChasing));
+						int projectileType = projectileTypeForSpell(spellEnum);
+						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, damage, projectileType, setChasing));
 						getPlayer().setKillType(KillType.MAGIC);
 						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT);
 						break;
 				}
 			}
 		});
+		}
+
+	private int projectileTypeForSpell(Spells spellEnum) {
+		switch (spellEnum) {
+			case WIND_BLAST:
+				return WIND_BLAST_PROJECTILE;
+			case WATER_BLAST:
+				return WATER_BLAST_PROJECTILE;
+			case EARTH_BLAST:
+				return EARTH_BLAST_PROJECTILE;
+			case FIRE_BLAST:
+				return FIRE_BLAST_PROJECTILE;
+			default:
+				return MAGIC_PROJECTILE;
+		}
 	}
 
 	private boolean isBoostSpell(Player player, Spells spellEnum) {

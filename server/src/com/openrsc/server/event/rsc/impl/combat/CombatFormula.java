@@ -1,11 +1,13 @@
 package com.openrsc.server.event.rsc.impl.combat;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -25,9 +27,13 @@ public class CombatFormula {
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR = 1200.0D;
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_CAP = 0.24D;
 	private static final double VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE = 0.92D;
+	private static final int NPC_VS_PLAYER_MELEE_FLOOR = 15;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL = 40;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_LEVELS_PER_POINT = 8;
+	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_CAP = 12;
 	private static final String PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE = "pvpMeleeMomentumTarget";
 	private static final String PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE = "pvpMeleeMomentumStacks";
-	private static final double PVP_MELEE_MOMENTUM_BIG_HIT_RATIO = 0.75D;
+	private static final double PVP_MELEE_MOMENTUM_BIG_HIT_RATIO = 0.68D;
 	private static final int PVP_MELEE_MOMENTUM_MAX_STACKS = 1;
 
 	/**
@@ -65,14 +71,19 @@ public class CombatFormula {
 	 * @return The randomized value.
 	 */
 	public static int calculateMagicDamage(final double spellPower) {
-		return calculateMagicDamage(spellPower, null);
+		return calculateMagicDamage(spellPower, null, null);
 	}
 
 	public static int calculateMagicDamage(final double spellPower, final Mob victim) {
+		return calculateMagicDamage(spellPower, null, victim);
+	}
+
+	public static int calculateMagicDamage(final double spellPower, final Mob source, final Mob victim) {
 		//Given that melee max hit is fractional, it was likely that spell power values ending in "5" were supposed to hit their max hit more often.
 		//TODO: More research to see if that was the case. For now, we can just make it uniform after flooring.
-		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(spellPower) + 1);
-		return applyMagicDamageReduction(damage, victim);
+		final double effectiveSpellPower = spellPower * VoidContent.voidSceptreMagicMultiplier(source, victim);
+		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(effectiveSpellPower) + 1);
+		return applyMagicDamageReduction(damage, source, victim);
 	}
 
 	/**
@@ -103,7 +114,7 @@ public class CombatFormula {
 		boolean hasChargeBenefit = source.isCharged() && hasCapeEquipped;
 		int godSpellMax = hasChargeBenefit ? 25 : 18;
 
-		return calculateMagicDamage(godSpellMax, victim);
+		return calculateMagicDamage(godSpellMax, source, victim);
 	}
 
 	/**
@@ -116,9 +127,13 @@ public class CombatFormula {
 	}
 
 	public static int calculateIbanSpellDamage(final Mob victim) {
+		return calculateIbanSpellDamage(null, victim);
+	}
+
+	public static int calculateIbanSpellDamage(final Player source, final Mob victim) {
 		// TODO: Remove this code and roll it into calculateMagicDamage
 		// Source for max damage: http://web.archive.org/web/20041226185618/http://www.rsinn.com/forum/showthread.php?t=2469
-		return calculateMagicDamage(15, victim);
+		return calculateMagicDamage(15, source, victim);
 	}
 
 	/**
@@ -193,19 +208,21 @@ public class CombatFormula {
 		}
 
 		if (victim instanceof Player) {
-			// Track the damage dealt to the player
+			// Preserve defense-cape blocked-damage bookkeeping here. Actual direct
+			// Player->Player damage is recorded once where the hit is applied.
 			Player playerVictim = (Player)victim;
 			if (isHit) {
-				int damageToPlayer = damage;
 				int blockedDamage = 0;
 
 				// Defense skillcape
-				if (SkillCapes.shouldActivate((Player) victim, DEFENSE_CAPE) && damageToPlayer > 0) {
+				if (SkillCapes.shouldActivate((Player) victim, DEFENSE_CAPE) && damage > 0) {
 					damage /= 2;
 					blockedDamage = damage;
 				}
 
-				playerVictim.updateDamageAndBlockedDamageTracking(source, damageToPlayer, blockedDamage);
+				if (blockedDamage > 0) {
+					playerVictim.updateDamageAndBlockedDamageTracking(source, 0, blockedDamage);
+				}
 			}
 		}
 		if (source instanceof Player) {
@@ -222,7 +239,7 @@ public class CombatFormula {
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return isHit ? damage : 0;
+		return applyPlayerAttackDamageFloor(source, victim, isHit ? damage : 0);
 	}
 
 	private static int rollMeleeDamage(final Mob source, final Mob victim, final boolean hasMomentum) {
@@ -245,7 +262,7 @@ public class CombatFormula {
 	public static int doRangedDamage(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
 		boolean isHit = calculateRangedAccuracy(source, bowId, victim);
 
-		if (!isHit) return 0;
+		if (!isHit) return applyPlayerAttackDamageFloor(source, victim, 0);
 
 		final int damage;
 		if (skillCape) {
@@ -257,7 +274,7 @@ public class CombatFormula {
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return applyPhysicalDamageReduction(damage, victim);
+		return applyPlayerAttackDamageFloor(source, victim, applyPhysicalDamageReduction(damage, victim));
 	}
 
 	/**
@@ -277,7 +294,16 @@ public class CombatFormula {
 	}
 
 	private static int getMeleeDamage(final Mob source, final Mob victim) {
-		return (int) (getMeleeDamage(source) * voidMeleeMultiplier(source, victim));
+		int maxRoll = getMeleeDamage(source);
+		if (source instanceof Npc && victim instanceof Player) {
+			final int styleBonus = styleBonus(source, Skill.STRENGTH.id());
+			final double prayerBonus = addPrayers(source, Prayers.BURST_OF_STRENGTH,
+				Prayers.SUPERHUMAN_STRENGTH,
+				Prayers.ULTIMATE_STRENGTH);
+			final int effectiveStrength = npcVsPlayerMeleeLevel(source, Skill.STRENGTH.id());
+			maxRoll = (int)((Math.floor(effectiveStrength * prayerBonus) + styleBonus) * (source.getWeaponPowerPoints() + 64));
+		}
+		return (int) (maxRoll * voidMeleeMultiplier(source, victim));
 	}
 
 	/**
@@ -335,11 +361,41 @@ public class CombatFormula {
 		return Math.max(1, (int)Math.floor(damage * (1.0D - reduction)));
 	}
 
-	private static int applyMagicDamageReduction(final int damage, final Mob victim) {
+	private static int applyMagicDamageReduction(final int damage, final Mob source, final Mob victim) {
 		if (damage <= 0 || !(victim instanceof Player)) {
 			return damage;
 		}
+		final Player playerVictim = (Player) victim;
+		if (isProtectFromMagicBlockableSource(source)
+			&& playerVictim.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
+			return 0;
+		}
 		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
+	}
+
+	private static boolean isProtectFromMagicBlockableSource(final Mob source) {
+		if (!(source instanceof Npc)) {
+			return false;
+		}
+		final int npcId = ((Npc) source).getID();
+		return npcId != NpcId.DM_KING.id() && npcId != NpcId.DM_KING_ARENA.id();
+	}
+
+	private static int applyPlayerAttackDamageFloor(final Mob source, final Mob victim, final int damage) {
+		if (!(source instanceof Player) || !(victim instanceof Npc)) {
+			return damage;
+		}
+
+		final int floor = ((Npc) victim).getPlayerAttackDamageFloor();
+		if (floor <= 0) {
+			return damage;
+		}
+
+		final int remainingHits = victim.getSkills().getLevel(Skill.HITS.id());
+		if (remainingHits <= 0) {
+			return damage;
+		}
+		return Math.min(remainingHits, Math.max(damage, floor));
 	}
 
 	private static boolean consumePvpMeleeMomentum(final Mob source, final Mob victim) {
@@ -378,6 +434,25 @@ public class CombatFormula {
 			return 0;
 		}
 		return applyPhysicalDamageReduction((maxRoll - 1 + 320) / 640, victim);
+	}
+
+	public static int calculateMeleeMaxHit(final Mob source, final Mob victim) {
+		return applyPlayerAttackDamageFloor(source, victim, getTargetAdjustedMeleeMaxHit(source, victim));
+	}
+
+	public static int calculateRangedMaxHit(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
+		final int maxRoll = getRangedDamage(source, bowId, arrowId, victim);
+		if (maxRoll <= 0) {
+			return 0;
+		}
+		final int maxHit = skillCape
+			? Math.max(0, (((maxRoll + 320) / 640) * 2) - 1)
+			: (maxRoll - 1 + 320) / 640;
+		return applyPlayerAttackDamageFloor(source, victim, applyPhysicalDamageReduction(maxHit, victim));
+	}
+
+	public static int calculateMagicMaxHit(final double spellPower, final Mob victim) {
+		return applyMagicDamageReduction((int)Math.floor(spellPower), null, victim);
 	}
 
 	private static void clearPvpMeleeMomentum(final Mob source) {
@@ -421,7 +496,28 @@ public class CombatFormula {
 	}
 
 	private static double getMeleeAccuracy(final Mob attacker, final Mob defender) {
-		return getMeleeAccuracy(attacker) * voidMeleeMultiplier(attacker, defender);
+		double accuracy = getMeleeAccuracy(attacker);
+		if (attacker instanceof Npc && defender instanceof Player) {
+			final int styleBonus = styleBonus(attacker, Skill.ATTACK.id());
+			final double prayerBonus = addPrayers(attacker, Prayers.CLARITY_OF_THOUGHT,
+				Prayers.IMPROVED_REFLEXES,
+				Prayers.INCREDIBLE_REFLEXES);
+			final int effectiveAttack = npcVsPlayerMeleeLevel(attacker, Skill.ATTACK.id());
+			accuracy = (Math.floor(effectiveAttack * prayerBonus) + styleBonus) * (attacker.getWeaponAimPoints() + 64);
+		}
+		return accuracy * voidMeleeMultiplier(attacker, defender);
+	}
+
+	private static int npcVsPlayerMeleeLevel(final Mob npc, final int skillId) {
+		final int skillLevel = npc.getSkills().getLevel(skillId);
+		int effectiveLevel = Math.max(NPC_VS_PLAYER_MELEE_FLOOR, skillLevel);
+		final int offenseLevel = Math.max(npc.getSkills().getLevel(Skill.ATTACK.id()), npc.getSkills().getLevel(Skill.STRENGTH.id()));
+		if (offenseLevel < NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL) {
+			return effectiveLevel;
+		}
+		final int bonus = Math.min(NPC_VS_PLAYER_OFFENCE_BONUS_CAP,
+			((offenseLevel - NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL) / NPC_VS_PLAYER_OFFENCE_BONUS_LEVELS_PER_POINT) + 1);
+		return effectiveLevel + bonus;
 	}
 
 	private static double voidMeleeMultiplier(final Mob attacker, final Mob defender) {
@@ -429,9 +525,6 @@ public class CombatFormula {
 			return 1.0D;
 		}
 		final Player player = (Player) attacker;
-		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_MACE.id())) {
-			return VoidContent.VOID_MACE_MELEE_MULTIPLIER;
-		}
 		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_SCIMITAR.id())) {
 			return VoidContent.VOID_SCIMITAR_MELEE_MULTIPLIER;
 		}

@@ -32,6 +32,8 @@
         <jar basedir="${build}" destfile="${jar}">
             <manifest>
                 <attribute name="Main-Class" value="launcher.Main"/>
+                <attribute name="Implementation-Title" value="Voidscape Launcher"/>
+                <attribute name="Implementation-Version" value="${calculatedVersion}"/>
             </manifest>
         </jar>
     </target>

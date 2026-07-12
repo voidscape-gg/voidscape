@@ -438,6 +438,7 @@ public abstract class Mob extends Entity {
 		if (stopAtEnd) setEndFollowRadius(radius);
 		following = mob;
 		followEvent = new GameTickEvent(getWorld(), this, 0, "Mob Following Mob", DuplicationStrategy.ONE_PER_MOB) {
+			private boolean usedProjectileKiteGrace;
 
 			public void run() {
 				if (getDelayTicks() == 0) setDelayTicks(1);
@@ -458,11 +459,16 @@ public abstract class Mob extends Entity {
 				boolean shouldStopWalking = withinRange(mob, radius)
 					&& PathValidation.checkAdjacentDistance(getWorld(), getLocation(), mob.getLocation(), true, false)
 					&& getTimesRan() >= 1;
+				boolean shouldHoldProjectileKiteLine = !usedProjectileKiteGrace
+					&& PathValidation.shouldHoldProjectileKiteLine(Mob.this, mob, radius);
 
 				if (!withinRange(mob) || shouldInterrupt) {
 					if (!mob.isFollowing()) {
 						resetFollowing();
 					}
+				} else if (shouldHoldProjectileKiteLine) {
+					usedProjectileKiteGrace = true;
+					resetPath();
 				} else if ((radius > 0 && getWalkingQueue().getNextMovement().equals(mob.getLocation())) || shouldStopWalking) {
 					//Don't allow more walking if the radius is more than 0 and the next step will move the follower onto the followee's tile.
 					//Also don't allow more if the conditionals are fulfilled.
@@ -1041,7 +1047,7 @@ public abstract class Mob extends Entity {
 
 	public void setOpponent(final Mob opponent) {
 		combatWith = opponent;
-		if (opponent != null && this.isPlayer()) {
+		if (opponent != null && this.isPlayer() && !opponent.isNpc()) {
 			((com.openrsc.server.model.entity.player.Player) this).cancelAutoWalk();
 		}
 	}
@@ -1075,6 +1081,19 @@ public abstract class Mob extends Entity {
 
 	public void tryResyncHitEvent() {
 		statRestorationEvent.tryResyncHit();
+	}
+
+	/**
+	 * Re-arms this mob's stat restoration event if it parked itself (NPC at full stats).
+	 * Called from Skills mutators so any stat change wakes the restoration cycle back up.
+	 */
+	public void ensureStatRestorationActive() {
+		final StatRestorationEvent event = statRestorationEvent;
+		if (event == null || event.isRunning()) {
+			return;
+		}
+		event.restart();
+		getWorld().getServer().getGameEventHandler().add(event);
 	}
 
 	public UpdateFlags getUpdateFlags() {

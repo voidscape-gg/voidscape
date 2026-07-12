@@ -49,6 +49,12 @@ scripts/content.sh voidscim register --png path/to/fit.png --name "Void relic" -
 This keeps the proven Void Scimitar/Subscription Card tooling alive while the
 general content factory grows around it.
 
+The legacy `.orsc` sprite packer keeps hard-mask transparency by default: pixel
+value `0` is transparent and every non-zero pixel is opaque. Use
+`tools/voidscim-art/pack.py --preserve-alpha` only for assets with a matching
+ARGB-aware client render path; the elemental Blast projectile sprites are the
+first such projectile assets.
+
 ## UI Asset Bridge
 
 Voidscape HUD skin assets that are already filesystem PNGs should not go

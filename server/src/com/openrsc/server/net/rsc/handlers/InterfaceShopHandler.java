@@ -61,8 +61,8 @@ public final class InterfaceShopHandler implements PayloadProcessor<ShopStruct, 
 		if (def == null) {
 			return;
 		}
-		if (def.isMembersOnly() && !player.getConfig().MEMBER_WORLD) {
-			player.sendMemberErrorMessage();
+		if (!player.canUseMembersItemHere(def, catalogID)) {
+			player.sendCannotUseMembersHereMessage();
 			return;
 		}
 

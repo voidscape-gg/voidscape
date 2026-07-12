@@ -39,3 +39,11 @@ fi
 
 make "import-$VARIANT-sqlite" "db=$DB_NAME"
 echo "==> Done. DB at $DB_FILE"
+
+# Reseeding wipes all accounts; re-provision the QA bot pool (docs/QA-CAMPAIGN.md).
+# Skipped for non-default DBs; disable explicitly with QA_PROVISION_ACCOUNTS=0.
+if [[ "$DB_NAME" == "preservation" && "${QA_PROVISION_ACCOUNTS:-1}" == "1" ]]; then
+    if ! "$SCRIPT_DIR/qa-provision-accounts.sh"; then
+        echo "WARNING: QA account provisioning failed or was refused — run scripts/qa-provision-accounts.sh manually" >&2
+    fi
+fi

@@ -36,6 +36,11 @@ public class NpcUseItem implements PayloadProcessor<ItemOnMobStruct, OpcodeIn> {
 
 				NpcInteraction.setInteractions(affectedNpc, getPlayer(), interaction);
 
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
+					return;
+				}
+
 				if (getPlayer().getWorld().getServer().getPluginHandler().handlePlugin(
 						UseNpcTrigger.class,
 						getPlayer(),
@@ -48,11 +53,6 @@ public class NpcUseItem implements PayloadProcessor<ItemOnMobStruct, OpcodeIn> {
 					default:
 						getPlayer().message("Nothing interesting happens");
 						break;
-				}
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
-					return;
 				}
 			}
 		});

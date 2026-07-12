@@ -9,6 +9,7 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketServerCompressionHandler;
 import io.netty.handler.ssl.OptionalSslHandler;
+import io.netty.handler.ssl.SslContext;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.AttributeMap;
@@ -52,7 +53,10 @@ public final class RSCMultiPortDecoder extends ByteToMessageDecoder implements A
 	}
 
 	private void addWebHandlerStack(ChannelHandlerContext ctx) {
-		ctx.pipeline().addFirst(new OptionalSslHandler(this.server.getSSLContext()));
+		SslContext sslContext = this.server.getSSLContext();
+		if (sslContext != null) {
+			ctx.pipeline().addFirst(new OptionalSslHandler(sslContext));
+		}
 		ctx.pipeline().addBefore(Server.rscConnectionHandlerId, "httpcodec", new HttpServerCodec());
 		ctx.pipeline().addBefore(Server.rscConnectionHandlerId, "aggregator", new HttpObjectAggregator(65536));
 		ctx.pipeline().addBefore(Server.rscConnectionHandlerId, "httphandler", new HttpRequestHandler("/"));

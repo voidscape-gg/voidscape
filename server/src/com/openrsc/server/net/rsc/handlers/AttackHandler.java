@@ -11,6 +11,7 @@ import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.npc.NpcInteraction;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.TargetMobStruct;
@@ -41,6 +42,10 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			player.resetPath();
 			return;
 		}
+		if (!passesVoidDungeonPvpGate(player, affectedMob)) {
+			player.resetPath();
+			return;
+		}
 
 		boolean pkCatchingSimulatorTarget = isPkCatchingSimulatorTarget(affectedMob);
 		if (pkCatchingSimulatorTarget && isPkCatchingSimulatorReattackBlocked(player, affectedMob)) {
@@ -63,6 +68,7 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			return;
 		}
 
+		player.cancelAutoWalk();
 		player.resetAll();
 
 		if (affectedMob.isPlayer()) {
@@ -130,6 +136,9 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 				public void executeInternal() {
 					getPlayer().resetFollowing();
 
+					if (!passesVoidDungeonPvpGate(getPlayer(), mob)) {
+						return;
+					}
 					if (mob.inCombat() && !isPkCatchingSimulatorTarget(mob)
 						&& getPlayer().getRangeEquip() < 0 && getPlayer().getThrowingEquip() < 0) {
 						getPlayer().message("I can't get close enough");
@@ -244,6 +253,16 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 				}
 			});
 		}
+	}
+
+	private boolean passesVoidDungeonPvpGate(Player player, Mob target) {
+		if (!target.isPlayer()
+			|| WildernessRules.canAttackVoidDungeonPvp(player, (Player) target)) {
+			return true;
+		}
+
+		player.message(WildernessRules.voidDungeonPvpMessage());
+		return false;
 	}
 
 	private boolean isPkCatchingSimulatorTarget(Mob mob) {

@@ -8,6 +8,7 @@ import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.ChatMessage;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.entity.update.Projectile;
@@ -277,7 +278,9 @@ public final class VoidKnightBoss implements OnCombatStartScript, CombatScript {
 		knight.getUpdateFlags().setChatMessage(new ChatMessage(knight, phase >= 3 ? "Void flame!" : "Fire blast!", player));
 		knight.getUpdateFlags().setProjectile(new Projectile(knight, player, 1));
 		ActionSender.sendSound(player, "spellok");
-		int damage = magicHits(player) ? DataConversions.random(0, fireBlastMax(phase)) : 0;
+		int damage = player.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)
+			? 0
+			: (magicHits(player) ? DataConversions.random(0, fireBlastMax(phase)) : 0);
 		applyPlayerDamage(knight, player, damage);
 	}
 

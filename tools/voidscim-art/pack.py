@@ -25,7 +25,7 @@ HEADER_SIZE = 25
 assert struct.calcsize(HEADER_FMT) == HEADER_SIZE
 
 
-def encode(img: Image.Image, sidecar: dict | None = None) -> bytes:
+def encode(img: Image.Image, sidecar: dict | None = None, preserve_alpha: bool = False) -> bytes:
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
     width, height = img.size
@@ -38,18 +38,23 @@ def encode(img: Image.Image, sidecar: dict | None = None) -> bytes:
         sc.get('something1', 0), sc.get('something2', 0),
     )
 
-    # On-disk format: int32 BE per pixel where the high byte is unused (always 0)
-    # and value 0 means **transparent** (no alpha channel — magic-value convention).
-    # PIL RGBA bytes are [R, G, B, A]. We map alpha < 128 -> 0 (transparent),
-    # otherwise -> [0, R, G, B] with the high byte forced to 0. If a fully-opaque
-    # pixel happens to be RGB=(0,0,0), bump it to (1,0,0) so it doesn't collide
-    # with the transparency sentinel.
+    # Legacy RSC sprites use 0 as the transparency sentinel and otherwise store
+    # opaque 0x00RRGGBB pixels. Opt-in ARGB mode preserves soft alpha for render
+    # paths that explicitly understand it.
     rgba = img.tobytes()
     pixel_bytes = len(rgba)
     argb = bytearray(pixel_bytes)
     for i in range(0, pixel_bytes, 4):
         a = rgba[i + 3]
-        if a < 128:
+        if preserve_alpha:
+            if a == 0:
+                argb[i] = argb[i + 1] = argb[i + 2] = argb[i + 3] = 0
+            else:
+                argb[i] = a
+                argb[i + 1] = rgba[i]
+                argb[i + 2] = rgba[i + 1]
+                argb[i + 3] = rgba[i + 2]
+        elif a < 128:
             argb[i] = argb[i + 1] = argb[i + 2] = argb[i + 3] = 0
         else:
             r, g, b = rgba[i], rgba[i + 1], rgba[i + 2]
@@ -90,6 +95,7 @@ def main() -> int:
     ap.add_argument('--start-index', required=True, type=int, help='first entry index; subsequent inputs use start+1, start+2, ...')
     ap.add_argument('--inputs', required=True, help='comma-separated PNG paths')
     ap.add_argument('--sidecar', help='shared sidecar JSON for header metadata (per-input sidecars supported via <input>.json convention)')
+    ap.add_argument('--preserve-alpha', action='store_true', help='store ARGB alpha instead of legacy hard-mask pixels')
     ap.add_argument('--commit', action='store_true', help='atomically replace the archive (default: dry-run, write <archive>.new.orsc)')
     args = ap.parse_args()
 
@@ -113,8 +119,9 @@ def main() -> int:
         per_sidecar = parse_sidecar_arg(str(per_sidecar_path)) if per_sidecar_path.exists() else None
         sidecar = per_sidecar if per_sidecar is not None else shared_sidecar
         with Image.open(png_path) as img:
-            replacements[str(index)] = encode(img, sidecar)
-        print(f'  encoded {png_path} -> entry "{index}" ({img.width}x{img.height}, sidecar={"yes" if sidecar else "defaults"})')
+            replacements[str(index)] = encode(img, sidecar, preserve_alpha=args.preserve_alpha)
+        alpha_mode = 'argb-alpha' if args.preserve_alpha else 'legacy-mask'
+        print(f'  encoded {png_path} -> entry "{index}" ({img.width}x{img.height}, {alpha_mode}, sidecar={"yes" if sidecar else "defaults"})')
 
     if args.commit:
         bak = args.archive.with_suffix(args.archive.suffix + '.bak')

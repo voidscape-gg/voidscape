@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implements AttributeMap {
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int CHANNEL_CLOSED_RECONNECT_GRACE_MS = 5000;
+	private static final int ANDROID_CHANNEL_CLOSED_RECONNECT_GRACE_MS = 10 * 60 * 1000;
 
 	public static final AttributeKey<ConnectionAttachment> attachment = AttributeKey.valueOf("conn-attachment");
 
@@ -151,9 +152,10 @@ public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implement
 			if (player.getChannel() == channel) {
 				final Player disconnectingPlayer = player;
 				final Channel closedChannel = channel;
+				final int reconnectGraceMs = reconnectGraceMs(disconnectingPlayer);
 				getServer().getGameEventHandler().add(
 					new DelayedEvent(disconnectingPlayer.getWorld(), disconnectingPlayer,
-						CHANNEL_CLOSED_RECONNECT_GRACE_MS, "Channel closed reconnect grace") {
+						reconnectGraceMs, "Channel closed reconnect grace") {
 						public void run() {
 							try {
 								Channel currentChannel = disconnectingPlayer.getChannel();
@@ -174,6 +176,13 @@ public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implement
 				LOGGER.info("Ignoring stale channel unregister for player " + player.getUsername());
 			}
 		}
+	}
+
+	private int reconnectGraceMs(final Player player) {
+		if (player != null && player.isUsingAndroidClient()) {
+			return ANDROID_CHANNEL_CLOSED_RECONNECT_GRACE_MS;
+		}
+		return CHANNEL_CLOSED_RECONNECT_GRACE_MS;
 	}
 
 	@Override

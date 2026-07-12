@@ -17,6 +17,7 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Projectile;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.handler.PluginHandler;
@@ -30,6 +31,7 @@ public class RangeEvent extends GameTickEvent {
 	private final ServerConfiguration config;
 	private final PluginHandler pluginHandler;
 	private boolean deliveredFirstProjectile;
+	private boolean usedProjectileKiteGrace;
 	private Mob target;
 
 	public RangeEvent(final World world, final Player owner, final long tickDelay, final Mob target) {
@@ -83,10 +85,23 @@ public class RangeEvent extends GameTickEvent {
 			return;
 		}
 
+		ItemDefinition weaponDef = player.getWorld().getServer().getEntityHandler().getItemDef(weaponId);
+		if (!player.canUseMembersItemHere(weaponDef, weaponId)) {
+			player.sendCannotUseMembersHereMessage();
+			player.resetRange();
+			return;
+		}
+
 		final int radius = RangeUtils.isCrossbow(weaponId) || RangeUtils.isShortBow(weaponId) ?
 			4 : 5;
 
 		if (!player.withinRange(target, radius)) {
+			if (!usedProjectileKiteGrace && PathValidation.shouldHoldProjectileKiteLine(player, target, radius)) {
+				usedProjectileKiteGrace = true;
+				player.resetPath();
+				setDelayTicks(1);
+				return;
+			}
 			if (getOwner().nextStep(getOwner().getX(), getOwner().getY(), target) == null) {
 				reset(ProjectileFailureReason.CANT_GET_CLOSE_ENOUGH);
 				return;
@@ -96,6 +111,7 @@ public class RangeEvent extends GameTickEvent {
 			return;
 		}
 
+		usedProjectileKiteGrace = false;
 		if (!player.finishedPath()) player.resetPath();
 
 		if (!PathValidation.checkPath(player.getWorld(), player.getLocation(), target.getLocation())) {
@@ -122,7 +138,6 @@ public class RangeEvent extends GameTickEvent {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);
 				return;
 			}
-			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
 		} else {
 			if (pluginHandler.handlePlugin(PlayerRangeNpcTrigger.class, getPlayerOwner(), new Object[]{getOwner(), target})) {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);
@@ -148,6 +163,11 @@ public class RangeEvent extends GameTickEvent {
 			reset(ProjectileFailureReason.OUT_OF_AMMO);
 			return;
 		}
+		if (target.isPlayer()) {
+			Player playerTarget = (Player) target;
+			WildernessRules.markVoidDungeonPvp(player, playerTarget);
+			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
+		}
 
 		boolean skillCape = SkillCapes.shouldActivate(player, ItemId.RANGED_CAPE);
 		int delay = 3;
@@ -156,10 +176,12 @@ public class RangeEvent extends GameTickEvent {
 			delay = 1;
 		}
 
-		final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
+			final int damage = RangeUtils.doRangedDamage(player, weaponId, ammoId, target, skillCape);
+			final int attackerMaxHit = RangeUtils.calculateRangedMaxHit(player, weaponId, ammoId, target, skillCape);
 
 		if ((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
-			&& !(target.isNpc() && target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target))
+			&& !(target.isNpc() && (target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target)
+				|| ((Npc) target).shouldSuppressDefaultDeathRewards()))
 			&& damage > 0) {
 			player.incExp(Skill.RANGED.id(), Formulae.rangedHitExperience(target, damage), true);
 		}
@@ -175,8 +197,9 @@ public class RangeEvent extends GameTickEvent {
 
 		player.setAttribute("can_range_again", getWorld().getServer().getCurrentTick() + delay);
 		ActionSender.sendSound(player, "shoot");
-		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2));
-	}
+			getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2,
+				true, DuplicationStrategy.ONE_PER_MOB, attackerMaxHit));
+		}
 
 	private int takeAmmoFromInventory(final int weaponId, final boolean isCrossbow) {
 		final int[] ammoIds = isCrossbow ? Formulae.boltIDs : Formulae.arrowIDs;
@@ -196,7 +219,7 @@ public class RangeEvent extends GameTickEvent {
 				continue;
 			}
 
-			if (!config.MEMBER_WORLD && ammoId != ItemId.BRONZE_ARROWS.id() && ammoId != ItemId.CROSSBOW_BOLTS.id()) {
+			if (!WildernessRules.canUseItem(player, ammo)) {
 				reset(ProjectileFailureReason.NOT_ENOUGH_AMMO_ARROWS);
 				return -1;
 			}

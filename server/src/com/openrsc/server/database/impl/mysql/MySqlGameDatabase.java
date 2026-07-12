@@ -8,6 +8,8 @@ import com.openrsc.server.database.DatabaseType;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.JDBCDatabase;
 import com.openrsc.server.database.JDBCDatabaseConnection;
+import com.openrsc.server.database.PortalCommerceLedger;
+import com.openrsc.server.database.WorldAchievementLedger;
 import com.openrsc.server.database.impl.mysql.queries.logging.LoginLog;
 import com.openrsc.server.database.queries.NamedParameterQuery;
 import com.openrsc.server.database.queries.Queries;
@@ -441,7 +443,7 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			statement.setString(3, password);
 			statement.setLong(4, System.currentTimeMillis() / 1000);
 			statement.setString(5, ip);
-			statement.setInt(6, Group.ADMIN);
+			statement.setInt(6, Group.DEFAULT_GROUP);
 
 			statement.executeUpdate();
 		} catch (final SQLException ex) {
@@ -899,6 +901,45 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
 		return null;
+	}
+
+	@Override
+	public PortalCommerceEntitlement queryOldestPendingPortalCommerceEntitlement(final int accountId)
+		throws GameDatabaseException {
+		return PortalCommerceLedger.loadOldestPending(getConnection(), accountId);
+	}
+
+	@Override
+	public PortalCommerceEntitlement queryPortalCommerceEntitlement(final long entitlementId)
+		throws GameDatabaseException {
+		return PortalCommerceLedger.loadById(getConnection(), entitlementId);
+	}
+
+	@Override
+	public WorldAchievementRecord queryLoadWorldAchievementRecord(final String seasonId,
+		final String recordKey) throws GameDatabaseException {
+		return WorldAchievementLedger.loadRecord(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			seasonId, recordKey);
+	}
+
+	@Override
+	public WorldPkEvent queryLoadWorldPkEvent(final String deathId) throws GameDatabaseException {
+		return WorldAchievementLedger.loadPkEvent(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			deathId);
+	}
+
+	@Override
+	public Long queryLoadLastQualifiedWorldPkPairTime(final String seasonId,
+		final int pairLowPlayerId, final int pairHighPlayerId) throws GameDatabaseException {
+		return WorldAchievementLedger.loadLastQualifiedPairTime(getConnection(),
+			getServer().getConfig().DB_TABLE_PREFIX, seasonId, pairLowPlayerId, pairHighPlayerId);
+	}
+
+	@Override
+	public WorldPkStreak queryLoadWorldPkStreak(final String seasonId, final int playerId)
+		throws GameDatabaseException {
+		return WorldAchievementLedger.loadPkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			seasonId, playerId);
 	}
 
 	@Override
@@ -1741,6 +1782,24 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public int queryAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException {
+		final String query = "SELECT COALESCE(SUM(`total_price`), 0) AS `seller_volume` FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX + "auction_sales` WHERE `seller`=? AND `sold_at` >= ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, sellerId);
+			statement.setLong(2, since);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return (int) Math.min(Integer.MAX_VALUE, result.getLong("seller_volume"));
+				}
+			}
+		} catch (final SQLException e) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, e.getMessage());
+		}
+		return 0;
+	}
+
+	@Override
 	public void queryInsertItemProvenanceEvent(final ItemProvenanceEvent event) throws GameDatabaseException {
 		try (final PreparedStatement statement = getConnection().prepareStatement(getMySqlQueries().insertItemProvenanceEvent)) {
 			statement.setLong(1, event.itemID);
@@ -2299,6 +2358,38 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
+	}
+
+	@Override
+	public int queryClaimPortalCommerceEntitlement(final long entitlementId, final int accountId,
+		final int playerId, final long catalogItemId, final long claimedAtMs) throws GameDatabaseException {
+		return PortalCommerceLedger.claimPending(getConnection(), entitlementId, accountId,
+			playerId, catalogItemId, claimedAtMs);
+	}
+
+	@Override
+	public int queryInsertWorldAchievementRecord(final WorldAchievementRecord record)
+		throws GameDatabaseException {
+		return WorldAchievementLedger.insertRecord(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			record);
+	}
+
+	@Override
+	public int queryInsertWorldPkEvent(final WorldPkEvent event) throws GameDatabaseException {
+		return WorldAchievementLedger.insertPkEvent(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			event);
+	}
+
+	@Override
+	public int queryInsertWorldPkStreak(final WorldPkStreak streak) throws GameDatabaseException {
+		return WorldAchievementLedger.insertPkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			streak);
+	}
+
+	@Override
+	public int queryUpdateWorldPkStreak(final WorldPkStreak streak) throws GameDatabaseException {
+		return WorldAchievementLedger.updatePkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
+			streak);
 	}
 
 	@Override

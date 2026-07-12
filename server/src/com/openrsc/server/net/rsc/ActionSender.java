@@ -2,14 +2,16 @@ package com.openrsc.server.net.rsc;
 
 import com.openrsc.server.Server;
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.clan.ClanPlayer;
 import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.DropTable;
+import com.openrsc.server.content.CrackerCampaignService;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.struct.UsernameChangeType;
@@ -70,6 +72,8 @@ public class ActionSender {
 	private static final Payload203Generator PAYLOAD_203_GENERATOR = new Payload203Generator();
 	private static final Payload235Generator PAYLOAD_235_GENERATOR = new Payload235Generator();
 	private static final PayloadCustomGenerator PAYLOAD_CUSTOM_GENERATOR = new PayloadCustomGenerator();
+	public static final int CRACKER_CAMPAIGN_STATE_CLIENT_VERSION = 10132;
+	private static final String CRACKER_CAMPAIGN_STATE_PREFIX = "@vscrackercampaign@v1|";
 
 	/**
 	 * Get respective generator
@@ -633,6 +637,8 @@ public class ActionSender {
 			}
 		}
 
+		addBestiaryDragonWeaponRareDrops(player, npcId, drops);
+
 		Collections.sort(drops, Comparator
 			.comparingDouble((BestiaryStruct.DropEntry drop) ->
 				drop.denominator <= 0 ? 0.0D : (double) drop.numerator / (double) drop.denominator).reversed()
@@ -642,6 +648,31 @@ public class ActionSender {
 		struct.entries = new BestiaryStruct.NpcEntry[] { npcEntry };
 
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+	}
+
+	private static void addBestiaryDragonWeaponRareDrops(Player player, int npcId, List<BestiaryStruct.DropEntry> drops) {
+		NpcDrops.DragonWeaponRareDropProfile profile =
+			player.getWorld().getNpcDrops().getDragonWeaponRareDropProfile(npcId);
+		if (profile == null) {
+			return;
+		}
+		for (Entry<Integer, Integer> entry : profile.getItemDropDenominators().entrySet()) {
+			addBestiaryFixedChanceDrop(player, drops, entry.getKey(), 1, entry.getValue());
+		}
+	}
+
+	private static void addBestiaryFixedChanceDrop(
+		Player player, List<BestiaryStruct.DropEntry> drops, int itemId, long amount, long denominator
+	) {
+		if (!bestiaryWorldAllowsDrop(player, itemId)) {
+			return;
+		}
+		BestiaryStruct.DropEntry drop = new BestiaryStruct.DropEntry();
+		drop.itemId = itemId;
+		drop.amount = amount;
+		drop.numerator = 1L;
+		drop.denominator = denominator;
+		drops.add(drop);
 	}
 
 	private static int bestiaryBoneDrop(Player player, int npcId) {
@@ -1490,6 +1521,30 @@ public class ActionSender {
 		sendMessage(player, "@cya@" + messageSend);
 	}
 
+	public static boolean supportsCrackerCampaignState(Player player) {
+		return player != null && player.isUsingCustomClient()
+			&& supportsCrackerCampaignStateVersion(player.getClientVersion());
+	}
+
+	static boolean supportsCrackerCampaignStateVersion(int clientVersion) {
+		return clientVersion >= CRACKER_CAMPAIGN_STATE_CLIENT_VERSION;
+	}
+
+	static String crackerCampaignStateEnvelope(int remaining) {
+		final int safeRemaining = remaining >= 0
+			&& remaining <= CrackerCampaignService.MAX_REMAINING ? remaining : 0;
+		return CRACKER_CAMPAIGN_STATE_PREFIX + safeRemaining;
+	}
+
+	/** Sends a senderless hidden QUEST envelope through the existing message opcode. */
+	public static void sendCrackerCampaignState(Player player, int remaining) {
+		if (!supportsCrackerCampaignState(player)) {
+			return;
+		}
+		sendMessage(player, null, MessageType.QUEST,
+			crackerCampaignStateEnvelope(remaining), 0, null);
+	}
+
 	public static void sendMessage(Player player, String message) {
 		sendMessage(player, null, MessageType.GAME, message, 0, null);
 	}
@@ -1501,7 +1556,7 @@ public class ActionSender {
 	public static void sendMessage(Player player, Player sender, MessageType type, String message,
 								   int iconSprite, String colorString) {
 		MessageStruct struct = new MessageStruct();
-		struct.iconSprite = iconSprite;
+		struct.iconSprite = VoidSubscription.withChatNameFlag(player, sender, iconSprite);
 		struct.messageTypeRsId = type.getRsID();
 		byte infoContained = 0;
 		if (sender != null) {
@@ -1575,7 +1630,9 @@ public class ActionSender {
 				struct.playerName = struct.formerName = "Global$" + sender.getUsername();
 			}
 		}
-		struct.iconSprite = player.isUsing233CompatibleClient() ? sender.getIconAuthentic() : sender.getIcon();
+		struct.iconSprite = player.isUsing233CompatibleClient()
+			? sender.getIconAuthentic()
+			: VoidSubscription.withChatNameFlag(player, sender, sender.getIcon());
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_PRIVATE_MESSAGE, struct, player);
 	}
 
@@ -2350,7 +2407,7 @@ public class ActionSender {
 	}
 
 	static void sendLogin(Player player) {
-		boolean resumedSession = player.isReconnecting() && player.getWorld().getPlayers().contains(player);
+		boolean resumedSession = player.isReconnecting() && player.getWorld().isCurrentPlayer(player);
 		try {
 			if (player.getWorld().registerPlayer(player) || resumedSession) {
                 sendPrivacySettings(player);
@@ -2364,8 +2421,8 @@ public class ActionSender {
 				    sendMessage(player, null, MessageType.QUEST, "@mag@There is a Holiday Drop Event going on now! Type @gre@::drop@mag@ for more information.", 0, null);
                 }
 
-                sendGameSettings(player);
-				GlobalChatIpFlags.resolvePlayerAsync(player);
+				sendGameSettings(player);
+				player.getWorld().getCrackerCampaignService().sendStateSnapshot(player);
 				sendWorldInfo(player);
                 sendQuestInfo(player);
                 sendPlayerOnTutorial(player);
@@ -2763,11 +2820,12 @@ public class ActionSender {
 		struct.unlockedHairStyles = new boolean[0];
 		struct.unlockedBodyTypes = new boolean[0];
 		struct.unlockedSkinColours = player.getUnlockedSkinColours();
-		struct.unlockedHairColours = new boolean[0];
-		struct.unlockedTopColours = new boolean[0];
-		struct.unlockedBottomColours = new boolean[0];
-		tryFinalizeAndSendPacket(OpcodeOut.SEND_UNLOCKED_APPEARANCES, struct, player);
-	}
+			struct.unlockedHairColours = new boolean[0];
+			struct.unlockedTopColours = new boolean[0];
+			struct.unlockedBottomColours = new boolean[0];
+			struct.selectedCountryCode = GlobalChatCountryFlags.selectedCountryCode(player);
+			tryFinalizeAndSendPacket(OpcodeOut.SEND_UNLOCKED_APPEARANCES, struct, player);
+		}
 
 	public static void sendIronManMode(Player player) {
 		IronManStruct struct = new IronManStruct();

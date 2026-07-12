@@ -35,7 +35,7 @@ public class ConfigCreator {
 		props.put("rsa_pub_key", "7112866275597968156550007489163685737528267584779959617759901583041864787078477876689003422509099353805015177703670715380710894892460637136582066351659813");
 		props.put("port", "43596");
 		props.put("rsa_exponent", "65537");
-		props.put("url", "play.voidscape.gg");
+		props.put("url", "game.openrsc.com");
 		props.put("name", "RSC Preservation");
 		props.put("servertype", "1");
 		props.put("hiscores_url", "https\\://voidscape.gg/#characters");
@@ -48,7 +48,7 @@ public class ConfigCreator {
 		props.put("rsa_pub_key", "7112866275597968156550007489163685737528267584779959617759901583041864787078477876689003422509099353805015177703670715380710894892460637136582066351659813");
 		props.put("port", "43235");
 		props.put("rsa_exponent", "65537");
-		props.put("url", "play.voidscape.gg");
+		props.put("url", "game.openrsc.com");
 		props.put("name", "RSC Uranium");
 		props.put("servertype", "1");
 		props.put("hiscores_url", "https\\://voidscape.gg/#characters");
@@ -61,7 +61,7 @@ public class ConfigCreator {
 		props.put("rsa_pub_key", "7112866275597968156550007489163685737528267584779959617759901583041864787078477876689003422509099353805015177703670715380710894892460637136582066351659813");
 		props.put("port", "43593");
 		props.put("rsa_exponent", "65537");
-		props.put("url", "play.voidscape.gg");
+		props.put("url", "game.openrsc.com");
 		props.put("name", "2001scape");
 		props.put("servertype", "1");
 		props.put("hiscores_url", "https\\://voidscape.gg/#characters");

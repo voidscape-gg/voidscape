@@ -5,7 +5,9 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.impl.mysql.queries.logging.PMLog;
+import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
 import com.openrsc.server.model.PlayerAppearance;
@@ -43,6 +45,13 @@ public final class GameStateUpdater {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int HIT_FEEDBACK_CLIENT_VERSION = 10116;
+	private static final int OVERHEAD_PRAYER_CLIENT_VERSION = 10117;
+	private static final byte HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
+	private static final String OUTDATED_CLIENT_KICK_ATTRIBUTE = "voidscape_outdated_client_kick_pending";
+	private static final long OUTDATED_CLIENT_KICK_DELAY_MS = 5000L;
+	private static final long CLIENT_ACTIVITY_TIMEOUT_MS = 30000L;
+	private static final long ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS = 10L * 60L * 1000L;
 
 	private final Server server;
 	public final Server getServer() {
@@ -62,27 +71,18 @@ public final class GameStateUpdater {
 	public void sendUpdatePackets(final Player player) {
 		// TODO: Should be private
 		try {
-			if (player.isUsing233CompatibleClient()) {
-				if (player.isChangingAppearance()) {
-					sendAppearanceKeepalive(player);
-				} else {
-					updatePlayers(player);
-					updatePlayerAppearances(player);
-					updateNpcs(player);
-					updateNpcAppearances(player);
-					updateGameObjects(player);
-					updateWallObjects(player);
-					updateGroundItems(player);
-					sendClearLocations(player);
-					updateTimeouts(player);
-				}
+			if (player.isUsing233CompatibleClient() && player.isChangingAppearance()) {
+				sendAppearanceKeepalive(player);
 			} else {
 				updatePlayers(player);
 				updatePlayerAppearances(player);
 				updateNpcs(player);
 				updateNpcAppearances(player);
-				updateGameObjects(player);
-				updateWallObjects(player);
+				// One scenery region scan shared by both passes (scenery + boundaries) —
+				// nothing mutates region object sets between the two calls.
+				final Collection<GameObject> sceneryInView = player.getViewArea().getGameObjectsInView();
+				updateGameObjects(player, sceneryInView);
+				updateWallObjects(player, sceneryInView);
 				updateGroundItems(player);
 				sendClearLocations(player);
 				updateTimeouts(player);
@@ -98,10 +98,15 @@ public final class GameStateUpdater {
 	 */
 	protected void updateTimeouts(final Player player) {
 		final long curTime = System.currentTimeMillis();
-		final int timeoutLimit = getServer().getConfig().IDLE_TIMER; // 5 minute idle log out
+		final int timeoutLimit = VoidSubscription.isActive(player)
+			? getServer().getConfig().IDLE_TIMER_SUBSCRIBER
+			: getServer().getConfig().IDLE_TIMER;
 		final int autoSave = getServer().getConfig().AUTO_SAVE; // 30 second autosave by default
 		final int timedEvents = getServer().getConfig().TIMED_EVENT_INTERVAL;
 		if (player.isRemoved() || player.getAttribute("dummyplayer", false)) {
+			return;
+		}
+		if (enforceCurrentClientVersion(player)) {
 			return;
 		}
 		if (curTime - player.getLastSaveTime() >= (autoSave) && player.loggedIn()) {
@@ -115,7 +120,7 @@ public final class GameStateUpdater {
 			player.setLastTimedEvent(curTime);
 		}
 
-		if (curTime - player.getLastClientActivity() >= 30000) {
+		if (curTime - player.getLastClientActivity() >= clientActivityTimeoutMs(player)) {
 			player.unregister(UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Client activity time-out");
 		}
 
@@ -138,6 +143,38 @@ public final class GameStateUpdater {
 				+ " mins! Please move to a new area");
 			player.setWarnedToMove(true);
 		}
+	}
+
+	private long clientActivityTimeoutMs(final Player player) {
+		return player.isUsingAndroidClient()
+			? ANDROID_CLIENT_ACTIVITY_TIMEOUT_MS
+			: CLIENT_ACTIVITY_TIMEOUT_MS;
+	}
+
+	private boolean enforceCurrentClientVersion(final Player player) {
+		if (!player.loggedIn() || !getServer().getConfig().requiresClientUpdate(player.getClientVersion())) {
+			return false;
+		}
+		if (!player.getAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, false)) {
+			player.setAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, true);
+			ActionSender.sendSystemMessage(player, "Voidscape has been updated. Relaunch the launcher to download the new client.");
+			if (player.getClientLimitations().supportsSystemUpdateTimer) {
+				ActionSender.sendSystemUpdateTimer(player, (int) (OUTDATED_CLIENT_KICK_DELAY_MS / 1000L));
+			}
+			player.getWorld().getServer().getGameEventHandler().add(
+				new DelayedEvent(player.getWorld(), player, OUTDATED_CLIENT_KICK_DELAY_MS, "Outdated client disconnect") {
+					@Override
+					public void run() {
+						final Player owner = getOwner();
+						if (owner != null && owner.loggedIn() && !owner.isRemoved()) {
+							owner.unregister(UnregisterForcefulness.FORCED, "Outdated client version " + owner.getClientVersion()
+								+ ", required " + owner.getConfig().CLIENT_VERSION);
+						}
+						stop();
+					}
+				});
+		}
+		return true;
 	}
 
 	private int safeNPCIndex(final Player player, final int npcIndex) {
@@ -533,7 +570,8 @@ public final class GameStateUpdater {
 			Damage npcNeedingHitsUpdate;
 			while ((npcNeedingHitsUpdate = npcsNeedingHitsUpdate.poll()) != null) {
 				updates.add((short) safeNPCIndex(player, npcNeedingHitsUpdate.getIndex()));
-				updates.add((byte) 2);
+				boolean sendHitFeedback = supportsHitFeedback(player) && npcNeedingHitsUpdate.hasHitFeedback();
+				updates.add(sendHitFeedback ? HIT_FEEDBACK_DAMAGE_UPDATE_TYPE : (byte) 2);
 				updates.add((byte) npcNeedingHitsUpdate.getDamage());
 				// The hit-bar fields are single unsigned bytes; raid bosses (e.g. Void Colossus,
 				// 5000 HP) would wrap past 255. Scale cur/max into a 0-100 range when max > 255 —
@@ -548,6 +586,11 @@ public final class GameStateUpdater {
 				} else {
 					updates.add((byte) colossusCurHits);
 					updates.add((byte) colossusMaxHits);
+				}
+				if (sendHitFeedback) {
+					updates.add((byte) npcNeedingHitsUpdate.getHitFeedbackAttackerType());
+					updates.add((short) npcNeedingHitsUpdate.getHitFeedbackAttackerIndex());
+					updates.add((short) npcNeedingHitsUpdate.getHitFeedbackAttackerMaxHit());
 				}
 			}
 			if (player.isUsingCustomClient()) {
@@ -775,7 +818,7 @@ public final class GameStateUpdater {
 
 						if (updateType == 1 || updateType == 7) {
 							if (cm.getSender() != null && cm.getSender() instanceof Player)
-								updatesMain.add((int) sender.getIcon());
+								updatesMain.add((int) VoidSubscription.withChatNameFlag(player, sender, sender.getIcon()));
 						}
 
 						if (updateType == 7) {
@@ -825,10 +868,16 @@ public final class GameStateUpdater {
 				Damage playerNeedingHitsUpdate;
 				while ((playerNeedingHitsUpdate = playersNeedingDamageUpdate.poll()) != null) {
 					updatesMain.add((short) playerNeedingHitsUpdate.getIndex());
-					updatesMain.add((byte) 2);
+					boolean sendHitFeedback = supportsHitFeedback(player) && playerNeedingHitsUpdate.hasHitFeedback();
+					updatesMain.add(sendHitFeedback ? HIT_FEEDBACK_DAMAGE_UPDATE_TYPE : (byte) 2);
 					updatesMain.add((byte) playerNeedingHitsUpdate.getDamage());
 					updatesMain.add((byte) playerNeedingHitsUpdate.getCurHits());
 					updatesMain.add((byte) playerNeedingHitsUpdate.getMaxHits());
+					if (sendHitFeedback) {
+						updatesMain.add((byte) playerNeedingHitsUpdate.getHitFeedbackAttackerType());
+						updatesMain.add((short) playerNeedingHitsUpdate.getHitFeedbackAttackerIndex());
+						updatesMain.add((short) playerNeedingHitsUpdate.getHitFeedbackAttackerMaxHit());
+					}
 				}
 
 				// Update Types 3 & 4: Projectile Update (draws the projectile)
@@ -1024,7 +1073,9 @@ public final class GameStateUpdater {
 						updatesMain.add((char) appearance.getTrouserColour());
 						updatesMain.add((char) appearance.getSkinColour(playerNeedingAppearanceUpdate.getClientLimitations().maxSkinColor));
 						updatesMain.add((byte) playerNeedingAppearanceUpdate.getCombatLevel());
-						updatesMain.add((byte) playerNeedingAppearanceUpdate.getSkullType());
+						updatesMain.add((byte) (isCustomClient && player.getClientVersion() >= OVERHEAD_PRAYER_CLIENT_VERSION
+							? playerNeedingAppearanceUpdate.getCustomOverheadType()
+							: playerNeedingAppearanceUpdate.getSkullType()));
 					}
 
 					if (isCustomClient) {
@@ -1041,6 +1092,9 @@ public final class GameStateUpdater {
 						updatesMain.add((int) playerNeedingAppearanceUpdate.getIcon());
 						if (player.getClientVersion() >= PlayerTitle.OVERHEAD_TITLE_CLIENT_VERSION) {
 							updatesMain.add(PlayerTitle.activeOverhead(playerNeedingAppearanceUpdate));
+						}
+						if (player.getClientVersion() >= PlayerTitle.OVERHEAD_TITLE_TIER_CLIENT_VERSION) {
+							updatesMain.add((byte) PlayerTitle.activeOverheadTier(playerNeedingAppearanceUpdate));
 						}
 						if (player.getClientVersion() >= PlayerAppearance.MODERN_HAIR_CLIENT_VERSION) {
 							updatesMain.add((byte) appearance.getHairStyle());
@@ -1071,7 +1125,15 @@ public final class GameStateUpdater {
 		}
 	}
 
+	private boolean supportsHitFeedback(final Player player) {
+		return player.isUsingCustomClient() && player.getClientVersion() >= HIT_FEEDBACK_CLIENT_VERSION;
+	}
+
 	protected void updateGameObjects(final Player playerToUpdate) {
+		updateGameObjects(playerToUpdate, playerToUpdate.getViewArea().getGameObjectsInView());
+	}
+
+	protected void updateGameObjects(final Player playerToUpdate, final Collection<GameObject> objectsInView) {
 		boolean changed = false;
 
 		GameObjectsUpdateStruct struct = new GameObjectsUpdateStruct();
@@ -1102,7 +1164,7 @@ public final class GameStateUpdater {
 		}
 
 		// Add scenery
-		for (final GameObject newObject : playerToUpdate.getViewArea().getGameObjectsInView()) {
+		for (final GameObject newObject : objectsInView) {
 			boolean skipAdd = newObject.isRemoved() ||
 				newObject.isInvisibleTo(playerToUpdate) ||
 				newObject.getType() != 0 || // not a wallObject
@@ -1198,6 +1260,10 @@ public final class GameStateUpdater {
 	}
 
 	protected void updateWallObjects(final Player playerToUpdate) {
+		updateWallObjects(playerToUpdate, playerToUpdate.getViewArea().getGameObjectsInView());
+	}
+
+	protected void updateWallObjects(final Player playerToUpdate, final Collection<GameObject> objectsInView) {
 		boolean changed = false;
 
 		GameObjectsUpdateStruct struct = new GameObjectsUpdateStruct();
@@ -1260,7 +1326,7 @@ public final class GameStateUpdater {
 		}
 
 		// add all new boundaries to be added
-		for (final GameObject newObject : playerToUpdate.getViewArea().getGameObjectsInView()) {
+		for (final GameObject newObject : objectsInView) {
 			if (!playerToUpdate.withinViewGridRange(newObject) || newObject.isRemoved()
 				|| newObject.isInvisibleTo(playerToUpdate) || newObject.getType() != 1
 				|| playerToUpdate.getLocalWallObjects().contains(newObject)) {

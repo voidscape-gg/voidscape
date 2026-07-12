@@ -6,7 +6,8 @@ License: AGPLv3 (same as voidscape — see `COPYING` upstream)
 
 ## What's here
 
-- `plane-0.png` — 2448 × 2736 pre-rendered RSC surface map. Produced by the sister library [`@2003scape/rsc-landscape`](https://github.com/2003scape/rsc-landscape) from canonical Jagex `.jag/.mem` archives. 3 px/tile, X-mirrored, sectors arranged right-to-left. **Then baked-in scenery** — see "Object overlay" below. Voidscape's world-map walker is surface-only by design; we don't ship `plane-{1,2,3}.png` from upstream.
+- `plane-0.png` — 2448 × 2736 pre-rendered RSC surface map. Produced by the sister library [`@2003scape/rsc-landscape`](https://github.com/2003scape/rsc-landscape) from canonical Jagex `.jag/.mem` archives. 3 px/tile, X-mirrored, sectors arranged right-to-left. **Then baked-in scenery** — see "Object overlay" below.
+- `plane-{1,2,3}.png` — 2448 × 2736 Voidscape-generated underground maps. These are not copied from upstream; see "Voidscape underground planes" below.
 - `labels.tsv` — 110 place-name labels, converted from `res/labels.json`. Columns: `text`, `x`, `y`, `size`, `align`, `bold`, `colour` (rgb or empty). Newlines in text are escaped as `\n`. Coordinates are PNG pixels in `plane-0.png`.
 - `points.tsv` — 309 POI markers across 42 types, converted from `res/points.json`. Columns: `type`, `x`, `y`. Coordinates are PNG pixels in `plane-0.png`.
 - `icons/<type>.png` — small sprite icons (5–11 px) for each POI type, copied verbatim from `res/key/`.
@@ -21,7 +22,17 @@ Upstream's `res/objects.json` (~27k records — trees, rocks, fences, fungus, et
 
 Wild box (PNG-pixel post-transform): `x∈[1440,2304], y∈[286,1286]`.
 
-We **bake this overlay into the plane PNGs at vendor time** via `scripts/bake-worldmap-objects.py`, so the runtime client has zero per-frame overlay cost. The PNGs in this directory are post-bake.
+We **bake this overlay into `plane-0.png` at vendor time** via `scripts/bake-worldmap-objects.py`, so the runtime client has zero per-frame overlay cost. The surface PNG in this directory is post-bake.
+
+## Voidscape underground planes
+
+`scripts/bake-voidscape-worldmap.py` creates `plane-1.png`, `plane-2.png`, and `plane-3.png` from fresh RGBA canvases on every run. Its inputs are:
+
+- `server/conf/server/data/void_dungeon_floor.json` for the exact floor mask, stage metadata, names, exits, and transitions;
+- `server/conf/server/defs/locs/BoundaryLocsVoidDungeon.json` for directional wall edges; and
+- `server/conf/server/defs/locs/SceneryLocsVoidDungeon.json` for scenery-backed ladder and exit-rift landmarks.
+
+The baker validates that the stage rectangles reproduce the flat mask exactly and that each landmark exists in generated scenery before writing any underground plane. It derives stages and floor membership from the data rather than assuming a stage count, so regenerating the dungeon with a different stage layout does not require a map-baker edit. A repeated run against identical inputs produces identical PNG bytes.
 
 ## Refresh procedure
 
@@ -53,8 +64,8 @@ PY
 # Bake the scenery objects overlay into the plane PNGs:
 scripts/bake-worldmap-objects.py /tmp/rsc-world-map/res/objects.json
 
-# Re-apply Voidscape-only overlays: Void Island, Void Enclave,
-# PK Catching Simulator arenas, labels, and POIs.
+# Re-apply Voidscape-only surface overlays and regenerate all three
+# underground dungeon planes.
 scripts/bake-voidscape-worldmap.py
 ```
 

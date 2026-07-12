@@ -1,6 +1,6 @@
 # Voidscape Performance Map
 
-This note captures the current server/game performance baseline after the first optimization pass on 2026-04-30. It is intentionally practical: what is vanilla, what voidscape changed, where latency comes from, and what to optimize next.
+This note captures the current server/game performance baseline after the optimization passes on 2026-04-30 and 2026-07-03. It is intentionally practical: what is vanilla, what voidscape changed, where latency comes from, and what to optimize next.
 
 ## Plain English Result
 
@@ -111,13 +111,42 @@ Verification:
 - `./scripts/perf-smoke.sh` passes with 0 late/skipped ticks.
 - `./scripts/perf-load.sh 50 130 18 2` held 50 synthetic players plus the real admin client (`players=51`) across the autosave boundary with 0 late/skipped ticks. During warm intervals, tick `p95` stayed in the `12.6-16.5ms` range and update-generation `p95` stayed in the `3.6-6.7ms` range. The only save-queue blip was one real-player save, and the first full interval after stop returned to `players=1`.
 
+## 2026-07-03 Pass
+
+Escalating `::loadbots` measurement found the loop had regressed since April (content growth: Void Dungeon mobs, sieges, arenas), and an 11-dimension multi-agent audit with adversarial verification identified the causes. Full change list and authenticity notes: `docs/DIVERGENCE.md` (2026-07-03 tick-loop entry). Highlights:
+
+- Deleted the `System.gc()` that ran on the game thread on every late tick (~371ms full-GC stall on an already-late tick, self-amplifying; observed p99 spikes over 1.2s).
+- Events run inline on the game thread when the event pool is single-threaded (the default) — no more ~3,700 FutureTask handoffs per tick through `invokeAll`.
+- Per-NPC `StatRestorationEvent`s park when the NPC has nothing to restore; re-armed by a centralized `Skills` mutator hook. Idle event population drops ~99%.
+- NPC roam phase jittered at spawn (the whole boot cohort used to path-build in lockstep every 5 ticks — that WAS the idle npc-stage p95).
+- Collision checks (`PathValidation.checkBlocking`/`isMobBlocking`) resolve the Region once and use non-stream first-match tile lookups; `Path.addStep` probes diagonals lazily; `RegionManager` lookups are 2 lock-free reads instead of 5; `getVisibleRegions` allocates no boxed lists; `getLocalPlayers` short-circuits at 0 players online.
+- Update generation: scenery region scan shared between scenery+boundary passes; appearance dedup is a map lookup instead of an O(localPlayers²) scan.
+- SQLite: WAL + synchronous=NORMAL + busy_timeout; connection-level `ReentrantLock` held across whole `atomically()` transactions (closes a save-corruption interleaving window).
+- Runtime: `run-server.sh` now uses the `runserverzgc` target (ZGC, 2g fixed heap); both ant targets write rotating `logs/gc.log`; G1 fallback loses the dead `UseBiasedLocking`/64m-young-gen pins.
+- Client: bounded 32-packet drain per frame in `mudclient.checkConnection` — a server tick's batched flush now renders in one frame instead of smearing over several 20ms frames.
+
+Measured (same machine, same world, 3,658 NPCs; warm intervals, `tick_ms p50/p95`):
+
+| Players | Before (2026-07-03 AM) | After | Skipped ticks |
+|---|---|---|---|
+| 0 (idle) | 24-39 / 44-84 | **8 / 14** | 0 → 0 |
+| 51 | 42-49 / 85-126 | **15-20 / 22-28** | 0 → 0 |
+| 151 | 100-117 / 168-322 | **42-52 / 66-69** | 2-3 → **0** |
+| 301 | ~220 / ~500 | **98-116 / 155-176** | 3+ → **0** |
+
+Idle stage p95s: npc 47-62ms → ~11ms, events 13-15ms → ~0.1ms. At 301 players the dominant stage is now `update` (95-148ms, ~90% of the tick) — that is the next scaling wall.
+
+Also diagnosed, no code change: the "idle tick creep" over uptime on the dev Mac is efficiency-core scheduling of the mostly-idle game thread, not a leak (heap flat over 25 min; the step reverses without restart). Treat Linux staging as the only regression baseline for absolute idle numbers.
+
+Verification: `scripts/build.sh` green; client `ant compile` green; server boots on ZGC with `logs/gc.log` rotating; `tests/smoke.sh` 26/26 (first post-restart run flaked 25/26, the documented warm-up pattern); NPC heal-cycle regression check (damage NPC, verify wall-clock heal cadence) — see BUGS.md/DIVERGENCE if it ever regresses.
+
 ## Remaining Plan
 
 Highest-value next work:
 
-1. Push the synthetic load higher in controlled steps: 100, 200, then 300 bots. Stop at the first interval with nonzero skipped ticks or repeatable `p95` above roughly 200ms.
-2. If `update` remains the dominant stage, profile `Player.sendUpdates()` and region-visible entity packet generation; that is the next likely multiplayer scaling limit.
-3. Review SQLite save pressure under real clients; if saves bunch up, stagger autosaves or move public testing to MySQL/MariaDB.
+1. **Update-packet generation is the scaling wall** (95-148ms p95 at 301 co-located players; ~90% of tick). Next lever: share the per-tick visible-region scans across the four entity classes and cache per-tick entity snapshots for co-located observers (ordered-region-list keyed, per the verified audit finding), or profile `updatePlayers`/`updateNpcs` inner loops.
+2. Note that 301 players in one spot is a deliberately brutal worst case — 301 spread across the map costs far less. Re-test with distributed bots before optimizing further.
+3. Review SQLite save pressure under real clients (WAL landed 2026-07-03; if saves still bunch, batch the game-logger drain into one transaction per 50ms flush).
 4. Build a true headless/light TCP client swarm only when we need to test auth, socket backpressure, login/logout churn, or WAN-like connection behavior.
-5. Move expensive one-shot jobs off the game thread if telemetry catches a repeatable stage spike.
+5. Prod deploy: `Deployment_Scripts/run.sh` still forces the g1gc arg — drop it only after confirming the VPS java is 17+ (ZGC does not exist on Java 8; see ant_launcher.sh comment).
 6. Make boot warnings actionable or quiet: missing query registrations, SLF4J binder warning, missing word filter files.

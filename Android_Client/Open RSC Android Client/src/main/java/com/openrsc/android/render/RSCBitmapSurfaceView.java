@@ -12,10 +12,14 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.os.Build;
 import android.text.InputType;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.view.WindowInsets;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -30,24 +34,27 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import orsc.graphics.two.MudClientGraphics;
 import orsc.mudclient;
 import orsc.multiclient.ClientPort;
 import orsc.osConfig;
-import orsc.util.Utils;
 
 public abstract class RSCBitmapSurfaceView extends SurfaceView implements SurfaceHolder.Callback, ClientPort {
 
-	private final int client_width = 512;
-	private final int client_height = 334;
-	private static final int CLIENT_FULL_HEIGHT = 334 + 12;
-	private static final int MAX_PORTRAIT_FULL_HEIGHT = 1152;
-
 	protected final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
 	private final Object frameLock = new Object();
-	private Bitmap currentFrame = Bitmap.createBitmap(512, CLIENT_FULL_HEIGHT, Bitmap.Config.RGB_565);
+	private final Object viewportLock = new Object();
+	private Bitmap currentFrame = Bitmap.createBitmap(AndroidClientViewport.BASE_WIDTH, AndroidClientViewport.BASE_FULL_HEIGHT, Bitmap.Config.RGB_565);
+	private volatile AndroidClientViewport.Metrics viewportMetrics;
+	private AndroidClientViewport.SafeInsets safeInsets = AndroidClientViewport.SafeInsets.NONE;
+	private volatile int imeBottomInset;
+	private volatile boolean imeVisible;
+	private int viewportSurfaceWidth;
+	private int viewportSurfaceHeight;
+	private String lastViewportLogLine;
 
 	private final GameActivity gameActivity;
 	private boolean m_hb;
@@ -57,7 +64,6 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	public RSCBitmapSurfaceView(Context c) {
 		super(c);
 		gameActivity = (GameActivity) c;
-		Utils.context = c;
 		SurfaceHolder holder = getHolder();
 		holder.addCallback(this);
 
@@ -66,6 +72,19 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		setFocusable(true);
 		setFocusableInTouchMode(true);
 		setKeepScreenOn(true);
+		setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+			@Override
+			public WindowInsets onApplyWindowInsets(View view, WindowInsets windowInsets) {
+				AndroidClientViewport.SafeInsets nextSafeInsets = readSafeInsets(windowInsets);
+				updateSafeInsets(nextSafeInsets);
+				int nextImeBottomInset = readImeBottomInset(windowInsets, nextSafeInsets.bottom);
+				updateImeState(
+					nextImeBottomInset,
+					readImeVisible(windowInsets, nextImeBottomInset)
+				);
+				return windowInsets;
+			}
+		});
 		loadStatusSprites();
 	}
 
@@ -81,11 +100,12 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void surfaceCreated(final SurfaceHolder holder) {
 		setWillNotDraw(false);
+		requestApplyInsets();
 	}
 
 	@Override
 	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-		requestClientResize(width, height);
+		updateViewportMetrics(width, height);
 	}
 
 	@Override
@@ -95,17 +115,30 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public InputConnection onCreateInputConnection(EditorInfo editorinfo) {
-		BaseInputConnection bic = new BaseInputConnection(this, false);
 		editorinfo.actionLabel = null;
-		editorinfo.inputType = InputType.TYPE_NULL;
-		editorinfo.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
-		bic.finishComposingText();
-		return bic;
+		editorinfo.inputType = InputType.TYPE_CLASS_TEXT
+			| InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+			| InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
+		editorinfo.imeOptions = EditorInfo.IME_ACTION_DONE
+			| EditorInfo.IME_FLAG_NO_FULLSCREEN
+			| EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+		editorinfo.initialSelStart = 0;
+		editorinfo.initialSelEnd = 0;
+
+		// fullEditor=false keeps BaseInputConnection in fallback mode. Committed
+		// text, backspace, and the IME action are translated into the KeyEvents
+		// consumed by InputImpl, while modern IMEs still see a real text editor.
+		return new BaseInputConnection(this, false);
+	}
+
+	@Override
+	public boolean onCheckIsTextEditor() {
+		return true;
 	}
 
 	@Override
 	public boolean onKeyPreIme(int keyCode, @NonNull KeyEvent event) { // @NonNull?
-		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && osConfig.F_SHOWING_KEYBOARD) {
+		if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && gameActivity.isKeyboardShowing()) {
 			if (event.getAction() == KeyEvent.ACTION_DOWN) {
 				gameActivity.closeKeyboard();
 			}
@@ -131,14 +164,14 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	private void drawLoadingScreen(String state, int percent) {
 		try {
-
-			int x = (this.client_width - 281) / 2;
-			int y = (this.client_height - 148) / 2;
-
 			Paint paint = new Paint();
 			paint.setTextSize(15);
 			paint.setTextAlign(Align.CENTER);
 			synchronized (frameLock) {
+				int contentWidth = currentFrame.getWidth();
+				int contentHeight = getFrameContentHeight();
+				int x = (contentWidth - 281) / 2;
+				int y = (contentHeight - 148) / 2;
 				Canvas canvas = new Canvas(currentFrame);
 				canvas.drawColor(0, Mode.CLEAR);
 
@@ -179,7 +212,7 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 					canvas.drawText("Classic adventure, rebuilt", x + 138, y + 44, paint);
 				} else {
 					paint.setColor(Color.rgb(132, 132, 152));
-					canvas.drawText("Voidscape", x + 138, client_height - 20, paint);
+					canvas.drawText("Voidscape", x + 138, contentHeight - 20, paint);
 				}
 			}
 		} catch (Exception var6) {
@@ -190,13 +223,13 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void showLoadingProgress(int percentage, String status) {
 		drawLoadingScreen(status, percentage);
-		int x = (this.client_width - 281) / 2;
-		x += 2;
-		int y = (this.client_height - 148) / 2;
-		y += 90;
 		int progress = percentage * 277 / 100;
 
 		synchronized (frameLock) {
+			int x = (currentFrame.getWidth() - 281) / 2;
+			x += 2;
+			int y = (getFrameContentHeight() - 148) / 2;
+			y += 90;
 			Canvas canvas = new Canvas(currentFrame);
 			Paint paint = new Paint();
 			paint.setColor(Color.rgb(132, 132, 132));
@@ -234,18 +267,18 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 	@Override
 	public void drawLoadingError() {
 		drawLoadingScreen("Can't reach selected server", 0);
-		int x = (this.client_width - 281) / 2;
-		int y = (this.client_height - 148) / 2;
-		x += 2;
-		y += 90;
 
 		synchronized (frameLock) {
+			int x = (currentFrame.getWidth() - 281) / 2;
+			int y = (getFrameContentHeight() - 148) / 2;
+			x += 2;
+			y += 90;
 			Canvas canvas = new Canvas(currentFrame);
 			Paint paint = new Paint();
 			paint.setColor(Color.rgb(198, 198, 198));
 			paint.setTextSize(15);
 			paint.setTextAlign(Align.CENTER);
-			canvas.drawText("Open app again and choose Public.", x + 138, y + 62, paint);
+			canvas.drawText("Check connection and reopen app.", x + 138, y + 62, paint);
 		}
 	}
 
@@ -271,18 +304,20 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 				paint.setColor(Color.rgb(220, 0, 0));
 			}
 
-			int x = 512 / 2 - 140;
-			int y = 334 / 2 - 25;
+				int centerX = currentFrame.getWidth() >> 1;
+				int centerY = getFrameContentHeight() >> 1;
+				int x = centerX - 140;
+				int y = centerY - 25;
 			paint.setStyle(Paint.Style.FILL);
 			canvas.drawRect(x, y, x + 280, y + 50, paint);
 			paint.setStyle(Paint.Style.STROKE);
 			paint.setColor(Color.WHITE);
-			canvas.drawRect(x, y, x + 280, y + 50, paint);
+				canvas.drawRect(x, y, x + 280, y + 50, paint);
 
-			paint.setTextAlign(Align.CENTER);
-			canvas.drawText(line1, client_width >> 1, (client_height >> 1) - 10, paint);
-			canvas.drawText(line2, client_width >> 1, 10 + (client_height >> 1), paint);
-			paint.setColor(Color.BLACK);
+				paint.setTextAlign(Align.CENTER);
+				canvas.drawText(line1, centerX, centerY - 10, paint);
+				canvas.drawText(line2, centerX, centerY + 10, paint);
+				paint.setColor(Color.BLACK);
 		}
 	}
 
@@ -328,21 +363,20 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 			return;
 		}
 		c.drawRGB(0, 0, 0);
-		int resizedWidth = c.getWidth();
-		int resizedHeight = c.getHeight();
-		float gameWidth = client.getGameWidth();
-		float gameHeight = client.getGameHeight() + 12;
+		int gameWidth = client.getGameWidth();
+		int gameHeight = client.getGameHeight() + 12;
 		if (gameWidth <= 0 || gameHeight <= 0) {
 			return;
 		}
-		float scale = Math.min(resizedWidth / gameWidth, resizedHeight / gameHeight);
-		float left = (resizedWidth - gameWidth * scale) / 2.0f;
-		float top = (resizedHeight - gameHeight * scale) / 2.0f;
-		c.translate(left, top);
-		c.scale(scale, scale);
+		AndroidClientViewport.Transform transform = getClientTransform(gameWidth, gameHeight);
+		int saveCount = c.save();
+		c.translate(transform.offsetX, transform.offsetY);
+		c.scale(transform.scale, transform.scale);
 		synchronized (frameLock) {
+			c.clipRect(0, 0, gameWidth, gameHeight);
 			c.drawBitmap(currentFrame, 0, 0, bitmapPaint);
 		}
+		c.restoreToCount(saveCount);
 	}
 
 	@Override
@@ -362,32 +396,245 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 
 	@Override
 	public void resized() {
-
+		emitViewportLogIfChanged();
 	}
 
-	private void requestClientResize(int surfaceWidth, int surfaceHeight) {
+	public void refreshViewportMetrics() {
+		requestApplyInsets();
+		int width = getWidth();
+		int height = getHeight();
+		if (width > 0 && height > 0) {
+			updateViewportMetrics(width, height);
+		}
+	}
+
+	private void updateViewportMetrics(int surfaceWidth, int surfaceHeight) {
 		if (surfaceWidth <= 0 || surfaceHeight <= 0) {
 			return;
 		}
-		int targetWidth = client_width;
-		int targetFullHeight = CLIENT_FULL_HEIGHT;
-		if (surfaceHeight > surfaceWidth) {
-			float aspect = (float) surfaceHeight / (float) surfaceWidth;
-			targetFullHeight = clamp(Math.round(targetWidth * aspect), CLIENT_FULL_HEIGHT, MAX_PORTRAIT_FULL_HEIGHT);
+		AndroidClientViewport.Metrics metrics;
+		synchronized (viewportLock) {
+			viewportSurfaceWidth = surfaceWidth;
+			viewportSurfaceHeight = surfaceHeight;
+			metrics = AndroidClientViewport.metricsForSurface(
+				surfaceWidth,
+				surfaceHeight,
+				safeInsets,
+				getResources().getDisplayMetrics().density
+			);
+			viewportMetrics = metrics;
 		}
+		applyClientTarget(metrics);
+		emitViewportLogIfChanged();
+		postInvalidate();
+	}
+
+	private void updateSafeInsets(AndroidClientViewport.SafeInsets nextInsets) {
+		int width;
+		int height;
+		synchronized (viewportLock) {
+			if (safeInsets.sameAs(nextInsets)) {
+				return;
+			}
+			safeInsets = nextInsets;
+			width = viewportSurfaceWidth > 0 ? viewportSurfaceWidth : getWidth();
+			height = viewportSurfaceHeight > 0 ? viewportSurfaceHeight : getHeight();
+		}
+		if (width > 0 && height > 0) {
+			updateViewportMetrics(width, height);
+		}
+	}
+
+	private void applyClientTarget(AndroidClientViewport.Metrics metrics) {
+		AndroidClientViewport.TargetSize target = metrics.target;
 
 		mudclient client = gameActivity.getMudclient();
-		if (client != null) {
+		// Configuration changes briefly leave the old SurfaceView alive beside the
+		// replacement Activity. Only the Activity currently bound as ClientPort may
+		// resize the retained client; otherwise a late portrait callback can overwrite
+		// the replacement's settled landscape target (and vice versa).
+		if (client != null && mudclient.clientPort == gameActivity) {
 			int currentFullHeight = client.getGameHeight() + 12;
-			if (client.getGameWidth() != targetWidth || currentFullHeight != targetFullHeight) {
-				client.resizeWidth = targetWidth;
-				client.resizeHeight = targetFullHeight;
+			if (client.getGameWidth() != target.width || currentFullHeight != target.fullHeight) {
+				if (client.resizeWidth != target.width || client.resizeHeight != target.fullHeight) {
+					client.resizeWidth = target.width;
+					client.resizeHeight = target.fullHeight;
+				}
 			}
 		}
 		synchronized (frameLock) {
-			ensureFrameBitmap(targetWidth, targetFullHeight);
+			ensureFrameBitmap(target.width, target.fullHeight);
 		}
+	}
+
+	AndroidClientViewport.Transform getClientTransform(int logicalWidth, int logicalFullHeight) {
+		AndroidClientViewport.Metrics metrics = getViewportMetrics();
+		return metrics.transformFor(logicalWidth, logicalFullHeight);
+	}
+
+	@Override
+	public int getTouchTargetClientPixels(int dp) {
+		AndroidClientViewport.Metrics metrics = getViewportMetrics();
+		mudclient client = gameActivity.getMudclient();
+		int logicalWidth = client == null ? metrics.target.width : Math.max(1, client.getGameWidth());
+		int logicalFullHeight = client == null
+			? metrics.target.fullHeight
+			: Math.max(1, client.getGameHeight() + 12);
+		return AndroidClientViewport.logicalPixelsForDp(
+			dp,
+			metrics.density,
+			metrics.transformFor(logicalWidth, logicalFullHeight)
+		);
+	}
+
+	@Override
+	public int getKeyboardTopClientPixel() {
+		int bottomInset = imeBottomInset;
+		if (bottomInset <= 0) {
+			return Integer.MAX_VALUE;
+		}
+		AndroidClientViewport.Metrics metrics = getViewportMetrics();
+		mudclient client = gameActivity.getMudclient();
+		int logicalWidth = client == null ? metrics.target.width : Math.max(1, client.getGameWidth());
+		int logicalFullHeight = client == null
+			? metrics.target.fullHeight
+			: Math.max(1, client.getGameHeight() + 12);
+		AndroidClientViewport.Transform transform = metrics.transformFor(logicalWidth, logicalFullHeight);
+		float keyboardTop = metrics.surfaceHeight - bottomInset;
+		int logicalTop = (int) Math.floor((keyboardTop - transform.offsetY) / transform.scale);
+		int gameHeight = client == null ? Math.max(1, logicalFullHeight - 12)
+			: Math.max(1, client.getGameHeight());
+		return Math.max(0, Math.min(gameHeight, logicalTop));
+	}
+
+	private void updateImeState(int bottomInset, boolean visible) {
+		int sanitized = Math.max(0, Math.min(Math.max(1, getHeight()), bottomInset));
+		boolean insetChanged = imeBottomInset != sanitized;
+		boolean visibilityChanged = imeVisible != visible;
+		if (!insetChanged && !visibilityChanged) {
+			return;
+		}
+		imeBottomInset = sanitized;
+		imeVisible = visible;
+		if (visibilityChanged) {
+			gameActivity.onImeVisibilityChanged(visible);
+		}
+		emitViewportLogIfChanged();
 		postInvalidate();
+	}
+
+	private AndroidClientViewport.Metrics getViewportMetrics() {
+		AndroidClientViewport.Metrics metrics = viewportMetrics;
+		if (metrics != null) {
+			return metrics;
+		}
+		int width = Math.max(1, getWidth());
+		int height = Math.max(1, getHeight());
+		return AndroidClientViewport.metricsForSurface(
+			width,
+			height,
+			safeInsets,
+			getResources().getDisplayMetrics().density
+		);
+	}
+
+	private void emitViewportLogIfChanged() {
+		AndroidClientViewport.Metrics metrics = getViewportMetrics();
+		mudclient client = gameActivity.getMudclient();
+		int logicalWidth = client == null ? metrics.target.width : Math.max(1, client.getGameWidth());
+		int logicalFullHeight = client == null
+			? metrics.target.fullHeight
+			: Math.max(1, client.getGameHeight() + 12);
+		AndroidClientViewport.Transform transform = metrics.transformFor(logicalWidth, logicalFullHeight);
+		int touch44 = AndroidClientViewport.logicalPixelsForDp(44, metrics.density, transform);
+		int touch48 = AndroidClientViewport.logicalPixelsForDp(48, metrics.density, transform);
+		int keyboardTop = getKeyboardTopClientPixel();
+		String line = String.format(
+			Locale.US,
+			"ANDROID_MOBILE_VIEWPORT surfaceW=%d surfaceH=%d contentW=%d contentH=%d insetL=%d insetT=%d insetR=%d insetB=%d logicalW=%d logicalH=%d scale=%.4f density=%.3f touch44=%d touch48=%d imeBottom=%d keyboardTop=%d",
+			metrics.surfaceWidth,
+			metrics.surfaceHeight,
+			metrics.contentWidth,
+			metrics.contentHeight,
+			metrics.insets.left,
+			metrics.insets.top,
+			metrics.insets.right,
+			metrics.insets.bottom,
+			logicalWidth,
+			logicalFullHeight,
+			transform.scale,
+			metrics.density,
+			touch44,
+			touch48,
+			imeBottomInset,
+			keyboardTop
+		);
+		synchronized (viewportLock) {
+			if (line.equals(lastViewportLogLine)) {
+				return;
+			}
+			lastViewportLogLine = line;
+		}
+		Log.i("Voidscape", line);
+	}
+
+	@SuppressWarnings("deprecation")
+	private AndroidClientViewport.SafeInsets readSafeInsets(WindowInsets windowInsets) {
+		if (windowInsets == null) {
+			return AndroidClientViewport.SafeInsets.NONE;
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			return readSafeInsetsApi30(windowInsets);
+		}
+
+		int left = Math.max(0, windowInsets.getStableInsetLeft());
+		int top = 0;
+		int right = Math.max(0, windowInsets.getStableInsetRight());
+		int bottom = Math.max(0, windowInsets.getStableInsetBottom());
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+			android.graphics.Insets gestures = windowInsets.getMandatorySystemGestureInsets();
+			left = Math.max(left, gestures.left);
+			top = Math.max(top, gestures.top);
+			right = Math.max(right, gestures.right);
+			bottom = Math.max(bottom, gestures.bottom);
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && windowInsets.getDisplayCutout() != null) {
+			left = Math.max(left, windowInsets.getDisplayCutout().getSafeInsetLeft());
+			top = Math.max(top, windowInsets.getDisplayCutout().getSafeInsetTop());
+			right = Math.max(right, windowInsets.getDisplayCutout().getSafeInsetRight());
+			bottom = Math.max(bottom, windowInsets.getDisplayCutout().getSafeInsetBottom());
+		}
+		return new AndroidClientViewport.SafeInsets(left, top, right, bottom);
+	}
+
+	private AndroidClientViewport.SafeInsets readSafeInsetsApi30(WindowInsets windowInsets) {
+		int mask = WindowInsets.Type.navigationBars()
+			| WindowInsets.Type.displayCutout()
+			| WindowInsets.Type.mandatorySystemGestures();
+		android.graphics.Insets insets = windowInsets.getInsetsIgnoringVisibility(mask);
+		return new AndroidClientViewport.SafeInsets(insets.left, insets.top, insets.right, insets.bottom);
+	}
+
+	@SuppressWarnings("deprecation")
+	private int readImeBottomInset(WindowInsets windowInsets, int safeBottomInset) {
+		if (windowInsets == null) {
+			return 0;
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			return windowInsets.isVisible(WindowInsets.Type.ime())
+				? windowInsets.getInsets(WindowInsets.Type.ime()).bottom : 0;
+		}
+		return Math.max(0, windowInsets.getSystemWindowInsetBottom() - safeBottomInset);
+	}
+
+	private boolean readImeVisible(WindowInsets windowInsets, int bottomInset) {
+		if (windowInsets == null) {
+			return false;
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			return windowInsets.isVisible(WindowInsets.Type.ime());
+		}
+		return bottomInset > 0;
 	}
 
 	private void ensureFrameBitmap(int width, int height) {
@@ -400,8 +647,8 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		currentFrame = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
 	}
 
-	private int clamp(int value, int min, int max) {
-		return Math.max(min, Math.min(max, value));
+	private int getFrameContentHeight() {
+		return Math.max(1, currentFrame.getHeight() - 12);
 	}
 
 	@Override

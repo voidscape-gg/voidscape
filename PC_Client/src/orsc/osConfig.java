@@ -1,14 +1,16 @@
 package orsc;
 
 public class osConfig {
+	public static final boolean F_WEB_BUILD = false;
 	/* Android: */
 	public static boolean F_ANDROID_BUILD = false; // This MUST be true if Android client or it will crash on launch, needs to be set as public for the Android client to use
 	public static final String DL_URL = "game.openrsc.com"; // needs to be set as public for the Android client to use
 	public static final String ANDROID_DOWNLOAD_PATH = "https://" + DL_URL + "/downloads/";
 	public static final String CACHE_URL = "https://" + DL_URL + "/downloads/";
 	public static final int ANDROID_CLIENT_VERSION = 143; // Important! Depends on web server android_version.txt to check for an updated version
-	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "";
-	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "";
+	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/portal?auth=login";
+	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/portal?auth=recovery";
+	public static final String VOIDSCAPE_PORTAL_SHOP_URL = "https://voidscape.gg/portal#subscription-buy";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;

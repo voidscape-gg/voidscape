@@ -6,6 +6,7 @@ import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.SpellDamages;
 import com.openrsc.server.constants.Spells;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.handler.GameEventHandler;
 import com.openrsc.server.event.rsc.impl.ObjectRemover;
@@ -374,7 +375,7 @@ public final class VoidColossusCombat implements AttackNpcTrigger, OpLocTrigger,
 
 	private int calculateSpellDamage(Player player, Npc boss, Spells spellEnum) {
 		if (spellEnum == Spells.IBAN_BLAST) {
-			return CombatFormula.calculateIbanSpellDamage(boss);
+			return CombatFormula.calculateIbanSpellDamage(player, boss);
 		}
 		if (isGodSpell(spellEnum)) {
 			return CombatFormula.calculateGodSpellDamage(player, boss);
@@ -393,7 +394,7 @@ public final class VoidColossusCombat implements AttackNpcTrigger, OpLocTrigger,
 			max = player.getWorld().getServer().getConstants().getSpellDamages()
 				.getSpellDamage(spellEnum, EntityType.NPC, SpellDamages.MagicType.F2PONLYMAGIC);
 		}
-		return max < 0.0D ? -1 : CombatFormula.calculateMagicDamage(max, boss);
+		return max < 0.0D ? -1 : CombatFormula.calculateMagicDamage(max, player, boss);
 	}
 
 	private boolean isGodSpell(Spells spellEnum) {
@@ -438,6 +439,7 @@ public final class VoidColossusCombat implements AttackNpcTrigger, OpLocTrigger,
 			dropped++;
 		}
 		announceKill(world, player, dropped);
+		PlayerTitle.unlock(player, PlayerTitle.COLOSSUSBANE);
 	}
 
 	/** Random walkable tile inside the plaza (not the boss centre), or null after enough misses. */

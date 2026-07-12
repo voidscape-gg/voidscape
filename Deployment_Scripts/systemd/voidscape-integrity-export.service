@@ -1,0 +1,13 @@
+[Unit]
+Description=Export Voidscape public integrity summary
+After=voidscape.service
+
+[Service]
+Type=oneshot
+User=voidscape
+Group=voidscape
+WorkingDirectory=/opt/voidscape
+Environment=PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
+Environment=PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
+Environment=PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json
+ExecStart=/usr/bin/node /opt/voidscape/scripts/export-integrity-summary.mjs --quiet

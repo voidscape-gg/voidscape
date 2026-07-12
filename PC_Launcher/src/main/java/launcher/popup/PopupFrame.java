@@ -576,7 +576,7 @@ public class PopupFrame extends JLabel {
 		String icon = null;
 
 		switch (preferredClient) {
-			// These are listed in chronological order of compatibility with legacy servers.
+			// these are listed in chronological order of compatibility with openrsc server
 			case Settings.OPENRSC:
 			case ClientSettingsCard.OPENRSC:
 				icon = "openrsc-client-large";
@@ -628,3 +628,4 @@ public class PopupFrame extends JLabel {
 		return undecoratedLabel.getPreferredSize().width;
 	}
 }
+

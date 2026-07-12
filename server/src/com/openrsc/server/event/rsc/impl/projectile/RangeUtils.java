@@ -188,20 +188,25 @@ public class RangeUtils {
     public static void handleArrowLossAndDrop(World world, Player player, Mob target, int damage, int arrowId) {
         // Void Bow uses itself as an ammo sentinel only against Void NPCs.
         if (isVoidBow(arrowId)) return;
+        if (target instanceof Npc
+                && ((Npc) target).getAttribute(Npc.SUPPRESS_RANGED_AMMO_DROP_ATTRIBUTE, false)
+                && isBolt(arrowId)) {
+            return;
+        }
         if (Formulae.loseArrow(damage)) {
             GroundItem arrows = getArrows(arrowId, target, player);
             if (!DropTable.handleRingOfAvarice(player, new Item(arrowId, 1))) {
                 if (arrows == null) {
-                    world.registerItem(
-                            new GroundItem(
-                                    player.getWorld(),
-                                    arrowId,
-                                    target.getX(),
-                                    target.getY(),
-                                    1,
-                                    player
-                            )
+                    GroundItem droppedArrow = new GroundItem(
+                            player.getWorld(),
+                            arrowId,
+                            target.getX(),
+                            target.getY(),
+                            1,
+                            player
                     );
+                    droppedArrow.setInstanceId(target.getInstanceId());
+                    world.registerItem(droppedArrow);
                 } else {
                     arrows.setAmount(arrows.getAmount() + 1);
                 }
@@ -211,6 +216,10 @@ public class RangeUtils {
 
     private static GroundItem getArrows(int id, Mob target, Player player) {
         return target.getViewArea().getVisibleGroundItem(id, target.getLocation(), player);
+    }
+
+    private static boolean isBolt(int itemId) {
+        return BASIC_BOLTS.contains(itemId) || DRAGON_BOLTS.contains(itemId);
     }
 
     public static void applyPoison(Player player, Mob target, int arrowId) {
@@ -236,10 +245,18 @@ public class RangeUtils {
     }
 
     public static int doRangedDamage(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
+			if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
+				return OSRSCombatFormula.Ranged.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			} else {
+				return CombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			}
+		}
+
+	public static int calculateRangedMaxHit(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
 		if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
-			return OSRSCombatFormula.Ranged.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			return OSRSCombatFormula.Ranged.calculateMaxHit(attacker, arrowId, defender, skillCape);
 		} else {
-			return CombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			return CombatFormula.calculateRangedMaxHit(attacker, bowId, arrowId, defender, skillCape);
 		}
 	}
 

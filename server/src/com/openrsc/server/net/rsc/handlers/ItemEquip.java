@@ -64,8 +64,8 @@ public final class ItemEquip implements PayloadProcessor<EquipStruct, OpcodeIn> 
 			return;
 		}
 		//Check the weapon can be wielded on their world
-		if (!player.getConfig().MEMBER_WORLD && request.item.getDef(player.getWorld()).isMembersOnly()) {
-			player.message("You need to be a member to use this object");
+		if (!player.canUseMembersItemHere(request.item)) {
+			player.sendCannotUseMembersHereMessage();
 			return;
 		}
 

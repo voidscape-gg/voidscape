@@ -1,6 +1,7 @@
 package com.openrsc.server.plugins.authentic.skills.cooking;
 
 import com.openrsc.server.constants.*;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.external.ItemCookingDef;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
@@ -24,6 +25,9 @@ public class ObjectCooking implements UseLocTrigger {
 			Npc cook = ifnearvisnpc(owner, NpcId.COOK.id(), 20);
 			if (cook != null) {
 				npcsay(owner, cook, "Hey! Who said you could use that?");
+			} else {
+				// the cook can be dead or out of sight; don't deny silently (VS-042)
+				owner.message("You need to complete the cook's assistant quest to use this range");
 			}
 		} else
 			handleCooking(item, owner, object);
@@ -214,8 +218,11 @@ public class ObjectCooking implements UseLocTrigger {
 				player.getCarriedItems().getInventory().add(cookedFood);
 				player.message(cookedMessage(player, cookedFood, isOvenFood(item)));
 				player.incExp(Skill.COOKING.id(), cookingDef.getExp(), true);
+				PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_COOK_STREAK);
+				PlayerTitle.recordSwordfishCooked(player, cookedFood.getCatalogId());
 			} else {
 				player.getCarriedItems().getInventory().add(new Item(cookingDef.getBurnedId()));
+				PlayerTitle.resetCounter(player, PlayerTitle.COUNTER_COOK_STREAK);
 				if (cookedFood.getCatalogId() == ItemId.COOKEDMEAT.id()) {
 					player.playerServerMessage(MessageType.QUEST, "You accidentally burn the meat");
 				} else {

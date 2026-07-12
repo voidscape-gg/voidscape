@@ -12,8 +12,10 @@ import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
+import com.openrsc.server.model.entity.player.PvpDamageTracking;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.states.CombatState;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.util.PidShuffler;
@@ -179,13 +181,27 @@ public class CombatEvent extends GameTickEvent {
 
 			//if(hitter.isNpc() && target.isPlayer() || target.isNpc() && hitter.isPlayer()) {
 			int damage;
+			int attackerMaxHit;
 			if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
 				damage = OSRSCombatFormula.Melee.doMeleeDamage(hitter, target);
+				attackerMaxHit = OSRSCombatFormula.Melee.calculateMaxHit(hitter, target);
 			} else {
 				damage = CombatFormula.doMeleeDamage(hitter, target);
+				attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
 			}
 
-			inflictDamage(hitter, target, damage);
+			if (isPvPCombat) {
+				WildernessRules.markVoidDungeonPvp((Player) hitter, (Player) target);
+			}
+			if (hitter != target && hitter instanceof Player && target instanceof Player) {
+				final int actualDirectDamage = PvpDamageTracking.actualDirectDamage(
+					damage, target.getLevel(Skill.HITS.id()));
+				if (actualDirectDamage > 0) {
+					((Player) target).updateDamageAndBlockedDamageTracking(
+						(Player) hitter, actualDirectDamage, 0);
+				}
+			}
+			inflictDamage(hitter, target, damage, attackerMaxHit);
 			if (target.isPlayer()) {
 				if (((Player)target).getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_RECOIL.id())) {
 					int reflectedDamage = damage/10 + ((damage > 0) ? 1 : 0);
@@ -221,6 +237,10 @@ public class CombatEvent extends GameTickEvent {
 	}
 
 	private void inflictDamage(final Mob hitter, final Mob target, int damage) {
+		inflictDamage(hitter, target, damage, 0);
+	}
+
+	private void inflictDamage(final Mob hitter, final Mob target, int damage, int attackerMaxHit) {
 		hitter.incHitsMade();
 
 		if (target.isPlayer()) {
@@ -243,11 +263,12 @@ public class CombatEvent extends GameTickEvent {
 		// Reduce targets hits by supplied damage amount.
 		int lastHits = target.getLevel(Skill.HITS.id());
 		target.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
-		target.getUpdateFlags().setDamage(new Damage(target, damage));
+		target.getUpdateFlags().setDamage(new Damage(target, damage).withHitFeedback(hitter, attackerMaxHit));
 		if (target.isNpc() && hitter.isPlayer()) {
 			Npc n = (Npc) target;
 			Player player = ((Player) hitter);
-			if (!n.getWorld().getVoidArena().shouldSuppressDmKingNpcXp(n)) {
+			if (!n.getWorld().getVoidArena().shouldSuppressDmKingNpcXp(n)
+				&& !n.shouldSuppressDefaultDeathRewards()) {
 				damage = Math.min(damage, lastHits);
 				n.addCombatDamage(player, damage);
 				n.awardMeleeHitExperience(player, damage);
@@ -367,14 +388,15 @@ public class CombatEvent extends GameTickEvent {
 	private boolean combatCanContinue() {
 		boolean removed = attackerMob.isRemoved() || defenderMob.isRemoved();
 		boolean nextToVictim = attackerMob.getLocation().equals(defenderMob.getLocation());
+		boolean sameInstance = attackerMob.sharesInstanceWith(defenderMob);
 		if (defenderMob.isNpc() && attackerMob.isNpc()) {
-			return !removed && nextToVictim && running;
+			return !removed && sameInstance && nextToVictim && running;
 		}
 		boolean bothLoggedIn = (attackerMob.isPlayer() && ((Player) attackerMob).loggedIn())
 			|| (defenderMob.isPlayer() && ((Player) defenderMob).loggedIn());
 		boolean respawning = (attackerMob.isNpc() && ((Npc)attackerMob).isRespawning())
 			|| (defenderMob.isNpc() && ((Npc)defenderMob).isRespawning());
-		return bothLoggedIn && !removed && !respawning && nextToVictim && running;
+		return bothLoggedIn && !removed && !respawning && sameInstance && nextToVictim && running;
 	}
 
 	public Mob getAttacker() {

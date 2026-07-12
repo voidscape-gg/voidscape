@@ -98,8 +98,9 @@ public class WorldWalkRequest implements PayloadProcessor<WorldWalkStruct, Opcod
 			ActionSender.sendWorldWalkRoute(player, false, REASON_BUSY, Collections.emptyList());
 			return;
 		}
-
 		player.cancelAutoWalk();
+		player.resetAll();
+		player.resetPath();
 		final AutoWalkEvent event = new AutoWalkEvent(player.getWorld(), player, path);
 		player.setAutoWalkEvent(event);
 		player.getWorld().getServer().getGameEventHandler().add(event);

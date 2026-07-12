@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.authentic.misc;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
@@ -54,6 +55,7 @@ public class Bones implements OpInvTrigger, UseInvTrigger {
 		player.playerServerMessage(MessageType.QUEST, "You bury the bones");
 		if (player.getCarriedItems().remove(toRemove) != -1) {
 			giveBonesExperience(player, item);
+			PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_BONES_BURIED);
 		}
 
 		if (SkillCapes.shouldActivate(player, ItemId.PRAYER_CAPE)) {

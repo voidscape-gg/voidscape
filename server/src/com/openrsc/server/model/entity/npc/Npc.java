@@ -4,6 +4,8 @@ import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.FarmSim;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.ItemProvenanceEvent;
@@ -19,6 +21,7 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.*;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.triggers.KillNpcTrigger;
@@ -32,16 +35,27 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public class Npc extends Mob {
+	public static final String SUPPRESS_DEFAULT_DEATH_ATTRIBUTE = "voidscape_suppress_default_npc_death";
+	public static final String FORCE_CHASE_ATTRIBUTE = "voidscape_force_npc_chase";
+	public static final String CONTACT_ATTACK_ATTRIBUTE = "voidscape_contact_npc_attack";
+	public static final String CONTACT_ATTACK_NEXT_TICK_ATTRIBUTE = "voidscape_contact_npc_next_attack_tick";
+	public static final String CONTACT_ATTACK_MAX_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_max_damage";
+	public static final String CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE = "voidscape_contact_npc_min_damage";
+	public static final String PLAYER_ATTACK_DAMAGE_FLOOR_ATTRIBUTE = "voidscape_player_attack_damage_floor";
+	public static final String SUPPRESS_RANGED_AMMO_DROP_ATTRIBUTE = "voidscape_suppress_ranged_ammo_drop";
+
 	/**
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final String RESPAWN_MULTIPLIER_ATTRIBUTE = "voidscape_respawn_multiplier";
+	private static final Map<Integer, Integer> WILDERNESS_RESPAWN_SECONDS = createWildernessRespawnSeconds();
 
 	private long healTimer = 0;
 	private boolean shouldRespawn = true;
@@ -358,6 +372,12 @@ public class Npc extends Mob {
 		}
 
 		owner.getWorld().getServer().getPluginHandler().handlePlugin(KillNpcTrigger.class, owner, new Object[]{owner, this});
+		if (shouldSuppressDefaultDeathRewards()) {
+			owner.setAttribute("can_range_again", getWorld().getServer().getCurrentTick());
+			deathListeners.clear();
+			getWorld().unregisterNpc(this);
+			return;
+		}
 		for (int npcId : removeHandledInPlugin) {
 			if (this.getID() == npcId) {
 				if (this.getID() == NpcId.RAT_TUTORIAL.id()) {
@@ -393,7 +413,10 @@ public class Npc extends Mob {
 		ActionSender.sendSound(owner, "victory");
 		owner.getWorld().getServer().getAchievementSystem().checkAndIncSlayNpcTasks(owner, this);
 		owner.incNpcKills();
+		owner.getWorld().getCrackerCampaignService().onNpcKill(owner);
+		PlayerTitle.checkGiantKiller(owner, getDef().combatLevel);
 		BalanceTelemetry.recordNpcKill(owner, this);
+		FarmSim.recordNpcKill(owner, this);
 
 		//If NPC kill messages are enabled and the filter is enabled and the NPC is in the list of NPCs, display the messages,
 		//otherwise we will display the message for all NPCs if NPC kill messages are enabled if there is no filter.
@@ -459,7 +482,13 @@ public class Npc extends Mob {
 		/* 3. Roll wilderness-only Void Key bonus drop. */
 		rollVoidKeyDrop(owner);
 
-		/* 4. Get the rest of the mob's drops. */
+		/* 4. Roll wilderness-only training bonus drops. */
+		rollWildernessBonusDrop(owner);
+
+		/* 5. Roll drop-only dragon weapon rares. */
+		rollDragonWeaponRareDrops(owner);
+
+		/* 6. Get the rest of the mob's drops. */
 		DropTable drops = getWorld().npcDrops.getDropTable(this.getID());
 		if (drops == null) {
 			// Some enemies have no drops
@@ -469,7 +498,7 @@ public class Npc extends Mob {
 		}
 		drops = drops.clone(drops.getDescription());
 
-		/* 5. Drop items that should always drop, that are not bones. */
+		/* 7. Drop items that should always drop, that are not bones. */
 		ArrayList<Item> invariableItems = drops.invariableItems(owner);
 		for (Item item : invariableItems) {
 			if (!worldAllowsDrop(item)) {
@@ -490,7 +519,7 @@ public class Npc extends Mob {
 			recordNpcDrop(owner, item.getCatalogId(), amount, item.getNoted(), isRareDrop(item), "ground");
 		}
 
-		/* 6. Roll for drops. */
+		/* 8. Roll for drops. */
 		boolean ringOfWealth = false;
 		if (getConfig().WANT_NEW_RARE_DROP_TABLES) {
 			ringOfWealth = owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_WEALTH.id());
@@ -512,6 +541,30 @@ public class Npc extends Mob {
 				}
 			}
 		}
+	}
+
+	public boolean shouldSuppressDefaultDeathRewards() {
+		return getAttribute(SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, false);
+	}
+
+	public boolean shouldForceChaseTarget() {
+		return getAttribute(FORCE_CHASE_ATTRIBUTE, false);
+	}
+
+	public boolean shouldUseContactAttack() {
+		return getAttribute(CONTACT_ATTACK_ATTRIBUTE, false);
+	}
+
+	public int getContactAttackMaxDamage() {
+		return getAttribute(CONTACT_ATTACK_MAX_DAMAGE_ATTRIBUTE, Integer.MAX_VALUE);
+	}
+
+	public int getContactAttackMinDamage() {
+		return getAttribute(CONTACT_ATTACK_MIN_DAMAGE_ATTRIBUTE, 0);
+	}
+
+	public int getPlayerAttackDamageFloor() {
+		return getAttribute(PLAYER_ATTACK_DAMAGE_FLOOR_ATTRIBUTE, 0);
 	}
 
 	private void rollVoidKeyDrop(Player owner) {
@@ -549,6 +602,61 @@ public class Npc extends Mob {
 		return Math.max(128, 1200 - getDef().combatLevel * 6);
 	}
 
+	private void rollDragonWeaponRareDrops(Player owner) {
+		NpcDrops.DragonWeaponRareDropProfile profile =
+			getWorld().getNpcDrops().getDragonWeaponRareDropProfile(this.getID());
+		if (owner == null || profile == null) {
+			return;
+		}
+
+		for (Map.Entry<Integer, Integer> entry : profile.getItemDropDenominators().entrySet()) {
+			rollDragonWeaponRareDrop(owner, entry.getKey(), entry.getValue());
+		}
+	}
+
+	private void rollDragonWeaponRareDrop(Player owner, int itemId, int denominator) {
+		if (DataConversions.random(1, denominator) != 1) {
+			return;
+		}
+
+		Item item = new Item(itemId, 1);
+		item.setAttribute(DropTable.RARE_DROP_ATTRIBUTE, true);
+		if (!worldAllowsDrop(item)) {
+			return;
+		}
+		if (getWorld().getServer().getEntityHandler().getItemDef(itemId).isStackable()) {
+			dropStackItem(item, owner);
+		} else {
+			dropStandardItem(item, owner);
+		}
+	}
+
+	private void rollWildernessBonusDrop(Player owner) {
+		if (owner == null
+			|| !getLocation().inWilderness()
+			|| getLocation().isInSafeZone()) {
+			return;
+		}
+
+		DropTable bonusDrops = getWorld().npcDrops.getWildernessBonusDropTable(this.getID());
+		if (bonusDrops == null || bonusDrops.getTotalWeight() <= 0) {
+			return;
+		}
+
+		bonusDrops = bonusDrops.clone(bonusDrops.getDescription());
+		ArrayList<Item> items = bonusDrops.rollItem(false, owner);
+		for (Item item : items) {
+			if (item == null || !worldAllowsDrop(item)) {
+				continue;
+			}
+			if (getWorld().getServer().getEntityHandler().getItemDef(item.getCatalogId()).isStackable()) {
+				dropStackItem(item, owner);
+			} else {
+				dropStandardItem(item, owner);
+			}
+		}
+	}
+
 	private boolean worldAllowsDrop(Item item) {
 		if ((getWorld().getServer().getConfig().RESTRICT_ITEM_ID >= 0 && item.getCatalogId() > getWorld().getServer().getConfig().RESTRICT_ITEM_ID)
 			|| (getWorld().getServer().getConfig().ONLY_BASIC_RUNES
@@ -557,10 +665,12 @@ public class Npc extends Mob {
 			// world does not allow drop
 			return false;
 		}
-        // No p2p drops on f2p world. On openrsc we can just drop nothing.
-        // In OSRS, they have a different f2p drop instead usually, but there wouldn't be data on this for RSC.
-        return getWorld().getServer().getConfig().MEMBER_WORLD || !item.getDef(getWorld()).isMembersOnly();
-    }
+		// Members loot can be carried out of F2P Wilderness, but true F2P worlds
+		// still suppress it because the item is unavailable on that world.
+		return WildernessRules.canAppearAsGroundLoot(
+			getWorld().getServer().getConfig().MEMBER_WORLD,
+			item.getDef(getWorld()));
+	}
 
 	private int getBoneTier(int boneId) {
 		switch(ItemId.getById(boneId)) {
@@ -735,9 +845,10 @@ public class Npc extends Mob {
 		else amount = 1;
 		for (int count = 0; count < loop; count++) {
 			if (dropID != ItemId.NOTHING.id()
-				&& getWorld().getServer().getEntityHandler().getItemDef(dropID).isMembersOnly()
-				&& !getConfig().MEMBER_WORLD) {
-				continue; // Members item on a non-members world.
+				&& !WildernessRules.canAppearAsGroundLoot(
+					getConfig().MEMBER_WORLD,
+					getWorld().getServer().getEntityHandler().getItemDef(dropID))) {
+				continue; // Members-only item on a non-members world.
 			} else if (dropID != ItemId.NOTHING.id()) {
 				boolean destroyHerbs = false;
 				if (Formulae.isUnidHerb(new Item(dropID)) && EnchantedCrowns.shouldActivate(owner, ItemId.CROWN_OF_THE_HERBALIST)) {
@@ -779,6 +890,9 @@ public class Npc extends Mob {
 	}
 
 	private void recordNpcDrop(Player owner, int itemId, int amount, boolean noted, boolean rare, String destination) {
+		if (owner != null && itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
+			PlayerTitle.checkDragonMediumDrop(owner);
+		}
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
 		owner.addBestiaryDrop(getID(), itemId, amount);
 		final ItemProvenanceEvent event = new ItemProvenanceEvent();
@@ -1054,11 +1168,97 @@ public class Npc extends Mob {
 	}
 
 	private double getRespawnMultiplier() {
+		double multiplier = Math.max(0.05D, getConfig().NPC_RESPAWN_MULTIPLIER);
+		final Integer wildernessRespawnSeconds = getWildernessRespawnSeconds();
+		if (wildernessRespawnSeconds != null && def.respawnTime() > 0) {
+			multiplier = Math.min(multiplier, Math.max(0.05D, wildernessRespawnSeconds / (double)def.respawnTime()));
+		}
 		final Object override = getAttribute(RESPAWN_MULTIPLIER_ATTRIBUTE, null);
 		if (override instanceof Number) {
-			return Math.max(0.05D, ((Number) override).doubleValue());
+			multiplier = Math.min(multiplier, Math.max(0.05D, ((Number) override).doubleValue()));
 		}
-		return getConfig().NPC_RESPAWN_MULTIPLIER;
+		return multiplier;
+	}
+
+	private Integer getWildernessRespawnSeconds() {
+		if (loc == null || getConfig().WILDERNESS_SPAWN_MULTIPLIER <= 1.0D) {
+			return null;
+		}
+		if (!Point.inWilderness(loc.startX(), loc.startY())) {
+			return null;
+		}
+		return WILDERNESS_RESPAWN_SECONDS.get(loc.getId());
+	}
+
+	private static Map<Integer, Integer> createWildernessRespawnSeconds() {
+		final Map<Integer, Integer> respawns = new HashMap<>();
+
+		addWildernessRespawn(respawns, 29, 12);  // Rat
+		addWildernessRespawn(respawns, 34, 12);  // spider
+		addWildernessRespawn(respawns, 854, 12); // Void Spider
+		addWildernessRespawn(respawns, 19, 15);  // Rat
+		addWildernessRespawn(respawns, 23, 15);  // Giant Spider
+		addWildernessRespawn(respawns, 47, 18);  // Rat
+		addWildernessRespawn(respawns, 367, 18); // Dungeon Rat
+		addWildernessRespawn(respawns, 860, 18); // Void Unicorn
+		addWildernessRespawn(respawns, 43, 20);  // Giant bat
+		addWildernessRespawn(respawns, 57, 20);  // Darkwizard
+		addWildernessRespawn(respawns, 70, 20);  // Scorpion
+		addWildernessRespawn(respawns, 137, 20); // Pirate
+		addWildernessRespawn(respawns, 251, 20); // Thug
+		addWildernessRespawn(respawns, 342, 20); // Rogue
+		addWildernessRespawn(respawns, 856, 20); // Void Wolf
+		addWildernessRespawn(respawns, 859, 20); // Void Wizard
+		addWildernessRespawn(respawns, 41, 22);  // zombie
+		addWildernessRespawn(respawns, 46, 22);  // skeleton
+		addWildernessRespawn(respawns, 53, 22);  // Ghost
+		addWildernessRespawn(respawns, 45, 24);  // skeleton
+		addWildernessRespawn(respawns, 60, 25);  // Darkwizard
+		addWildernessRespawn(respawns, 61, 25);  // Giant
+		addWildernessRespawn(respawns, 67, 25);  // Hobgoblin
+		addWildernessRespawn(respawns, 74, 25);  // Giant Spider
+		addWildernessRespawn(respawns, 99, 25);  // Deadly Red spider
+		addWildernessRespawn(respawns, 136, 25); // King Scorpion
+		addWildernessRespawn(respawns, 188, 25); // Bear
+		addWildernessRespawn(respawns, 189, 25); // Black Knight
+		addWildernessRespawn(respawns, 232, 25); // Bandit
+		addWildernessRespawn(respawns, 234, 25); // Bandit
+		addWildernessRespawn(respawns, 263, 25); // Ice spider
+		addWildernessRespawn(respawns, 270, 25); // Chaos Druid
+		addWildernessRespawn(respawns, 292, 25); // Poison Spider
+		addWildernessRespawn(respawns, 295, 25); // Animated axe
+		addWildernessRespawn(respawns, 343, 25); // Shadow spider
+		addWildernessRespawn(respawns, 855, 25); // Void Giant
+		addWildernessRespawn(respawns, 858, 25); // Void Ogre
+		addWildernessRespawn(respawns, 68, 25);  // zombie
+		addWildernessRespawn(respawns, 104, 30); // Moss Giant
+		addWildernessRespawn(respawns, 158, 30); // Ice warrior
+		addWildernessRespawn(respawns, 195, 30); // skeleton
+		addWildernessRespawn(respawns, 243, 30); // Grey wolf
+		addWildernessRespawn(respawns, 584, 30); // Earth warrior
+		addWildernessRespawn(respawns, 853, 30); // Void Knight
+		addWildernessRespawn(respawns, 135, 35); // Ice Giant
+		addWildernessRespawn(respawns, 190, 35); // chaos Dwarf
+		addWildernessRespawn(respawns, 236, 35); // Donny the lad
+		addWildernessRespawn(respawns, 237, 35); // Black Heather
+		addWildernessRespawn(respawns, 238, 35); // Speedy Keith
+		addWildernessRespawn(respawns, 22, 40);  // Lesser Demon
+		addWildernessRespawn(respawns, 344, 40); // Fire Giant
+		addWildernessRespawn(respawns, 184, 45); // Greater Demon
+		addWildernessRespawn(respawns, 789, 45); // Battle mage
+		addWildernessRespawn(respawns, 790, 45); // Battle mage
+		addWildernessRespawn(respawns, 791, 45); // Battle mage
+		addWildernessRespawn(respawns, 857, 45); // Void Demon
+		addWildernessRespawn(respawns, 201, 50); // Red Dragon
+		addWildernessRespawn(respawns, 290, 50); // Black Demon
+		addWildernessRespawn(respawns, 291, 60); // Black Dragon
+		addWildernessRespawn(respawns, 315, 60); // Chronozon
+
+		return Collections.unmodifiableMap(respawns);
+	}
+
+	private static void addWildernessRespawn(final Map<Integer, Integer> respawns, final int npcId, final int seconds) {
+		respawns.put(npcId, seconds);
 	}
 
 	public void teleport(final int x, final int y) {

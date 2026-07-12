@@ -33,6 +33,14 @@ case "${1:-}" in
       esac
     done
     [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"start needs --user and --pass"}'; exit 2; }
+    # Refuse if something already listens on the control port: blind-spawning here
+    # orphans an uncontrollable logged-in session and the readiness ping below would
+    # hit the OLD daemon and report false success. One-shot connect (not cli.py ping,
+    # which retries the connect for ~5s and would make free-port checks slow).
+    if "$PY" -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1',$CTRL_PORT))==0 else 1)" 2>/dev/null; then
+      echo "{\"ok\":false,\"error\":\"control port $CTRL_PORT is already in use (another voidbotd?) — stop it or set VOIDBOT_CTRL_PORT to a free port\",\"ctrl_port\":$CTRL_PORT}"
+      exit 2
+    fi
     LOG="${VOIDBOT_LOG:-${TMPDIR:-/tmp}/voidbotd-$CTRL_PORT.log}"
     # Redirect daemon output to a log file so this command-substitution-friendly
     # wrapper returns immediately (a backgrounded child sharing our stdout pipe
@@ -64,6 +72,34 @@ case "${1:-}" in
       exit 1
     fi
     echo "{\"ok\":true,\"started\":true,\"pid\":$DPID,\"ctrl_port\":$CTRL_PORT,\"log\":\"$LOG\"}"
+    ;;
+  register)
+    shift
+    HOST="${VOIDBOT_HOST:-127.0.0.1}"
+    GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
+    USER=""; PASS=""; EMAIL=""; NO_EMAIL=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --user) USER="$2"; shift 2;;
+        --pass) PASS="$2"; shift 2;;
+        --email) EMAIL="$2"; shift 2;;
+        --no-email) NO_EMAIL=1; shift;;
+        --game-port) GAME_PORT="$2"; shift 2;;
+        --host) HOST="$2"; shift 2;;
+        *) shift;;
+      esac
+    done
+    [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"register needs --user and --pass"}'; exit 2; }
+    EXTRA=()
+    [ "$NO_EMAIL" -eq 1 ] && EXTRA+=(--no-email)
+    [ -n "$EMAIL" ] && EXTRA+=(--email "$EMAIL")
+    if [ "${#EXTRA[@]}" -gt 0 ]; then
+      exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
+          --user "$USER" --pass "$PASS" "${EXTRA[@]}"
+    else
+      exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
+          --user "$USER" --pass "$PASS"
+    fi
     ;;
   stop)
     "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" shutdown || true

@@ -85,9 +85,9 @@ public class PlayerService implements IPlayerService {
 		try {
 			if (!database.playerExists(player.getDatabaseID())) {
 				LOGGER.error("ERROR SAVING : PLAYER DOES NOT EXIST : {}", player.getUsername());
-				return player.checkAndIncrementSaveAttempts();
+				return applySaveOutcome(false, player::resetSaveAttempts, player::incrementSaveAttempts);
 			}
-			boolean realSuccess = database.atomically(() -> {
+			boolean databaseCommitted = database.atomically(() -> {
 				savePlayerBankPresets(player);
 				savePlayerInventory(player);
 				savePlayerEquipment(player);
@@ -102,25 +102,38 @@ public class PlayerService implements IPlayerService {
 				savePlayerSkills(player);
 				savePlayerSocial(player);
 			});
-			if (realSuccess) {
+			if (applySaveOutcome(databaseCommitted, player::resetSaveAttempts, player::incrementSaveAttempts)) {
 				if (null != player.getUsernameChangePending()) {
 					player.getUsernameChangePending().doChangeUsername();
 				}
-				player.resetSaveAttempts();
+				return true;
 			}
-			return realSuccess;
+			return false;
 		} catch (final Exception ex) {
 			if (player != null) {
 				LOGGER.error(
 					MessageFormat.format("Unable to save player to database: {}", player.getUsername()),
 					ex
 				);
-				return player.checkAndIncrementSaveAttempts();
+				return applySaveOutcome(false, player::resetSaveAttempts, player::incrementSaveAttempts);
 			} else {
 				LOGGER.error("Player reference lost and failed to save.", ex);
 				return false;
 			}
 		}
+	}
+
+	/**
+	 * Keeps retry bookkeeping separate from the externally visible commit result.
+	 * Exhausting retries must never be mistaken for a successful database write.
+	 */
+	static boolean applySaveOutcome(boolean databaseCommitted, Runnable onCommit, Runnable onFailure) {
+		if (databaseCommitted) {
+			onCommit.run();
+			return true;
+		}
+		onFailure.run();
+		return false;
 	}
 
 	@Override

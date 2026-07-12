@@ -33,6 +33,7 @@ damage = damageNumerator / 640
 - `bonusConstant`: 8 (player), 0 (NPC).
 - `styleBonus`: +3 for matching aggressive/accurate/defensive, +1 for controlled.
 - Strength prayers: 1.05 (Burst of Strength), 1.10 (Superhuman), 1.15 (Ultimate Strength).
+- NPCs attacking players use an effective Attack/Strength floor of 15, then gain a small offence bonus from level 40 upward: `+1` per 8 levels, capped at `+12`.
 
 **Ranged max hit**:
 ```
@@ -54,6 +55,7 @@ else:
 ```
 - Melee accuracy: `(AttackLevel + bonusConstant + styleBonus) * (weaponAim + 64)`
 - Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (64 + armourPoints * 0.60)`
+- For NPCs attacking players, the same floor/scaling described under melee max hit is applied to the NPC Attack level before the accuracy roll.
 
 **Physical armour mitigation**:
 ```
@@ -68,7 +70,7 @@ damage = floor(damage * (1 - reduction))
 - **Defence cape**: blocks 50% of melee damage to player.
 - **Attack cape**: prevents zero hits (re-rolls misses).
 - **Strength cape**: +20% damage on hits ≥ 50% of max hit.
-- **PvP melee momentum**: player-vs-player melee hits at or above 75% of the target-adjusted max hit grant one momentum stack against that same target. The next successful melee hit rolls damage twice and keeps the higher roll, then consumes the stack; a miss or target swap clears it.
+- **PvP melee momentum**: player-vs-player melee hits at or above 68% of the target-adjusted max hit grant one momentum stack against that same target. The next successful melee hit rolls damage twice and keeps the higher roll, then consumes the stack; a miss or target swap clears it.
 - **Poison**: 10 levels; each tick reduces power by 2, deals `floor(power/10)` damage.
 - **Ring of Recoil**: reflects 10% of damage taken; breaks at 40 reflected total.
 
@@ -104,7 +106,13 @@ Defensive (Defence):
 - Rock Skin (×1.10)
 - Steel Skin (×1.15)
 
-Utility: Rapid Restore, Rapid Heal, Protect Items, Paralyze Monster, Protect from Missiles.
+Utility:
+- Rapid Restore
+- Rapid Heal
+- Protect Items
+- Paralyze Monster
+- Protect from Missiles
+- Protect from Magic: blocks most NPC/boss-origin magic damage against players only. Player-cast PvP spells still use normal magic damage scaling, Void Knight boss Fire Blast is blockable, and Sir Charles' Void Arena magic is deliberately unblockable.
 
 Drain rate: `server/src/com/openrsc/server/event/rsc/impl/PrayerDrainEvent.java`.
 
@@ -145,6 +153,27 @@ PvP-specific:
 - Wilderness PK check: `pl.getLocation().inWilderness() || player.getConfig().USES_PK_MODE` (`:60`).
 - PvE only: combat scripts, aggression ranges, respawning.
 
+### PvP action constraints
+
+The core PvP restrictions to mirror for player-like custom fights are:
+
+- A player can only retreat from active combat after the opponent has made at least three hits; otherwise `WalkRequest` rejects the walk with "You can't retreat during the first 3 rounds of combat".
+- A legal PvP retreat timestamps both combatants with `setRanAwayTimer()` and resets their combat events. `pvp_reattack_timer` defaults to 5 game ticks, and `Player.canBeReattacked()` allows re-engagement only once `ranAwayTimer + pvp_reattack_timer <= currentTick`.
+- Melee attacks check the target player's reattack timer in `AttackHandler`; PvP spell casts check both the caster and target timers in `SpellHandler`.
+- Inventory actions, including food and potions, are blocked while `player.inCombat()` by the normal item handlers. Food/potions become legal only after combat is broken.
+- Follow and item-on-player actions also respect the target player's reattack timer.
+- Void Dungeon underground PvP is 1v1-only. If either player is inside the generated underground Void Dungeon footprint, third-party melee, ranged, throwing, and magic attacks are denied while either player has an active or recent player opponent. Legal melee rounds refresh the pair through the final hit; projectile attacks mark only after weapon and ammo validation; offensive self-casts are rejected; and denied magic is checked before spell-failure rolls. NPC-vs-player and player-vs-NPC combat are deliberately unchanged.
+- Generic instance isolation requires matching instance ids for entity lookup, attack eligibility, combat start and continuation, delayed projectile effects, offensive spell targeting/finalization, trade, and item-on-player. The retired Void Wyrm no longer creates a private phase, but these shared guards remain required by other instanced minigames.
+
+### Void gear PvE policy
+
+- Void Scimitar and Void Shortbow multiply both offensive accuracy and damage by `1.15` only when the defender is a Void NPC. The Shortbow also waives ammunition only for those targets.
+- Void Sceptre (item `1596`, whose internal constant retains the historical `VOID_MACE` name) requires 60 Magic. Against Void NPCs it multiplies the ordinary spell-success roll weight and spell power by `1.15`; player targets and non-Void NPCs use the unchanged formula. It does not autocast, batch spells, save runes, or affect alchemy.
+- Void Amulet uses Diamond Amulet of Power base stats and multiplies eligible stackable Void-NPC drops by `1.5`; it has no special PvP combat effect.
+- Void gear uses a death-only top sort value. This does not change alchemy value, noted/stackable loss, skull behavior, the unskulled keep-three rule, or Protect Item's one extra slot.
+
+DM King is technically an NPC, so the Void Arena challenge explicitly mirrors these PvP gates around his custom AI: when DM King retreats, both sides are timestamped, and neither DM King's melee/Fire Blast nor the challenger's attack/cast actions can re-engage until the same PvP timer expires.
+
 XP distribution:
 - PvP: `combatExperience()` formula.
 - PvE melee, authentic mode: `Npc.handleXpDistribution()` awards XP after NPC death based on damage tracking.
@@ -159,6 +188,15 @@ XP distribution:
 - `WildernessLocation` objects with bounds and `WildState` (`MEMBERS_WILD`, `F2P_WILD`).
 - Helpers: `inWilderness()`, `inFreeWild()`, `wildernessLevel()`.
 - Multi-combat check: combine `getLocation().inWilderness()` with aggression flags.
+- NPC movement blocking uses global `npc_blocking` unless a Wilderness tile is being checked, where `wilderness_npc_blocking` can override it. Voidscape launch configs set the Wilderness override to `0`, so aggressive NPCs still aggro and fight there but do not body-block player movement.
+- NPC auto-aggro also respects explicit retreat immunity: when a retreat stamps a player's `ranAwayTimer`, aggressive NPCs wait for `Player.canBeReattacked()` before auto-aggro can pick that player again. Ordinary combat completion still uses the normal combat-timer path so AFK training can keep flowing. Scripted force-chase targets bypass this gate.
+
+**F2P Wilderness member loot**:
+
+- Ground-loot availability and item-use eligibility are separate policies in `WildernessRules`.
+- On a members-enabled world, members-only NPC drops, manual drops, and player death-pile items can exist, become public under the normal ownership timer, and be picked up in F2P Wilderness. This preserves the configured drop-table roll instead of silently replacing or discarding it.
+- Equipping, consuming, identifying, using, trading through restricted actions, using members ammunition, and casting members spells remain blocked in F2P Wilderness by the existing `canUseItem`, `canUseItemAt`, and `canUseSpell` paths. Carrying the loot is allowed so it can be taken out of the Wilderness.
+- On a true non-members world (`member_world: false`), members-only ground loot remains suppressed. Non-members items and existing Voidscape F2P-Wilderness use exceptions are unchanged.
 
 **Retreating**:
 - NPC behavior states `State.RETREAT` and `State.TACKLE_RETREAT` in `server/src/com/openrsc/server/model/entity/npc/NpcBehavior.java`.

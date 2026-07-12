@@ -4,6 +4,7 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.ProgressionMilestones;
+import com.openrsc.server.content.WorldAchievementService.SkillClaimResult;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerExperience;
@@ -104,6 +105,7 @@ public class Skills {
 		levels[skill] = level;
 		exps[skill] = exp;
 		sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public void setLevel(int skill, int level, boolean sendUpdate, boolean fromRestoreEvent) {
@@ -121,6 +123,20 @@ public class Skills {
 		} else if (skill == Skill.PRAYER.id()
 			&& mob.isPlayer()) {
 			((Player)mob).setPrayerStatePoints(level * 120);
+		}
+		if (!fromRestoreEvent) {
+			rearmNpcRestoration();
+		}
+	}
+
+	/**
+	 * Wakes a parked NPC StatRestorationEvent after any level change. All NPC stat
+	 * mutations (combat damage, spell drains, poison) funnel through this class, so
+	 * this single hook keeps the parked-event optimization behaviorally invisible.
+	 */
+	private void rearmNpcRestoration() {
+		if (mob.isNpc()) {
+			mob.ensureStatRestorationActive();
 		}
 	}
 
@@ -151,6 +167,7 @@ public class Skills {
 			}
 		}
 		sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public void setExperienceAndLevel(int skill, int exp, int lvl, boolean sendUpdate) {
@@ -161,11 +178,13 @@ public class Skills {
 		if (sendUpdate) {
 			sendUpdate(skill);
 		}
+		rearmNpcRestoration();
 	}
 
 	public void incrementLevel(int skill) {
 		levels[skill]++;
 		sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public void decrementLevel(int skill) {
@@ -174,6 +193,7 @@ public class Skills {
 			levels[skill] = 0;
 
 		sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public void increaseLevel(int skill, int amount) {
@@ -185,6 +205,7 @@ public class Skills {
 		}
 		levels[skill] = levels[skill] + amount;
 		sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public void subtractLevel(int skill, int amount) {
@@ -199,6 +220,7 @@ public class Skills {
 
 		if (update)
 			sendUpdate(skill);
+		rearmNpcRestoration();
 	}
 
 	public int getLevel(int skill) {
@@ -260,8 +282,10 @@ public class Skills {
 			if (getMob().isPlayer()) {
 				Player player = (Player) getMob();
 				int newTotalLevel = player.getTotalLevel();
+				boolean maxSkillSaved = false;
 				try {
 					getWorld().getServer().getPlayerService().savePlayerMaxSkill(player.getDatabaseID(), skill, maxStats[skill]);
+					maxSkillSaved = true;
 				} catch (GameDatabaseException e) {
 					LOGGER.catching(e);
 				}
@@ -275,7 +299,19 @@ public class Skills {
 					skillName = getWorld().getServer().getConstants().getSkills().getSkill(skill).getLongName().toLowerCase();
 				}
 				if (!player.getConfig().WANT_OPENPK_POINTS) {
-					getWorld().getWorldAnnouncementService().announceSkillMilestone(player, skill, oldLevel, newLevel);
+					int highestWorldFirstLevel = 0;
+					if (maxSkillSaved) {
+						SkillClaimResult skillClaims = getWorld().getWorldAchievementService()
+							.claimFirstSkillLevels(player.getDatabaseID(), player.getUsername(),
+								!player.isDefaultUser(), skill, oldLevel, newLevel);
+						if (skillClaims.hasClaims()) {
+							highestWorldFirstLevel = skillClaims.getHighestClaimedLevel();
+							getWorld().getWorldAnnouncementService()
+								.announceFirstSkillLevel(player, skill, highestWorldFirstLevel);
+						}
+					}
+					getWorld().getWorldAnnouncementService().announceSkillMilestone(
+						player, skill, oldLevel, newLevel, highestWorldFirstLevel);
 					getWorld().getWorldAnnouncementService().announceTotalLevelMilestone(player, oldTotalLevel, newTotalLevel);
 					if (newLevel >= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - (getWorld().getServer().getConfig().SKILLING_EXP_RATE > 1.0 && !player.isOneXp() ? 9 : 19)
 						&& newLevel <= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - 1) {

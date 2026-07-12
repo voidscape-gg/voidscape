@@ -294,7 +294,7 @@ public final class Reldo implements TalkNpcTrigger {
 							if (config().INFLUENCE_INSTEAD_QP) {
 								player.message("@gre@You just advanced 0 influence level!");
 							} else {
-								player.message("@gre@You haved gained 0 quest point!");
+								player.message("@gre@You have gained 0 quest points!");
 							}
 					}
 				}

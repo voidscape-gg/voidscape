@@ -2,10 +2,11 @@ package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.content.BetaOnboardingGuide;
+import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.LootBeamSettings;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.RestedExperience;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.clan.ClanInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
@@ -37,7 +38,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,9 +56,9 @@ public final class RegularPlayer implements CommandTrigger {
 	private enum TitleCatalogView {
 		ALL("All titles"),
 		UNLOCKED("Unlocked titles"),
-		UNIQUE("Unique titles"),
-		COMMON("Common titles"),
-		RAREST("Rarest titles");
+		RENOWN("Renown titles"),
+		FEAT("Feat titles"),
+		UNIQUE("Unique titles");
 
 		private final String label;
 
@@ -142,6 +142,10 @@ public final class RegularPlayer implements CommandTrigger {
 			reportBetaBug(player, args);
 		} else if (command.equalsIgnoreCase("beta") || command.equalsIgnoreCase("betaguide")) {
 			BetaOnboardingGuide.show(player);
+		} else if (command.equalsIgnoreCase("farmkit")) {
+			FarmSim.handleFarmKitCommand(player, args);
+		} else if (command.equalsIgnoreCase("farmsim") || command.equalsIgnoreCase("farmcal")) {
+			FarmSim.handleFarmSimCommand(player, args);
 		} else if (command.equalsIgnoreCase("lootbeam") || command.equalsIgnoreCase("lootbeams")) {
 			handleLootBeamCommand(player, args);
 		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {
@@ -225,7 +229,7 @@ public final class RegularPlayer implements CommandTrigger {
 			bankPinOptOut(player);
 		} else if (command.equalsIgnoreCase("rename")) {
 			renameSelf(player, args);
-		} else if (command.equalsIgnoreCase("globalchat") || command.equalsIgnoreCase("gc")) {
+		} else if (command.equalsIgnoreCase("globalchat")) {
 			globalChatInfo(player);
 		}
 	}
@@ -263,30 +267,29 @@ public final class RegularPlayer implements CommandTrigger {
 			return;
 		}
 		if (!title.isUnlocked(player)) {
-			player.message("You have not unlocked @red@" + title.displayName() + "@whi@ yet.");
+			player.message("You have not unlocked " + title.tierColorToken() + title.displayName() + "@whi@ yet.");
 			if (title.unique()) {
-				PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
-				if (uniqueClaim != null && uniqueClaim != title) {
-					player.message("You already hold the unique title @red@" + uniqueClaim.displayName() + "@whi@.");
-					player.message("Each account can hold only one unique title.");
-					return;
-				}
 				String owner = PlayerTitle.ownerName(player, title);
 				if (owner != null) {
 					player.message("That unique title is already held by @yel@" + owner + "@whi@.");
+				} else if (title.firstUnique()) {
+					player.message("@yel@Unique title@whi@ - first player to meet this requirement claims it forever.");
+					player.message(title.unlockHint());
+				} else if (title.contested()) {
+					player.message("@yel@Contested title@whi@ - held by the current leader.");
 				} else {
-					player.message("@red@Unique title@whi@ - first player to meet this requirement claims it.");
+					player.message("@yel@Unique title@whi@ - awarded by possession or staff action.");
 					player.message(title.unlockHint());
 				}
 			} else {
-				player.message("@cya@Reusable title@whi@ - anyone who meets this requirement can unlock it.");
+				player.message(title.tierColorToken() + title.tierLabel() + "@whi@ title - anyone who meets this requirement can unlock it.");
 				player.message(title.unlockHint());
 			}
 			return;
 		}
 
 		PlayerTitle.setActive(player, title);
-		player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+		player.message("Your active title is now " + title.tierColorToken() + title.displayName() + "@whi@.");
 	}
 
 	private void openTitleMenu(Player player) {
@@ -296,20 +299,16 @@ public final class RegularPlayer implements CommandTrigger {
 
 		int unlockedOption = options.size();
 		options.add("Unlocked titles (" + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length + ")");
-		int allOption = options.size();
-		options.add("All titles");
+		int renownOption = options.size();
+		options.add("Renown titles");
+		int featOption = options.size();
+		options.add("Feat titles");
 		int uniqueOption = options.size();
 		options.add("Unique titles");
-		int commonOption = options.size();
-		options.add("Common titles");
-		int rarestOption = options.size();
-		options.add("Rarest titles");
-
-		int clearOption = -1;
-		if (activeTitle != null) {
-			clearOption = options.size();
-			options.add("Clear active title");
-		}
+		int allOption = options.size();
+		options.add("All titles");
+		int clearOption = options.size();
+		options.add("Clear active title");
 		int closeOption = options.size();
 		options.add("Close");
 
@@ -334,16 +333,16 @@ public final class RegularPlayer implements CommandTrigger {
 			showTitleCatalog(player, TitleCatalogView.ALL, 0);
 			return;
 		}
+		if (option == renownOption) {
+			showTitleCatalog(player, TitleCatalogView.RENOWN, 0);
+			return;
+		}
+		if (option == featOption) {
+			showTitleCatalog(player, TitleCatalogView.FEAT, 0);
+			return;
+		}
 		if (option == uniqueOption) {
 			showTitleCatalog(player, TitleCatalogView.UNIQUE, 0);
-			return;
-		}
-		if (option == commonOption) {
-			showTitleCatalog(player, TitleCatalogView.COMMON, 0);
-			return;
-		}
-		if (option == rarestOption) {
-			showTitleCatalog(player, TitleCatalogView.RAREST, 0);
 		}
 	}
 
@@ -355,29 +354,31 @@ public final class RegularPlayer implements CommandTrigger {
 		while (true) {
 			PlayerTitle activeTitle = PlayerTitle.active(player);
 			List<String> options = new ArrayList<>();
+			int start = page * TITLE_CATALOG_PAGE_SIZE;
+			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
+			String showing = titles.isEmpty() ? "0-0 of 0" : (start + 1) + "-" + end + " of " + titles.size();
 			options.add(view.label() + " - page " + (page + 1) + "/" + totalPages
+				+ " - showing " + showing
 				+ " - unlocked " + PlayerTitle.unlockedCount(player) + "/" + PlayerTitle.values().length);
 
 			int allViewOption = -1;
 			int unlockedViewOption = -1;
+			int renownViewOption = -1;
+			int featViewOption = -1;
 			int uniqueViewOption = -1;
-			int commonViewOption = -1;
-			int rarestViewOption = -1;
 			if (player.isUsingCustomClient()) {
 				allViewOption = options.size();
 				options.add("View all titles");
 				unlockedViewOption = options.size();
 				options.add("View unlocked titles");
+				renownViewOption = options.size();
+				options.add("View renown titles");
+				featViewOption = options.size();
+				options.add("View feat titles");
 				uniqueViewOption = options.size();
 				options.add("View unique titles");
-				commonViewOption = options.size();
-				options.add("View common titles");
-				rarestViewOption = options.size();
-				options.add("View rarest titles");
 			}
 
-			int start = page * TITLE_CATALOG_PAGE_SIZE;
-			int end = Math.min(titles.size(), start + TITLE_CATALOG_PAGE_SIZE);
 			int firstTitleOption = options.size();
 			for (int i = start; i < end; i++) {
 				options.add(titleCatalogOption(player, titles.get(i), activeTitle));
@@ -422,22 +423,22 @@ public final class RegularPlayer implements CommandTrigger {
 				page = 0;
 				continue;
 			}
+			if (option == renownViewOption) {
+				view = TitleCatalogView.RENOWN;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
+			if (option == featViewOption) {
+				view = TitleCatalogView.FEAT;
+				titles = titleCatalogTitles(player, view);
+				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
+				page = 0;
+				continue;
+			}
 			if (option == uniqueViewOption) {
 				view = TitleCatalogView.UNIQUE;
-				titles = titleCatalogTitles(player, view);
-				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
-				page = 0;
-				continue;
-			}
-			if (option == commonViewOption) {
-				view = TitleCatalogView.COMMON;
-				titles = titleCatalogTitles(player, view);
-				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
-				page = 0;
-				continue;
-			}
-			if (option == rarestViewOption) {
-				view = TitleCatalogView.RAREST;
 				titles = titleCatalogTitles(player, view);
 				totalPages = Math.max(1, (titles.size() + TITLE_CATALOG_PAGE_SIZE - 1) / TITLE_CATALOG_PAGE_SIZE);
 				page = 0;
@@ -467,33 +468,55 @@ public final class RegularPlayer implements CommandTrigger {
 
 	private String titleCatalogOption(Player player, PlayerTitle title, PlayerTitle activeTitle) {
 		String prefix = title == activeTitle ? "* " : "";
-		return prefix + title.displayName() + " - " + titleCatalogStatus(player, title) + " - " + titleCatalogState(player, title, activeTitle);
+		String fallback = prefix + title.displayName() + " - " + titleCatalogTier(title) + " - " + titleCatalogState(player, title, activeTitle);
+		if (!player.isUsingCustomClient()) {
+			return fallback;
+		}
+		return fallback + " ~vstitle~"
+			+ safeTitleCell(title.tableTitle()) + "|"
+			+ safeTitleCell(title.tableTierLabel()) + "|"
+			+ title.tier().code() + "|"
+			+ (title.recordTitle() ? "1" : "0") + "|"
+			+ safeTitleCell(title.tableHolder(player)) + "|"
+			+ safeTitleCell(title.tableAge(player)) + "|"
+			+ safeTitleCell(titleCatalogStatePlain(player, title, activeTitle)) + "|"
+			+ (title == activeTitle ? "1" : "0");
 	}
 
-	private String titleCatalogStatus(Player player, PlayerTitle title) {
-		if (title.unique()) {
-			String owner = PlayerTitle.ownerName(player, title);
-			if (owner == null) {
-				return "@red@unique@whi@ open";
-			}
-			return "@red@unique@whi@ " + owner;
-		}
+	private String safeTitleCell(String value) {
+		return value == null ? "" : value.replace("|", "/").replace("~vstitle~", "");
+	}
 
-		String rarity = title.rarityLabel();
-		if (rarity.equals("rare")) {
-			return "@mag@rare@whi@";
-		}
-		if (rarity.equals("uncommon")) {
-			return "@yel@uncommon@whi@";
-		}
-		return "@cya@common@whi@";
+	private String titleCatalogTier(PlayerTitle title) {
+		return title.tierColorToken() + title.tierLabel() + "@whi@";
 	}
 
 	private String titleCatalogState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
 		if (title == activeTitle) {
 			return "@gre@active@whi@";
 		}
-		return title.isUnlocked(player) ? "@gre@unlocked@whi@" : "locked";
+		if (title.isUnlocked(player)) {
+			return "@gre@unlocked@whi@";
+		}
+		if (title.unique()) {
+			String owner = PlayerTitle.ownerName(player, title);
+			return owner == null ? "@yel@open@whi@" : "@yel@held by " + owner + "@whi@";
+		}
+		return "locked";
+	}
+
+	private String titleCatalogStatePlain(Player player, PlayerTitle title, PlayerTitle activeTitle) {
+		if (title == activeTitle) {
+			return "active";
+		}
+		if (title.isUnlocked(player)) {
+			return "unlocked";
+		}
+		if (title.unique()) {
+			String owner = PlayerTitle.ownerName(player, title);
+			return owner == null ? "open" : "held";
+		}
+		return "locked";
 	}
 
 	private boolean showTitleDetail(Player player, PlayerTitle title, TitleCatalogView returnView, int returnPage) {
@@ -503,8 +526,11 @@ public final class RegularPlayer implements CommandTrigger {
 			options.add("Title details: " + title.displayName());
 			options.add("Requirement - " + title.unlockHint());
 			options.add(title.requirementProgress(player));
+			options.add("Tier: " + titleCatalogTier(title));
 			options.add(titleDetailScope(player, title));
-			options.add("Rarity: " + title.rarityLabel());
+			if (title.unique()) {
+				options.add(titleDetailUnique(player, title));
+			}
 			options.add("Status: " + titleDetailState(player, title, activeTitle));
 
 			int equipOption = -1;
@@ -526,7 +552,7 @@ public final class RegularPlayer implements CommandTrigger {
 			}
 			if (option == equipOption) {
 				PlayerTitle.setActive(player, title);
-				player.message("Your active title is now @red@" + title.displayName() + "@whi@.");
+				player.message("Your active title is now " + title.tierColorToken() + title.displayName() + "@whi@.");
 				return true;
 			}
 		}
@@ -534,17 +560,35 @@ public final class RegularPlayer implements CommandTrigger {
 
 	private String titleDetailScope(Player player, PlayerTitle title) {
 		if (!title.unique()) {
-			return "Scope: reusable - anyone can earn it.";
+			return "Lifecycle: reusable - anyone can earn it.";
 		}
 
+		if (title.firstUnique()) {
+			return "Lifecycle: first - permanent server history.";
+		}
+		if (title.contested()) {
+			return "Lifecycle: contested - held by the current leader.";
+		}
+		return "Lifecycle: item-bound - follows the relic holder.";
+	}
+
+	private String titleDetailUnique(Player player, PlayerTitle title) {
 		String owner = PlayerTitle.ownerName(player, title);
-		if (owner == null) {
-			return "Scope: unique - open first claim.";
+		if (title.firstUnique()) {
+			if (owner == null) {
+				return "Claim: unclaimed - first to this deed takes it forever.";
+			}
+			String date = PlayerTitle.firstClaimDate(player, title);
+			return "Claim: " + owner + (date.isEmpty() ? "." : " on " + date + ".");
 		}
-		if (owner.equalsIgnoreCase(player.getUsername())) {
-			return "Scope: unique - held by you.";
+		if (title.contested()) {
+			int score = PlayerTitle.currentContestedScore(player, title);
+			if (owner == null) {
+				return "Holder: open.";
+			}
+			return score > 0 ? "Holder: " + owner + " with " + score + "." : "Holder: " + owner + ".";
 		}
-		return "Scope: unique - held by " + owner + ".";
+		return owner == null ? "Holder: open." : "Holder: " + owner + ".";
 	}
 
 	private String titleDetailState(Player player, PlayerTitle title, PlayerTitle activeTitle) {
@@ -555,13 +599,15 @@ public final class RegularPlayer implements CommandTrigger {
 			return "unlocked";
 		}
 		if (title.unique()) {
-			PlayerTitle uniqueClaim = PlayerTitle.uniqueClaim(player);
-			if (uniqueClaim != null && uniqueClaim != title) {
-				return "locked - you already hold " + uniqueClaim.displayName() + ".";
-			}
 			String owner = PlayerTitle.ownerName(player, title);
 			if (owner != null) {
 				return "locked - held by " + owner + ".";
+			}
+			if (title.firstUnique()) {
+				return "open - first qualifying player claims it.";
+			}
+			if (title.contested()) {
+				return "open - current leader claims it.";
 			}
 		}
 		return "locked";
@@ -576,21 +622,13 @@ public final class RegularPlayer implements CommandTrigger {
 			if (view == TitleCatalogView.UNIQUE && !title.unique()) {
 				continue;
 			}
-			if (view == TitleCatalogView.COMMON && title.unique()) {
+			if (view == TitleCatalogView.RENOWN && title.tier() != PlayerTitle.Tier.RENOWN) {
+				continue;
+			}
+			if (view == TitleCatalogView.FEAT && title.tier() != PlayerTitle.Tier.FEAT) {
 				continue;
 			}
 			titles.add(title);
-		}
-		if (view == TitleCatalogView.RAREST) {
-			Collections.sort(titles, new Comparator<PlayerTitle>() {
-				public int compare(PlayerTitle left, PlayerTitle right) {
-					int rarity = Integer.compare(right.rarityScore(), left.rarityScore());
-					if (rarity != 0) {
-						return rarity;
-					}
-					return left.displayName().compareTo(right.displayName());
-				}
-			});
 		}
 		return titles;
 	}
@@ -618,11 +656,11 @@ public final class RegularPlayer implements CommandTrigger {
 		if (action.equals("unique") || action.equals("uniques")) {
 			return TitleCatalogView.UNIQUE;
 		}
-		if (action.equals("common") || action.equals("commons") || action.equals("reusable") || action.equals("reusables")) {
-			return TitleCatalogView.COMMON;
+		if (action.equals("renown") || action.equals("silver") || action.equals("reusable") || action.equals("reusables")) {
+			return TitleCatalogView.RENOWN;
 		}
-		if (action.equals("rarest") || action.equals("rare")) {
-			return TitleCatalogView.RAREST;
+		if (action.equals("feat") || action.equals("feats") || action.equals("purple")) {
+			return TitleCatalogView.FEAT;
 		}
 		return null;
 	}
@@ -1079,7 +1117,11 @@ public final class RegularPlayer implements CommandTrigger {
 
 		String rawMessage = String.join(" ", args).trim();
 		if (rawMessage.isEmpty()) {
-			player.message(badSyntaxPrefix + command + " <message>");
+			if (command.equalsIgnoreCase("g")) {
+				globalChatInfo(player);
+			} else {
+				player.message(badSyntaxPrefix + command + " <message>");
+			}
 			return;
 		}
 
@@ -1124,7 +1166,7 @@ public final class RegularPlayer implements CommandTrigger {
 	}
 
 	private String formatGlobalChatLine(Player player, String message) {
-		return GlobalChatIpFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
+		return GlobalChatCountryFlags.flagTokenFor(player) + "@gre@" + player.getUsername() + ": @whi@" + message;
 	}
 
 	private void sendMessageParty(Player player, String command, String[] args) {
@@ -1944,7 +1986,7 @@ public final class RegularPlayer implements CommandTrigger {
 		if (message.length() == 0) {
 			player.message(badSyntaxPrefix + "bug <what happened>");
 			player.playerServerMessage(MessageType.QUEST,
-				"@mag@Example: @whi@::bug Void Knight door stuck after teleporting from ::beta");
+				"@mag@Example: @whi@::bug Void Knight door stuck after using the starter rift");
 			return;
 		}
 		if (message.length() < 8) {
@@ -2027,10 +2069,11 @@ public final class RegularPlayer implements CommandTrigger {
 
 	private void queryCommands(Player player, int page) {
 		if (page == 0) {
+			String[] commands = pageZeroCommands(player);
 			if (player.getClientLimitations().supportsMessageBox) {
-				ActionSender.sendBox(player, String.join("", pageZeroCommands), true);
+				ActionSender.sendBox(player, String.join("", commands), true);
 			} else {
-				for (String command : pageZeroCommands) {
+				for (String command : commands) {
 					player.playerServerMessage(MessageType.QUEST, command.replace("%", ""));
 					delay(2);
 				}
@@ -2050,6 +2093,13 @@ public final class RegularPlayer implements CommandTrigger {
 			}
 		}
 
+	}
+
+	private static String[] pageZeroCommands(Player player) {
+		if (player.getConfig().WANT_BETA_ONBOARDING_GUIDE) {
+			return pageZeroCommandsBeta;
+		}
+		return pageZeroCommands;
 	}
 
 	private void setClientVersion(Player player, String[] args) {
@@ -2121,8 +2171,32 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::online - shows players currently online %",
 		"@whi@::uniqueonline - shows number of unique IPs logged in %",
 		"@whi@::onlinelist - shows players currently online in a list %",
+		"@whi@::bug <message> - sends a bug report %",
+		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
+		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
+		"@whi@::c <message> - talk in clan chat %",
+		"@whi@::p <message> - talk in party chat %",
+		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
+		"@whi@::wilderness - shows the wilderness activity %",
+		"@whi@::arena - enter ranked Void Arena %",
+		"@whi@::event - to enter an ongoing server event %",
+		"@whi@::kills - shows kill counts of npcs %",
+		"@whi@::qoloptout - opts you out of Quality of Life features %",
+		"@whi@::certoptout - opts you out of the traditional 'cert' system %"
+	};
+
+	private static final String[] pageZeroCommandsBeta = new String[]{
+		"@yel@Commands available: %",
+		"@lre@Type :: before you enter your command, see the list below. %",
+		" %", // this adds a line of whitespace for readability
+		"@whi@::gameinfo - shows player and server information %",
+		"@whi@::leave - leaves PK catching practice early %",
+		"@whi@::online - shows players currently online %",
+		"@whi@::uniqueonline - shows number of unique IPs logged in %",
+		"@whi@::onlinelist - shows players currently online in a list %",
 		"@whi@::beta - opens the Voidscape beta guide menu %",
-		"@whi@::bug <message> - sends a beta bug report %",
+		"@whi@::bug <message> - sends a bug report %",
+		"@whi@::codes - shows earned beta referral reward codes %",
 		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",

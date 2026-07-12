@@ -2,6 +2,7 @@ package com.openrsc.server.model.container;
 
 import com.openrsc.server.constants.IronmanMode;
 import com.openrsc.server.constants.Quests;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.DeathLog;
 import com.openrsc.server.database.struct.PlayerInventory;
@@ -421,7 +422,8 @@ public class Inventory {
 		return true;
 	}
 
-	public void dropOnDeath(final Mob mob) {
+	public List<GroundItem> dropOnDeath(final Mob mob) {
+		final List<GroundItem> groundItems = new ArrayList<>();
 		// deathItemsMap: Compiles a list of Value : Items
 		// Stacks receive a value of -1, as they are always removed.
 		final TreeMap<Integer, ArrayList<Item>> deathItemsMap = new TreeMap<>(Collections.reverseOrder());
@@ -443,7 +445,7 @@ public class Inventory {
 				if (item == null) continue;
 
 				def = item.getDef(player.getWorld());
-				key = def.isStackable() || item.getNoted() ? -1 : def.getDefaultPrice(); // Stacks are always lost.
+				key = deathProtectionValue(item, def);
 				value = deathItemsMap.getOrDefault(key, new ArrayList<>());
 				value.add(item);
 				deathItemsMap.put(key, value);
@@ -453,7 +455,7 @@ public class Inventory {
 		// Add inventory items and values to deathItemsMap
 		for (final Item item : getItems()) {
 			def = item.getDef(player.getWorld());
-			key = def.isStackable() || item.getNoted() ? -1 : def.getDefaultPrice(); // Stacks are always lost.
+			key = deathProtectionValue(item, def);
 			value = deathItemsMap.getOrDefault(key, new ArrayList<>());
 			value.add(item);
 			deathItemsMap.put(key, value);
@@ -475,7 +477,10 @@ public class Inventory {
 		// Save three most expensive items by ItemDef default price
 		if (!player.isSkulled() && !player.isIronMan(IronmanMode.Ultimate.id())) {
 			for (int items = 1; items <= 3 && iterator.hasNext(); items++) {
-				if (iterator.next().getDef(player.getWorld()).isStackable()) {
+				final Item keptItem = iterator.next();
+				// noted items are keyed -1 above like stacks; never let one occupy a
+				// keep slot (VS-003, ruled 2026-07-03: noted always lost on death)
+				if (keptItem.getDef(player.getWorld()).isStackable() || keptItem.getNoted()) {
 					iterator.previous();
 					break;
 				}
@@ -484,7 +489,8 @@ public class Inventory {
 
 		// Save a fourth item if protect item prayer is enabled
 		if (player.getPrayers().isPrayerActivated(Prayers.PROTECT_ITEMS) && iterator.hasNext()) {
-			if (iterator.next().getDef(player.getWorld()).isStackable()) {
+			final Item keptItem = iterator.next();
+			if (keptItem.getDef(player.getWorld()).isStackable() || keptItem.getNoted()) {
 				iterator.previous();
 			}
 		}
@@ -508,6 +514,7 @@ public class Inventory {
 				final GroundItem groundItem = new GroundItem(player.getWorld(), item.getCatalogId(), player.getX(),
 					player.getY(), item.getAmount(), player, item.getNoted());
 				player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
+				groundItems.add(groundItem);
 				recordDeathDrop(item, itemID, mob, "death_untradable", "ground_owner", player);
 				continue;
 			}
@@ -517,6 +524,7 @@ public class Inventory {
 				final GroundItem groundItem = new GroundItem(player.getWorld(), item.getCatalogId(), player.getX(),
 					player.getY(), item.getAmount(), null, item.getNoted());
 				player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
+				groundItems.add(groundItem);
 
 				groundItem.setAttribute("killedByMob", player.getUsernameHash());
 				recordDeathDrop(item, itemID, mob, mob == null ? "death_unknown" : "death_pve", "ground_public", null);
@@ -536,6 +544,7 @@ public class Inventory {
 			groundItem.setAttribute("killerHash", playerMob.getUsernameHash());
 
 			player.getWorld().registerItem(groundItem, player.getConfig().GAME_TICK * 1000);
+			groundItems.add(groundItem);
 			recordDeathDrop(item, itemID, mob, dropOwner == player ? "death_pvp_ironman" : "death_pvp",
 				dropOwner == player ? "ground_owner" : "ground_killer", dropOwner);
 		}
@@ -561,6 +570,16 @@ public class Inventory {
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipmentStats(player);
 		player.getUpdateFlags().setAppearanceChanged(true);
+		return Collections.unmodifiableList(new ArrayList<>(groundItems));
+	}
+
+	private int deathProtectionValue(final Item item, final ItemDefinition def) {
+		if (def.isStackable() || item.getNoted()) {
+			return -1;
+		}
+		return VoidContent.isVoidGear(item.getCatalogId())
+			? VoidContent.VOID_GEAR_DEATH_PROTECTION_VALUE
+			: def.getDefaultPrice();
 	}
 
 	private void recordDeathDrop(final Item item, final long itemID, final Mob killer, final String source,

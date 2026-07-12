@@ -38,6 +38,14 @@ import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
  *   ::talknpc <npcId>          walk to + talk to the nearest NPC of that id (TalkNpcTrigger)
  *   ::opnpc <npcId> [cmd|2]    walk to + operate the nearest NPC's menu command (OpNpcTrigger)
  *   ::dropinv <itemId>         drop the first matching inventory item (real drop path)
+ *   ::undeadsiege              enter a fresh Undead Siege solo instance
+ *   ::undeadsiegeparty         start Undead Siege with eligible nearby party members
+ *   ::undeadsiegepartynear     create a QA party from nearby players, then start Undead Siege
+ *   ::undeadsiegeclear         kill active Undead Siege NPCs through the real death path
+ *   ::undeadsiegefinish        finish the current Undead Siege run through cleanup/payout
+ *   ::undeadsiegefinishfull    finish with a full restored inventory to test payout drops
+ *   ::undeadsiegedie           force the real safe-death cleanup path inside Undead Siege
+ *   ::shop                     reopen the Undead Siege supply shop during intermission
  *   ::colossus                 enter a fresh Void Colossus solo instance (real spawn/teleport path)
  *   ::colossuspeace [on|off]   toggle the boss dealing no damage (inspect angles/size safely)
  */
@@ -91,6 +99,46 @@ public final class VoidTestCommands implements CommandTrigger {
 			case "dropinv":
 			case "dropitem":
 				dropInv(player, args);
+				break;
+			case "undeadsiege":
+			case "siege":
+			case "zombies":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.startSolo(player);
+				break;
+			case "undeadsiegeparty":
+			case "siegeparty":
+			case "zombiesparty":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.startParty(player);
+				break;
+			case "undeadsiegepartynear":
+			case "siegepartynear":
+			case "zombiespartynear":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.debugStartNearbyParty(player);
+				break;
+			case "undeadsiegeclear":
+			case "siegeclear":
+			case "zombiesclear":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.debugClearWave(player);
+				break;
+			case "undeadsiegefinish":
+			case "siegefinish":
+			case "zombiesfinish":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.debugFinish(player);
+				break;
+			case "undeadsiegefinishfull":
+			case "siegefinishfull":
+			case "zombiesfinishfull":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.debugFinishFull(player);
+				break;
+			case "undeadsiegedie":
+			case "siegedie":
+			case "zombiesdie":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.debugKillPlayer(player);
+				break;
+			case "shop":
+			case "siegeshop":
+			case "zombiesshop":
+				com.openrsc.server.plugins.custom.minigames.undeadsiege.UndeadSiegeMinigame.openSupplyShop(player);
 				break;
 			case "colossus":
 			case "voidcolossus":

@@ -32,6 +32,11 @@ public class ItemUseOnPlayer implements PayloadProcessor<ItemOnMobStruct, Opcode
 			player.message("Nothing interesting happens");
 			return;
 		}
+		if (!player.sharesInstanceWith(affectedPlayer)) {
+			player.message("You cannot reach that player.");
+			player.resetPath();
+			return;
+		}
 		if (!affectedPlayer.canBeReattacked()) {
 			player.resetPath();
 			return;
@@ -46,16 +51,16 @@ public class ItemUseOnPlayer implements PayloadProcessor<ItemOnMobStruct, Opcode
 			public void executeInternal() {
 				getPlayer().resetPath();
 				getPlayer().resetFollowing();
-				if (!getPlayer().getCarriedItems().getInventory().contains(item)
+				if (!getPlayer().sharesInstanceWith(affectedPlayer)
+					|| !getPlayer().getCarriedItems().getInventory().contains(item)
 					|| !getPlayer().canReach(affectedPlayer) || getPlayer().isBusy()
 					|| getPlayer().isRanging()) {
 					return;
 				}
 				getPlayer().resetAll();
 				getPlayer().face(affectedPlayer);
-				if (item.getDef(getPlayer().getWorld()).isMembersOnly()
-					&& !getPlayer().getConfig().MEMBER_WORLD) {
-					getPlayer().message(getPlayer().MEMBER_MESSAGE);
+				if (!getPlayer().canUseMembersItemHere(item)) {
+					getPlayer().sendCannotUseMembersHereMessage();
 					return;
 				}
 

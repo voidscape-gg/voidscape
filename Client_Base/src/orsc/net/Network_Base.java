@@ -5,13 +5,13 @@ import java.io.IOException;
 import orsc.buffers.RSBuffer_Bits;
 import orsc.util.GenUtil;
 
-class Network_Base {
+public class Network_Base {
 
 	private final int writeBufferSize = 5000;
 	public int m_d = 0;
 	public RSBuffer_Bits bufferBits;
-	String errorCode = "";
-	boolean errorHappened = false;
+	volatile String errorCode = "";
+	volatile boolean errorHappened = false;
 	private int packetReadAttempts = 0;
 	private int incomingPacketLength = 0;
 	private int readyPackets = 0;
@@ -59,7 +59,7 @@ class Network_Base {
 		}
 	}
 
-	int read() throws IOException {
+	public int read() throws IOException {
 		try {
 			return 0;
 		} catch (RuntimeException var3) {
@@ -88,8 +88,8 @@ class Network_Base {
 			try {
 				++this.packetReadAttempts;
 				if (this.m_d > 0 && this.packetReadAttempts > this.m_d) {
-					this.errorHappened = true;
 					this.errorCode = "time-out";
+					this.errorHappened = true;
 					this.m_d += this.m_d;
 					return 0;
 				}
@@ -106,8 +106,8 @@ class Network_Base {
 					return packetLength;
 				}
 			} catch (IOException var4) {
-				this.errorHappened = true;
 				this.errorCode = var4.getMessage();
+				this.errorHappened = true;
 			}
 
 			return 0;
@@ -116,7 +116,7 @@ class Network_Base {
 		}
 	}
 
-	int available() throws IOException {
+	public int available() throws IOException {
 		try {
 			return 0;
 		} catch (RuntimeException var3) {
@@ -141,6 +141,10 @@ class Network_Base {
 		}
 	}
 
+	public final void resetReadTimeout() {
+		this.packetReadAttempts = 0;
+	}
+
 	public final void newPacket(int opcode) {
 		try {
 			// (4/5) of write buffer is filled; flush
@@ -148,8 +152,8 @@ class Network_Base {
 				try {
 					this.flush(0, true);
 				} catch (IOException var4) {
-					this.errorHappened = true;
 					this.errorCode = var4.getMessage();
+					this.errorHappened = true;
 				}
 			}
 
@@ -169,14 +173,18 @@ class Network_Base {
 		}
 	}
 
-	void close() {
+	public void close() {
 		try {
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "b.G(" + true + ')');
 		}
 	}
 
-	void read(byte[] data, int offset, int count) throws IOException {
+	public void closeAfterFlush() {
+		close();
+	}
+
+	public void read(byte[] data, int offset, int count) throws IOException {
 		try {
 		} catch (RuntimeException var6) {
 			throw GenUtil.makeThrowable(var6,
@@ -195,6 +203,55 @@ class Network_Base {
 			this.packetStart = this.bufferBits.packetEnd;
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "b.L(" + "dummy" + ')');
+		}
+	}
+
+	public final int getByte() {
+		try {
+			return this.read();
+		} catch (IOException var3) {
+			throw GenUtil.makeThrowable(var3, "");
+		}
+	}
+
+	public final int getUnsignedByte() {
+		try {
+			return this.read() & 255;
+		} catch (IOException var3) {
+			throw GenUtil.makeThrowable(var3, "");
+		}
+	}
+
+	public final int getShort() {
+		try {
+			return ((this.read() & 255) << 8) | (this.read() & 255);
+		} catch (IOException var3) {
+			throw GenUtil.makeThrowable(var3, "tb.G(" + "dummy" + ')');
+		}
+	}
+
+	public final int get32() {
+		try {
+			return ((this.read() & 255) << 24)
+				| ((this.read() & 255) << 16)
+				| ((this.read() & 255) << 8)
+				| (this.read() & 255);
+		} catch (IOException var3) {
+			throw GenUtil.makeThrowable(var3, "tb.G(" + "dummy" + ')');
+		}
+	}
+
+	public final String readString() {
+		try {
+			StringBuilder bldr = new StringBuilder();
+			int i;
+			while ((i = this.read()) != 10) {
+				if (i == -1) break;
+				bldr.append((char) i);
+			}
+			return bldr.toString();
+		} catch (IOException var3) {
+			throw GenUtil.makeThrowable(var3, "");
 		}
 	}
 }

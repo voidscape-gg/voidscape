@@ -3,12 +3,17 @@ package com.openrsc.android.updater;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.text.InputType;
 import android.util.Log;
 import android.view.View;
@@ -20,6 +25,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.openrsc.android.security.AndroidCredentialStore;
 import com.openrsc.client.R;
 import com.openrsc.client.android.GameActivity;
 
@@ -31,22 +37,40 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import orsc.multiclient.CredentialStore;
 import orsc.osConfig;
 
 public class CacheUpdater extends Activity {
 
 	private static final String BUNDLED_CACHE_ROOT = "cache";
 	private static final int NETWORK_TIMEOUT_MS = 5000;
+	private static final String BOOTSTRAP_PREFERENCES = "voidscape.bootstrap";
+	private static final String CACHE_INSTALL_IDENTITY = "cache.install_identity";
+	private static final String ENDPOINT_HOST = "endpoint.host";
+	private static final String ENDPOINT_PORT = "endpoint.port";
+	private static final String HOST_MIRROR_FILE = "ip.txt";
+	private static final String PORT_MIRROR_FILE = "port.txt";
+	private static final String LEGACY_PUBLIC_HOST = "5.161.114.251";
+	private static final String LEGACY_PUBLIC_PORT = "43596";
 	private static final String EXTRA_SMOKE_ENDPOINT_HOST = "voidscape.smoke.endpoint_host";
 	private static final String EXTRA_SMOKE_ENDPOINT_PORT = "voidscape.smoke.endpoint_port";
+	private static final String EXTRA_SMOKE_RELEASE_ENDPOINT_POLICY =
+		"voidscape.smoke.release_endpoint_policy";
 	private static final String EXTRA_SMOKE_CLEAR_CREDENTIALS = "voidscape.smoke.clear_credentials";
+	private static final String EXTRA_SMOKE_CACHE_FAIL_AFTER_FILES =
+		"voidscape.smoke.cache_fail_after_files";
+	private static final String CACHE_FAILURE_MESSAGE =
+		"Voidscape couldn't prepare its game files. Check that the device has free storage, then retry. "
+			+ "If the problem continues, reinstall the latest APK.";
 
 	private TextProgressBar progressBar;
 	private TextView statusText;
@@ -55,12 +79,13 @@ public class CacheUpdater extends Activity {
 	private final Handler mainHandler = new Handler(Looper.getMainLooper());
 	private boolean completed = false;
 	private boolean launching = false;
+	private int smokeCacheFailAfterFiles = -1;
+	private boolean smokeReleaseEndpointPolicy = false;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.updater);
-		applyDebugLaunchExtras(getIntent());
 
 		progressBar = findViewById(R.id.progressBar);
 		progressBar.setTextSize(18);
@@ -72,11 +97,16 @@ public class CacheUpdater extends Activity {
 		launchButton.setVisibility(View.GONE);
 		launchButton.setOnClickListener(v -> {
 			if (completed) {
-				selectServer(getSavedServerHost(), getSavedServerPort());
+				Endpoint endpoint = getSavedEndpoint();
+				selectServer(endpoint.host, endpoint.port);
 			}
 		});
 		launchButton.setOnLongClickListener(v -> {
 			if (completed) {
+				if (!isDebuggable()) {
+					Toast.makeText(this, "Public server selected", Toast.LENGTH_SHORT).show();
+					return true;
+				}
 				showGameSelectionDialog();
 				return true;
 			}
@@ -85,6 +115,12 @@ public class CacheUpdater extends Activity {
 
 		statusText = findViewById(R.id.textView1);
 		setStatus("Checking game data");
+		applyDebugLaunchExtras(getIntent());
+		try {
+			loadAndRepairEndpoint();
+		} catch (IOException e) {
+			Log.w("Voidscape", "Unable to repair the saved server endpoint", e);
+		}
 		startUpdateTask();
 	}
 
@@ -97,23 +133,39 @@ public class CacheUpdater extends Activity {
 			return;
 		}
 
-		String host = intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_HOST);
-		String port = intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_PORT);
+		String host = trimmedOrNull(intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_HOST));
+		String port = trimmedOrNull(intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_PORT));
+		smokeReleaseEndpointPolicy = intent.getBooleanExtra(
+			EXTRA_SMOKE_RELEASE_ENDPOINT_POLICY,
+			false);
+		if (smokeReleaseEndpointPolicy) {
+			Log.i("Voidscape", "ENDPOINT_BOOTSTRAP smoke-release-policy=true");
+		}
+		smokeCacheFailAfterFiles = Math.max(
+			-1,
+			intent.getIntExtra(EXTRA_SMOKE_CACHE_FAIL_AFTER_FILES, -1));
+		if (smokeCacheFailAfterFiles >= 0) {
+			Log.i(
+				"Voidscape",
+				"CACHE_BOOTSTRAP smoke-fail-after-files=" + smokeCacheFailAfterFiles);
+		}
 		try {
-			if (host != null && host.trim().length() > 0) {
-				writeTextFile(new File(getFilesDir(), "ip.txt"), host.trim());
-			}
-			if (port != null && port.trim().length() > 0) {
-				writeTextFile(new File(getFilesDir(), "port.txt"), port.trim());
-			}
-			if (intent.getBooleanExtra(EXTRA_SMOKE_CLEAR_CREDENTIALS, false)) {
-				File credentials = new File(getFilesDir(), "credentials.txt");
-				if (credentials.isFile() && !credentials.delete()) {
-					Log.w("Voidscape", "Unable to delete smoke credentials file");
+			if (host != null || port != null) {
+				if (host == null || port == null) {
+					Log.w("Voidscape", "Ignoring incomplete smoke server endpoint");
+				} else {
+					Endpoint endpoint = validatedEndpoint(host, port);
+					persistEndpoint(endpoint);
 				}
 			}
-		} catch (IOException e) {
+		} catch (IOException | IllegalArgumentException e) {
 			Log.w("Voidscape", "Unable to apply smoke launch extras", e);
+		}
+		if (intent.getBooleanExtra(EXTRA_SMOKE_CLEAR_CREDENTIALS, false)) {
+			CredentialStore.Result cleared = new AndroidCredentialStore(this).clear();
+			if (cleared.getState() == CredentialStore.State.UNAVAILABLE) {
+				Log.w("Voidscape", "Unable to clear saved logins for Android smoke");
+			}
 		}
 	}
 
@@ -133,40 +185,99 @@ public class CacheUpdater extends Activity {
 		launchButton.setEnabled(false);
 		launchButton.setVisibility(View.GONE);
 		updateExecutor.execute(() -> {
-			boolean ready = updateCache();
+			boolean ready = false;
+			try {
+				ready = updateCache();
+			} catch (Exception e) {
+				if (!(e instanceof InterruptedIOException) || !isFinishing()) {
+					Log.e("Voidscape", "Unable to prepare bundled game data", e);
+				}
+			}
+			if (!ready) {
+				boolean markerCleared = getBootstrapPreferences()
+					.edit()
+					.remove(CACHE_INSTALL_IDENTITY)
+					.commit();
+				Log.i("Voidscape", "CACHE_BOOTSTRAP failure marker-cleared=" + markerCleared);
+			}
+			boolean finalReady = ready;
 			mainHandler.post(() -> {
 				if (isFinishing() || isDestroyed()) {
 					return;
 				}
-			completed = ready;
-			launching = false;
-			if (ready) {
-				setStatus("Ready to play");
-				launchButton.setEnabled(true);
-				launchButton.setVisibility(View.VISIBLE);
-			} else {
-				showCacheFailureDialog();
-			}
+				completed = finalReady;
+				launching = false;
+				if (finalReady) {
+					setStatus("Ready to play");
+					progressBar.setText("Game data ready");
+					progressBar.setProgress(100);
+					launchButton.setEnabled(true);
+					launchButton.setVisibility(View.VISIBLE);
+				} else {
+					setStatus("Game data needs attention");
+					progressBar.setText("Setup stopped");
+					progressBar.setProgress(0);
+					showCacheFailureDialog();
+				}
 			});
 		});
 	}
 
-	private boolean updateCache() {
+	private boolean updateCache() throws IOException {
 		File cacheHome = getFilesDir();
 		if (!cacheHome.exists() && !cacheHome.mkdirs()) {
-			publishUpdateProgress("Unable to create cache directory", 0);
-			return false;
+			throw new IOException("Unable to create cache directory");
 		}
 
-		publishUpdateProgress("Installing bundled game data", 5);
-		boolean seeded = seedBundledCache(cacheHome);
+		throwIfInterrupted();
+		publishUpdateProgress("Checking bundled game data", 5);
+		String installIdentity = getInstallIdentity();
+		SharedPreferences preferences = getBootstrapPreferences();
+		boolean markerMatches = installIdentity.equals(
+			preferences.getString(CACHE_INSTALL_IDENTITY, null));
+		boolean requiredCacheReady = hasRequiredCacheFiles(cacheHome);
+		boolean bundledCacheCurrent = smokeCacheFailAfterFiles < 0
+			&& markerMatches
+			&& requiredCacheReady;
+		boolean installedBundledCache = false;
+
+		if (bundledCacheCurrent) {
+			Log.i("Voidscape", "CACHE_BOOTSTRAP marker-hit identity=" + installIdentity);
+			publishUpdateProgress("Bundled game data verified", 90);
+		} else {
+			boolean repairing = markerMatches && !requiredCacheReady;
+			Log.i(
+				"Voidscape",
+				repairing
+					? "CACHE_BOOTSTRAP repair-required identity=" + installIdentity
+					: "CACHE_BOOTSTRAP install-required identity=" + installIdentity);
+			publishUpdateProgress(
+				repairing ? "Repairing bundled game data" : "Installing bundled game data",
+				8);
+			if (!preferences.edit().remove(CACHE_INSTALL_IDENTITY).commit()) {
+				throw new IOException("Unable to clear stale game-data marker");
+			}
+			installBundledCache(cacheHome);
+			if (!hasRequiredCacheFiles(cacheHome)) {
+				throw new IOException("Required bundled game files are missing or empty");
+			}
+			installedBundledCache = true;
+			publishUpdateProgress("Bundled game data installed", 90);
+		}
 
 		if (hasRemoteCacheEndpoint()) {
 			publishUpdateProgress("Checking remote game data", 35);
 			updateRemoteCache(cacheHome);
 		}
 
-		boolean ready = seeded || hasRequiredCacheFiles(cacheHome);
+		throwIfInterrupted();
+		boolean ready = hasRequiredCacheFiles(cacheHome);
+		if (ready && installedBundledCache) {
+			if (!preferences.edit().putString(CACHE_INSTALL_IDENTITY, installIdentity).commit()) {
+				throw new IOException("Unable to save game-data marker");
+			}
+			Log.i("Voidscape", "CACHE_BOOTSTRAP install-complete identity=" + installIdentity);
+		}
 		publishUpdateProgress(ready ? "Game data ready" : "Game data unavailable", ready ? 100 : 0);
 		return ready;
 	}
@@ -187,7 +298,9 @@ public class CacheUpdater extends Activity {
 	}
 
 	private String getDefaultServerHost() {
-		return isProbablyEmulator() ? osConfig.VOIDSCAPE_EMULATOR_HOST : osConfig.VOIDSCAPE_PUBLIC_HOST;
+		return !usesReleaseEndpointPolicy() && isProbablyEmulator()
+			? osConfig.VOIDSCAPE_EMULATOR_HOST
+			: osConfig.VOIDSCAPE_PUBLIC_HOST;
 	}
 
 	private boolean isProbablyEmulator() {
@@ -202,41 +315,79 @@ public class CacheUpdater extends Activity {
 			|| Build.HARDWARE.contains("ranchu");
 	}
 
-	private boolean seedBundledCache(File cacheHome) {
+	private SharedPreferences getBootstrapPreferences() {
+		return getSharedPreferences(BOOTSTRAP_PREFERENCES, MODE_PRIVATE);
+	}
+
+	private String getInstallIdentity() throws IOException {
 		try {
-			copyAssetPath(getAssets(), BUNDLED_CACHE_ROOT, cacheHome);
-			return true;
-		} catch (IOException e) {
-			e.printStackTrace();
-			return hasRequiredCacheFiles(cacheHome);
+			PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+			long versionCode = getVersionCode(packageInfo);
+			return versionCode + ":" + packageInfo.lastUpdateTime;
+		} catch (PackageManager.NameNotFoundException e) {
+			throw new IOException("Unable to identify the installed APK", e);
 		}
 	}
 
-	private void copyAssetPath(AssetManager assetManager, String assetPath, File destination) throws IOException {
+	@SuppressWarnings("deprecation")
+	private long getVersionCode(PackageInfo packageInfo) {
+		return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+			? packageInfo.getLongVersionCode()
+			: packageInfo.versionCode;
+	}
+
+	private void installBundledCache(File cacheHome) throws IOException {
+		AssetManager assetManager = getAssets();
+		List<AssetEntry> entries = new ArrayList<>();
+		collectAssetFiles(assetManager, BUNDLED_CACHE_ROOT, cacheHome, entries);
+		if (entries.isEmpty()) {
+			throw new IOException("The APK does not contain bundled game data");
+		}
+		Log.i("Voidscape", "CACHE_BOOTSTRAP install-start files=" + entries.size());
+		if (smokeCacheFailAfterFiles == 0) {
+			smokeCacheFailAfterFiles = -1;
+			Log.i("Voidscape", "CACHE_BOOTSTRAP injected-failure copied=0");
+			throw new IOException("Injected cache-install failure after 0 files");
+		}
+
+		for (int index = 0; index < entries.size(); index++) {
+			throwIfInterrupted();
+			AssetEntry entry = entries.get(index);
+			int completedFiles = index + 1;
+			int progress = 10 + (75 * completedFiles / entries.size());
+			publishUpdateProgress(
+				"Installing game data " + completedFiles + "/" + entries.size(),
+				progress);
+			try (InputStream input = assetManager.open(entry.assetPath)) {
+				writeStreamAtomically(input, entry.destination, null);
+			}
+			if (smokeCacheFailAfterFiles >= 0 && completedFiles >= smokeCacheFailAfterFiles) {
+				smokeCacheFailAfterFiles = -1;
+				Log.i("Voidscape", "CACHE_BOOTSTRAP injected-failure copied=" + completedFiles);
+				throw new IOException(
+					"Injected cache-install failure after " + completedFiles + " files");
+			}
+		}
+	}
+
+	private void collectAssetFiles(
+		AssetManager assetManager,
+		String assetPath,
+		File destination,
+		List<AssetEntry> entries) throws IOException {
+		throwIfInterrupted();
 		String[] children = assetManager.list(assetPath);
 		if (children != null && children.length > 0) {
-			if (!destination.exists() && !destination.mkdirs()) {
-				throw new IOException("Unable to create " + destination.getAbsolutePath());
-			}
 			for (String child : children) {
-				copyAssetPath(assetManager, assetPath + "/" + child, new File(destination, child));
+				collectAssetFiles(
+					assetManager,
+					assetPath + "/" + child,
+					new File(destination, child),
+					entries);
 			}
 			return;
 		}
-
-		File parent = destination.getParentFile();
-		if (parent != null && !parent.exists() && !parent.mkdirs()) {
-			throw new IOException("Unable to create " + parent.getAbsolutePath());
-		}
-
-		try (InputStream in = assetManager.open(assetPath);
-			 OutputStream out = new FileOutputStream(destination)) {
-			byte[] buffer = new byte[8192];
-			int read;
-			while ((read = in.read(buffer)) != -1) {
-				out.write(buffer, 0, read);
-			}
-		}
+		entries.add(new AssetEntry(assetPath, destination));
 	}
 
 	private boolean updateRemoteCache(File cacheHome) {
@@ -271,10 +422,13 @@ public class CacheUpdater extends Activity {
 		}
 
 		File md5Table = new File(cacheHome, osConfig.MD5_TABLENAME);
-		if (md5Table.exists() && !md5Table.delete()) {
+		try {
+			atomicReplace(remoteMd5, md5Table);
+			return true;
+		} catch (IOException e) {
+			Log.w("Voidscape", "Unable to publish remote checksum table", e);
 			return false;
 		}
-		return remoteMd5.renameTo(md5Table);
 	}
 
 	private String normalizedCacheUrl() {
@@ -295,18 +449,14 @@ public class CacheUpdater extends Activity {
 			}
 
 			int fileSize = connection.getContentLength();
-			try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
-				 FileOutputStream out = new FileOutputStream(file)) {
-				byte[] buffer = new byte[8192];
-				int bytesRead;
-				int totalRead = 0;
-				while ((bytesRead = in.read(buffer)) != -1) {
-					totalRead += bytesRead;
-					out.write(buffer, 0, bytesRead);
+			try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
+				writeStreamAtomically(in, file, totalRead -> {
 					if (fileSize > 0) {
-						publishDownloadStatus("Downloading " + description, 35 + (60 * totalRead / fileSize));
+						publishDownloadStatus(
+							"Downloading " + description,
+							35 + (int) (60L * totalRead / fileSize));
 					}
-				}
+				});
 			}
 			return true;
 		} catch (IOException e) {
@@ -331,15 +481,20 @@ public class CacheUpdater extends Activity {
 	}
 
 	private boolean hasRequiredCacheFiles(File cacheHome) {
-		return new File(cacheHome, "video/Authentic_Sprites.orsc").exists()
-			&& new File(cacheHome, "video/models.orsc").exists()
-			&& new File(cacheHome, "video/Authentic_Landscape.orsc").exists();
+		return isNonEmptyFile(new File(cacheHome, "video/Authentic_Sprites.orsc"))
+			&& isNonEmptyFile(new File(cacheHome, "video/models.orsc"))
+			&& isNonEmptyFile(new File(cacheHome, "video/Authentic_Landscape.orsc"))
+			&& isNonEmptyFile(new File(cacheHome, "video/library.orsc"));
+	}
+
+	private boolean isNonEmptyFile(File file) {
+		return file.isFile() && file.length() > 0;
 	}
 
 	private void showCacheFailureDialog() {
 		AlertDialog dialog = new AlertDialog.Builder(CacheUpdater.this, R.style.VoidscapeDialogTheme)
 			.setTitle("Game data unavailable")
-			.setMessage("The bundled cache could not be installed. Rebuild the APK from a repository with Client_Base/Cache populated.")
+			.setMessage(CACHE_FAILURE_MESSAGE)
 			.setPositiveButton("Retry", (d, which) -> startUpdateTask())
 			.setNegativeButton("Close", (d, which) -> finish())
 			.show();
@@ -376,13 +531,14 @@ public class CacheUpdater extends Activity {
 	}
 
 	private void showManualServerDialog() {
+		Endpoint savedEndpoint = getSavedEndpoint();
 		LinearLayout layout = new LinearLayout(CacheUpdater.this);
 		layout.setOrientation(LinearLayout.VERTICAL);
 		layout.setPadding(dp(24), dp(8), dp(24), 0);
 
 		final EditText hostBox = new EditText(CacheUpdater.this);
 		hostBox.setHint(osConfig.VOIDSCAPE_PUBLIC_HOST);
-		hostBox.setText(readSavedServerValue("ip.txt", ""));
+		hostBox.setText(savedEndpoint.host);
 		hostBox.setSingleLine(true);
 		hostBox.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
 		styleInput(hostBox);
@@ -393,7 +549,7 @@ public class CacheUpdater extends Activity {
 
 		final EditText portBox = new EditText(CacheUpdater.this);
 		portBox.setHint(osConfig.VOIDSCAPE_DEFAULT_PORT);
-		portBox.setText(readSavedServerValue("port.txt", ""));
+		portBox.setText(savedEndpoint.port);
 		portBox.setSingleLine(true);
 		portBox.setInputType(InputType.TYPE_CLASS_NUMBER);
 		styleInput(portBox);
@@ -452,35 +608,19 @@ public class CacheUpdater extends Activity {
 		if (launching) {
 			return;
 		}
-		if (host == null || host.trim().length() == 0 || port == null || port.trim().length() == 0) {
-			showServerSelectionError("Server host and port are required");
-			return;
-		}
-
-		String selectedHost = host.trim();
-		String selectedPort = port.trim();
-		if (!selectedHost.matches("[A-Za-z0-9._:-]+")) {
-			showServerSelectionError("Use a host name or IP address only");
-			return;
-		}
 
 		try {
-			int parsedPort = Integer.parseInt(selectedPort);
-			if (parsedPort < 1 || parsedPort > 65535) {
-				showServerSelectionError("Port must be between 1 and 65535");
-				return;
-			}
+			Endpoint endpoint = acceptedEndpointForBuild(validatedEndpoint(host, port));
 			launching = true;
 			launchButton.setEnabled(false);
 			setStatus("Launching game");
-			writeTextFile(new File(getFilesDir(), "ip.txt"), selectedHost);
-			writeTextFile(new File(getFilesDir(), "port.txt"), selectedPort);
-			Log.i("Voidscape", "Selected server " + selectedHost + ":" + selectedPort);
-		} catch (NumberFormatException e) {
-			showServerSelectionError("Port must be a number");
+			persistEndpoint(endpoint);
+			Log.i("Voidscape", "Selected server " + endpoint.host + ":" + endpoint.port);
+		} catch (IllegalArgumentException e) {
+			showServerSelectionError(e.getMessage());
 			return;
-		} catch (Exception e) {
-			e.printStackTrace();
+		} catch (IOException e) {
+			Log.e("Voidscape", "Unable to save server selection", e);
 			launching = false;
 			launchButton.setEnabled(true);
 			showServerSelectionError("Unable to save server selection");
@@ -507,36 +647,271 @@ public class CacheUpdater extends Activity {
 		Toast.makeText(this, message, Toast.LENGTH_LONG).show();
 	}
 
-	private void writeTextFile(File file, String value) throws IOException {
-		try (FileOutputStream outputStream = new FileOutputStream(file);
-			 OutputStreamWriter outputWriter = new OutputStreamWriter(outputStream)) {
-			outputWriter.write(value);
-		}
-	}
-
-	private String getSavedServerHost() {
-		return readSavedServerValue("ip.txt", getDefaultServerHost());
-	}
-
-	private String getSavedServerPort() {
-		return readSavedServerValue("port.txt", osConfig.VOIDSCAPE_DEFAULT_PORT);
-	}
-
-	private String readSavedServerValue(String fileName, String fallback) {
+	private String readSavedServerValue(String fileName) {
 		File file = new File(getFilesDir(), fileName);
 		if (!file.isFile()) {
-			return fallback;
+			return null;
 		}
 
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)))) {
 			String value = reader.readLine();
 			if (value == null || value.trim().length() == 0) {
-				return fallback;
+				return null;
 			}
 			return value.trim();
 		} catch (IOException e) {
-			return fallback;
+			return null;
 		}
+	}
+
+	private Endpoint getSavedEndpoint() {
+		try {
+			return loadAndRepairEndpoint();
+		} catch (IOException e) {
+			Log.w("Voidscape", "Unable to load the saved server endpoint", e);
+			return getDefaultEndpoint();
+		}
+	}
+
+	private Endpoint loadAndRepairEndpoint() throws IOException {
+		SharedPreferences preferences = getBootstrapPreferences();
+		boolean hasHost = preferences.contains(ENDPOINT_HOST);
+		boolean hasPort = preferences.contains(ENDPOINT_PORT);
+		Endpoint endpoint = null;
+		boolean rewriteCanonicalPair = false;
+
+		if (hasHost && hasPort) {
+			endpoint = endpointOrNull(
+				preferences.getString(ENDPOINT_HOST, null),
+				preferences.getString(ENDPOINT_PORT, null));
+			if (endpoint == null) {
+				rewriteCanonicalPair = true;
+			}
+		} else if (!hasHost && !hasPort) {
+			endpoint = endpointOrNull(
+				readSavedServerValue(HOST_MIRROR_FILE),
+				readSavedServerValue(PORT_MIRROR_FILE));
+			rewriteCanonicalPair = true;
+		} else {
+			// Never assemble an endpoint from one preference and one legacy mirror.
+			rewriteCanonicalPair = true;
+		}
+
+		if (endpoint == null) {
+			endpoint = getDefaultEndpoint();
+		}
+		Endpoint migratedEndpoint = migratedLegacyPublicEndpoint(endpoint);
+		if (!migratedEndpoint.equals(endpoint)) {
+			endpoint = migratedEndpoint;
+			rewriteCanonicalPair = true;
+		}
+		Endpoint acceptedEndpoint = acceptedEndpointForBuild(endpoint);
+		if (!acceptedEndpoint.equals(endpoint)) {
+			Log.i("Voidscape", "ENDPOINT_BOOTSTRAP developer-host-reset-to-defaults");
+			endpoint = acceptedEndpoint;
+			rewriteCanonicalPair = true;
+		}
+
+		if (rewriteCanonicalPair) {
+			persistCanonicalEndpoint(endpoint);
+		}
+		repairEndpointMirrors(endpoint);
+		return endpoint;
+	}
+
+	private Endpoint acceptedEndpointForBuild(Endpoint endpoint) {
+		if (usesReleaseEndpointPolicy() && isDeveloperServerHost(endpoint.host)) {
+			return new Endpoint(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+		}
+		return endpoint;
+	}
+
+	private Endpoint migratedLegacyPublicEndpoint(Endpoint endpoint) {
+		if (usesReleaseEndpointPolicy()
+			&& LEGACY_PUBLIC_HOST.equals(endpoint.host)
+			&& LEGACY_PUBLIC_PORT.equals(endpoint.port)) {
+			Log.i(
+				"Voidscape",
+				"ENDPOINT_BOOTSTRAP legacy-public-migrated endpoint="
+					+ osConfig.VOIDSCAPE_PUBLIC_HOST
+					+ ":"
+					+ osConfig.VOIDSCAPE_DEFAULT_PORT);
+			return new Endpoint(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+		}
+		return endpoint;
+	}
+
+	private boolean usesReleaseEndpointPolicy() {
+		return !isDebuggable() || smokeReleaseEndpointPolicy;
+	}
+
+	private Endpoint getDefaultEndpoint() {
+		return new Endpoint(getDefaultServerHost(), osConfig.VOIDSCAPE_DEFAULT_PORT);
+	}
+
+	private Endpoint endpointOrNull(String host, String port) {
+		try {
+			return validatedEndpoint(host, port);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	private Endpoint validatedEndpoint(String host, String port) {
+		String selectedHost = trimmedOrNull(host);
+		String selectedPort = trimmedOrNull(port);
+		if (selectedHost == null || selectedPort == null) {
+			throw new IllegalArgumentException("Server host and port are required");
+		}
+		if (!selectedHost.matches("[A-Za-z0-9._:-]+")) {
+			throw new IllegalArgumentException("Use a host name or IP address only");
+		}
+
+		final int parsedPort;
+		try {
+			parsedPort = Integer.parseInt(selectedPort);
+		} catch (NumberFormatException e) {
+			throw new IllegalArgumentException("Port must be a number");
+		}
+		if (parsedPort < 1 || parsedPort > 65535) {
+			throw new IllegalArgumentException("Port must be between 1 and 65535");
+		}
+		return new Endpoint(selectedHost, Integer.toString(parsedPort));
+	}
+
+	private String trimmedOrNull(String value) {
+		if (value == null || value.trim().length() == 0) {
+			return null;
+		}
+		return value.trim();
+	}
+
+	private void persistEndpoint(Endpoint requestedEndpoint) throws IOException {
+		Endpoint endpoint = acceptedEndpointForBuild(requestedEndpoint);
+		persistCanonicalEndpoint(endpoint);
+		repairEndpointMirrors(endpoint);
+	}
+
+	private void persistCanonicalEndpoint(Endpoint endpoint) throws IOException {
+		boolean saved = getBootstrapPreferences()
+			.edit()
+			.putString(ENDPOINT_HOST, endpoint.host)
+			.putString(ENDPOINT_PORT, endpoint.port)
+			.commit();
+		if (!saved) {
+			throw new IOException("Unable to save server endpoint");
+		}
+	}
+
+	private void repairEndpointMirrors(Endpoint endpoint) throws IOException {
+		String mirroredHost = readSavedServerValue(HOST_MIRROR_FILE);
+		String mirroredPort = readSavedServerValue(PORT_MIRROR_FILE);
+		if (endpoint.host.equals(mirroredHost) && endpoint.port.equals(mirroredPort)) {
+			return;
+		}
+
+		Log.i(
+			"Voidscape",
+			"ENDPOINT_BOOTSTRAP mirror-repair endpoint=" + endpoint.host + ":" + endpoint.port);
+		writeTextFileAtomically(new File(getFilesDir(), HOST_MIRROR_FILE), endpoint.host);
+		writeTextFileAtomically(new File(getFilesDir(), PORT_MIRROR_FILE), endpoint.port);
+		if (!endpoint.host.equals(readSavedServerValue(HOST_MIRROR_FILE))
+			|| !endpoint.port.equals(readSavedServerValue(PORT_MIRROR_FILE))) {
+			throw new IOException("Unable to verify server endpoint mirrors");
+		}
+	}
+
+	private void writeTextFileAtomically(File destination, String value) throws IOException {
+		File temporary = prepareTemporaryFile(destination);
+		boolean published = false;
+		try {
+			try (FileOutputStream output = new FileOutputStream(temporary);
+				 OutputStreamWriter writer = new OutputStreamWriter(output, "UTF-8")) {
+				writer.write(value);
+				writer.flush();
+				output.getFD().sync();
+			}
+			throwIfInterrupted();
+			atomicReplace(temporary, destination);
+			published = true;
+		} finally {
+			if (!published) {
+				deleteTemporaryFile(temporary);
+			}
+		}
+	}
+
+	private void writeStreamAtomically(
+		InputStream input,
+		File destination,
+		ByteProgressListener progressListener) throws IOException {
+		File temporary = prepareTemporaryFile(destination);
+		boolean published = false;
+		try {
+			try (FileOutputStream output = new FileOutputStream(temporary)) {
+				byte[] buffer = new byte[8192];
+				int read;
+				long totalRead = 0;
+				while ((read = input.read(buffer)) != -1) {
+					throwIfInterrupted();
+					output.write(buffer, 0, read);
+					totalRead += read;
+					if (progressListener != null) {
+						progressListener.onProgress(totalRead);
+					}
+				}
+				output.flush();
+				output.getFD().sync();
+			}
+			throwIfInterrupted();
+			atomicReplace(temporary, destination);
+			published = true;
+		} finally {
+			if (!published) {
+				deleteTemporaryFile(temporary);
+			}
+		}
+	}
+
+	private File prepareTemporaryFile(File destination) throws IOException {
+		File parent = destination.getParentFile();
+		if (parent != null && !parent.exists() && !parent.mkdirs()) {
+			throw new IOException("Unable to create " + parent.getAbsolutePath());
+		}
+		File temporary = new File(parent, "." + destination.getName() + ".voidscape-tmp");
+		if (temporary.exists() && !temporary.delete()) {
+			throw new IOException("Unable to clear " + temporary.getAbsolutePath());
+		}
+		return temporary;
+	}
+
+	private void atomicReplace(File source, File destination) throws IOException {
+		throwIfInterrupted();
+		try {
+			Os.rename(source.getAbsolutePath(), destination.getAbsolutePath());
+		} catch (ErrnoException e) {
+			throw new IOException("Unable to publish " + destination.getAbsolutePath(), e);
+		}
+	}
+
+	private void deleteTemporaryFile(File temporary) {
+		if (temporary.exists() && !temporary.delete()) {
+			Log.w("Voidscape", "Unable to remove temporary file " + temporary.getAbsolutePath());
+		}
+	}
+
+	private void throwIfInterrupted() throws InterruptedIOException {
+		if (Thread.currentThread().isInterrupted()) {
+			throw new InterruptedIOException("Game-data setup interrupted");
+		}
+	}
+
+	private boolean isDeveloperServerHost(String host) {
+		return osConfig.VOIDSCAPE_EMULATOR_HOST.equals(host)
+			|| osConfig.VOIDSCAPE_LAN_HOST.equals(host)
+			|| "localhost".equalsIgnoreCase(host)
+			|| "127.0.0.1".equals(host)
+			|| "::1".equals(host);
 	}
 
 	private String getDescription(File ref) {
@@ -555,5 +930,46 @@ public class CacheUpdater extends Activity {
 			return "Graphics";
 		}
 		return "General";
+	}
+
+	private interface ByteProgressListener {
+		void onProgress(long totalBytes);
+	}
+
+	private static final class AssetEntry {
+		private final String assetPath;
+		private final File destination;
+
+		private AssetEntry(String assetPath, File destination) {
+			this.assetPath = assetPath;
+			this.destination = destination;
+		}
+	}
+
+	private static final class Endpoint {
+		private final String host;
+		private final String port;
+
+		private Endpoint(String host, String port) {
+			this.host = host;
+			this.port = port;
+		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) {
+				return true;
+			}
+			if (!(object instanceof Endpoint)) {
+				return false;
+			}
+			Endpoint endpoint = (Endpoint) object;
+			return host.equals(endpoint.host) && port.equals(endpoint.port);
+		}
+
+		@Override
+		public int hashCode() {
+			return 31 * host.hashCode() + port.hashCode();
+		}
 	}
 }

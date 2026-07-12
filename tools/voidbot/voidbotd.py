@@ -27,10 +27,41 @@ SKILL_NAMES = ["attack", "defense", "strength", "hits", "ranged", "prayer", "mag
                "runecraft", "harvesting"]
 
 
+def read_based_config_data(defs_dir):
+    """The server's based_config_data, which gates def patching (default 85).
+
+    Read from server/local.conf (three levels up from the defs dir, matching
+    scripts/run-server.sh); VOIDBOT_BASED_CONFIG_DATA overrides for probing.
+    """
+    override = os.environ.get("VOIDBOT_BASED_CONFIG_DATA")
+    if override:
+        return int(override)
+    conf = os.path.normpath(os.path.join(defs_dir, "..", "..", "..", "local.conf"))
+    try:
+        with open(conf, encoding="utf-8") as fh:
+            for line in fh:
+                m = re.match(r"\s*based_config_data\s*:\s*(\d+)", line)
+                if m:
+                    return int(m.group(1))
+    except OSError:
+        pass
+    return 85
+
+
 def load_item_defs(defs_dir):
-    """Return (stackable_set, name_by_id) from the server item defs."""
+    """Return (stackable_set, name_by_id) from the server item defs.
+
+    Mirrors EntityHandler: ItemDefs + ItemDefsCustom always load;
+    ItemDefsPatch<N>.json applies only when based_config_data (N) < 85.
+    patchObject only overrides truthy fields, so union-adding stackable
+    ids from an applied patch matches the server's merge.
+    """
+    files = ["ItemDefs.json", "ItemDefsCustom.json"]
+    based = read_based_config_data(defs_dir)
+    if based < 85:
+        files.append("ItemDefsPatch%d.json" % based)
     stackable, names = set(), {}
-    for fn in ("ItemDefs.json", "ItemDefsCustom.json", "ItemDefsPatch18.json"):
+    for fn in files:
         path = os.path.join(defs_dir, fn)
         if not os.path.exists(path):
             continue
@@ -92,10 +123,12 @@ class GameState:
         self.dialog_options = []    # list[str]
         self.input_open = False     # server SEND_INPUT_BOX prompt is showing
         self.input_prompt = ""
+        self.players = []           # nearby players [{server_index,x,y}]
         self.npcs = []              # ordered [{server_index,id,x,y}]
         self.npc_seen = {}          # server_index -> {id,x,y,t}; smooths decode flicker
         self.ground_items = []      # [{id,x,y}]
         self.messages = []          # [{seq,t,text,type}]
+        self.world_walk_route = None  # {ok,reason,count,route}
         self.events = []            # [{seq,t,kind,...}]
         self._seq = 0
 
@@ -121,6 +154,13 @@ class Daemon:
             self.stackable, self.names = load_item_defs(args.defs)
             self.object_defs = load_object_defs(args.defs)
         self.running = True
+        # Wire-format flags that gate optional per-item bytes in the ground-item stream
+        # (and the bank-withdraw noted byte). Must match the server's config: the
+        # voidscape preset ships want_bank_notes: true, so default on; override with
+        # VOIDBOT_WANT_BANK_NOTES=0 for a preset that has it off. The rare-drop-beam
+        # byte is present for client versions >= 10030 (P.CLIENT_VERSION).
+        self.want_bank_notes = os.environ.get("VOIDBOT_WANT_BANK_NOTES", "1") != "0"
+        self.ground_has_beam = P.CLIENT_VERSION >= 10030
 
     # ---------------- connection / login ----------------
     def connect_and_login(self):
@@ -145,7 +185,8 @@ class Daemon:
         resp = None
         for attempt in range(6):
             c = P.Connection(self.args.host, self.args.game_port)
-            body = P.build_login(self.args.user, self.args.password, exp, mod)
+            body = P.build_login(self.args.user, self.args.password, exp, mod,
+                                 max_item_id=max(self.names) if self.names else None)
             c.send_packet(body[0], body[1:])
             try:
                 resp = c.recv_byte()
@@ -218,23 +259,29 @@ class Daemon:
         name = P.IN.get(op)
         st = self.st
         if name == "PLAYER_COORDS":
-            br = P.BitReader(p)
-            x = br.bits(11); y = br.bits(13); br.bits(4)
-            with st.lock:
-                moved = (x, y) != (st.x, st.y)
-                st.x, st.y = x, y
-            if moved:
-                st.event("move", x=x, y=y)
+            self._decode_players(p)
         elif name == "NPC_COORDS":
             self._decode_npcs(p)
+        elif name == "UPDATE_NPC":
+            self._decode_npc_update(p)
         elif name == "SET_INVENTORY":
             self._decode_inventory_full(p)
         elif name == "SET_INVENTORY_SLOT":
             self._decode_inventory_slot(p)
         elif name == "REMOVE_INVENTORY_SLOT":
             slot = p[0] if p else -1
+            # Server compacts on removal (client PacketHandler.removeItem shifts every
+            # higher slot down by one), so decrement slots above the removed one — else
+            # the daemon's slot map goes stale and slot-addressed commands mis-target.
             with st.lock:
-                st.inventory = [it for it in st.inventory if it["slot"] != slot]
+                newinv = []
+                for it in st.inventory:
+                    if it["slot"] == slot:
+                        continue
+                    if it["slot"] > slot:
+                        it = dict(it, slot=it["slot"] - 1)
+                    newinv.append(it)
+                st.inventory = newinv
             st.event("inventory_remove", slot=slot)
         elif name == "SET_STATS":
             self._decode_stats(p)
@@ -276,6 +323,8 @@ class Daemon:
                 st.shop_open = False
         elif name == "GROUNDITEM_HANDLER":
             self._decode_grounditems(p)
+        elif name == "WORLD_WALK_ROUTE":
+            self._decode_world_walk_route(p)
         elif name == "FATIGUE":
             if len(p) >= 2:
                 with st.lock:
@@ -286,6 +335,53 @@ class Daemon:
             with st.lock:
                 st.logged_in = False
             st.event("logout")
+
+    def _decode_players(self, p):
+        """Decode local movement plus nearby player server indexes from PLAYER_COORDS."""
+        br = P.BitReader(p)
+        st = self.st
+        x = br.bits(11); y = br.bits(13); br.bits(4)
+        with st.lock:
+            moved = (x, y) != (st.x, st.y)
+            cache = list(st.players)
+            st.x, st.y = x, y
+        if moved:
+            st.event("move", x=x, y=y)
+
+        count = br.bits(8)
+        new_list = []
+        for i in range(count):
+            other = cache[i] if i < len(cache) else {"server_index": -1, "x": x, "y": y}
+            if br.bits(1) != 0:
+                if br.bits(1) != 0:
+                    sprite = br.bits(2)
+                    if sprite == 3:
+                        continue
+                    br.bits(2)
+                else:
+                    direction = br.bits(3)
+                    nx, ny = other["x"], other["y"]
+                    if direction in (1, 2, 3): nx += 1
+                    if direction in (5, 6, 7): nx -= 1
+                    if direction in (3, 4, 5): ny += 1
+                    if direction in (0, 1, 7): ny -= 1
+                    other = dict(other, x=nx, y=ny)
+            new_list.append(other)
+
+        total_bits = len(p) * 8
+        while total_bits > br.bitpos + 24:
+            server_index = br.bits(11)
+            dx = br.bits(6); dx -= 64 if dx > 31 else 0
+            dy = br.bits(6); dy -= 64 if dy > 31 else 0
+            br.bits(4)
+            new_list.append({"server_index": server_index, "x": x + dx, "y": y + dy})
+
+        with st.lock:
+            previous = {other["server_index"] for other in st.players}
+            current = {other["server_index"] for other in new_list}
+            st.players = new_list
+        for server_index in previous - current:
+            st.event("player_removed", server_index=server_index)
 
     def _decode_npcs(self, p):
         br = P.BitReader(p)
@@ -353,12 +449,18 @@ class Daemon:
                 "amount": amount, "wielded": wielded, "noted": bool(noted)}
 
     def _decode_inventory_full(self, p):
+        # SEND_INVENTORY wire format (PayloadCustomGenerator SEND_INVENTORY / client
+        # updateInventory): byte size, then per item: short catalogID (RAW — the
+        # wielded bit is NOT packed into it here, unlike the single-slot update),
+        # byte wielded, byte noted (always present), int amount (only when the item is
+        # stackable or noted). The old decoder read the update-item layout (wielded bit
+        # in the short, no separate wielded byte) and desynced after item 1.
         i = 0
         size = p[i]; i += 1
         inv = []
         for slot in range(size):
-            raw = int.from_bytes(p[i:i+2], "big"); i += 2
-            wielded = bool(raw & 0x8000); iid = raw & 0x7FFF
+            iid = int.from_bytes(p[i:i+2], "big"); i += 2
+            wielded = bool(p[i]); i += 1
             noted = p[i]; i += 1
             amount = 1
             if iid in self.stackable or noted:
@@ -421,6 +523,55 @@ class Daemon:
             self.st.skills[nm] = {"cur": cur, "max": mx, "xp": xp}
         self.st.event("stat", skill=nm, cur=cur, max=mx, xp=xp)
 
+    def _decode_npc_update(self, p):
+        # SEND_UPDATE_NPC (GameStateUpdater.updateNpcAppearances, custom client):
+        # short count, then per update: short serverIndex, byte type. Type 1 = overhead
+        # chat (short recipientIndex, \n-terminated string) -> npc_say event + a "npc"
+        # entry in messages so `wait message --regex` can assert NPC dialogue. Other
+        # types are skipped by their fixed sizes: 2 damage(3), 10 damage+feedback(8),
+        # 3/4 projectile(4), 5 skull(1), 6 wield(2), 7 bubble(2).
+        count = int.from_bytes(p[0:2], "big")
+        i = 2
+        for _ in range(count):
+            idx = int.from_bytes(p[i:i + 2], "big")
+            i += 2
+            ut = p[i]
+            i += 1
+            if ut == 1:
+                recipient = int.from_bytes(p[i:i + 2], "big", signed=True)
+                i += 2
+                end = p.find(b"\n", i)
+                if end < 0:
+                    end = len(p)
+                text = p[i:end].decode("latin1", "replace")
+                i = end + 1
+                with self.st.lock:
+                    self.st._seq += 1
+                    self.st.messages.append({"seq": self.st._seq,
+                                             "t": round(time.time(), 3),
+                                             "text": text, "type": "npc",
+                                             "npc_index": idx})
+                    if len(self.st.messages) > 2000:
+                        self.st.messages = self.st.messages[-1200:]
+                self.st.event("npc_say", server_index=idx, text=text,
+                              recipient=recipient)
+            elif ut == 2:
+                i += 3
+            elif ut == 10:
+                i += 8
+            elif ut in (3, 4):
+                i += 4
+            elif ut == 5:
+                i += 1
+            elif ut == 6:
+                i += 2
+            elif ut == 7:
+                i += 2
+            else:
+                self.st.event("decode_error", opcode=104,
+                              error="unknown npc update type %d" % ut)
+                break
+
     def _decode_message(self, p):
         # int icon, byte type, byte infobits, string msg, [sender,sender], [color]
         i = 4
@@ -466,43 +617,111 @@ class Daemon:
         self.st.event("bank_open", count=len(items))
 
     def _decode_bank_update(self, p):
-        # [byte slot][short id][int amount]; amount 0 means the slot was emptied.
-        slot = p[0]
-        iid = int.from_bytes(p[1:3], "big")
-        amt = int.from_bytes(p[3:7], "big")
+        # [short slot][short id][int amount]; amount 0 means the slot was emptied.
+        # Slot was one byte before client 10121 (it wrapped mod 256 — VS-008), so
+        # honor the negotiated version when probing older gates.
+        if P.CLIENT_VERSION >= 10121:
+            slot, off = int.from_bytes(p[0:2], "big"), 2
+        else:
+            slot, off = p[0], 1
+        iid = int.from_bytes(p[off:off + 2], "big")
+        amt = int.from_bytes(p[off + 2:off + 6], "big")
         with self.st.lock:
             bank = [b for b in self.st.bank if b["slot"] != slot]
             if amt > 0:
                 bank.append({"slot": slot, "id": iid, "amount": amt,
                              "name": self.names.get(iid, "")})
+            else:
+                # amount 0 = remove + compact: the client (BankInterface.updateBank)
+                # deletes the slot and shifts every later item down one (VS-031).
+                for b in bank:
+                    if b["slot"] > slot:
+                        b["slot"] -= 1
             bank.sort(key=lambda b: b["slot"])
             self.st.bank = bank
         self.st.event("bank_update", slot=slot, id=iid, amount=amt)
 
     def _decode_grounditems(self, p):
-        # variable; entries: [short id][byte dx][byte dy]... 0xFF markers for removal.
-        # We rebuild best-effort: ids with relative coords from player.
-        items = []
+        # Incremental add/remove delta stream (mirrors client PacketHandler
+        # .drawGroundItems) — NOT a full snapshot, so we apply deltas to persistent
+        # state instead of rebuilding. Per entry, peek one byte:
+        #   != 255: short id (0x8000 bit = remove-this-item), byte dx, byte dy,
+        #           [byte noted if want_bank_notes], [byte beam if client>=10030].
+        #           x=localX+dx, y=localY+dy. id&0x8000 -> remove (x,y,id&0x7FFF);
+        #           else add.
+        #   == 255: byte dx, byte dy, [byte noted], [byte beam] — region-clear: drop
+        #           every known item whose 8-tile region equals ((localX+dx)>>3,
+        #           (localY+dy)>>3) (item scrolled out of range / was taken elsewhere).
+        # The old decoder ignored the noted+beam bytes (desyncing every multi-entry
+        # packet) and rebuilt the list each packet (so taken items never disappeared
+        # and removes became phantom adds).
+        st = self.st
+        bx = st.x or 0
+        by = st.y or 0
         i = 0
-        bx = self.st.x or 0
-        by = self.st.y or 0
-        try:
-            while i + 3 <= len(p):
-                if p[i] == 0xFF:
-                    i += 3
-                    continue
-                iid = int.from_bytes(p[i:i+2], "big"); i += 2
-                dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
-                dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
-                real = iid & 0x7FFF
-                items.append({"id": real, "x": bx + dx, "y": by + dy,
-                              "name": self.names.get(real, "")})
-        except IndexError:
-            pass
+        n = len(p)
+        with st.lock:
+            ground = list(st.ground_items)
+            try:
+                while i < n:
+                    marker = p[i]
+                    if marker != 255:
+                        raw = int.from_bytes(p[i:i+2], "big"); i += 2
+                        dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        noted = False
+                        if self.want_bank_notes:
+                            noted = p[i] == 1; i += 1
+                        if self.ground_has_beam:
+                            i += 1
+                        x, y = bx + dx, by + dy
+                        iid = raw & 0x7FFF
+                        if raw & 0x8000:
+                            ground = [g for g in ground if not
+                                      (g["x"] == x and g["y"] == y and g["id"] == iid)]
+                        else:
+                            ground.append({"id": iid, "x": x, "y": y,
+                                           "noted": noted, "name": self.names.get(iid, "")})
+                    else:
+                        i += 1  # consume the 255 marker
+                        dx = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        dy = p[i] - 256 if p[i] > 127 else p[i]; i += 1
+                        if self.want_bank_notes:
+                            i += 1
+                        if self.ground_has_beam:
+                            i += 1
+                        rx, ry = (bx + dx) >> 3, (by + dy) >> 3
+                        ground = [g for g in ground if not
+                                  ((g["x"] >> 3) == rx and (g["y"] >> 3) == ry)]
+            except IndexError:
+                pass
+            st.ground_items = ground
+            count = len(ground)
+        self.st.event("grounditems", count=count)
+
+    def _decode_world_walk_route(self, p):
+        if len(p) < 4:
+            self.st.event("decode_error", opcode=100, error="short world-walk route")
+            return
+        ok = p[0] != 0
+        reason = p[1]
+        count = int.from_bytes(p[2:4], "big")
+        route = []
+        off = 4
+        for _ in range(count):
+            if off + 4 > len(p):
+                self.st.event("decode_error", opcode=100, error="truncated world-walk route")
+                return
+            route.append({"x": int.from_bytes(p[off:off + 2], "big"),
+                          "y": int.from_bytes(p[off + 2:off + 4], "big")})
+            off += 4
+        data = {"ok": ok, "reason": reason, "count": count, "route": route}
         with self.st.lock:
-            # merge: new sightings add/refresh
-            self.st.ground_items = items
-        self.st.event("grounditems", count=len(items))
+            self.st.world_walk_route = data
+        self.st.event("world_walk_route", ok=ok, reason=reason, count=count,
+                      first=route[0] if route else None,
+                      last=route[-1] if route else None,
+                      route=route)
 
     # ---------------- command dispatch ----------------
     def _slot_amount(self, slot):
@@ -615,6 +834,39 @@ class Daemon:
                 self.send("CAST_ON_SCENERY", P.BitWriter().u16(int(a["spell"]))
                           .u16(int(a["x"])).u16(int(a["y"])).b)
                 return {"ok": True, "spell": int(a["spell"]), "x": int(a["x"]), "y": int(a["y"])}
+            if cmd == "use-on-item":
+                # ITEM_USE_ITEM: combine two inventory items (herblaw, fletching, gem
+                # cutting, firemaking tinderbox-on-logs, potion mixing). Payload: two
+                # inventory slots (wire length 4).
+                self.send("ITEM_USE_ITEM",
+                          P.BitWriter().u16(int(a["slot1"])).u16(int(a["slot2"])).b)
+                return {"ok": True, "slot1": int(a["slot1"]), "slot2": int(a["slot2"])}
+            if cmd == "use-item-on-object":
+                # USE_ITEM_ON_SCENERY (wire 115): use an inventory item on a scenery
+                # object (smelting ore on furnace, smithing bar on anvil, cooking on a
+                # range, crafting on a wheel). Prewalk to the object edge like the real
+                # client, then send objectX, objectY, slot.
+                x = int(a["x"]); y = int(a["y"]); slot = int(a["slot"])
+                walk_tile = self.object_prewalk_tile(x, y, a.get("id"), int(a.get("direction", 0)))
+                if walk_tile:
+                    self.send("WALK_TO_POINT", P.BitWriter().u16(walk_tile[0]).u16(walk_tile[1]).b)
+                self.send("OBJECT_USE_ITEM", P.BitWriter().u16(x).u16(y).u16(slot).b)
+                return {"ok": True, "x": x, "y": y, "slot": slot, "walk_tile": walk_tile}
+            if cmd == "use-item-on-npc":
+                # NPC_USE_ITEM (wire 135): use an inventory item on an NPC (quests,
+                # cert/note exchange). Payload: NPC server index, inventory slot.
+                si = int(a.get("server_index", a.get("serverIndex")))
+                self.send("NPC_USE_ITEM", P.BitWriter().u16(si).u16(int(a["slot"])).b)
+                return {"ok": True, "server_index": si, "slot": int(a["slot"])}
+            if cmd == "use-item-on-ground":
+                # GROUND_ITEM_USE_ITEM (wire 53): use a carried item on a ground item
+                # (classic: light dropped logs with a tinderbox). Payload: groundX,
+                # groundY, inventory slot, ground-item id. Walk onto the tile first.
+                x = int(a["x"]); y = int(a["y"]); slot = int(a["slot"]); gid = int(a["ground_id"])
+                self.send("WALK_TO_POINT", P.BitWriter().u16(x).u16(y).b)
+                self.send("GROUND_ITEM_USE_ITEM",
+                          P.BitWriter().u16(x).u16(y).u16(slot).u16(gid).b)
+                return {"ok": True, "x": x, "y": y, "slot": slot, "ground_id": gid}
             if cmd == "say":
                 txt = a["text"]
                 self.send("CHAT_MESSAGE", P.encrypted_chat_payload(txt))
@@ -623,6 +875,33 @@ class Daemon:
                 c = a["command"].lstrip(":")
                 self.send("COMMAND", P.BitWriter().rsstr(c).b)
                 return {"ok": True, "sent": c}
+            if cmd == "design-character":
+                # PayloadCustomParser PLAYER_APPEARANCE_CHANGE wire order.
+                # Valid: headType 0/3/5/6/7, bodyType 1/4, hair 10-17,
+                # top/trousers 0-22, skin 0-4, hairStyle 0.
+                male = str(a.get("gender", "male")).lower() != "female"
+                w = (P.BitWriter()
+                     .u8(1 if male else 0)
+                     .u8(int(a.get("head", 0)))
+                     .u8(int(a.get("body", 1)))
+                     .u8(2)
+                     .u8(int(a.get("hair_colour", 10)))
+                     .u8(int(a.get("top_colour", 8)))
+                     .u8(int(a.get("trouser_colour", 14)))
+                     .u8(int(a.get("skin_colour", 0)))
+                     .u8(int(a.get("ironman", 0)))
+                     .u8(int(a.get("one_xp", 0)))
+                     .u8(int(a.get("hair_style", 0))))
+                if P.CLIENT_VERSION >= 10125:
+                    country = str(a.get("country", "")).strip().upper()
+                    if country in ("", "NONE"):
+                        w.u8(0).u8(0)
+                    elif len(country) == 2 and country.isalpha():
+                        w.u8(ord(country[0])).u8(ord(country[1]))
+                    else:
+                        return {"ok": False, "error": "country must be two letters or none"}
+                self.send("PLAYER_APPEARANCE_CHANGE", w.b)
+                return {"ok": True, "country": a.get("country", "none")}
             if cmd == "menu-reply":
                 self.send("QUESTION_DIALOG_ANSWER", P.BitWriter().u8(int(a["option"])).b)
                 return {"ok": True}
@@ -652,8 +931,13 @@ class Daemon:
                 self.send("ITEM_UNEQUIP_FROM_INVENTORY", P.BitWriter().u16(int(a["slot"])).b)
                 return {"ok": True}
             if cmd == "bank-withdraw":
+                # want_bank_notes servers always read a trailing noted byte, so send it
+                # unconditionally (0 unless --noted); omitting it made the server parse
+                # a short packet and silently drop un-noted withdrawals.
                 w = P.BitWriter().u16(int(a["id"])).u32(int(a["amount"]))
-                if a.get("noted"):
+                if self.want_bank_notes:
+                    w.u8(1 if a.get("noted") else 0)
+                elif a.get("noted"):
                     w.u8(1)
                 self.send("BANK_WITHDRAW", w.b)
                 return {"ok": True}
@@ -666,6 +950,9 @@ class Daemon:
             if cmd == "bank-close":
                 self.send("BANK_CLOSE")
                 return {"ok": True}
+            if cmd == "auction-delete":
+                self.send("INTERFACE_OPTIONS", P.BitWriter().u8(10).u8(5).u32(int(a["id"])).b)
+                return {"ok": True, "auction_id": int(a["id"])}
             if cmd == "logout":
                 self.send("LOGOUT")
                 return {"ok": True}
@@ -716,21 +1003,45 @@ class Daemon:
                 "shop": {"open": st.shop_open},
                 "dialog": {"open": st.dialog_open, "options": list(st.dialog_options),
                            "input_open": st.input_open, "input_prompt": st.input_prompt},
+                "players": list(st.players),
                 "npcs": list(st.npcs),
                 "ground_items": list(st.ground_items),
+                "world_walk_route": st.world_walk_route,
                 "messages": st.messages[-30:],
             }
         if section in (None, "all"):
             return full
         aliases = {"position": "position", "pos": "position", "inventory": "inventory",
                    "inv": "inventory", "stats": "skills", "skills": "skills",
+                   "players": "players",
                    "npcs": "npcs", "ground-items": "ground_items", "bank": "bank",
-                   "dialog": "dialog", "messages": "messages", "shop": "shop"}
+                   "dialog": "dialog", "messages": "messages", "shop": "shop",
+                   "world-walk-route": "world_walk_route",
+                   "world_walk_route": "world_walk_route"}
         key = aliases.get(section, section)
         return {key: full.get(key)}
 
+    WAIT_REQUIRED_ARGS = {
+        "position": ("x", "y"), "near": ("x", "y"),
+        "inventory-contains": ("id",), "inventory-lacks": ("id",),
+        "message": ("regex",), "xp-gained": ("skill",),
+        "npc-present": ("id",), "ground-item": ("id",),
+        "dialog-open": (), "input-open": (), "dialog-or-message": (),
+        "bank-open": (), "logged-in": (), "npc-dead": (), "npc-gone": (),
+    }
+
     def wait(self, a):
         cond = a.get("condition")
+        # Usage errors ("usage: ...") must fail fast with exit 2, not surface as raw
+        # KeyErrors or spin the full timeout on a typo'd condition.
+        if cond not in self.WAIT_REQUIRED_ARGS:
+            return {"ok": False, "error": "usage: unknown wait condition: %s" % cond}
+        missing = [k for k in self.WAIT_REQUIRED_ARGS[cond] if a.get(k) is None]
+        if missing:
+            return {"ok": False, "error": "usage: wait %s requires --%s"
+                    % (cond, " --".join(missing))}
+        if cond in ("npc-dead", "npc-gone") and a.get("id") is None and a.get("server_index") is None:
+            return {"ok": False, "error": "usage: wait %s requires --id or --server_index" % cond}
         timeout = float(a.get("timeout", 10))
         deadline = time.time() + timeout
         st = self.st
@@ -807,11 +1118,23 @@ class Daemon:
         return {"ok": False, "matched": False, "timeout": timeout, "error": "wait timed out"}
 
     # ---------------- control server ----------------
-    def serve_control(self):
+    def bind_control(self):
+        """Bind the control socket. Called BEFORE login so a port collision aborts
+        the process instead of orphaning an uncontrollable logged-in session (the
+        old behavior: bind died in a daemon thread while run() logged in anyway)."""
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.1", self.args.ctrl_port))
+        try:
+            srv.bind(("127.0.0.1", self.args.ctrl_port))
+        except OSError as e:
+            print("voidbotd: FATAL: cannot bind control port %d (%s) — is another "
+                  "voidbotd running? Set VOIDBOT_CTRL_PORT to a free port." %
+                  (self.args.ctrl_port, e), flush=True)
+            return None
         srv.listen(8)
+        return srv
+
+    def serve_control(self, srv):
         print("voidbotd: control on 127.0.0.1:%d, game session %s" %
               (self.args.ctrl_port, self.args.user), flush=True)
         while self.running:
@@ -846,7 +1169,10 @@ class Daemon:
 
     def run(self):
         # Control server first so `state`/`wait logged-in` work while login retries.
-        threading.Thread(target=self.serve_control, daemon=True).start()
+        srv = self.bind_control()
+        if srv is None:
+            sys.exit(2)
+        threading.Thread(target=self.serve_control, args=(srv,), daemon=True).start()
         try:
             self.connect_and_login()
         except Exception as e:
@@ -860,6 +1186,35 @@ class Daemon:
             time.sleep(0.3)
 
 
+def do_register(args):
+    """One-shot account registration; prints one JSON object, returns exit code."""
+    if args.no_email and args.email:
+        print(json.dumps({"ok": False, "error": "--email and --no-email are mutually exclusive"}))
+        return 2
+    email = None if args.no_email else (args.email or (args.user + "@voidscape.test"))
+    detail = {0: "created", 2: "username already taken",
+              4: "packet registration disabled (set want_packet_register: true in the active server config)",
+              5: "throttled/recently-registered/server error",
+              6: "invalid email or DB failure",
+              7: "username must be 2-12 chars",
+              8: "disallowed username or bad password length"}
+    try:
+        c = P.Connection(args.host, args.game_port, timeout=10)
+        body = P.build_register(args.user, args.password, email)
+        c.send_packet(body[0], body[1:])
+        resp = c.recv_byte()
+        c.close()
+    except (ConnectionError, OSError) as e:
+        print(json.dumps({"ok": False, "response": None,
+                          "error": "no register response (%s) — server down, or request "
+                                   "dropped by the 2 logins/sec throttle; retry after ~1s" % e}))
+        return 1
+    ok = resp == 0
+    print(json.dumps({"ok": ok, "response": resp,
+                      "detail": detail.get(resp, "unknown response"), "user": args.user}))
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -868,7 +1223,13 @@ def main():
     ap.add_argument("--user", required=True)
     ap.add_argument("--pass", dest="password", required=True)
     ap.add_argument("--defs", default=None, help="server/conf/server/defs dir for item names")
+    ap.add_argument("--register", action="store_true",
+                    help="one-shot: register the account and exit (no daemon)")
+    ap.add_argument("--email", default=None, help="email for --register (default <user>@voidscape.test)")
+    ap.add_argument("--no-email", action="store_true", help="omit the optional register email field")
     args = ap.parse_args()
+    if args.register:
+        sys.exit(do_register(args))
     Daemon(args).run()
 
 

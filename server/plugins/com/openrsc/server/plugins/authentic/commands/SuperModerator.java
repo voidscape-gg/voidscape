@@ -157,7 +157,8 @@ public final class SuperModerator implements CommandTrigger {
 	}
 
 	private void setQuest(Player player, String command, String[] args) {
-		if (args.length < 3) {
+		// (stage) is optional per the usage string — 2 args resets to stage 0.
+		if (args.length < 2) {
 			player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [questId] (stage)");
 			return;
 		}

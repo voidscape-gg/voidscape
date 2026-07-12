@@ -81,6 +81,20 @@ public final class RestedExperience {
 		return (int) total;
 	}
 
+	/**
+	 * Fills the pool to the cap (veteran-tour welcome gift). Drains elapsed
+	 * session time first so the stale drain marker can't instantly eat the gift.
+	 */
+	public static void grantFull(Player player) {
+		if (player == null) {
+			return;
+		}
+		drainElapsedSessionTime(player);
+		setPool(player, MAX_RESTED_SECONDS);
+		player.removeAttribute(NOTICE_ATTRIBUTE);
+		player.removeAttribute(EMPTY_NOTICE_ATTRIBUTE);
+	}
+
 	public static long getPool(Player player) {
 		return clampPool(getCacheLong(player, POOL_CACHE_KEY, 0L));
 	}
@@ -96,7 +110,7 @@ public final class RestedExperience {
 		drainElapsedSessionTime(player);
 		long pool = getPool(player);
 		return "@whi@Rested XP: @gre@" + formatDuration(pool) + "@whi@ / @gre@"
-			+ formatDuration(MAX_RESTED_SECONDS) + "@whi@ at 1.5x XP. Earns one rested minute per offline minute.";
+			+ formatDuration(MAX_RESTED_SECONDS) + "@whi@ at 1.5x XP. Earns one rested second per offline second.";
 	}
 
 	private static void drainElapsedSessionTime(Player player) {

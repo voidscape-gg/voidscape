@@ -4,6 +4,7 @@ import com.openrsc.client.entityhandling.EntityHandler;
 import com.openrsc.client.entityhandling.defs.ItemDef;
 import orsc.Config;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 import java.text.NumberFormat;
@@ -18,10 +19,14 @@ public final class LostOnDeathInterface {
 	int itemSelected = -1, rightClickMenuX = 0, rightClickMenuY = 0;
 	int width = 509;
 	int height = 331;
+	// Prayer index for Protect Items — must match server Prayers.PROTECT_ITEMS (8) and the
+	// client prayer list; mc.checkPrayerOn(8) is server-synced via opcode 206 SET_PRAYERS.
+	private static final int PROTECT_ITEMS_PRAYER = 8;
+	private static final int FIRST_VOID_GEAR_ID = 1593;
+	private static final int LAST_VOID_GEAR_ID = 1596;
 	private ArrayList<OnDeathItem> onDeathItems;
 	private boolean visible;
 	private mudclient mc;
-	private int panelColour, textColour, bordColour;
 	private int x, y;
 
 	public LostOnDeathInterface(mudclient mc) {
@@ -43,32 +48,25 @@ public final class LostOnDeathInterface {
 	public void onRender() {
 		reposition();
 
-		panelColour = 0x989898;
-		textColour = 0xFFFFFF;
-		bordColour = 0x000000;
-
 		lostOnDeathPanel.handleMouse(mc.getMouseX(), mc.getMouseY(), mc.getMouseButtonDown(), mc.getLastMouseDown());
 
-		// Draws the background
-		mc.getSurface().drawBoxAlpha(x, y, width, height, panelColour, 160);
-		mc.getSurface().drawBoxBorder(x, width, y, height, bordColour);
+		// Glass window chrome; close hit-test shares InterfaceChrome's coordinates.
+		int closeX = InterfaceChrome.closeX(x, width);
+		int closeY = InterfaceChrome.closeY(y);
+		boolean closeHover = UiSkin.hit(closeX, closeY, InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE,
+			mc.getMouseX(), mc.getMouseY());
+		InterfaceChrome.window(mc.getSurface(), x, y, width, height, "Items on Death", closeHover);
+		if (closeHover && mc.getMouseClick() == 1) {
+			setVisible(false);
+			mc.setMouseClick(0);
+		}
 
-		// Draws the title
-		drawStringCentered("Items on Death", x, y + 28, 5, textColour);
+		mc.getSurface().drawLineHoriz(x + 1, y + 40, width - 1, UiSkin.VOID_LINE);
+		mc.getSurface().drawLineVert(x + 145, y + 40, UiSkin.VOID_LINE, height - 40);
+		mc.getSurface().drawLineHoriz(x + 1, y + 88, width - 1, UiSkin.VOID_LINE);
 
-		this.drawButton(x + width - 35, y + 5, 30, 30, "X", 5, false, new ButtonHandler() {
-			@Override
-			void handle() {
-				setVisible(false);
-			}
-		});
-
-		mc.getSurface().drawLineHoriz(x + 1, y + 40, width - 1, 0);
-		mc.getSurface().drawLineVert(x + 145, y + 40, 2, height - 40);
-		mc.getSurface().drawLineHoriz(x + 1, y + 88, width - 1, 0);
-
-		drawString("Items kept on death", x + 5, y + 70, 3, textColour);
-		drawString("Items lost on death", x + 5, y + 115, 3, textColour);
+		drawString("Items kept on death", x + 5, y + 70, 3, UiSkin.GOLD_HEADER);
+		drawString("Items lost on death", x + 5, y + 115, 3, UiSkin.GOLD_HEADER);
 
 		drawItemsLost();
 	}
@@ -119,8 +117,8 @@ public final class LostOnDeathInterface {
 					curX + 1, curY + 10, 1, '\uffff');
 			}
 
-			drawString("Amount lost on death:", x + 5, y + 200, 3, textColour);
-			drawString(this.getLossTotal(), x + 5, y + 220, 3, textColour);
+			drawString("Amount lost on death:", x + 5, y + 200, 3, UiSkin.TEXT_BODY);
+			drawString(this.getLossTotal(), x + 5, y + 220, 3, UiSkin.GOLD_HOT);
 
 			if (((i - movedAtFlag + 1) % 6) == 0) {
 				curX = x + 160;
@@ -161,54 +159,59 @@ public final class LostOnDeathInterface {
 			}
 		}
 
+		// Stackable and noted items are always lost in full on death (the server keys
+		// them -1 in Inventory.dropOnDeath and never keeps one), so rank them below every
+		// keepable item rather than by their per-item price.
 		Collections.sort(onDeathItems, new Comparator<OnDeathItem>() {
 			@Override
 			public int compare(OnDeathItem obj1, OnDeathItem obj2) {
-				return (int) (obj2.getPrice() - obj1.getPrice());
+					long p1 = deathProtectionValue(obj1);
+					long p2 = deathProtectionValue(obj2);
+					int valueOrder = Long.compare(p2, p1);
+					return valueOrder != 0
+						? valueOrder
+						: Integer.compare(obj1.getItemID(), obj2.getItemID());
 			}
 		});
 
+		// Keep the 3 most valuable items (0 if skulled), plus 1 more while the Protect
+		// Items prayer is active — matches server Inventory.dropOnDeath(). Note that in
+		// this interface lost==true actually marks an item as KEPT (see getLossTotal /
+		// drawItemsLost), so the keep loop sets lost on the top items.
 		int keepXItems = 0;
-		if (mc.getLocalPlayer().skullVisible == 0) {
+		if ((mc.getLocalPlayer().skullVisible & 0x03) == 0) {
 			keepXItems += 3;
 		}
-		//TODO - add check for item protect
-		//TODO - fix stackables not being properly set to lost or not
+		if (mc.checkPrayerOn(PROTECT_ITEMS_PRAYER)) {
+			keepXItems += 1;
+		}
 
-		// Sets keepXItems amount of items first (sorted by price) to keep
 		for (int i = 0; i < keepXItems; i++) {
 			if (i >= onDeathItems.size()) {
 				break;
 			}
-			// Handles special case of stackable items being kept
-			if (EntityHandler.getItemDef(onDeathItems.get(i).getItemID()).isStackable()) {
-				onDeathItems.add(i, new OnDeathItem(onDeathItems.get(i).getItemID(), onDeathItems.get(i).getPrice(), 1, false, false));
-				onDeathItems.set(i + 1, new OnDeathItem(onDeathItems.get(i + 1).getItemID(), onDeathItems.get(i + 1).getPrice(), onDeathItems.get(i + 1).getStackCount() - 1, false, false));
-				if (onDeathItems.get(i+1).getStackCount() <= 0)
-					onDeathItems.remove(i+1);
+			// Stackable/noted items sort last and are never kept; once we reach one, no
+			// later item can be kept either, so stop.
+			if (isAlwaysLost(onDeathItems.get(i))) {
+				break;
 			}
 			onDeathItems.get(i).setLost(true);
 		}
+	}
 
-		// Handles special case of some stackables being kept and some being lost
-		for (int i = 0; i < keepXItems; i++) {
-			if (i >= onDeathItems.size()) {
-				break;
-			}
-			if (!EntityHandler.getItemDef(onDeathItems.get(i).getItemID()).isStackable()) {
-				break;
-			}
-			for (int j = i + 1; j < keepXItems; j++) {
-				if (j >= onDeathItems.size()) {
-					break;
-				}
-				if (onDeathItems.get(i).getItemID() == onDeathItems.get(j).getItemID()) {
-					OnDeathItem odi = onDeathItems.get(i);
-					onDeathItems.set(i, new OnDeathItem(odi.getItemID(), odi.getPrice(), odi.getStackCount() + 1, odi.getLost(), odi.getNoted()));
-					onDeathItems.remove(i + 1);
-				}
-			}
+	/** True if the item is always fully lost on death (stackable or noted), matching the
+	 *  server's Inventory.dropOnDeath rule. */
+	private boolean isAlwaysLost(OnDeathItem item) {
+		return item.getNoted() || EntityHandler.getItemDef(item.getItemID()).isStackable();
+	}
+
+	private long deathProtectionValue(OnDeathItem item) {
+		if (isAlwaysLost(item)) {
+			return -1L;
 		}
+		return item.getItemID() >= FIRST_VOID_GEAR_ID && item.getItemID() <= LAST_VOID_GEAR_ID
+			? Integer.MAX_VALUE
+			: item.getPrice();
 	}
 
 	private String getLossTotal() {
@@ -232,21 +235,12 @@ public final class LostOnDeathInterface {
 	}
 
 	private void drawButton(int x, int y, int width, int height, String text, int font, boolean checked, ButtonHandler handler) {
-		int bgBtnColour = 0x333333; // grey
-		if (checked) {
-			bgBtnColour = 16711680; // red
+		boolean hover = InterfaceChrome.button(mc.getSurface(), x, y, width, height, text, font, checked, false,
+			mc.getMouseX(), mc.getMouseY());
+		if (hover && mc.getMouseClick() == 1) {
+			handler.handle();
+			mc.setMouseClick(0);
 		}
-		if (mc.getMouseX() >= x && mc.getMouseY() >= y && mc.getMouseX() <= x + width && mc.getMouseY() <= y + height) {
-			if (!checked)
-				bgBtnColour = 16711680; // blue
-			if (mc.getMouseClick() == 1) {
-				handler.handle();
-				mc.setMouseClick(0);
-			}
-		}
-		mc.getSurface().drawBoxAlpha(x, y, width, height, bgBtnColour, 192);
-		mc.getSurface().drawBoxBorder(x, width, y, height, 0x242424);
-		mc.getSurface().drawString(text, x + (width / 2) - (mc.getSurface().stringWidth(font, text) / 2) - 1, y + height / 2 + 5, textColour, font);
 	}
 
 	public boolean isVisible() {

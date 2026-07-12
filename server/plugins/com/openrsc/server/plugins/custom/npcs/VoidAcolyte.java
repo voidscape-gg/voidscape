@@ -43,7 +43,7 @@ public final class VoidAcolyte implements TalkNpcTrigger, OpNpcTrigger {
 			"The web parts for steel, not for faith.",
 			"Speak softly. The stones remember blood.");
 
-		int option = multi(player, npc,
+		int option = multi(player, npc, false,
 			"What is this place?",
 			"Is it safe inside?",
 			"Why seal the gates with webs?",

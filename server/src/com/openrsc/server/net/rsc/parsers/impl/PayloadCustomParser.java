@@ -3,6 +3,7 @@ package com.openrsc.server.net.rsc.parsers.impl;
 import com.openrsc.server.constants.Constants;
 import com.openrsc.server.constants.custom.*;
 import com.openrsc.server.content.BetaReferralReward;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.Packet;
@@ -359,11 +360,17 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case COMBAT_STYLE_CHANGED:
 				return packet.getLength() == 1;
 			case PLAYER_APPEARANCE_CHANGE:
-				return packet.getLength() == 10 || packet.getLength() == 11
-					|| (player != null
-						&& player.getClientVersion() >= BetaReferralReward.CLIENT_VERSION
-						&& packet.getLength() >= 12
-						&& packet.getLength() <= 24);
+				if (packet.getLength() == 10 || packet.getLength() == 11) {
+					return true;
+				}
+				if (player != null
+					&& player.getClientVersion() >= GlobalChatCountryFlags.COUNTRY_PICKER_CLIENT_VERSION) {
+					return packet.getLength() >= 13 && packet.getLength() <= 26;
+				}
+				return player != null
+					&& player.getClientVersion() >= BetaReferralReward.CLIENT_VERSION
+					&& packet.getLength() >= 12
+					&& packet.getLength() <= 24;
 			case QUESTION_DIALOG_ANSWER:
 				return packet.getLength() == 1;
 			case BANK_SAVE_PRESET:
@@ -519,6 +526,14 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 				pl.isOneXp = packet.readByte();
 				if (packet.getLength() >= 11) {
 					pl.hairStyle = packet.readUnsignedByte();
+				}
+				if (packet.getReadableBytes() >= 2
+					&& player != null
+					&& player.getClientVersion() >= GlobalChatCountryFlags.COUNTRY_PICKER_CLIENT_VERSION) {
+					int first = packet.readUnsignedByte();
+					int second = packet.readUnsignedByte();
+					pl.countryCodePresent = true;
+					pl.countryCode = first == 0 && second == 0 ? "" : "" + (char) first + (char) second;
 				}
 				if (packet.getReadableBytes() > 0 && player.getClientVersion() >= BetaReferralReward.CLIENT_VERSION) {
 					pl.referralName = packet.readString().trim();

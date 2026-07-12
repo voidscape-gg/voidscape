@@ -23,5 +23,5 @@ EOF
     exit 1
 fi
 
-echo "==> Starting voidscape server (local.conf)"
-ant runserver -DconfFile=local
+echo "==> Starting voidscape server (local.conf, ZGC)"
+ant runserverzgc -DconfFile=local

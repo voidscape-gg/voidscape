@@ -57,7 +57,7 @@ dist/friend-beta/VoidscapeLauncher.jar
 
 On first Play, the launcher writes the hosted server endpoint into its runtime cache, downloads the PC client/cache from the manifest, and starts the client.
 
-6. For this friend beta, newly created characters are temporarily created as Admins automatically.
+6. Newly created characters use the normal User rank. Promote only trusted testers manually when admin-only commands are needed.
 
 Manual SQLite rank example, if an existing character needs to be changed:
 
@@ -106,9 +106,9 @@ Starter paths:
 
 | Path | Boost | Starter kit |
 |---|---|---|
-| Warrior | 2x Attack, Defense, Strength | Iron 2-handed sword, 10 cooked meat, bronze plate body, bronze medium helmet, bronze legs |
-| Forager | 2x Fishing, Cooking, Mining | Net, fishing rod, 50 bait, bronze pickaxe, tinderbox, 100 coins, 2 cooked meat, 2 bread |
-| Arcanist | 2x Ranged, Magic | Shortbow, 50 bronze arrows, blue wizard hat, wizard robe, 100 air runes, 50 mind runes, 25 fire runes, 2 bread |
+| Warrior | 2x Attack, Defense, Strength | Shared Classic basics plus iron short sword and 5 extra cooked meat |
+| Forager | 2x Fishing, Cooking, Mining | Shared Classic basics plus fishing rod, 25 bait, hammer, 50 coins |
+| Arcanist | 2x Ranged, Magic | Shared Classic basics plus 50 air runes, 30 mind runes, 15 fire runes, shortbow, 50 bronze arrows, blue wizard hat |
 
 ## Player Commands
 
@@ -117,13 +117,21 @@ These do not require admin rank.
 | Command | Use |
 |---|---|
 | `::beta` | Reopen the beta guide menu for commands, coords, items, and features to try. |
-| `::g <message>` | Send simplified global chat with your IP country flag beside your name. |
+| `::farmkit 40` | Apply flat 40 Attack/Strength/Defense/Hits, reset ranged/prayer/magic to 1, and equip full adamant, adamant battle axe, and ruby strength amulet. |
+| `::farmkit 60` | Apply flat 60 melee stats, reset ranged/prayer/magic to 1, and equip full adamant, adamant 2H, and ruby strength amulet. |
+| `::farmkit 80` | Apply flat 80 melee stats, reset ranged/prayer/magic to 1, and equip full adamant, rune battle axe, and ruby strength amulet. |
+| `::farmkit 99` | Apply flat 99 melee stats, reset ranged/prayer/magic to 1, and equip full rune, rune 2H, and ruby strength amulet. |
+| `::farmsim start` | Reset your FarmSim sample before testing one area or NPC group. |
+| `::farmsim` | Project your sampled NPC kills into a one-hour expected-loot popup with item sprites and quantities. |
+| `::farmsim 30m` | Project the same sample over another duration from 5 minutes to 4 hours. |
+| `::farmsim status` | Show what NPCs are currently in your FarmSim sample. |
+| `::g <message>` | Send simplified global chat with your chosen country flag beside your name. |
 | `::rested` | Show rested-XP pool and cap status. |
 | `::titles` | Open the title catalogue UI. |
 | `::titles unlocked` | Show unlocked titles. |
 | `::titles unique` | Show unique one-owner titles and owners. |
-| `::titles rarest` | Show the rarest title page. |
-| `::titles count` | Show unlocked count out of the 100-title catalog. |
+| `::titles renown` / `::titles feat` | Show tier-filtered title pages. |
+| `::titles count` | Show unlocked count out of the title catalog. |
 | `::title <id or name>` | Equip an unlocked title. |
 | `::title clear` | Remove active title. |
 | `::lootbeam list` | Show current rare-drop beam settings. |
@@ -137,7 +145,7 @@ These do not require admin rank.
 
 ## Admin Test Commands
 
-Use these for fast beta testing with the temporary auto-admin beta accounts.
+Use these for fast beta testing only after manually promoting a trusted tester account.
 
 | Command | Use |
 |---|---|
@@ -195,6 +203,45 @@ Useful drop test example:
 ::dropwave 67 10 3   # level-32 hobgoblins
 ```
 
+## FarmSim Drop-Rate Testing
+
+Use this when tuning whether an NPC group feels worth farming for one hour. The projection uses your real sampled kill pace, so walking, spawn spacing, competition, missed hits, defense, and weapon speed all matter.
+
+1. Pick one area or one NPC group to test.
+2. Apply one melee kit: `::farmkit 40`, `::farmkit 60`, `::farmkit 80`, or `::farmkit 99`.
+3. Stand where a normal player would farm that group.
+4. Use `::farmsim start` if you want to reset without changing kits.
+5. Kill a small representative sample. Aim for at least 5-10 low-level kills or 3-5 slower kills.
+6. Run `::farmsim`.
+7. Screenshot the popup and include the kit, location, NPCs, sample size, and whether the area felt too slow, too crowded, or too rewarding.
+
+Good starter FarmSim routes:
+
+| Kit | Suggested NPCs | Coordinates / area | What this checks |
+|---|---|---:|---|
+| 40 | Goblins | Varrock/Lumbridge outskirts | Low-level money, runes, arrows, and visible junk drops. |
+| 40 | Cows or men | Lumbridge / nearby towns | Very early bones, hides, food pacing, and baseline starter farming. |
+| 60 | Hobgoblins | Wilderness hobgoblins `(217,255)` | Midgame combat drops, spawn pressure, and Wilderness crowd tuning. |
+| 60 | Skeletons | Edgeville dungeon-style routes | Bone drops plus rune/coin pacing for slower low-mid NPCs. |
+| 80 | Lesser demons | Karamja / demon spots | Rare-table feel, rune/coin value, and longer kill samples. |
+| 80 | Void dungeon NPCs | Void Dungeon `72,3252` | Custom route value and unsafe-area reward pressure. |
+| 99 | Dragons or high demons | Existing boss/high-combat routes | High-stat hourly loot ceiling and long-respawn pain points. |
+| 99 | Void Knight / custom boss routes | Void Enclave boss paths | Boss-adjacent pacing, supply friction, and reward expectations. |
+
+Report FarmSim findings like this:
+
+```text
+FarmSim:
+Kit:
+Area/coords:
+NPCs:
+Sample kills:
+Projection duration:
+Screenshot:
+Felt too low/fair/too high:
+Notes on spawns, walking, banking, competition:
+```
+
 ## Coordinates
 
 Use exact coordinates with `::goto <x> <y>`.
@@ -209,7 +256,7 @@ Use exact coordinates with `::goto <x> <y>`.
 | Void Rift | `192 443` | Enter prompt to Void Enclave. |
 | Void Enclave | `113 314` | Safe zone, amenities, waystones, boss entry. |
 | Void Dungeon entrance | `112 296` | Unsafe Wilderness rift; requires 100,000 coins to enter. |
-| Void Dungeon | `72 3252` | Compact shared underground Wilderness cave, void NPC route, exit rift at `72 3250` returns to `112 297`. |
+| Void Dungeon | `72 3252` | Shared two-floor Wilderness dungeon: grouped rooms by void NPC kind, ladder at `72 3204`, and exit rifts at the entrance/checkpoints/boss room return to `112 297`. |
 | Void Knight boss ladder | `122 313` | Climb down from Enclave to boss chamber. |
 | Void Knight chamber | `984 667` | Attack the Void Knight to start the solo fight. |
 | Wilderness hobgoblins | `217 255` | Dynamic spawns and faster respawns. |
@@ -224,12 +271,13 @@ Ask each tester to try a few of these instead of everyone doing the same route.
 
 | Feature | Quick test |
 |---|---|
-| Client character creation | Create a fresh character from `New User`, complete appearance, and choose one Void Island path. |
+| Client character creation | Create a fresh character through the portal/account flow, complete appearance, and choose one Void Island path. |
 | Starter kits | Confirm the chosen path gives the right gear once and does not repeat on relog. |
 | Subscription cards | Buy from the Lumbridge vendor, redeem, and check the wrench/profile XP-rate display. |
 | Auction House UI | Use the Edgeville auctioneer or `::quickauction`; browse categories, inspect item cards, seed fixture data if needed. |
-| Titles | Open `::titles`, page through categories, click a title for requirements, equip one, and confirm overhead name stays one line. |
+| Titles | Open `::titles`, page through categories, click a title or first-to record row for requirements/holder details, equip one, and confirm overhead name stays one line. |
 | Rare drop beam | Toggle client loot beams, add/remove items with `::lootbeam`, and spawn/drop beam-worthy items for visuals. |
+| FarmSim projections | Use `::farmkit`, kill a few NPCs in one area, run `::farmsim`, screenshot the item-sprite popup, and report whether the projected hour feels fair. |
 | Appearance colors | Create or change appearance; verify only Voidscape hair colors appear, classic clothing colors remain, muted Voidscape clothing colors are appended, and grounded skin tones render cleanly. |
 | Global chat flags | Send `::g test`, confirm the flag icon appears beside the username, then use the wrench settings panel to toggle Country flag off/on. |
 | Dynamic wilderness spawns | Stand at `(217,255)`, use `::wildhobdebug 4` or real unique IPs, and watch for the purple area message. |
@@ -259,7 +307,7 @@ Extra notes:
 ## Beta Guardrails
 
 - Use disposable beta passwords.
-- Keep auto-admin access to trusted testers only, and revert the temporary beta default before public launch.
+- Keep staff-rank access to trusted testers only, and demote test accounts before public launch.
 - Do not treat beta economy/progression as permanent unless explicitly announced.
 - If the server starts feeling laggy, stop load bots with `::loadbots stop`.
 - Before a bigger friend wave, run the release checklist in `docs/RELEASE-CHECKLIST.md`.

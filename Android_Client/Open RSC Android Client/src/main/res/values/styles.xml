@@ -26,6 +26,20 @@
         <item name="android:colorAccent">@color/voidscape_gold</item>
     </style>
 
+    <style name="VoidscapeLaunchPanel.Base">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/voidscape_panel</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">24dp</item>
+    </style>
+
+    <!-- Narrow screens use the available width. Wider screens override this
+         with a centered cap so the bootstrap card never becomes tablet-wide. -->
+    <style name="VoidscapeLaunchPanel" parent="VoidscapeLaunchPanel.Base">
+        <item name="android:layout_width">match_parent</item>
+    </style>
+
     <style name="VoidscapeDialogTheme" parent="@android:style/Theme.Material.Dialog.Alert">
         <item name="android:fontFamily">@font/exoregular</item>
         <item name="android:colorAccent">@color/voidscape_gold</item>

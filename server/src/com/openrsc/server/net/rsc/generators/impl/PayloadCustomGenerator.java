@@ -1,7 +1,7 @@
 package com.openrsc.server.net.rsc.generators.impl;
 
 import com.openrsc.server.constants.ItemId;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.external.GameObjectLoc;
 import com.openrsc.server.external.ItemLoc;
@@ -413,7 +413,7 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 					builder.writeByte((byte) gs.hdVignette);
 					builder.writeByte((byte) gs.hdWaterShimmer);
 					builder.writeByte((byte) gs.hdSunlight);
-					if (player.getClientVersion() >= GlobalChatIpFlags.CLIENT_VERSION) {
+					if (player.getClientVersion() >= GlobalChatCountryFlags.CLIENT_VERSION) {
 						builder.writeByte((byte) gs.globalChatCountryFlags);
 					}
 					break;
@@ -664,7 +664,12 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 
 				case SEND_BANK_UPDATE:
 					BankUpdateStruct bu = (BankUpdateStruct) payload;
-					builder.writeByte((byte) bu.slot);
+					if (player.getClientVersion() >= 10121) {
+						// a one-byte slot wraps mod 256 in banks past 256 slots (VS-008)
+						builder.writeShort(bu.slot);
+					} else {
+						builder.writeByte((byte) bu.slot);
+					}
 					builder.writeShort(bu.catalogID);
 					builder.writeInt(bu.amount);
 					break;
@@ -1058,6 +1063,16 @@ public class PayloadCustomGenerator implements PayloadGenerator<OpcodeOut> {
 						builder.writeBits(uas.unlockedBottomColours[i] ? 1 : 0, 1);
 					}
 					builder.finishBitAccess();
+					if (player.getClientVersion() >= GlobalChatCountryFlags.COUNTRY_PICKER_CLIENT_VERSION) {
+						String code = GlobalChatCountryFlags.normalizeCountryCode(uas.selectedCountryCode);
+						if (code.length() == 2 && GlobalChatCountryFlags.isValidCountryCode(code)) {
+							builder.writeByte((byte) code.charAt(0));
+							builder.writeByte((byte) code.charAt(1));
+						} else {
+							builder.writeByte((byte) 0);
+							builder.writeByte((byte) 0);
+						}
+					}
 					break;
 
 				case SEND_WORLD_WALK_ROUTE:

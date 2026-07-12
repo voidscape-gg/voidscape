@@ -5,11 +5,12 @@ import com.openrsc.client.entityhandling.defs.ItemDef;
 import com.openrsc.client.entityhandling.defs.SpriteDef;
 import com.openrsc.client.entityhandling.defs.extras.AnimationDef;
 import com.openrsc.client.model.Sprite;
-import com.openrsc.data.DataConversions;
 import orsc.Config;
 import orsc.MiscFunctions;
+import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.SpriteArchive.*;
 import orsc.mudclient;
+import orsc.util.CacheArchive;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
@@ -18,8 +19,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public class GraphicsController {
 
@@ -60,7 +59,7 @@ public class GraphicsController {
 	private final Map<String, int[]> countryFlagIcons = new HashMap<>();
 	// public int[][] image2D_pixels;
 	private int[] m_Xb;
-	private ZipFile spriteArchive;
+	private CacheArchive spriteArchive;
 	private static final int COUNTRY_FLAG_WIDTH = 13;
 	private static final int COUNTRY_FLAG_HEIGHT = 10;
 	private static final int COUNTRY_FLAG_ADVANCE = 15;
@@ -102,12 +101,12 @@ public class GraphicsController {
 			this.width2 = var1;
 			try {
 				if (!Config.S_WANT_CUSTOM_SPRITES) {
-					spriteArchive = new ZipFile(Config.F_CACHE_DIR + File.separator + "video" + File.separator + "Authentic_Sprites.orsc");
+					spriteArchive = mudclient.clientPort.openCacheArchive("video" + File.separator + "Authentic_Sprites.orsc");
 					sprites = new Sprite[var3];
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
-				System.exit(1);
+				Config.exit(1);
 			}
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7, "ua.<init>(" + var1 + ',' + var2 + ',' + var3 + ')' + ')');
@@ -245,6 +244,22 @@ public class GraphicsController {
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "ua.JA(" + "dummy" + ')');
 		}
+	}
+
+	public final int getClipLeft() {
+		return this.clipLeft;
+	}
+
+	public final int getClipRight() {
+		return this.clipRight;
+	}
+
+	public final int getClipTop() {
+		return this.clipTop;
+	}
+
+	public final int getClipBottom() {
+		return this.clipBottom;
 	}
 
 	public final void spriteClipping(Sprite sprite, byte var2, int height, int var4, int width, int var6, int var7) {
@@ -1032,6 +1047,41 @@ public class GraphicsController {
 		}
 	}
 
+	private void plot_scale_argb_mask(int[] src, int heightStep, int scaleX, int srcStartY, int[] dest,
+									  int scaleY, int destHeight, int srcStartX, int destRowStride,
+									  int destWidth, int srcWidth, int destHead) {
+		try {
+			int firstColumn = srcStartX;
+
+			for (int i = -destHeight; i < 0; i += heightStep) {
+				int srcRowHead = (srcStartY >> 16) * srcWidth;
+				srcStartY += scaleY;
+
+				for (int j = -destWidth; j < 0; ++j) {
+					int argb = src[(srcStartX >> 16) + srcRowHead];
+					srcStartX += scaleX;
+					if (argb != 0) {
+						int alpha = argb >>> 24 & 0xFF;
+						int color = argb & 0xFFFFFF;
+						if (alpha == 0 || alpha >= 250) {
+							dest[destHead++] = color;
+						} else {
+							dest[destHead] = mixAlpha(dest[destHead], color, alpha + 1);
+							++destHead;
+						}
+					} else {
+						++destHead;
+					}
+				}
+
+				destHead += destRowStride;
+				srcStartX = firstColumn;
+			}
+		} catch (Exception var15) {
+			System.out.println("error in plot_argb_scale");
+		}
+	}
+
 	/*
 	 * public final void applyColorLookupTable(int imgID) { try {
 	 *  if (null != this.spriteColours[imgID]) { int
@@ -1581,7 +1631,9 @@ public class GraphicsController {
 
 			int mixOld = 256 - alpha;
 			int n3 = alpha * (color >> 16 & 255);
-			int n2 = ((color & '\uffc4') >> 8) * alpha;
+			// 0xFF00, not the decompiler artifact '\uffc4' (0xFFC4): the old mask let
+			// two blue bits bleed into the green blend of every translucent box.
+			int n2 = ((color & 0xFF00) >> 8) * alpha;
 			int n1 = alpha * (color & 255);
 			int lineStride = this.width2 - width;
 			byte var16 = 1;
@@ -1809,6 +1861,15 @@ public class GraphicsController {
 		}
 	}
 
+	/**
+	 * drawBoxBorder with conventional (x, y, width, height) argument order.
+	 * Not an overload: drawBoxBorder's (x, width, y, height) signature has the
+	 * identical erasure, so a same-name overload is impossible.
+	 */
+	public final void drawBorder(int x, int y, int width, int height, int color) {
+		this.drawBoxBorder(x, width, y, height, color);
+	}
+
 	public final void drawBoxBorder(int x, int width, int y, int height, int color) {
 		try {
 			this.drawLineHoriz(x, y, width, color);
@@ -1830,13 +1891,13 @@ public class GraphicsController {
 			int srcB = (255 & color >> 8) * alpha;
 			int srcG = alpha * (color & 255);
 			int startY = y - radius;
-			if (startY < 0) {
-				startY = 0;
+			if (startY < this.clipTop) {
+				startY = this.clipTop;
 			}
 
 			int endY = y + radius;
-			if (this.height2 <= endY) {
-				endY = this.height2 - 1;
+			if (this.clipBottom <= endY) {
+				endY = this.clipBottom - 1;
 			}
 
 			byte yStep = 1;
@@ -1852,13 +1913,13 @@ public class GraphicsController {
 				int dy = py - y;
 				int horizHalf = (int) Math.sqrt((double) (radius * radius - dy * dy));
 				int startX = x - horizHalf;
-				if (startX < 0) {
-					startX = 0;
+				if (startX < this.clipLeft) {
+					startX = this.clipLeft;
 				}
 
 				int endX = x + horizHalf;
-				if (this.width2 <= endX) {
-					endX = this.width2 - 1;
+				if (this.clipRight <= endX) {
+					endX = this.clipRight - 1;
 				}
 
 				int rowStart = startX + this.width2 * py;
@@ -1979,6 +2040,14 @@ public class GraphicsController {
 							color = 0x7CADDA;
 						} else if (key.equalsIgnoreCase("pin")) {
 							color = 0xFF8ED9;
+						} else if (key.equalsIgnoreCase("hdr")) {
+							color = UiSkin.GOLD_TITLE;
+						} else if (key.equalsIgnoreCase("acc")) {
+							color = UiSkin.GOLD_HOT;
+						} else if (key.equalsIgnoreCase("dis")) {
+							color = UiSkin.TEXT_DIM;
+						} else if (key.equalsIgnoreCase("bod")) {
+							color = UiSkin.TEXT_BODY;
 						}
 						i += 4;
 					} else {
@@ -2616,8 +2685,11 @@ public class GraphicsController {
 			textX -= (textWidth / 2);
 			textY += (textHeight / 2);
 		}
-		drawString(text, textX - 1, textY, 0x0F0F0F, fontSize);
-		drawString(text, textX, textY - 1, 0x0F0F0F, fontSize);
+		// One shadow convention everywhere: same (+1,0)/(0,+1) offsets as the
+		// automatic in-game pass, pure black (color 0 also suppresses that
+		// pass, so shadowed text is never double-shadowed when logged in).
+		drawString(text, textX + 1, textY, 0, fontSize);
+		drawString(text, textX, textY + 1, 0, fontSize);
 
 		drawString(text, textX, textY, textColor, fontSize);
 	}
@@ -2666,6 +2738,13 @@ public class GraphicsController {
 				this.pixelData[destIndex] = alpha >= 255 ? rgb : mixAlpha(this.pixelData[destIndex], rgb, alpha);
 			}
 		}
+	}
+
+	public void drawCountryFlagIcon(String countryCode, int x, int y) {
+		if (countryCode == null || countryCode.length() != 2) {
+			return;
+		}
+		drawCountryFlagToken(countryCode.toUpperCase(Locale.ENGLISH), x, y + COUNTRY_FLAG_HEIGHT - 2);
 	}
 
 	private int[] buildCountryFlagIcon(String countryCode) {
@@ -2846,6 +2925,95 @@ public class GraphicsController {
 		} catch (RuntimeException var17) {
 			throw GenUtil.makeThrowable(var17,
 				"ua.D(" + x + ',' + y + ',' + destHeight + ',' + destWidth + ',' + 5924 + ',' + sprite + ')');
+		}
+	}
+
+	public final void drawSpriteAlpha(Sprite sprite, int x, int y, int destWidth, int destHeight, int var5) {
+		try {
+			try {
+				int spriteWidth = sprite.getWidth();
+				int spriteHeight = sprite.getHeight();
+				int srcStartX = 0;
+				int srcStartY = 0;
+				int scaleX = (spriteWidth << 16) / destWidth;
+				int scaleY = (spriteHeight << 16) / destHeight;
+				int destHead;
+				int destRowStride;
+				if (sprite.requiresShift()) {
+					destHead = sprite.getSomething1();
+					destRowStride = sprite.getSomething2();
+					if (destHead == 0 || destRowStride == 0) {
+						return;
+					}
+
+					if (sprite.getYShift() * destHeight % destRowStride != 0) {
+						srcStartY = (destRowStride - destHeight * sprite.getYShift() % destRowStride << 16)
+							/ destHeight;
+					}
+
+					scaleX = (destHead << 16) / destWidth;
+					if (sprite.getXShift() * destWidth % destHead != 0) {
+						srcStartX = (destHead - sprite.getXShift() * destWidth % destHead << 16) / destWidth;
+					}
+
+					x += (destWidth * sprite.getXShift() + destHead - 1) / destHead;
+					scaleY = (destRowStride << 16) / destHeight;
+					y += (destRowStride + destHeight * sprite.getYShift() - 1) / destRowStride;
+					destHeight = (sprite.getHeight() - (srcStartY >> 16)) * destHeight / destRowStride;
+					destWidth = destWidth * (sprite.getWidth() - (srcStartX >> 16)) / destHead;
+				}
+
+				destHead = x + this.width2 * y;
+				if (y < this.clipTop) {
+					int lost = this.clipTop - y;
+					srcStartY += scaleY * lost;
+					destHeight -= lost;
+					destHead += this.width2 * lost;
+					y = 0;
+				}
+
+				destRowStride = this.width2 - destWidth;
+				if (y + destHeight >= this.clipBottom) {
+					destHeight -= y - this.clipBottom + destHeight + 1;
+				}
+
+				if (x < this.clipLeft) {
+					int lost = this.clipLeft - x;
+					destWidth -= lost;
+					destRowStride += lost;
+					destHead += lost;
+					x = 0;
+					srcStartX += scaleX * lost;
+				}
+
+				if (this.clipRight <= x + destWidth) {
+					int lost = 1 + x + (destWidth - this.clipRight);
+					destRowStride += lost;
+					destWidth -= lost;
+				}
+
+				byte heightStep = 1;
+				if (this.interlace) {
+					if ((y & 1) != 0) {
+						--destHeight;
+						destHead += this.width2;
+					}
+
+					destRowStride += this.width2;
+					heightStep = 2;
+					scaleY += scaleY;
+				}
+
+				this.plot_scale_argb_mask(sprite.getPixels(), heightStep, scaleX, srcStartY,
+					this.pixelData, scaleY, destHeight, srcStartX, destRowStride, destWidth, spriteWidth,
+					destHead);
+			} catch (Exception var16) {
+				System.out.println("drawSpriteAlpha: error in sprite clipping routine");
+			}
+
+		} catch (RuntimeException var17) {
+			throw GenUtil.makeThrowable(var17,
+				"ua.drawSpriteAlpha(" + x + ',' + y + ',' + destHeight + ',' + destWidth + ',' + var5 + ',' + sprite + ')');
 		}
 	}
 
@@ -3499,31 +3667,14 @@ public class GraphicsController {
 		return true;
 	}
 
-	public static ArrayList<Sprite> unpackSpriteData(ZipFile ioe, ZipEntry zipEntry) throws IOException {
+	public static ArrayList<Sprite> unpackSpriteData(byte[] archiveEntry) {
 		ArrayList<Sprite> sprites = new ArrayList<>();
 
 		try {
-			InputStream fileIn = ioe.getInputStream(zipEntry);
-			ByteArrayOutputStream fileBytesBuffer = new ByteArrayOutputStream();
-			byte[] buffer = new byte[4096];
-			int readByte;
-			while ((readByte = fileIn.read(buffer)) != -1) {
-				fileBytesBuffer.write(buffer, 0, readByte);
-			}
-
-			fileBytesBuffer.close();
-			fileIn.close();
-
-			byte[] fileBytes = fileBytesBuffer.toByteArray();
-			ByteBuffer fileByteBuffer = ByteBuffer.wrap(fileBytes);
-			try {
-				sprites = unpackSpriteNew(fileByteBuffer);
-			} catch (Exception e) {
-				System.out.println(e);
-			}
-
-		} catch (IOException a) {
-			a.printStackTrace();
+			ByteBuffer fileByteBuffer = ByteBuffer.wrap(archiveEntry);
+			sprites = unpackSpriteNew(fileByteBuffer);
+		} catch (Exception e) {
+			System.out.println(e);
 		}
 		return sprites;
 	}
@@ -3594,14 +3745,13 @@ public class GraphicsController {
 
 	public boolean loadSprite(int id, String packageName) {
 		try {
-			ZipEntry e = spriteArchive.getEntry(String.valueOf(id));
-			if (e == null) {
+			ByteBuffer data = spriteArchive.getEntryBuffer(String.valueOf(id));
+			if (data == null) {
 				if (Config.DEBUG)
 					System.err.println("Missing sprite: " + id + " from package " + packageName);
 				sprites[id] = Sprite.getUnknownSprite(48, 32);
 				return true;
 			}
-			ByteBuffer data = DataConversions.streamToBuffer(new BufferedInputStream(spriteArchive.getInputStream(e)));
 			sprites[id] = Sprite.unpack(data);
 			return true;
 		} catch (Exception e) {

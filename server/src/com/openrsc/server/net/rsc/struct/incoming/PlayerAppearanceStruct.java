@@ -20,4 +20,6 @@ public class PlayerAppearanceStruct extends AbstractStruct<OpcodeIn> {
 	public int ironmanMode = -1;
 	public int isOneXp = -1;
 	public String referralName = "";
+	public boolean countryCodePresent = false;
+	public String countryCode = "";
 }

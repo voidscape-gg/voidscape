@@ -5,6 +5,7 @@ import com.openrsc.interfaces.MenuAction;
 import com.openrsc.interfaces.NComponent;
 import com.openrsc.interfaces.NRightClickMenu;
 import orsc.graphics.gui.Panel;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 public class OnlineListInterface extends NComponent {
@@ -22,9 +23,9 @@ public class OnlineListInterface extends NComponent {
 		panel = new Panel(client.getSurface(), 1);
 		scroll = panel.addScrollingList2(getX(), getY() + 20, getWidth(), getHeight() - 20, 500, 1, true);
 
-		setBackground(10000536, 10000536, 128);
+		setBackground(UiSkin.GLASS_BODY, UiSkin.GLASS_BODY, 128);
 		setSize(408, 246);
-		setLocation((client.getGameWidth() - getWidth()) / 2, (client.getGameHeight() - getHeight()) / 2);
+		updateLocation();
 		setInputListener(new InputListener() {
 			@Override
 			public boolean onMouseDown(int clickX, int clickY, int mButtonDown, int mButtonClick) {
@@ -38,13 +39,13 @@ public class OnlineListInterface extends NComponent {
 
 		});
 		NComponent title = new NComponent(client);
-		title.setBackground(3093151, 0x7e8d09, 192);
+		title.setBackground(UiSkin.VOID_HEADER, UiSkin.VOID_HEADER, 192);
 		title.setLocation(0, 0);
 		title.setSize(408, 20);
 
 		titleText = new NComponent(client);
 		titleText.setText("Online Players");
-		titleText.setFontColor(0xFFFFFF, 0xFFFFFF);
+		titleText.setFontColor(UiSkin.GOLD_TITLE, UiSkin.GOLD_TITLE);
 		titleText.setTextSize(1);
 		titleText.setLocation(2, 1);
 
@@ -63,13 +64,13 @@ public class OnlineListInterface extends NComponent {
 				return true;
 			}
 		});
-		close.setFontColor(0xFFFFFF, 0xFF0000);
+		close.setFontColor(UiSkin.TEXT_BODY, UiSkin.DANGER_GLYPH);
 		title.addComponent(close);
 		addComponent(title);
 		addComponent(titleText);
 
 		userListContainer = new NComponent(client);
-		userListContainer.setFontColor(0xFFFFFF, 0xFFFFFF);
+		userListContainer.setFontColor(UiSkin.TEXT_BODY, UiSkin.TEXT_BODY);
 		userListContainer.setLocation(1, 21);
 		userListContainer.setSize(getWidth() - 3, getHeight());
 		addComponent(userListContainer);
@@ -77,6 +78,21 @@ public class OnlineListInterface extends NComponent {
 		rightClickMenu = new NRightClickMenu(this);
 		addComponent(rightClickMenu);
 		setVisible(false);
+	}
+
+	private void updateLocation() {
+		int x = Math.max(4, (getClient().getGameWidth() - getWidth()) / 2);
+		int y = (getClient().getGameHeight() - getHeight()) / 2;
+		if (getClient().isVoidscapeClassicWebSmallHud()) {
+			int topSafe = getClient().getVoidscapeDesktopOverlayTopSafeY();
+			int bottomSafe = getClient().getVoidscapeDesktopOverlayBottomSafeY();
+			if (getHeight() <= bottomSafe - topSafe) {
+				y = Math.max(topSafe, Math.min(y, bottomSafe - getHeight()));
+			} else {
+				y = topSafe;
+			}
+		}
+		setLocation(x, Math.max(4, y));
 	}
 
 	public void addOnlineUser(final String user, final int crownID, String location, boolean isLast) {
@@ -92,7 +108,7 @@ public class OnlineListInterface extends NComponent {
 		}
 		final NComponent userComponent = new NComponent(getClient());
 		userComponent.setText(isLast ? text : text + ", ");
-		userComponent.setFontColor(0xFFFFFF, 0xFF0000);
+		userComponent.setFontColor(UiSkin.TEXT_BODY, UiSkin.GOLD_HOT);
 		userComponent.setTextSize(1);
 		userComponent.setLocation(currentX, currentY);
 		userComponent.setSize(textWidth, textHeight);
@@ -105,6 +121,7 @@ public class OnlineListInterface extends NComponent {
 
 	@Override
 	public void update() {
+		updateLocation();
 		panel.handleMouse(getClient().getMouseX(), getClient().getMouseY(), getClient().getMouseButtonDown(),
 			getClient().getLastMouseDown());
 		panel.reposition(scroll, getX(), getY() + 20, getWidth(), getHeight() - 20);
@@ -265,12 +282,6 @@ public class OnlineListInterface extends NComponent {
 							@Override
 							public void action() {
 								getClient().addIgnore(username);
-							}
-						});
-						rightClickMenu.createOption("Invite to Party", new MenuAction() {
-							@Override
-							public void action() {
-								getClient().addPartyInv(username);
 							}
 						});
 

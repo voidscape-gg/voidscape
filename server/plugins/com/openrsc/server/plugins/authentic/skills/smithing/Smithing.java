@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.external.ItemSmithingDef;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
@@ -371,7 +372,10 @@ public class Smithing implements UseLocTrigger {
 			}
 		}
 		player.incExp(Skill.SMITHING.id(), getSmithingExp(item.getCatalogId(), def.getRequiredBars()), true);
-		delay();
+		if (def.getItemID() == ItemId.RUNE_PLATE_MAIL_BODY.id()) {
+			PlayerTitle.checkRunePlateSmith(player);
+		}
+		delay(3);
 
 		// Repeat
 		updatebatch();

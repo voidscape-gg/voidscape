@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS `players`
     `block_private`     tinyint(1)            DEFAULT 0,
     `block_trade`       tinyint(1)            DEFAULT 0,
     `block_duel`        tinyint(1)            DEFAULT 0,
-    `cameraauto`        tinyint(1)            DEFAULT 1,
+    `cameraauto`        tinyint(1)            DEFAULT 0,
     `onemouse`          tinyint(1)            DEFAULT 0,
     `soundoff`          tinyint(1)            DEFAULT 0,
     `haircolour`        int(5)                DEFAULT 10,

@@ -88,13 +88,31 @@ scripts/build.sh              # compile server core + plugins + client
 scripts/run-server.sh         # run server with the voidscape preset
 scripts/run-client.sh         # run PC client against local server
 scripts/run-launcher.sh       # build + run the Voidscape desktop launcher
+scripts/smoke-launcher-prelaunch.sh # screenshot-backed desktop launcher smoke
 scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
+scripts/smoke-pc-client-prelaunch.sh # screenshot-backed desktop Java client smoke
 scripts/run-portal.sh         # run website/account portal with local prototype API
 scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
 scripts/test-portal-api.sh    # smoke-test portal API flows
 scripts/test-portal-schema.sh # validate portal account-management schema contract
-scripts/build-android.sh      # build Android APK; requires Android SDK
+scripts/package-launch-staging.sh # package server, portal, /play, launcher, and Android for staging
+scripts/verify-launch-staging.mjs # verify hosted launch portal + /play staging gates
+scripts/build-web-teavm-spike.sh # build the TeaVM browser client target
+scripts/run-web-teavm-local.sh   # serve the TeaVM browser client on localhost/LAN
+scripts/run-web-teavm-iphone-simulator.sh # open TeaVM client in iOS Simulator Safari
+scripts/run-web-teavm-iphone-qa.sh # write LAN/deployed iPhone Safari QA reports
+scripts/validate-web-teavm-iphone-qa-report.py # validate copied Safari diagnostics report
+scripts/package-web-teavm.sh     # stage a production static web root for iPhone/Safari
+scripts/verify-web-teavm-deployment.sh # verify a hosted iPhone web-client deployment
+scripts/check-web-teavm-iphone-release.sh # run local automated iPhone web release preflight
+scripts/check-web-teavm-iphone-final-release.py # audit final hosted + physical iPhone web release evidence
+scripts/smoke-web-teavm-iphone.sh # Chrome iPhone-emulation login/post-login smoke
+scripts/smoke-web-teavm-iphone-controls.sh # synthetic iPhone control-regression smoke
+scripts/smoke-web-teavm-iphone-https-wss.sh # local HTTPS/same-host WSS proxy smoke
+scripts/build-android.sh      # build Android APK / Play AAB; requires Android SDK
 scripts/android-smoke.sh      # build/install Android APK and capture emulator QA screenshots
+scripts/run-android-device-qa.sh # write physical Android QA report templates
+scripts/validate-android-device-qa-report.py # validate filled physical Android QA reports
 scripts/reset-db.sh           # wipe + reseed dev DB
 scripts/fetch-upstream-snapshot.sh   # recreate upstream/openrsc-snapshot/
 ```
@@ -130,13 +148,27 @@ Build Android client:
 ```bash
 # Requires Android SDK via ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
 # or Homebrew android-commandlinetools at /opt/homebrew/share/android-commandlinetools.
-scripts/build-android.sh
+scripts/build-android.sh --debug
+
+# Release APKs require upload signing config through environment, Gradle properties,
+# or the local macOS Keychain services documented in ~/.voidscape/android-signing.
+scripts/build-android.sh --release
+
+# Google Play release bundle; upload the generated voidscape.aab only after preflight.
+scripts/build-android.sh --play-release
+scripts/check-android-play-release.sh \
+  --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" \
+  --server-config server/voidscape-launch.conf \
+  --current-play-version-code 8 \
+  --expected-signer-sha256 3B:AE:B2:F4:6D:68:55:DD:9E:21:DA:27:80:8C:02:90:B1:32:9F:07:27:23:F4:39:DC:A2:07:A4:0A:14:2E:D7
 ```
 
 Android emulator visual smoke:
 ```bash
 # Starts voidscape_api35 headless when no device is connected, installs the debug APK,
 # and writes wrapper/login screenshots to the chosen directory.
+# SDK discovery checks ANDROID_HOME, ANDROID_SDK_ROOT, Android_Client/local.properties,
+# common Android Studio/Homebrew SDK roots, then adb on PATH.
 scripts/android-smoke.sh --out /tmp/voidscape-android-smoke
 ```
 
@@ -158,6 +190,18 @@ AVD_NAME=voidscape_small_api35 scripts/android-smoke.sh --no-build --only-auth-l
 AVD_NAME=voidscape_tablet_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-tablet-lifecycle
 ```
 
+Android promo recording:
+```bash
+# With a local server running and the promo character already logged into the
+# visible Android emulator, record the guided silent portrait/landscape session.
+scripts/record-android-promo.sh --player wbtest
+
+scripts/record-android-promo.sh --list-shots
+scripts/record-android-promo.sh --clip landscape-hud --auto-stop 3 --skip-cracker-prep --no-montage --out /tmp/android-promo-proof
+```
+
+The promo recorder captures the emulator framebuffer rather than the macOS window, emits silent H.264 MP4 clips plus a 16:9 rough cut, and restores temporary display/orientation settings. Cracker preparation is local-only and requires a separate local admin account; use `--skip-cracker-prep` when the character is already prepared.
+
 Run PC client:
 ```bash
 cd Client_Base
@@ -172,7 +216,51 @@ scripts/run-client.sh
 # automatically after startup, avoiding mouse/keyboard login clicks during QA.
 scripts/run-client.sh --login StepAlt:stepalt
 scripts/run-client.sh --user StepAlt --pass stepalt
+
+# Workbench mode exposes loopback screenshot/state/input endpoints for visual QA.
+scripts/run-workbench-client.sh --user StepAlt --pass stepalt --workbench-port 18787
 ```
+
+Desktop Java prelaunch visual smoke:
+```bash
+# Backs up local saved desktop credentials by default, proves fresh-cache login,
+# and captures login/in-game/panel PNGs plus manifest.json.
+scripts/smoke-pc-client-prelaunch.sh --user StepAlt --pass stepalt --out /tmp/voidscape-pc-client-prelaunch
+```
+
+Desktop launcher visual smoke:
+```bash
+# Captures the Swing launcher as PNG, verifies endpoint files, and writes manifest.json.
+scripts/smoke-launcher-prelaunch.sh --host voidscape.gg --port 43596 --portal-url https://voidscape.gg --out /tmp/voidscape-launcher-prelaunch
+
+# To verify a packaged staging jar's embedded config instead of system-property overrides:
+scripts/smoke-launcher-prelaunch.sh --jar dist/launch-staging/launcher/VoidscapeLauncher-staging.jar --use-packaged-config --host voidscape.gg --port 43596 --portal-url https://voidscape.gg
+```
+
+Prelaunch readiness report:
+```bash
+# Runs local schema/API/build, launch-staging packaging, and packaged launcher
+# visual smoke, then writes summary.md and per-check logs.
+scripts/check-prelaunch-readiness.sh --out tmp/prelaunch-readiness
+
+# Add optional gates when the needed environment is available.
+scripts/check-prelaunch-readiness.sh \
+  --out tmp/prelaunch-readiness-live \
+  --skip-build \
+  --live-portal-visual \
+  --android-release-guard \
+  --pc-user <qa-user> \
+  --pc-pass-file <qa-pass-file>
+```
+
+Feature-page screenshot loop:
+
+```bash
+scripts/run-server.sh
+scripts/run-client.sh --login test:test
+```
+
+Use the in-game Options -> Screenshot row or press F12 in the PC client. Before capturing feature-page images, switch to a clean chat tab or hide the chat box so welcome/system/server messages are not visible. The client saves exact game-frame PNGs under `tmp/workbench/screenshots/`, with JSON sidecars, so screenshots do not depend on macOS window placement or desktop cropping.
 
 Compile plugins standalone:
 ```bash
@@ -248,10 +336,20 @@ mariadb:
     - ./server/inc/my.cnf:/etc/mysql/my.cnf
 ```
 
-Env vars come from `.env` (default scaffold creds — `root/root` for local only):
+Copy the safe scaffold before starting MariaDB, then replace both password
+placeholders. `.env` is intentionally ignored and must never be committed:
+
+```bash
+cp .env.example .env
+```
+
+The relevant variables are:
 ```
 MARIADB_ROOT_USER=root
-MARIADB_ROOT_PASSWORD=root
+MARIADB_ROOT_PASSWORD=change-me-local-root-password
+MARIADB_USER=openrsc
+MARIADB_PASS=change-me-local-user-password
+MYSQL_DUMPS_DIR=Backups
 ```
 
 Bring up:

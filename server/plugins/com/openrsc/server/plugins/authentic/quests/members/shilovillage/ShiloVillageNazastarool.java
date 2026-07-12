@@ -139,7 +139,7 @@ public class ShiloVillageNazastarool implements OpLocTrigger,
 
 	@Override
 	public boolean blockKillNpc(Player player, Npc n) {
-		return n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id() || n.getID() == NpcId.NAZASTAROOL_SKELETON.id() || n.getID() == NpcId.NAZASTAROOL_GHOST.id();
+		return isQuestNazastarool(n);
 	}
 
 	@Override
@@ -185,28 +185,36 @@ public class ShiloVillageNazastarool implements OpLocTrigger,
 
 	@Override
 	public boolean blockEscapeNpc(Player player, Npc n) {
-		return n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id() || n.getID() == NpcId.NAZASTAROOL_SKELETON.id() || n.getID() == NpcId.NAZASTAROOL_GHOST.id();
+		return isQuestNazastarool(n);
 	}
 
 	@Override
 	public void onEscapeNpc(Player player, Npc n) {
-		if (n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id() || n.getID() == NpcId.NAZASTAROOL_SKELETON.id() || n.getID() == NpcId.NAZASTAROOL_GHOST.id()) {
+		if (isQuestNazastarool(n)) {
 			runFromNazastarool(player, n);
 		}
 	}
 
 	@Override
 	public boolean blockSpellNpc(Player player, Npc n) {
-		return n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id() || n.getID() == NpcId.NAZASTAROOL_SKELETON.id() || n.getID() == NpcId.NAZASTAROOL_GHOST.id();
+		return isQuestNazastarool(n);
 	}
 
 	@Override
 	public void onSpellNpc(Player player, Npc n) {
-		if (n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id() || n.getID() == NpcId.NAZASTAROOL_SKELETON.id() || n.getID() == NpcId.NAZASTAROOL_GHOST.id()) {
+		if (isQuestNazastarool(n)) {
 			if (!player.getCarriedItems().getEquipment().hasEquipped(ItemId.BEADS_OF_THE_DEAD.id())) {
 				choke(player);
 			}
 			n.getSkills().setLevel(Skill.HITS.id(), n.getSkills().getMaxStat(Skill.HITS.id()));
 		}
+	}
+
+	private boolean isQuestNazastarool(Npc n) {
+		return n != null
+			&& !n.shouldSuppressDefaultDeathRewards()
+			&& (n.getID() == NpcId.NAZASTAROOL_ZOMBIE.id()
+				|| n.getID() == NpcId.NAZASTAROOL_SKELETON.id()
+				|| n.getID() == NpcId.NAZASTAROOL_GHOST.id());
 	}
 }

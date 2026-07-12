@@ -10,6 +10,10 @@ import orsc.graphics.two.GraphicsController;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
 
+import static orsc.Config.C_CUSTOM_UI;
+import static orsc.Config.S_WANT_CUSTOM_UI;
+import static orsc.osConfig.F_ANDROID_BUILD;
+
 public final class Panel {
 	public int[] controlListCurrentSize;
 	public int[] controlScrollAmount;
@@ -35,6 +39,7 @@ public final class Panel {
 	private int[] controlHeight;
 	private int[] controlSpaceHeight;
 	private int[] controlSpaceTextHeight;
+	private int[] controlTouchRowHeight;
 	private int[][] controlListEntryCrown;
 	private String[][] controlListEntryString;
 	private String[][] controlListEntryString2;
@@ -81,6 +86,7 @@ public final class Panel {
 			this.controlHeight = new int[maxControls];
 			this.controlSpaceHeight = new int[maxControls];
 			this.controlSpaceTextHeight = new int[maxControls];
+			this.controlTouchRowHeight = new int[maxControls];
 			this.controlClicked = new boolean[maxControls];
 			this.controlListEntryString3 = new String[maxControls][];
 			this.controlX = new int[maxControls];
@@ -103,6 +109,40 @@ public final class Panel {
 		}
 	}
 
+	/**
+	 * Dual-skin gate, same expression as Menu.useVoidscapeMenuStyle(). When
+	 * false, every render path below is byte-identical to the classic client
+	 * (docs/UI-STYLE-GUIDE.md §0 — preservation presets depend on it).
+	 */
+	private boolean useVoidSkin() {
+		return C_CUSTOM_UI || F_ANDROID_BUILD && S_WANT_CUSTOM_UI;
+	}
+
+	/**
+	 * One list state-color resolver for every list variant (replaces five
+	 * duplicated inline blocks). Classic values preserved exactly, including
+	 * the historical quirk that plain scrolling lists ignore the alt flag for
+	 * the clicked color while centered/horizontal lists respect it.
+	 */
+	private int resolveListColor(boolean alt, boolean hovered, boolean clicked, boolean clickedRespectsAlt) {
+		if (this.useVoidSkin()) {
+			if (clicked) {
+				return UiSkin.GOLD_TITLE;
+			}
+			if (hovered) {
+				return UiSkin.GOLD_HOT;
+			}
+			return UiSkin.TEXT_BODY;
+		}
+		if (clicked) {
+			return clickedRespectsAlt ? (alt ? 0xFF0000 : 0xC00000) : 0xFF0000;
+		}
+		if (hovered) {
+			return alt ? 0x808080 : 0xFFFFFF;
+		}
+		return alt ? 0xFFFFFF : 0;
+	}
+
 	public final int addButton(int x, int y, int width, int height) {
 		try {
 			this.controlType[this.controlCount] = PanelControlType.BUTTON;
@@ -117,6 +157,23 @@ public final class Panel {
 		} catch (RuntimeException var7) {
 			throw GenUtil.makeThrowable(var7, "qa.G(" + x + ',' + width + ',' + y + ',' + "dummy" + ',' + height + ')');
 		}
+	}
+
+	/**
+	 * Checkbox control. The TOGGLE_BUTTON renderer and its handleMouse toggle
+	 * logic have existed since vendor, but no adder did — this completes the
+	 * set. State is read via getControlClickedListIndex (0/1).
+	 */
+	public final int addToggleButton(int x, int y, int width, int height, boolean initiallyChecked) {
+		this.controlType[this.controlCount] = PanelControlType.TOGGLE_BUTTON;
+		this.controlVisible[this.controlCount] = true;
+		this.controlClicked[this.controlCount] = false;
+		this.controlClickedListIndex[this.controlCount] = initiallyChecked ? 1 : 0;
+		this.controlX[this.controlCount] = x - width / 2;
+		this.controlY[this.controlCount] = y - height / 2;
+		this.controlWidth[this.controlCount] = width;
+		this.controlHeight[this.controlCount] = height;
+		return this.controlCount++;
 	}
 
 	public final int addButtonBackground(int x, int y, int width, int height) {
@@ -484,6 +541,19 @@ public final class Panel {
 		}
 	}
 
+	private int effectiveListRowHeight(int control, int font) {
+		int fontHeight = this.graphics.fontHeight(font);
+		if (control >= 0 && control < this.controlTouchRowHeight.length && this.controlTouchRowHeight[control] > fontHeight) {
+			return this.controlTouchRowHeight[control];
+		}
+		return fontHeight;
+	}
+
+	private boolean usesTouchListRows(int control, int font) {
+		return control >= 0 && control < this.controlTouchRowHeight.length
+			&& this.controlTouchRowHeight[control] > this.graphics.fontHeight(font);
+	}
+
 	public final int getControlClickedListIndex(int control) {
 		try {
 
@@ -666,6 +736,12 @@ public final class Panel {
 
 	private void renderButtonBackground(int x, int y, int width, int height) {
 		try {
+			if (this.useVoidSkin()) {
+				this.graphics.setClip(x, x + width, y + height, y);
+				UiSkin.glassPanel(this.graphics, x, y, width, height, UiSkin.A_GLASS_TEXT);
+				this.graphics.clearClip();
+				return;
+			}
 			this.graphics.setClip(x, x + width, y + height, y);
 
 			this.graphics.drawVerticalGradient(x, y, width, height, this.colorI, this.colorL);
@@ -702,36 +778,16 @@ public final class Panel {
 			int lineY = y - (count - 1) * this.graphics.fontHeight(font) / 2;
 
 			for (int i = 0; count > i; ++i) {
-				int color;
-				if (this.controlUseAlternativeColour[controlIndex]) {
-					color = 16777215;
-				} else {
-					color = 0;
-				}
-
 				int width = this.graphics.stringWidth(font, entries[i]);
-				if (this.currMouseX >= x - width / 2 && this.currMouseX <= x + width / 2 && this.currMouseY - 2 <= lineY
-					&& lineY - this.graphics.fontHeight(font) < this.currMouseY - 2) {
-					if (this.controlUseAlternativeColour[controlIndex]) {
-						color = 8421504;
-					} else {
-						color = 16777215;
-					}
-
-					if (this.lastMouseButtonDown == 1) {
-						this.controlClickedListIndex[controlIndex] = i;
-						this.controlClicked[controlIndex] = true;
-					}
+				boolean hovered = this.currMouseX >= x - width / 2 && this.currMouseX <= x + width / 2
+					&& this.currMouseY - 2 <= lineY && lineY - this.graphics.fontHeight(font) < this.currMouseY - 2;
+				if (hovered && this.lastMouseButtonDown == 1) {
+					this.controlClickedListIndex[controlIndex] = i;
+					this.controlClicked[controlIndex] = true;
 				}
 
-				if (i == this.controlClickedListIndex[controlIndex]) {
-					if (!this.controlUseAlternativeColour[controlIndex]) {
-						color = 12582912;
-					} else {
-						color = 16711680;
-					}
-				}
-
+				int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+					i == this.controlClickedListIndex[controlIndex], true);
 				this.graphics.drawColoredString(x - width / 2, lineY, entries[i], font, color, 0);
 				lineY += this.graphics.fontHeight(font);
 			}
@@ -744,6 +800,10 @@ public final class Panel {
 
 	private void renderDecoratedBox(int x, int y, int width, int height) {
 		try {
+			if (this.useVoidSkin()) {
+				UiSkin.glassPanel(this.graphics, x, y, width, height, UiSkin.A_GLASS_TEXT);
+				return;
+			}
 			this.graphics.drawBox(x, y, width, height, 0);
 
 			this.graphics.drawBoxBorder(x, width, y, height, this.colorF);
@@ -786,36 +846,16 @@ public final class Panel {
 			int lineY = this.graphics.fontHeight(font) / 3 + y;
 
 			for (int var11 = 0; var8 > var11; ++var11) {
-				int color;
-				if (!this.controlUseAlternativeColour[controlIndex]) {
-					color = 0;
-				} else {
-					color = 16777215;
-				}
-
-				if (this.currMouseX >= lineX
+				boolean hovered = this.currMouseX >= lineX
 					&& lineX + this.graphics.stringWidth(font, entiresString[var11]) >= this.currMouseX
-					&& this.currMouseY <= lineY && lineY - this.graphics.fontHeight(font) < this.currMouseY) {
-					if (this.controlUseAlternativeColour[controlIndex]) {
-						color = 8421504;
-					} else {
-						color = 16777215;
-					}
-
-					if (this.lastMouseButtonDown == 1) {
-						this.controlClickedListIndex[controlIndex] = var11;
-						this.controlClicked[controlIndex] = true;
-					}
+					&& this.currMouseY <= lineY && lineY - this.graphics.fontHeight(font) < this.currMouseY;
+				if (hovered && this.lastMouseButtonDown == 1) {
+					this.controlClickedListIndex[controlIndex] = var11;
+					this.controlClicked[controlIndex] = true;
 				}
 
-				if (var11 == this.controlClickedListIndex[controlIndex]) {
-					if (this.controlUseAlternativeColour[controlIndex]) {
-						color = 16711680;
-					} else {
-						color = 12582912;
-					}
-				}
-
+				int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+					var11 == this.controlClickedListIndex[controlIndex], true);
 				this.graphics.drawColoredString(lineX, lineY, entiresString[var11], font, color, 0);
 				lineX += this.graphics.stringWidth(font, entiresString[var11] + "  ");
 			}
@@ -829,6 +869,18 @@ public final class Panel {
 		try {
 
 			int barX = x + width - 12;
+			if (this.useVoidSkin()) {
+				this.graphics.drawBoxBorder(barX, 12, y, height, UiSkin.VOID_LINE);
+				this.graphics.drawSprite(this.graphics.spriteSelect(EntityHandler.GUIPARTS.MINIARROWUP.getDef()), 1 + barX, y + 1);
+				this.graphics.drawSprite(this.graphics.spriteSelect(EntityHandler.GUIPARTS.MINIARROWDOWN.getDef()), 1 + barX, height - 12 + y);
+				this.graphics.drawLineHoriz(barX, 13 + y, 12, UiSkin.VOID_LINE);
+				this.graphics.drawLineHoriz(barX, y - 13 + height, 12, UiSkin.VOID_LINE);
+				this.graphics.drawBoxAlpha(1 + barX, 14 + y, 11, height - 27, UiSkin.VOID_BOX, UiSkin.A_BUTTON);
+				this.graphics.drawBox(barX + 3, 14 + y + barDragPos, 7, barDragSize, UiSkin.PURPLE_EDGE);
+				this.graphics.drawLineVert(barX + 2, y + barDragPos + 14, UiSkin.GOLD_LINE, barDragSize);
+				this.graphics.drawLineVert(barX + 10, 14 + barDragPos + y, UiSkin.SHADOW_B, barDragSize);
+				return;
+			}
 			this.graphics.drawBoxBorder(barX, 12, y, height, 0);
 			this.graphics.drawSprite(this.graphics.spriteSelect(EntityHandler.GUIPARTS.MINIARROWUP.getDef()), 1 + barX, y + 1);
 			this.graphics.drawSprite(this.graphics.spriteSelect(EntityHandler.GUIPARTS.MINIARROWDOWN.getDef()), 1 + barX, height - 12 + y);
@@ -844,15 +896,39 @@ public final class Panel {
 		}
 	}
 
+	private void renderTouchScrollIndicator(int x, int y, int width, int height,
+										 int entryCount, int visibleLines, int scroll) {
+		int trackY = y + 4;
+		int trackHeight = Math.max(1, height - 8);
+		int trackX = x + width - 5;
+		int maxScroll = Math.max(1, entryCount - visibleLines);
+		int thumbHeight = Math.min(trackHeight,
+			Math.max(18, trackHeight * Math.max(1, visibleLines) / Math.max(1, entryCount)));
+		int thumbTravel = Math.max(0, trackHeight - thumbHeight);
+		int thumbY = trackY + thumbTravel * Math.max(0, Math.min(scroll, maxScroll)) / maxScroll;
+		int trackColor = this.useVoidSkin() ? UiSkin.VOID_LINE : this.colorA;
+		int thumbColor = this.useVoidSkin() ? UiSkin.PURPLE_EDGE : this.colorD;
+		this.graphics.drawBoxAlpha(trackX, trackY, 3, trackHeight, trackColor, 100);
+		this.graphics.drawBoxAlpha(trackX - 1, thumbY, 5, thumbHeight, thumbColor, 225);
+	}
+
 
 	private void renderScrollingList(int controlIndex, int x, int y, int width, int height, int font,
 									 int entryCount, String[] entriesString, int[] entriesCrowns, int scroll) {
 		try {
 
-			int maxLines = height / this.graphics.fontHeight(font);
+			int fontHeight = this.graphics.fontHeight(font);
+			int rowHeight = effectiveListRowHeight(controlIndex, font);
+			boolean touchRows = this.usesTouchListRows(controlIndex, font);
+			int maxLines = height / rowHeight;
 			if (entryCount <= maxLines) {
 				scroll = 0;
 				this.controlScrollAmount[controlIndex] = 0;
+			} else if (touchRows) {
+				scroll = Math.max(0, Math.min(scroll, entryCount - maxLines));
+				this.controlScrollAmount[controlIndex] = scroll;
+				this.isScrolling[controlIndex] = false;
+				this.renderTouchScrollIndicator(x, y, width, height, entryCount, maxLines, scroll);
 			} else {
 				int scrollBarStartX = width - 12 + x;
 				int barDraggerSize = maxLines * (height - 27) / entryCount;
@@ -903,27 +979,24 @@ public final class Panel {
 			int lineY;
 
 			this.controlSelectedListIndex[controlIndex] = -1;
-			int heightWhitespace = height - this.graphics.fontHeight(font) * maxLines;
-			lineY = this.graphics.fontHeight(font) * 5 / 6 + y + heightWhitespace / 2;
+			int heightWhitespace = height - rowHeight * maxLines;
+			int rowTop = y + heightWhitespace / 2;
 
+			int renderedLines = 0;
 			for (int line = scroll; line < entryCount; ++line) {
-				int color;
-				if (this.controlUseAlternativeColour[controlIndex]) {
-					color = 16777215;
-				} else {
-					color = 0;
-				}
+				lineY = rowTop + (rowHeight - fontHeight) / 2 + fontHeight * 5 / 6;
 
-				if (this.currMouseX >= 2 + x
-					&& this.currMouseX <= this.graphics.stringWidth(font, entriesString[line]) + 2 + x
-					&& this.currMouseY - 2 <= lineY
-					&& this.currMouseY - 2 > lineY - this.graphics.fontHeight(font)) {
-					if (this.controlUseAlternativeColour[controlIndex]) {
-						color = 8421504;
-					} else {
-						color = 16777215;
-					}
-
+				boolean fullRowHit = rowHeight > fontHeight;
+				boolean rowXHit = fullRowHit
+					? this.currMouseX >= x && this.currMouseX < x + width - 12
+					: this.currMouseX >= 2 + x
+						&& this.currMouseX <= this.graphics.stringWidth(font, entriesString[line]) + 2 + x;
+				boolean rowYHit = fullRowHit
+					? this.currMouseY >= rowTop && this.currMouseY < rowTop + rowHeight
+					: this.currMouseY - 2 <= lineY
+						&& this.currMouseY - 2 > lineY - fontHeight;
+				boolean hovered = rowXHit && rowYHit;
+				if (hovered) {
 					this.controlSelectedListIndex[controlIndex] = line;
 					if (this.lastMouseButtonDown == 1) {
 						this.controlClickedListIndex[controlIndex] = line;
@@ -931,13 +1004,15 @@ public final class Panel {
 					}
 				}
 
-				if (line == this.controlClickedListIndex[controlIndex] && this.m_t) {
-					color = 16711680;
+				if (this.useVoidSkin() && hovered && fullRowHit) {
+					UiSkin.listRowFill(this.graphics, x, rowTop, width - 12, rowHeight, true, false);
 				}
-
+				int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+					line == this.controlClickedListIndex[controlIndex] && this.m_t, false);
 				this.graphics.drawColoredString(x + 2, lineY, entriesString[line], font, color, entriesCrowns[line] << 24);
-				lineY += this.graphics.fontHeight(font);
-				if (lineY >= height + y) {
+				rowTop += rowHeight;
+				renderedLines++;
+				if ((touchRows && renderedLines >= maxLines) || rowTop >= height + y) {
 					break;
 				}
 			}
@@ -953,6 +1028,11 @@ public final class Panel {
 	private void renderScrollingList3(int controlIndex, int x, int y, int width, int height, int font,
 									  int entryCount, String[] entriesString, int[] entriesInt, int scroll, int spaceHeight, int spaceHeightText) {
 		try {
+			if (this.usesTouchListRows(controlIndex, font)) {
+				this.renderScrollingList3Touch(controlIndex, x, y, width, height, font, entryCount,
+					entriesString, scroll, spaceHeight, spaceHeightText);
+				return;
+			}
 
 			int maxLines = (height - (spaceHeightText + spaceHeight)) / this.graphics.fontHeight(font);
 			if (entryCount <= maxLines) {
@@ -1012,23 +1092,11 @@ public final class Panel {
 			lineY = this.graphics.fontHeight(font) * 5 / 6 + y + heightWhitespace / 2;
 
 			for (int line = scroll; line < entryCount; ++line) {
-				int color;
-				if (this.controlUseAlternativeColour[controlIndex]) {
-					color = 16777215;
-				} else {
-					color = 0;
-				}
-
-				if (this.currMouseX >= 2 + x
+				boolean hovered = this.currMouseX >= 2 + x
 					&& this.currMouseX <= this.graphics.stringWidth(font, entriesString[line]) + 2 + x
 					&& this.currMouseY - 2 <= lineY
-					&& this.currMouseY - 2 > lineY - this.graphics.fontHeight(font)) {
-					if (this.controlUseAlternativeColour[controlIndex]) {
-						color = 8421504;
-					} else {
-						color = 16777215;
-					}
-
+					&& this.currMouseY - 2 > lineY - this.graphics.fontHeight(font);
+				if (hovered) {
 					this.controlSelectedListIndex[controlIndex] = line;
 					if (this.lastMouseButtonDown == 1) {
 						this.controlClickedListIndex[controlIndex] = line;
@@ -1036,10 +1104,8 @@ public final class Panel {
 					}
 				}
 
-				if (line == this.controlClickedListIndex[controlIndex] && this.m_t) {
-					color = 16711680;
-				}
-
+				int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+					line == this.controlClickedListIndex[controlIndex] && this.m_t, false);
 				this.graphics.drawColoredString(x + 2, lineY - (spaceHeightText), entriesString[line], font, color, 0);
 				lineY += this.graphics.fontHeight(font) + spaceHeight;
 				if (lineY >= height + y) {
@@ -1052,6 +1118,52 @@ public final class Panel {
 				"qa.D(" + height + ',' + x + ',' + controlIndex + ',' + (entriesString != null ? "{...}" : "null")
 					+ ',' + entryCount + ',' + font + ',' + y + ',' + (entriesInt != null ? "{...}" : "null")
 					+ ',' + "dummy" + ',' + scroll + ',' + width + ')');
+		}
+	}
+
+	private void renderScrollingList3Touch(int controlIndex, int x, int y, int width, int height, int font,
+										 int entryCount, String[] entriesString, int scroll, int spaceHeight,
+										 int spaceHeightText) {
+		int fontHeight = this.graphics.fontHeight(font);
+		int rowHeight = this.controlTouchRowHeight[controlIndex];
+		int contentHeight = Math.max(rowHeight, height - (spaceHeightText + spaceHeight));
+		int maxLines = Math.max(1, contentHeight / rowHeight);
+		int maxScroll = Math.max(0, entryCount - maxLines);
+		scroll = Math.max(0, Math.min(scroll, maxScroll));
+		this.controlScrollAmount[controlIndex] = scroll;
+
+		boolean hasScrollbar = entryCount > maxLines;
+		this.isScrolling[controlIndex] = false;
+		if (hasScrollbar) {
+			this.renderTouchScrollIndicator(x, y, width, height, entryCount, maxLines, scroll);
+		}
+
+		this.controlSelectedListIndex[controlIndex] = -1;
+		int visibleLines = Math.min(maxLines, entryCount - scroll);
+		int heightWhitespace = contentHeight - rowHeight * maxLines;
+		int rowTop = y + heightWhitespace / 2;
+		int rowWidth = width - (hasScrollbar ? 12 : 0);
+
+		for (int visibleLine = 0; visibleLine < visibleLines; ++visibleLine) {
+			int line = scroll + visibleLine;
+			int lineY = rowTop + (rowHeight - fontHeight) / 2 + fontHeight * 5 / 6;
+			boolean hovered = this.currMouseX >= x && this.currMouseX < x + rowWidth
+				&& this.currMouseY >= rowTop && this.currMouseY < rowTop + rowHeight;
+			if (hovered) {
+				this.controlSelectedListIndex[controlIndex] = line;
+				if (this.lastMouseButtonDown == 1) {
+					this.controlClickedListIndex[controlIndex] = line;
+					this.controlClicked[controlIndex] = true;
+				}
+			}
+
+			if (this.useVoidSkin() && hovered) {
+				UiSkin.listRowFill(this.graphics, x, rowTop, rowWidth, rowHeight, true, false);
+			}
+			int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+				line == this.controlClickedListIndex[controlIndex] && this.m_t, false);
+			this.graphics.drawColoredString(x + 2, lineY, entriesString[line], font, color, 0);
+			rowTop += rowHeight;
 		}
 	}
 
@@ -1159,7 +1271,11 @@ public final class Panel {
 		try {
 
 			int color;
-			if (!this.controlUseAlternativeColour[control]) {
+			if (this.useVoidSkin()) {
+				// All base panel text is parchment on the void skin — every plate
+				// this can land on is dark, and inline @col@ codes still override.
+				color = UiSkin.TEXT_BODY;
+			} else if (!this.controlUseAlternativeColour[control]) {
 				color = 0;
 			} else {
 				color = 16777215;
@@ -1222,6 +1338,18 @@ public final class Panel {
 
 	private void renderToggleButton(int controlIndex, int x, int y, int width, int height) {
 		try {
+			if (this.useVoidSkin()) {
+				this.graphics.drawBoxAlpha(x, y, width, height, UiSkin.FIELD_BG, UiSkin.A_FIELD);
+				this.graphics.drawBorder(x, y, width, height,
+					this.controlClickedListIndex[controlIndex] == 1 ? UiSkin.GOLD_LINE : UiSkin.FIELD_BORDER_IDLE);
+				if (this.controlClickedListIndex[controlIndex] == 1) {
+					for (int i = 0; i < height; ++i) {
+						this.graphics.drawLineHoriz(i + x, y + i, 1, UiSkin.GOLD_HOT);
+						this.graphics.drawLineHoriz(width + x - 1 - i, i + y, 1, UiSkin.GOLD_HOT);
+					}
+				}
+				return;
+			}
 			this.graphics.drawBox(x, y, width, height, 16777215);
 
 			this.graphics.drawLineHoriz(x, y, width, this.colorI);
@@ -1305,12 +1433,37 @@ public final class Panel {
 		}
 	}
 
+	public boolean isMouseOverScrollableListScrollbar(int control, int mouseX, int mouseY) {
+		if (control < 0 || control >= this.controlCount || !this.controlVisible[control]) {
+			return false;
+		}
+		int rowHeight = effectiveListRowHeight(control, this.controlArgInt[control]);
+		if (rowHeight <= 0) {
+			return false;
+		}
+		int maxLines;
+		if (this.controlType[control] == PanelControlType.SCROLLING_LIST3
+			&& this.usesTouchListRows(control, this.controlArgInt[control])) {
+			int listHeight = Math.max(rowHeight, this.controlHeight[control]
+				- this.controlSpaceTextHeight[control] - this.controlSpaceHeight[control]);
+			maxLines = Math.max(1, listHeight / rowHeight);
+		} else {
+			maxLines = this.controlHeight[control] / rowHeight;
+		}
+		if (this.controlListCurrentSize[control] <= maxLines) {
+			return false;
+		}
+		int scrollbarX = this.controlX[control] + this.controlWidth[control] - 12;
+		return mouseX >= scrollbarX && mouseX <= scrollbarX + 12
+			&& mouseY >= this.controlY[control] && mouseY <= this.controlY[control] + this.controlHeight[control];
+	}
+
 	public int getScrollPosition(int index) {
 		return controlScrollAmount[index];
 	}
 
 	public void scrollMethodList(int handle, int i) {
-		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / graphics.fontHeight(controlArgInt[handle]));
+		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / effectiveListRowHeight(handle, controlArgInt[handle]));
 		int diff = Math.abs(limit - controlScrollAmount[handle]);
 		if (controlScrollAmount[handle] <= limit) {
 			if (i > 0)
@@ -1327,6 +1480,17 @@ public final class Panel {
 	}
 
 	public void scrollMethodCustomList(int handle, int i, int cDifference) {
+		if (this.controlType[handle] == PanelControlType.SCROLLING_LIST3
+			&& this.usesTouchListRows(handle, this.controlArgInt[handle])) {
+			int rowHeight = effectiveListRowHeight(handle, this.controlArgInt[handle]);
+			int contentHeight = Math.max(rowHeight, this.controlHeight[handle]
+				- this.controlSpaceTextHeight[handle] - this.controlSpaceHeight[handle]);
+			int maxLines = Math.max(1, contentHeight / rowHeight);
+			int limit = Math.max(0, this.controlListCurrentSize[handle] - maxLines);
+			this.controlScrollAmount[handle] = Math.max(0,
+				Math.min(limit, this.controlScrollAmount[handle] + i));
+			return;
+		}
 		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / graphics.fontHeight(controlArgInt[handle])) + cDifference;
 		int diff = Math.abs(limit - controlScrollAmount[handle]);
 		if (controlScrollAmount[handle] <= limit) {
@@ -1349,6 +1513,20 @@ public final class Panel {
 		this.controlWidth[id] = w;
 		this.controlHeight[id] = h;
 
+	}
+
+	public void setScrollingListTouchRowHeight(int id, int rowHeight) {
+		if (id < 0 || id >= this.controlTouchRowHeight.length) {
+			return;
+		}
+		this.controlTouchRowHeight[id] = Math.max(0, rowHeight);
+	}
+
+	public void setControlFont(int id, int font) {
+		if (id < 0 || id >= this.controlArgInt.length) {
+			return;
+		}
+		this.controlArgInt[id] = Math.max(0, font);
 	}
 
 	public void resetScrollIndex(int auctionScrollHandle) {

@@ -22,11 +22,11 @@ Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → intend
 | BlinkHandler | BLINK (custom wire packet id 59; enum ordinal 5) | x:short, y:short (TargetPositionStruct.coordinate; packet length must be exactly 4; struct | Staff teleport: instantly teleport self to tile (x, y) via ctrl-click on the map | `voidbot blink <x> <y>` | player.isMod() — non-mod senders are flagged suspicious ('no |
 | ChatHandler | CHAT_MESSAGE (custom wire packet id 216; enum ordinal 64) | length:smart08_16 (1 byte if <128 else 2 bytes minus 0x8000), encryptedChat:byte[remaining | Send a public chat message visible to nearby players | `voidbot say <message>` | None to send — always accepted. Mute, shadow-mute, tutorial  |
 | ClientDebugHandler | SEND_DEBUG_INFO (enum ordinal 91; NO wire packet id in the C | infoString:string (RSC string: bytes until 0x0A terminator) — per Payload38Parser.java:519 | Client uploads a debug/diagnostic text blob; server only logs it at DEBUG level | `voidbot debug-report <text> (daemon-internal; do not expose on this server)` | Logged-in session; on voidscape (CUSTOM protocol, client_ver |
-| CombatStyleHandler | COMBAT_STYLE_CHANGED (custom wire packet id 29; enum ordinal | style:byte (packet length must be exactly 1; valid values 0=controlled, 1=aggressive, 2=ac | Change the player's combat style (which stat receives melee XP) | `voidbot combat-style <controlled\|aggressive\|accurate\|defensive>` | None — handler only range-checks; values outside 0-3 flag th |
+| CombatStyleHandler | COMBAT_STYLE_CHANGED (custom wire packet id 29; enum ordinal | style:byte (packet length must be exactly 1; valid values 0=controlled, 1=aggressive, 2=ac | Change the player's combat style (which stat receives melee XP) | NOT IMPLEMENTED (planned syntax): `voidbot combat-style <controlled\|aggressive\|accurate\|defensive>` | None — handler only range-checks; values outside 0-3 flag th |
 | CommandHandler | COMMAND (custom wire packet id 38; enum ordinal 65) | command:string (RSC string: raw bytes until 0x0A terminator; format '<cmd> [arg1 arg2 ...] | Execute a server slash-command (::cmd) — quest points, info commands, mod/admin  | `voidbot command <cmd> [args...]` | Rate limit: non-admins must wait 1000 ms between commands (v |
 | FriendHandler | SOCIAL_ADD_FRIEND (wire 195), SOCIAL_REMOVE_FRIEND (wire 167 | player:string (packet.readString(), target username). SOCIAL_SEND_PRIVATE_MESSAGE only: me | Manage friends/ignore list and send a private message: add/remove friend, add/re | `voidbot friend-add <name> \| voidbot friend-remove <name> \| voidbot ignore-add ` | Mostly none. friend-add/ignore-add: target account must exis |
 | GameObjectAction | OBJECT_COMMAND (wire 136), OBJECT_COMMAND2 (wire 79); Opcode | x:short, y:short (object's world tile; packet length must be exactly 4 bytes or it is drop | Perform the primary (OBJECT_COMMAND) or secondary (OBJECT_COMMAND2) right-click  | `voidbot object-action <x> <y> [--option 1\|2]  (default option 1; option selects` | A GameObject must exist at exactly (x,y) within the player's |
-| GameObjectWallAction | INTERACT_WITH_BOUNDARY (wire 14), INTERACT_WITH_BOUNDARY2 (w | x:short, y:short, direction:byte (wall-object facing 0-3; packet length must be exactly 5  | Perform option 1 (INTERACT_WITH_BOUNDARY) or option 2 (INTERACT_WITH_BOUNDARY2)  | `voidbot boundary-action <x> <y> <direction> [--option 1\|2]  (direction is the w` | Wall object with that exact direction must exist at (x,y) in |
+| GameObjectWallAction | INTERACT_WITH_BOUNDARY (wire 14), INTERACT_WITH_BOUNDARY2 (w | x:short, y:short, direction:byte (wall-object facing 0-3; packet length must be exactly 5  | Perform option 1 (INTERACT_WITH_BOUNDARY) or option 2 (INTERACT_WITH_BOUNDARY2)  | NOT IMPLEMENTED (planned syntax): `voidbot boundary-action <x> <y> <direction> [--option 1\|2]  (direction is the w` | Wall object with that exact direction must exist at (x,y) in |
 | GameSettingHandler | GAME_SETTINGS_CHANGED (wire 111); OpcodeIn enum ordinal 63 | index:byte, value:byte (packet length must be exactly 2). Parser copies value into cameraM | Change a game/client setting. For custom clients (version > 235, includes 10087) | `voidbot set-setting <index> <value>  (optionally alias well-known indices: voidb` | none (logged-in session only). index must be 0-99 else the p |
 | GroundItemTake | GROUND_ITEM_TAKE (wire 247 — shared packet ID with CHANGE_DE | x:short, y:short, itemId:short (catalog/definition id of the ground item) | Pick up a ground item at a world tile. Server queues WalkToPointAction to the it | `voidbot take-item <x> <y> <item-id>` | Ground item with that itemId must be visible to the player a |
 | Heartbeat | HEARTBEAT (wire 67); OpcodeIn enum ordinal 0 | (none — NoPayloadStruct; packet length must be 0) | Session keepalive ping; no gameplay effect. Server handler body is empty — every | `(daemon-internal: voidbot session loop sends HEARTBEAT automatically when no oth` | none (active logged-in connection) |
@@ -35,7 +35,7 @@ Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → intend
 | ItemActionHandler | ITEM_COMMAND (wire packet id 90, custom protocol; OpcodeIn o | index:short (inventory slot, or -1 for worn item), amount:int (always present on custom pr | Invoke an inventory item's right-click command (eat, drink, bury, rub, open, etc | `voidbot item-action <inv-slot> <command-index> [--amount <n>]  (worn-item varian` | Logged in; not in combat; not busy; item exists at slot and  |
 | ItemDropHandler | ITEM_DROP (wire packet id 246, custom protocol; OpcodeIn ord | index:short (inventory slot, or -1 for worn item), amount:int (present ONLY when server co | Drop an item (or a chosen stack amount, 'Drop X') from inventory onto the ground | `voidbot drop <inv-slot> [--amount <n>]` | Not in combat; not dueling; not busy; no active trade or due |
 | ItemEquip | ITEM_EQUIP_FROM_INVENTORY (wire packet id 169; OpcodeIn ordi | slotIndex:short (both opcodes; exact wire length 2). FROM_INVENTORY: inventory slot 0-29.  | Wield/wear an item from an inventory slot, or equip directly from a bank slot (e | `voidbot equip <inv-slot>; voidbot equip-from-bank <bank-slot>` | passCheck: not busy (unless in combat); duel rule 'No extra  |
-| ItemExamineRequest | ITEM_EXAMINE_REQUEST (wire packet id 36, voidscape-custom op | slot:short (inventory slot; exact wire length 2) | Examine an inventory item; server returns the item description as a game message | `voidbot examine <inv-slot>` | Slot within inventory bounds and occupied; no busy/combat ch |
+| ItemExamineRequest | ITEM_EXAMINE_REQUEST (wire packet id 36, voidscape-custom op | slot:short (inventory slot; exact wire length 2) | Examine an inventory item; server returns the item description as a game message | NOT IMPLEMENTED (planned syntax): `voidbot examine <inv-slot>` | Slot within inventory bounds and occupied; no busy/combat ch |
 | ItemUnequip | ITEM_UNEQUIP_FROM_INVENTORY (wire packet id 170; ordinal 41) | FROM_INVENTORY: slotIndex:short (inventory slot 0-29; wire length 2). FROM_EQUIPMENT and R | Remove a worn item: back to inventory (classic worlds address it by the inventor | `voidbot unequip <inv-slot>; voidbot unequip-slot <equip-slot 0-13>; voidbot uneq` | passCheck: not busy (unless in combat); duel 'no extra items |
 | ItemUseOnGroundItem | GROUND_ITEM_USE_ITEM (wire packet id 53, custom protocol; Op | groundItemX:short, groundItemY:short, slotIndex:short (inventory slot of the carried item) | Use a carried inventory item on an item lying on the ground (classic example: ti | `voidbot use-on-ground <inv-slot> <x> <y> <ground-item-id>` | Not in combat; not dueling; not busy. A ground item with tha |
 | ItemUseOnItem | ITEM_USE_ITEM (wire packet id 91, custom protocol; OpcodeIn  | slotIndex1:short, slotIndex2:short (both inventory slots; exact wire length 4) | Use one inventory item on another (combine/craft: herblaw, fletching, gem cuttin | `voidbot use-on-item <slot1> <slot2>` | Not in combat; not dueling; not busy. Both slots occupied (n |
@@ -49,11 +49,11 @@ Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → intend
 | NpcCommand | NPC_COMMAND (ordinal 25, custom wire id 202); NPC_COMMAND2 ( | serverIndex:short (NPC server index). Length == 2 bytes. Same shape for both opcodes; the  | Invoke an NPC's right-click action: NPC_COMMAND = NPCDef command1 (e.g. 'pickpoc | `voidbot npc-command <npcServerIndex> <1\|2>  (daemon emits wire id 202 for 1, 20` | Not in combat, not busy (dueling NOT checked here, unlike ta |
 | NpcTalkTo | NPC_TALK_TO (ordinal 24, custom wire id 153) | serverIndex:short (NPC server index). Length == 2 bytes. | Talk to an NPC — walks to it and starts its dialogue script. | `voidbot npc-talk <npcServerIndex>` | Not in combat, not dueling, not busy. NPC must resolve via w |
 | NpcUseItem (server/src/com/openrsc/server/net/rsc/handlers/NpcUseItem.java) — DEAD CODE; live handler for this opcode is ItemUseOnNpc.java | NPC_USE_ITEM (enum ordinal 29; CUSTOM-protocol wire packet I | serverIndex:short (NPC server index), slotIndex:short (inventory slot 0-29). Struct: ItemO | Use an inventory item on an NPC (walks to NPC, fires UseNpcTrigger plugins, e.g. | `voidbot use-item-on-npc <npc-server-index> <inv-slot>` | NPC with that server index loaded in world; item present in  |
-| PlayerAppearanceUpdater (server/src/com/openrsc/server/net/rsc/handlers/PlayerAppearanceUpdater.java) | PLAYER_APPEARANCE_CHANGE (enum ordinal 8; CUSTOM-protocol wi | WIRE ORDER (PayloadCustomParser line 497): headRestrictions:byte (1=male, else female), he | Submit the character-design (appearance) screen — sets gender, head/body type, c | `voidbot design-character --gender <male\|female> --head <type> --body <type> --h` | Server must have opened the appearance screen: player.isChan |
+| PlayerAppearanceUpdater (server/src/com/openrsc/server/net/rsc/handlers/PlayerAppearanceUpdater.java) | PLAYER_APPEARANCE_CHANGE (enum ordinal 8; custom wire id 235) | WIRE ORDER: gender/head/body/mustEqual2, hair/top/trouser/skin, ironman, one_xp, hair_style, then client >=10125 country bytes (`00 00` none or ASCII `CC`), then optional referral string. | Submit the character-design screen; also updates the player-chosen global-chat country flag. | `voidbot design-character --gender <male\|female> --country <cc\|none>` | Server must have opened the appearance screen: player.isChangingAppearance(). |
 | PlayerDuelHandler (server/src/com/openrsc/server/net/rsc/handlers/PlayerDuelHandler.java) | PLAYER_DUEL (ordinal 33, wire 103); DUEL_FIRST_SETTINGS_CHAN | PLAYER_DUEL: targetPlayerID:short (target player server index), len==2. DUEL_FIRST_SETTING | Full duel lifecycle: request a duel with another player; set the four stake rule | `voidbot duel-request <player-server-index> \| voidbot duel-settings --no-retreat` | All opcodes: MEMBER_WORLD config on; sender not Ironman (any |
 | PlayerFollowRequest (server/src/com/openrsc/server/net/rsc/handlers/PlayerFollowRequest.java) | PLAYER_FOLLOW (enum ordinal 35; CUSTOM-protocol wire packet  | serverIndex:short (target player server index). Struct: TargetMobStruct. Packet length mus | Start following another player (radius 1); prints 'Following <name>'. | `voidbot follow-player <player-server-index>` | Target player index must resolve to an online player (else s |
 | PlayerTradeHandler (server/src/com/openrsc/server/net/rsc/handlers/PlayerTradeHandler.java) | PLAYER_INIT_TRADE_REQUEST (ordinal 34, wire 142); PLAYER_ACC | PLAYER_INIT_TRADE_REQUEST: targetPlayerID:short (player server index), len==2. PLAYER_ADDE | Full trade lifecycle: request trade with a player; replace your offer with a lis | `voidbot trade-request <player-server-index> \| voidbot trade-offer [<catalogId>:` | All opcodes: sender not busy/ranging/banking/dueling/in-comb |
-| PrayerHandler (server/src/com/openrsc/server/net/rsc/handlers/PrayerHandler.java) | PRAYER_ACTIVATED (enum ordinal 61; wire packet ID 60) and PR | prayerID:byte (0-13; Prayers.java constants: 0 THICK_SKIN, 1 BURST_OF_STRENGTH, 2 CLARITY_ | Turn a prayer on (PRAYER_ACTIVATED) or off (PRAYER_DEACTIVATED). | `voidbot prayer-on <prayer-id 0-13> \| voidbot prayer-off <prayer-id 0-13>` | prayerID in [0,13] else flagged suspicious. World must not h |
+| PrayerHandler (server/src/com/openrsc/server/net/rsc/handlers/PrayerHandler.java) | PRAYER_ACTIVATED (enum ordinal 61; wire packet ID 60) and PR | prayerID:byte (0-13; Prayers.java constants: 0 THICK_SKIN, 1 BURST_OF_STRENGTH, 2 CLARITY_ | Turn a prayer on (PRAYER_ACTIVATED) or off (PRAYER_DEACTIVATED). | NOT IMPLEMENTED (planned syntax): `voidbot prayer-on <prayer-id 0-13> \| voidbot prayer-off <prayer-id 0-13>` | prayerID in [0,13] else flagged suspicious. World must not h |
 | PrivacySettingHandler (server/src/com/openrsc/server/net/rsc/handlers/PrivacySettingHandler.java) | PRIVACY_SETTINGS_CHANGED (enum ordinal 66; CUSTOM-protocol w | blockChat:byte, blockPrivate:byte, blockTrade:byte, blockDuel:byte — for custom clients th | Change chat/PM/trade/duel privacy blocking modes (the settings-tab toggles). | `voidbot set-privacy --chat <0\|1\|2> --private <0\|1\|2> --trade <0\|1\|2> --due` | none (no interface state required; one of the few opcodes ex |
 | ReportHandler (server/src/com/openrsc/server/net/rsc/handlers/ReportHandler.java) | REPORT_ABUSE (enum ordinal 67; CUSTOM-protocol wire packet I | targetPlayerName:string (RSC string via packet.readString()), reason:byte (rule code; Cons | File an abuse report against a player name (and, for mods, optionally perma-mute | `voidbot report <player-name> <reason-code> [--mute]` | Cannot report self; name must be non-empty and exist in the  |
 | SecuritySettingsHandler | CHANGE_PASS (enum ordinal 87; CUSTOM wire packet id 25) | oldPassword:string (LF-terminated), newPassword:string (LF-terminated); both trimmed serve | Change account password | `voidbot change-password <old-password> <new-password>` | none (any logged-in session) |
@@ -63,9 +63,9 @@ Inbound handlers in `server/src/com/openrsc/server/net/rsc/handlers/` → intend
 | SecuritySettingsHandler | SET_DETAILS (enum ordinal 89; CUSTOM wire packet id 253) | fullName:string (LF), zipCode:string (LF), country:string (LF), email:string (LF) — exactl | Submit account contact details | `voidbot set-details <full-name> <zip-code> <country> <email> (allow empty string` | player.isChangingDetails() must be true (prior CHANGE_DETAIL |
 | SecuritySettingsHandler | CANCEL_RECOVERY_REQUEST (enum ordinal 90; CUSTOM wire packet | none (no fields read) | Cancel a pending (not-yet-applied) recovery questions change | `voidbot cancel-recovery-change` | A pending recovery change set less than 14 days ago must exi |
 | SleepHandler | SLEEPWORD_ENTERED (enum ordinal 76; CUSTOM wire packet id 45 | sleepWord:string (LF/0x0A-terminated byte run via Packet.readString). NOTE: the CUSTOM pro | Submit the sleepword captcha answer while sleeping | `voidbot sleep-word <word> (plus voidbot sleep-word --refresh to send the literal` | player.isSleeping() must be true (player used a bed/sleeping |
-| SpellHandler | CAST_ON_SELF (enum ordinal 48; CUSTOM wire packet id 137) | spellId:short — index into Constants.spellMap (0=HOME_TELEPORT, 1=WIND_STRIKE, 2=CONFUSE,  | Cast a self-targeted spell: teleports, stat boosts, Charge, Bones-to-Bananas | `voidbot cast-self <spell-id>` | Generic cast gates (apply to ALL Cast* opcodes): not busy un |
+| SpellHandler | CAST_ON_SELF (enum ordinal 48; CUSTOM wire packet id 137) | spellId:short — index into Constants.spellMap (0=HOME_TELEPORT, 1=WIND_STRIKE, 2=CONFUSE,  | Cast a self-targeted spell: teleports, stat boosts, Charge, Bones-to-Bananas | NOT IMPLEMENTED (planned syntax): `voidbot cast-self <spell-id>` | Generic cast gates (apply to ALL Cast* opcodes): not busy un |
 | SpellHandler | PLAYER_CAST_PVP (enum ordinal 30; CUSTOM wire packet id 229) | spellId:short, targetIndex:short (target PLAYER server index). Payload length must be 4. | Cast an offensive/curse spell on another player | `voidbot cast-player <spell-id> <player-server-index>` | Generic cast gates (see CAST_ON_SELF row); spell must be typ |
-| SpellHandler | CAST_ON_NPC (enum ordinal 28; CUSTOM wire packet id 50) | spellId:short, targetIndex:short (target NPC server index). Payload length must be 4. | Cast an offensive spell on an NPC | `voidbot cast-npc <spell-id> <npc-server-index>` | Generic cast gates; spell must be type 2; NPC must resolve v |
+| SpellHandler | CAST_ON_NPC (enum ordinal 28; CUSTOM wire packet id 50) | spellId:short, targetIndex:short (target NPC server index). Payload length must be 4. | Cast an offensive spell on an NPC | NOT IMPLEMENTED (planned syntax): `voidbot cast-npc <spell-id> <npc-server-index>` | Generic cast gates; spell must be type 2; NPC must resolve v |
 | SpellHandler | CAST_ON_INVENTORY_ITEM (enum ordinal 39; CUSTOM wire packet  | spellId:short, targetIndex:short (INVENTORY SLOT index, not catalog id). Payload length mu | Cast a spell on an inventory item (alchemy, superheat, enchants, Curse/Enfeeble  | `voidbot cast-item <spell-id> <inventory-slot>` | Generic cast gates; additionally dropped outright while a tr |
 | SpellHandler | CAST_ON_BOUNDARY (enum ordinal 22; CUSTOM wire packet id 180 | spellId:short, x:short, y:short (boundary tile), direction:byte. Payload length must be 7. | Cast a spell on a wall/boundary object (doors etc.) | `voidbot cast-boundary <spell-id> <x> <y> <direction>` | Generic cast gates only. |
 | SpellHandler | CAST_ON_SCENERY (enum ordinal 52; CUSTOM wire packet id 99) | spellId:short, x:short, y:short (scenery/GameObject tile). Payload length must be 6. | Cast a spell on a scenery object (e.g. Charge Orb spells on obelisks) | `voidbot cast-object <spell-id> <x> <y>` | Generic cast gates; a GameObject must exist at that tile wit |
@@ -101,8 +101,31 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 **Session**
 - `voidbot start --user U --pass P` — launch the daemon (logs in, holds the session)
 - `voidbot login --user U --pass P` — alias for `start`
+- `voidbot register --user U --pass P [--email E|--no-email]` — one-shot account creation
+  (REGISTER_ACCOUNT, wire opcode 2; no daemon). Requires `want_packet_register: true`
+  in the active server config. Response byte 0 = created, 2 = name taken, 4 = registration disabled,
+  5/6/7/8 = throttled/email/name-length/disallowed; no response = dropped by the
+  2-logins-per-second throttle, retry after ~1s. Default email `<user>@voidscape.test`;
+  use `--no-email` to exercise the desktop/Android launch path with no email field.
 - `voidbot stop` — clean logout + shutdown
 - `voidbot ping` — daemon/login liveness
+
+**Running multiple instances (QA fleet)**
+One daemon = one logged-in account. For parallel sessions give each instance its own
+control port and account, and export the port for *every* call to that instance:
+
+```bash
+VOIDBOT_CTRL_PORT=18901 tools/voidbot/voidbot start --user qabot01 --pass voidqa123
+VOIDBOT_CTRL_PORT=18901 tools/voidbot/voidbot state position
+```
+
+Logs land at `${TMPDIR}/voidbotd-<port>.log`. The wrapper refuses to start onto a busy
+port (exit 2) and the daemon aborts before login if its control bind fails. The server
+exempts 127.0.0.1 from the per-IP player caps, but the 2-logins/sec throttle still
+applies — stagger daemon starts by ~600ms (the throttle lifts for the host once one
+admin account has logged in from it). Duplicate usernames are rejected with
+ACCOUNT_LOGGEDIN, so one account per daemon. Account pool + provisioning:
+`scripts/qa-provision-accounts.sh`; fleet conventions: `docs/QA-CAMPAIGN.md`.
 
 **Actions** (real game packets)
 - `voidbot goto <x> <y>` — server-pathfind walk (WORLD_WALK_REQUEST)
@@ -114,6 +137,10 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 - `voidbot take-item <x> <y> <itemId>` — GROUND_ITEM_TAKE
 - `voidbot object-action <x> <y> [1|2] [--id <objectId>]` — OBJECT_COMMAND1/2; `--id` lets the bot calculate the same object-edge prewalk the real client sends for large scenery
 - `voidbot cast-object <spellId> <x> <y>` — CAST_ON_SCENERY
+- `voidbot use-on-item <slot1> <slot2>` — ITEM_USE_ITEM (combine two inventory items: herblaw, fletching, gem cutting, potion mixing)
+- `voidbot use-item-on-object <x> <y> <slot>` — USE_ITEM_ON_SCENERY (item on scenery: smelt ore on furnace, smith bar on anvil, cook on a range, craft on a wheel; prewalks to the object)
+- `voidbot use-item-on-ground <slot> <x> <y> <groundItemId>` — GROUND_ITEM_USE_ITEM (item on a ground item: light dropped logs with a tinderbox)
+- `voidbot use-item-on-npc <npc-server-index> <slot>` — NPC_USE_ITEM (item on an NPC: quests, cert/note exchange)
 - `voidbot drop <slot> [--amount N]` — ITEM_DROP
 - `voidbot item-command <slot> [--amount N] [--command K]` — ITEM_COMMAND (eat/redeem/...)
 - `voidbot equip <slot>` / `voidbot unequip <slot>`
@@ -125,14 +152,26 @@ The daemon (`tools/voidbot/voidbotd.py`) + CLI (`tools/voidbot/voidbot`) current
 - `voidbot logout`
 
 **Queries** — `voidbot state <section>` where section ∈
-`all | position | inventory | skills | npcs | ground-items | bank | dialog | shop | messages`
+`all | position | inventory | skills | players | npcs | ground-items | bank | dialog | shop | messages |
+world-walk-route`
+
+`state players` exposes each nearby player's `server_index`, `x`, and `y`; this is the
+authoritative target index for `attack-player` and avoids screen-coordinate inference.
 
 **Waits** — `voidbot wait <condition> [--timeout N] [args]`, conditions:
 `logged-in | position --x --y | near --x --y --radius | inventory-contains --id --amount |
 inventory-lacks --id | message --regex | dialog-open | input-open | bank-open |
 npc-present --id | npc-dead (--id|--server_index) | ground-item --id | xp-gained --skill`
 
-**Events** — `voidbot events --since <seq>` (timestamped game-event log).
+**Events** — `voidbot events --since <seq>` (timestamped game-event log). A
+`WORLD_WALK_REQUEST` response emits `world_walk_route` with `ok`, `reason`, `count`,
+and the decoded route tiles.
+
+NPC overhead chat (SEND_UPDATE_NPC type 1, wire 104) is decoded: each line emits an
+`npc_say` event (`server_index`, `text`, `recipient`) and is mirrored into
+`state messages` with `type: "npc"` and `npc_index`, so `wait message --regex` can
+assert NPC dialogue (e.g. denial lines outside menu dialogs). The packet's other
+update types (damage, projectiles, skull, wield, bubble) are skipped, not surfaced.
 
 Exit codes: `0` ok/matched, `1` not-ok/timeout, `2` usage/connection error. Every command prints one JSON object.
 
@@ -155,7 +194,7 @@ respawns is best-effort.
 - **C2S** `[u16 BE len][opcode][payload]`, len excludes the 2 length bytes.
 - **S2C** `[u16 BE len][opcode][payload]`, len **includes** the 2 length bytes; the
   login response is a single raw (unframed) byte (`& 0x40` ⇒ success).
-- LOGIN body: `reconnect:u8 | clientVersion:u32(10087) | username\n | encVer:u8(1) |
+- LOGIN body: `reconnect:u8 | clientVersion:u32(10132, env VOIDBOT_CLIENT_VERSION) | username\n | encVer:u8(1) |
   u16 rsaPwLen + RSA(addCharacters(pw,20)+"\n") | u16 rsaDetailsLen + RSA("dir/jar\n") |
   UID:8 + limitations-trailer` (trailer constant for this client build).
 - Outbound opcode values: `Client_Base/src/orsc/net/Opcodes.java` `Out`. Inbound names:

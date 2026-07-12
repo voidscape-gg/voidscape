@@ -10,20 +10,26 @@ import static orsc.Config.S_WANT_CUSTOM_UI;
 import static orsc.osConfig.F_ANDROID_BUILD;
 
 public final class Menu {
-	private static final int VOIDSCAPE_UI_TINT = 0x3C3125;
-	private static final int VOIDSCAPE_UI_LINE = 0x6E5737;
-	private static final int VOIDSCAPE_UI_PURPLE = 0x4B2472;
-	private static final int VOIDSCAPE_UI_GOLD = 0xF6DA7D;
+	public static final int PAGE_CONTROL_CLICK = -3;
+	private static final int ANDROID_MIN_LINE_HEIGHT = 28;
+	private static final int VOIDSCAPE_UI_TINT = 0x3C3125; // menu-specific tint — no UiSkin token, see docs/UI-STYLE-GUIDE.md
+	private static final int VOIDSCAPE_UI_LINE = UiSkin.GOLD_LINE;
+	private static final int VOIDSCAPE_UI_PURPLE = UiSkin.PURPLE_SELECT;
+	private static final int VOIDSCAPE_UI_GOLD = UiSkin.GOLD_RING;
 	private static final int VOIDSCAPE_MENU_ALPHA = 132;
 	private static final int VOIDSCAPE_MENU_LINE_ALPHA = 116;
 	private static final int VOIDSCAPE_MENU_HEADER_ALPHA = 96;
 	private static final int VOIDSCAPE_MENU_HOVER_ALPHA = 58;
 	public int font;
 	private int itemCount;
+	private int maximumHeight;
 	private int menuHeight;
 	private MenuItem[] menuItems;
 	private String menuTitle;
 	private int menuWidth;
+	private int minimumLineHeight;
+	private int minimumWidth;
+	private int pageIndex;
 	private MudClientGraphics surf;
 
 	public Menu(MudClientGraphics var1, int var2) {
@@ -31,9 +37,13 @@ public final class Menu {
 	}
 
 	public Menu(MudClientGraphics surf, int font, String title) {
+		this.maximumHeight = 0;
 		this.menuHeight = 0;
 		this.itemCount = 0;
 		this.menuWidth = 0;
+		this.minimumLineHeight = 0;
+		this.minimumWidth = 0;
+		this.pageIndex = 0;
 
 		try {
 			this.font = font;
@@ -163,23 +173,29 @@ public final class Menu {
 	private void calculateMenuWidth() {
 		try {
 
-			int lineHeight = this.surf.fontHeight(this.font) + 1;
+			int lineHeight = this.lineHeight();
 			if (null == this.menuTitle) {
-				this.menuHeight = 0;
 				this.menuWidth = 0;
 			} else {
-				this.menuHeight = lineHeight;
 				this.menuWidth = 5 + this.surf.stringWidth(this.font, this.menuTitle);
 			}
 
 			for (int i = 0; this.itemCount > i; ++i) {
-				this.menuHeight += lineHeight;
 				int lineWidth = 5
 					+ this.surf.stringWidth(this.font, this.menuItems[i].label + " " + this.menuItems[i].actor);
 				if (lineWidth > this.menuWidth) {
 					this.menuWidth = lineWidth;
 				}
 			}
+			if (this.isPaginated()) {
+				int pageControlWidth = 5 + this.surf.stringWidth(this.font, this.pageControlLabel());
+				if (pageControlWidth > this.menuWidth) {
+					this.menuWidth = pageControlWidth;
+				}
+			}
+			this.menuWidth = Math.max(this.menuWidth, this.minimumWidth);
+			this.menuHeight = lineHeight * (this.titleRowCount() + this.visibleItemCount()
+				+ (this.isPaginated() ? 1 : 0));
 
 		} catch (RuntimeException var5) {
 			throw GenUtil.makeThrowable(var5, "wb.EA(" + "dummy" + ')');
@@ -193,6 +209,43 @@ public final class Menu {
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "wb.T(" + "dummy" + ')');
 		}
+	}
+
+	public final int getLineHeight() {
+		return this.lineHeight();
+	}
+
+	public final int getPageCount() {
+		return this.pageCount();
+	}
+
+	public final int getPageNumber() {
+		return this.normalizedPageIndex() + 1;
+	}
+
+	public final boolean isPaginatedMenu() {
+		return this.isPaginated();
+	}
+
+	/**
+	 * Configures touch geometry without coupling this shared menu to a platform
+	 * viewport. Zero values restore the legacy sizing behavior.
+	 */
+	public final void configureTouchLayout(int lineHeight, int width, int height) {
+		this.minimumLineHeight = Math.max(0, lineHeight);
+		this.minimumWidth = Math.max(0, width);
+		this.maximumHeight = Math.max(0, height);
+		this.pageIndex = 0;
+		this.calculateMenuWidth();
+	}
+
+	public final void advancePage() {
+		int pages = this.pageCount();
+		if (pages <= 1) {
+			return;
+		}
+		this.pageIndex = (this.normalizedPageIndex() + 1) % pages;
+		this.calculateMenuWidth();
 	}
 
 	public final MenuItemAction getItemAction(int item) {
@@ -320,11 +373,11 @@ public final class Menu {
 					}
 				}
 
-				int lineHeight = 1 + this.surf.fontHeight(this.font);
-				int lineY = lineHeight + menuY - 3;
+				int lineHeight = this.lineHeight();
+				int lineY = menuY;
 				int clickedLine = -1;
 				if (null != this.menuTitle) {
-					if (menuX < mouseX && mouseY > lineY + (3 - lineHeight) && lineY + 3 > mouseY
+					if (menuX < mouseX && mouseY >= lineY && mouseY < lineY + lineHeight
 						&& mouseX < menuX + this.menuWidth) {
 						if (!draw) {
 							return -2;
@@ -334,7 +387,7 @@ public final class Menu {
 					}
 
 					if (draw) {
-						this.surf.drawString(this.menuTitle, 2 + menuX, lineY, 0xFFFF, this.font);
+						this.surf.drawString(this.menuTitle, 2 + menuX, textBaselineY(lineY, lineHeight), 0xFFFF, this.font);
 					}
 
 					lineY += lineHeight;
@@ -344,9 +397,11 @@ public final class Menu {
 					this.menuTitle = (String) null;
 				}
 
-				for (int i = 0; i < this.itemCount; ++i) {
+				int firstItem = this.firstVisibleItem();
+				int lastItem = firstItem + this.visibleItemCount();
+				for (int i = firstItem; i < lastItem; ++i) {
 					int lineColor = 16777215;
-					if (menuX < mouseX && mouseY > 3 + lineY - lineHeight && mouseY < 3 + lineY
+					if (menuX < mouseX && mouseY >= lineY && mouseY < lineY + lineHeight
 						&& menuX + this.menuWidth > mouseX) {
 						lineColor = 16776960;
 						if (!draw) {
@@ -358,16 +413,37 @@ public final class Menu {
 
 					if (draw) {
 						if (useVoidscapeMenuStyle() && clickedLine == i) {
-							this.surf.drawBoxAlpha(menuX, lineY - lineHeight + 4, this.menuWidth, lineHeight,
+							this.surf.drawBoxAlpha(menuX, lineY, this.menuWidth, lineHeight,
 								VOIDSCAPE_UI_GOLD, VOIDSCAPE_MENU_HOVER_ALPHA);
-							this.surf.drawLineAlpha(menuX + 2, lineY + 3, menuX + this.menuWidth - 3, lineY + 3,
+							this.surf.drawLineAlpha(menuX + 2, lineY + lineHeight - 1,
+								menuX + this.menuWidth - 3, lineY + lineHeight - 1,
 								VOIDSCAPE_UI_GOLD, VOIDSCAPE_MENU_LINE_ALPHA);
 						}
-						this.surf.drawString(this.menuItems[i].label + " " + this.menuItems[i].actor, menuX + 2, lineY,
-							lineColor, this.font);
+						this.surf.drawString(this.menuItems[i].label + " " + this.menuItems[i].actor, menuX + 2,
+							textBaselineY(lineY, lineHeight), lineColor, this.font);
 					}
 
 					lineY += lineHeight;
+				}
+
+				if (this.isPaginated()) {
+					boolean hovered = menuX < mouseX && mouseY >= lineY && mouseY < lineY + lineHeight
+						&& menuX + this.menuWidth > mouseX;
+					if (hovered && !draw) {
+						return PAGE_CONTROL_CLICK;
+					}
+					if (draw) {
+						if (useVoidscapeMenuStyle() && hovered) {
+							this.surf.drawBoxAlpha(menuX, lineY, this.menuWidth, lineHeight,
+								VOIDSCAPE_UI_GOLD, VOIDSCAPE_MENU_HOVER_ALPHA);
+						}
+						this.surf.drawLineAlpha(menuX + 2, lineY,
+							menuX + this.menuWidth - 3, lineY,
+							VOIDSCAPE_UI_PURPLE, VOIDSCAPE_MENU_LINE_ALPHA);
+						this.surf.drawString(this.pageControlLabel(), menuX + 2,
+							textBaselineY(lineY, lineHeight), hovered ? 16776960 : VOIDSCAPE_UI_GOLD,
+							this.font);
+					}
 				}
 
 				return clickedLine;
@@ -380,6 +456,67 @@ public final class Menu {
 		}
 	}
 
+	private int lineHeight() {
+		int height = this.surf.fontHeight(this.font) + 1;
+		if (F_ANDROID_BUILD) {
+			height = Math.max(height, ANDROID_MIN_LINE_HEIGHT);
+		}
+		return Math.max(height, this.minimumLineHeight);
+	}
+
+	private int titleRowCount() {
+		return this.menuTitle == null ? 0 : 1;
+	}
+
+	private int maximumRows() {
+		if (this.maximumHeight <= 0) {
+			return Integer.MAX_VALUE;
+		}
+		return Math.max(this.titleRowCount() + 2, this.maximumHeight / Math.max(1, this.lineHeight()));
+	}
+
+	private boolean isPaginated() {
+		return this.maximumHeight > 0
+			&& this.titleRowCount() + this.itemCount > this.maximumRows();
+	}
+
+	private int pageCapacity() {
+		if (!this.isPaginated()) {
+			return Math.max(1, this.itemCount);
+		}
+		return Math.max(1, this.maximumRows() - this.titleRowCount() - 1);
+	}
+
+	private int pageCount() {
+		if (!this.isPaginated()) {
+			return 1;
+		}
+		int capacity = this.pageCapacity();
+		return Math.max(1, (this.itemCount + capacity - 1) / capacity);
+	}
+
+	private int normalizedPageIndex() {
+		return Math.max(0, Math.min(this.pageIndex, this.pageCount() - 1));
+	}
+
+	private int firstVisibleItem() {
+		return this.isPaginated() ? this.normalizedPageIndex() * this.pageCapacity() : 0;
+	}
+
+	private int visibleItemCount() {
+		return Math.max(0, Math.min(this.pageCapacity(), this.itemCount - this.firstVisibleItem()));
+	}
+
+	private String pageControlLabel() {
+		int pages = this.pageCount();
+		int nextPage = pages <= 1 ? 1 : (this.normalizedPageIndex() + 1) % pages + 1;
+		return nextPage == 1 ? "Back to first options" : "More options (" + nextPage + "/" + pages + ")";
+	}
+
+	private int textBaselineY(int lineY, int lineHeight) {
+		return lineY + (lineHeight + this.surf.fontHeight(this.font)) / 2 - 2;
+	}
+
 	private boolean useVoidscapeMenuStyle() {
 		return C_CUSTOM_UI || F_ANDROID_BUILD && S_WANT_CUSTOM_UI;
 	}
@@ -387,7 +524,7 @@ public final class Menu {
 	private void drawVoidscapeMenuShell(int menuX, int menuY) {
 		this.surf.drawBoxAlpha(menuX - 2, menuY - 2, this.menuWidth + 4, this.menuHeight + 4,
 			VOIDSCAPE_UI_TINT, VOIDSCAPE_MENU_ALPHA);
-		this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, Math.min(this.menuHeight, this.surf.fontHeight(this.font) + 2),
+		this.surf.drawBoxAlpha(menuX, menuY, this.menuWidth, Math.min(this.menuHeight, this.lineHeight()),
 			VOIDSCAPE_UI_TINT, VOIDSCAPE_MENU_HEADER_ALPHA);
 		int left = menuX - 2;
 		int top = menuY - 2;
@@ -397,8 +534,8 @@ public final class Menu {
 		this.surf.drawLineAlpha(left, bottom, right, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
 		this.surf.drawLineAlpha(left, top, left, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
 		this.surf.drawLineAlpha(right, top, right, bottom, VOIDSCAPE_UI_LINE, VOIDSCAPE_MENU_LINE_ALPHA);
-		this.surf.drawLineAlpha(menuX, menuY + this.surf.fontHeight(this.font) + 1,
-			menuX + this.menuWidth - 1, menuY + this.surf.fontHeight(this.font) + 1,
+		this.surf.drawLineAlpha(menuX, menuY + this.lineHeight() - 1,
+			menuX + this.menuWidth - 1, menuY + this.lineHeight() - 1,
 			VOIDSCAPE_UI_PURPLE, 96);
 	}
 
@@ -406,6 +543,7 @@ public final class Menu {
 		try {
 
 			this.itemCount = var1;
+			this.pageIndex = 0;
 			this.calculateMenuWidth();
 		} catch (RuntimeException var3) {
 			throw GenUtil.makeThrowable(var3, "wb.P(" + var1 + ')');

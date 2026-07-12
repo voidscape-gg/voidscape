@@ -1,5 +1,6 @@
 package com.openrsc.server.model;
 
+import com.openrsc.server.content.voiddungeon.VoidDungeonLayout;
 import com.openrsc.server.model.entity.WildernessLocation;
 import com.openrsc.server.model.entity.WildernessLocation.WildState;
 import com.openrsc.server.model.world.Area;
@@ -27,6 +28,11 @@ public class Point {
 		/* Void Island — non-PvP starter island. Strict bounds make the
 		 * playable starter island X=16..32, Y=17..42. */
 		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 15, 16, 33, 43));
+		/* Tutorial Isle — gated guided-track area west of Void Island.
+		 * Strict bounds make the interior X=33..46, Y=17..41. Without this the
+		 * isle computes deep-wilderness levels and the scoped safe-death
+		 * contract self-cancels (Player.getActiveScopedSafeDeathRespawn). */
+		wildernessLocations.add(new WildernessLocation(WildState.SAFE_ZONE, 32, 16, 47, 42));
 	}
 
 	protected short x, y;
@@ -64,8 +70,16 @@ public class Point {
 			return "Void Island";
 		}
 
+		else if (inVoidTutorialIsle()) {
+			return "Tutorial Isle";
+		}
+
 		else if (inVoidArena()) {
 			return "Void Arena";
+		}
+
+		else if (inVoidDungeonUnderground()) {
+			return "Void Dungeon";
 		}
 
 		else if (inTutorialLanding()) {
@@ -226,9 +240,7 @@ public class Point {
 					}
 				}
 			}
-			/* If its allowed in these wild levels */
-			return wildernessLevel() >= 48 && wildernessLevel() <= 56;
-			/* It is F2P */
+			return false;
 		}
 		/* Not in wild, its P2P */
 		return true;
@@ -294,12 +306,28 @@ public class Point {
 		return x >= 16 && x <= 32 && y >= 17 && y <= 42;
 	}
 
+	public boolean inVoidTutorialIsle() {
+		return inVoidTutorialIsle(x, y);
+	}
+
+	public static boolean inVoidTutorialIsle(int x, int y) {
+		return x >= 33 && x <= 46 && y >= 17 && y <= 41;
+	}
+
 	public boolean inVoidArena() {
 		return inBounds(582, 2910, 616, 2916)
 			|| inBounds(584, 2897, 590, 2909)
 			|| inBounds(592, 2897, 598, 2909)
 			|| inBounds(600, 2897, 606, 2909)
 			|| inBounds(608, 2897, 614, 2909);
+	}
+
+	public boolean inVoidDungeonUnderground() {
+		return inVoidDungeonUnderground(x, y);
+	}
+
+	public static boolean inVoidDungeonUnderground(int x, int y) {
+		return VoidDungeonLayout.contains(x, y);
 	}
 
 	public boolean onTutorialIsland() {
@@ -327,7 +355,7 @@ public class Point {
 	}
 
 	public boolean inFreeWild() {
-		return (wildernessLevel() >= 1 && wildernessLevel() <= 48);
+		return inWilderness() && !isMembersWild();
 	}
 
 	public boolean inVarrock() {

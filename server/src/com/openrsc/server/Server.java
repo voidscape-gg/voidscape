@@ -575,9 +575,18 @@ public class Server implements Runnable {
 			try {
 				if (!isRunning()) {
 					return;
-			}
+				}
 				LOGGER.info("Server stop requested");
-				getWorld().unloadPlayers();
+				try {
+					getWorld().unloadPlayers();
+				} catch (final IllegalStateException ex) {
+					LOGGER.fatal("Server stop aborted while player data remains uncommitted; services remain online", ex);
+					shutdownEvent = null;
+					shuttingDown = false;
+					restarting = false;
+					LOGGER.error("Shutdown/restart request was cancelled; an operator must retry after persistence recovers.");
+					return;
+				}
 
 				scheduledExecutor.shutdown();
 				try {

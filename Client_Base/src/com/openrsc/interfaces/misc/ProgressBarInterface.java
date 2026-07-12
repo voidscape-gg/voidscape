@@ -3,6 +3,7 @@ package com.openrsc.interfaces.misc;
 import com.openrsc.interfaces.InputListener;
 import com.openrsc.interfaces.NComponent;
 import com.openrsc.interfaces.NCustomComponent;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 
 public class ProgressBarInterface {
@@ -15,15 +16,29 @@ public class ProgressBarInterface {
 	private int batchCompletedCount;
 	private int batchTotalCount;
 
+	// Last game size the anchor math ran against; re-derived live on resize.
+	private int lastGameWidth;
+	private int lastGameHeight;
+
 	public ProgressBarInterface(final mudclient graphics) {
 		progressBarComponent = new NComponent(graphics);
 		progressBarComponent.setSize(138, 59);
-		progressBarComponent.setBackground(0xFFFFFF, 0xFFFFFF, 128);
-		progressBarComponent.setLocation((graphics.getGameWidth() - 138) / 2, graphics.getGameHeight() - 100);
+		progressBarComponent.setBackground(UiSkin.GLASS_BODY, UiSkin.GLASS_BODY, 128);
+		lastGameWidth = graphics.getGameWidth();
+		lastGameHeight = graphics.getGameHeight();
+		progressBarComponent.setLocation((lastGameWidth - 138) / 2, lastGameHeight - 100);
 
 		NCustomComponent progressBarItself = new NCustomComponent(graphics) {
 			@Override
 			public void render() {
+				// Re-anchor with the constructor math whenever the window is
+				// resized (was anchored once at construction only). Skipped on
+				// unchanged frames so the drag-to-move gesture keeps working.
+				if (graphics.getGameWidth() != lastGameWidth || graphics.getGameHeight() != lastGameHeight) {
+					lastGameWidth = graphics.getGameWidth();
+					lastGameHeight = graphics.getGameHeight();
+					progressBarComponent.setLocation((lastGameWidth - 138) / 2, lastGameHeight - 100);
+				}
 				float progressBarWidth = 120;
 
 				// float elapsedTime = (System.currentTimeMillis() - batchStartTime);
@@ -38,16 +53,16 @@ public class ProgressBarInterface {
 				float percentToWidth = (percentDone * progressBarWidth);
 
 				graphics().drawBoxAlpha(getX() - 2, getY() - 2, (int) progressBarWidth + 4, 10 + 4, 0, 128);
-				graphics().drawBoxAlpha(getX(), getY(), (int) progressBarWidth, 10, 0xffffff, 125);
+				graphics().drawBoxAlpha(getX(), getY(), (int) progressBarWidth, 10, UiSkin.VOID_BOX, 125);
 
 				if (percentToWidth > progressBarWidth)
 					percentToWidth = progressBarWidth;
 				else if (percentToWidth < 0)
 					percentToWidth = 0;
 
-				graphics().drawBoxAlpha(getX(), getY(), (int) percentToWidth - 1, 10, 0x0000ff, 200);
+				graphics().drawBoxAlpha(getX(), getY(), (int) percentToWidth - 1, 10, UiSkin.PURPLE_BRIGHT, 200);
 				int center = (batchTotalCount - batchCompletedCount) > 9 ? 13 : 7;
-				graphics().drawColoredString((int) (getX() + (progressBarWidth / 2) - center), getY() + 9, (batchCompletedCount) + "/" + batchTotalCount, 0, 0xffffff, 0);
+				graphics().drawColoredString((int) (getX() + (progressBarWidth / 2) - center), getY() + 9, (batchCompletedCount) + "/" + batchTotalCount, 0, UiSkin.GOLD_HOT, 0);
 //
 //				graphics().drawText((batchTotalCount - batchCompletedCount) + "/" + batchTotalCount,
 //						(int) (getX() + (progressBarWidth / 2)), getY() + 9, 0, 0xffffff);
@@ -57,9 +72,9 @@ public class ProgressBarInterface {
 
 		final NComponent headerComponent = new NComponent(graphics);
 		headerComponent.setSize(138, 19);
-		headerComponent.setBackground(0, 0, 156);
+		headerComponent.setBackground(UiSkin.VOID_HEADER, UiSkin.VOID_HEADER, 156);
 		headerComponent.setLocation(0, 0);
-		headerComponent.setFontColor(0xFFFFFF, 0xFFFFFF);
+		headerComponent.setFontColor(UiSkin.GOLD_TITLE, UiSkin.GOLD_TITLE);
 		headerComponent.setTextCentered(true);
 		headerComponent.setText("Batching");
 		headerComponent.setTextSize(1);
@@ -94,9 +109,9 @@ public class ProgressBarInterface {
 		NComponent cancelButton = new NComponent(graphics);
 		cancelButton.setTextCentered(true);
 		cancelButton.setText("Cancel");
-		cancelButton.setBorderColors(0xFFFFFF, 0xFFFFFF);
-		cancelButton.setBackground(0x454545, 0x454545, 128);
-		cancelButton.setFontColor(0xFFFFFF, 0xFF0000);
+		cancelButton.setBorderColors(UiSkin.GOLD_LINE, UiSkin.GOLD_HOT);
+		cancelButton.setBackground(UiSkin.VOID_BOX, UiSkin.VOID_BOX, 128);
+		cancelButton.setFontColor(UiSkin.TEXT_BODY, UiSkin.BAD);
 		cancelButton.setTextSize(0);
 		cancelButton.setLocation(31, 39);
 		cancelButton.setSize(75, 16);

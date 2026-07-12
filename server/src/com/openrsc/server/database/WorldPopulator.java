@@ -10,6 +10,7 @@ import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.util.SystemUtil;
+import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -117,6 +118,7 @@ public final class WorldPopulator {
 				LOGGER.info("Void Enclave filter stripped {} pre-existing NPC spawns from inside the footprint", box(before - npclocs.size()));
 			}
 			loadCustomLocs(LocType.NPC);
+			applyWildernessSpawnMultiplier();
 			// NpcLocation[] npcLocations = getWorld().getServer().getDatabase().getNpcLocs();
 			// for (NpcLocation npcLocation : npcLocations) {
 			for (NPCLoc loc : npclocs) {
@@ -216,6 +218,81 @@ public final class WorldPopulator {
 			&& y >= VOID_ENCLAVE_CLEAR_MIN_Y && y <= VOID_ENCLAVE_CLEAR_MAX_Y;
 	}
 
+	private void applyWildernessSpawnMultiplier() {
+		final double multiplier = Math.max(1.0, getWorld().getServer().getConfig().WILDERNESS_SPAWN_MULTIPLIER);
+		if (multiplier <= 1.0) {
+			return;
+		}
+
+		final ArrayList<NPCLoc> eligibleLocs = new ArrayList<>();
+		for (NPCLoc loc : npclocs) {
+			if (!Point.inWilderness(loc.startX(), loc.startY())) {
+				continue;
+			}
+			if (!getWorld().getServer().getEntityHandler().getNpcDef(loc.id).isAttackable()) {
+				continue;
+			}
+			eligibleLocs.add(loc);
+		}
+
+		final int wholeMultiplier = (int) Math.floor(multiplier);
+		final int guaranteedCopies = Math.max(0, wholeMultiplier - 1);
+		final double fractionalCopies = multiplier - wholeMultiplier;
+		final ArrayList<NPCLoc> additions = new ArrayList<>();
+		for (NPCLoc loc : eligibleLocs) {
+			for (int copy = 0; copy < guaranteedCopies; copy++) {
+				additions.add(copyWildernessNpcLoc(loc));
+			}
+		}
+		if (fractionalCopies > 0.0) {
+			double fractionalProgress = 0.0;
+			for (NPCLoc loc : eligibleLocs) {
+				fractionalProgress += fractionalCopies;
+				if (fractionalProgress + 1.0e-9 >= 1.0) {
+					additions.add(copyWildernessNpcLoc(loc));
+					fractionalProgress -= 1.0;
+				}
+			}
+		}
+
+		npclocs.addAll(additions);
+		LOGGER.info("Wilderness density x{}: added {} spawns from {} eligible locs",
+			box(multiplier), box(additions.size()), box(eligibleLocs.size()));
+	}
+
+	private NPCLoc copyWildernessNpcLoc(final NPCLoc loc) {
+		final NPCLoc copy = new NPCLoc(loc.id, loc.startX, loc.startY,
+			loc.minX, loc.maxX, loc.minY, loc.maxY);
+		if (loc.minX > loc.maxX || loc.minY > loc.maxY) {
+			return copy;
+		}
+
+		final boolean hasAlternateStart = loc.minX < loc.maxX || loc.minY < loc.maxY;
+		for (int attempt = 0; attempt < 8; attempt++) {
+			final int startX = DataConversions.random(loc.minX, loc.maxX);
+			final int startY = DataConversions.random(loc.minY, loc.maxY);
+			if (Point.inWilderness(startX, startY)
+				&& (!hasAlternateStart || startX != loc.startX || startY != loc.startY)) {
+				copy.startX = startX;
+				copy.startY = startY;
+				return copy;
+			}
+		}
+
+		if (loc.minX < loc.maxX) {
+			final int startX = loc.startX < loc.maxX ? loc.startX + 1 : loc.startX - 1;
+			if (Point.inWilderness(startX, loc.startY)) {
+				copy.startX = startX;
+			}
+		} else if (loc.minY < loc.maxY) {
+			final int startY = loc.startY < loc.maxY ? loc.startY + 1 : loc.startY - 1;
+			if (Point.inWilderness(loc.startX, startY)) {
+				copy.startY = startY;
+			}
+		}
+		return copy;
+	}
+
 	private void loadCustomLocs(LocType type) {
 		switch (type) {
 			case Boundary: {
@@ -228,9 +305,11 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidEnclave.json", type);
 				}
-					if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
-						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidDungeon.json", type);
-					}
+				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON
+					&& !getWorld().getServer().getConfig().WANT_CUSTOM_LANDSCAPE) {
+					// The custom landscape bakes these walls for matching collision and minimap.
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidDungeon.json", type);
+				}
 				return;
 			}
 			case Scenery: {
@@ -269,14 +348,16 @@ public final class WorldPopulator {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidEnclave.json", type);
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsDeathMatchArena.json", type);
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidRift.json", type);
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsUndeadSiege.json", type);
 				}
 				if (getWorld().getServer().getConfig().WANT_VOID_COLOSSUS) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidColossusArena.json", type);
 				}
-				loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidArena.json", type);
-				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
-					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidDungeon.json", type);
-				}
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidArena.json", type);
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidIsland.json", type);
+					if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
+						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/SceneryLocsVoidDungeon.json", type);
+					}
 				return;
 			}
 			case NPC: {
@@ -296,10 +377,10 @@ public final class WorldPopulator {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsAuction.json");
 				}
 				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsKaramjaFishmonger.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidSubscriptions.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
-				loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidArena.json");
-				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidSubscriptions.json");
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidIsland.json");
+					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidArena.json");
+					if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsVoidEnclave.json");
 					loadNpcLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/NpcLocsDeathMatchArena.json");
 				}

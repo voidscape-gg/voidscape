@@ -14,20 +14,34 @@ public final class MudClientGraphics extends GraphicsController {
 		super(var1, var2, var3);
 	}
 
+	private static boolean isAlphaProjectile(int projectileType) {
+		return projectileType == EntityHandler.PROJECTILE_TYPES.FIRE_BLAST.id()
+			|| projectileType == EntityHandler.PROJECTILE_TYPES.WIND_BLAST.id()
+			|| projectileType == EntityHandler.PROJECTILE_TYPES.WATER_BLAST.id()
+			|| projectileType == EntityHandler.PROJECTILE_TYPES.EARTH_BLAST.id();
+	}
+
 	@Override
 	public final void drawEntity(int index, int x, int y, int width, int height, int overlayMovement, int topPixelSkew) {
 		try {
 			if (Config.S_WANT_BANK_NOTES && index == -1) {
 				this.mudClientRef.drawItemAt(-1, x, y, width, height, topPixelSkew);
-			}
-			else if (index < 50000) {
+			} else if (index < 50000) {
 				if (index < 40000) {
 					if (index >= 20000) {
 						this.mudClientRef.drawNPC(index - 20000, x, y, width, height, topPixelSkew, 105,
 							overlayMovement);
+					} else if (index >= mudclient.PLAYER_COMPOSITE_NPC_SCENE_INDEX) {
+						this.mudClientRef.drawPlayerCompositeNpc(index - mudclient.PLAYER_COMPOSITE_NPC_SCENE_INDEX,
+							x, y, width, height, topPixelSkew, overlayMovement);
 					} else if (index < 5000) {
-						Sprite projectile = spriteSelect(EntityHandler.projectiles.get(index-mudclient.spriteProjectile));
-						super.drawSprite(projectile, x, y, width, height, 5924);
+						int projectileType = index - mudclient.spriteProjectile;
+						Sprite projectile = spriteSelect(EntityHandler.projectiles.get(projectileType));
+						if (isAlphaProjectile(projectileType)) {
+							super.drawSpriteAlpha(projectile, x, y, width, height, 5924);
+						} else {
+							super.drawSprite(projectile, x, y, width, height, 5924);
+						}
 					} else {
 						this.mudClientRef.drawPlayer(index - 5000, x, y, width, height, topPixelSkew, 20,
 							overlayMovement);

@@ -11,8 +11,12 @@ public abstract class BallProjectileEvent extends BenignProjectileEvent {
 
 	@Override
 	public void action() {
-		if (!canceled) {
-			doSpell();
+		try {
+			if (canImpact()) {
+				doSpell();
+			}
+		} finally {
+			super.action();
 		}
 	}
 

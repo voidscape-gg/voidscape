@@ -7,9 +7,13 @@ import com.openrsc.server.model.Path.PathType;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.TelePointGraph;
 import com.openrsc.server.model.WorldPathfinder;
+import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.states.CombatState;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.triggers.EscapeNpcTrigger;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -21,8 +25,9 @@ import java.util.List;
  * routinely exceed {@link Path}'s 50-step queue capacity, so we feed it in
  * pieces rather than all at once.
  *
- * Cancellation is delegated to {@link Player#cancelAutoWalk()} — combat,
- * regular walk packets, and the future Stop button all route through that.
+ * Cancellation is delegated to {@link Player#cancelAutoWalk()} — regular walk
+ * packets, explicit player actions, and the future Stop button all route
+ * through that.
  * This event also self-stops if the player drifts off the planned tiles
  * (e.g. NPC pushed them off, teleport, knock-back) and a re-pathfind from
  * the new position fails.
@@ -31,6 +36,8 @@ public class AutoWalkEvent extends GameTickEvent {
 
 	/** How many tiles to feed the WalkingQueue per refill. Stays comfortably below {@code Path.MAXIMUM_SIZE}. */
 	private static final int CHUNK_SIZE = 40;
+	private static final int REASON_NO_PATH = 1;
+	private static final int REASON_BUSY = 6;
 
 	/**
 	 * Recovery cap when re-pathfinding mid-route.
@@ -65,10 +72,11 @@ public class AutoWalkEvent extends GameTickEvent {
 			stop();
 			return;
 		}
-		// Combat / generic-busy abort. cancelAutoWalk() will be called separately
-		// from the relevant hooks; this is a defensive belt-and-suspenders check.
-		if (player.inCombat() || player.isBusy()) {
-			player.cancelAutoWalk();
+		if (player.inCombat() && !retreatFromNpcCombat(player)) {
+			return;
+		}
+		if (player.isBusy()) {
+			fail(player, REASON_BUSY);
 			return;
 		}
 
@@ -84,7 +92,7 @@ public class AutoWalkEvent extends GameTickEvent {
 				return;
 			}
 			if (!repathFromCurrent(player) || remaining.isEmpty()) {
-				player.cancelAutoWalk();
+				fail(player, REASON_NO_PATH);
 				return;
 			}
 		}
@@ -104,7 +112,7 @@ public class AutoWalkEvent extends GameTickEvent {
 				return; // let the teleport settle; resume walking next tick
 			}
 			if (!repathFromCurrent(player) || remaining.isEmpty()) {
-				player.cancelAutoWalk();
+				fail(player, REASON_NO_PATH);
 				return;
 			}
 		}
@@ -149,7 +157,39 @@ public class AutoWalkEvent extends GameTickEvent {
 		player.getWalkingQueue().setPath(path);
 	}
 
+	private boolean retreatFromNpcCombat(final Player player) {
+		final Mob opponent = player.getOpponent();
+		if (opponent == null || !opponent.isNpc()) {
+			player.cancelAutoWalk();
+			return false;
+		}
+		if (opponent.getHitsMade() < 3) {
+			return false;
+		}
+
+		opponent.setLastOpponent(opponent.getOpponent());
+		player.setLastOpponent(opponent);
+		player.setCombatTimer();
+		player.setLastCombatState(CombatState.RUNNING);
+		opponent.setLastCombatState(CombatState.WAITING);
+		player.resetCombatEvent();
+		player.setRanAwayTimer();
+		ActionSender.sendSound(player, "retreat");
+
+		if (player.getConfig().WANT_PARTIES && player.getParty() != null) {
+			player.getParty().sendParty();
+		}
+		player.getWorld().getServer().getPluginHandler().handlePlugin(
+			EscapeNpcTrigger.class, player, new Object[]{player, (Npc) opponent});
+		return true;
+	}
+
 	private boolean isAtGoal(final Player player) {
 		return player.getX() == goal.getX() && player.getY() == goal.getY();
+	}
+
+	private void fail(final Player player, final int reason) {
+		ActionSender.sendWorldWalkRoute(player, false, reason, java.util.Collections.emptyList());
+		player.cancelAutoWalk();
 	}
 }

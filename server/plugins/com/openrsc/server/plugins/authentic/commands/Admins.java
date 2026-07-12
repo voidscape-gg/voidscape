@@ -2,7 +2,9 @@ package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
+import com.openrsc.server.content.CrackerCampaignService;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
 import com.openrsc.server.database.GameDatabaseException;
@@ -38,6 +40,7 @@ import com.openrsc.server.model.struct.EquipRequest.RequestType;
 import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.authentic.misc.ChristmasCracker;
 import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushConfig;
 import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushMinigame;
 import com.openrsc.server.plugins.triggers.CommandTrigger;
@@ -74,6 +77,7 @@ public final class Admins implements CommandTrigger {
 	private static final int DROPWAVE_MAX_COUNT = 20;
 	private static final int DROPWAVE_MAX_RADIUS = 8;
 	private static final long DROPWAVE_COOLDOWN_MILLIS = 5000L;
+	private static final int CRACKER_CAMPAIGN_MAX_POOL = 1_000_000;
 
 	private Player petOwnerA;
 	private final HashMap<Long, Long> dropWaveLastUse = new HashMap<>();
@@ -124,6 +128,8 @@ public final class Admins implements CommandTrigger {
 			pathfindDebug(player, args);
 		} else if (command.equalsIgnoreCase("holidaydrop")) {
 			startHolidayDrop(player, command, args, false);
+		} else if (command.equalsIgnoreCase("cracker")) {
+			crackerCampaign(player, command, args);
 		} else if (command.equalsIgnoreCase("stopholidaydrop") || command.equalsIgnoreCase("cancelholidaydrop") || command.equalsIgnoreCase("christmasiscancelled")) {
 			stopHolidayDrop(player);
 		} else if (command.equalsIgnoreCase("cabbagehalloweendrop")) {
@@ -168,10 +174,16 @@ public final class Admins implements CommandTrigger {
 			openAuctionHouse(player, args);
 		} else if (command.equalsIgnoreCase("workbenchauctionfixture") || command.equalsIgnoreCase("workbenchahfixture")) {
 			seedWorkbenchAuctionHouseFixture(player);
+		} else if (command.equalsIgnoreCase("workbenchcracker") || command.equalsIgnoreCase("crackerfixture")) {
+			queueChristmasCrackerFixture(player, command, args);
 		} else if (command.equalsIgnoreCase("wildhobdebug") || command.equalsIgnoreCase("wildhobgoblin")) {
 			wildernessHobgoblinDebug(player, command, args);
 		} else if (command.equalsIgnoreCase("balancereport") || command.equalsIgnoreCase("balancestats")) {
 			balanceReport(player, command, args);
+		} else if (command.equalsIgnoreCase("granttitle")) {
+			grantTitle(player, command, args);
+		} else if (command.equalsIgnoreCase("revoketitle")) {
+			revokeTitle(player, command, args);
 		} else if (command.equalsIgnoreCase("gatherstreak") || command.equalsIgnoreCase("resourcestreak")) {
 			seedGatheringStreak(player, command, args);
 		} else if (command.equalsIgnoreCase("announcepreview") || command.equalsIgnoreCase("worldannouncepreview")) {
@@ -503,7 +515,7 @@ public final class Admins implements CommandTrigger {
 
 	private void cinematic(Player player, String[] args) {
 		if (args.length < 1) {
-			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], teamfight [actors] [radius], sparrowcastle [actors] [radius], stop, status");
 			return;
 		}
 		final String action = args[0].toLowerCase();
@@ -515,8 +527,32 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService().status());
 			return;
 		}
+		if (action.equals("teamfight") || action.equals("teams") || action.equals("fight")) {
+			try {
+				final int actors = args.length >= 2 ? Integer.parseInt(args[1]) : 36;
+				final int sceneRadius = args.length >= 3 ? Integer.parseInt(args[2]) : 8;
+				player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService()
+					.startCinematicTeamFight(player, actors, sceneRadius));
+				player.message(messagePrefix + "Use ::cinematic stop when you are done filming.");
+			} catch (NumberFormatException ex) {
+				player.message(messagePrefix + "actors and radius must be integers");
+			}
+			return;
+		}
+		if (action.equals("sparrowcastle") || action.equals("sparrow") || action.equals("castleflyover")) {
+			try {
+				final int actors = args.length >= 2 ? Integer.parseInt(args[1]) : 40;
+				final int sceneRadius = args.length >= 3 ? Integer.parseInt(args[2]) : 8;
+				player.message(messagePrefix + player.getWorld().getServer().getSyntheticLoadService()
+					.startVoidSparrowCastleFlyover(player, actors, sceneRadius));
+				player.message(messagePrefix + "Use Escape to return from the sparrow view, then ::cinematic stop.");
+			} catch (NumberFormatException ex) {
+				player.message(messagePrefix + "actors and radius must be integers");
+			}
+			return;
+		}
 		if (!action.equals("bossfight") && !action.equals("boss")) {
-			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], ::cinematic stop, ::cinematic status");
+			player.message(messagePrefix + "Usage: ::cinematic bossfight [actors] [bossNpcId] [radius], teamfight [actors] [radius], sparrowcastle [actors] [radius], stop, status");
 			return;
 		}
 		try {
@@ -665,6 +701,134 @@ public final class Admins implements CommandTrigger {
 		newArgs[1] = String.format("%d", (minute + delay) % 60);
 		newArgs[2] = "1330"; // Halloween Cracker
 		startHolidayDrop(player, command,  newArgs, true);
+	}
+
+	private void crackerCampaign(Player player, String command, String[] args) {
+		if (!player.isOwner()) {
+			player.message(messagePrefix + "That command is owner-only.");
+			return;
+		}
+
+		final CrackerCampaignService campaign = player.getWorld().getCrackerCampaignService();
+		if (campaign == null) {
+			player.message(messagePrefix + "The cracker campaign service is unavailable.");
+			return;
+		}
+
+		if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("status"))) {
+			reportCrackerCampaignStatus(player, campaign.getState());
+			return;
+		}
+
+		final String amountArgument;
+		if (args.length == 1) {
+			amountArgument = args[0];
+		} else if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
+			amountArgument = args[1];
+		} else {
+			crackerCampaignUsage(player, command);
+			return;
+		}
+
+		final int intendedRemaining;
+		try {
+			intendedRemaining = Integer.parseInt(amountArgument);
+		} catch (NumberFormatException ex) {
+			crackerCampaignUsage(player, command);
+			return;
+		}
+		if (intendedRemaining < 0 || intendedRemaining > CRACKER_CAMPAIGN_MAX_POOL) {
+			player.message(messagePrefix + "Remaining crackers must be from 0 through "
+				+ CRACKER_CAMPAIGN_MAX_POOL + ".");
+			return;
+		}
+
+		final CrackerCampaignService.State state = campaign.getState();
+		if (!state.isEnabled()) {
+			player.message(messagePrefix + "The cracker campaign is disabled by server configuration.");
+			return;
+		}
+
+		final CrackerCampaignService.SetResult result;
+		try {
+			result = campaign.setRemaining(intendedRemaining);
+		} catch (RuntimeException ex) {
+			LOGGER.error("Unable to set cracker campaign pool", ex);
+			auditCrackerCampaignSet(player, "failed_exception", intendedRemaining,
+				CrackerCampaignService.UNKNOWN_REMAINING, CrackerCampaignService.UNKNOWN_REMAINING);
+			player.message(messagePrefix + "The cracker campaign pool could not be saved. Check the server logs.");
+			return;
+		}
+
+		switch (result.getStatus()) {
+			case UPDATED:
+				auditCrackerCampaignSet(player, "updated", intendedRemaining,
+					result.getPreviousRemaining(), result.getRemaining());
+				player.message(messagePrefix + "Cracker campaign pool changed from "
+					+ displayCrackerCount(result.getPreviousRemaining()) + " to "
+					+ displayCrackerCount(result.getRemaining()) + "."
+					+ (result.getRemaining() == 0 ? " Awards are now off." : ""));
+				return;
+			case UNCHANGED:
+				auditCrackerCampaignSet(player, "unchanged", intendedRemaining,
+					result.getPreviousRemaining(), result.getRemaining());
+				player.message(messagePrefix + "Cracker campaign pool is already "
+					+ displayCrackerCount(result.getRemaining()) + "."
+					+ (result.getRemaining() == 0 ? " Awards are off." : ""));
+				return;
+			case FAILED:
+				auditCrackerCampaignSet(player, "failed", intendedRemaining,
+					result.getPreviousRemaining(), result.getRemaining());
+				player.message(messagePrefix + "The cracker campaign pool was not changed because the database write failed.");
+				return;
+			case UNCERTAIN:
+				auditCrackerCampaignSet(player, "uncertain", intendedRemaining,
+					result.getPreviousRemaining(), result.getRemaining());
+				player.message(messagePrefix + "The cracker campaign database result is uncertain. Do not retry; use ::cracker status first.");
+				return;
+			default:
+				auditCrackerCampaignSet(player, "failed_unknown", intendedRemaining,
+					result.getPreviousRemaining(), result.getRemaining());
+				player.message(messagePrefix + "The cracker campaign pool was not changed.");
+		}
+	}
+
+	private void reportCrackerCampaignStatus(Player player, CrackerCampaignService.State state) {
+		if (!state.isLoaded()) {
+			player.message(messagePrefix + "Cracker campaign status is unavailable because the durable pool could not be loaded.");
+			return;
+		}
+		if (!state.isEnabled()) {
+			player.message(messagePrefix + "Cracker campaign is disabled by server configuration"
+				+ " (persisted pool: " + displayCrackerCount(state.getRemaining()) + ").");
+			return;
+		}
+
+		player.message(messagePrefix + "Cracker campaign is "
+			+ (state.isActive() ? "active" : "inactive") + " with "
+			+ displayCrackerCount(state.getRemaining()) + " remaining; NPC kills 1/"
+			+ player.getConfig().CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR
+			+ ", skilling 1/" + player.getConfig().CRACKER_CAMPAIGN_SKILLING_DENOMINATOR + ".");
+	}
+
+	private void crackerCampaignUsage(Player player, String command) {
+		player.message(badSyntaxPrefix + command.toUpperCase()
+			+ " [status|0-" + CRACKER_CAMPAIGN_MAX_POOL + "|set 0-"
+			+ CRACKER_CAMPAIGN_MAX_POOL + "]");
+	}
+
+	private void auditCrackerCampaignSet(Player player, String status, int intendedRemaining,
+		int previousRemaining, int remaining) {
+		player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21,
+			messagePrefix + "Cracker campaign set status=" + status
+				+ " intended=" + displayCrackerCount(intendedRemaining)
+				+ " previous=" + displayCrackerCount(previousRemaining)
+				+ " remaining=" + displayCrackerCount(remaining)));
+	}
+
+	private String displayCrackerCount(int remaining) {
+		return remaining == CrackerCampaignService.UNKNOWN_REMAINING
+			? "unknown" : Integer.toString(remaining);
 	}
 
 	private void startHolidayDrop(Player player, String command, String[] args, boolean allowMultiple) {
@@ -1164,6 +1328,10 @@ public final class Admins implements CommandTrigger {
 			if (player.getUsernameHash() != p.getUsernameHash() && !player.isInvisibleTo(p)) {
 				p.message(messagePrefix + "A staff member has given you " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName());
 			}
+		} else if (!p.getCarriedItems().getInventory().canHold(id, amount)) {
+			// Inventory.add drops the item at the player's feet when the inventory is
+			// full — the spawn succeeded to the ground, so say that (VS-043)
+			player.message(messagePrefix + p.getUsername() + "'s inventory is full - the " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " dropped to the ground");
 		} else {
 			player.message(messagePrefix + "Something went wrong spawning " + amount + " " + p.getWorld().getServer().getEntityHandler().getItemDef(id).getName() + " to " + p.getUsername());
 		}
@@ -1376,6 +1544,11 @@ public final class Admins implements CommandTrigger {
 			player.message(messagePrefix + "Invalid name or player is not online");
 			return;
 		}
+		// The auctioneer NPC open paths set this attribute; without it the
+		// InterfaceOptionHandler gate drops every auction option packet (Refresh, Buy,
+		// Create, ...), so an admin-opened AH panel can never fetch listings. Mirror
+		// Auctioneers/VoidAuctioneer so the workbench/admin open path works too.
+		targetPlayer.setAttribute("auctionhouse", true);
 		ActionSender.sendOpenAuctionHouse(targetPlayer);
 	}
 
@@ -1389,6 +1562,25 @@ public final class Admins implements CommandTrigger {
 		} catch (GameDatabaseException e) {
 			player.message(messagePrefix + "Database Error! (Could not seed Auction House workbench fixture). Check the logs.");
 			LOGGER.error(e);
+		}
+	}
+
+	private void queueChristmasCrackerFixture(Player player, String command, String[] args) {
+		if (args.length < 1 || args.length > 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [category-specific reward roll]");
+			return;
+		}
+		try {
+			int categoryRoll = Integer.parseInt(args[0]);
+			int rewardRoll = args.length == 2 ? Integer.parseInt(args[1]) : 0;
+			if (!ChristmasCracker.queueAdminFixture(player, categoryRoll, rewardRoll)) {
+				player.message(badSyntaxPrefix + "Reward roll must be 0 for category 0-59, 0-127 (0-137 with custom sprites) for 60-79, or 0-9 for 80-99.");
+				return;
+			}
+			player.message(messagePrefix + "Queued Christmas cracker fixture: category="
+				+ categoryRoll + ", reward=" + rewardRoll + ".");
+		} catch (NumberFormatException ex) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [category-specific reward roll]");
 		}
 	}
 
@@ -1437,6 +1629,71 @@ public final class Admins implements CommandTrigger {
 		for (String line : BalanceTelemetry.report(player, mode)) {
 			player.playerServerMessage(MessageType.QUEST, line);
 		}
+	}
+
+	private void grantTitle(Player player, String command, String[] args) {
+		if (args.length < 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [title_id]");
+			return;
+		}
+
+		Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0].replace('.', ' ')));
+		if (targetPlayer == null) {
+			player.message(messagePrefix + "Invalid name or player is not online");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinTitleArgs(args, 1));
+		if (title == null) {
+			player.message(messagePrefix + "Unknown title id.");
+			return;
+		}
+
+		if (PlayerTitle.unlock(targetPlayer, title)) {
+			player.message(messagePrefix + "Granted title " + title.id() + " to " + targetPlayer.getUsername() + ".");
+			player.getWorld().getServer().getGameLogger().addQuery(
+				new StaffLog(player, 21, messagePrefix + "Granted title " + title.id() + " to " + targetPlayer.getUsername()));
+		} else {
+			player.message(messagePrefix + targetPlayer.getUsername() + " already has that title or it is not available.");
+		}
+	}
+
+	private void revokeTitle(Player player, String command, String[] args) {
+		if (args.length < 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [title_id]");
+			return;
+		}
+
+		Player targetPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0].replace('.', ' ')));
+		if (targetPlayer == null) {
+			player.message(messagePrefix + "Invalid name or player is not online");
+			return;
+		}
+
+		PlayerTitle title = PlayerTitle.byId(joinTitleArgs(args, 1));
+		if (title == null) {
+			player.message(messagePrefix + "Unknown title id.");
+			return;
+		}
+
+		if (PlayerTitle.revoke(targetPlayer, title)) {
+			player.message(messagePrefix + "Revoked title " + title.id() + " from " + targetPlayer.getUsername() + ".");
+			player.getWorld().getServer().getGameLogger().addQuery(
+				new StaffLog(player, 21, messagePrefix + "Revoked title " + title.id() + " from " + targetPlayer.getUsername()));
+		} else {
+			player.message(messagePrefix + targetPlayer.getUsername() + " does not have that title.");
+		}
+	}
+
+	private String joinTitleArgs(String[] args, int start) {
+		StringBuilder builder = new StringBuilder();
+		for (int i = start; i < args.length; i++) {
+			if (builder.length() > 0) {
+				builder.append(' ');
+			}
+			builder.append(args[i]);
+		}
+		return builder.toString();
 	}
 
 	private void seedGatheringStreak(Player player, String command, String[] args) {
@@ -3091,7 +3348,7 @@ public final class Admins implements CommandTrigger {
 
 	private void worldAnnouncementPreview(Player player, String command, String[] args) {
 		if (args.length < 1) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
+			worldAnnouncementPreviewUsage(player, command);
 			return;
 		}
 
@@ -3104,9 +3361,26 @@ public final class Admins implements CommandTrigger {
 			announcer.previewSkulledWildernessKill(player);
 		} else if (args[0].equalsIgnoreCase("newplayer") || args[0].equalsIgnoreCase("new")) {
 			announcer.previewNewPlayerJoined(player);
+		} else if (args[0].equalsIgnoreCase("firstskill")) {
+			announcer.previewFirstSkillLevel(player);
+		} else if (args[0].equalsIgnoreCase("qualifiedpk")) {
+			announcer.previewQualifiedWildernessKill(player);
+		} else if (args[0].equalsIgnoreCase("pk3")) {
+			announcer.previewPkStreakMilestone(player, 3);
+		} else if (args[0].equalsIgnoreCase("pk5")) {
+			announcer.previewPkStreakMilestone(player, 5);
+		} else if (args[0].equalsIgnoreCase("pk10")) {
+			announcer.previewPkStreakMilestone(player, 10);
+		} else if (args[0].equalsIgnoreCase("firstcracker")) {
+			announcer.previewFirstCampaignCracker(player);
 		} else {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
+			worldAnnouncementPreviewUsage(player, command);
 		}
+	}
+
+	private void worldAnnouncementPreviewUsage(Player player, String command) {
+		player.message(badSyntaxPrefix + command.toUpperCase()
+			+ " [skill|total|pk|newplayer|firstskill|qualifiedpk|pk3|pk5|pk10|firstcracker]");
 	}
 
 	private void npcRangedPlayer(Player player, String command, String[] args) {
@@ -3168,8 +3442,11 @@ public final class Admins implements CommandTrigger {
 	}
 
 	private void spawnNpc(Player player, String command, String[] args) {
-		if (args.length < 1) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+		final String usage = badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes) (x y)";
+		// Coordinates used to be silently ignored (spawn was always at the sender),
+		// which made remote-coordinate spawns look like silent no-ops.
+		if (args.length < 1 || args.length == 4 || args.length > 5) {
+			player.message(usage);
 			return;
 		}
 
@@ -3177,7 +3454,7 @@ public final class Admins implements CommandTrigger {
 		try {
 			id = Integer.parseInt(args[0]);
 		} catch (NumberFormatException ex) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+			player.message(usage);
 			return;
 		}
 
@@ -3186,7 +3463,7 @@ public final class Admins implements CommandTrigger {
 			try {
 				radius = Integer.parseInt(args[1]);
 			} catch (NumberFormatException ex) {
-				player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+				player.message(usage);
 				return;
 			}
 		} else {
@@ -3198,11 +3475,27 @@ public final class Admins implements CommandTrigger {
 			try {
 				time = Integer.parseInt(args[2]);
 			} catch (NumberFormatException ex) {
-				player.message(badSyntaxPrefix + command.toUpperCase() + " [id] (radius) (time in minutes)");
+				player.message(usage);
 				return;
 			}
 		} else {
 			time = 10;
+		}
+
+		int spawnX = player.getX();
+		int spawnY = player.getY();
+		if (args.length >= 5) {
+			try {
+				spawnX = Integer.parseInt(args[3]);
+				spawnY = Integer.parseInt(args[4]);
+			} catch (NumberFormatException ex) {
+				player.message(usage);
+				return;
+			}
+			if (!player.getWorld().withinWorld(spawnX, spawnY)) {
+				player.message(messagePrefix + "Invalid coordinates");
+				return;
+			}
 		}
 
 		if (player.getWorld().getServer().getEntityHandler().getNpcDef(id) == null) {
@@ -3210,9 +3503,9 @@ public final class Admins implements CommandTrigger {
 			return;
 		}
 
-		final Npc n = new Npc(player.getWorld(), id, player.getX(), player.getY(),
-			player.getX() - radius, player.getX() + radius,
-			player.getY() - radius, player.getY() + radius);
+		final Npc n = new Npc(player.getWorld(), id, spawnX, spawnY,
+			spawnX - radius, spawnX + radius,
+			spawnY - radius, spawnY + radius);
 		n.setShouldRespawn(false);
 		player.getWorld().registerNpc(n);
 		player.getWorld().getServer().getGameEventHandler().add(new SingleEvent(player.getWorld(), null, time * 60000, "Spawn NPC Command") {
@@ -3222,7 +3515,7 @@ public final class Admins implements CommandTrigger {
 			}
 		});
 
-		player.message(messagePrefix + "You have spawned " + player.getWorld().getServer().getEntityHandler().getNpcDef(id).getName() + ", radius: " + radius + " for " + time + " minutes");
+		player.message(messagePrefix + "You have spawned " + player.getWorld().getServer().getEntityHandler().getNpcDef(id).getName() + " at (" + spawnX + ", " + spawnY + "), radius: " + radius + " for " + time + " minutes");
 	}
 
 	private void spawnNpcDropWave(Player player, String command, String[] args) {
@@ -3747,7 +4040,35 @@ public final class Admins implements CommandTrigger {
 		catch(NumberFormatException ex) {
 			otherPlayer = player.getWorld().getPlayer(DataConversions.usernameToHash(args[0]));
 
-			if (args.length < 2) {
+			// Natural-order fallback: "::setstat attack 90". Only when no online player
+			// matches args[0] and it names a skill — an online player of that name still
+			// wins, the same presence heuristic the handler already relies on.
+			int naturalStat = -1;
+			if (otherPlayer == null && args.length == 2) {
+				naturalStat = player.getWorld().getServer().getConstants().getSkills().getSkillIndex(args[0].toLowerCase());
+			}
+			Integer naturalLevel = null;
+			if (naturalStat != -1) {
+				try {
+					naturalLevel = Integer.valueOf(args[1]);
+				} catch (NumberFormatException e) {
+					naturalLevel = null;
+				}
+			}
+
+			if (naturalLevel != null) {
+				otherPlayer = player;
+				stat = naturalStat;
+				level = naturalLevel.intValue();
+				try {
+					statName = player.getWorld().getServer().getConstants().getSkills().getSkillName(stat);
+				}
+				catch (IndexOutOfBoundsException e) {
+					player.message(messagePrefix + "Invalid stat");
+					return;
+				}
+			}
+			else if (args.length < 2) {
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [level] OR ");
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [level] OR ");
 				player.message(badSyntaxPrefix + command.toUpperCase() + " [player] [level] [stat] OR");

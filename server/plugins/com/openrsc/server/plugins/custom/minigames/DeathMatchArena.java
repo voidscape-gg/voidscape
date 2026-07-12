@@ -36,6 +36,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 
 	private static final int VOID_KNIGHT_ID = NpcId.VOID_KNIGHT.id();
 	private static final int FIGHT_VOID_KNIGHT_ID = NpcId.VOID_KNIGHT_ARENA.id();
+	private static final boolean VOID_KNIGHT_RELEASE_ENABLED = false;
 	private static final String DYNAMIC_ATTRIBUTE = "deathmatch_void_knight_dynamic";
 	private static final String OWNER_ATTRIBUTE = "deathmatch_void_knight_owner";
 
@@ -79,7 +80,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	private static final int LOW_HITS_KITE_THRESHOLD = 50;
 	private static final int RANDOM_KITE_CHANCE = 25;
 	private static final int DRAGON_PIECE_CHANCE = 32;
-	private static final int VOID_GEAR_CHANCE = 64;
+	private static final int VOID_GEAR_CHANCE = 1024;
 	private static final int RUPTURE_WARNING_TICKS = 2;
 	private static final int RUPTURE_ACTIVE_TICKS = 1;
 	private static final int RUPTURE_RADIUS = 1;
@@ -114,21 +115,16 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	};
 
 	private static final WeightedItem[] VOID_KNIGHT_DRAGON_REWARDS = {
-		new WeightedItem(ItemId.DRAGON_SWORD_HILT.id(), 6),
-		new WeightedItem(ItemId.DRAGON_SWORD_BLADE.id(), 5),
-		new WeightedItem(ItemId.DRAGON_SWORD_TIP.id(), 6),
-		new WeightedItem(ItemId.RIGHT_HALF_DRAGON_SQUARE_SHIELD.id(), 4),
-		new WeightedItem(ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id(), 3),
 		new WeightedItem(ItemId.DRAGON_BAR.id(), 4),
 		new WeightedItem(ItemId.CHIPPED_DRAGON_SCALE.id(), 4),
 		new WeightedItem(ItemId.DRAGON_METAL_CHAIN.id(), 4)
 	};
 
 	private static final WeightedItem[] VOID_KNIGHT_VOID_REWARDS = {
-		new WeightedItem(ItemId.VOID_SCIMITAR.id(), 3),
-		new WeightedItem(ItemId.VOID_BOW.id(), 4),
-		new WeightedItem(ItemId.VOID_AMULET.id(), 5),
-		new WeightedItem(ItemId.VOID_MACE.id(), 4)
+		new WeightedItem(ItemId.VOID_SCIMITAR.id(), 1),
+		new WeightedItem(ItemId.VOID_BOW.id(), 1),
+		new WeightedItem(ItemId.VOID_AMULET.id(), 1),
+		new WeightedItem(ItemId.VOID_MACE.id(), 1)
 	};
 
 	private static final Reward[] VOID_KNIGHT_SUPPLY_REWARDS = {
@@ -277,6 +273,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
 		if (isEnclaveLadderDown(obj)) {
+			if (!VOID_KNIGHT_RELEASE_ENABLED) {
+				player.message("The Void Knight's chamber is sealed for now.");
+				return;
+			}
 			warnAndEnterBasement(player);
 		} else if (isBasementLadderUp(obj)) {
 			returnToEnclave(player);
@@ -353,6 +353,10 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	}
 
 	private synchronized void startChallenge(Player player) {
+		if (!VOID_KNIGHT_RELEASE_ENABLED) {
+			player.message("The Void Knight is not available yet.");
+			return;
+		}
 		if (sessions.containsKey(player.getUsernameHash())) {
 			player.message("You are already fighting the Void Knight.");
 			return;
@@ -464,7 +468,6 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 		if (DataConversions.random(1, VOID_GEAR_CHANCE) == 1) {
 			Item voidGear = new Item(rollWeightedItem(VOID_KNIGHT_VOID_REWARDS), 1);
 			giveReward(player, voidGear);
-			PlayerTitle.unlock(player, PlayerTitle.VOID_TOUCHED);
 			player.message("@mag@The Void Knight's core collapses into void gear.");
 			broadcastRareReward(player, voidGear);
 		}

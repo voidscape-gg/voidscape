@@ -76,7 +76,7 @@ public final class VoidGeneralStore extends AbstractShop {
 		if (!isQuartermaster(npc)) return;
 
 		npcsay(player, npc, "If you came through the web, you came unprepared.");
-		int option = multi(player, npc,
+		int option = multi(player, npc, false,
 			"Show me your stock.",
 			"What do you sell here?",
 			"Never mind.");

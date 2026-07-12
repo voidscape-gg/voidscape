@@ -147,7 +147,7 @@ public class Social {
 				player.playerServerMessage(MessageType.QUEST, (green ? "@gre@" : "@whi@") + "You are now able to read \"Global chat\".");
 				player.playerServerMessage(MessageType.QUEST, ("@whi@When you reach a total level of " + player.getConfig().GLOBAL_MESSAGE_TOTAL_LEVEL_REQ + ", you will be able to send messages to global chat as well."));
 			}
-			player.playerServerMessage(MessageType.QUEST, "@whi@Type @gre@::globalchat@whi@ or @gre@::gc@whi@ for more information.");
+			player.playerServerMessage(MessageType.QUEST, "@whi@Type @gre@::g@whi@ for more information.");
 
 			// Long.MIN_VALUE is the usernameHash of the global friend
 			ActionSender.sendFriendUpdate(player, Long.MIN_VALUE, "Global$", "");

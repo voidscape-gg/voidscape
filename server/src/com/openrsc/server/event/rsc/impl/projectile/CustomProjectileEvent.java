@@ -18,7 +18,7 @@ public abstract class CustomProjectileEvent extends ProjectileEvent {
 
 	@Override
 	public void action() {
-		if (!canceled) {
+		if (canImpact()) {
 			doSpell();
 			if (opponent.isNpc() && caster.isPlayer()) {
 				Npc npc = (Npc) opponent;

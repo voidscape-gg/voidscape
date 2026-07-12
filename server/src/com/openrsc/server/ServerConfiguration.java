@@ -44,6 +44,7 @@ public class ServerConfiguration {
 	int WS_SERVER_PORT;
 	public boolean WANT_FEATURE_WEBSOCKETS;
 	int IDLE_TIMER;
+	int IDLE_TIMER_SUBSCRIBER;
 	int AUTO_SAVE;
 	public int TIMED_EVENT_INTERVAL;
 	public int MILLISECONDS_BETWEEN_CASTS;
@@ -66,9 +67,11 @@ public class ServerConfiguration {
 	public double WILDERNESS_BOOST;
 	public double SKULL_BOOST;
 	public double NPC_RESPAWN_MULTIPLIER;
+	public double WILDERNESS_SPAWN_MULTIPLIER;
 	public int VIEW_DISTANCE;
 	public String LOGO_SPRITE_ID;
 	public int NPC_BLOCKING;
+	public int WILDERNESS_NPC_BLOCKING;
 	public int PLAYER_BLOCKING;
 	public int MAX_CONNECTIONS_PER_IP;
 	public int MAX_CONNECTIONS_PER_SECOND;
@@ -101,7 +104,14 @@ public class ServerConfiguration {
 	public boolean WANT_WORLD_MILESTONE_ANNOUNCEMENTS;
 	public boolean WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS;
 	public boolean WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS;
+	public boolean WANT_WORLD_ACHIEVEMENTS;
+	public String WORLD_ACHIEVEMENT_SEASON_ID;
+	public int WORLD_PK_LOOT_MINIMUM;
+	public boolean WANT_CRACKER_CAMPAIGN;
+	public int CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR;
+	public int CRACKER_CAMPAIGN_SKILLING_DENOMINATOR;
 	public boolean WANT_BETA_ONBOARDING_GUIDE;
+	public boolean PRODUCTION_COMMAND_LOCKDOWN;
 	public boolean FOG_TOGGLE;
 	public boolean GROUND_ITEM_TOGGLE;
 	public boolean GROUND_ITEM_NAMES;
@@ -129,9 +139,6 @@ public class ServerConfiguration {
 	public boolean WANT_GLOBAL_RULES_AGREEMENT;
 	public String[] GLOBAL_RULES;
 	public boolean WANT_GLOBAL_CHAT_COUNTRY_FLAGS;
-	public String GLOBAL_CHAT_COUNTRY_LOOKUP_URL;
-	public int GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS;
-	public String GLOBAL_CHAT_LOCAL_COUNTRY_CODE;
 	public int GLOBAL_MESSAGE_COOLDOWN;
 	public int GLOBAL_MESSAGE_TOTAL_LEVEL_REQ;
 	public int GLOBAL_MESSAGE_READING_TOTAL_LEVEL_REQ;
@@ -430,6 +437,7 @@ public class ServerConfiguration {
 		MILLISECONDS_BETWEEN_CASTS = tryReadInt("milliseconds_between_casts").orElse(GAME_TICK * 3 - 20);
 		WANT_CUSTOM_WALK_SPEED = tryReadBool("want_custom_walking_speed").orElse(false);
 		IDLE_TIMER = tryReadInt("idle_timer").orElse(300000); // 5 minutes
+		IDLE_TIMER_SUBSCRIBER = tryReadInt("idle_timer_subscriber").orElse(IDLE_TIMER);
 		AUTO_SAVE = tryReadInt("auto_save").orElse(30000); // 30 seconds
 		CLIENT_VERSION = tryReadInt("client_version").orElse(10009);
 		ENFORCE_CUSTOM_CLIENT_VERSION = tryReadBool("enforce_custom_client_version").orElse(true);
@@ -473,6 +481,7 @@ public class ServerConfiguration {
 		SKULL_BOOST = tryReadDouble("skull_boost").orElse(0.0);
 		IS_DOUBLE_EXP = tryReadBool("double_exp").orElse(false);
 		NPC_RESPAWN_MULTIPLIER = tryReadDouble("npc_respawn_multiplier").orElse(1.0);
+		WILDERNESS_SPAWN_MULTIPLIER = tryReadDouble("wilderness_spawn_multiplier").orElse(1.0);
 		WANT_REGISTRATION_LIMIT = tryReadBool("want_registration_limit").orElse(false);
 		REGISTRATION_LIMIT_COUNT = tryReadInt("registration_limit_count").orElse(2);
 		PACKET_LIMIT = tryReadInt("packet_limit").orElse(100);
@@ -607,7 +616,26 @@ public class ServerConfiguration {
 		WANT_WORLD_MILESTONE_ANNOUNCEMENTS = tryReadBool("want_world_milestone_announcements").orElse(false);
 		WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS = tryReadBool("want_world_skulled_pk_announcements").orElse(false);
 		WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS = tryReadBool("want_world_new_player_announcements").orElse(false);
+		WANT_WORLD_ACHIEVEMENTS = tryReadBool("want_world_achievements").orElse(false);
+		WORLD_ACHIEVEMENT_SEASON_ID =
+			tryReadString("world_achievement_season_id").orElse("launch-2026");
+		WORLD_PK_LOOT_MINIMUM = tryReadInt("world_pk_loot_minimum").orElse(5000);
+		if (WORLD_PK_LOOT_MINIMUM <= 0) {
+			WORLD_PK_LOOT_MINIMUM = 5000;
+		}
+		WANT_CRACKER_CAMPAIGN = tryReadBool("want_cracker_campaign").orElse(false);
+		CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR =
+			tryReadInt("cracker_campaign_npc_kill_denominator").orElse(500);
+		if (CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR <= 0) {
+			CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR = 500;
+		}
+		CRACKER_CAMPAIGN_SKILLING_DENOMINATOR =
+			tryReadInt("cracker_campaign_skilling_denominator").orElse(1000);
+		if (CRACKER_CAMPAIGN_SKILLING_DENOMINATOR <= 0) {
+			CRACKER_CAMPAIGN_SKILLING_DENOMINATOR = 1000;
+		}
 		WANT_BETA_ONBOARDING_GUIDE = tryReadBool("want_beta_onboarding_guide").orElse(false);
+		PRODUCTION_COMMAND_LOCKDOWN = tryReadBool("production_command_lockdown").orElse(false);
 		SIDE_MENU_TOGGLE = tryReadBool("side_menu_toggle").orElse(false);
 		INVENTORY_COUNT_TOGGLE = tryReadBool("inventory_count_toggle").orElse(false);
 		AUTO_MESSAGE_SWITCH_TOGGLE = tryReadBool("auto_message_switch_toggle").orElse(false);
@@ -617,15 +645,12 @@ public class ServerConfiguration {
 		SHOW_TUTORIAL_SKIP_OPTION = tryReadBool("show_tutorial_skip_option").orElse(true);
 		SKIP_TUTORIAL_GIVES_ITEMS = tryReadBool("skip_tutorial_gives_items").orElse(false);
 		WANT_GLOBAL_CHAT = tryReadBool("want_global_chat").orElse(false);
-		WANT_GLOBAL_FRIEND = tryReadBool("want_global_friend").orElse(false);
-		WANT_GLOBAL_RULES_AGREEMENT = tryReadBool("want_global_rules_agreement").orElse(false);
-		WANT_GLOBAL_CHAT_COUNTRY_FLAGS = tryReadBool("want_global_chat_country_flags").orElse(true);
-		GLOBAL_CHAT_COUNTRY_LOOKUP_URL = tryReadString("global_chat_country_lookup_url").orElse("https://api.country.is/%s");
-		GLOBAL_CHAT_COUNTRY_LOOKUP_TIMEOUT_MS = tryReadInt("global_chat_country_lookup_timeout_ms").orElse(1500);
-		GLOBAL_CHAT_LOCAL_COUNTRY_CODE = tryReadString("global_chat_local_country_code").orElse("");
-		if (WANT_GLOBAL_RULES_AGREEMENT) {
-			readGlobalRules("globalrules.txt");
-		}
+			WANT_GLOBAL_FRIEND = tryReadBool("want_global_friend").orElse(false);
+			WANT_GLOBAL_RULES_AGREEMENT = tryReadBool("want_global_rules_agreement").orElse(false);
+			WANT_GLOBAL_CHAT_COUNTRY_FLAGS = tryReadBool("want_global_chat_country_flags").orElse(true);
+			if (WANT_GLOBAL_RULES_AGREEMENT) {
+				readGlobalRules("globalrules.txt");
+			}
 		WANT_EXPERIENCE_ELIXIRS = tryReadBool("want_experience_elixirs").orElse(false);
 		WANT_KEYBOARD_SHORTCUTS = tryReadInt("want_keyboard_shortcuts").orElse(0);
 		WANT_CUSTOM_RANK_DISPLAY = tryReadBool("want_custom_rank_display").orElse(false);
@@ -640,6 +665,7 @@ public class ServerConfiguration {
 		WANT_DECANTING = tryReadBool("want_decanting").orElse(false);
 		PLAYER_COMMANDS = tryReadBool("player_commands").orElse(false);
 		NPC_BLOCKING = tryReadInt("npc_blocking").orElse(2);
+		WILDERNESS_NPC_BLOCKING = tryReadInt("wilderness_npc_blocking").orElse(NPC_BLOCKING);
 		PLAYER_BLOCKING = tryReadInt("player_blocking").orElse(1);
 		NPC_DONT_RETREAT = tryReadBool("npc_dont_retreat").orElse(false);
 		MESSAGE_FULL_INVENTORY = tryReadBool("message_full_inventory").orElse(false);
@@ -681,7 +707,7 @@ public class ServerConfiguration {
 		WANT_COMBAT_ODYSSEY = tryReadBool("want_combat_odyssey").orElse(false);
 		WANT_INVISIBLE_NPCS = tryReadBool("want_invisible_npcs").orElse(false);
 		EQUIP_QUEST_ITEMS_WITHOUT_QUESTS = tryReadBool("equip_quest_items_without_quests").orElse(false);
-		WANT_PACKET_REGISTER = tryReadBool("want_packet_register").orElse(true);
+		WANT_PACKET_REGISTER = tryReadBool("want_packet_register").orElse(false);
 		TIMED_EVENT_INTERVAL = tryReadInt("timed_event_interval").orElse(30000);
 
 		// Party settings
@@ -807,6 +833,16 @@ public class ServerConfiguration {
 		ARMY_OF_OBSCURITY = tryReadBool("army_of_obscurity").orElse(false);
 
 		// adminIp = Arrays.asList(ADMIN_IP.split(","));
+	}
+
+	public boolean requiresClientUpdate(final int clientVersion) {
+		if (clientVersion == CLIENT_VERSION) {
+			return false;
+		}
+		if (clientVersion > 10000) {
+			return ENFORCE_CUSTOM_CLIENT_VERSION;
+		}
+		return WANT_CUSTOM_SPRITES;
 	}
 
 	protected static String loadServerProps(YMLReader reader, String defaultFile) {

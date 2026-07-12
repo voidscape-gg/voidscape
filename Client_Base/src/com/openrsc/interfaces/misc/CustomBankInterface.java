@@ -6,6 +6,7 @@ import com.openrsc.client.entityhandling.instances.Item;
 import orsc.Config;
 import orsc.enumerations.InputXAction;
 import orsc.graphics.gui.InputXPrompt;
+import orsc.graphics.gui.UiSkin;
 import orsc.mudclient;
 import orsc.util.BankUtil;
 
@@ -30,6 +31,16 @@ public final class CustomBankInterface extends BankInterface {
 	private static final int BANK_SLOT_HEIGHT_ANDROID = 32;
 	private static final int BANK_SLOT_WIDTH_SPACIOUS = 62;
 	private static final int BANK_SLOT_HEIGHT_SPACIOUS = 40;
+	// Small-desktop web layout (Classic 512x346): NATIVE-size cells (like the original
+	// OpenRSC bank's 49x34 cell / 48x32 icon) so icons stay full-size. The panel is made
+	// to fit below the plaque + above the chat by showing FEWER bank rows (bankRows()),
+	// with the scroll bar covering the rest — not by shrinking the cells (VS-044).
+	private static final int BANK_SLOT_WIDTH_WEB = 49;
+	private static final int BANK_SLOT_HEIGHT_WEB = 32;
+	// Visible bank rows in the web layout. With the HUD (plaque + top tabs) hidden while
+	// banking, the panel reclaims the top space and 3 native-size rows fit the Classic
+	// viewport above the chat; the scroll bar shows the rest.
+	private static final int BANK_ROWS_WEB = 3;
 	private static final int BANK_PANEL_WIDTH = 620;
 	private static final int BANK_PANEL_WIDTH_ANDROID = 504;
 	private static final int BANK_PANEL_WIDTH_SPACIOUS = 720;
@@ -38,9 +49,9 @@ public final class CustomBankInterface extends BankInterface {
 	private static final int UI_HEADER = 0x0B0710;
 	private static final int UI_SLOT = 0x3C3125;
 	private static final int UI_SLOT_HOVER = 0x58452F;
-	private static final int UI_GRID_LINE = 0x6E5737;
+	private static final int UI_GRID_LINE = UiSkin.GOLD_LINE;
 	private static final int UI_PANEL_BODY_ALPHA = 46;
-	private static final int UI_HOVER_GLOW = 0xF6DA7D;
+	private static final int UI_HOVER_GLOW = UiSkin.GOLD_RING;
 	private static final int UI_TOOLBAR_BG = 0x08050C;
 	private static final int UI_TOOLBAR_ALPHA = 142;
 	private static final int UI_TOOLBAR_DIVIDER_ALPHA = 104;
@@ -48,10 +59,10 @@ public final class CustomBankInterface extends BankInterface {
 	private static final int UI_MENU_HEADER_ALPHA = 96;
 	private static final int UI_MENU_LINE_ALPHA = 116;
 	private static final int UI_MENU_HOVER_ALPHA = 58;
-	private static final int UI_PURPLE = 0x6A4FA0;
+	private static final int UI_PURPLE = UiSkin.PURPLE_EDGE;
 	private static final int UI_PURPLE_DARK = 0x241A36;
 	private static final int UI_PURPLE_ACTIVE = 0x5B24A3;
-	private static final int UI_GOLD = 0xF6DA7D;
+	private static final int UI_GOLD = UiSkin.GOLD_RING;
 	private static final int UI_MUTED = 0xA99BBF;
 	private static final int UI_GREEN = 0x40FF48;
 	private static final int UI_CYAN = 0x00FFFF;
@@ -92,13 +103,27 @@ public final class CustomBankInterface extends BankInterface {
 		super(mc);
 		if (Config.S_WANT_CUSTOM_BANKS) {
 			updateLayout();
-			bankScroll = bank.addScrollingList(bankGridX(), bankGridY(), bankGridWidth(), bankGridHeight(), 500, BANK_ROWS, true);
+			bankScroll = bank.addScrollingList(bankGridX(), bankGridY(), bankGridWidth(), bankGridHeight(), 500, bankRows(), true);
 			bankSearch = bank.addLeftTextEntry(searchFieldX(), searchFieldY(), searchFieldWidth(), searchFieldHeight(), 0, 15, false, true);
 		}
 	}
 
+	public boolean useLegacyCustomBank() {
+		return Config.S_WANT_CUSTOM_BANKS && !Config.C_CUSTOM_UI;
+	}
+
+	@Override
+	public String getBankRendererName() {
+		return useLegacyCustomBank() ? "legacyCustom" : super.getBankRendererName();
+	}
+
 	private void updateLayout() {
-		if (androidLayout()) {
+		if (smallDesktopWebLayout()) {
+			// Hug the grid (not the whole viewport) and center, so the panel isn't
+			// oversized at the Classic preset (VS-044, bank rebuild).
+			width = Math.min(mc.getGameWidth() - 8, bankGridWidth() + 24);
+			height = compactPanelHeight();
+		} else if (androidLayout()) {
 			width = Math.min(BANK_PANEL_WIDTH_ANDROID, Math.max(bankGridWidth() + 20, mc.getGameWidth() - 8));
 			width = Math.min(width, mc.getGameWidth() - 8);
 			height = compactPanelHeight();
@@ -106,6 +131,14 @@ public final class CustomBankInterface extends BankInterface {
 			int spaciousWidth = Math.min(BANK_PANEL_WIDTH_SPACIOUS, mc.getGameWidth() - 32);
 			width = Math.max(bankGridWidth() + 56, spaciousWidth);
 			height = spaciousPanelHeight();
+		} else if (narrowDesktopLayout()) {
+			// Narrow desktop frames (e.g. Classic 512): the fixed compact grid is wider than the
+			// viewport, so the old Math.max defeated the clamp (panelX went negative, panel
+			// overhung both edges). Clamp the panel to the viewport and center it; the grid uses
+			// native 49px cells here (bankSlotWidth) so all 10 columns fit inside the clamped
+			// panel instead of anchoring off-screen. (UI-STYLE-GUIDE §9)
+			width = mc.getGameWidth() - 16;
+			height = compactPanelHeight();
 		} else {
 			width = Math.min(BANK_PANEL_WIDTH, Math.max(bankGridWidth() + 20, mc.getGameWidth() - 30));
 			height = compactPanelHeight();
@@ -114,6 +147,21 @@ public final class CustomBankInterface extends BankInterface {
 		if (androidLayout()) {
 			x = Math.max(4, x);
 			y = Math.max(4, (mc.getGameHeight() - height) / 2);
+		} else if (smallDesktopWebLayout() || narrowDesktopLayout()) {
+			x = Math.max(4, Math.min(x, mc.getGameWidth() - width - 4));
+			// The location plaque + top tabs are hidden while banking, so the panel can use
+			// the freed top space (small margin) instead of clearing the tab row.
+			int topSafe = 8;
+			int bottomSafe = mc.getVoidscapeDesktopOverlayBottomSafeY();
+			int centeredY = (mc.getGameHeight() - height) / 2;
+			if (height <= bottomSafe - topSafe) {
+				y = Math.max(topSafe, Math.min(centeredY, bottomSafe - height));
+			} else {
+				// Panel taller than the safe band (Classic 512x346): anchor near the top but
+				// clamp the bottom to the game height so the last inventory row and first item
+				// aren't cut off / hidden behind the frame (VS-030).
+				y = Math.max(0, Math.min(topSafe, mc.getGameHeight() - height));
+			}
 		} else {
 			y = Math.max(55, Math.min(82, (mc.getGameHeight() - height) / 2 + 2));
 		}
@@ -123,8 +171,19 @@ public final class CustomBankInterface extends BankInterface {
 		return Config.isAndroid();
 	}
 
+	private boolean smallDesktopWebLayout() {
+		return mc.isVoidscapeClassicWebSmallHud();
+	}
+
 	private boolean spaciousLayout() {
-		return !androidLayout() && mc.getGameWidth() >= 700 && mc.getGameHeight() >= 520;
+		return !androidLayout() && !smallDesktopWebLayout() && mc.getGameWidth() >= 700 && mc.getGameHeight() >= 520;
+	}
+
+	/** Narrow desktop frames without the small-HUD web preset (e.g. Classic 512): the fixed
+	 *  compact grid is wider than the viewport, so the panel is clamped to gameWidth and the grid
+	 *  falls back to native 49px cells so its 10 columns stay inside the clamped panel. */
+	private boolean narrowDesktopLayout() {
+		return !androidLayout() && !smallDesktopWebLayout() && mc.getGameWidth() <= 560;
 	}
 
 	private int contentX() {
@@ -140,7 +199,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int controlRowYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return 42;
 		}
 		return spaciousLayout() ? 58 : 54;
@@ -155,6 +214,9 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int bankGridYOffset() {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
+			return 64; // grid starts below the tab/search row (controlRowYOffset 42 + row height)
+		}
 		if (androidLayout()) {
 			return 64;
 		}
@@ -166,7 +228,19 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int bankGridHeight() {
-		return BANK_ROWS * bankSlotHeight();
+		return bankRows() * bankSlotHeight();
+	}
+
+	/** Number of bank rows visible at once (fewer in the compact web layout; scroll shows the rest). */
+	private int bankRows() {
+		// Narrow desktop shares the web tier's 3-row window: 4 full-height rows +
+		// inventory strip total ~376px, which cannot fit a 334px Classic frame.
+		return smallDesktopWebLayout() || narrowDesktopLayout() ? BANK_ROWS_WEB : BANK_ROWS;
+	}
+
+	/** Items per bank page/scroll window = columns x visible rows. */
+	private int bankPageSize() {
+		return BANK_COLUMNS * bankRows();
 	}
 
 	private int actionRowY() {
@@ -174,7 +248,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int actionRowYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return bankGridYOffset() + bankGridHeight() + 4;
 		}
 		return bankGridYOffset() + bankGridHeight() + (spaciousLayout() ? 17 : 8);
@@ -185,7 +259,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int inventoryGridYOffset() {
-		if (androidLayout()) {
+		if (androidLayout() || smallDesktopWebLayout() || narrowDesktopLayout()) {
 			return actionRowYOffset() + actionButtonHeight() + 4;
 		}
 		return actionRowYOffset() + actionButtonHeight() + (spaciousLayout() ? 13 : 8);
@@ -200,6 +274,9 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int compactPanelHeight() {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
+			return inventoryGridYOffset() + inventoryGridHeight() + 2;
+		}
 		if (androidLayout()) {
 			return inventoryGridYOffset() + inventoryGridHeight() + 6;
 		}
@@ -207,13 +284,24 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int bankSlotWidth() {
+		if (smallDesktopWebLayout()) {
+			return BANK_SLOT_WIDTH_WEB;
+		}
 		if (androidLayout()) {
 			return BANK_SLOT_WIDTH_ANDROID;
+		}
+		if (narrowDesktopLayout()) {
+			// Native 49px cells: 10 columns = 490px, which fits inside the viewport-clamped panel
+			// (gameWidth - 16). The wider 56px compact cell would overhang a narrow frame.
+			return BANK_SLOT_WIDTH_WEB;
 		}
 		return spaciousLayout() ? BANK_SLOT_WIDTH_SPACIOUS : BANK_SLOT_WIDTH_COMPACT;
 	}
 
 	private int bankSlotHeight() {
+		if (smallDesktopWebLayout() || narrowDesktopLayout()) {
+			return BANK_SLOT_HEIGHT_WEB;
+		}
 		if (androidLayout()) {
 			return BANK_SLOT_HEIGHT_ANDROID;
 		}
@@ -221,6 +309,9 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int actionButtonHeight() {
+		if (smallDesktopWebLayout()) {
+			return 18;
+		}
 		if (androidLayout()) {
 			return 20;
 		}
@@ -368,7 +459,7 @@ public final class CustomBankInterface extends BankInterface {
 
 	@Override
 	public boolean onRender() {
-		if (!Config.S_WANT_CUSTOM_BANKS) return super.onRender();
+		if (!useLegacyCustomBank()) return super.onRender();
 
 		updateLayout();
 		bank.reposition(bankSearch, searchFieldX(), searchFieldY(), searchFieldWidth(), searchFieldHeight());
@@ -436,7 +527,7 @@ public final class CustomBankInterface extends BankInterface {
 		drawCloseButton(closeButtonX, closeButtonY, isInside(closeButtonX, closeButtonY, 24, 24));
 
 		int bankPages = bankItems.isEmpty() ? 0 :
-			Math.min(BANK_TAB_LIMIT, Math.max(1, (bankItems.size() + BANK_PAGE_SIZE - 1) / BANK_PAGE_SIZE));
+			Math.min(BANK_TAB_LIMIT, Math.max(1, (bankItems.size() + bankPageSize() - 1) / bankPageSize()));
 		if (mc.bankPage > bankPages) {
 			mc.bankPage = bankPages;
 		}
@@ -517,7 +608,7 @@ public final class CustomBankInterface extends BankInterface {
 			}
 		}
 		int bankCount = 0;
-		int bankSlotStart = (mc.bankPage - 1) * BANK_PAGE_SIZE;
+		int bankSlotStart = (mc.bankPage - 1) * bankPageSize();
 
 		if (mc.bankPage == 0) {
 			bank.clearList(bankScroll);
@@ -543,7 +634,7 @@ public final class CustomBankInterface extends BankInterface {
 
 		drawGridPanel(bankGridX(), bankGridY(), bankGridWidth(), bankGridHeight());
 		int gridY = bankGridY();
-		for (int verticalSlots = 0; verticalSlots < BANK_ROWS; verticalSlots++) {
+		for (int verticalSlots = 0; verticalSlots < bankRows(); verticalSlots++) {
 			for (int horizonalSlots = 0; horizonalSlots < BANK_COLUMNS; horizonalSlots++) {
 				BankItem bankItem = null;
 				ItemDef bankDef = null;
@@ -613,7 +704,7 @@ public final class CustomBankInterface extends BankInterface {
 				}
 			}
 		}
-		drawGridLines(bankGridX(), bankGridY(), BANK_COLUMNS, BANK_ROWS);
+		drawGridLines(bankGridX(), bankGridY(), BANK_COLUMNS, bankRows());
 		if (!searchItem.isEmpty() && searchList.isEmpty()) {
 			drawCenteredString("No matching items", x + width / 2, bankGridY() + 83, 1, UI_GOLD);
 		}
@@ -839,6 +930,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private void drawGridPanel(int gx, int gy, int gw, int gh) {
+		// Owner direction 2026-07-04: grids stay translucent glass — no opaque backing.
 		mc.getSurface().drawBoxAlpha(gx, gy, gw, gh, UI_SLOT, UI_PANEL_BODY_ALPHA);
 	}
 
@@ -945,13 +1037,33 @@ public final class CustomBankInterface extends BankInterface {
 			return;
 		}
 		String text = mudclient.formatStackAmount(amount);
-		int chipX = sx + 2;
+		int tx = sx + 4;
 		int baseline = sy + bankSlotHeight() - 5;
-		drawString(text, chipX + 2, baseline, 0, color);
+		drawString(text, tx + 1, baseline + 1, 0, 0x000000); // shadow for legibility over the item
+		drawString(text, tx, baseline, 0, color);
 	}
 
 	private void drawItemInSlot(Item item, int drawX, int drawY, boolean dragging) {
-		drawItemSprite(item, drawX + (bankSlotWidth() - 48) / 2, drawY + (bankSlotHeight() - 32) / 2, dragging);
+		// Fit the item sprite inside the ACTUAL cell (preserving the 48x32 / 3:2 aspect,
+		// 1px inset) instead of drawing a fixed 48x32 that overflows and mis-aligns when
+		// the responsive cell is smaller than 48x32. Keeps items on the grid at any size.
+		drawItemFittedInCell(item, drawX, drawY, bankSlotWidth(), bankSlotHeight(), dragging);
+	}
+
+	/** Draw an item sprite scaled to fit within a cell of (cellW x cellH), centered.
+	 *  Capped at the native 48x32 so items only shrink for small cells, never upscale. */
+	private void drawItemFittedInCell(Item item, int cellX, int cellY, int cellW, int cellH, boolean dragging) {
+		int availW = Math.min(48, Math.max(1, cellW - 2));
+		int availH = Math.min(32, Math.max(1, cellH - 2));
+		int iw = availW;
+		int ih = iw * 32 / 48;
+		if (ih > availH) {
+			ih = availH;
+			iw = ih * 48 / 32;
+		}
+		int ix = cellX + (cellW - iw) / 2;
+		int iy = cellY + (cellH - ih) / 2;
+		drawItemSpriteScaled(item, ix, iy, iw, ih, dragging);
 	}
 
 	private void drawCenteredString(String label, int cx, int cy, int font, int color) {
@@ -1084,7 +1196,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private int clampedBankScrollRow() {
-		int maxScrollRow = Math.max(0, bank.controlListCurrentSize[bankScroll] - BANK_ROWS);
+		int maxScrollRow = Math.max(0, bank.controlListCurrentSize[bankScroll] - bankRows());
 		int scrollRow = Math.max(0, Math.min(maxScrollRow, bank.getScrollPosition(bankScroll)));
 		if (scrollRow != bank.getScrollPosition(bankScroll)) {
 			bank.resetListToIndex(bankScroll, scrollRow);
@@ -1098,7 +1210,7 @@ public final class CustomBankInterface extends BankInterface {
 			return;
 		}
 
-		int maxScroll = Math.max(0, bank.controlListCurrentSize[bankScroll] - BANK_ROWS);
+		int maxScroll = Math.max(0, bank.controlListCurrentSize[bankScroll] - bankRows());
 		if (maxScroll <= 0) {
 			resetAndroidBankSwipeScroll();
 			return;
@@ -1211,37 +1323,44 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	private void drawItemSprite(Item item, int drawX, int drawY, boolean dragging) {
+		drawItemSpriteScaled(item, drawX, drawY, 48, 32, dragging);
+	}
+
+	/**
+	 * Draw an item sprite at an arbitrary size (drawW x drawH). Surface.drawSpriteClipping
+	 * scales the sprite to the destination rect, so any slot size aligns correctly. The
+	 * noted/cert background fills the rect and the inner item scales proportionally to the
+	 * classic 48x32/29x19 layout.
+	 */
+	private void drawItemSpriteScaled(Item item, int drawX, int drawY, int drawW, int drawH, boolean dragging) {
 		if (item == null || item.getCatalogID() == -1 || item.getItemDef() == null) {
 			return;
 		}
 		ItemDef def = item.getItemDef();
 		if (item.getNoted()) {
-			if (S_WANT_CERT_AS_NOTES) {
-				if (dragging) {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.noteDef), drawX, drawY, 48, 32,
-						EntityHandler.noteDef.getPictureMask(), 0, EntityHandler.noteDef.getBlueMask(), false, 0, 1);
-				} else {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.noteDef), drawX, drawY, 48, 32,
-						EntityHandler.noteDef.getPictureMask(), 0, EntityHandler.noteDef.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
-				}
-				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX + 7, drawY + 8, 29, 19,
-					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
+			ItemDef bg = S_WANT_CERT_AS_NOTES ? EntityHandler.noteDef : EntityHandler.certificateDef;
+			if (dragging) {
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(bg), drawX, drawY, drawW, drawH,
+					bg.getPictureMask(), 0, bg.getBlueMask(), false, 0, 1);
 			} else {
-				if (dragging) {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.certificateDef), drawX, drawY, 48, 32,
-						EntityHandler.certificateDef.getPictureMask(), 0, EntityHandler.certificateDef.getBlueMask(), false, 0, 1);
-				} else {
-					mc.getSurface().drawSpriteClipping(mc.spriteSelect(EntityHandler.certificateDef), drawX, drawY, 48, 32,
-						EntityHandler.certificateDef.getPictureMask(), 0, EntityHandler.certificateDef.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
-				}
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(bg), drawX, drawY, drawW, drawH,
+					bg.getPictureMask(), 0, bg.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
+			}
+			if (S_WANT_CERT_AS_NOTES) {
+				int innerW = Math.max(1, drawW * 29 / 48);
+				int innerH = Math.max(1, drawH * 19 / 32);
+				int innerX = drawX + drawW * 7 / 48;
+				int innerY = drawY + drawH * 8 / 32;
+				mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), innerX, innerY, innerW, innerH,
+					def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
 			}
 			return;
 		}
 		if (dragging) {
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, 48, 32,
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, drawW, drawH,
 				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1);
 		} else {
-			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, 48, 32,
+			mc.getSurface().drawSpriteClipping(mc.spriteSelect(def), drawX, drawY, drawW, drawH,
 				def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
 		}
 	}
@@ -1578,7 +1697,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	public void sendDeposit(int i, boolean uncertMode) {
-		if (Config.S_WANT_CUSTOM_BANKS) {
+		if (useLegacyCustomBank()) {
 			if (selectedInventorySlot < 0 || selectedInventorySlot >= mc.getInventoryItemCount()) {
 				return;
 			}
@@ -1628,7 +1747,7 @@ public final class CustomBankInterface extends BankInterface {
 	}
 
 	public void sendWithdraw(int i) {
-		if (Config.S_WANT_CUSTOM_BANKS) {
+		if (useLegacyCustomBank()) {
 			if (selectedBankSlot < 0 || selectedBankSlot >= bankItems.size()) {
 				return;
 			}
@@ -1673,6 +1792,7 @@ public final class CustomBankInterface extends BankInterface {
 
 
 	public void keyDown(int key) {
+		if (!useLegacyCustomBank()) return;
 		if (mc.inputX_Action == InputXAction.ACT_0) {
 			if (key == 27) {
 				if (pendingSavePresetSlot != -1) {

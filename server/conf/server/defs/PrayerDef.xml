@@ -83,4 +83,10 @@
       <name>Protect from missiles</name>
       <description>100% protection from ranged attack</description>
     </PrayerDef>
+    <PrayerDef>
+      <reqLevel>43</reqLevel>
+      <drainRate>60</drainRate>
+      <name>Protect from magic</name>
+      <description>Blocks most NPC magic attacks</description>
+    </PrayerDef>
 </PrayerDef-array>

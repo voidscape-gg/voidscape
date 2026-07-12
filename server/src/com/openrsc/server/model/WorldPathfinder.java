@@ -189,7 +189,31 @@ public class WorldPathfinder {
 			anchor = next;
 		}
 		if (!appendSegment(stitched, anchor, target, maxNodes)) return null;
+		pruneRepeatedTiles(stitched);
 		return stitched.isEmpty() ? null : stitched;
+	}
+
+	private void pruneRepeatedTiles(final ArrayList<Point> route) {
+		if (route.size() < 2) return;
+
+		final ArrayList<Point> pruned = new ArrayList<>(route.size());
+		final HashMap<Long, Integer> indexes = new HashMap<>(route.size() * 2);
+		for (Point point : route) {
+			final long pointKey = key(point.getX(), point.getY());
+			final Integer previousIndex = indexes.get(pointKey);
+			if (previousIndex != null) {
+				for (int i = pruned.size() - 1; i > previousIndex; i--) {
+					final Point removed = pruned.remove(i);
+					indexes.remove(key(removed.getX(), removed.getY()));
+				}
+				continue;
+			}
+			indexes.put(pointKey, pruned.size());
+			pruned.add(point);
+		}
+
+		route.clear();
+		route.addAll(pruned);
 	}
 
 	private int farthestDirectWaypoint(final Point anchor, final List<WaypointGraph.Node> route, final int startIndex) {

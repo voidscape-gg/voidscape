@@ -22,7 +22,7 @@ public final class BetaOnboardingGuide {
 		new Destination("Subscription Vendor - 126,649", 126, 649),
 		new Destination("Edgeville bank - 217,449", 217, 449),
 		new Destination("Void Auctioneer - 217,460", 217, 460),
-		new Destination("City Void Rift - 139,636", 139, 636),
+		new Destination("Starter Void Rift - 139,636", 139, 636),
 		new Destination("Void Enclave - 113,314", 113, 314)
 	};
 
@@ -31,7 +31,7 @@ public final class BetaOnboardingGuide {
 		new Destination("Void Dungeon inside - 72,3252", 72, 3252),
 		new Destination("Void Knight chamber - 984,667", 984, 667),
 		new Destination("Void Arena lobby - 600,2914", 600, 2914),
-		new Destination("Void Colossus rift - 113,321", 113, 321)
+		new Destination("Void Arena rift - 113,321", 113, 321)
 	};
 
 	private static final BetaItem[] CARD_KEY_KIT = {
@@ -114,6 +114,7 @@ public final class BetaOnboardingGuide {
 				"Teleports: hubs, bosses, and test areas",
 				"Stats: set levels and restore",
 				"Items: spawn beta kits",
+				"FarmSim: melee kits and loot projections",
 				"Checklist: what to test",
 				"Reference: commands, coords, item IDs",
 				"Close beta toolkit");
@@ -129,9 +130,12 @@ public final class BetaOnboardingGuide {
 					showItems(player);
 					break;
 				case 3:
-					ActionSender.sendBox(player, checklistText(), true);
+					FarmSim.showMenu(player);
 					break;
 				case 4:
+					ActionSender.sendBox(player, checklistText(), true);
+					break;
+				case 5:
 					ActionSender.sendBox(player, referenceText(), true);
 					break;
 				default:
@@ -417,12 +421,13 @@ public final class BetaOnboardingGuide {
 
 	private static String referenceText() {
 		return "@yel@Beta reference% %"
-			+ "@whi@Commands: @gre@::beta@whi@, @gre@::coords@whi@, @gre@::rested@whi@, @gre@::titles@whi@, @gre@::codes@whi@.%"
+			+ "@whi@Commands: @gre@::beta@whi@, @gre@::farmkit 40@whi@, @gre@::farmsim@whi@, @gre@::bug <message>@whi@.%"
+			+ "@whi@Commands: @gre@::coords@whi@, @gre@::rested@whi@, @gre@::titles@whi@, @gre@::codes@whi@.%"
 			+ "@whi@Coords: Lumbridge @gre@120 648@whi@, Vendor @gre@126 649@whi@, Edgeville @gre@217 449@whi@.%"
 			+ "@whi@Coords: Enclave @gre@113 314@whi@, Dungeon @gre@112 296@whi@, Arena @gre@600 2914@whi@.%"
-			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Colossus rift @gre@113 321@whi@.% %"
+			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Arena rift @gre@113 321@whi@.% %"
 			+ "@whi@Items: Subscription card @gre@1602@whi@, Void Key @gre@1601@whi@.%"
-			+ "@whi@Items: Void Scimitar @gre@1593@whi@, Void Bow @gre@1594@whi@, Void Amulet @gre@1595@whi@, Void Mace @gre@1596@whi@.";
+			+ "@whi@Items: Void Scimitar @gre@1593@whi@, Void Bow @gre@1594@whi@, Void Amulet @gre@1595@whi@, Void Sceptre @gre@1596@whi@.";
 	}
 
 	private static final class Destination {

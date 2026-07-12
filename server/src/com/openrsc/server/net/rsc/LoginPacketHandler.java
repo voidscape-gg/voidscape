@@ -11,6 +11,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.*;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
+import com.openrsc.server.plugins.triggers.PostLoginReadyTrigger;
 import com.openrsc.server.util.rsc.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -78,6 +79,17 @@ public class LoginPacketHandler {
 	private void routeUnchosenStarterPlayer(Player loadedPlayer) {
 		if (VoidPath.shouldRouteToVoidIsland(loadedPlayer)) {
 			loadedPlayer.setInitialLocation(VoidStarterIntro.entryPoint(loadedPlayer));
+		}
+	}
+
+	private void completeLogin(Server server, Player loadedPlayer) {
+		boolean reconnecting = loadedPlayer.isReconnecting();
+		if (!reconnecting) {
+			server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+		}
+		ActionSender.sendLogin(loadedPlayer);
+		if (!reconnecting && loadedPlayer.getWorld().isCurrentPlayer(loadedPlayer)) {
+			server.getPluginHandler().handlePlugin(PostLoginReadyTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
 		}
 	}
 
@@ -235,10 +247,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -320,10 +329,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+										completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -405,10 +411,7 @@ public class LoginPacketHandler {
 
 									initializePcapLogger(loadedPlayer, attachment);
 
-									if (!loadedPlayer.isReconnecting()) {
-										server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-									}
-									ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 								}
 							};
 							server.getLoginExecutor().add(request);
@@ -475,10 +478,7 @@ public class LoginPacketHandler {
 
 								initializePcapLogger(loadedPlayer, attachment);
 
-								if (!loadedPlayer.isReconnecting()) {
-									server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-								}
-								ActionSender.sendLogin(loadedPlayer);
+									completeLogin(server, loadedPlayer);
 							}
 						};
 						server.getLoginExecutor().add(request);
@@ -495,7 +495,8 @@ public class LoginPacketHandler {
 
 					final String username = getString(packet.getBuffer()).trim();
 					String password = "";
-						if (clientVersion < 10010) {
+					String loginDetails = "";
+					if (clientVersion < 10010) {
 						password = getString(packet.getBuffer()).trim();
 					} else {
 						byte loginEncryptionVersion = packet.readByte(); //0 = none, 1 = RSA, 2 = SSL/TLS
@@ -511,11 +512,10 @@ public class LoginPacketHandler {
 							} catch (Exception e) {
 								LOGGER.error("error parsing password in login block", e);
 							}
-							String loginDetails = "";
 							int rsaDetailsLength = packet.readUnsignedShort();
 							byte[] loginDetailsBlock = Crypto.decryptRSA(packet.readBytes(rsaDetailsLength), 0, rsaDetailsLength);
 							try {
-								 loginDetails = new String(loginDetailsBlock, "UTF8").trim();
+								loginDetails = new String(loginDetailsBlock, "UTF8").trim();
 							} catch (Exception e) {
 								LOGGER.error("error parsing details in login block", e);
 							}
@@ -554,8 +554,11 @@ public class LoginPacketHandler {
 					if (packet.getReadableBytes() > 0) {
 						cl.isAndroidClient = (packet.readUnsignedByte() & 0xFF) != 0;
 					}
+					if (!cl.isAndroidClient && isNativeAndroidLoginDetails(loginDetails)) {
+						cl.isAndroidClient = true;
+					}
 
-					final LoginRequest request = new LoginRequest(server, channel, username, password, false, clientVersion, opcode == OpcodeIn.RELOGIN, null) {
+					final LoginRequest request = new LoginRequest(server, channel, username, password, false, clientVersion, reconnecting, null) {
 						@Override
 						public void loginValidated(int response) {
 							loginResponse = response;
@@ -585,12 +588,10 @@ public class LoginPacketHandler {
 
 							initializePcapLogger(loadedPlayer, attachment);
 
-							if (!loadedPlayer.isReconnecting()) {
-								server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
-							}
-							ActionSender.sendLogin(loadedPlayer);
+							completeLogin(server, loadedPlayer);
 						}
 					};
+					request.setAndroidClient(cl.isAndroidClient);
 					server.getLoginExecutor().add(request);
 					break;
 
@@ -987,6 +988,12 @@ public class LoginPacketHandler {
 					break;
 				}
 		}
+	}
+
+	private boolean isNativeAndroidLoginDetails(final String loginDetails) {
+		return loginDetails != null
+			&& (loginDetails.equalsIgnoreCase("Android")
+				|| loginDetails.regionMatches(true, 0, "Android/", 0, "Android/".length()));
 	}
 
 	public int getVersion(int retrievedVersion, Player player) {

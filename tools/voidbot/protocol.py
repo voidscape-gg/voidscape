@@ -1,4 +1,4 @@
-"""voidbot wire protocol for the voidscape custom RSC client (client_version 10112).
+"""voidbot wire protocol for the voidscape custom RSC client (client_version 10132).
 
 Empirically validated 2026-06-10 against a live capture (see docs/bot-api.md and
 the project memory voidbot-protocol-spec). The custom client is the server's
@@ -10,12 +10,14 @@ Framing:
   S2C  [u16 BE len][opcode][payload]   len INCLUSIVE of the 2 len bytes
 The single login-response byte is sent raw (unframed) right after config.
 """
+import os
 import socket
 import struct
 
 # ---- Outbound opcode wire values (Client_Base/src/orsc/net/Opcodes.java `Out`) ----
 OUT = {
     "LOGIN": 0,
+    "REGISTER_ACCOUNT": 2,           # login-phase only; needs want_packet_register: true
     "PING": 67,
     "WALK_TO_POINT": 187,
     "WALK_TO_ENTITY": 16,
@@ -26,6 +28,8 @@ OUT = {
     "NPC_COMMAND2": 203,
     "NPC_ATTACK1": 190,
     "NPC_USE_ITEM": 135,
+    "ITEM_USE_ITEM": 91,             # use one inventory item on another (combine/craft)
+    "GROUND_ITEM_USE_ITEM": 53,      # use a carried item on a ground item (e.g. light logs)
     "PLAYER_ATTACK": 171,
     "PLAYER_FOLLOW": 165,
     "PLAYER_USE_ITEM": 113,
@@ -58,6 +62,7 @@ OUT = {
     "LOGOUT": 102,
     "CONFIRM_LOGOUT": 31,
     "ITEM_EXAMINE_REQUEST": 36,
+    "PLAYER_APPEARANCE_CHANGE": 235,  # submit the character-design screen
 }
 
 # ---- Inbound opcode names (Client_Base/src/orsc/PacketHandler.java map) ----
@@ -74,6 +79,7 @@ IN = {
     103: "VOID_SCOUT_STATE",
     114: "FATIGUE", 117: "FALL_ASLEEP", 120: "RECEIVE_PM",
     123: "REMOVE_INVENTORY_SLOT", 128: "CONCLUDE_TRADE", 131: "SEND_MESSAGE",
+    100: "WORLD_WALK_ROUTE",
     137: "EXIT_SHOP", 149: "UPDATE_FRIEND", 153: "EQUIP_STATS", 156: "SET_STATS",
     159: "UPDATE_STAT", 165: "CLOSE_CONNECTION", 172: "CONFIRM_DUEL",
     176: "DIALOGUE_DUEL", 182: "WELCOME", 183: "DENY_LOGOUT",
@@ -91,7 +97,10 @@ LOGIN_TRAILER = bytes.fromhex(
     "1c000000df0100060000002f000000110000001600630000002504147fffffff"
     "66656533396431306639636235643630323762616331623332666133333566330a00"
 )
-CLIENT_VERSION = 10112
+# Login client version. Matches the real client (Client_Base/src/orsc/Config.java
+# CLIENT_VERSION); env-overridable so QA can probe server version gates (e.g. paths
+# gated to specific client versions).
+CLIENT_VERSION = int(os.environ.get("VOIDBOT_CLIENT_VERSION", "10132"))
 
 
 class BitWriter:
@@ -303,8 +312,40 @@ class Connection:
         except OSError: pass
 
 
+def build_register(username: str, password: str, email=None) -> bytes:
+    """REGISTER_ACCOUNT body for the custom-client path (server classifies our framing
+    as authenticClient == -1 -> the plain-strings branch in LoginPacketHandler ~L750):
+    username/password and optional email as 0x0A-terminated strings.
+    Password travels plaintext — loopback dev use only.
+    Server replies with ONE raw byte: 0=created, 2=name taken, 4=packet registration
+    disabled (want_packet_register: false), 5=throttled/recently-registered/error,
+    6=bad email or DB failure, 7=username not 2-12 chars, 8=disallowed name or bad
+    password length. No reply at all = dropped by the 2/s login throttle."""
+    w = BitWriter()
+    w.u8(OUT["REGISTER_ACCOUNT"])
+    w.rsstr(username)
+    w.rsstr(password)
+    if email is not None:
+        w.rsstr(email)
+    return bytes(w.b)
+
+
+def login_trailer(max_item_id=None) -> bytes:
+    """The UID+limitations trailer, optionally with maxItemId patched.
+
+    The captured constant under-reports limits added after its capture date
+    (10088: maxItemId 1603), and the server force-drops or placeholder-swaps
+    items it thinks the client can't render (VS-032). Layout after the 8-byte
+    UID mirrors mudclient.tellLimitations: short maxAnimationId, int maxItemId.
+    """
+    t = bytearray(LOGIN_TRAILER)
+    if max_item_id is not None:
+        struct.pack_into(">I", t, 10, max_item_id)
+    return bytes(t)
+
+
 def build_login(username: str, password: str, exponent: int, modulus: int,
-                reconnect=False) -> bytes:
+                reconnect=False, max_item_id=None) -> bytes:
     """Full LOGIN packet body (opcode + fields); caller frames it."""
     w = BitWriter()
     w.u8(OUT["LOGIN"])
@@ -318,5 +359,5 @@ def build_login(username: str, password: str, exponent: int, modulus: int,
     det_plain = ("voidbot/voidbot.jar" + "\n").encode("latin1")
     det_cipher = rsa_block(det_plain, exponent, modulus)
     w.u16(len(det_cipher)); w.raw(det_cipher)
-    w.raw(LOGIN_TRAILER)
+    w.raw(login_trailer(max_item_id))
     return bytes(w.b)

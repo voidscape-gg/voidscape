@@ -18,8 +18,10 @@ public final class VoidscapeLauncherConfig {
   public static final int WINDOW_WIDTH = 820;
   public static final int WINDOW_HEIGHT = 560;
 
-  private static final String DEFAULT_PORTAL_URL = "";
-  private static final String DEFAULT_WEBSITE_URL = "";
+  private static final String DEFAULT_SERVER_HOST = "voidscape.gg";
+  private static final int DEFAULT_SERVER_PORT = 43596;
+  private static final String DEFAULT_PORTAL_URL = "https://voidscape.gg";
+  private static final String DEFAULT_WEBSITE_URL = "https://voidscape.gg";
   private static final String PORTAL_MANIFEST_PATH = "api/launcher/manifest.properties";
   private static final String LAUNCHER_PROPERTIES = "voidscape-launcher.properties";
   private static final Properties PACKAGED_SETTINGS = loadPackagedSettings();
@@ -36,15 +38,15 @@ public final class VoidscapeLauncherConfig {
   }
 
   public static String serverHost() {
-    return setting("voidscape.serverHost", "VOIDSCAPE_SERVER_HOST", "127.0.0.1");
+    return setting("voidscape.serverHost", "VOIDSCAPE_SERVER_HOST", DEFAULT_SERVER_HOST);
   }
 
   public static int serverPort() {
-    String configured = setting("voidscape.serverPort", "VOIDSCAPE_SERVER_PORT", null);
+    String configured = setting("voidscape.serverPort", "VOIDSCAPE_SERVER_PORT", String.valueOf(DEFAULT_SERVER_PORT));
     if (configured != null && configured.trim().length() > 0) {
-      return parsePort(configured.trim(), 43594);
+      return parsePort(configured.trim(), DEFAULT_SERVER_PORT);
     }
-    return detectLocalServerPort();
+    return DEFAULT_SERVER_PORT;
   }
 
   public static String manifestUrl() {
@@ -91,12 +93,28 @@ public final class VoidscapeLauncherConfig {
     return serverHost() + ":" + serverPort();
   }
 
+  /** Escape hatch for plain-http update channels on non-loopback hosts (never set in production). */
+  public static boolean allowInsecureHttp() {
+    return "true".equalsIgnoreCase(setting("voidscape.allowInsecureHttp", "VOIDSCAPE_ALLOW_INSECURE_HTTP", "false"));
+  }
+
+  /** Build label stamped into the jar manifest by ant; "dev" when running from classes. */
+  public static String launcherBuildLabel() {
+    String version = VoidscapeLauncherConfig.class.getPackage() == null
+        ? null
+        : VoidscapeLauncherConfig.class.getPackage().getImplementationVersion();
+    if (version == null || version.trim().length() == 0) {
+      return "dev";
+    }
+    return version.trim();
+  }
+
   private static String portalRoute(String route) {
     String url = portalBaseUrl();
     if (url == null || url.trim().length() == 0) {
       return "";
     }
-    return url + "#" + route;
+    return url + "/#" + route;
   }
 
   private static String portalPath(String path) {

@@ -1688,6 +1688,8 @@ public enum ItemId {
 				}
 			}
 		}
+		// Keep the historical enum name while accepting the current display identity.
+		byName.put(sanitizeName("VOID_SCEPTRE"), VOID_MACE);
 	}
 
 	public static ItemId getById(Integer id) {

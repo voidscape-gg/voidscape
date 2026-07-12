@@ -15,6 +15,7 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Projectile;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.triggers.PlayerRangeNpcTrigger;
@@ -128,12 +129,18 @@ public class ThrowingEvent extends GameTickEvent {
 				player.resetRange();
 				return;
 			}
-			player.getWorld().getBountyHunter().onPvPAttack(player, (Player) target);
 		}
 
 		if (throwingID == -1) {
 			ActionSender.sendSound(player, "outofammo");
 			player.message(ProjectileFailureReason.OUT_OF_AMMO.getText());
+			player.resetRange();
+			return;
+		}
+		if (!player.canUseMembersItemHere(
+			player.getWorld().getServer().getEntityHandler().getItemDef(throwingID),
+			throwingID)) {
+			player.sendCannotUseMembersHereMessage();
 			player.resetRange();
 			return;
 		}
@@ -161,6 +168,11 @@ public class ThrowingEvent extends GameTickEvent {
 			Item toRemove = new Item(rangeType.getCatalogId(), 1, false, rangeType.getItemId());
 			player.getCarriedItems().remove(toRemove);
 		}
+		if (target.isPlayer()) {
+			Player playerTarget = (Player) target;
+			WildernessRules.markVoidDungeonPvp(player, playerTarget);
+			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
+		}
 
 		/*if (!getPlayerOwner().getLocation().isMembersWild()) {
 			getPlayerOwner().message("Members content can only be used in wild levels: "
@@ -179,11 +191,13 @@ public class ThrowingEvent extends GameTickEvent {
 			delay = 1;
 		}
 
-		int damage = RangeUtils.doRangedDamage(player, throwingID, throwingID, target, skillCape);
+			int damage = RangeUtils.doRangedDamage(player, throwingID, throwingID, target, skillCape);
+			int attackerMaxHit = RangeUtils.calculateRangedMaxHit(player, throwingID, throwingID, target, skillCape);
 
 		RangeUtils.applyDragonFireBreath(player, target, deliveredFirstProjectile);
 		if((target.isPlayer() || getWorld().getServer().getConfig().RANGED_GIVES_XP_HIT)
-			&& !(target.isNpc() && target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target))
+			&& !(target.isNpc() && (target.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) target)
+				|| ((Npc) target).shouldSuppressDefaultDeathRewards()))
 			&& damage > 0) {
 			player.incExp(Skill.RANGED.id(), Formulae.rangedHitExperience(target, damage), true);
 		}
@@ -195,7 +209,9 @@ public class ThrowingEvent extends GameTickEvent {
 
 			if (!DropTable.handleRingOfAvarice(player, new Item(throwingID, 1))) {
 				if (thrownItemOnGround == null || !thrownItemOnGround.getDef().isStackable()) {
-					getWorld().registerItem(new GroundItem(player.getWorld(), throwingID, target.getX(), target.getY(), 1, player));
+					GroundItem droppedThrowingItem = new GroundItem(player.getWorld(), throwingID, target.getX(), target.getY(), 1, player);
+					droppedThrowingItem.setInstanceId(target.getInstanceId());
+					getWorld().registerItem(droppedThrowingItem);
 				} else {
 					thrownItemOnGround.setAmount(thrownItemOnGround.getAmount() + 1);
 				}
@@ -221,7 +237,8 @@ public class ThrowingEvent extends GameTickEvent {
 
 		player.setAttribute("can_range_again", getWorld().getServer().getCurrentTick() + delay);
 		getOwner().setKillType(KillType.RANGED);
-		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2));
-		deliveredFirstProjectile = true;
+			getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getWorld(), player, target, damage, 2,
+				true, DuplicationStrategy.ONE_PER_MOB, attackerMaxHit));
+			deliveredFirstProjectile = true;
+		}
 	}
-}

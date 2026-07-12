@@ -1,7 +1,11 @@
 package orsc.enumerations;
 
 public enum MessageTab {
-	ALL(0), CHAT(1), QUEST(2), PRIVATE(3), CLAN(4);
+	// Client-side UI state only: never serialized and never sent on the wire
+	// (lookup() below has no callers — verified again when GLOBAL was added).
+	// GLOBAL is the voidscape-skin global-chat history tab; the classic 5-tab
+	// strip never selects it.
+	ALL(0), CHAT(1), QUEST(2), PRIVATE(3), GLOBAL(4);
 	private static final MessageTab[] map;
 
 	static {

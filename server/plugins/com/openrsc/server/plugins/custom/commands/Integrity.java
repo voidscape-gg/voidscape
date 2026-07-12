@@ -65,8 +65,14 @@ public final class Integrity implements CommandTrigger {
 			+ ": " + summary.optInt("flagged", 0) + " flagged, " + summary.optInt("highSeverity", 0) + " high.");
 		player.message(player.getConfig().MESSAGE_PREFIX + "Checked " + summary.optInt("trackedItems", 0)
 			+ " item rows across " + summary.optInt("checkedPlayers", 0) + " players.");
+		player.message(player.getConfig().MESSAGE_PREFIX + "Economy flagged: " + summary.optInt("economyFlagged", summary.optInt("flagged", 0))
+			+ ". Account flagged: " + summary.optInt("accountFlagged", 0)
+			+ ". Review: " + summary.optInt("review", 0) + ".");
+		player.message(player.getConfig().MESSAGE_PREFIX + "Account review: " + summary.optInt("privilegedAccounts", 0)
+			+ " privileged, " + summary.optInt("watchedCacheRows", 0) + " watched cache rows, "
+			+ summary.optInt("recentSensitiveCommands24h", 0) + " sensitive staff commands 24h.");
 		player.message(player.getConfig().MESSAGE_PREFIX + "Last scan: " + shortTimestamp(report.optString("generatedAt", "")));
-		if (summary.optInt("flagged", 0) > 0) {
+		if (summary.optInt("flagged", 0) > 0 || summary.optInt("review", 0) > 0) {
 			player.message(player.getConfig().MESSAGE_PREFIX + "Use ::integrity recent or ::integrity player <name>.");
 		}
 	}
@@ -74,7 +80,7 @@ public final class Integrity implements CommandTrigger {
 	private void showRecent(Player player, JSONObject report, int limit) {
 		JSONArray findings = report.optJSONArray("findings");
 		if (findings == null || findings.length() == 0) {
-			player.message(player.getConfig().MESSAGE_PREFIX + "No private economy findings in the latest scan.");
+			player.message(player.getConfig().MESSAGE_PREFIX + "No private integrity findings in the latest scan.");
 			return;
 		}
 		int shown = Math.min(limit, findings.length());
@@ -87,7 +93,7 @@ public final class Integrity implements CommandTrigger {
 	private void showPlayer(Player player, JSONObject report, String username, int limit) {
 		JSONArray findings = report.optJSONArray("findings");
 		if (findings == null || findings.length() == 0) {
-			player.message(player.getConfig().MESSAGE_PREFIX + "No private economy findings in the latest scan.");
+			player.message(player.getConfig().MESSAGE_PREFIX + "No private integrity findings in the latest scan.");
 			return;
 		}
 		String needle = username.trim().toLowerCase();
@@ -120,6 +126,14 @@ public final class Integrity implements CommandTrigger {
 		String username = finding.optString("username", "");
 		if (!username.isEmpty()) {
 			line.append(" player=").append(username);
+		}
+		String staffUsername = finding.optString("staffUsername", "");
+		if (!staffUsername.isEmpty()) {
+			line.append(" staff=").append(staffUsername);
+		}
+		String cacheKey = finding.optString("cacheKey", "");
+		if (!cacheKey.isEmpty()) {
+			line.append(" cache=").append(cacheKey);
 		}
 		int itemID = finding.optInt("itemID", 0);
 		if (itemID > 0) {

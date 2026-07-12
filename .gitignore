@@ -102,6 +102,7 @@ local.properties
 
 server/logs/*.gz
 server/logs/*.log
+server/logs/gc.log.*
 server/logs/pcaps/*.gz
 server/logs/pcaps/**/*.gz
 
@@ -172,7 +173,8 @@ upstream/openrsc-snapshot/
 .DS_Store
 **/.DS_Store
 
-# Local override env (.env itself stays tracked with scaffold defaults)
+# Local environment overrides and credentials. Copy .env.example to .env.
+.env
 .env.local
 .env.*.local
 

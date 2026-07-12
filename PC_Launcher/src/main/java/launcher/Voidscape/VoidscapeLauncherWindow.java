@@ -15,6 +15,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
+import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -29,6 +30,7 @@ import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.net.URL;
 
@@ -69,6 +71,7 @@ public class VoidscapeLauncherWindow extends JFrame {
   private final JLabel endpointLabel;
   private final JButton playButton;
   private final JButton updateButton;
+  private Timer smokeTimer;
   private Point dragStart;
 
   public VoidscapeLauncherWindow() {
@@ -111,7 +114,13 @@ public class VoidscapeLauncherWindow extends JFrame {
     setVisible(true);
     toFront();
     requestFocus();
-    updater.prepareAsync();
+    if (smokeModeEnabled() || launcher.Main.disabledUpdate) {
+      // Screenshot smokes must stay hermetic (no network); --no-update skips sync by request.
+      updater.prepareAsync();
+    } else {
+      updater.syncAsync();
+    }
+    maybeCaptureSmokeAndExit();
   }
 
   private void addWindowControls(JPanel root) {
@@ -128,7 +137,7 @@ public class VoidscapeLauncherWindow extends JFrame {
 
   private void addSkinHitTargets(JPanel root) {
     playButton.setBounds(PLAY_X, PLAY_Y, PLAY_W, PLAY_H);
-    playButton.addActionListener(e -> updater.launchClient(this));
+    playButton.addActionListener(e -> updater.launchAsync(this));
     root.add(playButton);
 
     updateButton.setBounds(STATUS_X, STATUS_Y, STATUS_W, STATUS_H);
@@ -226,7 +235,7 @@ public class VoidscapeLauncherWindow extends JFrame {
     card.add(subtitle);
 
     playButton.setBounds(22, 76, 200, 56);
-    playButton.addActionListener(e -> updater.launchClient(this));
+    playButton.addActionListener(e -> updater.launchAsync(this));
     card.add(playButton);
 
     updateButton.setBounds(234, 76, 92, 56);
@@ -378,6 +387,8 @@ public class VoidscapeLauncherWindow extends JFrame {
     panel.add(settingsLine("Endpoint", VoidscapeLauncherConfig.endpointLabel()));
     panel.add(settingsLine("Manifest", blankLabel(VoidscapeLauncherConfig.manifestUrl())));
     panel.add(settingsLine("Portal", VoidscapeLauncherConfig.portalUrl()));
+    panel.add(settingsLine("Launcher build", VoidscapeLauncherConfig.launcherBuildLabel()));
+    panel.add(settingsLine("Client release", blankLabel(updater.lastVersionLabel())));
 
     int response = JOptionPane.showOptionDialog(this,
         panel,
@@ -432,6 +443,65 @@ public class VoidscapeLauncherWindow extends JFrame {
       return;
     }
     Utils.openWebpage(url);
+  }
+
+  private boolean smokeModeEnabled() {
+    String output = System.getProperty("voidscape.launcher.smoke.out", "").trim();
+    return Boolean.getBoolean("voidscape.launcher.smoke") || output.length() > 0;
+  }
+
+  private void maybeCaptureSmokeAndExit() {
+    if (!smokeModeEnabled()) {
+      return;
+    }
+    String output = System.getProperty("voidscape.launcher.smoke.out", "").trim();
+
+    int delayMs = parseIntProperty("voidscape.launcher.smoke.delayMs", 2200);
+    smokeTimer = new Timer(delayMs, e -> {
+      try {
+        captureSmokeScreenshot(output);
+      } catch (Exception ex) {
+        System.err.println("VOIDSCAPE_LAUNCHER_SMOKE_ERROR " + ex.getMessage());
+      }
+      if (!"false".equalsIgnoreCase(System.getProperty("voidscape.launcher.smoke.exit", "true"))) {
+        System.exit(0);
+      }
+    });
+    smokeTimer.setRepeats(false);
+    smokeTimer.start();
+  }
+
+  private int parseIntProperty(String key, int fallback) {
+    String value = System.getProperty(key);
+    if (value == null || value.trim().length() == 0) {
+      return fallback;
+    }
+    try {
+      return Integer.parseInt(value.trim());
+    } catch (NumberFormatException ignored) {
+      return fallback;
+    }
+  }
+
+  private void captureSmokeScreenshot(String output) throws Exception {
+    File file = output == null || output.trim().length() == 0
+        ? new File("voidscape-launcher-smoke.png")
+        : new File(output.trim());
+    file = file.getAbsoluteFile();
+    File parent = file.getParentFile();
+    if (parent != null && !parent.exists() && !parent.mkdirs()) {
+      throw new Exception("Could not create screenshot folder: " + parent.getAbsolutePath());
+    }
+
+    BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    try {
+      paintAll(graphics);
+    } finally {
+      graphics.dispose();
+    }
+    ImageIO.write(image, "png", file);
+    System.out.println("VOIDSCAPE_LAUNCHER_SMOKE_SCREENSHOT " + file.getAbsolutePath());
   }
 
   private void updateStatus(final String message, final int progress, final boolean busy) {

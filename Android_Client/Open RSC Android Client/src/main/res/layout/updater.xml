@@ -8,65 +8,84 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
+        android:importantForAccessibility="no"
         android:scaleType="centerCrop"
         android:src="@drawable/voidscape_wrapper_background" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:importantForAccessibility="no"
         android:background="@color/voidscape_scrim" />
 
-    <LinearLayout
-        android:layout_width="340dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/voidscape_panel"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="24dp">
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp"
+        android:scrollbars="none">
 
-        <ImageView
-            android:layout_width="280dp"
-            android:layout_height="80dp"
-            android:adjustViewBounds="true"
-            android:contentDescription="@string/app_name"
-            android:scaleType="fitCenter"
-            android:src="@drawable/voidscape_wordmark" />
-
-        <TextView
-            android:id="@+id/textView1"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:fontFamily="@font/exoregular"
-            android:text="Checking game data"
-            android:textColor="@color/voidscape_muted"
-            android:textSize="16sp" />
-
-        <com.openrsc.android.updater.TextProgressBar
-            android:id="@+id/progressBar"
-            style="?android:attr/progressBarStyleHorizontal"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="22dp"
-            android:layout_marginTop="18dp"
-            android:maxHeight="22dp"
-            android:minHeight="22dp"
-            android:progressDrawable="@drawable/voidscape_progress_horizontal" />
+            android:layout_height="wrap_content">
 
-        <Button
-            android:id="@+id/launch_client"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/voidscape_button_primary"
-            android:fontFamily="@font/exoregular"
-            android:minHeight="52dp"
-            android:stateListAnimator="@null"
-            android:text="Play"
-            android:textAllCaps="false"
-            android:textColor="@color/voidscape_ink"
-            android:textSize="20sp" />
+            <LinearLayout
+                style="@style/VoidscapeLaunchPanel"
+                android:layout_gravity="center">
 
-    </LinearLayout>
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="80dp"
+                    android:adjustViewBounds="true"
+                    android:contentDescription="@string/app_name"
+                    android:maxWidth="280dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/voidscape_wordmark" />
+
+                <TextView
+                    android:id="@+id/textView1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="@font/exoregular"
+                    android:gravity="center"
+                    android:text="Checking game data"
+                    android:textColor="@color/voidscape_muted"
+                    android:textSize="16sp" />
+
+                <com.openrsc.android.updater.TextProgressBar
+                    android:id="@+id/progressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="22dp"
+                    android:layout_marginTop="18dp"
+                    android:maxHeight="22dp"
+                    android:minHeight="22dp"
+                    android:progressDrawable="@drawable/voidscape_progress_horizontal" />
+
+                <Button
+                    android:id="@+id/launch_client"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="20dp"
+                    android:background="@drawable/voidscape_button_primary"
+                    android:fontFamily="@font/exoregular"
+                    android:minHeight="52dp"
+                    android:stateListAnimator="@null"
+                    android:text="Play"
+                    android:textAllCaps="false"
+                    android:textColor="@color/voidscape_ink"
+                    android:textSize="20sp" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+    </ScrollView>
 
 </FrameLayout>

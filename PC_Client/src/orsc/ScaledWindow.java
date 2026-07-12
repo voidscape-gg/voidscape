@@ -1,5 +1,6 @@
 package orsc;
 
+import orsc.graphics.gui.UiSkin;
 import orsc.util.Utils;
 
 import java.awt.*;
@@ -31,10 +32,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static boolean isMacOS = false;
 	private static boolean shouldRealign = false;
 	private static final int[][] VIEWPORT_PRESETS = new int[][]{
-		{640, 480}, {720, 540}, {800, 600}, {896, 672}, {1024, 768}
+		{640, 480}, {720, 540}, {800, 600}, {896, 672}, {1024, 768}, {512, 346}
 	};
 	private static final String[] VIEWPORT_PRESET_LABELS = new String[]{
-		"Small", "Medium", "Large", "XL", "Huge"
+		"Small", "Medium", "Large", "XL", "Huge", "Classic"
 	};
 	private static int viewportPresetIndex = 0;
 	// Voidscape: base render resolution. Uses a compact native buffer so the world does not turn into
@@ -232,6 +233,40 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 			revalidate();
 			repaint();
 		});
+	}
+
+	/**
+	 * Voidscape: first run only (no persisted window settings) — pick the
+	 * largest viewport preset whose window fits the usable screen, so large
+	 * displays don't boot into the 640x480-class default. Uses the same fit
+	 * math as {@link #largestIntegerScalarThatFits}: preset dimensions compared
+	 * against {@link #getMaximumEffectiveWindowSize()}, which already accounts
+	 * for window insets. Persisted settings always win — the caller must only
+	 * invoke this when clientSettings.conf carried no viewport_preset and no
+	 * scaling_scalar.
+	 */
+	public void applyFirstRunViewportPreset() {
+		Dimension maxEffectiveWindowSize = getMaximumEffectiveWindowSize();
+		int bestIndex = -1;
+		long bestArea = -1L;
+		for (int i = 0; i < VIEWPORT_PRESETS.length; i++) {
+			int width = VIEWPORT_PRESETS[i][0];
+			int height = VIEWPORT_PRESETS[i][1];
+			if (width <= maxEffectiveWindowSize.width && height <= maxEffectiveWindowSize.height) {
+				long area = (long) width * height;
+				if (area > bestArea) {
+					bestArea = area;
+					bestIndex = i;
+				}
+			}
+		}
+
+		if (bestIndex >= 0 && bestIndex != viewportPresetIndex) {
+			setViewportPresetIndex(bestIndex);
+			setMinimumSize(new Dimension(minViewportWidth(), minViewportHeight()));
+			refreshAvailableScalars();
+			System.out.println("Voidscape first run: viewport preset " + getViewportPresetLabel());
+		}
 	}
 
 	public void applyStartupScalingDefaults(boolean hasSavedScalingScalar) {
@@ -960,7 +995,7 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 				boolean error = state.toLowerCase(Locale.ENGLISH).contains("unable")
 					|| state.toLowerCase(Locale.ENGLISH).contains("failed")
 					|| state.toLowerCase(Locale.ENGLISH).contains("error");
-				int accent = error ? 0xd45b5b : 0x9b62ff;
+				int accent = error ? UiSkin.BAD : UiSkin.PURPLE_FOCUS;
 				int panelWidth = Math.min(340, Math.max(240, width - 64));
 				int panelHeight = 96;
 				int x = Math.max(16, (width - panelWidth) / 2);

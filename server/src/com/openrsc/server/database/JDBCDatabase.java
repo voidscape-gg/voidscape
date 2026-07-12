@@ -3,6 +3,8 @@ package com.openrsc.server.database;
 import com.openrsc.server.Server;
 import com.openrsc.server.util.checked.CheckedConsumer;
 import com.openrsc.server.util.checked.CheckedFunction;
+import com.openrsc.server.util.checked.CheckedRunnable;
+import com.openrsc.server.util.checked.CheckedSupplier;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,6 +17,43 @@ public abstract class JDBCDatabase extends GameDatabase {
     }
 
     public abstract JDBCDatabaseConnection getConnection();
+
+    /**
+     * Holds the connection lock for the whole BEGIN..COMMIT/ROLLBACK span so concurrent
+     * threads (login/save, auction, game logger) cannot interleave statements — or a
+     * colliding rollback — into an open transaction on the single shared connection.
+     * The lock is reentrant, so statements inside the runnable re-acquire it freely.
+     */
+    @Override
+    public boolean atomically(CheckedRunnable<Exception> runnable) {
+        getConnection().getConnectionLock().lock();
+        try {
+            return super.atomically(runnable);
+        } finally {
+            getConnection().getConnectionLock().unlock();
+        }
+    }
+
+    @Override
+    public AtomicTransactionOutcome atomicallyWithOutcome(CheckedRunnable<Exception> runnable) {
+        getConnection().getConnectionLock().lock();
+        try {
+            return super.atomicallyWithOutcome(runnable);
+        } finally {
+            getConnection().getConnectionLock().unlock();
+        }
+    }
+
+    @Override
+    public AtomicTransactionOutcome atomicallySettled(CheckedRunnable<Exception> runnable,
+                                                       CheckedSupplier<Exception, AtomicTransactionOutcome> verifier) {
+        getConnection().getConnectionLock().lock();
+        try {
+            return super.atomicallySettled(runnable, verifier);
+        } finally {
+            getConnection().getConnectionLock().unlock();
+        }
+    }
 
     public void withPreparedStatement(
             String query,
@@ -48,18 +87,17 @@ public abstract class JDBCDatabase extends GameDatabase {
             String query,
             CheckedConsumer<Exception, ResultSet> resultSetConsumer
     ) {
-        ResultSet resultSet = withPreparedStatement(
+        // The ResultSet must be consumed inside the statement's scope: withPreparedStatement
+        // closes the PreparedStatement on return, which closes its ResultSet, and a closed
+        // sqlite-jdbc ResultSet reads as empty instead of throwing.
+        withPreparedStatement(
                 query,
-                (CheckedFunction<Exception, PreparedStatement, ResultSet>) PreparedStatement::executeQuery
+                (CheckedConsumer<Exception, PreparedStatement>) statement -> {
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        resultSetConsumer.accept(resultSet);
+                    }
+                }
         );
-        try {
-            resultSetConsumer.accept(resultSet);
-        } catch(Exception ex) {
-            throw new GameDatabaseException(
-                    getClass(),
-                    ex.getMessage()
-            );
-        }
     }
 
     public PreparedStatement preparedStatement(String query) throws SQLException {

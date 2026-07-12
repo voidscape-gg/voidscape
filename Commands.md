@@ -1,5 +1,8 @@
 OpenRSC Commands
 ------------------------
+
+Production note: when `production_command_lockdown: true` is enabled, high-risk staff/dev commands that can mutate economy, accounts, combat state, world state, movement, server runtime, or QA fixtures are owner-only even if a non-owner staff account normally has the rank to run them. Moderation and read-only support commands remain staff-gated by their normal rank checks.
+
 Admin Commands
 ------------------------
 - clearipbans
@@ -29,7 +32,10 @@ Admin Commands
   - Saves all users currently logged in.
 - integrity
   - Usage: `::integrity [summary|recent [limit]|player <name> [limit]]`
-  - Shows the latest private economy integrity scan summary and findings for admins.
+  - Shows the latest private economy/account integrity scan summary and findings for admins.
+- receipts
+  - Usage: `::receipts [recent|player <name>|item <itemID>|catalog <catalogID>|command <name>] [limit]`
+  - Shows private item-provenance receipt rows for admins.
 - winterholidayevent
   - Usage: `::winterholidayevent`
   - Turns on the winter holiday event (spawns tree objects). Note: this is only functional on custom feature worlds, such as Cabbage and Coleslaw.	
@@ -45,6 +51,9 @@ Admin Commands
 - holidaydrop
   - Usage: `::holidaydrop [total hours] [minute of hour] [item id] ...`
   - Performs a global holiday drop. More than one item may be specified by putting spaces between item IDs.
+- cracker
+  - Usage: `::cracker`, `::cracker status`, `::cracker <remaining>`, or `::cracker set <remaining>`
+  - Owner-only. Shows or sets the exact remaining launch cracker campaign pool from 0 through 1,000,000. Setting 0 disables awards without changing the server configuration.
 - stopholidaydrop
   - Usage: `::stopholidaydrop`
   - Alias: `::cancelholidaydrop` or `::christmasiscancelled`
@@ -217,9 +226,9 @@ Admin Commands
   - Alias: `::resourcestreak`
   - Seeds the current player's transient gathering dry-streak counter for local resource-protection tests.
 - announcepreview
-  - Usage: `::announcepreview [skill|total|pk|newplayer]`
+  - Usage: `::announcepreview [skill|total|pk|newplayer|firstskill|qualifiedpk|pk3|pk5|pk10|firstcracker]`
   - Alias: `::worldannouncepreview`
-  - Sends sample Void Herald world-announcement messages for local styling checks.
+  - Sends sample world-announcement messages for local styling checks. The durable-family previews use fixed sample data and do not write achievement, PK, cracker, or player-progression state. Production command lockdown restricts both aliases to owners.
 - dropwave
   - Usage: `::dropwave <npc_id> [count] [radius]`
   - Alias: `::farmdrops` or `::spawndrops`
@@ -834,15 +843,32 @@ Regular Player Commands
   - Usage: `::gameinfo`
   - Shows your coordinates and total time played.
 - beta
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::beta`
   - Alias: `::betaguide`
   - Opens the Voidscape beta tester toolkit.
-  - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, test checklist, common coordinates, and item IDs.
+  - Includes click-to-teleport hub/boss locations, 99-stat presets, beta item kits, FarmSim, test checklist, common coordinates, and item IDs.
+- farmkit
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
+  - Usage: `::farmkit 40`
+  - Usage: `::farmkit 60`
+  - Usage: `::farmkit 80`
+  - Usage: `::farmkit 99`
+  - Applies beta-only melee stat/gear kits for drop-rate testing, resets ranged/prayer/magic to 1, and resets the FarmSim sample.
+- farmsim
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
+  - Usage: `::farmsim`
+  - Usage: `::farmsim start`
+  - Usage: `::farmsim status`
+  - Usage: `::farmsim [minutes|30m|1h]`
+  - Alias: `::farmcal`
+  - Projects the current NPC-kill sample into an expected-loot popup using real observed kill pace and server drop tables.
 - bug
   - Usage: `::bug <what happened>`
   - Alias: `::reportbug`
-  - Sends a beta bug report with your current location and client version to the server bug ledger and Discord bug queue.
+  - Sends a bug report with your current location and client version to the server bug ledger and Discord bug queue.
 - codes
+  - Availability: trusted beta worlds only (`want_beta_onboarding_guide: true`) and owner-only when `production_command_lockdown: true`.
   - Usage: `::codes`
   - Alias: `::refcodes`
   - Shows beta referral reward codes earned when invited players entered your in-game name during character creation.
@@ -853,11 +879,12 @@ Regular Player Commands
 - titles
   - Usage: `::titles`
   - Usage: `::titles list [page]`
+  - Usage: `::titles unlocked|renown|feat|unique [page]`
   - Usage: `::title <title id or name>`
   - Usage: `::title clear`
   - Usage: `::titles count`
   - Alias: `::title`
-  - Opens the unlocked player-title menu, browses the 100-title catalog with Next/Previous page buttons, equips an unlocked title, clears the active title, or shows unlock count. Unique titles show their holder and are limited to one unique title per account; reusable titles can be earned by anyone.
+  - Opens the achievement-style player-title board, browses the catalog with Next/Previous page buttons, equips an unlocked title, clears the active title, or shows unlock count. Unique and first-to record titles show their holder when claimed; reusable titles can be earned by anyone.
 - event
   - Usage: `::event`
   - Join the currently running server PK Event.
@@ -869,7 +896,7 @@ Regular Player Commands
   - Alias: `::pk`
   - Send a simplified global-chat message. The custom client can show the sender's IP country flag beside the username.
   - `::pk` still routes to the legacy PK global channel when enabled.
-  - You can only send one global chat message per 15 seconds.
+  - Global chat has no send cooldown in Voidscape presets.
 - p
   - Usage: `::p [message]`
   - Send a message to party members chat.

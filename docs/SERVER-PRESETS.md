@@ -1,13 +1,24 @@
 # Server presets
 
-OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and play style. Voidscape's working config lives at `server/local.conf` (gitignored), copied from one of these templates and edited.
+OpenRSC ships seven historical `.conf` presets in `server/`. Voidscape additionally tracks a secret-free public-launch preset. Local work still runs from `server/local.conf` (gitignored).
 
 ## Preset inventory
+
+### `voidscape-launch.conf` — canonical public launch
+
+- DB: `voidscape`. TCP/WebSocket ports: `43596` / `43496`.
+- Client `10132`, custom-version enforcement on, native PC/Android registration on, registration email off.
+- Authentic `640ms` tick, `10x` combat, `1.5x` skilling, no fatigue, hybrid members-enabled world.
+- Three-floor boss-free Void Dungeon and Enclave enabled; Void Colossus and beta tester tooling disabled.
+- Command lockdown on, packet capture off, localhost restrictions on, webhook values null.
+- Void Glass, notes, bank presets, auction house, custom landscape, and the approved launch economy enabled.
+
+This is the only tracked preset authorized as a release-package source. Validate it with `scripts/check-launch-config.mjs`; private deployment files may add credentials, but must retain the checked gameplay and safety values.
 
 ### `preservation.conf` — authentic RSC with minimal QoL
 - DB: `preservation`. Port: 43596. Era: ~RSC c.2010.
 - `member_world: true`, `want_fatigue: true`, `game_tick: 640`, `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `auto_save: 120s`
-- `location_data: 1` (some custom content), `want_fixed_broken_mechanics: true`
+- `location_data: 1` (preservation + discontinued content, e.g. the Black Hole), `want_fixed_broken_mechanics: true`
 - Style: faithful to original. Fatigue is real. Slow grind.
 
 ### `default.conf` — generic hybrid
@@ -42,7 +53,7 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 ### `uranium.conf` — bot-friendly authentic
 - DB: `uranium`. Port: 43235.
-- `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `want_fatigue: false`, `auto_save: 300s`
+- `combat_exp_rate: 1`, `skilling_exp_rate: 1`, `want_fatigue: true`, `auto_save: 300s`
 - `max_connections_per_ip: 100`, `max_logins_per_second: 40`
 - `want_pcap_logging: false`
 - Style: anything goes. Pure grind for automation.
@@ -56,29 +67,18 @@ OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and pla
 
 Voidscape's stated goal is **mostly authentic RSC with QoL and small customization**. That puts us between `preservation` (too punishing — fatigue is the canonical QoL pain point) and `rsccabbage` (too fast — 5× exp + 430ms tick are fundamentally non-authentic).
 
-**Recommended starting point**: `preservation.conf` with targeted QoL overrides.
+**Recommended local starting point**: copy the tracked launch preset, then change only local DB/access details.
 
 ```bash
-cp server/preservation.conf server/local.conf
+cp server/voidscape-launch.conf server/local.conf
 $EDITOR server/local.conf
 ```
 
-Suggested overrides to apply in `local.conf`:
+The tracked preset already carries the approved rules. Typical local-only overrides are:
 ```
-# QoL — remove the most universally disliked authentic mechanic
-want_fatigue: false
-
-# Keep authentic combat timing, with Voidscape's current progression rates
-game_tick: 640
-combat_exp_rate: 10
-skilling_exp_rate: 2
-
-# Optional: enable some custom-but-authentic-feeling content
-# location_data: 1   # already preservation default; bump to 2 if you want OpenRSC additions
-
-# Voidscape identity
-server_name: Voidscape
-server_name_welcome: Voidscape
+db_name: voidscape_dev
+is_localhost_restricted: false
+production_command_lockdown: false # QA only; never copy this value to deployment
 ```
 
 If these rates feel too fast for a particular test, lower `combat_exp_rate` and
@@ -92,13 +92,12 @@ If `rsccabbage` ends up feeling closer to the actual goal after testing, we can 
 
 ## Active config selection
 
-`ServerConfiguration.java` resolution order:
+`Server.java` resolution order:
 
-1. **CLI arg** — `ant runserver -DconfFile=mypreset` loads `mypreset.conf`.
-2. **`local.conf`** — if it exists *and* you pass `-DconfFile=local`, it overrides.
-3. Otherwise, error: server tells you to provide `-DconfFile`.
+1. **CLI arg** — `ant runserver -DconfFile=mypreset` passes `mypreset.conf` to the server on startup; `-DconfFile=local` loads `local.conf` the same way.
+2. **No CLI arg** — falls back to `default.conf`; this is not an error.
 
-Voidscape convention: **always run via `local.conf`**. The `scripts/run-server.sh` wrapper enforces this.
+Voidscape convention: **always run via `local.conf`**. The `scripts/run-server.sh` wrapper enforces this (via the `runserverzgc` ant target, `-DconfFile=local`).
 
 `server/connections.conf` is loaded first regardless, for DB connection settings.
 
@@ -119,14 +118,15 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `want_fatigue` | `false` | Stamina drain during skilling |
 | `game_tick` | `640` | Tick speed in ms (authentic = 640) |
 | `combat_exp_rate` | `10` | Combat XP multiplier |
-| `skilling_exp_rate` | `2` | Non-combat skill XP multiplier |
+| `skilling_exp_rate` | `1.5` | Non-combat skill XP multiplier |
 | `wilderness_boost` | `0` | Additive exp bonus in wilderness |
+| `wilderness_npc_blocking` | `0` | Wilderness-only override for `npc_blocking`; `0` prevents aggressive NPC body-blocking while preserving normal-world collision |
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |
-| `client_version` | `10070` | Protocol version (must match client) |
+| `client_version` | `10132` | Protocol/cache version (must match every released client) |
 | `enforce_custom_client_version` | `true` | Reject mismatched clients |
-| `location_data` | `1` | Item/NPC data set (0=strict authentic, 1=preservation, 2=custom, 4=openpk) |
+| `location_data` | `1` | Item/NPC/scenery data set (0=preservation baseline, 1=+discontinued, 2=+custom, 4=openpk) |
 | `character_creation_mode` | `0` | 0=standard, 1=ironman+1x, 2=classes+globalPK |
 
 DB credentials live in `server/connections.conf`:
@@ -140,7 +140,8 @@ db_pass: root
 
 | Goal | Preset |
 |---|---|
-| Voidscape default | **preservation.conf** + QoL overrides → `local.conf` |
+| Voidscape public launch | **voidscape-launch.conf** |
+| Voidscape local QA | copy **voidscape-launch.conf** → `local.conf`, then apply local-only overrides |
 | Authentic purist | preservation.conf |
 | Retro nostalgia | 2001scape.conf |
 | Fast-paced QoL | rsccabbage.conf |

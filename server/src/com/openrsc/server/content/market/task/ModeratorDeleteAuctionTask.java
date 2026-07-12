@@ -40,6 +40,7 @@ public class ModeratorDeleteAuctionTask extends MarketTask {
 					});
 					if (dbOk) {
 						ActionSender.sendBox(player, "@gre@[Auction House - Success] % @whi@ Item has been removed from Auctions. % % Returned to collections for:  " + item.getSellerName(), false);
+						recordModeratorDeleteReceipt(item, amount);
 						updateDiscord = true;
 					} else {
 						ActionSender.sendBox(player, "@red@[Auction House - Error] % @whi@ Unable to remove auction", false);
@@ -57,5 +58,22 @@ public class ModeratorDeleteAuctionTask extends MarketTask {
 				return;
 			}
 		}
+	}
+
+	private void recordModeratorDeleteReceipt(final MarketItem item, final int amount) {
+		final int x = player.getX();
+		final int y = player.getY();
+		final String extra = "auction_id=" + item.getAuctionID()
+			+ " seller=" + item.getSeller()
+			+ " removed_by=" + player.getStaffName();
+		player.getWorld().getServer().submitSqlLogging(() -> {
+			try {
+				player.getWorld().getServer().getDatabase().addItemProvenanceEvent(player, null, "item_transfer",
+					"auction_listing", "auction_collectible", "auction_mod_delete", item.getCatalogID(), amount,
+					false, 0, x, y, extra);
+			} catch (final GameDatabaseException ex) {
+				LOGGER.catching(ex);
+			}
+		});
 	}
 }

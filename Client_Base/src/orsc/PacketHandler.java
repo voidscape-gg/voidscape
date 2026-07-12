@@ -12,6 +12,7 @@ import orsc.graphics.gui.KillAnnouncer;
 import orsc.graphics.gui.SocialLists;
 import orsc.graphics.three.RSModel;
 import orsc.multiclient.ClientPort;
+import orsc.net.Network_Base;
 import orsc.net.Network_Socket;
 import orsc.util.FastMath;
 import orsc.util.GenUtil;
@@ -31,8 +32,12 @@ import static orsc.Config.isAndroid;
 
 public class PacketHandler {
 
+	private static final int HIT_FEEDBACK_DAMAGE_UPDATE_TYPE = 10;
+	private static final int SUBSCRIPTION_CHAT_ICON_FLAG = 0x40000000;
+	private static final boolean HIT_FEEDBACK_DEBUG = Boolean.getBoolean("voidscape.hitFeedbackDebug");
+
 	private final RSBuffer_Bits packetsIncoming = new RSBuffer_Bits(30000);
-	private Network_Socket clientStream;
+	private volatile Network_Base clientStream;
 	private mudclient mc;
 
 	private static final Map<Integer, String> incomingOpcodeMap = new HashMap<Integer, String>() {{
@@ -127,22 +132,75 @@ public class PacketHandler {
 		this.mc = mc;
 	}
 
-	public Network_Socket getClientStream() {
+	public Network_Base getClientStream() {
 		return clientStream;
 	}
 
-	public void setClientStream(Network_Socket clientStream) {
-		this.clientStream = clientStream;
+	public void setClientStream(Network_Base clientStream) {
+		Network_Base previous;
+		synchronized (this) {
+			previous = this.clientStream;
+			this.clientStream = clientStream;
+		}
+		if (previous != null && previous != clientStream) {
+			closeStream(previous, false);
+		}
+	}
+
+	public void closeClientStream() {
+		closeClientStream(null, false);
+	}
+
+	public void closeClientStream(Network_Base expected) {
+		closeClientStream(expected, false);
+	}
+
+	public void closeClientStreamAfterFlush() {
+		closeClientStream(null, true);
+	}
+
+	public void closeClientStreamAfterFlush(Network_Base expected) {
+		closeClientStream(expected, true);
+	}
+
+	private void closeClientStream(Network_Base expected, boolean afterFlush) {
+		Network_Base previous;
+		synchronized (this) {
+			if (expected != null && this.clientStream != expected) {
+				return;
+			}
+			previous = this.clientStream;
+			this.clientStream = null;
+		}
+		if (previous == null) {
+			return;
+		}
+		closeStream(previous, afterFlush);
+	}
+
+	private void closeStream(Network_Base stream, boolean afterFlush) {
+		try {
+			if (afterFlush) {
+				stream.closeAfterFlush();
+			} else {
+				stream.close();
+			}
+		} catch (RuntimeException error) {
+			System.err.println("Unable to close superseded client stream: " + error.getClass().getSimpleName());
+		}
 	}
 
 	public void startThread(int andStart, Runnable proc) {
 		try {
 
-			Thread var3 = new Thread(proc);
+			String name = proc instanceof Network_Socket
+				? "Voidscape-NetworkWriter-" + Integer.toHexString(System.identityHashCode(proc))
+				: "Voidscape-ClientWorker";
+			Thread var3 = new Thread(proc, name);
 			if (andStart == 1) {
 				var3.setDaemon(true);
 				var3.start();
-			}
+		}
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "e.S(" + andStart + ',' + (proc != null ? "{...}" : "null") + ')');
 		}
@@ -150,14 +208,26 @@ public class PacketHandler {
 
 	public final Socket openSocket(int port, String host) throws IOException {
 		Socket s = new Socket();
-		int connectTimeout = isAndroid() ? 5000 : 10000;
-		int readTimeout = isAndroid() ? 10000 : 30000;
-		s.connect(new InetSocketAddress(InetAddress.getByName(host), port), connectTimeout);
-		//s.setSendBufferSize(25000);
-		//s.setReceiveBufferSize(25000);
-		s.setSoTimeout(readTimeout);
-		s.setTcpNoDelay(true);
-		return s;
+		try {
+			int connectTimeout = isAndroid() ? 5000 : 10000;
+			int readTimeout = isAndroid() ? 10000 : 30000;
+			s.connect(new InetSocketAddress(InetAddress.getByName(host), port), connectTimeout);
+			//s.setSendBufferSize(25000);
+			//s.setReceiveBufferSize(25000);
+			s.setSoTimeout(readTimeout);
+			s.setTcpNoDelay(true);
+			return s;
+		} catch (IOException | RuntimeException error) {
+			try {
+				s.close();
+			} catch (IOException ignored) {
+			}
+			throw error;
+		}
+	}
+
+	public final Network_Base openConnection(String host, int port) throws IOException {
+		return mudclient.clientPort.openNetworkConnection(this, host, port);
 	}
 
 	public RSBuffer_Bits getPacketsIncoming() {
@@ -211,10 +281,9 @@ public class PacketHandler {
 				// Fishing Trawler
 			else if (opcode == 133) fishingTrawlerUpdate();
 
-				// Clan Options
-			else if (opcode == 112) updateClan();
-
-			else if (opcode == 116) updateParty();
+			// Clan (112) and party (116) opcodes are gone with the clan/party UI:
+			// unhandled opcodes fall through to handleUnknownPacket, which is safe
+			// because each packet is length-framed and drained per read.
 
         /*else if(opcode == 50) { // Achievements
           int achievementStatus = this.packetsIncoming.getByte();
@@ -523,7 +592,7 @@ public class PacketHandler {
 			else if (opcode == 129) gotCombatStylePacket();
 
 				// sync unlocked hair/skin/clothing colours & styles
-			else if (opcode == 250) gotUnlockedPlayerAppearancesPacket();
+			else if (opcode == 250) gotUnlockedPlayerAppearancesPacket(length);
 
 			else handleUnknownPacket(opcode);
 
@@ -745,113 +814,6 @@ public class PacketHandler {
 		}
 	}
 
-	private void updateClan() {
-		int actionType = packetsIncoming.getByte();
-		//Clan clan = new Clan(mc);
-		switch (actionType) {
-			case 0: // Send clan
-				mc.clan.setClanName(packetsIncoming.readString());
-				mc.clan.setClanTag(packetsIncoming.readString());
-				mc.clan.setClanLeaderUsername(packetsIncoming.readString());
-				boolean isLeader = packetsIncoming.getByte() == 1;
-				mc.clan.setClanLeader(isLeader);
-				SocialLists.clanListCount = packetsIncoming.getByte();
-				for (int id = 0; id < SocialLists.clanListCount; id++) {
-					mc.clan.username[id] = packetsIncoming.readString();
-					mc.clan.clanRank[id] = packetsIncoming.getByte();
-					mc.clan.onlineClanMember[id] = packetsIncoming.getByte();
-				}
-				mc.clan.putClan(true);
-
-				break;
-			case 1: // Leave clan
-				mc.clan.putClan(false);
-				mc.clan.update();
-				break;
-			case 2: // Sent invitation
-				mc.clan.getClanInterface().initializeInvite(packetsIncoming.readString(), packetsIncoming.readString());
-				break;
-			case 3: // Settings
-				mc.clan.setClanSetting(0, packetsIncoming.getByte());
-				mc.clan.setClanSetting(1, packetsIncoming.getByte());
-				mc.clan.setClanSetting(2, packetsIncoming.getByte());
-				mc.clan.allowed[0] = packetsIncoming.getByte() == 1;
-				mc.clan.allowed[1] = packetsIncoming.getByte() == 1;
-				break;
-			case 4: // Clan search visual
-				mc.clan.getClanInterface().resetClans();
-				int clanCount = packetsIncoming.getShort();
-				for (int i = 0; i < clanCount; i++) {
-					int clanID = packetsIncoming.getShort();
-					String clanName = packetsIncoming.readString();
-					String clanTag = packetsIncoming.readString();
-					int members = packetsIncoming.getByte();
-					int canJoin = packetsIncoming.getByte();
-					int clanPoints = packetsIncoming.get32();
-					int clanRank = packetsIncoming.getShort();
-					mc.clan.getClanInterface().addClan(clanID, clanName, clanTag, members, canJoin, clanPoints, clanRank);
-				}
-				break;
-		}
-	}
-
-	private void updateParty() {
-		int actionType = packetsIncoming.getByte();
-		switch (actionType) {
-			case 0: // Send party
-				mc.party.setPartyLeaderUsername(packetsIncoming.readString());
-				boolean isLeader = packetsIncoming.getByte() == 1;
-				mc.party.setPartyLeader(isLeader);
-				SocialLists.partyListCount = packetsIncoming.getByte();
-				for (int id = 0; id < SocialLists.partyListCount; id++) {
-					mc.party.username[id] = packetsIncoming.readString();
-					mc.party.partyRank[id] = packetsIncoming.getByte();
-					mc.party.onlinePartyMember[id] = packetsIncoming.getByte();
-					mc.party.curHp[id] = packetsIncoming.getByte();
-					mc.party.maxHp[id] = packetsIncoming.getByte();
-					mc.party.cbLvl[id] = packetsIncoming.getByte();
-					mc.party.skull[id] = packetsIncoming.getByte();
-					mc.party.pMemD[id] = packetsIncoming.getByte();
-					mc.party.shareLoot[id] = packetsIncoming.getByte();
-					mc.party.partyMembersTotal[id] = packetsIncoming.getByte();
-					mc.party.inCombat[id] = packetsIncoming.getByte();
-					mc.party.shareExp[id] = packetsIncoming.getByte();
-					mc.party.expShared[id] = packetsIncoming.getLong(0);
-				}
-				mc.party.putParty(true);
-				mc.showPartyMenu();
-
-				break;
-			case 1: // Leave party
-				mc.party.putParty(false);
-				mc.party.update();
-				mc.hidePartyMenu();
-				break;
-			case 2: // Sent invitation
-				mc.party.getPartyInterface().initializeInvite(packetsIncoming.readString(), packetsIncoming.readString());
-				break;
-			case 3: // Settings
-				mc.party.setPartySetting(0, packetsIncoming.getByte());
-				mc.party.setPartySetting(1, packetsIncoming.getByte());
-				mc.party.setPartySetting(2, packetsIncoming.getByte());
-				mc.party.allowed[0] = packetsIncoming.getByte() == 1;
-				mc.party.allowed[1] = packetsIncoming.getByte() == 1;
-				break;
-			case 4: // Party search visual
-				mc.party.getPartyInterface().resetPartys();
-				int partyCount = packetsIncoming.getShort();
-				for (int i = 0; i < partyCount; i++) {
-					int partyID = packetsIncoming.getShort();
-					int members = packetsIncoming.getByte();
-					int canJoin = packetsIncoming.getByte();
-					int partyPoints = packetsIncoming.get32();
-					int partyRank = packetsIncoming.getShort();
-					mc.party.getPartyInterface().addParty(partyID, members, canJoin, partyPoints, partyRank);
-				}
-				break;
-		}
-	}
-
 	private void announceKill() {
 		if (!Config.S_WANT_KILL_FEED) return;
 		String killed = packetsIncoming.readString();
@@ -861,28 +823,55 @@ public class PacketHandler {
 	}
 
 	private void showMessage() {
-		int crown = packetsIncoming.get32();
+		int packedCrown = packetsIncoming.get32();
+		boolean subscriptionName = hasSubscriptionChatFlag(packedCrown);
+		int crown = unpackChatCrown(packedCrown);
 		MessageType type = MessageType.lookup(packetsIncoming.getUnsignedByte());
 		int messageType = packetsIncoming.getUnsignedByte();
 		String message = packetsIncoming.readString();
 		String sender = null;
-		String clan = null;
+		String formerName = null;
 		String colour = null;
 		if ((messageType & 1) != 0) {
 			sender = packetsIncoming.readString();
-			clan = packetsIncoming.readString();
+			formerName = packetsIncoming.readString();
 		}
 		if ((messageType & 2) != 0) {
 			colour = packetsIncoming.readString();
 		}
 
 		if (mc.handleVoidscapeAccountAuthMessage(message)
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeChristmasCrackerMessage(message))
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeCrackerCampaignMessage(message))
+			|| mc.handleVoidscapeFarmSimMessage(message)
+			|| mc.handleUndeadSiegeMessage(message)
 			|| mc.handleVoidArenaRatingMessage(message)) {
 			return;
 		}
 
-		// Why is clan being sent into former name?
-		mc.showMessage(true, sender, message, type, crown, clan, colour);
+		mc.showMessage(true, sender, message, type, crown, formerName, colour,
+			subscriptionName ? subscriptionChatDisplaySender(sender, type, colour) : null);
+	}
+
+	private static boolean hasSubscriptionChatFlag(int icon) {
+		return (icon & SUBSCRIPTION_CHAT_ICON_FLAG) != 0;
+	}
+
+	private static int unpackChatCrown(int icon) {
+		return icon & ~SUBSCRIPTION_CHAT_ICON_FLAG;
+	}
+
+	private static String subscriptionChatDisplaySender(String sender, MessageType type, String colourOverride) {
+		if (sender == null || sender.length() == 0) {
+			return sender;
+		}
+		String resetColour = colourOverride != null && colourOverride.length() > 0 ? colourOverride : type.color;
+		if (sender.regionMatches(true, 0, "Global$", 0, 7) && sender.length() > 7) {
+			return sender.substring(0, 7) + "@mag@" + sender.substring(7) + resetColour;
+		}
+		return "@mag@" + sender + resetColour;
 	}
 
 	private void sendConnectionMessage() {
@@ -1011,9 +1000,12 @@ public class PacketHandler {
 	private void receivePrivateMessage() {
 		String sender = packetsIncoming.readString();
 		String formerName = packetsIncoming.readString();
-		int icon = packetsIncoming.get32();
+		int packedIcon = packetsIncoming.get32();
+		boolean subscriptionName = hasSubscriptionChatFlag(packedIcon);
+		int icon = unpackChatCrown(packedIcon);
 		String message = RSBufferUtils.getEncryptedString(packetsIncoming);
-		mc.showMessage(true, sender, message, MessageType.PRIVATE_RECIEVE, icon, formerName);
+		mc.showMessage(true, sender, message, MessageType.PRIVATE_RECIEVE, icon, formerName, null,
+			subscriptionName ? subscriptionChatDisplaySender(sender, MessageType.PRIVATE_RECIEVE, null) : null);
 	}
 
 	private void sendPrivateMessage() {
@@ -1374,7 +1366,8 @@ public class PacketHandler {
 		props.setProperty("S_SPAWN_AUCTION_NPCS", spawnAuctionNpcs == 1 ? "true" : "false"); // 4
 		props.setProperty("S_SPAWN_IRON_MAN_NPCS", spawnIronManNpcs == 1 ? "true" : "false"); // 5
 		props.setProperty("S_SHOW_FLOATING_NAMETAGS", showFloatingNametags == 1 ? "true" : "false"); // 6
-		props.setProperty("S_WANT_CLANS", wantClans == 1 ? "true" : "false"); // 7
+		// S_WANT_CLANS (byte 7) is still parsed above for stream alignment, but the
+		// value is deliberately not applied: the clan UI was removed from this client.
 		props.setProperty("S_WANT_KILL_FEED", wantKillFeed == 1 ? "true" : "false"); // 8
 		props.setProperty("S_FOG_TOGGLE", fogToggle == 1 ? "true" : "false"); // 9
 		props.setProperty("S_GROUND_ITEM_TOGGLE", groundItemToggle == 1 ? "true" : "false"); // 10
@@ -1431,7 +1424,8 @@ public class PacketHandler {
 		props.setProperty("S_WANT_CUSTOM_LANDSCAPE", wantCustomLandscape == 1 ? "true" : "false"); //61
 		props.setProperty("S_WANT_EQUIPMENT_TAB", wantEquipmentTab == 1 ? "true" : "false"); //62
 		props.setProperty("S_WANT_BANK_PRESETS", wantBankPresets == 1 ? "true" : "false"); //63
-		props.setProperty("S_WANT_PARTIES", wantParties == 1 ? "true" : "false"); //64
+		// S_WANT_PARTIES (byte 64) is still parsed above for stream alignment, but the
+		// value is deliberately not applied: the party UI was removed from this client.
 		props.setProperty("S_MINING_ROCKS_EXTENDED", miningRocksExtended == 1 ? "true" : "false"); //65
 		props.setProperty("C_MOVE_PER_FRAME", String.valueOf(movePerFrame)); //66
 		props.setProperty("S_WANT_LEFTCLICK_WEBS", wantLeftclickWebs == 1 ? "true" : "false"); //67
@@ -1460,7 +1454,7 @@ public class PacketHandler {
 
 		mc.authenticSettings = !(
 			Config.isAndroid() ||
-				Config.S_WANT_CLANS || Config.S_WANT_KILL_FEED
+				Config.S_WANT_KILL_FEED
 				|| Config.S_FOG_TOGGLE || Config.S_GROUND_ITEM_TOGGLE
 				|| Config.S_AUTO_MESSAGE_SWITCH_TOGGLE || Config.S_BATCH_PROGRESSION
 				|| Config.S_SIDE_MENU_TOGGLE || Config.S_INVENTORY_COUNT_TOGGLE
@@ -1490,8 +1484,10 @@ public class PacketHandler {
 
 		packetsIncoming.startBitAccess();
 
-		mc.setLocalPlayerX(packetsIncoming.getBitMask(11));
-		mc.setLocalPlayerZ(packetsIncoming.getBitMask(13));
+		int serverLocalPlayerX = packetsIncoming.getBitMask(11);
+		int serverLocalPlayerZ = packetsIncoming.getBitMask(13);
+		mc.setLocalPlayerX(serverLocalPlayerX);
+		mc.setLocalPlayerZ(serverLocalPlayerZ);
 
 		int direction = packetsIncoming.getBitMask(4);
 		boolean needNextRegion = mc.loadNextRegion(mc.getLocalPlayerZ(), mc.getLocalPlayerX(), false);
@@ -1511,8 +1507,7 @@ public class PacketHandler {
 
 		mc.setLocalPlayer(
 			mc.createPlayer(currentZ, mc.getLocalPlayerServerIndex(), currentX, 1,
-				ORSCharacterDirection.lookup(direction)
-			)
+				ORSCharacterDirection.lookup(direction))
 		);
 
 		int dir = packetsIncoming.getBitMask(8);
@@ -1623,18 +1618,17 @@ public class PacketHandler {
 					int tileSize = mc.getTileSize();
 					int xWorld = (xTile * 2 + xSize) * tileSize / 2;
 					int zWorld = (zTile * 2 + zSize) * tileSize / 2;
-					RSModel m;
-					if (id == mudclient.VOID_RIFT_OBJECT_ID) {
-						m = mc.createVoidRiftGroundModel(xWorld, zWorld);
-					} else {
-						int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
-						m = mc.getModelCacheItem(modelIndex).clone();
-					}
+					int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
+					RSModel m = mc.getModelCacheItem(modelIndex).clone();
 					mc.getScene().addModel(m);
 					m.key = mc.getGameObjectInstanceCount();
 					m.addRotation(0, dir * 32, 0);
 					m.translate2(xWorld, -mc.getWorld().getElevation(xWorld, zWorld), zWorld);
-					m.setDiffuseLightAndColor(-50, -10, -50, 48, 48, true, 117);
+					if (id == mudclient.VOID_RIFT_OBJECT_ID) {
+						m.setDiffuseLightAndColor(-50, -10, -50, 60, 24, false, 117);
+					} else {
+						m.setDiffuseLightAndColor(-50, -10, -50, 48, 48, true, 117);
+					}
 					mc.getWorld().addGameObject_UpdateCollisionMap(xTile, zTile, id, false);
 					if (id == 74) {
 						m.translate2(0, -480, 0);
@@ -1694,7 +1688,7 @@ public class PacketHandler {
 		mc.applyServerCombatStyle(packetsIncoming.getUnsignedByte());
 	}
 
-	private void gotUnlockedPlayerAppearancesPacket() {
+	private void gotUnlockedPlayerAppearancesPacket(int length) {
 		int unlockedHairStyles = packetsIncoming.get32();
 		int unlockedBodyTypes = packetsIncoming.get32();
 		int unlockedSkinColours = packetsIncoming.get32();
@@ -1750,17 +1744,20 @@ public class PacketHandler {
 		for (int i = 0; i < unlockedSkinColours; i++) {
 			mc.unlockedSkinColours[i] = (packetsIncoming.getBitMask(1) == 1);
 		}
-		/*
 		for (int i = 0; i < unlockedHairColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
 		for (int i = 0; i < unlockedTopColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
 		for (int i = 0; i < unlockedBottomColours; i++) {
-
+			packetsIncoming.getBitMask(1);
 		}
-		 */
+		packetsIncoming.endBitAccess();
+		if (Config.CLIENT_VERSION >= Config.COUNTRY_PICKER_CLIENT_VERSION
+			&& length - packetsIncoming.packetEnd >= 2) {
+			mc.setAppearanceCountryCodeFromServer(packetsIncoming.getUnsignedByte(), packetsIncoming.getUnsignedByte());
+		}
 	}
 
 	private void updateInventoryItem() {
@@ -2044,18 +2041,32 @@ public class PacketHandler {
 					}
 				}
 
-			} else if (updateType == 2) { // NPC Hitpoints
-				int damage = packetsIncoming.getUnsignedByte();
-				int currentHits = packetsIncoming.getUnsignedByte();
-				int maximumHits = packetsIncoming.getUnsignedByte();
+				} else if (updateType == 2 || updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) { // NPC Hitpoints
+					int damage = packetsIncoming.getUnsignedByte();
+					int currentHits = packetsIncoming.getUnsignedByte();
+					int maximumHits = packetsIncoming.getUnsignedByte();
+					int attackerType = ORSCharacter.HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+					int attackerServerIndex = -1;
+					int attackerMaxHit = 0;
+					if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+						attackerType = packetsIncoming.getUnsignedByte();
+						attackerServerIndex = packetsIncoming.getShort();
+						attackerMaxHit = packetsIncoming.getShort();
+					}
 
-				if (null != npc) {
-					npc.damageTaken = damage;
-					npc.healthMax = maximumHits;
-					npc.combatTimeout = 200;
-					npc.healthCurrent = currentHits;
-				}
-			} else if (updateType == 3) {
+					if (null != npc) {
+						npc.damageTaken = damage;
+						npc.healthMax = maximumHits;
+						npc.combatTimeout = 200;
+						npc.healthCurrent = currentHits;
+						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+							npc.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
+							debugHitFeedbackPacket("npc", npc, damage);
+						} else {
+							npc.clearHitFeedback();
+						}
+					}
+				} else if (updateType == 3) {
 				int sprite = packetsIncoming.getShort();
 				int shooterServerIndex = packetsIncoming.getShort();
 				if (null != npc) {
@@ -2260,7 +2271,7 @@ public class PacketHandler {
 		mc.setOptionSoundDisabled(packetsIncoming.getUnsignedByte() == 1); // 2
 		mc.setCombatStyle(packetsIncoming.getUnsignedByte()); // ?
 		mc.setSettingsBlockGlobal(packetsIncoming.getUnsignedByte()); // 9
-		mc.setClanInviteBlockSetting(packetsIncoming.getUnsignedByte() == 1); // 11
+		packetsIncoming.getUnsignedByte(); // 11 — was clan-invite block; clans removed, byte still consumed
 		mc.setVolumeFunction(packetsIncoming.getUnsignedByte()); // 16
 		mc.setSwipeToRotateMode(packetsIncoming.getUnsignedByte()); // 17
 		mc.setSwipeToScrollMode(packetsIncoming.getUnsignedByte()); // 18
@@ -2281,7 +2292,7 @@ public class PacketHandler {
 		mc.setExperienceCounterToggle(packetsIncoming.getUnsignedByte()); // 33
 		mc.setHideInventoryCount(packetsIncoming.getUnsignedByte() == 1); // 34
 		mc.setHideNameTag(packetsIncoming.getUnsignedByte() == 1); // 35
-		mc.setBlockPartyInv(packetsIncoming.getUnsignedByte() == 1); // 36
+		packetsIncoming.getUnsignedByte(); // 36 — was party-invite block; parties removed, byte still consumed
 		mc.setAndroidInvToggle(packetsIncoming.getUnsignedByte() == 1); // 37
 		mc.setShowNPCKC(packetsIncoming.getUnsignedByte() == 1); // 38
 		mc.setCustomUI(packetsIncoming.getUnsignedByte() == 1); //39
@@ -2368,7 +2379,11 @@ public class PacketHandler {
 	}
 
 	private void showBank() {
+		// the server re-sends this packet to refresh an already-open bank (e.g. after an
+		// insert-reorder) — only reset the Void Glass view state on a fresh open
+		boolean wasOpen = mc.isShowDialogBank();
 		mc.setShowDialogBank(true);
+		if (!wasOpen) mc.getBank().vgResetSearch();
 		mc.setNewBankItemCount(packetsIncoming.getShort());
 		mc.setBankItemsMax(packetsIncoming.getShort());
 		mc.getBank().resetBank();
@@ -2477,7 +2492,8 @@ public class PacketHandler {
 	}
 
 	private void updateBank() {
-		int slot = packetsIncoming.getUnsignedByte();
+		// slot widened to a short at 10121 — one byte wrapped mod 256 past slot 255 (VS-008)
+		int slot = packetsIncoming.getShort();
 		int item = packetsIncoming.getShort();
 		int itemCount = packetsIncoming.get32();
 		mc.getBank().updateBank(slot, item, itemCount);
@@ -2806,7 +2822,9 @@ public class PacketHandler {
 				}
 			} else if (updateType == 1 || updateType == 6 || updateType == 7) {
 				if (updateType == 1 || updateType == 7) {
-					int crownID = packetsIncoming.get32();
+					int packedCrownID = packetsIncoming.get32();
+					boolean subscriptionName = hasSubscriptionChatFlag(packedCrownID);
+					int crownID = unpackChatCrown(packedCrownID);
 					boolean muted = false, onTutorial = false;
 					if (updateType == 7) {
 						muted = packetsIncoming.getUnsignedByte() > 0;
@@ -2833,18 +2851,21 @@ public class PacketHandler {
 						if (!var29) {
 							player.messageTimeout = 150;
 							player.message = message;
+							String statusPrefix = ((updateType == 7 && muted) ? "@whi@[MUTED]@yel@ " : "") +
+								((updateType == 7 && onTutorial) ? "@whi@[TUTORIAL]@yel@ " : "");
+							String sender = statusPrefix + player.getStaffName();
+							String displaySender = subscriptionName
+								? statusPrefix + subscriptionChatDisplaySender(player.getStaffName(), MessageType.CHAT, null)
+								: null;
 							mc.showMessage(
 								/*!Config.S_WANT_CUSTOM_RANK_DISPLAY*/ true,
-								(
-									((updateType == 7 && muted) ? "@whi@[MUTED]@yel@ " : "") +
-										((updateType == 7 && onTutorial) ? "@whi@[TUTORIAL]@yel@ " : "") +
-										(player.clanTag != null ? "@whi@[@cla@" + player.clanTag + "@whi@]@yel@ " : "") +
-										player.getStaffName()
-								),
+								sender,
 								player.message,
 								MessageType.CHAT,
 								crownID,
-								player.accountName
+								player.accountName,
+								null,
+								displaySender
 							);
 						}
 					}
@@ -2855,20 +2876,34 @@ public class PacketHandler {
 						player.message = message;
 						player.messageTimeout = 150;
 						if (mc.getLocalPlayer() == player) {
-							mc.showMessage(false, (player.clanTag != null ? "@whi@[@cla@" + player.clanTag + "@whi@]@whi@ " + player.getStaffName() : player.getStaffName()), player.message, MessageType.QUEST, 0, player.accountName);
+							mc.showMessage(false, player.getStaffName(), player.message, MessageType.QUEST, 0, player.accountName);
 						}
 					}
 				}
-			} else if (updateType == 2) {
-				int damage = packetsIncoming.getUnsignedByte();
-				int curhp = packetsIncoming.getUnsignedByte();
-				int maxhp = packetsIncoming.getUnsignedByte();
-				if (player != null) {
-					player.healthMax = maxhp;
-					player.healthCurrent = curhp;
-					player.damageTaken = damage;
-					if (mc.getLocalPlayer() == player) {
-						mc.setPlayerStatCurrent(3, curhp);
+				} else if (updateType == 2 || updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+					int damage = packetsIncoming.getUnsignedByte();
+					int curhp = packetsIncoming.getUnsignedByte();
+					int maxhp = packetsIncoming.getUnsignedByte();
+					int attackerType = ORSCharacter.HIT_FEEDBACK_ATTACKER_TYPE_UNKNOWN;
+					int attackerServerIndex = -1;
+					int attackerMaxHit = 0;
+					if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+						attackerType = packetsIncoming.getUnsignedByte();
+						attackerServerIndex = packetsIncoming.getShort();
+						attackerMaxHit = packetsIncoming.getShort();
+					}
+					if (player != null) {
+						player.healthMax = maxhp;
+						player.healthCurrent = curhp;
+						player.damageTaken = damage;
+						if (updateType == HIT_FEEDBACK_DAMAGE_UPDATE_TYPE) {
+							player.setHitFeedback(attackerType, attackerServerIndex, attackerMaxHit);
+							debugHitFeedbackPacket("player", player, damage);
+						} else {
+							player.clearHitFeedback();
+						}
+						if (mc.getLocalPlayer() == player) {
+							mc.setPlayerStatCurrent(3, curhp);
 						mc.setPlayerStatBase(3, maxhp);
 						mc.setShowDialogServerMessage(false);
 						mc.setShowDialogMessage(false);
@@ -2915,6 +2950,8 @@ public class PacketHandler {
 					packetsIncoming.get32();
 					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_CLIENT_VERSION)
 						packetsIncoming.readString();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_TIER_CLIENT_VERSION)
+						packetsIncoming.getUnsignedByte();
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION)
 						packetsIncoming.getUnsignedByte();
 				} else {
@@ -2944,9 +2981,10 @@ public class PacketHandler {
 					player.level = packetsIncoming.getUnsignedByte();
 					player.skullVisible = packetsIncoming.getUnsignedByte();
 					if (packetsIncoming.getByte() == 1) {
-						player.clanTag = packetsIncoming.readString();
-					} else {
-						player.clanTag = null;
+						// Clan tag: clans were removed from this client, but the
+						// appearance packet still carries the flag byte (+ string),
+						// so it must be consumed to stay aligned.
+						packetsIncoming.readString();
 					}
 
 					player.isInvisible = packetsIncoming.getByte() > 0;
@@ -2960,6 +2998,11 @@ public class PacketHandler {
 						}
 					} else {
 						player.title = null;
+					}
+					if (Config.CLIENT_VERSION >= Config.PLAYER_TITLE_TIER_CLIENT_VERSION) {
+						player.titleTier = packetsIncoming.getUnsignedByte();
+					} else {
+						player.titleTier = 0;
 					}
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION) {
 						player.hairStyle = packetsIncoming.getUnsignedByte();
@@ -2996,8 +3039,20 @@ public class PacketHandler {
 						mc.setShowDialogMessage(false);
 					}
 				}
+				}
 			}
 		}
+
+	private void debugHitFeedbackPacket(String targetKind, ORSCharacter target, int damage) {
+		if (!HIT_FEEDBACK_DEBUG || target == null || !target.hasHitFeedback()) {
+			return;
+		}
+		System.out.println("hit-feedback packet target=" + targetKind
+			+ " targetIndex=" + target.serverIndex
+			+ " damage=" + damage
+			+ " attackerType=" + target.hitFeedbackAttackerType
+			+ " attackerIndex=" + target.hitFeedbackAttackerServerIndex
+			+ " attackerMaxHit=" + target.hitFeedbackAttackerMaxHit);
 	}
 
 	private void drawGroundItems(int length) {

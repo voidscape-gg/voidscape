@@ -48,8 +48,6 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	private static final int VOID_RIFT_ID = 1306;
 	static final int VOID_COLOSSUS_OBJECT_ID = 1307;
-	private static final int HUB_RIFT_X = 113;
-	private static final int HUB_RIFT_Y = 321;
 	private static final int HUB_ARRIVAL_X = 113;
 	private static final int HUB_ARRIVAL_Y = 322;
 	private static final int ARENA_RIFT_X = 553;
@@ -68,6 +66,9 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	// Singleton handle so dev tooling (::colossus) can drive the real entry flow without the rift.
 	private static volatile VoidColossusArena instance;
+
+	// Guards against a player leaving the arena without clearing their instanceId (VS-028).
+	private volatile boolean strayExitGuardScheduled = false;
 
 	@Inject
 	private World world;
@@ -154,40 +155,34 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 
 	@Override
 	public boolean blockOpLoc(Player player, GameObject obj, String command) {
-		return isHubRift(obj) || isArenaRift(obj);
+		return isArenaRift(obj);
 	}
 
 	@Override
 	public void onOpLoc(Player player, GameObject obj, String command) {
-		if (isHubRift(obj)) {
-			if (!confirmTravel(player, "The rift hums with colossal fury beyond.",
-				"Face the Void Colossus alone?")) {
-				return;
-			}
-			enterInstance(player);
-		} else if (isArenaRift(obj)) {
+		if (isArenaRift(obj)) {
 			if (!confirmTravel(player, "The rift leads back to the safety of the Void Enclave.",
-				"Leave the arena?")) {
+				"Leave the arena?", "Leave the arena")) {
 				return;
 			}
 			exitInstance(player, true);
 		}
 	}
 
-	private boolean confirmTravel(Player player, String intro, String confirm) {
+	private boolean confirmTravel(Player player, String intro, String confirm, String acceptOption) {
 		if (player.inCombat()) {
-			player.message("You cannot enter the rift while fighting.");
+			player.message("You cannot use the rift while fighting.");
 			return false;
 		}
 		player.message(intro);
 		player.message(confirm);
-		int option = multi(player, "Enter the rift", "Stay here");
+		int option = multi(player, acceptOption, "Stay here");
 		if (option != 0) {
 			player.message("You step away from the rift.");
 			return false;
 		}
 		if (player.inCombat()) {
-			player.message("You cannot enter the rift while fighting.");
+			player.message("You cannot use the rift while fighting.");
 			return false;
 		}
 		return true;
@@ -209,14 +204,51 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		int instanceId = nextInstanceId.getAndIncrement();
 		playerInstance.put(hash, instanceId);
 		instanceOwner.put(instanceId, hash);
-		player.setInstanceId(instanceId);
 
 		player.message("You step into the Void Rift.");
 		displayTeleportBubble(player, player.getX(), player.getY(), false);
 		delay(2);
 		player.teleport(ARENA_LANDING_X, ARENA_LANDING_Y, true);
+		// Assign the phase only once the player is physically inside the arena, so the
+		// stray-exit guard (which clears the instance for any owner it finds outside the
+		// arena) cannot fire during the pre-teleport delay window and cancel this entry.
+		player.setInstanceId(instanceId);
 		spawnBoss(instanceId);
 		player.message("The void folds around you and opens onto a shattered plaza, yours alone.");
+		ensureStrayExitGuard();
+	}
+
+	/**
+	 * Recurring guard: if a player leaves the arena by any means OTHER than the rift/death/logout
+	 * (a teleport spell, teleport item, home-teleport, or admin ::teleport), nothing clears their
+	 * instanceId, and the RegionManager instance filter then hides every overworld NPC from them
+	 * until relog (VS-028). This sweep clears the stale phase in place the moment an owner is found
+	 * outside the arena. Self-schedules on first entry and stops when no instances remain.
+	 */
+	private synchronized void ensureStrayExitGuard() {
+		if (strayExitGuardScheduled) {
+			return;
+		}
+		strayExitGuardScheduled = true;
+		world.getServer().getGameEventHandler().add(new DelayedEvent(world, null, 1200, "Colossus Stray-Exit Guard") {
+			@Override
+			public void run() {
+				if (instanceOwner.isEmpty()) {
+					strayExitGuardScheduled = false;
+					stop();
+					return;
+				}
+				for (Map.Entry<Integer, Long> entry : instanceOwner.entrySet()) {
+					Player owner = world.getPlayer(entry.getValue());
+					if (owner == null) {
+						continue; // offline: the logout hook already tears the instance down
+					}
+					if (owner.getInstanceId() > 0 && !inArena(owner.getX(), owner.getY())) {
+						exitInstance(owner, false); // clear the stale phase in place, no teleport
+					}
+				}
+			}
+		});
 	}
 
 	private void exitInstance(Player player, boolean teleport) {
@@ -395,10 +427,6 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 		if (playerInstance.containsKey(player.getUsernameHash())) {
 			exitInstance(player, false);
 		}
-	}
-
-	private boolean isHubRift(GameObject obj) {
-		return obj.getID() == VOID_RIFT_ID && obj.getX() == HUB_RIFT_X && obj.getY() == HUB_RIFT_Y;
 	}
 
 	private boolean isArenaRift(GameObject obj) {

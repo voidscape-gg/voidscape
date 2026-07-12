@@ -6,6 +6,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.external.ItemCraftingDef;
 import com.openrsc.server.external.ItemGemDef;
 import com.openrsc.server.model.Point;
@@ -686,7 +687,7 @@ public class Crafting implements UseInvTrigger,
 		}
 
 		// Remove items
-        delay();
+        delay(2);
 		tellPlayerSuccessfullyProducedCraftingProduct(player, def);
 		player.getCarriedItems().remove(goldBar);
 		if (def.getReqGem() != ItemId.NOTHING.id()) {
@@ -698,7 +699,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchGoldJewelry(player, item, def);
 		}
 	}
@@ -932,7 +933,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchSilverJewelry(player, item, results, type, reply);
 		}
 	}
@@ -1007,7 +1008,7 @@ public class Crafting implements UseInvTrigger,
 		);
 		if (softClay == null) return;
 
-		delay();
+		delay(2);
 		player.getCarriedItems().remove(softClay);
 		thinkbubble(softClay);
 		player.playerServerMessage(MessageType.QUEST, "you make the clay into a " + potteryItemName(result.getDef(player.getWorld()).getName()));
@@ -1017,7 +1018,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchPotteryMoulding(player, item, reqLvl, result, msg, exp);
 		}
 	}
@@ -1110,7 +1111,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchPotteryFiring(player, item, reqLvl, result, msg, exp);
 		}
 	}
@@ -1147,7 +1148,7 @@ public class Crafting implements UseInvTrigger,
 		player.playerServerMessage(MessageType.QUEST, "you heat the sand and soda ash in the furnace to make glass");
 		player.getCarriedItems().remove(item1);
 		player.getCarriedItems().remove(item2);
-		delay();
+		delay(2);
 		inventory.add(new Item(ItemId.MOLTEN_GLASS.id(), 1));
 		inventory.add(new Item(ItemId.BUCKET.id(), 1));
 		player.incExp(Skill.CRAFTING.id(), 80, true);
@@ -1155,7 +1156,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchGlassMaking(player, item, otherItem);
 		}
 	}
@@ -1233,7 +1234,7 @@ public class Crafting implements UseInvTrigger,
 		if (glass == null) return;
 
 		player.getCarriedItems().remove(glass);
-		delay();
+		delay(2);
 		String message = "You make a " + result.getDef(player.getWorld()).getName();
 
 		// Special handling for vials
@@ -1323,7 +1324,7 @@ public class Crafting implements UseInvTrigger,
 		if (item == null) return;
 
 		player.getCarriedItems().remove(item);
-		delay();
+		delay(2);
 		Item cutGem = new Item(gemDef.getGemID(), 1);
 		// Jade, Opal and red topaz fail handler - 25% chance to fail
 
@@ -1351,10 +1352,11 @@ public class Crafting implements UseInvTrigger,
                     gemName = StringUtils.capitalize(gemName);
                 }
             }
-			player.message("You cut the " + gemName);
-			player.playSound("chisel");
-			player.incExp(Skill.CRAFTING.id(), gemDef.getExp(), true);
-		}
+				player.message("You cut the " + gemName);
+				player.playSound("chisel");
+				player.incExp(Skill.CRAFTING.id(), gemDef.getExp(), true);
+				PlayerTitle.recordGemCut(player);
+			}
 
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
@@ -1481,7 +1483,7 @@ public class Crafting implements UseInvTrigger,
 		if (item == null) return;
 
 		player.getCarriedItems().remove(item);
-		delay();
+		delay(2);
 		player.message("You make some " + result.getDef(player.getWorld()).getName());
 		player.getCarriedItems().getInventory().add(result);
 		player.incExp(Skill.CRAFTING.id(), exp, true);
@@ -1505,7 +1507,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchLeather(player, leather, result, reqLvl, exp);
 		}
 	}
@@ -1565,12 +1567,12 @@ public class Crafting implements UseInvTrigger,
 		player.getCarriedItems().remove(item);
 		player.message("You put some string on your " + item.getDef(player.getWorld()).getName().toLowerCase());
 		player.getCarriedItems().getInventory().add(new Item(newID));
-		delay();
+		delay(2);
 
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchString(player, item, woolBall, newID);
 		}
 	}
@@ -1608,7 +1610,7 @@ public class Crafting implements UseInvTrigger,
 		// Repeat
 		updatebatch();
 		if (!ifinterrupted() && !isbatchcomplete()) {
-			delay();
+			delay(2);
 			batchWaterClay(player, water, item);
 		}
 	}

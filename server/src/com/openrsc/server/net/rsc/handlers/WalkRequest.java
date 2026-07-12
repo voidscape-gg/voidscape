@@ -108,7 +108,7 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 			player.message("@mag@The Void Council blocks the path north. Speak to one of them.");
 			return;
 		}
-		player.cancelAutoWalk();
+			player.cancelAutoWalk();
 		player.resetAll();
 		player.resetPath();
 

@@ -1,27 +1,35 @@
 # Player Titles
 
-Voidscape player titles are cosmetic suffix-style labels such as `Crownless Conqueror`. A player unlocks titles by meeting server-side requirements, picks an active title with `::titles`, and the custom client renders the active title beside the normal player name, such as `void Crownless Conqueror`.
+Voidscape player titles are cosmetic suffix-style labels such as `the Master-at-Arms`.
+A player unlocks titles by meeting server-side requirements, picks an active title with
+`::titles`, and the custom client renders the active title beside the normal player
+name, such as `void the Master-at-Arms`.
 
 ## Server model
 
-- `server/src/com/openrsc/server/content/PlayerTitle.java` is the title registry. It contains the title catalog, requirement metadata, cache keys, lookup helpers, and automatic unlock checks.
-- Unlock state is stored in the existing player cache using keys prefixed with `pt_u_`. The shorter prefix keeps every title key under the current `player_cache.key` schema limit; legacy `player_title_unlocked_` keys are still read for older local data.
-- Active title state is stored in `player_title_active`.
-- Titles have a scope: `reusable` titles can be unlocked by every qualifying player, while `unique` titles are first-claim exclusives. Each account can hold only one unique title total.
-- Unique title claims are stored in `pt_unique_claim`; owner display resolves that claim from online player caches first, then from the existing `player_cache` table joined to `players`. No new schema is required.
-- Automatic unlocks currently evaluate stable, already-persisted player state: total level, combat level, quest points, wilderness player kills, total NPC kills, single-NPC kill streaks, and individual real RSC skill levels.
-- Manual titles are catalog entries for systems that need bespoke hooks, such as event rewards, auction-house milestones, rare-drop milestones, or Voidscape encounters.
+- `server/src/com/openrsc/server/content/PlayerTitle.java` is the title registry. It owns the 62-entry catalog, tier/lifecycle metadata, achievement-table metadata, cache keys, lookup helpers, and automatic unlock checks.
+- Unlock state is stored in the existing player cache using `pt_u_<id>`. Active title state is stored in `player_title_active`.
+- Titles have a tier: `RENOWN` (white), `FEAT` (purple), or `UNIQUE` (gold). Rarity scoring was removed.
+- Unique titles have a lifecycle: `FIRST` (permanent first claim), `CONTESTED` (current leader), or `ITEM_BOUND` (follows a future relic holder). Accounts may hold any number of uniques, but only one title can be active.
+- First-to record titles are `FIRST` uniques whose catalog rows read like achievements, such as `First 50,000 Swordfish Cooked` and `First Total Level 1700`. They keep short player-cache counter keys and stamp the first claimant/date through the existing unique-title global cache.
+- Contested titles use a global token in `title_contested_token_<id>`; the current holder's `pt_u_<id>` value must match that token. Warlord and Magnate also store current-month leader score metadata under `title_contested_month_<id>` and `title_contested_score_<id>`.
+- Login/use migration clears old `pt_u_*`, `player_title_unlocked_*`, `pt_b_*`, and `pt_unique_claim` title state for the prelaunch overhaul, preserving only `founder`.
 
 ## Commands
 
-- `::titles` refreshes automatic unlocks, then opens a dialogue-style title hub.
-- `::titles list [page]` opens the all-title catalog.
-- `::titles unlocked|unique|common|rarest [page]` opens a filtered 10-title catalog page. Rows stay compact; selecting a title opens a detail pop-up with its requirement, current progress, scope, rarity, and lock/owner state. Unlocked titles can be equipped from that pop-up.
+- `::titles` refreshes automatic unlocks, then opens the title hub.
+- `::titles list|all [page]` opens the full catalog.
+- `::titles unlocked|renown|feat|unique [page]` opens a filtered catalog page. Rows show achievement/title, tier, holder/player, and claim age; selecting a row opens requirement/progress/lifecycle/holder details.
 - `::title <id or name>` equips an unlocked title.
 - `::title clear` removes the active title.
-- `::titles count` shows the player's unlocked count out of the full title catalog.
+- `::titles count` shows the player's unlocked count out of the catalog.
+- Staff can use `::granttitle <player> <title_id>` and `::revoketitle <player> <title_id>` for manual/event titles.
 
-The custom PC client recognizes these title menu payloads and renders them as centered black modals with category tabs, page buttons, and title-detail pop-ups instead of the stock cyan top-left options menu. The modals still send ordinary menu replies, so the server remains authoritative and no title-catalog opcode is required.
+The custom PC client recognizes structured `~vstitle~` row metadata embedded in normal
+menu option strings and renders the catalog as an achievement-style table with
+All/Unlocked/Renown/Feat/Unique tabs. Generic clients still see readable fallback option
+text. The modals still send ordinary menu replies, so the server remains authoritative
+and no title-catalog opcode is required.
 
 ## Unlock hooks
 
@@ -31,12 +39,28 @@ Automatic titles refresh in these existing progression paths:
 - `Player.addNpcKill(...)`
 - wilderness player kills inside `Player.killedBy(...)`
 - level-ups inside `Skills.addExperience(...)`
-- opening `::titles`, which also retroactively grants titles for old accounts
+- opening `::titles`, which also retroactively grants titles for current state
 
-For a future custom title, prefer adding a direct `PlayerTitle.unlock(player, PlayerTitle.X)` call at the authoritative completion point of the feature. For example, an auction-house title should unlock where the successful sale is committed, not from a UI command.
+Direct event hooks award the manual/feat titles at authoritative completion points:
 
-`DM Kingslayer` is a reusable manual title unlocked by the authoritative DM King victory resolver in `VoidArena`.
+- fishing/cooking/bone burying/mining/high-alchemy/gnomeball counters feed Lobster Baron, Unburnt, Bone Collector, Coal-Hearted, Goldspinner, Gnome-Baller, and first swordfish/coal record titles.
+- woodcutting, herb pickup, gem cutting, and spell-cast hooks feed the first magic-log, herb, gem, and spell record titles.
+- NPC death/drop hooks feed Giant-Killer and Dragon-Crowned.
+- Smithing a rune plate mail body awards Runesmith.
+- Wilderness PKs feed Edgelord, Bronze Reaper, Widowmaker, and monthly Warlord of the Wastes.
+- Void content awards Voidbane, Gravewalker, Void Arena Champion, and Colossusbane from their owning systems.
+- Committed auction-house sales feed monthly Magnate through the sale-history table.
+
+`RIFTBOUND` remains manual until there is a real Void Rift win-state event; the current
+`VoidRift` plugin is a travel network, not a contest.
 
 ## Client display
 
-The custom appearance update sends the active title as an extra string for custom clients at version `10052` or newer. Authentic and retro clients are not sent this field. The client stores it on `ORSCharacter.title` and composes a one-line overhead label locally: the staff-colored username first, then the red active title. `displayName` and `accountName` stay untouched so menus, social features, and player identity keep using the real username.
+The custom appearance update sends the active title string for clients `>= 10052` and,
+for clients `>= 10123`, a one-byte title tier immediately after it. Authentic and retro
+clients are not sent the custom title fields.
+
+The client stores the fields on `ORSCharacter.title` and `ORSCharacter.titleTier`, draws
+the username in the normal name color, and draws the title suffix in the tier color. The
+label is hidden while a player overhead chat message is active so chat text stays
+readable. Public chat no longer receives title prefixes.

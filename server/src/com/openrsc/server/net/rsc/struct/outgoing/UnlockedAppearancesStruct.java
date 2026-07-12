@@ -10,4 +10,5 @@ public class UnlockedAppearancesStruct extends AbstractStruct<OpcodeOut> {
 	public boolean[] unlockedSkinColours;
 	public boolean[] unlockedHairStyles;
 	public boolean[] unlockedBodyTypes;
+	public String selectedCountryCode = "";
 }

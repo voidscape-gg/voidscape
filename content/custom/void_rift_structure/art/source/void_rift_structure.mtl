@@ -1,0 +1,32 @@
+# Flat colors for the original Voidscape Void Rift source mesh.
+# Textures, transparency, specular maps, and external assets are intentionally absent.
+
+newmtl rift_core
+Ka 0.0000 0.0000 0.0000
+Kd 0.1255 0.0314 0.1882
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl voidstone_dark
+Ka 0.0000 0.0000 0.0000
+Kd 0.2510 0.2196 0.2824
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl gunmetal
+Ka 0.0000 0.0000 0.0000
+Kd 0.3765 0.3451 0.4078
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl bruised_violet
+Ka 0.0000 0.0000 0.0000
+Kd 0.5020 0.2196 0.5961
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl rift_violet
+Ka 0.0000 0.0000 0.0000
+Kd 0.7216 0.3765 0.8471
+Ks 0.0000 0.0000 0.0000
+illum 1

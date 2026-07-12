@@ -109,6 +109,7 @@ public class LoginExecutor implements Runnable {
 			LOGGER.error("There were " + (genericRequests.size() + saveRequests.size() + loginRequests.size()) + " unprocessed requests. (Very bad!!!!!!!!!!)");
 			processAndClearSet(saveRequests, saveRequest -> {
 				LOGGER.error("Could not save " + saveRequest.getPlayer() + " during LoginExecutor shutdown.");
+				saveRequest.rejectBeforeProcessing();
 			});
 			clearRequests();
 		}
@@ -148,8 +149,13 @@ public class LoginExecutor implements Runnable {
 		Iterator<T> iterator = set.iterator();
 		while (iterator.hasNext()) {
 			T item = iterator.next();
-			processor.accept(item);
-			iterator.remove();
+			try {
+				processor.accept(item);
+			} catch (final Throwable ex) {
+				LOGGER.error("Error processing queued login-executor work", ex);
+			} finally {
+				iterator.remove();
+			}
 		}
 	}
 }

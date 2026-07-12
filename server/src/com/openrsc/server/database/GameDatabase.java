@@ -25,6 +25,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.PlayerSettings;
 import com.openrsc.server.util.SystemUtil;
 import com.openrsc.server.util.checked.CheckedRunnable;
+import com.openrsc.server.util.checked.CheckedSupplier;
 import com.openrsc.server.util.rsc.DataConversions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,7 +40,7 @@ public abstract class GameDatabase {
 	/**
 	 * The asynchronous logger.
 	 */
-	private static final Logger LOGGER = LogManager.getLogger();
+	private static final Logger LOGGER = LogManager.getLogger(GameDatabase.class);
 	private static final String AUCTION_WORKBENCH_SELLER = "wb-fixture";
 	private static final String AUCTION_WORKBENCH_BUYER = "wb-buyer";
 	private static final String AUCTION_WORKBENCH_MARKER = "workbench-fixture";
@@ -155,6 +156,23 @@ public abstract class GameDatabase {
 
 	public abstract Long queryLoadGlobalCacheLong(String cacheKey) throws GameDatabaseException;
 
+	public abstract PortalCommerceEntitlement queryOldestPendingPortalCommerceEntitlement(int accountId)
+		throws GameDatabaseException;
+
+	public abstract PortalCommerceEntitlement queryPortalCommerceEntitlement(long entitlementId)
+		throws GameDatabaseException;
+
+	public abstract WorldAchievementRecord queryLoadWorldAchievementRecord(String seasonId,
+		String recordKey) throws GameDatabaseException;
+
+	public abstract WorldPkEvent queryLoadWorldPkEvent(String deathId) throws GameDatabaseException;
+
+	public abstract Long queryLoadLastQualifiedWorldPkPairTime(String seasonId,
+		int pairLowPlayerId, int pairHighPlayerId) throws GameDatabaseException;
+
+	public abstract WorldPkStreak queryLoadWorldPkStreak(String seasonId, int playerId)
+		throws GameDatabaseException;
+
 	public abstract String queryPlayerCacheOwner(String cacheKey) throws GameDatabaseException;
 
 	public abstract String queryPlayerCacheOwner(String cacheKey, String cacheValue) throws GameDatabaseException;
@@ -231,6 +249,7 @@ public abstract class GameDatabase {
 	public abstract void querySetSoldOut(final AuctionItem auctionItem) throws GameDatabaseException;
 	public abstract void queryUpdateAuction(final AuctionItem auctionItem) throws GameDatabaseException;
 	public abstract void queryInsertAuctionSale(final AuctionSale auctionSale) throws GameDatabaseException;
+	public abstract int queryAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException;
 	public abstract AuctionItemSummary[] queryAuctionItemSummaries(final long since) throws GameDatabaseException;
 	public abstract AuctionItemSummary[] queryHotAuctionItems(final long since, final int limit) throws GameDatabaseException;
 	public abstract AuctionSale[] queryRecentAuctionSales(final int limit) throws GameDatabaseException;
@@ -262,6 +281,18 @@ public abstract class GameDatabase {
 	public abstract void querySaveGlobalCacheInt(String cacheKey, int value) throws GameDatabaseException;
 
 	public abstract void querySaveGlobalCacheLong(String cacheKey, long value) throws GameDatabaseException;
+
+	public abstract int queryClaimPortalCommerceEntitlement(long entitlementId, int accountId,
+		int playerId, long catalogItemId, long claimedAtMs) throws GameDatabaseException;
+
+	public abstract int queryInsertWorldAchievementRecord(WorldAchievementRecord record)
+		throws GameDatabaseException;
+
+	public abstract int queryInsertWorldPkEvent(WorldPkEvent event) throws GameDatabaseException;
+
+	public abstract int queryInsertWorldPkStreak(WorldPkStreak streak) throws GameDatabaseException;
+
+	public abstract int queryUpdateWorldPkStreak(WorldPkStreak streak) throws GameDatabaseException;
 
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
 
@@ -367,21 +398,79 @@ public abstract class GameDatabase {
 	}
 
 	public boolean atomically(CheckedRunnable<Exception> runnable) {
+		return atomicallyWithOutcome(runnable) == AtomicTransactionOutcome.COMMITTED;
+	}
+
+	public AtomicTransactionOutcome atomicallyWithOutcome(CheckedRunnable<Exception> runnable) {
+		return executeAtomicTransaction(this::startTransaction, runnable,
+			this::commitTransaction, this::rollbackTransaction);
+	}
+
+	static AtomicTransactionOutcome executeAtomicTransaction(CheckedRunnable<Exception> start,
+		CheckedRunnable<Exception> body, CheckedRunnable<Exception> commit,
+		CheckedRunnable<Exception> rollback) {
 		try {
-			startTransaction();
-			runnable.run();
-			commitTransaction();
-			return true;
-		} catch(Exception ex) {
-			LOGGER.error("Error during atomically", ex);
+			start.run();
+		} catch (Exception startEx) {
+			LOGGER.error("Unable to start atomic transaction", startEx);
 			try {
-				rollbackTransaction();
-				LOGGER.error("Rolling back transaction: ", ex);
-			} catch (final Exception rollbackTxEx) {
-				LOGGER.error("Failed to rollback transaction: " + rollbackTxEx);
+				rollback.run();
+				return AtomicTransactionOutcome.ROLLED_BACK;
+			} catch (Exception rollbackEx) {
+				LOGGER.error("Unable to establish rollback after transaction-start failure", rollbackEx);
+				return AtomicTransactionOutcome.UNKNOWN;
 			}
-			return false;
 		}
+
+		try {
+			body.run();
+		} catch (Exception bodyEx) {
+			LOGGER.error("Error during atomic transaction body", bodyEx);
+			try {
+				rollback.run();
+				return AtomicTransactionOutcome.ROLLED_BACK;
+			} catch (Exception rollbackEx) {
+				LOGGER.error("Unable to rollback failed atomic transaction", rollbackEx);
+				return AtomicTransactionOutcome.UNKNOWN;
+			}
+		}
+
+		try {
+			commit.run();
+			return AtomicTransactionOutcome.COMMITTED;
+		} catch (Exception commitEx) {
+			LOGGER.error("Atomic transaction COMMIT acknowledgement failed", commitEx);
+			try {
+				rollback.run();
+				return AtomicTransactionOutcome.COMMIT_UNCERTAIN;
+			} catch (Exception rollbackEx) {
+				LOGGER.error("Unable to rollback after uncertain COMMIT", rollbackEx);
+				return AtomicTransactionOutcome.UNKNOWN;
+			}
+		}
+	}
+
+	/**
+	 * Resolves a lost COMMIT acknowledgement while the JDBC implementation still owns
+	 * its connection lock. The verifier must inspect durable operation-specific state
+	 * and return only COMMITTED, ROLLED_BACK, or UNKNOWN.
+	 */
+	public AtomicTransactionOutcome atomicallySettled(CheckedRunnable<Exception> runnable,
+		CheckedSupplier<Exception, AtomicTransactionOutcome> verifier) {
+		final AtomicTransactionOutcome outcome = atomicallyWithOutcome(runnable);
+		if (outcome != AtomicTransactionOutcome.COMMIT_UNCERTAIN) {
+			return outcome;
+		}
+		try {
+			final AtomicTransactionOutcome verified = verifier.get();
+			if (verified == AtomicTransactionOutcome.COMMITTED
+				|| verified == AtomicTransactionOutcome.ROLLED_BACK) {
+				return verified;
+			}
+		} catch (Exception verifyEx) {
+			LOGGER.error("Unable to verify uncertain atomic COMMIT", verifyEx);
+		}
+		return AtomicTransactionOutcome.UNKNOWN;
 	}
 
 	// Creates a new player. If successful, will return the new player's ID. Otherwise, returns -1.
@@ -838,6 +927,10 @@ public abstract class GameDatabase {
 
 	public AuctionSale[] getRecentAuctionSales(final int limit) throws GameDatabaseException {
 		return queryRecentAuctionSales(limit);
+	}
+
+	public int getAuctionSellerVolumeSince(final int sellerId, final long since) throws GameDatabaseException {
+		return queryAuctionSellerVolumeSince(sellerId, since);
 	}
 
 	public int seedAuctionWorkbenchFixture(final int playerId) throws GameDatabaseException {

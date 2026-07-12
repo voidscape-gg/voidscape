@@ -7,19 +7,66 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 
 import orsc.Config;
+import orsc.PacketHandler;
+import orsc.net.Network_Base;
+import orsc.net.Network_Socket;
+import orsc.util.CacheArchive;
 
 public interface ClientPort {
+
+	default CredentialStore getCredentialStore() {
+		return CredentialStore.unsupported();
+	}
 
 	boolean drawLoading(int i);
 
 	void showLoadingProgress(int percentage, String status);
 
 	void initListeners();
+
+	default void pollInput() {
+	}
+
+	default boolean isAppInBackground() {
+		return false;
+	}
+
+	default boolean shouldSuppressReconnectOverlay() {
+		return false;
+	}
+
+	/**
+	 * Notifies the platform shell that the low-resource AFK monitor is active.
+	 * Platforms without a dedicated implementation can safely ignore this.
+	 */
+	default void setAfkMonitorActive(boolean active) {
+	}
+
+	/**
+	 * Converts a platform touch target expressed in density-independent pixels
+	 * into the current logical client framebuffer coordinate space. Desktop and
+	 * web clients retain a one-to-one fallback; the native Android shell
+	 * overrides this using its display density and active viewport transform.
+	 */
+	default int getTouchTargetClientPixels(int dp) {
+		return Math.max(1, dp);
+	}
+
+	/**
+	 * Returns the logical client Y coordinate where the platform soft keyboard
+	 * begins, or {@link Integer#MAX_VALUE} when it is hidden or unavailable.
+	 * Native Android uses this to keep canvas-owned composers above the IME
+	 * without resizing the game framebuffer.
+	 */
+	default int getKeyboardTopClientPixel() {
+		return Integer.MAX_VALUE;
+	}
 
 	void crashed();
 
@@ -66,6 +113,22 @@ public interface ClientPort {
 	void setTitle(String title);
 
 	void setIconImage(String serverName);
+
+	default String saveScreenshot() {
+		return "";
+	}
+
+	default Network_Base openNetworkConnection(PacketHandler packetHandler, String host, int port) throws IOException {
+		return new Network_Socket(packetHandler.openSocket(port, host), packetHandler);
+	}
+
+	default InputStream openCacheResource(String relativePath) throws IOException {
+		return new FileInputStream(getCacheLocation() + relativePath);
+	}
+
+	default CacheArchive openCacheArchive(String relativePath) throws IOException {
+		return CacheArchive.read(openCacheResource(relativePath));
+	}
 
 	static boolean saveHideIp(int preference) {
 		FileOutputStream fileout;

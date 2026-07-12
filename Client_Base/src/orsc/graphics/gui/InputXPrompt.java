@@ -24,6 +24,4 @@ public class InputXPrompt {
 	public static String[] reduceLevelsX = new String[] { "Enter number of levels to reduce and press enter" };
 	public static String[] teamDuelOfferX = new String[] { "Enter number of items to stake and press enter" };
 	public static String[] teamDuelRemoveX = new String[] { "Enter number of items to remove and press enter" };
-	public static String[] clanInvite = new String[] { "Enter the username of the player you want to invite to your clan" };
-	public static String[] partyInvite = new String[]{"Enter the username of the player you want to invite to your party"};
 }

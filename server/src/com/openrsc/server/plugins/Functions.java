@@ -1316,7 +1316,7 @@ public class Functions {
 
 	public static void incQP(Player player, Integer questPoints, boolean showMessage) {
 		if (showMessage) {
-			player.message("@gre@You haved gained " + questPoints + " quest point" + (questPoints > 1 ? "s" : "") + "!");
+			player.message("@gre@You have gained " + questPoints + " quest point" + (questPoints != 1 ? "s" : "") + "!");
 		}
 		if (questPoints > 0) {
 			player.incQuestPoints(questPoints);

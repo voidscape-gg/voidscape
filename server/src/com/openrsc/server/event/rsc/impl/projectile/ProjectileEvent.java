@@ -8,6 +8,7 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.PvpDamageTracking;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.entity.update.Projectile;
 import com.openrsc.server.model.states.CombatState;
@@ -18,6 +19,7 @@ public class ProjectileEvent extends SingleTickEvent {
 
 	Mob caster, opponent;
 	protected int damage;
+	protected int attackerMaxHit;
 	protected int type;
 	boolean canceled;
 	boolean shouldChase;
@@ -31,7 +33,13 @@ public class ProjectileEvent extends SingleTickEvent {
 	}
 
 	public ProjectileEvent(final World world, final Mob caster, final Mob opponent, final int damage, final int type,
-						   final boolean setChasing, final DuplicationStrategy duplicationStrategy)
+							   final boolean setChasing, final DuplicationStrategy duplicationStrategy)
+	{
+		this(world, caster, opponent, damage, type, setChasing, duplicationStrategy, 0);
+	}
+
+	public ProjectileEvent(final World world, final Mob caster, final Mob opponent, final int damage, final int type,
+							   final boolean setChasing, final DuplicationStrategy duplicationStrategy, final int attackerMaxHit)
 	{
 		super(world, caster, 1, "Projectile Event", duplicationStrategy);
 		this.caster = caster;
@@ -39,6 +47,7 @@ public class ProjectileEvent extends SingleTickEvent {
 		this.damage = damage;
 		this.type = type;
 		this.shouldChase = setChasing;
+		this.attackerMaxHit = attackerMaxHit;
 
 		sendProjectile(caster, opponent);
 		if (caster.isPlayer() && opponent.isPlayer()) {
@@ -59,7 +68,7 @@ public class ProjectileEvent extends SingleTickEvent {
 
 	@Override
 	public void action() {
-		if (!canceled && caster.withinRange(opponent, 15)) {// maybe this will
+		if (canImpact() && caster.withinRange(opponent, 15)) {// maybe this will
 			// cancel the damage
 			// out on death
 			projectileDamage();
@@ -72,6 +81,10 @@ public class ProjectileEvent extends SingleTickEvent {
 				}
 			}
 		}
+	}
+
+	protected final boolean canImpact() {
+		return !canceled && caster.sharesInstanceWith(opponent);
 	}
 
 	private void recoilDamage(Player opponent, Mob caster, int damage) {
@@ -117,8 +130,14 @@ public class ProjectileEvent extends SingleTickEvent {
 		}
 
 		int lastHits = opponent.getLevel(Skill.HITS.id());
+		final int actualDirectDamage = PvpDamageTracking.actualDirectDamage(damage, lastHits);
+		if (actualDirectDamage > 0 && caster != opponent
+			&& caster instanceof Player && opponent instanceof Player) {
+			((Player) opponent).updateDamageAndBlockedDamageTracking(
+				(Player) caster, actualDirectDamage, 0);
+		}
 		opponent.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
-		opponent.getUpdateFlags().setDamage(new Damage(opponent, damage));
+		opponent.getUpdateFlags().setDamage(new Damage(opponent, damage).withHitFeedback(caster, attackerMaxHit));
 
 
 		if (caster.isPlayer()) {

@@ -1,0 +1,15 @@
+Original low-poly RuneScape Classic-readable Voidscape market shelter.
+
+Silhouette: an open, inhabited quartermaster stall about three tiles wide and
+two tiles deep. Four slender mismatched voidwood and salvaged-metal posts hold
+a patched sloping cloth canopy. The front canopy edge is irregular and torn,
+with one asymmetric hanging tab. All front and side sightlines stay open.
+
+Details: a low rear counter, small side supply shelf, two modest bundles,
+weathered ropes, and two tiny faceted violet charms. No solid floor, no opaque
+back wall, no giant signs, and no visual mass that could hide a player.
+
+Palette: dark charcoal wood, subdued gunmetal, muted bruised-violet cloth,
+charcoal repairs, desaturated supply wood and rope, with very small bright
+violet charm accents. Flat materials only; no textures, UVs, transparency, or
+external assets. Centered, grounded, modest triangle count, Blender-style Z up.

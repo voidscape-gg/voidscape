@@ -20,8 +20,7 @@ public final class VarrockSwords extends AbstractShop {
 		new Item(ItemId.BRONZE_LONG_SWORD.id(), 4), new Item(ItemId.IRON_LONG_SWORD.id(), 3), new Item(ItemId.STEEL_LONG_SWORD.id(), 3),
 		new Item(ItemId.BLACK_LONG_SWORD.id(), 2), new Item(ItemId.MITHRIL_LONG_SWORD.id(), 2), new Item(ItemId.ADAMANTITE_LONG_SWORD.id(), 1),
 		new Item(ItemId.BRONZE_DAGGER.id(), 10), new Item(ItemId.IRON_DAGGER.id(), 6), new Item(ItemId.STEEL_DAGGER.id(), 5),
-		new Item(ItemId.BLACK_DAGGER.id(), 4), new Item(ItemId.MITHRIL_DAGGER.id(), 3), new Item(ItemId.ADAMANTITE_DAGGER.id(), 2),
-		new Item(ItemId.DRAGON_SWORD_HILT.id(), 1));
+		new Item(ItemId.BLACK_DAGGER.id(), 4), new Item(ItemId.MITHRIL_DAGGER.id(), 3), new Item(ItemId.ADAMANTITE_DAGGER.id(), 2));
 
 	@Override
 	public boolean blockTalkNpc(final Player player, final Npc n) {

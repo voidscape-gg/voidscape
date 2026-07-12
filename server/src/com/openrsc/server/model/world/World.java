@@ -6,8 +6,11 @@ import com.openrsc.server.avatargenerator.AvatarGenerator;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
+import com.openrsc.server.content.CrackerCampaignService;
+import com.openrsc.server.content.WorldAchievementService;
+import com.openrsc.server.content.WorldPkSettlementService;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
-import com.openrsc.server.content.GlobalChatIpFlags;
+import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
 import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
@@ -77,6 +80,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 * The asynchronous logger.
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final int NPC_CAPACITY = 5000;
 
 	/**
 	 * Avatar generator upon logout save to PNG.
@@ -114,6 +118,9 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	private final PartyManager partyManager;
 	private final ClanManager clanManager;
 	private final Market market;
+	private final CrackerCampaignService crackerCampaignService;
+	private final WorldAchievementService worldAchievementService;
+	private final WorldPkSettlementService worldPkSettlementService;
 	private final WorldAnnouncementService worldAnnouncementService;
 	private final BountyHunter bountyHunter;
 	private final VoidArena voidArena;
@@ -134,7 +141,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public World(final Server server) {
 		this.server = server;
-		this.npcs = new EntityList<>(4000);
+		this.npcs = new EntityList<>(NPC_CAPACITY);
 		this.players = new PlayerList(2000);
 		this.sceneryLocs = new HashMap<>();
 		this.npcDrops = new NpcDrops(this);
@@ -151,6 +158,18 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		this.clanManager = new ClanManager(this);
 		this.partyManager = new PartyManager(this);
 		this.combatOdysseyData = new CombatOdysseyData(this);
+		this.crackerCampaignService = new CrackerCampaignService(server.getDatabase(),
+			server.getConfig().WANT_CRACKER_CAMPAIGN,
+			server.getConfig().CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR,
+			server.getConfig().CRACKER_CAMPAIGN_SKILLING_DENOMINATOR,
+			this::broadcastCrackerCampaignState);
+		this.worldAchievementService = new WorldAchievementService(server.getDatabase(),
+			server.getConfig().WANT_WORLD_ACHIEVEMENTS,
+			server.getConfig().WORLD_ACHIEVEMENT_SEASON_ID);
+		this.worldPkSettlementService = new WorldPkSettlementService(server.getDatabase(),
+			server.getConfig().WANT_WORLD_ACHIEVEMENTS,
+			server.getConfig().WORLD_ACHIEVEMENT_SEASON_ID,
+			server.getConfig().WORLD_PK_LOOT_MINIMUM);
 		this.worldAnnouncementService = new WorldAnnouncementService(this);
 		this.bountyHunter = new BountyHunter(this);
 		this.voidArena = new VoidArena(this);
@@ -192,6 +211,18 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public WorldAnnouncementService getWorldAnnouncementService() {
 		return worldAnnouncementService;
+	}
+
+	public WorldAchievementService getWorldAchievementService() {
+		return worldAchievementService;
+	}
+
+	public WorldPkSettlementService getWorldPkSettlementService() {
+		return worldPkSettlementService;
+	}
+
+	public CrackerCampaignService getCrackerCampaignService() {
+		return crackerCampaignService;
 	}
 
 	public BountyHunter getBountyHunter() {
@@ -298,16 +329,38 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		return players.getPlayerByHash(usernameHash);
 	}
 
+	public boolean isCurrentPlayer(final Player player) {
+		return players.isCurrent(player);
+	}
+
 	/**
 	 * Removes a player by their username hash
 	 */
 	public Player removePlayer(final long usernameHash) {
 		Player player = players.getPlayerByHash(usernameHash);
-		if (player != null) {
-			voidArena.handleLogout(player);
-			bountyHunter.onPlayerLogout(player);
+		if (player != null && players.removeIfCurrent(player)) {
+			afterPlayerRemoved(player);
+			return player;
 		}
-		return players.removePlayerByHash(usernameHash);
+		return null;
+	}
+
+	/** Removes only the exact Player incarnation supplied by the caller. */
+	public boolean removePlayerIfCurrent(final Player player) {
+		return players.removeIfCurrent(player);
+	}
+
+	private void afterPlayerRemoved(final Player player) {
+		try {
+			voidArena.handleLogout(player);
+		} catch (final RuntimeException ex) {
+			LOGGER.error("Unable to clean up Void Arena state for removed player " + player.getUsername(), ex);
+		}
+		try {
+			bountyHunter.onPlayerLogout(player);
+		} catch (final RuntimeException ex) {
+			LOGGER.error("Unable to clean up Bounty Hunter state for removed player " + player.getUsername(), ex);
+		}
 	}
 
 	/**
@@ -432,7 +485,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 */
 
 	public boolean hasPlayer(final Player player) {
-		return getPlayers().contains(player);
+		return isCurrentPlayer(player);
 	}
 
 	public boolean isLoggedIn(final long usernameHash) {
@@ -470,8 +523,15 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public void unloadPlayers() {
 		LOGGER.info("unloadPlayers requested");
+		final List<Player> unloading = new ArrayList<>();
 		for (final Player p : getPlayers()) {
+			unloading.add(p);
 			unregisterPlayer(p);
+		}
+		for (final Player p : unloading) {
+			if (!p.drainLogoutSaveForShutdown(10_000L)) {
+				throw new IllegalStateException("Refusing to unload after logout save failed for " + p.getUsername());
+			}
 		}
 	}
 
@@ -710,34 +770,33 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	}
 
 	public boolean registerPlayer(final Player player) {
-		if (!getPlayers().contains(player)) {
-			player.setBusy(false);
-
-			getPlayers().add(player);
-			player.updateRegion();
-			getServer().getGameLogger().run(new PlayerOnlineFlagQuery(getServer(), player.getDatabaseID(), player.getCurrentIP(), true));
-
-			for (Player other : getPlayers()) {
-				other.getSocial().alertOfLogin(player);
-			}
-			getClanManager().checkAndAttachToClan(player);
-			getPartyManager().checkAndAttachToParty(player);
-
-			if (player.getCache().hasKey("skull_remaining") && (player.getCache().getLong("skull_remaining") > 0)) {
-				player.addSkull(player.getCache().getLong("skull_remaining"));
-				player.setSkullTimer(player.getCache().getLong("skull_remaining"));
-			}
-
-			if (player.getCache().hasKey("charge_remaining") && (player.getCache().getLong("charge_remaining") > 0)) {
-				player.addCharge(player.getCache().getLong("charge_remaining"));
-				player.setChargeTimer(player.getCache().getLong("charge_remaining"));
-			}
-
-			worldAnnouncementService.announceNewPlayerJoined(player);
-
-			return true;
+		if (!players.add(player)) {
+			return false;
 		}
-		return false;
+
+		player.setBusy(false);
+		player.updateRegion();
+		getServer().getGameLogger().run(new PlayerOnlineFlagQuery(getServer(), player.getDatabaseID(), player.getCurrentIP(), true));
+
+		for (Player other : getPlayers()) {
+			other.getSocial().alertOfLogin(player);
+		}
+		getClanManager().checkAndAttachToClan(player);
+		getPartyManager().checkAndAttachToParty(player);
+
+		if (player.getCache().hasKey("skull_remaining") && (player.getCache().getLong("skull_remaining") > 0)) {
+			player.addSkull(player.getCache().getLong("skull_remaining"));
+			player.setSkullTimer(player.getCache().getLong("skull_remaining"));
+		}
+
+		if (player.getCache().hasKey("charge_remaining") && (player.getCache().getLong("charge_remaining") > 0)) {
+			player.addCharge(player.getCache().getLong("charge_remaining"));
+			player.setChargeTimer(player.getCache().getLong("charge_remaining"));
+		}
+
+		worldAnnouncementService.announceNewPlayerJoined(player);
+
+		return true;
 	}
 
 	public void registerQuest(final QuestInterface quest) {
@@ -804,6 +863,12 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	public void sendWorldMessage(final String msg) {
 		for (final Player player : getPlayers()) {
 			player.playerServerMessage(MessageType.QUEST, msg);
+		}
+	}
+
+	private void broadcastCrackerCampaignState(final int remaining) {
+		for (final Player player : getPlayers()) {
+			ActionSender.sendCrackerCampaignState(player, remaining);
 		}
 	}
 
@@ -903,64 +968,102 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 * Removes a player from the server and saves their account
 	 */
 	public void unregisterPlayer(final Player player) {
-		try {
+		if (!player.beginLogoutPreparation()) {
+			return;
+		}
+		try (LogoutPreparationGuard ignored = new LogoutPreparationGuard(() -> finishPreparedLogout(player))) {
 			if (getServer().getLoginExecutor() != null) {
-				getServer().getGameLogger().addQuery(new PlayerOnlineFlagQuery(getServer(), player.getDatabaseID(), false));
+				runLogoutStage(player, "online-flag update", () -> getServer().getGameLogger().addQuery(
+					new PlayerOnlineFlagQuery(getServer(), player.getDatabaseID(), false)));
 				// We handle avatar generation code exceptions separately, they are not a critical part of the logout process.
-				try {
+				runLogoutStage(player, "avatar generation", () -> {
 					if (avatarGenerator != null) {
 						avatarGenerator.generateAvatar(player.getDatabaseID(), player.getSettings().getAppearance(), player.getWornItems());
 					}
-			} catch (final Exception e){
-					LOGGER.error("Error generating avatar: ", e);
+				});
 			}
-			}
-			getServer().getPluginHandler().handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player});
-			player.resetSceneryMorph();
-			voidArena.handleLogout(player);
-			bountyHunter.onPlayerLogout(player);
-			player.logout();
+			runLogoutStage(player, "logout plugins", () -> getServer().getPluginHandler()
+				.handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player}));
+			runLogoutStage(player, "scenery reset", player::resetSceneryMorph);
+			runLogoutStage(player, "Void Arena cleanup", () -> voidArena.handleLogout(player));
+			runLogoutStage(player, "Bounty Hunter cleanup", () -> bountyHunter.onPlayerLogout(player));
+			runLogoutStage(player, "player normalization", player::logout);
 			LOGGER.info("Unregistered " + player.getUsername() + " from player list.");
 
 			if (player.getChannel() == null) {
 				LOGGER.warn("Warning: getChannel() is already null for " + player.getUsername());
 			}
 
-			if (getServer().getConfig().WANT_PCAP_LOGGING) {
-				if (player.getChannel() != null && player.getChannel().attr(attachment).get() != null) {
+			runLogoutStage(player, "PCAP export", () -> {
+				if (getServer().getConfig().WANT_PCAP_LOGGING
+					&& player.getChannel() != null && player.getChannel().attr(attachment).get() != null) {
 					PcapLogger pcap = player.getChannel().attr(attachment).get().pcapLogger.get();
 
 					getServer().getPcapLogger().addJob(pcap::exportPCAP);
 					LOGGER.info("Wrote out pcap for " + player.getUsername() + " at " + pcap.fname);
-			}
-			}
-
-			getServer().getPacketFilter().removeLoggedInPlayer(player.getCurrentIP(), player.getUsernameHash());
-
-			// close the channel after a safe amount of time for the logout packet to reach the player
-			// does not matter if player logs back in while this still hasn't been destroyed, it's just to free memory.
-			player.getWorld().getServer().getGameEventHandler().add(
-				new DelayedEvent(player.getWorld(), null, 2500, "Free channel memory") {
-				public void run() {
-					try {
-						Channel playerChannel = player.getChannel();
-						if (playerChannel != null) {
-							if (playerChannel.hasAttr(attachment)) {
-								playerChannel.attr(attachment).set(null);
-						}
-							player.close();
-							getServer().getPacketFilter().removePlayerConnPacket(playerChannel);
-						}
-					} catch (Exception e) {
-						LOGGER.error("Exception in freeing channel memory", e);
-					} finally {
-						player.unsetChannel();
-						stop();
-					}
-			}
+				}
 			});
+
+			runLogoutStage(player, "packet-filter logout", () -> getServer().getPacketFilter()
+				.removeLoggedInPlayer(player.getCurrentIP(), player.getUsernameHash()));
 		} catch (final Exception e) {
 			LOGGER.error("Exception in unregisterPlayer", e);
+		}
+	}
+
+	@FunctionalInterface
+	private interface LogoutStage {
+		void run() throws Exception;
+	}
+
+	private void runLogoutStage(Player player, String stage, LogoutStage action) {
+		try {
+			action.run();
+		} catch (final Exception ex) {
+			LOGGER.error("Unable to complete " + stage + " for " + player.getUsername(), ex);
+		}
+	}
+
+	private void finishPreparedLogout(Player player) {
+		try {
+			player.finishLogoutPreparation();
+		} finally {
+			scheduleChannelCleanup(player);
+		}
+	}
+
+	private void scheduleChannelCleanup(Player player) {
+		try {
+			final boolean scheduled = player.getWorld().getServer().getGameEventHandler().add(
+				new DelayedEvent(player.getWorld(), null, 2500, "Free channel memory") {
+					public void run() {
+						closePreparedPlayerChannel(player);
+						stop();
+					}
+				});
+			if (!scheduled) {
+				closePreparedPlayerChannel(player);
+			}
+		} catch (final RuntimeException ex) {
+			LOGGER.error("Unable to schedule channel cleanup for " + player.getUsername(), ex);
+			closePreparedPlayerChannel(player);
+		}
+	}
+
+	private void closePreparedPlayerChannel(Player player) {
+		try {
+			Channel playerChannel = player.getChannel();
+			if (playerChannel != null) {
+				if (playerChannel.hasAttr(attachment)) {
+					playerChannel.attr(attachment).set(null);
+				}
+				player.close();
+				getServer().getPacketFilter().removePlayerConnPacket(playerChannel);
+			}
+		} catch (final Exception ex) {
+			LOGGER.error("Exception in freeing channel memory", ex);
+		} finally {
+			player.unsetChannel();
 		}
 	}
 
@@ -1175,7 +1278,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	private String formatGlobalQuestMessage(GlobalMessage gm) {
 		StringBuilder returnMessage = new StringBuilder();
-		returnMessage.append(GlobalChatIpFlags.flagTokenFor(gm.getPlayer()));
+		returnMessage.append(GlobalChatCountryFlags.flagTokenFor(gm.getPlayer()));
 		returnMessage.append("@gre@");
 		returnMessage.append(gm.getPlayer().getUsername());
 		returnMessage.append(": @whi@");

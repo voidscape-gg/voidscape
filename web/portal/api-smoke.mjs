@@ -7,7 +7,9 @@ let token = "";
 const initialPublic = await api("/api/public");
 assert(initialPublic.status.online === true, "public endpoint should expose online state");
 assert(initialPublic.rates.baseCombat === 10, "public endpoint should expose base combat rate");
-assert(initialPublic.rates.subscribedSkill === 3, "public endpoint should expose subscribed skill rate");
+assert(initialPublic.rates.baseSkill === 1.5, "public endpoint should expose base skill rate");
+assert(initialPublic.rates.subscribedCombat === 11, "public endpoint should expose subscribed combat rate");
+assert(initialPublic.rates.subscribedSkill === 2.5, "public endpoint should expose subscribed skill rate");
 assert(Array.isArray(initialPublic.news) && initialPublic.news.length >= 3, "public endpoint should expose news");
 assert(Array.isArray(initialPublic.market) && initialPublic.market.length >= 6, "public endpoint should expose market rows");
 assert(Array.isArray(initialPublic.highscores) && initialPublic.highscores.length >= 6, "public endpoint should expose highscores");
@@ -24,6 +26,10 @@ assert(initialPublic.integrity.economyScans && initialPublic.integrity.economySc
 assert(initialPublic.integrity.privacy.includes("excludes IP addresses"), "integrity summary should describe public privacy limits");
 assert(Array.isArray(initialPublic.integrity.build.artifacts), "integrity summary should expose build artifact proof");
 assert(initialPublic.integrity.build.manifest && initialPublic.integrity.build.manifest.url === "/api/launcher/manifest.properties", "integrity summary should expose launcher manifest proof");
+const alagardFont = await fetch(`${baseUrl}/assets/alagard.ttf`);
+assert(alagardFont.ok && (alagardFont.headers.get("content-type") || "").startsWith("font/ttf"), "Alagard should be served with a font MIME type");
+const instrumentFont = await fetch(`${baseUrl}/assets/instrument-sans-latin-400-600.woff2`);
+assert(instrumentFont.ok && (instrumentFont.headers.get("content-type") || "").startsWith("font/woff2"), "Instrument Sans should be served with a font MIME type");
 const launcherDownload = initialPublic.downloads.find((row) => row.slug === "launcher");
 assert(launcherDownload && typeof launcherDownload.available === "boolean", "public endpoint should expose launcher download availability");
 if (launcherDownload.available) {
@@ -58,7 +64,7 @@ if (clientRuntimeDownload.available) {
 	assert(manifestResponse.ok, "available client runtime should expose launcher manifest");
 	const manifest = await manifestResponse.text();
 	assert(/^version=.+$/m.test(manifest), "launcher manifest should include a version");
-	assert(/^file\.\d+\.path=VoidscapeClient\.jar$/m.test(manifest), "launcher manifest should include the client runtime jar path");
+	assert(/^file\.\d+\.path=Open_RSC_Client\.jar$/m.test(manifest), "launcher manifest should use the jar path launched by Play");
 	assert(/^file\.\d+\.sha256=[0-9a-f]{64}$/m.test(manifest), "launcher manifest should include SHA-256 hashes");
 	assert(manifest.includes(`${baseUrl}/downloads/client-runtime`), "launcher manifest should point at the client runtime download");
 }
@@ -70,6 +76,31 @@ const paymentStub = await api("/api/payments/subscription-cards/checkout", {
 	expectStatus: 501
 });
 assert(paymentStub.error === "payments_not_configured", "production payment stub should be explicit");
+
+const presenceHeartbeat = await api("/api/presence/heartbeat", {
+	method: "POST",
+	noAuth: true,
+	body: {
+		visitorId: "presenceSmokeVisitor_12345",
+		page: "/portal?resetToken=must-not-leak#verify-email=must-not-leak",
+		title: "Voidscape Account",
+		visible: true
+	}
+});
+assert(presenceHeartbeat.ok === true, "presence heartbeat should accept a valid anonymous browser id");
+const presence = await api("/api/admin/presence", {
+	headers: { "x-portal-admin-token": adminToken }
+});
+assert(presence.active && presence.active.total >= 1, "staff presence summary should count active browsers");
+assert(Array.isArray(presence.visitors) && presence.visitors.some((row) => row.page === "/portal"), "presence should retain only the normalized route");
+assert(!JSON.stringify(presence).includes("must-not-leak"), "presence must discard query and fragment secrets");
+const invalidPresence = await api("/api/presence/heartbeat", {
+	method: "POST",
+	noAuth: true,
+	body: { visitorId: "short", page: "/" },
+	expectStatus: 400
+});
+assert(invalidPresence.error === "invalid_visitor_id", "presence should reject malformed browser ids");
 
 const integrity = await api("/api/integrity");
 assert(integrity.staffCommands && typeof integrity.staffCommands.total24h === "number", "integrity endpoint should expose staff command totals");
@@ -92,7 +123,7 @@ assert(snapshot.character.name === "SmokeHero", "snapshot endpoint should return
 assert(snapshot.character.combat === 87, "snapshot endpoint should return combat level");
 assert(snapshot.character.total === "1194", "snapshot endpoint should return total level");
 assert(snapshot.character.status === "Varrock", "snapshot endpoint should summarize location");
-assert(snapshot.character.title === "Crownless Conqueror", "snapshot endpoint should resolve the active title");
+assert(snapshot.character.title === "the Founder", "snapshot endpoint should resolve the active title");
 assert(snapshot.character.subscriptionState.active === false, "unlinked snapshot should not inherit subscription state");
 assert(snapshot.character.subscriptionState.combatXpRate === 10, "unlinked snapshot should use base combat XP rate");
 assert(Array.isArray(snapshot.character.equipment) && snapshot.character.equipment.length === 2, "snapshot endpoint should return wielded gear");
@@ -202,10 +233,22 @@ const registered = await api("/api/accounts/register", {
 });
 token = registered.token;
 assert(token, "registration should return a session token");
-assert(registered.characters.length === 1, "registration should create the first character");
+assert(registered.characters.length === 1, "registration should reserve the first character name");
 assert(registered.founder.starterCardUnlocked === true, "prelaunch signup should reserve the starter subscription card");
 assert(registered.rewards.starterSubscriptionCards === 1, "reserved starter card should appear in account reward state");
+assert(registered.characters[0].source === "founder-reserved", "registration should wait for a game password before creating the OpenRSC save");
 assert(registered.characters[0].appearanceData.topColour === 4, "starter characters should expose default appearance data");
+
+const signedInRegisterBlocked = await api("/api/accounts/register", {
+	method: "POST",
+	body: {
+		username: "AlreadyIn",
+		email: "already-in@example.com",
+		password: "correct-horse-battery"
+	},
+	expectStatus: 409
+});
+assert(signedInRegisterBlocked.error === "already_signed_in", "signed-in visitors should not be able to create another account from the landing form");
 
 const heldReservation = await api("/api/founder/reservations", {
 	method: "POST",
@@ -225,9 +268,74 @@ const heldNameBlocked = await api("/api/characters", {
 });
 assert(heldNameBlocked.error === "username_reserved", "character creation should respect founder reservations held by another email");
 
+if (Number(process.env.PORTAL_CHARACTER_IP_DAILY_LIMIT || 0) === 2) {
+	const originalToken = token;
+		const characterLimitIp = "198.51.100.188";
+		const limitedRegistered = await api("/api/accounts/register", {
+			method: "POST",
+			noAuth: true,
+			headers: { "x-forwarded-for": characterLimitIp },
+			body: {
+				username: "CharCapOne",
+			email: "char-cap-one@example.com",
+			password: "character-cap-password"
+		}
+	});
+	token = limitedRegistered.token;
+	const charCapOne = await api("/api/characters", {
+		method: "POST",
+		headers: { "x-forwarded-for": characterLimitIp },
+		body: {
+			name: "CharCapOne",
+			gamePassword: "CharCapPass1"
+		}
+	});
+	assert(charCapOne.characters.some((character) => character.name === "CharCapOne" && character.source === "openrsc-sqlite-created"), "first character from an IP should be created");
+	const charCapTwo = await api("/api/characters", {
+		method: "POST",
+		headers: { "x-forwarded-for": characterLimitIp },
+		body: {
+			name: "CharCapTwo",
+			gamePassword: "CharCapPass2"
+		}
+	});
+	assert(charCapTwo.characters.some((character) => character.name === "CharCapTwo" && character.source === "openrsc-sqlite-created"), "second character within the IP limit should be created");
+	const charCapThree = await api("/api/characters", {
+		method: "POST",
+		headers: { "x-forwarded-for": characterLimitIp },
+		body: {
+			name: "CharCapThree",
+			gamePassword: "CharCapPass3"
+		},
+		expectStatus: 429
+	});
+	assert(charCapThree.error === "rate_limited", "character creation past the configured IP limit should be rate limited");
+	token = originalToken;
+}
+
+const existingGameNameBlocked = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "TakenHero",
+		email: "taken-squatter@example.com"
+	},
+	expectStatus: 409
+});
+assert(existingGameNameBlocked.error === "username_reserved", "founder reservations should respect existing OpenRSC character names");
+
 const originalToken = token;
+const signedInLoginBlocked = await api("/api/accounts/login", {
+	method: "POST",
+	body: {
+		email: "smoke@example.com",
+		password: "correct-horse-battery"
+	},
+	expectStatus: 409
+});
+assert(signedInLoginBlocked.error === "already_signed_in", "signed-in visitors should log out before switching accounts");
 const secondLogin = await api("/api/accounts/login", {
 	method: "POST",
+	noAuth: true,
 	body: {
 		email: "smoke@example.com",
 		password: "correct-horse-battery"
@@ -311,7 +419,10 @@ assert(createdReservedCard.source === "openrsc-sqlite-created", "reserved Google
 assert(createdReservedCard.linkStatus === "linked", "reserved Google character should link to the created game save");
 token = originalToken;
 
-const recovery = await api("/api/security/recovery-codes", { method: "POST" });
+const recovery = await api("/api/security/recovery-codes", {
+	method: "POST",
+	body: { currentPassword: "correct-horse-battery" }
+});
 assert(Array.isArray(recovery.codes) && recovery.codes.length === 8, "security endpoint should return one-time recovery codes");
 assert(recovery.security.recoveryCodes.activeCount === 8, "security state should count active recovery codes");
 
@@ -356,20 +467,29 @@ assert(badRecovery.error === "invalid_recovery_code", "password recovery should 
 
 const recovered = await api("/api/accounts/recover-password", {
 	method: "POST",
+	noAuth: true,
 	body: {
 		email: "smoke@example.com",
 		code: recovery.codes[0],
 		newPassword: "recover-horse-battery"
 	}
 });
-const recoveredToken = recovered.token;
-assert(recoveredToken && recoveredToken !== originalToken, "password recovery should issue a new session");
-assert(recovered.security.recoveryCodes.activeCount === 7, "password recovery should consume exactly one recovery code");
+assert(recovered.ok === true && !recovered.token, "password recovery should finish at sign-in without manufacturing a session");
 
 token = originalToken;
 const oldRecoverySession = await api("/api/account", { expectStatus: 401 });
 assert(oldRecoverySession.error === "invalid_session", "password recovery should revoke existing sessions");
-token = recoveredToken;
+const recoveredLogin = await api("/api/accounts/login", {
+	method: "POST",
+	noAuth: true,
+	body: {
+		email: "smoke@example.com",
+		password: "recover-horse-battery"
+	}
+});
+token = recoveredLogin.token;
+assert(token, "recovered accounts should sign in explicitly with the new password");
+assert(recoveredLogin.security.recoveryCodes.activeCount === 0, "password recovery should revoke every remaining recovery code");
 
 const linkStart = await api("/api/character-links/start", {
 	method: "POST",
@@ -402,9 +522,60 @@ assert(linkedCharacter, "verified link should keep SmokeHero in the roster");
 assert(linkedCharacter.linkStatus === "linked", "verified link should mark the roster character as linked");
 assert(linkedCharacter.playerId === 77, "verified link should persist the OpenRSC player id");
 assert(linkedCharacter.combat === 87, "verified link should replace preview combat with saved combat");
-assert(linkedCharacter.title === "Crownless Conqueror", "verified link should persist saved title state");
+assert(linkedCharacter.title === "the Founder", "verified link should persist saved title state");
 assert(linkedCharacter.appearanceData.topColour === 8, "verified link should persist saved appearance data");
 assert(Array.isArray(linkedCharacter.equipment) && linkedCharacter.equipment.length === 2, "verified link should persist wielded equipment state");
+
+const badGamePasswordReset = await api(`/api/characters/${linkedCharacter.id}/game-password`, {
+	method: "POST",
+	body: {
+		currentPassword: "wrong-horse-battery",
+		newPassword: "NewGamePass1"
+	},
+	expectStatus: 401
+});
+assert(badGamePasswordReset.error === "invalid_current_password", "game-password reset should require account-password confirmation");
+const gamePasswordReset = await api(`/api/characters/${linkedCharacter.id}/game-password`, {
+	method: "POST",
+	body: {
+		currentPassword: "recover-horse-battery",
+		newPassword: "NewGamePass1"
+	},
+	expectStatus: 409
+});
+assert(gamePasswordReset.error === "character_game_password_reset_unsupported", "game-password reset should fail closed for imported character links");
+
+const deleteProbe = await api("/api/characters", {
+	method: "POST",
+	body: {
+		name: "DeleteMe",
+		path: "warrior",
+		gamePassword: "DeletePass1"
+	}
+});
+const deleteProbeCharacter = deleteProbe.characters.find((character) => character.name === "DeleteMe");
+assert(deleteProbeCharacter && deleteProbeCharacter.source === "openrsc-sqlite-created", "delete probe should create a real game row");
+assert(deleteProbe.characters.length === 2, "delete probe should use a second roster slot");
+const resetDeleteProbe = await api(`/api/characters/${deleteProbeCharacter.id}/game-password`, {
+	method: "POST",
+	body: {
+		currentPassword: "recover-horse-battery",
+		newPassword: "ResetDelete1"
+	}
+});
+assert(resetDeleteProbe.ok === true && resetDeleteProbe.characterId === deleteProbeCharacter.id, "game-password reset should update an offline portal-created character");
+const deletedProbe = await api(`/api/characters/${deleteProbeCharacter.id}`, {
+	method: "DELETE"
+});
+assert(deletedProbe.characters.length === 1, "deleting a character should free the roster slot");
+assert(!deletedProbe.characters.some((character) => character.name === "DeleteMe"), "deleted character should leave the account roster");
+const deletedSnapshot = await api("/api/openrsc/characters/DeleteMe", { expectStatus: 404 });
+assert(deletedSnapshot.error === "character_not_found", "deleting a portal-created character should remove the OpenRSC save");
+const deleteAgain = await api(`/api/characters/${deleteProbeCharacter.id}`, {
+	method: "DELETE",
+	expectStatus: 404
+});
+assert(deleteAgain.error === "character_not_found", "deleting a missing character should 404");
 
 for (let i = 2; i <= 10; i += 1) {
 	const roster = await api("/api/characters", {
@@ -421,6 +592,16 @@ for (let i = 2; i <= 10; i += 1) {
 	assert(created.source === "openrsc-sqlite-created", `Smoke${i} should report the OpenRSC creation source`);
 	assert(created.playerId > 77, `Smoke${i} should expose the OpenRSC player id`);
 }
+
+const existingPortalCharacterBlocked = await api("/api/founder/reservations", {
+	method: "POST",
+	body: {
+		username: "Smoke2",
+		email: "smoke-two-squatter@example.com"
+	},
+	expectStatus: 409
+});
+assert(existingPortalCharacterBlocked.error === "username_reserved", "founder reservations should respect already-created portal characters");
 
 const overflow = await api("/api/characters", {
 	method: "POST",
@@ -444,7 +625,7 @@ const redeemed = await api("/api/subscriptions/redeem", {
 });
 assert(redeemed.account.subscription.active === true, "redeeming a card should activate subscription state");
 assert(redeemed.account.subscription.combatXpRate === 11, "subscribed combat XP rate should be 11x");
-assert(redeemed.account.subscription.skillXpRate === 3, "subscribed skill XP rate should be 3x");
+assert(redeemed.account.subscription.skillXpRate === 2.5, "subscribed skill XP rate should be 2.5x");
 
 const account = await api("/api/account");
 assert(account.characters.length === 10, "account endpoint should return the full roster");
@@ -472,6 +653,7 @@ assert(adminStarterGrant.rewards.starterSubscriptionCards >= 1, "admin starter-c
 const abuseIp = "198.51.100.77";
 const abuseOne = await api("/api/accounts/register", {
 	method: "POST",
+	noAuth: true,
 	headers: { "x-forwarded-for": abuseIp },
 	body: {
 		username: "AbuseOne",
@@ -481,6 +663,7 @@ const abuseOne = await api("/api/accounts/register", {
 });
 const abuseTwo = await api("/api/accounts/register", {
 	method: "POST",
+	noAuth: true,
 	headers: { "x-forwarded-for": abuseIp },
 	body: {
 		username: "AbuseTwo",
@@ -490,6 +673,7 @@ const abuseTwo = await api("/api/accounts/register", {
 });
 const abuseThree = await api("/api/accounts/register", {
 	method: "POST",
+	noAuth: true,
 	headers: { "x-forwarded-for": abuseIp },
 	body: {
 		username: "AbuseThree",
@@ -497,10 +681,21 @@ const abuseThree = await api("/api/accounts/register", {
 		password: "abuse-horse-battery"
 	}
 });
+const abuseFour = await api("/api/accounts/register", {
+	method: "POST",
+	noAuth: true,
+	headers: { "x-forwarded-for": abuseIp },
+	body: {
+		username: "AbuseFour",
+		email: "abuse-four@example.com",
+		password: "abuse-horse-battery"
+	},
+	expectStatus: 429
+});
 assert(abuseOne.rewards.starterSubscriptionCards === 1, "first account from an IP should keep the starter card");
 assert(abuseTwo.rewards.starterSubscriptionCards === 1, "second account within the configured IP limit should keep the starter card");
-assert(abuseThree.rewards.starterSubscriptionCards === 0, "account creation should continue but withhold the starter card after the IP limit");
-assert(abuseThree.abuse.starterCard.status === "review", "withheld starter cards should be visible as review state");
+assert(abuseThree.rewards.starterSubscriptionCards === 1, "third account within the configured IP limit should keep the starter card");
+assert(abuseFour.error === "rate_limited", "account creation past the configured signup IP limit should be rate limited");
 
 const signupIp = "203.0.113.99";
 const signupLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
@@ -555,7 +750,7 @@ async function api(path, options = {}) {
 		method: options.method || "GET",
 		headers: {
 			"content-type": "application/json",
-			...(token ? { authorization: `Bearer ${token}` } : {}),
+			...(token && !options.noAuth ? { authorization: `Bearer ${token}` } : {}),
 			...(options.headers || {})
 		},
 		body: options.body ? JSON.stringify(options.body) : undefined

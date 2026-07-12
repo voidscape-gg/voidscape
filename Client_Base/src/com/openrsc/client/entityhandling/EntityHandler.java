@@ -207,9 +207,11 @@ public class EntityHandler {
 			"Increases your attack by 15%"));
 		prayers.add(new PrayerDef(37, 60, "Paralyze monster",
 			"Stops monsters from fighting back"));
-		prayers.add(new PrayerDef(40, 60, "Protect from missiles",
-			"100% protection from ranged attacks"));
-	}
+			prayers.add(new PrayerDef(40, 60, "Protect from missiles",
+				"100% protection from ranged attacks"));
+			prayers.add(new PrayerDef(43, 60, "Protect from magic",
+				"Blocks most NPC magic attacks"));
+		}
 
 	private static void loadTileDefinitions() {
 		tiles.add(new TileDef(-16913, 1, 0));
@@ -249,6 +251,12 @@ public class EntityHandler {
 		// Voidscape: V3 ritual floor (id 28). Positive colour 64 references TextureDef id 64
 		// (archive slot 3289), giving the enclave a generated cracked-stone floor.
 		tiles.add(new TileDef(64, 3, 0));
+		// Voidscape: Undead Siege plank floor (id 29). Reuses the stock plankstimber
+		// texture for a house-board floor without adding cache art.
+		tiles.add(new TileDef(46, 3, 0));
+		// Voidscape: Undead Siege mossy stone floor (id 30). Reuses the stock mossy-brick
+		// texture for yard paths and damaged room patches.
+		tiles.add(new TileDef(23, 3, 0));
 	}
 
 	private static void loadElevationDefinitions() {
@@ -367,7 +375,11 @@ public class EntityHandler {
 		SPIKEBALL(5),
 		BLANK(6), //not sure if this is even used for anything
 		VOID_SHARD(7),
-		VOID_CLAW(8);
+		VOID_CLAW(8),
+		FIRE_BLAST(9),
+		WIND_BLAST(10),
+		WATER_BLAST(11),
+		EARTH_BLAST(12);
 
 		private final int value;
 
@@ -394,6 +406,10 @@ public class EntityHandler {
 		projectiles.add(new SpriteDef("blank projectile", mudclient.spriteProjectile + 6, "projectiles:6", 6));
 		projectiles.add(new SpriteDef("void shard projectile", mudclient.spriteProjectile + 7, "projectiles:7", 7));
 		projectiles.add(new SpriteDef("void claw projectile", mudclient.spriteProjectile + 8, "projectiles:8", 8));
+		projectiles.add(new SpriteDef("fire blast projectile", mudclient.spriteProjectile + 9, "projectiles:9", 9));
+		projectiles.add(new SpriteDef("wind blast projectile", mudclient.spriteProjectile + 10, "projectiles:10", 10));
+		projectiles.add(new SpriteDef("water blast projectile", mudclient.spriteProjectile + 11, "projectiles:11", 11));
+		projectiles.add(new SpriteDef("earth blast projectile", mudclient.spriteProjectile + 12, "projectiles:12", 12));
 	}
 
 	public enum GUIPARTS {
@@ -2480,12 +2496,25 @@ public class EntityHandler {
 		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
 		npcs.add(new NPCDef("Void Arena Herald", "A robed keeper of the ranked deathmatch ladder.", "Leaderboard", "", 0, 0, 5, 0, false, sprites, 0, 4915330, 3151156, 12100313, 145, 220, 6, 6, 5, i++)); // 861
 
-		// voidscape: Void Arena solo challenge NPCs (server ids 862/863). Exact Death
-		// Match Arena Void Knight visual copy; only name/stats/behavior differ.
-		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
-		npcs.add(new NPCDef("DM King", "The perfect ranked death matcher.", "Challenge", "", 123, 123, 123, 123, false, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++)); // 862
-		sprites = new int[]{6, 33, 41, -1, 52, -1, -1, -1, -1, -1, 80, -1};
-		npcs.add(new NPCDef("DM King", "The perfect ranked death matcher.", "", 123, 123, 123, 123, true, sprites, 16777215, 65535, 65535, 12100313, 145, 220, 6, 6, 5, i++)); // 863
+		// voidscape: Void Arena solo challenge NPCs (server ids 862/863). These use
+		// base player appearance-slot IDs and player palette indexes.
+		sprites = new int[]{0, 0, 0, 0, 53, 18, 34, 42, 0, 0, 81, 0};
+		npcs.add(new NPCDef("Sir Charles", "A terribly British ranked death matcher.", "Challenge", "", 123, 123, 123, 123, false, sprites, 0, 0, 0, 0, 145, 220, 6, 6, 5, i++, true)); // 862
+		sprites = new int[]{0, 0, 0, 0, 53, 18, 34, 42, 0, 0, 81, 0};
+		npcs.add(new NPCDef("Sir Charles", "A terribly British ranked death matcher.", "", "", 123, 123, 123, 123, true, sprites, 0, 0, 0, 0, 145, 220, 6, 6, 5, i++, true)); // 863
+
+		// voidscape: Void Island onboarding NPCs (server ids 864-868).
+		// Positional list — order must match NpcDefsCustom.json exactly.
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Guide", "A patient survivor who teaches the old ways.", "", 0, 0, 5, 0, false, sprites, 0, 3050327, 3151156, 12100313, 145, 220, 6, 6, 5, i++)); // 864
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Adept", "A survivor honing the old fighting forms.", "Spar", "", 0, 0, 5, 0, false, sprites, 0, 9132587, 2106401, 12100313, 145, 220, 6, 6, 5, i++)); // 865
+		sprites = new int[]{0, 1, 2, -1, -1, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Adept", "A survivor honing the old fighting forms.", "", 3, 3, 6, 1, true, sprites, 0, 9132587, 2106401, 12100313, 145, 220, 6, 6, 5, i++)); // 866
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Rogue", "A scavenger who preys on lone survivors.", "", 18, 10, 12, 3, true, sprites, 0, 9109504, 1710618, 12100313, 145, 220, 6, 6, 5, i++)); // 867
+		sprites = new int[]{0, 1, 2, -1, 228, -1, -1, -1, 46, -1, -1, -1};
+		npcs.add(new NPCDef("Void Archivist", "A keeper of everything the void changed.", "", 0, 0, 5, 0, false, sprites, 0, 2106401, 4915330, 12100313, 145, 220, 6, 6, 5, i++)); // 868
 
 		if (Config.S_WANT_CUSTOM_SPRITES) {
 			// Ranael
@@ -3076,7 +3105,7 @@ public class EntityHandler {
 		items.add(new ItemDef("weapon poison", "For use on daggers and arrows", "", 144, 48, "items:48", false, false, 0, 1140479, true, false, true, 572));
 		items.add(new ItemDef("ID Paper", "ID of Hartigen the black knight", "", 1, 29, "items:29", false, false, 0, 0, true, false, true, 573));
 		items.add(new ItemDef("Poison Bronze Arrows", "Venomous looking arrows", "", 2, 206, "items:206", true, Config.S_WANT_EQUIPMENT_TAB, Config.S_WANT_EQUIPMENT_TAB ? 1000 : 0, 16737817, true, false, false, 574));
-		items.add(new ItemDef("Christmas cracker", "Use on another player to pull it", "", 1, 188, "items:188", false, false, 0, 16711680, false, false, true, 575));
+		items.add(new ItemDef("Christmas cracker", "Open it for a chance at a festive prize", "Open", 1, 188, "items:188", false, false, 0, 16711680, false, false, true, 575));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 16711680, false, false, true, 576));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 16776960, false, false, true, 577));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 255, false, false, true, 578));
@@ -4280,16 +4309,16 @@ public class EntityHandler {
 		items.add(new ItemDef("Boomstick", "A 12-Gauge, Double-Barreled Remington", "", 1, 606, "items:606", false, true, 16, 16737817, false, true, false, 1592));
 
 		// voidscape: Void Scimitar (id 1593). spriteID 607 = AI-generated void icon at archive index 2757 (= 2150 + 607). pictureMask=0 so the icon's own colors are used as-is, no tint.
-		items.add(new ItemDef("Void Scimitar", "A scimitar pulsing with otherworldly energy.", "", 64000, 607, "items:607", false, true, 16, 0, false, true, true, 1593));
+		items.add(new ItemDef("Void Scimitar", "Deals 15% more damage and accuracy against void monsters.", "", 64000, 607, "items:607", false, true, 16, 0, false, false, true, 1593));
 
 		// voidscape: Void Shortbow (id 1594). spriteID 608 = AI-generated icon at archive index 2758. F2P (membersItem=false), tradeable, noteable.
-		items.add(new ItemDef("Void Shortbow", "A bow humming with void energy. It needs no arrows against void monsters.", "", 5000, 608, "items:608", false, true, 24, 0, false, false, true, 1594));
+		items.add(new ItemDef("Void Shortbow", "Needs no arrows and deals 15% more damage and accuracy against void monsters.", "", 5000, 608, "items:608", false, true, 24, 0, false, false, true, 1594));
 
 		// voidscape: Void Amulet (id 1595). spriteID 609 = AI-generated icon at archive index 2759. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
-		items.add(new ItemDef("Void Amulet", "An amulet pulsing with void energy. Stackable void-monster drops bend toward its wearer.", "", 20000, 609, "items:609", false, true, 1024, 0, false, false, true, 1595));
+		items.add(new ItemDef("Void Amulet", "Increases stackable drops from void monsters by 50%.", "", 20000, 609, "items:609", false, true, 1024, 0, false, false, true, 1595));
 
-		// voidscape: Void Mace (id 1596). spriteID 610 = AI-generated icon at archive index 2760. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
-		items.add(new ItemDef("Void Mace", "A heavy mace crackling with void energy. Crushes monsters with otherworldly force.", "", 30000, 610, "items:610", false, true, 16, 0, false, false, true, 1596));
+		// voidscape: Void Sceptre (id 1596). spriteID 610 = AI-generated icon at archive index 2760. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
+		items.add(new ItemDef("Void Sceptre", "Makes combat spells 15% stronger and more accurate against void monsters.", "", 30000, 610, "items:610", false, true, 16, 0, false, false, true, 1596));
 
 		// voidscape: Cursed Greatsword (id 1597). spriteID 612 = AI-generated icon at archive index 2762. Inherits wieldability from id 81 ('rune 2-handed Sword').
 		items.add(new ItemDef("Cursed Greatsword", "A greatsword wreathed in dark, vengeful energy.", "", 100, 612, "items:612", false, true, 8216, 0, false, false, true, 1597));
@@ -7213,6 +7242,8 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void claw charge", "A clawed void sigil tearing into shape", "WalkTo", "Examine", 0, 1, 1, 0, "voidclawcharge", ++i)); //1309
 		objects.add(new GameObjectDef("Void test cube", "A colored cube for testing imported OB3 scenery", "WalkTo", "Examine", 0, 1, 1, 0, "void_test_cube", ++i)); //1310
 		objects.add(new GameObjectDef("Void portal arch", "A violet stone arch humming around an empty portal frame", "WalkTo", "Examine", 0, 2, 1, 0, "void_portal_arch", ++i)); //1311
+		objects.add(new GameObjectDef("Void watchtower", "A shattered sentry tower holding a cold violet beacon", "WalkTo", "Examine", 0, 2, 2, 0, "void_watchtower", ++i)); //1312
+		objects.add(new GameObjectDef("Void market shelter", "A patched shelter where Enclave survivors trade supplies", "WalkTo", "Examine", 0, 3, 2, 0, "void_market_shelter", ++i)); //1313
 	}
 
 	public static void load(boolean loadMembers) {
