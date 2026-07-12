@@ -2,6 +2,8 @@
 
 Use this before any player-facing test, public weekend, or real launch. The goal is not ceremony; it is catching avoidable drift before players do.
 
+For the July 18 launch execution order, use `docs/LAUNCH-CRITICAL-CHECKLIST.md` first. This file remains the complete audit inventory; items explicitly deferred by the focused checklist are not part of the current production-preparation critical path.
+
 ## Release target
 
 - [ ] Release name / tag:
@@ -25,6 +27,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [x] Slice 8D release source is a credential-clean snapshot on the public-mirror lineage: private development ancestry, root `.env`, runtime SQLite databases, agent/developer memory, private deployment metadata, internal reports, and the omitted portable JDK binary are unreachable from the release branch; high-confidence source and package scans pass.
 - [x] The historically tracked root `.env` is byte-identical to the frozen upstream OpenRSC scaffold and contains human-readable local placeholders, not a live secret. Production must never use its default MariaDB values.
 - [ ] Before any public branch push, revoke or rotate the old Discord webhook and retire or reconstruct obsolete remote feature refs that expose private development history. Never push the private WIP ref.
+- [x] Current owner direction: do not push the new clean release source or mutate public remote refs during production preparation. Preserve the clean snapshot locally; any later source request, publication, or remote cleanup is a separate explicitly approved task.
 - [ ] Confirm fixed QA identities such as `wbtest` and `qabot*` do not exist in the production database; their development-only passwords are intentionally visible in test scripts.
 
 ## Build
