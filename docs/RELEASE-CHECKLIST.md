@@ -22,12 +22,16 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] New player commands are reflected in `Commands.md`.
 - [ ] New content recipes or subsystem lessons were added to `docs/recipes/` or `docs/subsystems/` when reusable.
 - [ ] No secrets are in the tree: `git grep -n "sk-|DISCORD_BOT_TOKEN|password|webhook"` reviewed.
+- [x] Slice 8D release source is a credential-clean snapshot on the public-mirror lineage: private development ancestry, root `.env`, runtime SQLite databases, agent/developer memory, private deployment metadata, internal reports, and the omitted portable JDK binary are unreachable from the release branch; high-confidence source and package scans pass.
+- [x] The historically tracked root `.env` is byte-identical to the frozen upstream OpenRSC scaffold and contains human-readable local placeholders, not a live secret. Production must never use its default MariaDB values.
+- [ ] Before any public branch push, revoke or rotate the old Discord webhook and retire or reconstruct obsolete remote feature refs that expose private development history. Never push the private WIP ref.
+- [ ] Confirm fixed QA identities such as `wbtest` and `qabot*` do not exist in the production database; their development-only passwords are intentionally visible in test scripts.
 
 ## Build
 
-- [x] `scripts/build.sh` passes for the clean Slice 8C source-seal commit.
+- [x] `scripts/build.sh` passes from the clean Slice 8D public-source checkout without a root `.env`; the canonical Makefile now treats that local credential file as optional for compile-only workflows.
 - [ ] Android, if shipping APK publicly: `scripts/build-android.sh --release` passes on JDK 17 with upload signing configured; debug APKs are only for internal QA/emulator smoke.
-- [x] Slice 8C Google Play artifact gate: `scripts/build-android.sh --play-release` and `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config server/voidscape-launch.conf --current-play-version-code 8 --expected-signer-sha256 3B:AE:B2:F4:6D:68:55:DD:9E:21:DA:27:80:8C:02:90:B1:32:9F:07:27:23:F4:39:DC:A2:07:A4:0A:14:2E:D7` pass for the clean, signed, provenance-bound `9 / 1.0.8` bundle. Play Console was audited on 2026-07-12: codes `1` through `8` are the only uploaded bundles and production runs `8 / 1.0.7`.
+- [x] Slice 8D Google Play artifact gate: `scripts/build-android.sh --play-release` and `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config server/voidscape-launch.conf --current-play-version-code 8 --expected-signer-sha256 3B:AE:B2:F4:6D:68:55:DD:9E:21:DA:27:80:8C:02:90:B1:32:9F:07:27:23:F4:39:DC:A2:07:A4:0A:14:2E:D7` pass for a clean-public-history, signed, provenance-bound `9 / 1.0.8` bundle. The matching release APK checker also passes. Play Console was audited on 2026-07-12: codes `1` through `8` are the only uploaded bundles and production runs `8 / 1.0.7`.
 - [ ] Before production enforces client protocol `10132`, upload and approve the clean signed Android `9 / 1.0.8` AAB on the intended Play track and verify players can receive it. Slice 8C created and preflighted the local bundle but did not upload, deploy, or roll it out.
 - [ ] Android day-one distribution: the verified Play Store listing URL is present in portal download metadata and points at the approved production track; direct APK remains an explicitly tested fallback, not the only advertised Android path.
 - [x] Generated client/cache metadata is intentionally committed and the canonical 530-file manifest reproduces after the clean build.
@@ -180,8 +184,9 @@ Use this before any player-facing test, public weekend, or real launch. The goal
   `scripts/check-prelaunch-readiness.sh --out tmp/prelaunch-readiness-final --host <game-host> --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws-url wss://<portal-host>/play/ws/ --android-device-report tmp/android-device-qa-current/android-device-qa-report.md --iphone-qa-report tmp/iphone-web-qa/iphone-safari-qa-report.md --iphone-local-preflight tmp/web-teavm-iphone-release-preflight/summary.json --iphone-package-dir dist/web-teavm`
 - [ ] Visual game/client evidence board is generated and reviewed:
   `scripts/build-prelaunch-visual-board.mjs --out tmp/prelaunch-visual-board`
-- [ ] Launch staging bundle is generated with the target host URLs:
+- [x] Launch staging bundle is generated locally with the production target URLs:
   `scripts/package-launch-staging.sh --host <game-host> --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws-url wss://<portal-host>/play/ws/ --skip-android`; `MANIFEST.txt` reports `promotable=true`, fresh server/client and web builds, and no blockers.
+- [x] The local bundle's server config/database/client-cache checksum tables, direct artifact hashes, forbidden-file/secret scan, and all 538 TeaVM build-manifest files pass; evidence lives under `tmp/launch-staging-8d-final*`. No remote sync, service restart, signup, Play upload, or production mutation occurred.
 - [ ] Generated `RELEASE-HANDOFF.md` from the launch-staging bundle is filled with actual backup paths, rollback owner, and AGPL/source-disclosure confirmation, then archived with `MANIFEST.txt` and verifier output.
 - [ ] If Android is included in the public bundle, launch staging is generated with `--android-release`; the committed endpoint already matches, and `MANIFEST.txt` records `promotable=true`, `android_apk_type=release`, `android_apk_promotable=true`, and `android_release_check=passed`. Nothing under `android/rehearsal-only/` is published.
 - [ ] Android public-channel decision is recorded. Current direction is to restore the APK to the post-launch download chooser; production should prefer a release-signed APK and physical Android QA before broad promotion.
