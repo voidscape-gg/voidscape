@@ -26,8 +26,22 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-061 multi-minute app-switch fix verified and ready to
-  commit; resume the approved Android polish slices after this bug commit.
+- **Active bug:** none — VS-074 is fixed, production-verified, and ready to commit.
+- **Session preflight 2026-07-12 (VS-074):** branch
+  `codex/launch-rc-public-clean`; worktree clean before triage; pre-fix
+  `scripts/build.sh` green. Real post-promotion signup reproduced the launch blocker:
+  delivered-email confirmation reached the OpenRSC character transaction, SQLite
+  rejected `BEGIN IMMEDIATE`/`INSERT INTO players` as read-only, the public UI reduced
+  the backend failure to “verification link invalid or already used,” and the bounded
+  verifier finished with the exact account still 401 and the requested name still
+  available. Game service remained inactive/disabled and public ingress closed.
+- **VS-074 result 2026-07-12:** corrected only the production SQLite runtime directory
+  from `root:voidscape 0750` to `0770`, then proved a service-user write/rollback with
+  clean integrity and foreign keys. The canonical verifier passed 606 checks and
+  created exactly one active verified portal account plus one linked player/stats/cache
+  row while the game remained inactive/disabled and TCP/WSS remained closed. Added an
+  idempotent packaged permission helper, hermetic regression test, package guard, and
+  operator documentation; portal API/schema suites and the canonical build are green.
 - **Session preflight 2026-07-09 (VS-061 multi-minute reopen):** branch `main`;
   `scripts/build.sh` and `scripts/build-android.sh --debug` green on the current tree.
   VS-073 lifecycle automation fix committed as `dc8fbefe`; its 35-second focused run
@@ -181,21 +195,22 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
-  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 + **VS-003 (closed by Ryan's rulings +
-  server noted-on-death fix)** DONE 2026-07-03. **Ryan redirected 2026-07-03: the bug
-  loop's P3/P4 tail is DEPRIORITIZED in favor of the launch-readiness sweep
-  (docs/RELEASE-CHECKLIST.md, launch 2026-07-11)** — new findings still land in
-  Intake. When the loop resumes: VS-034 (deep diagnosis in its Log), VS-009, P4 tail,
-  Intake triage (canHold has two fresh datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
-  to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
-  10121 — a fielded 10120 client build will be version-rejected by the updated
-  dev/staging server (expected; the launcher updates clients).
+- **Next action:** the July 18 prelaunch queue is complete; follow
+  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate. The two VS-074
+  follow-ups in Intake (sensitive sqlite child-error logging and misleading 5xx
+  verification copy) remain separate bugs and must not be folded into this fix.
 
 ---
 
 ## Intake — dump raw bug reports here
 
+- Portal email-verification failures currently log the full sqlite3 child-process SQL
+  to journald, including account email, password hash/salt, and source IP. Found while
+  diagnosing the production SQLite permission failure for VS-074; logs must redact the
+  command/error detail without hiding the actionable SQLite error code/message.
+- The email-verification page maps backend 5xx failures to “verification link is
+  invalid or has already been used,” sending users toward resends instead of reporting
+  a temporary server problem. Found during the VS-074 production signup pass.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
@@ -898,6 +913,35 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-074 — Production verified signup could not write the game SQLite database (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / production operations / launch surface
+- Evidence: the required real post-promotion signup delivered verification mail, but
+  character creation failed with SQLite error 8, “attempt to write a readonly
+  database.” The DB file was writable `voidscape:voidscape 0600`, but promotion left
+  its rollback-journal directory `root:voidscape 0750`; the portal service could read
+  the DB but could not create `voidscape.db-journal`. The UI showed the secondary
+  misleading invalid/used-link message, the verifier stayed at 401, and the requested
+  name remained available, proving there was no partial account or character.
+- Fix: production now uses `root:voidscape 0770` on `server/inc/sqlite/` while the DB
+  remains `voidscape:voidscape 0600`. The new idempotent
+  `scripts/prepare-production-sqlite-permissions.sh` enforces that least-privilege
+  contract and proves main-DB journal creation with a rolled-back table transaction.
+  Launch packaging carries the helper under `ops/database`, hashes it in the manifest,
+  and requires it in deployment/handoff docs before either service restarts.
+- Verify: the live service-user write/rollback probe passed with no schema residue;
+  SQLite integrity and foreign-key checks passed. Final evidence
+  `tmp/production-signup-20260713T001102Z/summary.json` passed 606 checks with zero
+  failures, proving the exact email active/verified and exactly one linked
+  `openrsc-sqlite-created` character. Exact player/maxstats/curstats/experience/
+  capped-experience/link counts are each one; public admin is 404; game service is
+  inactive/disabled; TCP `43596`/`43496` time out and WSS remains unavailable.
+  `tests/production-sqlite-permissions.sh`, `tests/launch-staging-guard-unit.sh`,
+  `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`, `git diff --check`,
+  and `scripts/build.sh` all pass.
+- Log: 2026-07-12 triaged from the owner signup gate, reproduced without partial state,
+  corrected live with the single reversible directory-mode change, hardened in the
+  tracked deployment path, and production-verified while the world remained closed.
 
 ### VS-073 — Android lifecycle smoke waited for the wrong Settings tab (FIXED)
 - Status: verified · Severity: P2 · Area: Android APK QA

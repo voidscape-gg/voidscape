@@ -71,7 +71,7 @@ Launch time: **2026-07-18 18:00 UTC / 11:00 AM Pacific**.
   - launcher/API and legacy manifests plus TeaVM/APK metadata report protocol `10132`, and the served client/cache/launcher/APK hashes match the bundle;
   - TCP remains closed and WSS remains unavailable because the game service is stopped;
   - the public signup surface is available and the portal reports durable, readable storage.
-- [ ] Complete one real post-promotion production signup and email-verification pass with an owner-selected address. This deliberately remains separate because a synthetic signup would mutate the live production roster.
+- [x] Complete one real post-promotion production signup and email-verification pass with an owner-selected address. This deliberately remains separate because a synthetic signup would mutate the live production roster.
 
 ## P0 — final launch-day gate
 
@@ -122,3 +122,4 @@ Do not open the world if any of these are true:
 - Remote coordinated backup: `/opt/voidscape/backups/prep-10132-20260712T184726Z/`; `BACKUP-SHA256SUMS` SHA-256 `ed7a8fc003f91004d649176e681f0215d62057a33ad8d93debbc041efe2983e5`; manifest verification and byte-identical SQLite restore passed.
 - Closed production verification: `tmp/production-closed-verify-6bcdf860/`; deep TeaVM proof `tmp/web-teavm-deployment-verify/summary.json`; the deployed launch config is byte-identical to the bundle and passes all 50 policy checks.
 - Promotion evidence: `/opt/voidscape/deployments/prep-10132-6bcdf860/promotion-evidence/`; 547-file `PROMOTION-SHA256SUMS` SHA-256 `394c3ae70eba7db6eae346424fc8614eb31e2f785b7b253429a42dd4694d75bc`. The legacy `10126` launcher bridge downloaded all 531 entries, selected client `10132`, and staged the exact `10132` launcher. Commerce and achievement schemas are present and empty while the patch ledger intentionally remains at 15 until the first canonical server boot replays and records patches 16-17.
+- Real production signup: `tmp/production-signup-20260713T001102Z/summary.json`; final mode passed 606 checks with zero failures and proved the exact owner-selected email active/verified with one linked `openrsc-sqlite-created` character (player 542). The pass exposed and then verified the VS-074 SQLite runtime-directory permission repair (`root:voidscape` `0750` -> `0770`); a service-user write/rollback probe, post-signup integrity and foreign-key checks, exact player/stats/link row counts, public admin `404`, inactive/disabled game service, closed TCP `43596`/`43496`, and unavailable WSS all passed. No game boot occurred.

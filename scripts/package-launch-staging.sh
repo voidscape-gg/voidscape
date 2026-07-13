@@ -379,7 +379,7 @@ if [[ "$OUTPUT_DIR" == "/" || "$OUTPUT_DIR" == "$ROOT" ]]; then
 	exit 1
 fi
 rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"/{server,client,portal,launcher,android,logs,ops/cutover,ops/nginx}
+mkdir -p "$OUTPUT_DIR"/{server,client,portal,launcher,android,logs,ops/cutover,ops/database,ops/nginx}
 
 VERSION="$(client_version)"
 CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -503,6 +503,9 @@ After the seal, later ownership repair cannot grant launch or automatic starter
 cards to new player IDs. Physical delivery remains game-server-only and must be
 proved separately through the vendor transaction QA.
 EOF
+
+cp "$ROOT/scripts/prepare-production-sqlite-permissions.sh" "$OUTPUT_DIR/ops/database/"
+chmod +x "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh"
 
 cat > "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf" <<'EOF'
 # Include this location fragment inside every internet-facing Voidscape nginx
@@ -1030,6 +1033,7 @@ If \`Promotable\` is false, this bundle is rehearsal-only regardless of the
 - \`launcher/VoidscapeLauncher-staging.jar\`
 - \`android/README.md\`; a root \`android/voidscape-staging.apk\` exists only after the release checker passes in a promotable bundle
 - \`ops/cutover/\` one-shot native ownership backfill helpers (packaged inactive; no timer)
+- \`ops/database/prepare-production-sqlite-permissions.sh\` for the shared game/portal SQLite runtime contract
 - \`ops/nginx/voidscape-admin-public-block.location.conf\` for every public portal-proxying nginx block
 
 ## Host Placement
@@ -1074,6 +1078,21 @@ Copy \`portal/portal.env.staging\` to the host, replace its required private
 and keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google is intentionally being
 tested. Verified signup and password recovery require working Resend delivery;
 use \`PORTAL_EMAIL_DRY_RUN=1\` only for private staging.
+
+While both the portal and game services are stopped, establish and verify the
+shared SQLite runtime contract before either service restarts:
+
+\`\`\`bash
+sudo ./ops/database/prepare-production-sqlite-permissions.sh \\
+  --db /opt/voidscape/server/inc/sqlite/voidscape.db \\
+  --service-user voidscape \\
+  --service-group voidscape
+\`\`\`
+
+This preserves root ownership of the SQLite directory while granting its
+\`voidscape\` group the write permission SQLite needs for rollback journals. It
+keeps the database private to the service identity and proves a main-database
+write inside a rolled-back transaction without leaving a table behind.
 
 Install \`ops/nginx/voidscape-admin-public-block.location.conf\` under
 \`/etc/nginx/snippets/\` and include it in every portal-proxying TLS server
@@ -1150,6 +1169,9 @@ front of people. Fill the blanks with the actual deployed paths from the host.
   \`android_release_check=passed\`. Rerun the exact checker command in
   \`android/README.md\` immediately before copying; otherwise publish no APK.
 - Confirm the native portal backfill was dry-run against verified backups, reports zero conflicts, and is applied exactly once. Never enable a repeating timer; none is packaged.
+- Confirm both services are stopped, then run
+  \`sudo ./ops/database/prepare-production-sqlite-permissions.sh\`. Do not
+  restart the portal unless its rollback-only service-identity probe passes.
 - Install \`ops/nginx/voidscape-admin-public-block.location.conf\` in every
   portal-proxying public TLS block: the shared \`voidscape.gg www.voidscape.gg\`
   block and the mandatory launch-period
@@ -1204,6 +1226,10 @@ If production is MariaDB, use the matching dump/restore commands from
 - Only after rerunning the passing checker from \`android/README.md\`, copy
   \`android/voidscape-staging.apk\` when it exists and the three manifest gates
   above are true. Never publish anything under \`android/rehearsal-only/\`.
+- While both services remain stopped, run
+  \`sudo ./ops/database/prepare-production-sqlite-permissions.sh\` to enforce
+  \`root:voidscape 0770\` on the SQLite directory, \`voidscape:voidscape 0600\`
+  on the DB, and pass the rollback-only write probe before any restart.
 - Install the packaged nginx location fragment in every public portal-proxying block, then run \`nginx -t\` before reloading nginx.
 - Restart the server and portal units, then reload the reverse proxy.
 
@@ -1291,6 +1317,7 @@ web_build_manifest_sha256=$(sha256_file "$OUTPUT_DIR/play/voidscape-web-build.js
 portal_build_meta_sha256=$(sha256_file "$OUTPUT_DIR/portal/web-portal/build-meta.json")
 native_portal_backfill_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/native-portal-backfill-sweep.sh")
 native_portal_backfill_service_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/voidscape-native-portal-backfill.service")
+sqlite_permissions_helper_sha256=$(sha256_file "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh")
 nginx_admin_public_block_sha256=$(sha256_file "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf")
 android_apk_type=$ANDROID_APK_TYPE
 android_apk_promotable=$([[ "$ANDROID_APK_PROMOTABLE" -eq 1 ]] && echo true || echo false)

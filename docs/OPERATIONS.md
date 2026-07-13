@@ -96,6 +96,7 @@ Deploy notes:
 - Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
 - `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
 - For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
+- Before restarting either service after a SQLite deployment or permission change, keep both services stopped and run `sudo scripts/prepare-production-sqlite-permissions.sh`. The canonical contract is `root:voidscape 0770` on `server/inc/sqlite/` and `voidscape:voidscape 0600` on `voidscape.db`; the helper must pass its rollback-only main-database write probe as `voidscape` before the portal starts.
 - During closed-world production preparation, restart only `voidscape-portal`; keep `voidscape` inactive and disabled. Start the game only at the final launch-day gate after closing public TCP/WSS ingress, completing the coordinated backup/card cutover, and preparing loopback voidbot verification. Reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
 
 ## Build and run
@@ -347,6 +348,26 @@ sqlite3 server/inc/sqlite/voidscape.db ".backup 'Backups/voidscape-$(date +%Y%m%
 ```
 
 Do not commit backup files.
+
+### Production SQLite permissions
+
+The game server and portal share the production SQLite database as the
+`voidscape` service identity. SQLite must create and remove rollback journals in
+the database directory, so a writable database file inside a `0750`
+`root:voidscape` directory is still read-only to both services. With both
+services stopped, run the packaged helper before either restart:
+
+```bash
+sudo scripts/prepare-production-sqlite-permissions.sh \
+  --db /opt/voidscape/server/inc/sqlite/voidscape.db \
+  --service-user voidscape \
+  --service-group voidscape
+```
+
+The command is idempotent. It enforces `root:voidscape 0770` on the containing
+directory and `voidscape:voidscape 0600` on the database, then creates a unique
+table in the main database inside a transaction and rolls it back. Treat any
+probe failure as a deploy blocker; do not restart the portal or game service.
 
 ### MariaDB backup
 
