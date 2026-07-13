@@ -262,7 +262,7 @@ The data store defaults to `/tmp/voidscape-portal-api/dev-store.json`. Set `PORT
 
 Useful local API environment variables:
 
-- `PORTAL_OPENRSC_DB=/path/to/voidscape.db` enables the SQLite game bridge.
+- `PORTAL_OPENRSC_DB=/path/to/voidscape.db` enables the SQLite game bridge. Failed SQLite child processes are logged only as a fixed operation label, bounded exit/code, and allowlisted failure category; the portal never logs the original child error, SQL command, stdout/stderr, database path, or query values.
 - `PORTAL_LEGENDS_SEASON_ID=launch-2026` fixes `GET /api/legends` to one validated server-selected season. The default is `launch-2026`; query parameters cannot select historical/private seasons.
 - `PORTAL_ADMIN_TOKEN=...` enables `/api/admin/*`; without it the admin API returns `admin_not_configured`.
 - `PORTAL_TEBEX_PUBLIC_TOKEN`, `PORTAL_TEBEX_PRIVATE_KEY`, and `PORTAL_TEBEX_WEBHOOK_SECRET` are the three Tebex credentials. The private key and webhook secret are distinct secrets.

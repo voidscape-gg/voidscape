@@ -653,6 +653,58 @@ class HttpError extends Error {
 	}
 }
 
+const sqliteOperationLabels = new Set([
+	"commerce_read",
+	"commerce_write",
+	"create_openrsc_player",
+	"delete_openrsc_player",
+	"link_player_account",
+	"native_backfill_apply",
+	"openrsc_read",
+	"openrsc_write_lock",
+	"restore_cache_rows",
+	"revoke_starter_card",
+	"sync_account_subscription",
+	"sync_signup_code",
+	"sync_starter_card",
+	"unlink_player_account",
+	"update_player_password"
+]);
+
+function sqliteChildCode(error) {
+	const code = error && error.code;
+	if (Number.isInteger(code) && code >= 0 && code <= 255) return code;
+	const text = String(code || "");
+	return /^[A-Z0-9_]{1,24}$/.test(text) ? text : "unknown";
+}
+
+function sqliteFailureSummary(error) {
+	const stderr = String(error && error.stderr || "").toLowerCase();
+	if (stderr.includes("readonly") || stderr.includes("read-only")) return "readonly_database";
+	if (stderr.includes("database is locked")) return "database_locked";
+	if (stderr.includes("database is busy")) return "database_busy";
+	if (stderr.includes("unable to open database")) return "unable_to_open";
+	if (stderr.includes("database or disk is full") || stderr.includes("disk full")) return "disk_full";
+	if (stderr.includes("disk i/o error") || stderr.includes("i/o error")) return "io_error";
+	if (stderr.includes("malformed") || stderr.includes("not a database")) return "malformed_database";
+	if (stderr.includes("no such table")) return "schema_missing";
+	if (stderr.includes("constraint")) return "constraint_failed";
+	return "sqlite_error";
+}
+
+function logSqliteChildFailure(error, operation) {
+	console.error("openrsc_sqlite_child_failed", JSON.stringify({
+		operation: sqliteOperationLabels.has(operation) ? operation : "unknown",
+		code: sqliteChildCode(error),
+		summary: sqliteFailureSummary(error)
+	}));
+}
+
+function openRscDatabaseUnavailable(error, operation) {
+	logSqliteChildFailure(error, operation);
+	return new HttpError(503, "openrsc_db_unavailable");
+}
+
 const server = createServer((request, response) => {
 	handleRequest(request, response).catch((error) => {
 		const status = error.status || 500;
@@ -6912,7 +6964,7 @@ async function applyNativeBackfillGameWrites(writes = {}) {
 	}
 	if (launchCutover.enabled) sql.push("DROP TABLE voidscape_launch_card_guard;");
 	sql.push("COMMIT;");
-	await sqliteWriteJsonStrict(sql.join("\n"), "native_backfill_launch_card_write_conflict");
+	await sqliteWriteJsonStrict(sql.join("\n"), "native_backfill_launch_card_write_conflict", "native_backfill_apply");
 }
 
 function findCharacterByAccountAndName(store, accountId, normalizedName) {
@@ -7029,7 +7081,7 @@ async function syncStarterCardToOpenRsc(account) {
 			VALUES (0, 0, ${sqlString(key)}, ${sqlString(starterCardAvailable)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_starter_card");
 	return () => restoreOpenRscCacheRows(0, key, previousRows);
 }
 
@@ -7079,7 +7131,7 @@ async function revokeStarterCardFromOpenRsc(account) {
 		  AND value = ${sqlString(starterCardAvailable)};
 		COMMIT;
 		SELECT 1 AS ok;
-	`);
+	`, "revoke_starter_card");
 	return starterCardLedgerState(account);
 }
 
@@ -7106,7 +7158,7 @@ async function syncSignupCodeValueToOpenRsc(code, transaction = null) {
 			VALUES (0, 0, ${sqlString(key)}, ${sqlString(signupCodeAvailable)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_signup_code");
 	if (transaction) {
 		transaction.onRollback(() => restoreOpenRscCacheRows(0, key, previousRows));
 	}
@@ -7147,7 +7199,7 @@ async function restoreOpenRscCacheRows(playerId, key, rows) {
 		${restoreRows}
 		COMMIT;
 		SELECT 1 AS ok;
-	`);
+	`, "restore_cache_rows");
 }
 
 async function signupCodeGameValues() {
@@ -7211,7 +7263,7 @@ async function syncAccountSubscriptionToOpenRsc(account) {
 			VALUES (0, 3, ${sqlString(key)}, ${sqlString(expiresAt)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_account_subscription");
 }
 
 async function syncAccountSubscriptionFromOpenRsc(account) {
@@ -7247,7 +7299,7 @@ async function linkOpenRscPlayerToAccount(playerId, accountId) {
 			WHERE playerID = ${Number(playerId)}
 			  AND key = ${sqlString(openRscAccountIdCacheKey)}
 			LIMIT 1;
-	`);
+	`, "link_player_account");
 }
 
 async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
@@ -7260,7 +7312,7 @@ async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
 			  AND value = ${sqlString(accountId)};
 		COMMIT;
 		SELECT 1 AS ok;
-	`);
+	`, "unlink_player_account");
 }
 
 async function deleteOpenRscPlayer(character, accountId, options = {}) {
@@ -7420,7 +7472,7 @@ async function deleteOpenRscPlayer(character, accountId, options = {}) {
 		"DROP TABLE portal_deleted_item_ids;",
 		"COMMIT;"
 	);
-	const rows = await sqliteWriteJson(sql.join("\n"));
+	const rows = await sqliteWriteJson(sql.join("\n"), "delete_openrsc_player");
 	if (Number(rows[0] && rows[0].playersDeleted || 0) !== 1) {
 		throw new HttpError(409, "character_delete_conflict");
 	}
@@ -7483,7 +7535,7 @@ async function updateOpenRscPlayerPassword(character, accountId, password, ip) {
 		FROM portal_password_guard;
 		DROP TABLE portal_password_guard;
 		COMMIT;
-	`);
+	`, "update_player_password");
 	if (Number(rows[0] && rows[0].playersUpdated || 0) !== 1) {
 		throw new HttpError(409, "character_link_mismatch");
 	}
@@ -7523,7 +7575,7 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 			LIMIT 1;
 		COMMIT;
 		SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
-	`);
+	`, "create_openrsc_player");
 	const playerId = Number(rows[0] && rows[0].id);
 	if (!playerId) throw new HttpError(500, "openrsc_character_create_failed");
 	return { playerId, creationDate: createdAt };
@@ -7966,14 +8018,14 @@ function safeCommerceCode(value) {
 }
 
 async function sqliteCommerceRead(query) {
-	return sqliteCommerceExec(["-readonly", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query]);
+	return sqliteCommerceExec(["-readonly", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query], "commerce_read");
 }
 
 async function sqliteCommerceWrite(query) {
-	return sqliteCommerceExec(["-cmd", ".timeout 5000", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query]);
+	return sqliteCommerceExec(["-cmd", ".timeout 5000", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query], "commerce_write");
 }
 
-async function sqliteCommerceExec(args) {
+async function sqliteCommerceExec(args, operation) {
 	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
 	try {
 		const { stdout } = await execFile("sqlite3", args, { maxBuffer: 1024 * 1024 });
@@ -7989,7 +8041,7 @@ async function sqliteCommerceExec(args) {
 		if (error.stderr && (error.stderr.includes("constraint") || error.stderr.includes("UNIQUE"))) {
 			throw new HttpError(409, "commerce_ledger_conflict");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, operation);
 	}
 }
 
@@ -8774,7 +8826,7 @@ async function sqliteJson(query) {
 		if (error.stderr && error.stderr.includes("no such table")) {
 			throw new HttpError(500, "openrsc_schema_missing");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, "openrsc_read");
 	}
 }
 
@@ -8836,7 +8888,7 @@ function withOpenRscWriteLock(callback) {
 				return;
 			}
 			if (!callbackStarted || code !== 0) {
-				if (stderr) console.error("openrsc_claim_lock_failed", stderr.trim().slice(0, 180));
+				logSqliteChildFailure({ code, stderr }, "openrsc_write_lock");
 				rejectLock(new HttpError(503, "openrsc_claim_lock_unavailable"));
 				return;
 			}
@@ -8846,7 +8898,7 @@ function withOpenRscWriteLock(callback) {
 	});
 }
 
-async function sqliteWriteJson(query) {
+async function sqliteWriteJson(query, operation) {
 	try {
 		const { stdout } = await execFile("sqlite3", ["-cmd", ".timeout 5000", "-json", openRscDbPath, query], {
 			maxBuffer: 1024 * 1024
@@ -8862,11 +8914,11 @@ async function sqliteWriteJson(query) {
 		if (error.stderr && error.stderr.includes("constraint")) {
 			throw new HttpError(409, "openrsc_character_constraint_failed");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, operation);
 	}
 }
 
-async function sqliteWriteJsonStrict(query, conflictCode) {
+async function sqliteWriteJsonStrict(query, conflictCode, operation) {
 	try {
 		const { stdout } = await execFile("sqlite3", [
 			"-batch", "-cmd", ".timeout 5000", "-cmd", ".bail on", "-json", openRscDbPath, query
@@ -8885,7 +8937,7 @@ async function sqliteWriteJsonStrict(query, conflictCode) {
 		if (stderr.includes("constraint")) {
 			throw new HttpError(409, "openrsc_character_constraint_failed");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, operation);
 	}
 }
 

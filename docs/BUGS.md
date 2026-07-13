@@ -26,7 +26,39 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-076 is fixed, production-verified, and committed locally.
+- **Active bug:** none — VS-075 code and owner-authorized historical cleanup are complete.
+- **VS-075 cleanup authorization 2026-07-12:** worktree clean at `3fe8f9e8` and
+  `scripts/build.sh` green. Ryan explicitly approved deleting the mixed archived
+  journal file after the plain-language warning that this also removes roughly 6.5
+  hours of unrelated system history. Scope is exact and fail-closed: delete only the
+  archive whose recorded hash contains 521 vulnerable-PID entries, filter exactly 521
+  matching lines from the isolated syslog archive, retain no raw copy, then verify zero
+  incident indicators plus unchanged portal/game/database state.
+- **VS-075 cleanup result 2026-07-12:** the exact hash-pinned mixed journal archive was
+  deleted, removing 521 incident entries plus the explicitly accepted 22,163 unrelated
+  entries. Exactly 521 vulnerable-PID lines were filtered from the isolated syslog
+  archive, leaving 24,277 lines at the deterministic expected hash. The other journal
+  archive remained byte-identical; zero vulnerable-node journal entries and zero
+  matching syslog lines remain. Portal health/public readiness, SQLite integrity/
+  foreign keys, inactive/disabled game state, closed production ports, WSS `502`, and
+  public admin `404` all passed. No raw log copy was retained.
+- **Session preflight 2026-07-12 (VS-075):** branch
+  `codex/launch-rc-public-clean`; worktree clean at `fd18b62f`; pre-fix
+  `scripts/build.sh` green with 6.9 GiB free. Ryan approved proceeding to the next
+  recommended launch hardening item. Plan: reproduce the raw child-process leak in a
+  hermetic forced SQLite failure, sanitize only the portal SQLite error boundary, add a
+  no-secret regression, run the complete portal/build gates, deploy portal-only with
+  rollback, then remediate the already-written production journal exposure without
+  changing the game, database, signup records, email state, or ingress.
+- **VS-075 result 2026-07-12:** every portal SQLite child boundary now discards the
+  original error/command and emits only a fixed operation, bounded code, and allowlisted
+  summary before returning retryable `openrsc_db_unavailable`. The forced readonly
+  verification regression, portal API/schema/browser gates, and canonical build passed.
+  A reversible one-file portal deployment passed backup/restore, health, hash, admin-
+  boundary, and closed-world checks. The vulnerable PID's existing 522 journal entries
+  and 521 syslog lines were sealed into privileged archives without copying or deleting
+  them; destructive historical-log removal remains an explicit owner decision because
+  the affected journal file also contains unrelated system audit history.
 - **Session preflight 2026-07-12 (VS-076):** branch
   `codex/launch-rc-public-clean`; worktree clean at `470fdeb7`; pre-fix
   `scripts/build.sh` green. Ryan explicitly approved the narrow portal UX/error-copy
@@ -210,9 +242,8 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action:** the July 18 prelaunch queue is complete; follow
-  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate. VS-075, which
-  redacts sensitive SQLite child-error logging, remains a separate security bug.
+- **Next action:** the prelaunch queue is complete; follow
+  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate.
 
 ---
 
@@ -287,23 +318,6 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
-
-### VS-075 — SQLite child failures expose account fields in journald
-- Status: confirmed · Severity: P1 · Area: web-portal / security / production operations
-- Evidence: the VS-074 production failure caused the portal to log the full sqlite3
-  child-process command text, including the account email, bcrypt hash/salt, and source
-  IP, to journald. The error path in `sqliteWriteJson` propagates the raw child-process
-  error/command rather than a sanitized SQLite code and operation label.
-- Repro: against a hermetic OpenRSC SQLite fixture whose containing directory is not
-  writable, complete a pending email verification. Capture the portal error output;
-  it includes the generated `INSERT INTO players` SQL and account fields.
-- Verify: the same forced SQLite failure logs only a bounded operation label, exit/code,
-  and safe SQLite error summary; no SQL, email, password hash/salt, IP, or token appears.
-  `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`, and `scripts/build.sh`
-  remain green.
-- Log: 2026-07-12 split from VS-074 diagnosis. Confirmed by production journal and
-  source inspection; deliberately left separate from Ryan's approved verification UX
-  patch so each bug keeps its own commit and blast radius.
 
 ### VS-072 — Website character manager cannot delete characters
 - Status: fixed · Severity: P1 · Area: web-portal / launch surface
@@ -937,6 +951,47 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-075 — SQLite child failures expose account fields in journald (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / security / production operations
+- Evidence: the VS-074 readonly-database failure propagated Node's raw `execFile`
+  rejection from `sqliteWriteJson`; its message and `cmd` contained the complete player-
+  creation SQL, so the global 500 logger wrote the account email, bcrypt hash/salt,
+  source IP, and query into journald and rsyslog.
+- Fix: SQLite read, write, strict-write, commerce, and write-lock boundaries now inspect
+  stderr only in memory and discard the original child error. Unknown child failures
+  log exactly a fixed allowlisted operation, a bounded numeric/symbolic code, and a
+  constant summary, then return `503 openrsc_db_unavailable`; known missing-binary,
+  schema, constraint, and commerce-conflict semantics remain distinct. No raw error,
+  message, command, stdout/stderr, database path, SQL, or query value is retained.
+- Verify: a one-shot SQLite shim forced readonly code 8 inside the real email-
+  verification transaction. Pre-fix, the API test stopped on the synthetic email in
+  the captured child command. Post-fix, the only failure record was 123 bytes with
+  `create_openrsc_player`, `8`, and `readonly_database`; exhaustive canaries for email,
+  username, password/token, bcrypt hash, IP, DB path, SQL, and sqlite command were
+  absent. The response was retryable, no partial account/player existed, and the same
+  token then succeeded. `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`,
+  local and production `--skip-signup` Playwright smokes, Node/shell syntax,
+  `git diff --check`, and `scripts/build.sh` passed.
+- Production: exactly `web/portal/dev-server.mjs` was swapped at
+  `/opt/voidscape/deployments/portal-sqlite-log-redaction-20260713T010651Z/` after a
+  coordinated portal/data/env/SQLite backup and clean restore check. Health is public-
+  ready with no issues, source remains `publication_pending`, public admin routes are
+  `404`, release hashes are unchanged, and the game remains inactive/disabled with
+  `43596`/`43496` closed and WSS `502`. While the vulnerable process was stopped,
+  journald and syslog were first rotated without deletion. After Ryan explicitly
+  approved the warned destructive cleanup, the hash-pinned incident journal archive was
+  deleted: 22,684 entries total, comprising 521 vulnerable-node entries and 22,163
+  unrelated entries. The other archive remained byte-identical. Exactly 521 matching
+  lines were atomically filtered from the isolated syslog archive, leaving 24,277 lines
+  at SHA-256 `390884e472bbfecdfdfb6b48c6cf6476e29fe94437ca964edba254d48ffb1439`.
+  Zero vulnerable-node journal entries and zero matching syslog lines remain; no raw
+  log was copied into evidence.
+- Log: 2026-07-12 split from VS-074, reproduced, fixed, locally verified, deployed, and
+  production-verified. Historical deletion/filtering was performed only after the
+  separate owner authorization, with exact hashes/counts and fail-closed checks before
+  mutation. Final safe evidence is `tmp/portal-sqlite-log-redaction-20260713T010651Z/`
+  and its matching remote deployment directory.
 
 ### VS-076 — Verification confirmation is easy to miss and misreports 5xx failures (FIXED)
 - Status: verified · Severity: P2 · Area: web-portal / launch surface / account UX

@@ -1546,6 +1546,31 @@ closed_window_pid=""
 verify_db="$tmp_dir/openrsc-verify.db"
 cp "$base_fixture_db" "$verify_db"
 sqlite3 "$verify_db" "UPDATE players SET creation_date=strftime('%s','now'), creation_ip='198.51.100.70' WHERE username='SmokeHero';"
+verify_log="$tmp_dir/email-verification.log"
+verify_real_sqlite3="$(command -v sqlite3)"
+verify_sqlite_shim_dir="$tmp_dir/verify-sqlite-shim"
+verify_sqlite_fault_marker="$tmp_dir/verify-sqlite-fault-fired"
+mkdir -p "$verify_sqlite_shim_dir"
+node -- - "$verify_sqlite_shim_dir/sqlite3" <<'NODE'
+const fs = require("fs");
+const path = process.argv[2];
+fs.writeFileSync(path, `#!/usr/bin/env node
+const fs = require("fs");
+const { spawnSync } = require("child_process");
+const args = process.argv.slice(2);
+const query = args.find((arg) => arg.includes("INSERT INTO players (") && arg.includes("'VerifyGuy'"));
+const marker = process.env.VS075_SQLITE_FAULT_MARKER || "";
+if (query && marker && !fs.existsSync(marker)) {
+  fs.writeFileSync(marker, "fired\\n");
+  process.stderr.write("Error: stepping, attempt to write a readonly database (8)\\n");
+  process.exit(8);
+}
+const child = spawnSync(process.env.VS075_REAL_SQLITE3, args, { stdio: "inherit" });
+if (child.error) process.exit(127);
+process.exit(Number.isInteger(child.status) ? child.status : 1);
+`);
+NODE
+chmod 0755 "$verify_sqlite_shim_dir/sqlite3"
 verify_port=$((PORT + 6))
 PORT="$verify_port" \
 	PORTAL_DATA_DIR="$tmp_dir/verify-store" \
@@ -1569,7 +1594,10 @@ PORT="$verify_port" \
 	PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT=1 \
 	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
 	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
-	node web/portal/dev-server.mjs >/tmp/voidscape-portal-email-verification-smoke.log 2>&1 &
+	VS075_REAL_SQLITE3="$verify_real_sqlite3" \
+	VS075_SQLITE_FAULT_MARKER="$verify_sqlite_fault_marker" \
+	PATH="$verify_sqlite_shim_dir:$PATH" \
+	node web/portal/dev-server.mjs >"$verify_log" 2>&1 &
 verify_pid="$!"
 for _ in {1..60}; do
 	if curl -fsS "http://127.0.0.1:${verify_port}/api/health" >/dev/null 2>&1; then
@@ -1649,8 +1677,8 @@ expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-e
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.80' \
 	-d '{"email":"unknown-4@example.com"}'
-grep -q '"event":"portal_rate_limit_decision"' /tmp/voidscape-portal-email-verification-smoke.log || { echo "rate-limit decisions should be logged"; exit 1; }
-if grep -Eq '198\.51\.100\.(73|80)|verify-guy@example\.com|unknown-4@example\.com' /tmp/voidscape-portal-email-verification-smoke.log; then
+grep -q '"event":"portal_rate_limit_decision"' "$verify_log" || { echo "rate-limit decisions should be logged"; exit 1; }
+if grep -Eq '198\.51\.100\.(73|80)|verify-guy@example\.com|unknown-4@example\.com' "$verify_log"; then
 	echo "rate-limit decision logs must not contain raw IP or email values"
 	exit 1
 fi
@@ -1704,6 +1732,55 @@ fi
 verify_after_scanner_accounts="$(node -e "const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); process.stdout.write(String((store.accounts || []).filter((account) => account.emailCanonical === 'verify-guy@example.com').length));" "$tmp_dir/verify-store/dev-store.json")"
 if [[ "$verify_after_scanner_accounts" != "0" ]]; then
 	echo "email verification GET must not create an account before explicit confirmation"
+	exit 1
+fi
+verify_failure_status="$(curl -sS -o "$tmp_dir/verify-sqlite-failure-response.json" -w '%{http_code}' \
+	-X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d "{\"token\":\"${verify_token}\"}")"
+node -- - "$verify_log" "$verify_token" "$verify_db" <<'NODE'
+const fs = require("fs");
+const [logPath, token, databasePath] = process.argv.slice(2);
+const log = fs.readFileSync(logPath, "utf8");
+const forbidden = [
+	"verify-guy@example.com",
+	"VerifyGuy",
+	"Verifypass1",
+	"198.51.100.70",
+	token,
+	databasePath,
+	"INSERT INTO players",
+	"BEGIN IMMEDIATE",
+	"pass, salt",
+	"creation_ip",
+	"sqlite3 -cmd"
+];
+for (const value of forbidden) {
+	if (value && log.includes(value)) throw new Error(`SQLite failure log exposed forbidden value: ${value}`);
+}
+if (/\$2y\$10\$[./A-Za-z0-9]{53}/.test(log)) {
+	throw new Error("SQLite failure log exposed a generated game-password hash");
+}
+const prefix = "openrsc_sqlite_child_failed ";
+const lines = log.split(/\r?\n/).filter((line) => line.startsWith(prefix));
+if (lines.length !== 1) throw new Error(`expected one sanitized SQLite child record, got ${lines.length}`);
+if (Buffer.byteLength(lines[0], "utf8") > 256) throw new Error("sanitized SQLite child record exceeded 256 bytes");
+const record = JSON.parse(lines[0].slice(prefix.length));
+if (Object.keys(record).sort().join(",") !== "code,operation,summary") {
+	throw new Error("sanitized SQLite child record contains unexpected fields");
+}
+if (record.operation !== "create_openrsc_player" || record.code !== 8 || record.summary !== "readonly_database") {
+	throw new Error(`unexpected sanitized SQLite child record: ${JSON.stringify(record)}`);
+}
+NODE
+if [[ "$verify_failure_status" != "503" ]] || ! grep -q '"openrsc_db_unavailable"' "$tmp_dir/verify-sqlite-failure-response.json"; then
+	echo "injected SQLite write failure should return retryable openrsc_db_unavailable"
+	exit 1
+fi
+verify_after_failure_state="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'); process.stdout.write(JSON.stringify({pending:p&&p.status,accounts:(s.accounts||[]).filter(x=>x.emailCanonical==='verify-guy@example.com').length}));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_after_failure_state" != '{"pending":"pending","accounts":0}' ]] || [[ "$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")" != "0" ]]; then
+	echo "injected SQLite write failure should leave the pending signup retryable with no partial account or player"
 	exit 1
 fi
 verify_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
