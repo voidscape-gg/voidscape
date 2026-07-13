@@ -500,17 +500,30 @@ async function assertSignInCta(page) {
 async function runLandingClickMap(page, context) {
 	await assertPortalWiring(page, "desktop");
 	await assertPolicyPagesReachable(context, "desktop");
-	const links = await page.evaluate(() => ({
+	const links = await page.evaluate(async () => ({
 		features: Boolean(document.querySelector('a[href="/features"]')),
 		npcs: Boolean(document.querySelector('a[href="/npcs"]')),
 		reserve: Boolean(document.querySelector("#reserve-form")),
-		signIn: document.querySelector("[data-signin]")?.getAttribute("href") || ""
+		signIn: document.querySelector("[data-signin]")?.getAttribute("href") || "",
+		rosterWritesFrozen: (await fetch("/api/public").then((response) => response.json())).rosterWritesFrozen === true
 	}));
 	assertCheck("landing exposes the reserve flow", links.reserve, JSON.stringify(links));
 	assertCheck("landing feature guide link is present", links.features, JSON.stringify(links));
 	assertCheck("landing NPC database link is present", links.npcs, JSON.stringify(links));
 	assertCheck("landing sign-in link targets the account portal", links.signIn.startsWith("/portal?auth=login"), JSON.stringify(links));
-	await assertSignInCta(page);
+	if (links.rosterWritesFrozen) {
+		await page.goto(new URL("/portal?auth=login", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+		await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 5000 });
+		const loginState = await page.evaluate(() => ({
+			emailEnabled: document.querySelector("#portal-auth-email")?.disabled !== true,
+			passwordEnabled: document.querySelector("#portal-auth-password")?.disabled !== true,
+			submitEnabled: document.querySelector("#portal-auth-submit")?.disabled !== true
+		}));
+		assertCheck("frozen roster keeps account sign-in controls enabled", loginState.emailEnabled && loginState.passwordEnabled && loginState.submitEnabled, JSON.stringify(loginState));
+		await gotoPortal(page);
+	} else {
+		await assertSignInCta(page);
+	}
 	await screenshot(page, "02-desktop-signed-out-auth");
 }
 
@@ -533,8 +546,82 @@ async function assertLaunchOpen(page, label) {
 	assertCheck(`${label} launch status chip`, /open|live|launch/i.test(state.chip), JSON.stringify(state));
 	assertCheck(`${label} signup form hidden`, state.reserveHidden === true, JSON.stringify(state));
 	assertCheck(`${label} download actions visible`, state.downloadsHidden === false && state.downloads.length > 0, JSON.stringify(state));
-	assertCheck(`${label} web client action is present`, state.downloads.some((row) => /browser|web/i.test(row.text)), JSON.stringify(state.downloads));
+	assertCheck(`${label} iPhone Safari web action is present`, state.downloads.some((row) => /web.*iphone|iphone.*safari/i.test(row.text) && /\/play/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
+	assertCheck(`${label} Google Play action is present`, state.downloads.some((row) => /google play/i.test(row.text) && /play\.google\.com\/store\/apps\/details\?id=com\.voidscape\.gg/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
+	assertCheck(`${label} direct APK action is distinct`, state.downloads.some((row) => /direct apk/i.test(row.text) && /\/downloads\/android-apk/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
 	assertCheck(`${label} public Android action is not a debug APK`, state.downloads.every((row) => !/android/i.test(row.text) || !/debug/i.test(`${row.text} ${row.href}`)), JSON.stringify(state.downloads));
+}
+
+async function assertRosterFreezeIfConfigured(page, label) {
+	const state = await page.evaluate(async () => {
+		const publicState = await fetch("/api/public").then((response) => response.json());
+		return {
+			frozen: publicState.rosterWritesFrozen === true,
+			formHidden: document.querySelector("#reserve-form")?.hidden,
+			noticeVisible: Boolean(document.querySelector("#roster-frozen-notice")?.getBoundingClientRect().height),
+			notice: document.querySelector("#roster-frozen-notice")?.textContent?.trim() || "",
+			signIn: document.querySelector("[data-signin]")?.textContent?.trim() || ""
+		};
+	});
+	if (!state.frozen) return;
+	assertCheck(`${label} frozen roster hides signup form`, state.formHidden === true, JSON.stringify(state));
+	const signedIn = /manage account/i.test(state.signIn);
+	assertCheck(`${label} frozen roster maintenance notice`, signedIn || (state.noticeVisible && /roster update in progress/i.test(state.notice)), JSON.stringify(state));
+	assertCheck(`${label} frozen roster keeps sign-in available`, /sign in|manage account/i.test(state.signIn), JSON.stringify(state));
+}
+
+async function assertFrozenAccountManager(page) {
+	const frozen = await page.evaluate(async () => {
+		const state = await fetch("/api/public").then((response) => response.json());
+		return state.rosterWritesFrozen === true;
+	});
+	if (!frozen) return;
+
+	await activateView(page, "characters");
+	await page.waitForTimeout(300);
+	const roster = await page.evaluate(() => ({
+		createDisabled: document.querySelector("#queue-character")?.disabled,
+		deleteDisabled: document.querySelector("#delete-character")?.disabled,
+		message: document.querySelector("#character-message")?.textContent?.trim() || ""
+	}));
+	assertCheck("frozen account manager disables character create and delete", roster.createDisabled === true && roster.deleteDisabled === true, JSON.stringify(roster));
+	assertCheck("frozen account manager explains roster maintenance", /roster update in progress/i.test(roster.message), JSON.stringify(roster));
+
+	await activateView(page, "security");
+	await page.waitForTimeout(300);
+	const security = await page.evaluate(() => ({
+		visible: Boolean(document.querySelector("#security.is-active")?.getBoundingClientRect().height),
+		currentPasswordDisabled: document.querySelector("#current-password")?.disabled,
+		newPasswordDisabled: document.querySelector("#new-password")?.disabled,
+		recoveryDisabled: document.querySelector("#generate-recovery")?.disabled,
+		sessionsDisabled: document.querySelector("#end-other-sessions")?.disabled
+	}));
+	assertCheck("frozen account manager keeps security controls reachable", security.visible && security.currentPasswordDisabled !== true && security.newPasswordDisabled !== true && security.recoveryDisabled !== true && security.sessionsDisabled !== true, JSON.stringify(security));
+
+	const isolated = await page.context().browser().newContext({
+		viewport: { width: 1200, height: 900 },
+		ignoreHTTPSErrors
+	});
+	try {
+		const authPage = await isolated.newPage();
+		await authPage.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+		await authPage.waitForFunction(() => document.querySelector("#email-verification-submit")?.disabled === true && /roster update in progress/i.test(document.querySelector("#email-verification-message")?.textContent || ""), null, { timeout: 10000 });
+		const verification = await authPage.evaluate(() => ({
+			disabled: document.querySelector("#email-verification-submit")?.disabled,
+			message: document.querySelector("#email-verification-message")?.textContent?.trim() || ""
+		}));
+		assertCheck("frozen verification link shows maintenance without submitting", verification.disabled === true && /link remains pending/i.test(verification.message), JSON.stringify(verification));
+
+		await authPage.goto(new URL("/portal?auth=claim", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+		await authPage.waitForFunction(() => document.querySelector("#legacy-claim-submit")?.disabled === true && /roster update in progress/i.test(document.querySelector("#legacy-claim-message")?.textContent || ""), null, { timeout: 10000 });
+		const claim = await authPage.evaluate(() => ({
+			disabled: document.querySelector("#legacy-claim-submit")?.disabled,
+			message: document.querySelector("#legacy-claim-message")?.textContent?.trim() || ""
+		}));
+		assertCheck("frozen older-account claim shows maintenance without submitting", claim.disabled === true && /roster update in progress/i.test(claim.message), JSON.stringify(claim));
+	} finally {
+		await isolated.close();
+	}
 }
 
 async function activateView(page, view) {
@@ -769,6 +856,7 @@ async function runLoginAccountFlow(page) {
 		cards: Array.from(document.querySelectorAll("#character-cards .character-card")).map((card) => card.textContent || "").join("\n")
 	}));
 	assertCheck("existing account roster loaded", characters.cardCount >= 1 || /\d+ character/i.test(characters.title), JSON.stringify(characters));
+	await assertFrozenAccountManager(page);
 
 	await activateView(page, "subscription");
 	await page.waitForTimeout(500);
@@ -802,6 +890,7 @@ async function runMobilePass(page) {
 	await assertPortalWiring(page, "mobile");
 	await assertNoHorizontalOverflow(page, "mobile landing");
 	await screenshot(page, "08-mobile-landing");
+	await assertRosterFreezeIfConfigured(page, "mobile");
 	if (expectLaunchOpen) await assertLaunchOpen(page, "mobile");
 	const authText = await page.locator("[data-signin]").first().textContent().catch(() => "");
 	if (authenticated) {
@@ -914,6 +1003,7 @@ async function main() {
 		await gotoPortal(page);
 		await assertNoHorizontalOverflow(page, "desktop landing");
 		await screenshot(page, expectLaunchOpen ? "01-desktop-launch-open" : "01-desktop-landing");
+		await assertRosterFreezeIfConfigured(page, "desktop");
 		if (expectLaunchOpen) await assertLaunchOpen(page, "desktop");
 		await runLandingClickMap(page, context);
 		await gotoPortal(page);

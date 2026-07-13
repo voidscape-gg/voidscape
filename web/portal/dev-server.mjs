@@ -19,6 +19,8 @@ const defaultLaunchAtIso = "2026-07-18T18:00:00Z";
 // Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
 const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
 const launchSignupMode = publicMode && process.env.PORTAL_LAUNCH_SIGNUP_MODE === "1";
+// Read once at process startup so a service restart is the write-drain boundary.
+const rosterWritesFrozen = publicMode && process.env.PORTAL_ROSTER_WRITES_FROZEN === "1";
 const betaMode = process.env.PORTAL_BETA_MODE === "1" || process.env.PORTAL_PUBLIC_BETA === "1";
 const launchOpenAtIso = configuredIsoTimestamp("PORTAL_LAUNCH_AT", process.env.PORTAL_LAUNCH_AT || process.env.PORTAL_BETA_OPEN_AT || defaultLaunchAtIso);
 const launchFreeCardHours = configuredNonNegativeInteger("PORTAL_LAUNCH_FREE_CARD_HOURS", process.env.PORTAL_LAUNCH_FREE_CARD_HOURS || "0");
@@ -31,7 +33,13 @@ const storePath = join(dataDir, "dev-store.json");
 const testStoreFaultPhase = String(process.env.PORTAL_TEST_STORE_FAULT || "").trim().toLowerCase();
 const testStoreFaultAt = Number(process.env.PORTAL_TEST_STORE_FAULT_AT || 1);
 const testStoreFaultsEnabled = process.env.PORTAL_ENABLE_TEST_FAULTS === "1";
+const testStorePauseMarkerPath = String(process.env.PORTAL_TEST_STORE_PAUSE_MARKER || "").trim();
+const testStorePauseReleasePath = String(process.env.PORTAL_TEST_STORE_PAUSE_RELEASE || "").trim();
+const testStorePauseAt = Number(process.env.PORTAL_TEST_STORE_PAUSE_AT || 1);
+const testStorePauseTimeoutMs = Number(process.env.PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS || 30000);
+const shutdownTimeoutMs = configuredPositiveInteger("PORTAL_SHUTDOWN_TIMEOUT_MS", process.env.PORTAL_SHUTDOWN_TIMEOUT_MS || "30000");
 let storeSaveAttempts = 0;
+let storePauseAttempts = 0;
 if (testStoreFaultPhase) {
 	if (!testStoreFaultsEnabled) {
 		throw new Error("PORTAL_TEST_STORE_FAULT requires PORTAL_ENABLE_TEST_FAULTS=1");
@@ -40,6 +48,19 @@ if (testStoreFaultPhase) {
 		|| !Number.isInteger(testStoreFaultAt)
 		|| testStoreFaultAt <= 0) {
 		throw new Error("invalid PORTAL_TEST_STORE_FAULT configuration");
+	}
+}
+if (testStorePauseMarkerPath || testStorePauseReleasePath) {
+	if (!testStoreFaultsEnabled) {
+		throw new Error("PORTAL_TEST_STORE_PAUSE_* requires PORTAL_ENABLE_TEST_FAULTS=1");
+	}
+	if (!testStorePauseMarkerPath
+		|| !testStorePauseReleasePath
+		|| !Number.isInteger(testStorePauseAt)
+		|| testStorePauseAt <= 0
+		|| !Number.isInteger(testStorePauseTimeoutMs)
+		|| testStorePauseTimeoutMs <= 0) {
+		throw new Error("invalid PORTAL_TEST_STORE_PAUSE configuration");
 	}
 }
 const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(dataDir, "integrity-summary.json");
@@ -269,6 +290,28 @@ function configuredAndroidPlayUrl(envName, value) {
 		throw new Error(`${envName} must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing`);
 	}
 	return "https://play.google.com/store/apps/details?id=com.voidscape.gg";
+}
+
+function isRosterWriteRequest(method, pathname) {
+	if (method === "POST" && [
+		"/api/founder/reservations",
+		"/api/accounts/register",
+		"/api/accounts/verify-email",
+		"/api/accounts/google",
+		"/api/accounts/legacy-claim/request",
+		"/api/accounts/legacy-claim/complete",
+		"/api/oauth/google/nonce",
+		"/api/characters"
+	].includes(pathname)) {
+		return true;
+	}
+	if (method === "GET" && [
+		"/api/accounts/verify-email",
+		"/api/accounts/legacy-claim/verify"
+	].includes(pathname)) {
+		return true;
+	}
+	return method === "DELETE" && /^\/api\/characters\/\d+$/.test(pathname);
 }
 
 function configuredIsoTimestamp(envName, value) {
@@ -642,6 +685,11 @@ const betaContent = {
 };
 
 let writeQueue = Promise.resolve();
+let shuttingDown = false;
+let activeHandlers = 0;
+let shutdownPromise = null;
+const handlerDrainWaiters = new Set();
+const backgroundTasks = new Set();
 let itemDefinitionsPromise = null;
 let titleDefinitionsPromise = null;
 let tebexWebhookFailureInjected = false;
@@ -706,13 +754,27 @@ function openRscDatabaseUnavailable(error, operation) {
 }
 
 const server = createServer((request, response) => {
+	if (shuttingDown) {
+		response.setHeader("connection", "close");
+		json(response, 503, { error: "portal_shutting_down" });
+		return;
+	}
+	activeHandlers += 1;
 	handleRequest(request, response).catch((error) => {
 		const status = error.status || 500;
-		json(response, status, {
-			error: status === 500 ? "internal_error" : error.message
-		});
+		if (!response.headersSent && !response.writableEnded) {
+			json(response, status, {
+				error: status === 500 ? "internal_error" : error.message
+			});
+		}
 		if (status === 500) {
 			console.error(error);
+		}
+	}).finally(() => {
+		activeHandlers -= 1;
+		if (activeHandlers === 0) {
+			for (const resolveWaiter of handlerDrainWaiters) resolveWaiter();
+			handlerDrainWaiters.clear();
 		}
 	});
 });
@@ -737,6 +799,65 @@ server.listen(port, bindHost, () => {
 	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${modeLabel}`);
 	console.log(`Portal API data: ${storePath}`);
 });
+
+process.once("SIGTERM", () => beginGracefulShutdown("SIGTERM"));
+process.once("SIGINT", () => beginGracefulShutdown("SIGINT"));
+
+function beginGracefulShutdown(signal) {
+	if (shutdownPromise) return shutdownPromise;
+	shuttingDown = true;
+	console.log("portal_shutdown_started", JSON.stringify({ signal, activeHandlers }));
+	const closePromise = new Promise((resolveClose, rejectClose) => {
+		server.close((error) => error ? rejectClose(error) : resolveClose());
+		if (typeof server.closeIdleConnections === "function") server.closeIdleConnections();
+	});
+	let timeoutId = null;
+	const timeoutPromise = new Promise((resolveTimeout, rejectTimeout) => {
+		timeoutId = setTimeout(() => rejectTimeout(new Error("portal_shutdown_timeout")), shutdownTimeoutMs);
+	});
+	shutdownPromise = Promise.race([
+		Promise.all([closePromise, drainPortalWork()]),
+		timeoutPromise
+	]).then(() => {
+		if (timeoutId) clearTimeout(timeoutId);
+		console.log("portal_shutdown_complete", JSON.stringify({ signal }));
+		process.exit(0);
+	}).catch((error) => {
+		if (timeoutId) clearTimeout(timeoutId);
+		console.error("portal_shutdown_failed", JSON.stringify({
+			signal,
+			error: error && error.message ? error.message : "unknown_error",
+			activeHandlers,
+			backgroundTasks: backgroundTasks.size
+		}));
+		if (typeof server.closeAllConnections === "function") server.closeAllConnections();
+		process.exit(1);
+	});
+	return shutdownPromise;
+}
+
+async function drainPortalWork() {
+	for (;;) {
+		await waitForActiveHandlers();
+		const tasks = Array.from(backgroundTasks);
+		if (tasks.length) await Promise.allSettled(tasks);
+		const queuedWrites = writeQueue;
+		await queuedWrites;
+		if (activeHandlers === 0 && backgroundTasks.size === 0 && queuedWrites === writeQueue) return;
+	}
+}
+
+function waitForActiveHandlers() {
+	if (activeHandlers === 0) return Promise.resolve();
+	return new Promise((resolveWaiter) => handlerDrainWaiters.add(resolveWaiter));
+}
+
+function trackBackgroundTask(task) {
+	const tracked = Promise.resolve(task);
+	backgroundTasks.add(tracked);
+	tracked.finally(() => backgroundTasks.delete(tracked));
+	return tracked;
+}
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
@@ -811,6 +932,11 @@ async function handleApi(request, response, url) {
 			throw new HttpError(404, "not_available_during_prelaunch");
 		}
 	}
+	if (rosterWritesFrozen
+		&& !url.pathname.startsWith("/api/admin/")
+		&& isRosterWriteRequest(method, url.pathname)) {
+		throw new HttpError(503, "roster_writes_frozen");
+	}
 
 	if (method === "GET" && url.pathname === "/api/health") {
 		const storageHealth = await portalStorageHealth();
@@ -832,6 +958,8 @@ async function handleApi(request, response, url) {
 			service: "voidscape-portal-dev",
 			publicMode,
 			launchSignupMode,
+			rosterWritesFrozen,
+			shuttingDown,
 			storage: {
 				durable: Boolean(process.env.PORTAL_DATA_DIR),
 				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1",
@@ -3251,11 +3379,13 @@ async function queueAdminBulkEmail(request, type, payload, options) {
 
 function scheduleEmailDelivery(emailEventId) {
 	if (!emailEventId) return;
-	setTimeout(() => {
-		deliverQueuedEmail(emailEventId).catch((error) => {
-			console.error("email_delivery_failed", sanitizeEmailError(error));
-		});
-	}, 0);
+	trackBackgroundTask(new Promise((resolveDelivery) => {
+		setTimeout(() => {
+			deliverQueuedEmail(emailEventId).catch((error) => {
+				console.error("email_delivery_failed", sanitizeEmailError(error));
+			}).finally(resolveDelivery);
+		}, 0);
+	}));
 }
 
 async function deliverEmailEvents(eventIds) {
@@ -3404,7 +3534,7 @@ function buildEmailMessage(event, account, founder) {
 	const androidPrimaryLabel = androidPlayUrl ? "Google Play" : "Android APK";
 	const androidEmailLinks = [
 		{ url: androidPrimaryUrl, label: androidPrimaryLabel },
-		...(androidPlayUrl ? [{ url: androidApkUrl, label: "Signed APK fallback" }] : [])
+		...(androidPlayUrl ? [{ url: androidApkUrl, label: "Direct APK download" }] : [])
 	];
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
@@ -3419,8 +3549,9 @@ function buildEmailMessage(event, account, founder) {
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the Voidscape launcher.",
 				androidPlayUrl
-					? "Android players should install from Google Play; the signed APK is available as a direct fallback."
-					: "Players can use the web client in a supported browser; Android players can also use the Android release.",
+					? "Android players can choose Google Play or the signed direct APK download."
+					: "Android players can install the signed APK directly from the website.",
+				"iPhone players can use the Safari web client at voidscape.gg/play. Some controls may feel less polished than desktop or Android.",
 				"Eligible prelaunch accounts have a free 1-week subscription card reserved.",
 				"Never share your password or signup code. Voidscape staff will never ask for it."
 			],
@@ -3429,7 +3560,7 @@ function buildEmailMessage(event, account, founder) {
 			secondaryUrl: launcherUrl,
 			secondaryLabel: "Download launcher",
 			extraLinks: [
-				{ url: playUrl, label: "Web client" },
+				{ url: playUrl, label: "Web / iPhone Safari" },
 				...androidEmailLinks
 			]
 		});
@@ -3444,16 +3575,16 @@ function buildEmailMessage(event, account, founder) {
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the launcher from the website.",
-				"Players can use the web client from the play page in a supported browser.",
+				"Players can use the browser client from the play page; iPhone is supported through Safari, not a native App Store app, and some controls may feel less polished.",
 				androidPlayUrl
-					? "Android players should install from Google Play; the signed APK remains available as a direct fallback."
+					? "Android players can choose Google Play or the signed direct APK download."
 					: "Android players can install the Android APK from the website.",
 				"Your starter subscription card is waiting for eligible prelaunch accounts."
 			],
 			primaryUrl: manageUrl,
 			primaryLabel: "Open Voidscape",
 			secondaryUrl: playUrl,
-			secondaryLabel: "Web client",
+			secondaryLabel: "Web / iPhone Safari",
 			extraLinks: androidEmailLinks
 		});
 	}
@@ -5244,6 +5375,7 @@ async function publicState(store) {
 		return {
 			publicMode: Boolean(publicMode),
 			betaMode: true,
+			rosterWritesFrozen,
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
@@ -5280,6 +5412,7 @@ async function publicState(store) {
 		return {
 			publicMode: true,
 			launchSignupMode,
+			rosterWritesFrozen,
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
@@ -5927,25 +6060,25 @@ async function downloadState(options = {}) {
 	const includePrivate = options.includePrivate !== false;
 	const rows = [{
 		slug: "web-client",
-		label: "Web client",
-		state: "Supported browsers",
+		label: "Web / iPhone",
+		state: "Browser client · iPhone Safari supported",
 		url: webClientUrl,
 		available: true,
 		publicDownload: true,
 		external: true,
-		mobileOnly: true
+		platform: "web"
 	}];
 	if (androidPlayUrl) {
 		rows.push({
 			slug: "android-play",
 			label: "Google Play",
-			state: "Recommended Android install",
+			state: "Official Android store listing",
 			url: androidPlayUrl,
 			available: true,
 			publicDownload: true,
 			external: true,
 			platform: "android",
-			platformPrimary: true
+			platformChannel: "google-play"
 		});
 	}
 	for (const artifact of downloadArtifacts) {
@@ -5956,32 +6089,32 @@ async function downloadState(options = {}) {
 			const fileStat = await stat(artifact.path);
 			const sha256 = await sha256File(artifact.path, fileStat);
 			const metadata = await downloadArtifactMetadata(artifact);
-			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
+			const androidDirect = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: androidFallback ? "Signed APK fallback" : artifact.label,
-				state: androidFallback ? `Direct install fallback · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
+				label: androidDirect ? "Direct APK" : artifact.label,
+				state: androidDirect ? `Signed direct download · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
 				url: publicDownloadUrl(`/downloads/${artifact.slug}`),
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
-				...(androidFallback ? { fallback: true, platform: "android" } : {}),
+				...(androidDirect ? { platform: "android", platformChannel: "direct-apk" } : {}),
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
 				sha256,
 				...metadata
 			});
 		} catch (error) {
-			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
+			const androidDirect = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: androidFallback ? "Signed APK fallback" : artifact.label,
-				state: androidFallback ? "Direct install fallback unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
+				label: androidDirect ? "Direct APK" : artifact.label,
+				state: androidDirect ? "Signed direct download unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
 				url: "#",
 				available: false,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
-				...(androidFallback ? { fallback: true, platform: "android" } : {})
+				...(androidDirect ? { platform: "android", platformChannel: "direct-apk" } : {})
 			});
 		}
 	}
@@ -10000,6 +10133,7 @@ async function updateStore(mutator, options = {}) {
 		let phase = "mutate";
 		try {
 			const result = await mutator(store, transaction);
+			await maybePauseTestStoreWrite();
 			phase = "persist";
 			await saveStore(store);
 			phase = "after_persist";
@@ -10048,6 +10182,25 @@ async function updateStore(mutator, options = {}) {
 		: execute());
 	writeQueue = next.catch(() => undefined);
 	return next;
+}
+
+async function maybePauseTestStoreWrite() {
+	if (!testStorePauseMarkerPath) return;
+	const attempt = ++storePauseAttempts;
+	if (attempt !== testStorePauseAt) return;
+	await mkdir(dirname(testStorePauseMarkerPath), { recursive: true });
+	await writeFile(testStorePauseMarkerPath, `${process.pid}\n`);
+	const deadline = Date.now() + testStorePauseTimeoutMs;
+	for (;;) {
+		try {
+			await stat(testStorePauseReleasePath);
+			return;
+		} catch (error) {
+			if (!error || error.code !== "ENOENT") throw error;
+		}
+		if (Date.now() >= deadline) throw new Error("portal_test_store_pause_timeout");
+		await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+	}
 }
 
 function createStoreTransactionContext() {

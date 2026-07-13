@@ -99,6 +99,21 @@ Deploy notes:
 - Before restarting either service after a SQLite deployment or permission change, keep both services stopped and run `sudo scripts/prepare-production-sqlite-permissions.sh`. The canonical contract is `root:voidscape 0770` on `server/inc/sqlite/` and `voidscape:voidscape 0600` on `voidscape.db`; the helper must pass its rollback-only main-database write probe as `voidscape` before the portal starts.
 - During closed-world production preparation, restart only `voidscape-portal`; keep `voidscape` inactive and disabled. Start the game only at the final launch-day gate after closing public TCP/WSS ingress, completing the coordinated backup/card cutover, and preparing loopback voidbot verification. Reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
 
+### Launch roster freeze and card cutover
+
+Keep the public landing and signup flow open during preparation. Use the roster freeze only for the final approximately ten-minute launch window:
+
+1. Confirm the game service is inactive and disabled and public TCP/WSS ingress is closed.
+2. Run `scripts/promote-owner-sqlite.sh` first as a dry run and then with `--apply` for `--player-id 542 --account-id 225 --username name123`. Archive its exact identity/link/rank assertions, integrity and foreign-key results, and pre-change backup/restored-copy SHA-256 evidence. This is offline promotion proof only; do not call OWNER authentication passed yet.
+3. Run `scripts/manage-portal-roster-freeze.sh freeze`. The helper itself must reject the freeze unless `voidscape.service` is inactive and disabled/masked and configured production game ports have no TCP listeners. Require both `/api/public` and `/api/health` to report `rosterWritesFrozen=true`; roster-mutating endpoints must return `503 roster_writes_frozen`, while the landing, verification resend, login, and security surfaces remain live.
+4. Take and restore-check the coordinated game DB and portal-data backup.
+5. Run the reviewed native-account/card dry-run. Eligibility means the game character was fully created before the freeze; an uncompleted verification email is not a roster entry. Explicitly include approved exception player `542` / `name123`, decide every other staff/banned/test/ambiguous row, archive the exact `reviewToken` and `asOfMs`, then apply once.
+6. Verify one marker per included player, none for exclusions, one `launch_subcard_2026:done` seal, and a zero-pending follow-up dry-run.
+7. Only after the apply passes, start protocol `10132` behind closed ingress. Use loopback voidbot to log in as `name123`, require harmless owner-only `::loadbots status` to return status instead of an owner-only refusal without starting any bots, then prove save, logout, and relogin. Do not run the game during backup, dry-run, or apply.
+8. At the announced time, open TCP/WSS and immediately run `scripts/manage-portal-roster-freeze.sh unfreeze`; require `rosterWritesFrozen=false`. Characters created afterward are post-cutover and receive no launch card.
+
+Android launch exposes both the approved Google Play listing and the checked release-signed direct APK as first-class choices. The iPhone path is browser-based Safari support at `https://voidscape.gg/play/`; it may be less polished, physical Safari/Home Screen QA remains owner-waived/not passed, and there is no native iOS/App Store claim.
+
 ## Build and run
 
 Canonical commands:

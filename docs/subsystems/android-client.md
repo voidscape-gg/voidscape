@@ -191,8 +191,8 @@ Country flag chat badges are the current pattern:
 Before sharing an APK with players:
 
 - For internal QA/emulator smoke, `scripts/build-android.sh --debug` must pass and emit `Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk`.
-- Current public-channel stance is to show the Android APK in the post-launch download chooser when the APK artifact exists. For production promotion, prefer `scripts/build-android.sh --release` with upload signing configured, point `PORTAL_ANDROID_APK` at that release artifact if it is outside the default build path, and keep a passing physical Android QA report with the release evidence.
-- Physical Android QA should be captured with `scripts/run-android-device-qa.sh --apk <release-apk-or-url>` and must pass `scripts/validate-android-device-qa-report.py` before a direct public APK channel is opened.
+- Current launch-channel stance is to offer both the approved Google Play release and the checked release-signed direct APK as first-class choices. Point `PORTAL_ANDROID_APK` at the promoted release artifact and configure the canonical Play listing only after code `9 / 1.0.8` is publicly receivable.
+- Physical Android QA should be captured with `scripts/run-android-device-qa.sh --apk <release-apk-or-url>` and validated by `scripts/validate-android-device-qa-report.py`. For July 18 this remains **OWNER-WAIVED / NOT PASSED**; the accepted waiver allows both public channels but does not convert emulator or signing proof into physical-device proof.
 - Fresh install on an emulator reaches `Ready to play`, pressing `Play` writes the public endpoint, and the login screen renders.
 - Emulator test matrix: one low-end-ish profile around 2 GB RAM, one modern phone profile, portrait and landscape fullscreen behavior, portrait HUD fit/touch targets, and at least one cold install with app data cleared.
 - Input smoke: tap walk, tap NPC/object, long-press/right-click menu, chat keyboard, login text entry, inventory tap, bank scroll, camera rotate, zoom gesture, and logout.
@@ -329,8 +329,8 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [ ] Produce a release APK/AAB path when distribution is chosen.
 - [x] Keep public portal APK downloads wired to the configured APK artifact and verify `/api/public` publishes a hash when the file exists.
 - [x] Replace hardcoded public IP with stable `voidscape.gg` and migrate the exact previous public endpoint on upgrade.
-- [x] Decide Android update strategy: Google Play production is primary; a release-signed direct APK is the tested fallback.
-- [x] Keep the portal channel switch fail-closed: `PORTAL_ANDROID_PLAY_URL` is absent while a release is under review, and accepts only the canonical `https://play.google.com/store/apps/details?id=com.voidscape.gg` listing after approval. Once set, `/api/public` exposes Play as the primary Android action and the release-signed APK as an explicit fallback; when unset, the prior APK-only contract remains unchanged.
+- [x] Decide Android update strategy: Google Play production and the release-signed direct APK are both first-class public channels.
+- [x] Keep the portal channel switch fail-closed: `PORTAL_ANDROID_PLAY_URL` is absent while a release is under review, and accepts only the canonical `https://play.google.com/store/apps/details?id=com.voidscape.gg` listing after approval. Once set, `/api/public` exposes both Play and the release-signed direct APK; when unset, the prior APK-only contract remains unchanged.
 - [ ] Add HTTPS remote cache/update endpoint only when versioned checksums are ready.
 - [ ] Ensure Android packaging excludes mutable local files and secrets.
 - [ ] Ensure AGPL source disclosure plan covers APK distribution.
@@ -387,6 +387,6 @@ This is the working Android punch list. The standard loop for each visual/input 
 ## Deferred Hardening
 
 - Replace deprecated wrapper APIs (`AsyncTask`, old fullscreen flags, `getDrawable(int)`, bare `Handler()`) after the build and first-launch flow are stable.
-- Decide the public distribution channel: direct APK download, Play internal/closed testing, or both.
+- Keep both approved Google Play and direct signed-APK delivery healthy; neither is merely an emergency fallback.
 - Add a remote Android cache endpoint only when it can be served over HTTPS with versioned cache checksums.
 - Add crash/ANR telemetry before public beta if privacy policy and player disclosure are ready.

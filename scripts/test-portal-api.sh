@@ -32,6 +32,9 @@ corrupt_store_pid=""
 fault_create_pid=""
 fault_delete_pid=""
 fault_reservation_pid=""
+drain_pid=""
+drain_restart_pid=""
+drain_request_pid=""
 
 cleanup() {
 	if [[ -n "$server_pid" ]]; then
@@ -73,6 +76,18 @@ cleanup() {
 	if [[ -n "$fault_reservation_pid" ]]; then
 		kill "$fault_reservation_pid" >/dev/null 2>&1 || true
 		wait "$fault_reservation_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$drain_request_pid" ]]; then
+		kill "$drain_request_pid" >/dev/null 2>&1 || true
+		wait "$drain_request_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$drain_pid" ]]; then
+		kill "$drain_pid" >/dev/null 2>&1 || true
+		wait "$drain_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$drain_restart_pid" ]]; then
+		kill "$drain_restart_pid" >/dev/null 2>&1 || true
+		wait "$drain_restart_pid" >/dev/null 2>&1 || true
 	fi
 	rm -rf "$tmp_dir"
 }
@@ -614,6 +629,144 @@ expect_status() {
 	fi
 }
 
+expect_json_error() {
+	local expected_status="$1"; shift
+	local expected_error="$1"; shift
+	local response actual_status
+	response="$(curl -sS -w '\n%{http_code}' "$@")"
+	actual_status="$(tail -n1 <<<"$response")"
+	if [[ "$actual_status" != "$expected_status" ]] || ! grep -Fq "\"error\": \"${expected_error}\"" <<<"$response"; then
+		echo "expected HTTP $expected_status/$expected_error from $*, got: $response"
+		exit 1
+	fi
+}
+
+# A restart must drain a roster transaction that has written OpenRSC rows but
+# has not yet renamed the matching portal store. The test-only pause makes that
+# normally tiny cross-store boundary deterministic.
+drain_db="$tmp_dir/openrsc-drain-fixture.db"
+drain_store="$tmp_dir/drain-store"
+drain_marker="$tmp_dir/drain-write-ready"
+drain_release="$tmp_dir/drain-write-release"
+drain_response="$tmp_dir/drain-signup-response.json"
+drain_status_file="$tmp_dir/drain-signup-status"
+drain_log="$tmp_dir/drain-server.log"
+drain_port=$((PORT + 12))
+cp "$base_fixture_db" "$drain_db"
+PORT="$drain_port" \
+	PORTAL_DATA_DIR="$drain_store" \
+	PORTAL_OPENRSC_DB="$drain_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_ENABLE_TEST_FAULTS=1 \
+	PORTAL_TEST_STORE_PAUSE_MARKER="$drain_marker" \
+	PORTAL_TEST_STORE_PAUSE_RELEASE="$drain_release" \
+	PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS=10000 \
+	PORTAL_SHUTDOWN_TIMEOUT_MS=5000 \
+	node web/portal/dev-server.mjs >"$drain_log" 2>&1 &
+drain_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+
+curl -sS -o "$drain_response" -w '%{http_code}' \
+	-X POST "http://127.0.0.1:${drain_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"DrainGuy","email":"drain-guy@example.com","password":"Drainpass1"}' \
+	>"$drain_status_file" &
+drain_request_pid="$!"
+for _ in {1..200}; do
+	[[ -f "$drain_marker" ]] && break
+	if ! kill -0 "$drain_pid" >/dev/null 2>&1; then
+		echo "drain fixture server exited before reaching the cross-store pause"
+		exit 1
+	fi
+	sleep 0.02
+done
+[[ -f "$drain_marker" ]] || { echo "in-flight roster write did not reach the deterministic pause"; exit 1; }
+
+kill -TERM "$drain_pid"
+sleep 0.15
+if ! kill -0 "$drain_pid" >/dev/null 2>&1; then
+	echo "SIGTERM exited before the in-flight roster write drained"
+	exit 1
+fi
+drain_listener_closed=0
+for _ in {1..50}; do
+	if ! curl -fsS --max-time 0.2 "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then
+		drain_listener_closed=1
+		break
+	fi
+	sleep 0.02
+done
+[[ "$drain_listener_closed" == "1" ]] || { echo "shutdown should stop accepting new requests while draining"; exit 1; }
+
+: >"$drain_release"
+if ! wait "$drain_request_pid"; then
+	echo "in-flight roster request failed while the service was draining"
+	exit 1
+fi
+drain_request_pid=""
+if ! wait "$drain_pid"; then
+	echo "portal should exit cleanly after draining the in-flight roster request"
+	exit 1
+fi
+drain_pid=""
+[[ "$(cat "$drain_status_file")" == "201" ]] || { echo "drained roster request should complete with HTTP 201"; exit 1; }
+grep -q 'portal_shutdown_complete' "$drain_log" || { echo "graceful shutdown should log a completed drain"; exit 1; }
+
+node - "$drain_store/dev-store.json" "$drain_db" <<'NODE'
+const fs = require("fs");
+const { execFileSync } = require("child_process");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const account = store.accounts.find((row) => row.emailCanonical === "drain-guy@example.com");
+if (!account) throw new Error("drained signup is missing from the portal store");
+const character = store.characters.find((row) => row.accountId === account.id && row.name === "DrainGuy");
+if (!character || !Number(character.playerId)) throw new Error("drained signup is missing its portal character link");
+const rows = execFileSync("sqlite3", ["-separator", "|", process.argv[3], "SELECT p.id,p.username,pc.value FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' WHERE p.username='DrainGuy';"], { encoding: "utf8" }).trim().split("|");
+if (Number(rows[0]) !== Number(character.playerId) || rows[1] !== "DrainGuy" || Number(rows[2]) !== Number(account.id)) {
+	throw new Error("drained roster write does not match across portal and OpenRSC stores");
+}
+const orphanCount = Number(execFileSync("sqlite3", [process.argv[3], "SELECT COUNT(*) FROM player_cache pc LEFT JOIN players p ON p.id=pc.playerID WHERE pc.key='web_account_id' AND p.id IS NULL;"], { encoding: "utf8" }).trim());
+if (orphanCount !== 0) throw new Error("drained roster write left an orphaned OpenRSC account link");
+NODE
+
+# Start the replacement on the same stores. The completed account stays
+# readable while the replacement freezes new roster mutations.
+PORT="$drain_port" \
+	PORTAL_DATA_DIR="$drain_store" \
+	PORTAL_OPENRSC_DB="$drain_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_ROSTER_WRITES_FROZEN=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >>"$drain_log" 2>&1 &
+drain_restart_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+drain_login="$(curl -fsS -X POST "http://127.0.0.1:${drain_port}/api/accounts/login" -H 'content-type: application/json' -d '{"email":"drain-guy@example.com","password":"Drainpass1"}')"
+drain_token="$(node -e "const p=JSON.parse(process.argv[1]); process.stdout.write(p.token || '')" "$drain_login")"
+[[ -n "$drain_token" ]] || { echo "replacement portal could not sign in the drained account"; exit 1; }
+drain_account="$(curl -fsS -H "authorization: Bearer ${drain_token}" "http://127.0.0.1:${drain_port}/api/account")"
+node -e "const p=JSON.parse(process.argv[1]); if (!(p.characters || []).some((row) => row.name === 'DrainGuy')) throw new Error('replacement portal lost the drained character');" "$drain_account"
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${drain_port}/api/accounts/register" -H 'content-type: application/json' -d '{}'
+kill -TERM "$drain_restart_pid"
+if ! wait "$drain_restart_pid"; then
+	echo "replacement portal should stop cleanly"
+	exit 1
+fi
+drain_restart_pid=""
+
 # the one public write path still works and mints a code
 public_signup="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"PublicGuy","email":"public-guy@example.com"}')"
 grep -q '"code": "VOID-' <<<"$public_signup" || { echo "public-mode signup should mint a code"; exit 1; }
@@ -659,12 +812,8 @@ grep -q '"mode": "hybrid-p2p-enabled"' <<<"$public_payload" || { echo "public-mo
 grep -q '"subscriptionGrantsMembers": false' <<<"$public_payload" || { echo "public-mode /api/public should expose subscription as non-membership-gating"; exit 1; }
 grep -q '"launch": {' <<<"$public_payload" || { echo "public-mode /api/public should expose launch countdown metadata"; exit 1; }
 grep -q '"openAt": "2099-07-18T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
-grep -q '"Web client"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web client action"; exit 1; }
-grep -q '"Supported browsers"' <<<"$public_payload" || { echo "public-mode /api/public should describe the web client without an iPhone launch claim"; exit 1; }
-if grep -Eqi 'iOS|iPhone' <<<"$public_payload"; then
-	echo "public-mode /api/public should not advertise deferred iPhone support"
-	exit 1
-fi
+grep -q '"Web / iPhone"' <<<"$public_payload" || { echo "public-mode /api/public should expose the web and iPhone Safari action"; exit 1; }
+grep -q '"Browser client · iPhone Safari supported"' <<<"$public_payload" || { echo "public-mode /api/public should describe iPhone as Safari web-client support"; exit 1; }
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
 node -e "
@@ -672,10 +821,12 @@ const payload = JSON.parse(process.argv[1]);
 const apkBuilt = process.argv[2] === '1';
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
 const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
+const web = (payload.downloads || []).find((row) => row.slug === 'web-client');
 const apkHasSidecar = process.argv[3] === '1';
+if (!web || web.platform !== 'web' || Object.prototype.hasOwnProperty.call(web, 'mobileOnly')) throw new Error('web/iPhone choice must describe the browser platform without stale mobile-only metadata');
 if (play) throw new Error('unset PORTAL_ANDROID_PLAY_URL must not expose a Google Play row');
 if (!android) throw new Error('public payload should keep an Android APK row for launch-open UI copy');
-if (android.label !== 'Android APK' || android.fallback === true) throw new Error('unset Play URL should preserve the existing APK-only contract');
+if (android.label !== 'Android APK' || android.platformAlternative === true || android.platformPrimary === true) throw new Error('unset Play URL should preserve the existing APK-only contract');
 if (apkBuilt) {
 	if (android.available !== true) throw new Error('built Android APK should be public in the launch-open chooser');
 	if (android.url !== '/downloads/android-apk') throw new Error('built Android APK should link to /downloads/android-apk');
@@ -708,11 +859,8 @@ if (apkBuilt) {
 	fi
 	grep -q 'Reserve + claim free week' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
 	grep -q 'data-signin' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
-	grep -q 'web, desktop &amp; Android' <<<"$landing_html" || { echo "landing page should explain launch platform support without play buttons"; exit 1; }
-	if grep -Eqi 'iOS|iPhone' <<<"$landing_html"; then
-		echo "landing page should not advertise deferred iPhone support"
-		exit 1
-	fi
+	grep -q 'web, iPhone Safari, desktop &amp; Android' <<<"$landing_html" || { echo "landing page should explain launch platform support without play buttons"; exit 1; }
+	grep -q 'not a native App Store app' <<<"$landing_html" || { echo "landing should distinguish iPhone Safari from a native app"; exit 1; }
 	grep -q 'href="/features"' <<<"$landing_html" || { echo "landing page should link to the full feature guide"; exit 1; }
 	grep -q 'href="/legends"' <<<"$landing_html" || { echo "landing page should link to the public Legends page"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
@@ -824,29 +972,31 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
 const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
-if (!play || play.available !== true || play.platformPrimary !== true || play.platform !== 'android' || play.external !== true) {
-	throw new Error('configured Google Play listing should be the primary external Android choice without replacing the launcher global primary');
+if (!play || play.available !== true || play.platform !== 'android' || play.platformChannel !== 'google-play' || play.external !== true) {
+	throw new Error('configured Google Play listing should be a first-class external Android choice');
 }
+if (play.state !== 'Official Android store listing') throw new Error('Google Play copy should remain neutral: ' + (play && play.state));
+if (play.platformPrimary === true || play.platformAlternative === true) throw new Error('Google Play must not be ranked above or below direct APK');
 if (play.url !== 'https://play.google.com/store/apps/details?id=com.voidscape.gg') {
 	throw new Error('Google Play URL should be canonicalized, got ' + (play && play.url));
 }
 if (!android || android.available !== true) throw new Error('explicit public Android APK should be available');
-if (android.label !== 'Signed APK fallback' || android.fallback !== true) throw new Error('configured Play listing should relabel the signed APK as fallback');
+if (android.label !== 'Direct APK' || android.platform !== 'android' || android.platformChannel !== 'direct-apk' || android.fallback === true) {
+	throw new Error('configured Play listing should keep the signed APK as a distinct first-class direct choice');
+}
+if (android.platformPrimary === true || android.platformAlternative === true) throw new Error('direct APK must not be ranked above or below Google Play');
 if (android.url !== '/downloads/android-apk') throw new Error('explicit public Android APK should link to /downloads/android-apk');
 if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('explicit public Android APK should expose sha256');
 if (android.clientVersion !== 10123) throw new Error('explicit public Android APK should expose sidecar clientVersion');
-if ((payload.downloads || []).indexOf(play) > (payload.downloads || []).indexOf(android)) throw new Error('Google Play should be exposed before its APK fallback');
+if ((payload.downloads || []).indexOf(play) > (payload.downloads || []).indexOf(android)) throw new Error('Google Play should be exposed before the direct APK choice');
 if ((payload.integrity && payload.integrity.build && payload.integrity.build.artifacts || []).some((row) => row.slug === 'android-play')) {
 	throw new Error('external Play listing must not appear as a file-hash build artifact');
 }
 " "$android_public_payload"
 android_landing_html="$(curl -fsS "http://127.0.0.1:${android_public_port}/")"
-grep -q 'id="ready-android-fallback"' <<<"$android_landing_html" || { echo "launch landing should render a distinct signed APK fallback action"; exit 1; }
-grep -q 'id="play-android-fallback"' <<<"$android_landing_html" || { echo "launch-open landing should render a distinct signed APK fallback action"; exit 1; }
-if grep -Eqi 'iOS|iPhone' <<<"$android_landing_html"; then
-	echo "Android channel chooser should not reintroduce deferred iPhone claims"
-	exit 1
-fi
+grep -q 'id="ready-android-direct"' <<<"$android_landing_html" || { echo "launch landing should render a distinct direct APK action"; exit 1; }
+grep -q 'id="play-android-direct"' <<<"$android_landing_html" || { echo "launch-open landing should render a distinct direct APK action"; exit 1; }
+grep -q 'iPhone uses Safari' <<<"$android_landing_html" || { echo "landing should advertise the honest iPhone Safari web-client path"; exit 1; }
 curl -fsS -X POST "http://127.0.0.1:${android_public_port}/api/funnel/click" \
 	-H 'content-type: application/json' \
 	-d '{"event":"download_android","target":"Google Play","href":"https://play.google.com/store/apps/details?id=com.voidscape.gg","page":"/"}' >/dev/null
@@ -911,6 +1061,7 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 if (!payload.publicMode) throw new Error('launch health should report public mode');
 if (!payload.launchSignupMode) throw new Error('launch health should report launch-signup mode');
+if (payload.rosterWritesFrozen !== false) throw new Error('launch health should report roster writes open by default');
 if (!payload.storage || payload.storage.durable !== true) throw new Error('launch health should report durable portal storage');
 if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('launch health should report the OpenRSC DB bridge');
 if (!payload.config || payload.config.publicReady !== true) throw new Error('launch health should report public config ready');
@@ -922,6 +1073,7 @@ if (payload.config.email.dryRun !== true) throw new Error('launch health should 
 if ((payload.config.issues || []).length) throw new Error('launch health should not report config issues: ' + JSON.stringify(payload.config.issues));
 " "$launch_health_payload"
 grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
+grep -q '"rosterWritesFrozen": false' <<<"$launch_public_payload" || { echo "launch-signup public state should report roster writes open by default"; exit 1; }
 grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the global members-world flag"; exit 1; }
 grep -q '"packetRegistration": false' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose portal-first registration"; exit 1; }
 grep -q '"oauth": {' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose OAuth config"; exit 1; }
@@ -1485,6 +1637,107 @@ expect_status 404 "http://127.0.0.1:${launch_port}/api/openrsc/characters/Launch
 
 kill "$launch_pid" >/dev/null 2>&1 || true
 wait "$launch_pid" >/dev/null 2>&1 || true
+launch_pid=""
+
+# ---- Process-boundary launch roster write freeze ----
+# Restart the same configured portal with the freeze flag so every public path
+# capable of changing the launch cohort fails before parsing or persistence.
+PORT="$launch_port" \
+PORTAL_DATA_DIR="$tmp_dir/launch-store" \
+PORTAL_OPENRSC_DB="$launch_fixture_db" \
+PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+PORTAL_ADMIN_TOKEN="$public_admin_token" \
+PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+PORTAL_PUBLIC_MODE=1 \
+PORTAL_LAUNCH_SIGNUP_MODE=1 \
+PORTAL_ROSTER_WRITES_FROZEN=1 \
+PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
+PORTAL_ANDROID_PLAY_URL="https://play.google.com/store/apps/details?id=com.voidscape.gg" \
+PORTAL_EMAIL_PROVIDER=resend \
+PORTAL_EMAIL_DRY_RUN=1 \
+PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>" \
+PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+node web/portal/dev-server.mjs >/tmp/voidscape-portal-roster-frozen-smoke.log 2>&1 &
+launch_pid="$!"
+trap 'kill "$launch_pid" >/dev/null 2>&1 || true; cleanup' EXIT
+
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${launch_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+frozen_health="$(curl -fsS "http://127.0.0.1:${launch_port}/api/health")"
+frozen_public="$(curl -fsS "http://127.0.0.1:${launch_port}/api/public")"
+node -e "
+const health = JSON.parse(process.argv[1]);
+const publicState = JSON.parse(process.argv[2]);
+if (health.rosterWritesFrozen !== true) throw new Error('health must expose the active roster-write freeze');
+if (!health.config || health.config.publicReady !== true || (health.config.issues || []).length) {
+	throw new Error('an intentional roster freeze must not make portal health unready');
+}
+if (publicState.rosterWritesFrozen !== true) throw new Error('public state must expose the active roster-write freeze');
+" "$frozen_health" "$frozen_public"
+frozen_landing="$(curl -fsS "http://127.0.0.1:${launch_port}/")"
+grep -q 'id="roster-frozen-notice"' <<<"$frozen_landing" || { echo "frozen landing should include the roster maintenance notice"; exit 1; }
+
+frozen_player_count_before="$(sqlite3 "$launch_fixture_db" 'SELECT COUNT(*) FROM players;')"
+frozen_roster_before="$(node -e "
+const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+process.stdout.write(JSON.stringify({
+	accounts: store.accounts.length,
+	founders: store.founders.length,
+	characters: store.characters.length,
+	claims: store.legacyAccountClaims.length,
+	oauthStates: store.oauthStates.length
+}));
+" "$tmp_dir/launch-store/dev-store.json")"
+
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/founder/reservations" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen "http://127.0.0.1:${launch_port}/api/accounts/verify-email?token=scanner-probe"
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/accounts/verify-email" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen "http://127.0.0.1:${launch_port}/api/accounts/legacy-claim/verify?token=scanner-probe"
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/accounts/legacy-claim/request" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/accounts/legacy-claim/complete" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X POST "http://127.0.0.1:${launch_port}/api/characters" -H "authorization: Bearer ${launch_token}" -H 'content-type: application/json' -d '{}'
+expect_json_error 503 roster_writes_frozen -X DELETE "http://127.0.0.1:${launch_port}/api/characters/1" -H "authorization: Bearer ${launch_token}"
+
+frozen_player_count_after="$(sqlite3 "$launch_fixture_db" 'SELECT COUNT(*) FROM players;')"
+frozen_roster_after="$(node -e "
+const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+process.stdout.write(JSON.stringify({
+	accounts: store.accounts.length,
+	founders: store.founders.length,
+	characters: store.characters.length,
+	claims: store.legacyAccountClaims.length,
+	oauthStates: store.oauthStates.length
+}));
+" "$tmp_dir/launch-store/dev-store.json")"
+if [[ "$frozen_player_count_after" != "$frozen_player_count_before" || "$frozen_roster_after" != "$frozen_roster_before" ]]; then
+	echo "frozen roster requests must leave portal and game roster counts unchanged"
+	exit 1
+fi
+
+# Existing-account auth/read/security and verification resend remain available,
+# and loopback admin routes do not pass through the public freeze guard.
+expect_status 202 -X POST "http://127.0.0.1:${launch_port}/api/accounts/verify-email/resend" -H 'content-type: application/json' -d '{"email":"missing@example.com"}'
+frozen_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" -H 'content-type: application/json' -d '{"email":"native-player-test@native.voidscape.invalid","password":"Nativepass1"}')"
+frozen_token="$(node -e "const payload=JSON.parse(process.argv[1]); process.stdout.write(payload.token || '')" "$frozen_login")"
+[[ -n "$frozen_token" ]] || { echo "existing account login should remain available during roster freeze"; exit 1; }
+expect_status 200 -H "authorization: Bearer ${frozen_token}" "http://127.0.0.1:${launch_port}/api/account"
+frozen_codes="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/security/recovery-codes" -H "authorization: Bearer ${frozen_token}" -H 'content-type: application/json' -d '{"currentPassword":"Nativepass1"}')"
+node -e "const payload=JSON.parse(process.argv[1]); if (!Array.isArray(payload.codes) || payload.codes.length !== 8) throw new Error('security writes should remain available during roster freeze')" "$frozen_codes"
+expect_status 200 -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${launch_port}/api/admin/signups"
+expect_status 200 "http://127.0.0.1:${launch_port}/api/openrsc/characters/LaunchGuy?availability=1"
+
+kill "$launch_pid" >/dev/null 2>&1 || true
+wait "$launch_pid" >/dev/null 2>&1 || true
+launch_pid=""
 trap cleanup EXIT
 
 # ---- Default zero-hour starter-card window closes at launch ----

@@ -11,6 +11,7 @@ WS_PORT="43496"
 PORTAL_URL=""
 WEB_URL=""
 WS_URL=""
+ANDROID_PLAY_URL=""
 LAUNCH_AT="2026-07-18T18:00:00Z"
 SERVER_PRESET="$ROOT/server/voidscape-launch.conf"
 SKIP_BUILD=0
@@ -61,6 +62,9 @@ Options:
   --ws-port PORT           Game WebSocket port. Default: 43496.
   --ws-url URL             Public WSS URL for /play verification.
                            Default: <portal-url>/play/ws/ converted to wss://.
+  --android-play-url URL   Optional official Google Play details listing for
+                           com.voidscape.gg. It is canonicalized and written to
+                           portal.env only when explicitly supplied.
   --launch-at ISO          Launch timestamp. Default: 2026-07-18T18:00:00Z.
   --server-preset FILE     Source config for generated local.launch-staging.conf.
                            Default: server/voidscape-launch.conf.
@@ -105,6 +109,10 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--ws-url)
 			WS_URL="${2:-}"
+			shift 2
+			;;
+		--android-play-url)
+			ANDROID_PLAY_URL="${2:-}"
 			shift 2
 			;;
 		--launch-at)
@@ -184,6 +192,42 @@ if [[ "$SKIP_ANDROID" -eq 1 && "$ANDROID_RELEASE" -eq 1 ]]; then
 	exit 1
 fi
 
+canonical_android_play_url() {
+	local configured="$1"
+	python3 - "$configured" <<'PY'
+import sys
+from urllib.parse import parse_qs, urlsplit
+
+text = sys.argv[1].strip()
+try:
+    parsed = urlsplit(text)
+    ids = parse_qs(parsed.query, keep_blank_values=True).get("id", [])
+    path = parsed.path.rstrip("/")
+    valid = (
+        parsed.scheme == "https"
+        and parsed.hostname == "play.google.com"
+        and parsed.port in (None, 443)
+        and parsed.username is None
+        and parsed.password is None
+        and path == "/store/apps/details"
+        and len(ids) == 1
+        and ids[0] == "com.voidscape.gg"
+    )
+except (TypeError, ValueError):
+    valid = False
+if not valid:
+    raise SystemExit(1)
+print("https://play.google.com/store/apps/details?id=com.voidscape.gg", end="")
+PY
+}
+
+if [[ -n "$ANDROID_PLAY_URL" ]]; then
+	if ! ANDROID_PLAY_URL="$(canonical_android_play_url "$ANDROID_PLAY_URL")"; then
+		echo "ERROR: --android-play-url must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing." >&2
+		exit 1
+	fi
+fi
+
 mark_non_promotable() {
 	local reason="$1"
 	local existing=""
@@ -256,6 +300,10 @@ trim_trailing_slash() {
 
 PORTAL_URL="$(trim_trailing_slash "$PORTAL_URL")"
 WEB_URL="$(trim_trailing_slash "$WEB_URL")/"
+ANDROID_PLAY_ENV_LINE=""
+if [[ -n "$ANDROID_PLAY_URL" ]]; then
+	ANDROID_PLAY_ENV_LINE="PORTAL_ANDROID_PLAY_URL=$ANDROID_PLAY_URL"
+fi
 if [[ -z "$WS_URL" ]]; then
 	WS_URL="${PORTAL_URL}/play/ws/"
 	WS_URL="${WS_URL/http:\/\//ws://}"
@@ -476,8 +524,10 @@ scripts/check-launch-config.mjs \
 
 echo "==> Packaging reviewed one-shot cutover helpers (not activated)"
 cp "$ROOT/scripts/native-portal-backfill-sweep.sh" "$OUTPUT_DIR/ops/cutover/"
+cp "$ROOT/scripts/manage-portal-roster-freeze.sh" "$OUTPUT_DIR/ops/cutover/"
 cp "$ROOT/Deployment_Scripts/systemd/voidscape-native-portal-backfill.service" \
 	"$OUTPUT_DIR/ops/cutover/"
+chmod +x "$OUTPUT_DIR/ops/cutover/manage-portal-roster-freeze.sh"
 cat > "$OUTPUT_DIR/ops/cutover/README.md" <<'EOF'
 # One-shot native portal and launch-card cutover
 
@@ -505,7 +555,10 @@ proved separately through the vendor transaction QA.
 EOF
 
 cp "$ROOT/scripts/prepare-production-sqlite-permissions.sh" "$OUTPUT_DIR/ops/database/"
-chmod +x "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh"
+cp "$ROOT/scripts/promote-owner-sqlite.sh" "$OUTPUT_DIR/ops/database/"
+chmod +x \
+	"$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh" \
+	"$OUTPUT_DIR/ops/database/promote-owner-sqlite.sh"
 
 cat > "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf" <<'EOF'
 # Include this location fragment inside every internet-facing Voidscape nginx
@@ -562,6 +615,7 @@ PORT=8788
 PORTAL_BIND_HOST=127.0.0.1
 PORTAL_PUBLIC_MODE=1
 PORTAL_LAUNCH_SIGNUP_MODE=1
+PORTAL_ROSTER_WRITES_FROZEN=0
 PORTAL_LAUNCH_AT=$LAUNCH_AT
 PORTAL_WEB_CLIENT_URL=$WEB_URL
 PORTAL_DATA_DIR=/var/lib/voidscape-portal
@@ -569,6 +623,7 @@ PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
 PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
 PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json
 PORTAL_PUBLIC_ORIGIN=$PORTAL_URL
+$ANDROID_PLAY_ENV_LINE
 PORTAL_EMAIL_VERIFICATION_REQUIRED=1
 PORTAL_EMAIL_VERIFICATION_TTL_HOURS=48
 PORTAL_EMAIL_VERIFICATION_IP_LIMIT=3
@@ -1304,6 +1359,7 @@ ws_port=$WS_PORT
 portal_url=$PORTAL_URL/
 web_url=$WEB_URL
 ws_url=$WS_URL
+android_play_url=$([[ -n "$ANDROID_PLAY_URL" ]] && printf '%s' "$ANDROID_PLAY_URL" || printf '%s' "none")
 server_core_sha256=$(sha256_file "$OUTPUT_DIR/server/core.jar")
 server_plugins_sha256=$(sha256_file "$OUTPUT_DIR/server/plugins.jar")
 portal_password_helper_sha256=$(sha256_file "$OUTPUT_DIR/server/portal-password-helper.jar")
@@ -1317,7 +1373,9 @@ web_build_manifest_sha256=$(sha256_file "$OUTPUT_DIR/play/voidscape-web-build.js
 portal_build_meta_sha256=$(sha256_file "$OUTPUT_DIR/portal/web-portal/build-meta.json")
 native_portal_backfill_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/native-portal-backfill-sweep.sh")
 native_portal_backfill_service_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/voidscape-native-portal-backfill.service")
+portal_roster_freeze_helper_sha256=$(sha256_file "$OUTPUT_DIR/ops/cutover/manage-portal-roster-freeze.sh")
 sqlite_permissions_helper_sha256=$(sha256_file "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh")
+owner_promotion_helper_sha256=$(sha256_file "$OUTPUT_DIR/ops/database/promote-owner-sqlite.sh")
 nginx_admin_public_block_sha256=$(sha256_file "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf")
 android_apk_type=$ANDROID_APK_TYPE
 android_apk_promotable=$([[ "$ANDROID_APK_PROMOTABLE" -eq 1 ]] && echo true || echo false)

@@ -19,6 +19,7 @@
 	var launchOpen = false;
 	var launchStarterCardOpen = true;
 	var launchSignupModeActive = false;
+	var rosterWritesFrozen = false;
 	var downloadRows = [];
 	var availabilityTimer = 0;
 	var availabilityController = null;
@@ -50,6 +51,7 @@
 		reservePassword: document.getElementById("reserve-password"),
 		reserveConfirm: document.getElementById("reserve-confirm"),
 		nameHint: document.getElementById("name-hint"),
+		rosterFrozenNotice: document.getElementById("roster-frozen-notice"),
 		reserveProof: document.getElementById("reserve-proof"),
 		reserveCount: document.getElementById("reserve-count"),
 		googleSignup: document.getElementById("google-signup"),
@@ -71,12 +73,12 @@
 		readyLauncher: document.getElementById("ready-launcher"),
 		readyAndroid: document.getElementById("ready-android"),
 		readyAndroidCopy: document.getElementById("ready-android-copy"),
-		readyAndroidFallback: document.getElementById("ready-android-fallback"),
+		readyAndroidDirect: document.getElementById("ready-android-direct"),
 		playBlock: document.getElementById("play-block"),
 		playLauncher: document.getElementById("play-launcher"),
 		playWeb: document.getElementById("play-web"),
 		playAndroid: document.getElementById("play-android"),
-		playAndroidFallback: document.getElementById("play-android-fallback")
+		playAndroidDirect: document.getElementById("play-android-direct")
 	};
 
 	setupCharacterSelect();
@@ -200,6 +202,7 @@
 
 	function applyPublicState(state) {
 		launchSignupModeActive = Boolean(state && state.launchSignupMode);
+		rosterWritesFrozen = Boolean(state && state.rosterWritesFrozen);
 		googleClientId = state && state.oauth && state.oauth.google && state.oauth.google.enabled
 			? String(state.oauth.google.clientId || "")
 			: "";
@@ -213,6 +216,7 @@
 		renderSignupCounter(state && state.founderStats);
 		updateDownloadLinks();
 		updateLaunchStateFromSchedule(state && state.status);
+		updateRosterWriteState();
 		if (launchTimer) window.clearInterval(launchTimer);
 		launchTimer = window.setInterval(function () {
 			updateLaunchStateFromSchedule(publicState && publicState.status);
@@ -265,6 +269,8 @@
 				? "Voidscape is live. Download the launcher for the best experience, or play right in your browser."
 				: loggedIn
 					? "Download a client or manage your account while the countdown runs."
+					: rosterWritesFrozen
+					? "Launch roster update in progress. Existing players can still sign in; new accounts return shortly."
 					: launchStarterCardOpen
 					? "Reserve your name now - founders start with a free week."
 					: "Create your account and first character.";
@@ -276,6 +282,25 @@
 				: launchDateLabel(launchSchedule && launchSchedule.openAt);
 		}
 		updateDownloadLinks();
+		updateRosterWriteState();
+	}
+
+	function updateRosterWriteState() {
+		if (els.reserveForm) els.reserveForm.hidden = rosterWritesFrozen;
+		if (els.rosterFrozenNotice) els.rosterFrozenNotice.hidden = !rosterWritesFrozen;
+		if (els.reserveName) els.reserveName.disabled = rosterWritesFrozen;
+		if (els.reserveEmail) els.reserveEmail.disabled = rosterWritesFrozen;
+		if (els.reservePassword) els.reservePassword.disabled = rosterWritesFrozen;
+		if (els.reserveSubmit) els.reserveSubmit.disabled = rosterWritesFrozen;
+		if (els.reserveConfirm) els.reserveConfirm.disabled = rosterWritesFrozen;
+		if (rosterWritesFrozen) setHint("Launch roster update in progress. New accounts return shortly.", false);
+	}
+
+	function discoverRosterWriteFreeze() {
+		rosterWritesFrozen = true;
+		updateRosterWriteState();
+		updateGoogleSignupButton();
+		updateCaptchaWidget();
 	}
 
 	function setCountdownFromMs(ms) {
@@ -313,18 +338,18 @@
 		var androidPrimary = androidPlay || androidApk;
 		setDownloadLink(els.readyLauncher, launcher, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyAndroid, androidPrimary, { hiddenWhenUnavailable: true, download: true });
-		setDownloadLink(els.readyAndroidFallback, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
+		setDownloadLink(els.readyAndroidDirect, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyWeb, web, { hiddenWhenUnavailable: true });
 		if (els.readyWeb && !launchOpen) els.readyWeb.hidden = true;
 		setDownloadLink(els.playLauncher, launcher, { download: true });
 		setDownloadLink(els.playWeb, web, {});
 		setDownloadLink(els.playAndroid, androidPrimary, { download: true });
-		setDownloadLink(els.playAndroidFallback, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
+		setDownloadLink(els.playAndroidDirect, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
 		if (els.readyAndroid) els.readyAndroid.textContent = androidPlay ? "Get it on Google Play" : "Get APK";
 		if (els.playAndroid) els.playAndroid.textContent = androidPlay ? "Google Play" : "Android APK";
 		if (els.readyAndroidCopy) {
 			els.readyAndroidCopy.textContent = androidPlay
-				? "Install from Google Play. The signed APK is available as a direct fallback."
+				? "Choose Google Play or download the same signed Android release directly."
 				: "Sideload the APK ahead of time and skip the launch-day fiddling.";
 		}
 	}
@@ -365,6 +390,10 @@
 
 	function checkAvailabilitySoon() {
 		if (!els.reserveName || !els.nameHint) return;
+		if (rosterWritesFrozen) {
+			setHint("Launch roster update in progress. New accounts return shortly.", false);
+			return;
+		}
 		window.clearTimeout(availabilityTimer);
 		if (availabilityController) availabilityController.abort();
 		els.nameHint.textContent = "";
@@ -402,6 +431,10 @@
 	}
 
 	async function handleReserveSubmit() {
+		if (rosterWritesFrozen) {
+			setHint("Launch roster update in progress. Existing players can still sign in; new accounts return shortly.", false);
+			return;
+		}
 		var name = normalizeName(els.reserveName && els.reserveName.value || "");
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 			setHint("Choose a 2-12 character username to reserve.", true);
@@ -549,6 +582,8 @@
 			setHint("Signup security check is unavailable right now. Try again shortly.", true);
 		} else if (error.status === 503 && error.code === "email_verification_not_configured") {
 			setHint("Email verification is unavailable right now. Try again shortly.", true);
+		} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+			discoverRosterWriteFreeze();
 		} else if (error.status === 429) {
 			setHint("Too many recent attempts from this network. Wait a little and try again.", true);
 		} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
@@ -559,8 +594,8 @@
 	}
 
 	function setReserveBusy(busy) {
-		if (els.reserveSubmit) els.reserveSubmit.disabled = busy;
-		if (els.reserveConfirm) els.reserveConfirm.disabled = busy;
+		if (els.reserveSubmit) els.reserveSubmit.disabled = busy || rosterWritesFrozen;
+		if (els.reserveConfirm) els.reserveConfirm.disabled = busy || rosterWritesFrozen;
 	}
 
 	function setHint(message, taken) {
@@ -571,7 +606,7 @@
 
 	function updateGoogleSignupButton() {
 		if (!els.googleSignup || !els.googleSignupButton) return;
-		var enabled = Boolean(googleClientId && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
+		var enabled = Boolean(!rosterWritesFrozen && googleClientId && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
 		els.googleSignup.hidden = !enabled;
 		if (!enabled || googleButtonRendered) return;
 		renderGoogleSignupButton();
@@ -637,7 +672,7 @@
 
 	function updateCaptchaWidget() {
 		if (!els.captchaWidget) return;
-		var enabled = Boolean(captchaSignupRequired() && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
+		var enabled = Boolean(!rosterWritesFrozen && captchaSignupRequired() && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
 		els.captchaWidget.hidden = !enabled;
 		if (!enabled) return;
 		if (!captchaConfig || !captchaConfig.configured || !captchaConfig.siteKey || captchaConfig.provider !== "turnstile") {
@@ -705,6 +740,10 @@
 	}
 
 	async function handleGoogleCredential(response) {
+		if (rosterWritesFrozen) {
+			setHint("Launch roster update in progress. Existing players can still sign in; new accounts return shortly.", false);
+			return;
+		}
 		var credential = response && response.credential ? response.credential : "";
 		var name = normalizeName(els.reserveName && els.reserveName.value || "");
 		var gamePassword = els.reservePassword ? els.reservePassword.value : "";
@@ -768,6 +807,8 @@
 				setHint("Complete the security check before using Google signup.", true);
 			} else if (error.status === 503 && (error.code === "captcha_unavailable" || error.code === "captcha_not_configured")) {
 				setHint("Signup security check is unavailable right now. Try again shortly.", true);
+			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
 			} else {
 				setHint("Google signup is unavailable right now. Use email to reserve.", true);
 			}
@@ -832,6 +873,7 @@
 	}
 
 	function reserveConfirmLabel(name) {
+		if (rosterWritesFrozen) return "Roster update in progress";
 		var display = name || "";
 		if (!launchStarterCardOpen) return display ? "Create " + display + " account" : "Create account";
 		return display ? "Reserve " + display + " + claim free week" : "Reserve + claim free week";

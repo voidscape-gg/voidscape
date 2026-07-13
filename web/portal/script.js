@@ -318,6 +318,7 @@
 	var legacyAccountClaimToken = legacyAccountClaimTokenFromLocation();
 	var publicModeActive = false;
 	var launchSignupModeActive = false;
+	var rosterWritesFrozen = false;
 	var publicModeViews = {
 		account: true
 	};
@@ -492,6 +493,10 @@
 
 	if (queueCharacter) {
 		queueCharacter.addEventListener("click", async function () {
+			if (rosterWritesFrozen) {
+				characterMessage.textContent = rosterFreezeMessage();
+				return;
+			}
 			var name = normalizeName(characterName.value || "");
 			if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 				characterMessage.textContent = "Choose a 2-12 character name.";
@@ -541,13 +546,16 @@
 				} else if (error.status === 400 && error.code === "invalid_game_password") {
 					characterMessage.textContent = "Enter a 4-20 letter and number game password for this character.";
 					if (characterPassword) characterPassword.focus();
+				} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+					discoverRosterWriteFreeze();
+					characterMessage.textContent = rosterFreezeMessage();
 				} else if (error.status === 404 && error.code === "not_available_during_prelaunch") {
 					characterMessage.textContent = "Public prelaunch mode only accepts reservations. Character creation opens with the account portal.";
 				} else {
 					characterMessage.textContent = "Character creation failed: " + (error.code || "api_error") + ".";
 				}
 			} finally {
-				queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+				queueCharacter.disabled = rosterWritesFrozen || characters.length >= maxCharacters || !sessionToken;
 			}
 		});
 	}
@@ -608,6 +616,10 @@
 
 	if (deleteCharacter) {
 		deleteCharacter.addEventListener("click", async function () {
+			if (rosterWritesFrozen) {
+				characterMessage.textContent = rosterFreezeMessage();
+				return;
+			}
 			var character = selectedRosterCharacter();
 			if (!character) {
 				characterMessage.textContent = "Select a character to delete.";
@@ -645,6 +657,9 @@
 					characterMessage.textContent = "Log out of that character in-game before deleting it.";
 				} else if (error.status === 409 && (error.code === "character_link_mismatch" || error.code === "character_link_missing" || error.code === "character_delete_conflict")) {
 					characterMessage.textContent = "Character link changed in the game database. Refresh and try again.";
+				} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+					discoverRosterWriteFreeze();
+					characterMessage.textContent = rosterFreezeMessage();
 				} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 					characterMessage.textContent = "Game database is unavailable, so this character was not deleted.";
 				} else {
@@ -1305,6 +1320,10 @@
 	}
 
 	async function handleEmailVerification() {
+		if (rosterWritesFrozen) {
+			emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
+			return;
+		}
 		if (!emailVerificationToken) {
 			emailVerificationMessage.textContent = "This verification link is missing or invalid.";
 			return;
@@ -1324,7 +1343,10 @@
 			cleanPortalDashboardUrl();
 			activateView("dashboard");
 		} catch (error) {
-			if (error.status === 410) {
+			if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
+			} else if (error.status === 410) {
 				emailVerificationMessage.textContent = "That verification link expired. Create the account again to request a new one.";
 			} else if (!error.status || error.status >= 500) {
 				emailVerificationMessage.textContent = "Verification is temporarily unavailable. Your link may still be valid; try again shortly.";
@@ -1332,7 +1354,7 @@
 				emailVerificationMessage.textContent = "That verification link is invalid or has already been used.";
 			}
 		} finally {
-			emailVerificationSubmit.disabled = false;
+			emailVerificationSubmit.disabled = rosterWritesFrozen;
 		}
 	}
 
@@ -1403,6 +1425,10 @@
 	}
 
 	async function handleLegacyAccountClaimRequest() {
+		if (rosterWritesFrozen) {
+			legacyClaimMessage.textContent = rosterFreezeMessage();
+			return;
+		}
 		var username = legacyClaimUsername ? legacyClaimUsername.value.trim().replace(/\s+/g, " ") : "";
 		var gamePassword = legacyClaimGamePassword ? legacyClaimGamePassword.value : "";
 		var email = legacyClaimEmail ? legacyClaimEmail.value.trim() : "";
@@ -1453,7 +1479,10 @@
 			legacyClaimPasswordConfirm.value = "";
 			legacyClaimMessage.textContent = "Verification email queued. Check your inbox to finish claiming your character.";
 		} catch (error) {
-			if (error.status === 401) {
+			if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				legacyClaimMessage.textContent = rosterFreezeMessage();
+			} else if (error.status === 401) {
 				legacyClaimMessage.textContent = "Character username or game password did not match an unclaimed older account.";
 			} else if (error.status === 409) {
 				legacyClaimMessage.textContent = "That email cannot be used for this claim. Sign in if it already belongs to you, or contact support.";
@@ -1463,11 +1492,15 @@
 				legacyClaimMessage.textContent = "Account claim is unavailable right now. Try again shortly.";
 			}
 		} finally {
-			legacyClaimSubmit.disabled = false;
+			legacyClaimSubmit.disabled = rosterWritesFrozen;
 		}
 	}
 
 	async function handleLegacyAccountClaimComplete() {
+		if (rosterWritesFrozen) {
+			legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
+			return;
+		}
 		if (!legacyAccountClaimToken) {
 			legacyClaimConfirmMessage.textContent = "This account claim link is missing or invalid. Start again.";
 			return;
@@ -1485,13 +1518,18 @@
 			setPortalAuthMode("login");
 			portalAuthMessage.textContent = "Account claimed. Sign in with your verified email and new website password.";
 		} catch (error) {
-			legacyClaimConfirmMessage.textContent = error.status === 401
-				? "That claim link is invalid, expired, or already used. Start again."
-				: error.status === 409
-					? "The account or requested email changed before confirmation. Start again or contact support."
-					: "Account claim failed: " + (error.code || "api_error") + ".";
+			if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
+			} else {
+				legacyClaimConfirmMessage.textContent = error.status === 401
+					? "That claim link is invalid, expired, or already used. Start again."
+					: error.status === 409
+						? "The account or requested email changed before confirmation. Start again or contact support."
+						: "Account claim failed: " + (error.code || "api_error") + ".";
+			}
 		} finally {
-			legacyClaimConfirmSubmit.disabled = false;
+			legacyClaimConfirmSubmit.disabled = rosterWritesFrozen;
 		}
 	}
 
@@ -1598,6 +1636,10 @@
 	}
 
 	async function createPrelaunchGameLogin() {
+		if (rosterWritesFrozen) {
+			founderMessage.textContent = rosterFreezeMessage();
+			return;
+		}
 		if (!sessionToken) {
 			founderMessage.textContent = "Sign in to the portal first.";
 			return;
@@ -1642,13 +1684,16 @@
 				if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			} else if (error.status === 409) {
 				founderMessage.textContent = "That username is already taken. Open Manage characters to choose another.";
+			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				founderMessage.textContent = rosterFreezeMessage();
 			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 				founderMessage.textContent = "Start the portal with PORTAL_OPENRSC_DB before creating game logins.";
 			} else {
 				founderMessage.textContent = "Game login creation failed: " + (error.code || "unknown_error") + ".";
 			}
 		} finally {
-			prelaunchCreateGameLogin.disabled = false;
+			prelaunchCreateGameLogin.disabled = rosterWritesFrozen;
 		}
 	}
 
@@ -1693,6 +1738,10 @@
 			} finally {
 				if (founderSubmit) founderSubmit.disabled = false;
 			}
+			return;
+		}
+		if (rosterWritesFrozen) {
+			founderMessage.textContent = rosterFreezeMessage();
 			return;
 		}
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
@@ -1774,6 +1823,9 @@
 				founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
 			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_game_password") {
 				founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
+			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				founderMessage.textContent = rosterFreezeMessage();
 			} else if (launchSignupModeActive && error.status === 503 && error.code === "email_verification_not_configured") {
 				founderMessage.textContent = "Email verification is unavailable right now. Try again shortly.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
@@ -1799,7 +1851,7 @@
 				founderMessage.textContent = "Signup is unavailable right now. Please try again soon.";
 			}
 		} finally {
-			if (founderSubmit) founderSubmit.disabled = false;
+			if (founderSubmit) founderSubmit.disabled = rosterWritesFrozen && accountMode !== "signin";
 		}
 	}
 
@@ -1952,11 +2004,13 @@
 	function applyPublicState(state) {
 			if (!state) return;
 			launchSignupModeActive = Boolean(state.launchSignupMode);
+			rosterWritesFrozen = Boolean(state.rosterWritesFrozen);
 			launchStarterCardOpen = starterCardWindowOpen(state.launch || (state.beta && state.beta.schedule) || null);
 			document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
-		googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
+			googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
 		updateLaunchSignupCopy();
 		updateGoogleSignupButton();
+		updateRosterFreezeControls();
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
 			document.body.classList.add("public-mode");
@@ -2066,15 +2120,18 @@
 				? (launchOpenActive ? "Create your account and character" : "Reserve your account name")
 				: launchOpenActive ? "Create your launch username" : "Reserve your username";
 		}
-			if (founderSubmit) {
-				founderSubmit.textContent = signInMode
-					? "Sign in"
-					: launchSignupModeActive
-					? (launchOpenActive
-						? "Create account + character"
-						: (launchStarterCardOpen ? "Reserve name + free card" : "Create account + character"))
-					: launchOpenActive ? "Create launch code" : "Reserve & get my code";
-			}
+		if (founderSubmit) {
+			founderSubmit.textContent = signInMode
+				? "Sign in"
+				: rosterWritesFrozen
+				? "Roster update in progress"
+				: launchSignupModeActive
+				? (launchOpenActive
+					? "Create account + character"
+					: (launchStarterCardOpen ? "Reserve name + free card" : "Create account + character"))
+				: launchOpenActive ? "Create launch code" : "Reserve & get my code";
+			founderSubmit.disabled = rosterWritesFrozen && !signInMode;
+		}
 		if (founderPassword) {
 			if (launchSignupModeActive) {
 				founderPassword.setAttribute("type", "password");
@@ -2089,6 +2146,8 @@
 		if (founderMessage && founderForm && !founderForm.classList.contains("is-claimed")) {
 			founderMessage.textContent = signInMode
 				? "Use your email and password to manage characters, recovery, and launch rewards."
+				: rosterWritesFrozen
+				? rosterFreezeMessage()
 				: launchSignupModeActive
 				? (launchOpenActive
 					? (launchStarterCardOpen
@@ -2115,7 +2174,7 @@
 
 	function updateGoogleSignupButton() {
 		if (!prelaunchGoogle || !googleSignupButton) return;
-		var enabled = Boolean(launchSignupModeActive && googleClientId && !(founderForm && founderForm.classList.contains("is-claimed")));
+		var enabled = Boolean(!rosterWritesFrozen && launchSignupModeActive && googleClientId && !(founderForm && founderForm.classList.contains("is-claimed")));
 		prelaunchGoogle.hidden = !enabled;
 		if (!enabled || googleButtonRendered) return;
 		renderGoogleSignupButton();
@@ -2177,6 +2236,10 @@
 	}
 
 	async function handleGoogleCredential(response) {
+		if (rosterWritesFrozen) {
+			founderMessage.textContent = rosterFreezeMessage();
+			return;
+		}
 		var credential = response && response.credential ? response.credential : "";
 		var name = normalizeName(founderName.value || "");
 		var gamePassword = founderPassword ? founderPassword.value : "";
@@ -2226,6 +2289,9 @@
 				founderMessage.textContent = "Google sign-in could not be verified. Try again or use email.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved" || error.code === "character_name_taken")) {
 				founderMessage.textContent = "That username is already taken.";
+			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
+				discoverRosterWriteFreeze();
+				founderMessage.textContent = rosterFreezeMessage();
 			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 				founderMessage.textContent = "Launch signup needs the game database before creating characters.";
 			} else {
@@ -2853,7 +2919,7 @@
 	function renderPortalAuthState(state) {
 		var account = state && state.account ? state.account : betaAccount && betaAccount.account ? betaAccount.account : null;
 		if (queueCharacter) {
-			queueCharacter.disabled = authStatus !== "authenticated" || !sessionToken || characters.length >= maxCharacters;
+			queueCharacter.disabled = rosterWritesFrozen || authStatus !== "authenticated" || !sessionToken || characters.length >= maxCharacters;
 		}
 		if (accountLogout) {
 			accountLogout.hidden = !(account && sessionToken && authStatus === "authenticated");
@@ -3386,6 +3452,8 @@
 		if (characterMessage) {
 			if (!sessionToken) {
 				characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
+			} else if (rosterWritesFrozen) {
+				characterMessage.textContent = rosterFreezeMessage();
 			} else if (characters.length >= maxCharacters) {
 				characterMessage.textContent = "Roster is full. Web accounts are capped at 10 characters.";
 			} else {
@@ -3438,16 +3506,44 @@
 	}
 
 	function updateCharacterControls() {
-		if (queueCharacter) queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
+		if (queueCharacter) queueCharacter.disabled = rosterWritesFrozen || characters.length >= maxCharacters || !sessionToken;
 		var character = selectedRosterCharacter();
 		if (showGamePasswordReset) {
 			showGamePasswordReset.disabled = !sessionToken || !canResetGamePassword(character);
 		}
 		if (deleteCharacter) {
-			deleteCharacter.disabled = !sessionToken || !character;
+			deleteCharacter.disabled = rosterWritesFrozen || !sessionToken || !character;
 			deleteCharacter.textContent = character
 				? (isPortalCreatedCharacter(character) ? "Delete " : "Remove ") + character.name
 				: "Delete selected";
+		}
+	}
+
+	function rosterFreezeMessage() {
+		return "Launch roster update in progress. Existing players can still sign in; account and character roster changes return shortly.";
+	}
+
+	function discoverRosterWriteFreeze() {
+		rosterWritesFrozen = true;
+		updateLaunchSignupCopy();
+		updateGoogleSignupButton();
+		updateRosterFreezeControls();
+	}
+
+	function updateRosterFreezeControls() {
+		updateCharacterControls();
+		if (emailVerificationSubmit) emailVerificationSubmit.disabled = rosterWritesFrozen;
+		if (legacyClaimSubmit) legacyClaimSubmit.disabled = rosterWritesFrozen;
+		if (legacyClaimConfirmSubmit) legacyClaimConfirmSubmit.disabled = rosterWritesFrozen;
+		if (prelaunchCreateGameLogin) prelaunchCreateGameLogin.disabled = rosterWritesFrozen;
+		if (!rosterWritesFrozen) return;
+		if (characterMessage) characterMessage.textContent = rosterFreezeMessage();
+		if (portalAuthMode === "verify" && emailVerificationMessage) {
+			emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
+		}
+		if (portalAuthMode === "claim" && legacyClaimMessage) legacyClaimMessage.textContent = rosterFreezeMessage();
+		if (portalAuthMode === "claim-confirm" && legacyClaimConfirmMessage) {
+			legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
 		}
 	}
 
