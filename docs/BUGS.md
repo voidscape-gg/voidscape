@@ -26,7 +26,22 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-074 is fixed, production-verified, and ready to commit.
+- **Active bug:** none — VS-076 is fixed, production-verified, and committed locally.
+- **Session preflight 2026-07-12 (VS-076):** branch
+  `codex/launch-rc-public-clean`; worktree clean at `470fdeb7`; pre-fix
+  `scripts/build.sh` green. Ryan explicitly approved the narrow portal UX/error-copy
+  patch plus one resend to the single affected pending registrant. Plan: preserve the
+  scanner-resistant explicit POST, make the second click unmistakable, distinguish
+  retryable 5xx/network failures from invalid/expired tokens, run the full portal gates,
+  deploy only the portal app, then send and audit exactly one resend.
+- **VS-076 result 2026-07-12:** the email now labels its CTA as opening a verification
+  page and explicitly tells the player to press `Verify email` there; the page puts
+  that final action before the button. Network/5xx failures stay retryable, 410 remains
+  expired, and other 4xx responses remain invalid/used. Local and live Playwright
+  smokes passed. A reversible four-file portal-only deployment passed health, served
+  hash, public-admin `404`, artifact-integrity, database-restore, and closed-world
+  checks. Exactly one resend was delivered to the uniquely affected pending signup as
+  email event 427 in one provider attempt, with one queued/requested/sent audit chain.
 - **Session preflight 2026-07-12 (VS-074):** branch
   `codex/launch-rc-public-clean`; worktree clean before triage; pre-fix
   `scripts/build.sh` green. Real post-promotion signup reproduced the launch blocker:
@@ -196,21 +211,13 @@ to resume from these two files alone. Keep every entry self-contained.
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
 - **Next action:** the July 18 prelaunch queue is complete; follow
-  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate. The two VS-074
-  follow-ups in Intake (sensitive sqlite child-error logging and misleading 5xx
-  verification copy) remain separate bugs and must not be folded into this fix.
+  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate. VS-075, which
+  redacts sensitive SQLite child-error logging, remains a separate security bug.
 
 ---
 
 ## Intake — dump raw bug reports here
 
-- Portal email-verification failures currently log the full sqlite3 child-process SQL
-  to journald, including account email, password hash/salt, and source IP. Found while
-  diagnosing the production SQLite permission failure for VS-074; logs must redact the
-  command/error detail without hiding the actionable SQLite error code/message.
-- The email-verification page maps backend 5xx failures to “verification link is
-  invalid or has already been used,” sending users toward resends instead of reporting
-  a temporary server problem. Found during the VS-074 production signup pass.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
@@ -280,6 +287,23 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
+
+### VS-075 — SQLite child failures expose account fields in journald
+- Status: confirmed · Severity: P1 · Area: web-portal / security / production operations
+- Evidence: the VS-074 production failure caused the portal to log the full sqlite3
+  child-process command text, including the account email, bcrypt hash/salt, and source
+  IP, to journald. The error path in `sqliteWriteJson` propagates the raw child-process
+  error/command rather than a sanitized SQLite code and operation label.
+- Repro: against a hermetic OpenRSC SQLite fixture whose containing directory is not
+  writable, complete a pending email verification. Capture the portal error output;
+  it includes the generated `INSERT INTO players` SQL and account fields.
+- Verify: the same forced SQLite failure logs only a bounded operation label, exit/code,
+  and safe SQLite error summary; no SQL, email, password hash/salt, IP, or token appears.
+  `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`, and `scripts/build.sh`
+  remain green.
+- Log: 2026-07-12 split from VS-074 diagnosis. Confirmed by production journal and
+  source inspection; deliberately left separate from Ryan's approved verification UX
+  patch so each bug keeps its own commit and blast radius.
 
 ### VS-072 — Website character manager cannot delete characters
 - Status: fixed · Severity: P1 · Area: web-portal / launch surface
@@ -913,6 +937,35 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-076 — Verification confirmation is easy to miss and misreports 5xx failures (FIXED)
+- Status: verified · Severity: P2 · Area: web-portal / launch surface / account UX
+- Evidence: the scanner-resistant flow deliberately made the email GET open a fragment
+  confirmation page and required an explicit POST, but neither the email CTA nor the
+  page made that second action unmistakable. The frontend also mapped the production
+  SQLite 500 from VS-074—and every network/5xx failure—to the invalid/already-used
+  message, prompting unnecessary resends instead of identifying temporary failure.
+- Fix: the email CTA is now `Open verification page`, the email and page both instruct
+  the player to press `Verify email`, and the page leads with `One last step` before the
+  button. Network/5xx failures retain the fragment token and display retryable
+  temporary-unavailable copy; 410 remains expired and other 4xx remains invalid/used.
+  Token format, explicit POST/scanner resistance, TTL, rate limits, and the account/
+  character transaction are unchanged.
+- Verify: syntax and launch guards, `scripts/test-portal-api.sh`,
+  `scripts/test-portal-schema.sh`, `git diff --check`, `scripts/build.sh`, and local plus
+  production `--skip-signup` Playwright smokes passed. The four-file portal-only swap at
+  `/opt/voidscape/deployments/portal-email-ux-20260713T004326Z/` has a coordinated
+  portal/data/env/SQLite backup and clean restore check; health is public-ready with no
+  issues, live hashes match, public admin routes are `404`, client/launcher/APK/
+  manifest hashes are unchanged, source is `publication_pending`, and the game remains
+  inactive/disabled with `43596`/`43496` closed and WSS `502`. Exactly one replacement
+  email was delivered to pending signup 31 as event 427, `sent` by Resend in one
+  attempt, with audit events 8061–8063 and no additional target event.
+- Log: 2026-07-12 triaged from Ryan's real flow, fixed within the approved portal-only
+  scope, and production-verified. The first deployment verifier correctly rolled code
+  back after its own strict-pipe `curl | grep -q` false positive; the corrected verifier
+  staged a fresh tree and completed without rollback. No game boot, ingress opening,
+  source publication, card/cracker action, or bulk resend occurred.
 
 ### VS-074 — Production verified signup could not write the game SQLite database (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / production operations / launch surface

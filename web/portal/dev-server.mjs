@@ -3441,11 +3441,12 @@ function buildEmailVerificationMessage(event, pending) {
 		bullets: [
 			`Requested username: ${username}`,
 			"Your account, first character, and starter subscription card are not created until you verify.",
+			"On the verification page, press Verify email to finish creating your account.",
 			`This link expires in ${emailVerificationTtlHours} hours.`,
 			"If you did not request this, ignore this email."
 		],
 		primaryUrl: verifyUrl,
-		primaryLabel: "Verify email",
+		primaryLabel: "Open verification page",
 		secondaryUrl: joinUrl(origin, "/"),
 		secondaryLabel: "Open Voidscape"
 	});

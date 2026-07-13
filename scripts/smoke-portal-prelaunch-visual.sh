@@ -442,9 +442,44 @@ async function assertSignInCta(page) {
 	await page.locator('[data-auth-panel="request"] [data-auth-show="code"]').click();
 	await page.locator('[data-auth-panel="code"]').waitFor({ state: "visible", timeout: 3000 });
 	assertCheck("recovery-code fallback is reachable", await page.locator("#recovery-code-value").isVisible(), page.url());
+	let verificationResponse = 503;
+	let verificationRequestCount = 0;
+	await page.route("**/api/accounts/verify-email", async (route) => {
+		verificationRequestCount += 1;
+		if (verificationResponse === 0) {
+			await route.abort("failed");
+			return;
+		}
+		const error = verificationResponse === 410 ? "email_verification_expired" : verificationResponse === 400 ? "invalid_email_verification_token" : "openrsc_write_failed";
+		await route.fulfill({ status: verificationResponse, contentType: "application/json", body: JSON.stringify({ error }) });
+	});
 	await page.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="verify"]').waitFor({ state: "visible", timeout: 5000 });
-	assertCheck("email verification requires an explicit browser confirmation", await page.locator("#email-verification-submit").isVisible(), page.url());
+	const verificationState = await page.evaluate(() => ({
+		heading: document.querySelector('[data-auth-panel="verify"] h2')?.textContent?.trim() || "",
+		prompt: document.querySelector(".verification-confirmation-prompt")?.textContent?.trim() || "",
+		button: document.querySelector("#email-verification-submit")?.textContent?.trim() || "",
+		buttonVisible: Boolean(document.querySelector("#email-verification-submit")?.getBoundingClientRect().height),
+		buttonDisabled: Boolean(document.querySelector("#email-verification-submit")?.disabled)
+	}));
+	assertCheck("email verification requires an explicit browser confirmation", verificationState.heading === "One last step" && /email link opened/i.test(verificationState.prompt) && /press verify email below to create your account/i.test(verificationState.prompt) && verificationState.button === "Verify email" && verificationState.buttonVisible && !verificationState.buttonDisabled && verificationRequestCount === 0, JSON.stringify(verificationState));
+	await screenshot(page, "02a-email-verification-confirmation");
+	await page.locator("#email-verification-submit").click();
+	await page.waitForFunction(() => /temporarily unavailable/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
+	assertCheck("email verification 5xx stays retryable", verificationRequestCount === 1 && /link may still be valid/i.test(await page.locator("#email-verification-message").textContent() || ""), await page.locator("#email-verification-message").textContent() || "");
+	verificationResponse = 0;
+	await page.locator("#email-verification-submit").click();
+	await page.waitForFunction(() => !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
+	assertCheck("email verification network failure stays retryable", verificationRequestCount === 2 && /temporarily unavailable/i.test(await page.locator("#email-verification-message").textContent() || ""), await page.locator("#email-verification-message").textContent() || "");
+	verificationResponse = 410;
+	await page.locator("#email-verification-submit").click();
+	await page.waitForFunction(() => /expired/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
+	assertCheck("email verification expiry remains distinct", verificationRequestCount === 3, await page.locator("#email-verification-message").textContent() || "");
+	verificationResponse = 400;
+	await page.locator("#email-verification-submit").click();
+	await page.waitForFunction(() => /invalid or has already been used/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
+	assertCheck("email verification invalid token remains distinct", verificationRequestCount === 4, await page.locator("#email-verification-message").textContent() || "");
+	await page.unroute("**/api/accounts/verify-email");
 	await page.goto(new URL("/portal?auth=claim-confirm#claim=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="claim-confirm"]').waitFor({ state: "visible", timeout: 5000 });
 	assertCheck("older-account claim requires an explicit browser confirmation", await page.locator("#legacy-claim-confirm-submit").isVisible(), page.url());

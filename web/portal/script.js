@@ -1324,9 +1324,13 @@
 			cleanPortalDashboardUrl();
 			activateView("dashboard");
 		} catch (error) {
-			emailVerificationMessage.textContent = error.status === 410
-				? "That verification link expired. Create the account again to request a new one."
-				: "That verification link is invalid or has already been used.";
+			if (error.status === 410) {
+				emailVerificationMessage.textContent = "That verification link expired. Create the account again to request a new one.";
+			} else if (!error.status || error.status >= 500) {
+				emailVerificationMessage.textContent = "Verification is temporarily unavailable. Your link may still be valid; try again shortly.";
+			} else {
+				emailVerificationMessage.textContent = "That verification link is invalid or has already been used.";
+			}
 		} finally {
 			emailVerificationSubmit.disabled = false;
 		}
