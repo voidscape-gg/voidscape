@@ -45,6 +45,7 @@ grep -q 'verify_exact_sha256_tree "\\$BUNDLE_DIR/scripts" "\\$BUNDLE_DIR/scripts
 grep -q '"\\$BUNDLE_DIR/scripts/verify-launch-staging.mjs"' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'ANDROID_VERIFY_MODE=(--expect-no-android-apk)' "$ROOT/scripts/package-launch-staging.sh"
 grep -q -- '--expected-android-apk "\\$BUNDLE_DIR/android/voidscape-staging.apk"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'ANDROID_PLAY_VERIFY_MODE=(--expect-no-android-play)' "$ROOT/scripts/package-launch-staging.sh"
 if grep -q 'VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK\|VOIDSCAPE_REPO_ROOT' "$ROOT/scripts/package-launch-staging.sh"; then
 	echo "packaged verifier provenance or byte checks can be bypassed" >&2
 	exit 1
@@ -223,6 +224,7 @@ common_404=(
 	--skip-web-verify
 	--skip-server-config
 	--expect-no-android-apk
+	--expect-no-android-play
 	--allow-http
 )
 common_403=(
@@ -231,6 +233,7 @@ common_403=(
 	--skip-web-verify
 	--skip-server-config
 	--expect-no-android-apk
+	--expect-no-android-play
 	--allow-http
 )
 

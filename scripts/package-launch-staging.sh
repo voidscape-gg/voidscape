@@ -1015,6 +1015,10 @@ ANDROID_VERIFY_MODE=(--expect-no-android-apk)
 if [[ -f "\$BUNDLE_DIR/android/voidscape-staging.apk" ]]; then
 	ANDROID_VERIFY_MODE=(--expected-android-apk "\$BUNDLE_DIR/android/voidscape-staging.apk")
 fi
+ANDROID_PLAY_VERIFY_MODE=(--expect-no-android-play)
+if [[ -n "$ANDROID_PLAY_URL" ]]; then
+	ANDROID_PLAY_VERIFY_MODE=(--expected-android-play-url "$ANDROID_PLAY_URL")
+fi
 "\$BUNDLE_DIR/scripts/verify-launch-staging.mjs" \\
   --portal-url "$PORTAL_URL/" \\
   --web-url "$WEB_URL" \\
@@ -1026,6 +1030,7 @@ fi
   --expected-client-version "$VERSION" \\
   --out "\$BUNDLE_DIR/logs/verify-staging-\$(date -u +%Y%m%dT%H%M%SZ)" \\
 	  "\${ANDROID_VERIFY_MODE[@]}" \\
+	  "\${ANDROID_PLAY_VERIFY_MODE[@]}" \\
   "\${SIGNUP_MODE[@]}"
 EOF
 chmod +x "$OUTPUT_DIR/VERIFY-STAGING.sh"

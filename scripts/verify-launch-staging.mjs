@@ -107,6 +107,9 @@ async function main() {
 	if (args.expectedAndroidApk && args.expectNoAndroidApk) {
 		throw new Error("--expected-android-apk and --expect-no-android-apk are mutually exclusive.");
 	}
+	if (args.expectedAndroidPlayUrl && args.expectNoAndroidPlay) {
+		throw new Error("--expected-android-play-url and --expect-no-android-play are mutually exclusive.");
+	}
 	const signupModes = [args.runSignup, args.pendingEmailRehearsal, args.skipSignup].filter(Boolean).length;
 	if (signupModes !== 1) {
 		throw new Error("Choose exactly one signup mode: --run-signup, --pending-email-rehearsal, or --skip-signup.");
@@ -217,6 +220,13 @@ async function verifyPublicLaunchPayload() {
 		assertCheck("google hidden", google.enabled === false && !google.clientId, JSON.stringify(google));
 	}
 	const downloads = Array.isArray(body.downloads) ? body.downloads : [];
+	const androidPlay = downloads.find((row) => row && row.slug === "android-play") || {};
+	if (args.expectedAndroidPlayUrl) {
+		assertCheck("Google Play row published", androidPlay.available === true, JSON.stringify(androidPlay));
+		assertCheck("Google Play row matches candidate URL", androidPlay.url === args.expectedAndroidPlayUrl, `${androidPlay.url || "(absent)"} vs ${args.expectedAndroidPlayUrl}`);
+	} else if (args.expectNoAndroidPlay) {
+		assertCheck("Google Play row withheld", androidPlay.available !== true, JSON.stringify(androidPlay));
+	}
 	const android = downloads.find((row) => row && row.slug === "android-apk") || {};
 	assertCheck("android APK row present", Boolean(android.slug), JSON.stringify(android));
 	if (android.available === true) {
@@ -729,6 +739,12 @@ function parseArgs(argv) {
 			case "--expect-no-android-apk":
 				parsed.expectNoAndroidApk = true;
 				break;
+			case "--expected-android-play-url":
+				parsed.expectedAndroidPlayUrl = value();
+				break;
+			case "--expect-no-android-play":
+				parsed.expectNoAndroidPlay = true;
+				break;
 			case "--launch-at":
 				parsed.launchAt = value();
 				break;
@@ -842,6 +858,8 @@ Useful options:
   --expected-build-manifest FILE Default: dist/web-teavm/voidscape-web-build.json.
   --expected-android-apk FILE   Require the public direct APK bytes to match this candidate.
   --expect-no-android-apk       Require the direct APK row to remain unavailable.
+  --expected-android-play-url URL Require the published Play row to use this canonical URL.
+  --expect-no-android-play      Require the Google Play row to remain unavailable.
   --signup-username NAME        Exact new QA character; required for --run-signup.
   --signup-email EMAIL          Exact delivered-email address; required for --run-signup.
   --signup-password PASSWORD    Exact portal/game password; required for --run-signup.
