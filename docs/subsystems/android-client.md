@@ -82,7 +82,7 @@ Focused `--only-auth-wilderness-target` coverage verifies wilderness player-targ
 The APK should prioritize one-tap entry for beta players:
 
 - After bundled cache install, the visible `Play` button starts `GameActivity` using the saved Android app-private `ip.txt` / `port.txt` endpoint when present. Release builds always default to `5.161.114.251:43596`, including emulator-like Play review devices; debuggable builds on Android emulators default to `10.0.2.2:43596` so local smoke tests hit the host server without the advanced picker.
-- The shared login screen's `Create Account` action opens the in-client username/password character-creation form and submits the existing register packet to the selected game server. Recovery still opens the portal security URL in Android's browser.
+- The shared login screen's `Create Account` action opens the Community-Rules-gated portal account flow in Android's browser. Recovery opens the portal security route, while the in-game Account sheet exposes the public account/data-deletion route. Desktop intentionally retains the in-client packet-registration path.
 - Long-press `Play` opens the advanced server picker for developers and testers only in debuggable builds.
 - Debug advanced choices are public Voidscape, Android emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, and manual host/port. Manual host/port opens prefilled with the current saved endpoint to avoid accidentally switching a QA device back to the default server.
 - Replace the hardcoded public IP with the final DNS name before broad release so old APKs survive VPS moves.
@@ -145,7 +145,7 @@ Endpoint note: when iterating against a non-default local port, write `ip.txt` /
 
 Current emulator quirk: `adb shell wm size` and `dumpsys window displays` can report stale orientation after switching between the portrait wrapper and landscape `GameActivity`. The smoke script sizes tap coordinates from a temporary `screencap` PNG first, then falls back to `dumpsys`/`wm size` only if image probing fails. In tall portrait gameplay, client coordinates map from the top of the Android surface with width-based scale; in phone landscape, coordinates map against the widened logical framebuffer rather than the old centered `512x346` frame. The native wrapper's `Play` button can land higher on tablet-density layouts than on phone profiles, so smoke taps the UIAutomator text when possible and falls back to the actual button band instead of a bottom-biased percentage. Named screenshots also go through a timeout-backed `screencap` helper; if adb stalls, the smoke logs a warning and keeps action assertions moving instead of hanging indefinitely. The ATD automation image is reliable for log-driven assertions but can return black `screencap` frames in this environment; use it for repeatable input proof, then use `voidscape_api35` or a real device for visual QA screenshots. The Google APIs image can still ANR during credential entry under headless load, so real-device visual screenshots remain the release-grade check. Fresh Google APIs profiles can show Android's OS-owned fullscreen education card (`Viewing full screen` / `Got it`) on first launch; focused authenticated UI smokes close the game welcome panel from logged client coordinates instead of blind center taps.
 
-Android account creation uses the shared in-client packet registration form, not the web portal. `Create Account` collects only username, password, and confirmation when `want_email:false`; on success it returns to Existing User with the new credentials prefilled so the player can press `Ok` and enter the normal first-login appearance/onboarding flow. The existing-user `Recover account` action still uses `orsc.osConfig.VOIDSCAPE_PORTAL_RECOVERY_URL`; release builds point recovery at `https://voidscape.gg/#security`. Because the APK targets modern Android, `AndroidManifest.xml` declares HTTP/HTTPS `ACTION_VIEW` queries so `GameActivity.openUrl()` can discover Chrome/browser handlers before calling `startActivity`.
+Android account creation is portal-first so every new mobile account accepts the current Community Rules before entering chat or submitting other player-created content. `Create Account` opens `orsc.osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL`; `Recover account` uses `VOIDSCAPE_PORTAL_RECOVERY_URL`; and the native Account sheet links `VOIDSCAPE_PORTAL_DELETION_URL` so a player can initiate deletion of the game/app account and associated data. Release builds use the `https://voidscape.gg` account, recovery, and data-deletion routes. The desktop client retains the intentional packet-registration path. Because the APK targets modern Android, `AndroidManifest.xml` declares HTTP/HTTPS `ACTION_VIEW` queries so `GameActivity.openUrl()` can discover Chrome/browser handlers before calling `startActivity`.
 
 Android shows the existing `Save` credential button even when the server-side desktop remember-login flag is disabled. Saved credentials are stored in Android app-private `credentials.txt`, reloaded into the shared login fields on the next app launch, and remain excluded from bundled APK cache assets.
 
@@ -188,6 +188,10 @@ Before sharing an APK with players:
 
 - For internal QA/emulator smoke, `scripts/build-android.sh --debug` must pass and emit `Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk`.
 - Current public-channel stance is to show the Android APK in the post-launch download chooser when the APK artifact exists. For production promotion, prefer `scripts/build-android.sh --release` with upload signing configured, point `PORTAL_ANDROID_APK` at that release artifact if it is outside the default build path, and keep a passing physical Android QA report with the release evidence.
+- The public account contract is portal-first on Android and web, with exact Community Rules version `2026-07-16` acceptance required and persisted; Desktop alone retains packet registration. Android `Create Account`, recovery, and `Settings -> Account -> Delete account data` must open their intended `https://voidscape.gg` routes.
+- Google Play's user-generated-content gate requires the shipped interaction paths to remain usable: players accept the current Community Rules before creating an account, can submit `Settings -> Account -> Report a player`, and can block/unblock another player through the Social panel's Ignore list.
+- The public `/data-deletion` page must work while signed out and describe deletion of the game/app account, characters, portal account, and associated data. The in-app deletion row and the Play Console account-deletion declaration must point to that same process.
+- The held 10139 candidate currently uses `targetSdk 35` and `versionCode 10`. Re-read both values from the exact AAB before handoff, then compare the target SDK with Google's upload-day requirement and the version code with every Play track, including drafts.
 - Physical Android QA should be captured with `scripts/run-android-device-qa.sh --apk <release-apk-or-url>` and must pass `scripts/validate-android-device-qa-report.py` before a direct public APK channel is opened.
 - Fresh install on an emulator reaches `Ready to play`, pressing `Play` writes the public endpoint, and the login screen renders.
 - Emulator test matrix: one low-end-ish profile around 2 GB RAM, one modern phone profile, portrait and landscape fullscreen behavior, portrait HUD fit/touch targets, and at least one cold install with app data cleared.
@@ -238,10 +242,11 @@ This is the working Android punch list. The standard loop for each visual/input 
 
 ### Account and Login Flow
 
-- [x] Decide Android's public account path: in-client character creation for new username/password characters; recovery remains a portal handoff.
-- [x] Enable client packet registration on launch configs so `Create Account` does not lead to a disabled path.
-- [x] Add a clear `Create Account` path that opens the shared in-client registration form and prefills Existing User after success.
+- [x] Decide Android's public account path: Community-Rules-gated portal signup; Desktop retains the intentional packet-registration path.
+- [x] Route Android `Create Account` to the configured portal account URL without falling back to packet registration.
+- [x] Require and persist exact Community Rules version acceptance in the portal signup used by Android.
 - [x] Add a clear `Forgot password` path that opens the configured portal recovery flow, with an in-client fallback status if the URL is missing in a dev build.
+- [x] Add `Settings -> Account -> Delete account data`, opening the configured public web deletion process.
 - [x] Verify existing-user username/password entry with the Android soft keyboard.
 - [x] Verify password field masking and input focus behavior.
 - [x] Verify back button behavior from login, keyboard, recovery, and server picker.
@@ -323,6 +328,9 @@ This is the working Android punch list. The standard loop for each visual/input 
 - [x] Add a documented command for reinstalling the latest APK and taking screenshots.
 - [ ] Add release signing config outside Git.
 - [ ] Produce a release APK/AAB path when distribution is chosen.
+- [ ] Confirm the release AAB is signed with the intended Play upload key and record the certificate fingerprint without recording key passwords.
+- [ ] Confirm `targetSdk` meets the Google Play requirement current on upload day and `versionCode` exceeds every artifact in every Play track, including drafts.
+- [ ] Review and save evidence for the Play Console Data safety answers and App content account-deletion declaration against the exact candidate AAB and public `/data-deletion` page.
 - [x] Keep public portal APK downloads wired to the configured APK artifact and verify `/api/public` publishes a hash when the file exists.
 - [ ] Replace hardcoded public IP with a stable DNS name before wider release.
 - [ ] Decide Android update strategy: website APK download for beta, Play internal testing, or another channel.
@@ -364,7 +372,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 ### Product Decisions
 
 - [ ] Decide whether Android should ship for beta at all or stay internal until real-device QA is green.
-- [x] Android players create new username/password characters in-app; recovery stays in the portal/browser flow.
+- [x] Android players create accounts through the Community-Rules-gated portal; recovery and data deletion stay in the portal/browser flow; Desktop alone retains packet registration.
 - [ ] Decide whether Android gets a separate download page with screenshots and sideload instructions.
 - [x] Android uses mobile-specific navigation and touch affordances while keeping world content, gameplay rules, and authentic/classic mode unchanged.
 - [ ] Decide what “good enough for beta” means: login only, basic skilling, bank/shop, or PvP-ready.
@@ -377,6 +385,7 @@ This is the working Android punch list. The standard loop for each visual/input 
 - Google Play releases should use `scripts/build-android.sh --play-release`, then upload `Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab` after `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config <target-server.conf>` passes.
 - Release signing is configured through `VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE`, `VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD`, and `VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD`, matching `voidscape.android.uploadKeystore.*` Gradle properties, or the local macOS Keychain services documented in `~/.voidscape/android-signing`.
 - `assembleRelease` / `bundleRelease` fail unless signing is configured. `VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1` exists only for local unsigned release experiments.
+- Before upload, verify the exact AAB's signing-certificate fingerprint, current Play target-SDK requirement, and next valid `versionCode`; then review Data safety and account-deletion declarations in Play Console. A held release candidate stops after local build/checksum/QA evidence: it is not uploaded, assigned to a testing track, submitted for review, or deployed without a separate explicit go-live authorization.
 
 ## Deferred Hardening
 

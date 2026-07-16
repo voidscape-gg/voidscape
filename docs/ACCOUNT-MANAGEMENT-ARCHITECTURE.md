@@ -14,7 +14,7 @@ Authoritative schema lives in `server/database/sqlite/core.sqlite` and `server/d
 - `player_cache` stores custom Voidscape state such as titles, web-account links, account subscription mirrors, and Void Island path state.
 - Login flow in `LoginRequest` and `CharacterCreateRequest` looks up or creates by username directly.
 
-Implication: adding web accounts must not rename or split `players` yet. Desktop and native Android can use the existing packet registration path for one-character game logins, while web-account ownership remains a portal concern.
+Implication: adding web accounts must not rename or split `players` yet. Desktop can use the existing packet registration path for one-character game logins, while native Android and web-account ownership use the portal.
 
 ## Target Model
 
@@ -117,12 +117,12 @@ Phase 1 keeps game login untouched and splits signup by surface:
 1. A desktop or native Android player can create a character in-client with only username/password, then log in with that character username and game password.
 2. The website authenticates by web account email/password or Google OpenID Connect.
 3. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
-4. Public client packet registration is enabled for desktop/native Android; shipped web `/play` keeps directing new users to the portal account manager.
+4. Public client packet registration is enabled for desktop; native Android and shipped web `/play` direct new users to the portal account manager.
 5. Subscription state lives at the web-account level. The game bridge stores `web_account_id` on each character and `acct_sub:<webAccountId>` as the account-wide expiry in global `player_cache`.
 
 Launch decision: `member_world` stays globally enabled on the server for every client surface. Subscription cards are an account-wide XP/card incentive, not a per-player P2P unlock. The server config remains the source of truth for F2P/P2P restrictions, so launcher, Android, and web clients do not need separate membership logic.
 
-The shared game client uses the original packet registration form for desktop and native Android `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Web `/play` keeps its portal account sentinel for account creation, while client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
+The shared game client uses the original packet registration form for desktop `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Native Android and web `/play` use the portal account route so Android signup records Community Rules acceptance; client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
 
 Starter-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. `starter_card:<webAccountId> = 1` means waiting at the Lumbridge vendor, `2` means claimed, and staff revoke only clears an unclaimed waiting marker.
 

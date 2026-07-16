@@ -33,8 +33,8 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
 | `client_version` | `10139` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
-| `want_email` | `false` for the launch preset | `false` | `false` | Desktop and Android in-client character creation asks only for username/password. The web portal may still collect email for web accounts. |
-| `want_packet_register` | `true` for the launch preset, `false` when omitted | `true` | `true` | Enables desktop and native Android in-client character creation through the existing register packet. `/play` web signup remains portal-first. |
+| `want_email` | `false` for the launch preset | `false` | `false` | Desktop packet character creation asks only for username/password. Android and web use the portal account flow, which may collect email. |
+| `want_packet_register` | `true` for the launch preset, `false` when omitted | `true` | `true` | Enables desktop in-client character creation through the existing register packet. Native Android and `/play` web signup remain portal-first. |
 
 ## Portal account API
 
@@ -83,7 +83,7 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
-| `launch_subscription_card_until` | unset unless testing native packet registration | launch + 24h UTC | `2026-07-19T18:00:00Z` for July 18 launch | Optional server-side cutoff for native packet-created accounts to receive a `launch_24h_card` vendor marker. Env `VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL` overrides it. |
+| `launch_subscription_card_until` | unset unless testing packet registration | launch + 24h UTC | `2026-07-19T18:00:00Z` for July 18 launch | Optional server-side cutoff for desktop packet-created accounts to receive a `launch_24h_card` vendor marker. Env `VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL` overrides it. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |
 | `aggro_range` | `4` | `4` | `4` | Voidscape default aggressive-NPC scan radius; authentic presets remain at the Java/default 1-tile behavior unless configured otherwise. |
@@ -94,8 +94,8 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
 | `production_command_lockdown` | `true` for prelaunch/public rehearsal | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
 | `void_arena_allow_ambiguous_proxy_ranked` | `true` only for isolated local WebSocket QA | `false` | `false` | A non-public server-observed WebSocket peer is normally a reverse proxy, so ranked admission fails closed while unranked remains available. Keep this false outside isolated development; browser ranked requires a direct public peer or a future reviewed trusted-origin propagation path. |
-| `want_email` | `false` for launch preset and staging bundle | `false` | `false` | Keeps desktop/native Android character creation email-free; portal web accounts remain separate. |
-| `want_packet_register` | `true` for launch preset and staging bundle; Java default remains `false` when omitted | `true` | `true` | Enables desktop/native Android in-client character creation while web `/play` continues to use portal signup. |
+| `want_email` | `false` for launch preset and staging bundle | `false` | `false` | Keeps desktop packet character creation email-free; native Android and web use portal accounts. |
+| `want_packet_register` | `true` for launch preset and staging bundle; Java default remains `false` when omitted | `true` | `true` | Enables desktop in-client character creation while native Android and web `/play` use portal signup. |
 
 ## Content gates
 

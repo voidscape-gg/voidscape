@@ -27204,7 +27204,7 @@ public final class mudclient implements Runnable {
 		int cell = voidscapeNativeAndroidRailCell();
 		int margin = voidscapeNativeAndroidEdgeMargin() * 2;
 		int width = Math.min(this.getGameWidth() - margin * 2, Math.max(cell * 5, 280));
-		int height = cell * 3;
+		int height = cell * 4;
 		return new int[]{(this.getGameWidth() - width) / 2,
 			(this.getGameHeight() - height) / 2, width, height};
 	}
@@ -27218,6 +27218,12 @@ public final class mudclient implements Runnable {
 	private int[] voidscapeNativeAndroidAccountLogoutRect() {
 		int[] modal = voidscapeNativeAndroidAccountSheetRect();
 		int cell = voidscapeNativeAndroidRailCell();
+		return new int[]{modal[0], modal[1] + cell * 3, modal[2], cell};
+	}
+
+	private int[] voidscapeNativeAndroidAccountDeletionRect() {
+		int[] modal = voidscapeNativeAndroidAccountSheetRect();
+		int cell = voidscapeNativeAndroidRailCell();
 		return new int[]{modal[0], modal[1] + cell * 2, modal[2], cell};
 	}
 
@@ -27229,7 +27235,7 @@ public final class mudclient implements Runnable {
 
 	private int[] voidscapeNativeAndroidLogoutConfirmRect() {
 		int[] account = voidscapeNativeAndroidAccountSheetRect();
-		return new int[]{account[0], account[1], account[2], account[3]};
+		return new int[]{account[0], account[1], account[2], voidscapeNativeAndroidRailCell() * 3};
 	}
 
 	private int[] voidscapeNativeAndroidLogoutCancelRect() {
@@ -27551,6 +27557,8 @@ public final class mudclient implements Runnable {
 		UiSkin.modal(this.getSurface(), modal[0], modal[1], modal[2], modal[3], "ACCOUNT");
 		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountReportRect(),
 			"Report a player", false);
+		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountDeletionRect(),
+			"Delete account data", false);
 		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountLogoutRect(),
 			"Log out", true);
 		int[] close = voidscapeNativeAndroidAccountCloseRect();
@@ -27574,6 +27582,8 @@ public final class mudclient implements Runnable {
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountSheetRect());
 		line.append(" report=");
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountReportRect());
+		line.append(" deletion=");
+		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountDeletionRect());
 		line.append(" logout=");
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountLogoutRect());
 		line.append(" cancel=");
@@ -27633,6 +27643,9 @@ public final class mudclient implements Runnable {
 			if (!osConfig.F_SHOWING_KEYBOARD && this.clientPort != null) {
 				this.clientPort.drawKeyboard();
 			}
+		} else if (mouseInVoidscapeRect(voidscapeNativeAndroidAccountDeletionRect())) {
+			this.voidscapeNativeAndroidAccountSheetOpen = false;
+			openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_DELETION_URL);
 		} else {
 			this.voidscapeNativeAndroidAccountSheetOpen = false;
 		}
@@ -34762,7 +34775,7 @@ public final class mudclient implements Runnable {
 					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
-					if (Config.isWeb()) {
+					if (Config.isWeb() || isAndroid()) {
 						if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
 							openCreateAccountPortal();
 						} else {

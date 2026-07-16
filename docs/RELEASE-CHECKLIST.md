@@ -2,6 +2,8 @@
 
 Use this before any player-facing test, public weekend, or real launch. The goal is not ceremony; it is catching avoidable drift before players do.
 
+For a held release candidate, complete the local build, packaging, and evidence gates, then stop at **Held-candidate boundary**. Production deployment, public-link changes, Google Play upload, track rollout, and review submission require a separate explicit go-live decision.
+
 ## Release target
 
 - [ ] Release name / tag:
@@ -11,6 +13,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Client version:
 - [ ] Build commit:
 - [ ] Operator:
+- [ ] Release mode: held candidate / deployment authorized
 
 ## Git and workspace
 
@@ -28,7 +31,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] `scripts/build.sh` passes.
 - [ ] Void Arena focused gates pass independently: `scripts/test-void-arena-ranked-policy-java.sh`, `python3 scripts/test-void-arena-ranked-persistence.py`, `scripts/test-jdbc-transaction-lock-java.sh`, `scripts/test-void-arena-kit-snapshot-java.sh`, and `scripts/test-void-arena-sir-policy-java.sh`.
 - [ ] Android, if shipping APK publicly: `scripts/build-android.sh --release` passes on JDK 17 with upload signing configured; debug APKs are only for internal QA/emulator smoke.
-- [ ] Android, if shipping through Google Play: `scripts/build-android.sh --play-release` passes, `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config <target-server.conf>` passes, and the Play `versionCode` is greater than the live artifact.
+- [ ] Android, if shipping through Google Play: `scripts/build-android.sh --play-release` produces `Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab`; `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config <target-server.conf>` passes; the AAB is release-signed with the intended upload key (never debug/unsigned); its signing-certificate fingerprint matches the Play app's registered upload certificate; `targetSdk` satisfies the Play requirement in effect on upload day; and `versionCode` is greater than every artifact already present in every Play track, including drafts.
 - [ ] Generated client/server cache assets are intentionally committed when they are part of the release.
 - [ ] Build artifacts remain untracked: `server/*.jar`, `Client_Base/Open_RSC_Client.jar`, `PC_Launcher/OpenRSC.jar`.
 
@@ -86,13 +89,16 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Recovery-code reset works once, does not mark an unverified email verified, and also leaves the player signed out for a clean login.
 - [ ] Recovery-code rotation requires the current website password, or a recent passwordless federated login.
 - [ ] A portal-created linked character can reset its game password only while offline and after website-password confirmation; wrong-account, imported/unlinked, online, stale-owner, helper-failure, and rate-limit cases leave the game row unchanged.
+- [ ] Password and Google signup both require `termsAccepted: true` with the exact current `termsVersion: "2026-07-16"`; missing, false, or stale acceptance is rejected; the accepted Community Rules version and acceptance time persist on the pending signup/account record.
+- [ ] `/community-rules` is publicly reachable and matches version `2026-07-16`; Android and web `Create Account` reach the rules-gated portal flow before the account can enter chat or submit player-created content.
+- [ ] `/data-deletion` is publicly reachable without signing in and clearly covers the Voidscape game/app account, characters, portal account, and associated data; the documented request channel has been tested end to end.
 - [ ] `PORTAL_EMAIL_VERIFICATION_REQUIRED=1`, Resend delivery, `PORTAL_PUBLIC_ORIGIN`, the game-password helper classpath, and all recovery limits match `docs/CONFIG-MATRIX.md` in the deployed env.
 
 ## Client smoke test
 
 - [ ] `scripts/run-client.sh` connects to the intended host/port.
 - [ ] Login screen renders Voidscape branding correctly.
-- [ ] Portal-first account creation works and launch clients send Create Account/Recover account traffic to the account manager instead of relying on packet registration.
+- [ ] The intentional hybrid signup split works: Desktop `Create Account` uses packet registration and prefills Existing User; Android and web `Create Account` use the Community-Rules-gated portal; every client's recovery action uses the portal.
 - [ ] Existing account login works.
 - [ ] Desktop launcher visual smoke passes: `scripts/smoke-launcher-prelaunch.sh --jar <bundle>/launcher/VoidscapeLauncher-staging.jar --use-packaged-config --host <game-host> --port <game-port> --portal-url https://<portal-host> --out tmp/launcher-prelaunch`, proving the packaged jar renders and writes the intended endpoint.
 - [ ] Desktop launcher update-pipeline smoke passes: `scripts/smoke-launcher-update.sh`, covering fresh install, idempotent re-run, corruption repair, prune of removed files, launcher self-update staging plus the `--relaunched` loop guard, offline fallback, and plain-http refusal against a hermetic local channel.
@@ -104,6 +110,8 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Void Glass bank opens, searches/clears, deposits, withdraws, closes, and loadouts save/load from mobile-sized controls with `want_custom_ui:true`, `want_custom_banks:false`, and `want_bank_presets:true`.
 - [ ] Android, if shipping APK: fresh emulator install reaches `Ready to play`, `Play` connects to the intended public endpoint, and the advanced long-press server picker still supports emulator/manual testing.
 - [ ] Android, if shipping APK: touch movement, long-press menu, login/chat keyboard, six-band glass chat tabs including Global, inventory, Void Glass bank scrolling/search/clear/loadouts/Close via `scripts/android-smoke.sh --only-auth-bank` (`renderer=voidGlass`), camera rotate, zoom, background/resume, logout, portrait gameplay framing, and settings-panel spacing are smoke-tested.
+- [ ] Android's in-app `Settings -> Account -> Delete account data` opens the same public `/data-deletion` resource declared for Google Play; the destination itself is also usable without a portal sign-in.
+- [ ] User-generated-content safeguards work on the release clients: players accept the current Community Rules before account creation, `Settings -> Account -> Report a player` submits the existing report flow, and the Social panel can add/remove another player through the Ignore list (the player-blocking control).
 - [ ] Android, if shipping APK publicly: a physical-device report generated by `scripts/run-android-device-qa.sh` is filled on real Android hardware and passes `scripts/validate-android-device-qa-report.py`.
 - [ ] iPhone web, if shipping: `scripts/check-web-teavm-iphone-release.sh --no-build --with-simulator --package-dir dist/web-teavm` passes against a running local server and saves `tmp/web-teavm-iphone-release-preflight/summary.json` with prerequisites, local controls, login, HTTPS/WSS, package, local package-verifier, and iPhone Simulator Safari orientation-matrix results for the exact upload package.
 - [ ] iPhone web, if shipping: `scripts/smoke-web-teavm-iphone-controls.sh` passes and saves a current mobile-controls screenshot/summary, including safe portal URL resolution/rejection, small/standard/large portrait and short/wide landscape viewport coverage, dialog-safe blocking-dialog overlay placement, plus keyboard beforeinput/paste/composition coverage.
@@ -150,7 +158,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
 - [ ] Player titles command opens the achievement board and active title appears beside the overhead name.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
-- [ ] Desktop and Android `Create Account` open in-client username/password character creation, then prefill Existing User; their recovery buttons still open the portal. Web `/play` keeps Create Account/recovery portal-first, and launch configs keep packet registration enabled with email disabled.
+- [ ] Desktop `Create Account` opens in-client username/password character creation and prefills Existing User; Android and web `/play` open the Community-Rules-gated portal signup; all recovery buttons open the portal; launch configs keep packet registration enabled only for the intended desktop path with email disabled.
 - [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, marks the portal reward as claimed, and redeemed cards apply the intended account-wide XP rates.
 - [ ] PK Catching Simulator shows the three-card chooser; Trainer is unranked with a stable reachable destination, two-tick pacing, and exact `ATTACK NOW`; Medium preserves classic movement; Hard produces sustained expert routes; all modes reject tick-12 late catches, report `You missed`, stop for two ticks, and resume cleanly; `::leave` exits, logout releases the arena, and separate Medium/Hard highscores persist and tab correctly.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
@@ -183,7 +191,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Android public-channel decision is recorded. Current direction is to restore the APK to the post-launch download chooser; production should prefer a release-signed APK and physical Android QA before broad promotion.
 - [ ] Public Android APK channel, if chosen, has a passing physical Android QA report archived with the release handoff.
 - [ ] If Android APK links are public, `/api/public` shows the Android row with a SHA-256 hash and `/downloads/android-apk` returns the APK. Set `PORTAL_ANDROID_APK` when the public APK lives outside the default build output.
-- [ ] Prelaunch portal signup is backed by production persistence, creates linked game characters, and disables/redirects client packet registration.
+- [ ] Prelaunch portal signup is backed by production persistence and creates linked game characters for Android and web; Desktop intentionally retains packet registration, while Android/web cannot fall back to that path.
 - [ ] Public `/api/health.config.publicReady` is `true`, `abuseHashSaltConfigured` is `true`, and `issues` is empty; endpoint output exposes only booleans, never secret values.
 - [ ] Hosted launch staging verifier passes against the deployed portal, web client, WSS endpoint, and deployed server config:
   `scripts/verify-launch-staging.mjs --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws wss://<portal-host>/play/ws/ --server-config <deployed-server.conf> --connections-config <deployed-connections.conf> --skip-signup`; use `--run-signup` only for the separate isolated-DB mutation rehearsal.
@@ -192,8 +200,16 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Starter-card abuse controls have a stable hash salt, tuned IP bucket limit, and staff review/grant process.
 - [ ] Staff account tools are protected by production identity/RBAC, not the local `PORTAL_ADMIN_TOKEN` prototype guard.
 - [ ] Google OAuth and subscription-card payment checkout/webhooks are wired or intentionally disabled with clear player-facing copy.
+- [ ] Immediately before any Google Play upload, review the Play Console Data safety answers against the exact AAB and current privacy policy, and review the App content account-deletion declaration plus its public `/data-deletion` URL. Record screenshots/exported evidence; do not assume a prior release's answers still apply.
 - [ ] Public links, invite URLs, support instructions, and rules are current.
 - [ ] AGPL source-disclosure plan is ready before any public distribution; `/`, `/privacy`, `/data-deletion`, `/transparency`, and `/api/integrity` point at the Voidscape source mirror rather than only upstream OpenRSC.
+
+## Held-candidate boundary
+
+- [ ] The exact 10139 desktop, Android, web, server, portal, and launcher artifacts are built or packaged locally with checksums and verification evidence retained together.
+- [ ] Live-only checks that require the production host or Play Console are recorded as pending, not silently marked complete from local evidence.
+- [ ] Stop here for release integration: no production sync/deploy, public download-link switch, Google Play upload, testing-track rollout, review submission, or production database mutation has occurred.
+- [ ] A new explicit go-live authorization is required before any action beyond this boundary.
 
 ## Rollback
 

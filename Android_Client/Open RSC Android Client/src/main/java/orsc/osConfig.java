@@ -15,6 +15,7 @@ public class osConfig {
 	public static final String VOIDSCAPE_DEFAULT_PORT = "43596";
 	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/portal?auth=login";
 	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/portal?auth=recovery";
+	public static final String VOIDSCAPE_PORTAL_DELETION_URL = "https://voidscape.gg/data-deletion";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;
