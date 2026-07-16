@@ -1797,6 +1797,26 @@ assert_resumed_activity() {
 	return 1
 }
 
+wait_for_external_activity() {
+	local label="$1"
+	local timeout="${2:-15}"
+	local deadline=$((SECONDS + timeout))
+	local activities resumed escaped_app_id
+	escaped_app_id="${APP_ID//./\\.}"
+	while (( SECONDS < deadline )); do
+		activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
+		resumed="$(grep -E '(mResumedActivity|topResumedActivity)[:=]' <<< "$activities" | head -1 || true)"
+		if [[ -n "$resumed" ]] && ! grep -Eq "${escaped_app_id}/" <<< "$resumed"; then
+			echo "Verified external Android handoff for $label: $resumed"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: $label did not hand off to an external Android activity" >&2
+	grep -E '(mResumedActivity|topResumedActivity|mLastResumedActivity)' <<< "${activities:-}" >&2 || true
+	return 1
+}
+
 assert_game_activity_for_input() {
 	local step="$1"
 	local screenshot_name="${2:-diagnostic-lost-game-activity}"
@@ -6600,7 +6620,7 @@ assert_android_logout_layout() {
 		return 1
 	fi
 
-	for field in account report logout cancel confirm; do
+	for field in account report deletion logout cancel confirm; do
 		rect="$(android_logout_rect_from_line "$line" "$field")" || return 1
 		read -r x y width height <<< "$rect"
 		if (( x + width > game_width || y + height > game_height )); then
@@ -10349,19 +10369,20 @@ screenshot 15-saved-credentials-loaded
 "$ADB" shell input keyevent BACK
 sleep 1
 tap_pct 50 59
-sleep 4
+wait_for_external_activity "Recover account portal" 15 || exit 1
 screenshot 16-recover-account-handoff
 
 "$ADB" shell input keyevent BACK
-sleep 1
+wait_for_login_state 2 10 || exit 1
+"$ADB" shell input keyevent BACK
+wait_for_login_state 0 10 || exit 1
 screenshot 17-existing-user-back-home
 tap_create_account_button
-wait_for_login_state 1 10 || exit 1
-sleep 1
-screenshot 18-create-account-form
+wait_for_external_activity "Create Account portal" 15 || exit 1
+screenshot 18-create-account-portal-handoff
 
 "$ADB" shell input keyevent BACK
-sleep 1
+wait_for_login_state 0 10 || exit 1
 launch_to_login_home
 "$ADB" shell input keyevent HOME
 sleep 2
