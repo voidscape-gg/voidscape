@@ -1269,9 +1269,13 @@
 			cleanPortalDashboardUrl();
 			activateView("dashboard");
 		} catch (error) {
-			emailVerificationMessage.textContent = error.status === 410
-				? "That verification link expired. Create the account again to request a new one."
-				: "That verification link is invalid or has already been used.";
+			if (error.status === 410) {
+				emailVerificationMessage.textContent = "That verification link expired. Create the account again to request a new one.";
+			} else if (!error.status || error.status >= 500) {
+				emailVerificationMessage.textContent = "Verification is temporarily unavailable. Your link may still be valid; try again shortly.";
+			} else {
+				emailVerificationMessage.textContent = "That verification link is invalid or has already been used.";
+			}
 		} finally {
 			emailVerificationSubmit.disabled = false;
 		}
@@ -3950,8 +3954,19 @@
 			return;
 		}
 		if (trustSourceRepo) {
-			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
-			trustSourceRepo.textContent = source.repositoryUrl ? "View AGPL source" : titleStatus(source.status || "Source pending");
+			if (source.repositoryUrl) {
+				trustSourceRepo.href = source.repositoryUrl;
+				trustSourceRepo.target = "_blank";
+				trustSourceRepo.rel = "noreferrer";
+				trustSourceRepo.removeAttribute("aria-disabled");
+				trustSourceRepo.textContent = "View AGPL source";
+			} else {
+				trustSourceRepo.removeAttribute("href");
+				trustSourceRepo.removeAttribute("target");
+				trustSourceRepo.removeAttribute("rel");
+				trustSourceRepo.setAttribute("aria-disabled", "true");
+				trustSourceRepo.textContent = "Source publication pending";
+			}
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
@@ -3984,11 +3999,14 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var rows = ["Voidscape stays AGPL source-available."];
+		var sourcePublished = Boolean(source.repositoryUrl && source.shortCommit);
+		var rows = [sourcePublished
+			? "The corresponding AGPL source revision is published."
+			: "AGPL source publication is pending and required before player-facing distribution."];
 		if (source.shortCommit && source.dirty) {
-			rows.push("Live files are based on commit " + source.shortCommit + "; newer deployed patches are marked until published.");
+			rows.push("Staged files are based on revision " + source.shortCommit + "; newer changes remain unpublished.");
 		} else if (source.shortCommit) {
-			rows.push("Live source commit: " + source.shortCommit + ".");
+			rows.push("Published source revision: " + source.shortCommit + ".");
 		} else {
 			rows.push("Source commit metadata is waiting for the next publish.");
 		}

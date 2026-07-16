@@ -84,7 +84,12 @@ assert(Array.isArray(integrity.itemProvenance.recent), "integrity endpoint shoul
 assert(integrity.economyScans && integrity.economyScans.flagged >= 1, "integrity endpoint should expose economy scan findings");
 assert(integrity.build.status, "integrity endpoint should expose build evidence status");
 assert(Array.isArray(integrity.build.artifacts), "integrity endpoint should expose build artifact hashes");
-assert(integrity.build.source && integrity.build.source.repositoryUrl, "integrity endpoint should expose source metadata");
+assert(integrity.build.source && integrity.build.source.status, "integrity endpoint should expose source publication status");
+if (["publication_pending", "source_pending"].includes(integrity.build.source.status)) {
+	assert(!integrity.build.source.repositoryUrl && !integrity.build.source.commit, "pending source publication must not expose stale provenance");
+} else {
+	assert(integrity.build.source.repositoryUrl && integrity.build.source.commit, "published source metadata should identify its repository and commit");
+}
 
 const snapshot = await api("/api/openrsc/characters/SmokeHero");
 assert(snapshot.character.source === "openrsc-sqlite", "snapshot endpoint should report the OpenRSC source");
@@ -197,6 +202,8 @@ const registered = await api("/api/accounts/register", {
 		username: "SmokeHero",
 		email: "smoke@example.com",
 		password: "correct-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16",
 		path: "warrior"
 	}
 });
@@ -213,7 +220,9 @@ const signedInRegisterBlocked = await api("/api/accounts/register", {
 	body: {
 		username: "AlreadyIn",
 		email: "already-in@example.com",
-		password: "correct-horse-battery"
+		password: "correct-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	},
 	expectStatus: 409
 });
@@ -247,7 +256,9 @@ if (Number(process.env.PORTAL_CHARACTER_IP_DAILY_LIMIT || 0) === 2) {
 			body: {
 				username: "CharCapOne",
 			email: "char-cap-one@example.com",
-			password: "character-cap-password"
+			password: "character-cap-password",
+			termsAccepted: true,
+			termsVersion: "2026-07-16"
 		}
 	});
 	token = limitedRegistered.token;
@@ -627,7 +638,9 @@ const abuseOne = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseOne",
 		email: "abuse-one@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseTwo = await api("/api/accounts/register", {
@@ -637,7 +650,9 @@ const abuseTwo = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseTwo",
 		email: "abuse-two@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseThree = await api("/api/accounts/register", {
@@ -647,7 +662,9 @@ const abuseThree = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseThree",
 		email: "abuse-three@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseFour = await api("/api/accounts/register", {
@@ -657,7 +674,9 @@ const abuseFour = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseFour",
 		email: "abuse-four@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	},
 	expectStatus: 429
 });

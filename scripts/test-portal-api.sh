@@ -20,6 +20,9 @@ captcha_pid=""
 public_pid=""
 no_db_pid=""
 verify_pid=""
+drain_pid=""
+drain_restart_pid=""
+drain_request_pid=""
 
 cleanup() {
 	if [[ -n "$server_pid" ]]; then
@@ -42,9 +45,58 @@ cleanup() {
 		kill "$verify_pid" >/dev/null 2>&1 || true
 		wait "$verify_pid" >/dev/null 2>&1 || true
 	fi
+	if [[ -n "$drain_request_pid" ]]; then
+		kill "$drain_request_pid" >/dev/null 2>&1 || true
+		wait "$drain_request_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$drain_pid" ]]; then
+		kill "$drain_pid" >/dev/null 2>&1 || true
+		wait "$drain_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$drain_restart_pid" ]]; then
+		kill "$drain_restart_pid" >/dev/null 2>&1 || true
+		wait "$drain_restart_pid" >/dev/null 2>&1 || true
+	fi
 	rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
+
+expect_invalid_android_play_url() {
+	local url="$1"
+	local slug="$2"
+	local log="$tmp_dir/android-play-invalid-${slug}.log"
+	local pid
+	PORT=0 \
+		PORTAL_DATA_DIR="$tmp_dir/android-play-invalid-${slug}" \
+		PORTAL_ANDROID_PLAY_URL="$url" \
+		node web/portal/dev-server.mjs >"$log" 2>&1 &
+	pid="$!"
+	for _ in {1..20}; do
+		if ! kill -0 "$pid" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 0.05
+	done
+	if kill -0 "$pid" >/dev/null 2>&1; then
+		kill "$pid" >/dev/null 2>&1 || true
+		wait "$pid" >/dev/null 2>&1 || true
+		echo "PORTAL_ANDROID_PLAY_URL should reject $url"
+		exit 1
+	fi
+	if wait "$pid" >/dev/null 2>&1; then
+		echo "invalid PORTAL_ANDROID_PLAY_URL should fail startup: $url"
+		exit 1
+	fi
+	grep -q 'must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing' "$log" || {
+		echo "invalid PORTAL_ANDROID_PLAY_URL should explain the accepted listing"
+		exit 1
+	}
+}
+
+expect_invalid_android_play_url "http://play.google.com/store/apps/details?id=com.voidscape.gg" "http"
+expect_invalid_android_play_url "https://example.com/store/apps/details?id=com.voidscape.gg" "host"
+expect_invalid_android_play_url "https://play.google.com/store/apps/details?id=com.example.wrong" "package"
+expect_invalid_android_play_url "https://play.google.com/apps/internaltest/4700211566888170922" "internal-test"
 
 sqlite3 "$fixture_db" <<'SQL'
 CREATE TABLE players (
@@ -457,9 +509,22 @@ captcha_pid=""
 
 # ---- PORTAL_PUBLIC_MODE lockdown ----
 public_port=$((PORT + 1))
+private_build_commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+cat >"$tmp_dir/public-build-meta.json" <<JSON
+{
+	"sourcePublicationStatus": "publication_pending",
+	"sourceRepositoryUrl": "",
+	"sourceCommit": "",
+	"privateBuildCommit": "$private_build_commit",
+	"privateBuildShortCommit": "aaaaaaaaaaaa",
+	"sourceDirty": true,
+	"generatedAt": "2026-07-15T00:00:00.000Z"
+}
+JSON
 	PORT="$public_port" \
 	PORTAL_DATA_DIR="$tmp_dir/public-store" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+	PORTAL_BUILD_META="$tmp_dir/public-build-meta.json" \
 	PORTAL_ADMIN_TOKEN="$public_admin_token" \
 	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
@@ -511,6 +576,141 @@ if (payload.error !== "invalid_game_password") {
 ' "$response_file"
 }
 
+expect_terms_acceptance_required() {
+	local response_file="$tmp_dir/terms-acceptance-required.json"
+	local actual
+	actual="$(curl -sS -o "$response_file" -w '%{http_code}' "$@")"
+	if [[ "$actual" != "400" ]]; then
+		echo "terms contract: expected HTTP 400 from $*, got $actual"
+		exit 1
+	fi
+	node -e '
+const payload = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (payload.error !== "terms_acceptance_required") {
+	throw new Error("expected terms_acceptance_required, got " + JSON.stringify(payload));
+}
+' "$response_file"
+}
+
+# A restart must drain a roster transaction that has written OpenRSC rows but
+# has not yet renamed the matching portal store. The test-only pause makes that
+# normally tiny cross-store boundary deterministic.
+drain_db="$tmp_dir/openrsc-drain-fixture.db"
+drain_store="$tmp_dir/drain-store"
+drain_marker="$tmp_dir/drain-write-ready"
+drain_release="$tmp_dir/drain-write-release"
+drain_response="$tmp_dir/drain-signup-response.json"
+drain_status_file="$tmp_dir/drain-signup-status"
+drain_log="$tmp_dir/drain-server.log"
+drain_port=$((PORT + 12))
+cp "$base_fixture_db" "$drain_db"
+PORT="$drain_port" \
+	PORTAL_DATA_DIR="$drain_store" \
+	PORTAL_OPENRSC_DB="$drain_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_ENABLE_TEST_FAULTS=1 \
+	PORTAL_TEST_STORE_PAUSE_MARKER="$drain_marker" \
+	PORTAL_TEST_STORE_PAUSE_RELEASE="$drain_release" \
+	PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS=10000 \
+	PORTAL_SHUTDOWN_TIMEOUT_MS=5000 \
+	node web/portal/dev-server.mjs >"$drain_log" 2>&1 &
+drain_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+
+curl -sS -o "$drain_response" -w '%{http_code}' \
+	-X POST "http://127.0.0.1:${drain_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"DrainGuy","email":"drain-guy@example.com","password":"Drainpass1","termsAccepted":true,"termsVersion":"2026-07-16"}' \
+	>"$drain_status_file" &
+drain_request_pid="$!"
+for _ in {1..200}; do
+	[[ -f "$drain_marker" ]] && break
+	if ! kill -0 "$drain_pid" >/dev/null 2>&1; then
+		echo "drain fixture server exited before reaching the cross-store pause"
+		exit 1
+	fi
+	sleep 0.02
+done
+[[ -f "$drain_marker" ]] || { echo "in-flight roster write did not reach the deterministic pause"; exit 1; }
+
+kill -TERM "$drain_pid"
+sleep 0.15
+if ! kill -0 "$drain_pid" >/dev/null 2>&1; then
+	echo "SIGTERM exited before the in-flight roster write drained"
+	exit 1
+fi
+drain_listener_closed=0
+for _ in {1..50}; do
+	if ! curl -fsS --max-time 0.2 "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then
+		drain_listener_closed=1
+		break
+	fi
+	sleep 0.02
+done
+[[ "$drain_listener_closed" == "1" ]] || { echo "shutdown should stop accepting new requests while draining"; exit 1; }
+
+: >"$drain_release"
+if ! wait "$drain_request_pid"; then
+	echo "in-flight roster request failed while the service was draining"
+	exit 1
+fi
+drain_request_pid=""
+if ! wait "$drain_pid"; then
+	echo "portal should exit cleanly after draining the in-flight roster request"
+	exit 1
+fi
+drain_pid=""
+[[ "$(cat "$drain_status_file")" == "201" ]] || { echo "drained roster request should complete with HTTP 201"; exit 1; }
+grep -q 'portal_shutdown_complete' "$drain_log" || { echo "graceful shutdown should log a completed drain"; exit 1; }
+
+node - "$drain_store/dev-store.json" "$drain_db" <<'NODE'
+const fs = require("fs");
+const { execFileSync } = require("child_process");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const account = store.accounts.find((row) => row.emailCanonical === "drain-guy@example.com");
+if (!account) throw new Error("drained signup is missing from the portal store");
+const character = store.characters.find((row) => row.accountId === account.id && row.name === "DrainGuy");
+if (!character || !Number(character.playerId)) throw new Error("drained signup is missing its portal character link");
+const rows = execFileSync("sqlite3", ["-separator", "|", process.argv[3], "SELECT p.id,p.username,pc.value FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' WHERE p.username='DrainGuy';"], { encoding: "utf8" }).trim().split("|");
+if (Number(rows[0]) !== Number(character.playerId) || rows[1] !== "DrainGuy" || Number(rows[2]) !== Number(account.id)) {
+	throw new Error("drained roster write does not match across portal and OpenRSC stores");
+}
+const orphanCount = Number(execFileSync("sqlite3", [process.argv[3], "SELECT COUNT(*) FROM player_cache pc LEFT JOIN players p ON p.id=pc.playerID WHERE pc.key='web_account_id' AND p.id IS NULL;"], { encoding: "utf8" }).trim());
+if (orphanCount !== 0) throw new Error("drained roster write left an orphaned OpenRSC account link");
+NODE
+
+# A clean replacement can read and authenticate the drained account.
+PORT="$drain_port" \
+	PORTAL_DATA_DIR="$drain_store" \
+	PORTAL_OPENRSC_DB="$drain_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >>"$drain_log" 2>&1 &
+drain_restart_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${drain_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+drain_login="$(curl -fsS -X POST "http://127.0.0.1:${drain_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"drain-guy@example.com","password":"Drainpass1"}')"
+node -e "const payload=JSON.parse(process.argv[1]); if(!payload.token || !(payload.characters||[]).some((row)=>row.name==='DrainGuy')) throw new Error('replacement portal could not read the drained account');" "$drain_login"
+kill -TERM "$drain_restart_pid"
+wait "$drain_restart_pid"
+drain_restart_pid=""
+
 # the one public write path still works and mints a code
 public_signup="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"PublicGuy","email":"public-guy@example.com"}')"
 grep -q '"code": "VOID-' <<<"$public_signup" || { echo "public-mode signup should mint a code"; exit 1; }
@@ -555,10 +755,26 @@ grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/
 grep -q '"Android APK"' <<<"$public_payload" || { echo "public-mode /api/public should expose the Android APK download"; exit 1; }
 node -e "
 const payload = JSON.parse(process.argv[1]);
+const source = payload.integrity && payload.integrity.build && payload.integrity.build.source || {};
+if (source.status !== 'publication_pending') throw new Error('pending packaged source metadata should remain publication_pending');
+for (const field of ['repositoryUrl', 'commit', 'shortCommit', 'branch']) {
+	if (source[field] !== '') throw new Error('pending source proof must keep ' + field + ' blank');
+}
+if (source.dirty !== false) throw new Error('pending source proof must not expose private build dirty state');
+const serialized = JSON.stringify(payload);
+if (serialized.includes('privateBuildCommit') || serialized.includes(process.argv[2])) {
+	throw new Error('public payload exposed private build provenance');
+}
+" "$public_payload" "$private_build_commit"
+node -e "
+const payload = JSON.parse(process.argv[1]);
 const apkBuilt = process.argv[2] === '1';
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
 const apkHasSidecar = process.argv[3] === '1';
+if (play) throw new Error('unset PORTAL_ANDROID_PLAY_URL must not expose a Google Play row');
 if (!android) throw new Error('public payload should keep an Android APK row for launch-open UI copy');
+if (android.label !== 'Android APK' || android.fallback === true) throw new Error('unset Play URL should preserve the APK-only contract');
 if (apkBuilt) {
 	if (android.available !== true) throw new Error('built Android APK should be public in the launch-open chooser');
 	if (android.url !== '/downloads/android-apk') throw new Error('built Android APK should link to /downloads/android-apk');
@@ -596,7 +812,11 @@ if (apkBuilt) {
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
 	grep -q 'href="/privacy"' <<<"$landing_html" || { echo "landing page should link to the privacy policy"; exit 1; }
 	grep -q 'href="/data-deletion"' <<<"$landing_html" || { echo "landing page should link to data deletion"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$landing_html" || { echo "landing page should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$landing_html" || { echo "landing page should report deferred source publication"; exit 1; }
+	if grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$landing_html"; then
+		echo "landing page must not advertise the older mirror as current source"
+		exit 1
+	fi
 	if grep -q 'Open-RSC/Core-Framework' <<<"$landing_html"; then
 		echo "landing page should not use upstream-only source disclosure"
 		exit 1
@@ -623,17 +843,21 @@ if (apkBuilt) {
 	grep -q 'trust-staff-board' <<<"$transparency_html" || { echo "/transparency should include the staff ledger board"; exit 1; }
 	grep -q 'trust-source-board' <<<"$transparency_html" || { echo "/transparency should include the build proof board"; exit 1; }
 	expect_status 200 "http://127.0.0.1:${public_port}/privacy"
+	expect_status 200 "http://127.0.0.1:${public_port}/community-rules"
+	community_rules_html="$(curl -fsS "http://127.0.0.1:${public_port}/community-rules")"
+	grep -q '<title>Voidscape Community Rules</title>' <<<"$community_rules_html" || { echo "/community-rules should serve the current policy"; exit 1; }
+	grep -q 'version 2026-07-16' <<<"$community_rules_html" || { echo "/community-rules should identify the registration terms version"; exit 1; }
 	expect_status 200 "http://127.0.0.1:${public_port}/data-deletion"
 	privacy_html="$(curl -fsS "http://127.0.0.1:${public_port}/privacy")"
 	grep -q 'Voidscape account data should stay boring and explainable.' <<<"$privacy_html" || { echo "/privacy should render the policy copy"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$privacy_html" || { echo "/privacy should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$privacy_html" || { echo "/privacy should report deferred source publication"; exit 1; }
 	if grep -q 'Open-RSC/Core-Framework' <<<"$privacy_html"; then
 		echo "/privacy should not use upstream-only source disclosure"
 		exit 1
 	fi
 	deletion_html="$(curl -fsS "http://127.0.0.1:${public_port}/data-deletion")"
 	grep -q 'Request account data deletion.' <<<"$deletion_html" || { echo "/data-deletion should render the deletion flow"; exit 1; }
-	grep -q 'href="https://github.com/voidscape-gg/voidscape"' <<<"$deletion_html" || { echo "/data-deletion should link to the Voidscape AGPL source mirror"; exit 1; }
+	grep -q 'Source publication pending' <<<"$deletion_html" || { echo "/data-deletion should report deferred source publication"; exit 1; }
 	if grep -q 'Open-RSC/Core-Framework' <<<"$deletion_html"; then
 		echo "/data-deletion should not use upstream-only source disclosure"
 		exit 1
@@ -676,6 +900,7 @@ JSON
 	PORTAL_ADMIN_TOKEN="$public_admin_token" \
 	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_ANDROID_PLAY_URL="https://play.google.com/store/apps/details?hl=en&id=com.voidscape.gg&utm_source=portal-smoke" \
 	PORTAL_ANDROID_APK="$android_release_apk" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-android-public-smoke.log 2>&1 &
 android_public_pid="$!"
@@ -692,10 +917,24 @@ android_public_payload="$(curl -fsS "http://127.0.0.1:${android_public_port}/api
 node -e "
 const payload = JSON.parse(process.argv[1]);
 const android = (payload.downloads || []).find((row) => row.slug === 'android-apk');
+const play = (payload.downloads || []).find((row) => row.slug === 'android-play');
+if (!play || play.available !== true || play.platformPrimary !== true || play.platform !== 'android' || play.external !== true) {
+	throw new Error('configured Google Play listing should be the primary external Android choice');
+}
+if (play.url !== 'https://play.google.com/store/apps/details?id=com.voidscape.gg') {
+	throw new Error('Google Play URL should be canonicalized, got ' + (play && play.url));
+}
 if (!android || android.available !== true) throw new Error('explicit public Android APK should be available');
+if (android.label !== 'Signed APK fallback' || android.fallback !== true || android.platform !== 'android') {
+	throw new Error('configured Play listing should keep the signed APK as an explicit fallback');
+}
 if (android.url !== '/downloads/android-apk') throw new Error('explicit public Android APK should link to /downloads/android-apk');
 if (!/^[0-9a-f]{64}$/.test(android.sha256 || '')) throw new Error('explicit public Android APK should expose sha256');
 if (android.clientVersion !== 10123) throw new Error('explicit public Android APK should expose sidecar clientVersion');
+if ((payload.downloads || []).indexOf(play) > (payload.downloads || []).indexOf(android)) throw new Error('Google Play should appear before its APK fallback');
+if ((payload.integrity && payload.integrity.build && payload.integrity.build.artifacts || []).some((row) => row.slug === 'android-play')) {
+	throw new Error('external Play listing must not appear as a file-hash build artifact');
+}
 " "$android_public_payload"
 expect_status 200 "http://127.0.0.1:${android_public_port}/downloads/android-apk"
 
@@ -757,7 +996,17 @@ if ((payload.config.issues || []).length) throw new Error('launch health should 
 " "$launch_health_payload"
 grep -q '"launchSignupMode": true' <<<"$launch_public_payload" || { echo "launch-signup mode should be exposed to the frontend"; exit 1; }
 grep -q '"memberWorld": true' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the global members-world flag"; exit 1; }
-grep -q '"packetRegistration": false' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose portal-first registration"; exit 1; }
+node -e "
+const payload = JSON.parse(process.argv[1]);
+const rules = payload.worldRules || {};
+if (rules.registration !== 'hybrid') throw new Error('launch metadata should describe hybrid registration');
+if (rules.webRegistration !== 'portal-first') throw new Error('web registration should remain portal-first');
+if (rules.desktopRegistration !== 'packet') throw new Error('desktop registration should use the packet flow');
+if (rules.nativeAndroidRegistration !== 'portal-first') throw new Error('native Android registration should use the policy-gated portal flow');
+if (rules.packetRegistration !== true) throw new Error('launch metadata should report packet registration enabled');
+if (rules.communityTermsVersion !== '2026-07-16') throw new Error('launch metadata should expose the current registration terms version');
+if (rules.communityTermsUrl !== '/community-rules') throw new Error('launch metadata should link the current community rules');
+" "$launch_public_payload"
 grep -q '"oauth": {' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose OAuth config"; exit 1; }
 grep -q '"clientId": "test-google-client"' <<<"$launch_public_payload" || { echo "launch-signup /api/public should expose the Google client id when configured"; exit 1; }
 node -e "
@@ -787,9 +1036,15 @@ fi
 
 # Launch signup shares one password with the first game character. It accepts
 # only letters and numbers and keeps the launch-specific 8-20 limit.
+expect_terms_acceptance_required -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"NoTerms","email":"no-terms@example.com","password":"NoTerms123"}'
+expect_terms_acceptance_required -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"OldTerms","email":"old-terms@example.com","password":"OldTerms123","termsAccepted":true,"termsVersion":"2026-07-15"}'
 expect_status 400 -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
-	-d '{"username":"BadLaunch","email":"bad-launch@example.com","password":"Ab12345"}'
+	-d '{"username":"BadLaunch","email":"bad-launch@example.com","password":"Ab12345","termsAccepted":true,"termsVersion":"2026-07-16"}'
 for invalid_launch_password in \
 	'A12345678901234567890' \
 	'Bad!Pass1' \
@@ -800,12 +1055,12 @@ for invalid_launch_password in \
 	$'Bad\nPass1'; do
 	expect_invalid_game_password -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 		-H 'content-type: application/json' \
-		-d "$(node -e 'process.stdout.write(JSON.stringify({username:"BadLaunch",email:"bad-launch@example.com",password:process.argv[1]}))' "$invalid_launch_password")"
+		-d "$(node -e 'process.stdout.write(JSON.stringify({username:"BadLaunch",email:"bad-launch@example.com",password:process.argv[1],termsAccepted:true,termsVersion:"2026-07-16"}))' "$invalid_launch_password")"
 done
 
 launch_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
-	-d '{"username":"LaunchGuy","email":"launch-guy@example.com","password":"Launchpass1"}')"
+	-d '{"username":"LaunchGuy","email":"launch-guy@example.com","password":"Launchpass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 grep -q '"token":' <<<"$launch_signup" || { echo "launch-signup account registration should issue a session"; exit 1; }
 grep -q '"LaunchGuy"' <<<"$launch_signup" || { echo "launch-signup account registration should create the requested username"; exit 1; }
 grep -q '"source": "openrsc-sqlite-created"' <<<"$launch_signup" || { echo "launch-signup registration should create a real OpenRSC save immediately"; exit 1; }
@@ -822,9 +1077,17 @@ if [[ -z "$launch_token" ]]; then
 	echo "launch-signup registration returned an empty token"
 	exit 1
 fi
+node - "$tmp_dir/launch-store/dev-store.json" <<'NODE'
+const fs = require("fs");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const account = (store.accounts || []).find((row) => row.emailCanonical === "launch-guy@example.com");
+if (!account) throw new Error("launch signup account is missing from the portal store");
+if (account.communityTermsVersion !== "2026-07-16") throw new Error("launch signup did not persist the accepted terms version");
+if (!Number.isFinite(Date.parse(account.communityTermsAcceptedAt || ""))) throw new Error("launch signup did not persist the terms acceptance timestamp");
+NODE
 synthetic_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
-	-d '{"username":"NativeTest","email":"native-player-test@native.voidscape.invalid","password":"Nativepass1"}')"
+	-d '{"username":"NativeTest","email":"native-player-test@native.voidscape.invalid","password":"Nativepass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 grep -q '"NativeTest"' <<<"$synthetic_signup" || { echo "synthetic-email fixture account should still register"; exit 1; }
 synthetic_reset_request="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/password-reset/request" \
 	-H 'content-type: application/json' \
@@ -1005,9 +1268,15 @@ expect_status 429 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
 # VS-051: a garbage Google credential must fail on the credential (401
 # invalid_google_token), not trip the username check first (the old ordering
 # answered 400 invalid_username).
-expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
+expect_terms_acceptance_required -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
 	-H 'content-type: application/json' \
 	-d '{"credential":"garbage"}'
+expect_terms_acceptance_required -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
+	-H 'content-type: application/json' \
+	-d '{"credential":"garbage","termsAccepted":true,"termsVersion":"2026-07-15"}'
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
+	-H 'content-type: application/json' \
+	-d '{"credential":"garbage","termsAccepted":true,"termsVersion":"2026-07-16"}'
 
 launch_player_count="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
 if [[ "$launch_player_count" != "1" ]]; then
@@ -1161,7 +1430,7 @@ fi
 expect_status 401 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}"
 launch_other_account="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
-	-d '{"username":"OtherGuy","email":"other-guy@example.com","password":"Otherpass1"}')"
+	-d '{"username":"OtherGuy","email":"other-guy@example.com","password":"Otherpass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 launch_other_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_other_account")"
 launch_other_account_id="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(String(payload.account && payload.account.id || ''));" "$launch_other_account")"
 if [[ -z "$launch_other_token" || -z "$launch_other_account_id" ]]; then
@@ -1327,7 +1596,7 @@ if [[ -z "$google_nonce" ]]; then
 fi
 expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
 	-H 'content-type: application/json' \
-	-d "{\"credential\":\"bad-token\",\"nonce\":\"${google_nonce}\",\"username\":\"GoogleGuy\",\"gamePassword\":\"GooglePass1\"}"
+	-d "{\"credential\":\"bad-token\",\"nonce\":\"${google_nonce}\",\"username\":\"GoogleGuy\",\"gamePassword\":\"GooglePass1\",\"termsAccepted\":true,\"termsVersion\":\"2026-07-16\"}"
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google/dev" -H 'content-type: application/json' -d '{}'
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/founder/simulate-referral" -H 'content-type: application/json' -d '{}'
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/character-links/simulate-verify" -H 'content-type: application/json' -d '{}'
@@ -1347,6 +1616,31 @@ trap cleanup EXIT
 verify_db="$tmp_dir/openrsc-verify.db"
 cp "$base_fixture_db" "$verify_db"
 sqlite3 "$verify_db" "UPDATE players SET creation_date=strftime('%s','now'), creation_ip='198.51.100.70' WHERE username='SmokeHero';"
+verify_log="$tmp_dir/email-verification.log"
+verify_real_sqlite3="$(command -v sqlite3)"
+verify_sqlite_shim_dir="$tmp_dir/verify-sqlite-shim"
+verify_sqlite_fault_marker="$tmp_dir/verify-sqlite-fault-fired"
+mkdir -p "$verify_sqlite_shim_dir"
+node -- - "$verify_sqlite_shim_dir/sqlite3" <<'NODE'
+const fs = require("fs");
+const path = process.argv[2];
+fs.writeFileSync(path, `#!/usr/bin/env node
+const fs = require("fs");
+const { spawnSync } = require("child_process");
+const args = process.argv.slice(2);
+const query = args.find((arg) => arg.includes("INSERT INTO players (") && arg.includes("'VerifyGuy'"));
+const marker = process.env.VS075_SQLITE_FAULT_MARKER || "";
+if (query && marker && !fs.existsSync(marker)) {
+  fs.writeFileSync(marker, "fired\\n");
+  process.stderr.write("Error: stepping, attempt to write a readonly database (8)\\n");
+  process.exit(8);
+}
+const child = spawnSync(process.env.VS075_REAL_SQLITE3, args, { stdio: "inherit" });
+if (child.error) process.exit(127);
+process.exit(Number.isInteger(child.status) ? child.status : 1);
+`);
+NODE
+chmod 0755 "$verify_sqlite_shim_dir/sqlite3"
 verify_port=$((PORT + 6))
 PORT="$verify_port" \
 	PORTAL_DATA_DIR="$tmp_dir/verify-store" \
@@ -1369,7 +1663,10 @@ PORT="$verify_port" \
 	PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=1 \
 	PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT=1 \
 	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
-	node web/portal/dev-server.mjs >/tmp/voidscape-portal-email-verification-smoke.log 2>&1 &
+	VS075_REAL_SQLITE3="$verify_real_sqlite3" \
+	VS075_SQLITE_FAULT_MARKER="$verify_sqlite_fault_marker" \
+	PATH="$verify_sqlite_shim_dir:$PATH" \
+	node web/portal/dev-server.mjs >"$verify_log" 2>&1 &
 verify_pid="$!"
 for _ in {1..60}; do
 	if curl -fsS "http://127.0.0.1:${verify_port}/api/health" >/dev/null 2>&1; then
@@ -1380,7 +1677,7 @@ done
 verify_signup="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.70' \
-	-d '{"username":"VerifyGuy","email":"verify-guy@example.com","password":"VerifyPass1"}')"
+	-d '{"username":"VerifyGuy","email":"verify-guy@example.com","password":"VerifyPass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.verificationRequired !== true) throw new Error('verified launch signup should require email verification');
@@ -1395,14 +1692,14 @@ if (ttlHours < 47.9 || ttlHours > 48.1) throw new Error('default email verificat
 verify_second_pending="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.70' \
-	-d '{"username":"PendingTwo","email":"pending-two@example.com","password":"PendingPass2"}')"
+	-d '{"username":"PendingTwo","email":"pending-two@example.com","password":"PendingPass2","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 node -e "const p=JSON.parse(process.argv[1]); if(p.verificationRequired!==true) throw new Error('verification send should not double-count as a completed signup');" "$verify_second_pending"
 
 verify_pending_before_retry="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'&&x.status==='pending'); process.stdout.write(JSON.stringify({username:p.username,passwordHash:p.passwordHash,gamePasswordSealed:p.gamePasswordSealed,tokenHash:p.tokenHash,expiresAt:p.expiresAt}));" "$tmp_dir/verify-store/dev-store.json")"
 verify_retry_signup="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.74' \
-	-d '{"username":"HijackName","email":"verify-guy@example.com","password":"Hijackpass1"}')"
+	-d '{"username":"HijackName","email":"verify-guy@example.com","password":"Hijackpass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
 node -e "const p=JSON.parse(process.argv[1]); if(p.verificationRequired!==true || p.username!=='VerifyGuy') throw new Error('an active pending signup should be reused without accepting replacement credentials');" "$verify_retry_signup"
 verify_pending_after_retry="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'&&x.status==='pending'); process.stdout.write(JSON.stringify({username:p.username,passwordHash:p.passwordHash,gamePasswordSealed:p.gamePasswordSealed,tokenHash:p.tokenHash,expiresAt:p.expiresAt}));" "$tmp_dir/verify-store/dev-store.json")"
 if [[ "$verify_pending_after_retry" != "$verify_pending_before_retry" ]]; then
@@ -1449,8 +1746,8 @@ expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-e
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.80' \
 	-d '{"email":"unknown-4@example.com"}'
-grep -q '"event":"portal_rate_limit_decision"' /tmp/voidscape-portal-email-verification-smoke.log || { echo "rate-limit decisions should be logged"; exit 1; }
-if grep -Eq '198\.51\.100\.(73|80)|verify-guy@example\.com|unknown-4@example\.com' /tmp/voidscape-portal-email-verification-smoke.log; then
+grep -q '"event":"portal_rate_limit_decision"' "$verify_log" || { echo "rate-limit decisions should be logged"; exit 1; }
+if grep -Eq '198\.51\.100\.(73|80)|verify-guy@example\.com|unknown-4@example\.com' "$verify_log"; then
 	echo "rate-limit decision logs must not contain raw IP or email values"
 	exit 1
 fi
@@ -1472,6 +1769,8 @@ const pending = (store.emailVerifications || []).find((row) =>
 	row.status === "pending" && row.emailCanonical === "verify-guy@example.com"
 );
 if (!pending || !pending.gamePasswordSealed) throw new Error("pending signup game-password seal not found");
+if (pending.communityTermsVersion !== "2026-07-16") throw new Error("pending signup did not preserve the accepted terms version");
+if (!Number.isFinite(Date.parse(pending.communityTermsAcceptedAt || ""))) throw new Error("pending signup did not preserve the terms acceptance timestamp");
 const [version, ivText, tagText, encryptedText] = String(pending.gamePasswordSealed).split(".");
 if (version !== "v1" || !ivText || !tagText || !encryptedText) throw new Error("game-password seal should use v1 format");
 const key = createHash("sha256").update(`${process.argv[3]}:portal-seal`).digest();
@@ -1525,6 +1824,55 @@ if [[ "$verify_after_scanner_accounts" != "0" ]]; then
 	echo "email verification GET must not create an account before explicit confirmation"
 	exit 1
 fi
+verify_failure_status="$(curl -sS -o "$tmp_dir/verify-sqlite-failure-response.json" -w '%{http_code}' \
+	-X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d "{\"token\":\"${verify_token}\"}")"
+node -- - "$verify_log" "$verify_token" "$verify_db" <<'NODE'
+const fs = require("fs");
+const [logPath, token, databasePath] = process.argv.slice(2);
+const log = fs.readFileSync(logPath, "utf8");
+const forbidden = [
+	"verify-guy@example.com",
+	"VerifyGuy",
+	"VerifyPass1",
+	"198.51.100.70",
+	token,
+	databasePath,
+	"INSERT INTO players",
+	"BEGIN IMMEDIATE",
+	"pass, salt",
+	"creation_ip",
+	"sqlite3 -cmd"
+];
+for (const value of forbidden) {
+	if (value && log.includes(value)) throw new Error(`SQLite failure log exposed forbidden value: ${value}`);
+}
+if (/\$2y\$10\$[./A-Za-z0-9]{53}/.test(log)) {
+	throw new Error("SQLite failure log exposed a generated game-password hash");
+}
+const prefix = "openrsc_sqlite_child_failed ";
+const lines = log.split(/\r?\n/).filter((line) => line.startsWith(prefix));
+if (lines.length !== 1) throw new Error(`expected one sanitized SQLite child record, got ${lines.length}`);
+if (Buffer.byteLength(lines[0], "utf8") > 256) throw new Error("sanitized SQLite child record exceeded 256 bytes");
+const record = JSON.parse(lines[0].slice(prefix.length));
+if (Object.keys(record).sort().join(",") !== "code,operation,summary") {
+	throw new Error("sanitized SQLite child record contains unexpected fields");
+}
+if (record.operation !== "create_openrsc_player" || record.code !== 8 || record.summary !== "readonly_database") {
+	throw new Error(`unexpected sanitized SQLite child record: ${JSON.stringify(record)}`);
+}
+NODE
+if [[ "$verify_failure_status" != "503" ]] || ! grep -q '"openrsc_db_unavailable"' "$tmp_dir/verify-sqlite-failure-response.json"; then
+	echo "injected SQLite write failure should return retryable openrsc_db_unavailable"
+	exit 1
+fi
+verify_after_failure_state="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'); process.stdout.write(JSON.stringify({pending:p&&p.status,accounts:(s.accounts||[]).filter(x=>x.emailCanonical==='verify-guy@example.com').length}));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_after_failure_state" != '{"pending":"pending","accounts":0}' ]] || [[ "$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")" != "0" ]]; then
+	echo "injected SQLite write failure should leave the pending signup retryable with no partial account or player"
+	exit 1
+fi
 verify_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
 	-H 'content-type: application/json' \
 	-H 'x-forwarded-for: 198.51.100.70' \
@@ -1561,6 +1909,9 @@ const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));
 const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com');
 if(!p || p.status!=='verified') throw new Error('verification row should be marked verified');
 if(p.passwordHash || p.gamePasswordSealed || p.tokenHash || p.verificationTokenSealed) throw new Error('used verification credentials should be cleared');
+const account=(s.accounts||[]).find(x=>x.emailCanonical==='verify-guy@example.com');
+if(!account || account.communityTermsVersion!=='2026-07-16') throw new Error('verified account should inherit the accepted terms version');
+if(!Number.isFinite(Date.parse(account.communityTermsAcceptedAt||''))) throw new Error('verified account should inherit the terms acceptance timestamp');
 if((s.emailEvents||[]).filter(e=>e.pendingSignupId===p.id).some(e=>e.metadata&&e.metadata.verificationTokenSealed)) throw new Error('verification email events should not retain used token material');
 " "$tmp_dir/verify-store/dev-store.json"
 expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/characters" \

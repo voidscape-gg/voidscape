@@ -28,9 +28,29 @@ const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
 const betaSignupCounterSeed = process.env.PORTAL_BETA_COUNTER_SEED || "voidscape-public-beta";
 const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
 const storePath = join(dataDir, "dev-store.json");
+const testStoreFaultsEnabled = process.env.PORTAL_ENABLE_TEST_FAULTS === "1";
+const testStorePauseMarkerPath = String(process.env.PORTAL_TEST_STORE_PAUSE_MARKER || "").trim();
+const testStorePauseReleasePath = String(process.env.PORTAL_TEST_STORE_PAUSE_RELEASE || "").trim();
+const testStorePauseAt = Number(process.env.PORTAL_TEST_STORE_PAUSE_AT || 1);
+const testStorePauseTimeoutMs = Number(process.env.PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS || 30000);
+const shutdownTimeoutMs = configuredPositiveInteger("PORTAL_SHUTDOWN_TIMEOUT_MS", process.env.PORTAL_SHUTDOWN_TIMEOUT_MS || "30000");
+let storePauseAttempts = 0;
+if (testStorePauseMarkerPath || testStorePauseReleasePath) {
+	if (!testStoreFaultsEnabled) {
+		throw new Error("PORTAL_TEST_STORE_PAUSE_* requires PORTAL_ENABLE_TEST_FAULTS=1");
+	}
+	if (!testStorePauseMarkerPath
+		|| !testStorePauseReleasePath
+		|| !Number.isInteger(testStorePauseAt)
+		|| testStorePauseAt <= 0
+		|| !Number.isInteger(testStorePauseTimeoutMs)
+		|| testStorePauseTimeoutMs <= 0) {
+		throw new Error("invalid PORTAL_TEST_STORE_PAUSE configuration");
+	}
+}
 const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(dataDir, "integrity-summary.json");
 const buildMetadataPath = process.env.PORTAL_BUILD_META || join(rootDir, "build-meta.json");
-const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "https://github.com/voidscape-gg/voidscape";
+const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "";
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
 const gamePasswordHelperClasspath = process.env.PORTAL_GAME_PASSWORD_HELPER_CLASSPATH || join(repoRoot, "server/core.jar");
 const gamePasswordJavaBin = process.env.PORTAL_JAVA_BIN || "java";
@@ -124,6 +144,7 @@ const googleIdentityProvider = "google";
 let googleJwksCache = { expiresAt: 0, keys: new Map() };
 const publicSiteOrigin = normalizedOrigin(process.env.PORTAL_PUBLIC_ORIGIN || "");
 const webClientUrl = mobileWebClientUrl(process.env.PORTAL_WEB_CLIENT_URL || "https://voidscape.gg/play/");
+const androidPlayUrl = configuredAndroidPlayUrl("PORTAL_ANDROID_PLAY_URL", process.env.PORTAL_ANDROID_PLAY_URL);
 const discordInviteUrl = process.env.PORTAL_DISCORD_INVITE_URL || "https://discord.gg/f6uQmrRv4";
 const emailProvider = String(process.env.PORTAL_EMAIL_PROVIDER || "").trim().toLowerCase();
 const emailDryRun = process.env.PORTAL_EMAIL_DRY_RUN === "1";
@@ -179,7 +200,7 @@ const funnelEvents = new Set([
 	"transparency",
 	"click"
 ]);
-const clientCacheDir = join(repoRoot, "Client_Base/Cache");
+const clientCacheDir = configuredDownloadPath("PORTAL_CLIENT_CACHE_DIR", join(repoRoot, "Client_Base/Cache"));
 const launcherRuntimeFiles = new Set([
 	"accounts.txt",
 	"credentials.txt",
@@ -198,10 +219,34 @@ const clientVersionOverride = process.env.PORTAL_CLIENT_VERSION
 	: null;
 const clientVersionSourcePath = join(repoRoot, "Client_Base/src/orsc/Config.java");
 let clientVersionCache;
+const currentCommunityTermsVersion = "2026-07-16";
 
 function configuredDownloadPath(envName, fallbackPath) {
 	const configuredPath = process.env[envName];
 	return configuredPath ? resolve(repoRoot, configuredPath) : fallbackPath;
+}
+
+function configuredAndroidPlayUrl(envName, value) {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		const parsed = new URL(text);
+		const ids = parsed.searchParams.getAll("id");
+		const pathname = parsed.pathname.replace(/\/+$/g, "");
+		if (parsed.protocol !== "https:"
+			|| parsed.hostname !== "play.google.com"
+			|| parsed.port
+			|| parsed.username
+			|| parsed.password
+			|| pathname !== "/store/apps/details"
+			|| ids.length !== 1
+			|| ids[0] !== "com.voidscape.gg") {
+			throw new Error("invalid listing");
+		}
+	} catch (error) {
+		throw new Error(`${envName} must be the official https://play.google.com/store/apps/details?id=com.voidscape.gg listing`);
+	}
+	return "https://play.google.com/store/apps/details?id=com.voidscape.gg";
 }
 
 function configuredIsoTimestamp(envName, value) {
@@ -495,6 +540,11 @@ const betaContent = {
 };
 
 let writeQueue = Promise.resolve();
+let shuttingDown = false;
+let activeHandlers = 0;
+let shutdownPromise = null;
+const handlerDrainWaiters = new Set();
+const backgroundTasks = new Set();
 let itemDefinitionsPromise = null;
 let titleDefinitionsPromise = null;
 
@@ -505,14 +555,77 @@ class HttpError extends Error {
 	}
 }
 
+const sqliteOperationLabels = new Set([
+	"create_openrsc_player",
+	"delete_openrsc_player",
+	"link_player_account",
+	"native_backfill_apply",
+	"openrsc_read",
+	"openrsc_write_lock",
+	"revoke_starter_card",
+	"sync_account_subscription",
+	"sync_signup_code",
+	"sync_starter_card",
+	"unlink_player_account",
+	"update_player_password"
+]);
+
+function sqliteChildCode(error) {
+	const code = error && error.code;
+	if (Number.isInteger(code) && code >= 0 && code <= 255) return code;
+	const text = String(code || "");
+	return /^[A-Z0-9_]{1,24}$/.test(text) ? text : "unknown";
+}
+
+function sqliteFailureSummary(error) {
+	const stderr = String(error && error.stderr || "").toLowerCase();
+	if (stderr.includes("readonly") || stderr.includes("read-only")) return "readonly_database";
+	if (stderr.includes("database is locked")) return "database_locked";
+	if (stderr.includes("database is busy")) return "database_busy";
+	if (stderr.includes("unable to open database")) return "unable_to_open";
+	if (stderr.includes("database or disk is full") || stderr.includes("disk full")) return "disk_full";
+	if (stderr.includes("disk i/o error") || stderr.includes("i/o error")) return "io_error";
+	if (stderr.includes("malformed") || stderr.includes("not a database")) return "malformed_database";
+	if (stderr.includes("no such table")) return "schema_missing";
+	if (stderr.includes("constraint")) return "constraint_failed";
+	return "sqlite_error";
+}
+
+function logSqliteChildFailure(error, operation) {
+	console.error("openrsc_sqlite_child_failed", JSON.stringify({
+		operation: sqliteOperationLabels.has(operation) ? operation : "unknown",
+		code: sqliteChildCode(error),
+		summary: sqliteFailureSummary(error)
+	}));
+}
+
+function openRscDatabaseUnavailable(error, operation) {
+	logSqliteChildFailure(error, operation);
+	return new HttpError(503, "openrsc_db_unavailable");
+}
+
 const server = createServer((request, response) => {
+	if (shuttingDown) {
+		response.setHeader("connection", "close");
+		json(response, 503, { error: "portal_shutting_down" });
+		return;
+	}
+	activeHandlers += 1;
 	handleRequest(request, response).catch((error) => {
 		const status = error.status || 500;
-		json(response, status, {
-			error: status === 500 ? "internal_error" : error.message
-		});
+		if (!response.headersSent && !response.writableEnded) {
+			json(response, status, {
+				error: status === 500 ? "internal_error" : error.message
+			});
+		}
 		if (status === 500) {
 			console.error(error);
+		}
+	}).finally(() => {
+		activeHandlers -= 1;
+		if (activeHandlers === 0) {
+			for (const resolveWaiter of handlerDrainWaiters) resolveWaiter();
+			handlerDrainWaiters.clear();
 		}
 	});
 });
@@ -537,6 +650,65 @@ server.listen(port, bindHost, () => {
 	console.log(`Voidscape portal dev server: http://${bindHost}:${port}/${modeLabel}`);
 	console.log(`Portal API data: ${storePath}`);
 });
+
+process.once("SIGTERM", () => beginGracefulShutdown("SIGTERM"));
+process.once("SIGINT", () => beginGracefulShutdown("SIGINT"));
+
+function beginGracefulShutdown(signal) {
+	if (shutdownPromise) return shutdownPromise;
+	shuttingDown = true;
+	console.log("portal_shutdown_started", JSON.stringify({ signal, activeHandlers }));
+	const closePromise = new Promise((resolveClose, rejectClose) => {
+		server.close((error) => error ? rejectClose(error) : resolveClose());
+		if (typeof server.closeIdleConnections === "function") server.closeIdleConnections();
+	});
+	let timeoutId = null;
+	const timeoutPromise = new Promise((resolveTimeout, rejectTimeout) => {
+		timeoutId = setTimeout(() => rejectTimeout(new Error("portal_shutdown_timeout")), shutdownTimeoutMs);
+	});
+	shutdownPromise = Promise.race([
+		Promise.all([closePromise, drainPortalWork()]),
+		timeoutPromise
+	]).then(() => {
+		if (timeoutId) clearTimeout(timeoutId);
+		console.log("portal_shutdown_complete", JSON.stringify({ signal }));
+		process.exit(0);
+	}).catch((error) => {
+		if (timeoutId) clearTimeout(timeoutId);
+		console.error("portal_shutdown_failed", JSON.stringify({
+			signal,
+			error: error && error.message ? error.message : "unknown_error",
+			activeHandlers,
+			backgroundTasks: backgroundTasks.size
+		}));
+		if (typeof server.closeAllConnections === "function") server.closeAllConnections();
+		process.exit(1);
+	});
+	return shutdownPromise;
+}
+
+async function drainPortalWork() {
+	for (;;) {
+		await waitForActiveHandlers();
+		const tasks = Array.from(backgroundTasks);
+		if (tasks.length) await Promise.allSettled(tasks);
+		const queuedWrites = writeQueue;
+		await queuedWrites;
+		if (activeHandlers === 0 && backgroundTasks.size === 0 && queuedWrites === writeQueue) return;
+	}
+}
+
+function waitForActiveHandlers() {
+	if (activeHandlers === 0) return Promise.resolve();
+	return new Promise((resolveWaiter) => handlerDrainWaiters.add(resolveWaiter));
+}
+
+function trackBackgroundTask(task) {
+	const tracked = Promise.resolve(task);
+	backgroundTasks.add(tracked);
+	tracked.finally(() => backgroundTasks.delete(tracked));
+	return tracked;
+}
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
@@ -785,6 +957,7 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/register") {
 		const payload = await readJson(request);
+		requireCommunityTermsAcceptance(payload);
 		await requireCaptcha(request, payload, "signup");
 		const password = requirePassword(payload.password);
 		if (launchSignupMode) {
@@ -830,6 +1003,8 @@ async function handleApi(request, response, url) {
 				emailDisplay: String(payload.email || "").trim(),
 				passwordHash,
 				status: "active",
+				communityTermsVersion: currentCommunityTermsVersion,
+				communityTermsAcceptedAt: now(),
 				subscriptionExpiresAt: 0,
 				createdAt: now(),
 				updatedAt: now()
@@ -936,12 +1111,14 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/accounts/google") {
 		requireGoogleConfigured();
 		const payload = await readJson(request);
+		requireCommunityTermsAcceptance(payload);
 		await requireCaptcha(request, payload, "signup");
 		const profile = await googleProfileFromCredential(payload);
 		const result = await updateStore(async (store) => {
 				consumeGoogleNonce(store, payload.nonce || "", request);
 				const wasNewAccount = !findGoogleAccount(store, profile);
 				const account = await upsertGoogleAccount(store, profile, payload, request);
+				recordCommunityTermsAcceptance(account);
 				if (account.status !== "active") throw new HttpError(401, "invalid_account");
 				if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
 					await createLaunchFirstCharacter(store, account, {
@@ -2210,6 +2387,7 @@ function presencePageInfo(path) {
 	if (path === "/npcs" || path === "/npcs.html" || path === "/drops" || path === "/drops.html") return { key: "npcs", label: "NPC drops" };
 	if (path === "/transparency" || path === "/transparency.html") return { key: "transparency", label: "Transparency" };
 	if (path === "/privacy" || path === "/privacy.html") return { key: "privacy", label: "Privacy" };
+	if (path === "/community-rules" || path === "/community-rules.html") return { key: "community_rules", label: "Community rules" };
 	if (path === "/data-deletion" || path === "/data-deletion.html") return { key: "data_deletion", label: "Data deletion" };
 	if (path === "/discord" || path === "/discord.html") return { key: "discord", label: "Discord" };
 	return { key: "other", label: "Other" };
@@ -2278,6 +2456,12 @@ async function queuePendingEmailVerificationSignup(store, payload, passwordHash,
 		Number(entry.expiresAtMs || 0) > Date.now()
 	);
 	if (existingPending) {
+		if (existingPending.communityTermsVersion !== currentCommunityTermsVersion
+			|| !validIsoTimestamp(existingPending.communityTermsAcceptedAt)) {
+			existingPending.communityTermsVersion = currentCommunityTermsVersion;
+			existingPending.communityTermsAcceptedAt = now();
+			existingPending.updatedAt = now();
+		}
 		return { pending: existingPending, created: false };
 	}
 
@@ -2299,6 +2483,8 @@ async function queuePendingEmailVerificationSignup(store, payload, passwordHash,
 		username,
 		normalizedName,
 		passwordHash,
+		communityTermsVersion: currentCommunityTermsVersion,
+		communityTermsAcceptedAt: now(),
 		gamePasswordSealed: launchSignupMode ? sealText(password) : "",
 		referrerCode: String(payload.referrerCode || payload.referralCode || payload.ref || "").trim().slice(0, 40),
 		status: "pending",
@@ -2389,6 +2575,8 @@ async function verifyEmailSignupToken(token, request) {
 			emailDisplay: pending.emailDisplay || pending.emailCanonical,
 			passwordHash: pending.passwordHash,
 			status: "active",
+			communityTermsVersion: pending.communityTermsVersion,
+			communityTermsAcceptedAt: pending.communityTermsAcceptedAt,
 			emailVerifiedAt: now(),
 			subscriptionExpiresAt: 0,
 			createdAt: now(),
@@ -2978,11 +3166,13 @@ async function queueAdminBulkEmail(request, type, payload, options) {
 
 function scheduleEmailDelivery(emailEventId) {
 	if (!emailEventId) return;
-	setTimeout(() => {
-		deliverQueuedEmail(emailEventId).catch((error) => {
-			console.error("email_delivery_failed", sanitizeEmailError(error));
-		});
-	}, 0);
+	trackBackgroundTask(new Promise((resolveDelivery) => {
+		setTimeout(() => {
+			deliverQueuedEmail(emailEventId).catch((error) => {
+				console.error("email_delivery_failed", sanitizeEmailError(error));
+			}).finally(resolveDelivery);
+		}, 0);
+	}));
 }
 
 async function deliverEmailEvents(eventIds) {
@@ -3208,11 +3398,12 @@ function buildEmailVerificationMessage(event, pending) {
 		bullets: [
 			`Requested username: ${username}`,
 			"Your account, first character, and starter subscription card are not created until you verify.",
+			"On the verification page, press Verify email to finish creating your account.",
 			`This link expires in ${emailVerificationTtlHours} hours.`,
 			"If you did not request this, ignore this email."
 		],
 		primaryUrl: verifyUrl,
-		primaryLabel: "Verify email",
+		primaryLabel: "Open verification page",
 		secondaryUrl: joinUrl(origin, "/"),
 		secondaryLabel: "Open Voidscape"
 	});
@@ -3808,21 +3999,23 @@ async function serveStatic(request, response, pathname) {
 			? "/portal.html"
 			: pathname === "/privacy"
 				? "/privacy.html"
-				: pathname === "/data-deletion"
-					? "/data-deletion.html"
-					: pathname === "/features"
-						? "/features.html"
-							: pathname === "/loot-editor" || pathname === "/loot-editor/"
-								? "/loot-editor.html"
-								: pathname === "/loot-editor-guide" || pathname === "/loot-editor-guide/"
-									? "/loot-editor-guide.html"
-									: pathname === "/npcs" || pathname === "/drops"
-										? "/npcs.html"
-										: pathname === "/discord"
-											? "/discord.html"
-											: pathname === "/transparency"
-												? "/transparency.html"
-												: decodeURIComponent(pathname);
+				: pathname === "/community-rules"
+					? "/community-rules.html"
+					: pathname === "/data-deletion"
+						? "/data-deletion.html"
+						: pathname === "/features"
+							? "/features.html"
+								: pathname === "/loot-editor" || pathname === "/loot-editor/"
+									? "/loot-editor.html"
+										: pathname === "/loot-editor-guide" || pathname === "/loot-editor-guide/"
+											? "/loot-editor-guide.html"
+												: pathname === "/npcs" || pathname === "/drops"
+													? "/npcs.html"
+														: pathname === "/discord"
+															? "/discord.html"
+																: pathname === "/transparency"
+																	? "/transparency.html"
+																	: decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
@@ -5267,16 +5460,18 @@ function normalizeBuildManifest(input) {
 
 function normalizeBuildSource(input) {
 	if (!input || typeof input !== "object") {
-		return { status: "source_pending", repositoryUrl: sourceRepositoryUrl, commit: "", shortCommit: "", branch: "", dirty: false };
+		return { status: "source_pending", repositoryUrl: "", commit: "", shortCommit: "", branch: "", dirty: false };
 	}
+	const status = sanitizeIntegrityLabel(input.status, "source_pending");
+	const publicationPending = status === "publication_pending" || status === "source_pending";
 	const commit = safeCommitHash(input.commit);
 	return {
-		status: sanitizeIntegrityLabel(input.status, "source_pending"),
-		repositoryUrl: safeHttpUrl(input.repositoryUrl) || sourceRepositoryUrl,
-		commit,
-		shortCommit: String(input.shortCommit || commit.slice(0, 12)).slice(0, 16),
-		branch: sanitizeSourceText(input.branch, 64),
-		dirty: input.dirty === true,
+		status,
+		repositoryUrl: publicationPending ? "" : (safeHttpUrl(input.repositoryUrl) || safeHttpUrl(sourceRepositoryUrl)),
+		commit: publicationPending ? "" : commit,
+		shortCommit: publicationPending ? "" : String(input.shortCommit || commit.slice(0, 12)).slice(0, 16),
+		branch: publicationPending ? "" : sanitizeSourceText(input.branch, 64),
+		dirty: publicationPending ? false : input.dirty === true,
 		generatedAt: validIsoTimestamp(input.generatedAt) || ""
 	};
 }
@@ -5290,7 +5485,7 @@ async function buildIntegrity(input) {
 		evidence: proof.evidence,
 		artifacts: proof.artifacts.length ? proof.artifacts : normalized.artifacts,
 		manifest: proof.manifest.status !== "unknown" ? proof.manifest : normalized.manifest,
-		source: proof.source.status !== "source_pending" ? proof.source : normalized.source
+		source: proof.source
 	};
 }
 
@@ -5510,6 +5705,19 @@ async function downloadState(options = {}) {
 		external: true,
 		mobileOnly: true
 	}];
+	if (androidPlayUrl) {
+		rows.push({
+			slug: "android-play",
+			label: "Google Play",
+			state: "Recommended Android install",
+			url: androidPlayUrl,
+			available: true,
+			publicDownload: true,
+			external: true,
+			platform: "android",
+			platformPrimary: true
+		});
+	}
 	for (const artifact of downloadArtifacts) {
 		if (!includePrivate && artifact.publicDownload === false) {
 			continue;
@@ -5518,28 +5726,32 @@ async function downloadState(options = {}) {
 			const fileStat = await stat(artifact.path);
 			const sha256 = await sha256File(artifact.path, fileStat);
 			const metadata = await downloadArtifactMetadata(artifact);
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: artifact.label,
-				state: `Built ${formatBytes(fileStat.size)}`,
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? `Direct install fallback · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
 				url: publicDownloadUrl(`/downloads/${artifact.slug}`),
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
+				...(androidFallback ? { fallback: true, platform: "android" } : {}),
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
 				sha256,
 				...metadata
 			});
 		} catch (error) {
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: artifact.label,
-				state: artifact.unavailableState || "Run scripts/build.sh",
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? "Direct install fallback unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
 				url: "#",
 				available: false,
 				publicDownload: artifact.publicDownload !== false,
-				primary: artifact.slug === "launcher"
+				primary: artifact.slug === "launcher",
+				...(androidFallback ? { fallback: true, platform: "android" } : {})
 			});
 		}
 	}
@@ -5564,7 +5776,7 @@ async function downloadArtifactMetadata(artifact) {
 async function buildProofState() {
 	const artifacts = await downloadState({ includePrivate: true, publicSurface: true });
 	const publicArtifacts = artifacts
-		.filter((artifact) => artifact.publicDownload !== false)
+		.filter((artifact) => artifact.publicDownload !== false && artifact.external !== true)
 		.map((artifact) => ({
 			slug: artifact.slug,
 			label: artifact.label,
@@ -5644,44 +5856,47 @@ async function latestClientCacheManifestMtime() {
 
 async function sourceProofState() {
 	const metadata = await readBuildMetadata();
-	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.commit || await gitValue(["rev-parse", "HEAD"]));
-	const branch = sanitizeSourceText(process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.branch || await gitValue(["branch", "--show-current"]), 64);
-	const dirty = metadata.dirty === true || (metadata.dirty !== false && await gitDirty());
+	const repositoryUrl = safeHttpUrl(process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || metadata.sourceRepositoryUrl);
+	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.sourceCommit);
+	let status = sanitizeIntegrityLabel(
+		process.env.PORTAL_SOURCE_PUBLICATION_STATUS
+			|| metadata.sourcePublicationStatus
+			|| (repositoryUrl && commit ? "published" : "source_pending"),
+		"source_pending"
+	);
+	if (!["publication_pending", "source_pending"].includes(status) && (!repositoryUrl || !commit)) {
+		status = "source_pending";
+	}
 	return normalizeBuildSource({
-		status: commit ? (dirty ? "publish_pending" : "commit_recorded") : "source_pending",
-		repositoryUrl: process.env.PORTAL_SOURCE_URL || metadata.repositoryUrl || sourceRepositoryUrl,
+		status,
+		repositoryUrl,
 		commit,
 		shortCommit: commit.slice(0, 12),
-		branch,
-		dirty,
+		branch: process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.sourceBranch || "",
+		dirty: metadata.sourceDirty === true,
 		generatedAt: metadata.generatedAt || ""
 	});
 }
 
 async function readBuildMetadata() {
 	try {
-		const metadata = JSON.parse(await readFile(buildMetadataPath, "utf8"));
-		return metadata && typeof metadata === "object" ? metadata : {};
+		const input = JSON.parse(await readFile(buildMetadataPath, "utf8"));
+		if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+		const sourceRepository = safeHttpUrl(input.sourceRepositoryUrl);
+		const sourceCommit = safeCommitHash(input.sourceCommit);
+		return {
+			sourcePublicationStatus: sanitizeIntegrityLabel(
+				input.sourcePublicationStatus,
+				sourceRepository && sourceCommit ? "published" : "source_pending"
+			),
+			sourceRepositoryUrl: sourceRepository,
+			sourceCommit,
+			sourceBranch: sanitizeSourceText(input.sourceBranch, 64),
+			sourceDirty: input.sourceDirty === true,
+			generatedAt: validIsoTimestamp(input.generatedAt) || ""
+		};
 	} catch (error) {
 		return {};
-	}
-}
-
-async function gitValue(args) {
-	try {
-		const result = await execFile("git", ["-C", repoRoot, ...args], { timeout: 1500 });
-		return String(result.stdout || "").trim();
-	} catch (error) {
-		return "";
-	}
-}
-
-async function gitDirty() {
-	try {
-		const result = await execFile("git", ["-C", repoRoot, "status", "--porcelain"], { timeout: 1500 });
-		return String(result.stdout || "").trim().length > 0;
-	} catch (error) {
-		return false;
 	}
 }
 
@@ -6139,7 +6354,7 @@ async function applyNativeBackfillGameWrites(writes = {}) {
 		);
 	}
 	sql.push("COMMIT;");
-	await sqliteWriteJson(sql.join("\n"));
+	await sqliteWriteJson(sql.join("\n"), "native_backfill_apply");
 }
 
 function findCharacterByAccountAndName(store, accountId, normalizedName) {
@@ -6255,7 +6470,7 @@ async function syncStarterCardToOpenRsc(account) {
 			VALUES (0, 0, ${sqlString(key)}, ${sqlString(starterCardAvailable)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_starter_card");
 }
 
 async function starterCardLedgerState(account) {
@@ -6304,7 +6519,7 @@ async function revokeStarterCardFromOpenRsc(account) {
 		  AND value = ${sqlString(starterCardAvailable)};
 		COMMIT;
 		SELECT 1 AS ok;
-	`);
+	`, "revoke_starter_card");
 	return starterCardLedgerState(account);
 }
 
@@ -6336,7 +6551,7 @@ async function syncSignupCodeValueToOpenRsc(code) {
 			VALUES (0, 0, ${sqlString(key)}, ${sqlString(signupCodeAvailable)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_signup_code");
 	return true;
 }
 
@@ -6414,7 +6629,7 @@ async function syncAccountSubscriptionToOpenRsc(account) {
 			VALUES (0, 3, ${sqlString(key)}, ${sqlString(expiresAt)});
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`);
+	`, "sync_account_subscription");
 }
 
 async function syncAccountSubscriptionFromOpenRsc(account) {
@@ -6450,7 +6665,7 @@ async function linkOpenRscPlayerToAccount(playerId, accountId) {
 			WHERE playerID = ${Number(playerId)}
 			  AND key = ${sqlString(openRscAccountIdCacheKey)}
 			LIMIT 1;
-	`);
+	`, "link_player_account");
 }
 
 async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
@@ -6463,7 +6678,7 @@ async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
 			  AND value = ${sqlString(accountId)};
 		COMMIT;
 		SELECT 1 AS ok;
-	`);
+	`, "unlink_player_account");
 }
 
 async function deleteOpenRscPlayer(character, accountId) {
@@ -6616,7 +6831,7 @@ async function deleteOpenRscPlayer(character, accountId) {
 		"DROP TABLE portal_deleted_item_ids;",
 		"COMMIT;"
 	);
-	const rows = await sqliteWriteJson(sql.join("\n"));
+	const rows = await sqliteWriteJson(sql.join("\n"), "delete_openrsc_player");
 	if (Number(rows[0] && rows[0].playersDeleted || 0) !== 1) {
 		throw new HttpError(409, "character_delete_conflict");
 	}
@@ -6679,7 +6894,7 @@ async function updateOpenRscPlayerPassword(character, accountId, password, ip) {
 		FROM portal_password_guard;
 		DROP TABLE portal_password_guard;
 		COMMIT;
-	`);
+	`, "update_player_password");
 	if (Number(rows[0] && rows[0].playersUpdated || 0) !== 1) {
 		throw new HttpError(409, "character_link_mismatch");
 	}
@@ -6719,7 +6934,7 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 			LIMIT 1;
 		COMMIT;
 		SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
-	`);
+	`, "create_openrsc_player");
 	const playerId = Number(rows[0] && rows[0].id);
 	if (!playerId) throw new HttpError(500, "openrsc_character_create_failed");
 	return playerId;
@@ -6851,7 +7066,7 @@ async function sqliteJson(query) {
 		if (error.stderr && error.stderr.includes("no such table")) {
 			throw new HttpError(500, "openrsc_schema_missing");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, "openrsc_read");
 	}
 }
 
@@ -6913,7 +7128,7 @@ function withOpenRscWriteLock(callback) {
 				return;
 			}
 			if (!callbackStarted || code !== 0) {
-				if (stderr) console.error("openrsc_claim_lock_failed", stderr.trim().slice(0, 180));
+				logSqliteChildFailure({ code, stderr }, "openrsc_write_lock");
 				rejectLock(new HttpError(503, "openrsc_claim_lock_unavailable"));
 				return;
 			}
@@ -6923,7 +7138,7 @@ function withOpenRscWriteLock(callback) {
 	});
 }
 
-async function sqliteWriteJson(query) {
+async function sqliteWriteJson(query, operation) {
 	try {
 		const { stdout } = await execFile("sqlite3", ["-cmd", ".timeout 5000", "-json", openRscDbPath, query], {
 			maxBuffer: 1024 * 1024
@@ -6939,7 +7154,7 @@ async function sqliteWriteJson(query) {
 		if (error.stderr && error.stderr.includes("constraint")) {
 			throw new HttpError(409, "openrsc_character_constraint_failed");
 		}
-		throw error;
+		throw openRscDatabaseUnavailable(error, operation);
 	}
 }
 
@@ -7997,6 +8212,7 @@ async function updateStore(mutator, options = {}) {
 		const store = await loadStore();
 		recoverInterruptedEmailEvents(store);
 		const result = await mutator(store);
+		await maybePauseTestStoreWrite();
 		await saveStore(store);
 		return result;
 	};
@@ -8005,6 +8221,25 @@ async function updateStore(mutator, options = {}) {
 		: execute());
 	writeQueue = next.catch(() => undefined);
 	return next;
+}
+
+async function maybePauseTestStoreWrite() {
+	if (!testStorePauseMarkerPath) return;
+	const attempt = ++storePauseAttempts;
+	if (attempt !== testStorePauseAt) return;
+	await mkdir(dirname(testStorePauseMarkerPath), { recursive: true });
+	await writeFile(testStorePauseMarkerPath, `${process.pid}\n`);
+	const deadline = Date.now() + testStorePauseTimeoutMs;
+	for (;;) {
+		try {
+			await stat(testStorePauseReleasePath);
+			return;
+		} catch (error) {
+			if (!error || error.code !== "ENOENT") throw error;
+		}
+		if (Date.now() >= deadline) throw new Error("portal_test_store_pause_timeout");
+		await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+	}
 }
 
 function recoverInterruptedEmailEvents(store) {
@@ -8174,6 +8409,7 @@ function sanitizeFunnelHref(value) {
 	if (!text) return "";
 	if (text.startsWith("/downloads/") || text === "/transparency") return text;
 	if (text === "/play/" || text === "/play") return text;
+	if (androidPlayUrl && text === androidPlayUrl) return androidPlayUrl;
 	try {
 		const url = new URL(text);
 		const webUrl = new URL(webClientUrl);
@@ -8234,6 +8470,24 @@ function requirePassword(password) {
 		throw new HttpError(400, "invalid_password");
 	}
 	return text;
+}
+
+function requireCommunityTermsAcceptance(payload) {
+	if (!payload
+		|| payload.termsAccepted !== true
+		|| payload.termsVersion !== currentCommunityTermsVersion) {
+		throw new HttpError(400, "terms_acceptance_required");
+	}
+}
+
+function recordCommunityTermsAcceptance(account) {
+	if (account.communityTermsVersion === currentCommunityTermsVersion
+		&& validIsoTimestamp(account.communityTermsAcceptedAt)) {
+		return;
+	}
+	account.communityTermsVersion = currentCommunityTermsVersion;
+	account.communityTermsAcceptedAt = now();
+	account.updatedAt = now();
 }
 
 function requireGamePassword(password) {
@@ -8361,8 +8615,13 @@ function worldRules() {
 		memberWorld: true,
 		membershipAccess: "global",
 		subscriptionGrantsMembers: false,
-		registration: "portal-first",
-		packetRegistration: false
+		registration: "hybrid",
+		webRegistration: "portal-first",
+		desktopRegistration: "packet",
+		nativeAndroidRegistration: "portal-first",
+		packetRegistration: true,
+		communityTermsVersion: currentCommunityTermsVersion,
+		communityTermsUrl: "/community-rules"
 	};
 }
 

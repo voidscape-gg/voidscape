@@ -116,8 +116,19 @@
 			return;
 		}
 		if (trustSourceRepo) {
-			trustSourceRepo.href = source.repositoryUrl || "https://github.com/voidscape-gg/voidscape";
-			trustSourceRepo.textContent = source.repositoryUrl ? "View public code" : simpleStatus(source.status || "source_pending");
+			if (source.repositoryUrl) {
+				trustSourceRepo.href = source.repositoryUrl;
+				trustSourceRepo.target = "_blank";
+				trustSourceRepo.rel = "noreferrer";
+				trustSourceRepo.removeAttribute("aria-disabled");
+				trustSourceRepo.textContent = "View public code";
+			} else {
+				trustSourceRepo.removeAttribute("href");
+				trustSourceRepo.removeAttribute("target");
+				trustSourceRepo.removeAttribute("rel");
+				trustSourceRepo.setAttribute("aria-disabled", "true");
+				trustSourceRepo.textContent = "Source publication pending";
+			}
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
@@ -150,13 +161,16 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var rows = ["The game code is public, so people can inspect what is being run."];
+		var sourcePublished = Boolean(source.repositoryUrl && source.shortCommit);
+		var rows = [sourcePublished
+			? "Published source is linked so people can inspect the corresponding code."
+			: "Source publication is pending and must be completed before player-facing distribution."];
 		if (source.shortCommit && source.dirty) {
-			rows.push("The live server is based on public code version " + source.shortCommit + "; live-only changes are marked until published.");
+			rows.push("The staged files are based on source revision " + source.shortCommit + "; newer changes remain unpublished.");
 		} else if (source.shortCommit) {
-			rows.push("Current public code version: " + source.shortCommit + ".");
+			rows.push("Published source revision: " + source.shortCommit + ".");
 		} else {
-			rows.push("The public code version is waiting for the next update.");
+			rows.push("Source revision metadata will appear after publication.");
 		}
 		rows.push("Downloads are checked when they are served, so replacing a file changes the check.");
 		if (manifest.status === "available") {

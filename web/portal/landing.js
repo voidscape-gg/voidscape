@@ -48,6 +48,7 @@
 		reserveMore: document.getElementById("reserve-more"),
 		reserveEmail: document.getElementById("reserve-email"),
 		reservePassword: document.getElementById("reserve-password"),
+		reserveTerms: document.getElementById("reserve-terms"),
 		reserveConfirm: document.getElementById("reserve-confirm"),
 		nameHint: document.getElementById("name-hint"),
 		reserveProof: document.getElementById("reserve-proof"),
@@ -413,6 +414,11 @@
 			if (els.reservePassword) els.reservePassword.focus();
 			return;
 		}
+		if (launchSignupModeActive && (!els.reserveTerms || !els.reserveTerms.checked)) {
+			setHint("Accept the Community Rules before creating your account.", true);
+			if (els.reserveTerms) els.reserveTerms.focus();
+			return;
+		}
 		var captchaToken = "";
 		if (captchaSignupRequired()) {
 			captchaToken = currentCaptchaToken();
@@ -433,6 +439,8 @@
 						username: name,
 						email: email,
 						password: password,
+						termsAccepted: true,
+						termsVersion: "2026-07-16",
 						captchaToken: captchaToken || undefined,
 						referrerCode: currentReferralCode() || undefined
 					}
@@ -702,6 +710,11 @@
 			if (els.reservePassword) els.reservePassword.focus();
 			return;
 		}
+		if (!els.reserveTerms || !els.reserveTerms.checked) {
+			setHint("Accept the Community Rules before creating your account.", true);
+			if (els.reserveTerms) els.reserveTerms.focus();
+			return;
+		}
 		if (!credential || !googleNonce) {
 			setHint("Google sign-in did not return a usable login. Try again or use email.", true);
 			googleButtonRendered = false;
@@ -727,6 +740,8 @@
 					nonce: googleNonce,
 					username: name,
 					gamePassword: gamePassword,
+					termsAccepted: true,
+					termsVersion: "2026-07-16",
 					captchaToken: captchaToken || undefined,
 					referrerCode: currentReferralCode() || undefined
 				}
