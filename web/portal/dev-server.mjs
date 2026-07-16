@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, stat, unlink as unlinkFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback, spawn } from "node:child_process";
-import { createCipheriv, createDecipheriv, createHash, createHmac, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
 import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,37 +19,22 @@ const defaultLaunchAtIso = "2026-07-18T18:00:00Z";
 // Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
 const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
 const launchSignupMode = publicMode && process.env.PORTAL_LAUNCH_SIGNUP_MODE === "1";
-// Read once at process startup so a service restart is the write-drain boundary.
-const rosterWritesFrozen = publicMode && process.env.PORTAL_ROSTER_WRITES_FROZEN === "1";
 const betaMode = process.env.PORTAL_BETA_MODE === "1" || process.env.PORTAL_PUBLIC_BETA === "1";
 const launchOpenAtIso = configuredIsoTimestamp("PORTAL_LAUNCH_AT", process.env.PORTAL_LAUNCH_AT || process.env.PORTAL_BETA_OPEN_AT || defaultLaunchAtIso);
-const launchFreeCardHours = configuredNonNegativeInteger("PORTAL_LAUNCH_FREE_CARD_HOURS", process.env.PORTAL_LAUNCH_FREE_CARD_HOURS || "0");
+const launchFreeCardHours = configuredNonNegativeInteger("PORTAL_LAUNCH_FREE_CARD_HOURS", process.env.PORTAL_LAUNCH_FREE_CARD_HOURS || "24");
 const betaOpenAtIso = configuredIsoTimestamp("PORTAL_BETA_OPEN_AT", process.env.PORTAL_BETA_OPEN_AT || process.env.PORTAL_LAUNCH_AT || "");
 const betaSignupCounterBase = configuredNonNegativeInteger("PORTAL_BETA_COUNTER_BASE", process.env.PORTAL_BETA_COUNTER_BASE || "132");
 const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
 const betaSignupCounterSeed = process.env.PORTAL_BETA_COUNTER_SEED || "voidscape-public-beta";
 const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
 const storePath = join(dataDir, "dev-store.json");
-const testStoreFaultPhase = String(process.env.PORTAL_TEST_STORE_FAULT || "").trim().toLowerCase();
-const testStoreFaultAt = Number(process.env.PORTAL_TEST_STORE_FAULT_AT || 1);
 const testStoreFaultsEnabled = process.env.PORTAL_ENABLE_TEST_FAULTS === "1";
 const testStorePauseMarkerPath = String(process.env.PORTAL_TEST_STORE_PAUSE_MARKER || "").trim();
 const testStorePauseReleasePath = String(process.env.PORTAL_TEST_STORE_PAUSE_RELEASE || "").trim();
 const testStorePauseAt = Number(process.env.PORTAL_TEST_STORE_PAUSE_AT || 1);
 const testStorePauseTimeoutMs = Number(process.env.PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS || 30000);
 const shutdownTimeoutMs = configuredPositiveInteger("PORTAL_SHUTDOWN_TIMEOUT_MS", process.env.PORTAL_SHUTDOWN_TIMEOUT_MS || "30000");
-let storeSaveAttempts = 0;
 let storePauseAttempts = 0;
-if (testStoreFaultPhase) {
-	if (!testStoreFaultsEnabled) {
-		throw new Error("PORTAL_TEST_STORE_FAULT requires PORTAL_ENABLE_TEST_FAULTS=1");
-	}
-	if (!["write", "rename"].includes(testStoreFaultPhase)
-		|| !Number.isInteger(testStoreFaultAt)
-		|| testStoreFaultAt <= 0) {
-		throw new Error("invalid PORTAL_TEST_STORE_FAULT configuration");
-	}
-}
 if (testStorePauseMarkerPath || testStorePauseReleasePath) {
 	if (!testStoreFaultsEnabled) {
 		throw new Error("PORTAL_TEST_STORE_PAUSE_* requires PORTAL_ENABLE_TEST_FAULTS=1");
@@ -67,7 +52,6 @@ const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(data
 const buildMetadataPath = process.env.PORTAL_BUILD_META || join(rootDir, "build-meta.json");
 const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "";
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
-const legendsSeasonId = configuredSeasonId("PORTAL_LEGENDS_SEASON_ID", process.env.PORTAL_LEGENDS_SEASON_ID || "launch-2026");
 const gamePasswordHelperClasspath = process.env.PORTAL_GAME_PASSWORD_HELPER_CLASSPATH || join(repoRoot, "server/core.jar");
 const gamePasswordJavaBin = process.env.PORTAL_JAVA_BIN || "java";
 const legacyClaimDummyPasswordHash = "$2y$10$hwWyOlWjtLF2.3WvF64jl.RFQxNGz2k/iwGXJkhZJcbI187bacx46";
@@ -81,20 +65,14 @@ const openRscAccountIdCacheKey = "web_account_id";
 const starterCardCachePrefix = "starter_card:";
 const starterCardAvailable = 1;
 const starterCardClaimed = 2;
-const launchCharacterCardCachePrefix = "launch_subcard_2026:";
-const launchCharacterCardCompletionKey = "launch_subcard_2026:done";
-const launchCharacterCardAvailable = 1;
-const launchCharacterCardClaimed = 2;
-const launchCharacterCardCutoverComplete = 1;
 const accountSubscriptionCachePrefix = "acct_sub:";
 const playerSubscriptionCachePrefix = "char_sub:";
 const signupCodeCachePrefix = "signup_code:";
 const signupCodeAvailable = 1;
 const signupCodeRedeemed = 2;
 const starterFreeSubscriptionType = "starter_free_subscription";
-const nativeBackfillCohortPolicy = "native-portal-launch-cutover-v2";
 const baseCombatXpRate = 10;
-const baseSkillXpRate = 1.5;
+const baseSkillXpRate = 2;
 const sha256Cache = new Map();
 const presenceVisitors = new Map();
 const presenceHeartbeatSeconds = 15;
@@ -133,9 +111,6 @@ const sensitiveActionWindowMs = configuredPositiveInteger("PORTAL_SENSITIVE_ACTI
 const gamePasswordResetLimit = configuredPositiveInteger("PORTAL_GAME_PASSWORD_RESET_LIMIT", process.env.PORTAL_GAME_PASSWORD_RESET_LIMIT || "5");
 const gamePasswordResetWindowMs = configuredPositiveInteger("PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES", process.env.PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES || "60") * 60 * 1000;
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
-const checkoutRateWindowMs = 10 * 60 * 1000;
-const checkoutAccountRateLimit = 5;
-const checkoutIpRateLimit = 8;
 const blockedIpCidrs = cidrList(process.env.PORTAL_BLOCKED_IP_CIDRS || "");
 const proxyIpCidrs = cidrList(process.env.PORTAL_PROXY_IP_CIDRS || process.env.PORTAL_REVIEW_IP_CIDRS || "");
 const captchaSignupRequired = process.env.PORTAL_CAPTCHA_REQUIRED === "1" || process.env.PORTAL_CAPTCHA_SIGNUP_REQUIRED === "1";
@@ -151,25 +126,6 @@ const abuseHashSalt = abuseHashSaltInput || defaultAbuseHashSalt;
 const adminToken = process.env.PORTAL_ADMIN_TOKEN || "";
 const abuseHashSaltConfigured = configuredSecret(abuseHashSaltInput, defaultAbuseHashSalt);
 const adminTokenConfigured = configuredSecret(adminToken, "");
-const tebexPublicToken = String(process.env.PORTAL_TEBEX_PUBLIC_TOKEN || "").trim();
-const tebexPrivateKey = String(process.env.PORTAL_TEBEX_PRIVATE_KEY || "").trim();
-const tebexWebhookSecret = String(process.env.PORTAL_TEBEX_WEBHOOK_SECRET || "").trim();
-const tebexSubscriptionCardPackageId = String(process.env.PORTAL_TEBEX_SUBSCRIPTION_CARD_PACKAGE_ID || "").trim();
-const tebexExpectedCurrency = String(process.env.PORTAL_TEBEX_EXPECTED_CURRENCY || "").trim().toUpperCase();
-const tebexExpectedPriceMinorText = String(process.env.PORTAL_TEBEX_EXPECTED_PRICE_MINOR || "").trim();
-const tebexExpectedPriceMinor = /^\d+$/.test(tebexExpectedPriceMinorText)
-	? Number(tebexExpectedPriceMinorText)
-	: null;
-const officialTebexApiBase = "https://headless.tebex.io/api";
-const tebexTestApiBase = String(process.env.PORTAL_TEBEX_API_BASE || "").trim().replace(/\/+$/, "");
-const tebexApiBase = tebexTestApiBase || officialTebexApiBase;
-const tebexTestWebhookFailOnce = process.env.PORTAL_TEST_TEBEX_WEBHOOK_FAIL_ONCE === "1";
-if (tebexTestApiBase && !testStoreFaultsEnabled) {
-	throw new Error("PORTAL_TEBEX_API_BASE requires PORTAL_ENABLE_TEST_FAULTS=1");
-}
-if (tebexTestWebhookFailOnce && !testStoreFaultsEnabled) {
-	throw new Error("PORTAL_TEST_TEBEX_WEBHOOK_FAIL_ONCE requires PORTAL_ENABLE_TEST_FAULTS=1");
-}
 const discordApiBase = process.env.PORTAL_DISCORD_API_BASE || "https://discord.com/api/v10";
 const discordClientId = process.env.PORTAL_DISCORD_CLIENT_ID || "";
 const discordClientSecret = process.env.PORTAL_DISCORD_CLIENT_SECRET || "";
@@ -263,6 +219,7 @@ const clientVersionOverride = process.env.PORTAL_CLIENT_VERSION
 	: null;
 const clientVersionSourcePath = join(repoRoot, "Client_Base/src/orsc/Config.java");
 let clientVersionCache;
+const currentCommunityTermsVersion = "2026-07-16";
 
 function configuredDownloadPath(envName, fallbackPath) {
 	const configuredPath = process.env[envName];
@@ -292,28 +249,6 @@ function configuredAndroidPlayUrl(envName, value) {
 	return "https://play.google.com/store/apps/details?id=com.voidscape.gg";
 }
 
-function isRosterWriteRequest(method, pathname) {
-	if (method === "POST" && [
-		"/api/founder/reservations",
-		"/api/accounts/register",
-		"/api/accounts/verify-email",
-		"/api/accounts/google",
-		"/api/accounts/legacy-claim/request",
-		"/api/accounts/legacy-claim/complete",
-		"/api/oauth/google/nonce",
-		"/api/characters"
-	].includes(pathname)) {
-		return true;
-	}
-	if (method === "GET" && [
-		"/api/accounts/verify-email",
-		"/api/accounts/legacy-claim/verify"
-	].includes(pathname)) {
-		return true;
-	}
-	return method === "DELETE" && /^\/api\/characters\/\d+$/.test(pathname);
-}
-
 function configuredIsoTimestamp(envName, value) {
 	if (!value) return "";
 	const timestamp = Date.parse(value);
@@ -329,14 +264,6 @@ function configuredNonNegativeInteger(envName, value) {
 		throw new Error(`${envName} must be a non-negative integer`);
 	}
 	return number;
-}
-
-function configuredSeasonId(envName, value) {
-	const seasonId = String(value || "").trim().toLowerCase();
-	if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(seasonId)) {
-		throw new Error(`${envName} must use 1-32 letters, numbers, hyphens, or underscores`);
-	}
-	return seasonId;
 }
 
 function configuredPositiveInteger(envName, value) {
@@ -367,65 +294,6 @@ function emailProviderLabel() {
 	return emailProvider || "disabled";
 }
 
-function tebexConfigHealth() {
-	const publicTokenConfigured = Boolean(tebexPublicToken);
-	const privateKeyConfigured = configuredSecret(tebexPrivateKey, "");
-	const webhookSecretConfigured = configuredSecret(tebexWebhookSecret, "");
-	const packageConfigured = /^\d+$/.test(tebexSubscriptionCardPackageId) && Number(tebexSubscriptionCardPackageId) > 0;
-	const currencyConfigured = /^[A-Z]{3}$/.test(tebexExpectedCurrency);
-	const priceConfigured = Number.isSafeInteger(tebexExpectedPriceMinor) && tebexExpectedPriceMinor > 0;
-	const databaseConfigured = Boolean(openRscDbPath);
-	const publicOriginConfigured = Boolean(publicSiteOrigin);
-	return {
-		configured: publicTokenConfigured
-			&& privateKeyConfigured
-			&& webhookSecretConfigured
-			&& packageConfigured
-			&& currencyConfigured
-			&& priceConfigured
-			&& databaseConfigured
-			&& publicOriginConfigured,
-		publicTokenConfigured,
-		privateKeyConfigured,
-		webhookSecretConfigured,
-		packageConfigured,
-		currencyConfigured,
-		priceConfigured,
-		databaseConfigured,
-		publicOriginConfigured
-	};
-}
-
-function tebexCheckoutConfigured() {
-	return tebexConfigHealth().configured;
-}
-
-function tebexWebhookConfigured() {
-	return tebexConfigHealth().webhookSecretConfigured;
-}
-
-async function tebexOperationalHealth() {
-	const config = tebexConfigHealth();
-	let databaseReadable = false;
-	let schemaReady = false;
-	if (openRscDbPath) {
-		try {
-			await sqliteCommerceRead("SELECT 1 AS ok;");
-			databaseReadable = true;
-			schemaReady = await commerceSchemaAvailable();
-		} catch (error) {
-			databaseReadable = false;
-			schemaReady = false;
-		}
-	}
-	return {
-		...config,
-		databaseReadable,
-		schemaReady,
-		operational: config.configured && databaseReadable && schemaReady
-	};
-}
-
 function portalConfigHealth() {
 	const issues = [];
 	if (publicMode && !abuseHashSaltConfigured) {
@@ -445,18 +313,6 @@ function portalConfigHealth() {
 	}
 	if ((captchaSignupRequired || captchaCharacterRequired) && !captchaConfigured()) {
 		issues.push("captcha_not_configured");
-	}
-	const commerce = tebexConfigHealth();
-	const commercePartiallyConfigured = Boolean(
-		tebexPublicToken
-		|| tebexPrivateKey
-		|| tebexWebhookSecret
-		|| tebexSubscriptionCardPackageId
-		|| tebexExpectedCurrency
-		|| tebexExpectedPriceMinorText
-	);
-	if (commercePartiallyConfigured && !commerce.configured) {
-		issues.push("tebex_commerce_not_configured");
 	}
 	return {
 		publicReady: issues.length === 0,
@@ -480,7 +336,6 @@ function portalConfigHealth() {
 			verificationRequired: emailVerificationRequired,
 			fromConfigured: Boolean(emailFrom)
 		},
-		commerce,
 		issues
 	};
 }
@@ -523,7 +378,7 @@ const kits = {
 
 const publicContent = {
 	news: [
-		{ type: "rare", text: "Three-floor Void Dungeon routes are ready for launch.", time: "Today" },
+		{ type: "rare", text: "Void Enclave boss tuning moved into live difficulty controls.", time: "Today" },
 		{ type: "market", text: "Weekly subscription cards and portal redeem flow are now represented.", time: "Today" },
 		{ type: "title", text: "Character title state is part of the account portal contract.", time: "Jun 3" }
 	],
@@ -613,7 +468,7 @@ const betaContent = {
 	],
 	coords: [
 		{ group: "Onboarding", label: "Void Council intro", value: "24, 37", note: "Fresh-character intro clearing." },
-		{ group: "Onboarding", label: "Void Island Herald", value: "24, 24", note: "Choose a starter path and review launch guidance." },
+		{ group: "Onboarding", label: "Void Island Herald", value: "24, 24", note: "Choose starter path; later routes to Void Rush." },
 		{ group: "Home", label: "Lumbridge home", value: "120, 648", note: "Respawn/home flow." },
 		{ group: "Home", label: "Subscription Vendor", value: "126, 649", note: "Claim release-valid starter card code." },
 		{ group: "Market", label: "Edgeville bank", value: "217, 449", note: "Bank, PvP access, nearby Auction House." },
@@ -692,7 +547,6 @@ const handlerDrainWaiters = new Set();
 const backgroundTasks = new Set();
 let itemDefinitionsPromise = null;
 let titleDefinitionsPromise = null;
-let tebexWebhookFailureInjected = false;
 
 class HttpError extends Error {
 	constructor(status, message) {
@@ -702,15 +556,12 @@ class HttpError extends Error {
 }
 
 const sqliteOperationLabels = new Set([
-	"commerce_read",
-	"commerce_write",
 	"create_openrsc_player",
 	"delete_openrsc_player",
 	"link_player_account",
 	"native_backfill_apply",
 	"openrsc_read",
 	"openrsc_write_lock",
-	"restore_cache_rows",
 	"revoke_starter_card",
 	"sync_account_subscription",
 	"sync_signup_code",
@@ -861,6 +712,25 @@ function trackBackgroundTask(task) {
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+	if (url.pathname === "/portal" && url.searchParams.get("auth") === "register") {
+		if (!["GET", "HEAD"].includes(request.method || "GET")) {
+			throw new HttpError(405, "method_not_allowed");
+		}
+		const referralInput = String(url.searchParams.get("ref") || url.searchParams.get("invite") || "")
+			.trim()
+			.toUpperCase();
+		const referral = /^[A-Z0-9-]{1,18}$/.test(referralInput) ? referralInput : "";
+		const registrationUrl = new URL("/", "https://voidscape.invalid");
+		registrationUrl.searchParams.set("auth", "register");
+		if (referral) registrationUrl.searchParams.set("ref", referral);
+		response.writeHead(302, {
+			location: `${registrationUrl.pathname}${registrationUrl.search}`,
+			"cache-control": "no-store",
+			...securityHeaders()
+		});
+		response.end();
+		return;
+	}
 	if (publicMode && !betaMode && !launchSignupMode && (
 		url.pathname.startsWith("/openrsc/avatar/")
 	)) {
@@ -896,11 +766,9 @@ async function handleApi(request, response, url) {
 			(method === "GET" && url.pathname === "/api/health")
 			|| (method === "GET" && url.pathname === "/api/public")
 			|| (method === "GET" && url.pathname === "/api/integrity")
-			|| (method === "GET" && url.pathname === "/api/legends")
 			|| (method === "GET" && url.pathname.startsWith("/api/openrsc/characters/") && url.searchParams.get("availability") === "1")
 			|| (method === "POST" && url.pathname === "/api/funnel/click")
 			|| (method === "POST" && url.pathname === "/api/presence/heartbeat")
-			|| (method === "POST" && url.pathname === "/api/payments/tebex/webhook")
 			|| (!betaMode && method === "POST" && url.pathname === "/api/founder/reservations")
 			|| (launchSignupMode && method === "GET" && url.pathname === "/api/account")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/register")
@@ -923,7 +791,6 @@ async function handleApi(request, response, url) {
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/password")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/recovery-codes")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/sessions/revoke-others")
-			|| ((launchSignupMode || betaMode) && method === "POST" && url.pathname === "/api/payments/subscription-cards/checkout")
 			|| (betaMode && method === "GET" && url.pathname === "/api/account")
 			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/start")
 			|| (betaMode && method === "GET" && url.pathname === "/api/oauth/discord/callback")
@@ -932,43 +799,21 @@ async function handleApi(request, response, url) {
 			throw new HttpError(404, "not_available_during_prelaunch");
 		}
 	}
-	if (rosterWritesFrozen
-		&& !url.pathname.startsWith("/api/admin/")
-		&& isRosterWriteRequest(method, url.pathname)) {
-		throw new HttpError(503, "roster_writes_frozen");
-	}
 
 	if (method === "GET" && url.pathname === "/api/health") {
-		const storageHealth = await portalStorageHealth();
-		const configHealth = portalConfigHealth();
-		const commerceHealth = await tebexOperationalHealth();
-		configHealth.commerce = commerceHealth;
-		if (commerceHealth.configured && !commerceHealth.operational) {
-			configHealth.publicReady = false;
-			if (!configHealth.issues.includes("tebex_commerce_not_operational")) {
-				configHealth.issues = [...configHealth.issues, "tebex_commerce_not_operational"];
-			}
-		}
-		if (!storageHealth.readable) {
-			configHealth.publicReady = false;
-			configHealth.issues = [...configHealth.issues, "portal_store_unreadable"];
-		}
 		json(response, 200, {
-			ok: storageHealth.readable,
+			ok: true,
 			service: "voidscape-portal-dev",
 			publicMode,
 			launchSignupMode,
-			rosterWritesFrozen,
-			shuttingDown,
 			storage: {
 				durable: Boolean(process.env.PORTAL_DATA_DIR),
-				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1",
-				readable: storageHealth.readable
+				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1"
 			},
 			openRscDb: {
 				configured: Boolean(openRscDbPath)
 			},
-			config: configHealth
+			config: portalConfigHealth()
 		});
 		return;
 	}
@@ -985,11 +830,6 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
-	if (method === "GET" && url.pathname === "/api/legends") {
-		json(response, 200, await legendsState());
-		return;
-	}
-
 	if (method === "POST" && url.pathname === "/api/funnel/click") {
 		const payload = await readJson(request);
 		const result = await recordFunnelClick(request, payload);
@@ -1001,11 +841,6 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = recordPresenceHeartbeat(payload);
 		json(response, 200, result);
-		return;
-	}
-
-	if (method === "POST" && url.pathname === "/api/payments/tebex/webhook") {
-		await handleTebexWebhook(request, response);
 		return;
 	}
 
@@ -1047,11 +882,7 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/payments/subscription-cards/checkout") {
-		requireTebexCheckoutConfigured();
-		const payload = await readJson(request);
-		if (Object.keys(payload).length !== 0) throw new HttpError(400, "invalid_checkout_request");
-		const account = await reserveTebexCheckoutAttempt(request);
-		json(response, 201, await createTebexSubscriptionCardCheckout(account, request));
+		throw new HttpError(501, "payments_not_configured");
 		return;
 	}
 
@@ -1074,13 +905,13 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/founder/reservations") {
-		if (!founderReservationsOpen()) {
-			throw new HttpError(404, "not_found");
+		if (betaMode) {
+			throw new HttpError(404, "discord_beta_required");
 		}
 		const payload = await readJson(request);
 		await requireCaptcha(request, payload, "signup");
 		const ip = clientIp(request);
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 			assertSignupAllowed(store, request);
 			const founder = await reserveFounder(store, payload);
 			// Codes are minted only on this public landing route: registered portal
@@ -1102,7 +933,7 @@ async function handleApi(request, response, url) {
 				});
 			}
 			try {
-				if (await syncSignupCodeToOpenRsc(founder, transaction) && !founder.signupCodeSyncedAt) {
+				if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
 					founder.signupCodeSyncedAt = now();
 				}
 			} catch (error) {
@@ -1112,7 +943,7 @@ async function handleApi(request, response, url) {
 				? store.founders.find((entry) => entry.code === founder.referredByCode)
 				: null;
 			try {
-				await syncReferralRewardCodesToOpenRsc(rewardReferrer, transaction);
+				await syncReferralRewardCodesToOpenRsc(rewardReferrer);
 			} catch (error) {
 				audit(store, "referral_reward_code_sync_failed", {
 					founderId: rewardReferrer && rewardReferrer.id,
@@ -1145,13 +976,14 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/register") {
 		const payload = await readJson(request);
+		requireCommunityTermsAcceptance(payload);
 		await requireCaptcha(request, payload, "signup");
 		const password = requirePassword(payload.password);
 		if (launchSignupMode) {
 			requireLaunchFirstGamePassword(password);
 		}
 		const passwordHash = await hashPassword(password);
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 			if (optionalSession(request, store)) {
 				throw new HttpError(409, "already_signed_in");
 			}
@@ -1190,6 +1022,8 @@ async function handleApi(request, response, url) {
 				emailDisplay: String(payload.email || "").trim(),
 				passwordHash,
 				status: "active",
+				communityTermsVersion: currentCommunityTermsVersion,
+				communityTermsAcceptedAt: now(),
 				subscriptionExpiresAt: 0,
 				createdAt: now(),
 				updatedAt: now()
@@ -1203,7 +1037,7 @@ async function handleApi(request, response, url) {
 				await createLaunchFirstCharacter(store, account, {
 					username: founder.username,
 					gamePassword: password
-				}, request, transaction);
+				}, request);
 			} else {
 				const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
 				reservedCharacter.source = "founder-reserved";
@@ -1213,7 +1047,7 @@ async function handleApi(request, response, url) {
 				emailCanonical,
 				provider: "password",
 				signupSignalsRecorded: true
-			}, transaction);
+			});
 			const token = createSession(store, account.id);
 			const queuedEmail = queueAccountEmail(store, account, signupConfirmationEmailType, {
 				origin: requestPublicOrigin(request)
@@ -1296,18 +1130,20 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/accounts/google") {
 		requireGoogleConfigured();
 		const payload = await readJson(request);
+		requireCommunityTermsAcceptance(payload);
 		await requireCaptcha(request, payload, "signup");
 		const profile = await googleProfileFromCredential(payload);
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 				consumeGoogleNonce(store, payload.nonce || "", request);
 				const wasNewAccount = !findGoogleAccount(store, profile);
-				const account = await upsertGoogleAccount(store, profile, payload, request, transaction);
+				const account = await upsertGoogleAccount(store, profile, payload, request);
+				recordCommunityTermsAcceptance(account);
 				if (account.status !== "active") throw new HttpError(401, "invalid_account");
 				if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
 					await createLaunchFirstCharacter(store, account, {
 						username: payload.username || payload.reservedUsername || profile.username,
 					gamePassword: payload.gamePassword || payload.characterPassword
-				}, request, transaction);
+				}, request);
 			}
 			const token = createSession(store, account.id);
 			const queuedEmail = wasNewAccount
@@ -1338,10 +1174,10 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/google/dev") {
 		const payload = await readJson(request);
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 				const profile = googleDevProfile(payload);
 				const wasNewAccount = !findGoogleAccount(store, profile);
-				const account = await upsertGoogleAccount(store, profile, payload, request, transaction);
+				const account = await upsertGoogleAccount(store, profile, payload, request);
 				if (account.status !== "active") throw new HttpError(401, "invalid_account");
 				const token = createSession(store, account.id);
 			const queuedEmail = wasNewAccount
@@ -1827,9 +1663,9 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/characters") {
 		const payload = await readJson(request);
 		await requireCaptcha(request, payload, "character");
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
-			await createAccountCharacter(store, account, payload, request, { transaction });
+			await createAccountCharacter(store, account, payload, request);
 			account.updatedAt = now();
 			audit(store, "character_created", { accountId: account.id });
 			return accountState(store, account);
@@ -1841,9 +1677,9 @@ async function handleApi(request, response, url) {
 	const deleteCharacterMatch = /^\/api\/characters\/(\d+)$/.exec(url.pathname);
 	if (method === "DELETE" && deleteCharacterMatch) {
 		const characterId = Number(deleteCharacterMatch[1]);
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
-			const deleted = await deleteAccountCharacter(store, account, characterId, transaction);
+			const deleted = await deleteAccountCharacter(store, account, characterId);
 			account.updatedAt = now();
 			audit(store, "character_deleted", {
 				accountId: account.id,
@@ -2094,18 +1930,6 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
-	if (method === "GET" && url.pathname === "/api/admin/commerce") {
-		requireAdmin(request);
-		json(response, 200, await commerceAdminList(commerceAdminLimit(url.searchParams.get("limit") || 100)));
-		return;
-	}
-
-	if (method === "POST" && url.pathname === "/api/admin/commerce/reconcile") {
-		requireAdmin(request);
-		json(response, 200, await commerceReconcileReport());
-		return;
-	}
-
 	if (method === "GET" && url.pathname === "/api/admin/signups") {
 		requireAdmin(request);
 		const store = await loadStore();
@@ -2289,68 +2113,40 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/admin/accounts/backfill-native") {
 		requireAdmin(request);
 		const payload = await readJson(request);
-		const dryRun = payload.apply !== true;
+		const dryRun = payload.dryRun === true || payload.apply === false;
 		const grantMissingStarterCard = payload.grantMissingStarterCard !== false;
-		const grantLaunchCharacterCards = payload.grantLaunchCharacterCards !== false;
-		const asOfMs = normalizeNativeBackfillAsOfMs(payload.asOfMs, dryRun);
-		const approvedExceptionPlayerIds = normalizePositiveIntegerList(payload.approvedExceptionPlayerIds);
-		const excludedExceptionPlayerIds = normalizePositiveIntegerList(payload.excludedExceptionPlayerIds);
-		const reviewToken = String(payload.reviewToken || "").trim();
 		if (dryRun) {
 			const store = await loadStore();
 			const result = await backfillNativePortalAccounts(cloneJson(store), {
 				dryRun: true,
-				grantMissingStarterCard,
-				grantLaunchCharacterCards,
-				asOfMs,
-				approvedExceptionPlayerIds,
-				excludedExceptionPlayerIds
+				grantMissingStarterCard
 			});
 			json(response, 200, result);
 			return;
 		}
-		const result = await updateStore(async (store, transaction) => {
+		const result = await updateStore(async (store) => {
 			const backfill = await backfillNativePortalAccounts(store, {
 				dryRun: false,
 				grantMissingStarterCard,
-				grantLaunchCharacterCards,
-				asOfMs,
-				approvedExceptionPlayerIds,
-				excludedExceptionPlayerIds,
-				reviewToken,
 				deferGameWrites: true
 			});
-			const pendingGameWrites = backfill.pendingGameWrites || {};
-			delete backfill.pendingGameWrites;
-			transaction.afterPersist(() => applyNativeBackfillGameWrites(pendingGameWrites));
 			if (backfill.createdAccounts || backfill.createdCharacters || backfill.updatedCharacters
-				|| backfill.linkedPlayers || backfill.starterCardsGranted || backfill.launchCharacterCardsSeeded
-				|| backfill.launchCharacterCardCutoverWillSeal || backfill.subscriptionsMigrated || backfill.conflicts.length) {
+				|| backfill.linkedPlayers || backfill.starterCardsGranted || backfill.subscriptionsMigrated || backfill.conflicts.length) {
 				audit(store, "admin_native_accounts_backfilled", {
 					createdAccounts: backfill.createdAccounts,
 					createdCharacters: backfill.createdCharacters,
 					updatedCharacters: backfill.updatedCharacters,
 					linkedPlayers: backfill.linkedPlayers,
 					starterCardsGranted: backfill.starterCardsGranted,
-					starterCardsSkippedAfterLaunchSeal: backfill.starterCardsSkippedAfterLaunchSeal,
-					grantLaunchCharacterCards: backfill.grantLaunchCharacterCards,
-					launchCharacterCardsSeeded: backfill.launchCharacterCardsSeeded,
-					launchCharacterCardsAlreadyPresent: backfill.launchCharacterCardsAlreadyPresent,
-					launchCharacterCardsSkippedAfterSeal: backfill.launchCharacterCardsSkippedAfterSeal,
-					launchCharacterCardCutoverWillSeal: backfill.launchCharacterCardCutoverWillSeal,
-					launchCharacterCardCutoverSealed: backfill.launchCharacterCardCutoverSealed,
-					launchCharacterCardCutoverAlreadySealed: backfill.launchCharacterCardCutoverAlreadySealed,
-					asOfMs: backfill.cohort.asOfMs,
 					subscriptionsMigrated: backfill.subscriptionsMigrated,
-					cohortPolicy: backfill.cohort.policy,
-					cohortReviewTokenPrefix: backfill.cohort.reviewToken.slice(0, 12),
-					approvedExceptions: backfill.cohort.approvedExceptionPlayerIds.length,
-					excludedExceptions: backfill.cohort.excludedExceptionPlayerIds.length,
 					conflicts: backfill.conflicts.length
 				});
 			}
 			return backfill;
 		});
+		const pendingGameWrites = result.pendingGameWrites || {};
+		delete result.pendingGameWrites;
+		await applyNativeBackfillGameWrites(pendingGameWrites);
 		json(response, 200, result);
 		return;
 	}
@@ -2607,10 +2403,10 @@ function presencePageInfo(path) {
 	if (path === "/" || path === "/index.html") return { key: "landing", label: "Landing" };
 	if (path === "/portal" || path === "/portal.html") return { key: "portal", label: "Account manager" };
 	if (path === "/features" || path === "/features.html") return { key: "features", label: "Features" };
-	if (path === "/legends" || path === "/legends.html") return { key: "legends", label: "Legends" };
 	if (path === "/npcs" || path === "/npcs.html" || path === "/drops" || path === "/drops.html") return { key: "npcs", label: "NPC drops" };
 	if (path === "/transparency" || path === "/transparency.html") return { key: "transparency", label: "Transparency" };
 	if (path === "/privacy" || path === "/privacy.html") return { key: "privacy", label: "Privacy" };
+	if (path === "/community-rules" || path === "/community-rules.html") return { key: "community_rules", label: "Community rules" };
 	if (path === "/data-deletion" || path === "/data-deletion.html") return { key: "data_deletion", label: "Data deletion" };
 	if (path === "/discord" || path === "/discord.html") return { key: "discord", label: "Discord" };
 	return { key: "other", label: "Other" };
@@ -2679,6 +2475,12 @@ async function queuePendingEmailVerificationSignup(store, payload, passwordHash,
 		Number(entry.expiresAtMs || 0) > Date.now()
 	);
 	if (existingPending) {
+		if (existingPending.communityTermsVersion !== currentCommunityTermsVersion
+			|| !validIsoTimestamp(existingPending.communityTermsAcceptedAt)) {
+			existingPending.communityTermsVersion = currentCommunityTermsVersion;
+			existingPending.communityTermsAcceptedAt = now();
+			existingPending.updatedAt = now();
+		}
 		return { pending: existingPending, created: false };
 	}
 
@@ -2700,6 +2502,8 @@ async function queuePendingEmailVerificationSignup(store, payload, passwordHash,
 		username,
 		normalizedName,
 		passwordHash,
+		communityTermsVersion: currentCommunityTermsVersion,
+		communityTermsAcceptedAt: now(),
 		gamePasswordSealed: launchSignupMode ? sealText(password) : "",
 		referrerCode: String(payload.referrerCode || payload.referralCode || payload.ref || "").trim().slice(0, 40),
 		status: "pending",
@@ -2760,7 +2564,7 @@ async function verifyEmailSignupToken(token, request) {
 	if (!/^[A-Za-z0-9_-]{32,120}$/.test(normalizedToken)) {
 		throw new HttpError(400, "invalid_email_verification_token");
 	}
-	const result = await updateStore(async (store, transaction) => {
+	const result = await updateStore(async (store) => {
 		pruneEmailVerifications(store);
 		const tokenHash = hashToken(normalizedToken);
 		const pending = store.emailVerifications.find((entry) =>
@@ -2790,6 +2594,8 @@ async function verifyEmailSignupToken(token, request) {
 			emailDisplay: pending.emailDisplay || pending.emailCanonical,
 			passwordHash: pending.passwordHash,
 			status: "active",
+			communityTermsVersion: pending.communityTermsVersion,
+			communityTermsAcceptedAt: pending.communityTermsAcceptedAt,
 			emailVerifiedAt: now(),
 			subscriptionExpiresAt: 0,
 			createdAt: now(),
@@ -2804,7 +2610,7 @@ async function verifyEmailSignupToken(token, request) {
 			await createLaunchFirstCharacter(store, account, {
 				username: founder.username,
 				gamePassword: unsealText(pending.gamePasswordSealed || "")
-			}, request, transaction);
+			}, request);
 		} else {
 			const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
 			reservedCharacter.source = "founder-reserved";
@@ -2814,7 +2620,7 @@ async function verifyEmailSignupToken(token, request) {
 			emailCanonical: pending.emailCanonical,
 			provider: "password_email_verified",
 			signupSignalsRecorded: true
-		}, transaction);
+		});
 		const confirmation = queueAccountEmail(store, account, signupConfirmationEmailType, {
 			origin: requestPublicOrigin(request)
 		});
@@ -3529,13 +3335,7 @@ function buildEmailMessage(event, account, founder) {
 	const manageUrl = joinUrl(origin, "/");
 	const playUrl = mobileWebClientUrl(joinUrl(origin, "/play/"));
 	const launcherUrl = joinUrl(origin, "/downloads/launcher");
-	const androidApkUrl = joinUrl(origin, "/downloads/android-apk");
-	const androidPrimaryUrl = androidPlayUrl || androidApkUrl;
-	const androidPrimaryLabel = androidPlayUrl ? "Google Play" : "Android APK";
-	const androidEmailLinks = [
-		{ url: androidPrimaryUrl, label: androidPrimaryLabel },
-		...(androidPlayUrl ? [{ url: androidApkUrl, label: "Direct APK download" }] : [])
-	];
+	const androidUrl = joinUrl(origin, "/downloads/android-apk");
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
 	if (event.type === launchReminderEmailType) {
@@ -3548,10 +3348,7 @@ function buildEmailMessage(event, account, founder) {
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the Voidscape launcher.",
-				androidPlayUrl
-					? "Android players can choose Google Play or the signed direct APK download."
-					: "Android players can install the signed APK directly from the website.",
-				"iPhone players can use the Safari web client at voidscape.gg/play. Some controls may feel less polished than desktop or Android.",
+				"Mobile players can use the web client; Android players can also use the APK.",
 				"Eligible prelaunch accounts have a free 1-week subscription card reserved.",
 				"Never share your password or signup code. Voidscape staff will never ask for it."
 			],
@@ -3560,8 +3357,8 @@ function buildEmailMessage(event, account, founder) {
 			secondaryUrl: launcherUrl,
 			secondaryLabel: "Download launcher",
 			extraLinks: [
-				{ url: playUrl, label: "Web / iPhone Safari" },
-				...androidEmailLinks
+				{ url: playUrl, label: "Mobile web client" },
+				{ url: androidUrl, label: "Android APK" }
 			]
 		});
 	}
@@ -3571,21 +3368,17 @@ function buildEmailMessage(event, account, founder) {
 			account,
 			subject: "Voidscape is live",
 			heading: "Voidscape is live",
-			intro: `Your reserved name ${reservedName} is ready. The desktop launcher and web client are live from the Voidscape site.`,
+			intro: `Your reserved name ${reservedName} is ready. The desktop launcher and mobile web client are live from the Voidscape site.`,
 			bullets: [
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the launcher from the website.",
-				"Players can use the browser client from the play page; iPhone is supported through Safari, not a native App Store app, and some controls may feel less polished.",
-				androidPlayUrl
-					? "Android players can choose Google Play or the signed direct APK download."
-					: "Android players can install the Android APK from the website.",
+				"Mobile players can use the web client from the play page.",
 				"Your starter subscription card is waiting for eligible prelaunch accounts."
 			],
 			primaryUrl: manageUrl,
 			primaryLabel: "Open Voidscape",
 			secondaryUrl: playUrl,
-			secondaryLabel: "Web / iPhone Safari",
-			extraLinks: androidEmailLinks
+			secondaryLabel: "Mobile web client"
 		});
 	}
 	return emailMessage({
@@ -4225,19 +4018,23 @@ async function serveStatic(request, response, pathname) {
 			? "/portal.html"
 			: pathname === "/privacy"
 				? "/privacy.html"
-				: pathname === "/data-deletion"
-					? "/data-deletion.html"
-					: pathname === "/features"
-						? "/features.html"
-							: pathname === "/legends"
-								? "/legends.html"
-								: pathname === "/npcs" || pathname === "/drops"
-									? "/npcs.html"
-									: pathname === "/discord"
-										? "/discord.html"
-										: pathname === "/transparency"
-											? "/transparency.html"
-											: decodeURIComponent(pathname);
+				: pathname === "/community-rules"
+					? "/community-rules.html"
+					: pathname === "/data-deletion"
+						? "/data-deletion.html"
+						: pathname === "/features"
+							? "/features.html"
+								: pathname === "/loot-editor" || pathname === "/loot-editor/"
+									? "/loot-editor.html"
+										: pathname === "/loot-editor-guide" || pathname === "/loot-editor-guide/"
+											? "/loot-editor-guide.html"
+												: pathname === "/npcs" || pathname === "/drops"
+													? "/npcs.html"
+														: pathname === "/discord"
+															? "/discord.html"
+																: pathname === "/transparency"
+																	? "/transparency.html"
+																	: decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
@@ -4329,15 +4126,6 @@ async function serveCacheDownload(request, response, pathname) {
 		requestedPath = decodeURIComponent(pathname.slice("/downloads/cache/".length));
 	} catch (error) {
 		throw new HttpError(400, "invalid_download_path");
-	}
-	if (requestedPath === "Open_RSC_Client.jar") {
-		const clientArtifact = downloadArtifacts.find((entry) => entry.slug === "client-runtime");
-		await sendFile(request, response, clientArtifact.path, {
-			contentType: clientArtifact.contentType || "application/java-archive",
-			contentDisposition: `attachment; filename="${clientArtifact.filename}"`,
-			notFound: "download_not_built"
-		});
-		return;
 	}
 
 	const resolved = resolve(clientCacheDir, requestedPath);
@@ -4752,7 +4540,7 @@ function createCharacter(store, accountId, name, path) {
 	return character;
 }
 
-async function createLaunchFirstCharacter(store, account, payload, request, transaction = null) {
+async function createLaunchFirstCharacter(store, account, payload, request) {
 	const existingCharacters = store.characters.filter((character) => character.accountId === account.id);
 	const linkedCharacter = existingCharacters.find((character) => character.source === "openrsc-sqlite-created");
 	if (linkedCharacter) return linkedCharacter;
@@ -4764,7 +4552,7 @@ async function createLaunchFirstCharacter(store, account, payload, request, tran
 	return await createAccountCharacter(store, account, {
 		name: username,
 		gamePassword
-	}, request, { initialSignup: true, transaction });
+	}, request, { initialSignup: true });
 }
 
 async function createAccountCharacter(store, account, payload, request, options = {}) {
@@ -4828,22 +4616,13 @@ async function createAccountCharacter(store, account, payload, request, options 
 		await assertCharacterCreationAllowed(store, account, request);
 	}
 
-	const createdPlayer = await createOpenRscPlayer({
+	const playerId = await createOpenRscPlayer({
 		accountId: account.id,
 		username,
 		email: account.emailDisplay || account.emailCanonical || "",
 		password,
 		ip: clientIp(request)
 	});
-	const playerId = createdPlayer.playerId;
-	if (options.transaction) {
-		options.transaction.onRollback(() => deleteOpenRscPlayer({
-			playerId,
-			name: username
-		}, account.id, {
-			expectedCreationDate: createdPlayer.creationDate
-		}));
-	}
 	const snapshot = await openRscCharacterSnapshot(username);
 	const character = {
 		id: reservedForAccount ? existingCharacter.id : nextId(store, "character"),
@@ -4883,7 +4662,7 @@ async function createAccountCharacter(store, account, payload, request, options 
 	return character;
 }
 
-async function deleteAccountCharacter(store, account, characterId, transaction = null) {
+async function deleteAccountCharacter(store, account, characterId) {
 	if (!Number.isInteger(characterId) || characterId <= 0) {
 		throw new HttpError(400, "invalid_character_id");
 	}
@@ -4900,7 +4679,7 @@ async function deleteAccountCharacter(store, account, characterId, transaction =
 		name: character.name,
 		playerId: character.playerId || null,
 		source: character.source || "portal-preview",
-		openRscDeleted: character.source === "openrsc-sqlite-created"
+		openRscDeleted: false
 	};
 
 	if (Number(character.playerId) > 0) {
@@ -4908,15 +4687,9 @@ async function deleteAccountCharacter(store, account, characterId, transaction =
 			throw new HttpError(503, "openrsc_db_not_configured");
 		}
 		if (character.source === "openrsc-sqlite-created") {
-			const removePlayer = async () => {
-				deleted.openRscDeleted = await deleteOpenRscPlayer(character, account.id);
-			};
-			if (transaction) transaction.afterPersist(removePlayer);
-			else await removePlayer();
+			deleted.openRscDeleted = await deleteOpenRscPlayer(character, account.id);
 		} else {
-			const unlinkPlayer = () => unlinkOpenRscPlayerFromAccount(character.playerId, account.id);
-			if (transaction) transaction.afterPersist(unlinkPlayer);
-			else await unlinkPlayer();
+			await unlinkOpenRscPlayerFromAccount(character.playerId, account.id);
 		}
 	}
 
@@ -5106,17 +4879,10 @@ function launchScheduleState() {
 	};
 }
 
-function founderReservationsOpen() {
-	if (betaMode || launchSignupMode) return false;
-	if (!publicMode) return true;
-	const openAtMs = Date.parse(launchOpenAtIso || "");
-	return Number.isFinite(openAtMs) && Date.now() < openAtMs;
-}
-
 function launchFreeCardWindowState() {
-	if (!launchOpenAtIso) {
+	if (!launchOpenAtIso || launchFreeCardHours <= 0) {
 		return {
-			open: true,
+			open: !launchOpenAtIso,
 			endsAt: null,
 			remainingMs: null
 		};
@@ -5178,7 +4944,6 @@ async function rewardState(store, account) {
 			}]
 			: [];
 
-	const paidSubscriptionCards = await paidSubscriptionCardState(account.id);
 	return {
 		starterSubscriptionCards,
 		starterSubscriptionCardsClaimed,
@@ -5187,7 +4952,6 @@ async function rewardState(store, account) {
 			synced: hasGameLedger,
 			status: ledger.status
 		},
-		paidSubscriptionCards,
 		cards: visibleCards.map((entry) => ({
 			id: entry.id,
 			type: entry.type,
@@ -5254,112 +5018,6 @@ function securityState(store, account, currentSession, founder) {
 	};
 }
 
-async function legendsState() {
-	if (!openRscDbPath) {
-		throw new HttpError(503, "openrsc_db_not_configured");
-	}
-
-	try {
-		const season = sqlString(legendsSeasonId);
-		const [recordRows, streakRows] = await Promise.all([
-			sqliteJson(`
-				SELECT record_type AS "type",
-				       player_name AS "playerName",
-				       subject_id AS "subjectId",
-				       value AS "value",
-				       claimed_at_ms AS "achievedAtMs"
-				FROM world_achievement_records
-				WHERE season_id = ${season}
-				  AND (
-				    (record_type = 'first_skill' AND subject_id BETWEEN 0 AND 19 AND value IN (80, 90, 99))
-				    OR (record_type = 'first_item' AND subject_id = 575 AND value = 1)
-				  )
-				ORDER BY claimed_at_ms ASC, record_type ASC, subject_id ASC, value ASC, record_key ASC
-				LIMIT 200;
-			`),
-			sqliteJson(`
-				SELECT player_name AS "playerName",
-				       current_streak AS "currentStreak",
-				       best_streak AS "bestStreak",
-				       qualified_kills AS "qualifiedKills",
-				       last_qualified_at_ms AS "lastQualifiedAtMs"
-				FROM world_pk_streaks
-				WHERE season_id = ${season}
-				  AND qualified_kills > 0
-				ORDER BY best_streak DESC,
-				         qualified_kills DESC,
-				         current_streak DESC,
-				         lower(player_name) ASC,
-				         player_name ASC,
-				         player_id ASC
-				LIMIT 200;
-			`)
-		]);
-
-		const firsts = recordRows
-			.map(publicLegendRecord)
-			.filter(Boolean);
-		const leaders = streakRows
-			.map(publicLegendStreak)
-			.filter(Boolean)
-			.slice(0, 50)
-			.map((entry, index) => ({ rank: index + 1, ...entry }));
-		return {
-			seasonId: legendsSeasonId,
-			firsts,
-			pvp: { leaders }
-		};
-	} catch (error) {
-		console.error("legends_read_failed", error instanceof Error ? error.message : "unknown_error");
-		throw new HttpError(503, "legends_unavailable");
-	}
-}
-
-function publicLegendRecord(row) {
-	const type = String(row && row.type || "");
-	const playerName = publicLegendPlayerName(row && row.playerName);
-	const subjectId = publicSafeNonNegativeInteger(row && row.subjectId);
-	const value = publicSafeNonNegativeInteger(row && row.value);
-	const achievedAtMs = publicSafeNonNegativeInteger(row && row.achievedAtMs);
-	const validSkill = type === "first_skill"
-		&& subjectId !== null && subjectId <= 19
-		&& [80, 90, 99].includes(value);
-	const validItem = type === "first_item" && subjectId === 575 && value === 1;
-	if (!playerName || achievedAtMs === null || achievedAtMs <= 0 || (!validSkill && !validItem)) {
-		return null;
-	}
-	return { type, playerName, subjectId, value, achievedAtMs };
-}
-
-function publicLegendStreak(row) {
-	const playerName = publicLegendPlayerName(row && row.playerName);
-	const currentStreak = publicSafeNonNegativeInteger(row && row.currentStreak);
-	const bestStreak = publicSafeNonNegativeInteger(row && row.bestStreak);
-	const qualifiedKills = publicSafeNonNegativeInteger(row && row.qualifiedKills);
-	const lastQualifiedAtMs = publicSafeNonNegativeInteger(row && row.lastQualifiedAtMs);
-	if (!playerName
-		|| currentStreak === null || bestStreak === null || qualifiedKills === null
-		|| lastQualifiedAtMs === null || lastQualifiedAtMs <= 0
-		|| qualifiedKills <= 0 || bestStreak <= 0
-		|| currentStreak > bestStreak || bestStreak > qualifiedKills) {
-		return null;
-	}
-	return { playerName, currentStreak, bestStreak, qualifiedKills, lastQualifiedAtMs };
-}
-
-function publicLegendPlayerName(value) {
-	const rawPlayerName = String(value || "");
-	const playerName = cleanUsername(rawPlayerName);
-	return playerName === rawPlayerName && normalizeUsername(playerName) ? playerName : "";
-}
-
-function publicSafeNonNegativeInteger(value) {
-	if (typeof value !== "number" && typeof value !== "string") return null;
-	if (typeof value === "string" && !/^(0|[1-9]\d*)$/.test(value)) return null;
-	const number = Number(value);
-	return Number.isSafeInteger(number) && number >= 0 ? number : null;
-}
-
 async function publicState(store) {
 	const founderUnlocks = store.founders.filter((founder) =>
 		Boolean(founder.starterCardUnlocked) || founder.creditedReferrals >= 2
@@ -5375,7 +5033,6 @@ async function publicState(store) {
 		return {
 			publicMode: Boolean(publicMode),
 			betaMode: true,
-			rosterWritesFrozen,
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
@@ -5412,7 +5069,6 @@ async function publicState(store) {
 		return {
 			publicMode: true,
 			launchSignupMode,
-			rosterWritesFrozen,
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
@@ -5848,7 +5504,7 @@ async function buildIntegrity(input) {
 		evidence: proof.evidence,
 		artifacts: proof.artifacts.length ? proof.artifacts : normalized.artifacts,
 		manifest: proof.manifest.status !== "unknown" ? proof.manifest : normalized.manifest,
-		source: proof.source.status !== "source_pending" ? proof.source : normalized.source
+		source: proof.source
 	};
 }
 
@@ -6060,25 +5716,25 @@ async function downloadState(options = {}) {
 	const includePrivate = options.includePrivate !== false;
 	const rows = [{
 		slug: "web-client",
-		label: "Web / iPhone",
-		state: "Browser client · iPhone Safari supported",
+		label: "Mobile web client",
+		state: "iOS and Android browsers",
 		url: webClientUrl,
 		available: true,
 		publicDownload: true,
 		external: true,
-		platform: "web"
+		mobileOnly: true
 	}];
 	if (androidPlayUrl) {
 		rows.push({
 			slug: "android-play",
 			label: "Google Play",
-			state: "Official Android store listing",
+			state: "Recommended Android install",
 			url: androidPlayUrl,
 			available: true,
 			publicDownload: true,
 			external: true,
 			platform: "android",
-			platformChannel: "google-play"
+			platformPrimary: true
 		});
 	}
 	for (const artifact of downloadArtifacts) {
@@ -6089,32 +5745,32 @@ async function downloadState(options = {}) {
 			const fileStat = await stat(artifact.path);
 			const sha256 = await sha256File(artifact.path, fileStat);
 			const metadata = await downloadArtifactMetadata(artifact);
-			const androidDirect = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: androidDirect ? "Direct APK" : artifact.label,
-				state: androidDirect ? `Signed direct download · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? `Direct install fallback · ${formatBytes(fileStat.size)}` : `Built ${formatBytes(fileStat.size)}`,
 				url: publicDownloadUrl(`/downloads/${artifact.slug}`),
 				available: true,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
-				...(androidDirect ? { platform: "android", platformChannel: "direct-apk" } : {}),
+				...(androidFallback ? { fallback: true, platform: "android" } : {}),
 				sizeBytes: fileStat.size,
 				updatedAt: fileStat.mtime.toISOString(),
 				sha256,
 				...metadata
 			});
 		} catch (error) {
-			const androidDirect = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
+			const androidFallback = artifact.slug === "android-apk" && Boolean(androidPlayUrl);
 			rows.push({
 				slug: artifact.slug,
-				label: androidDirect ? "Direct APK" : artifact.label,
-				state: androidDirect ? "Signed direct download unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
+				label: androidFallback ? "Signed APK fallback" : artifact.label,
+				state: androidFallback ? "Direct install fallback unavailable" : (artifact.unavailableState || "Run scripts/build.sh"),
 				url: "#",
 				available: false,
 				publicDownload: artifact.publicDownload !== false,
 				primary: artifact.slug === "launcher",
-				...(androidDirect ? { platform: "android", platformChannel: "direct-apk" } : {})
+				...(androidFallback ? { fallback: true, platform: "android" } : {})
 			});
 		}
 	}
@@ -6219,56 +5875,47 @@ async function latestClientCacheManifestMtime() {
 
 async function sourceProofState() {
 	const metadata = await readBuildMetadata();
-	const metadataStatus = sanitizeIntegrityLabel(metadata.status, "source_pending");
-	if (metadataStatus === "publication_pending" || metadataStatus === "source_pending") {
-		return normalizeBuildSource({
-			status: metadataStatus,
-			repositoryUrl: "",
-			commit: "",
-			shortCommit: "",
-			branch: "",
-			dirty: false,
-			generatedAt: metadata.generatedAt || ""
-		});
+	const repositoryUrl = safeHttpUrl(process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || metadata.sourceRepositoryUrl);
+	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.sourceCommit);
+	let status = sanitizeIntegrityLabel(
+		process.env.PORTAL_SOURCE_PUBLICATION_STATUS
+			|| metadata.sourcePublicationStatus
+			|| (repositoryUrl && commit ? "published" : "source_pending"),
+		"source_pending"
+	);
+	if (!["publication_pending", "source_pending"].includes(status) && (!repositoryUrl || !commit)) {
+		status = "source_pending";
 	}
-	const commit = safeCommitHash(process.env.PORTAL_SOURCE_COMMIT || process.env.PORTAL_GIT_COMMIT || metadata.commit || await gitValue(["rev-parse", "HEAD"]));
-	const branch = sanitizeSourceText(process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.branch || await gitValue(["branch", "--show-current"]), 64);
-	const dirty = metadata.dirty === true || (metadata.dirty !== false && await gitDirty());
 	return normalizeBuildSource({
-		status: commit ? (dirty ? "publish_pending" : "commit_recorded") : "source_pending",
-		repositoryUrl: process.env.PORTAL_SOURCE_URL || metadata.repositoryUrl || sourceRepositoryUrl,
+		status,
+		repositoryUrl,
 		commit,
 		shortCommit: commit.slice(0, 12),
-		branch,
-		dirty,
+		branch: process.env.PORTAL_SOURCE_BRANCH || process.env.PORTAL_GIT_BRANCH || metadata.sourceBranch || "",
+		dirty: metadata.sourceDirty === true,
 		generatedAt: metadata.generatedAt || ""
 	});
 }
 
 async function readBuildMetadata() {
 	try {
-		const metadata = JSON.parse(await readFile(buildMetadataPath, "utf8"));
-		return metadata && typeof metadata === "object" ? metadata : {};
+		const input = JSON.parse(await readFile(buildMetadataPath, "utf8"));
+		if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+		const sourceRepository = safeHttpUrl(input.sourceRepositoryUrl);
+		const sourceCommit = safeCommitHash(input.sourceCommit);
+		return {
+			sourcePublicationStatus: sanitizeIntegrityLabel(
+				input.sourcePublicationStatus,
+				sourceRepository && sourceCommit ? "published" : "source_pending"
+			),
+			sourceRepositoryUrl: sourceRepository,
+			sourceCommit,
+			sourceBranch: sanitizeSourceText(input.sourceBranch, 64),
+			sourceDirty: input.sourceDirty === true,
+			generatedAt: validIsoTimestamp(input.generatedAt) || ""
+		};
 	} catch (error) {
 		return {};
-	}
-}
-
-async function gitValue(args) {
-	try {
-		const result = await execFile("git", ["-C", repoRoot, ...args], { timeout: 1500 });
-		return String(result.stdout || "").trim();
-	} catch (error) {
-		return "";
-	}
-}
-
-async function gitDirty() {
-	try {
-		const result = await execFile("git", ["-C", repoRoot, "status", "--porcelain"], { timeout: 1500 });
-		return String(result.stdout || "").trim().length > 0;
-	} catch (error) {
-		return false;
 	}
 }
 
@@ -6456,24 +6103,17 @@ async function backfillNativePortalAccounts(store, options = {}) {
 	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
 	const dryRun = options.dryRun === true;
 	const grantMissingStarterCard = options.grantMissingStarterCard !== false;
-	const grantLaunchCharacterCards = options.grantLaunchCharacterCards !== false;
-	const asOfMs = normalizeNativeBackfillAsOfMs(options.asOfMs, dryRun);
-	const playerColumns = await sqliteJson("PRAGMA table_info(players);");
-	const hasBannedColumn = playerColumns.some((column) => String(column.name || "").toLowerCase() === "banned");
 	const players = await sqliteJson(`
-		SELECT id, username, email, group_id AS groupId, ${hasBannedColumn ? "banned" : "'0'"} AS banned,
-		       creation_date AS creationDate,
-		       combat, skill_total, quest_points, kills, npc_kills, deaths,
+		SELECT id, username, email, combat, skill_total, quest_points, kills, npc_kills, deaths,
 		       login_date, male, haircolour, topcolour, trousercolour, skincolour, headsprite, bodysprite
 		FROM players
 		ORDER BY id
 	`);
 	const cacheRows = await sqliteJson(`
-		SELECT playerID, type, key, value, dbid
+		SELECT playerID, key, value, dbid
 		FROM player_cache
 		WHERE key = ${sqlString(openRscAccountIdCacheKey)}
 		   OR key = 'launch_24h_card'
-		   OR substr(key, 1, ${launchCharacterCardCachePrefix.length}) = ${sqlString(launchCharacterCardCachePrefix)}
 		   OR (playerID = 0 AND (
 			key LIKE ${sqlString(`${starterCardCachePrefix}%`)}
 			OR key LIKE ${sqlString(`${playerSubscriptionCachePrefix}%`)}
@@ -6481,46 +6121,11 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		   ))
 		ORDER BY dbid
 	`);
-	const launchCharacterCardMarkerRows = cacheRows.filter((row) =>
-		String(row.key || "").startsWith(launchCharacterCardCachePrefix));
-	const webAccountLinkSnapshot = cacheRows
-		.filter((row) => String(row.key || "") === openRscAccountIdCacheKey && Number(row.playerID) > 0)
-		.map((row) => ({
-			dbid: Number(row.dbid),
-			playerId: Number(row.playerID),
-			accountId: String(row.value == null ? "" : row.value),
-			type: Number(row.type)
-		}));
-	const launchCharacterCardIntegrity = inspectLaunchCharacterCardMarkers(launchCharacterCardMarkerRows);
-	const launchCharacterCardCompletion = launchCharacterCardIntegrity.completion;
-	const cohort = nativeBackfillCohort(players, {
-		grantMissingStarterCard,
-		grantLaunchCharacterCards,
-		asOfMs,
-		launchCharacterCardCompletion,
-		launchCharacterCardMarkers: launchCharacterCardMarkerRows.map(normalizeLaunchCharacterCardMarkerRow),
-		webAccountLinks: webAccountLinkSnapshot,
-		approvedExceptionPlayerIds: options.approvedExceptionPlayerIds,
-		excludedExceptionPlayerIds: options.excludedExceptionPlayerIds
-	});
-	if (!dryRun) {
-		if (!launchCharacterCardIntegrity.ok) {
-			throw new HttpError(409, "native_backfill_launch_card_markers_invalid");
-		}
-		if (!cohort.ready) throw new HttpError(409, "native_backfill_review_required");
-		if (!options.reviewToken || String(options.reviewToken) !== cohort.reviewToken) {
-			throw new HttpError(409, "native_backfill_review_token_mismatch");
-		}
-	}
-	const includedPlayerIds = new Set(cohort.includedPlayerIds);
-	const includedPlayers = players.filter((player) => includedPlayerIds.has(Number(player.id)));
 	const webLinks = new Map();
 	const launchCardMarkers = new Map();
 	const starterCardMarkers = new Map();
 	const playerSubscriptionMarkers = new Map();
 	const accountSubscriptionMarkers = new Map();
-	const launchCharacterCardMarkers = new Map(launchCharacterCardIntegrity.campaignMarkers.map((marker) =>
-		[marker.playerId, marker.state]));
 	for (const row of cacheRows) {
 		const playerId = Number(row.playerID);
 		const key = String(row.key || "");
@@ -6553,15 +6158,12 @@ async function backfillNativePortalAccounts(store, options = {}) {
 
 	const linkInserts = [];
 	const starterInserts = [];
-	const launchCharacterCardInserts = [];
 	const subscriptionUpserts = new Map();
 	const subscriptionMigrationAccounts = new Set();
 	const result = {
 		dryRun,
 		grantMissingStarterCard,
-		grantLaunchCharacterCards,
 		players: players.length,
-		cohort,
 		alreadyLinked: 0,
 		createdAccounts: 0,
 		reusedSyntheticAccounts: 0,
@@ -6569,44 +6171,12 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		updatedCharacters: 0,
 		linkedPlayers: 0,
 		starterCardsGranted: 0,
-		starterCardsSkippedAfterLaunchSeal: 0,
-		launchCharacterCardsSeeded: 0,
-		launchCharacterCardsAlreadyPresent: 0,
-		launchCharacterCardsSkippedAfterSeal: 0,
-		launchCharacterCardCutoverWillSeal: false,
-		launchCharacterCardCutoverSealed: false,
-		launchCharacterCardCutoverAlreadySealed: launchCharacterCardCompletion.sealed,
-		launchCharacterCardCampaign: {
-			prefix: launchCharacterCardCachePrefix,
-			completionKey: launchCharacterCardCompletionKey,
-			availableState: launchCharacterCardAvailable,
-			claimedState: launchCharacterCardClaimed,
-			integrity: launchCharacterCardIntegrity,
-			markersBefore: launchCharacterCardIntegrity.campaignMarkers.length,
-			completionBefore: launchCharacterCardCompletion
-		},
 		subscriptionsMigrated: 0,
 		conflicts: [],
 		samples: []
 	};
-	for (const anomaly of launchCharacterCardIntegrity.anomalies) {
-		result.conflicts.push({ reason: "launch_character_card_marker_invalid", ...anomaly });
-	}
-	if (!launchCharacterCardCompletion.sealed) {
-		const currentPlayerIds = new Set(players.map((player) => Number(player.id)).filter((id) => id > 0));
-		for (const marker of launchCharacterCardIntegrity.campaignMarkers) {
-			if (currentPlayerIds.has(marker.playerId) && !includedPlayerIds.has(marker.playerId)) {
-				result.conflicts.push({
-					reason: "launch_character_card_marker_for_excluded_player",
-					playerId: marker.playerId,
-					state: marker.state,
-					key: marker.key
-				});
-			}
-		}
-	}
 
-	for (const player of includedPlayers) {
+	for (const player of players) {
 		const playerId = Number(player.id);
 		const username = cleanUsername(player.username || "");
 		const normalizedName = normalizeUsername(username);
@@ -6731,30 +6301,12 @@ async function backfillNativePortalAccounts(store, options = {}) {
 			const starterKey = starterCardCacheKey(accountId);
 			const hasLaunchCard = launchCardMarkers.has(playerId);
 			const hasStarterCard = starterKey && starterCardMarkers.has(starterKey);
-			const belongsToSealedLaunchCohort = !launchCharacterCardCompletion.sealed
-				|| launchCharacterCardMarkers.has(playerId);
-			if (starterKey && !hasLaunchCard && !hasStarterCard && belongsToSealedLaunchCohort) {
+			if (starterKey && !hasLaunchCard && !hasStarterCard) {
 				starterCardMarkers.set(starterKey, starterCardAvailable);
 				starterInserts.push({ accountId, key: starterKey });
 				ensureStarterEntitlement(store, accountId, "native_client_backfill");
 				result.starterCardsGranted += 1;
-			} else if (starterKey && !hasLaunchCard && !hasStarterCard
-				&& launchCharacterCardCompletion.sealed) {
-				result.starterCardsSkippedAfterLaunchSeal += 1;
 			}
-		}
-
-		if (launchCharacterCardMarkers.has(playerId)) {
-			result.launchCharacterCardsAlreadyPresent += 1;
-		} else if (grantLaunchCharacterCards && !launchCharacterCardCompletion.sealed) {
-			launchCharacterCardMarkers.set(playerId, launchCharacterCardAvailable);
-			launchCharacterCardInserts.push({
-				playerId,
-				key: launchCharacterCardKey(playerId)
-			});
-			result.launchCharacterCardsSeeded += 1;
-		} else if (grantLaunchCharacterCards && launchCharacterCardCompletion.sealed) {
-			result.launchCharacterCardsSkippedAfterSeal += 1;
 		}
 
 		if (result.samples.length < 12 && (linkInserts.some((row) => row.playerId === playerId) || !character)) {
@@ -6772,20 +6324,10 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		throw new HttpError(409, "native_backfill_conflicts");
 	}
 	result.subscriptionsMigrated = subscriptionMigrationAccounts.size;
-	const sealLaunchCharacterCardCutover = grantLaunchCharacterCards && !launchCharacterCardCompletion.sealed;
-	result.launchCharacterCardCutoverWillSeal = sealLaunchCharacterCardCutover;
-	result.launchCharacterCardCutoverSealed = !dryRun && sealLaunchCharacterCardCutover;
 
 	const pendingGameWrites = {
 		linkInserts,
 		starterInserts,
-		launchCharacterCardCutover: {
-			enabled: grantLaunchCharacterCards,
-			seal: sealLaunchCharacterCardCutover,
-			inserts: launchCharacterCardInserts,
-			includedPlayerIds: cohort.includedPlayerIds,
-			expectedMarkerRows: launchCharacterCardMarkerRows.map(normalizeLaunchCharacterCardMarkerRow)
-		},
 		subscriptionUpserts: Array.from(subscriptionUpserts.values())
 	};
 	if (!dryRun && !options.deferGameWrites) {
@@ -6796,254 +6338,17 @@ async function backfillNativePortalAccounts(store, options = {}) {
 	result.gameWrites = {
 		webAccountLinksInserted: linkInserts.length,
 		starterCardsInserted: starterInserts.length,
-		launchCharacterCardsInserted: launchCharacterCardInserts.length,
-		launchCharacterCardCompletionInserted: sealLaunchCharacterCardCutover ? 1 : 0,
 		accountSubscriptionsUpserted: subscriptionUpserts.size
 	};
 	return result;
 }
 
-function nativeBackfillCohort(players, options = {}) {
-	const asOfMs = normalizeNativeBackfillAsOfMs(options.asOfMs, true);
-	const approvedExceptionPlayerIds = normalizePositiveIntegerList(options.approvedExceptionPlayerIds);
-	const excludedExceptionPlayerIds = normalizePositiveIntegerList(options.excludedExceptionPlayerIds);
-	const approvedSet = new Set(approvedExceptionPlayerIds);
-	const excludedSet = new Set(excludedExceptionPlayerIds);
-	const rows = players.map((player) => nativeBackfillCohortRow(player, asOfMs));
-	const exceptions = rows.filter((row) => row.classification !== "eligible");
-	const exceptionIds = new Set(exceptions.map((row) => row.playerId).filter((id) => id > 0));
-	const unexpectedApprovedPlayerIds = approvedExceptionPlayerIds.filter((id) => !exceptionIds.has(id));
-	const unexpectedExcludedPlayerIds = excludedExceptionPlayerIds.filter((id) => !exceptionIds.has(id));
-	const conflictingDecisionPlayerIds = approvedExceptionPlayerIds.filter((id) => excludedSet.has(id));
-	const approvedExceptions = exceptions.filter((row) => row.approvable && approvedSet.has(row.playerId) && !excludedSet.has(row.playerId));
-	const explicitlyExcludedExceptions = exceptions.filter((row) => excludedSet.has(row.playerId) && !approvedSet.has(row.playerId));
-	const decidedExceptionIds = new Set(approvedExceptions.concat(explicitlyExcludedExceptions).map((row) => row.playerId));
-	const pendingExceptions = exceptions.filter((row) => !decidedExceptionIds.has(row.playerId));
-	const eligiblePlayerIds = rows
-		.filter((row) => row.classification === "eligible")
-		.map((row) => row.playerId);
-	const includedPlayerIds = eligiblePlayerIds.concat(approvedExceptions.map((row) => row.playerId)).sort((a, b) => a - b);
-	const tokenRows = rows.map((row) => ({
-		playerId: row.playerId,
-		username: row.snapshotUsername,
-		email: row.email,
-		groupId: row.groupId,
-		banned: row.banned,
-		creationDate: row.creationDate,
-		classification: row.classification,
-		reasons: row.reasons
-	}));
-	const reviewToken = hashToken(JSON.stringify({
-		policy: nativeBackfillCohortPolicy,
-		grantMissingStarterCard: options.grantMissingStarterCard !== false,
-		grantLaunchCharacterCards: options.grantLaunchCharacterCards !== false,
-		asOfMs,
-		launchCharacterCardCompletion: options.launchCharacterCardCompletion || null,
-		launchCharacterCardMarkers: options.launchCharacterCardMarkers || [],
-		webAccountLinks: options.webAccountLinks || [],
-		approvedExceptionPlayerIds,
-		excludedExceptionPlayerIds,
-		players: tokenRows
-	}));
-	return {
-		policy: nativeBackfillCohortPolicy,
-		reviewToken,
-		asOfMs,
-		asOf: new Date(asOfMs).toISOString(),
-		ready: pendingExceptions.length === 0
-			&& unexpectedApprovedPlayerIds.length === 0
-			&& unexpectedExcludedPlayerIds.length === 0
-			&& conflictingDecisionPlayerIds.length === 0,
-		totalPlayers: rows.length,
-		eligiblePlayers: eligiblePlayerIds.length,
-		excludedPlayers: exceptions.filter((row) => row.classification === "excluded").length,
-		ambiguousPlayers: exceptions.filter((row) => row.classification === "ambiguous").length,
-		approvedExceptions: approvedExceptions.length,
-		explicitlyExcludedExceptions: explicitlyExcludedExceptions.length,
-		pendingExceptions: pendingExceptions.length,
-		eligiblePlayerIds,
-		approvedExceptionPlayerIds,
-		excludedExceptionPlayerIds,
-		unexpectedApprovedPlayerIds,
-		unexpectedExcludedPlayerIds,
-		conflictingDecisionPlayerIds,
-		includedPlayerIds,
-		exceptions: exceptions.map((row) => ({
-			...row,
-			decision: approvedSet.has(row.playerId) && !excludedSet.has(row.playerId)
-				? "include"
-				: excludedSet.has(row.playerId) && !approvedSet.has(row.playerId)
-					? "exclude"
-					: "pending"
-		}))
-	};
-}
-
-function nativeBackfillCohortRow(player, asOfMs) {
-	const playerId = Number(player.id);
-	const username = cleanUsername(player.username || "");
-	const normalizedName = normalizeUsername(username);
-	const email = String(player.email || "").trim().toLowerCase();
-	const groupId = Number(player.groupId);
-	const banned = String(player.banned == null ? "0" : player.banned).trim();
-	const creationDate = String(player.creationDate == null ? "0" : player.creationDate);
-	const reasons = [];
-	let approvable = true;
-	if (!Number.isInteger(playerId) || playerId <= 0 || !normalizedName) {
-		reasons.push("invalid_player_row");
-		approvable = false;
-	}
-	if (!Number.isInteger(groupId)) {
-		reasons.push("invalid_group_id");
-		approvable = false;
-	} else if (groupId !== 10) {
-		reasons.push("staff_or_privileged_group");
-	}
-	if (nativeBackfillBanActive(banned, asOfMs)) reasons.push("banned_account");
-	if (nativeBackfillLooksNonPlayer(normalizedName, email)) reasons.push("suspected_dev_or_test_account");
-	const excluded = reasons.includes("staff_or_privileged_group") || reasons.includes("banned_account");
-	return {
-		playerId: Number.isInteger(playerId) ? playerId : 0,
-		username,
-		snapshotUsername: String(player.username == null ? "" : player.username),
-		email,
-		groupId: Number.isInteger(groupId) ? groupId : null,
-		banned,
-		creationDate,
-		classification: reasons.length ? (excluded ? "excluded" : "ambiguous") : "eligible",
-		reasons,
-		approvable
-	};
-}
-
-function nativeBackfillBanActive(value, asOfMs) {
-	const text = String(value == null ? "" : value).trim().toLowerCase();
-	if (["", "0", "false", "none", "null"].includes(text)) return false;
-	const expiresAt = Number(text);
-	return expiresAt === -1 || (Number.isFinite(expiresAt) && expiresAt > Number(asOfMs));
-}
-
-function normalizeNativeBackfillAsOfMs(value, allowDefault) {
-	if (value == null || value === "") {
-		if (!allowDefault) throw new HttpError(400, "native_backfill_as_of_required");
-		return Date.now();
-	}
-	const asOfMs = Number(value);
-	if (!Number.isInteger(asOfMs) || asOfMs <= 0) {
-		throw new HttpError(400, "invalid_native_backfill_as_of");
-	}
-	return asOfMs;
-}
-
-function launchCharacterCardKey(playerId) {
-	const id = Number(playerId);
-	return Number.isInteger(id) && id > 0 ? `${launchCharacterCardCachePrefix}${id}` : "";
-}
-
-function normalizeLaunchCharacterCardMarkerRow(row) {
-	return {
-		dbid: Number(row.dbid),
-		playerID: Number(row.playerID),
-		type: Number(row.type),
-		key: String(row.key || ""),
-		value: String(row.value == null ? "" : row.value)
-	};
-}
-
-function inspectLaunchCharacterCardMarkers(rows) {
-	const normalizedRows = rows.map(normalizeLaunchCharacterCardMarkerRow);
-	const anomalies = [];
-	const counts = new Map();
-	for (const row of normalizedRows) counts.set(row.key, Number(counts.get(row.key) || 0) + 1);
-	for (const [key, count] of counts) {
-		if (count > 1) anomalies.push({ reason: "duplicate_marker", key, count });
-	}
-
-	const campaignMarkers = [];
-	const completionRows = [];
-	for (const row of normalizedRows) {
-		if (row.key === launchCharacterCardCompletionKey) {
-			completionRows.push(row);
-			if (row.playerID !== 0 || row.type !== 0 || row.value !== String(launchCharacterCardCutoverComplete)) {
-				anomalies.push({ reason: "invalid_completion_marker", row });
-			}
-			continue;
-		}
-		const suffix = row.key.slice(launchCharacterCardCachePrefix.length);
-		const playerId = Number(suffix);
-		const canonicalKey = launchCharacterCardKey(playerId);
-		const state = Number(row.value);
-		if (row.playerID !== 0 || row.type !== 0 || !canonicalKey || row.key !== canonicalKey
-			|| ![launchCharacterCardAvailable, launchCharacterCardClaimed].includes(state)
-			|| row.value !== String(state)) {
-			anomalies.push({ reason: "invalid_campaign_marker", row });
-			continue;
-		}
-		campaignMarkers.push({ playerId, state, dbid: row.dbid, key: row.key });
-	}
-	const completion = {
-		rowCount: completionRows.length,
-		state: completionRows.length === 1 ? completionRows[0].value : null,
-		sealed: completionRows.length === 1
-			&& completionRows[0].playerID === 0
-			&& completionRows[0].type === 0
-			&& completionRows[0].value === String(launchCharacterCardCutoverComplete),
-		rows: completionRows
-	};
-	return {
-		ok: anomalies.length === 0,
-		rowCount: normalizedRows.length,
-		campaignMarkerCount: campaignMarkers.length,
-		campaignMarkers,
-		completion,
-		anomalies
-	};
-}
-
-function nativeBackfillLooksNonPlayer(normalizedName, email) {
-	const compactName = String(normalizedName || "").replace(/\s+/g, "").toLowerCase();
-	const suspiciousName = /^(?:wbtest|test(?:user|account|player|char)?\d*|dev(?:user|account|player|char)?\d*|qa(?:user|account|player|char)?\d*|bot\d*|dummy\d*|staff\d*|admin\d*|owner\d*|mod(?:erator)?\d*)$/.test(compactName);
-	const suspiciousEmail = Boolean(email) && (email.endsWith(".invalid") || email.endsWith("@localhost"));
-	return suspiciousName || suspiciousEmail;
-}
-
-function normalizePositiveIntegerList(value) {
-	if (value == null || value === "") return [];
-	if (!Array.isArray(value)) throw new HttpError(400, "invalid_player_id_list");
-	const result = [];
-	for (const entry of value) {
-		const id = Number(entry);
-		if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, "invalid_player_id_list");
-		if (!result.includes(id)) result.push(id);
-	}
-	return result.sort((a, b) => a - b);
-}
-
 async function applyNativeBackfillGameWrites(writes = {}) {
 	const linkInserts = Array.isArray(writes.linkInserts) ? writes.linkInserts : [];
 	const starterInserts = Array.isArray(writes.starterInserts) ? writes.starterInserts : [];
-	const launchCutover = writes.launchCharacterCardCutover || {};
-	const launchInserts = Array.isArray(launchCutover.inserts) ? launchCutover.inserts : [];
 	const subscriptionUpserts = Array.isArray(writes.subscriptionUpserts) ? writes.subscriptionUpserts : [];
-	if (!linkInserts.length && !starterInserts.length && !subscriptionUpserts.length && !launchCutover.enabled) return;
+	if (!linkInserts.length && !starterInserts.length && !subscriptionUpserts.length) return;
 	const sql = ["BEGIN IMMEDIATE;"];
-	if (launchCutover.enabled) {
-		const expectedRows = Array.isArray(launchCutover.expectedMarkerRows)
-			? launchCutover.expectedMarkerRows.map(normalizeLaunchCharacterCardMarkerRow)
-			: [];
-		const expectedPredicate = expectedRows.length
-			? expectedRows.map((row) => `(dbid = ${row.dbid} AND playerID = ${row.playerID} AND type = ${row.type} AND key = ${sqlString(row.key)} AND value = ${sqlString(row.value)})`).join(" OR ")
-			: "0";
-		sql.push(
-			"CREATE TEMP TABLE voidscape_launch_card_guard (ok INTEGER NOT NULL CHECK (ok = 1));",
-			`INSERT INTO voidscape_launch_card_guard (ok)
-			 SELECT CASE WHEN COUNT(*) = ${expectedRows.length}
-			  AND COALESCE(SUM(CASE WHEN ${expectedPredicate} THEN 1 ELSE 0 END), 0) = ${expectedRows.length}
-			 THEN 1 ELSE 0 END
-			 FROM player_cache
-			 WHERE substr(key, 1, ${launchCharacterCardCachePrefix.length}) = ${sqlString(launchCharacterCardCachePrefix)};`
-		);
-	}
 	for (const link of linkInserts) {
 		sql.push(`
 			INSERT INTO player_cache (playerID, type, key, value)
@@ -7061,43 +6366,14 @@ async function applyNativeBackfillGameWrites(writes = {}) {
 				SELECT 1 FROM player_cache WHERE playerID = 0 AND key = ${sqlString(starter.key)}
 			);`);
 	}
-	for (const marker of launchInserts) {
-		sql.push(`
-			INSERT INTO player_cache (playerID, type, key, value)
-			SELECT 0, 0, ${sqlString(marker.key)}, ${sqlString(launchCharacterCardAvailable)}
-			WHERE NOT EXISTS (
-				SELECT 1 FROM player_cache WHERE key = ${sqlString(marker.key)}
-			);`);
-	}
-	if (launchCutover.enabled && launchCutover.seal) {
-		sql.push(`
-			INSERT INTO player_cache (playerID, type, key, value)
-			SELECT 0, 0, ${sqlString(launchCharacterCardCompletionKey)}, ${sqlString(launchCharacterCardCutoverComplete)}
-			WHERE NOT EXISTS (
-				SELECT 1 FROM player_cache WHERE key = ${sqlString(launchCharacterCardCompletionKey)}
-			);`);
-		for (const playerId of launchCutover.includedPlayerIds || []) {
-			const key = launchCharacterCardKey(playerId);
-			sql.push(`INSERT INTO voidscape_launch_card_guard (ok)
-				SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END
-				FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)}
-				  AND value IN (${sqlString(launchCharacterCardAvailable)}, ${sqlString(launchCharacterCardClaimed)});`);
-		}
-		sql.push(`INSERT INTO voidscape_launch_card_guard (ok)
-			SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END
-			FROM player_cache WHERE playerID = 0 AND type = 0
-			  AND key = ${sqlString(launchCharacterCardCompletionKey)}
-			  AND value = ${sqlString(launchCharacterCardCutoverComplete)};`);
-	}
 	for (const subscription of subscriptionUpserts) {
 		sql.push(
 			`DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(subscription.key)};`,
 			`INSERT INTO player_cache (playerID, type, key, value) VALUES (0, 3, ${sqlString(subscription.key)}, ${sqlString(subscription.expiresAt)});`
 		);
 	}
-	if (launchCutover.enabled) sql.push("DROP TABLE voidscape_launch_card_guard;");
 	sql.push("COMMIT;");
-	await sqliteWriteJsonStrict(sql.join("\n"), "native_backfill_launch_card_write_conflict", "native_backfill_apply");
+	await sqliteWriteJson(sql.join("\n"), "native_backfill_apply");
 }
 
 function findCharacterByAccountAndName(store, accountId, normalizedName) {
@@ -7197,15 +6473,14 @@ function ensureStarterEntitlement(store, accountId, source) {
 }
 
 async function syncStarterCardToOpenRsc(account) {
-	if (!openRscDbPath || !account) return null;
+	if (!openRscDbPath || !account) return;
 	const key = starterCardCacheKey(account.id);
-	if (!key) return null;
+	if (!key) return;
 
 	const current = await starterCardLedgerState(account);
 	if (current.status === "claimed") {
-		return null;
+		return;
 	}
-	const previousRows = await openRscCacheRows(0, key);
 
 	await sqliteWriteJson(`
 		BEGIN IMMEDIATE;
@@ -7215,7 +6490,6 @@ async function syncStarterCardToOpenRsc(account) {
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
 	`, "sync_starter_card");
-	return () => restoreOpenRscCacheRows(0, key, previousRows);
 }
 
 async function starterCardLedgerState(account) {
@@ -7268,19 +6542,24 @@ async function revokeStarterCardFromOpenRsc(account) {
 	return starterCardLedgerState(account);
 }
 
-async function syncSignupCodeToOpenRsc(founder, transaction = null) {
+async function syncSignupCodeToOpenRsc(founder) {
 	if (!openRscDbPath || !founder || !founder.signupCode) return false;
-	return syncSignupCodeValueToOpenRsc(founder.signupCode, transaction);
+	return syncSignupCodeValueToOpenRsc(founder.signupCode);
 }
 
-async function syncSignupCodeValueToOpenRsc(code, transaction = null) {
+async function syncSignupCodeValueToOpenRsc(code) {
 	if (!openRscDbPath || !code) return false;
 	const key = signupCodeCacheKey(code);
 	if (!key) return false;
 
-	const previousRows = await openRscCacheRows(0, key);
-	const current = previousRows[previousRows.length - 1];
-	if (current && Number(current.value) === signupCodeRedeemed) {
+	const current = await sqliteJson(`
+		SELECT value
+		FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		ORDER BY dbid DESC
+		LIMIT 1
+	`);
+	if (current.length && Number(current[0].value) === signupCodeRedeemed) {
 		return true;
 	}
 
@@ -7292,47 +6571,20 @@ async function syncSignupCodeValueToOpenRsc(code, transaction = null) {
 		COMMIT;
 		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
 	`, "sync_signup_code");
-	if (transaction) {
-		transaction.onRollback(() => restoreOpenRscCacheRows(0, key, previousRows));
-	}
 	return true;
 }
 
-async function syncReferralRewardCodesToOpenRsc(founder, transaction = null) {
+async function syncReferralRewardCodesToOpenRsc(founder) {
 	if (!openRscDbPath || !founder || !Array.isArray(founder.referralRewardCodes)) return 0;
 	let synced = 0;
 	for (const reward of founder.referralRewardCodes) {
 		if (!reward || reward.syncedAt) continue;
-		if (await syncSignupCodeValueToOpenRsc(reward.code, transaction)) {
+		if (await syncSignupCodeValueToOpenRsc(reward.code)) {
 			reward.syncedAt = now();
 			synced += 1;
 		}
 	}
 	return synced;
-}
-
-async function openRscCacheRows(playerId, key) {
-	return sqliteJson(`
-		SELECT type, value
-		FROM player_cache
-		WHERE playerID = ${Number(playerId)} AND key = ${sqlString(key)}
-		ORDER BY dbid
-	`);
-}
-
-async function restoreOpenRscCacheRows(playerId, key, rows) {
-	const safePlayerId = Number(playerId);
-	const restoreRows = rows.map((row) => `
-		INSERT INTO player_cache (playerID, type, key, value)
-			VALUES (${safePlayerId}, ${Number.isInteger(Number(row.type)) ? Number(row.type) : 0}, ${sqlString(key)}, ${sqlString(row.value)});`
-	).join("\n");
-	await sqliteWriteJson(`
-		BEGIN IMMEDIATE;
-		DELETE FROM player_cache WHERE playerID = ${safePlayerId} AND key = ${sqlString(key)};
-		${restoreRows}
-		COMMIT;
-		SELECT 1 AS ok;
-	`, "restore_cache_rows");
 }
 
 async function signupCodeGameValues() {
@@ -7448,16 +6700,15 @@ async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
 	`, "unlink_player_account");
 }
 
-async function deleteOpenRscPlayer(character, accountId, options = {}) {
+async function deleteOpenRscPlayer(character, accountId) {
 	const playerId = Number(character && character.playerId || 0);
 	const normalizedName = normalizeUsername(character && character.name || "");
-	const expectedCreationDate = Number(options.expectedCreationDate || 0);
 	if (!playerId || !normalizedName) {
 		throw new HttpError(400, "invalid_character_id");
 	}
 
 	const playerRows = await sqliteJson(`
-		SELECT p.id, p.online, p.creation_date AS creationDate, pc.value AS webAccountId
+		SELECT p.id, p.online, pc.value AS webAccountId
 		FROM players p
 		LEFT JOIN player_cache pc
 		  ON pc.playerID = p.id
@@ -7474,15 +6725,9 @@ async function deleteOpenRscPlayer(character, accountId, options = {}) {
 	if (Number(playerRows[0].webAccountId) !== Number(accountId)) {
 		throw new HttpError(409, "character_link_mismatch");
 	}
-	if (expectedCreationDate > 0 && Number(playerRows[0].creationDate || 0) !== expectedCreationDate) {
-		throw new HttpError(409, "character_delete_conflict");
-	}
 	if (Number(playerRows[0].online || 0) !== 0) {
 		throw new HttpError(409, "character_online");
 	}
-	const creationDateGuard = expectedCreationDate > 0
-		? " AND p.creation_date = " + expectedCreationDate
-		: "";
 
 	const tables = await openRscExistingTables([
 		"auctions",
@@ -7527,7 +6772,7 @@ async function deleteOpenRscPlayer(character, accountId, options = {}) {
 			 AND pc.value = ${sqlString(accountId)}
 			WHERE p.id = ${playerId}
 			  AND lower(p.username) = ${sqlString(normalizedName)}
-			  AND p.online = 0${creationDateGuard};`,
+			  AND p.online = 0;`,
 		"CREATE TEMP TABLE portal_deleted_item_ids (itemID INTEGER PRIMARY KEY);"
 	];
 	if (tables.has("invitems")) {
@@ -7711,7 +6956,7 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 	`, "create_openrsc_player");
 	const playerId = Number(rows[0] && rows[0].id);
 	if (!playerId) throw new HttpError(500, "openrsc_character_create_failed");
-	return { playerId, creationDate: createdAt };
+	return playerId;
 }
 
 async function openRscCharacterSnapshot(username) {
@@ -7827,1125 +7072,6 @@ async function loadOpenRscEquipment(playerId) {
 	return Array.from(byItemId.values());
 }
 
-function requireTebexCheckoutConfigured() {
-	if (!tebexCheckoutConfigured()) {
-		throw new HttpError(501, "payments_not_configured");
-	}
-}
-
-function requireTebexWebhookConfigured() {
-	if (!tebexWebhookConfigured()) {
-		throw new HttpError(503, "payments_not_configured");
-	}
-}
-
-async function reserveTebexCheckoutAttempt(request) {
-	return updateStore((store) => {
-		const { account } = requireSession(request, store);
-		const since = Date.now() - checkoutRateWindowMs;
-		const ip = clientIp(request);
-		if (countAbuseSignals(store, "tebex_checkout_account", String(account.id), since) >= checkoutAccountRateLimit
-			|| countAbuseSignals(store, "tebex_checkout_ip", ip, since) >= checkoutIpRateLimit) {
-			throw new HttpError(429, "checkout_rate_limited");
-		}
-		recordAbuseSignal(store, {
-			accountId: account.id,
-			signalType: "tebex_checkout_account",
-			signalValue: String(account.id),
-			bucket: dailyBucket(),
-			metadata: { provider: "tebex" }
-		});
-		recordAbuseSignal(store, {
-			accountId: account.id,
-			signalType: "tebex_checkout_ip",
-			signalValue: ip,
-			bucket: dailyBucket(),
-			metadata: { provider: "tebex" }
-		});
-		return account;
-	});
-}
-
-async function createTebexSubscriptionCardCheckout(account, request) {
-	requireTebexCheckoutConfigured();
-	if (!account || !Number.isInteger(Number(account.id)) || Number(account.id) <= 0) {
-		throw new HttpError(401, "invalid_account");
-	}
-
-	if (!(await commerceSchemaAvailable())) throw new HttpError(503, "commerce_schema_missing");
-	await verifyTebexSubscriptionCardPackage();
-	const ipAddress = tebexCheckoutIpAddress(request);
-	const intentId = randomBytes(32).toString("base64url");
-	const createdAtMs = Date.now();
-	// Tebex can retry delivery well after payment. The signed payment timestamp,
-	// rather than webhook arrival time, is compared with this 24-hour window.
-	const expiresAtMs = createdAtMs + 24 * 60 * 60 * 1000;
-	await sqliteCommerceWrite(`
-		BEGIN IMMEDIATE;
-		INSERT INTO portal_commerce_checkout_intents (
-			intent_id, account_id, provider, package_id, expected_currency,
-			expected_amount_minor, status, created_at_ms, expires_at_ms, updated_at_ms
-		) VALUES (
-			${sqlString(intentId)}, ${Number(account.id)}, 'tebex', ${sqlString(tebexSubscriptionCardPackageId)},
-			${sqlString(tebexExpectedCurrency)}, ${tebexExpectedPriceMinor}, 'created',
-			${createdAtMs}, ${expiresAtMs}, ${createdAtMs}
-		);
-		COMMIT;
-		SELECT intent_id, status FROM portal_commerce_checkout_intents
-		WHERE intent_id = ${sqlString(intentId)};
-	`);
-
-	try {
-		const returnBase = `${publicSiteOrigin}/portal`;
-		const createdPayload = await tebexRequest(
-			`/accounts/${encodeURIComponent(tebexPublicToken)}/baskets`,
-			{
-				method: "POST",
-				body: {
-					complete_url: `${returnBase}?checkout=success#subscription`,
-					cancel_url: `${returnBase}?checkout=cancelled#subscription`,
-					complete_auto_redirect: true,
-					ip_address: ipAddress,
-					custom: { voidscape_intent: intentId }
-				}
-			}
-		);
-		const createdBasket = tebexDataObject(createdPayload);
-		const basketId = validateCreatedTebexBasket(createdBasket, intentId);
-		await sqliteCommerceWrite(`
-			BEGIN IMMEDIATE;
-			UPDATE portal_commerce_checkout_intents
-			SET basket_id = ${sqlString(basketId)}, updated_at_ms = ${Date.now()}
-			WHERE intent_id = ${sqlString(intentId)} AND status = 'created' AND basket_id IS NULL;
-			COMMIT;
-			SELECT intent_id, basket_id, status FROM portal_commerce_checkout_intents
-			WHERE intent_id = ${sqlString(intentId)};
-		`);
-
-		const basketPayload = await tebexRequest(`/baskets/${encodeURIComponent(basketId)}/packages`, {
-			method: "POST",
-			body: {
-				package_id: Number(tebexSubscriptionCardPackageId),
-				quantity: 1,
-				custom: {
-					voidscape_intent: intentId,
-					voidscape_basket: basketId
-				}
-			}
-		});
-		const basket = tebexDataObject(basketPayload);
-		const checkoutUrl = validateCompletedTebexBasket(basket, basketId, intentId);
-		const rows = await sqliteCommerceWrite(`
-			BEGIN IMMEDIATE;
-			UPDATE portal_commerce_checkout_intents
-			SET status = 'basket_created', last_error_code = NULL, updated_at_ms = ${Date.now()}
-			WHERE intent_id = ${sqlString(intentId)}
-			  AND basket_id = ${sqlString(basketId)}
-			  AND status = 'created';
-			COMMIT;
-			SELECT intent_id, basket_id, status FROM portal_commerce_checkout_intents
-			WHERE intent_id = ${sqlString(intentId)};
-		`);
-		if (!rows.length || rows[0].status !== "basket_created") {
-			throw new HttpError(409, "checkout_intent_state_conflict");
-		}
-		return {
-			status: "checkout_ready",
-			links: { checkout: checkoutUrl }
-		};
-	} catch (error) {
-		await markCommerceIntentFailed(intentId, commerceErrorCode(error));
-		if (error instanceof HttpError) throw error;
-		throw new HttpError(502, "tebex_checkout_failed");
-	}
-}
-
-function tebexCheckoutIpAddress(request) {
-	const raw = clientIp(request);
-	const ipv4 = String(raw).startsWith("::ffff:") ? String(raw).slice("::ffff:".length) : String(raw);
-	if (ipv4ToInt(ipv4) === null) {
-		throw new HttpError(400, "tebex_ipv4_required");
-	}
-	return ipv4;
-}
-
-async function verifyTebexSubscriptionCardPackage() {
-	const payload = await tebexRequest(
-		`/accounts/${encodeURIComponent(tebexPublicToken)}/packages/${encodeURIComponent(tebexSubscriptionCardPackageId)}`,
-		{ method: "GET" }
-	);
-	const packageRow = tebexDataObject(payload);
-	if (String(packageRow.id || "") !== tebexSubscriptionCardPackageId) {
-		throw new HttpError(502, "tebex_package_mismatch");
-	}
-	if (String(packageRow.type || "").toLowerCase() !== "single") {
-		throw new HttpError(502, "tebex_package_not_single_payment");
-	}
-	if (packageRow.disable_quantity !== true || packageRow.disable_gifting !== true) {
-		throw new HttpError(502, "tebex_package_checkout_controls_unlocked");
-	}
-	const currency = String(packageRow.currency || "").toUpperCase();
-	const amountMinor = moneyToMinor(
-		packageRow.base_price,
-		currency
-	);
-	if (currency !== tebexExpectedCurrency || amountMinor !== tebexExpectedPriceMinor) {
-		throw new HttpError(502, "tebex_package_price_mismatch");
-	}
-}
-
-async function tebexRequest(pathname, options = {}) {
-	const method = options.method || "GET";
-	const headers = {
-		accept: "application/json",
-		authorization: `Basic ${Buffer.from(`${tebexPublicToken}:${tebexPrivateKey}`, "utf8").toString("base64")}`
-	};
-	const requestOptions = { method, headers };
-	if (options.body !== undefined) {
-		headers["content-type"] = "application/json";
-		requestOptions.body = JSON.stringify(options.body);
-	}
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 10000);
-	requestOptions.signal = controller.signal;
-	let response;
-	try {
-		response = await fetch(`${tebexApiBase}${pathname}`, requestOptions);
-	} catch (error) {
-		throw new HttpError(502, error && error.name === "AbortError" ? "tebex_timeout" : "tebex_unavailable");
-	} finally {
-		clearTimeout(timeout);
-	}
-	let payload;
-	try {
-		payload = JSON.parse(await response.text());
-	} catch (error) {
-		throw new HttpError(502, "tebex_invalid_response");
-	}
-	if (!response.ok) {
-		throw new HttpError(502, "tebex_request_rejected");
-	}
-	return payload;
-}
-
-function tebexDataObject(payload) {
-	let value = payload && Object.prototype.hasOwnProperty.call(payload, "data") ? payload.data : payload;
-	if (Array.isArray(value)) value = value[0];
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new HttpError(502, "tebex_invalid_response");
-	}
-	return value;
-}
-
-function validateCreatedTebexBasket(basket, intentId) {
-	const basketId = String(basket.ident || "").trim();
-	if (!basketId || basketId.length > 128) {
-		throw new HttpError(502, "tebex_basket_missing");
-	}
-	validateTebexBasketCustom(basket.custom, intentId);
-	if (Array.isArray(basket.packages) && basket.packages.length !== 0) {
-		throw new HttpError(502, "tebex_basket_not_empty");
-	}
-	return basketId;
-}
-
-function validateCompletedTebexBasket(basket, basketId, intentId) {
-	if (String(basket.ident || "") !== basketId) {
-		throw new HttpError(502, "tebex_basket_mismatch");
-	}
-	validateTebexBasketCustom(basket.custom, intentId);
-	if (!Array.isArray(basket.packages) || basket.packages.length !== 1) {
-		throw new HttpError(502, "tebex_basket_package_count_mismatch");
-	}
-	const packageRow = basket.packages[0] || {};
-	const packageId = packageRow.id ?? packageRow.package_id ?? (packageRow.package && packageRow.package.id);
-	if (packageId != null && String(packageId) !== tebexSubscriptionCardPackageId) {
-		throw new HttpError(502, "tebex_basket_package_mismatch");
-	}
-	const quantityValue = packageRow.in_basket && packageRow.in_basket.quantity != null
-		? packageRow.in_basket.quantity
-		: packageRow.qty == null ? packageRow.quantity : packageRow.qty;
-	const quantity = Number(quantityValue);
-	if (quantity !== 1) {
-		throw new HttpError(502, "tebex_basket_quantity_mismatch");
-	}
-	if (packageRow.type != null && String(packageRow.type).toLowerCase() !== "single") {
-		throw new HttpError(502, "tebex_basket_not_single_payment");
-	}
-	const currency = String(basket.currency || "").toUpperCase();
-	if (currency !== tebexExpectedCurrency
-		|| moneyToMinor(basket.base_price, currency) !== tebexExpectedPriceMinor) {
-		throw new HttpError(502, "tebex_basket_price_mismatch");
-	}
-	const checkoutUrl = String(basket.links && basket.links.checkout || "").trim();
-	let parsedCheckout;
-	try {
-		parsedCheckout = new URL(checkoutUrl);
-	} catch (error) {
-		throw new HttpError(502, "tebex_checkout_link_missing");
-	}
-	if (tebexTestApiBase) {
-		if (!["http:", "https:"].includes(parsedCheckout.protocol)) {
-			throw new HttpError(502, "tebex_checkout_link_invalid");
-		}
-	} else if (parsedCheckout.protocol !== "https:" || parsedCheckout.hostname !== "checkout.tebex.io") {
-		throw new HttpError(502, "tebex_checkout_link_invalid");
-	}
-	return parsedCheckout.toString();
-}
-
-function validateTebexBasketCustom(custom, intentId) {
-	if (!custom || typeof custom !== "object" || Array.isArray(custom)) {
-		throw new HttpError(502, "tebex_basket_custom_missing");
-	}
-	const keys = Object.keys(custom);
-	if (keys.length !== 1 || keys[0] !== "voidscape_intent" || custom.voidscape_intent !== intentId) {
-		throw new HttpError(502, "tebex_basket_custom_mismatch");
-	}
-}
-
-function moneyToMinor(value, currency) {
-	const digits = currencyMinorDigits(currency);
-	const text = String(value == null ? "" : value).trim();
-	const match = /^(\d+)(?:\.(\d+))?$/.exec(text);
-	if (!match || (match[2] || "").length > digits) {
-		throw new HttpError(422, "invalid_payment_amount");
-	}
-	const fraction = (match[2] || "").padEnd(digits, "0");
-	const scale = 10 ** digits;
-	const result = Number(match[1]) * scale + Number(fraction || 0);
-	if (!Number.isSafeInteger(result)) throw new HttpError(422, "invalid_payment_amount");
-	return result;
-}
-
-function currencyMinorDigits(currency) {
-	try {
-		return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits;
-	} catch (error) {
-		throw new HttpError(422, "invalid_payment_currency");
-	}
-}
-
-async function markCommerceIntentFailed(intentId, errorCode) {
-	try {
-		await sqliteCommerceWrite(`
-			BEGIN IMMEDIATE;
-			UPDATE portal_commerce_checkout_intents
-			SET status = 'failed', last_error_code = ${sqlString(safeCommerceCode(errorCode))}, updated_at_ms = ${Date.now()}
-			WHERE intent_id = ${sqlString(intentId)} AND status <> 'completed';
-			COMMIT;
-			SELECT intent_id FROM portal_commerce_checkout_intents WHERE intent_id = ${sqlString(intentId)};
-		`);
-	} catch (error) {
-		console.error("commerce_intent_failure_record_failed");
-	}
-}
-
-function commerceErrorCode(error) {
-	return safeCommerceCode(error && error.message || "tebex_checkout_failed");
-}
-
-function safeCommerceCode(value) {
-	const normalized = String(value || "commerce_error").toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 64);
-	return normalized || "commerce_error";
-}
-
-async function sqliteCommerceRead(query) {
-	return sqliteCommerceExec(["-readonly", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query], "commerce_read");
-}
-
-async function sqliteCommerceWrite(query) {
-	return sqliteCommerceExec(["-cmd", ".timeout 5000", "-cmd", "PRAGMA foreign_keys=ON;", "-json", openRscDbPath, query], "commerce_write");
-}
-
-async function sqliteCommerceExec(args, operation) {
-	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
-	try {
-		const { stdout } = await execFile("sqlite3", args, { maxBuffer: 1024 * 1024 });
-		return stdout.trim() ? JSON.parse(stdout) : [];
-	} catch (error) {
-		if (error.code === "ENOENT") throw new HttpError(503, "sqlite3_not_available");
-		if (error.stderr && error.stderr.includes("no such table")) {
-			throw new HttpError(503, "commerce_schema_missing");
-		}
-		if (error.stderr && (error.stderr.includes("unable to open database") || error.stderr.includes("database is locked"))) {
-			throw new HttpError(503, "openrsc_db_unavailable");
-		}
-		if (error.stderr && (error.stderr.includes("constraint") || error.stderr.includes("UNIQUE"))) {
-			throw new HttpError(409, "commerce_ledger_conflict");
-		}
-		throw openRscDatabaseUnavailable(error, operation);
-	}
-}
-
-async function handleTebexWebhook(request, response) {
-	requireTebexWebhookConfigured();
-	const rawBody = await readRawRequestBody(request);
-	verifyTebexWebhookSignature(rawBody, request.headers["x-signature"]);
-	const payloadHash = createHash("sha256").update(rawBody).digest("hex");
-	let payload;
-	try {
-		payload = JSON.parse(rawBody.toString("utf8"));
-	} catch (error) {
-		throw new HttpError(400, "invalid_json");
-	}
-	if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-		throw new HttpError(400, "invalid_json");
-	}
-	const webhookId = webhookIdentifier(payload.id);
-	const eventType = webhookEventType(payload.type);
-	if (eventType === "validation.webhook") {
-		if (!webhookId) throw new HttpError(422, "webhook_id_missing");
-		json(response, 200, { id: webhookId });
-		return;
-	}
-
-	requireTebexCheckoutConfigured();
-	if (!webhookId) throw new HttpError(422, "webhook_id_missing");
-	if (!eventType) throw new HttpError(422, "webhook_type_missing");
-	const existing = await commerceWebhookReplayState(webhookId, payloadHash);
-	if (existing.duplicate) {
-		json(response, 200, { ok: true, duplicate: true });
-		return;
-	}
-
-	const supportedPaymentEvents = new Set([
-		"payment.completed",
-		"payment.refunded",
-		"payment.dispute.opened",
-		"payment.dispute.won",
-		"payment.dispute.lost",
-		"payment.dispute.closed"
-	]);
-	if (!supportedPaymentEvents.has(eventType)) {
-		await recordIgnoredCommerceWebhook({ webhookId, eventType, payloadHash });
-		json(response, 200, { ok: true, ignored: true });
-		return;
-	}
-
-	let facts;
-	try {
-		facts = extractTebexPaymentFacts(payload.subject);
-		const intent = await verifiedCommerceIntent(facts);
-		if (tebexTestWebhookFailOnce && !tebexWebhookFailureInjected && !existing.row) {
-			tebexWebhookFailureInjected = true;
-			await recordFailedCommerceWebhook({
-				webhookId,
-				eventType,
-				payloadHash,
-				transactionId: facts.transactionId,
-				errorCode: "injected_webhook_failure"
-			});
-			throw new HttpError(503, "injected_webhook_failure");
-		}
-		if (eventType === "payment.completed") {
-			await processCompletedCommerceWebhook({ webhookId, eventType, payloadHash, facts, intent });
-		} else {
-			await processReversalCommerceWebhook({ webhookId, eventType, payloadHash, facts, intent });
-		}
-	} catch (error) {
-		if (!(error instanceof HttpError && error.message === "injected_webhook_failure")) {
-			await recordFailedCommerceWebhook({
-				webhookId,
-				eventType,
-				payloadHash,
-				transactionId: facts && facts.transactionId || webhookTransactionId(payload.subject),
-				errorCode: commerceErrorCode(error)
-			});
-		}
-		if (error instanceof HttpError) throw error;
-		throw new HttpError(503, "webhook_processing_failed");
-	}
-	json(response, 200, { ok: true, duplicate: false });
-}
-
-async function readRawRequestBody(request) {
-	const chunks = [];
-	let size = 0;
-	for await (const chunk of request) {
-		size += chunk.length;
-		if (size > 1024 * 1024) throw new HttpError(413, "payload_too_large");
-		chunks.push(chunk);
-	}
-	return Buffer.concat(chunks);
-}
-
-function verifyTebexWebhookSignature(rawBody, signatureHeader) {
-	const bodyHash = createHash("sha256").update(rawBody).digest("hex");
-	const expected = createHmac("sha256", tebexWebhookSecret).update(bodyHash, "utf8").digest("hex");
-	const provided = String(signatureHeader || "").trim().toLowerCase();
-	if (!/^[a-f0-9]{64}$/.test(provided) || !constantTimeMatches(provided, expected)) {
-		throw new HttpError(401, "invalid_webhook_signature");
-	}
-}
-
-function webhookIdentifier(value) {
-	const result = String(value || "").trim();
-	return result && result.length <= 128 ? result : "";
-}
-
-function webhookEventType(value) {
-	const result = String(value || "").trim().toLowerCase();
-	return result && result.length <= 64 ? result : "";
-}
-
-function webhookTransactionId(subject) {
-	const value = subject && (subject.transaction_id ?? (subject.transaction && subject.transaction.id));
-	const result = String(value || "").trim();
-	return result && result.length <= 128 ? result : "";
-}
-
-function extractTebexPaymentFacts(subject) {
-	if (!subject || typeof subject !== "object" || Array.isArray(subject)) {
-		throw new HttpError(422, "webhook_subject_missing");
-	}
-	const transactionId = webhookTransactionId(subject);
-	if (!transactionId) throw new HttpError(422, "payment_transaction_missing");
-	const paidAtMs = Date.parse(String(subject.created_at || ""));
-	if (!Number.isFinite(paidAtMs)) throw new HttpError(422, "payment_timestamp_missing");
-	if (String(subject.payment_sequence || "").toLowerCase() !== "oneoff") {
-		throw new HttpError(422, "payment_not_oneoff");
-	}
-	if (!Array.isArray(subject.products) || subject.products.length !== 1) {
-		throw new HttpError(422, "payment_product_count_mismatch");
-	}
-	const product = subject.products[0];
-	if (!product || typeof product !== "object" || Array.isArray(product)) {
-		throw new HttpError(422, "payment_product_missing");
-	}
-	const packageId = String(product.id ?? product.package_id ?? (product.package && product.package.id) ?? "").trim();
-	if (!packageId || packageId.length > 64) throw new HttpError(422, "payment_package_missing");
-	const quantity = Number(product.quantity == null ? product.qty : product.quantity);
-	if (quantity !== 1) throw new HttpError(422, "payment_quantity_mismatch");
-	const transactionPrice = subject.price_paid || subject.price;
-	if (!transactionPrice || typeof transactionPrice !== "object" || Array.isArray(transactionPrice)) {
-		throw new HttpError(422, "payment_price_missing");
-	}
-	const currency = String(transactionPrice.currency || "").toUpperCase();
-	const transactionPaidAmountMinor = moneyToMinor(transactionPrice.amount, currency);
-	if (!product.base_price || typeof product.base_price !== "object" || Array.isArray(product.base_price)) {
-		throw new HttpError(422, "payment_product_base_price_missing");
-	}
-	const baseCurrency = String(product.base_price.currency || "").toUpperCase();
-	const expectedAmountMinor = moneyToMinor(product.base_price.amount, baseCurrency);
-	if (!product.paid_price || typeof product.paid_price !== "object" || Array.isArray(product.paid_price)) {
-		throw new HttpError(422, "payment_product_paid_price_missing");
-	}
-	const paidCurrency = String(product.paid_price.currency || "").toUpperCase();
-	const productPaidAmountMinor = moneyToMinor(product.paid_price.amount, paidCurrency);
-	if (currency !== baseCurrency || currency !== paidCurrency) {
-		throw new HttpError(422, "payment_product_currency_mismatch");
-	}
-	const taxAndAdjustmentsMinor = transactionPaidAmountMinor - productPaidAmountMinor;
-	// The signed transaction total may include jurisdictional tax, while the
-	// signed product paid price may include a creator-configured discount. The
-	// allowlisted package's product base price is the stable configured amount;
-	// validate all three money objects/currencies but do not equate their totals.
-	const intentId = extractTebexIntent(subject, product);
-	const basketCandidates = [
-		subject.basket && subject.basket.ident,
-		subject.basket_ident,
-		subject.basket_id,
-		product.custom && product.custom.voidscape_basket
-	].map((value) => String(value || "").trim()).filter(Boolean);
-	const basketIds = Array.from(new Set(basketCandidates));
-	if (basketIds.length !== 1 || basketIds.some((value) => value.length > 128)) {
-		throw new HttpError(422, "payment_basket_mismatch");
-	}
-	return {
-		transactionId,
-		intentId,
-		basketId: basketIds[0] || "",
-		packageId,
-		quantity,
-		paymentSequence: "oneoff",
-		currency,
-		expectedAmountMinor,
-		transactionPaidAmountMinor,
-		productPaidAmountMinor,
-		taxAndAdjustmentsMinor,
-		paidAtMs,
-		lineKey: `package:${packageId}:unit:1`
-	};
-}
-
-function extractTebexIntent(subject, product) {
-	// Headless documents basket custom data being returned with webhooks, while
-	// deployed payloads have also surfaced it on an individual product. Support
-	// both representations, require every supplied copy to agree, and fail closed
-	// when neither representation contains our opaque key.
-	const containers = [
-		subject.custom,
-		subject.basket && subject.basket.custom,
-		subject.basket_custom,
-		product.custom
-	];
-	const values = containers
-		.filter((value) => value && typeof value === "object" && !Array.isArray(value))
-		.map((value) => String(value.voidscape_intent || "").trim())
-		.filter(Boolean);
-	const unique = Array.from(new Set(values));
-	if (unique.length !== 1 || unique[0].length > 64) {
-		throw new HttpError(422, values.length ? "payment_intent_mismatch" : "payment_intent_missing");
-	}
-	return unique[0];
-}
-
-async function verifiedCommerceIntent(facts) {
-	const rows = await sqliteCommerceRead(`
-		SELECT intent_id, account_id, package_id, expected_currency, expected_amount_minor,
-		       basket_id, status, created_at_ms, expires_at_ms
-		FROM portal_commerce_checkout_intents
-		WHERE intent_id = ${sqlString(facts.intentId)}
-		LIMIT 1;
-	`);
-	const intent = rows[0];
-	if (!intent) throw new HttpError(422, "payment_intent_unknown");
-	if (!["basket_created", "completed", "expired"].includes(intent.status)) {
-		throw new HttpError(422, "payment_intent_not_payable");
-	}
-	if (facts.paidAtMs < Number(intent.created_at_ms) - 5 * 60 * 1000) {
-		throw new HttpError(422, "payment_before_intent");
-	}
-	if (String(intent.package_id) !== facts.packageId || facts.packageId !== tebexSubscriptionCardPackageId) {
-		throw new HttpError(422, "payment_package_mismatch");
-	}
-	if (facts.quantity !== 1 || facts.paymentSequence !== "oneoff") {
-		throw new HttpError(422, "payment_terms_mismatch");
-	}
-	if (String(intent.expected_currency).toUpperCase() !== facts.currency
-		|| facts.currency !== tebexExpectedCurrency
-		|| Number(intent.expected_amount_minor) !== facts.expectedAmountMinor
-		|| facts.expectedAmountMinor !== tebexExpectedPriceMinor) {
-		throw new HttpError(422, "payment_price_mismatch");
-	}
-	if (!intent.basket_id || String(intent.basket_id) !== facts.basketId) {
-		throw new HttpError(422, "payment_basket_mismatch");
-	}
-	const store = await loadStore();
-	if (!store.accounts.some((account) => Number(account.id) === Number(intent.account_id))) {
-		throw new HttpError(422, "payment_account_unknown");
-	}
-	return {
-		...intent,
-		account_id: Number(intent.account_id),
-		expected_amount_minor: Number(intent.expected_amount_minor),
-		lateSettlement: facts.paidAtMs > Number(intent.expires_at_ms)
-	};
-}
-
-async function commerceWebhookReplayState(webhookId, payloadHash) {
-	const rows = await sqliteCommerceRead(`
-		SELECT webhook_id, payload_sha256, status, attempt_count
-		FROM portal_commerce_webhook_events
-		WHERE webhook_id = ${sqlString(webhookId)} OR payload_sha256 = ${sqlString(payloadHash)}
-		ORDER BY webhook_id;
-	`);
-	const exact = rows.find((row) => row.webhook_id === webhookId);
-	if (exact && exact.payload_sha256 !== payloadHash) {
-		throw new HttpError(409, "webhook_id_payload_mismatch");
-	}
-	const samePayload = rows.find((row) => row.payload_sha256 === payloadHash);
-	if (samePayload && samePayload.webhook_id !== webhookId) {
-		if (["processed", "ignored"].includes(samePayload.status)) return { duplicate: true, row: samePayload };
-		throw new HttpError(409, "webhook_payload_id_mismatch");
-	}
-	return {
-		duplicate: Boolean(exact && ["processed", "ignored"].includes(exact.status)),
-		row: exact || null
-	};
-}
-
-function commerceEventUpsertSql(event) {
-	const timestamp = Date.now();
-	return `
-		INSERT INTO portal_commerce_webhook_events (
-			webhook_id, provider, event_type, payload_sha256, transaction_id,
-			status, attempt_count, created_at_ms, updated_at_ms
-		) VALUES (
-			${sqlString(event.webhookId)}, 'tebex', ${sqlString(event.eventType)}, ${sqlString(event.payloadHash)},
-			${event.transactionId ? sqlString(event.transactionId) : "NULL"}, 'received', 1, ${timestamp}, ${timestamp}
-		)
-		ON CONFLICT(webhook_id) DO UPDATE SET
-			attempt_count = portal_commerce_webhook_events.attempt_count + 1,
-			status = 'received',
-			last_error_code = NULL,
-			updated_at_ms = excluded.updated_at_ms
-		WHERE portal_commerce_webhook_events.payload_sha256 = excluded.payload_sha256
-		  AND portal_commerce_webhook_events.status = 'failed';
-	`;
-}
-
-async function processCompletedCommerceWebhook(event) {
-	const { facts, intent } = event;
-	const timestamp = Date.now();
-	const rows = await sqliteCommerceWrite(`
-		BEGIN IMMEDIATE;
-		${commerceEventUpsertSql({ ...event, transactionId: facts.transactionId })}
-		INSERT OR IGNORE INTO portal_commerce_payments (
-			provider, transaction_id, intent_id, account_id, basket_id, package_id,
-			quantity, payment_sequence, currency, expected_amount_minor,
-			product_paid_amount_minor, transaction_paid_amount_minor, tax_and_adjustments_minor,
-			status, completed_at_ms, updated_at_ms
-		)
-		SELECT 'tebex', ${sqlString(facts.transactionId)}, intent_id, account_id, basket_id, package_id,
-		       1, 'oneoff', expected_currency, expected_amount_minor,
-		       ${facts.productPaidAmountMinor}, ${facts.transactionPaidAmountMinor}, ${facts.taxAndAdjustmentsMinor},
-		       'complete', ${facts.paidAtMs}, ${timestamp}
-		FROM portal_commerce_checkout_intents
-		WHERE intent_id = ${sqlString(facts.intentId)}
-		  AND account_id = ${intent.account_id}
-		  AND package_id = ${sqlString(facts.packageId)}
-		  AND expected_currency = ${sqlString(facts.currency)}
-		  AND expected_amount_minor = ${facts.expectedAmountMinor}
-		  AND basket_id = ${sqlString(String(intent.basket_id))}
-		  AND ${facts.paidAtMs} >= created_at_ms - 300000
-		  AND status IN ('basket_created', 'completed', 'expired')
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_webhook_events
-			WHERE webhook_id = ${sqlString(event.webhookId)}
-			  AND payload_sha256 = ${sqlString(event.payloadHash)}
-			  AND status = 'received'
-		  );
-		INSERT OR IGNORE INTO portal_commerce_entitlements (
-			payment_id, account_id, provider, transaction_id, line_key, package_id,
-			unit_index, state, created_at_ms, updated_at_ms
-		)
-		SELECT id, account_id, provider, transaction_id, ${sqlString(facts.lineKey)}, package_id,
-		       1, 'pending', ${timestamp}, ${timestamp}
-		FROM portal_commerce_payments
-		WHERE provider = 'tebex'
-		  AND transaction_id = ${sqlString(facts.transactionId)}
-		  AND intent_id = ${sqlString(facts.intentId)}
-		  AND account_id = ${intent.account_id}
-		  AND package_id = ${sqlString(facts.packageId)}
-		  AND quantity = 1
-		  AND payment_sequence = 'oneoff'
-		  AND currency = ${sqlString(facts.currency)}
-		  AND expected_amount_minor = ${facts.expectedAmountMinor}
-		  AND product_paid_amount_minor = ${facts.productPaidAmountMinor}
-		  AND transaction_paid_amount_minor = ${facts.transactionPaidAmountMinor}
-		  AND tax_and_adjustments_minor = ${facts.taxAndAdjustmentsMinor};
-		UPDATE portal_commerce_checkout_intents
-		SET status = 'completed',
-		    last_error_code = ${intent.lateSettlement ? "'late_signed_settlement'" : "NULL"},
-		    updated_at_ms = ${timestamp}
-		WHERE intent_id = ${sqlString(facts.intentId)}
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_payments
-			WHERE provider = 'tebex' AND transaction_id = ${sqlString(facts.transactionId)}
-			  AND intent_id = ${sqlString(facts.intentId)}
-		  );
-		UPDATE portal_commerce_webhook_events
-		SET status = 'processed', processed_at_ms = ${timestamp}, last_error_code = NULL, updated_at_ms = ${timestamp}
-		WHERE webhook_id = ${sqlString(event.webhookId)}
-		  AND payload_sha256 = ${sqlString(event.payloadHash)}
-		  AND status = 'received'
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_payments p
-			JOIN portal_commerce_entitlements e ON e.payment_id = p.id
-			WHERE p.provider = 'tebex'
-			  AND p.transaction_id = ${sqlString(facts.transactionId)}
-			  AND p.intent_id = ${sqlString(facts.intentId)}
-			  AND p.account_id = ${intent.account_id}
-			  AND p.package_id = ${sqlString(facts.packageId)}
-			  AND p.quantity = 1 AND p.payment_sequence = 'oneoff'
-			  AND p.currency = ${sqlString(facts.currency)}
-			  AND p.expected_amount_minor = ${facts.expectedAmountMinor}
-			  AND p.product_paid_amount_minor = ${facts.productPaidAmountMinor}
-			  AND p.transaction_paid_amount_minor = ${facts.transactionPaidAmountMinor}
-			  AND p.tax_and_adjustments_minor = ${facts.taxAndAdjustmentsMinor}
-			  AND e.line_key = ${sqlString(facts.lineKey)} AND e.unit_index = 1
-		  );
-		UPDATE portal_commerce_webhook_events
-		SET status = 'failed', last_error_code = 'commerce_atomic_validation_failed', updated_at_ms = ${timestamp}
-		WHERE webhook_id = ${sqlString(event.webhookId)} AND status = 'received';
-		COMMIT;
-		SELECT webhook_id, status, last_error_code
-		FROM portal_commerce_webhook_events WHERE webhook_id = ${sqlString(event.webhookId)};
-	`);
-	if (!rows.length || rows[0].status !== "processed") {
-		throw new HttpError(422, rows[0] && rows[0].last_error_code || "webhook_processing_failed");
-	}
-}
-
-function reversalTransition(eventType) {
-	if (eventType === "payment.refunded") {
-		return {
-			paymentStatus: "CASE WHEN status = 'dispute_lost' THEN status ELSE 'refunded' END",
-			entitlementPaymentPredicate: "status <> 'dispute_lost'",
-			entitlementState: "CASE WHEN claimed_at_ms IS NOT NULL THEN 'review' ELSE 'revoked' END",
-			reviewReason: "CASE WHEN claimed_at_ms IS NOT NULL THEN 'refund_after_claim' ELSE 'refund' END"
-		};
-	}
-	if (eventType === "payment.dispute.opened") {
-		return {
-			paymentStatus: "CASE WHEN status IN ('refunded', 'dispute_lost') THEN status ELSE 'disputed' END",
-			entitlementPaymentPredicate: "status NOT IN ('refunded', 'dispute_lost')",
-			entitlementState: "CASE WHEN state = 'pending' THEN 'frozen' WHEN state = 'claimed' THEN 'review' ELSE state END",
-			reviewReason: "CASE WHEN state = 'claimed' THEN 'dispute_after_claim' WHEN state = 'pending' THEN 'dispute_opened' ELSE review_reason END"
-		};
-	}
-	if (eventType === "payment.dispute.won") {
-		return {
-			paymentStatus: "CASE WHEN status IN ('refunded', 'dispute_lost') THEN status ELSE 'restored' END",
-			entitlementPaymentPredicate: "status NOT IN ('refunded', 'dispute_lost')",
-			entitlementState: "CASE WHEN state = 'frozen' THEN 'pending' WHEN state = 'review' AND review_reason IN ('dispute_after_claim', 'dispute_closed_review') AND claimed_at_ms IS NOT NULL THEN 'claimed' WHEN state = 'review' AND review_reason IN ('dispute_opened', 'dispute_closed_review') AND claimed_at_ms IS NULL THEN 'pending' ELSE state END",
-			reviewReason: "CASE WHEN state = 'frozen' THEN NULL WHEN state = 'review' AND review_reason IN ('dispute_after_claim', 'dispute_opened', 'dispute_closed_review') THEN NULL ELSE review_reason END"
-		};
-	}
-	if (eventType === "payment.dispute.lost") {
-		return {
-			paymentStatus: "CASE WHEN status = 'refunded' THEN status ELSE 'dispute_lost' END",
-			entitlementPaymentPredicate: "status <> 'refunded'",
-			entitlementState: "CASE WHEN claimed_at_ms IS NOT NULL THEN 'review' ELSE 'revoked' END",
-			reviewReason: "CASE WHEN claimed_at_ms IS NOT NULL THEN 'dispute_lost_after_claim' ELSE 'dispute_lost' END"
-		};
-	}
-	return {
-		paymentStatus: "CASE WHEN status IN ('refunded', 'dispute_lost', 'restored') THEN status ELSE 'review' END",
-		entitlementPaymentPredicate: "status NOT IN ('refunded', 'dispute_lost', 'restored')",
-		entitlementState: "CASE WHEN state <> 'revoked' THEN 'review' ELSE state END",
-		reviewReason: "CASE WHEN state <> 'revoked' THEN 'dispute_closed_review' ELSE review_reason END"
-	};
-}
-
-async function processReversalCommerceWebhook(event) {
-	const { facts, intent } = event;
-	const existingRows = await sqliteCommerceRead(`
-		SELECT p.id, p.intent_id, p.account_id, p.basket_id, p.package_id, p.quantity,
-		       p.payment_sequence, p.currency, p.expected_amount_minor,
-		       p.product_paid_amount_minor, p.transaction_paid_amount_minor, p.tax_and_adjustments_minor,
-		       e.line_key, e.unit_index
-		FROM portal_commerce_payments p
-		JOIN portal_commerce_entitlements e ON e.payment_id = p.id
-		WHERE p.provider = 'tebex' AND p.transaction_id = ${sqlString(facts.transactionId)}
-		LIMIT 1;
-	`);
-	const payment = existingRows[0];
-	if (!payment
-		|| payment.intent_id !== facts.intentId
-		|| Number(payment.account_id) !== intent.account_id
-		|| String(payment.basket_id) !== String(intent.basket_id)
-		|| payment.package_id !== facts.packageId
-		|| Number(payment.quantity) !== 1
-		|| payment.payment_sequence !== "oneoff"
-		|| payment.currency !== facts.currency
-		|| Number(payment.expected_amount_minor) !== facts.expectedAmountMinor
-		|| Number(payment.product_paid_amount_minor) !== facts.productPaidAmountMinor
-		|| Number(payment.transaction_paid_amount_minor) !== facts.transactionPaidAmountMinor
-		|| Number(payment.tax_and_adjustments_minor) !== facts.taxAndAdjustmentsMinor
-		|| payment.line_key !== facts.lineKey
-		|| Number(payment.unit_index) !== 1) {
-		throw new HttpError(422, "payment_ledger_mismatch");
-	}
-
-	const transition = reversalTransition(event.eventType);
-	const timestamp = Date.now();
-	const rows = await sqliteCommerceWrite(`
-		BEGIN IMMEDIATE;
-		${commerceEventUpsertSql({ ...event, transactionId: facts.transactionId })}
-		UPDATE portal_commerce_payments
-		SET status = ${transition.paymentStatus}, updated_at_ms = ${timestamp}
-		WHERE provider = 'tebex'
-		  AND transaction_id = ${sqlString(facts.transactionId)}
-		  AND intent_id = ${sqlString(facts.intentId)}
-		  AND account_id = ${intent.account_id}
-		  AND basket_id = ${sqlString(String(intent.basket_id))}
-		  AND package_id = ${sqlString(facts.packageId)}
-		  AND quantity = 1 AND payment_sequence = 'oneoff'
-		  AND currency = ${sqlString(facts.currency)}
-		  AND expected_amount_minor = ${facts.expectedAmountMinor}
-		  AND product_paid_amount_minor = ${facts.productPaidAmountMinor}
-		  AND transaction_paid_amount_minor = ${facts.transactionPaidAmountMinor}
-		  AND tax_and_adjustments_minor = ${facts.taxAndAdjustmentsMinor}
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_webhook_events
-			WHERE webhook_id = ${sqlString(event.webhookId)}
-			  AND payload_sha256 = ${sqlString(event.payloadHash)}
-			  AND status = 'received'
-		  );
-		UPDATE portal_commerce_entitlements
-		SET review_reason = ${transition.reviewReason},
-		    state = ${transition.entitlementState},
-		    updated_at_ms = ${timestamp}
-		WHERE provider = 'tebex'
-		  AND transaction_id = ${sqlString(facts.transactionId)}
-		  AND line_key = ${sqlString(facts.lineKey)}
-		  AND unit_index = 1
-		  AND account_id = ${intent.account_id}
-		  AND package_id = ${sqlString(facts.packageId)}
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_payments
-			WHERE id = portal_commerce_entitlements.payment_id
-			  AND ${transition.entitlementPaymentPredicate}
-		  );
-		UPDATE portal_commerce_webhook_events
-		SET status = 'processed', processed_at_ms = ${timestamp}, last_error_code = NULL, updated_at_ms = ${timestamp}
-		WHERE webhook_id = ${sqlString(event.webhookId)}
-		  AND payload_sha256 = ${sqlString(event.payloadHash)}
-		  AND status = 'received'
-		  AND EXISTS (
-			SELECT 1 FROM portal_commerce_payments p
-			JOIN portal_commerce_entitlements e ON e.payment_id = p.id
-			WHERE p.provider = 'tebex' AND p.transaction_id = ${sqlString(facts.transactionId)}
-			  AND p.intent_id = ${sqlString(facts.intentId)}
-			  AND p.account_id = ${intent.account_id}
-			  AND p.package_id = ${sqlString(facts.packageId)}
-			  AND p.quantity = 1 AND p.payment_sequence = 'oneoff'
-			  AND p.currency = ${sqlString(facts.currency)}
-			  AND p.expected_amount_minor = ${facts.expectedAmountMinor}
-			  AND p.product_paid_amount_minor = ${facts.productPaidAmountMinor}
-			  AND p.transaction_paid_amount_minor = ${facts.transactionPaidAmountMinor}
-			  AND p.tax_and_adjustments_minor = ${facts.taxAndAdjustmentsMinor}
-			  AND e.line_key = ${sqlString(facts.lineKey)} AND e.unit_index = 1
-		  );
-		UPDATE portal_commerce_webhook_events
-		SET status = 'failed', last_error_code = 'commerce_atomic_validation_failed', updated_at_ms = ${timestamp}
-		WHERE webhook_id = ${sqlString(event.webhookId)} AND status = 'received';
-		COMMIT;
-		SELECT webhook_id, status, last_error_code
-		FROM portal_commerce_webhook_events WHERE webhook_id = ${sqlString(event.webhookId)};
-	`);
-	if (!rows.length || rows[0].status !== "processed") {
-		throw new HttpError(422, rows[0] && rows[0].last_error_code || "webhook_processing_failed");
-	}
-}
-
-async function recordFailedCommerceWebhook(event) {
-	const timestamp = Date.now();
-	const errorCode = safeCommerceCode(event.errorCode);
-	await sqliteCommerceWrite(`
-		BEGIN IMMEDIATE;
-		INSERT INTO portal_commerce_webhook_events (
-			webhook_id, provider, event_type, payload_sha256, transaction_id,
-			status, attempt_count, last_error_code, created_at_ms, updated_at_ms
-		) VALUES (
-			${sqlString(event.webhookId)}, 'tebex', ${sqlString(event.eventType)}, ${sqlString(event.payloadHash)},
-			${event.transactionId ? sqlString(event.transactionId) : "NULL"}, 'failed', 1,
-			${sqlString(errorCode)}, ${timestamp}, ${timestamp}
-		)
-		ON CONFLICT(webhook_id) DO UPDATE SET
-			attempt_count = portal_commerce_webhook_events.attempt_count + 1,
-			status = CASE WHEN portal_commerce_webhook_events.status = 'processed' THEN 'processed' ELSE 'failed' END,
-			last_error_code = CASE WHEN portal_commerce_webhook_events.status = 'processed'
-				THEN portal_commerce_webhook_events.last_error_code ELSE excluded.last_error_code END,
-			updated_at_ms = excluded.updated_at_ms
-		WHERE portal_commerce_webhook_events.payload_sha256 = excluded.payload_sha256;
-		COMMIT;
-		SELECT webhook_id, status FROM portal_commerce_webhook_events
-		WHERE webhook_id = ${sqlString(event.webhookId)};
-	`);
-}
-
-async function recordIgnoredCommerceWebhook(event) {
-	const timestamp = Date.now();
-	await sqliteCommerceWrite(`
-		BEGIN IMMEDIATE;
-		INSERT OR IGNORE INTO portal_commerce_webhook_events (
-			webhook_id, provider, event_type, payload_sha256, transaction_id,
-			status, attempt_count, created_at_ms, processed_at_ms, updated_at_ms
-		) VALUES (
-			${sqlString(event.webhookId)}, 'tebex', ${sqlString(event.eventType)}, ${sqlString(event.payloadHash)},
-			NULL, 'ignored', 1, ${timestamp}, ${timestamp}, ${timestamp}
-		);
-		UPDATE portal_commerce_webhook_events
-		SET status = 'ignored', processed_at_ms = ${timestamp}, updated_at_ms = ${timestamp}
-		WHERE webhook_id = ${sqlString(event.webhookId)}
-		  AND payload_sha256 = ${sqlString(event.payloadHash)}
-		  AND status = 'failed';
-		COMMIT;
-		SELECT webhook_id, status FROM portal_commerce_webhook_events
-		WHERE webhook_id = ${sqlString(event.webhookId)};
-	`);
-}
-
-async function commerceSchemaAvailable() {
-	if (!openRscDbPath) return false;
-	const rows = await sqliteCommerceRead(`
-		SELECT name FROM sqlite_master
-		WHERE type = 'table' AND name IN (
-			'portal_commerce_checkout_intents',
-			'portal_commerce_webhook_events',
-			'portal_commerce_payments',
-			'portal_commerce_entitlements'
-		)
-		ORDER BY name;
-	`);
-	return rows.length === 4;
-}
-
-async function paidSubscriptionCardState(accountId) {
-	const empty = {
-		checkoutAvailable: false,
-		pending: 0,
-		claimed: 0,
-		review: 0,
-		frozen: 0,
-		revoked: 0
-	};
-	if (!openRscDbPath) return empty;
-	const schemaAvailable = await commerceSchemaAvailable();
-	if (!schemaAvailable) {
-		if (tebexCheckoutConfigured()) throw new HttpError(503, "commerce_schema_missing");
-		return empty;
-	}
-	const rows = await sqliteCommerceRead(`
-		SELECT
-			COALESCE(SUM(CASE WHEN state = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
-			COALESCE(SUM(CASE WHEN state = 'claimed' THEN 1 ELSE 0 END), 0) AS claimed,
-			COALESCE(SUM(CASE WHEN state = 'review' THEN 1 ELSE 0 END), 0) AS review,
-			COALESCE(SUM(CASE WHEN state = 'frozen' THEN 1 ELSE 0 END), 0) AS frozen,
-			COALESCE(SUM(CASE WHEN state = 'revoked' THEN 1 ELSE 0 END), 0) AS revoked
-		FROM portal_commerce_entitlements
-		WHERE account_id = ${Number(accountId)};
-	`);
-	const counts = rows[0] || {};
-	return {
-		checkoutAvailable: tebexCheckoutConfigured(),
-		pending: Number(counts.pending || 0),
-		claimed: Number(counts.claimed || 0),
-		review: Number(counts.review || 0),
-		frozen: Number(counts.frozen || 0),
-		revoked: Number(counts.revoked || 0)
-	};
-}
-
-function commerceAdminLimit(value) {
-	const limit = Number(value || 100);
-	if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
-		throw new HttpError(400, "invalid_limit");
-	}
-	return limit;
-}
-
-async function commerceAdminList(limit) {
-	if (!(await commerceSchemaAvailable())) throw new HttpError(503, "commerce_schema_missing");
-	const [summaryRows, intents, events, payments, entitlements] = await Promise.all([
-		commerceSummaryRows(),
-		sqliteCommerceRead(`
-			SELECT intent_id, account_id, provider, package_id, expected_currency,
-			       expected_amount_minor, basket_id, status, last_error_code,
-			       created_at_ms, expires_at_ms, updated_at_ms
-			FROM portal_commerce_checkout_intents
-			ORDER BY created_at_ms DESC, intent_id DESC LIMIT ${limit};
-		`),
-		sqliteCommerceRead(`
-			SELECT webhook_id, event_type, payload_sha256, transaction_id, status,
-			       attempt_count, last_error_code, created_at_ms, processed_at_ms, updated_at_ms
-			FROM portal_commerce_webhook_events
-			ORDER BY created_at_ms DESC, webhook_id DESC LIMIT ${limit};
-		`),
-		sqliteCommerceRead(`
-			SELECT id, provider, transaction_id, intent_id, account_id, basket_id,
-			       package_id, quantity, payment_sequence, currency, expected_amount_minor,
-			       product_paid_amount_minor, transaction_paid_amount_minor, tax_and_adjustments_minor,
-			       status, completed_at_ms, updated_at_ms
-			FROM portal_commerce_payments
-			ORDER BY completed_at_ms DESC, id DESC LIMIT ${limit};
-		`),
-		sqliteCommerceRead(`
-			SELECT id, payment_id, account_id, provider, transaction_id, line_key,
-			       package_id, unit_index, state, claimed_player_id, claimed_item_id,
-			       claimed_at_ms, review_reason, created_at_ms, updated_at_ms
-			FROM portal_commerce_entitlements
-			ORDER BY created_at_ms DESC, id DESC LIMIT ${limit};
-		`)
-	]);
-	return {
-		config: tebexConfigHealth(),
-		summary: summaryRows[0] || {},
-		intents,
-		events,
-		payments,
-		entitlements
-	};
-}
-
-async function commerceSummaryRows() {
-	return sqliteCommerceRead(`
-		SELECT
-			(SELECT COUNT(*) FROM portal_commerce_checkout_intents) AS intents,
-			(SELECT COUNT(*) FROM portal_commerce_webhook_events) AS webhook_events,
-			(SELECT COUNT(*) FROM portal_commerce_webhook_events WHERE status = 'failed') AS failed_events,
-			(SELECT COUNT(*) FROM portal_commerce_payments) AS payments,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements) AS entitlements,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements WHERE state = 'pending') AS pending,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements WHERE state = 'claimed') AS claimed,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements WHERE state = 'review') AS review,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements WHERE state = 'frozen') AS frozen,
-			(SELECT COUNT(*) FROM portal_commerce_entitlements WHERE state = 'revoked') AS revoked;
-	`);
-}
-
-async function commerceReconcileReport() {
-	if (!(await commerceSchemaAvailable())) throw new HttpError(503, "commerce_schema_missing");
-	const [summaryRows, completedWithoutPayment, paymentsWithoutEntitlement, unsafeEntitlements, ledgerMismatches, failedEvents] = await Promise.all([
-		commerceSummaryRows(),
-		sqliteCommerceRead(`
-			SELECT intent_id FROM portal_commerce_checkout_intents i
-			WHERE status = 'completed'
-			  AND NOT EXISTS (SELECT 1 FROM portal_commerce_payments p WHERE p.intent_id = i.intent_id)
-			ORDER BY intent_id;
-		`),
-		sqliteCommerceRead(`
-			SELECT transaction_id FROM portal_commerce_payments p
-			WHERE NOT EXISTS (SELECT 1 FROM portal_commerce_entitlements e WHERE e.payment_id = p.id)
-			ORDER BY transaction_id;
-		`),
-		sqliteCommerceRead(`
-			SELECT e.id, e.transaction_id, e.state, p.status AS payment_status,
-			       e.claimed_player_id, e.claimed_item_id, e.claimed_at_ms
-			FROM portal_commerce_entitlements e
-			JOIN portal_commerce_payments p ON p.id = e.payment_id
-			WHERE (e.state = 'pending' AND p.status NOT IN ('complete', 'restored'))
-			   OR (e.state = 'frozen' AND p.status <> 'disputed')
-			   OR (e.state = 'claimed' AND p.status NOT IN ('complete', 'restored'))
-			   OR (e.state = 'review' AND p.status NOT IN ('disputed', 'refunded', 'dispute_lost', 'review'))
-			   OR (e.state = 'revoked' AND p.status NOT IN ('refunded', 'dispute_lost'))
-			   OR (e.state = 'claimed' AND (e.claimed_player_id IS NULL OR e.claimed_item_id IS NULL OR e.claimed_at_ms IS NULL))
-			   OR (e.state IN ('pending', 'frozen', 'revoked') AND (e.claimed_player_id IS NOT NULL OR e.claimed_item_id IS NOT NULL OR e.claimed_at_ms IS NOT NULL))
-			   OR (e.state = 'review' AND ((e.claimed_player_id IS NULL) <> (e.claimed_item_id IS NULL) OR (e.claimed_player_id IS NULL) <> (e.claimed_at_ms IS NULL)))
-			ORDER BY e.id;
-		`),
-		sqliteCommerceRead(`
-			SELECT 'payment_intent' AS kind, p.transaction_id AS entity_id
-			FROM portal_commerce_payments p
-			LEFT JOIN portal_commerce_checkout_intents i ON i.intent_id = p.intent_id
-			WHERE i.intent_id IS NULL
-			   OR p.account_id <> i.account_id OR p.basket_id <> i.basket_id
-			   OR p.package_id <> i.package_id OR p.currency <> i.expected_currency
-			   OR p.expected_amount_minor <> i.expected_amount_minor
-			UNION ALL
-			SELECT 'entitlement_payment' AS kind, CAST(e.id AS TEXT) AS entity_id
-			FROM portal_commerce_entitlements e
-			LEFT JOIN portal_commerce_payments p ON p.id = e.payment_id
-			WHERE p.id IS NULL OR e.account_id <> p.account_id OR e.provider <> p.provider
-			   OR e.transaction_id <> p.transaction_id OR e.package_id <> p.package_id
-			ORDER BY kind, entity_id;
-		`),
-		sqliteCommerceRead(`
-			SELECT webhook_id, event_type, transaction_id, attempt_count, last_error_code
-			FROM portal_commerce_webhook_events
-			WHERE status = 'failed'
-			ORDER BY webhook_id;
-		`)
-	]);
-	const anomalies = {
-		completedIntentsWithoutPayment: completedWithoutPayment.map((row) => row.intent_id),
-		paymentsWithoutEntitlement: paymentsWithoutEntitlement.map((row) => row.transaction_id),
-		unsafeEntitlements,
-		ledgerMismatches,
-		failedEvents
-	};
-	return {
-		ok: Object.values(anomalies).every((rows) => rows.length === 0),
-		mutated: false,
-		summary: summaryRows[0] || {},
-		anomalies
-	};
-}
-
 async function sqliteJson(query) {
 	try {
 		const { stdout } = await execFile("sqlite3", ["-readonly", "-json", openRscDbPath, query], {
@@ -9045,29 +7171,6 @@ async function sqliteWriteJson(query, operation) {
 			throw new HttpError(500, "openrsc_schema_missing");
 		}
 		if (error.stderr && error.stderr.includes("constraint")) {
-			throw new HttpError(409, "openrsc_character_constraint_failed");
-		}
-		throw openRscDatabaseUnavailable(error, operation);
-	}
-}
-
-async function sqliteWriteJsonStrict(query, conflictCode, operation) {
-	try {
-		const { stdout } = await execFile("sqlite3", [
-			"-batch", "-cmd", ".timeout 5000", "-cmd", ".bail on", "-json", openRscDbPath, query
-		], { maxBuffer: 1024 * 1024 });
-		return stdout.trim() ? JSON.parse(stdout) : [];
-	} catch (error) {
-		if (error.code === "ENOENT") throw new HttpError(503, "sqlite3_not_available");
-		if (error.stderr && error.stderr.includes("no such table")) {
-			throw new HttpError(500, "openrsc_schema_missing");
-		}
-		const stderr = String(error.stderr || "");
-		if (conflictCode && (stderr.includes("CHECK constraint failed: ok = 1")
-			|| stderr.includes("voidscape_launch_card_guard"))) {
-			throw new HttpError(409, conflictCode);
-		}
-		if (stderr.includes("constraint")) {
 			throw new HttpError(409, "openrsc_character_constraint_failed");
 		}
 		throw openRscDatabaseUnavailable(error, operation);
@@ -9304,7 +7407,7 @@ function grantStarterCardEntitlement(store, founder, source = "prelaunch_signup"
 	return entitlement;
 }
 
-async function grantStarterCardIfEligible(store, account, founder, source, request, context, transaction = null) {
+async function grantStarterCardIfEligible(store, account, founder, source, request, context) {
 	if (!context || !context.signupSignalsRecorded) {
 		recordSignupSignals(store, account, request, context);
 	}
@@ -9336,8 +7439,7 @@ async function grantStarterCardIfEligible(store, account, founder, source, reque
 
 	const entitlement = grantStarterCardEntitlement(store, founder, source);
 	recordStarterGrantSignals(store, account, request, context);
-	const rollbackStarterCard = await syncStarterCardToOpenRsc(account);
-	if (transaction && rollbackStarterCard) transaction.onRollback(rollbackStarterCard);
+	await syncStarterCardToOpenRsc(account);
 	return entitlement;
 }
 
@@ -9891,7 +7993,7 @@ function requireReservationUsername(value) {
 	return username;
 }
 
-async function upsertGoogleAccount(store, profile, payload, request, transaction = null) {
+async function upsertGoogleAccount(store, profile, payload, request) {
 	let identity = store.identities.find((entry) =>
 		entry.provider === profile.provider &&
 		entry.providerSubject === profile.providerSubject
@@ -9926,7 +8028,7 @@ async function upsertGoogleAccount(store, profile, payload, request, transaction
 			emailCanonical: profile.emailCanonical,
 			provider: profile.provider,
 			providerSubject: profile.providerSubject
-		}, transaction);
+		});
 		audit(store, "account_google_registered_dev", { accountId: account.id });
 	}
 
@@ -10128,54 +8230,10 @@ async function updateStore(mutator, options = {}) {
 	const execute = async () => {
 		const store = await loadStore();
 		recoverInterruptedEmailEvents(store);
-		const originalStore = cloneJson(store);
-		const transaction = createStoreTransactionContext();
-		let phase = "mutate";
-		try {
-			const result = await mutator(store, transaction);
-			await maybePauseTestStoreWrite();
-			phase = "persist";
-			await saveStore(store);
-			phase = "after_persist";
-			await transaction.runAfterPersist();
-			transaction.clear();
-			return result;
-		} catch (error) {
-			if (phase === "after_persist") {
-				let restoreError = null;
-				let rollbackError = null;
-				try {
-					await saveStore(originalStore);
-				} catch (current) {
-					restoreError = current;
-				}
-				try {
-					await transaction.rollback();
-				} catch (current) {
-					rollbackError = current;
-				}
-				if (restoreError || rollbackError) {
-					console.error("portal_store_reconciliation_failed", {
-						restore: Boolean(restoreError),
-						rollback: Boolean(rollbackError)
-					});
-					throw new HttpError(503, "portal_store_reconciliation_failed");
-				}
-				if (error instanceof HttpError) throw error;
-				throw new HttpError(503, "portal_external_commit_failed");
-			}
-
-			try {
-				await transaction.rollback();
-			} catch (rollbackError) {
-				console.error("portal_transaction_compensation_failed");
-				throw new HttpError(503, "portal_transaction_compensation_failed");
-			}
-			if (phase === "persist") {
-				throw new HttpError(503, "portal_store_unavailable");
-			}
-			throw error;
-		}
+		const result = await mutator(store);
+		await maybePauseTestStoreWrite();
+		await saveStore(store);
+		return result;
 	};
 	const next = writeQueue.then(() => options.lockOpenRscWrites
 		? withOpenRscWriteLock(execute)
@@ -10203,43 +8261,6 @@ async function maybePauseTestStoreWrite() {
 	}
 }
 
-function createStoreTransactionContext() {
-	const rollbackActions = [];
-	const afterPersistActions = [];
-	return {
-		onRollback(action) {
-			if (typeof action !== "function") throw new TypeError("rollback action must be a function");
-			rollbackActions.push(action);
-		},
-		afterPersist(action) {
-			if (typeof action !== "function") throw new TypeError("after-persist action must be a function");
-			afterPersistActions.push(action);
-		},
-		async rollback() {
-			let firstError = null;
-			for (const action of rollbackActions.slice().reverse()) {
-				try {
-					await action();
-				} catch (error) {
-					if (!firstError) firstError = error;
-				}
-			}
-			rollbackActions.length = 0;
-			if (firstError) throw firstError;
-		},
-		async runAfterPersist() {
-			for (const action of afterPersistActions) {
-				await action();
-			}
-			afterPersistActions.length = 0;
-		},
-		clear() {
-			rollbackActions.length = 0;
-			afterPersistActions.length = 0;
-		}
-	};
-}
-
 function recoverInterruptedEmailEvents(store) {
 	const cutoff = Date.now() - interruptedEmailRecoveryMs;
 	for (const event of store.emailEvents || []) {
@@ -10255,48 +8276,15 @@ async function loadStore() {
 		const raw = await readFile(storePath, "utf8");
 		return normalizeStore(JSON.parse(raw));
 	} catch (error) {
-		if (error && error.code === "ENOENT") return normalizeStore({});
-		console.error("portal_store_load_failed", error && error.message ? error.message : "unknown_error");
-		throw new HttpError(503, "portal_store_unavailable");
-	}
-}
-
-async function portalStorageHealth() {
-	try {
-		await loadStore();
-		return { readable: true };
-	} catch (error) {
-		return { readable: false };
+		return normalizeStore({});
 	}
 }
 
 async function saveStore(store) {
 	await mkdir(dataDir, { recursive: true });
 	const tmpPath = `${storePath}.${process.pid}.tmp`;
-	const attempt = ++storeSaveAttempts;
-	try {
-		injectStoreFault("write", attempt);
-		await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`);
-		injectStoreFault("rename", attempt);
-		await rename(tmpPath, storePath);
-	} catch (error) {
-		try {
-			await unlinkFile(tmpPath);
-		} catch (cleanupError) {
-			if (!cleanupError || cleanupError.code !== "ENOENT") {
-				console.error("portal_store_temp_cleanup_failed");
-			}
-		}
-		throw error;
-	}
-}
-
-function injectStoreFault(phase, attempt) {
-	if (testStoreFaultPhase === phase && testStoreFaultAt === attempt) {
-		const error = new Error(`injected_portal_store_${phase}_failure`);
-		error.code = "PORTAL_TEST_STORE_FAULT";
-		throw error;
-	}
+	await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`);
+	await rename(tmpPath, storePath);
 }
 
 function normalizeStore(store) {
@@ -10503,6 +8491,24 @@ function requirePassword(password) {
 	return text;
 }
 
+function requireCommunityTermsAcceptance(payload) {
+	if (!payload
+		|| payload.termsAccepted !== true
+		|| payload.termsVersion !== currentCommunityTermsVersion) {
+		throw new HttpError(400, "terms_acceptance_required");
+	}
+}
+
+function recordCommunityTermsAcceptance(account) {
+	if (account.communityTermsVersion === currentCommunityTermsVersion
+		&& validIsoTimestamp(account.communityTermsAcceptedAt)) {
+		return;
+	}
+	account.communityTermsVersion = currentCommunityTermsVersion;
+	account.communityTermsAcceptedAt = now();
+	account.updatedAt = now();
+}
+
 function requireGamePassword(password) {
 	const text = String(password || "");
 	if (!/^[a-zA-Z0-9]{4,20}$/.test(text)) {
@@ -10628,8 +8634,13 @@ function worldRules() {
 		memberWorld: true,
 		membershipAccess: "global",
 		subscriptionGrantsMembers: false,
-		registration: "portal-first",
-		packetRegistration: false
+		registration: "hybrid",
+		webRegistration: "portal-first",
+		desktopRegistration: "packet",
+		nativeAndroidRegistration: "portal-first",
+		packetRegistration: true,
+		communityTermsVersion: currentCommunityTermsVersion,
+		communityTermsUrl: "/community-rules"
 	};
 }
 
@@ -10948,10 +8959,6 @@ function contentType(filePath) {
 		".jpeg": "image/jpeg",
 		".webp": "image/webp",
 		".svg": "image/svg+xml",
-		".ttf": "font/ttf",
-		".woff2": "font/woff2",
-		".txt": "text/plain; charset=utf-8",
-		".md": "text/markdown; charset=utf-8",
 		".mp4": "video/mp4",
 		".webm": "video/webm"
 	}[ext] || "application/octet-stream";

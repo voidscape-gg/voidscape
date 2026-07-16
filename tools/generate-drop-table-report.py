@@ -437,18 +437,9 @@ def crop_preview(src: Path, dest: Path) -> None:
     cropped.save(dest)
 
 
-def ensure_npc_sprite(
-    npc_id: int,
-    asset_dir: Path = NPC_ASSET_DIR,
-    cache_dir: Path | None = None,
-) -> Path:
+def ensure_npc_sprite(npc_id: int, asset_dir: Path = NPC_ASSET_DIR) -> Path:
     dest = asset_dir / f"{npc_id}.png"
     if dest.exists():
-        return dest
-    cached = cache_dir / dest.name if cache_dir is not None else None
-    if cached is not None and cached.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(cached, dest)
         return dest
     with tempfile.TemporaryDirectory(prefix="npc-preview-") as tmp:
         tmp_path = Path(tmp)
@@ -474,19 +465,9 @@ def ensure_npc_sprite(
     return dest
 
 
-def ensure_item_sprite(
-    item_id: int,
-    sprite_id: int,
-    asset_dir: Path = ITEM_ASSET_DIR,
-    cache_dir: Path | None = None,
-) -> Path:
+def ensure_item_sprite(item_id: int, sprite_id: int, asset_dir: Path = ITEM_ASSET_DIR) -> Path:
     dest = asset_dir / f"{item_id}.png"
     if dest.exists():
-        return dest
-    cached = cache_dir / dest.name if cache_dir is not None else None
-    if cached is not None and cached.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(cached, dest)
         return dest
     with zipfile.ZipFile(AUTHENTIC_SPRITES, "r") as archive:
         image, _ = decode_sprite(archive.read(str(SPRITE_ITEM + sprite_id)))
@@ -1155,22 +1136,12 @@ def render_portal_html(data: dict) -> str:
 """.replace("__NPC_DATA__", data_json)
 
 
-def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
-    staged_report_assets = staging_root / "report-assets"
-    staged_report_npcs = staged_report_assets / "npc"
-    staged_report_items = staged_report_assets / "item"
-    staged_report_html = staging_root / "drop-table-balance.html"
-    staged_portal_assets = staging_root / "portal-assets"
-    staged_portal_npcs = staged_portal_assets / "npc"
-    staged_portal_items = staged_portal_assets / "item"
-    staged_portal_html = staging_root / "npcs.html"
-    for directory in (
-        staged_report_npcs,
-        staged_report_items,
-        staged_portal_npcs,
-        staged_portal_items,
-    ):
-        directory.mkdir(parents=True, exist_ok=True)
+def main() -> int:
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    NPC_ASSET_DIR.mkdir(parents=True, exist_ok=True)
+    ITEM_ASSET_DIR.mkdir(parents=True, exist_ok=True)
+    PORTAL_NPC_ASSET_DIR.mkdir(parents=True, exist_ok=True)
+    PORTAL_ITEM_ASSET_DIR.mkdir(parents=True, exist_ok=True)
 
     npc_ids = parse_enum(NPC_ID)
     item_ids = parse_enum(ITEM_ID)
@@ -1212,8 +1183,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
         if item is None:
             continue
         try:
-            ensure_item_sprite(item_id, item.sprite_id, staged_report_items, ITEM_ASSET_DIR)
-            item_sprite_by_id[item_id] = ITEM_ASSET_DIR / f"{item_id}.png"
+            item_sprite_by_id[item_id] = ensure_item_sprite(item_id, item.sprite_id)
         except KeyError:
             pass
 
@@ -1223,8 +1193,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
         if item is None:
             continue
         try:
-            ensure_item_sprite(item_id, item.sprite_id, staged_portal_items, PORTAL_ITEM_ASSET_DIR)
-            portal_item_sprite_by_id[item_id] = PORTAL_ITEM_ASSET_DIR / f"{item_id}.png"
+            portal_item_sprite_by_id[item_id] = ensure_item_sprite(item_id, item.sprite_id, PORTAL_ITEM_ASSET_DIR)
         except KeyError:
             pass
 
@@ -1235,8 +1204,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
         table = tables.get(npc_name)
         if table is None:
             continue
-        ensure_npc_sprite(npc_id, staged_report_npcs, NPC_ASSET_DIR)
-        npc_sprite = NPC_ASSET_DIR / f"{npc_id}.png"
+        npc_sprite = ensure_npc_sprite(npc_id)
         drop_rows = flatten_table(table, table_by_var)
         empty_chance = effective_empty_chance(table, table_by_var)
         drop_html = "\n".join(render_flat_drop(row, item_sprite_by_id) for row in drop_rows)
@@ -1265,7 +1233,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
         cards_by_section.setdefault(section, []).append(card)
 
     html_output = "\n".join(line.rstrip() for line in build_html(cards_by_section).splitlines()) + "\n"
-    staged_report_html.write_text(html_output)
+    REPORT_PATH.write_text(html_output)
 
     portal_npcs: list[dict] = []
     for enum_name, table in sorted(tables.items(), key=lambda row: npc_ids.get(row[0], 999999)):
@@ -1282,7 +1250,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
                 section = "Wilderness"
             else:
                 section = "Standard"
-        ensure_npc_sprite(npc_id, staged_portal_npcs, PORTAL_NPC_ASSET_DIR)
+        npc_sprite = ensure_npc_sprite(npc_id, PORTAL_NPC_ASSET_DIR)
         bonus_rows = dragon_weapon_bonus_rows(enum_name, item_ids, item_names)
         drops = build_portal_drops(table, table_by_var, portal_item_sprite_by_id, bonus_rows)
         empty_pct = float(effective_empty_chance(table, table_by_var)) * 100
@@ -1322,52 +1290,7 @@ def generate_outputs(staging_root: Path) -> list[tuple[Path, Path]]:
         "npcs": portal_npcs,
     }
     portal_html = "\n".join(line.rstrip() for line in render_portal_html(portal_data).splitlines()) + "\n"
-    staged_portal_html.write_text(portal_html)
-    return [
-        (staged_report_assets, ASSET_DIR),
-        (staged_report_html, REPORT_PATH),
-        (staged_portal_assets, PORTAL_ASSET_DIR),
-        (staged_portal_html, PORTAL_NPCS_PATH),
-    ]
-
-
-def remove_path(path: Path) -> None:
-    if not path.exists():
-        return
-    if path.is_dir():
-        shutil.rmtree(path)
-    else:
-        path.unlink()
-
-
-def install_outputs(outputs: list[tuple[Path, Path]], backup_root: Path) -> None:
-    """Install a complete generated set, restoring every prior target on any failure."""
-    backup_root.mkdir(parents=True, exist_ok=True)
-    records: list[tuple[Path, Path, bool]] = []
-    try:
-        for index, (staged, target) in enumerate(outputs):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            backup = backup_root / str(index)
-            had_target = target.exists()
-            if had_target:
-                target.replace(backup)
-            records.append((target, backup, had_target))
-            staged.replace(target)
-    except BaseException:
-        for target, backup, had_target in reversed(records):
-            remove_path(target)
-            if had_target and backup.exists():
-                backup.replace(target)
-        raise
-
-
-def main() -> int:
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    PORTAL_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".drop-report-", dir=REPO_ROOT) as tmp:
-        staging_root = Path(tmp)
-        outputs = generate_outputs(staging_root)
-        install_outputs(outputs, staging_root / "backups")
+    PORTAL_NPCS_PATH.write_text(portal_html)
     print(REPORT_PATH)
     print(PORTAL_NPCS_PATH)
     return 0

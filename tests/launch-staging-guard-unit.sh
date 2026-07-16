@@ -30,12 +30,26 @@ grep -q 'android_apk_promotable=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'scripts/check-android-apk-release.sh' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'ops/database/prepare-production-sqlite-permissions.sh' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'sqlite_permissions_helper_sha256=' "$ROOT/scripts/package-launch-staging.sh"
-grep -q 'root:voidscape 0770' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'root:voidscape-db 0770' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'primaryLabel: "Open verification page"' "$ROOT/web/portal/dev-server.mjs"
 grep -q 'On the verification page, press Verify email' "$ROOT/web/portal/dev-server.mjs"
 grep -q '>One last step<' "$ROOT/web/portal/portal.html"
 grep -q 'Verification is temporarily unavailable' "$ROOT/web/portal/script.js"
 grep -q 'verify_exact_sha256_tree "\\$DEPLOYED_SERVER_DIR/database"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'verify_exact_sha256_tree "\\$DEPLOYED_PORTAL_DIR"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'normalize_public_tree_modes "$OUTPUT_DIR/server/conf"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'ops/verify/verify-exact-sha256-tree.py' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'VERIFY-STAGING.sh accepts no positional or option arguments' "$ROOT/scripts/package-launch-staging.sh"
+grep -q -- '--launch-at "$LAUNCH_AT"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'verify_exact_sha256_tree "\\$BUNDLE_DIR/scripts" "\\$BUNDLE_DIR/scripts.SHA256"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q '"\\$BUNDLE_DIR/scripts/verify-launch-staging.mjs"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'ANDROID_VERIFY_MODE=(--expect-no-android-apk)' "$ROOT/scripts/package-launch-staging.sh"
+grep -q -- '--expected-android-apk "\\$BUNDLE_DIR/android/voidscape-staging.apk"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'ANDROID_PLAY_VERIFY_MODE=(--expect-no-android-play)' "$ROOT/scripts/package-launch-staging.sh"
+if grep -q 'VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK\|VOIDSCAPE_REPO_ROOT' "$ROOT/scripts/package-launch-staging.sh"; then
+	echo "packaged verifier provenance or byte checks can be bypassed" >&2
+	exit 1
+fi
 grep -q 'location \^~ /api/admin/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'https://voidscape.5.161.114.251.sslip.io/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q '/var/www/html play voidscape' "$ROOT/scripts/package-launch-staging.sh"
@@ -105,6 +119,30 @@ expect_fail() {
 	fi
 }
 
+# The release-tree verifier must fail closed on bytes, paths, types, and modes.
+exact_tree="$TMP_DIR/exact-tree"
+exact_manifest="$TMP_DIR/exact-tree.SHA256"
+mkdir -p "$exact_tree/nested"
+printf '%s\n' "release bytes" > "$exact_tree/nested/file.txt"
+chmod 0755 "$exact_tree" "$exact_tree/nested"
+chmod 0644 "$exact_tree/nested/file.txt"
+(cd "$exact_tree" && shasum -a 256 ./nested/file.txt) > "$exact_manifest"
+expect_pass exact-tree-baseline "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+printf '%s\n' extra > "$exact_tree/extra.txt"
+expect_fail exact-tree-extra "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+rm "$exact_tree/extra.txt"
+ln -s nested/file.txt "$exact_tree/link.txt"
+expect_fail exact-tree-symlink "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+rm "$exact_tree/link.txt"
+mkfifo "$exact_tree/pipe"
+expect_fail exact-tree-special "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+rm "$exact_tree/pipe"
+chmod 0600 "$exact_tree/nested/file.txt"
+expect_fail exact-tree-unreadable "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+chmod 0644 "$exact_tree/nested/file.txt"
+printf '%s\n' "changed bytes" > "$exact_tree/nested/file.txt"
+expect_fail exact-tree-hash "$ROOT/scripts/verify-exact-sha256-tree.py" "$exact_tree" "$exact_manifest"
+
 # Exercise package promotability decisions from a genuinely clean Git worktree.
 promo_root="$TMP_DIR/promotability-repo"
 mkdir -p "$promo_root/scripts" "$promo_root/server" \
@@ -116,10 +154,11 @@ EOF
 cat > "$promo_root/Android_Client/Open RSC Android Client/src/main/java/orsc/osConfig.java" <<'EOF'
 package orsc;
 public final class osConfig {
-	public static final String VOIDSCAPE_PUBLIC_HOST = "old.example";
+	public static final String VOIDSCAPE_PUBLIC_HOST = "voidscape.gg";
 	public static final String VOIDSCAPE_DEFAULT_PORT = "43596";
-	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://old.example/portal?auth=login";
-	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://old.example/portal?auth=recovery";
+	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/portal?auth=register";
+	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/portal?auth=recovery";
+	public static final String VOIDSCAPE_PORTAL_DELETION_URL = "https://voidscape.gg/data-deletion";
 }
 EOF
 git -C "$promo_root" init -q
@@ -142,6 +181,15 @@ grep -q 'server_client_build_reused,web_build_reused' "$TMP_DIR/clean-reused-bui
 expect_fail clean-debug-android-rejected "${package_common[@]}"
 grep -q 'android_debug_apk' "$TMP_DIR/clean-debug-android-rejected.log"
 
+python3 - "$promo_root/Android_Client/Open RSC Android Client/src/main/java/orsc/osConfig.java" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text(encoding="utf-8").replace('"voidscape.gg"', '"old.example"', 1), encoding="utf-8")
+PY
+git -C "$promo_root" add .
+git -C "$promo_root" commit -qm endpoint-mismatch
 expect_fail clean-rewritten-android-rejected "${package_common[@]}" --android-release
 if ! grep -q 'target Android endpoint differs' "$TMP_DIR/clean-rewritten-android-rejected.log"; then
 	cat "$TMP_DIR/clean-rewritten-android-rejected.log" >&2
@@ -150,6 +198,20 @@ fi
 
 expect_fail conflicting-android-options "${package_common[@]}" --skip-android --android-release
 grep -q 'mutually exclusive' "$TMP_DIR/conflicting-android-options.log"
+
+mkdir -p "$promo_root/server/protected" "$promo_root/tmp"
+printf '%s\n' preserve > "$promo_root/server/protected/sentinel"
+expect_fail unsafe-output-rejected "${package_common[@]}" \
+	--skip-build --skip-web-build --skip-android --allow-dirty-staging \
+	--output-dir "$promo_root/server/protected"
+grep -q "must be a child of this worktree's dist/ or tmp/" "$TMP_DIR/unsafe-output-rejected.log"
+grep -qx preserve "$promo_root/server/protected/sentinel"
+ln -s "$promo_root/server/protected" "$promo_root/tmp/output-link"
+expect_fail symlink-output-rejected "${package_common[@]}" \
+	--skip-build --skip-web-build --skip-android --allow-dirty-staging \
+	--output-dir "$promo_root/tmp/output-link"
+grep -q 'must not be a symlink' "$TMP_DIR/symlink-output-rejected.log"
+grep -qx preserve "$promo_root/server/protected/sentinel"
 
 start_fixture 404 public404
 base_404="$FIXTURE_BASE"
@@ -161,6 +223,8 @@ common_404=(
 	--portal-url "$base_404"
 	--skip-web-verify
 	--skip-server-config
+	--expect-no-android-apk
+	--expect-no-android-play
 	--allow-http
 )
 common_403=(
@@ -168,6 +232,8 @@ common_403=(
 	--portal-url "$base_403"
 	--skip-web-verify
 	--skip-server-config
+	--expect-no-android-apk
+	--expect-no-android-play
 	--allow-http
 )
 

@@ -4,7 +4,7 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.ProgressionMilestones;
-import com.openrsc.server.content.WorldAchievementService.SkillClaimResult;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerExperience;
@@ -282,10 +282,8 @@ public class Skills {
 			if (getMob().isPlayer()) {
 				Player player = (Player) getMob();
 				int newTotalLevel = player.getTotalLevel();
-				boolean maxSkillSaved = false;
 				try {
 					getWorld().getServer().getPlayerService().savePlayerMaxSkill(player.getDatabaseID(), skill, maxStats[skill]);
-					maxSkillSaved = true;
 				} catch (GameDatabaseException e) {
 					LOGGER.catching(e);
 				}
@@ -299,19 +297,7 @@ public class Skills {
 					skillName = getWorld().getServer().getConstants().getSkills().getSkill(skill).getLongName().toLowerCase();
 				}
 				if (!player.getConfig().WANT_OPENPK_POINTS) {
-					int highestWorldFirstLevel = 0;
-					if (maxSkillSaved) {
-						SkillClaimResult skillClaims = getWorld().getWorldAchievementService()
-							.claimFirstSkillLevels(player.getDatabaseID(), player.getUsername(),
-								!player.isDefaultUser(), skill, oldLevel, newLevel);
-						if (skillClaims.hasClaims()) {
-							highestWorldFirstLevel = skillClaims.getHighestClaimedLevel();
-							getWorld().getWorldAnnouncementService()
-								.announceFirstSkillLevel(player, skill, highestWorldFirstLevel);
-						}
-					}
-					getWorld().getWorldAnnouncementService().announceSkillMilestone(
-						player, skill, oldLevel, newLevel, highestWorldFirstLevel);
+					getWorld().getWorldAnnouncementService().announceSkillMilestone(player, skill, oldLevel, newLevel);
 					getWorld().getWorldAnnouncementService().announceTotalLevelMilestone(player, oldTotalLevel, newTotalLevel);
 					if (newLevel >= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - (getWorld().getServer().getConfig().SKILLING_EXP_RATE > 1.0 && !player.isOneXp() ? 9 : 19)
 						&& newLevel <= getWorld().getServer().getConfig().PLAYER_LEVEL_LIMIT - 1) {
@@ -336,6 +322,7 @@ public class Skills {
 				}
 				sendUpdate(skill);
 				ProgressionMilestones.handleLevelUp(player, skill, oldLevel, newLevel, oldTotalLevel, newTotalLevel);
+				SkillBatching.notifyLimitIncrease(player, skill, oldLevel, newLevel, skillName);
 				PlayerTitle.refreshAutomaticUnlocks(player);
 			}
 

@@ -86,7 +86,7 @@
 			"We do not show private account details on public pages."
 		]);
 
-		setText(trustSourceStatus, simpleStatus(build.source && build.source.status || "source_pending"));
+		setText(trustSourceStatus, simpleStatus(build.status || "available"));
 		renderTrustList(trustSourceList, sourceListItems(build, integrity, staff));
 		renderSourceBuildBoard(build);
 
@@ -121,7 +121,7 @@
 				trustSourceRepo.target = "_blank";
 				trustSourceRepo.rel = "noreferrer";
 				trustSourceRepo.removeAttribute("aria-disabled");
-				trustSourceRepo.textContent = "View published source";
+				trustSourceRepo.textContent = "View public code";
 			} else {
 				trustSourceRepo.removeAttribute("href");
 				trustSourceRepo.removeAttribute("target");
@@ -132,8 +132,8 @@
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
-				? "Build commit " + source.shortCommit + (source.dirty ? " - live changes pending" : "")
-				: (source.status === "publication_pending" ? "Build commit recorded privately" : "Build commit pending");
+				? (source.dirty ? "Code version " : "Code version ") + source.shortCommit + (source.dirty ? " - live changes pending" : "")
+				: "Code version pending";
 			trustSourceCommit.textContent = commitText;
 			trustSourceCommit.title = source.commit || commitText;
 		}
@@ -161,16 +161,16 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var publicationPending = source.status === "publication_pending" || !source.repositoryUrl;
-		var rows = [];
-		if (publicationPending) {
-			rows.push("The release build commit is recorded privately for operator verification.");
-			rows.push("Publication of corresponding source for this release is pending.");
+		var sourcePublished = Boolean(source.repositoryUrl && source.shortCommit);
+		var rows = [sourcePublished
+			? "Published source is linked so people can inspect the corresponding code."
+			: "Source publication is pending and must be completed before player-facing distribution."];
+		if (source.shortCommit && source.dirty) {
+			rows.push("The staged files are based on source revision " + source.shortCommit + "; newer changes remain unpublished.");
+		} else if (source.shortCommit) {
+			rows.push("Published source revision: " + source.shortCommit + ".");
 		} else {
-			rows.push("A published source link is available for inspection.");
-			rows.push(source.shortCommit
-				? "Published source commit: " + source.shortCommit + "."
-				: "The published source commit is waiting for verification.");
+			rows.push("Source revision metadata will appear after publication.");
 		}
 		rows.push("Downloads are checked when they are served, so replacing a file changes the check.");
 		if (manifest.status === "available") {
@@ -414,7 +414,6 @@
 			recording: "Tracking",
 			recording_no_recent_staff_mints: "Tracking",
 			recording_no_staff_mints: "Tracking",
-			publication_pending: "Publication pending",
 			source_pending: "Waiting",
 			waiting_for_game_snapshot: "Waiting"
 		};

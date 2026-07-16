@@ -671,33 +671,6 @@ public final class Formulae {
 		return DataConversions.random(0, 6) != 0;
 	}
 
-	public static int getRepeatTimes(Player player, int skill) {
-		int maxStat = player.getSkills().getMaxStat(skill); // Number of time repeats is based on your highest level using this method
-		if (maxStat <= 10)
-			return 10;
-		if (maxStat <= 19)
-			return 12;
-		if (maxStat <= 29)
-			return 14;
-		if (maxStat <= 39)
-			return 16;
-		if (maxStat <= 49)
-			return 20;
-		if (maxStat <= 59)
-			return 24;
-		if (maxStat <= 69)
-			return 32;
-		if (maxStat <= 79)
-			return 40;
-		if (maxStat <= 89)
-			return 48;
-		if (maxStat <= 95)
-			return 56;
-		if (maxStat <= 99)
-			return 64;
-		return 1000;
-	}
-
 	/**
 	 * Must consume equal length lists.
 	 **/

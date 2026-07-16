@@ -85,12 +85,7 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.FISHING.id());
-		}
-
-		startbatch(repeat);
+		startskillbatch(object, Skill.FISHING.id());
 		batchFishing(entityHandler, player, def, object);
 	}
 
@@ -187,6 +182,9 @@ public class Fishing implements OpLocTrigger, UseLocTrigger {
 		player.playSound("fish");
 		thinkbubble(new Item(def.getNetId()));
 		delay(4);
+		if (ifinterrupted()) {
+			return;
+		}
 
 		if(!hasBait(def, player, inventory)) {
 			return;

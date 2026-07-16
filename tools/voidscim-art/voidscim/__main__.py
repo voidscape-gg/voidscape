@@ -66,6 +66,16 @@ def main(argv: list[str] | None = None) -> int:
     sp_pw.add_argument("--frames-dir", required=True, help="directory containing frame_NN.png + sidecars (output of recolor-wielded)")
     sp_pw.add_argument("--commit", action="store_true", help="apply changes; default is dry-run")
 
+    sp_vw = sub.add_parser("validate-wielded", help="verify a wearable's runtime mapping and every packed archive frame")
+    sp_vw.add_argument("--animation", required=True, help="AnimationDef name, e.g. cowboyhat")
+    sp_vw.add_argument("--item-id", required=True, type=int, help="server item id whose appearanceID must map to the AnimationDef")
+    sp_vw.add_argument("--archive", default=None, help="Authentic_Sprites.orsc to inspect (default: the client archive)")
+    sp_vw.add_argument("--expect-runtime-index", type=int, default=None, help="fail unless the zero-based AnimationDef index matches")
+    sp_vw.add_argument("--expect-appearance-id", type=int, default=None, help="fail unless the one-based item appearanceID matches")
+    sp_vw.add_argument("--expect-base", type=int, default=None, help="fail unless the simulated archive base matches")
+    sp_vw.add_argument("--allow-bearded-ladies", action="store_true", help="simulate the alternate head-definition branch")
+    sp_vw.add_argument("--layout-only", action="store_true", help="validate definitions and expected numbering before art is packed")
+
     for v in ("approve", "preview", "pack", "verify", "launch"):
         sub.add_parser(v, help=f"{v} (slice TBD)")
 
@@ -112,6 +122,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.verb == "pack-wielded":
         from .pack_wielded_cmd import cmd_pack_wielded
         return cmd_pack_wielded(args.target_item, args.source_item, args.frames_dir, commit=args.commit)
+    if args.verb == "validate-wielded":
+        from .paths import ARCHIVE_PATH
+        from .validate_wielded_cmd import cmd_validate_wielded
+        return cmd_validate_wielded(
+            args.animation,
+            args.item_id,
+            archive=args.archive or ARCHIVE_PATH,
+            expected_runtime_index=args.expect_runtime_index,
+            expected_appearance_id=args.expect_appearance_id,
+            expected_archive_base=args.expect_base,
+            allow_bearded_ladies=args.allow_bearded_ladies,
+            layout_only=args.layout_only,
+        )
     print(f"verb '{args.verb}' not implemented in this slice")
     return 2
 

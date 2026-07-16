@@ -1,0 +1,70 @@
+{
+  "schema": "voidscape-paperdoll-v2-art-candidate/v1",
+  "id": "mohawk-gpt-r3-variant2-coverage35",
+  "label": "GPT R3 Variant 2 faithful transfer",
+  "appearanceId": "mohawk",
+  "selectorId": 3,
+  "created": "2026-07-11",
+  "status": "owner-approved-preserved",
+  "canonical": false,
+  "shipping": false,
+  "ownerDecision": {
+    "approved": true,
+    "decision": "Preserve this exact Mohawk as an in-game candidate independently of the PixelLab experiment.",
+    "note": "The owner explicitly prefers this appearance despite an earlier conservative automated art-gate verdict. Owner taste is the final visual decision."
+  },
+  "source": {
+    "kind": "gpt-image-2 concept turnaround",
+    "variant": "R3 Variant 2",
+    "originalIgnoredPath": "output/imagegen/voidscape-mohawk-ai-pilot/r3-profile-variants/image_2.png",
+    "sha256": "c1a23a17a9b5fee4cc0ee6286fb24099bc8263a9f387ebaaf969f6514fe4ba08"
+  },
+  "transfer": {
+    "kind": "deterministic head registration and raster transfer",
+    "coverageThreshold": 0.35,
+    "authoredReplacementGeometry": false,
+    "scriptIgnoredPath": "tmp/appearance-studio/mohawk-ai-faithful-transfer-root/transfer.py",
+    "scriptSha256": "442ca7fbbcf9807c6711c97b3c12641d59275235b8d2611ba80358c6139c1a79",
+    "reportIgnoredPath": "tmp/appearance-studio/mohawk-ai-faithful-transfer-root/report.json",
+    "reportSha256": "d2cbf6844967a57d186d6b002e7cb27e3c411abdded145945b3077fdd745d6b0"
+  },
+  "masters": {
+    "north": {
+      "path": "masters/north.png",
+      "dimensions": [128, 204],
+      "sha256": "61fda9a92d6add1ead123eec86e8bb40b85fe3cd774e8b5a2fbc13a8eb7e6fcc"
+    },
+    "north-west": {
+      "path": "masters/north-west.png",
+      "dimensions": [128, 204],
+      "sha256": "90332b4bb81a394db4e15b329514ac6720f4f93d8d51ae75252d22e50c5cc474"
+    },
+    "west": {
+      "path": "masters/west.png",
+      "dimensions": [128, 204],
+      "sha256": "44b194a45a7a890d8327aac9b211ba6f4014b27c1c0855154fb69d4c5c97f404"
+    },
+    "south-west": {
+      "path": "masters/south-west.png",
+      "dimensions": [128, 204],
+      "sha256": "44e38751cae5ad750fb41affe9e80c4692bfe8801345a4de25b33ccd7fc3445d"
+    },
+    "south": {
+      "path": "masters/south.png",
+      "dimensions": [128, 204],
+      "sha256": "e863e54c6b7a752dc8a8f46d8c46a5e7b8b6b884515d856aa02311c876a53599"
+    },
+    "combat-west": {
+      "path": "masters/combat-west.png",
+      "dimensions": [168, 204],
+      "sha256": "5edd2a4e87e422443d6768caa471d1a49f826417eeaf734096c406dd07acc431"
+    }
+  },
+  "validatedDisposableBuild": {
+    "workspace": "tmp/appearance-studio/mohawk-ai-native-hybrid-r1",
+    "archiveSha256": "49c72547fa9d203c5e33ef28529cccc1bc94acb9b7209b52619ed74a5cb18fe0",
+    "archiveEntries": 720,
+    "valid": true
+  },
+  "promotionRule": "Do not replace or alter this candidate during PixelLab generation. Canonical promotion remains a separate approval-gated slice."
+}

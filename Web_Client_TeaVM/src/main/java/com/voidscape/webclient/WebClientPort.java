@@ -5,17 +5,17 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import org.teavm.jso.JSBody;
+import org.teavm.jso.crypto.Crypto;
+import org.teavm.jso.typedarrays.Uint8Array;
 
 import com.openrsc.client.model.Sprite;
 
 import orsc.Config;
 import orsc.ORSCharacter;
 import orsc.PacketHandler;
-import orsc.WebCrackerCampaignSmokeBridge;
 import orsc.osConfig;
 import orsc.graphics.two.Fonts;
 import orsc.graphics.two.GraphicsController;
-import orsc.graphics.gui.MessageHistory;
 import orsc.multiclient.ClientPort;
 import orsc.mudclient;
 import orsc.net.Network_Base;
@@ -37,9 +37,38 @@ public class WebClientPort implements ClientPort {
 	private int worldMapTouchStartX;
 	private int worldMapTouchStartY;
 	private long worldMapTouchReleaseUntilMillis;
+	private boolean pkCatchingPointerActive;
 
 	public void setClient(mudclient client) {
 		this.client = client;
+	}
+
+	@Override
+	public boolean fillSecureRandom(byte[] destination) {
+		if (destination == null || destination.length != 32) {
+			wipe(destination);
+			return false;
+		}
+		try {
+			if (!Crypto.isSupported()) {
+				wipe(destination);
+				return false;
+			}
+			Uint8Array random = Uint8Array.create(destination.length);
+			Crypto.current().getRandomValues(random);
+			for (int i = 0; i < destination.length; i++) {
+				destination[i] = (byte) random.get(i);
+			}
+			return true;
+		} catch (RuntimeException ignored) {
+			wipe(destination);
+			return false;
+		}
+	}
+
+	private static void wipe(byte[] destination) {
+		if (destination == null) return;
+		for (int i = 0; i < destination.length; i++) destination[i] = 0;
 	}
 
 	@Override
@@ -71,10 +100,7 @@ public class WebClientPort implements ClientPort {
 		publishLoginState();
 		publishUiState();
 		publishWorldMapState();
-		publishCrackerCampaignHudState();
 		drainWebSmokeLoginRequest();
-		drainWebSmokeCrackerCampaignCommand();
-		drainWebSmokeCrackerCampaignEnvelope();
 		drainInputEvents();
 		updateWorldMapTouchRelease();
 	}
@@ -238,59 +264,6 @@ public class WebClientPort implements ClientPort {
 		String pass = getWebSmokeLoginPass();
 		clearWebSmokeLoginRequest();
 		client.webSmokeLogin(user, pass);
-	}
-
-	private void drainWebSmokeCrackerCampaignEnvelope() {
-		if (client == null || !hasWebSmokeCrackerCampaignEnvelope()) {
-			return;
-		}
-		String envelope = getWebSmokeCrackerCampaignEnvelope();
-		clearWebSmokeCrackerCampaignEnvelope();
-		boolean consumed = WebCrackerCampaignSmokeBridge.applyEnvelope(client, envelope);
-		publishWebSmokeCrackerCampaignEnvelopeResult(consumed);
-	}
-
-	private void drainWebSmokeCrackerCampaignCommand() {
-		if (client == null || !hasWebSmokeCrackerCampaignCommand()) {
-			return;
-		}
-		int remaining = getWebSmokeCrackerCampaignCommand();
-		clearWebSmokeCrackerCampaignCommand();
-		boolean sent = WebCrackerCampaignSmokeBridge.sendCrackerCommand(client, remaining);
-		publishWebSmokeCrackerCampaignCommandResult(sent, remaining);
-	}
-
-	private void publishCrackerCampaignHudState() {
-		if (!isWebDiagnosticsEnabled()) {
-			return;
-		}
-		if (client == null) {
-			publishCrackerCampaignHudState(Config.CLIENT_VERSION, 0, false, "",
-				-1, -1, 0, 0, 0, 0, 0);
-			return;
-		}
-		publishCrackerCampaignHudState(
-			Config.CLIENT_VERSION,
-			client.workbenchCrackerCampaignRemaining(),
-			client.workbenchCrackerCampaignHudVisible(),
-			client.workbenchCrackerCampaignHudLabel(),
-			client.workbenchCrackerCampaignHudX(),
-			client.workbenchCrackerCampaignHudY(),
-			client.workbenchCrackerCampaignHudWidth(),
-			client.workbenchCrackerCampaignHudHeight(),
-			client.getGameWidth(),
-			client.getGameHeight(),
-			crackerCampaignEnvelopeLeakCount());
-	}
-
-	private int crackerCampaignEnvelopeLeakCount() {
-		int leaks = 0;
-		for (String message : MessageHistory.messageHistoryMessage) {
-			if (message != null && message.startsWith("@vscrackercampaign@")) {
-				leaks++;
-			}
-		}
-		return leaks;
 	}
 
 	private void applyViewportResize() {
@@ -535,9 +508,12 @@ public class WebClientPort implements ClientPort {
 		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
 		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
 		client.lastMouseAction = 0;
-		if (client.isVoidscapeSubscriptionShopOpen()
-			&& client.consumeVoidscapeSubscriptionShopPointerAt(client.mouseX, client.mouseY,
-				action == 1 && button != 2)) {
+		if (pkCatchingPointerActive) {
+			if (action == 2 || action == 4) {
+				pkCatchingPointerActive = false;
+				client.currentMouseButtonDown = 0;
+				client.lastMouseButtonDown = 0;
+			}
 			return;
 		}
 
@@ -555,6 +531,10 @@ public class WebClientPort implements ClientPort {
 					|| client.closeServerMessageDialogAt(client.mouseX, client.mouseY)
 					|| client.closeFarmSimDialogAt(client.mouseX, client.mouseY)
 				|| client.closeWildWarningDialogAt(client.mouseX, client.mouseY))) {
+				return;
+			}
+			if (client.consumePkCatchingPointerAt(client.mouseX, client.mouseY, button != 2)) {
+				pkCatchingPointerActive = true;
 				return;
 			}
 			client.currentMouseButtonDown = button;
@@ -584,13 +564,23 @@ public class WebClientPort implements ClientPort {
 	}
 
 	private void handleWorldMapTouchEvent(int phase, int x, int y) {
-		if (client == null || client.worldMapPanel == null || !client.worldMapPanel.isVisible()) {
+		if (client == null) return;
+		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
+		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
+		if (pkCatchingPointerActive) {
+			if (phase == 2 || phase == 3) pkCatchingPointerActive = false;
+			return;
+		}
+		if (phase == 0 && client.consumePkCatchingPointerAt(client.mouseX, client.mouseY, true)) {
+			pkCatchingPointerActive = true;
+			clearWorldMapTouchState(true);
+			return;
+		}
+		if (client.worldMapPanel == null || !client.worldMapPanel.isVisible()) {
 			clearWorldMapTouchState(true);
 			return;
 		}
 
-		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
-		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
 		client.lastMouseAction = 0;
 		client.lastMouseButtonDown = 0;
 
@@ -783,9 +773,7 @@ public class WebClientPort implements ClientPort {
 			if (key == 33) client.pageUp = false;
 			return;
 		}
-		if (client.isVoidscapeSubscriptionShopOpen()) {
-			client.handleKeyPress((byte) 126, key);
-			client.lastMouseAction = 0;
+		if (client.consumeDuelJournalKeyDown(key)) {
 			return;
 		}
 		if (handleNavigationKeyDown(key)) {
@@ -821,11 +809,7 @@ public class WebClientPort implements ClientPort {
 		if (key == 0) {
 			return;
 		}
-		if (client.isVoidscapeSubscriptionShopOpen()) {
-			client.handleKeyPress((byte) 126, key);
-			client.lastMouseAction = 0;
-			return;
-		}
+		if (client.consumeDuelJournalKeyDown(key)) return;
 
 		if (isWorldMapSearchFocused()) {
 			client.worldMapPanel.handleSearchKey((char) key, key);
@@ -882,12 +866,9 @@ public class WebClientPort implements ClientPort {
 		if (client == null || amount == 0) {
 			return;
 		}
-		if (client.isVoidscapeSubscriptionShopOpen()) {
-			client.lastMouseAction = 0;
-			return;
-		}
 		client.lastMouseAction = 0;
-		client.runScroll(clamp(amount, -8, 8));
+		int delta = clamp(amount, -8, 8);
+		if (!client.routeDuelJournalScroll(delta)) client.runScroll(delta);
 	}
 
 	private void syncMobileInputHints() {
@@ -911,7 +892,7 @@ public class WebClientPort implements ClientPort {
 	}
 
 	private boolean hasScrollableTouchUi() {
-		if (client.showUiTab != 0 || client.isShowDialogBank()) {
+		if (client.isDuelJournalVisible() || client.showUiTab != 0 || client.isShowDialogBank()) {
 			return true;
 		}
 		return (Config.S_SPAWN_AUCTION_NPCS && client.auctionHouse != null && client.auctionHouse.isVisible())
@@ -2386,42 +2367,6 @@ public class WebClientPort implements ClientPort {
 		String inputTextCurrent);
 
 	@JSBody(params = {
-		"clientVersion",
-		"remaining",
-		"visible",
-		"label",
-		"x",
-		"y",
-		"width",
-		"height",
-		"frameWidth",
-		"frameHeight",
-		"chatLeakCount"
-	}, script =
-		"window.__voidscapeCrackerCampaignHudState = {" +
-		"  clientVersion: clientVersion | 0," +
-		"  remaining: remaining | 0," +
-		"  visible: !!visible," +
-		"  label: String(label || '')," +
-		"  bounds: { x: x | 0, y: y | 0, width: width | 0, height: height | 0 }," +
-		"  frame: { width: frameWidth | 0, height: frameHeight | 0 }," +
-		"  chatLeakCount: Math.max(0, chatLeakCount | 0)," +
-		"  updatedAt: Date.now()" +
-		"};")
-	private static native void publishCrackerCampaignHudState(
-		int clientVersion,
-		int remaining,
-		boolean visible,
-		String label,
-		int x,
-		int y,
-		int width,
-		int height,
-		int frameWidth,
-		int frameHeight,
-		int chatLeakCount);
-
-	@JSBody(params = {
 		"loginScreenNumber",
 		"viewMode",
 		"userText",
@@ -2774,59 +2719,6 @@ public class WebClientPort implements ClientPort {
 	@JSBody(params = {}, script =
 		"delete window.__voidscapeSmokeLoginRequest;")
 	private static native void clearWebSmokeLoginRequest();
-
-	@JSBody(params = {}, script =
-		"return !!window.__voidscapeDiagnosticsEnabled" +
-		"  && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname === '::1')" +
-		"  && Object.prototype.hasOwnProperty.call(window, '__voidscapeCrackerCampaignSmokeEnvelope');")
-	private static native boolean hasWebSmokeCrackerCampaignEnvelope();
-
-	@JSBody(params = {}, script =
-		"return String(window.__voidscapeCrackerCampaignSmokeEnvelope || '');")
-	private static native String getWebSmokeCrackerCampaignEnvelope();
-
-	@JSBody(params = {}, script =
-		"delete window.__voidscapeCrackerCampaignSmokeEnvelope;")
-	private static native void clearWebSmokeCrackerCampaignEnvelope();
-
-	@JSBody(params = {}, script =
-		"const value = Number(window.__voidscapeCrackerCampaignSmokeCommand);" +
-		"return !!window.__voidscapeDiagnosticsEnabled" +
-		"  && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname === '::1')" +
-		"  && Object.prototype.hasOwnProperty.call(window, '__voidscapeCrackerCampaignSmokeCommand')" +
-		"  && Number.isInteger(value) && value >= 0 && value <= 1000000;")
-	private static native boolean hasWebSmokeCrackerCampaignCommand();
-
-	@JSBody(params = {}, script =
-		"return Number(window.__voidscapeCrackerCampaignSmokeCommand); ")
-	private static native int getWebSmokeCrackerCampaignCommand();
-
-	@JSBody(params = {}, script =
-		"delete window.__voidscapeCrackerCampaignSmokeCommand;")
-	private static native void clearWebSmokeCrackerCampaignCommand();
-
-	@JSBody(params = { "sent", "remaining" }, script =
-		"const previous = window.__voidscapeCrackerCampaignSmokeCommandResult || {};" +
-		"window.__voidscapeCrackerCampaignSmokeCommandResult = {" +
-		"  sequence: Math.max(0, Number(previous.sequence || 0)) + 1," +
-		"  sent: !!sent," +
-		"  remaining: remaining | 0," +
-		"  updatedAt: Date.now()" +
-		"};")
-	private static native void publishWebSmokeCrackerCampaignCommandResult(boolean sent, int remaining);
-
-	@JSBody(params = { "consumed" }, script =
-		"const previous = window.__voidscapeCrackerCampaignSmokeInjection || {};" +
-		"window.__voidscapeCrackerCampaignSmokeInjection = {" +
-		"  sequence: Math.max(0, Number(previous.sequence || 0)) + 1," +
-		"  consumed: !!consumed," +
-		"  updatedAt: Date.now()" +
-		"};")
-	private static native void publishWebSmokeCrackerCampaignEnvelopeResult(boolean consumed);
-
-	@JSBody(params = {}, script =
-		"return !!window.__voidscapeDiagnosticsEnabled;")
-	private static native boolean isWebDiagnosticsEnabled();
 
 	@JSBody(params = {}, script =
 		"if (window.__voidscapeFocusKeyboard) window.__voidscapeFocusKeyboard();" +

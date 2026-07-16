@@ -1,6 +1,7 @@
 package com.openrsc.server.login;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.PlayerLoginData;
 import com.openrsc.server.net.PacketBuilder;
@@ -209,6 +210,7 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 					getChannel().close();
 					return;
 				}
+				reserveNativeLaunchSubscriptionCard(playerId);
 
 				LOGGER.info(getIpAddress() + " - Registration successful");
 				getChannel().writeAndFlush(new PacketBuilder().writeByte((byte) 0).toPacket());
@@ -296,6 +298,7 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 				LOGGER.info(getIpAddress() + " - Registration failed: Player id not found.");
 				return (byte) RegisterLoginResponse.UNSUCCESSFUL;
 			}
+			reserveNativeLaunchSubscriptionCard(playerId);
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Database Exception during validateRegsiter()", e);
 			return (byte) RegisterLoginResponse.UNSUCCESSFUL;
@@ -305,6 +308,23 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 			System.out.println("Register was successful!");
 		}
 		return (byte) RegisterLoginResponse.REGISTER_SUCCESSFUL;
+	}
+
+	private void reserveNativeLaunchSubscriptionCard(final int playerId) {
+		if (playerId <= 0 || !getServer().getConfig().isLaunchSubscriptionCardActive()) {
+			return;
+		}
+		try {
+			getServer().getDatabase().querySavePlayerCacheValue(
+				playerId,
+				0,
+				VoidSubscription.LAUNCH_CARD_CACHE_KEY,
+				String.valueOf(VoidSubscription.LAUNCH_CARD_AVAILABLE)
+			);
+			LOGGER.info("{} - Reserved launch subscription card for {}", getIpAddress(), getUsername());
+		} catch (Exception ex) {
+			LOGGER.error("Unable to reserve launch subscription card for {}", getUsername(), ex);
+		}
 	}
 
 	private boolean isDisallowedUsername(String username) {

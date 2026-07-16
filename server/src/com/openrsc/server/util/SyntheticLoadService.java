@@ -350,6 +350,7 @@ public final class SyntheticLoadService {
 			if (bot.getRegion() != null) {
 				bot.remove();
 			}
+			server.getWorld().getPlayers().remove(bot);
 			server.getWorld().removePlayer(bot.getUsernameHash());
 			bot.setLoggedIn(false);
 		} catch (Exception e) {

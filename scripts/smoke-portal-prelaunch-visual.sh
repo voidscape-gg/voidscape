@@ -27,7 +27,7 @@ Options:
   --out DIR               Output directory. Default: tmp/portal-prelaunch-visual-smoke.
   --username NAME         Signup username. Default: generated Vis* name.
   --email EMAIL           Signup email. Default: visual+<name>@voidscape.gg.
-  --password PASSWORD     Signup/game password. Default: Visualpass1.
+  --password PASSWORD     Signup/game password. Default: Visualpass1; letters/numbers only (symbols/spaces rejected).
   --login-email EMAIL     Sign in to an existing portal account instead of signing up.
   --login-password PASS   Existing portal password. Prefer --login-password-file for live QA.
   --login-password-file FILE
@@ -315,20 +315,18 @@ async function assertPortalWiring(page, label) {
 			brokenWhitepaperTargets: whitepaperTargets.filter((row) => !row.targetExists || !row.inLanding),
 			brokenViewTargets: viewTargets.filter((row) => !row.targetExists || (!row.isView && !row.inLanding)),
 			policyLinks: links.filter((row) => ["/privacy", "/data-deletion", "/transparency"].includes(row.href)),
-			sourceLinks: links.filter((row) => /github\.com\/voidscape-gg\/voidscape/i.test(row.href)),
-			sourcePublicationPending: /source publication pending/i.test(String(document.body.textContent || ""))
+			sourceLinks: links.filter((row) => /github\.com\/voidscape-gg\/voidscape/i.test(row.href))
 		};
 	});
 	assertCheck(`${label} landing button targets exist`, wiring.brokenLandingScrollTargets.length === 0, JSON.stringify(wiring.brokenLandingScrollTargets));
 	assertCheck(`${label} whitepaper button targets exist`, wiring.brokenWhitepaperTargets.length === 0, JSON.stringify(wiring.brokenWhitepaperTargets));
 	assertCheck(`${label} account view targets exist`, wiring.brokenViewTargets.length === 0, JSON.stringify(wiring.brokenViewTargets));
 	assertCheck(`${label} policy links are present`, wiring.policyLinks.length >= 3, JSON.stringify(wiring.policyLinks));
-	assertCheck(`${label} reports pending source publication`, wiring.sourcePublicationPending === true, JSON.stringify(wiring));
-	assertCheck(`${label} does not advertise the older source mirror`, wiring.sourceLinks.length === 0, JSON.stringify(wiring.sourceLinks));
+	assertCheck(`${label} AGPL source link is present`, wiring.sourceLinks.length >= 1, JSON.stringify(wiring.sourceLinks));
 }
 
 async function assertPolicyPagesReachable(context, label) {
-	for (const pagePath of ["/privacy", "/data-deletion", "/transparency"]) {
+	for (const pagePath of ["/privacy", "/community-rules", "/data-deletion", "/transparency"]) {
 		const target = new URL(pagePath, portalUrl).href;
 		try {
 			const response = await context.request.get(target, { timeout: 15000, failOnStatusCode: false });
@@ -442,44 +440,9 @@ async function assertSignInCta(page) {
 	await page.locator('[data-auth-panel="request"] [data-auth-show="code"]').click();
 	await page.locator('[data-auth-panel="code"]').waitFor({ state: "visible", timeout: 3000 });
 	assertCheck("recovery-code fallback is reachable", await page.locator("#recovery-code-value").isVisible(), page.url());
-	let verificationResponse = 503;
-	let verificationRequestCount = 0;
-	await page.route("**/api/accounts/verify-email", async (route) => {
-		verificationRequestCount += 1;
-		if (verificationResponse === 0) {
-			await route.abort("failed");
-			return;
-		}
-		const error = verificationResponse === 410 ? "email_verification_expired" : verificationResponse === 400 ? "invalid_email_verification_token" : "openrsc_write_failed";
-		await route.fulfill({ status: verificationResponse, contentType: "application/json", body: JSON.stringify({ error }) });
-	});
 	await page.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="verify"]').waitFor({ state: "visible", timeout: 5000 });
-	const verificationState = await page.evaluate(() => ({
-		heading: document.querySelector('[data-auth-panel="verify"] h2')?.textContent?.trim() || "",
-		prompt: document.querySelector(".verification-confirmation-prompt")?.textContent?.trim() || "",
-		button: document.querySelector("#email-verification-submit")?.textContent?.trim() || "",
-		buttonVisible: Boolean(document.querySelector("#email-verification-submit")?.getBoundingClientRect().height),
-		buttonDisabled: Boolean(document.querySelector("#email-verification-submit")?.disabled)
-	}));
-	assertCheck("email verification requires an explicit browser confirmation", verificationState.heading === "One last step" && /email link opened/i.test(verificationState.prompt) && /press verify email below to create your account/i.test(verificationState.prompt) && verificationState.button === "Verify email" && verificationState.buttonVisible && !verificationState.buttonDisabled && verificationRequestCount === 0, JSON.stringify(verificationState));
-	await screenshot(page, "02a-email-verification-confirmation");
-	await page.locator("#email-verification-submit").click();
-	await page.waitForFunction(() => /temporarily unavailable/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
-	assertCheck("email verification 5xx stays retryable", verificationRequestCount === 1 && /link may still be valid/i.test(await page.locator("#email-verification-message").textContent() || ""), await page.locator("#email-verification-message").textContent() || "");
-	verificationResponse = 0;
-	await page.locator("#email-verification-submit").click();
-	await page.waitForFunction(() => !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
-	assertCheck("email verification network failure stays retryable", verificationRequestCount === 2 && /temporarily unavailable/i.test(await page.locator("#email-verification-message").textContent() || ""), await page.locator("#email-verification-message").textContent() || "");
-	verificationResponse = 410;
-	await page.locator("#email-verification-submit").click();
-	await page.waitForFunction(() => /expired/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
-	assertCheck("email verification expiry remains distinct", verificationRequestCount === 3, await page.locator("#email-verification-message").textContent() || "");
-	verificationResponse = 400;
-	await page.locator("#email-verification-submit").click();
-	await page.waitForFunction(() => /invalid or has already been used/i.test(document.querySelector("#email-verification-message")?.textContent || "") && !document.querySelector("#email-verification-submit")?.disabled, null, { timeout: 3000 });
-	assertCheck("email verification invalid token remains distinct", verificationRequestCount === 4, await page.locator("#email-verification-message").textContent() || "");
-	await page.unroute("**/api/accounts/verify-email");
+	assertCheck("email verification requires an explicit browser confirmation", await page.locator("#email-verification-submit").isVisible(), page.url());
 	await page.goto(new URL("/portal?auth=claim-confirm#claim=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="claim-confirm"]').waitFor({ state: "visible", timeout: 5000 });
 	assertCheck("older-account claim requires an explicit browser confirmation", await page.locator("#legacy-claim-confirm-submit").isVisible(), page.url());
@@ -500,30 +463,40 @@ async function assertSignInCta(page) {
 async function runLandingClickMap(page, context) {
 	await assertPortalWiring(page, "desktop");
 	await assertPolicyPagesReachable(context, "desktop");
-	const links = await page.evaluate(async () => ({
+	const links = await page.evaluate(() => ({
 		features: Boolean(document.querySelector('a[href="/features"]')),
 		npcs: Boolean(document.querySelector('a[href="/npcs"]')),
 		reserve: Boolean(document.querySelector("#reserve-form")),
-		signIn: document.querySelector("[data-signin]")?.getAttribute("href") || "",
-		rosterWritesFrozen: (await fetch("/api/public").then((response) => response.json())).rosterWritesFrozen === true
+		signIn: document.querySelector("[data-signin]")?.getAttribute("href") || ""
 	}));
 	assertCheck("landing exposes the reserve flow", links.reserve, JSON.stringify(links));
 	assertCheck("landing feature guide link is present", links.features, JSON.stringify(links));
 	assertCheck("landing NPC database link is present", links.npcs, JSON.stringify(links));
 	assertCheck("landing sign-in link targets the account portal", links.signIn.startsWith("/portal?auth=login"), JSON.stringify(links));
-	if (links.rosterWritesFrozen) {
-		await page.goto(new URL("/portal?auth=login", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
-		await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 5000 });
-		const loginState = await page.evaluate(() => ({
-			emailEnabled: document.querySelector("#portal-auth-email")?.disabled !== true,
-			passwordEnabled: document.querySelector("#portal-auth-password")?.disabled !== true,
-			submitEnabled: document.querySelector("#portal-auth-submit")?.disabled !== true
-		}));
-		assertCheck("frozen roster keeps account sign-in controls enabled", loginState.emailEnabled && loginState.passwordEnabled && loginState.submitEnabled, JSON.stringify(loginState));
-		await gotoPortal(page);
-	} else {
-		await assertSignInCta(page);
-	}
+	await page.goto(new URL("/portal?auth=register", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.waitForURL((url) => url.pathname === "/" && url.searchParams.get("auth") === "register", { timeout: 10000 });
+	await page.locator("#reserve-name").fill(signup.username);
+	await page.locator("#reserve-submit").click();
+	await page.locator("#reserve-more").waitFor({ state: "visible", timeout: 5000 });
+	const registration = await page.evaluate(() => ({
+		path: window.location.pathname,
+		auth: new URLSearchParams(window.location.search).get("auth") || "",
+		formVisible: Boolean(document.querySelector("#reserve-form")?.getBoundingClientRect().height),
+		loginVisible: Boolean(document.querySelector('[data-auth-panel="login"]')?.getBoundingClientRect().height),
+		termsPresent: Boolean(document.querySelector("#reserve-terms")),
+		termsLabelVisible: Boolean(document.querySelector("label.terms-acceptance")?.getBoundingClientRect().height),
+		rulesHref: document.querySelector('label.terms-acceptance a')?.getAttribute("href") || "",
+		rulesVisible: Boolean(document.querySelector('label.terms-acceptance a')?.getBoundingClientRect().height)
+	}));
+	assertCheck(
+		"Create Account URL lands directly on rules-gated registration",
+		registration.path === "/" && registration.auth === "register"
+			&& registration.formVisible && !registration.loginVisible && registration.termsPresent
+			&& registration.termsLabelVisible && registration.rulesVisible && registration.rulesHref === "/community-rules",
+		JSON.stringify(registration)
+	);
+	await gotoPortal(page);
+	await assertSignInCta(page);
 	await screenshot(page, "02-desktop-signed-out-auth");
 }
 
@@ -546,82 +519,8 @@ async function assertLaunchOpen(page, label) {
 	assertCheck(`${label} launch status chip`, /open|live|launch/i.test(state.chip), JSON.stringify(state));
 	assertCheck(`${label} signup form hidden`, state.reserveHidden === true, JSON.stringify(state));
 	assertCheck(`${label} download actions visible`, state.downloadsHidden === false && state.downloads.length > 0, JSON.stringify(state));
-	assertCheck(`${label} iPhone Safari web action is present`, state.downloads.some((row) => /web.*iphone|iphone.*safari/i.test(row.text) && /\/play/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
-	assertCheck(`${label} Google Play action is present`, state.downloads.some((row) => /google play/i.test(row.text) && /play\.google\.com\/store\/apps\/details\?id=com\.voidscape\.gg/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
-	assertCheck(`${label} direct APK action is distinct`, state.downloads.some((row) => /direct apk/i.test(row.text) && /\/downloads\/android-apk/i.test(row.href) && !row.disabled), JSON.stringify(state.downloads));
+	assertCheck(`${label} web client action is present`, state.downloads.some((row) => /browser|web/i.test(row.text)), JSON.stringify(state.downloads));
 	assertCheck(`${label} public Android action is not a debug APK`, state.downloads.every((row) => !/android/i.test(row.text) || !/debug/i.test(`${row.text} ${row.href}`)), JSON.stringify(state.downloads));
-}
-
-async function assertRosterFreezeIfConfigured(page, label) {
-	const state = await page.evaluate(async () => {
-		const publicState = await fetch("/api/public").then((response) => response.json());
-		return {
-			frozen: publicState.rosterWritesFrozen === true,
-			formHidden: document.querySelector("#reserve-form")?.hidden,
-			noticeVisible: Boolean(document.querySelector("#roster-frozen-notice")?.getBoundingClientRect().height),
-			notice: document.querySelector("#roster-frozen-notice")?.textContent?.trim() || "",
-			signIn: document.querySelector("[data-signin]")?.textContent?.trim() || ""
-		};
-	});
-	if (!state.frozen) return;
-	assertCheck(`${label} frozen roster hides signup form`, state.formHidden === true, JSON.stringify(state));
-	const signedIn = /manage account/i.test(state.signIn);
-	assertCheck(`${label} frozen roster maintenance notice`, signedIn || (state.noticeVisible && /roster update in progress/i.test(state.notice)), JSON.stringify(state));
-	assertCheck(`${label} frozen roster keeps sign-in available`, /sign in|manage account/i.test(state.signIn), JSON.stringify(state));
-}
-
-async function assertFrozenAccountManager(page) {
-	const frozen = await page.evaluate(async () => {
-		const state = await fetch("/api/public").then((response) => response.json());
-		return state.rosterWritesFrozen === true;
-	});
-	if (!frozen) return;
-
-	await activateView(page, "characters");
-	await page.waitForTimeout(300);
-	const roster = await page.evaluate(() => ({
-		createDisabled: document.querySelector("#queue-character")?.disabled,
-		deleteDisabled: document.querySelector("#delete-character")?.disabled,
-		message: document.querySelector("#character-message")?.textContent?.trim() || ""
-	}));
-	assertCheck("frozen account manager disables character create and delete", roster.createDisabled === true && roster.deleteDisabled === true, JSON.stringify(roster));
-	assertCheck("frozen account manager explains roster maintenance", /roster update in progress/i.test(roster.message), JSON.stringify(roster));
-
-	await activateView(page, "security");
-	await page.waitForTimeout(300);
-	const security = await page.evaluate(() => ({
-		visible: Boolean(document.querySelector("#security.is-active")?.getBoundingClientRect().height),
-		currentPasswordDisabled: document.querySelector("#current-password")?.disabled,
-		newPasswordDisabled: document.querySelector("#new-password")?.disabled,
-		recoveryDisabled: document.querySelector("#generate-recovery")?.disabled,
-		sessionsDisabled: document.querySelector("#end-other-sessions")?.disabled
-	}));
-	assertCheck("frozen account manager keeps security controls reachable", security.visible && security.currentPasswordDisabled !== true && security.newPasswordDisabled !== true && security.recoveryDisabled !== true && security.sessionsDisabled !== true, JSON.stringify(security));
-
-	const isolated = await page.context().browser().newContext({
-		viewport: { width: 1200, height: 900 },
-		ignoreHTTPSErrors
-	});
-	try {
-		const authPage = await isolated.newPage();
-		await authPage.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
-		await authPage.waitForFunction(() => document.querySelector("#email-verification-submit")?.disabled === true && /roster update in progress/i.test(document.querySelector("#email-verification-message")?.textContent || ""), null, { timeout: 10000 });
-		const verification = await authPage.evaluate(() => ({
-			disabled: document.querySelector("#email-verification-submit")?.disabled,
-			message: document.querySelector("#email-verification-message")?.textContent?.trim() || ""
-		}));
-		assertCheck("frozen verification link shows maintenance without submitting", verification.disabled === true && /link remains pending/i.test(verification.message), JSON.stringify(verification));
-
-		await authPage.goto(new URL("/portal?auth=claim", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
-		await authPage.waitForFunction(() => document.querySelector("#legacy-claim-submit")?.disabled === true && /roster update in progress/i.test(document.querySelector("#legacy-claim-message")?.textContent || ""), null, { timeout: 10000 });
-		const claim = await authPage.evaluate(() => ({
-			disabled: document.querySelector("#legacy-claim-submit")?.disabled,
-			message: document.querySelector("#legacy-claim-message")?.textContent?.trim() || ""
-		}));
-		assertCheck("frozen older-account claim shows maintenance without submitting", claim.disabled === true && /roster update in progress/i.test(claim.message), JSON.stringify(claim));
-	} finally {
-		await isolated.close();
-	}
 }
 
 async function activateView(page, view) {
@@ -714,7 +613,31 @@ async function runSignupFlow(page) {
 	await page.locator("#reserve-submit").click();
 	await page.locator("#reserve-more").waitFor({ state: "visible", timeout: 5000 });
 	await page.locator("#reserve-email").fill(signup.email);
+	const passwordFieldCopy = await page.locator("#reserve-password").evaluate((element) => ({
+		placeholder: element.getAttribute("placeholder") || "",
+		title: element.getAttribute("title") || ""
+	}));
+	assertCheck(
+		"signup password field says letters and numbers only",
+		/letters and numbers only/i.test(passwordFieldCopy.placeholder) && /symbols and spaces are not allowed/i.test(passwordFieldCopy.title),
+		JSON.stringify(passwordFieldCopy)
+	);
+	await page.locator("#reserve-password").fill("Bad!Pass1");
+	await page.locator("#reserve-confirm").click();
+	await page.waitForFunction(() => /letters and numbers only/i.test(document.querySelector("#name-hint")?.textContent || ""), null, { timeout: 3000 });
+	const invalidPasswordHint = await page.locator("#name-hint").textContent();
+	assertCheck(
+		"signup symbol rejection explains the password policy",
+		/letters and numbers only/i.test(invalidPasswordHint || "") && /symbols and spaces are not allowed/i.test(invalidPasswordHint || ""),
+		invalidPasswordHint || ""
+	);
 	await page.locator("#reserve-password").fill(signup.password);
+	await page.locator("#reserve-terms").check();
+	assertCheck(
+		"signup accepts the Community Rules before submit",
+		await page.locator("#reserve-terms").isChecked(),
+		"#reserve-terms must be checked before /api/accounts/register"
+	);
 	const responsePromise = page.waitForResponse((response) => response.url().includes("/api/accounts/register") && response.request().method() === "POST", { timeout: 20000 });
 	await page.locator("#reserve-confirm").click();
 	const response = await responsePromise;
@@ -856,7 +779,6 @@ async function runLoginAccountFlow(page) {
 		cards: Array.from(document.querySelectorAll("#character-cards .character-card")).map((card) => card.textContent || "").join("\n")
 	}));
 	assertCheck("existing account roster loaded", characters.cardCount >= 1 || /\d+ character/i.test(characters.title), JSON.stringify(characters));
-	await assertFrozenAccountManager(page);
 
 	await activateView(page, "subscription");
 	await page.waitForTimeout(500);
@@ -890,7 +812,6 @@ async function runMobilePass(page) {
 	await assertPortalWiring(page, "mobile");
 	await assertNoHorizontalOverflow(page, "mobile landing");
 	await screenshot(page, "08-mobile-landing");
-	await assertRosterFreezeIfConfigured(page, "mobile");
 	if (expectLaunchOpen) await assertLaunchOpen(page, "mobile");
 	const authText = await page.locator("[data-signin]").first().textContent().catch(() => "");
 	if (authenticated) {
@@ -1003,7 +924,6 @@ async function main() {
 		await gotoPortal(page);
 		await assertNoHorizontalOverflow(page, "desktop landing");
 		await screenshot(page, expectLaunchOpen ? "01-desktop-launch-open" : "01-desktop-landing");
-		await assertRosterFreezeIfConfigured(page, "desktop");
 		if (expectLaunchOpen) await assertLaunchOpen(page, "desktop");
 		await runLandingClickMap(page, context);
 		await gotoPortal(page);

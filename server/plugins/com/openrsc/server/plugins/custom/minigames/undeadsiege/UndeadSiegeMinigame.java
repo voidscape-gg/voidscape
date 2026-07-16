@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public final class UndeadSiegeMinigame implements KillNpcTrigger, PlayerDeathTrigger,
 	PlayerLoginTrigger, PlayerLogoutTrigger, AttackNpcTrigger, PlayerRangeNpcTrigger, SpellNpcTrigger {
@@ -38,7 +37,6 @@ public final class UndeadSiegeMinigame implements KillNpcTrigger, PlayerDeathTri
 	private static final Logger LOGGER = LogManager.getLogger(UndeadSiegeMinigame.class);
 	private static volatile UndeadSiegeMinigame instance;
 
-	private final AtomicInteger nextInstanceId = new AtomicInteger(UndeadSiegeConfig.INSTANCE_ID_START);
 	private final Map<Long, UndeadSiegeInstance> playerSessions = new ConcurrentHashMap<Long, UndeadSiegeInstance>();
 	private final Map<Integer, UndeadSiegeInstance> instanceSessions = new ConcurrentHashMap<Integer, UndeadSiegeInstance>();
 	private final Map<UUID, UndeadSiegeInstance> npcSessions = new ConcurrentHashMap<UUID, UndeadSiegeInstance>();
@@ -169,7 +167,7 @@ public final class UndeadSiegeMinigame implements KillNpcTrigger, PlayerDeathTri
 			return;
 		}
 
-		int instanceId = nextInstanceId.getAndIncrement();
+		int instanceId = leader.getWorld().allocateInstanceId();
 		UndeadSiegeInstance session = new UndeadSiegeInstance(this, leader.getWorld(), instanceId, participants);
 		instanceSessions.put(instanceId, session);
 		for (Player participant : participants) {

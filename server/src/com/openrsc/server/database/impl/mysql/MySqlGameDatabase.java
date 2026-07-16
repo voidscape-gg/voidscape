@@ -1,6 +1,7 @@
 package com.openrsc.server.database.impl.mysql;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.achievement.AchievementReward;
 import com.openrsc.server.content.achievement.AchievementTask;
@@ -8,8 +9,6 @@ import com.openrsc.server.database.DatabaseType;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.JDBCDatabase;
 import com.openrsc.server.database.JDBCDatabaseConnection;
-import com.openrsc.server.database.PortalCommerceLedger;
-import com.openrsc.server.database.WorldAchievementLedger;
 import com.openrsc.server.database.impl.mysql.queries.logging.LoginLog;
 import com.openrsc.server.database.queries.NamedParameterQuery;
 import com.openrsc.server.database.queries.Queries;
@@ -28,6 +27,8 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.util.checked.CheckedRunnable;
 import com.openrsc.server.util.checked.CheckedSupplier;
 import com.openrsc.server.util.rsc.DataConversions;
+import com.voidscape.duelproof.DuelProofCrypto;
+import com.voidscape.duelproof.DuelProofSpec;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -36,6 +37,15 @@ import java.sql.*;
 import java.util.*;
 
 public class MySqlGameDatabase extends JDBCDatabase {
+	private static final int DUEL_RECEIPT_HISTORY_LIMIT = 10;
+	private static final int DUEL_PROOF_HASH_BYTES = 32;
+	private static final int DUEL_PROOF_CONTEXT_MAX_BYTES = 65535;
+	private static final String DUEL_PROOF_OPEN_STATUSES = "('"
+		+ DuelProofAttemptRecord.STATUS_SERVER_COMMITTED + "','"
+		+ DuelProofAttemptRecord.STATUS_CLIENT_COMMITTED + "','"
+		+ DuelProofAttemptRecord.STATUS_CLIENT_REVEALED + "','"
+		+ DuelProofAttemptRecord.STATUS_LOCKED + "','"
+		+ DuelProofAttemptRecord.STATUS_COMBAT + "')";
 
 	private final QueriesManager queriesManager;
 	private final Queries queries;
@@ -182,11 +192,9 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		long newNameHash = DataConversions.usernameToHash(newName);
 		long oldNameHash = DataConversions.usernameToHash(oldName);
 
-		try {
-			final PreparedStatement statementPlayers = getConnection().prepareStatement(getMySqlQueries().renamePlayer);
-			final PreparedStatement statementFriends = getConnection().prepareStatement(getMySqlQueries().renamePlayerUpdateFriendsList);
-			final PreparedStatement statementIgnores = getConnection().prepareStatement(getMySqlQueries().renamePlayerUpdateIgnoresList);
-
+		try (final PreparedStatement statementPlayers = getConnection().prepareStatement(getMySqlQueries().renamePlayer);
+			 final PreparedStatement statementFriends = getConnection().prepareStatement(getMySqlQueries().renamePlayerUpdateFriendsList);
+			 final PreparedStatement statementIgnores = getConnection().prepareStatement(getMySqlQueries().renamePlayerUpdateIgnoresList)) {
 			statementPlayers.setString(1, newName);
 			statementFriends.setString(1, newName);
 			statementIgnores.setLong(1, newNameHash);
@@ -904,45 +912,6 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
-	public PortalCommerceEntitlement queryOldestPendingPortalCommerceEntitlement(final int accountId)
-		throws GameDatabaseException {
-		return PortalCommerceLedger.loadOldestPending(getConnection(), accountId);
-	}
-
-	@Override
-	public PortalCommerceEntitlement queryPortalCommerceEntitlement(final long entitlementId)
-		throws GameDatabaseException {
-		return PortalCommerceLedger.loadById(getConnection(), entitlementId);
-	}
-
-	@Override
-	public WorldAchievementRecord queryLoadWorldAchievementRecord(final String seasonId,
-		final String recordKey) throws GameDatabaseException {
-		return WorldAchievementLedger.loadRecord(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			seasonId, recordKey);
-	}
-
-	@Override
-	public WorldPkEvent queryLoadWorldPkEvent(final String deathId) throws GameDatabaseException {
-		return WorldAchievementLedger.loadPkEvent(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			deathId);
-	}
-
-	@Override
-	public Long queryLoadLastQualifiedWorldPkPairTime(final String seasonId,
-		final int pairLowPlayerId, final int pairHighPlayerId) throws GameDatabaseException {
-		return WorldAchievementLedger.loadLastQualifiedPairTime(getConnection(),
-			getServer().getConfig().DB_TABLE_PREFIX, seasonId, pairLowPlayerId, pairHighPlayerId);
-	}
-
-	@Override
-	public WorldPkStreak queryLoadWorldPkStreak(final String seasonId, final int playerId)
-		throws GameDatabaseException {
-		return WorldAchievementLedger.loadPkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			seasonId, playerId);
-	}
-
-	@Override
 	public String queryPlayerCacheOwner(final String cacheKey) throws GameDatabaseException {
 		try (final PreparedStatement statement = statementFromString(getMySqlQueries().playerCacheOwner, cacheKey);
 			 final ResultSet result = statement.executeQuery()) {
@@ -969,6 +938,35 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
 		return null;
+	}
+
+	@Override
+	public PlayerCacheOwner[] queryPlayerCacheOwners(final String cacheKey, final int limit)
+		throws GameDatabaseException {
+		final ArrayList<PlayerCacheOwner> owners = new ArrayList<>();
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String query = "SELECT p.`id` AS `playerId`, p.`username`, pc.`value` AS `cacheValue` "
+			+ "FROM `" + prefix + "player_cache` pc JOIN `" + prefix + "players` p "
+			+ "ON p.`id` = pc.`playerID` WHERE pc.`key`=? "
+			+ "AND pc.`dbid` = (SELECT MAX(latest.`dbid`) FROM `" + prefix + "player_cache` latest "
+			+ "WHERE latest.`playerID` = pc.`playerID` AND latest.`key` = pc.`key`) "
+			+ "ORDER BY LOWER(p.`username`) ASC, p.`id` ASC LIMIT ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, cacheKey);
+			statement.setInt(2, Math.max(1, limit));
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					owners.add(new PlayerCacheOwner(
+						result.getInt("playerId"),
+						result.getString("username"),
+						result.getString("cacheValue")
+					));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return owners.toArray(new PlayerCacheOwner[0]);
 	}
 
 	@Override
@@ -1030,15 +1028,18 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
-	public VoidArenaStats[] queryTopVoidArenaStats(final String seasonId, final int limit) throws GameDatabaseException {
+	public VoidArenaStats[] queryTopVoidArenaStats(final String seasonId, final int minimumMatches,
+												 final int limit) throws GameDatabaseException {
 		final ArrayList<VoidArenaStats> list = new ArrayList<>();
 		final String query = "SELECT v.*, p.username FROM `" + getServer().getConfig().DB_TABLE_PREFIX
 			+ "voidarena_ranked_stats` v JOIN `" + getServer().getConfig().DB_TABLE_PREFIX
 			+ "players` p ON p.ID = v.playerID WHERE v.seasonID = ? "
-			+ "ORDER BY v.rating DESC, v.wins DESC, v.losses ASC LIMIT ?";
+			+ "AND (v.wins + v.losses) >= ? "
+			+ "ORDER BY v.rating DESC, v.wins DESC, v.losses ASC, v.playerID ASC LIMIT ?";
 		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
 			statement.setString(1, seasonId);
-			statement.setInt(2, Math.max(1, limit));
+			statement.setInt(2, Math.max(0, minimumMatches));
+			statement.setInt(3, Math.max(1, limit));
 			try (final ResultSet result = statement.executeQuery()) {
 				while (result.next()) {
 					list.add(readVoidArenaStats(result, result.getString("username")));
@@ -1131,6 +1132,931 @@ public class MySqlGameDatabase extends JDBCDatabase {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
 		return 0;
+	}
+
+	@Override
+	public int queryCountVoidArenaMatchSessions(final String seasonId) throws GameDatabaseException {
+		requireVoidArenaSeasonId(seasonId);
+		final String query = "SELECT COUNT(*) AS sessionCount FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` WHERE `season_id` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			try (final ResultSet result = statement.executeQuery()) {
+				return result.next() ? result.getInt("sessionCount") : 0;
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public int queryCountActiveVoidArenaMatchSessions(final String seasonId)
+		throws GameDatabaseException {
+		requireVoidArenaSeasonId(seasonId);
+		final String query = "SELECT COUNT(*) AS sessionCount FROM `"
+			+ getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` WHERE `season_id` = ? AND `status` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, seasonId);
+			statement.setString(2, VoidArenaMatchSessionRecord.STATUS_ACTIVE);
+			try (final ResultSet result = statement.executeQuery()) {
+				return result.next() ? result.getInt("sessionCount") : 0;
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public VoidArenaMatchSessionRecord[] queryRecentVoidArenaMatchSessions(final String seasonId,
+																		   final int limit)
+		throws GameDatabaseException {
+		return queryRecentVoidArenaMatchSessionsInternal(seasonId, null, limit);
+	}
+
+	@Override
+	public VoidArenaMatchSessionRecord[] queryRecentVoidArenaMatchSessionsForPlayer(
+		final String seasonId, final int playerId, final int limit) throws GameDatabaseException {
+		if (playerId <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Void Arena session history requires a positive player id");
+		}
+		return queryRecentVoidArenaMatchSessionsInternal(seasonId, playerId, limit);
+	}
+
+	@Override
+	public VoidArenaMatchSessionRecord queryVoidArenaMatchSession(final String matchId)
+		throws GameDatabaseException {
+		requireCanonicalVoidArenaMatchId(matchId);
+		final String query = "SELECT * FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` WHERE `match_id` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, matchId);
+			try (final ResultSet result = statement.executeQuery()) {
+				return result.next() ? readVoidArenaMatchSessionRecord(result) : null;
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	private VoidArenaMatchSessionRecord[] queryRecentVoidArenaMatchSessionsInternal(
+		final String seasonId, final Integer playerId, final int limit) {
+		requireVoidArenaSeasonId(seasonId);
+		final ArrayList<VoidArenaMatchSessionRecord> records = new ArrayList<>();
+		final StringBuilder query = new StringBuilder("SELECT * FROM `")
+			.append(getServer().getConfig().DB_TABLE_PREFIX)
+			.append("voidarena_ranked_match_sessions` WHERE `season_id` = ?");
+		if (playerId != null) {
+			query.append(" AND (`player_a_id` = ? OR `player_b_id` = ?)");
+		}
+		query.append(" ORDER BY COALESCE(`ended_at_ms`, `started_at_ms`) DESC, `match_id` DESC LIMIT ?");
+		try (final PreparedStatement statement = getConnection().prepareStatement(query.toString())) {
+			int parameter = 1;
+			statement.setString(parameter++, seasonId);
+			if (playerId != null) {
+				statement.setInt(parameter++, playerId);
+				statement.setInt(parameter++, playerId);
+			}
+			statement.setInt(parameter, Math.max(1, limit));
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					records.add(readVoidArenaMatchSessionRecord(result));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return records.toArray(new VoidArenaMatchSessionRecord[0]);
+	}
+
+	@Override
+	public VoidArenaPairAudit queryVoidArenaPairAudit(final int playerAId, final int playerBId,
+		final long rollingCutoffMs, final long utcDayStartMs) throws GameDatabaseException {
+		requireCanonicalVoidArenaPair(playerAId, playerBId);
+		if (rollingCutoffMs <= 0 || utcDayStartMs <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Void Arena pair audit cutoffs must be positive");
+		}
+		final String query = "SELECT MAX(CASE WHEN `ended_at_ms` >= ? THEN `ended_at_ms` ELSE NULL END) "
+			+ "AS `lastRatedResultAtMs`, COALESCE(SUM(CASE WHEN `ended_at_ms` >= ? "
+			+ "THEN 1 ELSE 0 END), 0) AS `decisiveResultsUtcDay` "
+			+ "FROM `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` WHERE `player_a_id` = ? AND `player_b_id` = ? "
+			+ "AND `status` = ? AND `result_reason` IN (?, ?)";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setLong(1, rollingCutoffMs);
+			statement.setLong(2, utcDayStartMs);
+			statement.setInt(3, playerAId);
+			statement.setInt(4, playerBId);
+			statement.setString(5, VoidArenaMatchSessionRecord.STATUS_SETTLED);
+			statement.setString(6, VoidArenaMatchSessionRecord.REASON_DEATH);
+			statement.setString(7, VoidArenaMatchSessionRecord.REASON_FORFEIT);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					final long lastRatedResultAtMs = result.getLong("lastRatedResultAtMs");
+					return new VoidArenaPairAudit(result.wasNull() ? 0L : lastRatedResultAtMs,
+						result.getInt("decisiveResultsUtcDay"));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return new VoidArenaPairAudit(0L, 0);
+	}
+
+	@Override
+	public long queryInsertDuelReceipt(final DuelReceipt receipt) throws GameDatabaseException {
+		validateDuelReceipt(receipt);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String insertReceipt = "INSERT INTO `" + prefix
+			+ "duel_receipts` (`started_at_ms`, `completed_at_ms`) VALUES (?, ?)";
+		final String insertParticipant = "INSERT INTO `" + prefix
+			+ "duel_receipt_participants` (`duel_id`, `player_id`, `player_username`, `won`) VALUES (?, ?, ?, ?)";
+		final String insertStake = "INSERT INTO `" + prefix
+			+ "duel_receipt_stakes` (`duel_id`, `owner_player_id`, `slot_index`, `catalog_id`, `amount`, `noted`) "
+			+ "VALUES (?, ?, ?, ?, ?, ?)";
+		final String insertSwing = "INSERT INTO `" + prefix
+			+ "duel_receipt_swings` (`duel_id`, `actor_player_id`, `swing_number`, `combat_style`, `did_hit`, `damage`) "
+			+ "VALUES (?, ?, ?, ?, ?, ?)";
+
+		try {
+			final long duelId;
+			try (final PreparedStatement statement = getConnection().prepareStatement(insertReceipt,
+				Statement.RETURN_GENERATED_KEYS)) {
+				statement.setLong(1, receipt.startedAt);
+				statement.setLong(2, receipt.completedAt);
+				statement.executeUpdate();
+				try (final ResultSet generatedKeys = statement.getGeneratedKeys()) {
+					if (!generatedKeys.next()) {
+						throw new SQLException("Duel receipt insert did not return a generated ID");
+					}
+					duelId = generatedKeys.getLong(1);
+				}
+			}
+
+			try (final PreparedStatement statement = getConnection().prepareStatement(insertParticipant)) {
+				for (final DuelReceiptParticipant participant : receipt.participants) {
+					statement.setLong(1, duelId);
+					statement.setInt(2, participant.playerId);
+					statement.setString(3, participant.username);
+					statement.setInt(4, participant.won ? 1 : 0);
+					statement.addBatch();
+				}
+				statement.executeBatch();
+			}
+
+			if (!receipt.stakes.isEmpty()) {
+				try (final PreparedStatement statement = getConnection().prepareStatement(insertStake)) {
+					for (final DuelReceiptStake stake : receipt.stakes) {
+						statement.setLong(1, duelId);
+						statement.setInt(2, stake.ownerPlayerId);
+						statement.setInt(3, stake.slot);
+						statement.setInt(4, stake.catalogId);
+						statement.setInt(5, stake.amount);
+						statement.setInt(6, stake.noted ? 1 : 0);
+						statement.addBatch();
+					}
+					statement.executeBatch();
+				}
+			}
+
+			if (!receipt.swings.isEmpty()) {
+				try (final PreparedStatement statement = getConnection().prepareStatement(insertSwing)) {
+					for (final DuelReceiptSwing swing : receipt.swings) {
+						statement.setLong(1, duelId);
+						statement.setInt(2, swing.actorPlayerId);
+						statement.setInt(3, swing.swingNumber);
+						statement.setInt(4, swing.combatStyle);
+						statement.setInt(5, swing.didHit ? 1 : 0);
+						statement.setInt(6, swing.damage);
+						statement.addBatch();
+					}
+					statement.executeBatch();
+				}
+			}
+			return duelId;
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public DuelReceiptHistoryEntry[] queryRecentDuelReceiptsForPlayer(final int requesterPlayerId)
+		throws GameDatabaseException {
+		final ArrayList<DuelReceiptHistoryEntry> history = new ArrayList<>();
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String query = "SELECT d.`duel_id`, d.`started_at_ms`, d.`completed_at_ms`, "
+			+ "requester.`player_id` AS `requester_player_id`, "
+			+ "requester.`player_username` AS `requester_username`, requester.`won` AS `requester_won`, "
+			+ "opponent.`player_id` AS `opponent_player_id`, "
+			+ "opponent.`player_username` AS `opponent_username`, opponent.`won` AS `opponent_won` "
+			+ "FROM `" + prefix + "duel_receipts` d "
+			+ "JOIN `" + prefix + "duel_receipt_participants` requester "
+			+ "ON requester.`duel_id` = d.`duel_id` AND requester.`player_id` = ? "
+			+ "JOIN `" + prefix + "duel_receipt_participants` opponent "
+			+ "ON opponent.`duel_id` = d.`duel_id` AND opponent.`player_id` <> requester.`player_id` "
+			+ "ORDER BY d.`completed_at_ms` DESC, d.`duel_id` DESC LIMIT " + DUEL_RECEIPT_HISTORY_LIMIT;
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, requesterPlayerId);
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					history.add(readDuelReceiptHistoryEntry(result));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return history.toArray(new DuelReceiptHistoryEntry[0]);
+	}
+
+	@Override
+	public DuelReceiptDetail queryDuelReceiptDetail(final long duelId, final int requesterPlayerId)
+		throws GameDatabaseException {
+		final DuelReceiptHistoryEntry header = queryDuelReceiptHeader(duelId, requesterPlayerId);
+		if (header == null) {
+			return null;
+		}
+
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final ArrayList<DuelReceiptStake> stakes = new ArrayList<>();
+		final String stakeQuery = "SELECT stake.`owner_player_id`, stake.`slot_index`, stake.`catalog_id`, "
+			+ "stake.`amount`, stake.`noted` FROM `" + prefix + "duel_receipt_stakes` stake "
+			+ "JOIN `" + prefix + "duel_receipt_participants` authorized "
+			+ "ON authorized.`duel_id` = stake.`duel_id` AND authorized.`player_id` = ? "
+			+ "WHERE stake.`duel_id` = ? "
+			+ "ORDER BY stake.`owner_player_id`, stake.`slot_index`";
+		try (final PreparedStatement statement = getConnection().prepareStatement(stakeQuery)) {
+			statement.setInt(1, requesterPlayerId);
+			statement.setLong(2, duelId);
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					stakes.add(new DuelReceiptStake(
+						result.getInt("owner_player_id"),
+						result.getInt("slot_index"),
+						result.getInt("catalog_id"),
+						result.getInt("amount"),
+						result.getBoolean("noted")
+					));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		final ArrayList<DuelReceiptSwing> requesterSwings = new ArrayList<>();
+		final String swingQuery = "SELECT swing.`actor_player_id`, swing.`swing_number`, swing.`combat_style`, "
+			+ "swing.`did_hit`, swing.`damage` FROM `" + prefix + "duel_receipt_swings` swing "
+			+ "JOIN `" + prefix + "duel_receipt_participants` authorized "
+			+ "ON authorized.`duel_id` = swing.`duel_id` AND authorized.`player_id` = ? "
+			+ "WHERE swing.`duel_id` = ? AND swing.`actor_player_id` = ? "
+			+ "ORDER BY swing.`swing_number`";
+		try (final PreparedStatement statement = getConnection().prepareStatement(swingQuery)) {
+			statement.setInt(1, requesterPlayerId);
+			statement.setLong(2, duelId);
+			statement.setInt(3, requesterPlayerId);
+			try (final ResultSet result = statement.executeQuery()) {
+				while (result.next()) {
+					requesterSwings.add(new DuelReceiptSwing(
+						result.getInt("actor_player_id"),
+						result.getInt("swing_number"),
+						result.getInt("combat_style"),
+						result.getBoolean("did_hit"),
+						result.getInt("damage")
+					));
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		final DuelProofWitnessRecord proof = queryVerifiedDuelProofWitness(duelId, header);
+		return new DuelReceiptDetail(header, stakes, requesterSwings, proof);
+	}
+
+	private DuelProofWitnessRecord queryVerifiedDuelProofWitness(final long duelId,
+													 final DuelReceiptHistoryEntry header) {
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String query = "SELECT witness.`proof_id`, witness.`witness_version`, "
+			+ "witness.`witness_bytes`, witness.`witness_hash32`, witness.`starter_ordinal`, "
+			+ "witness.`swing_count`, witness.`winner_player_id`, witness.`terminal_cause`, "
+			+ "witness.`finished_at_ms` FROM `" + prefix + "duel_proof_attempts` attempt "
+			+ "JOIN `" + prefix + "duel_proof_witnesses` witness "
+			+ "ON witness.`proof_id` = attempt.`proof_id` "
+			+ "WHERE attempt.`duel_id` = ? AND attempt.`status` = ? "
+			+ "AND attempt.`finished_at_ms` = witness.`finished_at_ms` "
+			+ "AND witness.`finished_at_ms` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setLong(1, duelId);
+			statement.setString(2, DuelProofAttemptRecord.STATUS_VERIFIED);
+			statement.setLong(3, header.completedAt);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (!result.next()) {
+					return null;
+				}
+				final DuelProofWitnessRecord proof = new DuelProofWitnessRecord(
+					result.getString("proof_id"),
+					result.getInt("witness_version"),
+					readBytes(result, "witness_bytes", DuelProofSpec.MAX_WITNESS_BYTES),
+					result.getBytes("witness_hash32"),
+					result.getInt("starter_ordinal"),
+					result.getInt("swing_count"),
+					result.getInt("winner_player_id"),
+					result.getString("terminal_cause"),
+					result.getLong("finished_at_ms")
+				);
+				validateDuelProofWitnessRecord(proof.getProofId(), duelId, proof);
+				final DuelReceiptParticipant winner = header.requester.won
+					? header.requester : header.opponent;
+				if (proof.getWinnerPlayerId() != winner.playerId || result.next()) {
+					throw new GameDatabaseException(MySqlGameDatabase.class,
+						"Verified duel proof does not match its authorized receipt");
+				}
+				return proof;
+			}
+		} catch (final SQLException | IOException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	private byte[] readBytes(final ResultSet result, final String column, final int maxBytes)
+		throws SQLException, IOException {
+		try (final InputStream input = result.getBinaryStream(column)) {
+			if (input == null) {
+				return null;
+			}
+			final ByteArrayOutputStream output = new ByteArrayOutputStream();
+			final byte[] buffer = new byte[8192];
+			int total = 0;
+			int read;
+			while ((read = input.read(buffer)) != -1) {
+				total += read;
+				if (total > maxBytes) {
+					throw new IOException("Duel proof witness exceeds the encoded size limit");
+				}
+				output.write(buffer, 0, read);
+			}
+			return output.toByteArray();
+		}
+	}
+
+	private DuelReceiptHistoryEntry queryDuelReceiptHeader(final long duelId, final int requesterPlayerId) {
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String query = "SELECT d.`duel_id`, d.`started_at_ms`, d.`completed_at_ms`, "
+			+ "requester.`player_id` AS `requester_player_id`, "
+			+ "requester.`player_username` AS `requester_username`, requester.`won` AS `requester_won`, "
+			+ "opponent.`player_id` AS `opponent_player_id`, "
+			+ "opponent.`player_username` AS `opponent_username`, opponent.`won` AS `opponent_won` "
+			+ "FROM `" + prefix + "duel_receipts` d "
+			+ "JOIN `" + prefix + "duel_receipt_participants` requester "
+			+ "ON requester.`duel_id` = d.`duel_id` AND requester.`player_id` = ? "
+			+ "JOIN `" + prefix + "duel_receipt_participants` opponent "
+			+ "ON opponent.`duel_id` = d.`duel_id` AND opponent.`player_id` <> requester.`player_id` "
+			+ "WHERE d.`duel_id` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setInt(1, requesterPlayerId);
+			statement.setLong(2, duelId);
+			try (final ResultSet result = statement.executeQuery()) {
+				if (result.next()) {
+					return readDuelReceiptHistoryEntry(result);
+				}
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+		return null;
+	}
+
+	private DuelReceiptHistoryEntry readDuelReceiptHistoryEntry(final ResultSet result) throws SQLException {
+		final DuelReceiptParticipant requester = new DuelReceiptParticipant(
+			result.getInt("requester_player_id"),
+			result.getString("requester_username"),
+			result.getBoolean("requester_won")
+		);
+		final DuelReceiptParticipant opponent = new DuelReceiptParticipant(
+			result.getInt("opponent_player_id"),
+			result.getString("opponent_username"),
+			result.getBoolean("opponent_won")
+		);
+		return new DuelReceiptHistoryEntry(
+			result.getLong("duel_id"),
+			result.getLong("started_at_ms"),
+			result.getLong("completed_at_ms"),
+			requester,
+			opponent
+		);
+	}
+
+	private void validateDuelReceipt(final DuelReceipt receipt) {
+		if (receipt == null) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt cannot be null");
+		}
+		if (receipt.startedAt <= 0 || receipt.completedAt < receipt.startedAt) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt timestamps are invalid");
+		}
+		if (receipt.participants.size() != 2) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt must contain exactly two participants");
+		}
+
+		final Set<Integer> participantIds = new HashSet<>();
+		int winners = 0;
+		for (final DuelReceiptParticipant participant : receipt.participants) {
+			if (participant == null || participant.playerId <= 0 || participant.username == null
+				|| participant.username.isEmpty() || participant.username.length() > 12
+				|| !participantIds.add(participant.playerId)) {
+				throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt participant is invalid");
+			}
+			if (participant.won) {
+				winners++;
+			}
+		}
+		if (winners != 1) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt must contain exactly one winner");
+		}
+
+		final Set<String> stakeSlots = new HashSet<>();
+		for (final DuelReceiptStake stake : receipt.stakes) {
+			if (stake == null || !participantIds.contains(stake.ownerPlayerId) || stake.slot < 0
+				|| stake.catalogId < 0 || stake.amount <= 0
+				|| !stakeSlots.add(stake.ownerPlayerId + ":" + stake.slot)) {
+				throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt stake is invalid");
+			}
+		}
+
+		final Set<String> swingNumbers = new HashSet<>();
+		for (final DuelReceiptSwing swing : receipt.swings) {
+			if (swing == null || !participantIds.contains(swing.actorPlayerId) || swing.swingNumber <= 0
+				|| swing.combatStyle < Skills.CONTROLLED_MODE || swing.combatStyle > Skills.DEFENSIVE_MODE
+				|| swing.damage < 0 || (!swing.didHit && swing.damage != 0)
+				|| !swingNumbers.add(swing.actorPlayerId + ":" + swing.swingNumber)) {
+				throw new GameDatabaseException(MySqlGameDatabase.class, "Duel receipt swing is invalid");
+			}
+		}
+	}
+
+	@Override
+	public void queryInsertDuelProofAttempt(final DuelProofAttemptRecord attempt)
+		throws GameDatabaseException {
+		validateInitialDuelProofAttempt(attempt);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String insertAttempt = "INSERT INTO `" + prefix + "duel_proof_attempts` "
+			+ "(`proof_id`, `protocol_version`, `rng_version`, `formula_version`, `context_version`, "
+			+ "`status`, `created_at_ms`, `updated_at_ms`, `context_bytes`, `context_hash32`, "
+			+ "`server_commitment32`, `server_seed32`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		final String insertParticipant = "INSERT INTO `" + prefix + "duel_proof_attempt_participants` "
+			+ "(`proof_id`, `canonical_ordinal`, `player_id`, `username`) VALUES (?, ?, ?, ?)";
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(insertAttempt)) {
+			statement.setString(1, attempt.getProofId());
+			statement.setInt(2, attempt.getProtocolVersion());
+			statement.setInt(3, attempt.getRngVersion());
+			statement.setInt(4, attempt.getFormulaVersion());
+			statement.setInt(5, attempt.getContextVersion());
+			statement.setString(6, DuelProofAttemptRecord.STATUS_SERVER_COMMITTED);
+			statement.setLong(7, attempt.getCreatedAtMs());
+			statement.setLong(8, attempt.getUpdatedAtMs());
+			statement.setBytes(9, attempt.getContextBytes());
+			statement.setBytes(10, attempt.getContextHash());
+			statement.setBytes(11, attempt.getServerCommitment());
+			statement.setBytes(12, attempt.getServerSeed());
+			requireDuelProofUpdate(statement.executeUpdate(), "insert proof attempt");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(insertParticipant)) {
+			for (final DuelProofAttemptParticipant participant : attempt.getParticipants()) {
+				statement.setString(1, attempt.getProofId());
+				statement.setInt(2, participant.getCanonicalOrdinal());
+				statement.setInt(3, participant.getPlayerId());
+				statement.setString(4, participant.getUsername());
+				requireDuelProofUpdate(statement.executeUpdate(), "insert proof participant");
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public void queryStoreDuelProofCommitments(final String proofId, final int firstId,
+										   final byte[] firstCommit, final int secondId,
+										   final byte[] secondCommit, final long updatedAt)
+		throws GameDatabaseException {
+		validateDuelProofStage(proofId, firstId, secondId, updatedAt);
+		requireDuelProofBytes(firstCommit, "first client commitment", false);
+		requireDuelProofBytes(secondCommit, "second client commitment", false);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String participantUpdate = "UPDATE `" + prefix + "duel_proof_attempt_participants` "
+			+ "SET `client_commitment32` = ? WHERE `proof_id` = ? AND `player_id` = ? "
+			+ "AND `client_commitment32` IS NULL AND `client_seed32` IS NULL AND `lock_ack32` IS NULL";
+		final String attemptUpdate = "UPDATE `" + prefix + "duel_proof_attempts` SET `status` = ?, "
+			+ "`updated_at_ms` = ? WHERE `proof_id` = ? AND `status` = ? "
+			+ "AND `final_lock_hash32` IS NULL AND `finished_at_ms` IS NULL";
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(participantUpdate)) {
+			storeDuelProofParticipantBytes(statement, proofId, firstId, firstCommit,
+				"store first client commitment");
+			storeDuelProofParticipantBytes(statement, proofId, secondId, secondCommit,
+				"store second client commitment");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		transitionDuelProofAttempt(attemptUpdate, DuelProofAttemptRecord.STATUS_CLIENT_COMMITTED,
+			updatedAt, proofId, DuelProofAttemptRecord.STATUS_SERVER_COMMITTED,
+			"advance proof attempt to client committed");
+	}
+
+	@Override
+	public void queryStoreDuelProofReveals(final String proofId, final int firstId,
+										 final byte[] firstSeed, final int secondId,
+										 final byte[] secondSeed, final byte[] finalLockHash,
+										 final long updatedAt) throws GameDatabaseException {
+		validateDuelProofStage(proofId, firstId, secondId, updatedAt);
+		requireDuelProofBytes(firstSeed, "first client seed", false);
+		requireDuelProofBytes(secondSeed, "second client seed", false);
+		requireDuelProofBytes(finalLockHash, "final lock hash", false);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String participantUpdate = "UPDATE `" + prefix + "duel_proof_attempt_participants` "
+			+ "SET `client_seed32` = ? WHERE `proof_id` = ? AND `player_id` = ? "
+			+ "AND `client_commitment32` IS NOT NULL AND `client_seed32` IS NULL AND `lock_ack32` IS NULL";
+		final String attemptUpdate = "UPDATE `" + prefix + "duel_proof_attempts` SET `status` = ?, "
+			+ "`updated_at_ms` = ?, `final_lock_hash32` = ? WHERE `proof_id` = ? AND `status` = ? "
+			+ "AND `final_lock_hash32` IS NULL AND `finished_at_ms` IS NULL";
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(participantUpdate)) {
+			storeDuelProofParticipantBytes(statement, proofId, firstId, firstSeed,
+				"store first client seed");
+			storeDuelProofParticipantBytes(statement, proofId, secondId, secondSeed,
+				"store second client seed");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(attemptUpdate)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_CLIENT_REVEALED);
+			statement.setLong(2, updatedAt);
+			statement.setBytes(3, finalLockHash);
+			statement.setString(4, proofId);
+			statement.setString(5, DuelProofAttemptRecord.STATUS_CLIENT_COMMITTED);
+			requireDuelProofUpdate(statement.executeUpdate(), "advance proof attempt to client revealed");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public void queryLockDuelProofAttempt(final String proofId, final int firstId,
+										 final byte[] firstAck, final int secondId,
+										 final byte[] secondAck, final long lockedAt)
+		throws GameDatabaseException {
+		validateDuelProofStage(proofId, firstId, secondId, lockedAt);
+		requireDuelProofBytes(firstAck, "first lock acknowledgement", false);
+		requireDuelProofBytes(secondAck, "second lock acknowledgement", false);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String participantUpdate = "UPDATE `" + prefix + "duel_proof_attempt_participants` "
+			+ "SET `lock_ack32` = ? WHERE `proof_id` = ? AND `player_id` = ? "
+			+ "AND `client_commitment32` IS NOT NULL AND `client_seed32` IS NOT NULL AND `lock_ack32` IS NULL";
+		final String attemptUpdate = "UPDATE `" + prefix + "duel_proof_attempts` SET `status` = ?, "
+			+ "`updated_at_ms` = ?, `locked_at_ms` = ? WHERE `proof_id` = ? AND `status` = ? "
+			+ "AND `final_lock_hash32` IS NOT NULL AND `locked_at_ms` IS NULL AND `finished_at_ms` IS NULL";
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(participantUpdate)) {
+			storeDuelProofParticipantBytes(statement, proofId, firstId, firstAck,
+				"store first lock acknowledgement");
+			storeDuelProofParticipantBytes(statement, proofId, secondId, secondAck,
+				"store second lock acknowledgement");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(attemptUpdate)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_LOCKED);
+			statement.setLong(2, lockedAt);
+			statement.setLong(3, lockedAt);
+			statement.setString(4, proofId);
+			statement.setString(5, DuelProofAttemptRecord.STATUS_CLIENT_REVEALED);
+			requireDuelProofUpdate(statement.executeUpdate(), "lock proof attempt");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public boolean queryMarkDuelProofAttemptCombat(final String proofId, final long startedAt)
+		throws GameDatabaseException {
+		requireDuelProofId(proofId);
+		requireDuelProofTimestamp(startedAt, "combat start");
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "duel_proof_attempts` SET `status` = ?, `updated_at_ms` = ?, `started_at_ms` = ? "
+			+ "WHERE `proof_id` = ? AND `status` = ? AND `locked_at_ms` IS NOT NULL "
+			+ "AND `started_at_ms` IS NULL AND `finished_at_ms` IS NULL";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_COMBAT);
+			statement.setLong(2, startedAt);
+			statement.setLong(3, startedAt);
+			statement.setString(4, proofId);
+			statement.setString(5, DuelProofAttemptRecord.STATUS_LOCKED);
+			requireDuelProofUpdate(statement.executeUpdate(), "advance proof attempt to combat");
+			return true;
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public boolean queryVerifyDuelProofAttempt(final String proofId, final long duelId,
+											 final DuelProofWitnessRecord record)
+		throws GameDatabaseException {
+		validateDuelProofWitnessRecord(proofId, duelId, record);
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String insertWitness = "INSERT INTO `" + prefix + "duel_proof_witnesses` "
+			+ "(`proof_id`, `witness_version`, `witness_bytes`, `witness_hash32`, "
+			+ "`starter_ordinal`, `swing_count`, `winner_player_id`, `terminal_cause`, "
+			+ "`finished_at_ms`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		final String verifyAttempt = "UPDATE `" + prefix + "duel_proof_attempts` "
+			+ "SET `status` = ?, `duel_id` = ?, `updated_at_ms` = ?, `finished_at_ms` = ? "
+			+ "WHERE `proof_id` = ? AND `status` = ? AND `duel_id` IS NULL "
+			+ "AND `started_at_ms` IS NOT NULL AND `started_at_ms` <= ? "
+			+ "AND `finished_at_ms` IS NULL "
+			+ "AND `abort_reason` IS NULL "
+			+ "AND EXISTS (SELECT 1 FROM `" + prefix + "duel_receipts` receipt "
+			+ "JOIN `" + prefix + "duel_receipt_participants` winner "
+			+ "ON winner.`duel_id` = receipt.`duel_id` "
+			+ "WHERE receipt.`duel_id` = ? AND receipt.`completed_at_ms` = ? "
+			+ "AND winner.`player_id` = ? AND winner.`won` = 1) "
+			+ "AND 2 = (SELECT COUNT(*) FROM `" + prefix + "duel_proof_attempt_participants` proof_player "
+			+ "JOIN `" + prefix + "duel_receipt_participants` receipt_player "
+			+ "ON receipt_player.`player_id` = proof_player.`player_id` "
+			+ "WHERE proof_player.`proof_id` = ? AND receipt_player.`duel_id` = ?) "
+			+ "AND ? = (SELECT COUNT(*) FROM `" + prefix + "duel_receipt_swings` receipt_swing "
+			+ "WHERE receipt_swing.`duel_id` = ?)";
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(insertWitness)) {
+			statement.setString(1, proofId);
+			statement.setInt(2, record.getWitnessVersion());
+			statement.setBytes(3, record.getWitnessBytes());
+			statement.setBytes(4, record.getWitnessHash32());
+			statement.setInt(5, record.getStarterOrdinal());
+			statement.setInt(6, record.getSwingCount());
+			statement.setInt(7, record.getWinnerPlayerId());
+			statement.setString(8, record.getTerminalCause());
+			statement.setLong(9, record.getFinishedAtMs());
+			requireDuelProofUpdate(statement.executeUpdate(), "insert terminal proof witness");
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+
+		try (final PreparedStatement statement = getConnection().prepareStatement(verifyAttempt)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_VERIFIED);
+			statement.setLong(2, duelId);
+			statement.setLong(3, record.getFinishedAtMs());
+			statement.setLong(4, record.getFinishedAtMs());
+			statement.setString(5, proofId);
+			statement.setString(6, DuelProofAttemptRecord.STATUS_COMBAT);
+			statement.setLong(7, record.getFinishedAtMs());
+			statement.setLong(8, duelId);
+			statement.setLong(9, record.getFinishedAtMs());
+			statement.setInt(10, record.getWinnerPlayerId());
+			statement.setString(11, proofId);
+			statement.setLong(12, duelId);
+			statement.setInt(13, record.getSwingCount());
+			statement.setLong(14, duelId);
+			requireDuelProofUpdate(statement.executeUpdate(), "verify terminal proof attempt");
+			return true;
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public boolean queryAbortDuelProofAttempt(final String proofId, final long finishedAt,
+										 final String reason) throws GameDatabaseException {
+		requireDuelProofId(proofId);
+		requireDuelProofTimestamp(finishedAt, "abort");
+		requireDuelProofAbortReason(reason);
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "duel_proof_attempts` SET `status` = ?, `updated_at_ms` = ?, `finished_at_ms` = ?, "
+			+ "`abort_reason` = ? WHERE `proof_id` = ? AND `status` IN " + DUEL_PROOF_OPEN_STATUSES;
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_ABORTED);
+			statement.setLong(2, finishedAt);
+			statement.setLong(3, finishedAt);
+			statement.setString(4, reason);
+			statement.setString(5, proofId);
+			return statement.executeUpdate() == 1;
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	public int queryAbortOpenDuelProofAttempts(final long finishedAt, final String reason)
+		throws GameDatabaseException {
+		requireDuelProofTimestamp(finishedAt, "startup reconciliation");
+		requireDuelProofAbortReason(reason);
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "duel_proof_attempts` SET `status` = ?, `updated_at_ms` = ?, `finished_at_ms` = ?, "
+			+ "`abort_reason` = ? WHERE `status` IN " + DUEL_PROOF_OPEN_STATUSES;
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, DuelProofAttemptRecord.STATUS_ABORTED);
+			statement.setLong(2, finishedAt);
+			statement.setLong(3, finishedAt);
+			statement.setString(4, reason);
+			return statement.executeUpdate();
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	private void transitionDuelProofAttempt(final String query, final String nextStatus,
+										final long updatedAt, final String proofId,
+										final String expectedStatus, final String operation) {
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, nextStatus);
+			statement.setLong(2, updatedAt);
+			statement.setString(3, proofId);
+			statement.setString(4, expectedStatus);
+			requireDuelProofUpdate(statement.executeUpdate(), operation);
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	private void storeDuelProofParticipantBytes(final PreparedStatement statement, final String proofId,
+											 final int playerId, final byte[] value, final String operation)
+		throws SQLException {
+		statement.setBytes(1, value);
+		statement.setString(2, proofId);
+		statement.setInt(3, playerId);
+		requireDuelProofUpdate(statement.executeUpdate(), operation);
+	}
+
+	private void validateInitialDuelProofAttempt(final DuelProofAttemptRecord attempt) {
+		if (attempt == null) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel proof attempt cannot be null");
+		}
+		requireDuelProofId(attempt.getProofId());
+		if (attempt.getDuelId() != null
+			|| !DuelProofAttemptRecord.STATUS_SERVER_COMMITTED.equals(attempt.getStatus())
+			|| attempt.getCreatedAtMs() <= 0 || attempt.getUpdatedAtMs() != attempt.getCreatedAtMs()
+			|| attempt.getLockedAtMs() != null || attempt.getStartedAtMs() != null
+			|| attempt.getFinishedAtMs() != null || attempt.getAbortReason() != null
+			|| attempt.getFinalLockHash() != null) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof attempt is not in its initial server-committed state");
+		}
+		if (attempt.getProtocolVersion() <= 0 || attempt.getRngVersion() <= 0
+			|| attempt.getFormulaVersion() <= 0 || attempt.getContextVersion() <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, "Duel proof versions must be positive");
+		}
+
+		final byte[] contextBytes = attempt.getContextBytes();
+		final byte[] contextHash = attempt.getContextHash();
+		final byte[] serverCommitment = attempt.getServerCommitment();
+		final byte[] serverSeed = attempt.getServerSeed();
+		if (contextBytes == null || contextBytes.length == 0
+			|| contextBytes.length > DUEL_PROOF_CONTEXT_MAX_BYTES) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof context must contain between 1 and 65535 bytes");
+		}
+		requireDuelProofBytes(contextHash, "context hash", false);
+		requireDuelProofBytes(serverCommitment, "server commitment", false);
+		requireDuelProofBytes(serverSeed, "server seed", false);
+		if (!DuelProofCrypto.constantTimeEquals(DuelProofCrypto.contextHash(contextBytes), contextHash)
+			|| !DuelProofCrypto.constantTimeEquals(
+				DuelProofCrypto.serverCommitment(contextHash, serverSeed), serverCommitment)) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof hashes do not match the canonical context and server seed");
+		}
+
+		if (attempt.getParticipants().size() != 2) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof attempt must contain exactly two participants");
+		}
+		final DuelProofAttemptParticipant[] canonical = new DuelProofAttemptParticipant[2];
+		for (final DuelProofAttemptParticipant participant : attempt.getParticipants()) {
+			if (participant == null || participant.getCanonicalOrdinal() < 0
+				|| participant.getCanonicalOrdinal() > 1
+				|| canonical[participant.getCanonicalOrdinal()] != null
+				|| participant.getPlayerId() <= 0 || participant.getUsername() == null
+				|| participant.getUsername().isEmpty() || participant.getUsername().length() > 12
+				|| participant.getClientCommitment() != null || participant.getClientSeed() != null
+				|| participant.getLockAck() != null) {
+				throw new GameDatabaseException(MySqlGameDatabase.class,
+					"Duel proof participant is invalid for an initial attempt");
+			}
+			canonical[participant.getCanonicalOrdinal()] = participant;
+		}
+		if (canonical[0] == null || canonical[1] == null
+			|| canonical[0].getPlayerId() >= canonical[1].getPlayerId()) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof participants are not in canonical player-id order");
+		}
+	}
+
+	private void validateDuelProofStage(final String proofId, final int firstId,
+										final int secondId, final long timestamp) {
+		requireDuelProofId(proofId);
+		if (firstId <= 0 || secondId <= 0 || firstId >= secondId) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof participants are not distinct canonical player ids");
+		}
+		requireDuelProofTimestamp(timestamp, "stage update");
+	}
+
+	private void validateDuelProofWitnessRecord(final String proofId, final long duelId,
+												 final DuelProofWitnessRecord record) {
+		requireDuelProofId(proofId);
+		if (duelId <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Verified duel proof must link to a positive duel receipt id");
+		}
+		if (record == null || !proofId.equals(record.getProofId())) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof witness does not match its proof id");
+		}
+		final byte[] witnessBytes = record.getWitnessBytes();
+		final byte[] witnessHash32 = record.getWitnessHash32();
+		if (record.getWitnessVersion() <= 0 || record.getWitnessVersion() > 65535
+			|| witnessBytes == null || witnessBytes.length == 0
+			|| witnessBytes.length > DuelProofSpec.MAX_WITNESS_BYTES) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof witness version or encoded length is invalid");
+		}
+		requireDuelProofBytes(witnessHash32, "witness hash", false);
+		if (!DuelProofCrypto.constantTimeEquals(DuelProofCrypto.sha256(witnessBytes), witnessHash32)) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof witness hash does not match its encoded bytes");
+		}
+		if ((record.getStarterOrdinal() != 0 && record.getStarterOrdinal() != 1)
+			|| record.getSwingCount() <= 0 || record.getWinnerPlayerId() <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof witness terminal fields are invalid");
+		}
+		requireDuelProofTerminalCause(record.getTerminalCause());
+		requireDuelProofTimestamp(record.getFinishedAtMs(), "witness finish");
+	}
+
+	private void requireDuelProofId(final String proofId) {
+		if (proofId == null || proofId.length() != 32) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof id must be 32 lowercase hexadecimal characters");
+		}
+		for (int i = 0; i < proofId.length(); i++) {
+			final char value = proofId.charAt(i);
+			if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f'))) {
+				throw new GameDatabaseException(MySqlGameDatabase.class,
+					"Duel proof id must be 32 lowercase hexadecimal characters");
+			}
+		}
+	}
+
+	private void requireDuelProofBytes(final byte[] value, final String label,
+										final boolean nullable) {
+		if (value == null && nullable) {
+			return;
+		}
+		if (value == null || value.length != DUEL_PROOF_HASH_BYTES) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof " + label + " must contain exactly 32 bytes");
+		}
+	}
+
+	private void requireDuelProofTimestamp(final long timestamp, final String label) {
+		if (timestamp <= 0) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof " + label + " timestamp must be positive");
+		}
+	}
+
+	private void requireDuelProofAbortReason(final String reason) {
+		if (reason == null || reason.isEmpty() || reason.length() > 32) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof abort reason must contain between 1 and 32 characters");
+		}
+	}
+
+	private void requireDuelProofTerminalCause(final String cause) {
+		if (cause == null || cause.isEmpty() || cause.length() > 32) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Duel proof terminal cause must contain between 1 and 32 characters");
+		}
+		for (int i = 0; i < cause.length(); i++) {
+			final char value = cause.charAt(i);
+			if (!((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+				|| (value >= '0' && value <= '9') || value == '_' || value == '-')) {
+				throw new GameDatabaseException(MySqlGameDatabase.class,
+					"Duel proof terminal cause may contain only letters, numbers, underscores, and hyphens");
+			}
+		}
+	}
+
+	private void requireDuelProofUpdate(final int updateCount, final String operation) {
+		if (updateCount != 1) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Unable to " + operation + "; expected one row but updated " + updateCount);
+		}
 	}
 
 	@Override
@@ -2323,6 +3249,60 @@ public class MySqlGameDatabase extends JDBCDatabase {
 	}
 
 	@Override
+	public int queryIncrementPlayerCacheInt(final int playerId, final int type, final String key,
+										 final int delta) throws GameDatabaseException {
+		final String prefix = getServer().getConfig().DB_TABLE_PREFIX;
+		final String selectQuery = "SELECT `value` FROM `" + prefix
+			+ "player_cache` WHERE `playerID`=? AND `key`=? ORDER BY `dbid` DESC LIMIT 1";
+		final String updateQuery = "UPDATE `" + prefix
+			+ "player_cache` SET `type`=?, `value`=? WHERE `playerID`=? AND `key`=?";
+		final String insertQuery = "INSERT INTO `" + prefix
+			+ "player_cache` (`playerID`, `type`, `key`, `value`) VALUES(?, ?, ?, ?)";
+
+		getConnection().getConnectionLock().lock();
+		try {
+			Integer currentValue = null;
+			try (final PreparedStatement statement = getConnection().prepareStatement(selectQuery)) {
+				statement.setInt(1, playerId);
+				statement.setString(2, key);
+				try (final ResultSet result = statement.executeQuery()) {
+					if (result.next()) {
+						currentValue = Integer.parseInt(result.getString("value"));
+					}
+				}
+			}
+
+			final int newValue = Math.addExact(currentValue == null ? 0 : currentValue, delta);
+			boolean insert = currentValue == null;
+			if (!insert) {
+				try (final PreparedStatement statement = getConnection().prepareStatement(updateQuery)) {
+					statement.setInt(1, type);
+					statement.setString(2, Integer.toString(newValue));
+					statement.setInt(3, playerId);
+					statement.setString(4, key);
+					insert = statement.executeUpdate() == 0;
+				}
+			}
+			if (insert) {
+				try (final PreparedStatement statement = getConnection().prepareStatement(insertQuery)) {
+					statement.setInt(1, playerId);
+					statement.setInt(2, type);
+					statement.setString(3, key);
+					statement.setString(4, Integer.toString(newValue));
+					if (statement.executeUpdate() != 1) {
+						throw new SQLException("Player cache increment did not insert exactly one row");
+					}
+				}
+			}
+			return newValue;
+		} catch (final SQLException | NumberFormatException | ArithmeticException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		} finally {
+			getConnection().getConnectionLock().unlock();
+		}
+	}
+
+	@Override
 	public void querySaveGlobalCacheInt(final String cacheKey, final int value) throws GameDatabaseException {
 		final String deleteQuery = "DELETE FROM `" + getServer().getConfig().DB_TABLE_PREFIX
 			+ "player_cache` WHERE `playerID`=0 AND `key`=?";
@@ -2358,38 +3338,6 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		} catch (final SQLException ex) {
 			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
 		}
-	}
-
-	@Override
-	public int queryClaimPortalCommerceEntitlement(final long entitlementId, final int accountId,
-		final int playerId, final long catalogItemId, final long claimedAtMs) throws GameDatabaseException {
-		return PortalCommerceLedger.claimPending(getConnection(), entitlementId, accountId,
-			playerId, catalogItemId, claimedAtMs);
-	}
-
-	@Override
-	public int queryInsertWorldAchievementRecord(final WorldAchievementRecord record)
-		throws GameDatabaseException {
-		return WorldAchievementLedger.insertRecord(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			record);
-	}
-
-	@Override
-	public int queryInsertWorldPkEvent(final WorldPkEvent event) throws GameDatabaseException {
-		return WorldAchievementLedger.insertPkEvent(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			event);
-	}
-
-	@Override
-	public int queryInsertWorldPkStreak(final WorldPkStreak streak) throws GameDatabaseException {
-		return WorldAchievementLedger.insertPkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			streak);
-	}
-
-	@Override
-	public int queryUpdateWorldPkStreak(final WorldPkStreak streak) throws GameDatabaseException {
-		return WorldAchievementLedger.updatePkStreak(getConnection(), getServer().getConfig().DB_TABLE_PREFIX,
-			streak);
 	}
 
 	@Override
@@ -2550,6 +3498,101 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		}
 	}
 
+	@Override
+	protected void queryInsertActiveVoidArenaMatch(final VoidArenaMatchSessionRecord record)
+		throws GameDatabaseException {
+		validateVoidArenaMatchSession(record, VoidArenaMatchSessionRecord.STATUS_ACTIVE);
+		final String query = "INSERT INTO `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` (`match_id`, `season_id`, `status`, `result_reason`, "
+			+ "`player_a_id`, `player_b_id`, `winner_id`, `loser_id`, "
+			+ "`player_a_rating_before`, `player_a_rating_after`, `player_b_rating_before`, "
+			+ "`player_b_rating_after`, `rating_delta`, `rating_applied`, `same_ip`, "
+			+ "`same_ip_local_exempt`, `prior_rated_results_30m`, `prior_decisive_results_day`, "
+			+ "`slot_index`, `started_at_ms`, `ended_at_ms`) "
+			+ "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			bindVoidArenaMatchSession(statement, record);
+			if (statement.executeUpdate() != 1) {
+				throw new SQLException("Void Arena ACTIVE session insert did not affect one row");
+			}
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	protected boolean queryTransitionVoidArenaMatchToSettled(
+		final VoidArenaMatchSessionRecord record) throws GameDatabaseException {
+		validateVoidArenaMatchSession(record, VoidArenaMatchSessionRecord.STATUS_SETTLED);
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` SET `status` = ?, `result_reason` = ?, "
+			+ "`winner_id` = ?, `loser_id` = ?, `player_a_rating_after` = ?, "
+			+ "`player_b_rating_after` = ?, `rating_delta` = ?, `rating_applied` = ?, "
+			+ "`ended_at_ms` = ? WHERE `match_id` = ? AND `status` = ? AND `season_id` = ? "
+			+ "AND `player_a_id` = ? AND `player_b_id` = ? AND `player_a_rating_before` = ? "
+			+ "AND `player_b_rating_before` = ? AND `same_ip` = ? AND `same_ip_local_exempt` = ? "
+			+ "AND `prior_rated_results_30m` = ? AND `prior_decisive_results_day` = ? "
+			+ "AND `slot_index` = ? AND `started_at_ms` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, record.status);
+			statement.setString(2, record.resultReason);
+			setNullableInt(statement, 3, record.winnerId);
+			setNullableInt(statement, 4, record.loserId);
+			setNullableInt(statement, 5, record.playerARatingAfter);
+			setNullableInt(statement, 6, record.playerBRatingAfter);
+			statement.setInt(7, record.ratingDelta);
+			statement.setInt(8, record.ratingApplied ? 1 : 0);
+			setNullableLong(statement, 9, record.endedAtMs);
+			statement.setString(10, record.matchId);
+			statement.setString(11, VoidArenaMatchSessionRecord.STATUS_ACTIVE);
+			statement.setString(12, record.seasonId);
+			statement.setInt(13, record.playerAId);
+			statement.setInt(14, record.playerBId);
+			statement.setInt(15, record.playerARatingBefore);
+			statement.setInt(16, record.playerBRatingBefore);
+			statement.setInt(17, record.sameIp ? 1 : 0);
+			statement.setInt(18, record.sameIpLocalExempt ? 1 : 0);
+			statement.setInt(19, record.priorRatedResults30m);
+			statement.setInt(20, record.priorDecisiveResultsDay);
+			statement.setInt(21, record.slotIndex);
+			statement.setLong(22, record.startedAtMs);
+			final int changed = statement.executeUpdate();
+			if (changed > 1) {
+				throw new SQLException("Void Arena session settlement affected more than one row");
+			}
+			return changed == 1;
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
+	@Override
+	protected int queryReconcileActiveVoidArenaMatches(final long endedAtMs,
+		final String resultReason) throws GameDatabaseException {
+		if (endedAtMs <= 0 || (!VoidArenaMatchSessionRecord.REASON_SERVER_SHUTDOWN_NO_CONTEST.equals(resultReason)
+			&& !VoidArenaMatchSessionRecord.REASON_SERVER_RESTART_NO_CONTEST.equals(resultReason))) {
+			throw new GameDatabaseException(MySqlGameDatabase.class,
+				"Void Arena reconciliation requires a server no-contest reason and positive timestamp");
+		}
+		final String query = "UPDATE `" + getServer().getConfig().DB_TABLE_PREFIX
+			+ "voidarena_ranked_match_sessions` SET `status` = ?, `result_reason` = ?, "
+			+ "`winner_id` = NULL, `loser_id` = NULL, "
+			+ "`player_a_rating_after` = `player_a_rating_before`, "
+			+ "`player_b_rating_after` = `player_b_rating_before`, `rating_delta` = 0, "
+			+ "`rating_applied` = 0, `ended_at_ms` = CASE WHEN `started_at_ms` > ? "
+			+ "THEN `started_at_ms` ELSE ? END WHERE `status` = ?";
+		try (final PreparedStatement statement = getConnection().prepareStatement(query)) {
+			statement.setString(1, VoidArenaMatchSessionRecord.STATUS_SETTLED);
+			statement.setString(2, resultReason);
+			statement.setLong(3, endedAtMs);
+			statement.setLong(4, endedAtMs);
+			statement.setString(5, VoidArenaMatchSessionRecord.STATUS_ACTIVE);
+			return statement.executeUpdate();
+		} catch (final SQLException ex) {
+			throw new GameDatabaseException(MySqlGameDatabase.class, ex.getMessage());
+		}
+	}
+
 	private VoidArenaStats readVoidArenaStats(final ResultSet result, final String username) throws SQLException {
 		final VoidArenaStats stats = new VoidArenaStats();
 		stats.seasonId = result.getString("seasonID");
@@ -2582,6 +3625,213 @@ public class MySqlGameDatabase extends JDBCDatabase {
 		record.startedAt = result.getLong("startedAt");
 		record.endedAt = result.getLong("endedAt");
 		return record;
+	}
+
+	private VoidArenaMatchSessionRecord readVoidArenaMatchSessionRecord(final ResultSet result)
+		throws SQLException {
+		final VoidArenaMatchSessionRecord record = new VoidArenaMatchSessionRecord(
+			result.getString("match_id"),
+			result.getString("season_id"),
+			result.getString("status"),
+			result.getString("result_reason"),
+			result.getInt("player_a_id"),
+			result.getInt("player_b_id"),
+			readNullableInt(result, "winner_id"),
+			readNullableInt(result, "loser_id"),
+			result.getInt("player_a_rating_before"),
+			readNullableInt(result, "player_a_rating_after"),
+			result.getInt("player_b_rating_before"),
+			readNullableInt(result, "player_b_rating_after"),
+			result.getInt("rating_delta"),
+			result.getInt("rating_applied") != 0,
+			result.getInt("same_ip") != 0,
+			result.getInt("same_ip_local_exempt") != 0,
+			result.getInt("prior_rated_results_30m"),
+			result.getInt("prior_decisive_results_day"),
+			result.getInt("slot_index"),
+			result.getLong("started_at_ms"),
+			readNullableLong(result, "ended_at_ms"));
+		validateVoidArenaMatchSession(record, record.status);
+		return record;
+	}
+
+	private Integer readNullableInt(final ResultSet result, final String column)
+		throws SQLException {
+		final int value = result.getInt(column);
+		return result.wasNull() ? null : value;
+	}
+
+	private Long readNullableLong(final ResultSet result, final String column)
+		throws SQLException {
+		final long value = result.getLong(column);
+		return result.wasNull() ? null : value;
+	}
+
+	private void bindVoidArenaMatchSession(final PreparedStatement statement,
+		final VoidArenaMatchSessionRecord record) throws SQLException {
+		statement.setString(1, record.matchId);
+		statement.setString(2, record.seasonId);
+		statement.setString(3, record.status);
+		if (record.resultReason == null) {
+			statement.setNull(4, Types.VARCHAR);
+		} else {
+			statement.setString(4, record.resultReason);
+		}
+		statement.setInt(5, record.playerAId);
+		statement.setInt(6, record.playerBId);
+		setNullableInt(statement, 7, record.winnerId);
+		setNullableInt(statement, 8, record.loserId);
+		statement.setInt(9, record.playerARatingBefore);
+		setNullableInt(statement, 10, record.playerARatingAfter);
+		statement.setInt(11, record.playerBRatingBefore);
+		setNullableInt(statement, 12, record.playerBRatingAfter);
+		statement.setInt(13, record.ratingDelta);
+		statement.setInt(14, record.ratingApplied ? 1 : 0);
+		statement.setInt(15, record.sameIp ? 1 : 0);
+		statement.setInt(16, record.sameIpLocalExempt ? 1 : 0);
+		statement.setInt(17, record.priorRatedResults30m);
+		statement.setInt(18, record.priorDecisiveResultsDay);
+		statement.setInt(19, record.slotIndex);
+		statement.setLong(20, record.startedAtMs);
+		setNullableLong(statement, 21, record.endedAtMs);
+	}
+
+	private void setNullableInt(final PreparedStatement statement, final int parameter,
+		final Integer value) throws SQLException {
+		if (value == null) {
+			statement.setNull(parameter, Types.INTEGER);
+		} else {
+			statement.setInt(parameter, value);
+		}
+	}
+
+	private void setNullableLong(final PreparedStatement statement, final int parameter,
+		final Long value) throws SQLException {
+		if (value == null) {
+			statement.setNull(parameter, Types.BIGINT);
+		} else {
+			statement.setLong(parameter, value);
+		}
+	}
+
+	private void validateVoidArenaMatchSession(final VoidArenaMatchSessionRecord record,
+		final String expectedStatus) {
+		if (record == null) {
+			throw voidArenaSessionError("session record is required");
+		}
+		requireCanonicalVoidArenaMatchId(record.matchId);
+		requireVoidArenaSeasonId(record.seasonId);
+		requireCanonicalVoidArenaPair(record.playerAId, record.playerBId);
+
+		if (!VoidArenaMatchSessionRecord.STATUS_ACTIVE.equals(record.status)
+			&& !VoidArenaMatchSessionRecord.STATUS_SETTLED.equals(record.status)) {
+			throw voidArenaSessionError("status must be ACTIVE or SETTLED");
+		}
+		if (!record.status.equals(expectedStatus)) {
+			throw voidArenaSessionError("session status does not match the requested operation");
+		}
+		if (record.playerARatingBefore < 1 || record.playerBRatingBefore < 1) {
+			throw voidArenaSessionError("ratings before the match must be positive");
+		}
+		if (record.slotIndex < 0 || record.startedAtMs <= 0) {
+			throw voidArenaSessionError("slot index and start timestamp are invalid");
+		}
+		if (record.sameIp != record.sameIpLocalExempt) {
+			throw voidArenaSessionError("same-IP matches require the local-development exemption");
+		}
+		if (record.priorRatedResults30m != 0) {
+			throw voidArenaSessionError("pair already has a rated result in the rolling window");
+		}
+		if (record.priorDecisiveResultsDay < 0 || record.priorDecisiveResultsDay > 2) {
+			throw voidArenaSessionError("pair has reached the UTC-day decisive-result limit");
+		}
+
+		if (VoidArenaMatchSessionRecord.STATUS_ACTIVE.equals(record.status)) {
+			validateActiveVoidArenaMatchSession(record);
+			return;
+		}
+		validateSettledVoidArenaMatchSession(record);
+	}
+
+	private void validateActiveVoidArenaMatchSession(final VoidArenaMatchSessionRecord record) {
+		if (record.resultReason != null || record.winnerId != null || record.loserId != null
+			|| record.playerARatingAfter != null || record.playerBRatingAfter != null
+			|| record.ratingDelta != 0 || record.ratingApplied || record.endedAtMs != null) {
+			throw voidArenaSessionError("ACTIVE sessions cannot contain settlement fields");
+		}
+	}
+
+	private void validateSettledVoidArenaMatchSession(final VoidArenaMatchSessionRecord record) {
+		if (record.playerARatingAfter == null || record.playerBRatingAfter == null
+			|| record.playerARatingAfter < 1 || record.playerBRatingAfter < 1
+			|| record.endedAtMs == null || record.endedAtMs < record.startedAtMs) {
+			throw voidArenaSessionError("SETTLED sessions require valid final ratings and end time");
+		}
+
+		final long expectedPlayerA = (long) record.playerARatingBefore + record.ratingDelta;
+		final long expectedPlayerB = (long) record.playerBRatingBefore - record.ratingDelta;
+		if (expectedPlayerA != record.playerARatingAfter
+			|| expectedPlayerB != record.playerBRatingAfter) {
+			throw voidArenaSessionError("rating changes must be zero-sum");
+		}
+
+		if (record.isDecisive()) {
+			validateDecisiveVoidArenaMatchSession(record);
+			return;
+		}
+		if (!record.isNeutral()) {
+			throw voidArenaSessionError("SETTLED result reason is invalid");
+		}
+		if (record.winnerId != null || record.loserId != null || record.ratingDelta != 0
+			|| record.ratingApplied
+			|| record.playerARatingAfter != record.playerARatingBefore
+			|| record.playerBRatingAfter != record.playerBRatingBefore) {
+			throw voidArenaSessionError("neutral settlements cannot change ratings or name a winner");
+		}
+	}
+
+	private void validateDecisiveVoidArenaMatchSession(final VoidArenaMatchSessionRecord record) {
+		if (!record.ratingApplied || record.winnerId == null || record.loserId == null) {
+			throw voidArenaSessionError("decisive settlements must apply their ranked result");
+		}
+		final boolean playerAWon = record.winnerId == record.playerAId
+			&& record.loserId == record.playerBId && record.ratingDelta >= 0;
+		final boolean playerBWon = record.winnerId == record.playerBId
+			&& record.loserId == record.playerAId && record.ratingDelta <= 0;
+		if (!playerAWon && !playerBWon) {
+			throw voidArenaSessionError("winner, loser, and rating-delta sign do not agree");
+		}
+	}
+
+	private void requireCanonicalVoidArenaMatchId(final String matchId) {
+		if (matchId == null || matchId.length() != 36) {
+			throw voidArenaSessionError("match id must be a canonical UUID");
+		}
+		try {
+			if (!UUID.fromString(matchId).toString().equals(matchId)) {
+				throw voidArenaSessionError("match id must be a lowercase canonical UUID");
+			}
+		} catch (final IllegalArgumentException ex) {
+			throw voidArenaSessionError("match id must be a canonical UUID");
+		}
+	}
+
+	private void requireVoidArenaSeasonId(final String seasonId) {
+		if (seasonId == null || seasonId.isEmpty() || seasonId.length() > 16
+			|| !seasonId.equals(seasonId.trim())) {
+			throw voidArenaSessionError("season id must contain 1 to 16 trimmed characters");
+		}
+	}
+
+	private void requireCanonicalVoidArenaPair(final int playerAId, final int playerBId) {
+		if (playerAId <= 0 || playerAId >= playerBId) {
+			throw voidArenaSessionError("player ids must be a positive canonical pair");
+		}
+	}
+
+	private GameDatabaseException voidArenaSessionError(final String message) {
+		return new GameDatabaseException(MySqlGameDatabase.class,
+			"Invalid Void Arena ranked session: " + message);
 	}
 
 	@Override
@@ -3226,22 +4476,28 @@ public class MySqlGameDatabase extends JDBCDatabase {
 
 	private PreparedStatement statementFromString(final String query, final String... longA) throws SQLException {
 		final PreparedStatement prepared = getConnection().prepareStatement(query);
-
-		for (int i = 1; i <= longA.length; i++) {
-			prepared.setString(i, longA[i - 1]);
+		try {
+			for (int i = 1; i <= longA.length; i++) {
+				prepared.setString(i, longA[i - 1]);
+			}
+			return prepared;
+		} catch (SQLException | RuntimeException ex) {
+			prepared.close();
+			throw ex;
 		}
-
-		return prepared;
 	}
 
 	private PreparedStatement statementFromInteger(final String statement, final int... longA) throws SQLException {
 		final PreparedStatement prepared = getConnection().prepareStatement(statement);
-
-		for (int i = 1; i <= longA.length; i++) {
-			prepared.setInt(i, longA[i - 1]);
+		try {
+			for (int i = 1; i <= longA.length; i++) {
+				prepared.setInt(i, longA[i - 1]);
+			}
+			return prepared;
+		} catch (SQLException | RuntimeException ex) {
+			prepared.close();
+			throw ex;
 		}
-
-		return prepared;
 	}
 
 	private void updateLongs(final String statement, final int... intA) throws SQLException {

@@ -83,6 +83,69 @@ forbidden_runtime_files=(
 	"Cache/voidscapeLauncher.properties"
 )
 
+scratch_basenames=(
+	".ds_store"
+	"thumbs.db"
+)
+
+scratch_suffixes=(
+	".bak"
+	".download"
+	".new"
+	".orig"
+	".part"
+	".predungeon"
+	".rej"
+	".swp"
+	".temp"
+	".tmp"
+	"~"
+)
+
+is_scratch_file() {
+	local basename_lower
+	local candidate
+	basename_lower="$(printf '%s' "${1##*/}" | tr '[:upper:]' '[:lower:]')"
+	for candidate in "${scratch_basenames[@]}"; do
+		if [[ "$basename_lower" == "$candidate" ]]; then
+			return 0
+		fi
+	done
+	for candidate in "${scratch_suffixes[@]}"; do
+		if [[ "$basename_lower" == *"$candidate" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+prune_scratch_files() {
+	local root="$1"
+	local path
+	while IFS= read -r -d '' path; do
+		if is_scratch_file "$path"; then
+			rm -f -- "$path"
+		fi
+	done < <(find "$root" \( -type f -o -type l \) -print0)
+}
+
+assert_no_scratch_files() {
+	local root="$1"
+	local path
+	local relative
+	local found=0
+	while IFS= read -r -d '' path; do
+		if is_scratch_file "$path"; then
+			relative="${path#"$root"/}"
+			echo "ERROR: production web root contains scratch file or symlink: $relative" >&2
+			found=1
+		fi
+	done < <(find "$root" \( -type f -o -type l \) -print0)
+	if [[ "$found" -ne 0 ]]; then
+		exit 1
+	fi
+}
+
 assert_no_forbidden_files() {
 	local root="$1"
 	local found=0
@@ -136,6 +199,8 @@ else
 	fi
 fi
 
+prune_scratch_files "$OUTPUT_DIR"
+assert_no_scratch_files "$OUTPUT_DIR"
 assert_no_forbidden_files "$OUTPUT_DIR"
 
 cat > "$OUTPUT_DIR/DEPLOYMENT.txt" <<'EOF'
@@ -164,11 +229,11 @@ Profiles do not store game credentials. endpoint=reset and resetPortal=1 clear
 only the active profile's saved web settings.
 
 The mobile login account/recovery buttons default to the same web root:
-  Create Account  -> /portal?auth=login
+  Create Account  -> /?auth=register
   Recover account -> /portal?auth=recovery
 Override when needed:
   index.html?mobile=1&portal=https://<portal-host>/
-  index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dlogin&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
+  index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dregister&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
 Portal overrides are saved for Home Screen launches. To clear stale tester
 portal URLs, open:
   index.html?mobile=1&resetPortal=1
@@ -259,7 +324,7 @@ Profiles isolate saved endpoint/portal settings only; they do not store game cre
 Account/recovery portal handoff:
   https://<host>/index.html?mobile=1&portal=https://<portal-host>/
 or:
-  https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dlogin&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
+  https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dregister&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
 
 Those portal overrides are saved for later Home Screen launches. Clear with:
   https://<host>/index.html?mobile=1&resetPortal=1

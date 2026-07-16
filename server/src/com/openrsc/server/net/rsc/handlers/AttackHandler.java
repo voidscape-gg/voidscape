@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.NpcId;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.handler.GameEventHandler;
 import com.openrsc.server.event.rsc.impl.projectile.RangeEvent;
@@ -23,7 +24,9 @@ import static com.openrsc.server.plugins.Functions.inArray;
 public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn> {
 	private static final String PK_CATCHING_SIM_OWNER = "pkcatchsim_owner";
 	private static final String PK_CATCHING_SIM_COMBAT_ACTIVE = "pkcatchsim_combat_active";
-	private static final int PK_CATCHING_SIM_PVP_DISTANCE = 2;
+	private static final String PK_CATCHING_SIM_RUNNING = "pkcatchsim_running";
+	private static final String PK_CATCHING_SIM_ATTACK_BLOCKED_UNTIL =
+		"pkcatchsim_attack_blocked_until";
 
 	public void process(TargetMobStruct payload, Player player) throws Exception {
 		OpcodeIn pID = payload.getOpcode();
@@ -101,16 +104,25 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 				&& (!player.getCache().hasKey("mage_arena") || player.getCache().getInt("mage_arena") < 2)) {
 				player.message("you are not yet ready to fight the battle mages");
 				return;
-			} else if (curTick <= runTick || (curTick <= runTick + 1 && !n.finishedPath())) {
+			} else if (!pkCatchingSimulatorTarget
+				&& (curTick <= runTick || (curTick <= runTick + 1 && !n.finishedPath()))) {
 				//Moving retreating enemies are immune from attack requests for an extra tick.
 				player.resetPath();
 				return;
 			}
 		}
+		if (affectedMob.isNpc()) {
+			VoidDungeonTraversalGrace.clear(player);
+		}
 
 		if (player.getRangeEquip() < 0 && player.getThrowingEquip() < 0) {
 
-			if (affectedMob.isPlayer() && !player.finishedPath() && !affectedMob.finishedPath()) {
+			boolean movingPvpStyleTarget = affectedMob.isPlayer()
+				? !affectedMob.finishedPath()
+				: pkCatchingSimulatorTarget
+					&& affectedMob.getAttribute(PK_CATCHING_SIM_RUNNING, false);
+			if ((affectedMob.isPlayer() || pkCatchingSimulatorTarget)
+				&& !player.finishedPath() && movingPvpStyleTarget) {
 				int pidlessCatchingDistanceOffset = 0;
 				if (affectedMob.isPlayer() && player.getConfig().PIDLESS_CATCHING && !player.willBeProcessedBefore((Player)affectedMob)) {
 					// other player has already moved this tick, meaning the gap is 1 more than is rendered on either person's client
@@ -128,9 +140,7 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			player.setFollowing(affectedMob, 0, false, true);
 
 			int radius = affectedMob.isPlayer() || pkCatchingSimulatorTarget
-				? (pkCatchingSimulatorTarget
-					? Math.max(player.getConfig().PVP_CATCHING_DISTANCE, PK_CATCHING_SIM_PVP_DISTANCE)
-					: player.getConfig().PVP_CATCHING_DISTANCE)
+				? player.getConfig().PVP_CATCHING_DISTANCE
 				: player.getConfig().PVM_CATCHING_DISTANCE;
 			player.setWalkToAction(new WalkToMobAction(player, affectedMob, radius, true, ActionType.ATTACK) {
 				public void executeInternal() {
@@ -174,6 +184,7 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 			player.setWalkToAction(new WalkToMobAction(player, affectedMob, radius, false, ActionType.ATTACK) {
 				public void executeInternal() {
 					if (getPlayer().isBusy() || getPlayer().inCombat()) return;
+					if (!getPlayer().checkAttack(getMob(), true)) return;
 					getPlayer().resetFollowing();
 					if (getMob().isPlayer()) {
 						Player affectedPlayer = (Player) getMob();
@@ -270,9 +281,14 @@ public class AttackHandler implements PayloadProcessor<TargetMobStruct, OpcodeIn
 	}
 
 	private boolean isPkCatchingSimulatorReattackBlocked(Player player, Mob target) {
+		long currentTick = player.getWorld().getServer().getCurrentTick();
+		Long blockedUntil = target.getAttribute(PK_CATCHING_SIM_ATTACK_BLOCKED_UNTIL, null);
+		if (blockedUntil != null && currentTick < blockedUntil.longValue()) {
+			return true;
+		}
 		long ranAwayTick = target.getRanAwayTimer();
 		return ranAwayTick > 0
-			&& ranAwayTick + player.getConfig().PVP_REATTACK_TIMER > player.getWorld().getServer().getCurrentTick();
+			&& ranAwayTick + player.getConfig().PVP_REATTACK_TIMER > currentTick;
 	}
 
 	private boolean clearStalePkCatchingSimulatorCombat(Player player, Mob target) {

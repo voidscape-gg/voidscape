@@ -1,0 +1,200 @@
+{
+  "generator": "tools/appearance-studio/proof_art/paperdoll_v2_hairstyles.py",
+  "generatorSha256": "df037fc1f07dab4f6f41466a8e71232838d3832427a06c56fb531755b67517f8",
+  "id": "high_topknot",
+  "label": "High Topknot",
+  "masters": {
+    "combat-west": {
+      "fileSha256": "6915bca6ca7b80faa3ab53deb79cc48034bbd101eb6b6f35c6c0bfb1a944d857",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        88,
+        100,
+        146,
+        176,
+        202,
+        212,
+        214,
+        224,
+        236
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 601,
+      "outsideAllowedPixels": 0,
+      "path": "masters/combat-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -24,
+        -12,
+        14,
+        16
+      ],
+      "rgbaSha256": "e475aa41c263fe8c611ab2d081e33ae567d15ed50658db679731d46c17661716",
+      "scalpAttachmentPixels": 236
+    },
+    "north": {
+      "fileSha256": "83a5f59c08dfa88f8ce656a3c2882f12b57b957350ba214c7804c6f15da03937",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        72,
+        92,
+        104,
+        112,
+        150,
+        180,
+        204,
+        218,
+        228,
+        238
+      ],
+      "nonzeroAlphaValues": [
+        192,
+        255
+      ],
+      "occupiedPixels": 541,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -15,
+        -13,
+        15,
+        16
+      ],
+      "rgbaSha256": "96d2d91310398e7f2061153a641c6914fc01226de96ab96c1fd94894ddf7946b",
+      "scalpAttachmentPixels": 219
+    },
+    "north-west": {
+      "fileSha256": "a1b3b4e17c512aa3c44681fcd62faa3f86fdbd4a0e6422ba67e685e1e003f7c6",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        72,
+        90,
+        102,
+        148,
+        178,
+        204,
+        214,
+        216,
+        226,
+        238
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 631,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -24,
+        -12,
+        15,
+        17
+      ],
+      "rgbaSha256": "705628875e778b372d81dfe6f429b55ecf5b9905556c06c77326a514858232d0",
+      "scalpAttachmentPixels": 252
+    },
+    "south": {
+      "fileSha256": "af60a381f8ae43a52e2640cb19b429e6288e037e13148bccd40e92249f450897",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        90,
+        104,
+        146,
+        180,
+        202,
+        212,
+        218,
+        224,
+        238
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 686,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -14,
+        -13,
+        14,
+        19
+      ],
+      "rgbaSha256": "0e242fdb40be964344c9c412e70223c6d8dccb61fdabb22473e5d7b7857ab163",
+      "scalpAttachmentPixels": 448
+    },
+    "south-west": {
+      "fileSha256": "66d2ecb969a46a7db304daae9ba8aab4655c08f39faa6307aebb6cb55cfe2d9c",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        90,
+        100,
+        146,
+        176,
+        202,
+        212,
+        214,
+        224,
+        236
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 735,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -20,
+        -12,
+        15,
+        19
+      ],
+      "rgbaSha256": "3b88c8cbfd3e03eff0cd3e1550f8db7770e5aa5b8be59deb6eab17b18fec435c",
+      "scalpAttachmentPixels": 449
+    },
+    "west": {
+      "fileSha256": "172e1b4dbddf74b6d957b0090ca8dd66a4bfca70b513f53a3bc3a220b7250825",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        88,
+        100,
+        146,
+        176,
+        202,
+        212,
+        214,
+        224,
+        236
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 601,
+      "outsideAllowedPixels": 0,
+      "path": "masters/west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -24,
+        -12,
+        14,
+        16
+      ],
+      "rgbaSha256": "8e794129c2f2cddbdeecd7840f1d5401d83ab94cb00a840b90453bf9fd7dadb3",
+      "scalpAttachmentPixels": 236
+    }
+  },
+  "rationale": "Close swept cap with a compact tied knot high at the rear crown in every direction.",
+  "schema": "voidscape-paperdoll-v2-hairstyle-art/v1",
+  "source": "explicit-crown-relative-grayscale-pixel-geometry",
+  "template": "rsc-player-2x-v1",
+  "templateSha256": "d7400f68d450498434967e5ec2c6b6d8165b739a511271401d65b530c9d8b019"
+}

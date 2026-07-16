@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-v2-selector-registry/v1",
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "eligibility": {
+      "type": "object",
+      "required": ["state", "platforms", "reasons"],
+      "properties": {
+        "state": {"enum": ["proof-only", "qa-ready", "shipping"]},
+        "baseProfiles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "platforms": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["pc", "android", "teavm"]}
+        },
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": false
+    },
+    "legacy_identity": {
+      "type": "object",
+      "required": ["headAppearanceId", "bodyAppearanceId", "legsAppearanceId"],
+      "properties": {
+        "headAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256},
+        "bodyAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256},
+        "legsAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256}
+      },
+      "additionalProperties": false
+    },
+    "generated_assets": {
+      "type": "object",
+      "required": ["controlHead", "controlBody", "controlLegs", "nativeHead", "nativeBody", "nativeLegs"],
+      "properties": {
+        "controlHead": {"$ref": "#/$defs/id"},
+        "controlBody": {"$ref": "#/$defs/id"},
+        "controlLegs": {"$ref": "#/$defs/id"},
+        "nativeHead": {"$ref": "#/$defs/id"},
+        "nativeBody": {"$ref": "#/$defs/id"},
+        "nativeLegs": {"$ref": "#/$defs/id"}
+      },
+      "additionalProperties": false
+    },
+    "stack": {
+      "type": "object",
+      "required": ["id", "label", "mode", "assets"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["pack-only", "live-controls"]},
+        "assets": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "hat_rule": {
+      "type": "object",
+      "required": ["id", "match", "action", "reason"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "match": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["hatAppearanceIds"],
+              "properties": {"hatAppearanceIds": {"const": [0]}},
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["anyNonzeroHat"],
+              "properties": {"anyNonzeroHat": {"const": true}},
+              "additionalProperties": false
+            }
+          ]
+        },
+        "action": {"enum": ["allow-v2", "fallback-legacy"]},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": [
+    "schema", "defaultEnabled", "namespace", "entries", "catalog", "template", "pack",
+    "baseProfiles", "hatOcclusionPolicy", "renderStacks"
+  ],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-v2-selector-registry/v1"},
+    "defaultEnabled": {"const": false},
+    "namespace": {
+      "type": "object",
+      "required": ["field", "classicId", "minimum", "maximum", "stabilityPolicy"],
+      "properties": {
+        "field": {"const": "hairStyle"},
+        "classicId": {"const": 0},
+        "minimum": {"const": 0},
+        "maximum": {"const": 255},
+        "stabilityPolicy": {"const": "never-reuse"}
+      },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["selectorId", "style", "label", "route", "baseProfiles", "stackByBase", "qaControlStackByBase", "eligibility"],
+        "properties": {
+          "selectorId": {"type": "integer", "minimum": 0, "maximum": 255},
+          "style": {"$ref": "#/$defs/id"},
+          "label": {"type": "string", "minLength": 1},
+          "route": {"enum": ["legacy", "v2"]},
+          "baseProfiles": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": {"$ref": "#/$defs/id"}
+          },
+          "stackByBase": {
+            "type": "object",
+            "propertyNames": {"$ref": "#/$defs/id"},
+            "additionalProperties": {"$ref": "#/$defs/id"}
+          },
+          "qaControlStackByBase": {
+            "type": "object", "minProperties": 1,
+            "propertyNames": {"$ref": "#/$defs/id"},
+            "additionalProperties": {"$ref": "#/$defs/id"}
+          },
+          "eligibility": {"$ref": "#/$defs/eligibility"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"selectorId": {"const": 0}}, "required": ["selectorId"]},
+            "then": {
+              "properties": {
+                "route": {"const": "legacy"},
+                "stackByBase": {"maxProperties": 0}
+              }
+            },
+            "else": {
+              "properties": {
+                "route": {"const": "v2"},
+                "stackByBase": {"minProperties": 1}
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.yaml$"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "template": {
+      "type": "object",
+      "required": ["path", "sha256", "sourceV1Sha256", "derivedMaskTreeSha256"],
+      "properties": {
+        "path": {"const": "content/appearance/templates/rsc-player-2x-v1/template.yaml"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "sourceV1Sha256": {"$ref": "#/$defs/sha256"},
+        "derivedMaskTreeSha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "pack": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "build/Paperdoll_V2.orsc"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "baseProfiles": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "gender", "legacyIdentity", "eligibility", "assets"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "label": {"type": "string", "minLength": 1},
+          "gender": {"enum": ["male", "female"]},
+          "legacyIdentity": {"$ref": "#/$defs/legacy_identity"},
+          "eligibility": {"$ref": "#/$defs/eligibility"},
+          "assets": {"$ref": "#/$defs/generated_assets"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "hatOcclusionPolicy": {
+      "type": "object",
+      "required": ["strategy", "rules"],
+      "properties": {
+        "strategy": {"const": "explicit-first-match"},
+        "rules": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/hat_rule"}}
+      },
+      "additionalProperties": false
+    },
+    "renderStacks": {
+      "type": "array", "minItems": 1, "items": {"$ref": "#/$defs/stack"}
+    }
+  },
+  "additionalProperties": false
+}

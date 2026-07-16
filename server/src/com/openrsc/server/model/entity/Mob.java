@@ -1,6 +1,8 @@
 package com.openrsc.server.model.entity;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.duelproof.DuelProofSession;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.handler.GameEventHandler;
@@ -730,9 +732,18 @@ public abstract class Mob extends Entity {
 	 * COMBAT
 	 */
 	public void startCombat(final Mob victim) {
+		if (victim == null || !sharesInstanceWith(victim)) {
+			return;
+		}
 		Mob lock = this.getUUID().compareTo(victim.getUUID()) > 0 ? this : victim;
 		synchronized (lock) {
 			if (this.inCombat() || victim.inCombat()) return;
+			if (this.isPlayer()) {
+				VoidDungeonTraversalGrace.clear((Player) this);
+			}
+			if (victim.isPlayer()) {
+				VoidDungeonTraversalGrace.clear((Player) victim);
+			}
 			boolean gotUnderAttack = false;
 
 			if (this.isPlayer()) {
@@ -920,6 +931,13 @@ public abstract class Mob extends Entity {
 	}
 
 	public void damage(final int damage) {
+		if (isPlayer()) {
+			final Player player = (Player) this;
+			final DuelProofSession proofSession = player.getDuel().getProofSession();
+			if (proofSession != null && proofSession.blocksExternalDamage()) {
+				return;
+			}
+		}
 		final int newHp = skills.getLevel(Skill.HITS.id()) - damage;
 		if (newHp <= 0) {
 			if (this.isPlayer()) {
@@ -1261,6 +1279,7 @@ public abstract class Mob extends Entity {
 		final int index = dropItemIndex;
 		this.setDropItemEvent(-1, null);
 		if (item == null) return;
+		if (player.getWorld().getVoidArena().blocksGroundItemAction(player, player.getLocation())) return;
 		getWorld().getServer().getPluginHandler().handlePlugin(DropObjTrigger.class, player, new Object[]{player, index, item, fromInventory});
 	}
 

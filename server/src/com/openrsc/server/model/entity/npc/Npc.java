@@ -7,6 +7,7 @@ import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidContent;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.ItemProvenanceEvent;
 import com.openrsc.server.event.DelayedEvent;
@@ -58,6 +59,8 @@ public class Npc extends Mob {
 	private static final Map<Integer, Integer> WILDERNESS_RESPAWN_SECONDS = createWildernessRespawnSeconds();
 
 	private long healTimer = 0;
+	private Point deathDropDestination;
+	private int deathDropInstanceId;
 	private boolean shouldRespawn = true;
 	private boolean isRespawning = false;
 	private boolean executedAggroScript = false;
@@ -370,6 +373,7 @@ public class Npc extends Mob {
 			remove();
 			return;
 		}
+		VoidDungeonTraversalGrace.armAfterKill(owner, this);
 
 		owner.getWorld().getServer().getPluginHandler().handlePlugin(KillNpcTrigger.class, owner, new Object[]{owner, this});
 		if (shouldSuppressDefaultDeathRewards()) {
@@ -413,8 +417,6 @@ public class Npc extends Mob {
 		ActionSender.sendSound(owner, "victory");
 		owner.getWorld().getServer().getAchievementSystem().checkAndIncSlayNpcTasks(owner, this);
 		owner.incNpcKills();
-		owner.getWorld().getCrackerCampaignService().onNpcKill(owner);
-		PlayerTitle.checkGiantKiller(owner, getDef().combatLevel);
 		BalanceTelemetry.recordNpcKill(owner, this);
 		FarmSim.recordNpcKill(owner, this);
 
@@ -466,9 +468,7 @@ public class Npc extends Mob {
 			}
 
 			if (!destroyBones) {
-				GroundItem groundItem = new GroundItem(
-					owner.getWorld(), bones, getX(), getY(), 1, owner
-				);
+				GroundItem groundItem = createDeathGroundItem(owner, bones, 1, false);
 				groundItem.setAttribute("npcdrop", true);
 				getWorld().registerItem(groundItem);
 				recordNpcDrop(owner, bones, 1, false, false, "ground");
@@ -512,7 +512,7 @@ public class Npc extends Mob {
 					amount = (int) (amount * VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER);
 				}
 			}
-			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), amount, owner);
+			GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), amount, item.getNoted());
 			groundItem.setAttribute("npcdrop", true);
 			markRareDropBeam(groundItem, item);
 			owner.getWorld().registerItem(groundItem);
@@ -545,6 +545,27 @@ public class Npc extends Mob {
 
 	public boolean shouldSuppressDefaultDeathRewards() {
 		return getAttribute(SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, false);
+	}
+
+	public void setDeathDropDestination(Point destination, int instanceId) {
+		if (destination == null || instanceId < 0) {
+			throw new IllegalArgumentException("NPC death-drop destination is invalid");
+		}
+		deathDropDestination = Point.location(destination.getX(), destination.getY());
+		deathDropInstanceId = instanceId;
+	}
+
+	public boolean hasDeathDropDestination() {
+		return deathDropDestination != null;
+	}
+
+	private GroundItem createDeathGroundItem(Player owner, int itemId, int amount, boolean noted) {
+		Point destination = deathDropDestination == null ? getLocation() : deathDropDestination;
+		int instanceId = deathDropDestination == null ? getInstanceId() : deathDropInstanceId;
+		GroundItem groundItem = new GroundItem(owner.getWorld(), itemId,
+			destination.getX(), destination.getY(), amount, owner, noted);
+		groundItem.setInstanceId(instanceId);
+		return groundItem;
 	}
 
 	public boolean shouldForceChaseTarget() {
@@ -583,7 +604,7 @@ public class Npc extends Mob {
 
 		Item item = new Item(ItemId.VOID_KEY.id(), 1);
 		item.setAttribute(DropTable.RARE_DROP_ATTRIBUTE, true);
-		GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), 1, owner);
+		GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), 1, item.getNoted());
 		groundItem.setAttribute("npcdrop", true);
 		markRareDropBeam(groundItem, item);
 		getWorld().registerItem(groundItem);
@@ -715,7 +736,7 @@ public class Npc extends Mob {
 			ArrayList<Item> kbdSpecificLoot = getWorld().getNpcDrops().getKbdTableCustom().rollItem(ringOfWealth, owner);
 			if (kbdSpecificLoot != null) {
 				for (Item item : kbdSpecificLoot) {
-					GroundItem groundItem = new GroundItem(getWorld(), item.getCatalogId(), getX(), getY(), item.getAmount(), owner);
+					GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), item.getAmount(), item.getNoted());
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
@@ -813,12 +834,12 @@ public class Npc extends Mob {
 			}
 		});
 
-		if (DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
+		if (!hasDeathDropDestination() && DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
 			recordNpcDrop(owner, dropID, amount, item.getNoted(), isRareDrop(item), "inventory_avarice");
 			return;
 		}
 
-		GroundItem groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner);
+		GroundItem groundItem = createDeathGroundItem(owner, dropID, amount, item.getNoted());
 		groundItem.setAttribute("npcdrop", true);
 		markRareDropBeam(groundItem, item);
 		getWorld().registerItem(groundItem);
@@ -858,7 +879,7 @@ public class Npc extends Mob {
 				}
 
 				if (!destroyHerbs) {
-					groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner, item.getNoted());
+					groundItem = createDeathGroundItem(owner, dropID, amount, item.getNoted());
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
@@ -890,8 +911,11 @@ public class Npc extends Mob {
 	}
 
 	private void recordNpcDrop(Player owner, int itemId, int amount, boolean noted, boolean rare, String destination) {
-		if (owner != null && itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
-			PlayerTitle.checkDragonMediumDrop(owner);
+		if (owner != null) {
+			if (itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
+				PlayerTitle.checkDragonMediumDrop(owner);
+			}
+			PlayerTitle.recordVoidNpcDrop(owner, itemId);
 		}
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
 		owner.addBestiaryDrop(getID(), itemId, amount);

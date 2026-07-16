@@ -12,7 +12,6 @@ cleanup() {
 trap cleanup EXIT
 
 sqlite3 "$db_path" < web/portal/schema/sqlite/001_web_accounts.sql
-sqlite3 "$db_path" < web/portal/schema/sqlite/002_tebex_commerce.sql
 
 sqlite3 "$db_path" <<'SQL'
 PRAGMA foreign_keys = ON;
@@ -78,30 +77,6 @@ VALUES (1, 'system', 'schema-test', 'schema_smoke', 'web_account', '1', '{"ok":t
 
 INSERT INTO web_abuse_signals (account_id, founder_reservation_id, signal_type, signal_hash, bucket, metadata_json, expires_at)
 VALUES (1, 1, 'ip', 'ip-hash', '127.0.0.0/24', '{"source":"schema-test"}', 9999999999999);
-
-INSERT INTO portal_commerce_checkout_intents (
-	intent_id, account_id, package_id, expected_currency, expected_amount_minor,
-	basket_id, status, created_at_ms, expires_at_ms, updated_at_ms
-) VALUES ('intent-schema-fixture', 1, '6276316', 'USD', 500, 'basket-schema-fixture', 'completed', 1000, 2000, 1500);
-
-INSERT INTO portal_commerce_webhook_events (
-	webhook_id, event_type, payload_sha256, transaction_id, status,
-	attempt_count, created_at_ms, processed_at_ms, updated_at_ms
-) VALUES ('webhook-schema-fixture', 'payment.completed', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-	'tbx-schema-fixture', 'processed', 1, 1500, 1500, 1500);
-
-INSERT INTO portal_commerce_payments (
-	provider, transaction_id, intent_id, account_id, basket_id, package_id,
-	quantity, payment_sequence, currency, expected_amount_minor,
-	product_paid_amount_minor, transaction_paid_amount_minor, tax_and_adjustments_minor,
-	status, completed_at_ms, updated_at_ms
-) VALUES ('tebex', 'tbx-schema-fixture', 'intent-schema-fixture', 1, 'basket-schema-fixture',
-	'6276316', 1, 'oneoff', 'USD', 500, 450, 495, 45, 'complete', 1500, 1500);
-
-INSERT INTO portal_commerce_entitlements (
-	payment_id, account_id, provider, transaction_id, line_key, package_id,
-	unit_index, state, created_at_ms, updated_at_ms
-) VALUES (1, 1, 'tebex', 'tbx-schema-fixture', 'package:6276316:unit:1', '6276316', 1, 'pending', 1500, 1500);
 SQL
 
 foreign_key_violations="$(sqlite3 "$db_path" "PRAGMA foreign_key_check;")"
@@ -180,42 +155,6 @@ if sqlite3 "$db_path" "INSERT INTO web_legacy_account_claims (account_id, charac
 	exit 1
 fi
 
-if sqlite3 "$db_path" "INSERT INTO portal_commerce_webhook_events (webhook_id, event_type, payload_sha256, status, attempt_count, created_at_ms, updated_at_ms) VALUES ('webhook-payload-dupe', 'payment.completed', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'processed', 1, 1, 1);" >/dev/null 2>&1; then
-	echo "expected duplicate webhook payload to violate event uniqueness"
-	exit 1
-fi
-
-if sqlite3 "$db_path" "INSERT INTO portal_commerce_payments (provider, transaction_id, intent_id, account_id, basket_id, package_id, quantity, payment_sequence, currency, expected_amount_minor, product_paid_amount_minor, transaction_paid_amount_minor, tax_and_adjustments_minor, status, completed_at_ms, updated_at_ms) VALUES ('tebex', 'tbx-schema-fixture', 'other-intent', 1, 'other-basket', '6276316', 1, 'oneoff', 'USD', 500, 500, 550, 50, 'complete', 1, 1);" >/dev/null 2>&1; then
-	echo "expected duplicate provider transaction to violate payment uniqueness"
-	exit 1
-fi
-
-if sqlite3 "$db_path" "INSERT INTO portal_commerce_entitlements (payment_id, account_id, provider, transaction_id, line_key, package_id, unit_index, state, created_at_ms, updated_at_ms) VALUES (1, 1, 'tebex', 'tbx-schema-fixture', 'package:6276316:unit:1', '6276316', 1, 'pending', 1, 1);" >/dev/null 2>&1; then
-	echo "expected duplicate provider transaction line to violate entitlement uniqueness"
-	exit 1
-fi
-
-if sqlite3 "$db_path" "INSERT INTO portal_commerce_entitlements (payment_id, account_id, provider, transaction_id, line_key, package_id, unit_index, state, created_at_ms, updated_at_ms) VALUES (1, 1, 'tebex', 'tbx-other', 'other-line', '6276316', 1, 'available', 1, 1);" >/dev/null 2>&1; then
-	echo "expected invalid commerce entitlement state to violate the state constraint"
-	exit 1
-fi
-
-if sqlite3 -cmd 'PRAGMA foreign_keys=ON;' "$db_path" "INSERT INTO portal_commerce_payments (provider, transaction_id, intent_id, account_id, basket_id, package_id, quantity, payment_sequence, currency, expected_amount_minor, product_paid_amount_minor, transaction_paid_amount_minor, tax_and_adjustments_minor, status, completed_at_ms, updated_at_ms) VALUES ('tebex', 'tbx-orphan', 'missing-intent', 1, 'missing-basket', '6276316', 1, 'oneoff', 'USD', 500, 500, 540, 40, 'complete', 1, 1);" >/dev/null 2>&1; then
-	echo "fresh commerce connections must enforce payment-to-intent foreign keys"
-	exit 1
-fi
-
-if sqlite3 -cmd 'PRAGMA foreign_keys=ON;' "$db_path" "INSERT INTO portal_commerce_entitlements (payment_id, account_id, provider, transaction_id, line_key, package_id, unit_index, state, created_at_ms, updated_at_ms) VALUES (999, 1, 'tebex', 'tbx-orphan-entitlement', 'orphan-line', '6276316', 1, 'pending', 1, 1);" >/dev/null 2>&1; then
-	echo "fresh commerce connections must enforce entitlement-to-payment foreign keys"
-	exit 1
-fi
-
-commerce_pii_columns="$(sqlite3 "$db_path" "SELECT name FROM pragma_table_info('portal_commerce_checkout_intents') UNION ALL SELECT name FROM pragma_table_info('portal_commerce_webhook_events') UNION ALL SELECT name FROM pragma_table_info('portal_commerce_payments') UNION ALL SELECT name FROM pragma_table_info('portal_commerce_entitlements');" | rg -i '(^|_)(email|username|ip|raw_body|customer)(_|$)' || true)"
-if [[ -n "$commerce_pii_columns" ]]; then
-	echo "commerce tables must not contain customer PII columns: $commerce_pii_columns"
-	exit 1
-fi
-
 sqlite3 "$db_path" "INSERT INTO web_founder_reservations (username, normalized_name, email_canonical, email_display, founder_code, status) VALUES ('SchemaHero2', 'schemahero', 'other@example.com', 'other@example.com', 'OTHER-A2', 'released');"
 
 sqlite3 -json "$db_path" <<'SQL'
@@ -231,17 +170,5 @@ SELECT
 	(SELECT COUNT(*) FROM web_founder_referral_reward_codes) AS referral_reward_codes,
 	(SELECT COUNT(*) FROM web_entitlements) AS entitlements,
 	(SELECT COUNT(*) FROM web_audit_events) AS audit_events,
-	(SELECT COUNT(*) FROM web_abuse_signals) AS abuse_signals,
-	(SELECT COUNT(*) FROM portal_commerce_checkout_intents) AS commerce_intents,
-	(SELECT COUNT(*) FROM portal_commerce_webhook_events) AS commerce_events,
-	(SELECT COUNT(*) FROM portal_commerce_payments) AS commerce_payments,
-	(SELECT COUNT(*) FROM portal_commerce_entitlements) AS commerce_entitlements;
+	(SELECT COUNT(*) FROM web_abuse_signals) AS abuse_signals;
 SQL
-
-game_patch_db="$tmp_dir/game-commerce-patch.db"
-sqlite3 "$game_patch_db" < server/database/sqlite/patches/2026_07_11_add_portal_commerce.sql
-game_patch_tables="$(sqlite3 "$game_patch_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'portal_commerce_%';")"
-if [[ "$game_patch_tables" != "4" ]]; then
-	echo "game SQLite commerce patch should create all four commerce tables"
-	exit 1
-fi

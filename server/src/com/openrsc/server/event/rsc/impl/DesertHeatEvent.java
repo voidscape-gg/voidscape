@@ -1,6 +1,7 @@
 package com.openrsc.server.event.rsc.impl;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.Point;
@@ -33,6 +34,11 @@ public class DesertHeatEvent extends GameTickEvent {
 	}
 
 	public void doDesertHeat() {
+		final Player player = (Player) mob;
+		final DuelProofSession proofSession = player.getDuel().getProofSession();
+		if (proofSession != null && proofSession.blocksExternalDamage()) {
+			return;
+		}
 		if (inDesert()) {
 			if (this.desertHeatCounter == Integer.MIN_VALUE) {
 				this.desertHeatCounter = calculateHeatDelay();

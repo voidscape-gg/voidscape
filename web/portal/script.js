@@ -87,10 +87,6 @@
 	var founderRewardCard = document.getElementById("founder-reward-card");
 	var founderRewardCount = document.getElementById("founder-reward-count");
 	var useFounderReward = document.getElementById("use-founder-reward");
-	var paidCardWallet = document.getElementById("paid-card-wallet");
-	var paidCardCount = document.getElementById("paid-card-count");
-	var buySubscriptionCard = document.getElementById("buy-subscription-card");
-	var checkoutState = document.getElementById("checkout-state");
 	var subTitle = document.getElementById("sub-title");
 	var subDays = document.getElementById("sub-days");
 	var subMeterFill = document.getElementById("sub-meter-fill");
@@ -303,13 +299,9 @@
 	var founderKey = "voidscape.portal.founder";
 	var referralKey = "voidscape.portal.referralCode";
 	var sessionKey = "voidscape.portal.sessionToken";
-	var purchaseIntentKey = "voidscape.portal.subscriptionCardPurchaseIntent";
 	var adminTokenKey = "voidscape.portal.adminToken";
 	var sessionToken = localStorage.getItem(sessionKey) || "";
 	var authStatus = sessionToken ? "checking" : "signed-out";
-	var purchaseIntentPending = captureSubscriptionPurchaseIntent();
-	var purchaseCheckoutStarted = false;
-	var purchaseAutoAttempted = false;
 	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
 	var portalAuthMode = initialPortalAuthMode();
@@ -318,7 +310,6 @@
 	var legacyAccountClaimToken = legacyAccountClaimTokenFromLocation();
 	var publicModeActive = false;
 	var launchSignupModeActive = false;
-	var rosterWritesFrozen = false;
 	var publicModeViews = {
 		account: true
 	};
@@ -453,16 +444,6 @@
 	setupFunnelTracking();
 
 	window.addEventListener("hashchange", function () {
-		if (window.location.hash === "#subscription-buy") {
-			purchaseIntentPending = true;
-			purchaseAutoAttempted = false;
-			try { sessionStorage.setItem(purchaseIntentKey, "1"); } catch (error) { /* best effort */ }
-			if (authStatus === "authenticated") {
-				activateView("subscription", { preserveHash: true });
-				beginSubscriptionCardCheckout(true);
-			}
-			return;
-		}
 		if (authStatus !== "authenticated") return;
 		activateView((window.location.hash || "#dashboard").replace("#", "") || "dashboard");
 	});
@@ -493,10 +474,6 @@
 
 	if (queueCharacter) {
 		queueCharacter.addEventListener("click", async function () {
-			if (rosterWritesFrozen) {
-				characterMessage.textContent = rosterFreezeMessage();
-				return;
-			}
 			var name = normalizeName(characterName.value || "");
 			if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 				characterMessage.textContent = "Choose a 2-12 character name.";
@@ -505,7 +482,7 @@
 			}
 			var gamePassword = characterPassword ? characterPassword.value : "";
 			if (!isGamePassword(gamePassword, 4)) {
-				characterMessage.textContent = "Game password must be 4-20 letters and numbers.";
+				characterMessage.textContent = gamePasswordRequirement(4, "Game password");
 				if (characterPassword) characterPassword.focus();
 				return;
 			}
@@ -544,18 +521,15 @@
 				} else if (error.status === 429) {
 					characterMessage.textContent = "Too many recent character creations. Wait a little and try again.";
 				} else if (error.status === 400 && error.code === "invalid_game_password") {
-					characterMessage.textContent = "Enter a 4-20 letter and number game password for this character.";
+					characterMessage.textContent = gamePasswordRequirement(4, "Game password");
 					if (characterPassword) characterPassword.focus();
-				} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-					discoverRosterWriteFreeze();
-					characterMessage.textContent = rosterFreezeMessage();
 				} else if (error.status === 404 && error.code === "not_available_during_prelaunch") {
 					characterMessage.textContent = "Public prelaunch mode only accepts reservations. Character creation opens with the account portal.";
 				} else {
 					characterMessage.textContent = "Character creation failed: " + (error.code || "api_error") + ".";
 				}
 			} finally {
-				queueCharacter.disabled = rosterWritesFrozen || characters.length >= maxCharacters || !sessionToken;
+				queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
 			}
 		});
 	}
@@ -616,10 +590,6 @@
 
 	if (deleteCharacter) {
 		deleteCharacter.addEventListener("click", async function () {
-			if (rosterWritesFrozen) {
-				characterMessage.textContent = rosterFreezeMessage();
-				return;
-			}
 			var character = selectedRosterCharacter();
 			if (!character) {
 				characterMessage.textContent = "Select a character to delete.";
@@ -657,9 +627,6 @@
 					characterMessage.textContent = "Log out of that character in-game before deleting it.";
 				} else if (error.status === 409 && (error.code === "character_link_mismatch" || error.code === "character_link_missing" || error.code === "character_delete_conflict")) {
 					characterMessage.textContent = "Character link changed in the game database. Refresh and try again.";
-				} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-					discoverRosterWriteFreeze();
-					characterMessage.textContent = rosterFreezeMessage();
 				} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 					characterMessage.textContent = "Game database is unavailable, so this character was not deleted.";
 				} else {
@@ -702,7 +669,7 @@
 				return;
 			}
 			if (!isGamePassword(nextPassword, 4)) {
-				characterMessage.textContent = "Game password must be 4-20 letters and numbers.";
+				characterMessage.textContent = gamePasswordRequirement(4, "Game password");
 				gamePasswordNew.focus();
 				return;
 			}
@@ -883,7 +850,7 @@
 			if (subTitle) subTitle.textContent = "Subscribed";
 			if (subMeterFill) subMeterFill.style.width = "100%";
 			if (subCombatRate) subCombatRate.textContent = "11x";
-			if (subSkillRate) subSkillRate.textContent = "2.5x";
+			if (subSkillRate) subSkillRate.textContent = "3x";
 		});
 	}
 
@@ -891,43 +858,6 @@
 		useFounderReward.addEventListener("click", function () {
 			redeemState.textContent = "Starter subscription cards are claimed from the Subscription Vendor in Lumbridge.";
 		});
-	}
-
-	if (buySubscriptionCard) {
-		buySubscriptionCard.addEventListener("click", function () {
-			beginSubscriptionCardCheckout(false);
-		});
-	}
-
-	async function beginSubscriptionCardCheckout(automatic) {
-		if (purchaseCheckoutStarted) return;
-		if (!sessionToken || authStatus !== "authenticated") {
-			purchaseIntentPending = true;
-			try { sessionStorage.setItem(purchaseIntentKey, "1"); } catch (error) { /* best effort */ }
-			if (checkoutState) checkoutState.textContent = "Sign in before starting checkout. Your purchase will resume after login.";
-			activateView("account", { preserveHash: true });
-			return;
-		}
-		purchaseCheckoutStarted = true;
-		if (buySubscriptionCard) buySubscriptionCard.disabled = true;
-		if (checkoutState) checkoutState.textContent = automatic
-			? "Resuming your secure Tebex checkout..."
-			: "Creating a secure Tebex checkout...";
-		try {
-			var checkout = await apiRequest("/api/payments/subscription-cards/checkout", {
-				method: "POST",
-				body: {}
-			});
-			if (!checkout.links || !checkout.links.checkout) throw { code: "checkout_link_missing" };
-			purchaseIntentPending = false;
-			try { sessionStorage.removeItem(purchaseIntentKey); } catch (error) { /* best effort */ }
-			window.location.assign(checkout.links.checkout);
-		} catch (error) {
-			purchaseCheckoutStarted = false;
-			if (error.status === 401) clearSession();
-			if (checkoutState) checkoutState.textContent = "Checkout unavailable: " + (error.code || "try again later") + ".";
-			if (buySubscriptionCard) buySubscriptionCard.disabled = false;
-		}
 	}
 
 	if (recoveryCodeRotationForm) {
@@ -1320,10 +1250,6 @@
 	}
 
 	async function handleEmailVerification() {
-		if (rosterWritesFrozen) {
-			emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
-			return;
-		}
 		if (!emailVerificationToken) {
 			emailVerificationMessage.textContent = "This verification link is missing or invalid.";
 			return;
@@ -1343,10 +1269,7 @@
 			cleanPortalDashboardUrl();
 			activateView("dashboard");
 		} catch (error) {
-			if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
-			} else if (error.status === 410) {
+			if (error.status === 410) {
 				emailVerificationMessage.textContent = "That verification link expired. Create the account again to request a new one.";
 			} else if (!error.status || error.status >= 500) {
 				emailVerificationMessage.textContent = "Verification is temporarily unavailable. Your link may still be valid; try again shortly.";
@@ -1354,7 +1277,7 @@
 				emailVerificationMessage.textContent = "That verification link is invalid or has already been used.";
 			}
 		} finally {
-			emailVerificationSubmit.disabled = rosterWritesFrozen;
+			emailVerificationSubmit.disabled = false;
 		}
 	}
 
@@ -1425,10 +1348,6 @@
 	}
 
 	async function handleLegacyAccountClaimRequest() {
-		if (rosterWritesFrozen) {
-			legacyClaimMessage.textContent = rosterFreezeMessage();
-			return;
-		}
 		var username = legacyClaimUsername ? legacyClaimUsername.value.trim().replace(/\s+/g, " ") : "";
 		var gamePassword = legacyClaimGamePassword ? legacyClaimGamePassword.value : "";
 		var email = legacyClaimEmail ? legacyClaimEmail.value.trim() : "";
@@ -1479,9 +1398,8 @@
 			legacyClaimPasswordConfirm.value = "";
 			legacyClaimMessage.textContent = "Verification email queued. Check your inbox to finish claiming your character.";
 		} catch (error) {
-			if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				legacyClaimMessage.textContent = rosterFreezeMessage();
+			if (error.status === 400 && error.code === "invalid_game_password") {
+				legacyClaimMessage.textContent = "Enter the exact 4-20 character password used by the older game client.";
 			} else if (error.status === 401) {
 				legacyClaimMessage.textContent = "Character username or game password did not match an unclaimed older account.";
 			} else if (error.status === 409) {
@@ -1492,15 +1410,11 @@
 				legacyClaimMessage.textContent = "Account claim is unavailable right now. Try again shortly.";
 			}
 		} finally {
-			legacyClaimSubmit.disabled = rosterWritesFrozen;
+			legacyClaimSubmit.disabled = false;
 		}
 	}
 
 	async function handleLegacyAccountClaimComplete() {
-		if (rosterWritesFrozen) {
-			legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
-			return;
-		}
 		if (!legacyAccountClaimToken) {
 			legacyClaimConfirmMessage.textContent = "This account claim link is missing or invalid. Start again.";
 			return;
@@ -1518,18 +1432,13 @@
 			setPortalAuthMode("login");
 			portalAuthMessage.textContent = "Account claimed. Sign in with your verified email and new website password.";
 		} catch (error) {
-			if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
-			} else {
-				legacyClaimConfirmMessage.textContent = error.status === 401
-					? "That claim link is invalid, expired, or already used. Start again."
-					: error.status === 409
-						? "The account or requested email changed before confirmation. Start again or contact support."
-						: "Account claim failed: " + (error.code || "api_error") + ".";
-			}
+			legacyClaimConfirmMessage.textContent = error.status === 401
+				? "That claim link is invalid, expired, or already used. Start again."
+				: error.status === 409
+					? "The account or requested email changed before confirmation. Start again or contact support."
+					: "Account claim failed: " + (error.code || "api_error") + ".";
 		} finally {
-			legacyClaimConfirmSubmit.disabled = rosterWritesFrozen;
+			legacyClaimConfirmSubmit.disabled = false;
 		}
 	}
 
@@ -1636,10 +1545,6 @@
 	}
 
 	async function createPrelaunchGameLogin() {
-		if (rosterWritesFrozen) {
-			founderMessage.textContent = rosterFreezeMessage();
-			return;
-		}
 		if (!sessionToken) {
 			founderMessage.textContent = "Sign in to the portal first.";
 			return;
@@ -1652,7 +1557,7 @@
 			return;
 		}
 		if (!isGamePassword(gamePassword, 4)) {
-			founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
+			founderMessage.textContent = gamePasswordRequirement(4, "Game password");
 			if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			return;
 		}
@@ -1680,20 +1585,17 @@
 				clearSession();
 				founderMessage.textContent = "Sign in to the portal again to continue.";
 			} else if (error.status === 400 && error.code === "invalid_game_password") {
-				founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
+				founderMessage.textContent = gamePasswordRequirement(4, "Game password");
 				if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			} else if (error.status === 409) {
 				founderMessage.textContent = "That username is already taken. Open Manage characters to choose another.";
-			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				founderMessage.textContent = rosterFreezeMessage();
 			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 				founderMessage.textContent = "Start the portal with PORTAL_OPENRSC_DB before creating game logins.";
 			} else {
 				founderMessage.textContent = "Game login creation failed: " + (error.code || "unknown_error") + ".";
 			}
 		} finally {
-			prelaunchCreateGameLogin.disabled = rosterWritesFrozen;
+			prelaunchCreateGameLogin.disabled = false;
 		}
 	}
 
@@ -1707,8 +1609,8 @@
 				if (founderEmail) founderEmail.focus();
 				return;
 			}
-			if (webPassword.length < 8 || webPassword.length > 20) {
-				founderMessage.textContent = "Password must be 8-20 characters.";
+			if (webPassword.length < 8 || webPassword.length > 128) {
+				founderMessage.textContent = "Website password must be 8-128 characters.";
 				if (founderPassword) founderPassword.focus();
 				return;
 			}
@@ -1740,10 +1642,6 @@
 			}
 			return;
 		}
-		if (rosterWritesFrozen) {
-			founderMessage.textContent = rosterFreezeMessage();
-			return;
-		}
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 			founderMessage.textContent = "Choose a 2-12 character username to reserve.";
 			founderName.focus();
@@ -1757,7 +1655,7 @@
 			return;
 		}
 		if (launchSignupModeActive && !isGamePassword(webPassword, 8)) {
-			founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+			founderMessage.textContent = gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.";
 			if (founderPassword) founderPassword.focus();
 			return;
 		}
@@ -1820,12 +1718,9 @@
 					? "Enter a valid email address for your web account."
 					: "Enter a valid email address. Your code is tied to it.";
 			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_password") {
-				founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+				founderMessage.textContent = gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.";
 			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_game_password") {
-				founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
-			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				founderMessage.textContent = rosterFreezeMessage();
+				founderMessage.textContent = gamePasswordRequirement(8, "First game password");
 			} else if (launchSignupModeActive && error.status === 503 && error.code === "email_verification_not_configured") {
 				founderMessage.textContent = "Email verification is unavailable right now. Try again shortly.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
@@ -1851,7 +1746,7 @@
 				founderMessage.textContent = "Signup is unavailable right now. Please try again soon.";
 			}
 		} finally {
-			if (founderSubmit) founderSubmit.disabled = rosterWritesFrozen && accountMode !== "signin";
+			if (founderSubmit) founderSubmit.disabled = false;
 		}
 	}
 
@@ -2004,13 +1899,11 @@
 	function applyPublicState(state) {
 			if (!state) return;
 			launchSignupModeActive = Boolean(state.launchSignupMode);
-			rosterWritesFrozen = Boolean(state.rosterWritesFrozen);
 			launchStarterCardOpen = starterCardWindowOpen(state.launch || (state.beta && state.beta.schedule) || null);
 			document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
-			googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
+		googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
 		updateLaunchSignupCopy();
 		updateGoogleSignupButton();
-		updateRosterFreezeControls();
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
 			document.body.classList.add("public-mode");
@@ -2120,18 +2013,15 @@
 				? (launchOpenActive ? "Create your account and character" : "Reserve your account name")
 				: launchOpenActive ? "Create your launch username" : "Reserve your username";
 		}
-		if (founderSubmit) {
-			founderSubmit.textContent = signInMode
-				? "Sign in"
-				: rosterWritesFrozen
-				? "Roster update in progress"
-				: launchSignupModeActive
-				? (launchOpenActive
-					? "Create account + character"
-					: (launchStarterCardOpen ? "Reserve name + free card" : "Create account + character"))
-				: launchOpenActive ? "Create launch code" : "Reserve & get my code";
-			founderSubmit.disabled = rosterWritesFrozen && !signInMode;
-		}
+			if (founderSubmit) {
+				founderSubmit.textContent = signInMode
+					? "Sign in"
+					: launchSignupModeActive
+					? (launchOpenActive
+						? "Create account + character"
+						: (launchStarterCardOpen ? "Reserve name + free card" : "Create account + character"))
+					: launchOpenActive ? "Create launch code" : "Reserve & get my code";
+			}
 		if (founderPassword) {
 			if (launchSignupModeActive) {
 				founderPassword.setAttribute("type", "password");
@@ -2146,8 +2036,6 @@
 		if (founderMessage && founderForm && !founderForm.classList.contains("is-claimed")) {
 			founderMessage.textContent = signInMode
 				? "Use your email and password to manage characters, recovery, and launch rewards."
-				: rosterWritesFrozen
-				? rosterFreezeMessage()
 				: launchSignupModeActive
 				? (launchOpenActive
 					? (launchStarterCardOpen
@@ -2174,7 +2062,7 @@
 
 	function updateGoogleSignupButton() {
 		if (!prelaunchGoogle || !googleSignupButton) return;
-		var enabled = Boolean(!rosterWritesFrozen && launchSignupModeActive && googleClientId && !(founderForm && founderForm.classList.contains("is-claimed")));
+		var enabled = Boolean(launchSignupModeActive && googleClientId && !(founderForm && founderForm.classList.contains("is-claimed")));
 		prelaunchGoogle.hidden = !enabled;
 		if (!enabled || googleButtonRendered) return;
 		renderGoogleSignupButton();
@@ -2204,7 +2092,7 @@
 			});
 			googleButtonRendered = true;
 			if (googleSignupMessage) {
-				googleSignupMessage.textContent = "Google creates the web login; the password above becomes the first character login.";
+				googleSignupMessage.textContent = "Google creates the web login; use 8-20 letters and numbers only for the first character password. Symbols and spaces are not allowed.";
 			}
 		} catch (error) {
 			googleButtonRendered = false;
@@ -2236,10 +2124,6 @@
 	}
 
 	async function handleGoogleCredential(response) {
-		if (rosterWritesFrozen) {
-			founderMessage.textContent = rosterFreezeMessage();
-			return;
-		}
 		var credential = response && response.credential ? response.credential : "";
 		var name = normalizeName(founderName.value || "");
 		var gamePassword = founderPassword ? founderPassword.value : "";
@@ -2249,7 +2133,7 @@
 			return;
 		}
 		if (!isGamePassword(gamePassword, 8)) {
-			founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
+			founderMessage.textContent = gamePasswordRequirement(8, "First game password");
 			if (founderPassword) founderPassword.focus();
 			return;
 		}
@@ -2285,13 +2169,12 @@
 				founderMessage.textContent = "Google sign-in timed out. Try the Google button again.";
 				googleButtonRendered = false;
 				renderGoogleSignupButton();
+			} else if (error.status === 400 && error.code === "invalid_game_password") {
+				founderMessage.textContent = gamePasswordRequirement(8, "First game password");
 			} else if (error.status === 401) {
 				founderMessage.textContent = "Google sign-in could not be verified. Try again or use email.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved" || error.code === "character_name_taken")) {
 				founderMessage.textContent = "That username is already taken.";
-			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
-				founderMessage.textContent = rosterFreezeMessage();
 			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
 				founderMessage.textContent = "Launch signup needs the game database before creating characters.";
 			} else {
@@ -2326,7 +2209,7 @@
 								? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
 								: "Create your account and first character now.")
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
-				: "Launch is open. Create or manage your account, then download the launcher, play in your browser, or use Android.";
+				: "Launch is open. Create or manage your account, then download the launcher or use the mobile web client.";
 			}
 			if (previousStarterCardOpen !== launchStarterCardOpen) updateLaunchSignupCopy();
 		}
@@ -2343,10 +2226,10 @@
 		}
 			if (landingHeroProof) {
 				landingHeroProof.innerHTML = launchOpenActive
-					? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Web and Android are ready.</span>"
+					? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Mobile web is ready for iOS and Android.</span>"
 					: launchStarterCardOpen
-						? "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, and Android at launch.</span>"
-						: "<span>Create your account.</span><span>Choose your first character.</span><span>Web, Desktop, and Android.</span>";
+						? "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>"
+						: "<span>Create your account.</span><span>Choose your first character.</span><span>Web, Desktop, iOS, and Android.</span>";
 			}
 			if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
 			setText(landingNavPrimaryCta, launchOpenActive ? "Create Account" : "Reserve Name");
@@ -2354,11 +2237,11 @@
 			setText(landingPlatformPrimaryCta, launchOpenActive ? "Create or Manage Account" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
 			setText(landingFinalPrimaryCta, launchOpenActive ? "Create Account + Play" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
 		if (landingPlatformLabel) landingPlatformLabel.textContent = launchOpenActive ? "Play now" : "Launch platform support";
-		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Supported clients.";
+		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Every platform.";
 		if (landingPlatformCopy) {
 			landingPlatformCopy.textContent = launchOpenActive
-				? "Use the desktop launcher on PC, Mac, or Linux, play in a supported browser, or use the Android release. Your portal account and characters work across the supported clients."
-				: "Voidscape will be available on Web, Desktop, and Android at launch. You can play in a supported browser if you prefer not to install a client.";
+				? "Use the desktop launcher on PC, Mac, or Linux. On iOS and Android, use the mobile web client, or the Android APK when it is available. Your portal account and characters work across the supported clients."
+				: "Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.";
 		}
 		if (landingReservePrompt) {
 			var promptLabel = landingReservePrompt.querySelector("span");
@@ -2695,7 +2578,6 @@
 		renderPortalAuthState(state);
 		updatePrelaunchAuthCtas();
 		renderBetaHub();
-		resumeSubscriptionPurchaseIntent();
 	}
 
 	function normalizeBetaResources(beta) {
@@ -2861,35 +2743,6 @@
 					? "Claimed in game"
 				: "No card waiting";
 		}
-		var paid = rewards && rewards.paidSubscriptionCards ? rewards.paidSubscriptionCards : null;
-		var paidPending = paid ? Number(paid.pending || 0) : 0;
-		var paidClaimed = paid ? Number(paid.claimed || 0) : 0;
-		var paidReview = paid ? Number(paid.review || 0) : 0;
-		var paidFrozen = paid ? Number(paid.frozen || 0) : 0;
-		if (paidCardWallet) paidCardWallet.classList.toggle("is-ready", paidPending > 0);
-		if (paidCardCount) {
-			var paidParts = [];
-			if (paidPending) paidParts.push(paidPending + " waiting");
-			if (paidClaimed) paidParts.push(paidClaimed + " claimed");
-			if (paidReview) paidParts.push(paidReview + " in review");
-			if (paidFrozen) paidParts.push(paidFrozen + " frozen");
-			paidCardCount.textContent = paidParts.length ? paidParts.join(" · ") : "No paid cards waiting";
-		}
-		if (buySubscriptionCard) buySubscriptionCard.disabled = !sessionToken || !(paid && paid.checkoutAvailable);
-		if (checkoutState) {
-			var checkoutReturn = new URLSearchParams(window.location.search).get("checkout");
-			if (checkoutReturn === "success") {
-				checkoutState.textContent = paidPending > 0
-					? "Payment confirmed. Your card is ready to claim in Lumbridge."
-					: "Checkout returned. Tebex confirmation can take a moment; refresh before visiting the vendor.";
-			} else if (checkoutReturn === "cancelled") {
-				checkoutState.textContent = "Checkout cancelled. No card was granted.";
-			} else if (!(paid && paid.checkoutAvailable)) {
-				checkoutState.textContent = "Paid card checkout is not configured right now.";
-			} else {
-				checkoutState.textContent = "Buy one tradable 1-week card. Tebex confirmation creates a pending in-game claim.";
-			}
-		}
 	}
 
 	function updateDashboardHome(state) {
@@ -2919,7 +2772,7 @@
 	function renderPortalAuthState(state) {
 		var account = state && state.account ? state.account : betaAccount && betaAccount.account ? betaAccount.account : null;
 		if (queueCharacter) {
-			queueCharacter.disabled = rosterWritesFrozen || authStatus !== "authenticated" || !sessionToken || characters.length >= maxCharacters;
+			queueCharacter.disabled = authStatus !== "authenticated" || !sessionToken || characters.length >= maxCharacters;
 		}
 		if (accountLogout) {
 			accountLogout.hidden = !(account && sessionToken && authStatus === "authenticated");
@@ -2936,23 +2789,6 @@
 		if (requested === "recovery" || requested === "request") return "request";
 		if (requested === "recovery-code" || requested === "code") return "code";
 		return "login";
-	}
-
-	function captureSubscriptionPurchaseIntent() {
-		var requested = window.location.hash === "#subscription-buy";
-		try {
-			if (requested) sessionStorage.setItem(purchaseIntentKey, "1");
-			return requested || sessionStorage.getItem(purchaseIntentKey) === "1";
-		} catch (error) {
-			return requested;
-		}
-	}
-
-	function resumeSubscriptionPurchaseIntent() {
-		if (!purchaseIntentPending || purchaseAutoAttempted || authStatus !== "authenticated" || !sessionToken || purchaseCheckoutStarted) return;
-		purchaseAutoAttempted = true;
-		activateView("subscription", { preserveHash: true });
-		window.setTimeout(function () { beginSubscriptionCardCheckout(true); }, 0);
 	}
 
 	function emailVerificationTokenFromLocation() {
@@ -3018,12 +2854,6 @@
 	function openRequestedAuthenticatedView() {
 		if (legacyAccountClaimToken) {
 			activateView("dashboard", { preserveHash: true });
-			return;
-		}
-		if (purchaseIntentPending || window.location.hash === "#subscription-buy") {
-			purchaseIntentPending = true;
-			activateView("subscription", { preserveHash: true });
-			resumeSubscriptionPurchaseIntent();
 			return;
 		}
 		var requested = String(window.location.hash || "").replace(/^#/, "");
@@ -3452,12 +3282,10 @@
 		if (characterMessage) {
 			if (!sessionToken) {
 				characterMessage.textContent = "Sign in on the Account page first. Then create game logins here with their own in-game passwords.";
-			} else if (rosterWritesFrozen) {
-				characterMessage.textContent = rosterFreezeMessage();
 			} else if (characters.length >= maxCharacters) {
 				characterMessage.textContent = "Roster is full. Web accounts are capped at 10 characters.";
 			} else {
-				characterMessage.textContent = "Create another game login with its own 4-20 letter and number password.";
+				characterMessage.textContent = "Create another game login with its own 4-20 letter and number password. Symbols and spaces are not allowed.";
 			}
 		}
 		if (!characters.length) {
@@ -3506,44 +3334,16 @@
 	}
 
 	function updateCharacterControls() {
-		if (queueCharacter) queueCharacter.disabled = rosterWritesFrozen || characters.length >= maxCharacters || !sessionToken;
+		if (queueCharacter) queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
 		var character = selectedRosterCharacter();
 		if (showGamePasswordReset) {
 			showGamePasswordReset.disabled = !sessionToken || !canResetGamePassword(character);
 		}
 		if (deleteCharacter) {
-			deleteCharacter.disabled = rosterWritesFrozen || !sessionToken || !character;
+			deleteCharacter.disabled = !sessionToken || !character;
 			deleteCharacter.textContent = character
 				? (isPortalCreatedCharacter(character) ? "Delete " : "Remove ") + character.name
 				: "Delete selected";
-		}
-	}
-
-	function rosterFreezeMessage() {
-		return "Launch roster update in progress. Existing players can still sign in; account and character roster changes return shortly.";
-	}
-
-	function discoverRosterWriteFreeze() {
-		rosterWritesFrozen = true;
-		updateLaunchSignupCopy();
-		updateGoogleSignupButton();
-		updateRosterFreezeControls();
-	}
-
-	function updateRosterFreezeControls() {
-		updateCharacterControls();
-		if (emailVerificationSubmit) emailVerificationSubmit.disabled = rosterWritesFrozen;
-		if (legacyClaimSubmit) legacyClaimSubmit.disabled = rosterWritesFrozen;
-		if (legacyClaimConfirmSubmit) legacyClaimConfirmSubmit.disabled = rosterWritesFrozen;
-		if (prelaunchCreateGameLogin) prelaunchCreateGameLogin.disabled = rosterWritesFrozen;
-		if (!rosterWritesFrozen) return;
-		if (characterMessage) characterMessage.textContent = rosterFreezeMessage();
-		if (portalAuthMode === "verify" && emailVerificationMessage) {
-			emailVerificationMessage.textContent = "Launch roster update in progress. Your verification link remains pending; try again shortly.";
-		}
-		if (portalAuthMode === "claim" && legacyClaimMessage) legacyClaimMessage.textContent = rosterFreezeMessage();
-		if (portalAuthMode === "claim-confirm" && legacyClaimConfirmMessage) {
-			legacyClaimConfirmMessage.textContent = "Launch roster update in progress. Your claim link remains pending; try again shortly.";
 		}
 	}
 
@@ -4159,7 +3959,7 @@
 				trustSourceRepo.target = "_blank";
 				trustSourceRepo.rel = "noreferrer";
 				trustSourceRepo.removeAttribute("aria-disabled");
-				trustSourceRepo.textContent = "View published source";
+				trustSourceRepo.textContent = "View AGPL source";
 			} else {
 				trustSourceRepo.removeAttribute("href");
 				trustSourceRepo.removeAttribute("target");
@@ -4170,8 +3970,8 @@
 		}
 		if (trustSourceCommit) {
 			var commitText = source.shortCommit
-				? "Build commit " + source.shortCommit + (source.dirty ? " - live patch pending" : "")
-				: (source.status === "publication_pending" ? "Build commit recorded privately" : "Build commit pending");
+				? (source.dirty ? "Baseline " : "Commit ") + source.shortCommit + (source.dirty ? " - live patch pending" : "")
+				: "Commit pending";
 			trustSourceCommit.textContent = commitText;
 			trustSourceCommit.title = source.commit || commitText;
 		}
@@ -4199,16 +3999,16 @@
 	function sourceListItems(build, integrity, staff) {
 		var source = build.source || {};
 		var manifest = build.manifest || {};
-		var publicationPending = source.status === "publication_pending" || !source.repositoryUrl;
-		var rows = [];
-		if (publicationPending) {
-			rows.push("The release build commit is recorded privately for operator verification.");
-			rows.push("Publication of corresponding source for this release is pending.");
+		var sourcePublished = Boolean(source.repositoryUrl && source.shortCommit);
+		var rows = [sourcePublished
+			? "The corresponding AGPL source revision is published."
+			: "AGPL source publication is pending and required before player-facing distribution."];
+		if (source.shortCommit && source.dirty) {
+			rows.push("Staged files are based on revision " + source.shortCommit + "; newer changes remain unpublished.");
+		} else if (source.shortCommit) {
+			rows.push("Published source revision: " + source.shortCommit + ".");
 		} else {
-			rows.push("A published source link is available for inspection.");
-			rows.push(source.shortCommit
-				? "Published source commit: " + source.shortCommit + "."
-				: "The published source commit is waiting for verification.");
+			rows.push("Source commit metadata is waiting for the next publish.");
 		}
 		rows.push(build.evidence || "Download hashes are generated from served files.");
 		if (manifest.status === "available") {
@@ -4393,9 +4193,8 @@
 	function downloadRank(row) {
 		if (isLauncherDownloadRow(row)) return 0;
 		if (isWebClientRow(row)) return 1;
-		if (row && row.slug === "android-play") return 2;
-		if (row && row.slug === "android-apk") return 3;
-		return 4;
+		if (row && row.slug === "android-apk") return 2;
+		return 3;
 	}
 
 	function downloadActionClass(row, available) {
@@ -4447,7 +4246,7 @@
 	function downloadFunnelEvent(row) {
 		if (!row) return "download";
 		if (isWebClientRow(row)) return "play_web";
-		if (row.slug === "android-play" || row.slug === "android-apk") return "download_android";
+		if (row.slug === "android-apk") return "download_android";
 		if (row.slug === "launcher" || isLauncherDownloadRow(row)) return "download_launcher";
 		return "download";
 	}
@@ -4508,7 +4307,6 @@
 		return row.publicDownload === true
 			|| isWebClientRow(row)
 			|| row.slug === "launcher"
-			|| row.slug === "android-play"
 			|| row.slug === "android-apk"
 			|| url.indexOf("/downloads/launcher") !== -1
 			|| url.indexOf("/downloads/android-apk") !== -1;
@@ -4631,6 +4429,10 @@
 		var text = String(value || "");
 		var min = minLength || 4;
 		return text.length >= min && text.length <= 20 && /^[a-zA-Z0-9]+$/.test(text);
+	}
+
+	function gamePasswordRequirement(minLength, label) {
+		return label + " must be " + minLength + "-20 letters and numbers only. Symbols and spaces are not allowed.";
 	}
 
 	function normalizeReferralCode(value) {

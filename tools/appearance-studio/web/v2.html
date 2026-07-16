@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voidscape Paperdoll V2 Studio</title>
+  <link rel="stylesheet" href="/v2.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">VOIDSCAPE APPEARANCE STUDIO</p>
+      <h1>Paperdoll V2 Pixel Lab</h1>
+    </div>
+    <div class="workspace-meta">
+      <span id="workspaceName">Loading workspace…</span>
+      <span class="safe-badge">TMP ONLY · NON-SHIPPING</span>
+    </div>
+  </header>
+
+  <main class="app-grid">
+    <aside class="left-rail panel">
+      <section>
+        <div class="section-heading">
+          <h2>Pose</h2>
+          <span id="poseCounter">—</span>
+        </div>
+        <nav id="poseList" class="pose-list" aria-label="Authoring poses"></nav>
+      </section>
+
+      <section>
+        <label class="field-label" for="channelSelect">Semantic layer</label>
+        <select id="channelSelect"></select>
+        <p id="channelMeta" class="microcopy"></p>
+      </section>
+
+      <section>
+        <label class="field-label" for="stackSelect">Preview stack</label>
+        <select id="stackSelect"></select>
+        <div id="stackLayers" class="stack-layers"></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>Frame inspector</h2>
+          <span id="frameLabel">master</span>
+        </div>
+        <div class="segmented" id="phaseButtons" aria-label="Frame phase">
+          <button type="button" data-phase="0">A</button>
+          <button type="button" data-phase="1">B</button>
+          <button type="button" data-phase="2">C</button>
+        </div>
+        <label class="check-row"><input id="showDerived" type="checkbox"> Show derived phase translation</label>
+      </section>
+    </aside>
+
+    <section class="work-area">
+      <div class="toolbar panel" role="toolbar" aria-label="Pixel tools">
+        <div class="tool-group">
+          <button class="tool active" type="button" data-tool="paint" title="Paint (P)">✎ <span>Paint</span></button>
+          <button class="tool" type="button" data-tool="erase" title="Erase (E)">◇ <span>Erase</span></button>
+          <button class="tool" type="button" data-tool="pick" title="Pick pixel (I)">⌾ <span>Pick</span></button>
+        </div>
+        <div class="tool-group compact">
+          <label for="brushSize">Brush</label>
+          <input id="brushSize" type="number" min="1" max="16" value="1" inputmode="numeric">
+        </div>
+        <div class="tool-group">
+          <button id="undo" type="button" title="Undo (⌘Z)" disabled>↶ <span>Undo</span></button>
+          <button id="redo" type="button" title="Redo (⇧⌘Z)" disabled>↷ <span>Redo</span></button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <div class="tool-group compact">
+          <label for="zoom">Zoom</label>
+          <input id="zoom" type="range" min="2" max="8" value="4">
+          <output id="zoomLabel">4×</output>
+        </div>
+      </div>
+
+      <div class="paint-layout">
+        <div class="paint-column panel">
+          <div class="canvas-heading">
+            <div>
+              <h2 id="canvasTitle">Master canvas</h2>
+              <p id="canvasMeta">—</p>
+            </div>
+            <div class="coordinates"><span id="cursorPosition">x — · y —</span><span id="pixelValue">rgba —</span></div>
+          </div>
+          <div id="canvasViewport" class="canvas-viewport checkerboard">
+            <div id="canvasStack" class="canvas-stack">
+              <canvas id="baseCanvas" aria-hidden="true"></canvas>
+              <canvas id="paintCanvas" aria-label="Editable native 2x sprite layer"></canvas>
+              <canvas id="overlayCanvas" aria-hidden="true"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <aside class="brush-column panel">
+          <section>
+            <div class="section-heading"><h2>Grayscale</h2><output id="grayValue">128</output></div>
+            <div id="graySwatches" class="swatches grayscale"></div>
+            <label class="range-row" for="grayRange"><span>Luminance</span><input id="grayRange" type="range" min="0" max="255" value="128"></label>
+          </section>
+          <section>
+            <div class="section-heading"><h2>Alpha</h2><output id="alphaValue">255</output></div>
+            <div id="alphaSwatches" class="swatches alpha"></div>
+            <label class="range-row" for="alphaRange"><span>Soft alpha</span><input id="alphaRange" type="range" min="0" max="255" value="255"></label>
+          </section>
+          <section>
+            <h2>Transform layer</h2>
+            <div class="nudge-grid" aria-label="Nudge layer">
+              <button id="nudgeUp" type="button">↑</button>
+              <button id="nudgeLeft" type="button">←</button>
+              <button id="nudgeDown" type="button">↓</button>
+              <button id="nudgeRight" type="button">→</button>
+            </div>
+            <button id="mirrorLayer" class="wide-button" type="button">Mirror layer</button>
+            <button id="clearLayer" class="wide-button danger" type="button">Clear layer</button>
+          </section>
+          <section>
+            <h2>Import stamp</h2>
+            <label class="file-button">Choose PNG<input id="importFile" type="file" accept="image/png"></label>
+            <p class="microcopy">Choose a PNG or paste one from the clipboard.</p>
+            <div id="stampControls" hidden>
+              <div class="mini-grid">
+                <button id="stampSmaller" type="button">Scale −</button>
+                <button id="stampLarger" type="button">Scale +</button>
+                <button id="stampMirror" type="button">Mirror</button>
+                <button id="stampApply" type="button">Apply</button>
+                <button id="stampCancel" type="button">Cancel</button>
+              </div>
+              <p class="microcopy">Drag the stamp on-canvas. Scaling is nearest-neighbor.</p>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <aside class="right-rail panel">
+      <section>
+        <div class="section-heading"><h2>Actual-size preview</h2><span id="previewScaleLabel">2× native</span></div>
+        <div class="segmented" id="previewScaleButtons">
+          <button type="button" data-scale="1">1× legacy size</button>
+          <button type="button" class="active" data-scale="2">2× native</button>
+        </div>
+        <div class="preview-well checkerboard"><canvas id="previewCanvas"></canvas></div>
+        <p class="microcopy">No smoothing. 1× is a nearest-neighbor size comparison; 2× shows every authored pixel.</p>
+      </section>
+
+      <section>
+        <h2>Geometry overlays</h2>
+        <label class="check-row"><input id="showBase" type="checkbox" checked> Bald head guide</label>
+        <label class="check-row"><input id="showAnchors" type="checkbox" checked> Attachment anchors</label>
+        <label class="check-row"><input id="showCrown" type="checkbox" checked> Crown crosshair</label>
+        <div id="anchorLegend" class="anchor-legend"></div>
+        <label class="field-label" for="maskSelect">Pose mask</label>
+        <select id="maskSelect"><option value="">None</option></select>
+        <label class="range-row" for="maskOpacity"><span>Mask opacity</span><input id="maskOpacity" type="range" min="0" max="100" value="35"></label>
+      </section>
+
+      <section>
+        <div class="section-heading"><h2>Workspace</h2><span id="dirtyBadge" class="dirty-badge clean">Saved</span></div>
+        <button id="save" class="primary-button" type="button" disabled>Save current master</button>
+        <p id="status" class="status" role="status">Connecting to tmp workspace…</p>
+      </section>
+
+      <section class="shortcuts">
+        <h2>Shortcuts</h2>
+        <dl><dt>P / E / I</dt><dd>paint, erase, pick</dd><dt>[ / ]</dt><dd>brush size</dd><dt>Arrow keys</dt><dd>nudge layer</dd><dt>⌘ / Ctrl V</dt><dd>paste PNG stamp</dd><dt>⌘ S</dt><dd>save master</dd></dl>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/v2.js"></script>
+</body>
+</html>

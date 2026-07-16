@@ -55,8 +55,9 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     private int worldMapTouchStartY = 0;
     private final View view;
     private long lastScrollOrRotate;
-    private boolean clientTouchActive = false;
+	private boolean clientTouchActive = false;
 	private boolean christmasCrackerTouchActive = false;
+	private boolean pkCatchingTouchActive = false;
 
     @Override
     public boolean onDown(MotionEvent e) {
@@ -95,11 +96,22 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         return true;
     }
 
-    @Override
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (mudclient.topMouseMenuVisible) {
-            return true;
-        }
+	@Override
+	public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+		setMousePosition(e2);
+		if (distanceY > 1) distanceY = 1;
+		if (distanceY < -1) distanceY = -1;
+		if (mudclient.isDuelJournalVisible()) {
+			int dir = osConfig.C_SWIPE_TO_SCROLL_MODE == 2 ? -1 : 1;
+			mudclient.routeDuelJournalScroll((int) (dir * distanceY));
+			mudclient.currentMouseButtonDown = 0;
+			mudclient.lastMouseButtonDown = 0;
+			mudclient.mouseButtonClick = 0;
+			return true;
+		}
+		if (mudclient.topMouseMenuVisible) {
+			return true;
+		}
 
         if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) {
             setMousePosition(e2);
@@ -110,12 +122,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
             return true;
         }
 
-        if (distanceY > 1)
-            distanceY = 1;
-        if (distanceY < -1)
-            distanceY = -1;
-
-        lastScrollOrRotate = System.currentTimeMillis();
+		lastScrollOrRotate = System.currentTimeMillis();
 
 		boolean inScrollable = isInScrollableInterface();
 		int firstX = screenToClientX(e1.getX());
@@ -192,9 +199,18 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         return false;
     }
 
-    @Override
-    public boolean onKey(View v, int keyCode, KeyEvent event) {
-        if (osConfig.C_VOLUME_FUNCTION == 0) {
+	@Override
+	public boolean onKey(View v, int keyCode, KeyEvent event) {
+		if (mudclient.isDuelJournalVisible()) {
+			if (event.getAction() == KeyEvent.ACTION_DOWN) {
+				mudclient.consumeDuelJournalKeyDown(
+					keyCode == KeyEvent.KEYCODE_ESCAPE ? 27 : event.getUnicodeChar());
+			} else {
+				mudclient.clearDuelJournalHeldNavigationState();
+			}
+			return true;
+		}
+		if (osConfig.C_VOLUME_FUNCTION == 0) {
             if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
                 mudclient.keyLeft = event.getAction() == KeyEvent.ACTION_DOWN;
                 return true;
@@ -294,9 +310,6 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
             if (keyCode == KeyEvent.KEYCODE_C && mudclient.stopAndroidSmokeWildernessTargetFromInput()) {
                 return true;
             }
-            if (keyCode == KeyEvent.KEYCODE_F12 && mudclient.runAndroidSmokeCrackerCampaignFromInput()) {
-                return true;
-            }
 
 			checkSpecialKeys(keyCode, chars);
             if (key == 0 && handleAndroidTextInput(chars)) {
@@ -318,10 +331,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         return true;
     }
 
-    private void handleAndroidKeyInput(int key) {
-        if (key == 0) {
-            return;
-        }
+	private void handleAndroidKeyInput(int key) {
+		if (key == 0) {
+			return;
+		}
+		if (mudclient.consumeDuelJournalKeyDown(key)) return;
 
         boolean hitInputFilter = false;
 
@@ -357,7 +371,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         }
     }
 
-    public void checkSpecialKeys(int keyCode, String chars) {
+	public void checkSpecialKeys(int keyCode, String chars) {
+		if (mudclient.isDuelJournalVisible()) {
+			mudclient.clearDuelJournalHeldNavigationState();
+			return;
+		}
 		if (keyCode == KeyEvent.KEYCODE_F1 || (chars != null && chars.equalsIgnoreCase("¹"))) {
 			mudclient.interlace = !mudclient.interlace;
 		}
@@ -458,6 +476,19 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 		if (christmasCrackerTouchActive || mudclient.isChristmasCrackerDialogVisible()) {
 			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
 				christmasCrackerTouchActive = false;
+			}
+			return finishTouch(action, true);
+		}
+		if (!pkCatchingTouchActive
+				&& (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_BUTTON_PRESS)) {
+			boolean primary = !isMouseEvent(e) || !isSecondaryMouseAction(e);
+			pkCatchingTouchActive = mudclient.consumePkCatchingPointerAt(
+				mudclient.mouseX, mudclient.mouseY, primary);
+		}
+		if (pkCatchingTouchActive) {
+			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+					|| action == MotionEvent.ACTION_BUTTON_RELEASE) {
+				pkCatchingTouchActive = false;
 			}
 			return finishTouch(action, true);
 		}
@@ -625,6 +656,7 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 	private void resetTouchState() {
 		clientTouchActive = false;
 		christmasCrackerTouchActive = false;
+		pkCatchingTouchActive = false;
 		worldMapTouchActive = false;
 		clearRightClickState();
 	}
@@ -667,7 +699,8 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 	}
 
 	private boolean isInScrollableInterface() {
-		return (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse != null && mudclient.auctionHouse.isVisible())
+		return mudclient.isDuelJournalVisible()
+			|| (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse != null && mudclient.auctionHouse.isVisible())
 			|| (mudclient.onlineList != null && mudclient.onlineList.isVisible())
 			|| (Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface != null && mudclient.skillGuideInterface.isVisible())
 			|| (Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface != null && mudclient.questGuideInterface.isVisible())

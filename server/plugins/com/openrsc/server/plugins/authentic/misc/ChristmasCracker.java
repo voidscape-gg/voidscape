@@ -13,8 +13,6 @@ import com.openrsc.server.plugins.triggers.UsePlayerTrigger;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.MessageType;
 
-import java.time.LocalDate;
-
 import static com.openrsc.server.plugins.Functions.inArray;
 
 /**
@@ -48,17 +46,6 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 		ItemId.YELLOW_PARTY_HAT.id()
 	};
 	private static final int[] PARTY_HAT_WEIGHTS = {10, 15, 20, 23, 32, 28};
-	// Historical custom-sprite worlds append black without changing legacy colours.
-	private static final int[] CUSTOM_PARTY_HAT_IDS = {
-		ItemId.PINK_PARTY_HAT.id(),
-		ItemId.BLUE_PARTY_HAT.id(),
-		ItemId.GREEN_PARTY_HAT.id(),
-		ItemId.WHITE_PARTY_HAT.id(),
-		ItemId.RED_PARTY_HAT.id(),
-		ItemId.YELLOW_PARTY_HAT.id(),
-		ItemId.BLACK_PARTY_HAT.id()
-	};
-	private static final int[] CUSTOM_PARTY_HAT_WEIGHTS = {10, 15, 20, 23, 32, 28, 10};
 
 	private static final int[] HOLIDAY_RARE_IDS = {
 		ItemId.PUMPKIN.id(),
@@ -66,11 +53,9 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 		ItemId.GREEN_HALLOWEEN_MASK.id(),
 		ItemId.RED_HALLOWEEN_MASK.id(),
 		ItemId.BLUE_HALLOWEEN_MASK.id(),
-		ItemId.SANTAS_HAT.id(),
-		ItemId.BUNNY_EARS.id(),
-		ItemId.SCYTHE.id()
+		ItemId.SANTAS_HAT.id()
 	};
-	private static final int[] HOLIDAY_RARE_WEIGHTS = {2, 2, 1, 1, 1, 1, 1, 1};
+	private static final int[] HOLIDAY_RARE_WEIGHTS = {2, 2, 1, 1, 1, 1};
 
 	@Override
 	public void onOpInv(Player player, Integer invIndex, Item item, String command) {
@@ -104,7 +89,6 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 		boolean deliveredToInventory = true;
 		if (result.itemId != ItemId.NOTHING.id()) {
 			deliveredToInventory = player.getCarriedItems().getInventory().add(new Item(result.itemId), false);
-			markReplacementEligibility(player, result.itemId);
 		}
 
 		sendClientReelResult(player, result, now);
@@ -154,23 +138,13 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 	 * the same weighted production tables. The values are transient and one-shot.
 	 */
 	public static boolean queueAdminFixture(Player player, int categoryRoll, int rewardRoll) {
-		if (player == null || !player.isAdmin()
-			|| !validFixtureRolls(player.getConfig().WANT_CUSTOM_SPRITES, categoryRoll, rewardRoll)) {
+		if (player == null || !player.isAdmin() || categoryRoll < 0 || categoryRoll > 99
+			|| rewardRoll < 0 || rewardRoll >= totalWeight(PARTY_HAT_WEIGHTS)) {
 			return false;
 		}
 		player.setAttribute(FIXTURE_CATEGORY_ROLL_ATTRIBUTE, categoryRoll);
 		player.setAttribute(FIXTURE_REWARD_ROLL_ATTRIBUTE, rewardRoll);
 		return true;
-	}
-
-	static boolean validFixtureRolls(boolean customSprites, int categoryRoll, int rewardRoll) {
-		if (categoryRoll < 0 || categoryRoll > 99 || rewardRoll < 0) return false;
-		if (categoryRoll < 60) return rewardRoll == 0;
-		if (categoryRoll < 80) {
-			return rewardRoll < totalWeight(customSprites
-				? CUSTOM_PARTY_HAT_WEIGHTS : PARTY_HAT_WEIGHTS);
-		}
-		return rewardRoll < totalWeight(HOLIDAY_RARE_WEIGHTS);
 	}
 
 	private static boolean isOpenCommand(Item item, String command) {
@@ -196,58 +170,23 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 		int forcedRewardRoll = player.getAttribute(FIXTURE_REWARD_ROLL_ATTRIBUTE, -1);
 		int categoryRoll = forcedCategoryRoll >= 0 ? forcedCategoryRoll : DataConversions.random(0, 99);
 
-		int category = categoryForRoll(categoryRoll);
-		if (category == CATEGORY_NOTHING) {
+		if (categoryRoll < 60) {
 			return new CrackerResult(CATEGORY_NOTHING, ItemId.NOTHING.id());
 		}
 
-		if (category == CATEGORY_PARTY_HAT) {
-			boolean customSprites = player.getConfig().WANT_CUSTOM_SPRITES;
+		if (categoryRoll < 80) {
 			int rewardRoll = forcedRewardRoll >= 0
 				? forcedRewardRoll
-				: DataConversions.random(0, totalWeight(customSprites
-					? CUSTOM_PARTY_HAT_WEIGHTS : PARTY_HAT_WEIGHTS) - 1);
+				: DataConversions.random(0, totalWeight(PARTY_HAT_WEIGHTS) - 1);
 			return new CrackerResult(CATEGORY_PARTY_HAT,
-				partyHatForRoll(customSprites, rewardRoll));
+				weightedChoice(PARTY_HAT_IDS, PARTY_HAT_WEIGHTS, rewardRoll));
 		}
 
 		int rewardRoll = forcedRewardRoll >= 0
 			? forcedRewardRoll
 			: DataConversions.random(0, totalWeight(HOLIDAY_RARE_WEIGHTS) - 1);
 		return new CrackerResult(CATEGORY_HOLIDAY_RARE,
-			holidayRareForRoll(rewardRoll));
-	}
-
-	static int categoryForRoll(int rawRoll) {
-		if (rawRoll < 0 || rawRoll > 99) {
-			throw new IllegalArgumentException("Christmas cracker category roll must be between 0 and 99");
-		}
-		if (rawRoll < 60) return CATEGORY_NOTHING;
-		if (rawRoll < 80) return CATEGORY_PARTY_HAT;
-		return CATEGORY_HOLIDAY_RARE;
-	}
-
-	static int partyHatForRoll(boolean customSprites, int rawRoll) {
-		return customSprites
-			? weightedChoice(CUSTOM_PARTY_HAT_IDS, CUSTOM_PARTY_HAT_WEIGHTS, rawRoll)
-			: weightedChoice(PARTY_HAT_IDS, PARTY_HAT_WEIGHTS, rawRoll);
-	}
-
-	static int holidayRareForRoll(int rawRoll) {
-		return weightedChoice(HOLIDAY_RARE_IDS, HOLIDAY_RARE_WEIGHTS, rawRoll);
-	}
-
-	static String replacementCacheKey(int itemId) {
-		if (itemId == ItemId.BUNNY_EARS.id()) return "bunny_ears";
-		if (itemId == ItemId.SCYTHE.id()) return "scythe";
-		return null;
-	}
-
-	private static void markReplacementEligibility(Player player, int itemId) {
-		String key = replacementCacheKey(itemId);
-		if (key != null && !player.getCache().hasKey(key)) {
-			player.getCache().put(key, LocalDate.now().getYear());
-		}
+			weightedChoice(HOLIDAY_RARE_IDS, HOLIDAY_RARE_WEIGHTS, rewardRoll));
 	}
 
 	private static int weightedChoice(int[] ids, int[] weights, int rawRoll) {
@@ -309,9 +248,7 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 	}
 
 	private static String articleFor(int itemId) {
-		if (itemId == ItemId.EASTER_EGG.id()) return "an";
-		if (itemId == ItemId.BUNNY_EARS.id()) return "some";
-		return "a";
+		return itemId == ItemId.EASTER_EGG.id() ? "an" : "a";
 	}
 
 	private static void logResult(Player player, CrackerResult result, long consumedItemId,
@@ -333,15 +270,12 @@ public class ChristmasCracker implements OpInvTrigger, UsePlayerTrigger, UseNpcT
 			case 579: return "green party hat";
 			case 580: return "pink party hat";
 			case 581: return "white party hat";
-			case 1582: return "black party hat";
 			case 422: return "pumpkin";
 			case 677: return "Easter egg";
 			case 828: return "green Halloween mask";
 			case 831: return "red Halloween mask";
 			case 832: return "blue Halloween mask";
 			case 971: return "Santa's hat";
-			case 1156: return "bunny ears";
-			case 1289: return "scythe";
 			default: return "holiday prize";
 		}
 	}

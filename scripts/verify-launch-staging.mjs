@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const launchConfigContractPath = resolve(root, "scripts/launch-config-contract.json");
 const startedAt = new Date();
 const defaultOut = `tmp/launch-staging-verify-${stamp(startedAt)}`;
 
@@ -48,6 +49,13 @@ console.log(`Artifacts: ${args.out}`);
 async function main() {
 	args.out = resolve(root, args.out || defaultOut);
 	await mkdir(args.out, { recursive: true });
+	if (args.serverConfigOnly) {
+		if (!args.serverConfig || !args.connectionsConfig) {
+			throw new Error("--server-config-only requires --server-config and --connections-config.");
+		}
+		await verifyServerConfig();
+		return;
+	}
 
 	if (!args.portalUrl) {
 		throw new Error("Missing --portal-url.");
@@ -93,8 +101,14 @@ async function main() {
 		}
 	}
 
-	if (!args.serverConfig && !args.skipServerConfig) {
-		throw new Error("Missing --server-config. Pass the deployed server config copy, or --skip-server-config for portal-only rehearsal.");
+	if ((!args.serverConfig || !args.connectionsConfig) && !args.skipServerConfig) {
+		throw new Error("Missing --server-config or --connections-config. Pass copies of both deployed configs, or --skip-server-config for portal-only rehearsal.");
+	}
+	if (args.expectedAndroidApk && args.expectNoAndroidApk) {
+		throw new Error("--expected-android-apk and --expect-no-android-apk are mutually exclusive.");
+	}
+	if (args.expectedAndroidPlayUrl && args.expectNoAndroidPlay) {
+		throw new Error("--expected-android-play-url and --expect-no-android-play are mutually exclusive.");
 	}
 	const signupModes = [args.runSignup, args.pendingEmailRehearsal, args.skipSignup].filter(Boolean).length;
 	if (signupModes !== 1) {
@@ -118,7 +132,7 @@ async function main() {
 	await verifyPublicLaunchPayload();
 	await verifyLauncherUpdateChannel();
 	await verifyDisabledProviderSurfaces();
-	await verifyBadLaunchPassword();
+	await verifyLaunchPasswordContract();
 	if (args.runSignup || args.pendingEmailRehearsal) {
 		await verifySignupFlow();
 	} else {
@@ -129,51 +143,44 @@ async function main() {
 
 async function verifyServerConfig() {
 	if (args.skipServerConfig) {
-		warn("server config skipped", "Command lockdown and packet-register config were not checked.");
+		warn("server config skipped", "The launch config contract and SQLite backend were not checked.");
 		return;
 	}
 	const configPath = resolve(root, args.serverConfig);
 	const text = await readFile(configPath, "utf8");
+	const connectionsPath = resolve(root, args.connectionsConfig);
+	const connectionsText = await readFile(connectionsPath, "utf8");
+	const contract = JSON.parse(await readFile(launchConfigContractPath, "utf8"));
 	const expectedClientVersion = args.expectedClientVersion || await readClientVersion();
-	const policy = spawnSync(process.execPath, [
-		resolve(root, "scripts/check-launch-config.mjs"),
-		configPath,
-		"--expected-client-version", expectedClientVersion
-	], { cwd: root, encoding: "utf8" });
-	assertCheck(
-		"server launch policy",
-		policy.status === 0,
-		(policy.stdout || policy.stderr || `exit ${policy.status}`).trim()
-	);
-	const values = {
-		server_name: configValue(text, "server_name"),
-		server_name_welcome: configValue(text, "server_name_welcome"),
-		client_version: configValue(text, "client_version"),
-		enforce_custom_client_version: configValue(text, "enforce_custom_client_version"),
-		want_email: configValue(text, "want_email"),
-		want_packet_register: configValue(text, "want_packet_register"),
-		want_pcap_logging: configValue(text, "want_pcap_logging"),
-		production_command_lockdown: configValue(text, "production_command_lockdown"),
-		want_cracker_campaign: configValue(text, "want_cracker_campaign"),
-		cracker_campaign_npc_kill_denominator: configValue(text, "cracker_campaign_npc_kill_denominator"),
-		cracker_campaign_skilling_denominator: configValue(text, "cracker_campaign_skilling_denominator"),
-		member_world: configValue(text, "member_world"),
-		want_feature_websockets: configValue(text, "want_feature_websockets")
-	};
+	const expected = { ...contract, client_version: expectedClientVersion };
+	const values = {};
+	for (const [key, expectedValue] of Object.entries(expected)) {
+		const found = configValues(text, key);
+		assertCheck(
+			`server config ${key} unique`,
+			found.length === 1,
+			`${found.length} active rows in ${configPath}`
+		);
+		values[key] = found.length === 1 ? found[0] : "";
+		assertCheck(
+			`server config ${key}`,
+			found.length === 1 && found[0] === expectedValue,
+			`${found.length === 1 ? found[0] : "(missing or duplicate)"} vs expected ${expectedValue}`
+		);
+	}
 	serverClientVersion = values.client_version;
-	assertCheck("server branded Voidscape", values.server_name === "Voidscape", String(values.server_name));
-	assertCheck("server welcome branded Voidscape", values.server_name_welcome === "Voidscape", String(values.server_name_welcome));
-	assertCheck("server client version", values.client_version === expectedClientVersion, `${values.client_version} vs expected ${expectedClientVersion}`);
-	assertCheck("server enforces custom client version", values.enforce_custom_client_version === "true", String(values.enforce_custom_client_version));
-	assertCheck("server registration email disabled", values.want_email === "false", String(values.want_email));
-	assertCheck("server packet registration enabled", values.want_packet_register === "true", String(values.want_packet_register));
-	assertCheck("server pcap logging disabled", values.want_pcap_logging === "false", String(values.want_pcap_logging));
-	assertCheck("server command lockdown enabled", values.production_command_lockdown === "true", String(values.production_command_lockdown));
-	assertCheck("server cracker campaign enabled", values.want_cracker_campaign === "true", String(values.want_cracker_campaign));
-	assertCheck("server cracker NPC-kill odds", values.cracker_campaign_npc_kill_denominator === "500", String(values.cracker_campaign_npc_kill_denominator));
-	assertCheck("server cracker skilling odds", values.cracker_campaign_skilling_denominator === "1000", String(values.cracker_campaign_skilling_denominator));
-	assertCheck("server member world enabled globally", values.member_world === "true", String(values.member_world));
-	assertCheck("server websockets enabled", values.want_feature_websockets === "true", String(values.want_feature_websockets));
+
+	const dbTypes = configValues(connectionsText, "db_type");
+	assertCheck(
+		"connections config db_type unique",
+		dbTypes.length === 1,
+		`${dbTypes.length} active rows in ${connectionsPath}`
+	);
+	assertCheck(
+		"connections config uses launch SQLite backend",
+		dbTypes.length === 1 && dbTypes[0] === "sqlite",
+		`${dbTypes.length === 1 ? dbTypes[0] : "(missing or duplicate)"} vs expected sqlite`
+	);
 }
 
 async function verifyPortalHealth() {
@@ -197,8 +204,12 @@ async function verifyPublicLaunchPayload() {
 	assertCheck("public mode", body.publicMode === true, JSON.stringify(body));
 	assertCheck("launch signup mode", body.launchSignupMode === true, JSON.stringify(body));
 	assertCheck("launch timestamp", iso(body.launch && body.launch.openAt) === iso(args.launchAt || "2026-07-18T18:00:00.000Z"), String(body.launch && body.launch.openAt));
-	assertCheck("portal-first registration", body.worldRules && body.worldRules.registration === "portal-first", JSON.stringify(body.worldRules || null));
-	assertCheck("public web packet registration off", body.worldRules && body.worldRules.packetRegistration === false, JSON.stringify(body.worldRules || null));
+	assertCheck("hybrid registration contract", body.worldRules && body.worldRules.registration === "hybrid", JSON.stringify(body.worldRules || null));
+	assertCheck("web registration portal-first", body.worldRules && body.worldRules.webRegistration === "portal-first", JSON.stringify(body.worldRules || null));
+	assertCheck("desktop packet registration", body.worldRules && body.worldRules.desktopRegistration === "packet", JSON.stringify(body.worldRules || null));
+	assertCheck("Android registration policy-gated", body.worldRules && body.worldRules.nativeAndroidRegistration === "portal-first", JSON.stringify(body.worldRules || null));
+	assertCheck("desktop packet registration enabled", body.worldRules && body.worldRules.packetRegistration === true, JSON.stringify(body.worldRules || null));
+	assertCheck("current community terms", body.worldRules && body.worldRules.communityTermsVersion === "2026-07-16" && body.worldRules.communityTermsUrl === "/community-rules", JSON.stringify(body.worldRules || null));
 	assertCheck("hybrid member world", body.worldRules && body.worldRules.memberWorld === true, JSON.stringify(body.worldRules || null));
 	assertCheck("subscription does not grant members", body.worldRules && body.worldRules.subscriptionGrantsMembers === false, JSON.stringify(body.worldRules || null));
 	assertCheck("no fake public player count", body.status && body.status.playersOnline === 0, JSON.stringify(body.status || null));
@@ -209,11 +220,36 @@ async function verifyPublicLaunchPayload() {
 		assertCheck("google hidden", google.enabled === false && !google.clientId, JSON.stringify(google));
 	}
 	const downloads = Array.isArray(body.downloads) ? body.downloads : [];
+	const androidPlay = downloads.find((row) => row && row.slug === "android-play") || {};
+	if (args.expectedAndroidPlayUrl) {
+		assertCheck("Google Play row published", androidPlay.available === true, JSON.stringify(androidPlay));
+		assertCheck("Google Play row matches candidate URL", androidPlay.url === args.expectedAndroidPlayUrl, `${androidPlay.url || "(absent)"} vs ${args.expectedAndroidPlayUrl}`);
+	} else if (args.expectNoAndroidPlay) {
+		assertCheck("Google Play row withheld", androidPlay.available !== true, JSON.stringify(androidPlay));
+	}
 	const android = downloads.find((row) => row && row.slug === "android-apk") || {};
 	assertCheck("android APK row present", Boolean(android.slug), JSON.stringify(android));
 	if (android.available === true) {
 		assertCheck("android APK public link", Boolean(android.url) && android.url !== "#", JSON.stringify(android));
 		assertCheck("android APK hash", /^[0-9a-f]{64}$/.test(android.sha256 || ""), JSON.stringify(android));
+	}
+	if (args.expectedAndroidApk) {
+		const expectedPath = resolve(root, args.expectedAndroidApk);
+		assertCheck("expected Android APK exists", existsSync(expectedPath), expectedPath);
+		if (existsSync(expectedPath)) {
+			const expectedBytes = await readFile(expectedPath);
+			const expectedSha256 = createHash("sha256").update(expectedBytes).digest("hex");
+			assertCheck("Android APK is published", android.available === true, JSON.stringify(android));
+			assertCheck("Android APK matches candidate hash", android.sha256 === expectedSha256, `${android.sha256 || "(absent)"} vs ${expectedSha256}`);
+			assertCheck("Android APK matches candidate size", Number(android.sizeBytes) === expectedBytes.length, `${android.sizeBytes} vs ${expectedBytes.length}`);
+			const androidUrl = new URL(String(android.url || "#"), args.portalUrl).href;
+			assertCheck("Android APK download URL", channelUrlOk(androidUrl), androidUrl);
+			if (android.available === true && channelUrlOk(androidUrl)) {
+				await verifyChannelArtifact("Android APK", androidUrl, expectedBytes.length, expectedSha256);
+			}
+		}
+	} else if (args.expectNoAndroidApk) {
+		assertCheck("Android direct APK withheld", android.available !== true, JSON.stringify(android));
 	}
 }
 
@@ -239,6 +275,7 @@ async function verifyLauncherUpdateChannel() {
 	assertCheck("launcher manifest file entries", files.length > 0, `${files.length} contiguous file.N.path entries`);
 	const requiredCachePaths = [
 		"MD5.SUM",
+		"video/Authentic_Sprites.orsc",
 		"video/Custom_Landscape.orsc",
 		"video/models.orsc",
 		"worldmap/plane-0.png",
@@ -246,6 +283,8 @@ async function verifyLauncherUpdateChannel() {
 		"worldmap/plane-2.png",
 		"worldmap/plane-3.png"
 	];
+	const unsafePaths = files.filter((file) => /(^|\/)(?:[^/]+\.(?:bak|tmp)|[^/]+~)$/i.test(file.path)).map((file) => file.path);
+	assertCheck("launcher manifest excludes backup files", unsafePaths.length === 0, unsafePaths.join(", ") || "no backup or temporary paths");
 	const manifestPaths = new Set(files.map((file) => file.path));
 	const missingCachePaths = requiredCachePaths.filter((path) => !manifestPaths.has(path));
 	assertCheck(
@@ -416,36 +455,54 @@ async function verifyDisabledProviderSurfaces() {
 	}
 }
 
-async function verifyBadLaunchPassword() {
+async function verifyLaunchPasswordContract() {
 	const badUsername = clipUsername(`${signupUser}Bad`);
-	const response = await request("/api/accounts/register", {
-		method: "POST",
-		body: {
-			username: badUsername,
-			email: `staging-${badUsername.toLowerCase()}@voidscape.gg`,
-			password: "bad-pass-1"
-		}
-	});
-	assertCheck(
-		"launch password rejects punctuation",
-		response.status === 400 && response.body.error === "invalid_game_password",
-		`HTTP ${response.status} ${JSON.stringify(response.body)}`
-	);
+	for (const [label, password] of [
+		["symbols", "Bad!Pass1"],
+		["spaces", "Bad Pass1"]
+	]) {
+		const response = await request("/api/accounts/register", {
+			method: "POST",
+			body: {
+				username: badUsername,
+				email: `staging-${badUsername.toLowerCase()}@voidscape.gg`,
+				password,
+				termsAccepted: true,
+				termsVersion: "2026-07-16"
+			}
+		});
+		assertCheck(
+			`launch password rejects ${label} with invalid_game_password`,
+			response.status === 400 && response.body.error === "invalid_game_password",
+			`HTTP ${response.status} ${JSON.stringify(response.body)}`
+		);
+	}
+	for (const [label, password] of [
+		["control characters", "Bad\nPass1"],
+		["Unicode", "Bad💥Pass1"],
+		["pound sign", "Bad£Pass1"],
+		["backtick", "Bad`Pass1"]
+	]) {
+		assertCheck(`launch password rejects ${label}`, !isGamePassword(password, 8), JSON.stringify(password));
+	}
+	assertCheck("launch password accepts letters and numbers", isGamePassword("Launchpass1", 8), "Launchpass1");
 }
 
 async function verifySignupFlow() {
 	if (!/^[A-Za-z0-9 ]{1,12}$/.test(signupUser)) {
 		throw new Error(`Signup username must be 1-12 client-safe characters: ${signupUser}`);
 	}
-	if (!/^[A-Za-z0-9]{8,20}$/.test(signupPassword)) {
-		throw new Error("Signup password must be 8-20 letters/numbers.");
+	if (!isGamePassword(signupPassword, 8)) {
+		throw new Error("Signup password must be 8-20 letters and numbers only. Symbols and spaces are not allowed.");
 	}
 	const signup = await request("/api/accounts/register", {
 		method: "POST",
 		body: {
 			username: signupUser,
 			email: signupEmail,
-			password: signupPassword
+			password: signupPassword,
+			termsAccepted: true,
+			termsVersion: "2026-07-16"
 		}
 	});
 	assertCheck("staged signup awaits verified email", signup.status === 202 && signup.body.verificationRequired === true && !signup.body.token, `HTTP ${signup.status} ${safeJson(signup.body)}`);
@@ -667,11 +724,26 @@ function parseArgs(argv) {
 			case "--server-config":
 				parsed.serverConfig = value();
 				break;
+			case "--connections-config":
+				parsed.connectionsConfig = value();
+				break;
 			case "--expected-build-manifest":
 				parsed.expectedBuildManifest = value();
 				break;
 			case "--expected-client-version":
 				parsed.expectedClientVersion = value();
+				break;
+			case "--expected-android-apk":
+				parsed.expectedAndroidApk = value();
+				break;
+			case "--expect-no-android-apk":
+				parsed.expectNoAndroidApk = true;
+				break;
+			case "--expected-android-play-url":
+				parsed.expectedAndroidPlayUrl = value();
+				break;
+			case "--expect-no-android-play":
+				parsed.expectNoAndroidPlay = true;
 				break;
 			case "--launch-at":
 				parsed.launchAt = value();
@@ -723,6 +795,9 @@ function parseArgs(argv) {
 			case "--skip-server-config":
 				parsed.skipServerConfig = true;
 				break;
+			case "--server-config-only":
+				parsed.serverConfigOnly = true;
+				break;
 			case "--skip-web-verify":
 				parsed.skipWebVerify = true;
 				break;
@@ -755,55 +830,51 @@ function parseArgs(argv) {
 }
 
 function usage() {
-	console.log(`Usage: scripts/verify-launch-staging.mjs --portal-url URL --web-url URL --server-config FILE (--run-signup|--pending-email-rehearsal|--skip-signup) [options]
+	console.log(`Usage: scripts/verify-launch-staging.mjs --portal-url URL --web-url URL --server-config FILE --connections-config FILE (--run-signup|--pending-email-rehearsal|--skip-signup) [options]
 
 Verifies the production-like launch gate for a staged Voidscape deployment:
   - portal health uses public launch-signup mode, durable storage, and an OpenRSC DB bridge
-  - /api/public exposes web portal-first registration metadata, hybrid member world, Google hidden by default
+  - /api/public exposes the desktop-packet / web-and-Android-portal registration split, current Community Rules, hybrid member world, and Google hidden by default
   - /api/launcher/manifest.properties is a well-formed update channel (required keys,
     64-hex sha256 values, https URLs, clientVersion matching the server config) and its
-	    every file entry has the declared hosted size; launch-critical cache/client files
-	    and the launcher self-update jar are downloaded and SHA-256 verified
+	    every file entry has the declared hosted size; launch-critical files and the launcher self-update jar are downloaded and SHA-256 verified
   - payment and Google provider surfaces are disabled/hidden unless explicitly allowed
-  - every supplied public host externally returns 404 for /api/admin/*, with and without an admin-token header
-  - launch signup rejects punctuation passwords and, with --run-signup, waits for the exact new signup to complete delivered-email verification, then proves its portal and linked-game login
+  - every supplied public host externally returns 404 for /api/admin/* with and without a fake token
+  - launch signup accepts the current Community Rules, rejects invalid game passwords, and, with --run-signup, waits for delivered-email verification before proving the exact linked account
   - /play static deployment matches dist/web-teavm/voidscape-web-build.json and optionally runs web login smoke
-  - deployed server config copy is Voidscape-branded, disables pcap logging,
-	    has production_command_lockdown: true, the approved cracker campaign odds,
-	    want_email: false, and want_packet_register: true
+  - deployed server config copy has exactly one of every value in the reviewed
+    launch contract; deployed connections config selects the SQLite launch backend
 
 Required for the full gate:
   --portal-url URL              Staged portal URL, e.g. https://staging.voidscape.gg/
   --web-url URL                 Staged web client URL, e.g. https://staging.voidscape.gg/play/
   --server-config FILE          Local copy of the deployed server config.
+  --connections-config FILE     Local copy of the deployed connections config.
   --run-signup                  Final gate: initiate the explicit signup below,
                                 wait for its email verification, then prove login.
-  --admin-public-url URL        Public origin whose /api/admin/* must return 404;
-                                repeat for any non-production aliases. Targeting
-                                Voidscape production always adds canonical, www,
-                                and the legacy sslip origin automatically.
 
 Useful options:
   --ws URL                      WSS URL for web smoke.
   --expected-build-manifest FILE Default: dist/web-teavm/voidscape-web-build.json.
+  --expected-android-apk FILE   Require the public direct APK bytes to match this candidate.
+  --expect-no-android-apk       Require the direct APK row to remain unavailable.
+  --expected-android-play-url URL Require the published Play row to use this canonical URL.
+  --expect-no-android-play      Require the Google Play row to remain unavailable.
   --signup-username NAME        Exact new QA character; required for --run-signup.
   --signup-email EMAIL          Exact delivered-email address; required for --run-signup.
   --signup-password PASSWORD    Exact portal/game password; required for --run-signup.
-  --verification-timeout-seconds N
-                                Bounded email-completion wait. Default: 240.
-  --verification-poll-seconds N
-                                Login-probe interval. Default: 30; max 9 probes.
-  --admin-token TOKEN           Local-only token proof; requires the loopback-only
-                                --allow-local-admin-token-guard option.
+  --verification-timeout-seconds N  Bounded email-completion wait. Default: 240.
+  --verification-poll-seconds N     Login-probe interval. Default: 30; max 9 probes.
+  --admin-public-url URL        Public origin whose /api/admin/* must return 404;
+                                repeat for non-production aliases.
+  --admin-token TOKEN           Loopback-only proof; requires --allow-local-admin-token-guard.
   --no-web-smoke                Static/deep web verification only.
   --skip-web-verify             Portal/config rehearsal only.
-  --skip-server-config          Do not check command lockdown or packet-register config.
+  --skip-server-config          Do not check the launch config contract or DB backend.
+  --server-config-only          Check both deployed config copies without network requests.
   --skip-signup                 Non-mutating dry gate.
-  --pending-email-rehearsal     Non-final: initiate email verification but allow
-                                the new signup to remain pending.
-  --allow-local-admin-token-guard
-                                Local loopback legacy fixture only; permits the
-                                backend 403/503 token guard instead of external 404.
+  --pending-email-rehearsal     Non-final: initiate verification but permit it to remain pending.
+  --allow-local-admin-token-guard  Loopback fixture only; permits the backend token guard instead of external 404.
   --allow-google                Expect Google to be intentionally configured.
   --allow-payment               Do not fail if payment endpoint is configured.
   --allow-android-apk           Accepted for older package scripts; Android is verified from /api/public.
@@ -843,6 +914,8 @@ async function writeSummary() {
 		webUrl: args.webUrl || "",
 		wsUrl: args.wsUrl || "",
 		serverConfig: args.serverConfig || "",
+		connectionsConfig: args.connectionsConfig || "",
+		serverConfigOnly: Boolean(args.serverConfigOnly),
 		signupMode: args.runSignup ? "final" : args.pendingEmailRehearsal ? "pending-email-rehearsal" : "skipped",
 		signup: args.runSignup || args.pendingEmailRehearsal ? {
 			username: signupUser,
@@ -892,9 +965,9 @@ function channelUrlOk(value) {
 		&& (url.hostname === "127.0.0.1" || url.hostname === "localhost");
 }
 
-function configValue(text, key) {
-	const match = text.match(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(key)}\\s*:\\s*([^#\\n]+)`));
-	return match ? match[1].trim() : "";
+function configValues(text, key) {
+	const pattern = new RegExp(`^[\\t ]*${escapeRegExp(key)}[\\t ]*:[\\t ]*([^#\\r\\n]*)`, "gm");
+	return [...text.matchAll(pattern)].map((match) => match[1].trim());
 }
 
 async function readClientVersion() {
@@ -910,6 +983,13 @@ function generatedUsername() {
 
 function clipUsername(value) {
 	return String(value || "").replace(/[^A-Za-z0-9 ]/g, "").slice(0, 12) || "StagingUser";
+}
+
+function isGamePassword(value, minimumLength) {
+	const text = String(value || "");
+	return text.length >= minimumLength
+		&& text.length <= 20
+		&& /^[A-Za-z0-9]+$/.test(text);
 }
 
 function iso(value) {

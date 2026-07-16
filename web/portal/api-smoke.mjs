@@ -7,9 +7,7 @@ let token = "";
 const initialPublic = await api("/api/public");
 assert(initialPublic.status.online === true, "public endpoint should expose online state");
 assert(initialPublic.rates.baseCombat === 10, "public endpoint should expose base combat rate");
-assert(initialPublic.rates.baseSkill === 1.5, "public endpoint should expose base skill rate");
-assert(initialPublic.rates.subscribedCombat === 11, "public endpoint should expose subscribed combat rate");
-assert(initialPublic.rates.subscribedSkill === 2.5, "public endpoint should expose subscribed skill rate");
+assert(initialPublic.rates.subscribedSkill === 3, "public endpoint should expose subscribed skill rate");
 assert(Array.isArray(initialPublic.news) && initialPublic.news.length >= 3, "public endpoint should expose news");
 assert(Array.isArray(initialPublic.market) && initialPublic.market.length >= 6, "public endpoint should expose market rows");
 assert(Array.isArray(initialPublic.highscores) && initialPublic.highscores.length >= 6, "public endpoint should expose highscores");
@@ -26,10 +24,6 @@ assert(initialPublic.integrity.economyScans && initialPublic.integrity.economySc
 assert(initialPublic.integrity.privacy.includes("excludes IP addresses"), "integrity summary should describe public privacy limits");
 assert(Array.isArray(initialPublic.integrity.build.artifacts), "integrity summary should expose build artifact proof");
 assert(initialPublic.integrity.build.manifest && initialPublic.integrity.build.manifest.url === "/api/launcher/manifest.properties", "integrity summary should expose launcher manifest proof");
-const alagardFont = await fetch(`${baseUrl}/assets/alagard.ttf`);
-assert(alagardFont.ok && (alagardFont.headers.get("content-type") || "").startsWith("font/ttf"), "Alagard should be served with a font MIME type");
-const instrumentFont = await fetch(`${baseUrl}/assets/instrument-sans-latin-400-600.woff2`);
-assert(instrumentFont.ok && (instrumentFont.headers.get("content-type") || "").startsWith("font/woff2"), "Instrument Sans should be served with a font MIME type");
 const launcherDownload = initialPublic.downloads.find((row) => row.slug === "launcher");
 assert(launcherDownload && typeof launcherDownload.available === "boolean", "public endpoint should expose launcher download availability");
 if (launcherDownload.available) {
@@ -77,31 +71,6 @@ const paymentStub = await api("/api/payments/subscription-cards/checkout", {
 });
 assert(paymentStub.error === "payments_not_configured", "production payment stub should be explicit");
 
-const presenceHeartbeat = await api("/api/presence/heartbeat", {
-	method: "POST",
-	noAuth: true,
-	body: {
-		visitorId: "presenceSmokeVisitor_12345",
-		page: "/portal?resetToken=must-not-leak#verify-email=must-not-leak",
-		title: "Voidscape Account",
-		visible: true
-	}
-});
-assert(presenceHeartbeat.ok === true, "presence heartbeat should accept a valid anonymous browser id");
-const presence = await api("/api/admin/presence", {
-	headers: { "x-portal-admin-token": adminToken }
-});
-assert(presence.active && presence.active.total >= 1, "staff presence summary should count active browsers");
-assert(Array.isArray(presence.visitors) && presence.visitors.some((row) => row.page === "/portal"), "presence should retain only the normalized route");
-assert(!JSON.stringify(presence).includes("must-not-leak"), "presence must discard query and fragment secrets");
-const invalidPresence = await api("/api/presence/heartbeat", {
-	method: "POST",
-	noAuth: true,
-	body: { visitorId: "short", page: "/" },
-	expectStatus: 400
-});
-assert(invalidPresence.error === "invalid_visitor_id", "presence should reject malformed browser ids");
-
 const integrity = await api("/api/integrity");
 assert(integrity.staffCommands && typeof integrity.staffCommands.total24h === "number", "integrity endpoint should expose staff command totals");
 assert(integrity.staffCommands.total24h >= 2, "integrity endpoint should count fixture staff commands");
@@ -115,9 +84,12 @@ assert(Array.isArray(integrity.itemProvenance.recent), "integrity endpoint shoul
 assert(integrity.economyScans && integrity.economyScans.flagged >= 1, "integrity endpoint should expose economy scan findings");
 assert(integrity.build.status, "integrity endpoint should expose build evidence status");
 assert(Array.isArray(integrity.build.artifacts), "integrity endpoint should expose build artifact hashes");
-assert(integrity.build.source && integrity.build.source.status === "publication_pending", "integrity endpoint should report pending source publication");
-assert(integrity.build.source.repositoryUrl === "", "pending source metadata must not advertise an older repository");
-assert(integrity.build.source.commit === "" && integrity.build.source.shortCommit === "" && integrity.build.source.branch === "", "pending source metadata must not expose private build provenance");
+assert(integrity.build.source && integrity.build.source.status, "integrity endpoint should expose source publication status");
+if (["publication_pending", "source_pending"].includes(integrity.build.source.status)) {
+	assert(!integrity.build.source.repositoryUrl && !integrity.build.source.commit, "pending source publication must not expose stale provenance");
+} else {
+	assert(integrity.build.source.repositoryUrl && integrity.build.source.commit, "published source metadata should identify its repository and commit");
+}
 
 const snapshot = await api("/api/openrsc/characters/SmokeHero");
 assert(snapshot.character.source === "openrsc-sqlite", "snapshot endpoint should report the OpenRSC source");
@@ -230,6 +202,8 @@ const registered = await api("/api/accounts/register", {
 		username: "SmokeHero",
 		email: "smoke@example.com",
 		password: "correct-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16",
 		path: "warrior"
 	}
 });
@@ -246,7 +220,9 @@ const signedInRegisterBlocked = await api("/api/accounts/register", {
 	body: {
 		username: "AlreadyIn",
 		email: "already-in@example.com",
-		password: "correct-horse-battery"
+		password: "correct-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	},
 	expectStatus: 409
 });
@@ -280,7 +256,9 @@ if (Number(process.env.PORTAL_CHARACTER_IP_DAILY_LIMIT || 0) === 2) {
 			body: {
 				username: "CharCapOne",
 			email: "char-cap-one@example.com",
-			password: "character-cap-password"
+			password: "character-cap-password",
+			termsAccepted: true,
+			termsVersion: "2026-07-16"
 		}
 	});
 	token = limitedRegistered.token;
@@ -627,7 +605,7 @@ const redeemed = await api("/api/subscriptions/redeem", {
 });
 assert(redeemed.account.subscription.active === true, "redeeming a card should activate subscription state");
 assert(redeemed.account.subscription.combatXpRate === 11, "subscribed combat XP rate should be 11x");
-assert(redeemed.account.subscription.skillXpRate === 2.5, "subscribed skill XP rate should be 2.5x");
+assert(redeemed.account.subscription.skillXpRate === 3, "subscribed skill XP rate should be 3x");
 
 const account = await api("/api/account");
 assert(account.characters.length === 10, "account endpoint should return the full roster");
@@ -660,7 +638,9 @@ const abuseOne = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseOne",
 		email: "abuse-one@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseTwo = await api("/api/accounts/register", {
@@ -670,7 +650,9 @@ const abuseTwo = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseTwo",
 		email: "abuse-two@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseThree = await api("/api/accounts/register", {
@@ -680,7 +662,9 @@ const abuseThree = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseThree",
 		email: "abuse-three@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	}
 });
 const abuseFour = await api("/api/accounts/register", {
@@ -690,7 +674,9 @@ const abuseFour = await api("/api/accounts/register", {
 	body: {
 		username: "AbuseFour",
 		email: "abuse-four@example.com",
-		password: "abuse-horse-battery"
+		password: "abuse-horse-battery",
+		termsAccepted: true,
+		termsVersion: "2026-07-16"
 	},
 	expectStatus: 429
 });

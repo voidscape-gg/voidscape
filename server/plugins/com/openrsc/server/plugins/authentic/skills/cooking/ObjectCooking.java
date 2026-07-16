@@ -2,6 +2,7 @@ package com.openrsc.server.plugins.authentic.skills.cooking;
 
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.external.ItemCookingDef;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
@@ -164,24 +165,26 @@ public class ObjectCooking implements UseLocTrigger {
 			else
 				player.message(cookingOnMessage(player, item, object, needOven));
 
-			startbatch(repeat);
+			startskillbatch(repeat, Skill.COOKING.id());
 			batchCooking(player, item, timeToCook, cookingDef, object);
 		}
 	}
 
 	private int chooseCookCount(Player player, Item item) {
 		int cookableCount = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
-		if (!config().BATCH_PROGRESSION || cookableCount <= 1) {
+		int maximumCookCount = Math.min(cookableCount,
+			SkillBatching.limitForSkill(player, Skill.COOKING.id()));
+		if (!config().BATCH_PROGRESSION || maximumCookCount <= 1) {
 			return 1;
 		}
 
 		player.message("How many would you like to cook?");
-		int option = multi(player, "Cook 1", "Cook All", "Cancel");
+		int option = multi(player, "Cook 1", "Cook max (" + maximumCookCount + ")", "Cancel");
 		if (option == 0) {
 			return 1;
 		}
 		if (option == 1) {
-			return cookableCount;
+			return maximumCookCount;
 		}
 		return -1;
 	}

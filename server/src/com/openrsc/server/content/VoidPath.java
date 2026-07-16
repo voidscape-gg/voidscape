@@ -112,12 +112,12 @@ public final class VoidPath {
 		}
 
 		ActionSender.sendGameSettings(player);
+		player.teleport(player.getConfig().RESPAWN_LOCATION_X, player.getConfig().RESPAWN_LOCATION_Y, true);
 		player.save(false, true);
 		player.message(name(path) + " chosen. " + boostedSkillSummary(path) + " now earn " + boostLimitSummary() + ".");
 		if (kitGranted) {
 			player.message("Your starter kit has been placed in your backpack.");
 		}
-		player.teleport(player.getConfig().RESPAWN_LOCATION_X, player.getConfig().RESPAWN_LOCATION_Y, true);
 		if (!BetaOnboardingGuide.showFirstTime(player)) {
 			ActionSender.sendBox(player, "@yel@" + name(path) + " chosen.% %"
 				+ "@whi@" + boostLimitSummary() + ": @gre@" + boostedSkillSummary(path) + "@whi@.%"
@@ -278,7 +278,7 @@ public final class VoidPath {
 	}
 
 	private static boolean canGrantStarterKit(Player player, int path) {
-		if (player == null || !player.getWorld().isCurrentPlayer(player)) {
+		if (player == null || !player.getWorld().getPlayers().contains(player)) {
 			return false;
 		}
 		Inventory inventory = player.getCarriedItems().getInventory();

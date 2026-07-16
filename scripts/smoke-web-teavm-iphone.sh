@@ -704,8 +704,16 @@ function derivedPortalUrl(base, hash) {
   return url.href;
 }
 
+function derivedPortalRegistrationUrl(base) {
+  const url = new URL(base || '/', baseUrl);
+  url.hash = '';
+  url.search = '';
+  url.searchParams.set('auth', 'register');
+  return url.href;
+}
+
 function expectedPortalAccountUrl() {
-  return portalAccountUrl ? resolvedHttpUrl(portalAccountUrl) : derivedPortalUrl(portalUrl, 'account');
+  return portalAccountUrl ? resolvedHttpUrl(portalAccountUrl) : derivedPortalRegistrationUrl(portalUrl);
 }
 
 function expectedPortalRecoveryUrl() {

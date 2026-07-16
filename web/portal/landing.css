@@ -405,6 +405,33 @@ body.state-launch .chip-dot { background: var(--live); box-shadow: 0 0 8px var(-
 
 .reserve-more input { width: min(452px, 92vw); }
 
+.reserve-more .terms-acceptance {
+	width: min(452px, 92vw);
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 10px;
+	font-size: 13px;
+	line-height: 1.45;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--muted);
+}
+
+.reserve-more .terms-acceptance input {
+	width: 18px;
+	height: 18px;
+	margin: 1px 0 0;
+	flex: 0 0 auto;
+}
+
+.reserve-more .terms-acceptance span {
+	padding: 0;
+	font-size: inherit;
+	letter-spacing: inherit;
+	text-transform: none;
+	color: inherit;
+}
+
 .google-signup {
 	width: min(452px, 92vw);
 	border: 1px solid var(--line);
@@ -668,7 +695,6 @@ body.state-launch .chip-dot { background: var(--live); box-shadow: 0 0 8px var(-
 .quiet-links {
 	margin-top: 14px;
 	display: flex;
-	flex-wrap: wrap;
 	justify-content: center;
 	gap: 26px;
 }

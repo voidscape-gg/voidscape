@@ -2,6 +2,9 @@ package com.openrsc.server.net.rsc.handlers;
 
 
 import com.openrsc.server.content.VoidStarterIntro;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
+import com.openrsc.server.content.duelproof.DuelProofService;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
 import com.openrsc.server.model.Path;
 import com.openrsc.server.model.Path.PathType;
@@ -15,6 +18,8 @@ import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.WalkStruct;
+import com.openrsc.server.plugins.Batch;
+import com.openrsc.server.plugins.GatherInputPolicy;
 import com.openrsc.server.plugins.triggers.EscapeNpcTrigger;
 
 import java.util.List;
@@ -34,8 +39,15 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 			return;
 		}
 		if (player.isBusy() && player.getMenuHandler() == null) {
-			if (player.getConfig().BATCH_PROGRESSION) {
+			final Batch batch = player.getBatch();
+			final boolean gathering = batch != null && batch.supportsGatherRepeat();
+			if (GatherInputPolicy.shouldInterruptBusyWalk(
+				player.getConfig().BATCH_PROGRESSION,
+				gathering,
+				packetOpcode == OpcodeIn.WALK_TO_POINT)) {
 				player.interruptPlugins();
+			} else if (player.getConfig().BATCH_PROGRESSION && gathering) {
+				batch.expectGatherObjectCommand();
 			}
 			return;
 		}
@@ -43,6 +55,7 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 		if (player.inCombat()) {
 			if (packetOpcode == OpcodeIn.WALK_TO_POINT) {
 				Mob opponent = player.getOpponent();
+				boolean proofRetreat = false;
 				if (opponent == null) {
 					player.setSuspiciousPlayer(true, "walk request null opponent");
 					return;
@@ -57,6 +70,8 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 							ProjectileEvent projectileEvent = player.getAttribute("projectile");
 							projectileEvent.setCanceled(true);
 						}
+						final DuelProofSession proofSession = player.getDuel().getProofSession();
+						proofRetreat = DuelProofService.cancelForRetreat(proofSession, player);
 					}
 
 					opponent.setLastOpponent(opponent.getOpponent());
@@ -64,7 +79,9 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 					player.setCombatTimer();
 					if (player.getOpponent().isPlayer()) {
 						Player victimPlayer = ((Player) player.getOpponent());
-						victimPlayer.message("Your opponent is retreating!");
+						if (!proofRetreat) {
+							victimPlayer.message("Your opponent is retreating!");
+						}
 						ActionSender.sendSound(victimPlayer, "retreat");
 						victimPlayer.setRanAwayTimer(); //This player also needs to be immune from player attacks for a while.
 					}
@@ -124,6 +141,9 @@ public class WalkRequest implements PayloadProcessor<WalkStruct, OpcodeIn> {
 			path.finish();
 		}
 		player.getWalkingQueue().setPath(path);
+		if (packetOpcode == OpcodeIn.WALK_TO_POINT && !path.isEmpty()) {
+			VoidDungeonTraversalGrace.activateForAcceptedWalk(player);
+		}
 	}
 
 	private void queueVoidScoutWalk(final WalkStruct payload, final Player player) {

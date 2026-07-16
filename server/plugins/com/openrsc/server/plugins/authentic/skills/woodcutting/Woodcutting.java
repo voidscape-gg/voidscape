@@ -79,12 +79,7 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.WOODCUTTING.id());
-		}
-
-		startbatch(repeat);
+		startskillbatch(object, Skill.WOODCUTTING.id());
 		batchWoodcutting(player, object, def, axeId);
 	}
 
@@ -92,6 +87,9 @@ public class Woodcutting implements OpLocTrigger, UseLocTrigger {
 		player.playerServerMessage(MessageType.QUEST, "You swing your " + player.getWorld().getServer().getEntityHandler().getItemDef(axeId).getName().toLowerCase() + " at the tree...");
 		thinkbubble(new Item(axeId));
 		delay(3);
+		if (ifinterrupted()) {
+			return;
+		}
 
 		final Item log = new Item(def.getLogId());
 		if (config().WANT_FATIGUE) {

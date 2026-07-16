@@ -361,13 +361,11 @@ public class Thieving implements OpLocTrigger, OpNpcTrigger, OpBoundTrigger {
 		final String thievedMobString = (thievedMobName.contains("gnome") || thievedMobName.contains("blurberry")) ? "gnome" :
 			thievedMobName.contains("watchman") ? "watchman" : thievedMobName;
 
-		int repeat = 1;
 		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.THIEVING.id());
 			npc.setBusy(true);
 		}
 
-		startbatch(repeat);
+		startskillbatch(Skill.THIEVING.id());
 		batchPickpocket(player, npc, pickpocket, lootTable, thievedMobString);
 	}
 
@@ -650,12 +648,7 @@ public class Thieving implements OpLocTrigger, OpNpcTrigger, OpBoundTrigger {
 				return;
 			}
 
-			int repeat = 1;
-			if (config().BATCH_PROGRESSION) {
-				repeat = Formulae.getRepeatTimes(player, Skill.THIEVING.id());
-			}
-
-			startbatch(repeat);
+			startskillbatch(Skill.THIEVING.id());
 			batchPicklock(player, obj, req, exp, goThrough, requiresLockpick);
 		}
 	}

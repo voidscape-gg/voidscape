@@ -52,6 +52,15 @@ def _cmd_voidscim(args: argparse.Namespace) -> int:
     return voidscim_main(args.voidscim_args)
 
 
+def _cmd_appearance(args: argparse.Namespace) -> int:
+    try:
+        from appearance_studio.__main__ import main as appearance_main
+    except ImportError as exc:
+        print(f"error: could not import appearance studio tool: {exc}", file=sys.stderr)
+        return 2
+    return appearance_main(args.appearance_args)
+
+
 def _normalize_model_name(name: str) -> str:
     return name[:-4] if name.lower().endswith(".ob3") else name
 
@@ -180,6 +189,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_voidscim.add_argument("voidscim_args", nargs=argparse.REMAINDER)
     p_voidscim.set_defaults(func=_cmd_voidscim)
 
+    p_appearance = sub.add_parser(
+        "appearance",
+        help="validate and plan manifest-driven player appearances",
+        add_help=False,
+    )
+    p_appearance.add_argument("appearance_args", nargs=argparse.REMAINDER)
+    p_appearance.set_defaults(func=_cmd_appearance)
+
     p_ui = sub.add_parser("ui", help="inspect, validate, preview, and ingest Voidscape UI assets")
     add_ui_subcommands(p_ui)
 
@@ -194,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "voidscim":
         return _cmd_voidscim(argparse.Namespace(voidscim_args=argv[1:]))
+    if argv and argv[0] == "appearance":
+        return _cmd_appearance(argparse.Namespace(appearance_args=argv[1:]))
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

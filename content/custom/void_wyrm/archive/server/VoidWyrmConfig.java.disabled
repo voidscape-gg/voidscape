@@ -1,0 +1,33 @@
+package com.openrsc.server.plugins.custom.minigames.voidwyrm;
+
+import com.openrsc.server.content.voiddungeon.VoidDungeonLayout;
+import com.openrsc.server.model.Point;
+
+final class VoidWyrmConfig {
+	static final int BOSS_X = 122;
+	static final int BOSS_Y = 1312;
+	static final int PLAYER_LANDING_X = 132;
+	static final int PLAYER_LANDING_Y = 1317;
+	static final int SHARED_RETURN_X = 118;
+	static final int SHARED_RETURN_Y = 1348;
+	static final int RESPAWN_DELAY_MS = 12_000;
+
+	private VoidWyrmConfig() {
+	}
+
+	static Point sharedDropPoint() {
+		return Point.location(SHARED_RETURN_X, SHARED_RETURN_Y);
+	}
+
+	static boolean isBossGate(int objectId, int x, int y) {
+		return objectId == VoidDungeonLayout.VOID_OBELISK_ID
+			&& x == VoidDungeonLayout.WYRMS_THRESHOLD_BOSS_GATE_X
+			&& y == VoidDungeonLayout.WYRMS_THRESHOLD_BOSS_GATE_Y;
+	}
+
+	static boolean isArena(Point point) {
+		return point != null
+			&& VoidDungeonLayout.stageAt(point.getX(), point.getY())
+				== VoidDungeonLayout.STAGE_WYRMS_THRESHOLD;
+	}
+}

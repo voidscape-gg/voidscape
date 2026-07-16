@@ -2,6 +2,7 @@ package com.openrsc.server.content.wilderness;
 
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -193,6 +194,7 @@ public final class BountyHunter {
 		if (isValidOnlinePlayer(killer) && isBountyLocation(killer) && isRewardEligible(killer, target, true)) {
 			incrementCache(killer, POINTS_CACHE, 5);
 			incrementCache(killer, KILLS_CACHE, 1);
+			PlayerTitle.refreshAutomaticUnlocks(killer);
 			startRewardCooldown(killer, target, now);
 			awardVoidKey(killer);
 			world.sendWorldMessage("@red@Bounty: @whi@" + killer.getUsername()
@@ -223,6 +225,7 @@ public final class BountyHunter {
 		if (hasClaimant() && claimedAt > 0L && now - claimedAt >= MIN_ESCAPE_TIME_MS) {
 			incrementCache(target, POINTS_CACHE, 1);
 			incrementCache(target, ESCAPES_CACHE, 1);
+			PlayerTitle.refreshAutomaticUnlocks(target);
 			world.sendWorldMessage("@red@Bounty: @whi@" + target.getUsername()
 				+ " escaped the Wilderness with a mark.");
 		} else {

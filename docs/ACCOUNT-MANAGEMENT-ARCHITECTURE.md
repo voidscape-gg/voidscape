@@ -14,7 +14,7 @@ Authoritative schema lives in `server/database/sqlite/core.sqlite` and `server/d
 - `player_cache` stores custom Voidscape state such as titles, web-account links, account subscription mirrors, and Void Island path state.
 - Login flow in `LoginRequest` and `CharacterCreateRequest` looks up or creates by username directly.
 
-Implication: adding web accounts must not rename or split `players` yet. Desktop and native Android can use the existing packet registration path for one-character game logins, while web-account ownership remains a portal concern.
+Implication: adding web accounts must not rename or split `players` yet. Desktop can use the existing packet registration path for one-character game logins, while native Android and web-account ownership use the portal.
 
 ## Target Model
 
@@ -117,12 +117,12 @@ Phase 1 keeps game login untouched and splits signup by surface:
 1. A desktop or native Android player can create a character in-client with only username/password, then log in with that character username and game password.
 2. The website authenticates by web account email/password or Google OpenID Connect.
 3. Web-created characters still create normal `players` rows and then link them in `web_account_characters`.
-4. Public client packet registration is enabled for desktop/native Android; shipped web `/play` keeps directing new users to the portal account manager.
+4. Public client packet registration is enabled for desktop; native Android and shipped web `/play` direct new users to the portal account manager.
 5. Subscription state lives at the web-account level. The game bridge stores `web_account_id` on each character and `acct_sub:<webAccountId>` as the account-wide expiry in global `player_cache`.
 
 Launch decision: `member_world` stays globally enabled on the server for every client surface. Subscription cards are an account-wide XP/card incentive, not a per-player P2P unlock. The server config remains the source of truth for F2P/P2P restrictions, so launcher, Android, and web clients do not need separate membership logic.
 
-The shared game client uses the original packet registration form for desktop and native Android `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Web `/play` keeps its portal account sentinel for account creation, while client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
+The shared game client uses the original packet registration form for desktop `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Native Android and web `/play` use the portal account route so Android signup records Community Rules acceptance; client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
 
 Starter-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. `starter_card:<webAccountId> = 1` means waiting at the Lumbridge vendor, `2` means claimed, and staff revoke only clears an unclaimed waiting marker.
 
@@ -248,10 +248,6 @@ When operators intentionally set a positive IP bucket limit and it is exceeded, 
 
 This keeps the normal launch path low friction while preventing throwaway accounts from reliably minting unlimited free subscription cards.
 
-### Final-roster launch-card cutover
-
-The owner's separate “one card per character at release” campaign is not implemented in account or character creation. During the post-reset maintenance window, the native-account cutover freezes one reviewed roster snapshot, seeds `launch_subcard_2026:<playerId> = 1` globally for every explicitly included character, and writes `launch_subcard_2026:done = 1` in the same game-DB transaction. The marker is keyed by immutable game player id, so linked siblings each have their own entitlement and unlinked native characters can claim without a portal account. Once sealed, later ownership backfill can never issue a campaign marker or automatic starter reward to a new/replacement player id. Existing account starter cards remain separate promises rather than being deleted or silently reassigned.
-
 ### Recovery and support policy
 
 The low-friction recovery path is:
@@ -262,7 +258,7 @@ The low-friction recovery path is:
 4. Character game passwords are separate. A signed-in owner confirms the website password (or has a recent passwordless federated session), selects an offline portal-created linked character, and changes only that `players.pass` value.
 5. A passwordless account created by native-player backfill uses the separate signed-out claim path. The player proves the current game password, chooses a real email and new website password, then explicitly confirms a hashed one-use email token. Completion rechecks the latest game credential fingerprint and `web_account_id` while holding a short SQLite write lock through the portal-store save, upgrades the same portal account in place, revokes portal recovery/session material, and never changes `players.pass`, its salt, character ownership, active subscription time, or starter-card entitlements. Backfill migrates any legacy `char_sub:<playerId>` expiry to `acct_sub:<accountId>` before the new ownership marker makes account-level lookup authoritative.
 
-Staff support remains the last resort for a player who has lost email/recovery access, does not know the older character's current game password, or needs an email collision reviewed. Claims never merge portal accounts automatically. For launch, every public reverse-proxy origin returns `404` for `/api/admin/*`, `PORTAL_ADMIN_TOKEN` stays unset during normal operation, and bounded maintenance uses a temporary token only through the loopback backend before removing it and restarting. Full staff identity/RBAC remains the post-launch replacement for that isolated maintenance path.
+Staff support remains the last resort for a player who has lost email/recovery access, does not know the older character's current game password, or needs an email collision reviewed. Claims never merge portal accounts automatically. Production still needs staff identity/RBAC beyond the local admin-token guard.
 
 ### Read-only OpenRSC snapshot endpoint
 

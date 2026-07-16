@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-v2-template/v1",
+  "type": "object",
+  "$defs": {
+    "point": {"oneOf": [{"type": "null"}, {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}}]},
+    "mask": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["workspace_path", "pixels_sha256"], "properties": {"workspace_path": {"type": "string", "pattern": "^guides/[a-z-]+/masks/[a-z_]+\\.png$"}, "pixels_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "additionalProperties": false}]},
+    "profile": {
+      "type": "object", "required": ["visual_pose", "landmarks", "masks"],
+      "properties": {
+        "visual_pose": {"enum": ["front", "three-quarter-front", "profile", "three-quarter-rear", "rear", "combat-profile"]},
+        "landmarks": {"type": "object", "required": ["forehead", "face_center", "nose_tip", "upper_lip", "chin", "ear", "occiput", "neck", "nape"], "properties": {"forehead": {"$ref": "#/$defs/point"}, "face_center": {"$ref": "#/$defs/point"}, "nose_tip": {"$ref": "#/$defs/point"}, "upper_lip": {"$ref": "#/$defs/point"}, "chin": {"$ref": "#/$defs/point"}, "ear": {"$ref": "#/$defs/point"}, "occiput": {"$ref": "#/$defs/point"}, "neck": {"$ref": "#/$defs/point"}, "nape": {"$ref": "#/$defs/point"}}, "additionalProperties": false},
+        "masks": {"type": "object", "required": ["hair_allowed", "facial_hair_allowed", "scalp_attachment", "upper_lip_attachment", "nape_tail", "face_clearance", "neck_clearance", "protected_anatomy"], "properties": {"hair_allowed": {"$ref": "#/$defs/mask"}, "facial_hair_allowed": {"$ref": "#/$defs/mask"}, "scalp_attachment": {"$ref": "#/$defs/mask"}, "upper_lip_attachment": {"$ref": "#/$defs/mask"}, "nape_tail": {"$ref": "#/$defs/mask"}, "face_clearance": {"$ref": "#/$defs/mask"}, "neck_clearance": {"$ref": "#/$defs/mask"}, "protected_anatomy": {"$ref": "#/$defs/mask"}}, "additionalProperties": false}
+      }, "additionalProperties": false
+    }
+  },
+  "required": ["schema", "key", "frame_count", "scale", "source_template", "logical_canvases", "groups", "runtime_mirrors", "coordinate_convention", "upper_hair_envelopes", "pose_profiles", "derived_masks", "preview", "palette"],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-v2-template/v1"},
+    "key": {"const": "rsc-player-2x-v1"},
+    "frame_count": {"const": 18},
+    "scale": {"const": 2},
+    "source_template": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "content/appearance/templates/rsc-player-v1/template.yaml"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "logical_canvases": {
+      "type": "object",
+      "required": ["walk", "combat"],
+      "properties": {"walk": {"const": [128, 204]}, "combat": {"const": [168, 204]}},
+      "additionalProperties": false
+    },
+    "groups": {
+      "type": "array", "minItems": 6, "maxItems": 6,
+      "items": {
+        "type": "object", "required": ["master", "offsets", "canvas", "crowns"],
+        "properties": {
+          "master": {"enum": ["north", "north-west", "west", "south-west", "south", "combat-west"]},
+          "offsets": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer", "minimum": 0, "maximum": 17}},
+          "canvas": {"enum": ["walk", "combat"]},
+          "crowns": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "runtime_mirrors": {
+      "const": {"south-east": "south-west", "east": "west", "north-east": "north-west", "combat-b": "combat-west"}
+    },
+    "coordinate_convention": {
+      "const": {"landmarks": "crown-relative-scaled-integer", "masks": "nearest-neighbor-2x-plus-upper-hair-envelope", "phase_translation": "doubled-crown-delta"}
+    },
+    "upper_hair_envelopes": {
+      "const": {
+        "north": [[-10, -18], [10, -18], [26, -6], [24, 8], [-24, 8], [-26, -6]],
+        "north-west": [[-22, -18], [-4, -18], [28, -4], [26, 8], [-26, 8], [-28, -4]],
+        "west": [[-24, -18], [-8, -18], [28, -6], [26, 8], [-24, 8], [-28, -4]],
+        "south-west": [[-26, -16], [-12, -18], [22, -18], [28, -4], [24, 8], [-26, 8]],
+        "south": [[-12, -18], [12, -18], [28, -4], [24, 8], [-24, 8], [-28, -4]],
+        "combat-west": [[-24, -18], [-8, -18], [28, -6], [26, 8], [-24, 8], [-28, -4]]
+      }
+    },
+    "pose_profiles": {
+      "type": "object", "required": ["north", "north-west", "west", "south-west", "south", "combat-west"],
+      "properties": {"north": {"$ref": "#/$defs/profile"}, "north-west": {"$ref": "#/$defs/profile"}, "west": {"$ref": "#/$defs/profile"}, "south-west": {"$ref": "#/$defs/profile"}, "south": {"$ref": "#/$defs/profile"}, "combat-west": {"$ref": "#/$defs/profile"}},
+      "additionalProperties": false
+    },
+    "derived_masks": {
+      "type": "object", "required": ["algorithm", "tree_sha256"],
+      "properties": {
+        "algorithm": {"const": "nearest-neighbor-2x-plus-upper-hair-envelope"},
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "preview": {
+      "const": {"width": 176, "height": 224, "draw_x": 24, "draw_y": 4, "draw_width": 128, "draw_height": 204}
+    },
+    "palette": {
+      "const": {"preserve_rgba": true, "arbitrary_grayscale": true, "tint_roles": ["skin", "hair", "facial-hair", "top", "bottom", "primary", "secondary", "fixed"]}
+    }
+  },
+  "additionalProperties": false
+}

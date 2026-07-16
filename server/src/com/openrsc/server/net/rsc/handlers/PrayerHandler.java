@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.IronmanMode;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.external.PrayerDef;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
@@ -88,6 +89,12 @@ public class PrayerHandler implements PayloadProcessor<PrayerStruct, OpcodeIn> {
 
 		if (player.getConfig().LACKS_PRAYERS) {
 			player.message("World does not feature prayers!");
+			return;
+		}
+
+		final DuelProofSession proofSession = player.getDuel().getProofSession();
+		if (proofSession != null && proofSession.isPreCombat()) {
+			player.message("Your prayers are locked until the verified duel begins.");
 			return;
 		}
 

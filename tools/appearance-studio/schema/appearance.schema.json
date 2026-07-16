@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-appearance/v1",
+  "title": "Voidscape authored appearance",
+  "type": "object",
+  "required": ["schema", "key", "name", "kind", "status", "profile", "source_mode", "registry", "integration", "authoring"],
+  "properties": {
+    "schema": {"const": "voidscape-appearance/v1"},
+    "key": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["hat", "hair", "facial-hair", "clothing", "equipment", "look"]},
+    "status": {"enum": ["draft", "reserved", "adopted", "active"]},
+    "profile": {"const": "authentic"},
+    "source_mode": {"enum": ["layers", "look", "legacy-import"]},
+    "registry": {
+      "type": "object",
+      "required": ["appearance_id", "sprite_base", "reservation_size"],
+      "properties": {
+        "appearance_id": {"type": "integer", "minimum": 1, "maximum": 256},
+        "sprite_base": {"type": "integer", "minimum": 0},
+        "reservation_size": {"const": 27}
+      },
+      "additionalProperties": false
+    },
+    "legacy": {"type": "object"},
+    "integration": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "required": [
+            "id", "description", "command", "base_price", "inventory_sprite_id",
+            "inventory_archive_index", "inventory_icon_file", "inventory_sprite_location", "stackable", "wearable",
+            "wearable_id", "wear_slot", "picture_mask", "blue_mask", "members", "untradeable",
+            "noteable", "female_only", "required_level", "required_skill_id", "bonuses"
+          ],
+          "properties": {
+            "id": {"type": "integer", "minimum": 0},
+            "description": {"type": "string", "minLength": 1},
+            "command": {"type": "string"},
+            "base_price": {"type": "integer", "minimum": 0},
+            "inventory_sprite_id": {"type": "integer", "minimum": 0},
+            "inventory_archive_index": {"type": "integer", "minimum": 0},
+            "inventory_icon_file": {"type": "string", "minLength": 1},
+            "inventory_sprite_location": {"type": "string", "minLength": 1},
+            "stackable": {"type": "boolean"},
+            "wearable": {"type": "boolean"},
+            "wearable_id": {"type": "integer", "minimum": 0},
+            "wear_slot": {"type": "integer", "minimum": 0, "maximum": 11},
+            "picture_mask": {"type": "integer", "minimum": 0},
+            "blue_mask": {"type": "integer", "minimum": 0},
+            "members": {"type": "boolean"},
+            "untradeable": {"type": "boolean"},
+            "noteable": {"type": "boolean"},
+            "female_only": {"type": "boolean"},
+            "required_level": {"type": "integer", "minimum": 0},
+            "required_skill_id": {"type": "integer", "minimum": 0},
+            "bonuses": {
+              "type": "object",
+              "required": ["armour", "weapon_aim", "weapon_power", "magic", "prayer"],
+              "properties": {
+                "armour": {"type": "integer"},
+                "weapon_aim": {"type": "integer"},
+                "weapon_power": {"type": "integer"},
+                "magic": {"type": "integer"},
+                "prayer": {"type": "integer"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "authoring": {"type": "object"},
+    "look": {"type": "object"}
+  },
+  "additionalProperties": false
+}

@@ -5,6 +5,7 @@ import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.external.ItemSmithingDef;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
@@ -259,7 +260,7 @@ public class Smithing implements UseLocTrigger {
 
 			final int toMake = config().BATCH_PROGRESSION ?
 				(player.getCarriedItems().getInventory().countId(ItemId.GOLD_BAR.id(), Optional.of(false)) / 2) : 1;
-			startbatch(toMake);
+			startskillbatch(toMake, Skill.SMITHING.id());
 			batchGoldSmithing(player);
 		}
 	}
@@ -328,7 +329,7 @@ public class Smithing implements UseLocTrigger {
 
 		if (makeCount == -1) return;
 
-		startbatch(makeCount);
+		startskillbatch(makeCount, Skill.SMITHING.id());
 		batchSmithing(player, item, def);
 	}
 
@@ -745,29 +746,36 @@ public class Smithing implements UseLocTrigger {
 	}
 
 	private int getCount(ItemSmithingDef def, Item item, Player player) {
-		int count = 1;
-		if (config().BATCH_PROGRESSION) {
-			String[] options = {
-				"Make 1",
-				"Make 5",
-				"Make 10",
-				"Make All"
-			};
-
-			count = multi(player, options);
-
-			if (count == -1) {
-				return -1;
-			}
-
-			int maximumMakeCount = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false)) / def.getRequiredBars();
-
-			return count != 3
-				? Integer.parseInt(options[count].replaceAll("Make ", ""))
-				: maximumMakeCount;
+		if (!config().BATCH_PROGRESSION) {
+			return 1;
 		}
 
-		return count;
+		int resourceMaximum = player.getCarriedItems().getInventory()
+			.countId(item.getCatalogId(), Optional.of(false)) / def.getRequiredBars();
+		int maximumMakeCount = Math.min(resourceMaximum,
+			SkillBatching.limitForSkill(player, Skill.SMITHING.id()));
+		if (maximumMakeCount <= 1) {
+			return 1;
+		}
+
+		ArrayList<String> options = new ArrayList<>();
+		ArrayList<Integer> amounts = new ArrayList<>();
+		options.add("Make 1");
+		amounts.add(1);
+		if (maximumMakeCount > 5) {
+			options.add("Make 5");
+			amounts.add(5);
+		}
+		if (maximumMakeCount > 10) {
+			options.add("Make 10");
+			amounts.add(10);
+		}
+		options.add("Make max (" + maximumMakeCount + ")");
+		amounts.add(maximumMakeCount);
+		options.add("Cancel");
+
+		int option = multi(player, options.toArray(new String[0]));
+		return option >= 0 && option < amounts.size() ? amounts.get(option) : -1;
 	}
 
 	/**

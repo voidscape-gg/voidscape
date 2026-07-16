@@ -86,9 +86,24 @@ public class LoginPacketHandler {
 		boolean reconnecting = loadedPlayer.isReconnecting();
 		if (!reconnecting) {
 			server.getPluginHandler().handlePlugin(PlayerLoginTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
+			if (loadedPlayer.hasUnregisterRequest() || loadedPlayer.isUnregistering()
+				|| loadedPlayer.getWorld().getVoidArena().needsImmediateArenaLoginRecovery(loadedPlayer)
+				|| loadedPlayer.isRemoved()) {
+				loadedPlayer.setLoggedIn(false);
+				Channel channel = loadedPlayer.getChannel();
+				if (channel != null) {
+					ConnectionAttachment connection = channel.attr(RSCConnectionHandler.attachment).get();
+					if (connection != null && connection.player.get() == loadedPlayer) {
+						connection.player.set(null);
+					}
+					channel.close();
+				}
+				loadedPlayer.unsetChannel();
+				return;
+			}
 		}
 		ActionSender.sendLogin(loadedPlayer);
-		if (!reconnecting && loadedPlayer.getWorld().isCurrentPlayer(loadedPlayer)) {
+		if (!reconnecting && loadedPlayer.getWorld().getPlayers().contains(loadedPlayer)) {
 			server.getPluginHandler().handlePlugin(PostLoginReadyTrigger.class, loadedPlayer, new Object[]{loadedPlayer});
 		}
 	}

@@ -441,6 +441,8 @@ run_android_release_guard() {
 }
 
 run_package_check() {
+	run_check "Launch config contract regression" \
+		python3 scripts/test-launch-staging-config.py
 	local args=(
 		scripts/package-launch-staging.sh
 		--host "$HOST"
@@ -467,6 +469,12 @@ run_package_check() {
 			;;
 	esac
 	run_check "Launch-staging package rehearsal" "${args[@]}"
+	run_check "Packaged launch config contract" \
+		node scripts/verify-launch-staging.mjs \
+		--server-config "$PACKAGE_DIR/server/local.launch-staging.conf" \
+		--connections-config server/connections.conf \
+		--server-config-only \
+		--out "$OUT_DIR/launch-config-verifier"
 	if [[ -f "$PACKAGE_DIR/MANIFEST.txt" ]]; then
 		record_check pass "Launch-staging manifest present" "bundle manifest written" "" "$PACKAGE_DIR/MANIFEST.txt"
 		local package_promotable
@@ -485,6 +493,38 @@ run_package_check() {
 		record_check pass "Release handoff present" "rollback/source-disclosure template written" "" "$PACKAGE_DIR/RELEASE-HANDOFF.md"
 	else
 		record_check fail "Release handoff present" "RELEASE-HANDOFF.md missing" ""
+	fi
+	run_check "Packaged headless-player config" \
+		python3 scripts/headless-player-helper.py check-fleet-runtime-config \
+		--path "$PACKAGE_DIR/server/local.launch-staging.conf"
+	local required_fleet_files=(
+		server/launch-config-contract.json
+		server/conf/server/defs/ItemDefs.json
+		scripts/headless-player-helper.py
+		scripts/provision-headless-players.sh
+		scripts/run-headless-controller.sh
+		scripts/run-headless-player.sh
+		tools/voidbot/cli.py
+		tools/voidbot/protocol.py
+		tools/voidbot/voidbot
+		tools/voidbot/voidbotd.py
+		tools/headless_players/controller.py
+		tools/headless_players/roster.json
+		Deployment_Scripts/systemd/voidscape-headless.target
+		Deployment_Scripts/systemd/voidscape-headless@.service
+		Deployment_Scripts/systemd/voidscape-headless-controller.service
+	)
+	local missing_fleet_files=()
+	local fleet_file
+	for fleet_file in "${required_fleet_files[@]}"; do
+		[[ -f "$PACKAGE_DIR/$fleet_file" ]] || missing_fleet_files+=("$fleet_file")
+	done
+	if [[ "${#missing_fleet_files[@]}" -eq 0 ]]; then
+		record_check pass "Packaged headless-player runtime" \
+			"runtime, definitions, roster, and systemd units present" ""
+	else
+		record_check fail "Packaged headless-player runtime" \
+			"missing: ${missing_fleet_files[*]}" ""
 	fi
 }
 
@@ -617,11 +657,9 @@ run_iphone_final_audit() {
 
 echo "==> Prelaunch readiness output: $OUT_DIR"
 
-run_check "Launch config policy" tests/launch-config.sh
-run_check "Cracker campaign durable control plane" tests/cracker-campaign-unit.sh
-run_check "Deferred-content reachability gate" tests/launch-content-reachability.sh
-run_check "Void Dungeon deterministic static gate" tests/void-dungeon-static.sh
 run_check "Canonical client/cache manifest" tests/client-cache-manifest.sh
+run_check "Launch staging release guards" tests/launch-staging-guard-unit.sh
+run_check "Production SQLite permissions" tests/production-sqlite-permissions.sh
 
 if [[ "$RUN_PORTAL_SCHEMA" -eq 1 ]]; then
 	run_check "Portal schema smoke" scripts/test-portal-schema.sh

@@ -1,14 +1,14 @@
 package com.openrsc.server.login;
 
 import com.openrsc.server.Server;
+import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
-import com.openrsc.server.util.PlayerEventStopper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.UUID;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -18,21 +18,17 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 	/**
 	 * The asynchronous logger.
 	 */
-	private static final Logger LOGGER = LogManager.getLogger(PlayerSaveRequest.class);
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final Server server;
 	private final Player player;
 	private final boolean logout;
-	private final UUID lifecycleId;
-	private final long persistentGeneration;
 	private final CompletableFuture<Boolean> completion = new CompletableFuture<>();
 
 	public PlayerSaveRequest(final Server server, final Player player, boolean logout) {
 		this.server = server;
 		this.player = player;
 		this.logout = logout;
-		this.lifecycleId = player.getSaveLifecycleId();
-		this.persistentGeneration = player.getPersistentSaveGeneration();
 	}
 
 	public final Player getPlayer() {
@@ -51,112 +47,51 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 		completion.complete(false);
 	}
 
-	public void rejectBeforeProcessing() {
-		try {
-			player.completeSaveTicket(logout, false);
-		} catch (final RuntimeException ex) {
-			LOGGER.error("Unable to balance rejected save ticket for " + player.getUsername(), ex);
-		} finally {
-			completion.complete(false);
-		}
-	}
-
 	protected void processInternal() {
 //		LOGGER.info("Saved player " + player.getUsername() + "");
 		boolean transactionSucceeded = false;
 		try {
 			if (player.getAttribute("dummyplayer", false)) {
-				transactionSucceeded = !this.logout || logoutSaveSuccess(persistentGeneration);
+				transactionSucceeded = true;
+				if (this.logout) {
+					logoutSaveSuccess();
+				}
 				return;
 			}
-			if (!isCapturedLifecycleCurrent()) {
-				return;
+			if (this.logout) {
+				RestedExperience.recordLogout(player);
 			}
-			final boolean databaseCommitted = getServer().getPlayerService().savePlayer(player);
-			final boolean stillCurrent = isCapturedLifecycleCurrent();
-			final boolean generationCurrent = !this.logout
-				|| player.isLogoutSaveGenerationCurrent(lifecycleId, persistentGeneration);
-			transactionSucceeded = databaseCommitted && stillCurrent && generationCurrent;
-			if (mayFinalizeLogout(databaseCommitted, stillCurrent, generationCurrent) && this.logout) {
-				transactionSucceeded = logoutSaveSuccess(persistentGeneration);
+			final boolean saveAccepted = getServer().getPlayerService().savePlayer(player);
+			transactionSucceeded = saveAccepted && getPlayer().getSaveAttempts() == 0;
+			if (saveAccepted && this.logout) {
+				logoutSaveSuccess();
 			}
 		} catch (final Exception ex) {
 			LOGGER.error("Error saving the player, phantom player may have extra login count on their IP address now...! Have a look at this Exception:", ex);
 		} finally {
 			if (getPlayer() != null) {
-				try {
-					getPlayer().completeSaveTicket(this.logout, transactionSucceeded);
-				} catch (final RuntimeException ex) {
-					transactionSucceeded = false;
-					LOGGER.error("Unable to balance completed save ticket for " + getPlayer().getUsername(), ex);
+				getPlayer().setSaving(false);
+				if (this.logout) {
+					getPlayer().setLoggingOut(false);
 				}
 			}
 			completion.complete(transactionSucceeded);
 		}
 	}
 
-	private boolean isCapturedLifecycleCurrent() {
-		return mayWrite(
-			lifecycleId.equals(player.getSaveLifecycleId()),
-			player.loggedIn(),
-			player.isRemoved(),
-			player.getWorld().isCurrentPlayer(player));
-	}
+	public void logoutSaveSuccess() {
+		getServer().getGameEventHandler().getPlayerEvents(getPlayer()).forEach(GameTickEvent::stop);
 
-	static boolean mayWrite(boolean sameLifecycle, boolean loggedIn, boolean removed,
-		boolean currentWorldInstance) {
-		return sameLifecycle && loggedIn && !removed && currentWorldInstance;
-	}
+		getServer().getPacketFilter().removeLoggedInPlayer(getPlayer().getCurrentIP(), getPlayer().getUsernameHash());
 
-	static boolean mayFinalizeLogout(boolean databaseCommitted, boolean stillCurrent,
-		boolean generationCurrent) {
-		return databaseCommitted && stillCurrent && generationCurrent;
-	}
-
-	public boolean logoutSaveSuccess(long expectedPersistentGeneration) {
-		final java.util.Collection<GameTickEvent> eventsToStop;
-		synchronized (getPlayer()) {
-			if (!isCapturedLifecycleCurrent()
-				|| !getPlayer().isLogoutSaveGenerationCurrent(lifecycleId, expectedPersistentGeneration)) {
-				return false;
-			}
-			try {
-				getServer().getPacketFilter().removeLoggedInPlayer(
-					getPlayer().getCurrentIP(), getPlayer().getUsernameHash());
-			} catch (final RuntimeException ex) {
-				LOGGER.error("Unable to clear packet-filter logout state for " + getPlayer().getUsername(), ex);
-			}
-
-			try {
-				if (!getPlayer().isRemoved()) {
-					getPlayer().remove(); // remove player from region
-				}
-			} catch (final RuntimeException ex) {
-				LOGGER.error("Unable to remove player from its final region: " + getPlayer().getUsername(), ex);
-				return false;
-			}
-			if (!getServer().getWorld().removePlayerIfCurrent(getPlayer())) {
-				return false;
-			}
-			eventsToStop = getServer().getGameEventHandler().getPlayerEvents(getPlayer());
-			getPlayer().setLoggedIn(false);
-			getPlayer().completeLogoutSaveWorker();
-		}
-		final int stopFailures = PlayerEventStopper.stopOutsidePlayerLock(
-			getPlayer(), eventsToStop, GameTickEvent::stop);
-		if (stopFailures > 0) {
-			LOGGER.error("Unable to stop {} finalized player event(s) for {}",
-				stopFailures, getPlayer().getUsername());
-		}
+		getPlayer().remove(); // remove player from region
+		getServer().getWorld().getPlayers().remove(getPlayer()); // remove player from player list
+		getServer().getWorld().removePlayer(getPlayer().getUsernameHash()); // remove player by hash in case they were not found in region
+		getPlayer().setLoggedIn(false);
 
 		LOGGER.info("Removed player " + getPlayer().getUsername());
 
-		try {
-			updateFriendsLists();
-		} catch (final RuntimeException ex) {
-			LOGGER.error("Unable to finish social logout cleanup for " + getPlayer().getUsername(), ex);
-		}
-		return true;
+		updateFriendsLists();
 	}
 
 	private void updateFriendsLists() {
@@ -174,12 +109,13 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		PlayerSaveRequest request = (PlayerSaveRequest) o;
-		return logout == request.logout && lifecycleId.equals(request.lifecycleId);
+		//We need to check both logout and player in both equals and hashCode because otherwise logouts may not start (like if there is already an auto-save happening on the same tick)
+		return logout == request.logout && Objects.equals(player, request.player);
 	}
 
 	@Override
 	public int hashCode() {
-		int result = lifecycleId.hashCode();
-		return 31 * result + (logout ? 1 : 0);
+		//We need to check both logout and player in both equals and hashCode because otherwise logouts may not start (like if there is already an auto-save happening on the same tick)
+		return Objects.hash(player, logout);
 	}
 }

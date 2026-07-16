@@ -1,5 +1,6 @@
 package com.openrsc.server.model;
 
+import com.openrsc.server.appearance.GeneratedLookPresets;
 import com.mysql.cj.xdevapi.Client;
 import com.openrsc.server.external.NPCDef;
 import com.openrsc.server.model.entity.player.Player;
@@ -18,6 +19,11 @@ public class PlayerAppearance {
 	public static final int MAX_CLOTHING_COLOUR = 22;
 	public static final int MAX_SKIN_COLOUR = 47;
 	public static final int MODERN_HAIR_BASE_HEAD = 1;
+	public static final int PAPERDOLL_V2_BASE_HEAD = 8;
+	public static final int PAPERDOLL_V2_BASE_MALE_BODY = 2;
+	public static final int PAPERDOLL_V2_BASE_FEMALE_BODY = 5;
+	public static final int PAPERDOLL_V2_BASE_LEGS = 3;
+	public static final int PAPERDOLL_V2_EVALUATION_MAX_HAIR_STYLE = 6;
 
 	private boolean hideTrousers;
 	private int body;
@@ -27,12 +33,13 @@ public class PlayerAppearance {
 	private byte skinColour;
 	private byte topColour;
 	private byte trouserColour;
+	private final int allowedHairStyleMax;
+	private final int compatibleHairHead;
 
 	private boolean impersonatingNpc;
 	private NPCDef npcAppearance;
 
 	private final int[] bodySprites = { 2, 5 };
-	private final int[] headSprites = { 1, 4, 6, 7, 8 };
 
 	private final int[] playerSkinColors = new int[]{
 		// original player skin colours
@@ -70,6 +77,29 @@ public class PlayerAppearance {
 
 	public PlayerAppearance(int hairColour, int topColour, int trouserColour,
 							int skinColour, int head, int body, int hairStyle) {
+		this(hairColour, topColour, trouserColour, skinColour, head, body, hairStyle,
+			MAX_HAIR_STYLE, MODERN_HAIR_BASE_HEAD, false);
+	}
+
+	public static PlayerAppearance forPaperdollV2Evaluation(int hairColour,
+		int topColour, int trouserColour, int skinColour, int head, int body,
+		int hairStyle) {
+		return new PlayerAppearance(hairColour, topColour, trouserColour, skinColour,
+			head, body, hairStyle, PAPERDOLL_V2_EVALUATION_MAX_HAIR_STYLE,
+			PAPERDOLL_V2_BASE_HEAD, true);
+	}
+
+	private PlayerAppearance(int hairColour, int topColour, int trouserColour,
+		int skinColour, int head, int body, int hairStyle, int allowedHairStyleMax,
+		int compatibleHairHead, boolean rejectOutOfRange) {
+		this.allowedHairStyleMax = allowedHairStyleMax;
+		this.compatibleHairHead = compatibleHairHead;
+		if (rejectOutOfRange && (hairStyle < 1 || hairStyle > allowedHairStyleMax
+			|| head != compatibleHairHead
+			|| (body != PAPERDOLL_V2_BASE_MALE_BODY
+				&& body != PAPERDOLL_V2_BASE_FEMALE_BODY))) {
+			throw new IllegalArgumentException("Invalid Paperdoll V2 evaluation appearance");
+		}
 		this.hairColour = (byte) hairColour;
 		this.topColour = (byte) topColour;
 		this.trouserColour = (byte) trouserColour;
@@ -98,11 +128,24 @@ public class PlayerAppearance {
 			this.hairStyle = 0;
 			return;
 		}
-		this.hairStyle = Math.max(0, Math.min(MAX_HAIR_STYLE, hairStyle));
+		this.hairStyle = Math.max(0, Math.min(allowedHairStyleMax, hairStyle));
 	}
 
 	private boolean supportsModernHairStyleHead() {
-		return head == MODERN_HAIR_BASE_HEAD;
+		return head == compatibleHairHead;
+	}
+
+	public static boolean isPaperdollV2EvaluationIdentity(int hairStyle, int head,
+		int body, boolean male) {
+		return hairStyle >= 1 && hairStyle <= PAPERDOLL_V2_EVALUATION_MAX_HAIR_STYLE
+			&& head == PAPERDOLL_V2_BASE_HEAD
+			&& body == (male ? PAPERDOLL_V2_BASE_MALE_BODY
+				: PAPERDOLL_V2_BASE_FEMALE_BODY);
+	}
+
+	public boolean usesPaperdollV2EvaluationPolicy() {
+		return allowedHairStyleMax == PAPERDOLL_V2_EVALUATION_MAX_HAIR_STYLE
+			&& compatibleHairHead == PAPERDOLL_V2_BASE_HEAD;
 	}
 
 	private byte getNearestHairColour(int hairColour) {
@@ -179,12 +222,13 @@ public class PlayerAppearance {
 	}
 
 	public boolean isValid(Player player) {
-		if (!DataConversions.inArray(headSprites, getHead())
+		if (!GeneratedLookPresets.isSelectableHead(getHead())
 			|| !DataConversions.inArray(bodySprites, getBody())) {
 			return false;
 		}
 		if (hairColour < 0 || topColour < 0 || trouserColour < 0
-			|| skinColour < 0) {
+			|| skinColour < 0 || hairStyle < 0 || hairStyle > allowedHairStyleMax
+			|| (hairStyle > 0 && !supportsModernHairStyleHead())) {
 			return false;
 		}
 		if (hairColour < MIN_HAIR_COLOUR || hairColour > MAX_HAIR_COLOUR

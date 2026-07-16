@@ -16,6 +16,7 @@ public class MenuReplyHandler implements PayloadProcessor<MenuOptionStruct, Opco
 			player.getMenu().handleReply(player, option);
 		} else if (menuHandler != null) {
 			if (option == -1) {
+				player.resetMenuHandler();
 				menuHandler.handleReply(option, null);
 				return;
 			}

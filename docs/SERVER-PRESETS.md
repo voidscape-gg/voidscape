@@ -1,19 +1,8 @@
 # Server presets
 
-OpenRSC ships seven historical `.conf` presets in `server/`. Voidscape additionally tracks a secret-free public-launch preset. Local work still runs from `server/local.conf` (gitignored).
+OpenRSC ships seven `.conf` presets in `server/`. Each represents an era and play style. Voidscape's working config lives at `server/local.conf` (gitignored), copied from one of these templates and edited.
 
 ## Preset inventory
-
-### `voidscape-launch.conf` — canonical public launch
-
-- DB: `voidscape`. TCP/WebSocket ports: `43596` / `43496`.
-- Client `10132`, custom-version enforcement on, native PC/Android registration on, registration email off.
-- Authentic `640ms` tick, `10x` combat, `1.5x` skilling, no fatigue, hybrid members-enabled world.
-- Three-floor boss-free Void Dungeon and Enclave enabled; Void Colossus and beta tester tooling disabled.
-- Command lockdown on, packet capture off, localhost restrictions on, webhook values null.
-- Void Glass, notes, bank presets, auction house, custom landscape, and the approved launch economy enabled.
-
-This is the only tracked preset authorized as a release-package source. Validate it with `scripts/check-launch-config.mjs`; private deployment files may add credentials, but must retain the checked gameplay and safety values.
 
 ### `preservation.conf` — authentic RSC with minimal QoL
 - DB: `preservation`. Port: 43596. Era: ~RSC c.2010.
@@ -67,18 +56,29 @@ This is the only tracked preset authorized as a release-package source. Validate
 
 Voidscape's stated goal is **mostly authentic RSC with QoL and small customization**. That puts us between `preservation` (too punishing — fatigue is the canonical QoL pain point) and `rsccabbage` (too fast — 5× exp + 430ms tick are fundamentally non-authentic).
 
-**Recommended local starting point**: copy the tracked launch preset, then change only local DB/access details.
+**Recommended starting point**: `preservation.conf` with targeted QoL overrides.
 
 ```bash
-cp server/voidscape-launch.conf server/local.conf
+cp server/preservation.conf server/local.conf
 $EDITOR server/local.conf
 ```
 
-The tracked preset already carries the approved rules. Typical local-only overrides are:
+Suggested overrides to apply in `local.conf`:
 ```
-db_name: voidscape_dev
-is_localhost_restricted: false
-production_command_lockdown: false # QA only; never copy this value to deployment
+# QoL — remove the most universally disliked authentic mechanic
+want_fatigue: false
+
+# Keep authentic combat timing, with Voidscape's current progression rates
+game_tick: 640
+combat_exp_rate: 10
+skilling_exp_rate: 1.5
+
+# Optional: enable some custom-but-authentic-feeling content
+# location_data: 1   # already preservation default; bump to 2 if you want OpenRSC additions
+
+# Voidscape identity
+server_name: Voidscape
+server_name_welcome: Voidscape
 ```
 
 If these rates feel too fast for a particular test, lower `combat_exp_rate` and
@@ -124,7 +124,7 @@ The ~20 most important — see comments in each `.conf` for the full set.
 | `max_connections_per_ip` | `20` | Concurrent connections per IP |
 | `max_logins_per_second` | `2` | Per-IP login attempt rate |
 | `auto_save` | `30000` | Player save interval (ms) |
-| `client_version` | `10132` | Protocol/cache version (must match every released client) |
+| `client_version` | `10123` | Protocol version (must match client) |
 | `enforce_custom_client_version` | `true` | Reject mismatched clients |
 | `location_data` | `1` | Item/NPC/scenery data set (0=preservation baseline, 1=+discontinued, 2=+custom, 4=openpk) |
 | `character_creation_mode` | `0` | 0=standard, 1=ironman+1x, 2=classes+globalPK |
@@ -140,8 +140,7 @@ db_pass: root
 
 | Goal | Preset |
 |---|---|
-| Voidscape public launch | **voidscape-launch.conf** |
-| Voidscape local QA | copy **voidscape-launch.conf** → `local.conf`, then apply local-only overrides |
+| Voidscape default | **preservation.conf** + QoL overrides → `local.conf` |
 | Authentic purist | preservation.conf |
 | Retro nostalgia | 2001scape.conf |
 | Fast-paced QoL | rsccabbage.conf |

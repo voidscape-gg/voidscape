@@ -112,7 +112,6 @@ public final class WorldMapPanel {
 
 	private final Sprite[] floorSprites = new Sprite[FLOOR_COUNT];
 	private final boolean[] floorLoadAttempted = new boolean[FLOOR_COUNT];
-	private final Object floorLoadLock = new Object();
 
 	private boolean visible;
 	private int currentFloor;
@@ -192,11 +191,6 @@ public final class WorldMapPanel {
 	public boolean isSearchFocused() { return visible && searchFocused; }
 	public void toggleVisible() { setVisible(!this.visible); }
 	public int getCurrentFloor() { return currentFloor; }
-	public String getCurrentFloorName() {
-		return currentFloor >= 0 && currentFloor < FLOOR_NAMES.length
-			? FLOOR_NAMES[currentFloor] : "Unknown";
-	}
-	public boolean hasCurrentFloorImage() { return getOrLoadFloor(currentFloor) != null; }
 	public int getZoomLevel() { return zoomLevel; }
 	public int getPanXRounded() { return Math.round(panX); }
 	public int getPanYRounded() { return Math.round(panY); }
@@ -1290,18 +1284,12 @@ public final class WorldMapPanel {
 
 	private Sprite getOrLoadFloor(int floor) {
 		if (floor < 0 || floor >= FLOOR_COUNT) return null;
-		synchronized (floorLoadLock) {
-			if (floorSprites[floor] != null) return floorSprites[floor];
-			if (floorLoadAttempted[floor]) return null;
-			floorLoadAttempted[floor] = true;
-		}
+		if (floorSprites[floor] != null) return floorSprites[floor];
+		if (floorLoadAttempted[floor]) return null;
+		floorLoadAttempted[floor] = true;
 
 		Sprite s = readPngAsSprite("plane-" + floor + ".png");
-		// Workbench reads this state from its HTTP thread. Publish only the
-		// completed assignment; PNG I/O/decoding stays outside the lock.
-		synchronized (floorLoadLock) {
-			floorSprites[floor] = s;
-		}
+		floorSprites[floor] = s;
 		return s;
 	}
 

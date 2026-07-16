@@ -10,7 +10,7 @@ public class osConfig {
 	public static final int ANDROID_CLIENT_VERSION = 143; // Important! Depends on web server android_version.txt to check for an updated version
 	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "https://voidscape.gg/portal?auth=login";
 	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "https://voidscape.gg/portal?auth=recovery";
-	public static final String VOIDSCAPE_PORTAL_SHOP_URL = "https://voidscape.gg/portal#subscription-buy";
+	public static final String VOIDSCAPE_PORTAL_DELETION_URL = "https://voidscape.gg/data-deletion";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0; // default to icons and text
 	public static boolean C_HOLD_AND_CHOOSE = true;

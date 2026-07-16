@@ -24,6 +24,17 @@ public interface ClientPort {
 		return CredentialStore.unsupported();
 	}
 
+	/**
+	 * Fills exactly one 32-byte duel-proof seed from platform secure entropy.
+	 * Unsupported ports fail closed and leave no caller-provided bytes behind.
+	 */
+	default boolean fillSecureRandom(byte[] destination) {
+		if (destination != null) {
+			for (int i = 0; i < destination.length; i++) destination[i] = 0;
+		}
+		return false;
+	}
+
 	boolean drawLoading(int i);
 
 	void showLoadingProgress(int percentage, String status);

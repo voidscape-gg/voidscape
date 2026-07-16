@@ -218,6 +218,10 @@ def portal_url_from_base(value, fragment):
     resolved = urlparse(resolve_http_url(value or "/"))
     return urlunparse(resolved._replace(fragment=fragment))
 
+def portal_registration_url_from_base(value):
+    resolved = urlparse(resolve_http_url(value or "/"))
+    return urlunparse(resolved._replace(query="auth=register", fragment=""))
+
 normal_params = {"mobile": "1"}
 diag_params = {"mobile": "1", "diag": "1"}
 if ws_url:
@@ -244,7 +248,7 @@ values = {
     "HOME_SCREEN_URL": with_query(mobile="1"),
     "MAC_URL": with_query(**normal_params),
     "EXPECTED_EFFECTIVE_WS": expected_ws,
-    "EXPECTED_PORTAL_ACCOUNT_URL": resolve_http_url(portal_account_url) if portal_account_url else portal_url_from_base(portal_url or "/", "account"),
+    "EXPECTED_PORTAL_ACCOUNT_URL": resolve_http_url(portal_account_url) if portal_account_url else portal_registration_url_from_base(portal_url or "/"),
     "EXPECTED_PORTAL_RECOVERY_URL": resolve_http_url(portal_recovery_url) if portal_recovery_url else portal_url_from_base(portal_url or "/", "security"),
 }
 for key, value in values.items():
@@ -313,6 +317,10 @@ def portal_url_from_base(value, fragment):
     resolved = urlparse(resolve_http_url(value or "/"))
     return urlunparse(resolved._replace(fragment=fragment))
 
+def portal_registration_url_from_base(value):
+    resolved = urlparse(resolve_http_url(value or "/"))
+    return urlunparse(resolved._replace(query="auth=register", fragment=""))
+
 normal_params = add_portal_params({"mobile": "1", "host": lan_ip, "port": ws_port})
 diag_params = add_portal_params({"mobile": "1", "diag": "1", "host": lan_ip, "port": ws_port})
 mac_params = add_portal_params({"mobile": "1", "host": "127.0.0.1", "port": ws_port})
@@ -324,7 +332,7 @@ values = {
     "HOME_SCREEN_URL": with_query(mobile="1"),
     "MAC_URL": urljoin(f"http://127.0.0.1:{port}/", "index.html") + "?" + urlencode(mac_params),
     "EXPECTED_EFFECTIVE_WS": f"ws://{lan_ip}:{ws_port}/",
-    "EXPECTED_PORTAL_ACCOUNT_URL": resolve_http_url(portal_account_url) if portal_account_url else portal_url_from_base(portal_url or "/", "account"),
+    "EXPECTED_PORTAL_ACCOUNT_URL": resolve_http_url(portal_account_url) if portal_account_url else portal_registration_url_from_base(portal_url or "/"),
     "EXPECTED_PORTAL_RECOVERY_URL": resolve_http_url(portal_recovery_url) if portal_recovery_url else portal_url_from_base(portal_url or "/", "security"),
 }
 for key, value in values.items():

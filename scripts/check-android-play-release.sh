@@ -413,7 +413,6 @@ python3 - "$META_PATH" "$ANDROID_BUILD_CONFIG" "$source_client_version" "$SERVER
 import json
 import re
 import sys
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -447,7 +446,6 @@ except Exception as exc:
 
 errors = []
 expected_application_id = "com.voidscape.gg"
-android_namespace = "{http://schemas.android.com/apk/res/android}"
 
 try:
     with zipfile.ZipFile(aab_path) as archive:
@@ -467,10 +465,25 @@ if not isinstance(embedded, dict):
     embedded = {}
 
 try:
-    manifest = ET.fromstring(Path(manifest_path).read_text(encoding="utf-8"))
+    manifest_text = Path(manifest_path).read_text(encoding="utf-8")
 except Exception as exc:
-    manifest = None
-    errors.append(f"bundletool AAB manifest is invalid: {exc}")
+    manifest_text = ""
+    errors.append(f"bundletool AAB manifest is unreadable: {exc}")
+
+
+def manifest_tag(name):
+    match = re.search(rf"<{re.escape(name)}\b(?P<attributes>[^>]*)>", manifest_text)
+    return match.group("attributes") if match else None
+
+
+def manifest_attribute(attributes, name):
+    if attributes is None:
+        return None
+    match = re.search(
+        rf"(?:android:)?{re.escape(name)}\s*=\s*['\"]([^'\"]+)['\"]",
+        attributes,
+    )
+    return match.group(1) if match else None
 
 
 def gradle_value(field, pattern, *, numeric=False):
@@ -513,34 +526,36 @@ def manifest_int(value, field):
         return None
 
 
-if manifest is None:
+manifest_attributes = manifest_tag("manifest")
+if manifest_attributes is None:
+    errors.append("bundletool AAB manifest root is missing")
     actual_application_id = None
     actual_version_code = None
     actual_version_name = None
     actual_min_sdk = None
     actual_target_sdk = None
 else:
-    actual_application_id = manifest.get("package")
+    actual_application_id = manifest_attribute(manifest_attributes, "package")
     actual_version_code = manifest_int(
-        manifest.get(android_namespace + "versionCode"), "versionCode"
+        manifest_attribute(manifest_attributes, "versionCode"), "versionCode"
     )
-    actual_version_name = manifest.get(android_namespace + "versionName")
-    uses_sdk = manifest.find("uses-sdk")
-    if uses_sdk is None:
+    actual_version_name = manifest_attribute(manifest_attributes, "versionName")
+    uses_sdk_attributes = manifest_tag("uses-sdk")
+    if uses_sdk_attributes is None:
         errors.append("AAB manifest uses-sdk is missing")
         actual_min_sdk = None
         actual_target_sdk = None
     else:
         actual_min_sdk = manifest_int(
-            uses_sdk.get(android_namespace + "minSdkVersion"), "minSdk"
+            manifest_attribute(uses_sdk_attributes, "minSdkVersion"), "minSdk"
         )
         actual_target_sdk = manifest_int(
-            uses_sdk.get(android_namespace + "targetSdkVersion"), "targetSdk"
+            manifest_attribute(uses_sdk_attributes, "targetSdkVersion"), "targetSdk"
         )
-    application = manifest.find("application")
-    if application is None:
+    application_attributes = manifest_tag("application")
+    if application_attributes is None:
         errors.append("AAB manifest application is missing")
-    elif application.get(android_namespace + "debuggable", "false").lower() != "false":
+    elif (manifest_attribute(application_attributes, "debuggable") or "false").lower() != "false":
         errors.append("AAB manifest is debuggable; only a release bundle may be promoted")
 
 if source_application_id != expected_application_id:

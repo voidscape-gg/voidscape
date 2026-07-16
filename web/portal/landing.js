@@ -19,7 +19,6 @@
 	var launchOpen = false;
 	var launchStarterCardOpen = true;
 	var launchSignupModeActive = false;
-	var rosterWritesFrozen = false;
 	var downloadRows = [];
 	var availabilityTimer = 0;
 	var availabilityController = null;
@@ -49,9 +48,9 @@
 		reserveMore: document.getElementById("reserve-more"),
 		reserveEmail: document.getElementById("reserve-email"),
 		reservePassword: document.getElementById("reserve-password"),
+		reserveTerms: document.getElementById("reserve-terms"),
 		reserveConfirm: document.getElementById("reserve-confirm"),
 		nameHint: document.getElementById("name-hint"),
-		rosterFrozenNotice: document.getElementById("roster-frozen-notice"),
 		reserveProof: document.getElementById("reserve-proof"),
 		reserveCount: document.getElementById("reserve-count"),
 		googleSignup: document.getElementById("google-signup"),
@@ -72,13 +71,10 @@
 		readyWeb: document.getElementById("ready-web"),
 		readyLauncher: document.getElementById("ready-launcher"),
 		readyAndroid: document.getElementById("ready-android"),
-		readyAndroidCopy: document.getElementById("ready-android-copy"),
-		readyAndroidDirect: document.getElementById("ready-android-direct"),
 		playBlock: document.getElementById("play-block"),
 		playLauncher: document.getElementById("play-launcher"),
 		playWeb: document.getElementById("play-web"),
-		playAndroid: document.getElementById("play-android"),
-		playAndroidDirect: document.getElementById("play-android-direct")
+		playAndroid: document.getElementById("play-android")
 	};
 
 	setupCharacterSelect();
@@ -202,7 +198,6 @@
 
 	function applyPublicState(state) {
 		launchSignupModeActive = Boolean(state && state.launchSignupMode);
-		rosterWritesFrozen = Boolean(state && state.rosterWritesFrozen);
 		googleClientId = state && state.oauth && state.oauth.google && state.oauth.google.enabled
 			? String(state.oauth.google.clientId || "")
 			: "";
@@ -216,7 +211,6 @@
 		renderSignupCounter(state && state.founderStats);
 		updateDownloadLinks();
 		updateLaunchStateFromSchedule(state && state.status);
-		updateRosterWriteState();
 		if (launchTimer) window.clearInterval(launchTimer);
 		launchTimer = window.setInterval(function () {
 			updateLaunchStateFromSchedule(publicState && publicState.status);
@@ -269,8 +263,6 @@
 				? "Voidscape is live. Download the launcher for the best experience, or play right in your browser."
 				: loggedIn
 					? "Download a client or manage your account while the countdown runs."
-					: rosterWritesFrozen
-					? "Launch roster update in progress. Existing players can still sign in; new accounts return shortly."
 					: launchStarterCardOpen
 					? "Reserve your name now - founders start with a free week."
 					: "Create your account and first character.";
@@ -282,25 +274,6 @@
 				: launchDateLabel(launchSchedule && launchSchedule.openAt);
 		}
 		updateDownloadLinks();
-		updateRosterWriteState();
-	}
-
-	function updateRosterWriteState() {
-		if (els.reserveForm) els.reserveForm.hidden = rosterWritesFrozen;
-		if (els.rosterFrozenNotice) els.rosterFrozenNotice.hidden = !rosterWritesFrozen;
-		if (els.reserveName) els.reserveName.disabled = rosterWritesFrozen;
-		if (els.reserveEmail) els.reserveEmail.disabled = rosterWritesFrozen;
-		if (els.reservePassword) els.reservePassword.disabled = rosterWritesFrozen;
-		if (els.reserveSubmit) els.reserveSubmit.disabled = rosterWritesFrozen;
-		if (els.reserveConfirm) els.reserveConfirm.disabled = rosterWritesFrozen;
-		if (rosterWritesFrozen) setHint("Launch roster update in progress. New accounts return shortly.", false);
-	}
-
-	function discoverRosterWriteFreeze() {
-		rosterWritesFrozen = true;
-		updateRosterWriteState();
-		updateGoogleSignupButton();
-		updateCaptchaWidget();
 	}
 
 	function setCountdownFromMs(ms) {
@@ -333,25 +306,14 @@
 	function updateDownloadLinks() {
 		var launcher = findDownload("launcher");
 		var web = findDownload("web-client");
-		var androidPlay = findDownload("android-play");
-		var androidApk = findDownload("android-apk");
-		var androidPrimary = androidPlay || androidApk;
+		var android = findDownload("android-apk");
 		setDownloadLink(els.readyLauncher, launcher, { hiddenWhenUnavailable: true, download: true });
-		setDownloadLink(els.readyAndroid, androidPrimary, { hiddenWhenUnavailable: true, download: true });
-		setDownloadLink(els.readyAndroidDirect, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
+		setDownloadLink(els.readyAndroid, android, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyWeb, web, { hiddenWhenUnavailable: true });
 		if (els.readyWeb && !launchOpen) els.readyWeb.hidden = true;
 		setDownloadLink(els.playLauncher, launcher, { download: true });
 		setDownloadLink(els.playWeb, web, {});
-		setDownloadLink(els.playAndroid, androidPrimary, { download: true });
-		setDownloadLink(els.playAndroidDirect, androidPlay ? androidApk : null, { hiddenWhenUnavailable: true, download: true });
-		if (els.readyAndroid) els.readyAndroid.textContent = androidPlay ? "Get it on Google Play" : "Get APK";
-		if (els.playAndroid) els.playAndroid.textContent = androidPlay ? "Google Play" : "Android APK";
-		if (els.readyAndroidCopy) {
-			els.readyAndroidCopy.textContent = androidPlay
-				? "Choose Google Play or download the same signed Android release directly."
-				: "Sideload the APK ahead of time and skip the launch-day fiddling.";
-		}
+		setDownloadLink(els.playAndroid, android, { download: true });
 	}
 
 	function setDownloadLink(anchor, row, options) {
@@ -368,8 +330,6 @@
 		anchor.hidden = false;
 		anchor.href = row.url;
 		anchor.removeAttribute("aria-disabled");
-		if (row.external) anchor.setAttribute("rel", "noopener");
-		else anchor.removeAttribute("rel");
 		if (options.download && !row.external) {
 			anchor.setAttribute("download", "");
 		} else {
@@ -390,10 +350,6 @@
 
 	function checkAvailabilitySoon() {
 		if (!els.reserveName || !els.nameHint) return;
-		if (rosterWritesFrozen) {
-			setHint("Launch roster update in progress. New accounts return shortly.", false);
-			return;
-		}
 		window.clearTimeout(availabilityTimer);
 		if (availabilityController) availabilityController.abort();
 		els.nameHint.textContent = "";
@@ -431,10 +387,6 @@
 	}
 
 	async function handleReserveSubmit() {
-		if (rosterWritesFrozen) {
-			setHint("Launch roster update in progress. Existing players can still sign in; new accounts return shortly.", false);
-			return;
-		}
 		var name = normalizeName(els.reserveName && els.reserveName.value || "");
 		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(name)) {
 			setHint("Choose a 2-12 character username to reserve.", true);
@@ -458,8 +410,13 @@
 			return;
 		}
 		if (launchSignupModeActive && !isGamePassword(password, 8)) {
-			setHint("Password must be 8-20 letters and numbers for your web account and first game login.", true);
+			setHint(gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.", true);
 			if (els.reservePassword) els.reservePassword.focus();
+			return;
+		}
+		if (launchSignupModeActive && (!els.reserveTerms || !els.reserveTerms.checked)) {
+			setHint("Accept the Community Rules before creating your account.", true);
+			if (els.reserveTerms) els.reserveTerms.focus();
 			return;
 		}
 		var captchaToken = "";
@@ -482,6 +439,8 @@
 						username: name,
 						email: email,
 						password: password,
+						termsAccepted: true,
+						termsVersion: "2026-07-16",
 						captchaToken: captchaToken || undefined,
 						referrerCode: currentReferralCode() || undefined
 					}
@@ -565,7 +524,7 @@
 		} else if (error.status === 400 && error.code === "invalid_email") {
 			setHint("Enter a valid email address. Your code is tied to it.", true);
 		} else if (error.status === 400 && (error.code === "invalid_password" || error.code === "invalid_game_password")) {
-			setHint("Password must be 8-20 letters and numbers for your web account and first game login.", true);
+			setHint(gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.", true);
 		} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
 			setHint("That name is taken - try another.", true);
 		} else if (error.status === 409 && error.code === "character_name_taken") {
@@ -582,8 +541,6 @@
 			setHint("Signup security check is unavailable right now. Try again shortly.", true);
 		} else if (error.status === 503 && error.code === "email_verification_not_configured") {
 			setHint("Email verification is unavailable right now. Try again shortly.", true);
-		} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-			discoverRosterWriteFreeze();
 		} else if (error.status === 429) {
 			setHint("Too many recent attempts from this network. Wait a little and try again.", true);
 		} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
@@ -594,8 +551,8 @@
 	}
 
 	function setReserveBusy(busy) {
-		if (els.reserveSubmit) els.reserveSubmit.disabled = busy || rosterWritesFrozen;
-		if (els.reserveConfirm) els.reserveConfirm.disabled = busy || rosterWritesFrozen;
+		if (els.reserveSubmit) els.reserveSubmit.disabled = busy;
+		if (els.reserveConfirm) els.reserveConfirm.disabled = busy;
 	}
 
 	function setHint(message, taken) {
@@ -606,7 +563,7 @@
 
 	function updateGoogleSignupButton() {
 		if (!els.googleSignup || !els.googleSignupButton) return;
-		var enabled = Boolean(!rosterWritesFrozen && googleClientId && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
+		var enabled = Boolean(googleClientId && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
 		els.googleSignup.hidden = !enabled;
 		if (!enabled || googleButtonRendered) return;
 		renderGoogleSignupButton();
@@ -635,7 +592,7 @@
 			});
 			googleButtonRendered = true;
 			if (els.googleSignupMessage) {
-				els.googleSignupMessage.textContent = "Google creates the web login; the password above becomes the first character login.";
+				els.googleSignupMessage.textContent = "Google creates the web login; use 8-20 letters and numbers only for the first character password. Symbols and spaces are not allowed.";
 			}
 		} catch (error) {
 			googleButtonRendered = false;
@@ -672,7 +629,7 @@
 
 	function updateCaptchaWidget() {
 		if (!els.captchaWidget) return;
-		var enabled = Boolean(!rosterWritesFrozen && captchaSignupRequired() && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
+		var enabled = Boolean(captchaSignupRequired() && els.reserveMore && !els.reserveMore.hidden && !(els.successBlock && !els.successBlock.hidden));
 		els.captchaWidget.hidden = !enabled;
 		if (!enabled) return;
 		if (!captchaConfig || !captchaConfig.configured || !captchaConfig.siteKey || captchaConfig.provider !== "turnstile") {
@@ -740,10 +697,6 @@
 	}
 
 	async function handleGoogleCredential(response) {
-		if (rosterWritesFrozen) {
-			setHint("Launch roster update in progress. Existing players can still sign in; new accounts return shortly.", false);
-			return;
-		}
 		var credential = response && response.credential ? response.credential : "";
 		var name = normalizeName(els.reserveName && els.reserveName.value || "");
 		var gamePassword = els.reservePassword ? els.reservePassword.value : "";
@@ -753,8 +706,13 @@
 			return;
 		}
 		if (!isGamePassword(gamePassword, 8)) {
-			setHint("Password must be 8-20 letters and numbers for your first game login.", true);
+			setHint(gamePasswordRequirement(8, "First game password"), true);
 			if (els.reservePassword) els.reservePassword.focus();
+			return;
+		}
+		if (!els.reserveTerms || !els.reserveTerms.checked) {
+			setHint("Accept the Community Rules before creating your account.", true);
+			if (els.reserveTerms) els.reserveTerms.focus();
 			return;
 		}
 		if (!credential || !googleNonce) {
@@ -782,6 +740,8 @@
 					nonce: googleNonce,
 					username: name,
 					gamePassword: gamePassword,
+					termsAccepted: true,
+					termsVersion: "2026-07-16",
 					captchaToken: captchaToken || undefined,
 					referrerCode: currentReferralCode() || undefined
 				}
@@ -799,6 +759,8 @@
 				setHint("Google sign-in timed out. Try the Google button again.", true);
 				googleButtonRendered = false;
 				renderGoogleSignupButton();
+			} else if (error.status === 400 && error.code === "invalid_game_password") {
+				setHint(gamePasswordRequirement(8, "First game password"), true);
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved" || error.code === "character_name_taken")) {
 				setHint("That name is taken - try another.", true);
 			} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
@@ -807,8 +769,6 @@
 				setHint("Complete the security check before using Google signup.", true);
 			} else if (error.status === 503 && (error.code === "captcha_unavailable" || error.code === "captcha_not_configured")) {
 				setHint("Signup security check is unavailable right now. Try again shortly.", true);
-			} else if (error.status === 503 && error.code === "roster_writes_frozen") {
-				discoverRosterWriteFreeze();
 			} else {
 				setHint("Google signup is unavailable right now. Use email to reserve.", true);
 			}
@@ -873,7 +833,6 @@
 	}
 
 	function reserveConfirmLabel(name) {
-		if (rosterWritesFrozen) return "Roster update in progress";
 		var display = name || "";
 		if (!launchStarterCardOpen) return display ? "Create " + display + " account" : "Create account";
 		return display ? "Reserve " + display + " + claim free week" : "Reserve + claim free week";
@@ -1019,6 +978,10 @@
 		var text = String(value || "");
 		var min = minLength || 4;
 		return text.length >= min && text.length <= 20 && /^[a-zA-Z0-9]+$/.test(text);
+	}
+
+	function gamePasswordRequirement(minLength, label) {
+		return label + " must be " + minLength + "-20 letters and numbers only. Symbols and spaces are not allowed.";
 	}
 
 	function copyText(text) {

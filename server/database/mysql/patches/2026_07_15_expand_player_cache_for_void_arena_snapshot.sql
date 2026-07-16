@@ -1,0 +1,2 @@
+ALTER TABLE `_PREFIX_player_cache`
+    MODIFY COLUMN `value` MEDIUMTEXT NOT NULL;

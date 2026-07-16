@@ -18,17 +18,11 @@ public final class PlayerDeathContext {
 	private final Mob killer;
 	private final UUID killerId;
 	private final List<GroundItem> groundItems;
-	private final PvpKillEvidence pvpKillEvidence;
 	private final AtomicBoolean persistenceRequested = new AtomicBoolean(false);
 
 	public PlayerDeathContext(Point deathPoint, int deathInstanceId, Mob killer,
 						  List<GroundItem> groundItems) {
-		this(UUID.randomUUID(), deathPoint, deathInstanceId, killer, groundItems, null);
-	}
-
-	public PlayerDeathContext(UUID deathId, Point deathPoint, int deathInstanceId, Mob killer,
-						  List<GroundItem> groundItems, PvpKillEvidence pvpKillEvidence) {
-		this.deathId = Objects.requireNonNull(deathId, "deathId");
+		this.deathId = UUID.randomUUID();
 		this.deathPoint = Point.location(
 			Objects.requireNonNull(deathPoint, "deathPoint").getX(), deathPoint.getY());
 		this.deathInstanceId = deathInstanceId;
@@ -36,18 +30,10 @@ public final class PlayerDeathContext {
 		this.killerId = killer == null ? null : killer.getUUID();
 		this.groundItems = Collections.unmodifiableList(new ArrayList<>(
 			Objects.requireNonNull(groundItems, "groundItems")));
-		if (pvpKillEvidence != null && !deathId.equals(pvpKillEvidence.getDeathId())) {
-			throw new IllegalArgumentException("PvP evidence death id must match its death context");
-		}
-		this.pvpKillEvidence = pvpKillEvidence;
 	}
 
 	public UUID getDeathId() {
 		return deathId;
-	}
-
-	public String getCanonicalDeathId() {
-		return deathId.toString();
 	}
 
 	public Point getDeathPoint() {
@@ -68,11 +54,6 @@ public final class PlayerDeathContext {
 
 	public List<GroundItem> getGroundItems() {
 		return groundItems;
-	}
-
-	/** Returns null for non-player kills. */
-	public PvpKillEvidence getPvpKillEvidence() {
-		return pvpKillEvidence;
 	}
 
 	public void requestPersistence() {

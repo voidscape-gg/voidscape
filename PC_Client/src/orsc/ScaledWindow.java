@@ -1,6 +1,7 @@
 package orsc;
 
 import orsc.graphics.gui.UiSkin;
+import orsc.appearance.v2.PaperdollV2Runtime;
 import orsc.util.Utils;
 
 import java.awt.*;
@@ -40,8 +41,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	private static int viewportPresetIndex = 0;
 	// Voidscape: base render resolution. Uses a compact native buffer so the world does not turn into
 	// a zoomed-out 1024x768 postcard, while Settings can cycle larger 4:3 native presets when wanted.
-	private static int baseViewportWidth = VIEWPORT_PRESETS[viewportPresetIndex][0];
-	private static int baseViewportHeight = VIEWPORT_PRESETS[viewportPresetIndex][1];
+	private static int baseViewportWidth = PaperdollV2Runtime.isRequested()
+		? PaperdollV2Runtime.VIEWPORT_WIDTH : VIEWPORT_PRESETS[viewportPresetIndex][0];
+	private static int baseViewportHeight = PaperdollV2Runtime.isRequested()
+		? PaperdollV2Runtime.VIEWPORT_HEIGHT : VIEWPORT_PRESETS[viewportPresetIndex][1];
 	// Voidscape: keep the startup window at native scale so the pixel-art HUD stays crisp; the buffer
 	// itself changes size via native presets instead of downscaling one fixed large image.
 	private static final float MIN_WINDOW_SCALE = 1.0f;
@@ -196,6 +199,11 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	}
 
 	public static void setViewportPresetIndex(int index) {
+		if (PaperdollV2Runtime.isRequested()) {
+			baseViewportWidth = PaperdollV2Runtime.VIEWPORT_WIDTH;
+			baseViewportHeight = PaperdollV2Runtime.VIEWPORT_HEIGHT;
+			return;
+		}
 		viewportPresetIndex = normalizeViewportPresetIndex(index);
 		baseViewportWidth = VIEWPORT_PRESETS[viewportPresetIndex][0];
 		baseViewportHeight = VIEWPORT_PRESETS[viewportPresetIndex][1];
@@ -212,6 +220,10 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	}
 
 	public static String getViewportPresetLabel() {
+		if (PaperdollV2Runtime.isRequested()) {
+			return "Paperdoll V2 Proof " + PaperdollV2Runtime.VIEWPORT_WIDTH
+				+ "x" + PaperdollV2Runtime.VIEWPORT_HEIGHT;
+		}
 		return getViewportPresetLabel(viewportPresetIndex);
 	}
 
@@ -246,6 +258,12 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	 * scaling_scalar.
 	 */
 	public void applyFirstRunViewportPreset() {
+		if (PaperdollV2Runtime.isRequested()) {
+			setViewportPresetIndex(viewportPresetIndex);
+			setMinimumSize(new Dimension(minViewportWidth(), minViewportHeight()));
+			refreshAvailableScalars();
+			return;
+		}
 		Dimension maxEffectiveWindowSize = getMaximumEffectiveWindowSize();
 		int bestIndex = -1;
 		long bestArea = -1L;
@@ -270,6 +288,15 @@ public class ScaledWindow extends JFrame implements WindowListener, FocusListene
 	}
 
 	public void applyStartupScalingDefaults(boolean hasSavedScalingScalar) {
+		if (PaperdollV2Runtime.isRequested()) {
+			mudclient.windowScaleMode = true;
+			mudclient.renderingScalar = 1.0f;
+			mudclient.newRenderingScalar = 1.0f;
+			ORSCApplet.oldRenderingScalar = 1.0f;
+			System.out.println("Paperdoll V2 proof viewport forced to "
+				+ PaperdollV2Runtime.VIEWPORT_WIDTH + "x" + PaperdollV2Runtime.VIEWPORT_HEIGHT);
+			return;
+		}
 		if (hasSavedScalingScalar) {
 			mudclient.windowScaleMode = false;
 			mudclient.newRenderingScalar = clampScalarToAvailableScalars(mudclient.scalingType, mudclient.newRenderingScalar);

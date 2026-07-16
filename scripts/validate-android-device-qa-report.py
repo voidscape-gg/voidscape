@@ -21,6 +21,7 @@ REQUIRED_FIELDS = [
     "Distribution channel",
     "Game endpoint",
     "Portal URL",
+    "Registration URL",
     "Result",
     "Screenshots/videos",
     "Logcat summary",
@@ -60,6 +61,16 @@ def validate(path: Path, allow_hold: bool) -> list[str]:
     device_model = fields.get("Device model", "").lower()
     if any(word in device_model for word in NON_PHYSICAL_DEVICE_WORDS):
         errors.append("Device model must identify real Android hardware, not an emulator/simulator")
+
+    portal_url = fields.get("Portal URL", "").rstrip("/")
+    registration_url = fields.get("Registration URL", "")
+    if not is_placeholder(portal_url) and not is_placeholder(registration_url):
+        expected_registration_url = f"{portal_url}/portal?auth=register"
+        if registration_url != expected_registration_url:
+            errors.append(
+                "Registration URL must match the portal's rules-gated registration route: "
+                f"{expected_registration_url}"
+            )
 
     result = fields.get("Result", "").strip().upper()
     owner_decision = fields.get("Release owner decision", "").strip().upper()

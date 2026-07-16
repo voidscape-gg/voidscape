@@ -152,17 +152,37 @@ public class RSCConnectionHandler extends ChannelInboundHandlerAdapter implement
 			if (player.getChannel() == channel) {
 				final Player disconnectingPlayer = player;
 				final Channel closedChannel = channel;
-				final int reconnectGraceMs = reconnectGraceMs(disconnectingPlayer);
+				final boolean arenaParticipantAtDisconnect = disconnectingPlayer.getWorld()
+					.getVoidArena().isInActiveMatch(disconnectingPlayer);
+				if (arenaParticipantAtDisconnect) {
+					disconnectingPlayer.getWorld().getVoidArena().noteDisconnect(disconnectingPlayer);
+				}
+				final int reconnectGraceMs = arenaParticipantAtDisconnect
+					? 0
+					: reconnectGraceMs(disconnectingPlayer);
 				getServer().getGameEventHandler().add(
 					new DelayedEvent(disconnectingPlayer.getWorld(), disconnectingPlayer,
 						reconnectGraceMs, "Channel closed reconnect grace") {
 						public void run() {
 							try {
 								Channel currentChannel = disconnectingPlayer.getChannel();
-								if ((currentChannel == null || currentChannel == closedChannel)
-									&& disconnectingPlayer.loggedIn()) {
+								if (!disconnectingPlayer.loggedIn()) {
+									LOGGER.info("Player " + disconnectingPlayer.getUsername()
+										+ " was already offline when channel-closed unregister ran.");
+								} else if (arenaParticipantAtDisconnect) {
 									disconnectingPlayer.unregister(
-										UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS, "Channel closed");
+										UnregisterForcefulness.FORCED,
+										"Channel closed during Void Arena match");
+								} else if (currentChannel == null || currentChannel == closedChannel) {
+									boolean arenaParticipantNow = disconnectingPlayer.getWorld()
+										.getVoidArena().isInActiveMatch(disconnectingPlayer);
+									disconnectingPlayer.unregister(
+										arenaParticipantNow
+											? UnregisterForcefulness.FORCED
+											: UnregisterForcefulness.WAIT_UNTIL_COMBAT_ENDS,
+										arenaParticipantNow
+											? "Channel closed during Void Arena match"
+											: "Channel closed");
 								} else {
 									LOGGER.info("Player " + disconnectingPlayer.getUsername()
 										+ " resumed before channel-closed unregister.");

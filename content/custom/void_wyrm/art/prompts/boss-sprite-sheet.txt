@@ -1,0 +1,21 @@
+Use case: stylized-concept
+Asset type: production source sheet for a RuneScape Classic NPC sprite
+Input image: use only the crown-heavy Void Wyrm on the right side of the reference as the character identity. Ignore the other two concepts.
+
+Create one exact 3-column by 6-row sprite contact sheet of that same Void Wyrm. Every cell must contain one complete, isolated full-body creature at a consistent scale and ground anchor.
+
+Rows, top to bottom:
+1. Front view: left step, neutral, right step.
+2. Front-right three-quarter view: left step, neutral, right step.
+3. Right-facing side profile: left step, neutral, right step.
+4. Back-right three-quarter view: left step, neutral, right step.
+5. Back view: left step, neutral, right step.
+6. Right-facing side attack: wind-up, forward bite/claw strike, recovery.
+
+Character invariants: low-slung ancient wyrm; massive forelimbs; long grounded tail; no wings; obsidian plate armour; broken bone crown; cyan eyes, mouth, and chest core; restrained magenta fissures. Preserve the approved broad head, heavy body, layered shoulder plates, and crown-heavy silhouette. Simplify the tallest crown branches enough to remain readable at small scale. Keep anatomy, crown shape, armour placement, tail length, colours, and lighting consistent in all 18 cells.
+
+Style: chunky filled late-1990s RuneScape Classic pixel art, hard black outline, limited 20-24 colour palette, crisp stepped edges, simple hard-edged shading, no painterly gradients, no modern OSRS or RS3 rendering. Each pose must remain readable after reduction to roughly 226 by 163 pixels.
+
+Layout constraints: perfectly regular 3 by 6 grid; equal cell sizes; generous internal padding; no overlap between cells; no cropped horns, claws, or tail; no labels, numbers, borders, grid lines, UI, text, logo, or watermark.
+
+Background: perfectly flat solid #00FF00 chroma-key green in every pixel not occupied by the creature. No floor plane, cast shadow, contact shadow, glow cloud, smoke, particles, texture, gradient, reflection, or green anywhere on the creature.

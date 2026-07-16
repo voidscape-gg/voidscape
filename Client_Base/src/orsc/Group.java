@@ -18,6 +18,11 @@ class Group {
 
 	static final int DEFAULT_GROUP = Group.USER;
 
+	/** Mirrors server Player.isDev(): owner/admin/developer, excluding tester. */
+	static boolean isServerDeveloper(int groupID) {
+		return groupID == OWNER || groupID == ADMIN || groupID == DEV;
+	}
+
 	private static final HashMap<Integer, String> GROUP_NAMES = new HashMap<Integer, String>();
 
 	static {

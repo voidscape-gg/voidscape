@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-appearance-registry/v1",
+  "title": "Voidscape appearance registry",
+  "type": "object",
+  "required": ["schema", "profile", "reservation_size", "managed_namespace", "entries", "external_reservations", "tombstones"],
+  "properties": {
+    "schema": {"const": "voidscape-appearance-registry/v1"},
+    "profile": {"const": "authentic"},
+    "reservation_size": {"const": 27},
+    "managed_namespace": {
+      "type": "object",
+      "required": ["status", "base", "end", "reservation_count", "capacity_required"],
+      "properties": {
+        "status": {"enum": ["proposed", "approved"]},
+        "base": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 26},
+        "reservation_count": {"type": "integer", "minimum": 1},
+        "capacity_required": {"type": "integer", "minimum": 27}
+      },
+      "additionalProperties": false
+    },
+    "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "external_reservations": {"type": "array", "items": {"$ref": "#/$defs/external"}},
+    "tombstones": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 256}, "uniqueItems": true}
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["key", "state", "kind", "appearance_id", "animation_name", "category", "char_colour", "blue_mask", "gender_model", "has_a", "has_f", "paperdoll_slot", "sprite_base", "frame_count"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "state": {"enum": ["active", "adopted", "reserved", "tombstoned"]},
+        "kind": {"enum": ["hat", "hair", "facial-hair", "clothing", "equipment", "look"]},
+        "appearance_id": {"type": "integer", "minimum": 1, "maximum": 256},
+        "animation_name": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "char_colour": {"type": "integer", "minimum": 0},
+        "blue_mask": {"type": "integer", "minimum": 0},
+        "gender_model": {"type": "integer", "minimum": 0},
+        "has_a": {"type": "boolean"},
+        "has_f": {"type": "boolean"},
+        "paperdoll_slot": {"type": "integer", "minimum": 0, "maximum": 11},
+        "sprite_base": {"type": "integer", "minimum": 0},
+        "frame_count": {"enum": [15, 18, 24, 27]},
+        "item_id": {"type": "integer", "minimum": 0},
+        "manifest": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "external": {
+      "type": "object",
+      "required": ["key", "owner", "appearance_id", "animation_name", "sprite_base", "frame_count"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "appearance_id": {"type": "integer", "minimum": 1, "maximum": 256},
+        "animation_name": {"type": "string", "minLength": 1},
+        "sprite_base": {"type": "integer", "minimum": 0},
+        "frame_count": {"enum": [15, 18, 24, 27]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

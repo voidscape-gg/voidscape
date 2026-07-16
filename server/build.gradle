@@ -23,6 +23,7 @@ sourceSets {
         java {
             srcDirs "src"
             srcDirs "plugins"
+            srcDirs "../Duel_Proof/src/main/java"
         }
     }
 }

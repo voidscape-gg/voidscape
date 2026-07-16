@@ -7,6 +7,7 @@ import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.PlayerTitle;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.external.ItemCraftingDef;
 import com.openrsc.server.external.ItemGemDef;
 import com.openrsc.server.model.Point;
@@ -281,39 +282,43 @@ public class Crafting implements UseInvTrigger,
 						player.getCarriedItems().getInventory().countId(goldBarItem.getCatalogId(), Optional.of(false))
 					);
 				}
-				if (mostThatCouldBeMade > 1) {
-					int howMany = multi(player, "Make all", "Make 1", "Make 3", "Make 5", "Make 10", "Make all but one");
-					switch (howMany) {
-						case 1:
-							repeat = Math.min(1, mostThatCouldBeMade);
-							break;
-						case 2:
-							repeat = Math.min(3, mostThatCouldBeMade);
-							break;
-						case 3:
-							repeat = Math.min(5, mostThatCouldBeMade);
-							break;
-						case 4:
-							repeat = Math.min(10, mostThatCouldBeMade);
-							break;
-						case 5:
-							if (mostThatCouldBeMade > 1) {
-								repeat = mostThatCouldBeMade - 1;
-							} else {
-								player.playerServerMessage(MessageType.QUEST, "Okay, all done making zero of your item.");
-								return;
-							}
-							break;
-						case 0:
-							repeat = mostThatCouldBeMade;
+				int maximumMakeCount = Math.min(mostThatCouldBeMade,
+					SkillBatching.limitForSkill(player, Skill.CRAFTING.id()));
+				if (maximumMakeCount > 1) {
+					ArrayList<String> options = new ArrayList<>();
+					ArrayList<Integer> amounts = new ArrayList<>();
+					options.add("Make 1");
+					amounts.add(1);
+					if (maximumMakeCount > 3) {
+						options.add("Make 3");
+						amounts.add(3);
 					}
+					if (maximumMakeCount > 5) {
+						options.add("Make 5");
+						amounts.add(5);
+					}
+					if (maximumMakeCount > 10) {
+						options.add("Make 10");
+						amounts.add(10);
+					}
+					options.add("Make max (" + maximumMakeCount + ")");
+					amounts.add(maximumMakeCount);
+					if (mostThatCouldBeMade > 1 && mostThatCouldBeMade - 1 <= maximumMakeCount) {
+						options.add("Make all but one");
+						amounts.add(mostThatCouldBeMade - 1);
+					}
+					int howMany = multi(player, options.toArray(new String[0]));
+					if (howMany < 0 || howMany >= amounts.size()) {
+						return;
+					}
+					repeat = amounts.get(howMany);
 				} else {
-					repeat = Math.min(1, mostThatCouldBeMade);
+					repeat = Math.min(1, maximumMakeCount);
 				}
 			}
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchGoldJewelry(player, goldBarItem, def);
 	}
 
@@ -893,7 +898,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchSilverJewelry(player, item, results, type, reply);
 	}
 
@@ -988,7 +993,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchPotteryMoulding(player, item, reqLvl, result, msg, exp);
 	}
 
@@ -1059,7 +1064,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchPotteryFiring(player, item, reqLvl, result, msg, exp);
 	}
 
@@ -1124,7 +1129,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = Math.min(player.getCarriedItems().getInventory().countId(otherItem, Optional.of(false)), repeat);
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchGlassMaking(player, item, otherItem);
 	}
 
@@ -1210,7 +1215,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(glass.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchGlassBlowing(player, glass, result, reqLvl, exp, resultGen);
 	}
 
@@ -1301,7 +1306,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(gem.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchGemCutting(player, gem, gemDef);
 	}
 
@@ -1462,7 +1467,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(leather.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchLeather(player, leather, result, reqLvl, exp);
 	}
 
@@ -1550,7 +1555,7 @@ public class Crafting implements UseInvTrigger,
 			repeat = Math.min(woolAmount, amuletAmount);
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchString(player, item, woolBall, newID);
 	}
 
@@ -1584,7 +1589,7 @@ public class Crafting implements UseInvTrigger,
 				player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false)));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchWaterClay(player, water, item);
 	}
 

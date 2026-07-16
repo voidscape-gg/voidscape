@@ -1,0 +1,16 @@
+Use the approved five-view brown cowboy-hat concept as the exact design target
+and the 6x3 wizard-hat sheet as the exact frame-layout and perspective target.
+
+Return exactly one 6-column by 3-row sprite sheet with 18 isolated cowboy-hat
+frames in the same row-major positions as the wizard-hat reference. Replace
+each wizard hat with the same compact cowboy hat while preserving that cell's
+orientation, walk-pose alignment, apparent scale, and silhouette footprint.
+Frames 00-14 are five viewing directions with three matching walk frames each;
+frames 15-17 are the three combat-facing frames. Keep the approved pinched
+crown, broad curled brim, dark band, and tiny muted-gold buckle consistent.
+
+Use a pure solid #00FF00 background. Hat only: no head, person, hair, UI, text,
+labels, cell borders, shadows, scenery, or extra objects. Match early
+RuneScape Classic chunky pixel art with hard edges, no antialiasing, no
+gradients, no soft transparency, and no more than eight flat colors. Do not
+change the 6x3 layout, omit a cell, merge cells, or add a presentation mockup.

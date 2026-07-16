@@ -51,9 +51,6 @@ Admin Commands
 - holidaydrop
   - Usage: `::holidaydrop [total hours] [minute of hour] [item id] ...`
   - Performs a global holiday drop. More than one item may be specified by putting spaces between item IDs.
-- cracker
-  - Usage: `::cracker`, `::cracker status`, `::cracker <remaining>`, or `::cracker set <remaining>`
-  - Owner-only. Shows or sets the exact remaining launch cracker campaign pool from 0 through 1,000,000. Setting 0 disables awards without changing the server configuration.
 - stopholidaydrop
   - Usage: `::stopholidaydrop`
   - Alias: `::cancelholidaydrop` or `::christmasiscancelled`
@@ -226,9 +223,9 @@ Admin Commands
   - Alias: `::resourcestreak`
   - Seeds the current player's transient gathering dry-streak counter for local resource-protection tests.
 - announcepreview
-  - Usage: `::announcepreview [skill|total|pk|newplayer|firstskill|qualifiedpk|pk3|pk5|pk10|firstcracker]`
+  - Usage: `::announcepreview [skill|total|pk|newplayer]`
   - Alias: `::worldannouncepreview`
-  - Sends sample world-announcement messages for local styling checks. The durable-family previews use fixed sample data and do not write achievement, PK, cracker, or player-progression state. Production command lockdown restricts both aliases to owners.
+  - Sends sample Void Herald world-announcement messages for local styling checks.
 - dropwave
   - Usage: `::dropwave <npc_id> [count] [radius]`
   - Alias: `::farmdrops` or `::spawndrops`

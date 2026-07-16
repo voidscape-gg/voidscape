@@ -1,0 +1,188 @@
+{
+  "generator": "tools/appearance-studio/proof_art/paperdoll_v2_hairstyles.py",
+  "generatorSha256": "df037fc1f07dab4f6f41466a8e71232838d3832427a06c56fb531755b67517f8",
+  "id": "textured_crop",
+  "label": "Textured Crop",
+  "masters": {
+    "combat-west": {
+      "fileSha256": "50c5967ab13b2dc4086c30270943004e8fe7c9bd34d07e04d028be0ff73ef101",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        84,
+        100,
+        120,
+        154,
+        204,
+        216,
+        228,
+        234
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 556,
+      "outsideAllowedPixels": 0,
+      "path": "masters/combat-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -18,
+        -10,
+        17,
+        14
+      ],
+      "rgbaSha256": "8851afeab55aefd343578dc800b0d38b9bf79c7697e45c1cb43abcfb0268712b",
+      "scalpAttachmentPixels": 216
+    },
+    "north": {
+      "fileSha256": "9489e75438da9802dcd8046483cec4e9bf495bf57572a3d3f878be216bfdf50e",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        88,
+        124,
+        158,
+        180,
+        208,
+        220,
+        232,
+        238
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 480,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -16,
+        -10,
+        16,
+        12
+      ],
+      "rgbaSha256": "a9caa4a5375ac883cd348c0a76d9cf90bf661ad475dbc88e93ecead26b413fe9",
+      "scalpAttachmentPixels": 181
+    },
+    "north-west": {
+      "fileSha256": "f49576daf1fcc0a68c9f2b9a974fc4d4bb604952892037ce6ec587d9904d5cd3",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        86,
+        102,
+        122,
+        156,
+        178,
+        206,
+        218,
+        230,
+        236
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 526,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -17,
+        -10,
+        17,
+        13
+      ],
+      "rgbaSha256": "af6db690b1fde3d6cddbc715f6c1a6a8c33a6b6caa252ae0abcd4034835f016b",
+      "scalpAttachmentPixels": 200
+    },
+    "south": {
+      "fileSha256": "d334c0b654458ada067bae7e71caa6897885f3435a693fcab0a0d7a139152823",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        84,
+        120,
+        154,
+        176,
+        204,
+        216,
+        228,
+        234
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 587,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -16,
+        -10,
+        16,
+        14
+      ],
+      "rgbaSha256": "f08191d22696cad248110d7c64e18f1e46834368158074eeb88a298555f99bce",
+      "scalpAttachmentPixels": 317
+    },
+    "south-west": {
+      "fileSha256": "baa0f73a6c99364f6f02b8eaeff5fe655a2ceacd35a172ac55b5abb7af9f520f",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        84,
+        120,
+        154,
+        176,
+        204,
+        216,
+        228,
+        234
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 611,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -17,
+        -10,
+        16,
+        14
+      ],
+      "rgbaSha256": "3c8406788ff1896cfb365f2418d178e4b6a85ae23bbe491558dbc503ad1ec71d",
+      "scalpAttachmentPixels": 328
+    },
+    "west": {
+      "fileSha256": "076d1e9b0a69c2438dd75b2559d7aba3b211ea9c1b11ef6f94ba96779313e83b",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        84,
+        100,
+        120,
+        154,
+        204,
+        216,
+        228,
+        234
+      ],
+      "nonzeroAlphaValues": [
+        255
+      ],
+      "occupiedPixels": 556,
+      "outsideAllowedPixels": 0,
+      "path": "masters/west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -18,
+        -10,
+        17,
+        14
+      ],
+      "rgbaSha256": "f2590152158f0ecbab3c0f0a705020fb9a3da9fa1980f3f9fe45656f8ecd80e6",
+      "scalpAttachmentPixels": 216
+    }
+  },
+  "rationale": "Compact broken crown with several readable fringe teeth and restrained sideburns.",
+  "schema": "voidscape-paperdoll-v2-hairstyle-art/v1",
+  "source": "explicit-crown-relative-grayscale-pixel-geometry",
+  "template": "rsc-player-2x-v1",
+  "templateSha256": "d7400f68d450498434967e5ec2c6b6d8165b739a511271401d65b530c9d8b019"
+}

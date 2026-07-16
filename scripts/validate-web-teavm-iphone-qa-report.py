@@ -137,6 +137,11 @@ def portal_url_from_base(value: str, page_url: str, fragment: str) -> str:
     return urlunparse(parsed._replace(fragment=fragment))
 
 
+def portal_registration_url_from_base(value: str, page_url: str) -> str:
+    parsed = urlparse(resolve_http_url(value or "/", page_url))
+    return urlunparse(parsed._replace(query="auth=register", fragment=""))
+
+
 def infer_expected_from_diagnostics_url(url: str) -> dict[str, Any]:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
@@ -198,7 +203,7 @@ def infer_expected_from_diagnostics_url(url: str) -> dict[str, Any]:
     portal_base = portal_values[0] if portal_values else "/"
     expected["portal"] = {
         "accountUrl": resolve_http_url(account_values[0], page_url)
-        if account_values else portal_url_from_base(portal_base, page_url, "account"),
+        if account_values else portal_registration_url_from_base(portal_base, page_url),
         "recoveryUrl": resolve_http_url(recovery_values[0], page_url)
         if recovery_values else portal_url_from_base(portal_base, page_url, "security"),
     }

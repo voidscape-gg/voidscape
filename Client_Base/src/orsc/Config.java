@@ -20,9 +20,10 @@ public class Config {
 	public static String WELCOME_TEXT = "You need a members account to use this server";
 	public static String SERVER_IP = null; // Modify this to override "Cache/ip.txt"
 	public static int SERVER_PORT; // Modify SERVER_IP above to override "Cache/port.txt" with this value
-	public static final int CLIENT_VERSION = 10132;
+	public static final int CLIENT_VERSION = 10139;
 	public static final int PLAYER_TITLE_CLIENT_VERSION = 10052;
 	public static final int PLAYER_TITLE_TIER_CLIENT_VERSION = 10123;
+	public static final int PLAYER_HONORIFIC_CLIENT_VERSION = 10137;
 	public static final int SHOP_PRICE_OVERRIDE_CLIENT_VERSION = 10054;
 	public static final int SUBSCRIPTION_PROFILE_CLIENT_VERSION = 10055;
 	public static final int MODERN_HAIR_CLIENT_VERSION = 10057;
@@ -58,8 +59,13 @@ public class Config {
 	public static boolean C_GROUND_ITEM_NAMES = true;
 	public static boolean C_WANT_NATURE_RUNE_PROTECTION = true; // Important that nature rune protection is true by default, otherwise we might have some very unhappy players!
 	public static boolean C_MESSAGE_TAB_SWITCH = false;
-	// Historic name kept for config-file compatibility (reflection matches field names);
-	// clans are gone, so this now only controls the overhead *name* label overlay.
+	public static final int OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES = 0;
+	public static final int OVERHEAD_PLAYER_LABEL_NAMES_ONLY = 1;
+	public static final int OVERHEAD_PLAYER_LABEL_HIDDEN = 2;
+	public static int C_OVERHEAD_PLAYER_LABEL_MODE = OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES;
+	// Historic name kept for config-file compatibility (reflection matches field names).
+	// It now applies only to the local player's legacy name-label behavior; remote
+	// labels use C_OVERHEAD_PLAYER_LABEL_MODE.
 	public static boolean C_NAME_CLAN_TAG_OVERLAY = false;
 	public static boolean C_SIDE_MENU_OVERLAY = false;
 	public static boolean C_CHAT_OVERLAY = true;

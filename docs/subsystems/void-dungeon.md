@@ -18,6 +18,12 @@ Every generated ladder has an exact reverse transition. Rift and ladder interact
 
 The route retains 53 ordinary NPC spawns: 17 spiders, 7 wolves, 5 unicorns, 5 ogres, 5 giants, 6 knights, 6 wizards, and 2 demons. Their definitions and ordinary supply drops remain unchanged; only the complete Void-gear unique slots are retuned below.
 
+## Traversal Grace
+
+Killing an NPC underground arms a five-tick, session-only traversal opportunity. Ordinary NPC auto-aggro waits for one decision scan because NPC AI is processed before queued player movement; if the player remains stationary, normal AFK re-aggro resumes on the following scan. An accepted ground or minimap walk during the opportunity activates five ticks of ordinary auto-aggro immunity so the player can move through a dense room. Ground clicks that produce no path and entity-follow clicks do not activate it, and world-map autowalk is intentionally outside the rule.
+
+Manual melee, ranged, throwing, and offensive magic remain usable and clear the opportunity or active grace. New combat, expiry, or leaving the generated dungeon footprint also clears it, while explicit force-chase NPCs bypass it. The state is not persisted and does not reuse the PvP retreat timer.
+
 ## Loot Membership
 
 The dungeon remains F2P Wilderness for combat and item use. On the launch members-enabled world, however, all legitimate NPC table rolls can appear and be collected, including members-only herbs, resources, and equipment. Members-only loot can be carried out but cannot be equipped, consumed, identified, or otherwise used until the player leaves F2P Wilderness. A true non-members server preset still suppresses members-only drops entirely. Membership filtering, quantities, and ownership timers are unchanged.

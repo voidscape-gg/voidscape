@@ -54,7 +54,6 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		"bankitem", "bitem", "addbank", "fillbank", "unfillbank",
 		"gi", "gitem", "grounditem", "dropwave", "farmdrops", "spawndrops",
 		"quickauction", "workbenchauctionfixture", "workbenchahfixture",
-		"workbenchcracker", "crackerfixture",
 		"invisible", "invis", "invulnerable", "invul", "blink", "norender",
 		"renderself", "possess", "pos", "possessnpc", "pnpc", "posnpc",
 		"possessrandom", "pr", "possessnext", "pn", "lain",
@@ -85,15 +84,13 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		"removegi", "removegitem", "removegrounditem", "rgi", "rgitem",
 		"rgrounditem", "stockgroup", "beastmode", "givemodtools", "givetools",
 		"lemons", "lemon", "quickauction", "workbenchauctionfixture",
-		"workbenchahfixture", "workbenchcracker", "crackerfixture",
-		"dropwave", "farmdrops", "spawndrops",
+		"workbenchahfixture", "dropwave", "farmdrops", "spawndrops",
 		"gatherstreak", "resourcestreak",
-		"announcepreview", "worldannouncepreview",
 		"spawnnpc", "massnpc", "smitenpc", "damagenpc", "dmgnpc", "shootme",
 		"npcrangeevent", "npcfightevent", "npcrangedlvl", "strpotnpc",
 		"setnpcstats", "npcrangeevent2", "npcevent", "chickenevent",
 		"stopnpcevent", "cancelnpcevent", "stopchickenevent",
-		"cracker", "holidaydrop", "stopholidaydrop", "cancelholidaydrop",
+		"holidaydrop", "stopholidaydrop", "cancelholidaydrop",
 		"christmasiscancelled", "cabbagehalloweendrop", "winterholidayevent",
 		"toggleholiday", "santaclausiscomingtotown", "resetevent",
 		"stopresetevent", "cancelresetevent", "wildhobdebug", "wildhobgoblin",
@@ -170,7 +167,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		"bankitem", "bitem", "addbank", "fillbank", "unfillbank", "ritem",
 		"rbitem", "wipeinventory", "wipeinv", "wipebank", "massitem", "dropwave",
 		"farmdrops", "spawndrops", "quickauction", "workbenchauctionfixture",
-		"workbenchahfixture", "workbenchcracker", "crackerfixture"
+		"workbenchahfixture"
 	));
 	private static final Set<String> COMMAND_AUDIT_MODERATION_COMMANDS = new HashSet<String>(Arrays.asList(
 		"ban", "unban", "tban", "ipban", "banip", "syncipbans", "sip",
@@ -344,11 +341,11 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	private static String commandAuditCategory(String cmd) {
 		if (COMMAND_AUDIT_MODERATION_COMMANDS.contains(cmd)) return "moderation";
 		if (COMMAND_AUDIT_ACCOUNT_COMMANDS.contains(cmd)) return "account";
-		if (isAuditedItemCommand(cmd)) return "item";
+		if (COMMAND_AUDIT_ITEM_COMMANDS.contains(cmd)) return "item";
 		if (cmd.equals("spawnnpc") || cmd.equals("massnpc") || cmd.contains("npc")) return "npc";
 		if (isTeleportCommand(cmd) || cmd.equals("summon") || cmd.equals("return")
 			|| cmd.equals("summonall") || cmd.equals("returnall") || cmd.contains("tele")) return "movement";
-		if (cmd.contains("event") || cmd.equals("cracker") || cmd.equals("holidaydrop") || cmd.equals("globaldrop")) return "world";
+		if (cmd.contains("event") || cmd.equals("holidaydrop") || cmd.equals("globaldrop")) return "world";
 		return "staff";
 	}
 
@@ -386,7 +383,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 		if (!player.getWorld().getServer().getConfig().WANT_BETA_ONBOARDING_GUIDE) return false;
 		if (!player.isAdmin() || player.isOwner()) return false;
 
-		if (isBetaBlockedAdminCommand(cmd)) {
+		if (BETA_BLOCKED_ADMIN_COMMANDS.contains(cmd)) {
 			player.message(player.getConfig().MESSAGE_PREFIX + "That admin command is disabled during public beta.");
 			return true;
 		}
@@ -436,20 +433,9 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	}
 
 	private static boolean blockUnsafeCommand(Player player, String cmd, String[] args) {
-		if (blockOwnerOnlyWorldControl(player, cmd)) return true;
 		if (blockBetaPlayerCommand(player, cmd)) return true;
 		if (blockUnsafeProductionCommand(player, cmd, args)) return true;
 		return blockUnsafeBetaAdminCommand(player, cmd, args);
-	}
-
-	private static boolean blockOwnerOnlyWorldControl(Player player, String cmd) {
-		if (!ownerOnlyWorldControlBlocks(player.isOwner(), cmd)) return false;
-		player.message(player.getConfig().MESSAGE_PREFIX + "That command is owner-only.");
-		return true;
-	}
-
-	static boolean ownerOnlyWorldControlBlocks(boolean owner, String cmd) {
-		return !owner && "cracker".equals(cmd);
 	}
 
 	private static boolean blockBetaPlayerCommand(Player player, String cmd) {
@@ -469,30 +455,17 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	}
 
 	private static boolean blockUnsafeProductionCommand(Player player, String cmd, String[] args) {
-		if (productionLockdownBlocks(
-			player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN,
-			player.isOwner(), cmd, args, isProductionOwnerOnlyStaffAlias(player, cmd))) {
+		if (!player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN) return false;
+		if (player.isOwner()) return false;
+
+		if (PRODUCTION_OWNER_ONLY_COMMANDS.contains(cmd)
+			|| isProductionOwnerOnlyPrefix(cmd)
+			|| isProductionOwnerOnlySubcommand(cmd, args)
+			|| isProductionOwnerOnlyStaffAlias(player, cmd)) {
 			player.message(player.getConfig().MESSAGE_PREFIX + "That command is owner-only while production command lockdown is enabled.");
 			return true;
 		}
 		return false;
-	}
-
-	static boolean productionLockdownBlocks(boolean lockdownEnabled, boolean owner,
-		String cmd, String[] args, boolean ownerOnlyStaffAlias) {
-		return lockdownEnabled && !owner
-			&& (PRODUCTION_OWNER_ONLY_COMMANDS.contains(cmd)
-				|| isProductionOwnerOnlyPrefix(cmd)
-				|| isProductionOwnerOnlySubcommand(cmd, args)
-				|| ownerOnlyStaffAlias);
-	}
-
-	static boolean isBetaBlockedAdminCommand(String cmd) {
-		return BETA_BLOCKED_ADMIN_COMMANDS.contains(cmd);
-	}
-
-	static boolean isAuditedItemCommand(String cmd) {
-		return COMMAND_AUDIT_ITEM_COMMANDS.contains(cmd);
 	}
 
 	private static boolean isProductionOwnerOnlyPrefix(String cmd) {

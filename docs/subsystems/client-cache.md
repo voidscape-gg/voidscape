@@ -30,12 +30,12 @@ This is PC-client presentation only. It does not change packets, opcodes, server
 
 Path: `Client_Base/`. ~120 Java files.
 
-Single source of truth for all client platforms. PC, native Android, and TeaVM compile against this source tree.
+Single source of truth for all client platforms. Both PC_Client and Android_Client compile against this.
 
 Package structure:
 - `src/orsc/mudclient.java` — main game loop (80+ fields). Rendering, networking, entity updates, UI panels.
 - `src/orsc/Config.java` — static constants:
-  - `CLIENT_VERSION = 10132`
+  - `CLIENT_VERSION = 10139`
   - `SERVER_IP`, `SERVER_PORT`
   - Feature flags (`C_EXPERIENCE_DROPS`, `C_CUSTOM_UI`, …)
   - Server-defined config (`S_PLAYER_LEVEL_LIMIT`, `S_WANT_SKILL_MENUS`, …)
@@ -59,7 +59,7 @@ Java target: 1.8. Android source uses the same target but requires the Android G
 Path: `Android_Client/`.
 
 - Build: Gradle 8.13, Android Gradle Plugin 8.13.2. Project file: `Open RSC Android Client/build.gradle`.
-- SDK: `minSdk 23`, `targetSdk 35`, `compileSdk 36`.
+- SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 36`.
 - Entry: `src/main/java/com/openrsc/client/android/GameActivity.java` — Android `Activity`, implements `ClientPort`.
 - Android-specific packages:
   - `com.openrsc.android.render.RSCBitmapSurfaceView` — Canvas/bitmap rendering.
@@ -69,7 +69,7 @@ Path: `Android_Client/`.
 - Build output: `voidscape.apk`.
 - Build helper: `scripts/build-android.sh` selects JDK 17 and runs Gradle; a local Android SDK is still required through `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `Android_Client/local.properties`, or Homebrew `android-commandlinetools` at `/opt/homebrew/share/android-commandlinetools`.
 - Cache seed: Gradle packages a generated asset copy of `Client_Base/Cache`, excluding mutable local files (`accounts.txt`, `config.txt`, `credentials.txt`, `hideIp.txt`, `ip.txt`, `port.txt`, `uid.dat`). `CacheUpdater` copies that bundled cache into app-private storage before trying any optional remote cache URL.
-- Server selection: normal players get a one-tap `Play` path to `voidscape.gg:43596`. Release upgrades rewrite only the exact former public endpoint `5.161.114.251:43596`; custom endpoints are preserved. Long-pressing Play opens advanced choices for public, emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
+- Server selection: normal players get a one-tap `Play` path to `5.161.114.251:43596`. Long-pressing Play opens advanced choices for public, emulator `10.0.2.2:43596`, LAN placeholder `192.168.1.100:43596`, or manual host/port.
 - Note: shares all `mudclient` logic with PC; differs only in input, rendering surface, server selection, and cache bootstrap strategy.
 
 ## PC_Launcher
@@ -159,7 +159,7 @@ Sync mechanism: **manual, ordinal-dependent**.
 
 There is no codegen and no shared schema. Devs must keep both files aligned manually.
 
-`CLIENT_VERSION = 10132` in `Config.java` is checked by the server at login. Bump manually when protocol or client-visible cache changes; mismatch -> rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
+`CLIENT_VERSION = 10139` in `Config.java` is checked by the server at login. Bump manually when protocol or client-visible cache changes; mismatch -> rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
 
 ## Build outputs
 
@@ -199,7 +199,7 @@ Recompile Client_Base.
 ## Pitfalls / non-obvious
 
 1. **Opcode ordinal desync.** Server OpcodeOut transmitted by ordinal; client must use identical ordering. Always append, never insert mid-list. Same applies to OpcodeIn.
-2. **Silent version mismatch.** `CLIENT_VERSION = 10132` is not auto-bumped. If you change protocol or client-visible cache but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
+2. **Silent version mismatch.** `CLIENT_VERSION = 10139` is not auto-bumped. If you change protocol or client-visible cache but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
 3. **Cache directory is CWD-relative.** `./Cache` relative to the working directory at launch — not the JAR location. Running from different dirs picks up different caches. Use absolute path or `--dir`.
 4. **Android inherits Client_Base wholesale.** No separate Android opcode tracking. Bumping Client_Base requires APK rebuild.
 5. **Android packages cache from the repo at build time.** Keep `Client_Base/Cache` populated before building the APK; local runtime files are excluded from packaging by Gradle.

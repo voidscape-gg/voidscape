@@ -2,6 +2,7 @@ package com.openrsc.server.plugins;
 
 import com.openrsc.server.ServerConfiguration;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.event.SingleEvent;
 import com.openrsc.server.event.rsc.PluginTask;
 import com.openrsc.server.external.GameObjectLoc;
@@ -20,6 +21,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.ScriptContext;
 import com.openrsc.server.model.entity.update.Bubble;
 import com.openrsc.server.model.entity.update.ChatMessage;
+import com.openrsc.server.model.states.Action;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -1136,6 +1138,59 @@ public class Functions {
 		batch.start();
 		player.setBatch(batch);
 		scriptContext.setBatch(batch);
+	}
+
+	/**
+	 * Starts an open-ended skill batch at the player's earned batch limit.
+	 * When skill batching is disabled, the action runs once.
+	 *
+	 * @param governingSkill permanent/base skill used for the earned limit
+	 */
+	public static void startskillbatch(int governingSkill) {
+		startskillbatch(Integer.MAX_VALUE, governingSkill, null);
+	}
+
+	/**
+	 * Starts an open-ended gathering batch bound to its exact scenery target.
+	 */
+	public static void startskillbatch(GameObject gatherTarget, int governingSkill) {
+		startskillbatch(Integer.MAX_VALUE, governingSkill, gatherTarget);
+	}
+
+	/**
+	 * Starts a resource-limited skill batch, clamped to the player's earned limit.
+	 * When skill batching is disabled, the action runs once.
+	 *
+	 * @param requested total repetitions allowed by materials or player choice
+	 * @param governingSkill permanent/base skill used for the earned limit
+	 */
+	public static void startskillbatch(int requested, int governingSkill) {
+		startskillbatch(requested, governingSkill, null);
+	}
+
+	private static void startskillbatch(
+		int requested, int governingSkill, GameObject gatherTarget
+	) {
+		final ScriptContext scriptContext = PluginTask.getContextPluginTask().getScriptContext();
+		if (scriptContext == null) {
+			return;
+		}
+		Player player = scriptContext.getContextPlayer();
+		if (player == null) {
+			return;
+		}
+		int totalBatch = player.getConfig().BATCH_PROGRESSION
+			? SkillBatching.clampRequested(player, requested, governingSkill)
+			: 1;
+		startbatch(totalBatch);
+		Batch batch = scriptContext.getBatch();
+		boolean gatherSkill = governingSkill == Skill.WOODCUTTING.id()
+			|| governingSkill == Skill.FISHING.id()
+			|| governingSkill == Skill.MINING.id();
+		if (gatherSkill && gatherTarget != null && batch != null
+			&& scriptContext.getCurrentAction() == Action.oploc) {
+			batch.bindObjectInteraction(gatherTarget, player.click);
+		}
 	}
 
 	private static Batch sniffBatchFromCurrentThread() {

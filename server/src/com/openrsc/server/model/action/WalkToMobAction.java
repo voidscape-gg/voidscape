@@ -4,10 +4,9 @@ import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.World;
 
 public abstract class WalkToMobAction extends WalkToAction {
-	private static final String PK_CATCHING_SIM_OWNER = "pkcatchsim_owner";
-
 	protected final Mob mob;
 	private final int radius;
 	private final boolean ignoreProjectileAllowed;
@@ -41,12 +40,8 @@ public abstract class WalkToMobAction extends WalkToAction {
 		This causes authentic weird behaviour like being able to walk through scenery if there is a gap one tile either side of the mob for attacking.
 		Some interactions work like this in RS2 as well.
 		 */
-		Point checkedPoint = ignoreProjectileAllowed ? getPlayer().getWalkingQueue().getNextMovement() : getPlayer().getLocation();
-		if (isPkCatchingSimulatorAttack()) {
-			return checkedPoint.withinRange(mob.getLocation(), radius);
-		}
-		boolean pathingCheckPassed = PathValidation.checkAdjacentDistance(getPlayer().getWorld(), checkedPoint, mob.getLocation(), ignoreProjectileAllowed, !ignoreProjectileAllowed);
-		boolean actionExecutedThisTick = checkedPoint.withinRange(mob.getLocation(), radius) && pathingCheckPassed;
+		boolean actionExecutedThisTick = isWithinInteractionReach(
+			getPlayer(), mob, radius, ignoreProjectileAllowed);
 		if (actionType == ActionType.ATTACKMAGIC && getPlayer().inCombat() && !actionExecutedThisTick) {
 			//If the player attempted to cast magic, is in combat, and was not able to cast it, we should clear it since it was unsuccessful.
 			getPlayer().setWalkToAction(null);
@@ -54,14 +49,31 @@ public abstract class WalkToMobAction extends WalkToAction {
 		return actionExecutedThisTick;
 	}
 
+	/**
+	 * The authoritative RSC walk-to-mob reach check. Interactions inspect the
+	 * player's next legal queued movement for melee-style actions, then apply the
+	 * same terrain boundary validation used by normal PvP.
+	 */
+	public static boolean isWithinInteractionReach(
+			Player player, Mob mob, int radius, boolean ignoreProjectileAllowed) {
+		Point checkedPoint = ignoreProjectileAllowed
+			? player.getWalkingQueue().getNextMovement()
+			: player.getLocation();
+		return isWithinInteractionReach(
+			player.getWorld(), checkedPoint, mob.getLocation(), radius, ignoreProjectileAllowed);
+	}
+
+	public static boolean isWithinInteractionReach(
+			World world, Point checkedPoint, Point mobPoint, int radius,
+			boolean ignoreProjectileAllowed) {
+		return checkedPoint.withinRange(mobPoint, radius)
+			&& PathValidation.checkAdjacentDistance(
+				world, checkedPoint, mobPoint,
+				ignoreProjectileAllowed, !ignoreProjectileAllowed);
+	}
+
 	@Override
 	public boolean isPvPAttack() {
 		return mob.isPlayer() && (actionType == ActionType.ATTACK || actionType == ActionType.ATTACKMAGIC);
-	}
-
-	private boolean isPkCatchingSimulatorAttack() {
-		return actionType == ActionType.ATTACK
-			&& mob.isNpc()
-			&& mob.getAttribute(PK_CATCHING_SIM_OWNER, null) != null;
 	}
 }

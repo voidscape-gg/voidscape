@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-authoring-layer/v2",
+  "type": "object",
+  "required": ["schema", "key", "kind", "status", "template", "masters", "propagation", "semantic_profile", "required_masks", "palette_policy", "art"],
+  "properties": {
+    "schema": {"const": "voidscape-authoring-layer/v2"},
+    "key": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["hair", "facial-hair"]},
+    "status": {"enum": ["proposed", "draft", "approved", "active"]},
+    "template": {"const": "rsc-player-v1"},
+    "masters": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "hidden_masters": {
+      "type": "array", "uniqueItems": true,
+      "items": {"enum": ["north", "north-west", "west", "south-west", "south", "combat-west"]}
+    },
+    "propagation": {"const": "rigid-head"},
+    "semantic_profile": {"enum": ["mullet", "mustache"]},
+    "required_masks": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": ["scalp_attachment", "nape_tail", "upper_lip_attachment"]}
+    },
+    "palette_policy": {"enum": ["fixed-whitelist", "hair-mask", "primary-mask", "skin-mask", "dual-mask", "mask-primary"]},
+    "art": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["masters_dir", "source_digest"],
+          "properties": {
+            "masters_dir": {"type": "string", "minLength": 1},
+            "source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

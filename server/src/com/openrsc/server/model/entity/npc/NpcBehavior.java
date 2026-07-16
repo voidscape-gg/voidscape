@@ -4,6 +4,7 @@ import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.EnchantedCrowns;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.event.rsc.impl.combat.AggroEvent;
 import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.event.rsc.impl.combat.OSRSCombatFormula;
@@ -453,6 +454,8 @@ public class NpcBehavior {
 
 		boolean targetCombatTimeoutExceeded = checkCombatTimer(target.getCombatTimer(), numTicks);
 		boolean targetReattackTimerElapsed = !isPlayer || ((Player) target).canBeReattacked();
+		boolean targetHasTraversalGrace = isPlayer
+			&& VoidDungeonTraversalGrace.blocksAutoAggro((Player) target);
 
 		boolean isAggressive = aggressiveCheck(target);
 
@@ -464,7 +467,8 @@ public class NpcBehavior {
 			&& !outOfBounds
 			&& (!targetInCombat || forceChase)
 			&& lastLogin
-			&& ((targetCombatTimeoutExceeded && targetReattackTimerElapsed) || forceChase);
+			&& ((targetCombatTimeoutExceeded && targetReattackTimerElapsed
+				&& !targetHasTraversalGrace) || forceChase);
 	}
 
 	private boolean grandTreeGnome(final Npc npc) {

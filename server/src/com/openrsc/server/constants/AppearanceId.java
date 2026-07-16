@@ -237,6 +237,7 @@ public enum AppearanceId {
 	SHADOW_WARRIOR_BOOTS(227, BOOTS),
 	SHADOW_WARRIOR_ROBE(228, BODY),
 	SCYTHE(229, WEAPON), // End of authentic animation sprites
+	COWBOY_HAT(245, HAT), // Voidscape custom wearable
 	BUNNY(473, NPC),
 	DUCK(474, NPC),
 	BUNNY_MORPH(475, MORPHING_RING),

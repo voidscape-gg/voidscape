@@ -20,6 +20,10 @@ public class DropObject {
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	public static void batchDrop(Player player, Item item, Boolean fromInventory, int amountToDrop, int totalToDrop, int invIndex) {
+		if (player.getWorld().getVoidArena().blocksGroundItemAction(player, player.getLocation())) {
+			return;
+		}
+
 		Item searchItem;
 		boolean found = false;
 		if (fromInventory) {

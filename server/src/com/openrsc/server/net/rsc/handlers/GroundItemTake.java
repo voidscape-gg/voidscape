@@ -35,6 +35,10 @@ public class GroundItemTake implements PayloadProcessor<TargetPositionStruct, Op
 		if (x < 0 || y < 0) return;
 
 		final Point location = Point.location(x, y);
+		if (player.getWorld().getVoidArena().blocksGroundItemAction(player, location)) {
+			player.message("You cannot use ground items in the Void Arena.");
+			return;
+		}
 
 		final int itemId = payload.itemId;
 		if (itemId < 0 || itemId >= player.getWorld().getServer().getEntityHandler().getItemCount()) {
@@ -58,6 +62,11 @@ public class GroundItemTake implements PayloadProcessor<TargetPositionStruct, Op
 		}
 		player.setWalkToAction(new WalkToPointAction(player, item.getLocation(), distance) {
 			public void executeInternal() {
+				if (getPlayer().getWorld().getVoidArena()
+					.blocksGroundItemAction(getPlayer(), item.getLocation())) {
+					return;
+				}
+
 				if (item.isInvisibleTo(getPlayer()))
 					return;
 

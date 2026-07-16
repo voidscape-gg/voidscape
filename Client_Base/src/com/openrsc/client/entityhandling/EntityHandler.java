@@ -109,6 +109,15 @@ public class EntityHandler {
 		return animations.get(id);
 	}
 
+	/** Resolves one-based player paperdoll IDs without changing legacy positional lookups. */
+	public static AnimationDef getPlayerAppearanceDef(int appearanceId) {
+		GeneratedAppearanceRegistry.Entry managed = GeneratedAppearanceRegistry.findAuthentic(appearanceId);
+		if (managed != null) {
+			return Config.S_WANT_CUSTOM_SPRITES ? null : managed.definition;
+		}
+		return appearanceId > 0 ? getAnimationDef(appearanceId - 1) : null;
+	}
+
 	public static int spellCount() {
 		return spells.size();
 	}
@@ -4347,6 +4356,9 @@ public class EntityHandler {
 		items.add(new ItemDef("Sacred ashes", "Pale ashes from a maple fire, ready for an altar.", "", 14, 23, "items:23", false, false, 0, 0xD7D5B0, false, false, true, 1606));
 		items.add(new ItemDef("Blessed ashes", "Silvery ashes from a yew fire.", "", 24, 23, "items:23", false, false, 0, 0xE6F4FF, false, false, true, 1607));
 		items.add(new ItemDef("Void ashes", "Magic-log ashes humming with a trace of void energy.", "", 40, 23, "items:23", false, false, 0, 0xA64DFF, false, false, true, 1608));
+
+		// voidscape: Cowboy hat (id 1609). spriteID 638 is packed at archive index 2788.
+		items.add(new ItemDef("Cowboy hat", "A rugged hat from the frontier.", "", 1, 638, "items:638", false, true, 32, 0, false, false, true, 1609));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
@@ -5119,6 +5131,7 @@ public class EntityHandler {
 		animations.add(new AnimationDef("demon", "npc", 0x6a0dad, 0, true, false, 0));   // idx 241 - void demon (tints shared sprite 864)
 		animations.add(new AnimationDef("unicorn", "npc", 0x6a0dad, 0, true, false, 0)); // idx 242 - void unicorn (tints shared sprite 999)
 		animations.add(new AnimationDef("boots", "equipment", 0x6a0dad, 0, true, false, 0)); // idx 243 - void boots (covers the base body's baked brown feet on the humanoid void mobs)
+		animations.add(new AnimationDef("cowboyhat", "equipment", 0, 0, true, false, 0)); // idx 244 - cowboy hat (JSON appearanceID 245)
 	}
 
 	@SuppressWarnings("unchecked")

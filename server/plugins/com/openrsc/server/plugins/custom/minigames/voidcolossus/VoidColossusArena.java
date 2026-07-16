@@ -18,7 +18,6 @@ import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.openrsc.server.plugins.Functions.delay;
 import static com.openrsc.server.plugins.Functions.displayTeleportBubble;
@@ -55,8 +54,6 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 	private static final int BOSS_OBJECT_X = ARENA_CENTER_X - 2;
 	private static final int BOSS_OBJECT_Y = ARENA_CENTER_Y - 2;
 
-	// Instance bookkeeping. instanceId starts at 1 (0 is reserved for the normal overworld).
-	private static final AtomicInteger nextInstanceId = new AtomicInteger(1);
 	private final Map<Long, Integer> playerInstance = new ConcurrentHashMap<>();  // playerHash -> instanceId
 	private final Map<Integer, Long> instanceOwner = new ConcurrentHashMap<>();   // instanceId -> playerHash
 	private final Map<Integer, Npc> instanceBoss = new ConcurrentHashMap<>();     // instanceId -> live boss
@@ -201,7 +198,7 @@ public class VoidColossusArena implements OpLocTrigger, KillNpcTrigger, PlayerLo
 			cleanupInstance(player.getInstanceId());
 			clearPlayerState(player);
 		}
-		int instanceId = nextInstanceId.getAndIncrement();
+		int instanceId = world.allocateInstanceId();
 		playerInstance.put(hash, instanceId);
 		instanceOwner.put(instanceId, hash);
 

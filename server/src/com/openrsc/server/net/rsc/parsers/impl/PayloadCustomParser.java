@@ -462,7 +462,26 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 			case PRIVACY_SETTINGS_CHANGED:
 				return packet.getLength() == 4;
 			case INTERFACE_OPTIONS:
-				return packet.getLength() >= 1;
+				if (packet.getLength() < 1) {
+					return false;
+				}
+				final int optionId = packet.getBuffer().getUnsignedByte(packet.getBuffer().readerIndex());
+				if (optionId == InterfaceOptions.DUEL_PROOF.id()) {
+					if (packet.getLength() < 3 || packet.getLength() > 194) {
+						return false;
+					}
+					final int proofPayloadStart = packet.getBuffer().readerIndex() + 1;
+					final int proofPayloadEnd = packet.getBuffer().readerIndex()
+						+ packet.getLength() - 1;
+					for (int offset = proofPayloadStart; offset < proofPayloadEnd; offset++) {
+						final int value = packet.getBuffer().getUnsignedByte(offset);
+						if (value < 0x20 || value > 0x7e) {
+							return false;
+						}
+					}
+					return packet.getBuffer().getByte(proofPayloadEnd) == 10;
+				}
+				return true;
 			case PLAYER_ACCEPTED_INIT_TRADE_REQUEST:
 			case PLAYER_ACCEPTED_TRADE:
 			case PLAYER_DECLINED_TRADE:
@@ -972,6 +991,9 @@ public class PayloadCustomParser implements PayloadParser<OpcodeIn> {
 						break;
 					case INPUT_BOX_REPLY:
 						os.name = packet.readString();
+						break;
+					case DUEL_PROOF:
+						os.duelProof = packet.readString();
 						break;
 					case ACCOUNT_VALIDATE:
 						os.name = packet.readString();

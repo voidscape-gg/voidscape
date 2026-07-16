@@ -14,7 +14,7 @@ public class osConfig {
 	public static final String VOIDSCAPE_DEFAULT_PORT = "43496";
 	public static final String VOIDSCAPE_PORTAL_ACCOUNT_URL = "voidscape:account";
 	public static final String VOIDSCAPE_PORTAL_RECOVERY_URL = "voidscape:recovery";
-	public static final String VOIDSCAPE_PORTAL_SHOP_URL = "voidscape:shop";
+	public static final String VOIDSCAPE_PORTAL_DELETION_URL = "/data-deletion";
 	public static boolean F_SHOWING_KEYBOARD = false;
 	public static int C_STATUS_BAR = 0;
 	public static boolean C_HOLD_AND_CHOOSE = true;

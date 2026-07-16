@@ -1,0 +1,54 @@
+schema: voidscape-appearance/v1
+key: cowboy_hat
+name: Cowboy hat
+kind: hat
+status: adopted
+profile: authentic
+source_mode: legacy-import
+
+registry:
+  appearance_id: 245
+  sprite_base: 1890
+  reservation_size: 27
+
+integration:
+  item:
+    id: 1609
+    description: A rugged hat from the frontier.
+    command: ""
+    base_price: 1
+    inventory_sprite_id: 638
+    inventory_archive_index: 2788
+    inventory_icon_file: content/custom/cowboy_hat/art/final/icon/cowboy_hat.png
+    inventory_sprite_location: items:638
+    stackable: false
+    wearable: true
+    wearable_id: 32
+    wear_slot: 5
+    picture_mask: 0
+    blue_mask: 0
+    members: false
+    untradeable: false
+    noteable: true
+    female_only: false
+    required_level: 0
+    required_skill_id: 0
+    bonuses:
+      armour: 0
+      weapon_aim: 0
+      weapon_power: 0
+      magic: 0
+      prayer: 0
+
+legacy:
+  animation_name: cowboyhat
+  item_id: 1609
+  frame_count: 18
+  frames_dir: content/custom/cowboy_hat/art/final/worn
+  client_archive: Client_Base/Cache/video/Authentic_Sprites.orsc
+  server_archive: server/conf/server/data/Authentic_Sprites.orsc
+  md5_file: Client_Base/Cache/MD5.SUM
+
+authoring:
+  layer_files: []
+  note: Existing art is adopted read-only; Slice 1 must not regenerate or rewrite it.

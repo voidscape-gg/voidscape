@@ -1,6 +1,6 @@
 # Prelaunch QA Handoff
 
-Last updated: 2026-07-12
+Last updated: 2026-06-27
 
 This is the current evidence map for prelaunch readiness. It is intentionally short; the full gate list remains in `docs/RELEASE-CHECKLIST.md`.
 
@@ -19,7 +19,7 @@ This is the current evidence map for prelaunch readiness. It is intentionally sh
   - `scripts/test-portal-schema.sh`
   - hosted/local launch verifier rehearsals recorded in `memory/prelaunch_readiness.md`
   - Live source-disclosure proof: `/`, `/privacy`, `/data-deletion`, and `/api/integrity` point at `https://github.com/voidscape-gg/voidscape`; visual proof `tmp/prelaunch-portal-live-source-link-v1`
-  - Superseded config-health evidence: the June 27 proof recorded `adminTokenConfigured=true`. The launch requirement is now `PORTAL_ADMIN_TOKEN` unset during normal operation plus external `404` responses for `/api/admin/*` on `voidscape.gg`, `www.voidscape.gg`, and the legacy sslip origin. All three remain mandatory verifier targets through launch; removing the legacy alias is a post-launch contract change. Rerun and archive the hardened hosted verifier before launch.
+  - Live config-health proof: `/api/health.config.publicReady=true`, `abuseHashSaltConfigured=true`, `adminTokenConfigured=true`, and `issues=[]`; hosted verifier proof `tmp/launch-staging-live-nonmutating-config-health-v1/summary.json`
   - Live footer/CTA fix proof: backup `/opt/voidscape/backups/portal-pre-footer-cta-fix-20260627T110009Z.tgz`, live link-click smoke `tmp/prelaunch-portal-live-link-clicks-v2`, and non-mutating hosted verifier `tmp/launch-staging-live-nonmutating-footer-cta-fix-v1/summary.json`.
   - Live recovery-support fallback proof: backup `/opt/voidscape/backups/portal-pre-recovery-fallback-20260627T122024Z.tgz`, HTTPS HTML check confirms `recovery-support-note`, live non-mutating portal visual smoke `tmp/prelaunch-portal-live-recovery-fallback-v1`, and hosted verifier `tmp/launch-staging-live-nonmutating-recovery-fallback-v1/summary.json`.
 - Desktop web `/play`:
@@ -121,7 +121,6 @@ scripts/package-launch-staging.sh \
   --skip-build \
   --skip-web-build \
   --skip-android \
-  --allow-dirty-staging \
   --output-dir tmp/launch-staging-package
 
 scripts/build-prelaunch-visual-board.mjs \
@@ -146,10 +145,6 @@ scripts/check-web-teavm-iphone-final-release.py \
   --local-preflight tmp/web-teavm-iphone-release-preflight/summary.json \
   --package-dir dist/web-teavm
 ```
-
-The skipped-build launch package above is deliberately rehearsal-only. Its
-`MANIFEST.txt` must report `promotable=false` with reused-build blockers; it is
-useful for launcher/layout QA, not release-ready evidence.
 
 The aggregate runner refuses to start when the output filesystem has less than
 512 MiB free, because launch bundles and screenshots can fail halfway on a full

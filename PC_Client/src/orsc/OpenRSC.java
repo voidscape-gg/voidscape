@@ -1,5 +1,6 @@
 package orsc;
 
+import orsc.appearance.v2.PaperdollV2Runtime;
 import orsc.util.Utils;
 
 import javax.swing.*;
@@ -103,10 +104,16 @@ public class OpenRSC extends ORSCApplet {
 			jframe.setBackground(Color.black);
 			// Just like above, here we add 12 because 12 was added back in 2009 for the skip tutorial line.
 			jframe.setMinimumSize(new Dimension(ScaledWindow.getBaseViewportWidth(), ScaledWindow.getBaseViewportHeight()));
-			jframe.pack();
-			jframe.setLocationRelativeTo(null);
-			applet.init();
-			applet.start();
+				jframe.pack();
+				jframe.setLocationRelativeTo(null);
+				applet.init();
+				if (PaperdollV2Runtime.isRequested()) {
+					// Establish the exact native proof buffer before the client thread can
+					// initialize its Scene at the legacy 512x334 default.
+					applet.resizeMudclient(ScaledWindow.getBaseViewportWidth(),
+						ScaledWindow.getBaseViewportHeight());
+				}
+				applet.start();
 
 			scaledWindow.launchScaledWindow();
 

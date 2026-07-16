@@ -6,7 +6,7 @@ set -euo pipefail
 
 DB_PATH="/opt/voidscape/server/inc/sqlite/voidscape.db"
 SERVICE_USER="voidscape"
-SERVICE_GROUP="voidscape"
+SERVICE_GROUP="voidscape-db"
 DIRECTORY_OWNER="root"
 
 usage() {
@@ -16,7 +16,7 @@ Usage: scripts/prepare-production-sqlite-permissions.sh [options]
 Options:
   --db PATH                 SQLite database. Default: /opt/voidscape/server/inc/sqlite/voidscape.db.
   --service-user USER       Game/portal service user. Default: voidscape.
-  --service-group GROUP     Game/portal service group. Default: voidscape.
+  --service-group GROUP     Dedicated game/portal DB group. Default: voidscape-db.
   --directory-owner USER    SQLite directory owner. Default: root.
                             Override only for an isolated test/staging root.
   -h, --help                Show this help.
@@ -25,6 +25,8 @@ The database must already exist and both the portal and game services must be
 stopped. The helper sets the containing directory to OWNER:GROUP 0770 and the
 database to USER:GROUP 0600, then creates a uniquely named table inside a
 transaction and rolls it back. A successful probe leaves no schema row behind.
+Keep simulated-player and unrelated service accounts out of this group; directory
+write permission is sufficient to replace a SQLite database file.
 EOF
 }
 

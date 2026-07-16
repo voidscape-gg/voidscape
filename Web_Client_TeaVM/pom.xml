@@ -55,6 +55,7 @@
 						<configuration>
 							<sources>
 								<source>${project.basedir}/../Client_Base/src</source>
+								<source>${project.basedir}/../Duel_Proof/src/main/java</source>
 							</sources>
 						</configuration>
 					</execution>

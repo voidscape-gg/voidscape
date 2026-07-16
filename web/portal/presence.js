@@ -65,8 +65,9 @@
 	function currentPayload() {
 		return {
 			visitorId: visitorId,
-			page: window.location.pathname,
+			page: window.location.pathname + window.location.search + window.location.hash,
 			title: document.title || "",
+			referrer: document.referrer || "",
 			visible: document.visibilityState !== "hidden"
 		};
 	}

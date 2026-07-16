@@ -3,9 +3,12 @@ package com.openrsc.server.content.voidarena;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
-import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.database.GameDatabaseException;
+import com.openrsc.server.database.struct.PlayerInventory;
 import com.openrsc.server.database.struct.VoidArenaMatchRecord;
+import com.openrsc.server.database.struct.VoidArenaMatchSessionRecord;
+import com.openrsc.server.database.struct.VoidArenaPairAudit;
+import com.openrsc.server.database.struct.VoidArenaSettlementStatus;
 import com.openrsc.server.database.struct.VoidArenaStats;
 import com.openrsc.server.event.SingleEvent;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
@@ -15,8 +18,11 @@ import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.Point;
+import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.container.Item;
+import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.Mob;
+import com.openrsc.server.model.entity.UnregisterForcefulness;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
@@ -29,8 +35,14 @@ import com.openrsc.server.util.rsc.MessageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.YearMonth;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -49,14 +61,19 @@ public final class VoidArena {
 	private static final int UNRANKED_MATCH_TIMEOUT_MS = 5 * 60 * 1000;
 	private static final int RANKED_MATCH_TIMEOUT_MS = 10 * 60 * 1000;
 	private static final int MATCH_COUNTDOWN_MS = 5 * 1000;
+	private static final int MONTHLY_CHAMPION_FINALIZATION_GRACE_MS = 15 * 60 * 1000;
 	private static final int DEATH_MATCH_SETUP_CLIENT_VERSION = 10109;
 	private static final int DM_KING_CLIENT_VERSION = 10112;
 	private static final String DM_KING_DISPLAY_NAME = "Sir Charles";
 	private static final int DM_KING_MATCH_TIMEOUT_MS = RANKED_MATCH_TIMEOUT_MS;
-	private static final int DM_KING_FIRE_BLAST_CASTS = 100;
+	private static final int DM_KING_FISH_COUNT = VoidArenaSirPolicy.FISH_CAPACITY;
+	private static final int DM_KING_FIRE_BLAST_CASTS = VoidArenaSirPolicy.FIRE_BLAST_CAST_CAPACITY;
 	private static final int DM_KING_AIR_RUNES = DM_KING_FIRE_BLAST_CASTS * 4;
 	private static final int DM_KING_DEATH_RUNES = DM_KING_FIRE_BLAST_CASTS;
 	private static final int DM_KING_FIRE_RUNES = DM_KING_FIRE_BLAST_CASTS * 5;
+	private static final int DM_KING_STRENGTH_POTION_DOSES = VoidArenaSirPolicy.STRENGTH_POTION_DOSE_CAPACITY;
+	private static final int DM_KING_PRAYER_LEVEL = VoidArenaSirPolicy.PRAYER_LEVEL;
+	private static final int DM_KING_PRAYER_STATE_POINTS = VoidArenaSirPolicy.INITIAL_PRAYER_STATE_POINTS;
 	private static final int DM_KING_EAT_DELAY_TICKS = 1;
 	private static final int DM_KING_STRENGTH_REPOT_DELAY_TICKS = 1;
 	private static final int DM_KING_IDLE_ROAM_DELAY_TICKS = 2;
@@ -66,7 +83,7 @@ public final class VoidArena {
 	private static final int DM_KING_MELEE_COMMIT_HITS = 18;
 	private static final int DM_KING_QUIP_COOLDOWN_TICKS = 12;
 	private static final int DM_KING_RANDOM_QUIP_CHANCE = 18;
-	private static final int DM_KING_FIRE_BLAST_PROJECTILE = 1;
+	private static final int DM_KING_FIRE_BLAST_PROJECTILE = 9;
 	private static final double DM_KING_FIRE_BLAST_POWER = 12.0D;
 	private static final int[] DM_KING_ACTIVE_PRAYERS = {
 		Prayers.STEEL_SKIN,
@@ -180,28 +197,56 @@ public final class VoidArena {
 	public static final String DM_KING_DYNAMIC_ATTRIBUTE = "void_arena_dm_king_dynamic";
 	public static final String DM_KING_OWNER_ATTRIBUTE = "void_arena_dm_king_owner";
 	private static final long SEASON_RESET_CONFIRM_MS = 2 * 60 * 1000;
-	private static final String CURRENT_CHAMPION_PLAYER_CACHE = "void_arena_current_champion_player";
-	private static final String CURRENT_CHAMPION_RATING_CACHE = "void_arena_current_champion_rating";
-	private static final String CURRENT_CHAMPION_AWARDED_AT_CACHE = "void_arena_current_champion_awarded_at";
+	private static final String LAST_FINALIZED_CHAMPION_SEASON_CACHE = "void_arena_last_champion_season";
+	private static final int SEASON_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+	private static final int RANKED_SETTLEMENT_RETRY_INITIAL_MS = 2_000;
+	private static final int RANKED_SETTLEMENT_RETRY_MAX_MS = 30_000;
 
 	private final World world;
 	private final Map<Long, Match> activeMatches = new ConcurrentHashMap<>();
 	private final Map<Long, DmKingChallenge> activeDmKingChallenges = new ConcurrentHashMap<>();
 	private final Map<Long, Challenge> incomingChallenges = new ConcurrentHashMap<>();
 	private final Map<Long, DeathMatchSetup> activeSetups = new ConcurrentHashMap<>();
-	private final Map<Integer, VoidArenaStats> statsCache = new ConcurrentHashMap<>();
+	private final Map<String, VoidArenaStats> statsCache = new ConcurrentHashMap<>();
 	private final Map<Long, SeasonResetConfirmation> pendingSeasonResets = new ConcurrentHashMap<>();
 
 	public VoidArena(World world) {
 		this.world = world;
 	}
 
+	public void startSeasonMaintenance() {
+		scheduleSeasonMaintenance(1_000);
+	}
+
+	private void scheduleSeasonMaintenance(int delayMs) {
+		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, delayMs,
+			"Void Arena Monthly Season Maintenance", DuplicationStrategy.ALLOW_MULTIPLE) {
+			@Override
+			public void action() {
+				try {
+					ensurePreviousSeasonChampion();
+				} catch (GameDatabaseException e) {
+					LOGGER.error("Unable to run Void Arena monthly season maintenance", e);
+				}
+				if (!world.getServer().isShuttingDown()) {
+					scheduleSeasonMaintenance(SEASON_MAINTENANCE_INTERVAL_MS);
+				}
+			}
+		});
+	}
+
 	public AttackCheck checkAttack(Player attacker, Player victim, boolean missile) {
 		Match match = activeMatches.get(attacker.getUsernameHash());
 		if (match != null) {
+			if (match.isFinished() || match.hasPendingDisconnect()) {
+				return AttackCheck.deny("That Death Match result is still being finalized.");
+			}
 			if (match.contains(victim) && match.isInsideAssignedCage(attacker) && match.isInsideAssignedCage(victim)) {
 				if (!match.hasStarted()) {
 					return AttackCheck.deny("The Death Match has not started yet.");
+				}
+				if (!canUsePvpOffense(attacker, victim)) {
+					return AttackCheck.deny("You need to wait before re-attacking after a retreat.");
 				}
 				if (missile && !match.rules.allowRanged) {
 					return AttackCheck.deny("Ranged is disabled for this Death Match.");
@@ -229,9 +274,15 @@ public final class VoidArena {
 	public AttackCheck checkMagic(Player attacker, Player victim) {
 		Match match = activeMatches.get(attacker.getUsernameHash());
 		if (match != null) {
+			if (match.isFinished() || match.hasPendingDisconnect()) {
+				return AttackCheck.deny("That Death Match result is still being finalized.");
+			}
 			if (match.contains(victim) && match.isInsideAssignedCage(attacker) && match.isInsideAssignedCage(victim)) {
 				if (!match.hasStarted()) {
 					return AttackCheck.deny("The Death Match has not started yet.");
+				}
+				if (!canUsePvpOffense(attacker, victim)) {
+					return AttackCheck.deny("You need to wait before re-attacking after a retreat.");
 				}
 				return match.rules.allowMagic
 					? AttackCheck.allow()
@@ -255,6 +306,11 @@ public final class VoidArena {
 		return AttackCheck.pass();
 	}
 
+	private boolean canUsePvpOffense(Player attacker, Player victim) {
+		return attacker != null && victim != null
+			&& attacker.canBeReattacked() && victim.canBeReattacked();
+	}
+
 	public boolean canActivatePrayer(Player player) {
 		Match match = activeMatches.get(player.getUsernameHash());
 		if (match != null && !match.rules.allowPrayer) {
@@ -267,19 +323,26 @@ public final class VoidArena {
 
 	public Point handlePlayerDeath(Player loser, Mob killer) {
 		DmKingChallenge dmKingChallenge = activeDmKingChallenges.get(loser.getUsernameHash());
-		if (dmKingChallenge != null && dmKingChallenge.king == killer) {
-			resolveDmKingLoss(dmKingChallenge, loser, DM_KING_DISPLAY_NAME + " defeated you.", false, true);
+		if (dmKingChallenge != null) {
+			resolveDmKingLoss(dmKingChallenge, loser, DM_KING_DISPLAY_NAME + " defeated you.",
+				false, true, true);
 			loser.setInstanceId(0);
 			return VoidArenaConfig.lobbyTile();
 		}
 
-		Player winner = killer instanceof Player ? (Player) killer : null;
 		Match match = activeMatches.get(loser.getUsernameHash());
-		if (match == null || winner == null || !match.contains(winner)) {
+		if (match == null) {
 			return null;
 		}
 
-		resolveMatch(match, winner, loser, false);
+		Player disconnected = match.disconnectedPlayer();
+		if (disconnected != null) {
+			resolveMatch(match, match.opponent(disconnected), disconnected,
+				VoidArenaRankedPolicy.ResultType.FORFEIT);
+		} else {
+			Player winner = match.opponent(loser);
+			resolveMatch(match, winner, loser, VoidArenaRankedPolicy.ResultType.DEATH);
+		}
 		loser.setInstanceId(0);
 		return VoidArenaConfig.lobbyTile();
 	}
@@ -305,15 +368,26 @@ public final class VoidArena {
 			return;
 		}
 
-		Player opponent = match.opponent(player);
-		resolveMatch(match, opponent, player, true);
+		match.noteDisconnect(player, System.currentTimeMillis());
+		Player forfeiter = match.disconnectedPlayer();
+		if (forfeiter == null) {
+			forfeiter = player;
+		}
+		Player opponent = match.opponent(forfeiter);
+		resolveMatch(match, opponent, forfeiter, VoidArenaRankedPolicy.ResultType.FORFEIT);
 		sendRatingClear(player);
 		player.setInstanceId(0);
 		player.setLocation(VoidArenaConfig.exitTile(), true);
 	}
 
 	public void handleLogin(Player player) {
-		recoverDmKingKit(player);
+		if (isOrphanedArenaCageLogin(player)) {
+			player.resetAll();
+			player.setInstanceId(0);
+			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+			restoreHits(player);
+			player.message("An interrupted Void Arena session returned you to the lobby.");
+		}
 		if (player == null || !VoidArenaConfig.isInsideVoidArena(player.getLocation())) {
 			return;
 		}
@@ -321,6 +395,36 @@ public final class VoidArena {
 		if (VoidArenaConfig.isInsideLobby(player.getLocation())) {
 			broadcastLobbyRating(player);
 		}
+	}
+
+	/** Finalizes live sessions without competitive results before a graceful server stop. */
+	public synchronized boolean prepareForShutdown() {
+		Set<Match> matches = new HashSet<>(activeMatches.values());
+		for (Match match : matches) {
+			if (match.isFinished() && match.rules.ranked
+				&& attemptRankedSettlement(match) == VoidArenaSettlementStatus.DATABASE_ERROR) {
+				LOGGER.fatal("Refusing graceful shutdown while ranked result {} is not durable",
+					match.sessionId);
+				return false;
+			}
+		}
+		for (Match match : matches) {
+			if (match.isFinished()) {
+				continue;
+			}
+			resolveNeutralMatch(match, VoidArenaRankedPolicy.ResultType.SERVER_SHUTDOWN_NO_CONTEST,
+				"server shutdown - no contest.");
+			if (match.rules.ranked && activeMatches.get(match.playerAHash) == match) {
+				LOGGER.fatal("Refusing graceful shutdown while ranked no-contest {} is not durable",
+					match.sessionId);
+				return false;
+			}
+		}
+		Set<DmKingChallenge> sirChallenges = new HashSet<>(activeDmKingChallenges.values());
+		for (DmKingChallenge challenge : sirChallenges) {
+			resolveDmKingNoContest(challenge, world.getPlayer(challenge.playerHash));
+		}
+		return true;
 	}
 
 	public void handleInterfaceOption(Player player, int action, int targetServerIndex, int ruleMask) {
@@ -420,35 +524,146 @@ public final class VoidArena {
 			player.message("All Void Arena cages are occupied right now.");
 			return;
 		}
+		purgeCageGroundItems(slotIndex);
+		if (!player.tryReserveSave()) {
+			player.message("Your account is still saving. Try the " + DM_KING_DISPLAY_NAME
+				+ " challenge again in a moment.");
+			return;
+		}
 
-		String snapshot = VoidArenaKitSnapshot.capture(player);
-		player.getCache().store(DM_KING_KIT_CACHE, snapshot);
-		savePlayerCache(player);
+		final String snapshot;
+		try {
+			snapshot = VoidArenaKitSnapshot.capture(player);
+		} catch (IllegalStateException e) {
+			LOGGER.error("Unable to capture {} kit for {}", DM_KING_DISPLAY_NAME,
+				player.getUsername(), e);
+			player.message("Your " + DM_KING_DISPLAY_NAME
+				+ " challenge could not start because your real kit could not be snapshotted safely.");
+			releaseDmKingSaveReservation(player, "snapshot capture failure");
+			return;
+		}
+		boolean markerSaved = false;
+		try {
+			player.getCache().store(DM_KING_KIT_CACHE, snapshot);
+			markerSaved = saveDmKingKitMarker(player, snapshot);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to save {} kit marker for {}",
+				DM_KING_DISPLAY_NAME, player.getUsername(), e);
+		}
+		if (!markerSaved) {
+			player.getCache().remove(DM_KING_KIT_CACHE);
+			player.message("Your " + DM_KING_DISPLAY_NAME
+				+ " challenge could not start because your real kit was not safely saved.");
+			releaseDmKingSaveReservation(player, "snapshot marker failure");
+			return;
+		}
 
 		VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
-		Npc king = new Npc(world, NpcId.DM_KING_ARENA.id(), slot.startBX, slot.startBY,
-			slot.minX, slot.maxX, slot.minY, slot.maxY);
-		king.setShouldRespawn(false);
-		king.setAttribute(DM_KING_DYNAMIC_ATTRIBUTE, true);
-		king.setAttribute(DM_KING_OWNER_ATTRIBUTE, player.getUsernameHash());
-		world.registerNpc(king);
+		Npc king = null;
+		DmKingChallenge challenge = null;
+		try {
+			king = new Npc(world, NpcId.DM_KING_ARENA.id(), slot.startBX, slot.startBY,
+				slot.minX, slot.maxX, slot.minY, slot.maxY);
+			king.setShouldRespawn(false);
+			king.setAttribute(Npc.SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, true);
+			king.setAttribute(DM_KING_DYNAMIC_ATTRIBUTE, true);
+			king.setAttribute(DM_KING_OWNER_ATTRIBUTE, player.getUsernameHash());
+			world.registerNpc(king);
 
-		player.resetAll();
-		int playerFishCapacity = applyDmKingKit(player);
-		restoreHits(player);
-		player.setInstanceId(0);
-		player.teleportFromVoidArena(slot.startAX, slot.startAY, true);
-		removeChallenges(player);
+			player.resetAll();
+			int playerFishCapacity = applyDmKingKit(player);
+			if (playerFishCapacity != DM_KING_FISH_COUNT) {
+				throw new IllegalStateException("temporary challenge kit did not fit exactly");
+			}
+			restoreHits(player);
+			player.setInstanceId(0);
+			player.teleportFromVoidArena(slot.startAX, slot.startAY, true);
+			removeChallenges(player);
 
-		DmKingChallenge challenge = new DmKingChallenge(slotIndex, player.getUsernameHash(), king,
-			System.currentTimeMillis() + MATCH_COUNTDOWN_MS, playerFishCapacity);
-		activeDmKingChallenges.put(player.getUsernameHash(), challenge);
-		world.getServer().getGameEventHandler().add(challenge.event);
+			challenge = new DmKingChallenge(slotIndex, player, king,
+				System.currentTimeMillis() + MATCH_COUNTDOWN_MS, playerFishCapacity);
+			if (activeDmKingChallenges.putIfAbsent(player.getUsernameHash(), challenge) != null) {
+				throw new IllegalStateException("player already has an active Sir Charles challenge");
+			}
+			world.getServer().getGameEventHandler().add(challenge.event);
 
-		sendArenaControl(player, "countdown|5");
-		player.message("@red@" + DM_KING_DISPLAY_NAME + " challenge begins in 5 seconds.");
-		player.message("Rules: Ranked F2P kit, melee and Fire Blast, finite supplies, no Elo.");
-		player.message("Defeat " + DM_KING_DISPLAY_NAME + " before the 10 minute limit.");
+			sendArenaControl(player, "countdown|5");
+			player.message("@red@" + DM_KING_DISPLAY_NAME + " challenge begins in 5 seconds.");
+			player.message("Rules: Ranked F2P kit, melee and Fire Blast, finite supplies, no Elo.");
+			player.message("Defeat " + DM_KING_DISPLAY_NAME + " before the 10 minute limit.");
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to start {} challenge for {} after saving the recovery marker",
+				DM_KING_DISPLAY_NAME,
+				player.getUsername(), e);
+			rollbackDmKingChallengeStart(player, slotIndex, king, challenge);
+		}
+	}
+
+	private void rollbackDmKingChallengeStart(Player player, int slotIndex, Npc king,
+		DmKingChallenge challenge) {
+		if (challenge != null) {
+			activeDmKingChallenges.remove(player.getUsernameHash(), challenge);
+			try {
+				challenge.event.stop();
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to stop failed {} startup event for {}",
+					DM_KING_DISPLAY_NAME, player.getUsername(), e);
+			}
+		}
+		try {
+			if (king != null) {
+				player.resetTrackedDamageAndBlockedDamage(king);
+			}
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to reset failed {} startup damage tracking for {}",
+				DM_KING_DISPLAY_NAME, player.getUsername(), e);
+		}
+		try {
+			cleanupDmKingNpc(king);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to remove failed {} startup NPC for {}",
+				DM_KING_DISPLAY_NAME, player.getUsername(), e);
+		}
+		try {
+			purgeCageGroundItems(slotIndex);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to purge failed {} startup cage {}",
+				DM_KING_DISPLAY_NAME, slotIndex, e);
+		}
+		try {
+			player.resetAll();
+			player.setInstanceId(0);
+			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to relocate {} after failed {} startup",
+				player.getUsername(), DM_KING_DISPLAY_NAME, e);
+			try {
+				player.setInstanceId(0);
+				player.setLocation(VoidArenaConfig.lobbyTile(), true);
+			} catch (RuntimeException fallbackError) {
+				LOGGER.error("Unable to apply fallback arena relocation for {}",
+					player.getUsername(), fallbackError);
+			}
+		}
+
+		boolean recoveryCommitted = false;
+		try {
+			recoveryCommitted = restoreDmKingKit(player);
+		} catch (IllegalStateException e) {
+			LOGGER.error("Unable to recover {} kit startup for {}", DM_KING_DISPLAY_NAME,
+				player.getUsername(), e);
+		} finally {
+			releaseDmKingSaveReservation(player, "startup rollback");
+		}
+		if (!recoveryCommitted) {
+			player.unregister(UnregisterForcefulness.FORCED,
+				"Sir Charles startup recovery persistence failed");
+			return;
+		}
+		if (player.loggedIn()) {
+			player.message("The " + DM_KING_DISPLAY_NAME
+				+ " challenge could not start; your exact real state was restored.");
+		}
 	}
 
 	public AttackCheck checkDmKingNpcAction(Player player, Npc npc, boolean missile) {
@@ -490,15 +705,75 @@ public final class VoidArena {
 	}
 
 	public void recoverDmKingKit(Player player) {
+		recoverDmKingKit(player, false);
+	}
+
+	public void recoverDmKingKitBeforeLogin(Player player) {
+		recoverDmKingKit(player, true);
+		if (player == null || hasPendingDmKingKitRecovery(player)
+			|| player.hasUnregisterRequest() || !isOrphanedArenaCageLogin(player)) {
+			return;
+		}
+		player.resetAll();
+		player.setInstanceId(0);
+		player.setLocation(VoidArenaConfig.lobbyTile(), true);
+		restoreHits(player);
+	}
+
+	private void recoverDmKingKit(Player player, boolean beforeLoginPackets) {
 		if (player == null || !player.getCache().hasKey(DM_KING_KIT_CACHE)) {
 			return;
 		}
-		restoreDmKingKit(player);
 		player.resetAll();
 		player.setInstanceId(0);
-		player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
-		restoreHits(player);
-		player.message("@mag@Your " + DM_KING_DISPLAY_NAME + " challenge kit was restored.");
+		if (beforeLoginPackets) {
+			player.setLocation(VoidArenaConfig.lobbyTile(), true);
+		} else {
+			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		}
+		final boolean recoveryCommitted;
+		try {
+			recoveryCommitted = restoreDmKingKit(player, !beforeLoginPackets);
+		} catch (IllegalStateException e) {
+			LOGGER.error("Corrupt {} kit snapshot for {}", DM_KING_DISPLAY_NAME,
+				player.getUsername(), e);
+			if (!beforeLoginPackets) {
+				player.message("Your " + DM_KING_DISPLAY_NAME
+					+ " kit recovery is locked because its saved snapshot is invalid. Contact staff.");
+			}
+			player.unregister(UnregisterForcefulness.FORCED,
+				"Invalid Sir Charles kit recovery snapshot");
+			return;
+		}
+		if (!recoveryCommitted) {
+			if (!beforeLoginPackets) {
+				player.message("Your " + DM_KING_DISPLAY_NAME
+					+ " kit was restored, but recovery could not be finalized safely. Please log in again.");
+			}
+			player.unregister(UnregisterForcefulness.FORCED,
+				"Sir Charles kit recovery persistence failed");
+			return;
+		}
+		if (!beforeLoginPackets) {
+			player.message("@mag@Your " + DM_KING_DISPLAY_NAME + " challenge kit was restored.");
+		}
+	}
+
+	public boolean hasPendingDmKingKitRecovery(Player player) {
+		return player != null && player.getCache().hasKey(DM_KING_KIT_CACHE);
+	}
+
+	public boolean needsImmediateArenaLoginRecovery(Player player) {
+		return hasPendingDmKingKitRecovery(player) || isOrphanedArenaCageLogin(player);
+	}
+
+	private boolean isOrphanedArenaCageLogin(Player player) {
+		if (player == null || !VoidArenaConfig.isInsideArena(player.getLocation())) {
+			return false;
+		}
+		Match match = activeMatches.get(player.getUsernameHash());
+		return (match == null || match.isFinished())
+			&& !activeDmKingChallenges.containsKey(player.getUsernameHash());
 	}
 
 	public boolean isDmKingChallengeNpc(Npc npc) {
@@ -519,16 +794,10 @@ public final class VoidArena {
 		if (challenge == null) {
 			return 1.0D;
 		}
-		if (challenge.hasPrayer(prayer3)) {
-			return 1.15D;
-		}
-		if (challenge.hasPrayer(prayer2)) {
-			return 1.1D;
-		}
-		if (challenge.hasPrayer(prayer1)) {
-			return 1.05D;
-		}
-		return 1.0D;
+		double activeMultiplier = challenge.hasPrayer(prayer3) ? 1.15D
+			: challenge.hasPrayer(prayer2) ? 1.1D
+			: challenge.hasPrayer(prayer1) ? 1.05D : 1.0D;
+		return VoidArenaSirPolicy.prayerMultiplier(challenge.prayerStatePoints, activeMultiplier);
 	}
 
 	public VoidArenaStats getStats(Player player) {
@@ -558,6 +827,63 @@ public final class VoidArena {
 				|| activeDmKingChallenges.containsKey(player.getUsernameHash()));
 	}
 
+	/** Captures connection loss before queued combat/death work can choose a terminal result. */
+	public void noteDisconnect(Player player) {
+		if (player == null) {
+			return;
+		}
+		Match match = activeMatches.get(player.getUsernameHash());
+		if (match != null) {
+			match.noteDisconnect(player, System.currentTimeMillis());
+		}
+	}
+
+	public boolean blocksGroundItemAction(Player player, Point targetLocation) {
+		return player != null && (isInActiveMatch(player)
+			|| VoidArenaConfig.isInsideArena(player.getLocation())
+			|| VoidArenaConfig.isInsideArena(targetLocation));
+	}
+
+	public boolean blocksOrdinaryDuel(Player player) {
+		return player != null && (VoidArenaConfig.isInsideVoidArena(player.getLocation())
+			|| activeMatches.containsKey(player.getUsernameHash())
+			|| activeDmKingChallenges.containsKey(player.getUsernameHash())
+			|| activeSetups.containsKey(player.getUsernameHash())
+			|| hasPendingChallenge(player));
+	}
+
+	public UUID projectileSessionId(Mob caster, Mob opponent) {
+		UUID casterSession = projectileSessionIdFor(caster);
+		UUID opponentSession = projectileSessionIdFor(opponent);
+		return casterSession != null && casterSession.equals(opponentSession) ? casterSession : null;
+	}
+
+	public boolean canProjectileImpact(Mob caster, Mob opponent, UUID expectedSessionId) {
+		UUID casterSession = projectileSessionIdFor(caster);
+		UUID opponentSession = projectileSessionIdFor(opponent);
+		if (expectedSessionId == null) {
+			return casterSession == null && opponentSession == null;
+		}
+		return expectedSessionId.equals(casterSession) && expectedSessionId.equals(opponentSession);
+	}
+
+	private UUID projectileSessionIdFor(Mob mob) {
+		if (mob instanceof Player) {
+			Player player = (Player) mob;
+			Match match = activeMatches.get(player.getUsernameHash());
+			if (match != null && !match.isFinished() && !match.hasPendingDisconnect()) {
+				return match.sessionId;
+			}
+			DmKingChallenge challenge = activeDmKingChallenges.get(player.getUsernameHash());
+			return challenge == null ? null : challenge.sessionId;
+		}
+		if (mob instanceof Npc && isDmKingChallengeNpc((Npc) mob)) {
+			DmKingChallenge challenge = dmKingChallengeFor((Npc) mob);
+			return challenge == null ? null : challenge.sessionId;
+		}
+		return null;
+	}
+
 	public boolean blocksTeleport(Player player) {
 		Match match = activeMatches.get(player.getUsernameHash());
 		if (match != null) {
@@ -574,7 +900,7 @@ public final class VoidArena {
 
 	public void enforceMatchBounds(Player player) {
 		Match match = activeMatches.get(player.getUsernameHash());
-		if (match != null && !match.isInsideAssignedCage(player)) {
+		if (match != null && !match.isFinished() && !match.isInsideAssignedCage(player)) {
 			player.resetPath();
 			player.message("You cannot leave the Death Match cage.");
 			Point start = match.startFor(player);
@@ -640,6 +966,9 @@ public final class VoidArena {
 	}
 
 	private void broadcastDmKingRecord(DmKingRecord record) {
+		if (record == null) {
+			return;
+		}
 		for (Player viewer : world.getPlayers()) {
 			if (VoidArenaConfig.isInsideVoidArena(viewer.getLocation())) {
 				sendDmKingRecordPayload(viewer, record);
@@ -675,6 +1004,10 @@ public final class VoidArena {
 			player.message("You can't enter the Void Arena whilst fighting.");
 			return;
 		}
+		if (player.getDuel().getDuelRecipient() != null || player.getDuel().isDuelActive()) {
+			player.message("Finish or cancel your regular duel before entering the Void Arena.");
+			return;
+		}
 		if (activeMatches.containsKey(player.getUsernameHash())
 			|| activeDmKingChallenges.containsKey(player.getUsernameHash())) {
 			player.message("You are already in a Void Arena fight.");
@@ -699,6 +1032,8 @@ public final class VoidArena {
 			player.message("You cannot leave during an active Death Match.");
 			return false;
 		}
+		cancelSetup(player, true);
+		removeChallenges(player);
 		sendRatingClear(player);
 		restoreHits(player);
 		player.setInstanceId(0);
@@ -743,7 +1078,7 @@ public final class VoidArena {
 		if (!canOpenSetup(playerA, playerB, true)) {
 			return;
 		}
-		MatchRules rules = (isRankedEligible(playerA) && isRankedEligible(playerB))
+		MatchRules rules = isRankedPairEligible(playerA, playerB)
 			? MatchRules.ranked()
 			: MatchRules.unrankedDefault();
 		DeathMatchSetup setup = new DeathMatchSetup(playerA.getUsernameHash(), playerB.getUsernameHash(), rules);
@@ -751,6 +1086,7 @@ public final class VoidArena {
 		activeSetups.put(playerB.getUsernameHash(), setup);
 		removeChallenges(playerA);
 		removeChallenges(playerB);
+		scheduleSetupTimeout(setup);
 		syncSetup(setup);
 		playerA.message("Death Match setup opened with " + playerB.getUsername() + ".");
 		playerB.message("Death Match setup opened with " + playerA.getUsername() + ".");
@@ -766,8 +1102,17 @@ public final class VoidArena {
 			if (activeSetups.get(player.getUsernameHash()) != setup) {
 				return;
 			}
-			if (requestedRules.ranked && !setup.rankedAvailable()) {
-				player.message("Ranked Death Match requires both players to have 99 Attack, Strength, Defense, and Hits.");
+			if (setup.expired()) {
+				expireSetup(setup);
+				return;
+			}
+			Player playerA = world.getPlayer(setup.playerAHash);
+			Player playerB = world.getPlayer(setup.playerBHash);
+			RankedAdmission admission = requestedRules.ranked
+				? evaluateRankedAdmission(playerA, playerB, System.currentTimeMillis()) : null;
+			if (requestedRules.ranked && (admission == null || !admission.eligible())) {
+				player.message(rankedDenialMessage(admission == null
+					? VoidArenaRankedPolicy.PairEligibility.DATABASE_UNAVAILABLE : admission.eligibility));
 				requestedRules = MatchRules.unrankedDefault();
 			}
 			setup.rules = requestedRules;
@@ -788,6 +1133,10 @@ public final class VoidArena {
 		}
 		synchronized (this) {
 			if (activeSetups.get(player.getUsernameHash()) != setup) {
+				return;
+			}
+			if (setup.expired()) {
+				expireSetup(setup);
 				return;
 			}
 			Player playerA = world.getPlayer(setup.playerAHash);
@@ -820,6 +1169,10 @@ public final class VoidArena {
 			if (activeSetups.get(player.getUsernameHash()) != setup) {
 				return;
 			}
+			if (setup.expired()) {
+				expireSetup(setup);
+				return;
+			}
 			if (!setup.confirmPhase || !setup.playerAAccepted || !setup.playerBAccepted) {
 				player.message("Both players must accept the Death Match first.");
 				syncSetup(setup);
@@ -840,10 +1193,17 @@ public final class VoidArena {
 				syncSetup(setup);
 				return;
 			}
-			removeSetup(setup);
+			// Clear setup before startMatch emits countdown; reversing these controls makes
+			// stateful clients interpret the newly started match as already ended.
 			sendArenaControl(playerA, "close");
 			sendArenaControl(playerB, "close");
-			startMatch(playerA, playerB, setup.rules);
+			if (!startMatch(playerA, playerB, setup.rules)) {
+				setup.playerAConfirmed = false;
+				setup.playerBConfirmed = false;
+				syncSetup(setup);
+				return;
+			}
+			removeSetup(setup);
 		}
 	}
 
@@ -872,6 +1232,34 @@ public final class VoidArena {
 			}
 		}
 		return true;
+	}
+
+	private void scheduleSetupTimeout(final DeathMatchSetup setup) {
+		world.getServer().getGameEventHandler().add(new SingleEvent(world, null,
+			VoidArenaConfig.SETUP_TIMEOUT_MS, "Void Arena Setup Timeout", DuplicationStrategy.ALLOW_MULTIPLE) {
+			@Override
+			public void action() {
+				expireSetup(setup);
+			}
+		});
+	}
+
+	private synchronized void expireSetup(DeathMatchSetup setup) {
+		if (activeSetups.get(setup.playerAHash) != setup
+			|| activeSetups.get(setup.playerBHash) != setup) {
+			return;
+		}
+		removeSetup(setup);
+		Player playerA = world.getPlayer(setup.playerAHash);
+		Player playerB = world.getPlayer(setup.playerBHash);
+		sendArenaControl(playerA, "close");
+		sendArenaControl(playerB, "close");
+		if (playerA != null) {
+			playerA.message("Death Match setup expired.");
+		}
+		if (playerB != null) {
+			playerB.message("Death Match setup expired.");
+		}
 	}
 
 	private void syncSetup(DeathMatchSetup setup) {
@@ -930,6 +1318,14 @@ public final class VoidArena {
 			if (message) challenger.message("Both players must be out of combat.");
 			return false;
 		}
+		if (challenger.getCurrentPoisonPower() > 0 || target.getCurrentPoisonPower() > 0) {
+			if (message) challenger.message("Both players must cure poison before starting a Death Match.");
+			return false;
+		}
+		if (challenger.isSkulled() || target.isSkulled()) {
+			if (message) challenger.message("Both players must wait for any skull to expire before starting a Death Match.");
+			return false;
+		}
 		if (activeMatches.containsKey(challenger.getUsernameHash())
 			|| activeMatches.containsKey(target.getUsernameHash())
 			|| activeDmKingChallenges.containsKey(challenger.getUsernameHash())
@@ -964,6 +1360,10 @@ public final class VoidArena {
 
 	private boolean canStartSetup(DeathMatchSetup setup, Player playerA, Player playerB,
 								  Player messenger, boolean message, boolean checkLoadouts) {
+		if (setup == null || setup.expired()) {
+			if (message && messenger != null) messenger.message("That Death Match setup has expired.");
+			return false;
+		}
 		if (playerA == null || playerB == null) {
 			if (message && messenger != null) messenger.message("That player is no longer online.");
 			return false;
@@ -974,6 +1374,14 @@ public final class VoidArena {
 		}
 		if (playerA.inCombat() || playerB.inCombat()) {
 			if (message && messenger != null) messenger.message("Both players must be out of combat.");
+			return false;
+		}
+		if (playerA.getCurrentPoisonPower() > 0 || playerB.getCurrentPoisonPower() > 0) {
+			if (message && messenger != null) messenger.message("Both players must cure poison before starting a Death Match.");
+			return false;
+		}
+		if (playerA.isSkulled() || playerB.isSkulled()) {
+			if (message && messenger != null) messenger.message("Both players must wait for any skull to expire before starting a Death Match.");
 			return false;
 		}
 		if (activeMatches.containsKey(playerA.getUsernameHash())
@@ -991,8 +1399,14 @@ public final class VoidArena {
 			if (message && messenger != null) messenger.message("All Void Arena cages are occupied right now.");
 			return false;
 		}
-		if (setup.rules.ranked && (!hasRankedStats(playerA, message) || !hasRankedStats(playerB, message))) {
-			return false;
+		if (setup.rules.ranked) {
+			RankedAdmission admission = evaluateRankedAdmission(playerA, playerB, System.currentTimeMillis());
+			if (!admission.eligible()) {
+				if (message && messenger != null) {
+					messenger.message(rankedDenialMessage(admission.eligibility));
+				}
+				return false;
+			}
 		}
 		if (!checkLoadouts || !setup.rules.f2pOnly) {
 			return true;
@@ -1008,7 +1422,10 @@ public final class VoidArena {
 		}
 		if (player.getCache().hasKey(DM_KING_KIT_CACHE)) {
 			recoverDmKingKit(player);
-			if (message) player.message("Your previous " + DM_KING_DISPLAY_NAME + " challenge kit was restored. Challenge him again when ready.");
+			if (message && !player.getCache().hasKey(DM_KING_KIT_CACHE)) {
+				player.message("Your previous " + DM_KING_DISPLAY_NAME
+					+ " challenge kit was restored. Challenge him again when ready.");
+			}
 			return false;
 		}
 		if (!isInsideLobby(player)) {
@@ -1017,6 +1434,14 @@ public final class VoidArena {
 		}
 		if (player.inCombat()) {
 			if (message) player.message("You must be out of combat to challenge " + DM_KING_DISPLAY_NAME + ".");
+			return false;
+		}
+		if (player.getCurrentPoisonPower() > 0) {
+			if (message) player.message("Cure your poison before challenging " + DM_KING_DISPLAY_NAME + ".");
+			return false;
+		}
+		if (player.isSkulled()) {
+			if (message) player.message("Wait for your skull to expire before challenging " + DM_KING_DISPLAY_NAME + ".");
 			return false;
 		}
 		if (activeMatches.containsKey(player.getUsernameHash())
@@ -1040,9 +1465,7 @@ public final class VoidArena {
 			if (message) player.message("You need the current Voidscape client to challenge " + DM_KING_DISPLAY_NAME + ".");
 			return false;
 		}
-		if (shouldAutoSetDmKingStats(player)) {
-			applyBetaDmKingStats(player);
-		} else if (!hasRankedStats(player, message)) {
+		if (!hasRankedStats(player, message)) {
 			return false;
 		}
 		return true;
@@ -1051,32 +1474,6 @@ public final class VoidArena {
 	private boolean supportsDmKingChallenge(Player player) {
 		return player != null && player.isUsingCustomClient()
 			&& player.getClientVersion() >= DM_KING_CLIENT_VERSION;
-	}
-
-	private boolean shouldAutoSetDmKingStats(Player player) {
-		return player != null && player.getConfig().WANT_BETA_ONBOARDING_GUIDE;
-	}
-
-	private void applyBetaDmKingStats(Player player) {
-		int betaLevel = Math.min(99, player.getConfig().PLAYER_LEVEL_LIMIT);
-		int skills = world.getServer().getConstants().getSkills().getSkillsCount();
-		boolean changed = false;
-		for (int skill = 0; skill < skills; skill++) {
-			if (player.getSkills().getMaxStat(skill) == betaLevel
-				&& player.getSkills().getLevel(skill) == betaLevel) {
-				continue;
-			}
-			player.getSkills().setLevelTo(skill, betaLevel);
-			player.getSkills().setLevel(skill, betaLevel, false);
-			changed = true;
-		}
-		player.setPrayerStatePoints(betaLevel * 120);
-		player.checkEquipment();
-		player.getSkills().sendUpdateAll();
-		ActionSender.sendEquipmentStats(player);
-		if (changed) {
-			player.message("@gre@Beta " + DM_KING_DISPLAY_NAME + " challenge: all stats set to " + betaLevel + ".");
-		}
 	}
 
 	private boolean hasPendingChallenge(Player player) {
@@ -1103,57 +1500,78 @@ public final class VoidArena {
 	private int applyDmKingKit(Player player) {
 		VoidArenaKitSnapshot.clearContainers(player);
 		player.exitMorph();
-		equipChallengeItem(player, ItemId.LARGE_RUNE_HELMET.id());
-		equipChallengeItem(player, ItemId.RUNE_PLATE_MAIL_BODY.id());
-		equipChallengeItem(player, ItemId.RUNE_PLATE_MAIL_LEGS.id());
-		equipChallengeItem(player, ItemId.DIAMOND_AMULET_OF_POWER.id());
-		equipChallengeItem(player, ItemId.RUNE_2_HANDED_SWORD.id());
-		player.getCarriedItems().getInventory().add(new Item(ItemId.FULL_STRENGTH_POTION.id()), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.AIR_RUNE.id(), DM_KING_AIR_RUNES), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.DEATH_RUNE.id(), DM_KING_DEATH_RUNES), false);
-		player.getCarriedItems().getInventory().add(new Item(ItemId.FIRE_RUNE.id(), DM_KING_FIRE_RUNES), false);
-		int playerFishCapacity = player.getCarriedItems().getInventory().getFreeSlots();
+		player.getSkills().setLevel(Skill.ATTACK.id(),
+			player.getSkills().getMaxStat(Skill.ATTACK.id()), false);
+		player.getSkills().setLevel(Skill.STRENGTH.id(),
+			player.getSkills().getMaxStat(Skill.STRENGTH.id()), false);
+		player.getSkills().setLevel(Skill.DEFENSE.id(),
+			player.getSkills().getMaxStat(Skill.DEFENSE.id()), false);
+		if (!equipChallengeItem(player, ItemId.LARGE_RUNE_HELMET.id())
+			|| !equipChallengeItem(player, ItemId.RUNE_PLATE_MAIL_BODY.id())
+			|| !equipChallengeItem(player, ItemId.RUNE_PLATE_MAIL_LEGS.id())
+			|| !equipChallengeItem(player, ItemId.DIAMOND_AMULET_OF_POWER.id())
+			|| !equipChallengeItem(player, ItemId.RUNE_2_HANDED_SWORD.id())) {
+			return -1;
+		}
+		Inventory inventory = player.getCarriedItems().getInventory();
+		if (!inventory.add(new Item(ItemId.FULL_STRENGTH_POTION.id()), false)
+			|| !inventory.add(new Item(ItemId.AIR_RUNE.id(), DM_KING_AIR_RUNES), false)
+			|| !inventory.add(new Item(ItemId.DEATH_RUNE.id(), DM_KING_DEATH_RUNES), false)
+			|| !inventory.add(new Item(ItemId.FIRE_RUNE.id(), DM_KING_FIRE_RUNES), false)) {
+			return -1;
+		}
+		int playerFishCapacity = Math.min(DM_KING_FISH_COUNT,
+			inventory.getFreeSlots());
 		for (int i = 0; i < playerFishCapacity; i++) {
-			player.getCarriedItems().getInventory().add(new Item(ItemId.SWORDFISH.id()), false);
+			if (!inventory.add(new Item(ItemId.SWORDFISH.id()), false)) {
+				return -1;
+			}
 		}
 		ActionSender.sendInventory(player);
 		ActionSender.sendEquipmentStats(player);
+		player.getSkills().sendUpdateAll();
 		player.getUpdateFlags().setAppearanceChanged(true);
 		return playerFishCapacity;
 	}
 
-	private void equipChallengeItem(Player player, int itemId) {
+	private boolean equipChallengeItem(Player player, int itemId) {
 		if (!player.getCarriedItems().getInventory().add(new Item(itemId), false)) {
-			return;
+			return false;
 		}
 		Item equipped = player.getCarriedItems().getInventory()
 			.get(player.getCarriedItems().getInventory().size() - 1);
 		if (equipped == null) {
-			return;
+			return false;
 		}
 		equipped.setWielded(true);
 		ItemDefinition def = equipped.getDef(player.getWorld());
-		if (def != null && def.getWieldPosition() < 12) {
-			player.updateWornItems(def.getWieldPosition(), def.getAppearanceId(), def.getWearableId(), true);
+		if (def == null || def.getWieldPosition() < 0 || def.getWieldPosition() >= 12) {
+			return false;
 		}
+		player.updateWornItems(def.getWieldPosition(), def.getAppearanceId(), def.getWearableId(), true);
+		return true;
 	}
 
 	private void resolveDmKingVictory(DmKingChallenge challenge, Player player) {
-		DmKingSummary summary = captureDmKingSummary(challenge, player);
-		activeDmKingChallenges.remove(challenge.playerHash, challenge);
-		challenge.finished = true;
-		challenge.event.stop();
-		cleanupDmKingNpc(challenge.king);
-		DmKingRecord record = recordDmKingResult(false);
+		if (challenge == null || !challenge.tryFinish()) {
+			return;
+		}
+		player = player == null ? challenge.player : player;
+		DmKingSummary summary = captureDmKingSummaryBestEffort(challenge, player, "victory");
+		cleanupDmKingChallengeTerminal(challenge, "victory");
 		finishDmKingSession(player, true);
-		player.playerServerMessage(MessageType.QUEST,
-			"@mag@" + DM_KING_DISPLAY_NAME + " defeated: @whi@You beat the perfect death matcher.");
-		player.playerServerMessage(MessageType.QUEST,
-			"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_RARE_LOSS_QUIPS));
-		sendDmKingSummary(player, summary);
-		sendDmKingRecordPayload(player, record);
+		DmKingRecord record = recordDmKingResultBestEffort(false, "victory");
+		if (player != null && player.loggedIn()) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@" + DM_KING_DISPLAY_NAME + " defeated: @whi@You beat the perfect death matcher.");
+			player.playerServerMessage(MessageType.QUEST,
+				"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_RARE_LOSS_QUIPS));
+			sendDmKingSummary(player, summary);
+			sendDmKingRecordPayload(player, record);
+		}
 		broadcastDmKingRecord(record);
-		if (!player.getCache().hasKey(DM_KING_BROADCAST_CACHE)) {
+		if (player != null && player.loggedIn()
+			&& !player.getCache().hasKey(DM_KING_BROADCAST_CACHE)) {
 			player.getCache().store(DM_KING_BROADCAST_CACHE, true);
 			savePlayerCache(player);
 			world.sendWorldMessage("@mag@" + player.getUsername() + " has defeated " + DM_KING_DISPLAY_NAME + " in the Void Arena!");
@@ -1162,13 +1580,24 @@ public final class VoidArena {
 
 	private void resolveDmKingLoss(DmKingChallenge challenge, Player player, String message, boolean disconnectLoss,
 								   boolean recordDmKingWin) {
-		DmKingSummary summary = captureDmKingSummary(challenge, player);
-		activeDmKingChallenges.remove(challenge.playerHash, challenge);
-		challenge.finished = true;
-		challenge.event.stop();
-		cleanupDmKingNpc(challenge.king);
-		DmKingRecord record = recordDmKingWin ? recordDmKingResult(true) : null;
-		finishDmKingSession(player, !disconnectLoss);
+		resolveDmKingLoss(challenge, player, message, disconnectLoss, recordDmKingWin, false);
+	}
+
+	private void resolveDmKingLoss(DmKingChallenge challenge, Player player, String message, boolean disconnectLoss,
+								   boolean recordDmKingWin, boolean deferDeathRestore) {
+		if (challenge == null || !challenge.tryFinish()) {
+			return;
+		}
+		player = player == null ? challenge.player : player;
+		DmKingSummary summary = captureDmKingSummaryBestEffort(challenge, player, "loss");
+		cleanupDmKingChallengeTerminal(challenge, "loss");
+		if (deferDeathRestore) {
+			sendArenaControlBestEffort(player, "close", "death recovery");
+		} else {
+			finishDmKingSession(player, !disconnectLoss);
+		}
+		DmKingRecord record = recordDmKingWin
+			? recordDmKingResultBestEffort(true, "loss") : null;
 		if (message != null && !message.isEmpty() && player != null && player.loggedIn()) {
 			player.playerServerMessage(MessageType.QUEST, "@mag@" + DM_KING_DISPLAY_NAME + " challenge ended: @whi@" + message);
 			if (recordDmKingWin) {
@@ -1183,29 +1612,184 @@ public final class VoidArena {
 		}
 	}
 
+	/** Completes Sir kit restoration after generic death normalization has finished. */
+	public void finishDeferredDmKingDeathRecovery(Player player) {
+		if (player == null) {
+			return;
+		}
+		try {
+			if (!hasPendingDmKingKitRecovery(player)) {
+				return;
+			}
+			try {
+				player.setInstanceId(0);
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to clear {} instance for {} after death",
+					DM_KING_DISPLAY_NAME, player.getUsername(), e);
+			}
+			final boolean recoveryCommitted;
+			try {
+				recoveryCommitted = restoreDmKingKit(player);
+			} catch (IllegalStateException e) {
+				LOGGER.error("Unable to restore {} kit for {} after death", DM_KING_DISPLAY_NAME,
+					player.getUsername(), e);
+				player.message("Your saved real kit could not be validated. You will be logged out; contact staff.");
+				player.unregister(UnregisterForcefulness.FORCED,
+					"Invalid Sir Charles kit snapshot after death");
+				return;
+			}
+			if (!recoveryCommitted) {
+				player.message("Your real kit recovery could not be finalized. You will be logged out to keep it safe.");
+				player.unregister(UnregisterForcefulness.FORCED,
+					"Sir Charles post-death kit recovery persistence failed");
+			}
+		} finally {
+			releaseDmKingSaveReservation(player, "post-death recovery");
+		}
+	}
+
+	private void resolveDmKingNoContest(DmKingChallenge challenge, Player player) {
+		if (challenge == null || !challenge.tryFinish()) {
+			return;
+		}
+		player = player == null ? challenge.player : player;
+		cleanupDmKingChallengeTerminal(challenge, "server no-contest");
+		finishDmKingSession(player, true);
+		if (player != null && player.loggedIn()) {
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@" + DM_KING_DISPLAY_NAME + " challenge ended: @whi@server shutdown - no contest.");
+		}
+	}
+
 	private void expireDmKingChallenge(DmKingChallenge challenge) {
 		if (activeDmKingChallenges.get(challenge.playerHash) != challenge) {
 			return;
 		}
-		Player player = world.getPlayer(challenge.playerHash);
-		resolveDmKingLoss(challenge, player, "time limit reached.", false, true);
+		resolveDmKingLoss(challenge, challenge.player, "time limit reached.", false, true);
 	}
 
 	private void finishDmKingSession(Player player, boolean moveToLobby) {
 		if (player == null) {
 			return;
 		}
-		sendArenaControl(player, "close");
-		player.resetAll();
-		player.setInstanceId(0);
-		restoreDmKingKit(player);
-		if (moveToLobby) {
-			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+		try {
+			sendArenaControlBestEffort(player, "close", "session finish");
+			try {
+				player.resetAll();
+				player.setInstanceId(0);
+				if (moveToLobby) {
+					player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+				} else {
+					player.setLocation(VoidArenaConfig.exitTile(), true);
+				}
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to relocate {} while finishing {} session",
+					player.getUsername(), DM_KING_DISPLAY_NAME, e);
+				try {
+					player.setInstanceId(0);
+					player.setLocation(moveToLobby
+						? VoidArenaConfig.lobbyTile() : VoidArenaConfig.exitTile(), true);
+				} catch (RuntimeException fallbackError) {
+					LOGGER.error("Unable to apply fallback {} terminal relocation for {}",
+						DM_KING_DISPLAY_NAME, player.getUsername(), fallbackError);
+				}
+			}
+			final boolean recoveryCommitted;
+			try {
+				recoveryCommitted = restoreDmKingKit(player);
+			} catch (IllegalStateException e) {
+				LOGGER.error("Unable to restore {} kit for {} at session end", DM_KING_DISPLAY_NAME,
+					player.getUsername(), e);
+				player.message("Your saved real kit could not be validated. You will be logged out; contact staff.");
+				player.unregister(UnregisterForcefulness.FORCED,
+					"Invalid Sir Charles kit snapshot at session end");
+				return;
+			}
+			if (!recoveryCommitted) {
+				player.message("Your real kit was restored, but the recovery marker could not be cleared. "
+					+ "You will be logged out to keep it safe.");
+				player.unregister(UnregisterForcefulness.FORCED,
+					"Sir Charles kit recovery persistence failed");
+			}
+			try {
+				ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
+				ActionSender.sendInventory(player);
+				ActionSender.sendEquipmentStats(player);
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to send final {} restoration packets to {}",
+					DM_KING_DISPLAY_NAME, player.getUsername(), e);
+			}
+		} finally {
+			releaseDmKingSaveReservation(player, "session finish");
 		}
-		restoreHits(player);
-		ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
-		ActionSender.sendInventory(player);
-		ActionSender.sendEquipmentStats(player);
+	}
+
+	private void releaseDmKingSaveReservation(Player player, String context) {
+		if (player == null) {
+			return;
+		}
+		try {
+			player.releaseSaveReservation();
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to release {} save reservation for {} during {}",
+				DM_KING_DISPLAY_NAME, player.getUsername(), context, e);
+		}
+	}
+
+	private void sendArenaControlBestEffort(Player player, String payload, String context) {
+		if (player == null) {
+			return;
+		}
+		try {
+			sendArenaControl(player, payload);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to send Void Arena control '{}' to {} during {}",
+				payload, player.getUsername(), context, e);
+		}
+	}
+
+	private DmKingSummary captureDmKingSummaryBestEffort(DmKingChallenge challenge,
+		Player player, String context) {
+		try {
+			return captureDmKingSummary(challenge, player);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to capture {} {} summary for {}",
+				DM_KING_DISPLAY_NAME, context,
+				player == null ? challenge.playerHash : player.getUsername(), e);
+			return null;
+		}
+	}
+
+	private void cleanupDmKingChallengeTerminal(DmKingChallenge challenge, String context) {
+		activeDmKingChallenges.remove(challenge.playerHash, challenge);
+		try {
+			challenge.event.stop();
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to stop {} event during {}", DM_KING_DISPLAY_NAME, context, e);
+		}
+		try {
+			challenge.player.resetTrackedDamageAndBlockedDamage(challenge.king);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to reset {} damage tracking during {}",
+				DM_KING_DISPLAY_NAME, context, e);
+		}
+		try {
+			cleanupDmKingNpc(challenge.king);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to remove {} NPC during {}", DM_KING_DISPLAY_NAME, context, e);
+		}
+		purgeCageGroundItemsBestEffort(challenge.slotIndex,
+			DM_KING_DISPLAY_NAME + " " + context);
+	}
+
+	private DmKingRecord recordDmKingResultBestEffort(boolean dmKingWon, String context) {
+		try {
+			return recordDmKingResult(dmKingWon);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to record {} result during {}",
+				DM_KING_DISPLAY_NAME, context, e);
+			return null;
+		}
 	}
 
 	private DmKingSummary captureDmKingSummary(DmKingChallenge challenge, Player player) {
@@ -1216,10 +1800,13 @@ public final class VoidArena {
 		int kingFish = challenge == null ? 0 : Math.max(0, challenge.fishRemaining);
 		int kingFishCapacity = challenge == null ? kingFish : challenge.fishCapacity;
 		int castsUsed = challenge == null ? 0 : Math.max(0, challenge.castsUsed);
+		int potionDosesRemaining = challenge == null ? 0
+			: Math.max(0, challenge.strengthPotionDosesRemaining);
+		int prayerStatePoints = challenge == null ? 0 : Math.max(0, challenge.prayerStatePoints);
 		long castTicks = challenge == null ? dmKingCastDelayTicks() : challenge.dmKingCastDelayTicks();
 		long castMs = castTicks * Math.max(1, world.getServer().getConfig().GAME_TICK);
 		return new DmKingSummary(playerFish, playerFishCapacity, kingFish, kingFishCapacity,
-			castTicks, castMs, castsUsed);
+			castTicks, castMs, castsUsed, potionDosesRemaining, prayerStatePoints);
 	}
 
 	private void sendDmKingSummary(Player player, DmKingSummary summary) {
@@ -1234,7 +1821,12 @@ public final class VoidArena {
 		player.playerServerMessage(MessageType.QUEST,
 			"@mag@" + DM_KING_DISPLAY_NAME + " cast speed: @whi@Fire Blast every " + summary.castDelayMs
 				+ "ms (" + summary.castDelayTicks + " " + tickLabel + "); casts used "
-				+ summary.castsUsed + " (unlimited).");
+				+ summary.castsUsed + "/" + DM_KING_FIRE_BLAST_CASTS + ".");
+		player.playerServerMessage(MessageType.QUEST,
+			"@mag@" + DM_KING_DISPLAY_NAME + " remaining: @whi@strength potion doses "
+				+ summary.potionDosesRemaining + "/" + DM_KING_STRENGTH_POTION_DOSES
+				+ ", prayer " + ((summary.prayerStatePoints + 119) / 120)
+				+ "/" + DM_KING_PRAYER_LEVEL + ".");
 	}
 
 	private long dmKingCastDelayTicks() {
@@ -1242,35 +1834,100 @@ public final class VoidArena {
 		int castDelay = world.getServer().getConfig().RAPID_CAST_SPELLS
 			? 0
 			: Math.max(0, world.getServer().getConfig().MILLISECONDS_BETWEEN_CASTS);
-		return Math.max(1, (castDelay + gameTick - 1L) / gameTick);
+		return VoidArenaSirPolicy.castDelayTicks(castDelay, gameTick);
+	}
+
+	private int dmKingPrayerDrainPerTick() {
+		int totalDrainRate = 0;
+		for (int prayerId : DM_KING_ACTIVE_PRAYERS) {
+			if (world.getServer().getEntityHandler().getPrayerDef(prayerId) != null) {
+				totalDrainRate += world.getServer().getEntityHandler()
+					.getPrayerDef(prayerId).getDrainRate();
+			}
+		}
+		return (int) Math.ceil(totalDrainRate * 120.0D / 300.0D);
 	}
 
 	private long pvpReattackDelayTicks() {
 		return Math.max(0, world.getServer().getConfig().PVP_REATTACK_TIMER);
 	}
 
-	private boolean pvpReattackReady(Mob mob, long tick) {
-		return mob == null || mob.getRanAwayTimer() <= 0
-			|| mob.getRanAwayTimer() + pvpReattackDelayTicks() <= tick;
+	private boolean restoreDmKingKit(Player player) {
+		return restoreDmKingKit(player, true);
 	}
 
-	private void restoreDmKingKit(Player player) {
+	private boolean restoreDmKingKit(Player player, boolean sendUpdates) {
 		if (player == null || !player.getCache().hasKey(DM_KING_KIT_CACHE)) {
-			return;
+			return true;
 		}
-		String snapshot = player.getCache().getString(DM_KING_KIT_CACHE);
+		Object storedSnapshot = player.getCache().getCacheMap().get(DM_KING_KIT_CACHE);
+		if (!(storedSnapshot instanceof String)) {
+			throw new IllegalStateException("Sir Charles kit snapshot has an invalid cache type");
+		}
+		String snapshot = (String) storedSnapshot;
 		VoidArenaKitSnapshot.restore(player, snapshot);
 		player.getCache().remove(DM_KING_KIT_CACHE);
-		savePlayerCache(player);
-		ActionSender.sendInventory(player);
-		ActionSender.sendEquipmentStats(player);
+		PlayerInventory[] inventory = exactInventoryForPersistence(player);
+		boolean committed = world.getServer().getDatabase().atomically(() -> {
+			world.getServer().getDatabase().savePlayerInventory(player.getDatabaseID(), inventory);
+			world.getServer().getDatabase().querySavePlayerEquipped(player);
+			world.getServer().getPlayerService().savePlayerCache(player);
+			world.getServer().getDatabase().querySavePlayerData(player);
+			world.getServer().getDatabase().querySavePlayerSkills(player);
+		});
+		if (!committed) {
+			player.getCache().store(DM_KING_KIT_CACHE, snapshot);
+			return false;
+		}
+		if (sendUpdates) {
+			ActionSender.sendInventory(player);
+			ActionSender.sendEquipmentStats(player);
+			player.getSkills().sendUpdateAll();
+			ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
+		}
+		return true;
 	}
 
-	private void savePlayerCache(Player player) {
+	private boolean saveDmKingKitMarker(Player player, String snapshot) {
+		boolean committed = world.getServer().getDatabase().atomically(() ->
+			world.getServer().getDatabase().querySavePlayerCacheValue(
+				player.getDatabaseID(), 1, DM_KING_KIT_CACHE, snapshot));
+		if (!committed) {
+			LOGGER.error("Unable to save {} kit recovery marker for {}",
+				DM_KING_DISPLAY_NAME, player.getUsername());
+		}
+		return committed;
+	}
+
+	private PlayerInventory[] exactInventoryForPersistence(Player player) {
+		List<Item> items = player.getCarriedItems().getInventory().getItems();
+		synchronized (items) {
+			PlayerInventory[] inventory = new PlayerInventory[items.size()];
+			for (int slot = 0; slot < items.size(); slot++) {
+				Item item = items.get(slot);
+				PlayerInventory saved = new PlayerInventory();
+				saved.itemId = item.getItemId();
+				saved.item = item;
+				saved.wielded = item.isWielded();
+				saved.slot = slot;
+				saved.amount = item.getAmount();
+				saved.noted = item.getNoted();
+				saved.catalogID = item.getCatalogId();
+				saved.durability = item.getItemStatus().getDurability();
+				saved.killLog = item.getItemStatus().getKillLog();
+				inventory[slot] = saved;
+			}
+			return inventory;
+		}
+	}
+
+	private boolean savePlayerCache(Player player) {
 		try {
 			world.getServer().getPlayerService().savePlayerCache(player);
+			return true;
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to save Void Arena player cache for {}", player.getUsername(), e);
+			return false;
 		}
 	}
 
@@ -1289,12 +1946,26 @@ public final class VoidArena {
 	}
 
 	private synchronized DmKingRecord recordDmKingResult(boolean dmKingWon) {
-		DmKingRecord current = loadDmKingRecord();
-		DmKingRecord next = dmKingWon
-			? new DmKingRecord(current.wins + 1, current.losses)
-			: new DmKingRecord(current.wins, current.losses + 1);
-		saveDmKingRecord(next);
-		return next;
+		final DmKingRecord[] committedRecord = {null};
+		boolean committed = world.getServer().getDatabase().atomically(() -> {
+			Integer storedWins = world.getServer().getDatabase()
+				.queryLoadGlobalCacheInt(DM_KING_WINS_CACHE);
+			Integer storedLosses = world.getServer().getDatabase()
+				.queryLoadGlobalCacheInt(DM_KING_LOSSES_CACHE);
+			int wins = storedWins == null ? DM_KING_INITIAL_WINS : Math.max(0, storedWins);
+			int losses = storedLosses == null ? DM_KING_INITIAL_LOSSES : Math.max(0, storedLosses);
+			DmKingRecord next = dmKingWon
+				? new DmKingRecord(Math.addExact(wins, 1), losses)
+				: new DmKingRecord(wins, Math.addExact(losses, 1));
+			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_WINS_CACHE, next.wins);
+			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_LOSSES_CACHE, next.losses);
+			committedRecord[0] = next;
+		});
+		if (!committed) {
+			LOGGER.error("Unable to commit {} result", DM_KING_DISPLAY_NAME);
+			return null;
+		}
+		return committedRecord[0];
 	}
 
 	private DmKingRecord loadDmKingRecord() {
@@ -1313,15 +1984,6 @@ public final class VoidArena {
 		}
 	}
 
-	private void saveDmKingRecord(DmKingRecord record) {
-		try {
-			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_WINS_CACHE, record.wins);
-			world.getServer().getDatabase().querySaveGlobalCacheInt(DM_KING_LOSSES_CACHE, record.losses);
-		} catch (GameDatabaseException e) {
-			LOGGER.error("Unable to save DM King record", e);
-		}
-	}
-
 	private static String randomLine(String[] lines) {
 		return lines[ThreadLocalRandom.current().nextInt(lines.length)];
 	}
@@ -1335,13 +1997,99 @@ public final class VoidArena {
 		return hasRankedStats(player, false);
 	}
 
+	private boolean isRankedPairEligible(Player playerA, Player playerB) {
+		return evaluateRankedAdmission(playerA, playerB, System.currentTimeMillis()).eligible();
+	}
+
+	private boolean sharesPublicNetworkAddress(Player playerA, Player playerB) {
+		return playerA != null && playerB != null
+			&& VoidArenaRankedPolicy.samePublicNetwork(playerA.getCurrentIP(), playerB.getCurrentIP());
+	}
+
+	private boolean hasAmbiguousRankedOrigin(Player player) {
+		return player != null && VoidArenaRankedPolicy.hasAmbiguousWebSocketOrigin(
+			player.isWebSocketConnection(), player.getCurrentIP(),
+			world.getServer().getConfig().VOID_ARENA_ALLOW_AMBIGUOUS_PROXY_RANKED);
+	}
+
+	private RankedAdmission evaluateRankedAdmission(Player playerA, Player playerB, long now) {
+		if (playerA == null || playerB == null || playerA.getDatabaseID() <= 0 || playerB.getDatabaseID() <= 0
+			|| playerA.getDatabaseID() == playerB.getDatabaseID()) {
+			return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.INVALID_PLAYER);
+		}
+		if (!isRankedEligible(playerA) || !isRankedEligible(playerB)) {
+			return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.STAT_REQUIREMENT);
+		}
+		if (hasAmbiguousRankedOrigin(playerA) || hasAmbiguousRankedOrigin(playerB)) {
+			return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.AMBIGUOUS_PROXY_IP);
+		}
+		if (sharesPublicNetworkAddress(playerA, playerB)) {
+			return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.SAME_PUBLIC_NETWORK);
+		}
+
+		Player canonicalA = playerA.getDatabaseID() < playerB.getDatabaseID() ? playerA : playerB;
+		Player canonicalB = canonicalA == playerA ? playerB : playerA;
+		String seasonId = VoidArenaConfig.currentSeasonId();
+		try {
+			VoidArenaStats statsA = loadRankedStats(canonicalA, seasonId);
+			VoidArenaStats statsB = loadRankedStats(canonicalB, seasonId);
+			long rollingCutoff = now - VoidArenaConfig.RATED_PAIR_COOLDOWN_MS;
+			long dayStart = VoidArenaRankedPolicy.utcDayStart(now);
+			VoidArenaPairAudit audit = world.getServer().getDatabase().queryVoidArenaPairAudit(
+				canonicalA.getDatabaseID(), canonicalB.getDatabaseID(), rollingCutoff, dayStart);
+			if (VoidArenaRankedPolicy.cooldownActive(audit.lastRatedResultAtMs, now)) {
+				return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.RATED_RESULT_COOLDOWN);
+			}
+			if (VoidArenaRankedPolicy.dailyCapReached(audit.decisiveResultsUtcDay)) {
+				return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.DAILY_DECISIVE_CAP);
+			}
+			return RankedAdmission.allowed(seasonId, canonicalA, canonicalB, statsA, statsB, audit);
+		} catch (GameDatabaseException e) {
+			LOGGER.error("Unable to authorize ranked Void Arena pair {} and {}",
+				playerA.getUsername(), playerB.getUsername(), e);
+			return RankedAdmission.denied(VoidArenaRankedPolicy.PairEligibility.DATABASE_UNAVAILABLE);
+		}
+	}
+
+	private VoidArenaStats loadRankedStats(Player player, String seasonId) throws GameDatabaseException {
+		VoidArenaStats stats = world.getServer().getDatabase()
+			.queryLoadVoidArenaStats(player.getDatabaseID(), seasonId);
+		if (stats == null) {
+			stats = defaultStats(player.getDatabaseID(), player.getUsername(), seasonId);
+		}
+		if (stats.username == null || stats.username.isEmpty()) {
+			stats.username = player.getUsername();
+		}
+		return stats;
+	}
+
+	private String rankedDenialMessage(VoidArenaRankedPolicy.PairEligibility eligibility) {
+		switch (eligibility) {
+			case INVALID_PLAYER:
+				return "Both players need valid saved accounts for a ranked Death Match.";
+			case STAT_REQUIREMENT:
+				return "Ranked Death Match requires both players to have 99 Attack, Strength, and Defense.";
+			case AMBIGUOUS_PROXY_IP:
+				return "Ranked Death Match is unavailable on a WebSocket route that hides your public IP. Use a direct game connection; unranked remains available.";
+			case SAME_PUBLIC_NETWORK:
+				return "Ranked Death Matches are unavailable between players on the same public network.";
+			case RATED_RESULT_COOLDOWN:
+				return "This pair must wait 30 minutes after its last rated result. Unranked remains available.";
+			case DAILY_DECISIVE_CAP:
+				return "This pair has reached today's limit of three rated results. Unranked remains available.";
+			case DATABASE_UNAVAILABLE:
+				return "Ranked Death Matches are temporarily unavailable because rating history could not be verified.";
+			default:
+				return "Ranked Death Match is unavailable for this pair.";
+		}
+	}
+
 	private boolean hasRankedStats(Player player, boolean message) {
 		if (player.getSkills().getMaxStat(Skill.ATTACK.id()) < 99
 			|| player.getSkills().getMaxStat(Skill.STRENGTH.id()) < 99
-			|| player.getSkills().getMaxStat(Skill.DEFENSE.id()) < 99
-			|| player.getSkills().getMaxStat(Skill.HITS.id()) < 99) {
+			|| player.getSkills().getMaxStat(Skill.DEFENSE.id()) < 99) {
 			if (message) {
-				player.message("Ranked Death Match requires 99 Attack, Strength, Defense, and Hits.");
+				player.message("Ranked Death Match requires 99 Attack, Strength, and Defense.");
 			}
 			return false;
 		}
@@ -1385,47 +2133,74 @@ public final class VoidArena {
 		return def != null && def.isMembersOnly();
 	}
 
-	private synchronized void startMatch(Player playerA, Player playerB, MatchRules rules) {
+	private synchronized boolean startMatch(Player playerA, Player playerB, MatchRules rules) {
+		RankedAdmission admission = null;
+		if (rules.ranked) {
+			admission = evaluateRankedAdmission(playerA, playerB, System.currentTimeMillis());
+			if (!admission.eligible()) {
+				String denial = rankedDenialMessage(admission.eligibility);
+				playerA.message(denial);
+				playerB.message(denial);
+				return false;
+			}
+		}
 		int slotIndex = firstAvailableSlot();
 		if (slotIndex < 0) {
 			playerA.message("All Void Arena cages are occupied right now.");
 			playerB.message("All Void Arena cages are occupied right now.");
-			return;
+			return false;
 		}
 
 		VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
-		Match match = new Match(slotIndex, playerA.getUsernameHash(), playerB.getUsernameHash(), rules,
-			System.currentTimeMillis() + MATCH_COUNTDOWN_MS);
+		Match match = new Match(slotIndex, playerA, playerB, rules,
+			System.currentTimeMillis() + MATCH_COUNTDOWN_MS, admission);
+		if (rules.ranked && !world.getServer().getDatabase()
+			.createActiveVoidArenaMatch(match.activeSessionRecord())) {
+			playerA.message("Ranked Death Match could not be started because its audit record was not saved.");
+			playerB.message("Ranked Death Match could not be started because its audit record was not saved.");
+			return false;
+		}
 		activeMatches.put(playerA.getUsernameHash(), match);
 		activeMatches.put(playerB.getUsernameHash(), match);
-		removeChallenges(playerA);
-		removeChallenges(playerB);
+		try {
+			purgeCageGroundItems(slotIndex);
+			removeChallenges(playerA);
+			removeChallenges(playerB);
 
-		playerA.resetAll();
-		playerB.resetAll();
-		if (!rules.allowPrayer) {
-			playerA.getPrayers().resetPrayers();
-			playerB.getPrayers().resetPrayers();
+			playerA.resetAll();
+			playerB.resetAll();
+			if (!rules.allowPrayer) {
+				playerA.getPrayers().resetPrayers();
+				playerB.getPrayers().resetPrayers();
+			}
+			restoreHits(playerA);
+			restoreHits(playerB);
+			playerA.setInstanceId(0);
+			playerB.setInstanceId(0);
+			playerA.teleportFromVoidArena(slot.startAX, slot.startAY, true);
+			playerB.teleportFromVoidArena(slot.startBX, slot.startBY, true);
+			sendArenaControl(playerA, "countdown|5");
+			sendArenaControl(playerB, "countdown|5");
+			playerA.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerB.getUsername() + ".");
+			playerB.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerA.getUsername() + ".");
+			playerA.message("Rules: " + rules.summary() + ".");
+			playerB.message("Rules: " + rules.summary() + ".");
+			playerA.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
+			playerB.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
+			scheduleMatchTimeout(match);
+			return true;
+		} catch (RuntimeException e) {
+			LOGGER.error("Void Arena match {} failed after its durable admission", match.sessionId, e);
+			resolveNeutralMatch(match, VoidArenaRankedPolicy.ResultType.SERVER_RESTART_NO_CONTEST,
+				"server setup failed - no contest.");
+			return false;
 		}
-		restoreHits(playerA);
-		restoreHits(playerB);
-		playerA.setInstanceId(0);
-		playerB.setInstanceId(0);
-		playerA.teleportFromVoidArena(slot.startAX, slot.startAY, true);
-		playerB.teleportFromVoidArena(slot.startBX, slot.startBY, true);
-		sendArenaControl(playerA, "countdown|5");
-		sendArenaControl(playerB, "countdown|5");
-		playerA.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerB.getUsername() + ".");
-		playerB.message("@red@" + rules.title() + " begins in 5 seconds. Defeat " + playerA.getUsername() + ".");
-		playerA.message("Rules: " + rules.summary() + ".");
-		playerB.message("Rules: " + rules.summary() + ".");
-		playerA.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
-		playerB.message(rules.title() + " ends after " + rules.timeoutMinutes() + " minutes if nobody wins.");
-		scheduleMatchTimeout(match);
 	}
 
 	private void scheduleMatchTimeout(final Match match) {
-		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, match.rules.timeoutMs(),
+		int delay = (int) Math.max(1L,
+			match.startsAt + match.rules.timeoutMs() - System.currentTimeMillis());
+		world.getServer().getGameEventHandler().add(new SingleEvent(world, null, delay,
 			"Void Arena Match Timeout", DuplicationStrategy.ALLOW_MULTIPLE) {
 			public void action() {
 				expireTimedMatch(match);
@@ -1438,22 +2213,14 @@ public final class VoidArena {
 			|| activeMatches.get(match.playerBHash) != match) {
 			return;
 		}
-
-		activeMatches.remove(match.playerAHash);
-		activeMatches.remove(match.playerBHash);
-		Player playerA = world.getPlayer(match.playerAHash);
-		Player playerB = world.getPlayer(match.playerBHash);
-		returnExpiredPlayer(playerA, match.rules);
-		returnExpiredPlayer(playerB, match.rules);
-	}
-
-	private void returnExpiredPlayer(Player player, MatchRules rules) {
-		if (player == null) {
+		Player disconnected = match.disconnectedPlayer();
+		if (disconnected != null) {
+			resolveMatch(match, match.opponent(disconnected), disconnected,
+				VoidArenaRankedPolicy.ResultType.FORFEIT);
 			return;
 		}
-		returnToLobby(player);
-		player.playerServerMessage(MessageType.QUEST,
-			"@mag@" + rules.title() + " ended: @whi@time limit reached.");
+		resolveNeutralMatch(match, VoidArenaRankedPolicy.ResultType.TIMEOUT_DRAW,
+			"time limit reached; the match is a draw.");
 	}
 
 	private boolean hasAvailableSlot() {
@@ -1480,78 +2247,345 @@ public final class VoidArena {
 		return -1;
 	}
 
-	private void resolveMatch(Match match, Player winner, Player loser, boolean disconnectLoss) {
-		activeMatches.remove(match.playerAHash);
-		activeMatches.remove(match.playerBHash);
+	private void purgeCageGroundItems(int slotIndex) {
+		VoidArenaConfig.ArenaSlot slot = VoidArenaConfig.arenaSlot(slotIndex);
+		for (GroundItem item : world.getRegionManager().getGroundItemsInBounds(
+			slot.minX, slot.minY, slot.maxX, slot.maxY, 0)) {
+			if (item.getLoc() == null && !item.isRemoved()) {
+				world.unregisterItem(item);
+			}
+		}
+	}
+
+	private void purgeCageGroundItemsBestEffort(int slotIndex, String context) {
+		try {
+			purgeCageGroundItems(slotIndex);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to purge Void Arena cage {} during {}",
+				slotIndex, context, e);
+		}
+	}
+
+	private synchronized void resolveMatch(Match match, Player winner, Player loser,
+						  VoidArenaRankedPolicy.ResultType resultType) {
+		if (match == null) {
+			return;
+		}
+		MatchTerminalClaim claim = match.claimTerminal(winner, loser, resultType);
+		if (claim == null) {
+			return;
+		}
+		resolveClaimedMatch(match, claim.winner, claim.loser, claim.resultType);
+	}
+
+	private void resolveClaimedMatch(Match match, Player winner, Player loser,
+		VoidArenaRankedPolicy.ResultType resultType) {
 		if (winner == null || loser == null) {
+			VoidArenaSettlementStatus settlement = VoidArenaSettlementStatus.SETTLED;
+			if (match.rules.ranked) {
+				settlement = beginNeutralRankedSettlement(match,
+					VoidArenaRankedPolicy.ResultType.SERVER_RESTART_NO_CONTEST);
+			} else {
+				releaseMatchLock(match);
+			}
+			purgeCageGroundItemsBestEffort(match.slotIndex, "missing-participant settlement");
+			returnNeutralPlayer(winner, match.rules, "participant unavailable - no contest.", settlement);
+			returnNeutralPlayer(loser, match.rules, "participant unavailable - no contest.", settlement);
 			return;
 		}
 
 		if (!match.rules.ranked) {
+			purgeCageGroundItemsBestEffort(match.slotIndex, "unranked terminal settlement");
+			releaseMatchLock(match);
 			returnToLobby(winner);
 			finishArenaSession(loser, false);
-			winner.playerServerMessage(MessageType.QUEST,
-				"@mag@Unranked Death Match win: @whi@You defeated " + loser.getUsername() + ".");
-			loser.playerServerMessage(MessageType.QUEST,
-				"@mag@Unranked Death Match loss: @whi@" + winner.getUsername() + " defeated you.");
-			if (disconnectLoss) {
-				winner.message(loser.getUsername() + " forfeited by leaving the Death Match.");
+			runArenaTerminalActionBestEffort(winner, "send unranked victory result", () ->
+				winner.playerServerMessage(MessageType.QUEST,
+					"@mag@Unranked Death Match win: @whi@You defeated " + loser.getUsername() + "."));
+			runArenaTerminalActionBestEffort(loser, "send unranked loss result", () ->
+				loser.playerServerMessage(MessageType.QUEST,
+					"@mag@Unranked Death Match loss: @whi@" + winner.getUsername() + " defeated you."));
+			if (resultType == VoidArenaRankedPolicy.ResultType.FORFEIT) {
+				runArenaTerminalActionBestEffort(winner, "send unranked forfeit result", () ->
+					winner.message(loser.getUsername() + " forfeited by leaving the Death Match."));
 			}
 			return;
 		}
 
-		VoidArenaStats winnerStats = getStats(winner);
-		VoidArenaStats loserStats = getStats(loser);
-		int oldWinnerRating = winnerStats.rating;
-		int oldLoserRating = loserStats.rating;
-		int delta = winnerDelta(oldWinnerRating, oldLoserRating);
+		try {
+			VoidArenaStats statsA = copyStats(match.rankedAdmission.playerAStats);
+			VoidArenaStats statsB = copyStats(match.rankedAdmission.playerBStats);
+			boolean winnerIsA = winner.getDatabaseID() == match.rankedAdmission.playerA.getDatabaseID();
+			VoidArenaStats winnerStats = winnerIsA ? statsA : statsB;
+			VoidArenaStats loserStats = winnerIsA ? statsB : statsA;
+			int oldWinnerRating = winnerStats.rating;
+			int oldLoserRating = loserStats.rating;
+			int delta = VoidArenaRankedPolicy.ratingTransfer(oldWinnerRating, oldLoserRating);
 
-		winnerStats.rating = oldWinnerRating + delta;
-		winnerStats.wins++;
-		winnerStats.updatedAt = System.currentTimeMillis();
-		loserStats.rating = Math.max(1, oldLoserRating - delta);
-		loserStats.losses++;
-		if (disconnectLoss) {
-			loserStats.disconnectLosses++;
+			winnerStats.rating = oldWinnerRating + delta;
+			winnerStats.wins++;
+			loserStats.rating = oldLoserRating - delta;
+			loserStats.losses++;
+			if (resultType == VoidArenaRankedPolicy.ResultType.FORFEIT) {
+				loserStats.disconnectLosses++;
+			}
+			long candidateEndedAt = resultType == VoidArenaRankedPolicy.ResultType.FORFEIT
+				&& match.disconnectedAtMs() > 0L
+				? match.disconnectedAtMs() : System.currentTimeMillis();
+			long endedAt = Math.max(match.createdAt, candidateEndedAt);
+			loserStats.updatedAt = endedAt;
+			winnerStats.updatedAt = endedAt;
+			VoidArenaMatchSessionRecord settledRecord = match.settledSessionRecord(resultType,
+				winner.getDatabaseID(), loser.getDatabaseID(), statsA.rating, statsB.rating,
+				statsA.rating - match.activeSessionRecord().playerARatingBefore, true, endedAt);
+			match.setPendingSettlement(PendingRankedSettlement.decisive(settledRecord,
+				statsA, statsB, resultType, winner.getUsernameHash(), loser.getUsernameHash(),
+				winnerIsA, delta, oldWinnerRating, oldLoserRating));
+		} catch (RuntimeException e) {
+			LOGGER.fatal("Unable to prepare terminal ranked settlement {}; recording no contest",
+				match.sessionId, e);
+			VoidArenaSettlementStatus neutralSettlement = beginNeutralRankedSettlement(match,
+				VoidArenaRankedPolicy.ResultType.SERVER_RESTART_NO_CONTEST);
+			purgeCageGroundItemsBestEffort(match.slotIndex,
+				"ranked terminal-preparation failure");
+			returnNeutralPlayer(winner, match.rules,
+				"result preparation failed - no contest.", neutralSettlement);
+			returnNeutralPlayer(loser, match.rules,
+				"result preparation failed - no contest.", neutralSettlement);
+			return;
 		}
-		loserStats.updatedAt = System.currentTimeMillis();
-		saveStats(winnerStats);
-		saveStats(loserStats);
-		recordRankedMatch(match, winner, loser, oldWinnerRating, winnerStats.rating,
-			oldLoserRating, loserStats.rating, delta, disconnectLoss);
+		VoidArenaSettlementStatus settlement = attemptRankedSettlement(match);
+		purgeCageGroundItemsBestEffort(match.slotIndex, "ranked terminal settlement");
 
 		returnToLobby(winner);
 		finishArenaSession(loser, false);
-		sendResultMessage(winner, true, delta, oldWinnerRating, winnerStats);
-		sendResultMessage(loser, false, delta, oldLoserRating, loserStats);
-		if (disconnectLoss) {
-			winner.message(loser.getUsername() + " forfeited by leaving the ranked Death Match.");
+		if (settlement == VoidArenaSettlementStatus.DATABASE_ERROR) {
+			String pending = "The ranked result is still being finalized; neither fighter can start another arena match until it is durable.";
+			runArenaTerminalActionBestEffort(winner, "send pending ranked-result notice", () ->
+				winner.message(pending));
+			runArenaTerminalActionBestEffort(loser, "send pending ranked-result notice", () ->
+				loser.message(pending));
+			return;
 		}
-		broadcastLobbyRating(winner);
-		broadcastLobbyRating(loser);
 	}
 
-	private void recordRankedMatch(Match match, Player winner, Player loser,
-								   int oldWinnerRating, int newWinnerRating,
-								   int oldLoserRating, int newLoserRating,
-								   int delta, boolean disconnectLoss) {
-		VoidArenaMatchRecord record = new VoidArenaMatchRecord();
-		record.seasonId = VoidArenaConfig.CURRENT_SEASON;
-		record.winnerId = winner.getDatabaseID();
-		record.loserId = loser.getDatabaseID();
-		record.winnerRatingBefore = oldWinnerRating;
-		record.winnerRatingAfter = newWinnerRating;
-		record.loserRatingBefore = oldLoserRating;
-		record.loserRatingAfter = newLoserRating;
-		record.ratingDelta = delta;
-		record.disconnectLoss = disconnectLoss;
-		record.slotIndex = match.slotIndex;
-		record.startedAt = match.createdAt;
-		record.endedAt = System.currentTimeMillis();
+	private synchronized void resolveNeutralMatch(Match match,
+		VoidArenaRankedPolicy.ResultType resultType, String message) {
+		if (match == null) {
+			return;
+		}
+		MatchTerminalClaim claim = match.claimTerminal(null, null, resultType);
+		if (claim == null) {
+			return;
+		}
+		if (claim.resultType == VoidArenaRankedPolicy.ResultType.FORFEIT) {
+			resolveClaimedMatch(match, claim.winner, claim.loser, claim.resultType);
+			return;
+		}
+		VoidArenaSettlementStatus settlement;
+		if (match.rules.ranked) {
+			settlement = beginNeutralRankedSettlement(match, claim.resultType);
+		} else {
+			releaseMatchLock(match);
+			settlement = VoidArenaSettlementStatus.SETTLED;
+		}
+		purgeCageGroundItemsBestEffort(match.slotIndex, "neutral terminal settlement");
+		Player playerA = world.getPlayer(match.playerAHash);
+		Player playerB = world.getPlayer(match.playerBHash);
+		returnNeutralPlayer(playerA, match.rules, message, settlement);
+		returnNeutralPlayer(playerB, match.rules, message, settlement);
+	}
+
+	private VoidArenaSettlementStatus beginNeutralRankedSettlement(Match match,
+												  VoidArenaRankedPolicy.ResultType resultType) {
+		long endedAt = Math.max(match.createdAt, System.currentTimeMillis());
+		VoidArenaMatchSessionRecord active = match.activeSessionRecord();
+		VoidArenaMatchSessionRecord record = match.settledSessionRecord(resultType, null, null,
+			active.playerARatingBefore, active.playerBRatingBefore, 0, false, endedAt);
+		match.setPendingSettlement(PendingRankedSettlement.neutral(record, resultType));
+		return attemptRankedSettlement(match);
+	}
+
+	private synchronized VoidArenaSettlementStatus attemptRankedSettlement(Match match) {
+		PendingRankedSettlement pending = match == null ? null : match.pendingSettlement();
+		if (pending == null) {
+			return VoidArenaSettlementStatus.DATABASE_ERROR;
+		}
+		if (pending.isComplete()) {
+			return VoidArenaSettlementStatus.NOT_ACTIVE;
+		}
+
+		final VoidArenaSettlementStatus settlement;
 		try {
-			world.getServer().getDatabase().queryAddVoidArenaMatchRecord(record);
-		} catch (GameDatabaseException e) {
-			LOGGER.error("Unable to record Void Arena ranked match {} vs {}", winner.getUsername(), loser.getUsername(), e);
+			settlement = world.getServer().getDatabase()
+				.settleVoidArenaMatch(pending.record, pending.statsA, pending.statsB);
+		} catch (RuntimeException e) {
+			LOGGER.error("Unexpected failure settling ranked match {}",
+				pending.record.matchId, e);
+			pending.markDatabaseError();
+			scheduleRankedSettlementRetry(match, pending);
+			return VoidArenaSettlementStatus.DATABASE_ERROR;
+		}
+		VoidArenaStats durableStatsA = pending.statsA;
+		VoidArenaStats durableStatsB = pending.statsB;
+		if (settlement == VoidArenaSettlementStatus.NOT_ACTIVE) {
+			try {
+				VoidArenaMatchSessionRecord durable = world.getServer().getDatabase()
+					.queryVoidArenaMatchSession(pending.record.matchId);
+				if (!sameTerminalSettlement(pending.record, durable)) {
+					LOGGER.fatal("Ranked settlement {} conflicts with its durable terminal row",
+						pending.record.matchId);
+					pending.markDatabaseError();
+					scheduleRankedSettlementRetry(match, pending);
+					return VoidArenaSettlementStatus.DATABASE_ERROR;
+				}
+				if (pending.record.isDecisive()) {
+					durableStatsA = world.getServer().getDatabase().queryLoadVoidArenaStats(
+						pending.record.playerAId, pending.record.seasonId);
+					durableStatsB = world.getServer().getDatabase().queryLoadVoidArenaStats(
+						pending.record.playerBId, pending.record.seasonId);
+					if (durableStatsA == null || durableStatsB == null) {
+						throw new GameDatabaseException(VoidArena.class,
+							"Durable ranked settlement is missing participant stats");
+					}
+				}
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to confirm already-terminal ranked settlement {}",
+					pending.record.matchId, e);
+				pending.markDatabaseError();
+				scheduleRankedSettlementRetry(match, pending);
+				return VoidArenaSettlementStatus.DATABASE_ERROR;
+			}
+		}
+
+		if (settlement == VoidArenaSettlementStatus.DATABASE_ERROR) {
+			pending.markDatabaseError();
+			scheduleRankedSettlementRetry(match, pending);
+			return settlement;
+		}
+		if (!pending.markComplete()) {
+			return settlement;
+		}
+
+		releaseMatchLock(match);
+		if (pending.record.isDecisive()) {
+			final VoidArenaStats settledStatsA = durableStatsA;
+			final VoidArenaStats settledStatsB = durableStatsB;
+			runArenaTerminalActionBestEffort(match.playerA, "cache ranked result", () ->
+				cacheStats(settledStatsA));
+			runArenaTerminalActionBestEffort(match.playerB, "cache ranked result", () ->
+				cacheStats(settledStatsB));
+			notifyDecisiveRankedSettlement(pending, durableStatsA, durableStatsB);
+		} else if (pending.hadDatabaseError()) {
+			notifyNeutralRankedSettlementFinalized(match);
+		}
+		return settlement;
+	}
+
+	private void scheduleRankedSettlementRetry(final Match match,
+											  final PendingRankedSettlement pending) {
+		int delay = pending.reserveRetryDelay();
+		if (delay < 0) {
+			return;
+		}
+		try {
+			world.getServer().getGameEventHandler().add(new SingleEvent(world, null, delay,
+				"Void Arena Ranked Settlement Retry", DuplicationStrategy.ALLOW_MULTIPLE) {
+				@Override
+				public void action() {
+					pending.retryStarted();
+					attemptRankedSettlement(match);
+				}
+			});
+		} catch (RuntimeException e) {
+			pending.retryStarted();
+			LOGGER.fatal("Unable to schedule ranked settlement retry {}",
+				pending.record.matchId, e);
+		}
+	}
+
+	private boolean sameTerminalSettlement(VoidArenaMatchSessionRecord expected,
+											 VoidArenaMatchSessionRecord durable) {
+		return durable != null
+			&& VoidArenaMatchSessionRecord.STATUS_SETTLED.equals(durable.status)
+			&& Objects.equals(expected.matchId, durable.matchId)
+			&& Objects.equals(expected.seasonId, durable.seasonId)
+			&& Objects.equals(expected.resultReason, durable.resultReason)
+			&& expected.playerAId == durable.playerAId
+			&& expected.playerBId == durable.playerBId
+			&& Objects.equals(expected.winnerId, durable.winnerId)
+			&& Objects.equals(expected.loserId, durable.loserId)
+			&& expected.playerARatingBefore == durable.playerARatingBefore
+			&& Objects.equals(expected.playerARatingAfter, durable.playerARatingAfter)
+			&& expected.playerBRatingBefore == durable.playerBRatingBefore
+			&& Objects.equals(expected.playerBRatingAfter, durable.playerBRatingAfter)
+			&& expected.ratingDelta == durable.ratingDelta
+			&& expected.ratingApplied == durable.ratingApplied
+			&& expected.sameIp == durable.sameIp
+			&& expected.sameIpLocalExempt == durable.sameIpLocalExempt
+			&& expected.priorRatedResults30m == durable.priorRatedResults30m
+			&& expected.priorDecisiveResultsDay == durable.priorDecisiveResultsDay
+			&& expected.slotIndex == durable.slotIndex
+			&& expected.startedAtMs == durable.startedAtMs
+			&& Objects.equals(expected.endedAtMs, durable.endedAtMs);
+	}
+
+	private void notifyDecisiveRankedSettlement(PendingRankedSettlement pending,
+											   VoidArenaStats statsA, VoidArenaStats statsB) {
+		Player winner = world.getPlayer(pending.winnerHash);
+		Player loser = world.getPlayer(pending.loserHash);
+		VoidArenaStats winnerStats = pending.winnerIsA ? statsA : statsB;
+		VoidArenaStats loserStats = pending.winnerIsA ? statsB : statsA;
+		if (winner != null && winner.loggedIn()) {
+			runArenaTerminalActionBestEffort(winner, "send ranked victory result", () ->
+				sendResultMessage(winner, true, pending.delta, pending.oldWinnerRating, winnerStats));
+			if (pending.resultType == VoidArenaRankedPolicy.ResultType.FORFEIT) {
+				runArenaTerminalActionBestEffort(winner, "send ranked forfeit result", () -> {
+					String loserName = loser == null ? "Your opponent" : loser.getUsername();
+					winner.message(loserName + " forfeited by leaving the ranked Death Match.");
+				});
+			}
+			runArenaTerminalActionBestEffort(winner, "broadcast ranked victory rating", () ->
+				broadcastLobbyRating(winner));
+		}
+		if (loser != null && loser.loggedIn()) {
+			runArenaTerminalActionBestEffort(loser, "send ranked loss result", () ->
+				sendResultMessage(loser, false, pending.delta, pending.oldLoserRating, loserStats));
+			runArenaTerminalActionBestEffort(loser, "broadcast ranked loss rating", () ->
+				broadcastLobbyRating(loser));
+		}
+	}
+
+	private void notifyNeutralRankedSettlementFinalized(Match match) {
+		Player playerA = world.getPlayer(match.playerAHash);
+		Player playerB = world.getPlayer(match.playerBHash);
+		if (playerA != null && playerA.loggedIn()) {
+			runArenaTerminalActionBestEffort(playerA, "send finalized neutral-result notice", () ->
+				playerA.message("Your ranked neutral result is now durable; arena admission is unlocked."));
+		}
+		if (playerB != null && playerB.loggedIn()) {
+			runArenaTerminalActionBestEffort(playerB, "send finalized neutral-result notice", () ->
+				playerB.message("Your ranked neutral result is now durable; arena admission is unlocked."));
+		}
+	}
+
+	private void releaseMatchLock(Match match) {
+		activeMatches.remove(match.playerAHash, match);
+		activeMatches.remove(match.playerBHash, match);
+	}
+
+	private void returnNeutralPlayer(Player player, MatchRules rules, String message,
+									 VoidArenaSettlementStatus settlement) {
+		if (player == null) {
+			return;
+		}
+		returnToLobby(player);
+		runArenaTerminalActionBestEffort(player, "send neutral arena result", () ->
+			player.playerServerMessage(MessageType.QUEST,
+				"@mag@" + rules.title() + " ended: @whi@" + message));
+		if (rules.ranked && settlement == VoidArenaSettlementStatus.DATABASE_ERROR) {
+			runArenaTerminalActionBestEffort(player, "send pending neutral-result notice", () ->
+				player.message("The neutral result is still being finalized; arena admission is locked until it is durable."));
 		}
 	}
 
@@ -1569,12 +2603,6 @@ public final class VoidArena {
 				+ "@whi@ ranked matches.");
 	}
 
-	private int winnerDelta(int winnerRating, int loserRating) {
-		double expected = 1.0D / (1.0D + Math.pow(10.0D,
-			(loserRating - winnerRating) / (double) VoidArenaConfig.ELO_DIVISOR));
-		return Math.max(1, (int) Math.round(VoidArenaConfig.ELO_K_FACTOR * (1.0D - expected)));
-	}
-
 	private void returnToLobby(Player player) {
 		finishArenaSession(player, true);
 	}
@@ -1583,16 +2611,47 @@ public final class VoidArena {
 		if (player == null) {
 			return;
 		}
-		sendArenaControl(player, "close");
-		player.resetAll();
-		player.setInstanceId(0);
+		sendArenaControlBestEffort(player, "close", "match session finish");
+		runArenaTerminalActionBestEffort(player, "reset arena combat state", player::resetAll);
+		runArenaTerminalActionBestEffort(player, "clear arena instance", () ->
+			player.setInstanceId(0));
 		if (moveToLobby) {
-			player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+			try {
+				player.teleportFromVoidArena(VoidArenaConfig.LOBBY_X, VoidArenaConfig.LOBBY_Y, true);
+			} catch (RuntimeException e) {
+				LOGGER.error("Unable to return {} to the Void Arena lobby at match end",
+					player.getUsername(), e);
+				try {
+					player.setInstanceId(0);
+					player.setLocation(VoidArenaConfig.lobbyTile(), true);
+				} catch (RuntimeException fallbackError) {
+					LOGGER.error("Unable to apply fallback Void Arena lobby relocation for {}",
+						player.getUsername(), fallbackError);
+				}
+			}
+			runArenaTerminalActionBestEffort(player, "confirm cleared arena instance", () ->
+				player.setInstanceId(0));
 		}
-		restoreHits(player);
-		ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers());
-		ActionSender.sendInventory(player);
-		ActionSender.sendEquipmentStats(player);
+		runArenaTerminalActionBestEffort(player, "restore arena hitpoints", () ->
+			restoreHits(player));
+		runArenaTerminalActionBestEffort(player, "send restored arena prayers", () ->
+			ActionSender.sendPrayers(player, player.getPrayers().getActivePrayers()));
+		runArenaTerminalActionBestEffort(player, "send restored arena inventory", () ->
+			ActionSender.sendInventory(player));
+		runArenaTerminalActionBestEffort(player, "send restored arena equipment", () ->
+			ActionSender.sendEquipmentStats(player));
+	}
+
+	private void runArenaTerminalActionBestEffort(Player player, String action, Runnable terminalAction) {
+		if (player == null || terminalAction == null) {
+			return;
+		}
+		try {
+			terminalAction.run();
+		} catch (RuntimeException e) {
+			LOGGER.error("Unable to {} for {} while finishing a Void Arena match",
+				action, player.getUsername(), e);
+		}
 	}
 
 	private void restoreHits(Player player) {
@@ -1603,51 +2662,70 @@ public final class VoidArena {
 	}
 
 	private VoidArenaStats getStats(int playerId, String username) {
-		VoidArenaStats cached = statsCache.get(playerId);
+		return getStats(playerId, username, VoidArenaConfig.currentSeasonId());
+	}
+
+	private VoidArenaStats getStats(int playerId, String username, String seasonId) {
+		String cacheKey = statsCacheKey(seasonId, playerId);
+		VoidArenaStats cached = statsCache.get(cacheKey);
 		if (cached != null) {
 			return cached;
 		}
 		try {
 			VoidArenaStats stats = world.getServer().getDatabase()
-				.queryLoadVoidArenaStats(playerId, VoidArenaConfig.CURRENT_SEASON);
+				.queryLoadVoidArenaStats(playerId, seasonId);
 			if (stats == null) {
-				stats = defaultStats(playerId, username);
+				stats = defaultStats(playerId, username, seasonId);
 			}
 			if (stats.username == null || stats.username.isEmpty()) {
 				stats.username = username;
 			}
-			statsCache.put(playerId, stats);
+			statsCache.put(cacheKey, stats);
 			return stats;
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to load Void Arena stats for player {}", playerId, e);
-			VoidArenaStats fallback = defaultStats(playerId, username);
-			statsCache.put(playerId, fallback);
+			VoidArenaStats fallback = defaultStats(playerId, username, seasonId);
+			statsCache.put(cacheKey, fallback);
 			return fallback;
 		}
 	}
 
-	private VoidArenaStats defaultStats(int playerId, String username) {
+	private String statsCacheKey(String seasonId, int playerId) {
+		return seasonId + ':' + playerId;
+	}
+
+	private VoidArenaStats defaultStats(int playerId, String username, String seasonId) {
 		VoidArenaStats stats = new VoidArenaStats();
-		stats.seasonId = VoidArenaConfig.CURRENT_SEASON;
+		stats.seasonId = seasonId;
 		stats.playerId = playerId;
 		stats.username = username;
 		stats.rating = VoidArenaConfig.STARTING_RATING;
 		return stats;
 	}
 
-	private void saveStats(VoidArenaStats stats) {
-		try {
-			world.getServer().getDatabase().querySaveVoidArenaStats(stats);
-			statsCache.put(stats.playerId, stats);
-		} catch (GameDatabaseException e) {
-			LOGGER.error("Unable to save Void Arena stats for player {}", stats.playerId, e);
-		}
+	private VoidArenaStats copyStats(VoidArenaStats source) {
+		VoidArenaStats copy = new VoidArenaStats();
+		copy.seasonId = source.seasonId;
+		copy.playerId = source.playerId;
+		copy.username = source.username;
+		copy.rating = source.rating;
+		copy.wins = source.wins;
+		copy.losses = source.losses;
+		copy.disconnectLosses = source.disconnectLosses;
+		copy.resetCount = source.resetCount;
+		copy.updatedAt = source.updatedAt;
+		return copy;
+	}
+
+	private void cacheStats(VoidArenaStats stats) {
+		statsCache.put(statsCacheKey(stats.seasonId, stats.playerId), stats);
 	}
 
 	public void sendLeaderboard(Player player) {
 		try {
 			VoidArenaStats[] top = world.getServer().getDatabase()
-				.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 50);
+				.queryTopVoidArenaStats(VoidArenaConfig.currentSeasonId(),
+					VoidArenaConfig.RATING_VISIBLE_MATCHES, 50);
 			StringBuilder box = new StringBuilder("@yel@Void Arena Leaderboard:%");
 			appendCurrentChampion(box);
 			box.append("@yel@Top 5:%");
@@ -1677,12 +2755,11 @@ public final class VoidArena {
 	}
 
 	private void handleSeasonCommand(Player player, String[] args) {
-		if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
-			sendSeasonResetPreview(player);
-			return;
-		}
-		if (args.length >= 2 && (args[1].equalsIgnoreCase("confirm") || args[1].equalsIgnoreCase("finalize"))) {
-			confirmSeasonReset(player, args);
+		if (args.length >= 2 && (args[1].equalsIgnoreCase("reset")
+			|| args[1].equalsIgnoreCase("confirm") || args[1].equalsIgnoreCase("finalize"))) {
+			if (requireArenaAdmin(player)) {
+				player.message("Void Arena seasons roll automatically at 00:00 UTC on the first of each month.");
+			}
 			return;
 		}
 		sendSeasonPreview(player);
@@ -1694,23 +2771,24 @@ public final class VoidArena {
 		}
 		try {
 			int rankedProfiles = world.getServer().getDatabase()
-				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaStats(VoidArenaConfig.currentSeasonId());
 			int rankedMatches = world.getServer().getDatabase()
-				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaMatchSessions(VoidArenaConfig.currentSeasonId());
 			VoidArenaStats[] top = world.getServer().getDatabase()
-				.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 10);
-			VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
-				.queryRecentVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON, 5);
+				.queryTopVoidArenaStats(VoidArenaConfig.currentSeasonId(),
+					VoidArenaConfig.RATING_VISIBLE_MATCHES, 10);
+			VoidArenaMatchSessionRecord[] recent = world.getServer().getDatabase()
+				.queryRecentVoidArenaMatchSessions(VoidArenaConfig.currentSeasonId(), 5);
 			StringBuilder box = new StringBuilder("@yel@Void Arena Season Preview:%");
-			box.append("@whi@Season: @cya@").append(VoidArenaConfig.CURRENT_SEASON)
+			box.append("@whi@Season: @cya@").append(VoidArenaConfig.currentSeasonId())
 				.append("@whi@, ranked profiles: @yel@").append(rankedProfiles)
 				.append("@whi@, ledger rows: @yel@").append(rankedMatches).append("%");
 			appendCurrentChampion(box);
 			box.append("@yel@Top ratings:%");
 			appendTopRatings(box, top, 5);
 			box.append("@yel@Recent ranked matches:%");
-			appendMatchRows(box, recent);
-			box.append("@whi@Run @cya@::arena season reset@whi@ for a destructive reset preview.%");
+			appendSessionRows(box, recent);
+			box.append("@whi@The next season begins automatically at 00:00 UTC on the first of the month.%");
 			ActionSender.sendBox(player, box.toString(), true);
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to load Void Arena season preview", e);
@@ -1724,11 +2802,12 @@ public final class VoidArena {
 		}
 		try {
 			int rankedProfiles = world.getServer().getDatabase()
-				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaStats(VoidArenaConfig.currentSeasonId());
 			int rankedMatches = world.getServer().getDatabase()
-				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaMatchRecords(VoidArenaConfig.currentSeasonId());
 			VoidArenaStats[] top = world.getServer().getDatabase()
-				.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 10);
+				.queryTopVoidArenaStats(VoidArenaConfig.currentSeasonId(),
+					VoidArenaConfig.RATING_VISIBLE_MATCHES, 10);
 			VoidArenaStats champion = findSeasonChampionCandidate();
 			String token = Integer.toString(ThreadLocalRandom.current().nextInt(100000, 1000000));
 			pendingSeasonResets.put(player.getUsernameHash(),
@@ -1789,9 +2868,9 @@ public final class VoidArena {
 		}
 		try {
 			int rankedProfiles = world.getServer().getDatabase()
-				.queryCountVoidArenaStats(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaStats(VoidArenaConfig.currentSeasonId());
 			int rankedMatches = world.getServer().getDatabase()
-				.queryCountVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON);
+				.queryCountVoidArenaMatchRecords(VoidArenaConfig.currentSeasonId());
 			VoidArenaStats champion = findSeasonChampionCandidate();
 			if (rankedProfiles != pending.rankedProfiles || rankedMatches != pending.rankedMatches) {
 				pendingSeasonResets.remove(player.getUsernameHash());
@@ -1804,21 +2883,21 @@ public final class VoidArena {
 				return;
 			}
 			int affected = world.getServer().getDatabase().queryResetVoidArenaStats(
-				VoidArenaConfig.CURRENT_SEASON, VoidArenaConfig.STARTING_RATING, System.currentTimeMillis());
-			boolean championAwarded = awardSeasonChampion(champion);
+				VoidArenaConfig.currentSeasonId(), VoidArenaConfig.STARTING_RATING, System.currentTimeMillis());
+			boolean championRecorded = recordSeasonChampion(champion);
 			pendingSeasonResets.remove(player.getUsernameHash());
 			statsCache.clear();
 			refreshLobbyRatingDisplays();
 			LOGGER.warn("{} reset Void Arena ranked stats for season {} ({} profiles, {} ledger rows retained, champion: {})",
-				player.getUsername(), VoidArenaConfig.CURRENT_SEASON, affected, rankedMatches,
-				championAwarded ? playerName(champion.username, champion.playerId) : "none");
+				player.getUsername(), VoidArenaConfig.currentSeasonId(), affected, rankedMatches,
+				championRecorded ? playerName(champion.username, champion.playerId) : "none");
 			player.playerServerMessage(MessageType.QUEST,
 				"@mag@Void Arena ranked reset complete: @whi@" + affected
 					+ " profiles reset. The ranked match ledger was retained.");
-			if (championAwarded) {
+			if (championRecorded) {
 				player.playerServerMessage(MessageType.QUEST,
 					"@mag@Season champion: @whi@" + playerName(champion.username, champion.playerId)
-						+ " earned the @yel@" + PlayerTitle.VOID_ARENA_CHAMPION.displayName() + "@whi@ title.");
+						+ " was recorded for the completed season.");
 			}
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to reset Void Arena ranked stats", e);
@@ -1827,8 +2906,12 @@ public final class VoidArena {
 	}
 
 	private VoidArenaStats findSeasonChampionCandidate() throws GameDatabaseException {
+		return findSeasonChampionCandidate(VoidArenaConfig.currentSeasonId());
+	}
+
+	private VoidArenaStats findSeasonChampionCandidate(String seasonId) throws GameDatabaseException {
 		VoidArenaStats[] top = world.getServer().getDatabase()
-			.queryTopVoidArenaStats(VoidArenaConfig.CURRENT_SEASON, 100);
+			.queryTopVoidArenaStats(seasonId, VoidArenaConfig.RATING_VISIBLE_MATCHES, 100);
 		for (VoidArenaStats stats : top) {
 			if (isRatingVisible(stats)) {
 				return stats;
@@ -1847,14 +2930,18 @@ public final class VoidArena {
 			&& pending.championMatches == matchCount(champion);
 	}
 
-	private boolean awardSeasonChampion(VoidArenaStats champion) throws GameDatabaseException {
+	private boolean recordSeasonChampion(VoidArenaStats champion) throws GameDatabaseException {
 		if (champion == null) {
 			return false;
 		}
-		world.getServer().getDatabase().querySaveGlobalCacheInt(CURRENT_CHAMPION_PLAYER_CACHE, champion.playerId);
-		world.getServer().getDatabase().querySaveGlobalCacheInt(CURRENT_CHAMPION_RATING_CACHE, champion.rating);
-		world.getServer().getDatabase().querySaveGlobalCacheLong(CURRENT_CHAMPION_AWARDED_AT_CACHE, System.currentTimeMillis());
-		return PlayerTitle.grantContested(world, champion.playerId, PlayerTitle.VOID_ARENA_CHAMPION);
+		String seasonId = VoidArenaConfig.currentSeasonId();
+		world.getServer().getDatabase().querySaveGlobalCacheInt(
+			championPlayerKey(seasonId), champion.playerId);
+		world.getServer().getDatabase().querySaveGlobalCacheInt(
+			championRatingKey(seasonId), champion.rating);
+		world.getServer().getDatabase().querySaveGlobalCacheLong(
+			championAwardedAtKey(seasonId), System.currentTimeMillis());
+		return true;
 	}
 
 	private boolean hasActiveSetupOrMatch() {
@@ -1885,10 +2972,21 @@ public final class VoidArena {
 		int limit = auditLimit(args, 10);
 		try {
 			if (args.length < 2 || args[1].equalsIgnoreCase("recent") || (args.length == 2 && lastArgIsInteger(args))) {
-				VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
-					.queryRecentVoidArenaMatchRecords(VoidArenaConfig.CURRENT_SEASON, limit);
+				VoidArenaMatchSessionRecord[] recent = world.getServer().getDatabase()
+					.queryRecentVoidArenaMatchSessions(VoidArenaConfig.currentSeasonId(), limit);
 				StringBuilder box = new StringBuilder("@yel@Void Arena Ranked Audit:%");
-				box.append("@whi@Recent ranked matches:%");
+				box.append("@whi@Season @cya@").append(VoidArenaConfig.currentSeasonId())
+					.append("@whi@ recent ranked sessions:%");
+				appendSessionRows(box, recent);
+				ActionSender.sendBox(player, box.toString(), true);
+				return;
+			}
+
+			if (args[1].equalsIgnoreCase("legacy")) {
+				VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
+					.queryRecentVoidArenaMatchRecords(VoidArenaConfig.LEGACY_SEASON, limit);
+				StringBuilder box = new StringBuilder("@yel@Void Arena Legacy Audit:%");
+				box.append("@whi@Pre-monthly ranked matches (read-only):%");
 				appendMatchRows(box, recent);
 				ActionSender.sendBox(player, box.toString(), true);
 				return;
@@ -1902,15 +3000,16 @@ public final class VoidArena {
 				return;
 			}
 			VoidArenaStats stats = getStats(playerId, username);
-			VoidArenaMatchRecord[] recent = world.getServer().getDatabase()
-				.queryRecentVoidArenaMatchRecordsForPlayer(VoidArenaConfig.CURRENT_SEASON, playerId, limit);
+			VoidArenaMatchSessionRecord[] recent = world.getServer().getDatabase()
+				.queryRecentVoidArenaMatchSessionsForPlayer(
+					VoidArenaConfig.currentSeasonId(), playerId, limit);
 			StringBuilder box = new StringBuilder("@yel@Void Arena Player Audit:%");
 			box.append("@whi@Player: @mag@").append(username)
 				.append("@whi@ rating @yel@").append(stats.rating)
 				.append("@whi@ (").append(stats.wins).append("-").append(stats.losses)
 				.append(", DC ").append(stats.disconnectLosses).append(")%");
 			box.append("@whi@Recent ranked matches:%");
-			appendMatchRows(box, recent);
+			appendSessionRows(box, recent);
 			ActionSender.sendBox(player, box.toString(), true);
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Unable to load Void Arena ranked audit", e);
@@ -1967,13 +3066,107 @@ public final class VoidArena {
 	}
 
 	private void appendCurrentChampion(StringBuilder box) throws GameDatabaseException {
-		SeasonChampion champion = loadCurrentChampion();
-		if (champion == null) {
-			box.append("@whi@Current champion: @gre@none yet.%");
+		if (!ensurePreviousSeasonChampion()) {
+			box.append("@whi@Previous season champion: @yel@finalizing.%");
 			return;
 		}
-		box.append("@whi@Current champion: @mag@").append(champion.username)
+		SeasonChampion champion = loadCurrentChampion();
+		if (champion == null) {
+			box.append("@whi@Previous season champion: @gre@none.%");
+			return;
+		}
+		box.append("@whi@Previous season champion: @mag@").append(champion.username)
 			.append("@whi@ at @yel@").append(champion.rating).append("@whi@ rating.%");
+	}
+
+	private synchronized boolean ensurePreviousSeasonChampion() throws GameDatabaseException {
+		if (System.currentTimeMillis() < VoidArenaConfig.currentSeasonStartMs()
+			+ MONTHLY_CHAMPION_FINALIZATION_GRACE_MS) {
+			return false;
+		}
+
+		YearMonth previous = YearMonth.parse(VoidArenaConfig.previousSeasonId());
+		Integer lastFinalized = world.getServer().getDatabase()
+			.queryLoadGlobalCacheInt(LAST_FINALIZED_CHAMPION_SEASON_CACHE);
+		YearMonth next = previous;
+		YearMonth parsedLast = parseSeasonNumber(lastFinalized);
+		if (parsedLast != null && parsedLast.isBefore(previous)) {
+			next = parsedLast.plusMonths(1);
+		}
+		while (!next.isAfter(previous)) {
+			if (!finalizeSeasonChampion(next.toString())) {
+				return false;
+			}
+			next = next.plusMonths(1);
+		}
+		return true;
+	}
+
+	private boolean finalizeSeasonChampion(final String seasonId)
+		throws GameDatabaseException {
+		final boolean[] finalized = {false};
+		boolean committed = world.getServer().getDatabase().atomically(() -> {
+			Integer existingPlayer = world.getServer().getDatabase()
+				.queryLoadGlobalCacheInt(championPlayerKey(seasonId));
+			Integer existingRating = world.getServer().getDatabase()
+				.queryLoadGlobalCacheInt(championRatingKey(seasonId));
+			if (existingPlayer == null) {
+				if (world.getServer().getDatabase()
+					.queryCountActiveVoidArenaMatchSessions(seasonId) > 0) {
+					return;
+				}
+				VoidArenaStats champion = findSeasonChampionCandidate(seasonId);
+				existingPlayer = champion == null ? 0 : champion.playerId;
+				existingRating = champion == null ? 0 : champion.rating;
+				world.getServer().getDatabase().querySaveGlobalCacheInt(
+					championPlayerKey(seasonId), existingPlayer);
+				world.getServer().getDatabase().querySaveGlobalCacheInt(
+					championRatingKey(seasonId), existingRating);
+				world.getServer().getDatabase().querySaveGlobalCacheLong(
+					championAwardedAtKey(seasonId), System.currentTimeMillis());
+			}
+			if (existingRating == null) {
+				throw new GameDatabaseException(VoidArena.class,
+					"Season champion cache is missing its rating");
+			}
+			world.getServer().getDatabase().querySaveGlobalCacheInt(
+				LAST_FINALIZED_CHAMPION_SEASON_CACHE, seasonNumber(YearMonth.parse(seasonId)));
+			finalized[0] = true;
+		});
+		if (!committed) {
+			throw new GameDatabaseException(VoidArena.class,
+				"Unable to finalize monthly champion for " + seasonId);
+		}
+		return finalized[0];
+	}
+
+	private YearMonth parseSeasonNumber(Integer seasonNumber) {
+		if (seasonNumber == null) {
+			return null;
+		}
+		int year = seasonNumber / 100;
+		int month = seasonNumber % 100;
+		try {
+			return YearMonth.of(year, month);
+		} catch (RuntimeException ignored) {
+			return null;
+		}
+	}
+
+	private int seasonNumber(YearMonth season) {
+		return season.getYear() * 100 + season.getMonthValue();
+	}
+
+	private String championPlayerKey(String seasonId) {
+		return "void_arena_champ_p_" + seasonId.replace("-", "");
+	}
+
+	private String championRatingKey(String seasonId) {
+		return "void_arena_champ_r_" + seasonId.replace("-", "");
+	}
+
+	private String championAwardedAtKey(String seasonId) {
+		return "void_arena_champ_t_" + seasonId.replace("-", "");
 	}
 
 	private void appendCandidateChampion(StringBuilder box, VoidArenaStats champion) {
@@ -1988,11 +3181,14 @@ public final class VoidArena {
 	}
 
 	private SeasonChampion loadCurrentChampion() throws GameDatabaseException {
-		Integer playerId = world.getServer().getDatabase().queryLoadGlobalCacheInt(CURRENT_CHAMPION_PLAYER_CACHE);
+		String previousSeasonId = VoidArenaConfig.previousSeasonId();
+		Integer playerId = world.getServer().getDatabase()
+			.queryLoadGlobalCacheInt(championPlayerKey(previousSeasonId));
 		if (playerId == null || playerId <= 0) {
 			return null;
 		}
-		Integer rating = world.getServer().getDatabase().queryLoadGlobalCacheInt(CURRENT_CHAMPION_RATING_CACHE);
+		Integer rating = world.getServer().getDatabase()
+			.queryLoadGlobalCacheInt(championRatingKey(previousSeasonId));
 		String username = world.getServer().getDatabase().usernameFromId(playerId);
 		return new SeasonChampion(playerId, username == null ? ("player " + playerId) : username,
 			rating == null ? 0 : rating);
@@ -2018,6 +3214,69 @@ public final class VoidArena {
 		}
 	}
 
+	private void appendSessionRows(StringBuilder box, VoidArenaMatchSessionRecord[] records)
+		throws GameDatabaseException {
+		if (records.length == 0) {
+			box.append("@whi@No ranked sessions recorded yet.%");
+			return;
+		}
+		Map<Integer, String> names = new HashMap<>();
+		for (VoidArenaMatchSessionRecord record : records) {
+			String matchLabel = record.matchId == null ? "?"
+				: record.matchId.substring(0, Math.min(8, record.matchId.length()));
+			String playerA = sessionPlayerName(record.playerAId, names);
+			String playerB = sessionPlayerName(record.playerBId, names);
+			box.append("@whi@#").append(matchLabel).append(" ");
+			if (VoidArenaMatchSessionRecord.STATUS_ACTIVE.equals(record.status)) {
+				box.append("@yel@ACTIVE @mag@").append(playerA).append("@whi@ vs @mag@")
+					.append(playerB).append("%");
+				continue;
+			}
+			if (record.isDecisive() && record.winnerId != null && record.loserId != null) {
+				String winner = sessionPlayerName(record.winnerId, names);
+				String loser = sessionPlayerName(record.loserId, names);
+				box.append("@mag@").append(winner).append("@whi@ defeated @mag@").append(loser)
+					.append("@whi@ @gre@+").append(Math.abs(record.ratingDelta))
+					.append("@whi@ (A ").append(record.playerARatingBefore).append("->")
+					.append(record.playerARatingAfter).append(" / B ")
+					.append(record.playerBRatingBefore).append("->")
+					.append(record.playerBRatingAfter).append(")");
+				if (VoidArenaMatchSessionRecord.REASON_FORFEIT.equals(record.resultReason)) {
+					box.append(" @red@FORFEIT");
+				}
+				box.append("%");
+				continue;
+			}
+			box.append("@mag@").append(playerA).append("@whi@ vs @mag@").append(playerB)
+				.append("@whi@ - @yel@").append(sessionResultLabel(record.resultReason)).append("%");
+		}
+	}
+
+	private String sessionPlayerName(int playerId, Map<Integer, String> names)
+		throws GameDatabaseException {
+		String cached = names.get(playerId);
+		if (cached != null) {
+			return cached;
+		}
+		String username = world.getServer().getDatabase().usernameFromId(playerId);
+		String resolved = playerName(username, playerId);
+		names.put(playerId, resolved);
+		return resolved;
+	}
+
+	private String sessionResultLabel(String reason) {
+		if (VoidArenaMatchSessionRecord.REASON_TIMEOUT_DRAW.equals(reason)) {
+			return "timeout draw";
+		}
+		if (VoidArenaMatchSessionRecord.REASON_SERVER_SHUTDOWN_NO_CONTEST.equals(reason)) {
+			return "server shutdown - no contest";
+		}
+		if (VoidArenaMatchSessionRecord.REASON_SERVER_RESTART_NO_CONTEST.equals(reason)) {
+			return "server restart recovery - no contest";
+		}
+		return reason == null ? "unknown result" : reason.toLowerCase().replace('_', ' ');
+	}
+
 	private String playerName(String username, int playerId) {
 		if (username != null && !username.isEmpty()) {
 			return username;
@@ -2031,10 +3290,9 @@ public final class VoidArena {
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena stats@mag@ - show your rating");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena top@mag@ - show the top ranked fighters");
 		player.playerServerMessage(MessageType.QUEST, "@whi@::arena leave@mag@ - leave the lobby");
-		if (player.isAdmin()) {
-			player.playerServerMessage(MessageType.QUEST, "@whi@::arena season@mag@ - preview current ranked season");
-			player.playerServerMessage(MessageType.QUEST, "@whi@::arena season reset@mag@ - preview/reset ranked profiles");
-			player.playerServerMessage(MessageType.QUEST, "@whi@::arena audit [recent|player]@mag@ - inspect ranked match ledger");
+			if (player.isAdmin()) {
+				player.playerServerMessage(MessageType.QUEST, "@whi@::arena season@mag@ - preview current ranked season");
+				player.playerServerMessage(MessageType.QUEST, "@whi@::arena audit [recent|player|legacy]@mag@ - inspect ranked match ledger");
 		}
 		player.playerServerMessage(MessageType.QUEST,
 			"@whi@Ratings are hidden until " + VoidArenaConfig.RATING_VISIBLE_MATCHES + " ranked matches are complete.");
@@ -2087,6 +3345,43 @@ public final class VoidArena {
 
 		private boolean isExpired() {
 			return System.currentTimeMillis() - createdAt > SEASON_RESET_CONFIRM_MS;
+		}
+	}
+
+	private static final class RankedAdmission {
+		private final VoidArenaRankedPolicy.PairEligibility eligibility;
+		private final String seasonId;
+		private final Player playerA;
+		private final Player playerB;
+		private final VoidArenaStats playerAStats;
+		private final VoidArenaStats playerBStats;
+		private final VoidArenaPairAudit audit;
+
+		private RankedAdmission(VoidArenaRankedPolicy.PairEligibility eligibility, String seasonId,
+								Player playerA, Player playerB, VoidArenaStats playerAStats,
+								VoidArenaStats playerBStats, VoidArenaPairAudit audit) {
+			this.eligibility = eligibility;
+			this.seasonId = seasonId;
+			this.playerA = playerA;
+			this.playerB = playerB;
+			this.playerAStats = playerAStats;
+			this.playerBStats = playerBStats;
+			this.audit = audit;
+		}
+
+		private static RankedAdmission denied(VoidArenaRankedPolicy.PairEligibility eligibility) {
+			return new RankedAdmission(eligibility, null, null, null, null, null, null);
+		}
+
+		private static RankedAdmission allowed(String seasonId, Player playerA, Player playerB,
+										 VoidArenaStats playerAStats, VoidArenaStats playerBStats,
+										 VoidArenaPairAudit audit) {
+			return new RankedAdmission(VoidArenaRankedPolicy.PairEligibility.ELIGIBLE, seasonId,
+				playerA, playerB, playerAStats, playerBStats, audit);
+		}
+
+		private boolean eligible() {
+			return eligibility == VoidArenaRankedPolicy.PairEligibility.ELIGIBLE;
 		}
 	}
 
@@ -2144,6 +3439,7 @@ public final class VoidArena {
 	private final class DeathMatchSetup {
 		private final long playerAHash;
 		private final long playerBHash;
+		private final long createdAt = System.currentTimeMillis();
 		private MatchRules rules;
 		private boolean playerAAccepted;
 		private boolean playerBAccepted;
@@ -2168,12 +3464,18 @@ public final class VoidArena {
 		private boolean rankedAvailable() {
 			Player playerA = world.getPlayer(playerAHash);
 			Player playerB = world.getPlayer(playerBHash);
-			return playerA != null && playerB != null && isRankedEligible(playerA) && isRankedEligible(playerB);
+			return playerA != null && playerB != null && isRankedPairEligible(playerA, playerB);
+		}
+
+		private boolean expired() {
+			return System.currentTimeMillis() - createdAt >= VoidArenaConfig.SETUP_TIMEOUT_MS;
 		}
 	}
 
 	private final class DmKingChallenge {
+		private final UUID sessionId = UUID.randomUUID();
 		private final int slotIndex;
+		private final Player player;
 		private final long playerHash;
 		private final Npc king;
 		private final DmKingEvent event;
@@ -2183,6 +3485,8 @@ public final class VoidArena {
 		private final int fishCapacity;
 		private int fishRemaining;
 		private int castsUsed;
+		private int strengthPotionDosesRemaining = DM_KING_STRENGTH_POTION_DOSES;
+		private int prayerStatePoints = DM_KING_PRAYER_STATE_POINTS;
 		private int strengthPotionBoostedLevel;
 		private long nextEatTick;
 		private long nextCastTick;
@@ -2197,22 +3501,25 @@ public final class VoidArena {
 		private boolean eatingToFull;
 		private boolean prepared;
 		private boolean started;
-		private boolean finished;
+		private volatile boolean finished;
 		private boolean quippedPlayerLowFood;
 		private boolean quippedPlayerNoFood;
 		private boolean quippedPlayerLowHits;
 		private boolean quippedPlayerName;
 		private boolean quippedKingLowFood;
+		private boolean announcedPrayerDepleted;
 
-		private DmKingChallenge(int slotIndex, long playerHash, Npc king, long startsAt, int playerFishCapacity) {
+		private DmKingChallenge(int slotIndex, Player player, Npc king, long startsAt,
+			int playerFishCapacity) {
 			this.slotIndex = slotIndex;
-			this.playerHash = playerHash;
+			this.player = Objects.requireNonNull(player, "player");
+			this.playerHash = player.getUsernameHash();
 			this.king = king;
 			this.startsAt = startsAt;
 			this.expiresAt = startsAt + DM_KING_MATCH_TIMEOUT_MS;
 			this.playerFishCapacity = playerFishCapacity;
-			this.fishCapacity = playerFishCapacity;
-			this.fishRemaining = playerFishCapacity;
+			this.fishCapacity = DM_KING_FISH_COUNT;
+			this.fishRemaining = DM_KING_FISH_COUNT;
 			this.event = new DmKingEvent(world, this);
 		}
 
@@ -2220,7 +3527,18 @@ public final class VoidArena {
 			return System.currentTimeMillis() >= startsAt;
 		}
 
+		private synchronized boolean tryFinish() {
+			if (finished) {
+				return false;
+			}
+			finished = true;
+			return true;
+		}
+
 		private boolean hasPrayer(int prayerId) {
+			if (prayerStatePoints <= 0) {
+				return false;
+			}
 			for (int activePrayerId : DM_KING_ACTIVE_PRAYERS) {
 				if (activePrayerId == prayerId) {
 					return true;
@@ -2240,14 +3558,17 @@ public final class VoidArena {
 			}
 			Player player = world.getPlayer(playerHash);
 			if (player == null || !player.loggedIn() || player.isRemoved()) {
-				activeDmKingChallenges.remove(playerHash, this);
-				finished = true;
-				cleanupDmKingNpc(king);
+				resolveDmKingLoss(this, player, "", true, true);
 				event.stop();
 				return;
 			}
 			if (king == null || king.isRemoved()) {
 				resolveDmKingLoss(this, player, DM_KING_DISPLAY_NAME + " vanished from the arena.", false, false);
+				event.stop();
+				return;
+			}
+			if (king.getSkills().getLevel(Skill.HITS.id()) <= 0) {
+				resolveDmKingVictory(this, player);
 				event.stop();
 				return;
 			}
@@ -2278,14 +3599,32 @@ public final class VoidArena {
 			}
 
 			long tick = world.getServer().getCurrentTick();
-			maybeRepotStrength(tick, player);
-			boolean acted = maybeRetreatToEat(tick, player) || maybeEat(tick, player);
-			if (!acted) {
-				maybeCast(tick, player);
-				acted = maybeKiteForMagic(tick, player);
-			}
-			if (!acted) {
-				maybeReengage(tick, player);
+			drainPrayer(player);
+			VoidArenaSirPolicy.MainAction action = VoidArenaSirPolicy.selectMainAction(castsUsed,
+				canRetreatToEat(tick, player), canEat(tick, player), canRepotStrength(tick),
+				canCast(tick, player), canKiteForMagic(tick, player), canReengage(tick, player));
+			switch (action) {
+				case RETREAT_TO_EAT:
+					maybeRetreatToEat(tick, player);
+					break;
+				case EAT:
+					maybeEat(tick, player);
+					break;
+				case REPOT_STRENGTH:
+					maybeRepotStrength(tick, player);
+					break;
+				case CAST_FIRE_BLAST:
+					maybeCast(tick, player);
+					break;
+				case KITE_FOR_MAGIC:
+					maybeKiteForMagic(tick, player);
+					break;
+				case MELEE_PRESSURE:
+					maybeReengage(tick, player);
+					break;
+				case NONE:
+				default:
+					break;
 			}
 			maybeFightQuip(tick, player);
 		}
@@ -2309,34 +3648,59 @@ public final class VoidArena {
 				"@yel@" + DM_KING_DISPLAY_NAME + ": " + randomLine(DM_KING_PREFIGHT_QUIPS));
 		}
 
-		private void drinkStrengthPotion() {
+		private boolean drinkStrengthPotion() {
+			if (!VoidArenaSirPolicy.canDrinkStrengthPotion(strengthPotionDosesRemaining)) {
+				return false;
+			}
 			int maxStrength = king.getSkills().getMaxStat(Skill.STRENGTH.id());
 			int boosted = maxStrength + 3 + ((maxStrength * 10) / 100);
 			king.getSkills().setLevel(Skill.STRENGTH.id(), boosted);
 			strengthPotionBoostedLevel = boosted;
+			strengthPotionDosesRemaining = VoidArenaSirPolicy.potionDosesAfterDrink(
+				strengthPotionDosesRemaining);
 			king.getUpdateFlags().setActionBubbleNpc(new BubbleNpc(king, ItemId.FULL_STRENGTH_POTION.id()));
+			return true;
 		}
 
-		private void maybeRepotStrength(long tick, Player player) {
-			if (tick < nextStrengthPotionTick || strengthPotionBoostedLevel <= 0) {
-				return;
+		private boolean maybeRepotStrength(long tick, Player player) {
+			if (!canRepotStrength(tick)) {
+				return false;
 			}
-			if (king.getSkills().getLevel(Skill.STRENGTH.id()) >= strengthPotionBoostedLevel) {
-				return;
+			if (!drinkStrengthPotion()) {
+				return false;
 			}
-			drinkStrengthPotion();
 			nextStrengthPotionTick = tick + DM_KING_STRENGTH_REPOT_DELAY_TICKS;
 			if (player != null && player.loggedIn()) {
-				player.message("@mag@" + DM_KING_DISPLAY_NAME + " drinks a strength potion.");
+				player.message("@mag@" + DM_KING_DISPLAY_NAME + " drinks a strength potion. "
+					+ strengthPotionDosesRemaining + " doses left.");
+			}
+			return true;
+		}
+
+		private boolean canRepotStrength(long tick) {
+			return tick >= nextStrengthPotionTick
+				&& strengthPotionBoostedLevel > 0
+				&& VoidArenaSirPolicy.canDrinkStrengthPotion(strengthPotionDosesRemaining)
+				&& king.getSkills().getLevel(Skill.STRENGTH.id()) < strengthPotionBoostedLevel;
+		}
+
+		private void drainPrayer(Player player) {
+			if (prayerStatePoints <= 0) {
+				return;
+			}
+			prayerStatePoints = VoidArenaSirPolicy.prayerPointsAfterDrain(prayerStatePoints,
+				VoidArena.this.dmKingPrayerDrainPerTick());
+			if (prayerStatePoints == 0 && !announcedPrayerDepleted) {
+				announcedPrayerDepleted = true;
+				if (player != null && player.loggedIn()) {
+					player.message("@mag@" + DM_KING_DISPLAY_NAME
+						+ " has run out of prayer points.");
+				}
 			}
 		}
 
 		private boolean maybeRetreatToEat(long tick, Player player) {
-			if (!king.inCombat() || tick < nextEatTick || !shouldStartEating(player)) {
-				return false;
-			}
-			Mob opponent = king.getOpponent();
-			if (opponent != player || player.getHitsMade() < 3) {
+			if (!canRetreatToEat(tick, player)) {
 				return false;
 			}
 			eatingToFull = true;
@@ -2347,8 +3711,14 @@ public final class VoidArena {
 			return true;
 		}
 
+		private boolean canRetreatToEat(long tick, Player player) {
+			return king.inCombat() && tick >= nextEatTick && shouldStartEating(player)
+				&& king.getOpponent() == player
+				&& VoidArenaSirPolicy.retreatHitGatePassed(player.getHitsMade());
+		}
+
 		private boolean maybeEat(long tick, Player player) {
-			if (king.inCombat() || tick < nextEatTick || !shouldContinueEating(player)) {
+			if (!canEat(tick, player)) {
 				return false;
 			}
 			int hits = king.getSkills().getLevel(Skill.HITS.id());
@@ -2357,13 +3727,22 @@ public final class VoidArena {
 				return false;
 			}
 			king.getSkills().setLevel(Skill.HITS.id(), healed);
-			fishRemaining--;
+			fishRemaining = VoidArenaSirPolicy.fishRemainingAfterEat(fishRemaining);
 			eatingToFull = fishRemaining > 0 && healed < dmKingMaxHits();
 			nextEatTick = tick + DM_KING_EAT_DELAY_TICKS;
 			nextReengageTick = Math.max(nextReengageTick,
 				tick + (eatingToFull ? DM_KING_EAT_DELAY_TICKS : DM_KING_REENGAGE_DELAY_TICKS));
+			king.getUpdateFlags().setActionBubbleNpc(new BubbleNpc(king, ItemId.SWORDFISH.id()));
 			player.message("@mag@" + DM_KING_DISPLAY_NAME + " eats a swordfish. " + fishRemaining + " left.");
 			return true;
+		}
+
+		private boolean canEat(long tick, Player player) {
+			if (king.inCombat() || tick < nextEatTick || !shouldContinueEating(player)) {
+				return false;
+			}
+			int hits = king.getSkills().getLevel(Skill.HITS.id());
+			return Math.min(dmKingMaxHits(), hits + dmKingSwordfishHeal()) > hits;
 		}
 
 		private boolean shouldContinueEating(Player player) {
@@ -2383,7 +3762,8 @@ public final class VoidArena {
 
 		private boolean canUseSwordfish() {
 			int hits = king.getSkills().getLevel(Skill.HITS.id());
-			return fishRemaining > 0 && hits > 0 && hits < dmKingMaxHits() && dmKingSwordfishHeal() > 0;
+			return VoidArenaSirPolicy.canEatFish(fishRemaining)
+				&& hits > 0 && hits < dmKingMaxHits() && dmKingSwordfishHeal() > 0;
 		}
 
 		private int dmKingMaxHits() {
@@ -2399,21 +3779,23 @@ public final class VoidArena {
 		}
 
 		private boolean maybeCast(long tick, Player player) {
-			if (tick < nextCastTick) {
-				return false;
-			}
-			if (!canUsePvpOffense(tick, player)) {
-				return false;
-			}
-			if (!canCastAt(player)) {
+			if (!canCast(tick, player)) {
 				return false;
 			}
 			int damage = CombatFormula.calculateMagicDamage(DM_KING_FIRE_BLAST_POWER, king, player);
 			world.getServer().getGameEventHandler().add(new ProjectileEvent(world, king, player,
 				damage, DM_KING_FIRE_BLAST_PROJECTILE, false));
-			castsUsed++;
+			castsUsed = VoidArenaSirPolicy.castsUsedAfterFireBlast(castsUsed);
 			nextCastTick = tick + dmKingCastDelayTicks();
 			return true;
+		}
+
+		private boolean canCast(long tick, Player player) {
+			return VoidArenaSirPolicy.canCastFireBlast(castsUsed)
+				&& tick >= nextCastTick
+				&& (!world.getServer().getConfig().BLOCK_USE_MAGIC_IN_COMBAT || !king.inCombat())
+				&& canUsePvpOffense(tick, player)
+				&& canCastAt(player);
 		}
 
 		private long dmKingCastDelayTicks() {
@@ -2426,14 +3808,10 @@ public final class VoidArena {
 		}
 
 		private boolean maybeKiteForMagic(long tick, Player player) {
-			if (tick < nextKiteTick || !shouldPreferMagicKite(tick, player)) {
+			if (!canKiteForMagic(tick, player)) {
 				return false;
 			}
 			if (king.inCombat()) {
-				Mob opponent = king.getOpponent();
-				if (opponent != player || player.getHitsMade() < 3) {
-					return false;
-				}
 				king.getBehavior().retreat(1);
 				markPvpStyleRetreat(player, tick);
 				nextKiteTick = tick + DM_KING_KITE_DELAY_TICKS;
@@ -2455,7 +3833,21 @@ public final class VoidArena {
 			return true;
 		}
 
+		private boolean canKiteForMagic(long tick, Player player) {
+			if (tick < nextKiteTick || !shouldPreferMagicKite(tick, player)) {
+				return false;
+			}
+			if (king.inCombat()) {
+				return king.getOpponent() == player
+					&& VoidArenaSirPolicy.retreatHitGatePassed(player.getHitsMade());
+			}
+			return isGoodMagicKitePosition(player) || bestMagicKiteStep(player) != null;
+		}
+
 		private boolean shouldPreferMagicKite(long tick, Player player) {
+			if (!VoidArenaSirPolicy.canCastFireBlast(castsUsed)) {
+				return false;
+			}
 			if (player.getSkills().getLevel(Skill.HITS.id()) <= 0) {
 				return false;
 			}
@@ -2545,10 +3937,7 @@ public final class VoidArena {
 		}
 
 		private void maybeReengage(long tick, Player player) {
-			if (tick < nextReengageTick || king.inCombat()) {
-				return;
-			}
-			if (!canUsePvpOffense(tick, player)) {
+			if (!canReengage(tick, player)) {
 				return;
 			}
 			nextReengageTick = tick + DM_KING_REENGAGE_DELAY_TICKS;
@@ -2563,6 +3952,11 @@ public final class VoidArena {
 			} else {
 				king.walkToEntityAStar(player.getX(), player.getY(), 20);
 			}
+		}
+
+		private boolean canReengage(long tick, Player player) {
+			return player != null && tick >= nextReengageTick && !king.inCombat()
+				&& canUsePvpOffense(tick, player);
 		}
 
 		private void maybeFightQuip(long tick, Player player) {
@@ -2691,11 +4085,13 @@ public final class VoidArena {
 		}
 
 		private boolean canUsePvpOffense(long tick, Player player) {
-			return VoidArena.this.pvpReattackReady(king, tick)
-				&& VoidArena.this.pvpReattackReady(player, tick);
+			return player != null && VoidArenaSirPolicy.sharedReattackReady(tick,
+				king.getRanAwayTimer(), player.getRanAwayTimer(),
+				VoidArena.this.pvpReattackDelayTicks());
 		}
 
 		private void markPvpStyleRetreat(Player player, long tick) {
+			king.setRanAwayTimer();
 			if (player != null) {
 				player.setRanAwayTimer();
 			}
@@ -2727,9 +4123,12 @@ public final class VoidArena {
 		private final long castDelayTicks;
 		private final long castDelayMs;
 		private final int castsUsed;
+		private final int potionDosesRemaining;
+		private final int prayerStatePoints;
 
 		private DmKingSummary(int playerFishRemaining, int playerFishCapacity, int kingFishRemaining,
-			int kingFishCapacity, long castDelayTicks, long castDelayMs, int castsUsed) {
+			int kingFishCapacity, long castDelayTicks, long castDelayMs, int castsUsed,
+			int potionDosesRemaining, int prayerStatePoints) {
 			this.playerFishRemaining = playerFishRemaining;
 			this.playerFishCapacity = playerFishCapacity;
 			this.kingFishRemaining = kingFishRemaining;
@@ -2737,6 +4136,8 @@ public final class VoidArena {
 			this.castDelayTicks = castDelayTicks;
 			this.castDelayMs = castDelayMs;
 			this.castsUsed = castsUsed;
+			this.potionDosesRemaining = potionDosesRemaining;
+			this.prayerStatePoints = prayerStatePoints;
 		}
 	}
 
@@ -2750,21 +4151,155 @@ public final class VoidArena {
 		}
 	}
 
+	private static final class PendingRankedSettlement {
+		private final VoidArenaMatchSessionRecord record;
+		private final VoidArenaStats statsA;
+		private final VoidArenaStats statsB;
+		private final VoidArenaRankedPolicy.ResultType resultType;
+		private final long winnerHash;
+		private final long loserHash;
+		private final boolean winnerIsA;
+		private final int delta;
+		private final int oldWinnerRating;
+		private final int oldLoserRating;
+		private int retryAttempts;
+		private boolean retryScheduled;
+		private boolean databaseError;
+		private boolean complete;
+
+		private PendingRankedSettlement(VoidArenaMatchSessionRecord record,
+			VoidArenaStats statsA, VoidArenaStats statsB,
+			VoidArenaRankedPolicy.ResultType resultType, long winnerHash, long loserHash,
+			boolean winnerIsA, int delta, int oldWinnerRating, int oldLoserRating) {
+			this.record = record;
+			this.statsA = statsA;
+			this.statsB = statsB;
+			this.resultType = resultType;
+			this.winnerHash = winnerHash;
+			this.loserHash = loserHash;
+			this.winnerIsA = winnerIsA;
+			this.delta = delta;
+			this.oldWinnerRating = oldWinnerRating;
+			this.oldLoserRating = oldLoserRating;
+		}
+
+		private static PendingRankedSettlement decisive(VoidArenaMatchSessionRecord record,
+			VoidArenaStats statsA, VoidArenaStats statsB,
+			VoidArenaRankedPolicy.ResultType resultType, long winnerHash, long loserHash,
+			boolean winnerIsA, int delta, int oldWinnerRating, int oldLoserRating) {
+			return new PendingRankedSettlement(record, statsA, statsB, resultType,
+				winnerHash, loserHash, winnerIsA, delta, oldWinnerRating, oldLoserRating);
+		}
+
+		private static PendingRankedSettlement neutral(VoidArenaMatchSessionRecord record,
+			VoidArenaRankedPolicy.ResultType resultType) {
+			return new PendingRankedSettlement(record, null, null, resultType,
+				0L, 0L, false, 0, 0, 0);
+		}
+
+		private synchronized boolean isComplete() {
+			return complete;
+		}
+
+		private synchronized boolean markComplete() {
+			if (complete) {
+				return false;
+			}
+			complete = true;
+			retryScheduled = false;
+			return true;
+		}
+
+		private synchronized void markDatabaseError() {
+			databaseError = true;
+		}
+
+		private synchronized boolean hadDatabaseError() {
+			return databaseError;
+		}
+
+		private synchronized int reserveRetryDelay() {
+			if (complete || retryScheduled) {
+				return -1;
+			}
+			long multiplier = 1L << Math.min(retryAttempts, 4);
+			long delay = Math.min(RANKED_SETTLEMENT_RETRY_MAX_MS,
+				RANKED_SETTLEMENT_RETRY_INITIAL_MS * multiplier);
+			retryAttempts++;
+			retryScheduled = true;
+			return (int) delay;
+		}
+
+		private synchronized void retryStarted() {
+			retryScheduled = false;
+		}
+	}
+
+	private static final class MatchTerminalClaim {
+		private final Player winner;
+		private final Player loser;
+		private final VoidArenaRankedPolicy.ResultType resultType;
+
+		private MatchTerminalClaim(Player winner, Player loser,
+			VoidArenaRankedPolicy.ResultType resultType) {
+			this.winner = winner;
+			this.loser = loser;
+			this.resultType = resultType;
+		}
+	}
+
 	private final class Match {
+		private final UUID sessionId = UUID.randomUUID();
 		private final int slotIndex;
+		private final Player playerA;
+		private final Player playerB;
 		private final long playerAHash;
 		private final long playerBHash;
 		private final MatchRules rules;
 		private final long createdAt;
 		private final long startsAt;
+		private final RankedAdmission rankedAdmission;
+		private final boolean sameIp;
+		private final boolean sameIpLocalExempt;
+		private final VoidArenaMatchSessionRecord rankedSessionRecord;
+		private volatile PendingRankedSettlement pendingSettlement;
+		private volatile Player disconnectedPlayer;
+		private volatile long disconnectedPlayerHash;
+		private volatile long disconnectedAtMs;
+		private volatile boolean finished;
 
-		private Match(int slotIndex, long playerAHash, long playerBHash, MatchRules rules, long startsAt) {
+		private Match(int slotIndex, Player playerA, Player playerB, MatchRules rules, long startsAt,
+						  RankedAdmission rankedAdmission) {
 			this.slotIndex = slotIndex;
-			this.playerAHash = playerAHash;
-			this.playerBHash = playerBHash;
+			this.playerA = Objects.requireNonNull(playerA, "playerA");
+			this.playerB = Objects.requireNonNull(playerB, "playerB");
+			this.playerAHash = playerA.getUsernameHash();
+			this.playerBHash = playerB.getUsernameHash();
 			this.rules = rules;
 			this.createdAt = System.currentTimeMillis();
 			this.startsAt = startsAt;
+			this.rankedAdmission = rankedAdmission;
+			this.sameIp = rankedAdmission != null && VoidArenaRankedPolicy.sameAddress(
+				rankedAdmission.playerA.getCurrentIP(), rankedAdmission.playerB.getCurrentIP());
+			this.sameIpLocalExempt = sameIp;
+			this.rankedSessionRecord = rankedAdmission == null ? null
+				: VoidArenaMatchSessionRecord.active(sessionId.toString(), rankedAdmission.seasonId,
+					rankedAdmission.playerA.getDatabaseID(), rankedAdmission.playerB.getDatabaseID(),
+					rankedAdmission.playerAStats.rating, rankedAdmission.playerBStats.rating,
+					sameIp, sameIpLocalExempt, 0, rankedAdmission.audit.decisiveResultsUtcDay,
+					slotIndex, createdAt);
+		}
+
+		private VoidArenaMatchSessionRecord activeSessionRecord() {
+			return rankedSessionRecord;
+		}
+
+		private VoidArenaMatchSessionRecord settledSessionRecord(
+			VoidArenaRankedPolicy.ResultType resultType, Integer winnerId, Integer loserId,
+			int playerARatingAfter, int playerBRatingAfter, int ratingDelta,
+			boolean ratingApplied, long endedAt) {
+			return rankedSessionRecord.settled(resultType.name(), winnerId, loserId,
+				playerARatingAfter, playerBRatingAfter, ratingDelta, ratingApplied, endedAt);
 		}
 
 		private boolean contains(Player player) {
@@ -2787,9 +4322,63 @@ public final class VoidArena {
 			return System.currentTimeMillis() >= startsAt;
 		}
 
+		private synchronized void noteDisconnect(Player player, long disconnectedAtMs) {
+			long playerHash = player == null ? 0L : player.getUsernameHash();
+			if (finished || disconnectedPlayerHash != 0L
+				|| (playerHash != playerAHash && playerHash != playerBHash)) {
+				return;
+			}
+			disconnectedPlayer = player;
+			disconnectedPlayerHash = playerHash;
+			this.disconnectedAtMs = disconnectedAtMs;
+		}
+
+		private boolean hasPendingDisconnect() {
+			return disconnectedPlayerHash != 0L;
+		}
+
+		private long disconnectedAtMs() {
+			return disconnectedAtMs;
+		}
+
+		private Player disconnectedPlayer() {
+			return disconnectedPlayer;
+		}
+
+		private synchronized MatchTerminalClaim claimTerminal(Player requestedWinner,
+			Player requestedLoser, VoidArenaRankedPolicy.ResultType requestedResult) {
+			if (finished) {
+				return null;
+			}
+			Player winner = requestedWinner;
+			Player loser = requestedLoser;
+			VoidArenaRankedPolicy.ResultType result = requestedResult;
+			if (disconnectedPlayerHash != 0L) {
+				loser = disconnectedPlayerHash == playerAHash ? playerA : playerB;
+				winner = loser == playerA ? playerB : playerA;
+				result = VoidArenaRankedPolicy.ResultType.FORFEIT;
+			}
+			finished = true;
+			return new MatchTerminalClaim(winner, loser, result);
+		}
+
+		private boolean isFinished() {
+			return finished;
+		}
+
+		private synchronized void setPendingSettlement(PendingRankedSettlement pending) {
+			if (pendingSettlement != null) {
+				throw new IllegalStateException("Ranked settlement is already captured");
+			}
+			pendingSettlement = pending;
+		}
+
+		private PendingRankedSettlement pendingSettlement() {
+			return pendingSettlement;
+		}
+
 		private Player opponent(Player player) {
-			long opponentHash = player.getUsernameHash() == playerAHash ? playerBHash : playerAHash;
-			return world.getPlayer(opponentHash);
+			return player != null && player.getUsernameHash() == playerAHash ? playerB : playerA;
 		}
 	}
 

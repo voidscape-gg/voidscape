@@ -1,0 +1,20 @@
+schema: voidscape-authoring-layer/v2
+key: future_mustache
+kind: facial-hair
+status: proposed
+template: rsc-player-v1
+masters:
+  - north
+  - north-west
+  - west
+  - south-west
+  - south
+  - combat-west
+hidden_masters:
+  - south-west
+  - south
+propagation: rigid-head
+semantic_profile: mustache
+required_masks: [upper_lip_attachment]
+palette_policy: hair-mask
+art: null

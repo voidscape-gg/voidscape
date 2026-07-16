@@ -1,7 +1,12 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.constants.IronmanMode;
+import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.content.dueljournal.DuelJournalService;
+import com.openrsc.server.content.duelproof.DuelProofService;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.impl.combat.CombatEvent;
+import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.action.WalkToMobAction;
@@ -18,7 +23,9 @@ import com.openrsc.server.util.rsc.CertUtil;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
 import com.openrsc.server.util.rsc.MessageType;
+import com.voidscape.duelproof.DuelProofSpec;
 
+import java.util.List;
 import java.util.Optional;
 
 public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, OpcodeIn> {
@@ -29,6 +36,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 
 	public void process(PlayerDuelStruct payload, Player player) throws Exception {
 		Player affectedPlayer = player.getDuel().getDuelRecipient();
+		if (rejectVoidArenaDuel(player, affectedPlayer)) {
+			return;
+		}
 
 		if (player == affectedPlayer) {
 			unsetOptions(player);
@@ -77,6 +87,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 			case PLAYER_DUEL:
 				int playerIndex = payload.targetPlayerID;
 				affectedPlayer = player.getWorld().getPlayer(playerIndex);
+				if (rejectVoidArenaDuel(player, affectedPlayer)) {
+					return;
+				}
 				if (affectedPlayer == null || affectedPlayer.getDuel().isDuelActive()
 					|| !player.withinRange(affectedPlayer, 8) || player.getDuel().isDuelActive()) {
 					player.getDuel().setDuelRecipient(null);
@@ -173,137 +186,7 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 				player.getDuel().setDuelConfirmAccepted(true);
 
 				if (affectedPlayer.getDuel().isDuelConfirmAccepted()) {
-					ActionSender.sendDuelWindowClose(player);
-					ActionSender.sendDuelWindowClose(affectedPlayer);
-					player.message("Commencing Duel!");
-					affectedPlayer.message("Commencing Duel!");
-
-					player.resetAllExceptDueling();
-
-					affectedPlayer.resetAllExceptDueling();
-
-					// We do not have the items we offered.
-					if (!player.getDuel().checkDuelItems() || !affectedPlayer.getDuel().checkDuelItems()) {
-						player.resetAll();
-						affectedPlayer.resetAll();
-						player.setSuspiciousPlayer(true, "duel without appropriate items in inventory");
-						affectedPlayer.setSuspiciousPlayer(true, "duel without appropriate items in inventory");
-						return;
-					}
-
-					if (player.getDuel().getDuelSetting(3)) {
-						if (player.getConfig().WANT_EQUIPMENT_TAB) {
-							Item item;
-							for (int i = 0; i < Equipment.SLOT_COUNT; i++) {
-								item = player.getCarriedItems().getEquipment().get(i);
-								if (item != null) {
-									if (!player.getCarriedItems().getEquipment().unequipItem(new UnequipRequest(player, item, UnequipRequest.RequestType.FROM_EQUIPMENT, false))) {
-										player.getDuel().resetAll();
-										player.message("Your inventory is full and you can't unequip your items. Cancelling duel.");
-										affectedPlayer.message("Your opponent needs to clear his inventory. Cancelling duel.");
-										return;
-									}
-								}
-							}
-
-							for (int i = 0; i < Equipment.SLOT_COUNT; i++) {
-								item = affectedPlayer.getCarriedItems().getEquipment().get(i);
-								if (item != null) {
-									if (!affectedPlayer.getCarriedItems().getEquipment().unequipItem(new UnequipRequest(affectedPlayer, item, UnequipRequest.RequestType.FROM_EQUIPMENT, false))) {
-										affectedPlayer.getDuel().resetAll();
-										affectedPlayer.message("Your inventory is full and you can't unequip your items. Cancelling duel.");
-										player.message("Your opponent needs to clear his inventory. Cancelling duel.");
-										return;
-									}
-								}
-							}
-						} else {
-							synchronized(player.getCarriedItems().getInventory().getItems()) {
-								for (Item item : player.getCarriedItems().getInventory().getItems()) {
-									if (item.isWielded()) {
-										player.getCarriedItems().getEquipment().unequipItem(new UnequipRequest(player, item, UnequipRequest.RequestType.FROM_INVENTORY, false));
-									}
-								}
-							}
-							synchronized(affectedPlayer.getCarriedItems().getInventory().getItems()) {
-								for (Item item : affectedPlayer.getCarriedItems().getInventory().getItems()) {
-									if (item.isWielded()) {
-										affectedPlayer.getCarriedItems().getEquipment().unequipItem(new UnequipRequest(player, item, UnequipRequest.RequestType.FROM_INVENTORY, false));
-									}
-								}
-							}
-							ActionSender.sendSound(player, "click");
-							ActionSender.sendInventory(player);
-							ActionSender.sendEquipmentStats(player);
-							ActionSender.sendSound(affectedPlayer, "click");
-							ActionSender.sendInventory(affectedPlayer);
-							ActionSender.sendEquipmentStats(affectedPlayer);
-						}
-					}
-
-					if (player.getDuel().getDuelSetting(2)) {
-						player.getPrayers().resetPrayers();
-						affectedPlayer.getPrayers().resetPrayers();
-					}
-
-					//Busy states moved down here since we don't modify busy in combat anymore.
-					//Should just be used to make sure combat happens.
-					player.setBusy(true);
-					affectedPlayer.setBusy(true);
-					player.walkToEntity(affectedPlayer.getX(), affectedPlayer.getY());
-					player.setWalkToAction(new WalkToMobAction(player, affectedPlayer, 1) {
-						public void executeInternal() {
-							Player affectedPlayer = (Player) mob;
-							getPlayer().setBusy(false);
-							affectedPlayer.setBusy(false);
-							getPlayer().resetPath();
-							if (!getPlayer().canReach(affectedPlayer)) {
-								getPlayer().getDuel().resetAll();
-								return;
-							}
-							affectedPlayer.resetPath();
-
-							getPlayer().resetAllExceptDueling();
-							affectedPlayer.resetAllExceptDueling();
-
-							getPlayer().setLocation(affectedPlayer.getLocation(), false);
-
-							// player.teleport(affectedPlayer.getX(),
-							// affectedPlayer.getY());
-
-
-							getPlayer().setSprite(9);
-							getPlayer().setOpponent(mob);
-							getPlayer().setCombatTimer();
-
-							affectedPlayer.setSprite(8);
-							affectedPlayer.setOpponent(getPlayer());
-							affectedPlayer.setCombatTimer();
-
-							Player attacker, opponent;
-							if (getPlayer().getCombatLevel() > affectedPlayer.getCombatLevel()) {
-								attacker = affectedPlayer;
-								opponent = getPlayer();
-							} else if (affectedPlayer.getCombatLevel() > getPlayer().getCombatLevel()) {
-								attacker = getPlayer();
-								opponent = affectedPlayer;
-							} else if (DataConversions.random(0, 1) == 1) {
-								attacker = getPlayer();
-								opponent = affectedPlayer;
-							} else {
-								attacker = affectedPlayer;
-								opponent = getPlayer();
-							}
-
-							attacker.getDuel().setDuelActive(true);
-							opponent.getDuel().setDuelActive(true);
-
-							CombatEvent combatEvent = new CombatEvent(getPlayer().getWorld(), attacker, opponent);
-							attacker.setCombatEvent(combatEvent);
-							opponent.setCombatEvent(combatEvent);
-							getPlayer().getWorld().getServer().getGameEventHandler().add(combatEvent);
-						}
-					});
+					prepareFinalDuel(player, affectedPlayer);
 				}
 				break;
 			case DUEL_DECLINED:
@@ -454,6 +337,384 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 				System.out.println("Somehow PlayerDuelHandler is mismanaged.");
 				break;
 		}
+	}
+
+	private void prepareFinalDuel(final Player first, final Player second) {
+		if (rejectVoidArenaDuel(first, second)) {
+			return;
+		}
+		first.resetAllExceptDueling();
+		second.resetAllExceptDueling();
+		CombatFormula.clearPvpMeleeMomentum(first);
+		CombatFormula.clearPvpMeleeMomentum(second);
+
+		if (!first.getDuel().checkDuelItems() || !second.getDuel().checkDuelItems()) {
+			first.setSuspiciousPlayer(true, "duel without appropriate items in inventory");
+			second.setSuspiciousPlayer(true, "duel without appropriate items in inventory");
+			cancelPreparedDuel(first, second);
+			return;
+		}
+
+		if (!applyFinalDuelRules(first, second)) {
+			return;
+		}
+		if (DuelProofService.requiresProof(first, second)
+			&& (proofStakeConsumesEquippedRecoil(first)
+				|| proofStakeConsumesEquippedRecoil(second))) {
+			first.message("An equipped Ring of recoil cannot also be staked in a verified duel.");
+			second.message("An equipped Ring of recoil cannot also be staked in a verified duel.");
+			cancelPreparedDuel(first, second);
+			return;
+		}
+
+		ActionSender.sendDuelWindowClose(first);
+		ActionSender.sendDuelWindowClose(second);
+		first.setBusy(true);
+		second.setBusy(true);
+
+		if (DuelProofService.requiresProof(first, second)) {
+			if (!DuelProofService.supportsProofClient(first)
+				|| !DuelProofService.supportsProofClient(second)) {
+				first.message("This No Magic duel needs an updated Voidscape client for melee verification.");
+				second.message("This No Magic duel needs an updated Voidscape client for melee verification.");
+				cancelPreparedDuel(first, second);
+				return;
+			}
+			first.message("Preparing your duel...");
+			second.message("Preparing your duel...");
+			// Overlap the normal approach with the durable handshake. The final lock still
+			// revalidates adjacency and falls back to the guarded walk action if needed.
+			first.walkToEntity(second.getX(), second.getY());
+			DuelProofService.begin(first, second, new Runnable() {
+				@Override
+				public void run() {
+					continuePreparedProofDuel(first, second);
+				}
+			});
+			return;
+		}
+
+		commencePreparedDuel(first, second, null);
+	}
+
+	private void continuePreparedProofDuel(final Player first, final Player second) {
+		final DuelProofSession proofSession = first.getDuel().getProofSession();
+		if (proofSession == null) {
+			cancelPreparedDuel(first, second);
+			return;
+		}
+		if (proofSession.getPhase() == DuelProofSession.Phase.PERSISTING_COMBAT) {
+			if (isPreparedDuelReady(first, second, proofSession)
+				&& first.withinRange(second, 1)
+				&& PathValidation.checkAdjacentDistance(first.getWorld(), first.getLocation(),
+					second.getLocation(), true, false)) {
+				enterPreparedDuelCombat(first, second, proofSession);
+			}
+			return;
+		}
+		commencePreparedDuel(first, second, proofSession);
+	}
+
+	/** True when the accepted stake needs the same physical recoil ring that is worn. */
+	private boolean proofStakeConsumesEquippedRecoil(final Player player) {
+		if (player == null || !player.getCarriedItems().getEquipment()
+			.hasEquipped(ItemId.RING_OF_RECOIL.id())) {
+			return false;
+		}
+
+		long offered = 0L;
+		final List<Item> offeredItems = player.getDuel().getDuelOffer().getItems();
+		synchronized (offeredItems) {
+			for (final Item item : offeredItems) {
+				if (item != null && item.getCatalogId() == ItemId.RING_OF_RECOIL.id()
+					&& !item.getNoted()) {
+					offered += item.getAmount();
+				}
+			}
+		}
+		if (offered <= 0L) {
+			return false;
+		}
+
+		long unworn = 0L;
+		final List<Item> inventory = player.getCarriedItems().getInventory().getItems();
+		synchronized (inventory) {
+			for (final Item item : inventory) {
+				if (item != null && item.getCatalogId() == ItemId.RING_OF_RECOIL.id()
+					&& !item.getNoted() && !item.isWielded()) {
+					unworn += item.getAmount();
+				}
+			}
+		}
+		return offered > unworn;
+	}
+
+	private boolean applyFinalDuelRules(final Player first, final Player second) {
+		if (first.getDuel().getDuelSetting(3)) {
+			if (first.getConfig().WANT_EQUIPMENT_TAB) {
+				Item item;
+				for (int i = 0; i < Equipment.SLOT_COUNT; i++) {
+					item = first.getCarriedItems().getEquipment().get(i);
+					if (item != null && !first.getCarriedItems().getEquipment().unequipItem(
+						new UnequipRequest(first, item, UnequipRequest.RequestType.FROM_EQUIPMENT, false))) {
+						first.message("Your inventory is full and you can't unequip your items. Cancelling duel.");
+						second.message("Your opponent needs to clear his inventory. Cancelling duel.");
+						cancelPreparedDuel(first, second);
+						return false;
+					}
+				}
+
+				for (int i = 0; i < Equipment.SLOT_COUNT; i++) {
+					item = second.getCarriedItems().getEquipment().get(i);
+					if (item != null && !second.getCarriedItems().getEquipment().unequipItem(
+						new UnequipRequest(second, item, UnequipRequest.RequestType.FROM_EQUIPMENT, false))) {
+						second.message("Your inventory is full and you can't unequip your items. Cancelling duel.");
+						first.message("Your opponent needs to clear his inventory. Cancelling duel.");
+						cancelPreparedDuel(first, second);
+						return false;
+					}
+				}
+			} else {
+				synchronized (first.getCarriedItems().getInventory().getItems()) {
+					for (final Item item : first.getCarriedItems().getInventory().getItems()) {
+						if (item.isWielded()) {
+							first.getCarriedItems().getEquipment().unequipItem(
+								new UnequipRequest(first, item, UnequipRequest.RequestType.FROM_INVENTORY, false));
+						}
+					}
+				}
+				synchronized (second.getCarriedItems().getInventory().getItems()) {
+					for (final Item item : second.getCarriedItems().getInventory().getItems()) {
+						if (item.isWielded()) {
+							second.getCarriedItems().getEquipment().unequipItem(
+								new UnequipRequest(first, item, UnequipRequest.RequestType.FROM_INVENTORY, false));
+						}
+					}
+				}
+				ActionSender.sendSound(first, "click");
+				ActionSender.sendInventory(first);
+				ActionSender.sendEquipmentStats(first);
+				ActionSender.sendSound(second, "click");
+				ActionSender.sendInventory(second);
+				ActionSender.sendEquipmentStats(second);
+			}
+		}
+
+		if (first.getDuel().getDuelSetting(2)) {
+			first.getPrayers().resetPrayers();
+			second.getPrayers().resetPrayers();
+		}
+		return true;
+	}
+
+	private void commencePreparedDuel(final Player first, final Player second,
+								   final DuelProofSession proofSession) {
+		if (!isPreparedDuelReady(first, second, proofSession)) {
+			if (proofSession != null) {
+				DuelProofService.abort(proofSession, "state");
+			} else {
+				cancelPreparedDuel(first, second);
+			}
+			return;
+		}
+		if (!first.getDuel().checkDuelItems() || !second.getDuel().checkDuelItems()) {
+			if (proofSession != null) {
+				DuelProofService.abort(proofSession, "items");
+			} else {
+				cancelPreparedDuel(first, second);
+			}
+			return;
+		}
+
+		first.walkToEntity(second.getX(), second.getY());
+		first.setWalkToAction(new WalkToMobAction(first, second, 1) {
+			@Override
+			public void executeInternal() {
+				final Player opponentPlayer = (Player) mob;
+				getPlayer().resetPath();
+				opponentPlayer.resetPath();
+
+				if (!isPreparedDuelReady(getPlayer(), opponentPlayer, proofSession)) {
+					if (proofSession != null) {
+						DuelProofService.abort(proofSession, "state");
+					} else {
+						cancelPreparedDuel(getPlayer(), opponentPlayer);
+					}
+					return;
+				}
+				if (!getPlayer().getDuel().checkDuelItems()
+					|| !opponentPlayer.getDuel().checkDuelItems()) {
+					if (proofSession != null) {
+						DuelProofService.abort(proofSession, "items");
+					} else {
+						cancelPreparedDuel(getPlayer(), opponentPlayer);
+					}
+					return;
+				}
+				if (!getPlayer().canReach(opponentPlayer)) {
+					if (proofSession != null) {
+						DuelProofService.abort(proofSession, "unreachable");
+					} else {
+						cancelPreparedDuel(getPlayer(), opponentPlayer);
+					}
+					return;
+				}
+
+					if (proofSession == null) {
+						if (!enterPreparedDuelCombat(getPlayer(), opponentPlayer, null)) {
+						cancelPreparedDuel(getPlayer(), opponentPlayer);
+					}
+					return;
+				}
+
+				if (!DuelProofService.persistCombatStart(proofSession, new Runnable() {
+						@Override
+						public void run() {
+							enterPreparedDuelCombat(getPlayer(), opponentPlayer, proofSession);
+					}
+				})) {
+					DuelProofService.abort(proofSession, "state");
+				}
+			}
+		});
+	}
+
+	private boolean enterPreparedDuelCombat(final Player first, final Player second,
+											  final DuelProofSession proofSession) {
+		if (rejectVoidArenaDuel(first, second)) {
+			return false;
+		}
+		CombatEvent combatEvent = null;
+		try {
+			first.resetAllExceptDueling();
+			second.resetAllExceptDueling();
+			first.setLocation(second.getLocation(), false);
+
+			first.setSprite(9);
+			first.setOpponent(second);
+			first.setCombatTimer();
+			second.setSprite(8);
+			second.setOpponent(first);
+			second.setCombatTimer();
+
+			final int starterPlayerId;
+			if (proofSession == null) {
+				final int firstCombatLevel = first.getCombatLevel();
+				final int secondCombatLevel = second.getCombatLevel();
+				final int tieBreaker = firstCombatLevel == secondCombatLevel
+					? DataConversions.random(0, 1) : 0;
+				starterPlayerId = DuelProofSpec.starterPlayerId(
+					first.getDatabaseID(), firstCombatLevel,
+					second.getDatabaseID(), secondCombatLevel, tieBreaker);
+			} else {
+				starterPlayerId = proofSession.chooseStarterPlayerId();
+			}
+			final Player attacker = starterPlayerId == first.getDatabaseID() ? first : second;
+			final Player opponent = attacker == first ? second : first;
+			attacker.getDuel().setDuelActive(true);
+			opponent.getDuel().setDuelActive(true);
+
+			combatEvent = new CombatEvent(first.getWorld(), attacker, opponent, proofSession);
+			attacker.setCombatEvent(combatEvent);
+			opponent.setCombatEvent(combatEvent);
+			if (!first.getWorld().getServer().getGameEventHandler().add(combatEvent)) {
+				cleanupFailedCombatEntry(first, second, combatEvent);
+				return false;
+			}
+
+			DuelJournalService.begin(first, second);
+			first.message("Commencing Duel!");
+			second.message("Commencing Duel!");
+		} catch (final RuntimeException failure) {
+			cleanupFailedCombatEntry(first, second, combatEvent);
+			return false;
+		}
+		first.setBusy(false);
+		second.setBusy(false);
+		first.getDuel().setDuelCombatStarted(true);
+		second.getDuel().setDuelCombatStarted(true);
+		return true;
+	}
+
+	private void cleanupFailedCombatEntry(final Player first, final Player second,
+										final CombatEvent combatEvent) {
+		if (combatEvent != null) {
+			combatEvent.stop();
+			if (first.getCombatEvent() == combatEvent) {
+				first.setCombatEvent(null);
+			}
+			if (second.getCombatEvent() == combatEvent) {
+				second.setCombatEvent(null);
+			}
+		}
+		if (first.getOpponent() == second) {
+			first.setOpponent(null);
+		}
+		if (second.getOpponent() == first) {
+			second.setOpponent(null);
+		}
+		first.setHitsMade(0);
+		second.setHitsMade(0);
+		if (first.getSprite() > 7) {
+			first.setSprite(4);
+		}
+		if (second.getSprite() > 7) {
+			second.setSprite(4);
+		}
+		first.getDuel().setDuelCombatStarted(false);
+		second.getDuel().setDuelCombatStarted(false);
+	}
+
+	private boolean isPreparedDuelReady(final Player first, final Player second,
+									 final DuelProofSession proofSession) {
+		if (rejectVoidArenaDuel(first, second)) {
+			return false;
+		}
+		return first != null && second != null && first != second
+			&& first.loggedIn() && second.loggedIn() && !first.isRemoved() && !second.isRemoved()
+			&& first.getDuel().isDuelActive() && second.getDuel().isDuelActive()
+			&& first.getDuel().isDuelAccepted() && second.getDuel().isDuelAccepted()
+			&& first.getDuel().isDuelConfirmAccepted() && second.getDuel().isDuelConfirmAccepted()
+			&& first.getDuel().getDuelRecipient() == second
+			&& second.getDuel().getDuelRecipient() == first
+			&& (proofSession == null
+				? first.getDuel().getProofSession() == null && second.getDuel().getProofSession() == null
+				: proofSession.isLocked() && first.getDuel().getProofSession() == proofSession
+					&& second.getDuel().getProofSession() == proofSession);
+	}
+
+	private void cancelPreparedDuel(final Player first, final Player second) {
+		if (first != null) {
+			first.setBusy(false);
+			first.resetPath();
+			first.setWalkToAction(null);
+			first.getDuel().resetAll();
+		}
+		if (second != null) {
+			second.setBusy(false);
+			second.resetPath();
+			second.setWalkToAction(null);
+			second.getDuel().resetAll();
+		}
+	}
+
+	private boolean rejectVoidArenaDuel(final Player first, final Player second) {
+		if (!blocksOrdinaryDuel(first) && !blocksOrdinaryDuel(second)) {
+			return false;
+		}
+		if (first != null) {
+			first.message("Regular duels are unavailable while you are involved in the Void Arena.");
+		}
+		if (second != null && second != first) {
+			second.message("Regular duels are unavailable while you are involved in the Void Arena.");
+		}
+		unsetOptions(first);
+		unsetOptions(second);
+		return true;
+	}
+
+	private boolean blocksOrdinaryDuel(final Player player) {
+		return player != null && player.getWorld().getVoidArena().blocksOrdinaryDuel(player);
 	}
 
 	private void unsetOptions(Player player) {

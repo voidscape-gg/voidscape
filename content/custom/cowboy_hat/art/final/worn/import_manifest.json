@@ -1,0 +1,36 @@
+{
+  "format": "voidscape-cowboy-sheet-v1",
+  "sourceGrid": "content/custom/cowboy_hat/art/source/generated/cowboy_worn_grid.png",
+  "referenceDir": "content/custom/cowboy_hat/art/source/references/wizardshat",
+  "frameCount": 18,
+  "canonicalSourceCells": [
+    0,
+    0,
+    0,
+    2,
+    2,
+    2,
+    3,
+    3,
+    3,
+    4,
+    4,
+    4,
+    15,
+    15,
+    15,
+    6,
+    6,
+    6
+  ],
+  "palette": [
+    "#000001",
+    "#24150D",
+    "#3E2516",
+    "#6B4325",
+    "#9B6736",
+    "#C28B4A",
+    "#16100D",
+    "#D6B456"
+  ]
+}

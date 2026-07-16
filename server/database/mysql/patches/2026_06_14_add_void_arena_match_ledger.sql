@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `voidarena_ranked_matches`
+CREATE TABLE IF NOT EXISTS `_PREFIX_voidarena_ranked_matches`
 (
     `ID`                  int(10) unsigned NOT NULL AUTO_INCREMENT,
     `seasonID`            varchar(16)      NOT NULL DEFAULT 'global',

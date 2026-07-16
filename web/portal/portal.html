@@ -365,7 +365,7 @@
 							</label>
 							<label>
 								<span>Game password</span>
-								<input id="character-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
+								<input id="character-password" type="password" minlength="4" maxlength="20" autocomplete="new-password" placeholder="4-20 letters and numbers only" title="Symbols and spaces are not allowed.">
 							</label>
 							<button class="primary-button" type="button" id="queue-character">Create character</button>
 						</div>
@@ -375,8 +375,8 @@
 							</div>
 							<form class="game-password-form" id="game-password-form" hidden novalidate>
 								<label><span>Account password</span><input id="game-password-account" type="password" autocomplete="current-password"></label>
-								<label><span>New game password</span><input id="game-password-new" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 letters and numbers"></label>
-								<label><span>Confirm game password</span><input id="game-password-confirm" type="password" maxlength="20" autocomplete="new-password"></label>
+								<label><span>New game password</span><input id="game-password-new" type="password" minlength="4" maxlength="20" autocomplete="new-password" placeholder="4-20 letters and numbers only" title="Symbols and spaces are not allowed."></label>
+								<label><span>Confirm game password</span><input id="game-password-confirm" type="password" minlength="4" maxlength="20" autocomplete="new-password" placeholder="Repeat game password"></label>
 								<div class="button-row">
 									<button class="primary-button" type="submit" id="game-password-submit">Update game password</button>
 									<button class="ghost-button" type="button" id="cancel-game-password-reset">Cancel</button>
@@ -410,18 +410,10 @@
 						</div>
 						<button class="ghost-button" type="button" id="use-founder-reward" disabled>Claim in Lumbridge</button>
 					</div>
-					<div class="reward-wallet" id="paid-card-wallet">
-						<div>
-							<span>Paid subscription cards</span>
-							<strong id="paid-card-count">No paid cards waiting</strong>
-						</div>
-						<button class="primary-button" type="button" id="buy-subscription-card" disabled>Buy 1 card</button>
-					</div>
-					<p class="inline-state" id="checkout-state">Sign in to buy one tradable 1-week subscription card through Tebex.</p>
 					<p class="inline-state" id="redeem-state">No subscription card is waiting right now.</p>
 					<div class="subscription-note">
 						<span>How it works</span>
-						<strong>Payment return is not fulfillment. After Tebex confirms payment, claim the pending card from the Subscription Vendor in Lumbridge.</strong>
+						<strong>Talk to the Subscription Vendor in Lumbridge to collect a reserved card.</strong>
 					</div>
 				</section>
 			</section>
@@ -516,7 +508,7 @@
 						</div>
 						<div class="title-list">
 							<button type="button"><strong>The Conqueror</strong><span>Equipped</span></button>
-							<button type="button"><strong>Voidbane</strong><span>Reusable</span></button>
+							<button type="button"><strong>the Runesmith</strong><span>Feat</span></button>
 							<button type="button"><strong>Red Revenant</strong><span>Rare</span></button>
 							<button type="button"><strong>Gatebreaker</strong><span>Unique held by Maeve</span></button>
 						</div>
@@ -750,7 +742,7 @@
 							</div>
 						</div>
 						<div class="event-list" id="public-news-list">
-							<div class="event-row rare"><span></span><p>Three-floor Void Dungeon routes are ready for launch.</p><time>Today</time></div>
+							<div class="event-row rare"><span></span><p>Void Enclave boss tuning is live.</p><time>Today</time></div>
 							<div class="event-row market"><span></span><p>Subscription cards added near Lumbridge.</p><time>Today</time></div>
 							<div class="event-row title"><span></span><p>Player titles now display overhead.</p><time>Jun 3</time></div>
 						</div>

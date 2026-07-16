@@ -4,7 +4,6 @@ import com.openrsc.server.constants.IronmanMode;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Minigames;
 import com.openrsc.server.constants.Skill;
-import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.event.rsc.impl.projectile.BallProjectileEvent;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GameObject;
@@ -225,7 +224,6 @@ public class GnomeBall implements MiniGameInterface, UsePlayerTrigger, TakeObjTr
 		player.setAttribute("gnomeball_goals", (prev_goalCount+1)%5);
 		player.getCache().set("gnomeball_xp", totalXp);
 		player.getCache().set("gnomeball_total_goals", totalGoals);
-		PlayerTitle.incrementCounter(player, PlayerTitle.COUNTER_GNOMEBALL_GOALS);
 	}
 
 	private void showScoreWindow(Player player, int goalNum) {

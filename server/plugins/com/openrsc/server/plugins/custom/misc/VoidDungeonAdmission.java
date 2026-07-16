@@ -1,13 +1,13 @@
 package com.openrsc.server.plugins.custom.misc;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.event.DelayedEvent;
 import com.openrsc.server.model.container.Inventory;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.UUID;
 
 import static com.openrsc.server.plugins.Functions.delay;
 
@@ -45,68 +45,59 @@ public final class VoidDungeonAdmission {
 	}
 
 	public static boolean purchaseAndPersist(Player player) {
-		return purchaseAndPersist(new PlayerAdmissionPort(player));
-	}
-
-	static boolean purchaseAndPersist(AdmissionPort admission) {
-		if (admission.isAdmitted()) {
+		if (isAdmitted(player)) {
 			return true;
 		}
-		if (!admission.reserveSave()) {
+		if (!reserveSave(player)) {
 			return false;
 		}
 
+		final Inventory inventory = player.getCarriedItems().getInventory();
 		CompletableFuture<Boolean> saveResult = null;
 		boolean coinsRemoved = false;
 		boolean committed = false;
 		try {
-			if (admission.isAdmitted()) {
+			if (isAdmitted(player)) {
 				committed = true;
 				return true;
 			}
-			if (!admission.hasEntryFee()) {
-				admission.message("You need 100,000 coins to enter the Void Dungeon.");
+			if (inventory.countId(ItemId.COINS.id()) < ENTRY_FEE_COINS) {
+				player.message("You need 100,000 coins to enter the Void Dungeon.");
 				return false;
 			}
 
-			if (!admission.removeEntryFee()) {
-				admission.message("The rift cannot take your coins. You remain outside.");
+			final long removedItemId = player.getCarriedItems().remove(
+				new Item(ItemId.COINS.id(), ENTRY_FEE_COINS), false);
+			if (removedItemId == Item.ITEM_ID_UNASSIGNED) {
+				player.message("The rift cannot take your coins. You remain outside.");
 				return false;
 			}
 			coinsRemoved = true;
 
-			admission.markAdmitted();
+			player.getCache().set(ADMISSION_CACHE_KEY, 1);
+			discoverDepth(player, INITIAL_DEPTH);
 
-			try {
-				saveResult = admission.saveReservedAsync();
-			} catch (final RuntimeException ex) {
-				return false;
-			}
-			if (!awaitSave(admission, saveResult)) {
+			saveResult = player.saveReservedAsync();
+			if (!awaitSave(player, saveResult)) {
+				player.message("The rift cannot secure your admission. Your 100,000 coins are returned.");
 				return false;
 			}
 
 			committed = true;
-			admission.syncInventory();
+			ActionSender.sendInventory(player);
 			return true;
 		} finally {
 			try {
 				if (!committed) {
-					admission.clearAdmission();
+					clear(player);
 					if (coinsRemoved) {
-						if (!admission.canRefundEntryFee()) {
-							admission.message("The rift could not secure your admission. The interrupted fee is consumed.");
-						} else if (admission.returnEntryFee()) {
-							admission.message("The rift cannot secure your admission. Your 100,000 coins are returned.");
-						} else {
-							admission.message("The rift cannot secure your admission. The fee could not be returned and is consumed.");
-						}
+						inventory.add(new Item(ItemId.COINS.id(), ENTRY_FEE_COINS), false);
 					}
-					admission.syncInventory();
-					repairRolledBackSave(admission, saveResult);
+					ActionSender.sendInventory(player);
+					repairRolledBackSave(player, saveResult);
 				}
 			} finally {
-				admission.releaseSaveReservation();
+				player.releaseSaveReservation();
 			}
 		}
 	}
@@ -118,151 +109,56 @@ public final class VoidDungeonAdmission {
 		return changed;
 	}
 
-	private static boolean awaitSave(AdmissionPort admission, CompletableFuture<Boolean> saveResult) {
-		if (saveResult == null) {
-			return false;
-		}
+	private static boolean awaitSave(Player player, CompletableFuture<Boolean> saveResult) {
 		for (int waited = 0; waited < SAVE_COMPLETION_WAIT_TICKS && !saveResult.isDone(); waited++) {
-			if (!admission.canCompleteAdmission()) {
+			if (!canCompleteAdmission(player)) {
 				return false;
 			}
-			admission.delayTick();
+			delay(1);
 		}
-		if (!saveResult.isDone() || !admission.canCompleteAdmission()) {
+		if (!saveResult.isDone() || !canCompleteAdmission(player)) {
 			return false;
 		}
 		try {
 			return Boolean.TRUE.equals(saveResult.getNow(false))
-				&& admission.canCompleteAdmission();
+				&& canCompleteAdmission(player);
 		} catch (final RuntimeException ex) {
 			return false;
 		}
 	}
 
-	private static void repairRolledBackSave(AdmissionPort admission,
-		CompletableFuture<Boolean> saveResult) {
+	private static boolean canCompleteAdmission(Player player) {
+		return player.loggedIn() && !player.isRemoved() && !player.isLoggingOut()
+			&& !player.isUnregistering() && !player.killed;
+	}
+
+	private static void repairRolledBackSave(Player player, CompletableFuture<Boolean> saveResult) {
 		if (saveResult == null) {
-			admission.repairRolledBackSave();
 			return;
 		}
-		saveResult.whenComplete((ignored, error) -> admission.repairRolledBackSave());
+		saveResult.whenComplete((ignored, error) ->
+			player.getWorld().getServer().getGameEventHandler().add(
+				new DelayedEvent(player.getWorld(), null, 0, "Void Dungeon admission rollback save") {
+					@Override
+					public void run() {
+						player.requestPersistentSave();
+						stop();
+					}
+				}));
 	}
 
-	interface AdmissionPort {
-		boolean isAdmitted();
-		boolean reserveSave();
-		boolean hasEntryFee();
-		boolean removeEntryFee();
-		boolean canRefundEntryFee();
-		boolean returnEntryFee();
-		void markAdmitted();
-		void clearAdmission();
-		CompletableFuture<Boolean> saveReservedAsync();
-		boolean canCompleteAdmission();
-		void delayTick();
-		void message(String message);
-		void syncInventory();
-		void repairRolledBackSave();
-		void releaseSaveReservation();
-	}
-
-	private static final class PlayerAdmissionPort implements AdmissionPort {
-		private final Player player;
-		private final UUID lifecycleId;
-
-		private PlayerAdmissionPort(Player player) {
-			this.player = player;
-			this.lifecycleId = player.getSaveLifecycleId();
-		}
-
-		@Override
-		public boolean isAdmitted() {
-			return VoidDungeonAdmission.isAdmitted(player);
-		}
-
-		@Override
-		public boolean reserveSave() {
-			for (int waited = 0; waited < SAVE_RESERVATION_WAIT_TICKS; waited++) {
-				if (!canCompleteAdmission()) {
-					return false;
-				}
-				if (player.tryReserveSave()) {
-					return true;
-				}
-				delayTick();
+	private static boolean reserveSave(Player player) {
+		for (int waited = 0; waited < SAVE_RESERVATION_WAIT_TICKS; waited++) {
+			if (!player.loggedIn() || player.isRemoved() || player.isLoggingOut()
+				|| player.isUnregistering() || player.killed) {
+				return false;
 			}
-			message("The rift is still securing your account. Please try again.");
-			return false;
-		}
-
-		@Override
-		public boolean hasEntryFee() {
-			return player.getCarriedItems().getInventory().countId(ItemId.COINS.id())
-				>= ENTRY_FEE_COINS;
-		}
-
-		@Override
-		public boolean removeEntryFee() {
-			return player.getCarriedItems().remove(
-				new Item(ItemId.COINS.id(), ENTRY_FEE_COINS), false) != Item.ITEM_ID_UNASSIGNED;
-		}
-
-		@Override
-		public boolean canRefundEntryFee() {
-			return player.isCurrentSaveLifecycle(lifecycleId) && !player.killed;
-		}
-
-		@Override
-		public boolean returnEntryFee() {
-			final Inventory inventory = player.getCarriedItems().getInventory();
-			return inventory.add(new Item(ItemId.COINS.id(), ENTRY_FEE_COINS), false);
-		}
-
-		@Override
-		public void markAdmitted() {
-			player.getCache().set(ADMISSION_CACHE_KEY, 1);
-			discoverDepth(player, INITIAL_DEPTH);
-		}
-
-		@Override
-		public void clearAdmission() {
-			clear(player);
-		}
-
-		@Override
-		public CompletableFuture<Boolean> saveReservedAsync() {
-			return player.saveReservedAsync();
-		}
-
-		@Override
-		public boolean canCompleteAdmission() {
-			return player.isCurrentSaveLifecycle(lifecycleId) && !player.isLoggingOut()
-				&& !player.isUnregistering() && !player.killed;
-		}
-
-		@Override
-		public void delayTick() {
+			if (player.tryReserveSave()) {
+				return true;
+			}
 			delay(1);
 		}
-
-		@Override
-		public void message(String message) {
-			player.message(message);
-		}
-
-		@Override
-		public void syncInventory() {
-			ActionSender.sendInventory(player);
-		}
-
-		@Override
-		public void repairRolledBackSave() {
-			player.requestPersistentSave(lifecycleId);
-		}
-
-		@Override
-		public void releaseSaveReservation() {
-			player.releaseSaveReservation();
-		}
+		player.message("The rift is still securing your account. Please try again.");
+		return false;
 	}
 }

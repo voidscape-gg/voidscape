@@ -39,7 +39,10 @@ public class Bones implements OpInvTrigger, UseInvTrigger {
 				buryAmount = (item.getAmount() > invAmount) ? invAmount : item.getAmount();
 			}
 
-			startbatch(buryAmount);
+			int prayerSkillId = player.getConfig().DIVIDED_GOOD_EVIL
+				? Skill.PRAYGOOD.id()
+				: Skill.PRAYER.id();
+			startskillbatch(buryAmount, prayerSkillId);
 			buryBones(player, item);
 		}
 	}

@@ -17,6 +17,7 @@ RELEVANT_PATHS = (
     "Android_Client",
     "Client_Base/src",
     "Client_Base/Cache",
+    "Duel_Proof/src/main/java",
     "scripts/build-android.sh",
     "scripts/android-provenance.py",
 )

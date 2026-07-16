@@ -8,12 +8,13 @@ import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
-import com.openrsc.server.model.entity.player.PvpDamageTracking;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.entity.update.Projectile;
 import com.openrsc.server.model.states.CombatState;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
+
+import java.util.UUID;
 
 public class ProjectileEvent extends SingleTickEvent {
 
@@ -23,6 +24,7 @@ public class ProjectileEvent extends SingleTickEvent {
 	protected int type;
 	boolean canceled;
 	boolean shouldChase;
+	private final UUID voidArenaSessionId;
 
 	public ProjectileEvent(World world, Mob caster, Mob opponent, int damage, int type) {
 		this(world, caster, opponent, damage, type, true);
@@ -48,6 +50,7 @@ public class ProjectileEvent extends SingleTickEvent {
 		this.type = type;
 		this.shouldChase = setChasing;
 		this.attackerMaxHit = attackerMaxHit;
+		this.voidArenaSessionId = world.getVoidArena().projectileSessionId(caster, opponent);
 
 		sendProjectile(caster, opponent);
 		if (caster.isPlayer() && opponent.isPlayer()) {
@@ -84,7 +87,8 @@ public class ProjectileEvent extends SingleTickEvent {
 	}
 
 	protected final boolean canImpact() {
-		return !canceled && caster.sharesInstanceWith(opponent);
+		return !canceled && caster.sharesInstanceWith(opponent)
+			&& getWorld().getVoidArena().canProjectileImpact(caster, opponent, voidArenaSessionId);
 	}
 
 	private void recoilDamage(Player opponent, Mob caster, int damage) {
@@ -130,12 +134,6 @@ public class ProjectileEvent extends SingleTickEvent {
 		}
 
 		int lastHits = opponent.getLevel(Skill.HITS.id());
-		final int actualDirectDamage = PvpDamageTracking.actualDirectDamage(damage, lastHits);
-		if (actualDirectDamage > 0 && caster != opponent
-			&& caster instanceof Player && opponent instanceof Player) {
-			((Player) opponent).updateDamageAndBlockedDamageTracking(
-				(Player) caster, actualDirectDamage, 0);
-		}
 		opponent.getSkills().subtractLevel(Skill.HITS.id(), damage, false);
 		opponent.getUpdateFlags().setDamage(new Damage(opponent, damage).withHitFeedback(caster, attackerMaxHit));
 

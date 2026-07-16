@@ -55,7 +55,6 @@
 						<span>02</span>
 						<h2>Game And Entitlement Data</h2>
 						<p>The portal may create or link game characters, read safe character snapshot fields, and write account-level markers such as <code>web_account_id</code>, <code>starter_card:&lt;accountId&gt;</code>, and subscription expiry markers so the Lumbridge vendor and portal agree.</p>
-						<p>If you buy a card, Tebex processes the checkout and receives the customer IPv4 address required for backend basket creation plus the payment/customer details it collects as merchant of record. Voidscape's restricted game-database ledger stores only the portal account id, opaque intent and basket ids, Tebex transaction id, package/currency, expected catalog amount, product-paid amount, transaction-paid amount, their non-tax-specific adjustments delta, entitlement state, and claim provenance. Tebex remains the source of truth for exact tax and fee details. Voidscape does not store the raw webhook, customer email, username, or IP address in this ledger.</p>
 					</article>
 					<article>
 						<span>03</span>
@@ -71,7 +70,6 @@
 						<span>05</span>
 						<h2>Downloads And Logs</h2>
 						<p>Normal web server logs may include IP address, user agent, request path, timestamp, and download requests. The portal also records lightweight funnel clicks so launch links can be checked for broken or confusing paths.</p>
-						<p>For the staff-only live visitor count, the site creates a random browser identifier in local or session storage. The portal hashes it, keeps only the current route without query strings or URL fragments, and discards the in-memory presence record after 30 minutes. Staff do not see the raw identifier.</p>
 					</article>
 					<article>
 						<span>06</span>
@@ -109,7 +107,7 @@
 					<a href="/transparency">Trust</a>
 					<a href="/privacy">Privacy</a>
 					<a href="/data-deletion">Data Deletion</a>
-					<a aria-disabled="true">Source publication pending</a>
+					<a href="/transparency">Source publication pending</a>
 				</div>
 			</footer>
 		</div>

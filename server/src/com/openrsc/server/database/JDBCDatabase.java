@@ -4,11 +4,12 @@ import com.openrsc.server.Server;
 import com.openrsc.server.util.checked.CheckedConsumer;
 import com.openrsc.server.util.checked.CheckedFunction;
 import com.openrsc.server.util.checked.CheckedRunnable;
-import com.openrsc.server.util.checked.CheckedSupplier;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 public abstract class JDBCDatabase extends GameDatabase {
 
@@ -26,32 +27,19 @@ public abstract class JDBCDatabase extends GameDatabase {
      */
     @Override
     public boolean atomically(CheckedRunnable<Exception> runnable) {
-        getConnection().getConnectionLock().lock();
-        try {
-            return super.atomically(runnable);
-        } finally {
-            getConnection().getConnectionLock().unlock();
-        }
+        return withConnectionTransactionLock(getConnection(), () -> super.atomically(runnable));
     }
 
-    @Override
-    public AtomicTransactionOutcome atomicallyWithOutcome(CheckedRunnable<Exception> runnable) {
-        getConnection().getConnectionLock().lock();
+    /** Package-visible so the concurrency test exercises the exact atomically() lock boundary. */
+    static boolean withConnectionTransactionLock(JDBCDatabaseConnection connection,
+                                                   Supplier<Boolean> transaction) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(transaction, "transaction");
+        connection.getConnectionLock().lock();
         try {
-            return super.atomicallyWithOutcome(runnable);
+            return transaction.get();
         } finally {
-            getConnection().getConnectionLock().unlock();
-        }
-    }
-
-    @Override
-    public AtomicTransactionOutcome atomicallySettled(CheckedRunnable<Exception> runnable,
-                                                       CheckedSupplier<Exception, AtomicTransactionOutcome> verifier) {
-        getConnection().getConnectionLock().lock();
-        try {
-            return super.atomicallySettled(runnable, verifier);
-        } finally {
-            getConnection().getConnectionLock().unlock();
+            connection.getConnectionLock().unlock();
         }
     }
 

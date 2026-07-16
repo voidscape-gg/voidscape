@@ -1,5 +1,9 @@
 package com.openrsc.server.model.entity.player;
 
+import com.openrsc.server.content.dueljournal.DuelJournalService;
+import com.openrsc.server.content.dueljournal.DuelJournalSession;
+import com.openrsc.server.content.duelproof.DuelProofService;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.database.impl.mysql.queries.logging.DeathLog;
 import com.openrsc.server.model.container.ContainerListener;
 import com.openrsc.server.model.container.Item;
@@ -25,6 +29,12 @@ public class Duel implements ContainerListener {
 	private boolean duelActive;
 
 	private ItemContainer duelOffer;
+
+	private DuelJournalSession journalSession;
+
+	private DuelProofSession proofSession;
+
+	private boolean duelCombatStarted;
 
 	public Duel(Player player) {
 		this.player = player;
@@ -91,6 +101,42 @@ public class Duel implements ContainerListener {
 		this.duelOffer = duelOffer;
 	}
 
+	public DuelJournalSession getJournalSession() {
+		return journalSession;
+	}
+
+	public void setJournalSession(final DuelJournalSession journalSession) {
+		this.journalSession = journalSession;
+	}
+
+	public void clearJournalSession(final DuelJournalSession expected) {
+		if (journalSession == expected) {
+			journalSession = null;
+		}
+	}
+
+	public DuelProofSession getProofSession() {
+		return proofSession;
+	}
+
+	public void setProofSession(final DuelProofSession proofSession) {
+		this.proofSession = proofSession;
+	}
+
+	public void clearProofSession(final DuelProofSession expected) {
+		if (proofSession == expected) {
+			proofSession = null;
+		}
+	}
+
+	public boolean hasDuelCombatStarted() {
+		return duelCombatStarted;
+	}
+
+	public void setDuelCombatStarted(final boolean duelCombatStarted) {
+		this.duelCombatStarted = duelCombatStarted;
+	}
+
 
 	@Override
 	public void fireItemChanged(int slot) {
@@ -125,6 +171,12 @@ public class Duel implements ContainerListener {
 	}
 
 	public void resetAll() {
+		final DuelProofSession interruptedProof = proofSession;
+		proofSession = null;
+		duelCombatStarted = false;
+		if (interruptedProof != null) {
+			DuelProofService.onDuelReset(interruptedProof);
+		}
 		if (duelRecipient != null) {
 			final Player duelRecipient = this.duelRecipient;
 
@@ -142,6 +194,7 @@ public class Duel implements ContainerListener {
 		setDuelActive(false);
 		setDuelAccepted(false);
 		setDuelConfirmAccepted(false);
+		journalSession = null;
 
 		resetDuelOffer();
 		clearDuelOptions();
@@ -167,8 +220,16 @@ public class Duel implements ContainerListener {
 	}
 
 	public void dropOnDeath() {
-		DeathLog log = new DeathLog(player, duelRecipient, true);
 		Player duelOpponent = getDuelRecipient();
+		final DuelProofSession settlementProof = proofSession != null
+			? proofSession : (duelOpponent == null ? null : duelOpponent.getDuel().getProofSession());
+		if (settlementProof != null
+			&& !DuelProofService.canSettle(settlementProof, duelOpponent, player)) {
+			DuelProofService.failCombat(settlementProof,
+				new IllegalStateException("stake settlement reached without a verified terminal capture"));
+			return;
+		}
+		DeathLog log = new DeathLog(player, duelRecipient, true);
 		synchronized(getDuelOffer().getItems()) {
 			for (Item item : getDuelOffer().getItems()) {
 				Item affectedItem = player.getCarriedItems().getInventory().get(
@@ -199,6 +260,14 @@ public class Duel implements ContainerListener {
 		if (player != null && duelOpponent != null) {
 			player.save();
 			duelOpponent.save();
+			if (settlementProof != null) {
+				if (!DuelProofService.completeSettlement(settlementProof, duelOpponent, player)) {
+					LOGGER.error("Verified duel settlement for players {} and {} was not queued",
+						duelOpponent.getDatabaseID(), player.getDatabaseID());
+				}
+			} else {
+				DuelJournalService.complete(journalSession, duelOpponent, player);
+			}
 		}
 	}
 

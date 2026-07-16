@@ -1,5 +1,6 @@
 package com.openrsc.server.event.rsc.impl;
 
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.entity.Mob;
@@ -20,6 +21,15 @@ public class PoisonEvent extends GameTickEvent {
 
 	@Override
 	public void run() {
+		if (mob.isPlayer()) {
+			final Player player = (Player) mob;
+			final DuelProofSession proofSession = player.getDuel().getProofSession();
+			// Eligible proof duels are melee-only. A poison tick must not bypass the
+			// terminal replay boundary and settle stakes outside the covered stream.
+			if (proofSession != null && proofSession.blocksExternalDamage()) {
+				return;
+			}
+		}
 		if (poisonPower < 10) {
 			mob.cure();
 			return;

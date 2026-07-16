@@ -41,6 +41,7 @@ fixture_artifacts="$tmp_dir/artifacts"
 mkdir -p \
 	"$fixture_root/Client_Base/src/orsc" \
 	"$fixture_root/Client_Base/Cache" \
+	"$fixture_root/Duel_Proof/src/main/java/com/voidscape/duelproof" \
 	"$fixture_root/Android_Client/Open RSC Android Client" \
 	"$fixture_root/scripts" \
 	"$fixture_artifacts/base/assets"
@@ -61,6 +62,10 @@ signer = sys.argv[4]
     encoding="utf-8",
 )
 (root / "Client_Base/Cache/fixture.bin").write_bytes(b"fixture-cache\n")
+(root / "Duel_Proof/src/main/java/com/voidscape/duelproof/Fixture.java").write_text(
+    "package com.voidscape.duelproof; public final class Fixture {}\n",
+    encoding="utf-8",
+)
 (root / "Android_Client/fixture.txt").write_text(
     "fixture android input\n", encoding="utf-8"
 )
@@ -375,14 +380,15 @@ expect_failure \
 	"--min-version-code is no longer accepted" \
 	"$CHECKER" --min-version-code 9
 
-git -C "$fixture_root" update-index --assume-unchanged Android_Client/fixture.txt
-printf 'dirty but hidden from status\n' >> "$fixture_root/Android_Client/fixture.txt"
-if [[ -n "$(git -C "$fixture_root" status --porcelain -- Android_Client/fixture.txt)" ]]; then
+duel_fixture="Duel_Proof/src/main/java/com/voidscape/duelproof/Fixture.java"
+git -C "$fixture_root" update-index --assume-unchanged "$duel_fixture"
+printf '// dirty but hidden from status\n' >> "$fixture_root/$duel_fixture"
+if [[ -n "$(git -C "$fixture_root" status --porcelain -- "$duel_fixture")" ]]; then
 	echo "ERROR: assume-unchanged regression fixture is still visible to git status." >&2
 	exit 1
 fi
 expect_failure \
-	"assume-unchanged source modification is rejected" \
+	"assume-unchanged Duel Proof modification is rejected" \
 	"Android/shared relevant inputs are dirty" \
 	"$CHECKER" "${fixture_args[@]}" --meta "$fixture_meta"
 

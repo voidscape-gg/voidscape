@@ -1,5 +1,6 @@
 package com.openrsc.server.net.rsc.handlers;
 
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
@@ -253,17 +254,24 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	public void process(SpellStruct payload, Player player) throws Exception {
+		OpcodeIn opcode = payload.getOpcode();
+		if (opcode == null)
+			return;
+		if (opcode == OpcodeIn.CAST_ON_GROUND_ITEM) {
+			final Point location = Point.location(payload.targetCoord.getX(), payload.targetCoord.getY());
+			if (player.getWorld().getVoidArena().blocksGroundItemAction(player, location)) {
+				player.message("You cannot use ground items in the Void Arena.");
+				player.resetPath();
+				return;
+			}
+		}
+
 		if ((player.isBusy() && !player.inCombat()) || player.isRanging()) {
 			return;
 		}
 		if (!canCast(player)) {
 			return;
 		}
-
-		OpcodeIn opcode = payload.getOpcode();
-
-		if (opcode == null)
-			return;
 
 		if (opcode == OpcodeIn.CAST_ON_INVENTORY_ITEM
 			&& (player.getTrade().isTradeActive() || (player.getDuel().isDuelActive() && !player.inCombat()))) {
@@ -699,7 +707,9 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		if (affectedMob.isPlayer()) {
 			WildernessRules.markVoidDungeonPvp(player, (Player) affectedMob);
 		}
-		finalizeSpell(player, spell, message, giveExp);
+		boolean recordTitleProgress = !(affectedMob instanceof Npc)
+			|| !player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob);
+		finalizeSpell(player, spell, message, giveExp, recordTitleProgress);
 	}
 
 	private boolean shouldAwardMobSpellExperience(Player player, Mob affectedMob) {
@@ -713,6 +723,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	public static void finalizeSpell(Player player, SpellDef spell, String message, boolean giveExp) {
+		finalizeSpell(player, spell, message, giveExp, true);
+	}
+
+	private static void finalizeSpell(Player player, SpellDef spell, String message,
+		boolean giveExp, boolean recordTitleProgress) {
 		player.lastCast = System.currentTimeMillis();
 		player.playSound("spellok");
 		// don't display a message if message is null (example superheat)
@@ -720,7 +735,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			player.playerServerMessage(MessageType.QUEST, message.trim().isEmpty() ? "Cast spell successfully" : message);
 			}
 			if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
-			PlayerTitle.recordSpellCast(player);
+			if (recordTitleProgress) PlayerTitle.recordSpellCast(player);
 			player.setCastTimer();
 		}
 
@@ -1248,6 +1263,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		player.setWalkToAction(new WalkToPointAction(player, affectedItem.getLocation(), 4) {
 			public void executeInternal() {
 				getPlayer().resetPath();
+				if (getPlayer().getWorld().getVoidArena()
+					.blocksGroundItemAction(getPlayer(), affectedItem.getLocation())) {
+					return;
+				}
 				if (!canCast(getPlayer()) || getPlayer().getViewArea().getVisibleGroundItem(affectedItem.getID(), getLocation(), getPlayer()) == null || affectedItem.isRemoved()) {
 					return;
 				}
@@ -1391,6 +1410,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							return;
 						}
 
+						if (getPlayer().getWorld().getVoidArena()
+							.blocksGroundItemAction(getPlayer(), affectedItem.getLocation())) {
+							return;
+						}
 						if (!checkAndRemoveRunes(getPlayer(), spell)) {
 							return;
 						}
@@ -1461,6 +1484,9 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			spellType != 0 && spellEnum != Spells.FEAR) {
 			player.message("You cannot do that whilst fighting!");
 			return;
+		}
+		if (affectedMob.isNpc()) {
+			VoidDungeonTraversalGrace.clear(player);
 		}
 
 		final int spellRange = player.getConfig().SPELL_RANGE_DISTANCE;

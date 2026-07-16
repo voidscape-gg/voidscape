@@ -31,6 +31,10 @@ public class ItemUseOnGroundItem implements PayloadProcessor<ItemOnGroundItemStr
 
 		player.resetAll();
 		Point location = Point.location(payload.groundItemCoord.getX(), payload.groundItemCoord.getY());
+		if (player.getWorld().getVoidArena().blocksGroundItemAction(player, location)) {
+			player.message("You cannot use ground items in the Void Arena.");
+			return;
+		}
 
 		int groundItemId;
 		int inventorySlot;
@@ -62,6 +66,11 @@ public class ItemUseOnGroundItem implements PayloadProcessor<ItemOnGroundItemStr
 		player.setWalkToAction(new WalkToPointAction(player,
 			gItem.getLocation(), firemaking ? 0 : 1) {
 			public void executeInternal() {
+				if (getPlayer().getWorld().getVoidArena()
+					.blocksGroundItemAction(getPlayer(), gItem.getLocation())) {
+					return;
+				}
+
 				if (getPlayer().isBusy()
 					|| getPlayer().isRanging()
 					|| getPlayer().getRegion().getItem(groundItemId, getLocation(), getPlayer()) == null

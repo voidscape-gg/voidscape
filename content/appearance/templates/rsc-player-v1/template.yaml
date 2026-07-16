@@ -1,0 +1,104 @@
+schema: voidscape-paperdoll-template/v2
+key: rsc-player-v1
+frame_count: 18
+references:
+  head4: {frames_dir: content/appearance/templates/rsc-player-v1/references/head4, tree_sha256: d3b23266b793e60733ccbec1dfddffebc48baba9643e36e1ba9538c41b427057}
+  head1: {frames_dir: content/appearance/templates/rsc-player-v1/references/head1, tree_sha256: a280f3ddd091d1f94f9e39cdf62f0ac8713fb09c19e179656591cee9a345d5d8}
+  fhead1: {frames_dir: content/appearance/templates/rsc-player-v1/references/fhead1, tree_sha256: b870484050b627492c41b9c4e6753a50d76c33ee11b3533e60ace6e45b456a54}
+  head3: {frames_dir: content/appearance/templates/rsc-player-v1/references/head3, tree_sha256: b14d567197701f68269c3f6f5a289ac7871aac2782d6d7d57e7aef834aa5fcca}
+  body: {frames_dir: content/appearance/templates/rsc-player-v1/references/body, tree_sha256: 464b3e7aa3d607be62a47b83d04564b65adbd526b3ddfdf8d77c1849b264e526}
+  legs: {frames_dir: content/appearance/templates/rsc-player-v1/references/legs, tree_sha256: 9b827eabb69beb5b49ffcd2e4da9a7edeff3455ebaf686bc4754f5361b7872d8}
+locked_base_reference: head4
+coordinate_convention: {landmarks: crown-relative, fractional_center_rounding: floor, masks: logical-canvas, phase_translation: crown-delta}
+logical_canvases:
+  walk: [64, 102]
+  combat: [84, 102]
+groups:
+  - {master: north, offsets: [0, 1, 2], canvas: walk, crowns: [[32, 9], [32, 9], [32, 9]]}
+  - {master: north-west, offsets: [3, 4, 5], canvas: walk, crowns: [[30, 9], [30, 9], [30, 9]]}
+  - {master: west, offsets: [6, 7, 8], canvas: walk, crowns: [[31, 9], [31, 9], [31, 9]]}
+  - {master: south-west, offsets: [9, 10, 11], canvas: walk, crowns: [[30, 9], [30, 9], [30, 9]]}
+  - {master: south, offsets: [12, 13, 14], canvas: walk, crowns: [[32, 9], [32, 9], [32, 9]]}
+  - {master: combat-west, offsets: [15, 16, 17], canvas: combat, crowns: [[16, 9], [21, 9], [27, 9]]}
+runtime_mirrors:
+  south-east: south-west
+  east: west
+  north-east: north-west
+  combat-b: combat-west
+pose_profiles:
+  north:
+    visual_pose: front
+    landmarks: {forehead: [0, 5], face_center: [0, 9], nose_tip: [0, 11], upper_lip: [0, 14], chin: [0, 17], ear: null, occiput: [0, 7], neck: [0, 17], nape: [0, 16]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/north/hair_allowed.png, sha256: 6eedabf06ec907ab8ea8115fa2859c189a1d96152fe50b709a65dfc063ecaa08}
+      facial_hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/north/facial_hair_allowed.png, sha256: 56f65800c3ee8c2d4cfd2de0dad568acb5ceb270161bb5958f9bf0e220d8af6d}
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/north/scalp_attachment.png, sha256: 4c56fc2e83cb0ca518afbfc7590136bc976d06107affa68197c9123e5ce42633}
+      upper_lip_attachment: {path: content/appearance/templates/rsc-player-v1/masks/north/upper_lip_attachment.png, sha256: 3fb08d72253b574dbe5d31ce052eb620e3c47589d6273e02f1cfc92522dbba5a}
+      nape_tail: null
+      face_clearance: {path: content/appearance/templates/rsc-player-v1/masks/north/face_clearance.png, sha256: b1503606cc8b7f5767b9150775fb7175f92bebd882e2e7e75fd2ec5def6e7db2}
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/north/neck_clearance.png, sha256: ef69111c0b753695bfeafc728f2390850c905c047fcb80643902254671600980}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/north/protected_anatomy.png, sha256: 207deed21a28500a89b22712bcdde68649500e1e7e3dba4a2306207acc3dd5b4}
+  north-west:
+    visual_pose: three-quarter-front
+    landmarks: {forehead: [4, 5], face_center: [5, 9], nose_tip: [8, 11], upper_lip: [5, 14], chin: [1, 17], ear: [-6, 9], occiput: [-6, 8], neck: [1, 17], nape: [-5, 15]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/north-west/hair_allowed.png, sha256: ffcbcd7b59cd3668c4ecf5c7967432e9c6c23bbbc2c2082e4c90cb45ef3a2184}
+      facial_hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/north-west/facial_hair_allowed.png, sha256: 5ae1a1be5d8f7a7630d00622a0ad159ab1b0db11ed4286fed6143d2885982c26}
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/north-west/scalp_attachment.png, sha256: ab7b2e8a4f0e3bece7504fa380e98d89d5a758c427ccd8a8884c3a88fe4cadc2}
+      upper_lip_attachment: {path: content/appearance/templates/rsc-player-v1/masks/north-west/upper_lip_attachment.png, sha256: bcf0ae67a8e1dfac70e099d1b3f76c38aac8ac087463fed63f3631325266f3b5}
+      nape_tail: {path: content/appearance/templates/rsc-player-v1/masks/north-west/nape_tail.png, sha256: db72092c4538939dbb6eabd02a8e207c3d203565bca9a1573ee173c653720672}
+      face_clearance: {path: content/appearance/templates/rsc-player-v1/masks/north-west/face_clearance.png, sha256: 32df9593365b94498a04732188f42b8d191f74348315fb780c333897a61912bb}
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/north-west/neck_clearance.png, sha256: 27400fe2a3dff94357fa49f7d7e08a2903baba79462b0ca63c714c3ce5f7b5c5}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/north-west/protected_anatomy.png, sha256: 49f459ce229f5fe30315f0e5ae6c39368174d9f37823dafd473bb9c305994664}
+  west:
+    visual_pose: profile
+    landmarks: {forehead: [3, 5], face_center: [4, 8], nose_tip: [7, 9], upper_lip: [3, 12], chin: [-1, 14], ear: [-3, 8], occiput: [-7, 7], neck: [-1, 14], nape: [-7, 13]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/west/hair_allowed.png, sha256: 725009105d6dcba4adfb995569117e1f86c40c6c0f81616ecfc31be1da1a3b69}
+      facial_hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/west/facial_hair_allowed.png, sha256: 5fda1740c4afb1a21f28c5ee20e79b46c1d11d89d54c2f8b989b6b277e51afdd}
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/west/scalp_attachment.png, sha256: 25b4da85848637cd90f3f29a4cf69994ff4ff9632a962966b68b38e5ccd22b0e}
+      upper_lip_attachment: {path: content/appearance/templates/rsc-player-v1/masks/west/upper_lip_attachment.png, sha256: 967d708eb171bc01be0634f6b09b03ccb440fa58aca8c31850fa9166121fb2ed}
+      nape_tail: {path: content/appearance/templates/rsc-player-v1/masks/west/nape_tail.png, sha256: fc6597feb042e49b6b2992d1665582486c98a917b4ea0f8ea8cc7777a168ebde}
+      face_clearance: {path: content/appearance/templates/rsc-player-v1/masks/west/face_clearance.png, sha256: 339a884fe6427380e0f8f15ca60397851ad4e17cd931716c6f87280cfd784c1a}
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/west/neck_clearance.png, sha256: 5b4b7300f30f96104b7233cc825d733a996e7b3c97fb26b76b3383606458dac2}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/west/protected_anatomy.png, sha256: cac04577c2c387292cff529a87b6c88d30f2273ce1b127b3d99960703d921fca}
+  south-west:
+    visual_pose: three-quarter-rear
+    landmarks: {forehead: null, face_center: null, nose_tip: null, upper_lip: null, chin: [0, 14], ear: [7, 8], occiput: [-4, 8], neck: [0, 14], nape: [-1, 14]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/south-west/hair_allowed.png, sha256: 503667217cd4ad077387e87bf42ba5e1e90e0730d8d56ad080d29a98fa39dc8b}
+      facial_hair_allowed: null
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/south-west/scalp_attachment.png, sha256: 415bf6b411d7197bdb43dba3a8619740b3492e4542a74ff08eb69e17fff5fed7}
+      upper_lip_attachment: null
+      nape_tail: {path: content/appearance/templates/rsc-player-v1/masks/south-west/nape_tail.png, sha256: 7afa6b721db4bdd5ca7659573860dbfe6118a4c0f01423dd1595ca77bded3360}
+      face_clearance: null
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/south-west/neck_clearance.png, sha256: 1d525bd9caa296bdb9b5c2a5ddcdcbe80570f0c94465ecd063f371d2c9e08973}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/south-west/protected_anatomy.png, sha256: e97afa9a513452ff933510f9a131eba6937357634b7ef83b21f2ebe02e33bad4}
+  south:
+    visual_pose: rear
+    landmarks: {forehead: null, face_center: null, nose_tip: null, upper_lip: null, chin: [0, 15], ear: null, occiput: [0, 8], neck: [0, 15], nape: [0, 15]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/south/hair_allowed.png, sha256: 1edf0f7ce59fb9287edf0c9375f3525534a5618c4f8a906bb00d7045abe2d860}
+      facial_hair_allowed: null
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/south/scalp_attachment.png, sha256: a4143bc5a4b38b23834ff049c9861404b44729f1387e25ad57148b31027e50ba}
+      upper_lip_attachment: null
+      nape_tail: {path: content/appearance/templates/rsc-player-v1/masks/south/nape_tail.png, sha256: 361930f3569f1f34e515acbe686f1103c0ee5f57e8439b5293aee8f656cc0169}
+      face_clearance: null
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/south/neck_clearance.png, sha256: f389049bfdcc6480eec6bc6da2c8f7c0d472a2e05cdc1c99ced1c81b23c1db9c}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/south/protected_anatomy.png, sha256: e97afa9a513452ff933510f9a131eba6937357634b7ef83b21f2ebe02e33bad4}
+  combat-west:
+    visual_pose: combat-profile
+    landmarks: {forehead: [3, 5], face_center: [4, 8], nose_tip: [7, 9], upper_lip: [3, 12], chin: [-1, 14], ear: [-3, 8], occiput: [-7, 7], neck: [-1, 14], nape: [-7, 13]}
+    masks:
+      hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/hair_allowed.png, sha256: 4da13951308cdf63821c7040d387048b7e91a37040d3c9329b91331cdb07ae97}
+      facial_hair_allowed: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/facial_hair_allowed.png, sha256: c9c0799203547af736f0a8561e461b6334123a0f23f14063477664531341c756}
+      scalp_attachment: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/scalp_attachment.png, sha256: 29ba86e6a7251626bfdbb067d1a1dfe0abab06fb2e7591c79e1df29da7542510}
+      upper_lip_attachment: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/upper_lip_attachment.png, sha256: 15213c64e8ea6f3a7b54cff0977a429b396ace2523cf8a5c39d516a591e9acb2}
+      nape_tail: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/nape_tail.png, sha256: 497d81d444dc8d536c72e9d7e6b998c6fa42b5867ddd3b74da6c105ac729ad31}
+      face_clearance: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/face_clearance.png, sha256: a728caabe914a99848a1da9b343770de3fdf0eb2804a5814ba048f89241f5aa5}
+      neck_clearance: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/neck_clearance.png, sha256: 955987bbfe1b34c3699abc128ca16586b08d30089594c89ed959ec4df132ebce}
+      protected_anatomy: {path: content/appearance/templates/rsc-player-v1/masks/combat-west/protected_anatomy.png, sha256: 953467e15af041030fbba7f2d16d896e7466b6e923a077b5ac4b55ea0b4b53f4}
+palette:
+  primary_shades: [103, 132, 160]
+  skin_shades: [[255, 124, 124], [255, 181, 181], [255, 205, 205]]
+  fixed_safe_black: [0, 0, 1]

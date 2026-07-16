@@ -12,6 +12,12 @@ import java.util.Optional;
 public final class ItemDropHandler implements PayloadProcessor<ItemCommandStruct, OpcodeIn> {
 
 	public void process(ItemCommandStruct payload, Player player) throws Exception {
+		if (player.getWorld().getVoidArena().blocksGroundItemAction(player, player.getLocation())) {
+			player.message("You cannot use ground items in the Void Arena.");
+			player.resetPath();
+			return;
+		}
+
 		if (player.inCombat()) {
 			player.message("You can't do that whilst you are fighting");
 			player.resetPath();

@@ -1,6 +1,8 @@
 package orsc;
 
 import com.openrsc.client.entityhandling.EntityHandler;
+import com.openrsc.client.entityhandling.GeneratedAppearanceRegistry;
+import com.openrsc.client.entityhandling.GeneratedLookPresets;
 import com.openrsc.client.entityhandling.EntityHandler.GUIPARTS;
 import com.openrsc.client.entityhandling.EntityHandler.PROJECTILE_TYPES;
 import com.openrsc.client.entityhandling.defs.GameObjectDef;
@@ -13,13 +15,32 @@ import com.openrsc.client.entityhandling.instances.GroundItem;
 import com.openrsc.client.entityhandling.instances.Item;
 import com.openrsc.client.model.Sprite;
 import com.openrsc.data.DataFileDecrypter;
+import com.openrsc.data.DataConversions;
 import com.openrsc.data.DataOperations;
 import com.openrsc.interfaces.NComponent;
 import com.openrsc.interfaces.NCustomComponent;
 import com.openrsc.interfaces.misc.*;
+import com.voidscape.duelproof.DuelProofCodec;
+import com.voidscape.duelproof.DuelProofContext;
+import com.voidscape.duelproof.DuelProofContextItem;
+import com.voidscape.duelproof.DuelProofContextParticipant;
+import com.voidscape.duelproof.DuelProofCrypto;
+import com.voidscape.duelproof.DuelProofMeleeSwing;
+import com.voidscape.duelproof.DuelProofSpec;
+import com.voidscape.duelproof.DuelProofTerminalParticipant;
+import com.voidscape.duelproof.DuelProofTerminalVerifier;
+import com.voidscape.duelproof.DuelProofTerminalWitness;
 import orsc.buffers.RSBuffer;
 import orsc.buffers.RSBufferUtils;
 import orsc.buffers.RSBuffer_Bits;
+import orsc.appearance.v2.PaperdollV2LegacyCompatibility;
+import orsc.appearance.v2.PaperdollV2Pack;
+import orsc.appearance.v2.PaperdollV2Palette;
+import orsc.appearance.v2.PaperdollV2Pose;
+import orsc.appearance.v2.PaperdollV2Renderer;
+import orsc.appearance.v2.PaperdollV2Runtime;
+import orsc.appearance.v2.PaperdollV2SelectorRegistry;
+import orsc.duelproof.DuelProofHandshakeClient;
 import orsc.enumerations.*;
 import orsc.graphics.gui.*;
 import orsc.graphics.three.CollisionFlag;
@@ -60,6 +81,11 @@ import static orsc.multiclient.ClientPort.saveHideIp;
 import static orsc.ScaledWindow.ScalingAlgorithm;
 
 public final class mudclient implements Runnable {
+	private static final int DUEL_PROOF_EQUIPMENT_SLOTS = 14;
+	private static final int DUEL_PROOF_ATTACK_CAPE = 1374;
+	private static final int DUEL_PROOF_STRENGTH_CAPE = 1381;
+	private static final int DUEL_PROOF_DEFENCE_CAPE = 1519;
+	private static final int DUEL_PROOF_RECOIL_RING = 1314;
 
 	private static final class VoidscapeSavedAccount {
 		String username;
@@ -90,6 +116,61 @@ public final class mudclient implements Runnable {
 		FarmSimItem(int itemId, long amount) {
 			this.itemId = itemId;
 			this.amount = amount;
+		}
+	}
+
+	private static final class VoidscapeTitleAwardMetadata {
+		final String id;
+		final String display;
+		final int tier;
+		final String position;
+		final String form;
+
+		VoidscapeTitleAwardMetadata(String id, String display, int tier, String position, String form) {
+			this.id = id;
+			this.display = display;
+			this.tier = tier;
+			this.position = position;
+			this.form = form;
+		}
+	}
+
+	/** Staging buffer for one private duel-journal message envelope. */
+	private static final class DuelJournalPending {
+		final long requestId;
+		final int expectedHistoryRows;
+		final long selectedDuelId;
+		final boolean latestReceiptRequest;
+		final ArrayList<DuelJournalInterface.DuelSummary> history = new ArrayList<>();
+		final ArrayList<DuelJournalInterface.StakeItem> stakes = new ArrayList<>();
+		final TreeMap<Integer, List<DuelJournalInterface.Swing>> swingChunks = new TreeMap<>();
+		final TreeMap<Integer, byte[]> proofChunks = new TreeMap<>();
+		boolean historyReceived;
+		boolean detailReceived;
+		boolean stakesReceived;
+		int expectedSwingChunks = -1;
+		int requesterPlayerId;
+		int opponentPlayerId;
+		boolean won;
+		long startedAt;
+		long completedAt;
+		String opponentName = "";
+		boolean proofMetaReceived;
+		boolean proofAvailable;
+		boolean proofTransportFailed;
+		String proofId = "";
+		int proofWitnessVersion = -1;
+		int proofByteLength = -1;
+		byte[] proofSha256;
+		int expectedProofChunks = -1;
+		int proofBytesReceived;
+
+		DuelJournalPending(long requestId, int expectedHistoryRows, long selectedDuelId,
+				boolean latestReceiptRequest) {
+			this.requestId = requestId;
+			this.expectedHistoryRows = expectedHistoryRows;
+			this.selectedDuelId = selectedDuelId;
+			this.latestReceiptRequest = latestReceiptRequest;
 		}
 	}
 
@@ -212,6 +293,7 @@ public final class mudclient implements Runnable {
 	private static final int VOIDSCAPE_BESTIARY_MODE_CATALOG = 2;
 	private static final int VOIDSCAPE_INTERFACE_XP_LOCK = 17;
 	private static final int VOIDSCAPE_INTERFACE_VOID_ARENA = 18;
+	private static final int VOIDSCAPE_INTERFACE_DUEL_PROOF = 19;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_CHALLENGE = 0;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_DECLINE = 1;
 	private static final int VOIDSCAPE_VOID_ARENA_ACTION_UPDATE_RULES = 2;
@@ -324,10 +406,6 @@ public final class mudclient implements Runnable {
 	private static final String ANDROID_SMOKE_SETTINGS_FLAG = "android-smoke-settings.flag";
 	private static final String ANDROID_SMOKE_AFK_FLAG = "android-smoke-afk.flag";
 	private static final String ANDROID_SMOKE_GROUND_LOOT_FLAG = "android-smoke-ground-loot.flag";
-	private static final String ANDROID_SMOKE_CRACKER_CAMPAIGN_FLAG =
-		"android-smoke-cracker-campaign.flag";
-	private static final String ANDROID_SMOKE_CRACKER_CAMPAIGN_COMMAND_FILE =
-		"android-smoke-cracker-campaign-command.txt";
 	private static final String ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG = "android-smoke-appearance-prompt.flag";
 	private static final String ANDROID_SMOKE_WALK_FLAG = "android-smoke-walk.flag";
 	private static final String ANDROID_SMOKE_LOGIN_FLAG = "android-smoke-login.flag";
@@ -340,17 +418,21 @@ public final class mudclient implements Runnable {
 	private static final String CLIENT_SETTING_CHAT_OVERLAY = "chat_overlay";
 	private static final String CLIENT_SETTING_PENDING_INPUT_MARKER = "pending_input_marker";
 	private static final String CLIENT_SETTING_CAMERA_INTERPOLATION = "camera_interpolation";
+	private static final String CLIENT_SETTING_LOCATION_PLAQUE = "location_plaque";
 	private static final String VOIDSCAPE_ACCOUNTS_FILE = "accounts.txt";
 	private static final String WORLD_MAP_WAYPOINTS_FILE = "worldmap-waypoints.properties";
 	private static final String VOIDSCAPE_ACCOUNT_AUTH_PREFIX = "@vsacct@";
+	private static final String VOIDSCAPE_TITLE_AWARD_MARKER = "~vstitleaward~";
 	private static final String VOIDSCAPE_ARENA_PREFIX = "@vsarena@";
 	private static final String VOIDSCAPE_FARMSIM_PREFIX = "@vsfarmsim@";
+	private static final String VOIDSCAPE_DUEL_JOURNAL_PREFIX = "@vsduel@";
+	private static final long DUEL_JOURNAL_REQUEST_TIMEOUT_MILLIS = 15_000L;
+	private static final int DUEL_JOURNAL_MAX_PROOF_BYTES = DuelProofSpec.MAX_WITNESS_BYTES;
+	private static final int DUEL_JOURNAL_MAX_PROOF_CHUNKS = 4096;
+	private static final int DUEL_JOURNAL_MAX_PROOF_CHUNK_BYTES = 1024;
+	private static final int DUEL_JOURNAL_MAX_CONTROL_CHARS = 2300;
 	private static final String VOIDSCAPE_CHRISTMAS_CRACKER_PREFIX = "@vscracker@";
-	private static final String VOIDSCAPE_CRACKER_CAMPAIGN_PREFIX = "@vscrackercampaign@";
 	private static final String VOIDSCAPE_UNDEAD_SIEGE_PREFIX = "@vsundeadsiege@";
-	private static final int VOIDSCAPE_CRACKER_CAMPAIGN_MAX_REMAINING = 1_000_000;
-	private static final int VOIDSCAPE_CRACKER_CAMPAIGN_NOT_ENVELOPE = Integer.MIN_VALUE;
-	private static final int VOIDSCAPE_CRACKER_CAMPAIGN_ITEM_ID = 575;
 	private static final int CHRISTMAS_CRACKER_CATEGORY_NOTHING = 0;
 	private static final int CHRISTMAS_CRACKER_CATEGORY_PARTY_HAT = 1;
 	private static final int CHRISTMAS_CRACKER_CATEGORY_HOLIDAY_RARE = 2;
@@ -362,8 +444,7 @@ public final class mudclient implements Runnable {
 	private static final long CHRISTMAS_CRACKER_REVEAL_MS = 5700L;
 	private static final long CHRISTMAS_CRACKER_TICK_INTERVAL_MS = 80L;
 	private static final int[] CHRISTMAS_CRACKER_PARTY_HATS = {576, 577, 578, 579, 580, 581};
-	private static final int[] CHRISTMAS_CRACKER_CUSTOM_PARTY_HATS = {576, 577, 578, 579, 580, 581, 1582};
-	private static final int[] CHRISTMAS_CRACKER_HOLIDAY_RARES = {422, 677, 828, 831, 832, 971, 1156, 1289};
+	private static final int[] CHRISTMAS_CRACKER_HOLIDAY_RARES = {422, 677, 828, 831, 832, 971};
 	private static final int NORMAL_CHAT_INPUT_MAX = 80;
 	private static final int MESSAGE_COMMAND_INPUT_MAX = 240;
 	private static final long ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS = 1000L;
@@ -426,7 +507,6 @@ public final class mudclient implements Runnable {
 	};
 	private static final int VOIDSCAPE_TOP_TAB_Y = 3;
 	private static final int VOIDSCAPE_SKILL_ROW_H = 17;
-	private static final int VOIDSCAPE_COMBAT_SKILLS = 7;
 	private static final int[] VOIDSCAPE_TOP_ICON_SIZES = {20, 24, 30, 32, 34, 36, 40, 42};
 	private static final int[] VOIDSCAPE_ACCOUNT_ICON_SIZES = {46, 54, 62, 72};
 	private static final int[] VOIDSCAPE_BOTTOM_CHAT_ICON_SIZES = {20, 22, 24, 28, 32};
@@ -461,6 +541,7 @@ public final class mudclient implements Runnable {
 	public static boolean optionSoundDisabled = true;
 	private static boolean optionPendingInputMarker = false;
 	private static boolean optionCameraInterpolation = false;
+	private static boolean optionLocationPlaque = true;
 	static byte[][] s_kb = new byte[250][];
 	static int[] s_wb;
 	private static int FPS = 0;
@@ -877,6 +958,8 @@ public final class mudclient implements Runnable {
 	public DoSkillInterface doSkillInterface;
 	public LostOnDeathInterface lostOnDeathInterface;
 	public TerritorySignupInterface territorySignupInterface;
+	public DuelJournalInterface duelJournalInterface;
+	private PkCatchingInterface pkCatchingInterface;
 	String m_p = null;
 	int clearBox = GenUtil.buildColor(181, 181, 181);
 	int selectedBox = GenUtil.buildColor(220, 220, 220);
@@ -1131,6 +1214,7 @@ public final class mudclient implements Runnable {
 	private static final int ADVANCED_ACTION_SCREEN_SIZE = 1007;
 	private static final int ADVANCED_ACTION_UI_SCALE = 1008;
 	private static final int ADVANCED_ACTION_SCALE_FILTER = 1009;
+	private static final int ADVANCED_ACTION_LOCATION_PLAQUE = 1010;
 	private int settingTab = SETTINGS_PROFILE_TAB;
 	private boolean settingsAdvancedMode = false;
 	private boolean showAdvancedSettingsWindow = false;
@@ -1143,9 +1227,6 @@ public final class mudclient implements Runnable {
 	private int profileEffectiveSkillingRateTenths = 10;
 	private long profileTotalPlayedSeconds = 0;
 	private long profileStatsReceivedAt = 0;
-	private static final int VOIDSCAPE_SUBSCRIPTION_CARD_ITEM_ID = 1602;
-	private boolean voidscapeSubscriptionShopOpen = false;
-	private String voidscapeSubscriptionShopStatus = "";
 	private int loginButtonExistingUser;
 	private int controlButtonAppearanceHair1;
 	private static final int VOIDSCAPE_CLOTHING_COLOUR_MIN = 0;
@@ -1364,29 +1445,6 @@ public final class mudclient implements Runnable {
 	private boolean showDialogTradeConfirm = false;
 	private boolean showDialogFarmSim = false;
 	private boolean showDialogChristmasCracker = false;
-	private long christmasCrackerRollId = -1L;
-	private long christmasCrackerSeed = 0L;
-	private long christmasCrackerStartedAtMillis = 0L;
-	private long christmasCrackerFixtureElapsedMillis = -1L;
-	private int christmasCrackerCategory = CHRISTMAS_CRACKER_CATEGORY_NOTHING;
-	private int christmasCrackerItemId = CHRISTMAS_CRACKER_NOTHING_ITEM_ID;
-	private final int[] christmasCrackerReel = new int[CHRISTMAS_CRACKER_REEL_SIZE];
-	private int christmasCrackerLastTickCard = -1;
-	private long christmasCrackerLastTickSoundMillis = 0L;
-	private boolean christmasCrackerStartSoundPlayed = false;
-	private boolean christmasCrackerRevealSoundPlayed = false;
-	private int crackerCampaignRemaining = 0;
-	private boolean crackerCampaignHudRendered = false;
-	private String crackerCampaignHudLabel = "";
-	private int crackerCampaignHudX = -1;
-	private int crackerCampaignHudY = -1;
-	private int crackerCampaignHudWidth = 0;
-	private int crackerCampaignHudHeight = 0;
-	private long lastAndroidSmokeCrackerCampaignHudLogMillis = 0L;
-	private int lastAndroidSmokeCrackerCampaignRemaining = Integer.MIN_VALUE;
-	private boolean lastAndroidSmokeCrackerCampaignHudRendered = false;
-	private String lastAndroidSmokeCrackerCampaignOrientation = "";
-	private boolean lastAndroidSmokeCrackerCampaignKeyboard = false;
 	private boolean showDialogVoidArenaDeathMatch = false;
 	private int voidArenaDeathMatchTargetIndex = -1;
 	private String voidArenaDeathMatchTargetName = "";
@@ -1448,10 +1506,37 @@ public final class mudclient implements Runnable {
 	private String farmSimDetails = "";
 	private final ArrayList<FarmSimItem> farmSimItems = new ArrayList<>();
 	private int farmSimScrollPixels = 0;
+	private final DuelProofHandshakeClient duelProofHandshakeClient = new DuelProofHandshakeClient();
+	private DuelJournalPending duelJournalPending;
+	private boolean duelJournalAwaitingResponse;
+	private boolean duelJournalLatestReceiptRequest;
+	private long duelJournalRequestStartedAtMillis;
+	private long christmasCrackerRollId = -1L;
+	private long christmasCrackerSeed = 0L;
+	private long christmasCrackerStartedAtMillis = 0L;
+	private long christmasCrackerFixtureElapsedMillis = -1L;
+	private int christmasCrackerCategory = CHRISTMAS_CRACKER_CATEGORY_NOTHING;
+	private int christmasCrackerItemId = CHRISTMAS_CRACKER_NOTHING_ITEM_ID;
+	private final int[] christmasCrackerReel = new int[CHRISTMAS_CRACKER_REEL_SIZE];
+	private int christmasCrackerLastTickCard = -1;
+	private long christmasCrackerLastTickSoundMillis = 0L;
+	private boolean christmasCrackerStartSoundPlayed = false;
+	private boolean christmasCrackerRevealSoundPlayed = false;
 	private int expShared = 0;
 	private int petFatigue = 0;
 	private long openPkPoints = 0;
 	private MudClientGraphics surface;
+	private MudClientGraphics workbenchAppearanceRasterSurface;
+	private MudClientGraphics workbenchPaperdollV2RasterSurface;
+	private PaperdollV2Runtime paperdollV2Runtime;
+	private final int[] paperdollV2LiveLegacyLayerScratch = new int[12];
+	private final int[] paperdollV2WorkbenchLegacyLayerScratch = new int[12];
+	private final int[] paperdollV2DesignerLayers = new int[12];
+	private final int[] paperdollV2DesignerLegacyLayerScratch = new int[12];
+	private String paperdollV2DesignerPreviewPath = "";
+	private String paperdollV2DesignerPreviewFallbackReason = "";
+	private boolean paperdollV2DesignerSessionEligible = false;
+	private String paperdollV2DesignerSessionBlockedReason = "";
 	private int systemUpdate = 0;
 	private int elixirTimer = 0;
 	private boolean inWild = false;
@@ -1597,6 +1682,11 @@ public final class mudclient implements Runnable {
 
 		initConfig();
 		loadVoidscapeClientSettings();
+		if (!orsc.osConfig.F_WEB_BUILD && !orsc.osConfig.F_ANDROID_BUILD) {
+			paperdollV2Runtime = PaperdollV2Runtime.load();
+		} else {
+			paperdollV2Runtime = null;
+		}
 	}
 
 	private static void saveScalingSettings(ScalingAlgorithm type, float scalar) {
@@ -1659,6 +1749,10 @@ public final class mudclient implements Runnable {
 		if (cameraInterpolation != null && !cameraInterpolation.trim().isEmpty()) {
 			optionCameraInterpolation = Boolean.parseBoolean(cameraInterpolation);
 		}
+		String locationPlaque = props.getProperty(CLIENT_SETTING_LOCATION_PLAQUE);
+		if (locationPlaque != null && !locationPlaque.trim().isEmpty()) {
+			optionLocationPlaque = Boolean.parseBoolean(locationPlaque);
+		}
 	}
 
 	private static void saveChatOverlaySetting() {
@@ -1671,6 +1765,10 @@ public final class mudclient implements Runnable {
 
 	private static void saveCameraInterpolationSetting() {
 		saveClientSetting(CLIENT_SETTING_CAMERA_INTERPOLATION, Boolean.toString(optionCameraInterpolation));
+	}
+
+	private static void saveLocationPlaqueSetting() {
+		saveClientSetting(CLIENT_SETTING_LOCATION_PLAQUE, Boolean.toString(optionLocationPlaque));
 	}
 
 	private static boolean isValidEmailAddress(String email) {
@@ -2023,6 +2121,10 @@ public final class mudclient implements Runnable {
 		return world;
 	}
 
+	public PkCatchingInterface getPkCatchingInterface() {
+		return pkCatchingInterface;
+	}
+
 	public final void addFriend(String player) {
 		try {
 
@@ -2181,9 +2283,6 @@ public final class mudclient implements Runnable {
 
 	public final void addMouseClick(int button, int x, int y) {
 		try {
-			if (consumeVoidscapeSubscriptionShopPointerAt(x, y, button == 1)) {
-				return;
-			}
 
 			this.mouseClickX[this.mouseClickCount] = x;
 			this.mouseClickY[this.mouseClickCount] = y;
@@ -3609,12 +3708,18 @@ public final class mudclient implements Runnable {
 		rowY += 62;
 		this.controlButtonAppearanceCountry1 = this.panelAppearance.addButton(leftX - arrowOffset, rowY, 20, 20);
 		this.controlButtonAppearanceCountry2 = this.panelAppearance.addButton(leftX + arrowOffset, rowY, 20, 20);
-
-		this.controlAppearanceReferralName = this.panelAppearance.addCenteredTextEntry(
-			voidscapeAppearanceReferralFieldCenterX(), voidscapeAppearanceReferralFieldCenterY(),
-			voidscapeAppearanceReferralFieldWidth(), 12, voidscapeAppearanceReferralFieldHeight(), 0, false, true);
-		if (referralName.length() > 0) {
-			this.panelAppearance.setText(this.controlAppearanceReferralName, referralName);
+		if (isPaperdollV2DesignerEvaluationVisible()) {
+			this.controlButtonAppearanceHairStyle1 = this.panelAppearance.addButton(
+				rightX - arrowOffset, rowY, 20, 20);
+			this.controlButtonAppearanceHairStyle2 = this.panelAppearance.addButton(
+				rightX + arrowOffset, rowY, 20, 20);
+		} else {
+			this.controlAppearanceReferralName = this.panelAppearance.addCenteredTextEntry(
+				voidscapeAppearanceReferralFieldCenterX(), voidscapeAppearanceReferralFieldCenterY(),
+				voidscapeAppearanceReferralFieldWidth(), 12, voidscapeAppearanceReferralFieldHeight(), 0, false, true);
+			if (referralName.length() > 0) {
+				this.panelAppearance.setText(this.controlAppearanceReferralName, referralName);
+			}
 		}
 
 		this.controlButtonAppearanceAccept = this.panelAppearance.addButton(panelX + 382, Math.min(this.getGameHeight() - 21, 316), 220, 30);
@@ -4828,6 +4933,7 @@ public final class mudclient implements Runnable {
 				y = 65;
 			}
 
+			if (!drawPaperdollV2DesignerPreviewCells(var5, y)) {
 			// pants
 			this.getSurface().spriteClip3(var5 - 87, this.getPlayerClothingColors()[this.characterBottomColour],
 				spriteSelect(EntityHandler.getAnimationDef(this.character2Colour), 0), y, 102, (byte) 105, 64);
@@ -4836,7 +4942,7 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getAnimationDef(appearanceBodyGender), 0), var5 - 32 - 55, y, 64,
 				102, this.getPlayerClothingColors()[this.characterTopColour], this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, 1);
 
-			this.getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getAnimationDef(appearanceHeadType), 0),
+			this.getSurface().drawSpriteClipping(spriteSelect(selectedAppearanceHeadDefinition(), 0),
 				var5 - 32 - 55, y, 64, 102, this.getPlayerHairColors()[this.appearanceHairColour],
 				this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, var1 + 13760);
 			this.drawAppearanceHairOverlay(var5 - 32 - 55, y, 64, 102, 0, false);
@@ -4848,7 +4954,7 @@ public final class mudclient implements Runnable {
 				64, 102, this.getPlayerClothingColors()[this.characterTopColour], this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0,
 				1);
 
-			this.getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getAnimationDef(this.appearanceHeadType), 6),
+			this.getSurface().drawSpriteClipping(spriteSelect(selectedAppearanceHeadDefinition(), 6),
 				var5 - 32, y, 64, 102, this.getPlayerHairColors()[this.appearanceHairColour], this.getPlayerSkinColors()[this.appearanceSkinColour],
 				0, false, 0, 1);
 			this.drawAppearanceHairOverlay(var5 - 32, y, 64, 102, 6, false);
@@ -4861,10 +4967,11 @@ public final class mudclient implements Runnable {
 				this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, var1 + 13760);
 
 			this.getSurface().drawSpriteClipping(
-				spriteSelect(EntityHandler.getAnimationDef(this.appearanceHeadType), 12), var5 + 55 - 32, y, 64, 102,
+				spriteSelect(selectedAppearanceHeadDefinition(), 12), var5 + 55 - 32, y, 64, 102,
 				this.getPlayerHairColors()[this.appearanceHairColour], this.getPlayerSkinColors()[this.appearanceSkinColour], 0, false, 0, 1);
 			this.drawAppearanceHairOverlay(var5 + 55 - 32, y, 64, 102, 12, false);
-			if (voidscapeAppearance) {
+			}
+			if (voidscapeAppearance && this.controlAppearanceReferralName >= 0) {
 				drawVoidscapeAppearanceReferralField();
 			}
 			this.getSurface().drawSprite(spriteSelect(GUIPARTS.BLUEBAR.getDef()), 0, this.getGameHeight());
@@ -4877,6 +4984,70 @@ public final class mudclient implements Runnable {
 
 		} catch (RuntimeException var4) {
 			throw GenUtil.makeThrowable(var4, "client.GD(" + var1 + ',' + type + ')');
+		}
+	}
+
+	private boolean drawPaperdollV2DesignerPreviewCells(int centerX, int y) {
+		if (!isPaperdollV2DesignerEvaluationVisible()) {
+			this.paperdollV2DesignerPreviewPath = "";
+			this.paperdollV2DesignerPreviewFallbackReason = "";
+			return false;
+		}
+		if (this.appearanceHairStyle <= 0) {
+			this.paperdollV2DesignerPreviewPath = "legacy";
+			this.paperdollV2DesignerPreviewFallbackReason = "classic-selector-legacy";
+			return false;
+		}
+		this.paperdollV2DesignerPreviewPath = "v2";
+		this.paperdollV2DesignerPreviewFallbackReason = "";
+		List<PaperdollV2Pose> poses = PaperdollV2Pose.canonical();
+		Arrays.fill(this.paperdollV2DesignerLayers, 0);
+		this.paperdollV2DesignerLayers[0] = PaperdollV2Runtime.COMPATIBLE_HEAD_APPEARANCE_ID;
+		this.paperdollV2DesignerLayers[1] = this.appearanceHeadGender == 1
+			? PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID
+			: PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID;
+		this.paperdollV2DesignerLayers[2] = PaperdollV2Runtime.COMPATIBLE_LEGS_APPEARANCE_ID;
+		int[] previewPoseIndexes = { 0, 6, 12 };
+		for (int poseIndex : previewPoseIndexes) {
+			PaperdollV2Pose pose = poses.get(poseIndex);
+			if (this.paperdollV2Runtime.preflight(this.paperdollV2DesignerLayers,
+				this.appearanceHairStyle, pose.getSpriteOffset(), 64, 102) == null) {
+				this.paperdollV2DesignerPreviewPath = "legacy";
+				this.paperdollV2DesignerPreviewFallbackReason =
+					this.paperdollV2Runtime.getLastRenderFallbackReason();
+				return false;
+			}
+		}
+		drawPaperdollV2DesignerPreviewCell(centerX - 87, y, poses.get(0));
+		drawPaperdollV2DesignerPreviewCell(centerX - 32, y, poses.get(6));
+		drawPaperdollV2DesignerPreviewCell(centerX + 23, y, poses.get(12));
+		return true;
+	}
+
+	private void drawPaperdollV2DesignerPreviewCell(int x, int y,
+		PaperdollV2Pose pose) {
+		Arrays.fill(this.paperdollV2DesignerLayers, 0);
+		this.paperdollV2DesignerLayers[0] = PaperdollV2Runtime.COMPATIBLE_HEAD_APPEARANCE_ID;
+		this.paperdollV2DesignerLayers[1] = this.appearanceHeadGender == 1
+			? PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID
+			: PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID;
+		this.paperdollV2DesignerLayers[2] = PaperdollV2Runtime.COMPATIBLE_LEGS_APPEARANCE_ID;
+		boolean usedV2 = drawPlayerCompositeLayersV2To(this.getSurface(),
+			this.paperdollV2DesignerLayers, this.appearanceHairStyle,
+			this.paperdollV2DesignerLegacyLayerScratch, pose.getWantedAnimDir(),
+			pose.getActualAnimDir(), pose.isMirrorX(), pose.getSpriteOffset(),
+			pose.getLegacyStepFrame(), x, y, 64, 102, 0, this.appearanceHairColour,
+			this.characterTopColour, this.characterBottomColour, this.appearanceSkinColour,
+			false, false);
+		if (!usedV2) {
+			this.paperdollV2DesignerPreviewPath = "legacy";
+			this.paperdollV2DesignerPreviewFallbackReason =
+				this.paperdollV2Runtime.getLastRenderFallbackReason();
+			drawPlayerCompositeLayersTo(this.getSurface(), this.paperdollV2DesignerLayers,
+				pose.getWantedAnimDir(), pose.getActualAnimDir(), pose.isMirrorX(),
+				pose.getSpriteOffset(), pose.getLegacyStepFrame(), x, y, 64, 102, 0,
+				this.appearanceHairColour, this.characterTopColour, this.characterBottomColour,
+				this.appearanceSkinColour, true, this.appearanceHairStyle, false, false);
 		}
 	}
 
@@ -4893,6 +5064,10 @@ public final class mudclient implements Runnable {
 
 	private boolean isModernHairCompatibleHeadAnimation(int animationId) {
 		return animationId == MODERN_HAIR_BASE_HEAD_TYPE;
+	}
+
+	private AnimationDef selectedAppearanceHeadDefinition() {
+		return EntityHandler.getPlayerAppearanceDef(this.appearanceHeadType + 1);
 	}
 
 	private int hairOverlayColourTransform(int hairColour, int actorColourTransform) {
@@ -4939,6 +5114,10 @@ public final class mudclient implements Runnable {
 			drawVoidscapeAppearanceSelector(rightX, rowY, "Bottom", this.clothingColorLabel(this.characterBottomColour));
 			rowY += 62;
 			drawVoidscapeCountrySelector(leftX, rowY);
+			if (isPaperdollV2DesignerEvaluationVisible()) {
+				drawVoidscapeAppearanceSelector(rightX, rowY, "Style",
+					modernHairStyleLabel());
+			}
 			int acceptX = panelX + 382;
 			int acceptY = Math.min(this.getGameHeight() - 21, 316);
 			drawVoidscapeButton(acceptX, acceptY, 220, 30, "Accept", true);
@@ -5079,12 +5258,103 @@ public final class mudclient implements Runnable {
 	}
 
 	private String modernHairStyleLabel() {
-		switch (this.appearanceHairStyle) {
-			case 1:
-				return "Swept";
-			default:
-				return "Classic";
+		if (this.appearanceHairStyle == 0) return "Classic";
+		PaperdollV2SelectorRegistry registry = this.paperdollV2Runtime == null
+			? null : this.paperdollV2Runtime.getSelectorRegistry();
+		PaperdollV2SelectorRegistry.Entry entry = registry == null
+			? null : registry.getEntry(this.appearanceHairStyle);
+		if (entry == null) return "Style " + this.appearanceHairStyle;
+		String[] words = entry.getStyle().split("_");
+		StringBuilder label = new StringBuilder();
+		for (String word : words) {
+			if (word.length() == 0) continue;
+			String title = Character.toUpperCase(word.charAt(0)) + word.substring(1);
+			if (label.length() > 0 && label.length() + 1 + title.length() > 14) break;
+			if (label.length() > 0) label.append(' ');
+			label.append(title);
 		}
+		return label.length() == 0 ? "Style " + this.appearanceHairStyle : label.toString();
+	}
+
+	private boolean isPaperdollV2DesignerEvaluationAvailable() {
+		return this.paperdollV2Runtime != null
+			&& this.paperdollV2Runtime.isDesignerEvaluationEnabled()
+			&& this.localPlayer != null
+			&& Group.isServerDeveloper(this.localPlayer.groupID);
+	}
+
+	private boolean isPaperdollV2DesignerEvaluationVisible() {
+		return isPaperdollV2DesignerEvaluationAvailable()
+			&& this.paperdollV2DesignerSessionEligible
+			&& this.currentViewMode == GameMode.GAME
+			&& this.useVoidscapeLogin() && Config.S_CHARACTER_CREATION_MODE == 0
+			&& paperdollV2DesignerHydrationBlockReason().length() == 0;
+	}
+
+	private String paperdollV2DesignerHydrationBlockReason() {
+		if (!isPaperdollV2DesignerEvaluationAvailable()
+			|| this.currentViewMode != GameMode.GAME) return "";
+		if (!this.useVoidscapeLogin() || Config.S_CHARACTER_CREATION_MODE != 0) {
+			return "unsupported-appearance-panel-mode";
+		}
+		if (this.localPlayer == null || this.localPlayer.layerAnimation == null
+			|| this.localPlayer.layerAnimation.length < 3) {
+			return "player-appearance-state-unavailable";
+		}
+		int[] layers = this.localPlayer.layerAnimation;
+		if (layers[0] <= 0) return "base-head-hidden-by-equipment";
+		if (layers[1] != PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID
+			&& layers[1] != PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID) {
+			return "base-body-hidden-by-equipment";
+		}
+		if (layers[2] != PaperdollV2Runtime.COMPATIBLE_LEGS_APPEARANCE_ID) {
+			return "base-legs-hidden-by-equipment";
+		}
+		int persistedStyle = this.localPlayer.hairStyle;
+		if (persistedStyle < 0 || persistedStyle > paperdollV2DesignerMaximumHairStyle()) {
+			return "persisted-selector-out-of-range";
+		}
+		if (persistedStyle > 0
+			&& layers[0] != PaperdollV2Runtime.COMPATIBLE_HEAD_APPEARANCE_ID) {
+			return "persisted-selector-base-mismatch";
+		}
+		return "";
+	}
+
+	private void showPaperdollV2DesignerHydrationBlocked(String reason) {
+		String message = reason.contains("hidden-by-equipment")
+			? "@or1@Unequip plate/head-slot gear before opening the Appearance Studio."
+			: "@or1@This saved appearance is not eligible for the V2 evaluation.";
+		this.showMessage(false, null, message, MessageType.GAME, 0, null);
+	}
+
+	private int paperdollV2DesignerMaximumHairStyle() {
+		PaperdollV2SelectorRegistry registry = isPaperdollV2DesignerEvaluationAvailable()
+			? this.paperdollV2Runtime.getSelectorRegistry() : null;
+		return registry == null ? Config.MAX_MODERN_HAIR_STYLE
+			: registry.getHighestDefinedSelectorId();
+	}
+
+	private void selectPaperdollV2DesignerHairStyle(int selectorId) {
+		int maximum = paperdollV2DesignerMaximumHairStyle();
+		if (!isPaperdollV2DesignerEvaluationVisible()
+			|| selectorId < 0 || selectorId > maximum) return;
+		this.appearanceHairStyle = selectorId;
+		if (selectorId > 0) applyPaperdollV2DesignerBaseProfile();
+	}
+
+	private void cyclePaperdollV2DesignerHairStyle(int direction) {
+		int maximum = paperdollV2DesignerMaximumHairStyle();
+		if (maximum <= 0) return;
+		selectPaperdollV2DesignerHairStyle(
+			Math.floorMod(this.appearanceHairStyle + direction, maximum + 1));
+	}
+
+	private void applyPaperdollV2DesignerBaseProfile() {
+		this.appearanceHeadType = PaperdollV2Runtime.COMPATIBLE_HEAD_APPEARANCE_ID - 1;
+		this.appearanceBodyGender = (this.appearanceHeadGender == 1
+			? PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID
+			: PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID) - 1;
 	}
 
 	private String hairColorLabel(int colour) {
@@ -5202,7 +5472,35 @@ public final class mudclient implements Runnable {
 
 	private void syncAppearanceHairStyleFromLocalPlayer() {
 		if (this.currentViewMode == GameMode.GAME && this.localPlayer != null) {
-			this.appearanceHairStyle = Math.max(0, Math.min(Config.MAX_MODERN_HAIR_STYLE, this.localPlayer.hairStyle));
+			int[] layers = this.localPlayer.layerAnimation;
+			if (layers != null && layers.length >= 3) {
+				if (layers[0] > 0) this.appearanceHeadType = layers[0] - 1;
+				if (layers[1] > 0) this.appearanceBodyGender = layers[1] - 1;
+				if (layers[1] == PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID) {
+					this.appearanceHeadGender = 1;
+				} else if (layers[1]
+					== PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID) {
+					this.appearanceHeadGender = 2;
+				}
+			}
+			this.appearanceHairColour = this.localPlayer.colourHair;
+			this.characterTopColour = this.localPlayer.colourTop;
+			this.characterBottomColour = this.localPlayer.colourBottom;
+			this.appearanceSkinColour = this.localPlayer.colourSkin;
+
+			int maximum = paperdollV2DesignerMaximumHairStyle();
+			int persistedStyle = this.localPlayer.hairStyle;
+			this.appearanceHairStyle = persistedStyle >= 0 && persistedStyle <= maximum
+				? persistedStyle : 0;
+			boolean compatibleV2Identity = layers != null && layers.length >= 3
+				&& layers[0] == PaperdollV2Runtime.COMPATIBLE_HEAD_APPEARANCE_ID
+				&& layers[2] == PaperdollV2Runtime.COMPATIBLE_LEGS_APPEARANCE_ID
+				&& (layers[1] == PaperdollV2Runtime.COMPATIBLE_MALE_BODY_APPEARANCE_ID
+					|| layers[1] == PaperdollV2Runtime.COMPATIBLE_FEMALE_BODY_APPEARANCE_ID);
+			if (this.appearanceHairStyle > 0 && (!isPaperdollV2DesignerEvaluationAvailable()
+				|| !compatibleV2Identity)) {
+				this.appearanceHairStyle = 0;
+			}
 		}
 	}
 
@@ -5513,13 +5811,12 @@ public final class mudclient implements Runnable {
 	// occupies (same y, same 16px height, full frame width), with a sixth
 	// Global tab. Draw AND hit both derive from voidscapeChatTabBand — the
 	// same lockstep pattern as the classic helpers above; no parallel magic
-	// ranges. Tab 5 (Shop) maps to null: it opens the in-canvas subscription
-	// catalog instead of selecting a message tab. Report Abuse remains in
-	// Options and the classic/authentic strip.
+	// ranges. Tab 5 (Report Abuse) maps to null: it opens the report flow
+	// instead of selecting a message tab.
 	private static final MessageTab[] VOIDSCAPE_DESKTOP_CHAT_TABS = {
 		MessageTab.ALL, MessageTab.CHAT, MessageTab.QUEST, MessageTab.GLOBAL, MessageTab.PRIVATE, null};
 	private static final String[] VOIDSCAPE_DESKTOP_CHAT_TAB_LABELS = {
-		"All messages", "Chat history", "Quest history", "Global chat", "Private history", "SHOP"};
+		"All messages", "Chat history", "Quest history", "Global chat", "Private history", "Report Abuse"};
 
 	private int voidscapeChatTabCount() {
 		return VOIDSCAPE_DESKTOP_CHAT_TABS.length;
@@ -5574,15 +5871,13 @@ public final class mudclient implements Runnable {
 		for (int i = 0; i < count; i++) {
 			int[] band = voidscapeChatTabBand(i);
 			boolean selected = voidscapeChatTabIsSelected(i);
-			boolean shop = i == count - 1;
 			this.getSurface().drawBoxAlpha(band[0], stripY, band[1] - band[0], stripH,
-				shop ? UiSkin.GOLD_LINE : (selected ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX),
-				shop ? UiSkin.A_BUTTON : (selected ? UiSkin.A_TAB_ACTIVE : 150));
+				selected ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
+				selected ? UiSkin.A_TAB_ACTIVE : 150);
 			if (i > 0) {
-				this.getSurface().drawLineVert(band[0], stripY + 1,
-					shop ? UiSkin.GOLD_BEVEL : UiSkin.VOID_LINE, stripH - 1);
+				this.getSurface().drawLineVert(band[0], stripY + 1, UiSkin.VOID_LINE, stripH - 1);
 			}
-			int color = shop ? UiSkin.GOLD_HOT
+			int color = i == count - 1 ? UiSkin.DANGER_GLYPH
 				: (selected ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY);
 			if (voidscapeChatTabFlashing(i)) {
 				color = UiSkin.FLASH;
@@ -5607,7 +5902,10 @@ public final class mudclient implements Runnable {
 				}
 				MessageTab tab = VOIDSCAPE_DESKTOP_CHAT_TABS[i];
 				if (tab == null) {
-					openVoidscapeSubscriptionShop();
+					// Report Abuse — same flow as the classic strip's fifth tab.
+					this.inputTextFinal = "";
+					this.inputTextCurrent = "";
+					this.reportAbuse_State = 1;
 				} else {
 					this.messageTabSelected = tab;
 					int control = activeMessageListControl();
@@ -7203,6 +7501,18 @@ public final class mudclient implements Runnable {
 
 	private void drawDialogOptionsMenu(int var1) {
 		try {
+			if (this.pkCatchingInterface != null
+				&& this.pkCatchingInterface.matchesChooser(this.optionsMenuCount, this.optionsMenuText)) {
+				int choice = this.pkCatchingInterface.renderChooser();
+				if (choice != PkCatchingInterface.NO_CHOOSER_ACTION) {
+					sendOptionsMenuChoice(choice);
+				}
+				return;
+			}
+			if (isVoidscapeTitleAwardMenu()) {
+				drawVoidscapeTitleAwardMenu();
+				return;
+			}
 
 			if (isVoidscapeWelcomeMenu()) {
 				drawVoidscapeWelcomeMenu();
@@ -7214,6 +7524,10 @@ public final class mudclient implements Runnable {
 			}
 			if (isVoidscapeTitleMenu()) {
 				drawVoidscapeTitleMenu();
+				return;
+			}
+			if (useVoidscapeDesktopClassicChat() && isVoidscapeRiftTeleportMenu()) {
+				drawVoidscapeDesktopRiftTeleportMenu();
 				return;
 			}
 			if (voidscapeUseNativeAndroidMobileShell()
@@ -7329,6 +7643,488 @@ public final class mudclient implements Runnable {
 		}
 	}
 
+	private int voidscapeRiftStayOptionIndex() {
+		for (int i = 0; i < this.optionsMenuCount; i++) {
+			if ("Stay here".equals(this.optionsMenuText[i])) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private int voidscapeRiftDestinationCount() {
+		return Math.max(0, this.optionsMenuCount - (voidscapeRiftStayOptionIndex() >= 0 ? 1 : 0));
+	}
+
+	private int voidscapeRiftColumns() {
+		int destinations = voidscapeRiftDestinationCount();
+		if (this.getGameWidth() <= 680) {
+			return 1;
+		}
+		if (this.getGameWidth() <= 860) {
+			return Math.min(2, Math.max(1, destinations));
+		}
+		return Math.min(3, Math.max(1, destinations));
+	}
+
+	private boolean voidscapeCompactRiftMenu() {
+		return this.getGameWidth() <= 560 && this.getGameHeight() <= 380;
+	}
+
+	private int voidscapeRiftRowGap() {
+		return voidscapeCompactRiftMenu() ? 4 : 8;
+	}
+
+	private int voidscapeRiftHeaderHeight() {
+		return voidscapeCompactRiftMenu() ? 50 : 66;
+	}
+
+	private int voidscapeRiftFooterHeight() {
+		return voidscapeRiftStayOptionIndex() >= 0
+			? (voidscapeCompactRiftMenu() ? 36 : 44)
+			: (voidscapeCompactRiftMenu() ? 10 : 14);
+	}
+
+	private int voidscapeRiftPreferredCardHeight() {
+		if (voidscapeCompactRiftMenu()) return 31;
+		int columns = voidscapeRiftColumns();
+		if (columns == 1) return 46;
+		if (columns == 2) return 72;
+		return this.getGameWidth() >= 1000 ? 84 : 78;
+	}
+
+	private int voidscapeRiftCardHeight() {
+		int destinations = Math.max(1, voidscapeRiftDestinationCount());
+		int columns = Math.max(1, voidscapeRiftColumns());
+		int rows = (destinations + columns - 1) / columns;
+		int safeHeight = Math.max(1,
+			getVoidscapeDesktopOverlayBottomSafeY() - getVoidscapeDesktopOverlayTopSafeY());
+		int gaps = Math.max(0, rows - 1) * voidscapeRiftRowGap();
+		int maximum = Math.max(26,
+			(safeHeight - voidscapeRiftHeaderHeight() - voidscapeRiftFooterHeight() - gaps) / rows);
+		return Math.min(voidscapeRiftPreferredCardHeight(), maximum);
+	}
+
+	private int[] voidscapeRiftPanelRect() {
+		int columns = voidscapeRiftColumns();
+		int preferredWidth = columns == 1 ? 540 : columns == 2 ? 680 : 820;
+		int sideInset = voidscapeCompactRiftMenu() ? 12 : columns == 3 ? 20 : 16;
+		int width = Math.max(280, Math.min(preferredWidth, this.getGameWidth() - sideInset * 2));
+		int destinations = Math.max(1, voidscapeRiftDestinationCount());
+		int rows = (destinations + Math.max(1, columns) - 1) / Math.max(1, columns);
+		int height = voidscapeRiftHeaderHeight() + rows * voidscapeRiftCardHeight()
+			+ Math.max(0, rows - 1) * voidscapeRiftRowGap() + voidscapeRiftFooterHeight();
+		int top = Math.max(0, getVoidscapeDesktopOverlayTopSafeY());
+		int bottom = Math.min(this.getGameHeight(), getVoidscapeDesktopOverlayBottomSafeY());
+		int y = top + Math.max(0, (bottom - top - height) / 2);
+		return new int[]{UiAnchor.centerX(this.getGameWidth(), width), y, width, height};
+	}
+
+	private int voidscapeRiftDisplaySlot(int option) {
+		if (option < 0 || option >= this.optionsMenuCount
+			|| option == voidscapeRiftStayOptionIndex()) {
+			return -1;
+		}
+		int slot = 0;
+		for (int i = 0; i < option; i++) {
+			if (i != voidscapeRiftStayOptionIndex()) slot++;
+		}
+		return slot;
+	}
+
+	private int[] voidscapeRiftOptionRect(int option) {
+		int slot = voidscapeRiftDisplaySlot(option);
+		if (slot < 0) return new int[]{-1, -1, 0, 0};
+		int[] panel = voidscapeRiftPanelRect();
+		int columns = Math.max(1, voidscapeRiftColumns());
+		int destinations = Math.max(1, voidscapeRiftDestinationCount());
+		int rows = (destinations + columns - 1) / columns;
+		int gap = voidscapeRiftRowGap();
+		int pad = voidscapeCompactRiftMenu() ? 10 : 14;
+		int contentWidth = panel[2] - pad * 2;
+		int cardWidth = Math.max(1, (contentWidth - gap * (columns - 1)) / columns);
+		int row = slot / columns;
+		int column = slot % columns;
+		int itemsInLastRow = destinations % columns;
+		int rowOffset = 0;
+		if (row == rows - 1 && itemsInLastRow > 0 && itemsInLastRow < columns) {
+			rowOffset = (columns - itemsInLastRow) * (cardWidth + gap) / 2;
+		}
+		int x = panel[0] + pad + rowOffset + column * (cardWidth + gap);
+		int y = panel[1] + voidscapeRiftHeaderHeight()
+			+ row * (voidscapeRiftCardHeight() + gap);
+		return new int[]{x, y, cardWidth, voidscapeRiftCardHeight()};
+	}
+
+	private int[] voidscapeRiftStayRect() {
+		int stay = voidscapeRiftStayOptionIndex();
+		if (stay < 0) return new int[]{-1, -1, 0, 0};
+		int[] panel = voidscapeRiftPanelRect();
+		int destinations = Math.max(1, voidscapeRiftDestinationCount());
+		int columns = Math.max(1, voidscapeRiftColumns());
+		int rows = (destinations + columns - 1) / columns;
+		int gridBottom = panel[1] + voidscapeRiftHeaderHeight()
+			+ rows * voidscapeRiftCardHeight() + Math.max(0, rows - 1) * voidscapeRiftRowGap();
+		int height = voidscapeCompactRiftMenu() ? 24 : 28;
+		int width = Math.min(voidscapeCompactRiftMenu() ? 180 : 220, panel[2] - 28);
+		return new int[]{panel[0] + (panel[2] - width) / 2,
+			gridBottom + (voidscapeRiftFooterHeight() - height) / 2, width, height};
+	}
+
+	private int[] voidscapeRiftCloseRect() {
+		int[] panel = voidscapeRiftPanelRect();
+		return new int[]{InterfaceChrome.closeX(panel[0], panel[2]),
+			InterfaceChrome.closeY(panel[1]), InterfaceChrome.CLOSE_SIZE, InterfaceChrome.CLOSE_SIZE};
+	}
+
+	private String voidscapeRiftOptionCategory(String option) {
+		if ("Void Enclave".equals(option)) return "SANCTUARY";
+		if ("Edgeville".equals(option)) return "FRONTIER";
+		if ("Varrock".equals(option)) return "CAPITAL";
+		if ("Falador".equals(option)) return "CITADEL";
+		if ("Ardougne".equals(option)) return "KANDARIN";
+		if ("Enter Void Arena".equals(option)) return "ARENA";
+		if ("Return to Void Enclave".equals(option)) return "SANCTUARY";
+		if ("Enter the Void Dungeon".equals(option)) return "DANGER";
+		if ("Enter the Riftworks".equals(option)) return "DEPTH I";
+		if ("Resume at the Broken Menagerie".equals(option)) return "DEPTH II";
+		if ("Resume at the Null Sanctum".equals(option)) return "DEPTH III";
+		if ("Leave the Void Dungeon".equals(option)) return "SURFACE";
+		if ("Leave the arena".equals(option)) return "SANCTUARY";
+		return "THRESHOLD";
+	}
+
+	private String voidscapeRiftOptionDetail(String option) {
+		if ("Void Enclave".equals(option)) return "The heart of Voidscape.";
+		if ("Edgeville".equals(option)) return "Wilderness frontier.";
+		if ("Varrock".equals(option)) return "Eastern kingdom capital.";
+		if ("Falador".equals(option)) return "White Knights' city.";
+		if ("Ardougne".equals(option)) return "Western trade city.";
+		if ("Enter Void Arena".equals(option)) return "Cross into the combat arena.";
+		if ("Return to Void Enclave".equals(option)) return "Return to the Enclave sanctuary.";
+		if ("Enter the Void Dungeon".equals(option)) return "Descend into the shared Wilderness dungeon.";
+		if ("Enter the Riftworks".equals(option)) return "Begin at the first dungeon threshold.";
+		if ("Resume at the Broken Menagerie".equals(option)) return "Resume at your discovered depth.";
+		if ("Resume at the Null Sanctum".equals(option)) return "Resume at your deepest threshold.";
+		if ("Leave the Void Dungeon".equals(option)) return "Return to the Wilderness above.";
+		if ("Leave the arena".equals(option)) return "Return to the Void Enclave.";
+		return "Step through the distant rift.";
+	}
+
+	private String voidscapeRiftMenuHeading() {
+		if (hasVoidscapeOption("Resume at the Broken Menagerie")) return "RESUME YOUR DESCENT";
+		if (hasVoidscapeOption("Leave the Void Dungeon")
+			|| hasVoidscapeOption("Leave the arena")
+			|| hasVoidscapeOption("Return to Void Enclave")) return "CHOOSE A PASSAGE";
+		if (hasVoidscapeOption("Enter Void Arena")
+			|| hasVoidscapeOption("Enter the Void Dungeon")
+			|| hasVoidscapeOption("Enter the Riftworks")) return "CROSS THE THRESHOLD";
+		return "SELECT A DESTINATION";
+	}
+
+	private String voidscapeRiftMenuDetail() {
+		if (hasVoidscapeOption("Resume at the Broken Menagerie")) {
+			return "The glass remembers every depth you have crossed.";
+		}
+		if (hasVoidscapeOption("Enter Void Arena")) {
+			return "Beyond the glass, another battlefield waits.";
+		}
+		if (hasVoidscapeOption("Enter the Void Dungeon")
+			|| hasVoidscapeOption("Enter the Riftworks")
+			|| hasVoidscapeOption("Leave the Void Dungeon")) {
+			return "A darker fracture threads the Wilderness depths.";
+		}
+		if (hasVoidscapeOption("Return to Void Enclave") || hasVoidscapeOption("Leave the arena")) {
+			return "The fracture opens toward safer ground.";
+		}
+		return "The glass bends toward distant thresholds.";
+	}
+
+	private void drawVoidscapeRiftOptionCard(int option, int[] rect) {
+		String label = this.optionsMenuText[option] == null ? "" : this.optionsMenuText[option];
+		boolean hover = UiSkin.hit(rect[0], rect[1], rect[2], rect[3], this.mouseX, this.mouseY);
+		UiSkin.glassPanel(this.getSurface(), rect[0], rect[1], rect[2], rect[3], UiSkin.A_GLASS);
+		if (hover) {
+			this.getSurface().drawBoxAlpha(rect[0] + 2, rect[1] + 2,
+				Math.max(1, rect[2] - 4), Math.max(1, rect[3] - 4),
+				UiSkin.PURPLE_SELECT, UiSkin.A_HOVER_ROW);
+			this.getSurface().drawBorder(rect[0] + 1, rect[1] + 1,
+				Math.max(1, rect[2] - 2), Math.max(1, rect[3] - 2), UiSkin.GOLD_HOT);
+		}
+		this.getSurface().drawLineVert(rect[0] + 4, rect[1] + 4,
+			hover ? UiSkin.GOLD_HOT : UiSkin.PURPLE_EDGE, Math.max(1, rect[3] - 8));
+
+		int shortcutW = voidscapeCompactRiftMenu() ? 22 : 26;
+		int shortcutH = voidscapeCompactRiftMenu() ? 19 : 22;
+		int shortcutX = rect[0] + 10;
+		int shortcutY = rect[1] + (rect[3] - shortcutH) / 2;
+		this.getSurface().drawBoxAlpha(shortcutX, shortcutY, shortcutW, shortcutH,
+			UiSkin.VOID_HEADER, UiSkin.A_HEADER);
+		this.getSurface().drawBorder(shortcutX, shortcutY, shortcutW, shortcutH,
+			hover ? UiSkin.GOLD_HOT : UiSkin.PURPLE_EDGE);
+		this.getSurface().drawColoredStringCentered(shortcutX + shortcutW / 2,
+			String.valueOf(option + 1), hover ? UiSkin.GOLD_HOT : UiSkin.TEXT_LABEL,
+			0, UiSkin.FONT_SMALL, shortcutY + shortcutH / 2 + 4);
+
+		String category = voidscapeRiftOptionCategory(label);
+		if (rect[3] <= 34) {
+			this.getSurface().drawString(fitVoidscapeText(label, rect[2] - 150, UiSkin.FONT_BODY),
+				shortcutX + shortcutW + 9, rect[1] + rect[3] / 2 + 5,
+				hover ? UiSkin.GOLD_TITLE : UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+			int categoryWidth = this.getSurface().stringWidth(UiSkin.FONT_SMALL, category);
+			this.getSurface().drawString(category, rect[0] + rect[2] - categoryWidth - 10,
+				rect[1] + rect[3] / 2 + 4, UiSkin.TEXT_DIM, UiSkin.FONT_SMALL);
+			return;
+		}
+
+		int textX = shortcutX + shortcutW + 10;
+		int rightPad = 10;
+		int categoryWidth = this.getSurface().stringWidth(UiSkin.FONT_SMALL, category);
+		this.getSurface().drawString(category, rect[0] + rect[2] - categoryWidth - rightPad,
+			rect[1] + 15, hover ? UiSkin.GOLD_HOT : UiSkin.TEXT_DIM, UiSkin.FONT_SMALL);
+		boolean roomyCard = rect[3] >= 64;
+		int titleWidth = rect[2] - (textX - rect[0]) - rightPad
+			- (roomyCard ? 0 : categoryWidth + 14);
+		this.getSurface().drawString(fitVoidscapeText(label, titleWidth, UiSkin.FONT_BODY),
+			textX, rect[1] + (roomyCard ? 33 : 21),
+			hover ? UiSkin.GOLD_TITLE : UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		this.getSurface().drawString(fitVoidscapeText(voidscapeRiftOptionDetail(label),
+			rect[2] - (textX - rect[0]) - rightPad, UiSkin.FONT_SMALL),
+			textX, rect[1] + (roomyCard ? 50 : Math.min(rect[3] - 10, 39)),
+			UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
+		if (rect[3] >= 64) {
+			String travel = hover ? "TRAVEL  >" : "RIFT PATH";
+			int travelWidth = this.getSurface().stringWidth(UiSkin.FONT_SMALL, travel);
+			this.getSurface().drawString(travel, rect[0] + rect[2] - travelWidth - rightPad,
+				rect[1] + rect[3] - 9, hover ? UiSkin.GOLD_HOT : UiSkin.TEXT_DIM, UiSkin.FONT_SMALL);
+		}
+	}
+
+	private void drawVoidscapeDesktopRiftTeleportMenu() {
+		int[] panel = voidscapeRiftPanelRect();
+		int[] close = voidscapeRiftCloseRect();
+		boolean closeHover = UiSkin.hit(close[0], close[1], close[2], close[3],
+			this.mouseX, this.mouseY);
+
+		this.showUiTab = 0;
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(),
+			UiSkin.VOID_SCRIM, UiSkin.A_SCRIM);
+		InterfaceChrome.window(this.getSurface(), panel[0], panel[1], panel[2], panel[3],
+			"VOID RIFT", closeHover);
+		this.getSurface().drawColoredStringCentered(panel[0] + panel[2] / 2,
+			voidscapeRiftMenuHeading(), UiSkin.GOLD_HEADER, 0, UiSkin.FONT_SMALL, panel[1] + 40);
+		if (!voidscapeCompactRiftMenu()) {
+			this.getSurface().drawColoredStringCentered(panel[0] + panel[2] / 2,
+				voidscapeRiftMenuDetail(), UiSkin.TEXT_LABEL, 0,
+				UiSkin.FONT_SMALL, panel[1] + 55);
+		}
+
+		for (int option = 0; option < this.optionsMenuCount; option++) {
+			if (option == voidscapeRiftStayOptionIndex()) continue;
+			drawVoidscapeRiftOptionCard(option, voidscapeRiftOptionRect(option));
+		}
+
+		int stayOption = voidscapeRiftStayOptionIndex();
+		int[] stay = voidscapeRiftStayRect();
+		boolean stayHover = stayOption >= 0 && UiSkin.hit(stay[0], stay[1], stay[2], stay[3],
+			this.mouseX, this.mouseY);
+		if (stayOption >= 0) {
+			UiSkin.button(this.getSurface(), stay[0], stay[1], stay[2], stay[3],
+				"STAY HERE", stayHover, false, false, UiSkin.FONT_BODY);
+		}
+
+		if (this.mouseButtonClick != 1) {
+			if (this.mouseButtonClick != 0) this.mouseButtonClick = 0;
+			return;
+		}
+		if (closeHover) {
+			sendOptionsMenuChoice(-1);
+			return;
+		}
+		for (int option = 0; option < this.optionsMenuCount; option++) {
+			if (option == stayOption) continue;
+			int[] rect = voidscapeRiftOptionRect(option);
+			if (UiSkin.hit(rect[0], rect[1], rect[2], rect[3], this.mouseX, this.mouseY)) {
+				sendOptionsMenuChoice(option);
+				return;
+			}
+		}
+		if (stayHover) {
+			sendOptionsMenuChoice(stayOption);
+			return;
+		}
+		if (!UiSkin.hit(panel[0], panel[1], panel[2], panel[3], this.mouseX, this.mouseY)) {
+			sendOptionsMenuChoice(-1);
+			return;
+		}
+		this.mouseButtonClick = 0;
+	}
+
+	private VoidscapeTitleAwardMetadata voidscapeTitleAwardMetadata() {
+		for (int i = 0; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i];
+			int marker = option == null ? -1 : option.indexOf(VOIDSCAPE_TITLE_AWARD_MARKER);
+			if (marker < 0) {
+				continue;
+			}
+			String payload = option.substring(marker + VOIDSCAPE_TITLE_AWARD_MARKER.length()).trim();
+			String[] cells = payload.split("\\|", -1);
+			if (cells.length < 5) {
+				continue;
+			}
+			String id = cells[0].trim();
+			String display = cells[1].trim();
+			String position = cells[3].trim().toLowerCase(Locale.ROOT);
+			if (id.length() == 0 || display.length() == 0
+				|| !("prefix".equals(position) || "suffix".equals(position))) {
+				continue;
+			}
+			return new VoidscapeTitleAwardMetadata(id, display,
+				parseVoidscapeTitleTier(cells[2]), position, cells[4].trim());
+		}
+		return null;
+	}
+
+	private int parseVoidscapeTitleTier(String value) {
+		if (value == null) {
+			return 0;
+		}
+		String normalized = value.trim().toLowerCase(Locale.ROOT);
+		if ("renown".equals(normalized)) return 0;
+		if ("feat".equals(normalized)) return 1;
+		if ("unique".equals(normalized)) return 2;
+		if ("supreme".equals(normalized)) return 3;
+		try {
+			return Integer.parseInt(normalized);
+		} catch (NumberFormatException ex) {
+			return 0;
+		}
+	}
+
+	private String voidscapeTitleTierLabel(int tier) {
+		switch (tier) {
+			case 1: return "FEAT";
+			case 2: return "UNIQUE";
+			case 3: return "SUPREME";
+			default: return "RENOWN";
+		}
+	}
+
+	private String titleAwardOptionLabel(String option) {
+		if (option == null) {
+			return "";
+		}
+		int marker = option.indexOf(VOIDSCAPE_TITLE_AWARD_MARKER);
+		return (marker < 0 ? option : option.substring(0, marker)).trim();
+	}
+
+	private int titleAwardOptionIndex(String prefix) {
+		for (int i = 0; i < this.optionsMenuCount; i++) {
+			if (titleAwardOptionLabel(this.optionsMenuText[i]).startsWith(prefix)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private boolean isVoidscapeTitleAwardMenu() {
+		return this.optionsMenuCount >= 2
+			&& voidscapeTitleAwardMetadata() != null
+			&& titleAwardOptionIndex("Wear it") >= 0
+			&& titleAwardOptionIndex("Not now") >= 0;
+	}
+
+	private int[] voidscapeTitleAwardPanelRect() {
+		int width = Math.min(420, this.getGameWidth() - 16);
+		int height = Math.min(218, this.getGameHeight() - 16);
+		return new int[] {
+			(this.getGameWidth() - width) / 2,
+			(this.getGameHeight() - height) / 2,
+			width,
+			height
+		};
+	}
+
+	private int[] voidscapeTitleAwardButtonRect(boolean wear) {
+		int[] panel = voidscapeTitleAwardPanelRect();
+		int gap = 12;
+		int side = 18;
+		int width = (panel[2] - side * 2 - gap) / 2;
+		int height = 28;
+		int x = wear ? panel[0] + side : panel[0] + side + width + gap;
+		return new int[] {x, panel[1] + panel[3] - height - 18, width, height};
+	}
+
+	private int[] voidscapeTitleAwardCloseRect() {
+		int[] panel = voidscapeTitleAwardPanelRect();
+		return new int[] {
+			InterfaceChrome.closeX(panel[0], panel[2]),
+			InterfaceChrome.closeY(panel[1]),
+			InterfaceChrome.CLOSE_SIZE,
+			InterfaceChrome.CLOSE_SIZE
+		};
+	}
+
+	private void drawVoidscapeTitleAwardMenu() {
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		if (award == null) {
+			return;
+		}
+		this.showUiTab = 0;
+		int[] panel = voidscapeTitleAwardPanelRect();
+		int[] close = voidscapeTitleAwardCloseRect();
+		int[] wear = voidscapeTitleAwardButtonRect(true);
+		int[] later = voidscapeTitleAwardButtonRect(false);
+		boolean closeHover = UiSkin.hit(close[0], close[1], close[2], close[3], this.mouseX, this.mouseY);
+
+		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(),
+			UiSkin.VOID_SCRIM, UiSkin.A_SCRIM);
+		InterfaceChrome.window(this.getSurface(), panel[0], panel[1], panel[2], panel[3],
+			"TITLE EARNED", closeHover);
+
+		int centerX = panel[0] + panel[2] / 2;
+		this.getSurface().drawColoredStringCentered(centerX, "YOU HAVE EARNED",
+			UiSkin.TEXT_LABEL, 0, UiSkin.FONT_SMALL, panel[1] + 48);
+		this.getSurface().drawColoredStringCentered(centerX,
+			fitVoidscapeText(award.display, panel[2] - 38, UiSkin.FONT_DISPLAY),
+			titleTierColor(award.tier), 0, UiSkin.FONT_DISPLAY, panel[1] + 78);
+
+		String kind = "prefix".equals(award.position) ? "HONORIFIC" : "EPITHET";
+		this.getSurface().drawColoredStringCentered(centerX,
+			voidscapeTitleTierLabel(award.tier) + "  /  " + kind,
+			UiSkin.GOLD_HEADER, 0, UiSkin.FONT_SMALL, panel[1] + 101);
+		String detail;
+		if ("prefix".equals(award.position) && award.form.length() > 0) {
+			detail = "Worn before your name as " + award.form + ".";
+		} else {
+			detail = "Worn beside your name.";
+		}
+		this.getSurface().drawColoredStringCentered(centerX,
+			fitVoidscapeText(detail, panel[2] - 36, UiSkin.FONT_BODY),
+			UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, panel[1] + 126);
+
+		int wearOption = titleAwardOptionIndex("Wear it");
+		int laterOption = titleAwardOptionIndex("Not now");
+		boolean wearHover = InterfaceChrome.button(this.getSurface(), wear[0], wear[1], wear[2], wear[3],
+			"Wear for 100,000 gp", UiSkin.FONT_BODY, false, false, this.mouseX, this.mouseY);
+		boolean laterHover = InterfaceChrome.button(this.getSurface(), later[0], later[1], later[2], later[3],
+			"Not now", UiSkin.FONT_BODY, false, false, this.mouseX, this.mouseY);
+
+		if (this.mouseButtonClick == 1) {
+			if (closeHover) {
+				sendOptionsMenuChoice(-1);
+			} else if (wearHover && wearOption >= 0) {
+				sendOptionsMenuChoice(wearOption);
+			} else if (laterHover && laterOption >= 0) {
+				sendOptionsMenuChoice(laterOption);
+			} else {
+				// The ceremony is modal: clicks on the scrim are consumed, while X/ESC
+				// explicitly dismiss with the ordinary menu's -1 reply.
+				this.mouseButtonClick = 0;
+			}
+		}
+	}
+
 	private boolean isVoidscapePathMenu() {
 		return this.useVoidscapeLogin()
 			&& this.optionsMenuCount == 3
@@ -7358,18 +8154,25 @@ public final class mudclient implements Runnable {
 		if (this.optionsMenuCount < 6 || this.optionsMenuText[0] == null) {
 			return false;
 		}
-		if (!this.optionsMenuText[0].startsWith("Active title:") && !this.optionsMenuText[0].startsWith("Active:")) {
+		if (!this.optionsMenuText[0].startsWith("Active title:")
+			&& !this.optionsMenuText[0].startsWith("Active titles:")
+			&& !this.optionsMenuText[0].startsWith("Active:")) {
 			return false;
 		}
-		return titleMenuOptionIndexStartsWith("Unlocked titles") >= 0
+		boolean browseHub = titleMenuOptionIndexStartsWith("Unlocked titles") >= 0
 			&& titleMenuOptionIndexStartsWith("All titles") >= 0
 			&& titleMenuOptionIndexStartsWith("Unique titles") >= 0
 			&& titleMenuOptionIndexStartsWith("Renown titles") >= 0
 			&& titleMenuOptionIndexStartsWith("Feat titles") >= 0;
+		boolean registrarHub = titleMenuOptionIndexStartsWith("Wear or change suffix title") >= 0
+			&& titleMenuOptionIndexStartsWith("Wear or change honorific") >= 0
+			&& titleMenuOptionIndexStartsWith("Browse the full title catalog") >= 0
+			&& titleMenuOptionIndexStartsWith("The Court") >= 0;
+		return browseHub || registrarHub;
 	}
 
 	private boolean isVoidscapeTitleCatalogMenu() {
-		return this.optionsMenuCount >= 4
+		return this.optionsMenuCount >= 2
 			&& this.optionsMenuText[0] != null
 			&& isVoidscapeTitleCatalogHeader(this.optionsMenuText[0]);
 	}
@@ -7384,8 +8187,11 @@ public final class mudclient implements Runnable {
 		return text.startsWith("All titles - page ")
 			|| text.startsWith("Unlocked titles - page ")
 			|| text.startsWith("Unique titles - page ")
+			|| text.startsWith("Supreme titles - page ")
 			|| text.startsWith("Renown titles - page ")
-			|| text.startsWith("Feat titles - page ");
+			|| text.startsWith("Feat titles - page ")
+			|| text.startsWith("The Court - page ")
+			|| text.startsWith("Court - page ");
 	}
 
 	private void drawVoidscapeTitleMenu() {
@@ -7408,7 +8214,9 @@ public final class mudclient implements Runnable {
 
 		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
 		drawVoidscapeCenteredText(cx, "Voidscape Titles", 0xffff00, 4, panelY + 24);
-		drawVoidscapeCenteredText(cx, titleHubActiveText(), 0xffffff, 1, panelY + 45);
+		drawVoidscapeCenteredText(cx,
+			fitVoidscapeText(titleHubActiveText(), panelWidth - 36, UiSkin.FONT_BODY),
+			0xffffff, 1, panelY + 45);
 
 		int buttonW = (panelWidth - 48) / 2;
 		int buttonH = 25;
@@ -7437,22 +8245,26 @@ public final class mudclient implements Runnable {
 		int cx = panelX + panelWidth / 2;
 		String header = this.optionsMenuText[0];
 		String currentCategory = titleCatalogCommandFromHeader(header);
+		boolean court = "court".equals(currentCategory);
 
 		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
 		this.getSurface().drawBoxAlpha(panelX + 2, panelY + 2, panelWidth - 4, 22, UiSkin.VITAL_PRAYER, 222);
 		this.getSurface().drawLineHoriz(panelX + 3, panelY + 24, panelWidth - 6, UiSkin.GOLD_LINE);
-		drawVoidscapeCenteredText(cx, "Achievement Titles", UiSkin.GOLD_TITLE, UiSkin.FONT_TITLE, panelY + 17);
+		drawVoidscapeCenteredText(cx, court ? "The Court" : "Achievement Titles",
+			UiSkin.GOLD_TITLE, UiSkin.FONT_TITLE, panelY + 17);
 		drawVoidscapeCenteredText(cx, titleCatalogSummaryText(header), UiSkin.TEXT_BODY, UiSkin.FONT_SMALL, panelY + 38);
 
 		int tabY = panelY + 45;
 		int tabH = voidscapeTitleTabHeight();
 		int tabX = panelX + 10;
-		int tabW = (panelWidth - 20) / 5;
+		int tabW = (panelWidth - 20) / 7;
 		if (drawVoidscapeTitleTab(tabX, tabY, tabW - 3, "All", titleMenuOptionIndexStartsWith("View all titles"), "all".equals(currentCategory))) return;
 		if (drawVoidscapeTitleTab(tabX + tabW, tabY, tabW - 3, "Unlocked", titleMenuOptionIndexStartsWith("View unlocked titles"), "unlocked".equals(currentCategory))) return;
 		if (drawVoidscapeTitleTab(tabX + tabW * 2, tabY, tabW - 3, "Renown", titleMenuOptionIndexStartsWith("View renown titles"), "renown".equals(currentCategory))) return;
 		if (drawVoidscapeTitleTab(tabX + tabW * 3, tabY, tabW - 3, "Feat", titleMenuOptionIndexStartsWith("View feat titles"), "feat".equals(currentCategory))) return;
-		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 4, tabY, tabW - 3, "Supreme", titleMenuOptionIndexStartsWith("View supreme titles"), "supreme".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 5, tabY, tabW - 3, "Unique", titleMenuOptionIndexStartsWith("View unique titles"), "unique".equals(currentCategory))) return;
+		if (drawVoidscapeTitleTab(tabX + tabW * 6, tabY, tabW - 3, "Court", titleCourtOptionIndex(), "court".equals(currentCategory))) return;
 
 		int tableX = panelX + 12;
 		int tableW = panelWidth - 24;
@@ -7463,10 +8275,10 @@ public final class mudclient implements Runnable {
 		int headerY = tabY + tabH + 16;
 		this.getSurface().drawBoxAlpha(tableX, headerY - 12, tableW, 16, UiSkin.VOID_HEADER, 220);
 		this.getSurface().drawLineHoriz(tableX, headerY + 4, tableW, UiSkin.GOLD_LINE);
-		this.getSurface().drawString("Achievement", tableX + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+		this.getSurface().drawString(court ? "Honorific" : "Achievement", tableX + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
 		this.getSurface().drawColoredStringCentered(tableX + titleW + tierW / 2, "Tier", UiSkin.GOLD_HEADER, 0, UiSkin.FONT_SMALL, headerY);
-		this.getSurface().drawString("Player", tableX + titleW + tierW + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
-		this.getSurface().drawString("Age", tableX + titleW + tierW + holderW + 4, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+		this.getSurface().drawString(court ? "Holder" : "Player", tableX + titleW + tierW + 6, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
+		this.getSurface().drawString(court ? "Since" : "Age", tableX + titleW + tierW + holderW + 4, headerY, UiSkin.GOLD_HEADER, UiSkin.FONT_SMALL);
 
 		int rowY = headerY + 8;
 		int rowH = isAndroid() ? 23 : 17;
@@ -7507,6 +8319,117 @@ public final class mudclient implements Runnable {
 		}
 
 	private void drawVoidscapeTitleDetailMenu() {
+		if (!useVoidscapeHudSkin()) {
+			drawClassicTitleDetailMenu();
+			return;
+		}
+
+		int panelWidth = UiSkin.modalWidth(this.getGameWidth(), UiSkin.MODAL_W_GRID);
+		int contentWidth = panelWidth - 52;
+		boolean nativeTouch = voidscapeUseNativeAndroidMobileShell();
+		int touchTarget = nativeTouch ? voidscapeAndroidTouchTarget(48) : 0;
+		int buttonHeight = nativeTouch ? touchTarget : 24;
+		int detailOptionCount = 0;
+		int detailLineCount = 0;
+		for (int i = 1; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
+			if (isVoidscapeTitleDetailActionOption(option)) {
+				continue;
+			}
+			detailOptionCount++;
+			detailLineCount += voidscapeWrapColoredString(titleDetailDisplayLine(option),
+				contentWidth, UiSkin.FONT_BODY).size();
+		}
+
+		int lineHeight = 15;
+		int optionGap = 3;
+		int bodyHeight = detailLineCount * lineHeight + Math.max(0, detailOptionCount - 1) * optionGap;
+		int maxPanelHeight = this.getGameHeight() - 24;
+		int desiredPanelHeight = bodyHeight + 96 + buttonHeight;
+		if (desiredPanelHeight > maxPanelHeight) {
+			lineHeight = 12;
+			optionGap = 2;
+			bodyHeight = detailLineCount * lineHeight + Math.max(0, detailOptionCount - 1) * optionGap;
+			desiredPanelHeight = bodyHeight + 96 + buttonHeight;
+		}
+		int panelHeight = Math.min(Math.max(244, desiredPanelHeight), maxPanelHeight);
+		int panelX = (this.getGameWidth() - panelWidth) / 2;
+		int panelY = (this.getGameHeight() - panelHeight) / 2;
+		int cx = panelX + panelWidth / 2;
+		String title = this.optionsMenuText[0].substring("Title details: ".length());
+
+		drawVoidscapeTitleFrame(panelX, panelY, panelWidth, panelHeight);
+		this.getSurface().drawBoxAlpha(panelX + 2, panelY + 2, panelWidth - 4,
+			UiSkin.TITLE_BAR_H, UiSkin.VOID_HEADER, 190);
+		this.getSurface().drawLineHoriz(panelX + 3, panelY + UiSkin.TITLE_BAR_H + 1,
+			panelWidth - 6, UiSkin.GOLD_LINE);
+		drawVoidscapeCenteredText(cx, "Title Details", UiSkin.GOLD_TITLE,
+			UiSkin.FONT_TITLE, panelY + 19);
+		drawVoidscapeCenteredText(cx, title, titleDetailHeadingColor(),
+			UiSkin.FONT_BODY, panelY + 47);
+
+		int close = titleMenuOptionIndexStartsWith("Close");
+		int closeSize = 20;
+		int closeX = panelX + panelWidth - closeSize - 6;
+		int closeY = panelY + 4;
+		int closeHitSize = nativeTouch ? touchTarget : closeSize;
+		int closeHitX = closeX + closeSize - closeHitSize;
+		int closeHitY = Math.max(0, Math.min(this.getGameHeight() - closeHitSize,
+			closeY + (closeSize - closeHitSize) / 2));
+		boolean closeHover = UiSkin.hit(closeHitX, closeHitY, closeHitSize, closeHitSize,
+			this.mouseX, this.mouseY);
+		UiSkin.closeButton(this.getSurface(), closeX, closeY, closeSize, closeHover);
+		if (closeHover && this.mouseButtonClick == 1) {
+			sendOptionsMenuChoice(close);
+			return;
+		}
+
+		int buttonY = panelY + panelHeight - buttonHeight - 10;
+		int contentX = panelX + 18;
+		int contentY = panelY + 58;
+		int contentHeight = buttonY - contentY - 10;
+		this.getSurface().drawBoxAlpha(contentX, contentY, panelWidth - 36,
+			contentHeight, UiSkin.VOID_BOX, 176);
+		this.getSurface().drawBoxBorder(contentX, panelWidth - 36, contentY,
+			contentHeight, UiSkin.VOID_LINE);
+
+		int lineY = contentY + 17;
+		for (int i = 1; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i] == null ? "" : this.optionsMenuText[i];
+			if (isVoidscapeTitleDetailActionOption(option)) {
+				continue;
+			}
+			java.util.List<String> wrapped = voidscapeWrapColoredString(
+				titleDetailDisplayLine(option), contentWidth, UiSkin.FONT_BODY);
+			for (String line : wrapped) {
+				this.getSurface().drawString(line, contentX + 8, lineY,
+					titleDetailLineColor(option), UiSkin.FONT_BODY);
+				lineY += lineHeight;
+			}
+			lineY += optionGap;
+		}
+
+		int equip = titleDetailEquipOptionIndex();
+		int back = titleMenuOptionIndexStartsWith("Back to ");
+		int backWidth = nativeTouch ? Math.max(112, touchTarget) : 112;
+		if (equip >= 0) {
+			if (back >= 0 && drawVoidscapeTitleButton(panelX + 18, buttonY, backWidth, buttonHeight,
+				"Back", back, false)) return;
+			String equipLabel = titleDetailWearButtonLabel(this.optionsMenuText[equip]);
+			int wearWidth = nativeTouch ? Math.max(160, touchTarget) : 160;
+			if (drawVoidscapeTitleButton(panelX + panelWidth - 18 - wearWidth,
+				buttonY, wearWidth, buttonHeight,
+				equipLabel, equip, false)) return;
+		} else {
+			if (back >= 0 && drawVoidscapeTitleButton(cx - backWidth / 2,
+				buttonY, backWidth, buttonHeight,
+				"Back", back, false)) return;
+		}
+
+		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private void drawClassicTitleDetailMenu() {
 		int panelWidth = Math.min(438, this.getGameWidth() - 16);
 		int panelHeight = Math.min(246, this.getGameHeight() - 24);
 		int panelX = (this.getGameWidth() - panelWidth) / 2;
@@ -7524,25 +8447,51 @@ public final class mudclient implements Runnable {
 			if (isVoidscapeTitleDetailActionOption(option)) {
 				continue;
 			}
-			this.getSurface().drawString(option, panelX + 18, lineY, titleDetailLineColor(option), 1);
+			this.getSurface().drawString(option, panelX + 18, lineY,
+				titleDetailLineColor(option), 1);
 			lineY += 18;
 		}
 
-		int equip = titleMenuOptionIndexStartsWith("Equip title");
+		int equip = titleDetailEquipOptionIndex();
 		int back = titleMenuOptionIndexStartsWith("Back to ");
 		int close = titleMenuOptionIndexStartsWith("Close");
 		int buttonY = panelY + panelHeight - 34;
 		if (equip >= 0) {
 			int equipX = panelX + 18;
-			if (drawVoidscapeTitleButton(equipX, buttonY, 112, 22, "Equip", equip, false)) return;
-			if (back >= 0 && drawVoidscapeTitleButton(equipX + 124, buttonY, 112, 22, "Back", back, false)) return;
-			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, buttonY, 70, 22, "Close", close, true)) return;
+			String equipLabel = this.optionsMenuText[equip].startsWith("Wear") ? "Wear" : "Equip";
+			if (drawVoidscapeTitleButton(equipX, buttonY, 112, 22,
+				equipLabel, equip, false)) return;
+			if (back >= 0 && drawVoidscapeTitleButton(equipX + 124, buttonY, 112, 22,
+				"Back", back, false)) return;
+			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86,
+				buttonY, 70, 22, "Close", close, true)) return;
 		} else {
-			if (back >= 0 && drawVoidscapeTitleButton(panelX + 18, buttonY, 112, 22, "Back", back, false)) return;
-			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86, buttonY, 70, 22, "Close", close, true)) return;
+			if (back >= 0 && drawVoidscapeTitleButton(panelX + 18, buttonY, 112, 22,
+				"Back", back, false)) return;
+			if (close >= 0 && drawVoidscapeTitleButton(panelX + panelWidth - 86,
+				buttonY, 70, 22, "Close", close, true)) return;
 		}
 
 		handleVoidscapeTitlePanelMiss(panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private String titleDetailDisplayLine(String option) {
+		if (option != null && option.startsWith("Requirement - ")) {
+			return "Requirement: " + option.substring("Requirement - ".length());
+		}
+		return option == null ? "" : option;
+	}
+
+	private String titleDetailWearButtonLabel(String option) {
+		if (option == null || option.isEmpty()) {
+			return "Wear";
+		}
+		if (option.startsWith("Wear for ")) {
+			return option.endsWith(" coins")
+				? option.substring(0, option.length() - " coins".length()) + " gp"
+				: option;
+		}
+		return option.startsWith("Equip title") ? "Equip" : option;
 	}
 
 	private void drawVoidscapeTitleFrame(int x, int y, int width, int height) {
@@ -7558,7 +8507,10 @@ public final class mudclient implements Runnable {
 		int border = hover ? UiSkin.GOLD_HOT : UiSkin.GOLD_LINE;
 		this.getSurface().drawBoxAlpha(x, y, width, height, fill, 235);
 		this.getSurface().drawBoxBorder(x, width, y, height, border);
-		this.getSurface().drawColoredStringCentered(x + width / 2, label, close ? UiSkin.DANGER_GLYPH : UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY, y + height / 2 + 4);
+		this.getSurface().drawColoredStringCentered(x + width / 2,
+			fitVoidscapeText(label, Math.max(1, width - 10), UiSkin.FONT_BODY),
+			close ? UiSkin.DANGER_GLYPH : UiSkin.TEXT_BODY, 0, UiSkin.FONT_BODY,
+			y + height / 2 + 4);
 		if (hover && this.mouseButtonClick == 1) {
 			sendOptionsMenuChoice(option);
 			return true;
@@ -7606,7 +8558,11 @@ public final class mudclient implements Runnable {
 				int holderX = tierX + tierW;
 				int ageX = holderX + holderW;
 				int titleColor = active ? UiSkin.GOLD_TITLE : "locked".equals(cells[6]) || "held".equals(cells[6]) ? UiSkin.TEXT_DIM : UiSkin.TEXT_BODY;
-				this.getSurface().drawString(fitVoidscapeText(cells[0], titleW - 10, UiSkin.FONT_BODY), x + 6, textY, titleColor, UiSkin.FONT_BODY);
+				String titleLabel = cells[0];
+				if (cells.length >= 9 && "prefix".equalsIgnoreCase(cells[8])) {
+					titleLabel += " [prefix]";
+				}
+				this.getSurface().drawString(fitVoidscapeText(titleLabel, titleW - 10, UiSkin.FONT_BODY), x + 6, textY, titleColor, UiSkin.FONT_BODY);
 				drawVoidscapeTitleTierPill(tierX + 5, y + 2, tierW - 10, height - 4, cells[1], parseTitleInt(cells[2]), "1".equals(cells[3]));
 				int holderColor = "Open".equals(cells[4]) ? UiSkin.GOLD_HOT : "-".equals(cells[4]) ? UiSkin.TEXT_DIM : UiSkin.GOOD;
 				this.getSurface().drawString(fitVoidscapeText(cells[4], holderW - 10, UiSkin.FONT_SMALL), holderX + 6, textY,
@@ -7623,9 +8579,9 @@ public final class mudclient implements Runnable {
 		}
 
 		private void drawVoidscapeTitleTierPill(int x, int y, int width, int height, String label, int tier, boolean record) {
-			int fill = record ? UiSkin.GOLD_LINE : tier == 2 ? UiSkin.GOLD_LINE : tier == 1 ? UiSkin.PURPLE_SELECT : UiSkin.VITAL_META;
-			int border = record ? UiSkin.GOLD_HOT : tier == 2 ? UiSkin.GOLD_HOT : tier == 1 ? UiSkin.PURPLE_FOCUS : UiSkin.FIELD_BORDER_IDLE;
-			int text = record || tier == 0 ? UiSkin.VOID_BODY : UiSkin.GOLD_TITLE;
+			int fill = record ? UiSkin.GOLD_LINE : tier == 3 ? titleTierColor(3) : tier == 2 ? UiSkin.GOLD_LINE : tier == 1 ? UiSkin.PURPLE_SELECT : UiSkin.VITAL_META;
+			int border = record ? UiSkin.GOLD_HOT : tier == 3 ? UiSkin.BAD : tier == 2 ? UiSkin.GOLD_HOT : tier == 1 ? UiSkin.PURPLE_FOCUS : UiSkin.FIELD_BORDER_IDLE;
+			int text = record || tier == 0 || tier == 3 ? UiSkin.VOID_BODY : UiSkin.GOLD_TITLE;
 			this.getSurface().drawBoxAlpha(x, y, width, height, fill, record ? 235 : 220);
 			this.getSurface().drawBoxBorder(x, width, y, height, border);
 			this.getSurface().drawColoredStringCentered(x + width / 2, fitVoidscapeText(label, width - 6, UiSkin.FONT_SMALL),
@@ -7696,16 +8652,49 @@ public final class mudclient implements Runnable {
 			|| option.startsWith("View all titles")
 			|| option.startsWith("View unlocked titles")
 			|| option.startsWith("View unique titles")
+			|| option.startsWith("View supreme titles")
 			|| option.startsWith("View renown titles")
 			|| option.startsWith("View feat titles")
+			|| option.startsWith("View the Court")
+			|| option.startsWith("View The Court")
+			|| option.startsWith("View Court")
 			|| option.startsWith("Change category")
 			|| option.startsWith("Close");
 	}
 
 	private boolean isVoidscapeTitleDetailActionOption(String option) {
-		return option.startsWith("Equip title")
+		return option.startsWith("Wear for ")
+			|| option.startsWith("Equip title")
+			|| option.startsWith("Wear title")
+			|| option.startsWith("Wear as epithet")
+			|| option.startsWith("Wear as honorific")
+			|| option.startsWith("Change form")
 			|| option.startsWith("Back to ")
 			|| option.startsWith("Close");
+	}
+
+	private int titleDetailEquipOptionIndex() {
+		int option = titleMenuOptionIndexStartsWith("Wear for ");
+		if (option >= 0) return option;
+		option = titleMenuOptionIndexStartsWith("Wear as honorific");
+		if (option >= 0) return option;
+		option = titleMenuOptionIndexStartsWith("Wear as epithet");
+		if (option >= 0) return option;
+		option = titleMenuOptionIndexStartsWith("Wear title");
+		if (option >= 0) return option;
+		return titleMenuOptionIndexStartsWith("Equip title");
+	}
+
+	private int titleDetailHeadingColor() {
+		for (int i = 0; i < this.optionsMenuCount; i++) {
+			String option = this.optionsMenuText[i] == null
+				? "" : this.optionsMenuText[i].toLowerCase(Locale.ROOT);
+			if (option.startsWith("tier:") && option.indexOf("supreme") >= 0) return titleTierColor(3);
+			if (option.startsWith("tier:") && option.indexOf("unique") >= 0) return titleTierColor(2);
+			if (option.startsWith("tier:") && option.indexOf("feat") >= 0) return titleTierColor(1);
+			if (option.startsWith("tier:") && option.indexOf("renown") >= 0) return titleTierColor(0);
+		}
+		return UiSkin.TEXT_BODY;
 	}
 
 	private int titleDetailLineColor(String option) {
@@ -7717,6 +8706,9 @@ public final class mudclient implements Runnable {
 		}
 		if (option.startsWith("Tier: @mag@feat")) {
 			return 0xd9b6ff;
+		}
+		if (option.startsWith("Tier: @red@supreme")) {
+			return titleTierColor(3);
 		}
 		if (option.startsWith("Tier: @whi@renown")) {
 			return 0x80d8ff;
@@ -7739,8 +8731,11 @@ public final class mudclient implements Runnable {
 
 	private String titleHubActiveText() {
 		String text = this.optionsMenuText[0] == null ? "Active title: none" : this.optionsMenuText[0];
+		if (text.startsWith("Active titles:")) {
+			return text;
+		}
 		if (text.startsWith("Active:")) {
-			return "Active title: " + text.substring("Active:".length()).trim();
+			return "Active titles: " + text.substring("Active:".length()).trim();
 		}
 		return text;
 	}
@@ -7748,8 +8743,10 @@ public final class mudclient implements Runnable {
 	private String titleCatalogCommandFromHeader(String header) {
 		if (header.startsWith("Unlocked titles")) return "unlocked";
 		if (header.startsWith("Unique titles")) return "unique";
+		if (header.startsWith("Supreme titles")) return "supreme";
 		if (header.startsWith("Renown titles")) return "renown";
 		if (header.startsWith("Feat titles")) return "feat";
+		if (header.startsWith("The Court") || header.startsWith("Court")) return "court";
 		return "all";
 	}
 
@@ -7760,6 +8757,16 @@ public final class mudclient implements Runnable {
 			}
 		}
 		return -1;
+	}
+
+	private int titleCourtOptionIndex() {
+		int option = titleMenuOptionIndexStartsWith("View the Court");
+		if (option >= 0) return option;
+		option = titleMenuOptionIndexStartsWith("View The Court");
+		if (option >= 0) return option;
+		option = titleMenuOptionIndexStartsWith("View Court");
+		if (option >= 0) return option;
+		return titleMenuOptionIndexStartsWith("The Court");
 	}
 
 	private void drawVoidscapePathMenu() {
@@ -8353,29 +9360,23 @@ public final class mudclient implements Runnable {
 			if (roll < 60) {
 				this.christmasCrackerReel[i] = CHRISTMAS_CRACKER_NOTHING_ITEM_ID;
 			} else if (roll < 80) {
-				this.christmasCrackerReel[i] = randomChristmasCrackerPartyHat(random);
+				this.christmasCrackerReel[i] = CHRISTMAS_CRACKER_PARTY_HATS[random.nextInt(CHRISTMAS_CRACKER_PARTY_HATS.length)];
 			} else {
 				this.christmasCrackerReel[i] = CHRISTMAS_CRACKER_HOLIDAY_RARES[random.nextInt(CHRISTMAS_CRACKER_HOLIDAY_RARES.length)];
 			}
 		}
 		this.christmasCrackerReel[CHRISTMAS_CRACKER_WINNER_INDEX - 2]
-			= randomChristmasCrackerPartyHat(random);
+			= CHRISTMAS_CRACKER_PARTY_HATS[random.nextInt(CHRISTMAS_CRACKER_PARTY_HATS.length)];
 		this.christmasCrackerReel[CHRISTMAS_CRACKER_WINNER_INDEX - 1]
 			= isChristmasCrackerHolidayRare(winningItemId)
-			? randomChristmasCrackerPartyHat(random)
+			? CHRISTMAS_CRACKER_PARTY_HATS[random.nextInt(CHRISTMAS_CRACKER_PARTY_HATS.length)]
 			: CHRISTMAS_CRACKER_HOLIDAY_RARES[random.nextInt(CHRISTMAS_CRACKER_HOLIDAY_RARES.length)];
 		this.christmasCrackerReel[CHRISTMAS_CRACKER_WINNER_INDEX] = winningItemId;
 		this.christmasCrackerReel[CHRISTMAS_CRACKER_WINNER_INDEX + 1]
 			= CHRISTMAS_CRACKER_HOLIDAY_RARES[random.nextInt(CHRISTMAS_CRACKER_HOLIDAY_RARES.length)];
 	}
 
-	private static int randomChristmasCrackerPartyHat(Random random) {
-		int[] partyHats = Config.S_WANT_CUSTOM_SPRITES
-			? CHRISTMAS_CRACKER_CUSTOM_PARTY_HATS : CHRISTMAS_CRACKER_PARTY_HATS;
-		return partyHats[random.nextInt(partyHats.length)];
-	}
-
-	static boolean isValidChristmasCrackerResult(int category, int itemId) {
+	private static boolean isValidChristmasCrackerResult(int category, int itemId) {
 		if (category == CHRISTMAS_CRACKER_CATEGORY_NOTHING) {
 			return itemId == CHRISTMAS_CRACKER_NOTHING_ITEM_ID;
 		}
@@ -8386,9 +9387,7 @@ public final class mudclient implements Runnable {
 	}
 
 	private static boolean isChristmasCrackerPartyHat(int itemId) {
-		int[] partyHats = Config.S_WANT_CUSTOM_SPRITES
-			? CHRISTMAS_CRACKER_CUSTOM_PARTY_HATS : CHRISTMAS_CRACKER_PARTY_HATS;
-		for (int id : partyHats) if (id == itemId) return true;
+		for (int id : CHRISTMAS_CRACKER_PARTY_HATS) if (id == itemId) return true;
 		return false;
 	}
 
@@ -8397,7 +9396,7 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
-	static String christmasCrackerDisplayName(int itemId) {
+	private static String christmasCrackerDisplayName(int itemId) {
 		switch (itemId) {
 			case 576: return "RED PARTY HAT";
 			case 577: return "YELLOW PARTY HAT";
@@ -8405,15 +9404,12 @@ public final class mudclient implements Runnable {
 			case 579: return "GREEN PARTY HAT";
 			case 580: return "PINK PARTY HAT";
 			case 581: return "WHITE PARTY HAT";
-			case 1582: return "BLACK PARTY HAT";
 			case 422: return "PUMPKIN";
 			case 677: return "EASTER EGG";
 			case 828: return "GREEN HALLOWEEN MASK";
 			case 831: return "RED HALLOWEEN MASK";
 			case 832: return "BLUE HALLOWEEN MASK";
 			case 971: return "SANTA'S HAT";
-			case 1156: return "BUNNY EARS";
-			case 1289: return "SCYTHE";
 			default: return "HOLIDAY PRIZE";
 		}
 	}
@@ -8481,38 +9477,216 @@ public final class mudclient implements Runnable {
 	public int workbenchChristmasCrackerCloseCenterX() { return christmasCrackerCloseX() + christmasCrackerCloseSize() / 2; }
 	public int workbenchChristmasCrackerCloseCenterY() { return christmasCrackerCloseY() + christmasCrackerCloseSize() / 2; }
 
-	public void workbenchSetCrackerCampaignRemaining(int remaining) {
-		setCrackerCampaignRemaining(remaining);
+	public boolean isDuelJournalVisible() {
+		return this.duelJournalInterface != null && this.duelJournalInterface.isVisible();
 	}
 
-	public int workbenchCrackerCampaignRemaining() { return this.crackerCampaignRemaining; }
-	public boolean workbenchCrackerCampaignHudVisible() { return this.crackerCampaignHudRendered; }
-	public String workbenchCrackerCampaignHudLabel() {
-		return this.crackerCampaignHudRendered ? this.crackerCampaignHudLabel : "";
+	/** Gives an open journal first refusal over every platform's scroll routing. */
+	public boolean routeDuelJournalScroll(int delta) {
+		if (!isDuelJournalVisible()) return false;
+		this.duelJournalInterface.handleWheel(delta);
+		return true;
 	}
-	public int workbenchCrackerCampaignHudX() { return this.crackerCampaignHudX; }
-	public int workbenchCrackerCampaignHudY() { return this.crackerCampaignHudY; }
-	public int workbenchCrackerCampaignHudWidth() { return this.crackerCampaignHudWidth; }
-	public int workbenchCrackerCampaignHudHeight() { return this.crackerCampaignHudHeight; }
-	public int workbenchCrackerCampaignTopTabsX() {
-		return voidscapeUseNativeAndroidMobileShell() ? -1 : voidscapeTopTabsStartX();
+
+	/** Gives an open journal first refusal over a platform pointer press. */
+	public boolean consumeDuelJournalPointerAt(int x, int y, boolean primary) {
+		return this.duelJournalInterface != null && this.duelJournalInterface.isVisible()
+			&& this.duelJournalInterface.handleClick(x, y, primary ? 1 : 2);
 	}
-	public int workbenchCrackerCampaignTopTabsY() {
-		return voidscapeUseNativeAndroidMobileShell() ? -1 : VOIDSCAPE_TOP_TAB_Y;
+
+	/** Gives the top PK Catching modal first refusal before platform input reaches lower surfaces. */
+	public boolean consumePkCatchingPointerAt(int x, int y, boolean primary) {
+		if (isPkCatchingTopModal()) {
+			this.pkCatchingInterface.handleClick(x, y, primary ? 1 : 2);
+			this.currentMouseButtonDown = 0;
+			this.lastMouseButtonDown = 0;
+			this.mouseButtonClick = 0;
+			return true;
+		}
+		if (!isPkCatchingChooserTop()) return false;
+		// Preserve the ordinary option-menu reply path while giving the chooser's
+		// entire scrim first refusal in the PC and Android platform bridges.
+		int button = primary ? 1 : 2;
+		this.mouseX = x;
+		this.mouseY = y;
+		this.currentMouseButtonDown = button;
+		this.lastMouseButtonDown = button;
+		this.mouseButtonClick = button;
+		return true;
 	}
-	public int workbenchCrackerCampaignTopTabsWidth() {
-		return voidscapeUseNativeAndroidMobileShell() ? 0 : voidscapeTopTabsSpan();
+
+	/** Consumes modal key-down/text input; Escape follows the shared close path. */
+	public boolean consumeDuelJournalKeyDown(int key) {
+		if (!isDuelJournalVisible()) return false;
+		clearDuelJournalHeldNavigationState();
+		if (key == 27) closeDuelJournal();
+		return true;
 	}
-	public int workbenchCrackerCampaignTopTabsHeight() {
-		return voidscapeUseNativeAndroidMobileShell() ? 0 : voidscapeTopTabSize();
+
+	public void clearDuelJournalHeldNavigationState() {
+		this.keyLeft = false;
+		this.keyRight = false;
+		this.keyUp = false;
+		this.keyDown = false;
+		this.pageUp = false;
+		this.pageDown = false;
+		this.enterPressed = false;
 	}
-	public int workbenchCrackerCampaignLocationX() { return voidscapeLocationPlaqueX(); }
-	public int workbenchCrackerCampaignLocationY() { return voidscapeLocationPlaqueY(); }
-	public int workbenchCrackerCampaignLocationWidth() {
-		return voidscapeCompactHud() ? 230 : 280;
+
+	/** Closes the modal and invalidates any response still in flight. */
+	public void closeDuelJournal() {
+		clearDuelJournalRequestState();
+		if (this.duelJournalInterface != null) this.duelJournalInterface.close();
+		clearDuelJournalHeldNavigationState();
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
 	}
-	public int workbenchCrackerCampaignLocationHeight() { return voidscapeLocationPlaqueHeight(); }
-	public int workbenchCrackerCampaignKillFeedBaseY() { return crackerCampaignKillFeedBaseY(); }
+
+	/** Clears all account-owned journal data at login/account boundaries. */
+	public void resetDuelJournal() {
+		clearDuelJournalRequestState();
+		if (this.duelJournalInterface != null) this.duelJournalInterface.reset();
+		clearDuelJournalHeldNavigationState();
+	}
+
+	private void beginDuelJournalRequest(boolean latestReceiptRequest) {
+		destroyPendingDuelProofBytes(this.duelJournalPending);
+		this.duelJournalPending = null;
+		this.duelJournalAwaitingResponse = true;
+		this.duelJournalLatestReceiptRequest = latestReceiptRequest;
+		this.duelJournalRequestStartedAtMillis = System.currentTimeMillis();
+		if (this.duelJournalInterface != null) this.duelJournalInterface.beginLoading();
+	}
+
+	private void clearDuelJournalRequestState() {
+		destroyPendingDuelProofBytes(this.duelJournalPending);
+		this.duelJournalPending = null;
+		this.duelJournalAwaitingResponse = false;
+		this.duelJournalLatestReceiptRequest = false;
+		this.duelJournalRequestStartedAtMillis = 0L;
+		if (this.duelJournalInterface != null) this.duelJournalInterface.cancelLoading();
+	}
+
+	private void expireDuelJournalRequestIfNeeded() {
+		if (!this.duelJournalAwaitingResponse) return;
+		long elapsed = System.currentTimeMillis() - this.duelJournalRequestStartedAtMillis;
+		if (elapsed < DUEL_JOURNAL_REQUEST_TIMEOUT_MILLIS) return;
+		clearDuelJournalRequestState();
+		if (this.currentViewMode == GameMode.GAME) {
+			showMessage(false, null, "Duel journal request timed out. Please try ::duel again.",
+				MessageType.GAME, 0, null);
+		}
+	}
+
+	private boolean isDuelJournalResponseAwaited() {
+		expireDuelJournalRequestIfNeeded();
+		return this.duelJournalAwaitingResponse;
+	}
+
+	public void workbenchOpenDuelJournalFixture(
+		List<DuelJournalInterface.DuelSummary> history, DuelJournalInterface.DuelDetail detail) {
+		if (this.duelJournalInterface == null) {
+			throw new IllegalStateException("Duel Journal is not initialized");
+		}
+		resetDuelJournal();
+		this.duelJournalInterface.applyJournal(history, detail);
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+	}
+
+	public void workbenchCloseDuelJournalFixture() {
+		resetDuelJournal();
+	}
+
+	public boolean workbenchConsumeDuelJournalPointerAt(int x, int y, boolean primary) {
+		return consumeDuelJournalPointerAt(x, y, primary);
+	}
+
+	public boolean workbenchDuelJournalVisible() {
+		return this.duelJournalInterface != null && this.duelJournalInterface.isVisible();
+	}
+
+	public boolean workbenchDuelJournalLoading() {
+		return this.duelJournalInterface != null && this.duelJournalInterface.isLoading();
+	}
+
+	public long workbenchDuelJournalSelectedId() {
+		return this.duelJournalInterface == null ? -1L : this.duelJournalInterface.getSelectedDuelId();
+	}
+
+	public int workbenchDuelJournalHistoryCount() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getHistoryCount();
+	}
+
+	public int workbenchDuelJournalSwingCount() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getSwingCount();
+	}
+
+	public String workbenchDuelJournalProofState() {
+		return this.duelJournalInterface == null ? "unavailable" : this.duelJournalInterface.getProofState();
+	}
+
+	public String workbenchDuelJournalProofId() {
+		return this.duelJournalInterface == null ? "" : this.duelJournalInterface.getProofId();
+	}
+
+	public int workbenchDuelJournalWindowX() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getWindowX();
+	}
+
+	public int workbenchDuelJournalWindowY() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getWindowY();
+	}
+
+	public int workbenchDuelJournalWindowWidth() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getWindowWidth();
+	}
+
+	public int workbenchDuelJournalWindowHeight() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getWindowHeight();
+	}
+
+	public int workbenchDuelJournalHistoryX() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getHistoryX();
+	}
+
+	public int workbenchDuelJournalHistoryY() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getHistoryY();
+	}
+
+	public int workbenchDuelJournalHistoryWidth() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getHistoryWidth();
+	}
+
+	public int workbenchDuelJournalHistoryHeight() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getHistoryHeight();
+	}
+
+	public int workbenchDuelJournalSwingX() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getSwingX();
+	}
+
+	public int workbenchDuelJournalSwingY() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getSwingY();
+	}
+
+	public int workbenchDuelJournalSwingWidth() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getSwingWidth();
+	}
+
+	public int workbenchDuelJournalSwingHeight() {
+		return this.duelJournalInterface == null ? 0 : this.duelJournalInterface.getSwingHeight();
+	}
+
+	public int workbenchDuelJournalCloseCenterX() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getCloseCenterX();
+	}
+
+	public int workbenchDuelJournalCloseCenterY() {
+		return this.duelJournalInterface == null ? -1 : this.duelJournalInterface.getCloseCenterY();
+	}
 
 	private int farmSimDialogWidth() {
 		return Math.min(520, Math.max(320, getGameWidth() - 24));
@@ -10288,8 +11462,17 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "other players can attack you!", bodyColor, 0, 1, halfGameHeight() - 18);
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "The further north you go the more dangerous it", bodyColor, 0, 1, halfGameHeight() + 4);
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "becomes, but the more treasure you will find.", bodyColor, 0, 1, halfGameHeight() + 17);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "In the wilderness an indicator at the bottom-right", bodyColor, 0, 1, halfGameHeight() + 39);
-			this.getSurface().drawColoredStringCentered(halfGameWidth(), "of the screen will show the current level of danger", bodyColor, 0, 1, halfGameHeight() + 52);
+			boolean dangerInLocationPlaque = voidSkin && optionLocationPlaque;
+			String dangerIndicatorLine1 = dangerInLocationPlaque
+				? "In the wilderness the red plaque at the top-left"
+				: "In the wilderness an indicator at the bottom-right";
+			String dangerIndicatorLine2 = dangerInLocationPlaque
+				? "shows your current level of danger"
+				: "of the screen will show the current level of danger";
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), dangerIndicatorLine1,
+				bodyColor, 0, 1, halfGameHeight() + 39);
+			this.getSurface().drawColoredStringCentered(halfGameWidth(), dangerIndicatorLine2,
+				bodyColor, 0, 1, halfGameHeight() + 52);
 			boolean closeHover = isWildWarningCloseHit(this.mouseX, this.mouseY);
 			int var3 = closeHover ? (voidSkin ? UiSkin.GOLD_HOT : 0xFF0000) : bodyColor;
 			this.getSurface().drawColoredStringCentered(halfGameWidth(), "Click here to close window", var3, 0, 1, halfGameHeight() + 74);
@@ -10576,7 +11759,7 @@ public final class mudclient implements Runnable {
 		} else if (this.panelPasswordChange_Mode == PasswordChangeMode.PASSWORD_REQ_SENT) {
 			prompt = "Password change requested";
 		} else if (this.panelPasswordChange_Mode == PasswordChangeMode.NEED_LONGER_PASSWORD) {
-			prompt = "Use at least 5 characters";
+			prompt = "Password must be at least 5 letters long";
 		} else {
 			prompt = "Password cannot match your username";
 		}
@@ -10760,10 +11943,6 @@ public final class mudclient implements Runnable {
 
 			if (isAndroid()) {
 				this.menuCommon.font = osConfig.C_MENU_SIZE;
-			}
-			if (this.voidscapeSubscriptionShopOpen
-				&& voidscapeSubscriptionShopBlockingSurfaceOpen()) {
-				closeVoidscapeSubscriptionShop();
 			}
 
 			if (var1 == 13) {
@@ -11139,6 +12318,9 @@ public final class mudclient implements Runnable {
 					if (!this.isCinematicHudHidden()) {
 						drawWorldWalkSceneRoute();
 						drawPendingInputMarker();
+						if (this.pkCatchingInterface != null) {
+							this.pkCatchingInterface.renderSceneMarker();
+						}
 					}
 					drawTerrainEditorHoverOverlay();
 					drawRareDropBeams();
@@ -11252,30 +12434,29 @@ public final class mudclient implements Runnable {
 						// anchors to the live frame width so wide viewports keep the
 						// feed flush right; the classic skin stays byte-identical.
 						int killFeedRight = useVoidscapeHudSkin() ? this.getGameWidth() - 5 : 507;
-						int killFeedBaseY = crackerCampaignKillFeedBaseY();
 						for (KillAnnouncer notify : killQueue.Kill) {
 							int picture_width = 20;
 							int width_killed = killFeedRight - this.getSurface().stringWidth(1, notify.killedString);
 							int width_icon = killFeedRight - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 5;
 							int width_killer = killFeedRight - this.getSurface().stringWidth(1, notify.killedString) - picture_width - 8 - this.getSurface().stringWidth(1, notify.killerString);
 
-							this.getSurface().drawString(notify.killerString, width_killer, killFeedBaseY + Offset, 0xffffff, 1);
+							this.getSurface().drawString(notify.killerString, width_killer, 50 + Offset, 0xffffff, 1);
 							switch (notify.killPicture) {
 								case -1:
-									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.projectiles.get(PROJECTILE_TYPES.RANGED.id())), width_icon, killFeedBaseY - 14 + Offset, picture_width,
+									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.projectiles.get(PROJECTILE_TYPES.RANGED.id())), width_icon, 36 + Offset, picture_width,
 										18, 0, 0, 0, false, 0, 1);
 									break;
 								case -2:
-									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.projectiles.get(PROJECTILE_TYPES.MAGIC.id())), width_icon, killFeedBaseY - 14 + Offset, picture_width,
+									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.projectiles.get(PROJECTILE_TYPES.MAGIC.id())), width_icon, 36 + Offset, picture_width,
 										18, 0, 0, 0, false, 0, 1);
 									break;
 								default:
-									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getItemDef(notify.killPicture)), width_icon, killFeedBaseY - 14 + Offset, picture_width,
+									getSurface().drawSpriteClipping(spriteSelect(EntityHandler.getItemDef(notify.killPicture)), width_icon, 36 + Offset, picture_width,
 										18, EntityHandler.getItemDef(notify.killPicture).getPictureMask(), 0,
 										EntityHandler.getItemDef(notify.killPicture).getBlueMask(), false, 0, 1);
 									break;
 							}
-							this.getSurface().drawString(notify.killedString, width_killed, killFeedBaseY + Offset, 0xffffff, 1);
+							this.getSurface().drawString(notify.killedString, width_killed, 50 + Offset, 0xffffff, 1);
 							Offset += 16;
 						}
 					}
@@ -11561,24 +12742,33 @@ public final class mudclient implements Runnable {
 					if (!voidRushUiLocked && !useVoidscapeHudSkin()) {
 						this.getSurface().a(spriteSelect(GUIPARTS.MENUBAR.getDef()), 0, this.getSurface().width2 - 200, 128, getUITabsY());
 					}
+					if (this.pkCatchingInterface != null) {
+						this.pkCatchingInterface.renderHud();
+					}
 					this.drawUi(0);
-					if (!this.showDialogChristmasCracker) {
+					boolean pkCatchingChooserTop = isPkCatchingChooserTop();
+					boolean pkCatchingModalTop = isPkCatchingTopModal();
+					if (!this.showDialogChristmasCracker
+						&& !pkCatchingChooserTop && !pkCatchingModalTop) {
 						drawVoidscapeHudSkin();
 					}
 					this.getSurface().loggedIn = false;
-					if (!this.showDialogChristmasCracker) {
+					if (!this.showDialogChristmasCracker
+						&& !pkCatchingChooserTop && !pkCatchingModalTop) {
 						this.drawChatMessageTabs(var1 - 8);
 					}
-					// Void skin: the wilderness level already lives on the
-					// top-left location plaque (drawVoidscapeLocationPlaque);
-					// the second bottom-right skull copy was redundant and is
-					// gone (UI-STYLE-GUIDE slice 9). Classic skin still draws
-					// drawWildernessLevelIndicator from the wild-check block.
-					if (!this.showDialogChristmasCracker && !this.voidscapeSubscriptionShopOpen) {
-						drawCrackerCampaignHud();
+					if (!this.showDialogChristmasCracker
+						&& !pkCatchingChooserTop && !pkCatchingModalTop) {
+						// When the optional plaque is hidden, restore the original-style
+						// warning after chat/HUD chrome so the bottom-right signal cannot
+						// be painted over. Authentic keeps its original early draw path.
+						drawVoidscapeWildernessFallbackIndicator();
 						this.drawTrainingXpRateBadge();
 						drawVoidArenaCountdownOverlay();
 						drawFpsOverlay();
+					}
+					if (pkCatchingModalTop) {
+						this.pkCatchingInterface.renderModal();
 					}
 					// this.getSurface().draw(this.graphics, this.screenOffsetX,
 					// 256, this.screenOffsetY);
@@ -11703,247 +12893,6 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawLineAlpha(x - radius, y, x, y - radius, color, alpha);
 	}
 
-	private boolean crackerCampaignHudShouldRender() {
-		if (this.crackerCampaignRemaining <= 0 || this.currentViewMode != GameMode.GAME
-			|| this.localPlayer == null || this.getSurface() == null || this.isSleeping
-			|| this.cinematicHudHidden || this.vitalsHudHidden || isVoidRushUiLocked()
-			|| this.showUiTab != 0 || this.topMouseMenuVisible
-			|| this.voidscapeAccountMenuOpen || this.voidscapeAccountAddFormOpen
-			|| !getWebOverlayDialogName().isEmpty()) {
-			return false;
-		}
-		return !voidscapeUseNativeAndroidMobileShell()
-			|| !voidscapeNativeAndroidMobileShellBlocked();
-	}
-
-	private String crackerCampaignHudLabel() {
-		if (this.crackerCampaignRemaining <= 0) {
-			return "";
-		}
-		return formatExactLong(this.crackerCampaignRemaining)
-			+ (this.crackerCampaignRemaining == 1 ? " cracker available" : " crackers available");
-	}
-
-	private int crackerCampaignHudHeight() {
-		return voidscapeCompactHud() ? 24 : 26;
-	}
-
-	private int crackerCampaignHudWidth(String label) {
-		return Math.max(132, this.getSurface().stringWidth(UiSkin.FONT_BODY, label) + 38);
-	}
-
-	private int crackerCampaignHudX(int width) {
-		int margin = voidscapeCompactHud() ? 8 : 10;
-		int x;
-		if (voidscapeUseNativeAndroidMobileShell()) {
-			int edge = voidscapeNativeAndroidEdgeMargin();
-			int vitalsX = this.getGameWidth() - edge - VOID_VITALS_BAR_W;
-			x = vitalsX - width - Math.max(5, voidscapeAndroidTouchTarget(6));
-		} else {
-			x = this.getGameWidth() - width - margin;
-		}
-		return Math.max(4, Math.min(x, this.getGameWidth() - width - 4));
-	}
-
-	private int crackerCampaignHudY(int x, int width, int height) {
-		int y;
-		if (voidscapeUseNativeAndroidMobileShell()) {
-			int edge = voidscapeNativeAndroidEdgeMargin();
-			y = edge;
-			// On narrow portrait screens the plaque's lane can begin behind the
-			// top-left location card. Drop it below that card before drawing.
-			int conservativeLocationRight = voidscapeLocationPlaqueX()
-				+ (voidscapeCompactHud() ? 230 : 280);
-			if (x < conservativeLocationRight + 6) {
-				y = voidscapeLocationPlaqueY() + voidscapeLocationPlaqueHeight()
-					+ Math.max(5, voidscapeAndroidTouchTarget(6));
-			}
-		} else {
-			y = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize()
-				+ (voidscapeCompactHud() ? 5 : 7);
-		}
-		return Math.max(4, Math.min(y, this.getGameHeight() - height - 4));
-	}
-
-	private int crackerCampaignKillFeedBaseY() {
-		if (!crackerCampaignHudShouldRender()) {
-			return 50;
-		}
-		String label = crackerCampaignHudLabel();
-		int width = crackerCampaignHudWidth(label);
-		int height = crackerCampaignHudHeight();
-		int x = crackerCampaignHudX(width);
-		int y = crackerCampaignHudY(x, width, height);
-		return Math.max(50, y + height + 13);
-	}
-
-	private int crackerCampaignIconWidth(int plaqueHeight) {
-		return Math.min(24, Math.max(1, plaqueHeight));
-	}
-
-	private int crackerCampaignIconHeight(int plaqueHeight) {
-		return Math.min(16, Math.max(1, plaqueHeight - 4));
-	}
-
-	private int crackerCampaignIconX(int plaqueX, int plaqueHeight) {
-		return plaqueX + 2 + (plaqueHeight - crackerCampaignIconWidth(plaqueHeight)) / 2;
-	}
-
-	private int crackerCampaignIconY(int plaqueY, int plaqueHeight) {
-		return plaqueY + (plaqueHeight - crackerCampaignIconHeight(plaqueHeight)) / 2;
-	}
-
-	private boolean drawCrackerCampaignItemSprite(int plaqueX, int plaqueY, int plaqueHeight) {
-		if (VOIDSCAPE_CRACKER_CAMPAIGN_ITEM_ID < 0
-			|| VOIDSCAPE_CRACKER_CAMPAIGN_ITEM_ID >= EntityHandler.itemCount()) {
-			return false;
-		}
-		ItemDef def = EntityHandler.getItemDef(VOIDSCAPE_CRACKER_CAMPAIGN_ITEM_ID);
-		this.getSurface().drawSpriteClipping(spriteSelect(def),
-			crackerCampaignIconX(plaqueX, plaqueHeight),
-			crackerCampaignIconY(plaqueY, plaqueHeight),
-			crackerCampaignIconWidth(plaqueHeight),
-			crackerCampaignIconHeight(plaqueHeight),
-			def.getPictureMask(), 0, def.getBlueMask(), false, 0, 1, 0xFFFFFFFF);
-		return true;
-	}
-
-	private int crackerCampaignEnvelopeLeakCount() {
-		int count = 0;
-		for (String message : MessageHistory.messageHistoryMessage) {
-			if (message != null && message.startsWith(VOIDSCAPE_CRACKER_CAMPAIGN_PREFIX)) {
-				count++;
-			}
-		}
-		return count;
-	}
-
-	private void logAndroidSmokeCrackerCampaignHud(boolean iconDrawn) {
-		if (!isAndroidSmokeCrackerCampaignLoggingEnabled()) {
-			return;
-		}
-
-		final String orientation = this.getGameWidth() > this.getGameHeight()
-			? "landscape" : "portrait";
-		final boolean keyboard = osConfig.F_SHOWING_KEYBOARD;
-		final long now = System.currentTimeMillis();
-		final boolean changed = this.crackerCampaignRemaining
-				!= this.lastAndroidSmokeCrackerCampaignRemaining
-			|| this.crackerCampaignHudRendered
-				!= this.lastAndroidSmokeCrackerCampaignHudRendered
-			|| !orientation.equals(this.lastAndroidSmokeCrackerCampaignOrientation)
-			|| keyboard != this.lastAndroidSmokeCrackerCampaignKeyboard;
-		if (!changed && now - this.lastAndroidSmokeCrackerCampaignHudLogMillis
-			< ANDROID_SMOKE_TARGET_LOG_INTERVAL_MS) {
-			return;
-		}
-		this.lastAndroidSmokeCrackerCampaignHudLogMillis = now;
-		this.lastAndroidSmokeCrackerCampaignRemaining = this.crackerCampaignRemaining;
-		this.lastAndroidSmokeCrackerCampaignHudRendered = this.crackerCampaignHudRendered;
-		this.lastAndroidSmokeCrackerCampaignOrientation = orientation;
-		this.lastAndroidSmokeCrackerCampaignKeyboard = keyboard;
-
-		int iconX = -1;
-		int iconY = -1;
-		int iconWidth = 0;
-		int iconHeight = 0;
-		if (this.crackerCampaignHudRendered) {
-			iconX = crackerCampaignIconX(this.crackerCampaignHudX,
-				this.crackerCampaignHudHeight);
-			iconY = crackerCampaignIconY(this.crackerCampaignHudY,
-				this.crackerCampaignHudHeight);
-			iconWidth = crackerCampaignIconWidth(this.crackerCampaignHudHeight);
-			iconHeight = crackerCampaignIconHeight(this.crackerCampaignHudHeight);
-		}
-		int edge = voidscapeNativeAndroidEdgeMargin();
-		int[] leftRail = voidscapeNativeAndroidRailBandRect(true);
-		int[] rightRail = voidscapeNativeAndroidRailBandRect(false);
-		int[] chat = voidscapeNativeAndroidChatLauncherRect();
-		int locationWidth = voidscapeCompactHud() ? 230 : 280;
-		int keyboardTop = this.clientPort == null
-			? Integer.MAX_VALUE : this.clientPort.getKeyboardTopClientPixel();
-
-		System.out.println("ANDROID_SMOKE_CRACKER_CAMPAIGN"
-			+ " event=HUD"
-			+ " protocol=" + Config.CLIENT_VERSION
-			+ " orientation=" + orientation
-			+ " native=" + voidscapeUseNativeAndroidMobileShell()
-			+ " remaining=" + this.crackerCampaignRemaining
-			+ " rendered=" + this.crackerCampaignHudRendered
-			+ " label=\"" + (this.crackerCampaignHudRendered
-				? this.crackerCampaignHudLabel : "") + "\""
-			+ " item=" + VOIDSCAPE_CRACKER_CAMPAIGN_ITEM_ID
-			+ " iconDrawn=" + iconDrawn
-			+ " x=" + this.crackerCampaignHudX
-			+ " y=" + this.crackerCampaignHudY
-			+ " width=" + this.crackerCampaignHudWidth
-			+ " height=" + this.crackerCampaignHudHeight
-			+ " iconX=" + iconX
-			+ " iconY=" + iconY
-			+ " iconWidth=" + iconWidth
-			+ " iconHeight=" + iconHeight
-			+ " killFeedY=" + crackerCampaignKillFeedBaseY()
-			+ " locationX=" + voidscapeLocationPlaqueX()
-			+ " locationY=" + voidscapeLocationPlaqueY()
-			+ " locationWidth=" + locationWidth
-			+ " locationHeight=" + voidscapeLocationPlaqueHeight()
-			+ " vitalsX=" + (this.getGameWidth() - edge - VOID_VITALS_BAR_W)
-			+ " vitalsY=" + edge
-			+ " vitalsWidth=" + VOID_VITALS_BAR_W
-			+ " vitalsHeight=" + (VOID_VITALS_BAR_H * 3 + 4)
-			+ " leftRailX=" + leftRail[0]
-			+ " leftRailY=" + leftRail[1]
-			+ " leftRailWidth=" + leftRail[2]
-			+ " leftRailHeight=" + leftRail[3]
-			+ " rightRailX=" + rightRail[0]
-			+ " rightRailY=" + rightRail[1]
-			+ " rightRailWidth=" + rightRail[2]
-			+ " rightRailHeight=" + rightRail[3]
-			+ " chatX=" + chat[0]
-			+ " chatY=" + chat[1]
-			+ " chatWidth=" + chat[2]
-			+ " chatHeight=" + chat[3]
-			+ " gameWidth=" + this.getGameWidth()
-			+ " gameHeight=" + this.getGameHeight()
-			+ " ime=" + keyboard
-			+ " keyboardTop=" + (keyboardTop == Integer.MAX_VALUE ? -1 : keyboardTop)
-			+ " historyLeaks=" + crackerCampaignEnvelopeLeakCount());
-	}
-
-	private void drawCrackerCampaignHud() {
-		this.crackerCampaignHudRendered = false;
-		this.crackerCampaignHudLabel = "";
-		this.crackerCampaignHudX = -1;
-		this.crackerCampaignHudY = -1;
-		this.crackerCampaignHudWidth = 0;
-		this.crackerCampaignHudHeight = 0;
-		if (!crackerCampaignHudShouldRender()) {
-			logAndroidSmokeCrackerCampaignHud(false);
-			return;
-		}
-
-		String label = crackerCampaignHudLabel();
-		int width = crackerCampaignHudWidth(label);
-		int height = crackerCampaignHudHeight();
-		int x = crackerCampaignHudX(width);
-		int y = crackerCampaignHudY(x, width, height);
-
-		this.getSurface().setClip(0, getGameWidth(), getGameHeight() + 12, 0);
-		UiSkin.plaque(this.getSurface(), x, y, width, height);
-		this.getSurface().drawLineHoriz(x + 3, y + 1, Math.max(1, width - 6), UiSkin.GOLD_LINE);
-		boolean iconDrawn = drawCrackerCampaignItemSprite(x, y, height);
-		this.getSurface().drawString(label, x + height + 5, y + height / 2 + 5,
-			UiSkin.GOLD_TITLE, UiSkin.FONT_BODY);
-
-		this.crackerCampaignHudRendered = true;
-		this.crackerCampaignHudLabel = label;
-		this.crackerCampaignHudX = x;
-		this.crackerCampaignHudY = y;
-		this.crackerCampaignHudWidth = width;
-		this.crackerCampaignHudHeight = height;
-		logAndroidSmokeCrackerCampaignHud(iconDrawn);
-	}
-
 	private void drawFpsOverlay() {
 		if (this.getSurface() == null) {
 			return;
@@ -11960,6 +12909,9 @@ public final class mudclient implements Runnable {
 		}
 		if (this.optionsMenuShow) {
 			return; // hide the vitals stack under option menus / card pickers
+		}
+		if (this.showAdvancedSettingsWindow && useVoidscapeHudSkin()) {
+			return; // modal owns this space; do not paint vitals above its scrim
 		}
 
 		String label = "FPS " + FPS;
@@ -12544,6 +13496,9 @@ public final class mudclient implements Runnable {
 		marker.accountName = this.localPlayer.accountName;
 		marker.displayName = this.localPlayer.displayName;
 		marker.title = this.localPlayer.title;
+		marker.titleTier = this.localPlayer.titleTier;
+		marker.honorific = this.localPlayer.honorific;
+		marker.honorificTier = this.localPlayer.honorificTier;
 		marker.groupID = this.localPlayer.groupID;
 		marker.serverIndex = this.localPlayer.serverIndex;
 		marker.colourBottom = this.localPlayer.colourBottom;
@@ -12590,6 +13545,16 @@ public final class mudclient implements Runnable {
 	 */
 	private void drawVoidscapeTimerPlaque(int slot, String label, boolean urgent) {
 		UiSkin.timerBanner(this.getSurface(), this.getGameWidth(), slot, label, urgent);
+	}
+
+	public int getPkCatchingHudTopSafeY() {
+		final int baseTop = 70;
+		if (!useVoidscapeHudSkin()) return baseTop;
+		int timerCount = (voidScoutTimerVisible() ? 1 : 0)
+			+ (this.systemUpdate != 0 ? 1 : 0)
+			+ (S_WANT_EXPERIENCE_ELIXIRS && this.elixirTimer != 0 ? 1 : 0);
+		// UiSkin.timerBanner starts at y=8 with an 18px height and 22px pitch.
+		return timerCount == 0 ? baseTop : Math.max(baseTop, 16 + timerCount * 22);
 	}
 
 	private boolean voidScoutTimerVisible() {
@@ -12689,10 +13654,6 @@ public final class mudclient implements Runnable {
 		return isAndroidSmokeFilePresent(ANDROID_SMOKE_GROUND_LOOT_FLAG);
 	}
 
-	private boolean isAndroidSmokeCrackerCampaignLoggingEnabled() {
-		return isAndroidSmokeFilePresent(ANDROID_SMOKE_CRACKER_CAMPAIGN_FLAG);
-	}
-
 	private boolean isAndroidSmokeAppearancePromptLoggingEnabled() {
 		return isAndroidSmokeFilePresent(ANDROID_SMOKE_APPEARANCE_PROMPT_FLAG);
 	}
@@ -12725,8 +13686,7 @@ public final class mudclient implements Runnable {
 			|| isAndroidSmokeWorldMapLoggingEnabled()
 			|| isAndroidSmokeSettingsLoggingEnabled()
 			|| isAndroidSmokeAfkLoggingEnabled()
-			|| isAndroidSmokeGroundLootLoggingEnabled()
-			|| isAndroidSmokeCrackerCampaignLoggingEnabled();
+			|| isAndroidSmokeGroundLootLoggingEnabled();
 	}
 
 	private void logAndroidSmokeWelcomeDialog(final int dialogX, final int dialogY, final int dialogWidth, final int dialogHeight) {
@@ -15661,255 +16621,6 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private void openVoidscapeSubscriptionShop() {
-		if (isNativeAndroidClient() || this.currentViewMode != GameMode.GAME) {
-			return;
-		}
-		clientPort.closeKeyboard();
-		// Player-owned overlays can be dismissed safely. Authoritative or
-		// transactional surfaces must stay on top instead of being hidden under
-		// the catalog (for example a trade, bank, NPC choice, or server dialog).
-		this.topMouseMenuVisible = false;
-		this.showAdvancedSettingsWindow = false;
-		this.voidscapeAccountMenuOpen = false;
-		if (this.worldMapPanel != null) {
-			this.worldMapPanel.setVisible(false);
-		}
-		if (voidscapeSubscriptionShopBlockingSurfaceOpen()) {
-			consumeVoidscapeSubscriptionShopMouseState();
-			this.showMessage(false, null, "@yel@Close the current window before opening SHOP.",
-				MessageType.GAME, 0, null);
-			return;
-		}
-		this.voidscapeSubscriptionShopStatus = "";
-		this.voidscapeSubscriptionShopOpen = true;
-		this.keyLeft = false;
-		this.keyRight = false;
-		this.keyUp = false;
-		this.keyDown = false;
-		this.pageUp = false;
-		this.pageDown = false;
-		consumeVoidscapeSubscriptionShopMouseState();
-	}
-
-	private boolean voidscapeSubscriptionShopBlockingSurfaceOpen() {
-		return this.showDialogChristmasCracker
-			|| this.voidScoutActive
-			|| this.showDialogMessage
-			|| this.showDialogServerMessage
-			|| this.showDialogFarmSim
-			|| this.showUiWildWarn == 1
-			|| this.showDialogTradeConfirm
-			|| this.showDialogTrade
-			|| this.showDialogDuelConfirm
-			|| this.showDialogDuel
-			|| this.showDialogVoidArenaDeathMatch
-			|| this.panelPasswordChange_Mode != PasswordChangeMode.NONE
-			|| this.reportAbuse_State != 0
-			|| this.panelSocialPopup_Mode != SocialPopupMode.NONE
-			|| this.inputX_Action != InputXAction.ACT_0
-			|| this.voidscapeAccountAddFormOpen
-			|| this.optionsMenuShow
-			|| this.isShowDialogBank()
-			|| this.shouldDrawShopDialog()
-			|| this.showAppearanceChange
-			|| this.showSetRecoveryQuestion
-			|| this.showSetContactDetails
-			|| this.deathScreenTimeout != 0
-			|| this.isSleeping
-			|| isVoidRushUiLocked()
-			|| this.logoutTimeout != 0
-			|| this.bankPinInterface != null && this.bankPinInterface.isVisible()
-			|| this.auctionHouse != null && this.auctionHouse.isVisible()
-			|| this.skillGuideInterface != null && this.skillGuideInterface.isVisible()
-			|| this.questGuideInterface != null && this.questGuideInterface.isVisible()
-			|| this.doSkillInterface != null && this.doSkillInterface.isVisible()
-			|| this.lostOnDeathInterface != null && this.lostOnDeathInterface.isVisible()
-			|| this.ironmanInterface != null && this.ironmanInterface.isVisible()
-			|| this.pointsToGpInterface != null && this.pointsToGpInterface.isVisible()
-			|| this.experienceConfigInterface != null && this.experienceConfigInterface.isVisible()
-			|| this.territorySignupInterface != null && this.territorySignupInterface.isVisible()
-			|| this.pointInterface != null && this.pointInterface.isVisible()
-			|| this.onlineList != null && this.onlineList.isVisible()
-			|| this.achievementInterface != null && this.achievementInterface.isVisible();
-	}
-
-	private boolean voidscapeSubscriptionShopCoveredByHigherModal() {
-		return this.showDialogChristmasCracker
-			|| this.showDialogMessage
-			|| this.showDialogServerMessage
-			|| this.showDialogFarmSim;
-	}
-
-	private void closeVoidscapeSubscriptionShop() {
-		this.voidscapeSubscriptionShopOpen = false;
-		this.voidscapeSubscriptionShopStatus = "";
-		consumeVoidscapeSubscriptionShopMouseState();
-	}
-
-	private void resetVoidscapeProfileSnapshot() {
-		this.profilePath = 0;
-		this.profileCombatRateTenths = 10;
-		this.profileSkillingRateTenths = 10;
-		this.profileSubscribed = false;
-		this.profileEffectiveCombatRateTenths = 10;
-		this.profileEffectiveSkillingRateTenths = 10;
-		this.profileTotalPlayedSeconds = 0;
-		this.profileStatsReceivedAt = 0;
-	}
-
-	private void openVoidscapeSubscriptionShopCheckout() {
-		clientPort.closeKeyboard();
-		if (openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_SHOP_URL)) {
-			this.voidscapeSubscriptionShopStatus = "Secure checkout opened in the Voidscape portal.";
-		} else {
-			this.voidscapeSubscriptionShopStatus = "Checkout is unavailable. Please try again shortly.";
-		}
-	}
-
-	private int[] voidscapeSubscriptionShopDialogRect() {
-		int width = UiSkin.modalWidth(this.getGameWidth(), 452);
-		int height = Math.min(268, Math.max(220, this.getGameHeight() - 16));
-		int centeredY = Math.max(8, (this.getGameHeight() - height) / 2);
-		int topSafeY = useVoidscapeHudSkin()
-			? VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + 6 : 8;
-		int bottomSafeY = Math.max(8, this.getGameHeight() - height - 4);
-		int dialogY = Math.min(Math.max(centeredY, topSafeY), bottomSafeY);
-		return new int[]{(this.getGameWidth() - width) / 2, dialogY, width, height};
-	}
-
-	private int[] voidscapeSubscriptionShopCloseRect() {
-		int[] dialog = voidscapeSubscriptionShopDialogRect();
-		return new int[]{dialog[0] + 16, dialog[1] + dialog[3] - 42, 96, 28};
-	}
-
-	private int[] voidscapeSubscriptionShopBuyRect() {
-		int[] dialog = voidscapeSubscriptionShopDialogRect();
-		return new int[]{dialog[0] + dialog[2] - 174, dialog[1] + dialog[3] - 42, 158, 28};
-	}
-
-	private int[] voidscapeSubscriptionShopXRect() {
-		int[] dialog = voidscapeSubscriptionShopDialogRect();
-		return new int[]{dialog[0] + dialog[2] - 24, dialog[1] + 3, 20, 20};
-	}
-
-	private boolean voidscapeSubscriptionShopHit(int[] rect, int x, int y) {
-		return rect != null && UiSkin.hit(rect[0], rect[1], rect[2], rect[3], x, y);
-	}
-
-	private void consumeVoidscapeSubscriptionShopMouseState() {
-		this.currentMouseButtonDown = 0;
-		this.lastMouseButtonDown = 0;
-		this.mouseButtonClick = 0;
-		this.mouseLastProcessedX = 0;
-		this.mouseLastProcessedY = 0;
-	}
-
-	/**
-	 * Modal pointer boundary used by every host client. While the catalog is
-	 * visible every pointer press is consumed; only its X, Close, and Buy
-	 * targets can act, so no click can reach the world or a hidden interface.
-	 */
-	public boolean consumeVoidscapeSubscriptionShopPointerAt(int x, int y, boolean primaryClick) {
-		if (!this.voidscapeSubscriptionShopOpen) {
-			return false;
-		}
-		if (this.currentViewMode != GameMode.GAME) {
-			closeVoidscapeSubscriptionShop();
-			return false;
-		}
-		if (voidscapeSubscriptionShopCoveredByHigherModal()) {
-			return false;
-		}
-		this.mouseX = x;
-		this.mouseY = y;
-		if (primaryClick) {
-			if (voidscapeSubscriptionShopHit(voidscapeSubscriptionShopXRect(), x, y)
-				|| voidscapeSubscriptionShopHit(voidscapeSubscriptionShopCloseRect(), x, y)) {
-				closeVoidscapeSubscriptionShop();
-			} else if (voidscapeSubscriptionShopHit(voidscapeSubscriptionShopBuyRect(), x, y)) {
-				openVoidscapeSubscriptionShopCheckout();
-			}
-		}
-		consumeVoidscapeSubscriptionShopMouseState();
-		return true;
-	}
-
-	public boolean isVoidscapeSubscriptionShopOpen() {
-		return this.voidscapeSubscriptionShopOpen;
-	}
-
-	private void drawVoidscapeSubscriptionShop() {
-		int[] dialog = voidscapeSubscriptionShopDialogRect();
-		int[] close = voidscapeSubscriptionShopCloseRect();
-		int[] buy = voidscapeSubscriptionShopBuyRect();
-		int[] xClose = voidscapeSubscriptionShopXRect();
-		int x = dialog[0];
-		int y = dialog[1];
-		int width = dialog[2];
-		int height = dialog[3];
-
-		this.getSurface().drawBoxAlpha(0, 0, this.getGameWidth(), this.getGameHeight(),
-			UiSkin.VOID_SCRIM, UiSkin.A_SCRIM);
-		UiSkin.modal(this.getSurface(), x, y, width, height, "Voidscape Subscription Shop");
-		UiSkin.closeButton(this.getSurface(), xClose[0], xClose[1], xClose[2],
-			voidscapeSubscriptionShopHit(xClose, this.mouseX, this.mouseY));
-
-		int bodyTop = y + UiSkin.TITLE_BAR_H + 10;
-		int cardX = x + 14;
-		int cardW = Math.min(112, Math.max(84, width / 4));
-		int cardH = 124;
-		UiSkin.glassPanel(this.getSurface(), cardX, bodyTop, cardW, cardH, UiSkin.A_GLASS_TEXT);
-		this.getSurface().drawColoredStringCentered(cardX + cardW / 2, "SUB CARD", UiSkin.GOLD_HEADER,
-			0, UiSkin.FONT_BODY, bodyTop + 17);
-		drawVoidscapePathItemIcon(VOIDSCAPE_SUBSCRIPTION_CARD_ITEM_ID,
-			cardX + 8, bodyTop + 25, cardW - 16, 70, UiSkin.GOLD_LINE);
-		this.getSurface().drawColoredStringCentered(cardX + cardW / 2, "Tradable", UiSkin.GOOD,
-			0, UiSkin.FONT_SMALL, bodyTop + 112);
-
-		int contentX = cardX + cardW + 14;
-		int contentW = Math.max(120, x + width - 14 - contentX);
-		int contentCenter = contentX + contentW / 2;
-		this.getSurface().drawColoredStringCentered(contentCenter, "ONE SUBSCRIPTION CARD",
-			UiSkin.GOLD_TITLE, 0, UiSkin.FONT_TITLE, bodyTop + 17);
-		this.getSurface().drawWrappedCenteredString(
-			"Redeem it for 7 days of +1x combat and skilling XP.", contentCenter,
-			bodyTop + 34, contentW, UiSkin.FONT_BODY, UiSkin.TEXT_BODY, true);
-		this.getSurface().drawWrappedCenteredString(
-			"Collect it from the Lumbridge vendor after purchase.", contentCenter,
-			bodyTop + 68, contentW, UiSkin.FONT_SMALL, UiSkin.TEXT_LABEL, true);
-
-		String subscription = this.profileStatsReceivedAt > 0
-			? (this.profileSubscribed ? "ACTIVE SUBSCRIBER" : "NOT SUBSCRIBED")
-			: "SUBSCRIPTION STATUS LOADING";
-		int subscriptionColor = this.profileStatsReceivedAt <= 0
-			? UiSkin.TEXT_DIM : (this.profileSubscribed ? UiSkin.GOOD : UiSkin.TEXT_LABEL);
-		this.getSurface().drawColoredStringCentered(contentCenter, subscription,
-			subscriptionColor, 0, UiSkin.FONT_BODY, bodyTop + 96);
-		String rates = this.profileStatsReceivedAt > 0
-			? "Your rates: " + formatXpRate(this.profileEffectiveCombatRateTenths) + " combat - "
-				+ formatXpRate(this.profileEffectiveSkillingRateTenths) + " skilling"
-			: "Your current rates appear in Profile.";
-		this.getSurface().drawColoredStringCentered(contentCenter, rates,
-			UiSkin.TEXT_BODY, 0, UiSkin.FONT_SMALL, bodyTop + 114);
-
-		int noteY = y + height - 74;
-		this.getSurface().drawColoredStringCentered(x + width / 2,
-			"Price and tax are shown at secure checkout.",
-			UiSkin.TEXT_LABEL, 0, UiSkin.FONT_SMALL, noteY);
-		String status = this.voidscapeSubscriptionShopStatus.length() > 0
-			? this.voidscapeSubscriptionShopStatus
-			: "Buy opens secure checkout in the Voidscape portal.";
-		this.getSurface().drawColoredStringCentered(x + width / 2, status,
-			this.voidscapeSubscriptionShopStatus.length() > 0 ? UiSkin.GOOD : UiSkin.TEXT_DIM,
-			0, UiSkin.FONT_SMALL, noteY + 14);
-
-		UiSkin.button(this.getSurface(), close[0], close[1], close[2], close[3], "Close",
-			voidscapeSubscriptionShopHit(close, this.mouseX, this.mouseY), false, false, UiSkin.FONT_BODY);
-		UiSkin.button(this.getSurface(), buy[0], buy[1], buy[2], buy[3], "Buy securely",
-			voidscapeSubscriptionShopHit(buy, this.mouseX, this.mouseY), true, false, UiSkin.FONT_BODY);
-	}
-
 	private void showLoginTimedOutStatus() {
 		if (isAndroid()) {
 			showLoginScreenStatus("Server did not reply.", "Try again shortly.");
@@ -16850,6 +17561,746 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
+	final boolean handleVoidscapePkCatchingMessage(String message) {
+		return this.pkCatchingInterface != null
+			&& this.pkCatchingInterface.handleServerMessage(message);
+	}
+
+	final boolean shouldSuppressVoidscapePkCatchingLegacyBox(String message) {
+		return this.pkCatchingInterface != null
+			&& this.pkCatchingInterface.shouldSuppressLegacyBox(message);
+	}
+
+	final boolean handleVoidscapeDuelProofMessage(String message) {
+		return this.duelProofHandshakeClient.handleServerMessage(message, clientPort,
+			this::validateVoidscapeDuelProofContext, this::sendVoidscapeDuelProofPayload);
+	}
+
+	/** Attests only state this client can independently see before contributing entropy. */
+	private boolean validateVoidscapeDuelProofContext(DuelProofContext context, int ownOrdinal) {
+		if (context == null || ownOrdinal < 0 || ownOrdinal > 1
+			|| this.localPlayer == null
+			|| this.playerStatCurrent == null || this.playerStatCurrent.length <= 5
+			|| this.playerStatBase == null || this.playerStatBase.length <= 5
+			|| this.playerStatEquipment == null || this.playerStatEquipment.length < 3) {
+			return false;
+		}
+		int expectedRuleMask = duelRuleFlag(this.duelOptionRetreat, 0)
+			| duelRuleFlag(this.duelOptionMagic, 1)
+			| duelRuleFlag(this.duelOptionPrayer, 2)
+			| duelRuleFlag(this.duelOptionWeapons, 3);
+		if (expectedRuleMask < 0 || context.getRuleMask() != expectedRuleMask
+			|| (expectedRuleMask & DuelProofSpec.DUEL_RULE_NO_MAGIC) == 0) {
+			return false;
+		}
+
+		DuelProofContextParticipant own = context.getParticipant(ownOrdinal);
+		DuelProofContextParticipant opponent = context.getParticipant(1 - ownOrdinal);
+		int opponentCombatLevel = visibleDuelProofCombatLevel(opponent.getUsername());
+		if (!matchesCanonicalDuelProofUsername(own.getUsername(), this.username)
+			|| !matchesCanonicalDuelProofUsername(opponent.getUsername(), this.duelOpponentName)
+			|| own.getCombatLevel() != this.localPlayer.level
+			|| opponentCombatLevel <= 0
+			|| opponent.getCombatLevel() != opponentCombatLevel
+			|| own.getCurrentAttack() != this.playerStatCurrent[0]
+			|| own.getMaximumAttack() != this.playerStatBase[0]
+			|| own.getCurrentDefence() != this.playerStatCurrent[1]
+			|| own.getMaximumDefence() != this.playerStatBase[1]
+			|| own.getCurrentStrength() != this.playerStatCurrent[2]
+			|| own.getMaximumStrength() != this.playerStatBase[2]
+			|| own.getCurrentHits() != this.playerStatCurrent[3]
+			|| own.getMaximumHits() != this.playerStatBase[3]
+			|| own.getCurrentPrayer() != this.playerStatCurrent[5]
+			|| own.getMaximumPrayer() != this.playerStatBase[5]
+			|| own.getInitialCombatStyle() != this.combatStyle
+			|| own.getWeaponAimPoints() != this.playerStatEquipment[1]
+			|| own.getWeaponPowerPoints() != this.playerStatEquipment[2]
+			|| own.getArmourPoints() != this.playerStatEquipment[0]
+			|| own.getPrayerMask() != activePrayerMask()
+			|| !matchesOwnDuelProofEquipment(own.getEquipment())
+			|| own.isAttackCapeEligible() != localCapeEligible(DUEL_PROOF_ATTACK_CAPE)
+			|| own.isStrengthCapeEligible() != localCapeEligible(DUEL_PROOF_STRENGTH_CAPE)
+			|| own.isDefenceCapeEligible() != localCapeEligible(DUEL_PROOF_DEFENCE_CAPE)
+			|| own.isRecoilEquipped() != isLocallyEquipped(DUEL_PROOF_RECOIL_RING)) {
+			return false;
+		}
+		return matchesConfirmedDuelStakes(own.getStakes(), true)
+			&& matchesConfirmedDuelStakes(opponent.getStakes(), false);
+	}
+
+	private int duelRuleFlag(int value, int bit) {
+		if (value != 0 && value != 1) return Integer.MIN_VALUE;
+		return value == 1 ? 1 << bit : 0;
+	}
+
+	private int activePrayerMask() {
+		int mask = 0;
+		for (int prayer = 0; prayer < this.prayerOn.length && prayer < 31; prayer++) {
+			if (this.prayerOn[prayer]) mask |= 1 << prayer;
+		}
+		return mask;
+	}
+
+	private boolean localCapeEligible(int itemId) {
+		return S_WANT_CUSTOM_SPRITES && !S_WANT_OPENPK_POINTS && isLocallyEquipped(itemId);
+	}
+
+	private boolean isLocallyEquipped(int itemId) {
+		if (S_WANT_EQUIPMENT_TAB) {
+			for (ItemDef item : this.equippedItems) {
+				if (item != null && item.id == itemId) return true;
+			}
+			return false;
+		}
+		for (int slot = 0; slot < this.inventoryItemCount; slot++) {
+			Item item = this.getInventoryItem(slot);
+			if (item != null && item.getEquipped() && item.getCatalogID() == itemId) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Matches every locally visible equipped tuple. The equipment-tab protocol collapses the
+	 * three mutually-exclusive classic helmet/body/leg alternatives, so those pairs accept the
+	 * one corresponding canonical server slot; all other slots are exact.
+	 */
+	private boolean matchesOwnDuelProofEquipment(List<DuelProofContextItem> contextEquipment) {
+		if (contextEquipment == null
+			|| contextEquipment.size() != DUEL_PROOF_EQUIPMENT_SLOTS) return false;
+		for (int slot = 0; slot < contextEquipment.size(); slot++) {
+			DuelProofContextItem item = contextEquipment.get(slot);
+			if (item == null || item.getSlot() != slot) return false;
+		}
+		if (!S_WANT_EQUIPMENT_TAB) {
+			return matchesClassicInventoryEquipment(contextEquipment);
+		}
+		return matchesCollapsedEquipmentPair(contextEquipment, 0, 5, 0)
+			&& matchesCollapsedEquipmentPair(contextEquipment, 1, 6, 1)
+			&& matchesCollapsedEquipmentPair(contextEquipment, 2, 7, 2)
+			&& matchesExactEquipmentSlot(contextEquipment, 3, 3)
+			&& matchesExactEquipmentSlot(contextEquipment, 4, 4)
+			&& matchesExactEquipmentSlot(contextEquipment, 8, 5)
+			&& matchesExactEquipmentSlot(contextEquipment, 9, 6)
+			&& matchesExactEquipmentSlot(contextEquipment, 10, 7)
+			&& matchesExactEquipmentSlot(contextEquipment, 11, 8)
+			&& matchesExactEquipmentSlot(contextEquipment, 12, 9)
+			&& matchesExactEquipmentSlot(contextEquipment, 13, 10);
+	}
+
+	private boolean matchesCollapsedEquipmentPair(List<DuelProofContextItem> contextEquipment,
+											  int firstServerSlot, int secondServerSlot,
+											  int clientSlot) {
+		if (clientSlot < 0 || clientSlot >= this.equippedItems.length) return false;
+		ItemDef local = this.equippedItems[clientSlot];
+		DuelProofContextItem first = contextEquipment.get(firstServerSlot);
+		DuelProofContextItem second = contextEquipment.get(secondServerSlot);
+		if (local == null) return first.isEmpty() && second.isEmpty();
+		int amount = this.equippedItemAmount[clientSlot];
+		return (matchesEquipmentTuple(first, local.id, amount, false) && second.isEmpty())
+			|| (first.isEmpty() && matchesEquipmentTuple(second, local.id, amount, false));
+	}
+
+	private boolean matchesExactEquipmentSlot(List<DuelProofContextItem> contextEquipment,
+											 int serverSlot, int clientSlot) {
+		if (clientSlot < 0 || clientSlot >= this.equippedItems.length) return false;
+		ItemDef local = this.equippedItems[clientSlot];
+		DuelProofContextItem committed = contextEquipment.get(serverSlot);
+		return local == null ? committed.isEmpty()
+			: matchesEquipmentTuple(committed, local.id,
+				this.equippedItemAmount[clientSlot], false);
+	}
+
+	private boolean matchesClassicInventoryEquipment(
+		List<DuelProofContextItem> contextEquipment) {
+		boolean[] matched = new boolean[contextEquipment.size()];
+		for (int inventorySlot = 0; inventorySlot < this.inventoryItemCount; inventorySlot++) {
+			Item local = this.getInventoryItem(inventorySlot);
+			if (local == null || !local.getEquipped()) continue;
+			int match = -1;
+			for (int contextSlot = 0; contextSlot < contextEquipment.size(); contextSlot++) {
+				if (!matched[contextSlot] && matchesEquipmentTuple(
+					contextEquipment.get(contextSlot), local.getCatalogID(), local.getAmount(),
+					local.getNoted())) {
+					match = contextSlot;
+					break;
+				}
+			}
+			if (match < 0) return false;
+			matched[match] = true;
+		}
+		for (int slot = 0; slot < contextEquipment.size(); slot++) {
+			if (!contextEquipment.get(slot).isEmpty() && !matched[slot]) return false;
+		}
+		return true;
+	}
+
+	private boolean matchesEquipmentTuple(DuelProofContextItem committed, int itemId,
+										 int amount, boolean noted) {
+		return committed != null && !committed.isEmpty()
+			&& committed.getItemId() == itemId && committed.getAmount() == amount
+			&& committed.isNoted() == noted;
+	}
+
+	private boolean matchesConfirmedDuelStakes(List<DuelProofContextItem> contextStakes,
+											 boolean mine) {
+		int confirmedCount = mine ? this.duelConfirmItemsCount
+			: this.duelOpponentConfirmItemsCount;
+		if (contextStakes == null || confirmedCount < 0
+			|| contextStakes.size() != confirmedCount) return false;
+		for (int slot = 0; slot < confirmedCount; slot++) {
+			DuelProofContextItem contextItem = contextStakes.get(slot);
+			Item confirmed = mine ? this.getDuelConfirmItem(slot)
+				: this.getDuelOpponentConfirmItem(slot);
+			if (contextItem == null || confirmed == null || confirmed.getItemDef() == null
+				|| contextItem.getSlot() != slot
+				|| contextItem.getItemId() != confirmed.getItemDef().id
+				|| contextItem.getAmount() != confirmed.getAmount()
+				|| contextItem.isNoted() != confirmed.getNoted()) return false;
+		}
+		return true;
+	}
+
+	private boolean sendVoidscapeDuelProofPayload(String payload) {
+		if (payload == null || payload.length() == 0
+			|| payload.length() > DuelProofHandshakeClient.MAX_OUTBOUND_CHARS) return false;
+		for (int i = 0; i < payload.length(); i++) {
+			char character = payload.charAt(i);
+			if (character < 0x20 || character > 0x7e) return false;
+		}
+		if (this.packetHandler == null || this.packetHandler.getClientStream() == null) return false;
+		try {
+			Network_Base stream = this.packetHandler.getClientStream();
+			if (stream == null) return false;
+			stream.newPacket(199);
+			stream.bufferBits.putByte(VOIDSCAPE_INTERFACE_DUEL_PROOF);
+			stream.bufferBits.putString(payload);
+			stream.finishPacketAndFlush();
+			return true;
+		} catch (Exception ignored) {
+			return false;
+		}
+	}
+
+	/**
+	 * Consumes the private duel-journal control envelope. Nothing is exposed to
+	 * the renderer until a complete, internally consistent begin..end sequence
+	 * has arrived for one request id.
+	 */
+	final boolean handleVoidscapeDuelJournalMessage(String message) {
+		if (message == null || !message.startsWith(VOIDSCAPE_DUEL_JOURNAL_PREFIX)) {
+			return false;
+		}
+		if (!isDuelJournalResponseAwaited()) {
+			return true; // closed, timed-out, or otherwise unsolicited private traffic
+		}
+		String payload = message.substring(VOIDSCAPE_DUEL_JOURNAL_PREFIX.length());
+		if (payload.length() == 0 || payload.length() > DUEL_JOURNAL_MAX_CONTROL_CHARS) {
+			failDuelJournalEnvelope();
+			return true;
+		}
+		String[] parts = payload.split("\\|", -1);
+		if (parts.length < 3 || !"v2".equals(parts[0])) {
+			failDuelJournalEnvelope();
+			return true;
+		}
+		long requestId = parseLongOrDefault(parts[1], Long.MIN_VALUE);
+		String kind = parts[2];
+		if ("blocked".equals(kind)) {
+			if (parts.length != 4 || requestId <= 0L || !"duel_active".equals(parts[3])) {
+				failDuelJournalEnvelope();
+				return true;
+			}
+			closeDuelJournal();
+			if (this.currentViewMode == GameMode.GAME) {
+				showMessage(false, null,
+					"Finish or cancel your current duel, then use ::duel to view the result.",
+					MessageType.GAME, 0, null);
+			}
+			return true;
+		}
+		if ("begin".equals(kind)) {
+			if (parts.length != 5 || requestId <= 0L) {
+				failDuelJournalEnvelope();
+				return true;
+			}
+			int expectedHistory = parseIntOrDefault(parts[3], -1);
+			long selectedId = parseLongOrDefault(parts[4], -1L);
+			if (expectedHistory < 0 || expectedHistory > 10 || selectedId < 0L) {
+				failDuelJournalEnvelope();
+				return true;
+			}
+			if (this.duelJournalPending != null) {
+				failDuelJournalEnvelope();
+				return true;
+			}
+			markDuelJournalResponseActivity();
+			this.duelJournalPending = new DuelJournalPending(requestId, expectedHistory, selectedId,
+				this.duelJournalLatestReceiptRequest);
+			return true;
+		}
+
+		DuelJournalPending pending = this.duelJournalPending;
+		if (pending == null || requestId != pending.requestId) {
+			return true; // stale or out-of-sequence control traffic is never rendered
+		}
+		boolean valid;
+		if ("history".equals(kind)) {
+			valid = parseDuelJournalHistory(parts, pending);
+		} else if ("detail".equals(kind)) {
+			valid = parseDuelJournalDetail(parts, pending);
+		} else if ("stakes".equals(kind)) {
+			valid = parseDuelJournalStakes(parts, pending);
+		} else if ("swings".equals(kind)) {
+			valid = parseDuelJournalSwings(parts, pending);
+		} else if ("proofmeta".equals(kind)) {
+			valid = parseDuelJournalProofMeta(parts, pending);
+			if (!valid) pending.proofTransportFailed = true;
+		} else if ("proofdata".equals(kind)) {
+			valid = parseDuelJournalProofData(parts, pending);
+			if (!valid) pending.proofTransportFailed = true;
+		} else if ("end".equals(kind)) {
+			valid = parts.length == 3 && commitDuelJournalEnvelope(pending);
+		} else {
+			valid = false;
+		}
+		if (valid) {
+			if (!"end".equals(kind)) markDuelJournalResponseActivity();
+		} else if (!"proofmeta".equals(kind) && !"proofdata".equals(kind)) {
+			failDuelJournalEnvelope();
+		}
+		return true;
+	}
+
+	/** Valid packets extend the bounded wait without imposing a total transfer cap. */
+	private void markDuelJournalResponseActivity() {
+		this.duelJournalRequestStartedAtMillis = System.currentTimeMillis();
+	}
+
+	private boolean parseDuelJournalHistory(String[] parts, DuelJournalPending pending) {
+		if (parts.length != 4 || pending.historyReceived) return false;
+		if (!parts[3].isEmpty()) {
+			String[] rows = parts[3].split(";", -1);
+			for (String encoded : rows) {
+				String[] row = encoded.split(",", -1);
+				if (row.length != 6) return false;
+				long duelId = parseLongOrDefault(row[0], -1L);
+				long startedAt = parseLongOrDefault(row[1], -1L);
+				long completedAt = parseLongOrDefault(row[2], -1L);
+				int won = parseBinaryFlag(row[3]);
+				int opponentId = parseIntOrDefault(row[4], -1);
+				if (duelId <= 0L || startedAt < 0L || completedAt < startedAt
+					|| won < 0 || opponentId <= 0 || row[5].isEmpty()) return false;
+				for (DuelJournalInterface.DuelSummary existing : pending.history) {
+					if (existing.duelId == duelId) return false;
+				}
+				pending.history.add(new DuelJournalInterface.DuelSummary(duelId, startedAt,
+					completedAt, won == 1, opponentId, row[5]));
+			}
+		}
+		if (pending.history.size() != pending.expectedHistoryRows) return false;
+		pending.historyReceived = true;
+		return true;
+	}
+
+	private boolean parseDuelJournalDetail(String[] parts, DuelJournalPending pending) {
+		if (parts.length != 10 || pending.detailReceived || pending.selectedDuelId <= 0L) return false;
+		long duelId = parseLongOrDefault(parts[3], -1L);
+		int requesterId = parseIntOrDefault(parts[4], -1);
+		int opponentId = parseIntOrDefault(parts[5], -1);
+		int won = parseBinaryFlag(parts[6]);
+		long startedAt = parseLongOrDefault(parts[7], -1L);
+		long completedAt = parseLongOrDefault(parts[8], -1L);
+		if (duelId != pending.selectedDuelId || requesterId <= 0 || opponentId <= 0
+			|| requesterId == opponentId || won < 0 || startedAt < 0L
+			|| completedAt < startedAt || parts[9].isEmpty()) return false;
+		pending.requesterPlayerId = requesterId;
+		pending.opponentPlayerId = opponentId;
+		pending.won = won == 1;
+		pending.startedAt = startedAt;
+		pending.completedAt = completedAt;
+		pending.opponentName = parts[9];
+		pending.detailReceived = true;
+		return true;
+	}
+
+	private boolean parseDuelJournalStakes(String[] parts, DuelJournalPending pending) {
+		if (parts.length != 4 || pending.stakesReceived || pending.selectedDuelId <= 0L) return false;
+		boolean[][] occupiedSlots = new boolean[2][12];
+		if (!parts[3].isEmpty()) {
+			String[] rows = parts[3].split(";", -1);
+			if (rows.length > 24) return false;
+			for (String encoded : rows) {
+				String[] row = encoded.split(",", -1);
+				if (row.length != 5) return false;
+				int mine = parseBinaryFlag(row[0]);
+				int slot = parseIntOrDefault(row[1], -1);
+				int catalogId = parseIntOrDefault(row[2], -1);
+				int amount = parseIntOrDefault(row[3], -1);
+				int noted = parseBinaryFlag(row[4]);
+				if (mine < 0 || slot < 0 || slot >= 12 || catalogId < 0
+					|| catalogId >= EntityHandler.itemCount() || amount <= 0 || noted < 0
+					|| occupiedSlots[mine][slot]) return false;
+				occupiedSlots[mine][slot] = true;
+				pending.stakes.add(new DuelJournalInterface.StakeItem(mine == 1, slot,
+					catalogId, amount, noted == 1));
+			}
+		}
+		pending.stakesReceived = true;
+		return true;
+	}
+
+	private boolean parseDuelJournalSwings(String[] parts, DuelJournalPending pending) {
+		if (parts.length != 6 || pending.selectedDuelId <= 0L) return false;
+		int chunk = parseIntOrDefault(parts[3], -1);
+		int total = parseIntOrDefault(parts[4], -1);
+		if (total <= 0 || total > 10000 || chunk < 0 || chunk >= total
+			|| (pending.expectedSwingChunks >= 0 && pending.expectedSwingChunks != total)
+			|| pending.swingChunks.containsKey(chunk)) return false;
+		ArrayList<DuelJournalInterface.Swing> swings = new ArrayList<>();
+		if (!parts[5].isEmpty()) {
+			String[] rows = parts[5].split(";", -1);
+			if (rows.length > 40) return false;
+			for (String encoded : rows) {
+				String[] row = encoded.split(",", -1);
+				if (row.length != 4) return false;
+				int number = parseIntOrDefault(row[0], -1);
+				int style = parseIntOrDefault(row[1], -1);
+				int accurate = parseBinaryFlag(row[2]);
+				int damage = parseIntOrDefault(row[3], -1);
+				if (number <= 0 || style < 0 || style > 3 || accurate < 0 || damage < 0) return false;
+				swings.add(new DuelJournalInterface.Swing(number, style, accurate == 1, damage));
+			}
+		}
+		pending.expectedSwingChunks = total;
+		pending.swingChunks.put(chunk, swings);
+		return true;
+	}
+
+	private boolean parseDuelJournalProofMeta(String[] parts, DuelJournalPending pending) {
+		if (pending.proofMetaReceived) return false;
+		if (parts.length == 4 && "0".equals(parts[3])) {
+			pending.proofMetaReceived = true;
+			pending.proofAvailable = false;
+			return true;
+		}
+		if (parts.length != 9 || !"1".equals(parts[3])) return false;
+		try {
+			byte[] proofIdBytes = DuelProofCodec.parseHexLowerExact(parts[4],
+				DuelProofSpec.PROOF_ID_BYTES);
+			byte[] digest = DuelProofCodec.parseHexLowerExact(parts[7], DuelProofSpec.HASH_BYTES);
+			int witnessVersion = parseCanonicalDecimal(parts[5], 1, 255);
+			int byteLength = parseCanonicalDecimal(parts[6], 1, DUEL_JOURNAL_MAX_PROOF_BYTES);
+			int chunkCount = parseCanonicalDecimal(parts[8], 1, DUEL_JOURNAL_MAX_PROOF_CHUNKS);
+			if (witnessVersion < 0 || byteLength < 0 || chunkCount < 0
+				|| chunkCount > byteLength) return false;
+			pending.proofMetaReceived = true;
+			pending.proofAvailable = true;
+			pending.proofId = DuelProofCodec.hexLower(proofIdBytes);
+			pending.proofWitnessVersion = witnessVersion;
+			pending.proofByteLength = byteLength;
+			pending.proofSha256 = digest;
+			pending.expectedProofChunks = chunkCount;
+			return true;
+		} catch (IllegalArgumentException ignored) {
+			return false;
+		}
+	}
+
+	private boolean parseDuelJournalProofData(String[] parts, DuelJournalPending pending) {
+		if (parts.length != 6 || !pending.proofMetaReceived || !pending.proofAvailable
+			|| pending.expectedProofChunks <= 0) return false;
+		int chunk = parseCanonicalDecimal(parts[3], 0, pending.expectedProofChunks - 1);
+		int total = parseCanonicalDecimal(parts[4], 1, DUEL_JOURNAL_MAX_PROOF_CHUNKS);
+		String encoded = parts[5];
+		if (chunk < 0 || total != pending.expectedProofChunks
+			|| pending.proofChunks.containsKey(chunk) || encoded.isEmpty()
+			|| (encoded.length() & 1) != 0
+			|| encoded.length() > DUEL_JOURNAL_MAX_PROOF_CHUNK_BYTES * 2) return false;
+		try {
+			byte[] decoded = DuelProofCodec.parseHexLowerExact(encoded, encoded.length() / 2);
+			if (decoded.length == 0
+				|| pending.proofBytesReceived > pending.proofByteLength - decoded.length) return false;
+			pending.proofChunks.put(chunk, decoded);
+			pending.proofBytesReceived += decoded.length;
+			return true;
+		} catch (IllegalArgumentException ignored) {
+			return false;
+		}
+	}
+
+	private boolean commitDuelJournalEnvelope(DuelJournalPending pending) {
+		if (!this.duelJournalAwaitingResponse || !pending.historyReceived
+			|| pending.history.size() != pending.expectedHistoryRows
+			|| this.duelJournalInterface == null
+			|| !matchesDuelJournalRequestSelection(pending)) return false;
+		DuelJournalInterface.DuelDetail selected = null;
+		if (pending.selectedDuelId == 0L) {
+			if (pending.detailReceived || pending.stakesReceived || pending.expectedSwingChunks >= 0) return false;
+		} else {
+			if (!pending.detailReceived || !pending.stakesReceived || pending.expectedSwingChunks <= 0
+				|| pending.swingChunks.size() != pending.expectedSwingChunks) return false;
+			ArrayList<DuelJournalInterface.Swing> swings = new ArrayList<>();
+			int expectedNumber = 1;
+			for (int chunk = 0; chunk < pending.expectedSwingChunks; chunk++) {
+				List<DuelJournalInterface.Swing> rows = pending.swingChunks.get(chunk);
+				if (rows == null) return false;
+				for (DuelJournalInterface.Swing swing : rows) {
+					if (swing.number != expectedNumber++) return false;
+					swings.add(swing);
+				}
+			}
+			DuelJournalInterface.ProofState proofState = verifyDuelJournalProof(pending, swings);
+			selected = new DuelJournalInterface.DuelDetail(pending.selectedDuelId,
+				pending.requesterPlayerId, pending.opponentPlayerId, pending.won,
+				pending.startedAt, pending.completedAt, pending.opponentName,
+				proofState, pending.proofId, pending.stakes, swings);
+		}
+		clearDuelJournalRequestState();
+		this.duelJournalInterface.applyJournal(pending.history, selected);
+		clearDuelJournalHeldNavigationState();
+		this.currentMouseButtonDown = 0;
+		this.lastMouseButtonDown = 0;
+		this.mouseButtonClick = 0;
+		return true;
+	}
+
+	private boolean matchesDuelJournalRequestSelection(DuelJournalPending pending) {
+		if (pending.latestReceiptRequest) {
+			if (pending.history.isEmpty()) {
+				return pending.selectedDuelId == 0L
+					&& !duelProofHandshakeClient.requiresLatestLockedWitness(true);
+			}
+			if (pending.selectedDuelId != pending.history.get(0).duelId) return false;
+		}
+
+		if (pending.selectedDuelId <= 0L) return true;
+		DuelJournalInterface.DuelSummary summary = selectedDuelJournalSummary(pending);
+		if (summary == null) return !pending.latestReceiptRequest;
+		return summary.opponentPlayerId == pending.opponentPlayerId
+			&& summary.won == pending.won
+			&& summary.startedAt == pending.startedAt
+			&& summary.completedAt == pending.completedAt
+			&& canonicalDuelProofUsername(summary.opponentName).equals(
+				canonicalDuelProofUsername(pending.opponentName));
+	}
+
+	private DuelJournalInterface.DuelSummary selectedDuelJournalSummary(
+			DuelJournalPending pending) {
+		for (DuelJournalInterface.DuelSummary summary : pending.history) {
+			if (summary.duelId == pending.selectedDuelId) return summary;
+		}
+		return null;
+	}
+
+	private DuelJournalInterface.ProofState verifyDuelJournalProof(
+		DuelJournalPending pending, List<DuelJournalInterface.Swing> privateSwings) {
+		boolean latestLockRequired = duelProofHandshakeClient.requiresLatestLockedWitness(
+			pending.latestReceiptRequest);
+		if (!pending.proofMetaReceived) return DuelJournalInterface.ProofState.FAILED;
+		if (!pending.proofAvailable) {
+			return pending.proofTransportFailed || latestLockRequired
+				? DuelJournalInterface.ProofState.FAILED
+				: DuelJournalInterface.ProofState.UNAVAILABLE;
+		}
+		if (pending.proofTransportFailed || pending.proofSha256 == null
+			|| pending.proofChunks.size() != pending.expectedProofChunks
+			|| pending.proofBytesReceived != pending.proofByteLength) {
+			return DuelJournalInterface.ProofState.FAILED;
+		}
+
+		byte[] witnessBytes = null;
+		byte[] transportHash = null;
+		try {
+			witnessBytes = new byte[pending.proofByteLength];
+			int offset = 0;
+			for (int chunk = 0; chunk < pending.expectedProofChunks; chunk++) {
+				byte[] bytes = pending.proofChunks.get(chunk);
+				if (bytes == null) return DuelJournalInterface.ProofState.FAILED;
+				if (offset > witnessBytes.length - bytes.length) {
+					return DuelJournalInterface.ProofState.FAILED;
+				}
+				System.arraycopy(bytes, 0, witnessBytes, offset, bytes.length);
+				offset += bytes.length;
+			}
+			if (offset != pending.proofByteLength) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+			transportHash = DuelProofCrypto.sha256(witnessBytes);
+			if (!DuelProofCrypto.constantTimeEquals(transportHash, pending.proofSha256)) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+
+			DuelProofTerminalVerifier.Verification verification =
+				DuelProofTerminalVerifier.verify(witnessBytes);
+			DuelProofTerminalWitness witness = verification.getWitness();
+			DuelProofContext context = verification.getContext();
+			if (witness == null
+				|| witness.getWitnessVersion() != pending.proofWitnessVersion
+				|| !DuelProofCrypto.constantTimeEquals(verification.getWitnessHash(), pending.proofSha256)
+				|| !pending.proofId.equals(DuelProofCodec.hexLower(witness.getProofId()))
+				|| witness.getFinishedAtMs() != pending.completedAt) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+
+			int requesterOrdinal = -1;
+			int opponentOrdinal = -1;
+			DuelProofTerminalParticipant canonicalFirst = null;
+			DuelProofTerminalParticipant canonicalSecond = null;
+			List<DuelProofTerminalParticipant> participants = witness.getParticipants();
+			if (participants == null || participants.size() != 2) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+			for (DuelProofTerminalParticipant participant : participants) {
+				if (participant.getOrdinal() == 0) canonicalFirst = participant;
+				else if (participant.getOrdinal() == 1) canonicalSecond = participant;
+				else return DuelJournalInterface.ProofState.FAILED;
+				if (participant.getPlayerId() == pending.requesterPlayerId) {
+					requesterOrdinal = participant.getOrdinal();
+				} else if (participant.getPlayerId() == pending.opponentPlayerId) {
+					opponentOrdinal = participant.getOrdinal();
+				} else {
+					return DuelJournalInterface.ProofState.FAILED;
+				}
+			}
+			if (requesterOrdinal < 0 || opponentOrdinal < 0 || requesterOrdinal == opponentOrdinal
+				|| pending.won != (witness.getWinnerOrdinal() == requesterOrdinal)
+				|| canonicalFirst == null || canonicalSecond == null) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+			DuelProofContextParticipant requesterContext = context.getParticipant(requesterOrdinal);
+			DuelProofContextParticipant opponentContext = context.getParticipant(opponentOrdinal);
+			if (requesterContext == null || opponentContext == null
+				|| !matchesCanonicalDuelProofUsername(requesterContext.getUsername(), this.username)
+				|| !matchesCanonicalDuelProofUsername(opponentContext.getUsername(),
+					pending.opponentName)
+				|| !matchesReceiptDuelStakes(requesterContext.getStakes(),
+				pending.stakes, true)
+				|| !matchesReceiptDuelStakes(opponentContext.getStakes(),
+				pending.stakes, false)) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+
+			if (!duelProofHandshakeClient.matchesLockedWitnessIfApplicable(
+				pending.latestReceiptRequest,
+				witness.getProofId(), witness.getContextHash(), witness.getServerCommitment(),
+				canonicalFirst.getPlayerId(), canonicalFirst.getCommitment(),
+				canonicalSecond.getPlayerId(), canonicalSecond.getCommitment(),
+				witness.getFinalLockHash())) {
+				return DuelJournalInterface.ProofState.FAILED;
+			}
+
+			int privateIndex = 0;
+			for (DuelProofMeleeSwing computed : verification.getComputedSwings()) {
+				if (computed.getActorOrdinal() != requesterOrdinal) continue;
+				if (privateIndex >= privateSwings.size()) {
+					return DuelJournalInterface.ProofState.FAILED;
+				}
+				DuelJournalInterface.Swing journal = privateSwings.get(privateIndex++);
+				if (journal.number != privateIndex
+					|| journal.combatStyle != computed.getInput().getAttackerCombatStyle()
+					|| journal.accurate != computed.getResult().isHit()
+					|| journal.damage != computed.getResult().getDamage()) {
+					return DuelJournalInterface.ProofState.FAILED;
+				}
+			}
+			return privateIndex == privateSwings.size()
+				? DuelJournalInterface.ProofState.VERIFIED
+				: DuelJournalInterface.ProofState.FAILED;
+		} catch (RuntimeException ignored) {
+			return DuelJournalInterface.ProofState.FAILED;
+		} finally {
+			if (witnessBytes != null) Arrays.fill(witnessBytes, (byte) 0);
+			if (transportHash != null) Arrays.fill(transportHash, (byte) 0);
+		}
+	}
+
+	private boolean matchesCanonicalDuelProofUsername(String canonicalContextUsername,
+			String displayedUsername) {
+		if (canonicalContextUsername == null || displayedUsername == null) return false;
+		// Account storage may be lowercase while the RSC display form is title-cased.
+		// Normalize both through the same base-37 identity instead of comparing raw casing.
+		String normalizedContext = canonicalDuelProofUsername(canonicalContextUsername);
+		return normalizedContext.length() > 0
+			&& normalizedContext.equals(canonicalDuelProofUsername(displayedUsername));
+	}
+
+	/** Returns the combat level currently displayed for the named nearby duel opponent. */
+	private int visibleDuelProofCombatLevel(String canonicalContextUsername) {
+		if (canonicalContextUsername == null) return -1;
+		for (int index = 0; index < this.playerCount; index++) {
+			ORSCharacter player = this.players[index];
+			if (player == null || player.level <= 0) continue;
+			if (matchesCanonicalDuelProofUsername(canonicalContextUsername, player.accountName)
+				|| matchesCanonicalDuelProofUsername(canonicalContextUsername,
+					player.displayName)) {
+				return player.level;
+			}
+		}
+		return -1;
+	}
+
+	private String canonicalDuelProofUsername(String username) {
+		return DataConversions.hashToUsername(
+			DataConversions.usernameToHash(username == null ? "" : username));
+	}
+
+	private boolean matchesReceiptDuelStakes(List<DuelProofContextItem> contextStakes,
+										 List<DuelJournalInterface.StakeItem> receiptStakes,
+										 boolean mine) {
+		if (contextStakes == null || receiptStakes == null) return false;
+		int receiptCount = 0;
+		for (DuelJournalInterface.StakeItem receipt : receiptStakes) {
+			if (receipt.mine == mine) receiptCount++;
+		}
+		if (receiptCount != contextStakes.size()) return false;
+		for (DuelProofContextItem contextItem : contextStakes) {
+			boolean matched = false;
+			for (DuelJournalInterface.StakeItem receipt : receiptStakes) {
+				if (receipt.mine == mine && receipt.slot == contextItem.getSlot()) {
+					if (matched || receipt.catalogId != contextItem.getItemId()
+						|| receipt.amount != contextItem.getAmount()
+						|| receipt.noted != contextItem.isNoted()) return false;
+					matched = true;
+				}
+			}
+			if (!matched) return false;
+		}
+		return true;
+	}
+
+	/** Drops the technical witness as soon as its one local verification is complete. */
+	private void destroyPendingDuelProofBytes(DuelJournalPending pending) {
+		if (pending == null) return;
+		for (byte[] chunk : pending.proofChunks.values()) {
+			if (chunk != null) Arrays.fill(chunk, (byte) 0);
+		}
+		pending.proofChunks.clear();
+		if (pending.proofSha256 != null) Arrays.fill(pending.proofSha256, (byte) 0);
+		pending.proofSha256 = null;
+		pending.proofBytesReceived = 0;
+	}
+
+	private int parseBinaryFlag(String value) {
+		return "0".equals(value) ? 0 : ("1".equals(value) ? 1 : -1);
+	}
+
+	private int parseCanonicalDecimal(String value, int minimum, int maximum) {
+		if (value == null || value.isEmpty() || minimum > maximum
+			|| (value.length() > 1 && value.charAt(0) == '0')) return -1;
+		long parsed = 0L;
+		for (int i = 0; i < value.length(); i++) {
+			char character = value.charAt(i);
+			if (character < '0' || character > '9') return -1;
+			parsed = parsed * 10L + character - '0';
+			if (parsed > maximum) return -1;
+		}
+		return parsed < minimum ? -1 : (int) parsed;
+	}
+
+	private void failDuelJournalEnvelope() {
+		clearDuelJournalRequestState();
+	}
+
 	final boolean handleVoidscapeChristmasCrackerMessage(String message) {
 		if (message == null || !message.startsWith(VOIDSCAPE_CHRISTMAS_CRACKER_PREFIX)) {
 			return false;
@@ -16867,52 +18318,6 @@ public final class mudclient implements Runnable {
 			startChristmasCrackerRoll(rollId, category, itemId, seed);
 		}
 		return true;
-	}
-
-	static int parseVoidscapeCrackerCampaignRemaining(String message) {
-		if (message == null || !message.startsWith(VOIDSCAPE_CRACKER_CAMPAIGN_PREFIX)) {
-			return VOIDSCAPE_CRACKER_CAMPAIGN_NOT_ENVELOPE;
-		}
-		String payload = message.substring(VOIDSCAPE_CRACKER_CAMPAIGN_PREFIX.length());
-		String[] parts = payload.split("\\|", -1);
-		if (parts.length != 2 || !"v1".equals(parts[0])) {
-			return 0;
-		}
-		try {
-			int remaining = Integer.parseInt(parts[1]);
-			return remaining >= 0 && remaining <= VOIDSCAPE_CRACKER_CAMPAIGN_MAX_REMAINING
-				? remaining : 0;
-		} catch (NumberFormatException ignored) {
-			return 0;
-		}
-	}
-
-	final boolean handleVoidscapeCrackerCampaignMessage(String message) {
-		int remaining = parseVoidscapeCrackerCampaignRemaining(message);
-		if (remaining == VOIDSCAPE_CRACKER_CAMPAIGN_NOT_ENVELOPE) {
-			return false;
-		}
-		setCrackerCampaignRemaining(remaining);
-		if (isAndroidSmokeCrackerCampaignLoggingEnabled()) {
-			System.out.println("ANDROID_SMOKE_CRACKER_CAMPAIGN"
-				+ " event=ENVELOPE"
-				+ " protocol=" + Config.CLIENT_VERSION
-				+ " consumed=true"
-				+ " remaining=" + this.crackerCampaignRemaining
-				+ " historyLeaks=" + crackerCampaignEnvelopeLeakCount());
-		}
-		return true;
-	}
-
-	private void setCrackerCampaignRemaining(int remaining) {
-		this.crackerCampaignRemaining = remaining >= 0
-			&& remaining <= VOIDSCAPE_CRACKER_CAMPAIGN_MAX_REMAINING ? remaining : 0;
-		this.crackerCampaignHudRendered = false;
-		this.crackerCampaignHudLabel = "";
-		this.crackerCampaignHudX = -1;
-		this.crackerCampaignHudY = -1;
-		this.crackerCampaignHudWidth = 0;
-		this.crackerCampaignHudHeight = 0;
 	}
 
 	final boolean handleUndeadSiegeMessage(String message) {
@@ -18145,6 +19550,16 @@ public final class mudclient implements Runnable {
 										   int topPixelSkew, int hairColour, int topColour, int bottomColour,
 										   int skinColour, boolean usePlayerPalette, int hairStyle, boolean invisible,
 										   boolean invulnerable) {
+		drawPlayerCompositeLayersTo(this.getSurface(), layerAnimation, wantedAnimDir, actualAnimDir, mirrorX,
+			spriteOffset, stepFrame, x, y, width, height, topPixelSkew, hairColour, topColour, bottomColour,
+			skinColour, usePlayerPalette, hairStyle, invisible, invulnerable);
+	}
+
+	private void drawPlayerCompositeLayersTo(MudClientGraphics target, int[] layerAnimation, int wantedAnimDir,
+											 int actualAnimDir, boolean mirrorX, int spriteOffset, int stepFrame,
+											 int x, int y, int width, int height, int topPixelSkew, int hairColour,
+											 int topColour, int bottomColour, int skinColour, boolean usePlayerPalette,
+											 int hairStyle, boolean invisible, boolean invulnerable) {
 		if (layerAnimation == null) {
 			return;
 		}
@@ -18155,13 +19570,14 @@ public final class mudclient implements Runnable {
 				continue;
 			}
 
-			int animID = layerAnimation[mappedLayer] - 1;
-			if (animID >= 0) {
+			int appearanceId = layerAnimation[mappedLayer];
+			AnimationDef animation = EntityHandler.getPlayerAppearanceDef(appearanceId);
+			if (animation != null) {
 				byte spriteOffsetX = 0;
 				byte spriteOffsetY = 0;
 				int mySpriteOffset = spriteOffset;
 				if (mirrorX && actualAnimDir >= 1 && actualAnimDir <= 3) {
-					if (EntityHandler.getAnimationDef(animID).hasF()) {
+					if (animation.hasF()) {
 						mySpriteOffset = spriteOffset + 15;
 					} else if (mappedLayer == 4 && actualAnimDir == 1) {
 						mySpriteOffset = actualAnimDir * 3
@@ -18196,19 +19612,19 @@ public final class mudclient implements Runnable {
 					}
 				}
 
-				if (actualAnimDir != 5 || EntityHandler.getAnimationDef(animID).hasA()) {
-					Sprite sprite = spriteSelect(EntityHandler.getAnimationDef(animID), mySpriteOffset);
+				if (actualAnimDir != 5 || animation.hasA()) {
+					Sprite sprite = spriteSelect(animation, mySpriteOffset);
 					int something1 = sprite.getSomething1();
 					int something2 = sprite.getSomething2();
-					int something3 = this.spriteSelect(EntityHandler.getAnimationDef(animID), 0).getSomething1();
+					int something3 = this.spriteSelect(animation, 0).getSomething1();
 					if (something1 != 0 && something2 != 0 && something3 != 0) {
 						int xOffset = (spriteOffsetX * width) / something1;
 						int yOffset = (spriteOffsetY * height) / something2;
 						int spriteWidth = (something1 * width) / something3;
 						xOffset -= (spriteWidth - width) / 2;
-						int animationColour = EntityHandler.getAnimationDef(animID).getCharColour();
+						int animationColour = animation.getCharColour();
 						int colorMask1 = animationColour;
-						int blueScaleColor = EntityHandler.getAnimationDef(animID).getBlueMask();
+						int blueScaleColor = animation.getBlueMask();
 						if (colorMask1 == 1) {
 							colorMask1 = usePlayerPalette ? paletteIndexedColor(this.getPlayerHairColors(), hairColour) : hairColour;
 						} else if (colorMask1 == 2) {
@@ -18226,13 +19642,26 @@ public final class mudclient implements Runnable {
 						if (invulnerable)
 							colourTransform &= 0xFF202020;
 
-						this.getSurface().drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth, height,
+						target.drawSpriteClipping(sprite, xOffset + x, y + yOffset, spriteWidth, height,
 							colorMask1, colorMask2, blueScaleColor, mirrorX, topPixelSkew, 1, colourTransform);
-						if (usePlayerPalette && mappedLayer == 0 && animationColour == 1 && hairStyle > 0
-							&& isModernHairCompatibleHeadAnimation(animID)) {
-							Sprite hair = VoidscapeHairOverlay.getFrame(hairStyle, mySpriteOffset);
+						if (usePlayerPalette && mappedLayer == 0 && animationColour == 1
+							&& hairStyle > 0) {
+							Sprite hair = null;
+							if (!GeneratedAppearanceRegistry.isManaged(appearanceId)
+								&& isModernHairCompatibleHeadAnimation(appearanceId - 1)) {
+								// Preserve the shipped, permissive head-1 overlay path byte-for-byte.
+								hair = VoidscapeHairOverlay.getFrame(hairStyle, mySpriteOffset);
+							} else if (appearanceId
+								== PaperdollV2LegacyCompatibility.COMPATIBLE_HEAD_APPEARANCE_ID
+								&& this.paperdollV2Runtime != null) {
+								PaperdollV2LegacyCompatibility compatibility =
+									this.paperdollV2Runtime.getLegacyCompatibility();
+								int hatAppearanceId = layerAnimation.length > 5 ? layerAnimation[5] : -1;
+								hair = compatibility == null ? null : compatibility.getFrame(
+									hairStyle, mySpriteOffset, appearanceId, hatAppearanceId);
+							}
 							if (hair != null) {
-								this.getSurface().drawArgbSpriteClipping(hair, xOffset + x, y + yOffset,
+								target.drawArgbSpriteClipping(hair, xOffset + x, y + yOffset,
 									spriteWidth, height, mirrorX, topPixelSkew,
 									hairOverlayColourTransform(hairColour, colourTransform));
 							}
@@ -18241,6 +19670,499 @@ public final class mudclient implements Runnable {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Dev-only live hybrid compositor. The complete V2 preflight happens before
+	 * the first pixel; a false return means the caller must draw the untouched
+	 * legacy player. Direction-specific legacy ordering remains authoritative.
+	 */
+	private boolean drawPlayerCompositeLayersV2To(MudClientGraphics target, int[] layerAnimation,
+		int hairStyle, int[] legacyLayerScratch,
+		int wantedAnimDir, int actualAnimDir, boolean mirrorX, int spriteOffset, int stepFrame,
+		int x, int y, int width, int height, int topPixelSkew, int hairColour, int topColour,
+		int bottomColour, int skinColour, boolean invisible, boolean invulnerable) {
+		PaperdollV2Runtime runtime = this.paperdollV2Runtime;
+		PaperdollV2Runtime.RenderSelection selection = runtime == null ? null
+			: runtime.preflight(layerAnimation, hairStyle, spriteOffset, width, height);
+		if (selection == null) return false;
+		PaperdollV2Pack.RenderStack stack = selection.getStack();
+
+		int skinRgb = paletteIndexedColor(this.getPlayerSkinColors(), skinColour);
+		int hairRgb = paletteIndexedColor(this.getPlayerHairColors(), hairColour);
+		int topRgb = paletteIndexedColor(this.getPlayerClothingColors(), topColour);
+		int bottomRgb = paletteIndexedColor(this.getPlayerClothingColors(), bottomColour);
+		int actorColourTransform = 0xffffffff;
+		if (invisible) actorColourTransform &= 0x80ffffff;
+		if (invulnerable) actorColourTransform &= 0xff202020;
+
+		int[] layerOrder = this.getAnimDirLayer_To_CharLayer()[wantedAnimDir];
+		for (int lay = 0; lay < 12; lay++) {
+			int mappedLayer = layerOrder[lay];
+			if (mappedLayer < 0 || mappedLayer >= layerAnimation.length) continue;
+			if (stack.substitutesSlot(mappedLayer)) {
+				PaperdollV2Renderer.drawStackSlot(target, stack, mappedLayer,
+					spriteOffset, x, y, width, height, mirrorX, topPixelSkew,
+					skinRgb, hairRgb, hairRgb, topRgb, bottomRgb, runtime.getPrimaryRgb(),
+					runtime.getSecondaryRgb(), actorColourTransform);
+				continue;
+			}
+
+			int appearanceId = layerAnimation[mappedLayer];
+			if (appearanceId <= 0) continue;
+			Arrays.fill(legacyLayerScratch, 0);
+			legacyLayerScratch[mappedLayer] = appearanceId;
+			drawPlayerCompositeLayersTo(target, legacyLayerScratch,
+				wantedAnimDir, actualAnimDir, mirrorX, spriteOffset, stepFrame,
+				x, y, width, height, topPixelSkew, hairColour, topColour, bottomColour,
+				skinColour, true, 0, invisible, invulnerable);
+		}
+		return true;
+	}
+
+	public boolean workbenchPaperdollV2DesignerAvailable() {
+		return isPaperdollV2DesignerEvaluationAvailable();
+	}
+
+	public boolean workbenchPaperdollV2DesignerVisible() {
+		return this.showAppearanceChange && isPaperdollV2DesignerEvaluationVisible();
+	}
+	public boolean workbenchAppearancePanelVisible() { return this.showAppearanceChange; }
+	public boolean workbenchPaperdollV2DesignerSessionEligible() {
+		return this.paperdollV2DesignerSessionEligible;
+	}
+
+	public int workbenchPaperdollV2DesignerHairStyle() { return this.appearanceHairStyle; }
+	public int workbenchPaperdollV2DesignerHairColour() { return this.appearanceHairColour; }
+	public int workbenchPaperdollV2DesignerTopColour() { return this.characterTopColour; }
+	public int workbenchPaperdollV2DesignerBottomColour() { return this.characterBottomColour; }
+	public int workbenchPaperdollV2DesignerSkinColour() { return this.appearanceSkinColour; }
+	public boolean workbenchAppearanceReferralControlPresent() {
+		return this.controlAppearanceReferralName >= 0;
+	}
+	public int workbenchAppearanceReferralTextLength() {
+		if (this.panelAppearance == null || this.controlAppearanceReferralName < 0) return 0;
+		String value = this.panelAppearance.getControlText(this.controlAppearanceReferralName);
+		return value == null ? 0 : value.length();
+	}
+	public int workbenchPaperdollV2DesignerMaximumHairStyle() {
+		return paperdollV2DesignerMaximumHairStyle();
+	}
+	public String workbenchPaperdollV2DesignerStyleLabel() { return modernHairStyleLabel(); }
+	public String workbenchPaperdollV2DesignerStyleIdentity() {
+		if (this.appearanceHairStyle == 0) return "classic";
+		PaperdollV2SelectorRegistry registry = this.paperdollV2Runtime == null
+			? null : this.paperdollV2Runtime.getSelectorRegistry();
+		PaperdollV2SelectorRegistry.Entry entry = registry == null
+			? null : registry.getEntry(this.appearanceHairStyle);
+		return entry == null ? "" : entry.getStyle();
+	}
+	public int workbenchPaperdollV2DesignerHeadAppearanceId() {
+		return this.appearanceHeadType + 1;
+	}
+	public int workbenchPaperdollV2DesignerBodyAppearanceId() {
+		return this.appearanceBodyGender + 1;
+	}
+	public int workbenchPaperdollV2DesignerLegsAppearanceId() {
+		return this.character2Colour + 1;
+	}
+	public boolean workbenchPaperdollV2DesignerMale() {
+		return this.appearanceHeadGender == 1;
+	}
+	public String workbenchPaperdollV2DesignerPreviewPath() {
+		return this.paperdollV2DesignerPreviewPath;
+	}
+	public String workbenchPaperdollV2DesignerPreviewFallbackReason() {
+		return this.paperdollV2DesignerPreviewFallbackReason;
+	}
+	public String workbenchPaperdollV2DesignerHydrationBlockedReason() {
+		if (this.paperdollV2DesignerSessionBlockedReason.length() > 0) {
+			return this.paperdollV2DesignerSessionBlockedReason;
+		}
+		return this.localPlayer != null && this.localPlayer.level >= 0
+			? paperdollV2DesignerHydrationBlockReason() : "";
+	}
+	private int workbenchPaperdollV2DesignerPanelX() {
+		return halfGameWidth() - Math.min(500, this.getGameWidth() - 12) / 2;
+	}
+	public int workbenchPaperdollV2DesignerPreviousStyleX() {
+		return workbenchPaperdollV2DesignerPanelX() + 423 - 42;
+	}
+	public int workbenchPaperdollV2DesignerNextStyleX() {
+		return workbenchPaperdollV2DesignerPanelX() + 423 + 42;
+	}
+	public int workbenchPaperdollV2DesignerStyleY() { return 274; }
+	public int workbenchPaperdollV2DesignerGenderPreviousX() {
+		return workbenchPaperdollV2DesignerPanelX() + 308 - 42;
+	}
+	public int workbenchPaperdollV2DesignerGenderNextX() {
+		return workbenchPaperdollV2DesignerPanelX() + 308 + 42;
+	}
+	public int workbenchPaperdollV2DesignerGenderY() { return 150; }
+	public int workbenchPaperdollV2DesignerAcceptX() {
+		return workbenchPaperdollV2DesignerPanelX() + 382;
+	}
+	public int workbenchPaperdollV2DesignerAcceptY() {
+		return Math.min(this.getGameHeight() - 21, 316);
+	}
+
+	/** Workbench-only isolated render through the live paperdoll compositor. */
+	public int[] workbenchRenderPlayerCompositeRaster(ORSCharacter player, int wantedAnimDir, int actualAnimDir,
+			boolean mirrorX, int spriteOffset, int stepFrame, int canvasWidth, int canvasHeight,
+			int drawX, int drawY, int drawWidth, int drawHeight, int backgroundRgb) {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("appearance raster capture requires the Workbench diagnostics flag");
+		}
+		MudClientGraphics target = this.workbenchAppearanceRasterSurface;
+		if (target == null || target.width2 != canvasWidth || target.height2 != canvasHeight) {
+			target = new MudClientGraphics(canvasWidth, canvasHeight, this.getSurface().sprites.length);
+			this.workbenchAppearanceRasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, canvasWidth, canvasHeight, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+		drawPlayerCompositeLayersTo(target, player.layerAnimation, wantedAnimDir, actualAnimDir, mirrorX,
+			spriteOffset, stepFrame, drawX, drawY, drawWidth, drawHeight, 0, player.colourHair,
+			player.colourTop, player.colourBottom, player.colourSkin, true, player.hairStyle,
+			player.isInvisible, player.isInvulnerable);
+		return Arrays.copyOf(target.pixelData, target.pixelData.length);
+	}
+
+	public int[] workbenchAppearanceLayerOrder(int wantedAnimDir) {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("appearance layer order requires the Workbench diagnostics flag");
+		}
+		return Arrays.copyOf(this.getAnimDirLayer_To_CharLayer()[wantedAnimDir], 12);
+	}
+
+	public int[] workbenchResolvedAppearanceColours(ORSCharacter player) {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("appearance colours require the Workbench diagnostics flag");
+		}
+		return new int[]{
+			paletteIndexedColor(this.getPlayerHairColors(), player.colourHair),
+			paletteIndexedColor(this.getPlayerClothingColors(), player.colourTop),
+			paletteIndexedColor(this.getPlayerClothingColors(), player.colourBottom),
+			paletteIndexedColor(this.getPlayerSkinColors(), player.colourSkin),
+		};
+	}
+
+	public int[] workbenchAppearancePaletteLengths() {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("appearance palette status requires the Workbench diagnostics flag");
+		}
+		return new int[]{
+			this.getPlayerHairColors().length,
+			this.getPlayerClothingColors().length,
+			this.getPlayerClothingColors().length,
+			this.getPlayerSkinColors().length,
+		};
+	}
+
+	public PaperdollV2Runtime workbenchPaperdollV2Runtime() {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("Paperdoll V2 runtime status requires the Workbench diagnostics flag");
+		}
+		return this.paperdollV2Runtime;
+	}
+
+	public void workbenchSelectPaperdollV2Stack(String stackId) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("Paperdoll V2 stack selection requires the Workbench diagnostics flag");
+		}
+		if (this.paperdollV2Runtime == null) throw new IOException("Paperdoll V2 runtime is not initialized");
+		this.paperdollV2Runtime.selectDevStack(stackId);
+	}
+
+	public int workbenchPaperdollV2ProjectionShift() {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("Paperdoll V2 projection status requires the Workbench diagnostics flag");
+		}
+		return effectiveSceneProjectionShift();
+	}
+
+	public long workbenchSurfacePixelBytes() {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("surface memory status requires the Workbench diagnostics flag");
+		}
+		return this.getSurface() == null || this.getSurface().pixelData == null
+			? 0L : (long) this.getSurface().pixelData.length * 4L;
+	}
+
+	/**
+	 * Workbench-only Paperdoll V2 proof compositor.
+	 *
+	 * <p>Pack-only stacks are the explicit upscaled-legacy control. Live-controls
+	 * stacks replace every declared native slot (base slots 0/1/2 and optional hat
+	 * slot 5), while every other slot is rendered one at a time through the existing
+	 * legacy compositor. Iterating
+	 * the live direction-specific slot order keeps weapon/shield/body occlusion and
+	 * their legacy offsets honest without adding a V2 branch to the live player
+	 * renderer.</p>
+	 */
+	public int[] workbenchRenderPaperdollV2Raster(PaperdollV2Pack pack, String stackId,
+		ORSCharacter player, PaperdollV2Pose pose, int backgroundRgb, int primaryRgb,
+		int secondaryRgb) throws IOException {
+		return workbenchRenderPaperdollV2RasterInternal(pack, stackId, player, pose,
+			backgroundRgb, primaryRgb, secondaryRgb, false);
+	}
+
+	/** Workbench-only exact V2 oracle: every declared native slot, no legacy controls. */
+	public int[] workbenchRenderPaperdollV2OnlyRaster(PaperdollV2Pack pack, String stackId,
+		ORSCharacter player, PaperdollV2Pose pose, int backgroundRgb, int primaryRgb,
+		int secondaryRgb) throws IOException {
+		PaperdollV2Pack.RenderStack stack = pack == null ? null : pack.requireRenderStack(stackId);
+		if (stack == null || !stack.usesLiveControls()) {
+			throw new IOException("Paperdoll V2-only raster requires a live-controls stack");
+		}
+		return workbenchRenderPaperdollV2RasterInternal(pack, stackId, player, pose,
+			backgroundRgb, primaryRgb, secondaryRgb, true);
+	}
+
+	/**
+	 * Workbench-only two-actor scene proving selector/profile resolution is per player.
+	 * The synthetic actors never enter the live player array and no packet/save state changes.
+	 */
+	public int[] workbenchRenderPaperdollV2SelectorPairRaster(ORSCharacter left,
+		ORSCharacter right, PaperdollV2Pose pose, int backgroundRgb) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("Paperdoll V2 selector raster requires Workbench diagnostics");
+		}
+		if (this.paperdollV2Runtime == null || !this.paperdollV2Runtime.isSelectorModeActive()) {
+			throw new IOException("Paperdoll V2 selector runtime is not active");
+		}
+		if (left == null || right == null || pose == null
+			|| left.layerAnimation == null || right.layerAnimation == null) {
+			throw new IOException("Paperdoll V2 selector pair inputs are incomplete");
+		}
+		int canvasWidth = PaperdollV2Pack.PREVIEW_WIDTH * 2;
+		int canvasHeight = PaperdollV2Pack.PREVIEW_HEIGHT;
+		MudClientGraphics target = this.workbenchPaperdollV2RasterSurface;
+		if (target == null || target.width2 != canvasWidth || target.height2 != canvasHeight) {
+			target = new MudClientGraphics(canvasWidth, canvasHeight, this.getSurface().sprites.length);
+			this.workbenchPaperdollV2RasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, canvasWidth, canvasHeight, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+
+		boolean leftRendered = drawPlayerCompositeLayersV2To(target, left.layerAnimation,
+			left.hairStyle, this.paperdollV2WorkbenchLegacyLayerScratch,
+			pose.getWantedAnimDir(), pose.getActualAnimDir(), pose.isMirrorX(),
+			pose.getSpriteOffset(), pose.getLegacyStepFrame(), pose.getV2DrawX(),
+			PaperdollV2Pack.PREVIEW_DRAW_Y, PaperdollV2Pack.WALK_WIDTH,
+			PaperdollV2Pack.PLAYER_HEIGHT, 0, left.colourHair, left.colourTop,
+			left.colourBottom, left.colourSkin, false, false);
+		boolean rightRendered = drawPlayerCompositeLayersV2To(target, right.layerAnimation,
+			right.hairStyle, this.paperdollV2WorkbenchLegacyLayerScratch,
+			pose.getWantedAnimDir(), pose.getActualAnimDir(), pose.isMirrorX(),
+			pose.getSpriteOffset(), pose.getLegacyStepFrame(), PaperdollV2Pack.PREVIEW_WIDTH
+				+ pose.getV2DrawX(), PaperdollV2Pack.PREVIEW_DRAW_Y, PaperdollV2Pack.WALK_WIDTH,
+			PaperdollV2Pack.PLAYER_HEIGHT, 0, right.colourHair, right.colourTop,
+			right.colourBottom, right.colourSkin, false, false);
+		if (!leftRendered || !rightRendered) {
+			throw new IOException("Paperdoll V2 selector pair unexpectedly entered legacy fallback: "
+				+ this.paperdollV2Runtime.getLastRenderFallbackReason());
+		}
+		return Arrays.copyOf(target.pixelData, target.pixelData.length);
+	}
+
+	/**
+	 * Workbench-only isolated raster through the exact live decision boundary.
+	 * A successful preflight uses V2; every other outcome draws one complete
+	 * legacy player, including the strict head-8 compatibility overlay when it
+	 * is available.  No live actor or server state is touched.
+	 */
+	public int[] workbenchRenderPaperdollV2RuntimePathRaster(ORSCharacter player,
+		PaperdollV2Pose pose, int backgroundRgb) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IOException("Paperdoll V2 runtime-path raster requires Workbench diagnostics");
+		}
+		if (player == null || pose == null || player.layerAnimation == null
+			|| player.layerAnimation.length < 12) {
+			throw new IOException("Paperdoll V2 runtime-path raster inputs are incomplete");
+		}
+		MudClientGraphics target = this.workbenchPaperdollV2RasterSurface;
+		if (target == null || target.width2 != PaperdollV2Pack.PREVIEW_WIDTH
+			|| target.height2 != PaperdollV2Pack.PREVIEW_HEIGHT) {
+			target = new MudClientGraphics(PaperdollV2Pack.PREVIEW_WIDTH,
+				PaperdollV2Pack.PREVIEW_HEIGHT, this.getSurface().sprites.length);
+			this.workbenchPaperdollV2RasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, PaperdollV2Pack.PREVIEW_WIDTH,
+			PaperdollV2Pack.PREVIEW_HEIGHT, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+		boolean usedV2 = this.paperdollV2Runtime != null
+			&& drawPlayerCompositeLayersV2To(target, player.layerAnimation, player.hairStyle,
+				this.paperdollV2WorkbenchLegacyLayerScratch, pose.getWantedAnimDir(),
+				pose.getActualAnimDir(), pose.isMirrorX(), pose.getSpriteOffset(),
+				pose.getLegacyStepFrame(), pose.getV2DrawX(), PaperdollV2Pack.PREVIEW_DRAW_Y,
+				PaperdollV2Pack.WALK_WIDTH, PaperdollV2Pack.PLAYER_HEIGHT, 0,
+				player.colourHair, player.colourTop, player.colourBottom, player.colourSkin,
+				player.isInvisible, player.isInvulnerable);
+		if (!usedV2) {
+			drawPlayerCompositeLayersTo(target, player.layerAnimation, pose.getWantedAnimDir(),
+				pose.getActualAnimDir(), pose.isMirrorX(), pose.getSpriteOffset(),
+				pose.getLegacyStepFrame(), pose.getV2DrawX(), PaperdollV2Pack.PREVIEW_DRAW_Y,
+				PaperdollV2Pack.WALK_WIDTH, PaperdollV2Pack.PLAYER_HEIGHT, 0,
+				player.colourHair, player.colourTop, player.colourBottom, player.colourSkin,
+				true, player.hairStyle, player.isInvisible, player.isInvulnerable);
+		}
+		return Arrays.copyOf(target.pixelData, target.pixelData.length);
+	}
+
+	/** Workbench-only isolated hair oracle through the selected live V2 stack. */
+	public int[] workbenchRenderPaperdollV2HairLayerRaster(ORSCharacter player,
+		PaperdollV2Pose pose, int backgroundRgb) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench") || this.paperdollV2Runtime == null
+			|| player == null || pose == null || player.layerAnimation == null
+			|| player.layerAnimation.length < 12) {
+			throw new IOException("Paperdoll V2 hair-layer raster inputs are incomplete");
+		}
+		PaperdollV2Runtime.RenderSelection selection = this.paperdollV2Runtime.preflight(
+			player.layerAnimation, player.hairStyle, pose.getSpriteOffset(),
+			PaperdollV2Pack.WALK_WIDTH, PaperdollV2Pack.PLAYER_HEIGHT);
+		if (selection == null) {
+			throw new IOException("Paperdoll V2 hair-layer preflight failed: "
+				+ this.paperdollV2Runtime.getLastRenderFallbackReason());
+		}
+		MudClientGraphics target = this.workbenchPaperdollV2RasterSurface;
+		if (target == null || target.width2 != PaperdollV2Pack.PREVIEW_WIDTH
+			|| target.height2 != PaperdollV2Pack.PREVIEW_HEIGHT) {
+			target = new MudClientGraphics(PaperdollV2Pack.PREVIEW_WIDTH,
+				PaperdollV2Pack.PREVIEW_HEIGHT, this.getSurface().sprites.length);
+			this.workbenchPaperdollV2RasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, PaperdollV2Pack.PREVIEW_WIDTH,
+			PaperdollV2Pack.PREVIEW_HEIGHT, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+		int rendered = PaperdollV2Renderer.drawStackAssetKind(target,
+			selection.getStack(), "hair", pose.getSpriteOffset(), pose.getV2DrawX(),
+			PaperdollV2Pack.PREVIEW_DRAW_Y, PaperdollV2Pack.WALK_WIDTH,
+			PaperdollV2Pack.PLAYER_HEIGHT, pose.isMirrorX(), 0,
+			paletteIndexedColor(this.getPlayerSkinColors(), player.colourSkin),
+			paletteIndexedColor(this.getPlayerHairColors(), player.colourHair),
+			paletteIndexedColor(this.getPlayerHairColors(), player.colourHair),
+			paletteIndexedColor(this.getPlayerClothingColors(), player.colourTop),
+			paletteIndexedColor(this.getPlayerClothingColors(), player.colourBottom),
+			this.paperdollV2Runtime.getPrimaryRgb(),
+			this.paperdollV2Runtime.getSecondaryRgb(), 0xffffffff);
+		if (rendered != 1) {
+			throw new IOException("Paperdoll V2 selected stack must contain exactly one hair asset");
+		}
+		return Arrays.copyOf(target.pixelData, target.pixelData.length);
+	}
+
+	/** Runs the complete three-native-slot selector draw for a desktop Workbench probe. */
+	public void workbenchRunPaperdollV2ThreeSlotRenderLoop(ORSCharacter player,
+		PaperdollV2Pose pose, int backgroundRgb, int iterations) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IOException("Paperdoll V2 allocation probe requires Workbench diagnostics");
+		}
+		if (this.paperdollV2Runtime == null || !this.paperdollV2Runtime.isSelectorModeActive()
+			|| player == null || pose == null || player.layerAnimation == null
+			|| player.layerAnimation.length < 12) {
+			throw new IOException("Paperdoll V2 allocation probe inputs are incomplete");
+		}
+		if (iterations < 1 || iterations > 100_000) {
+			throw new IOException("Paperdoll V2 allocation probe iteration count is out of range");
+		}
+		for (int slot = 3; slot < player.layerAnimation.length; slot++) {
+			if (player.layerAnimation[slot] != 0) {
+				throw new IOException("Paperdoll V2 allocation probe must isolate native slots 0,1,2");
+			}
+		}
+		MudClientGraphics target = this.workbenchPaperdollV2RasterSurface;
+		if (target == null || target.width2 != PaperdollV2Pack.PREVIEW_WIDTH
+			|| target.height2 != PaperdollV2Pack.PREVIEW_HEIGHT) {
+			target = new MudClientGraphics(PaperdollV2Pack.PREVIEW_WIDTH,
+				PaperdollV2Pack.PREVIEW_HEIGHT, this.getSurface().sprites.length);
+			this.workbenchPaperdollV2RasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, PaperdollV2Pack.PREVIEW_WIDTH, PaperdollV2Pack.PREVIEW_HEIGHT, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+		for (int index = 0; index < iterations; index++) {
+			if (!workbenchDrawPaperdollV2AllocationFrame(target, player, pose)) {
+				throw new IOException("Paperdoll V2 allocation probe entered legacy fallback");
+			}
+		}
+	}
+
+	private boolean workbenchDrawPaperdollV2AllocationFrame(MudClientGraphics target,
+		ORSCharacter player, PaperdollV2Pose pose) {
+		return drawPlayerCompositeLayersV2To(target, player.layerAnimation, player.hairStyle,
+			this.paperdollV2WorkbenchLegacyLayerScratch, pose.getWantedAnimDir(),
+			pose.getActualAnimDir(), pose.isMirrorX(), pose.getSpriteOffset(),
+			pose.getLegacyStepFrame(), pose.getV2DrawX(), PaperdollV2Pack.PREVIEW_DRAW_Y,
+			PaperdollV2Pack.WALK_WIDTH, PaperdollV2Pack.PLAYER_HEIGHT, 0,
+			player.colourHair, player.colourTop, player.colourBottom, player.colourSkin,
+			false, false);
+	}
+
+	private int[] workbenchRenderPaperdollV2RasterInternal(PaperdollV2Pack pack, String stackId,
+		ORSCharacter player, PaperdollV2Pose pose, int backgroundRgb, int primaryRgb,
+		int secondaryRgb, boolean v2Only) throws IOException {
+		if (!Boolean.getBoolean("voidscape.workbench")) {
+			throw new IllegalStateException("Paperdoll V2 raster capture requires the Workbench diagnostics flag");
+		}
+		if (pack == null || player == null || pose == null || player.layerAnimation == null) {
+			throw new IOException("Paperdoll V2 raster inputs are incomplete");
+		}
+		PaperdollV2Pack.RenderStack stack = pack.requireRenderStack(stackId);
+		MudClientGraphics target = this.workbenchPaperdollV2RasterSurface;
+		if (target == null || target.width2 != PaperdollV2Pack.PREVIEW_WIDTH
+			|| target.height2 != PaperdollV2Pack.PREVIEW_HEIGHT) {
+			target = new MudClientGraphics(PaperdollV2Pack.PREVIEW_WIDTH,
+				PaperdollV2Pack.PREVIEW_HEIGHT, this.getSurface().sprites.length);
+			this.workbenchPaperdollV2RasterSurface = target;
+		}
+		target.mudClientRef = this;
+		target.sprites = this.getSurface().sprites;
+		target.setClip(0, PaperdollV2Pack.PREVIEW_WIDTH, PaperdollV2Pack.PREVIEW_HEIGHT, 0);
+		Arrays.fill(target.pixelData, backgroundRgb & 0x00ffffff);
+
+		int[] resolved = workbenchResolvedAppearanceColours(player);
+		PaperdollV2Palette palette = new PaperdollV2Palette(
+			resolved[3], resolved[0], resolved[0], resolved[1], resolved[2], primaryRgb, secondaryRgb);
+		int[] layerOrder = this.getAnimDirLayer_To_CharLayer()[pose.getWantedAnimDir()];
+		for (int lay = 0; lay < 12; lay++) {
+			int mappedLayer = layerOrder[lay];
+			if (mappedLayer < 0 || mappedLayer >= player.layerAnimation.length) continue;
+			if (v2Only) {
+				if (stack.substitutesSlot(mappedLayer)) {
+					PaperdollV2Renderer.drawStackSlot(target, stack, mappedLayer, pose, palette);
+				}
+				continue;
+			}
+			if (!stack.usesLiveControls()) {
+				PaperdollV2Renderer.drawStackSlot(target, stack, mappedLayer, pose, palette);
+				continue;
+			}
+			if (stack.substitutesSlot(mappedLayer)) {
+				PaperdollV2Renderer.drawStackSlot(target, stack, mappedLayer, pose, palette);
+				continue;
+			}
+
+			int appearanceId = player.layerAnimation[mappedLayer];
+			if (appearanceId <= 0) continue;
+			int[] isolatedLayer = new int[player.layerAnimation.length];
+			isolatedLayer[mappedLayer] = appearanceId;
+			drawPlayerCompositeLayersTo(target, isolatedLayer, pose.getWantedAnimDir(),
+				pose.getActualAnimDir(), pose.isMirrorX(), pose.getSpriteOffset(),
+				pose.getLegacyStepFrame(), PaperdollV2Pack.PREVIEW_DRAW_X,
+				PaperdollV2Pack.PREVIEW_DRAW_Y, PaperdollV2Pack.WALK_WIDTH,
+				PaperdollV2Pack.PLAYER_HEIGHT, 0, player.colourHair, player.colourTop,
+				player.colourBottom, player.colourSkin, true, 0, false, false);
+		}
+		return Arrays.copyOf(target.pixelData, target.pixelData.length);
 	}
 
 	private int paletteIndexedColor(int[] palette, int index) {
@@ -18265,6 +20187,8 @@ public final class mudclient implements Runnable {
 
 	private int titleTierColor(int tier) {
 		switch (tier) {
+			case 3:
+				return 0xe04848;
 			case 2:
 				return 0xffd24a;
 			case 1:
@@ -18313,10 +20237,33 @@ public final class mudclient implements Runnable {
 					spriteOffset = this.animFrameToSprite_CombatA[this.getFrameCounter() / 5 % 8] + actualAnimDir * 3;
 				}
 
-				drawPlayerCompositeLayers(player.layerAnimation, wantedAnimDir, actualAnimDir, mirrorX, spriteOffset,
-					player.stepFrame, x, y, width, height, topPixelSkew, player.colourHair, player.colourTop,
-					player.colourBottom, player.colourSkin, true, player.hairStyle, player.isInvisible,
-					player.isInvulnerable);
+				boolean paperdollV2Probe = this.paperdollV2Runtime != null
+					&& this.paperdollV2Runtime.isRequestedByUser()
+					&& (this.paperdollV2Runtime.isSelectorModeActive()
+						|| player == this.localPlayer);
+				long paperdollRenderStartNs = paperdollV2Probe ? System.nanoTime() : 0L;
+				boolean usedPaperdollV2 = paperdollV2Probe
+					&& drawPlayerCompositeLayersV2To(this.getSurface(), player.layerAnimation, player.hairStyle,
+						this.paperdollV2LiveLegacyLayerScratch,
+						wantedAnimDir, actualAnimDir, mirrorX, spriteOffset, player.stepFrame,
+						x, y, width, height, topPixelSkew, player.colourHair, player.colourTop,
+						player.colourBottom, player.colourSkin, player.isInvisible,
+						player.isInvulnerable);
+				if (!usedPaperdollV2) {
+					drawPlayerCompositeLayers(player.layerAnimation, wantedAnimDir, actualAnimDir, mirrorX, spriteOffset,
+						player.stepFrame, x, y, width, height, topPixelSkew, player.colourHair, player.colourTop,
+						player.colourBottom, player.colourSkin, true, player.hairStyle, player.isInvisible,
+						player.isInvulnerable);
+				}
+				if (paperdollV2Probe) {
+					long paperdollRenderEndNs = System.nanoTime();
+					this.paperdollV2Runtime.recordRender(player == this.localPlayer, usedPaperdollV2,
+						paperdollRenderEndNs - paperdollRenderStartNs);
+					String paperdollActor = player == this.localPlayer ? "localPlayer" : "remotePlayer";
+					FramePacingMonitor.recordDuration((usedPaperdollV2
+						? "paperdollV2." : "paperdollLegacy.") + paperdollActor,
+						paperdollRenderStartNs, paperdollRenderEndNs);
+				}
 
 				if (player.messageTimeout > 0) {
 					this.characterDialogHalfWidth[this.characterDialogCount] = this.getSurface().stringWidth(1,
@@ -18332,20 +20279,46 @@ public final class mudclient implements Runnable {
 					this.characterDialogString[this.characterDialogCount++] = player.message;
 				}
 
-				boolean labelOverlayEnabled = S_SHOW_FLOATING_NAMETAGS
-					&& ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI) || (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY));
-				boolean hasPlayerTitle = player.title != null && player.title.length() > 0;
-				if (player.displayName != null && player.messageTimeout <= 0 && (labelOverlayEnabled || hasPlayerTitle)) {
-					String staffName = player.getStaffName();
-					int nameLineY = y - 14;
-					if (hasPlayerTitle) {
-						String titleSuffix = formatPlayerTitleSuffix(player.title);
-						int nameWidth = this.getSurface().stringWidth(0, staffName);
+				boolean localPlayerLabel = player == this.localPlayer;
+				boolean legacyLocalLabelEnabled = S_SHOW_FLOATING_NAMETAGS
+					&& ((C_NAME_CLAN_TAG_OVERLAY && this.showUiTab == 0 && !C_CUSTOM_UI)
+						|| (C_CUSTOM_UI && C_NAME_CLAN_TAG_OVERLAY));
+				boolean rawPlayerTitle = player.title != null && player.title.length() > 0;
+				boolean rawPlayerHonorific = player.honorific != null && player.honorific.length() > 0;
+				boolean remoteLabelEnabled = !localPlayerLabel
+					&& C_OVERHEAD_PLAYER_LABEL_MODE != OVERHEAD_PLAYER_LABEL_HIDDEN;
+				boolean showRemoteTitles = C_OVERHEAD_PLAYER_LABEL_MODE
+					== OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES;
+				boolean hasPlayerTitle = rawPlayerTitle && (localPlayerLabel || showRemoteTitles);
+				boolean hasPlayerHonorific = rawPlayerHonorific && (localPlayerLabel || showRemoteTitles);
+				boolean localLabelEnabled = localPlayerLabel
+					&& (legacyLocalLabelEnabled || rawPlayerTitle || rawPlayerHonorific);
+				if (player.displayName != null && player.messageTimeout <= 0
+					&& (localLabelEnabled || remoteLabelEnabled)) {
+					int nameLineY = y - 11;
+					if (hasPlayerTitle || hasPlayerHonorific) {
+						String playerName = player.getStaffName();
+						String honorificPrefix = hasPlayerHonorific ? player.honorific + " " : "";
+						String titleSuffix = hasPlayerTitle ? formatPlayerTitleSuffix(player.title) : "";
+						if ((honorificPrefix + playerName + titleSuffix).length() > 40) {
+							titleSuffix = "";
+						}
+						int honorificWidth = this.getSurface().stringWidth(0, honorificPrefix);
+						int nameWidth = this.getSurface().stringWidth(0, playerName);
 						int titleWidth = this.getSurface().stringWidth(0, titleSuffix);
-						int lineX = (width - nameWidth - titleWidth) / 2 + x + 1;
-						this.getSurface().drawShadowText(staffName, lineX, nameLineY, 0xffff00, 0, false);
-						this.getSurface().drawShadowText(titleSuffix, lineX + nameWidth, nameLineY, titleTierColor(player.titleTier), 0, false);
+						int lineX = (width - honorificWidth - nameWidth - titleWidth) / 2 + x + 1;
+						if (honorificWidth > 0) {
+							this.getSurface().drawShadowText(honorificPrefix, lineX, nameLineY,
+								titleTierColor(player.honorificTier), 0, false);
+						}
+						this.getSurface().drawShadowText(playerName, lineX + honorificWidth,
+							nameLineY, 0xffff00, 0, false);
+						if (titleWidth > 0) {
+							this.getSurface().drawShadowText(titleSuffix, lineX + honorificWidth + nameWidth,
+								nameLineY, titleTierColor(player.titleTier), 0, false);
+						}
 					} else {
+						String staffName = player.getStaffName();
 						this.getSurface().drawShadowText(staffName, (width - this.getSurface().stringWidth(0, staffName)) / 2 + x + 1, nameLineY, 0xffff00, 0, false);
 					}
 				}
@@ -18991,6 +20964,10 @@ public final class mudclient implements Runnable {
 		if (useVoidscapeHudSkin()) {
 			int topClearance = VOIDSCAPE_TOP_TAB_Y + voidscapeTopTabSize() + (voidscapeCompactHud() ? 4 : 6);
 			int y = voidscapeAccountButtonY() - height - (voidscapeCompactHud() ? 4 : 6);
+			if (shouldDrawVoidscapeWildernessFallback()) {
+				y = Math.min(y, voidscapeWildernessFallbackY() - height
+					- (voidscapeCompactHud() ? 4 : 6));
+			}
 			return Math.max(topClearance, y);
 		}
 		int bottomClearance = inWild ? 84 : 44;
@@ -19152,10 +21129,6 @@ public final class mudclient implements Runnable {
 			if (voidRushUiLocked) {
 				lockVoidRushUi();
 			}
-			if (this.voidscapeSubscriptionShopOpen
-				&& voidscapeSubscriptionShopBlockingSurfaceOpen()) {
-				closeVoidscapeSubscriptionShop();
-			}
 
 			// World-map auto-walker (slice 5). pollMouse runs every frame so
 			// it can manage drag-pan transitions (press → hold → release)
@@ -19163,7 +21136,7 @@ public final class mudclient implements Runnable {
 			// Render happens at the *bottom* of drawUi so the dialog draws
 			// on top of side panels and chat tabs.
 			if (!voidRushUiLocked && !this.showDialogChristmasCracker
-				&& !this.voidscapeSubscriptionShopOpen
+				&& !isPkCatchingTopModal()
 				&& this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 				ensureWorldMapWaypointsLoaded();
 				int[] outWorld = new int[2];
@@ -19230,8 +21203,8 @@ public final class mudclient implements Runnable {
 				this.drawDialogServerMessage((byte) -115);
 			} else if (this.showDialogFarmSim) {
 				this.drawDialogFarmSim();
-			} else if (this.voidscapeSubscriptionShopOpen) {
-				this.drawVoidscapeSubscriptionShop();
+			} else if (this.duelJournalInterface != null && this.duelJournalInterface.isVisible()) {
+				this.duelJournalInterface.onRender();
 			} else if (this.showUiWildWarn != 1) {
 				if (this.isShowDialogBank() && this.combatTimeout == 0 && !C_CUSTOM_UI) {
 					this.drawDialogBank();
@@ -19297,8 +21270,7 @@ public final class mudclient implements Runnable {
 				this.drawDialogWildWarn(120);
 			}
 
-			if (!this.showDialogChristmasCracker && !this.voidscapeSubscriptionShopOpen
-				&& this.inputX_Action != InputXAction.ACT_0) {
+			if (!this.showDialogChristmasCracker && this.inputX_Action != InputXAction.ACT_0) {
 				this.drawInputX();
 			}
 			if (var2) {
@@ -19324,6 +21296,14 @@ public final class mudclient implements Runnable {
 				} else {
 				if (this.optionsMenuShow) {
 					this.drawDialogOptionsMenu(-312);
+					if (isPkCatchingChooserTop()) {
+						// The card picker owns the entire frame. Consume scrim presses and
+						// stop before lower tabs, panels, maps, or context menus can see them.
+						this.currentMouseButtonDown = 0;
+						this.lastMouseButtonDown = 0;
+						this.mouseButtonClick = 0;
+						return;
+					}
 				}
 
 				if (voidscapeCombatStyleSelectorVisible()) {
@@ -19426,7 +21406,6 @@ public final class mudclient implements Runnable {
 			// World-map auto-walker (slice 5). Render at the very end so the
 			// dialog sits on top of side-panel tabs, minimap, and chat tabs.
 			if (!voidRushUiLocked && !this.showDialogChristmasCracker
-				&& !this.voidscapeSubscriptionShopOpen
 				&& this.worldMapPanel.isVisible() && this.currentViewMode == GameMode.GAME) {
 				ensureWorldMapWaypointsLoaded();
 				logAndroidSmokeWorldMapState("BEFORE_RENDER");
@@ -19438,8 +21417,7 @@ public final class mudclient implements Runnable {
 					useNativeAndroidWorldMapLayout(), nativeAndroidWorldMapTouchTarget());
 				logAndroidSmokeWorldMapState("STATE");
 			}
-			if (!this.showDialogChristmasCracker && !this.voidscapeSubscriptionShopOpen
-				&& this.showAdvancedSettingsWindow) {
+			if (!this.showDialogChristmasCracker && this.showAdvancedSettingsWindow) {
 				this.drawAdvancedSettingsWindow();
 			}
 			this.mouseButtonClick = 0;
@@ -21547,9 +23525,7 @@ public final class mudclient implements Runnable {
 		}
 	}
 
-	private void drawAdvancedSettingsWindow() {
-		this.topMouseMenuVisible = false;
-
+	private int[] voidscapeAdvancedSettingsLayout() {
 		boolean tinyClassic = voidscapeClassicWebSmallHud();
 		int width = tinyClassic ? Math.min(396, this.getGameWidth() - 32) : Math.min(450, this.getGameWidth() - 24);
 		int height = tinyClassic ? Math.min(286, Math.max(224, voidscapeChatTabTop() - voidscapeDefaultRightPanelY() - 12))
@@ -21559,6 +23535,26 @@ public final class mudclient implements Runnable {
 		int x = (this.getGameWidth() - width) / 2;
 		int y = tinyClassic ? voidscapeDefaultRightPanelY() + 4 : (this.getGameHeight() - height) / 2;
 		int railWidth = tinyClassic ? 88 : 106;
+		int railX = x + 8;
+		int railY = y + 39;
+		int categoryStep = tinyClassic ? 28 : 31;
+		int contentX = x + railWidth + 18;
+		int contentY = y + 45;
+		int contentWidth = width - railWidth - 28;
+		return new int[]{width, height, x, y, railWidth, railX, railY, categoryStep,
+			contentX, contentY, contentWidth};
+	}
+
+	private void drawAdvancedSettingsWindow() {
+		this.topMouseMenuVisible = false;
+
+		boolean tinyClassic = voidscapeClassicWebSmallHud();
+		int[] layout = voidscapeAdvancedSettingsLayout();
+		int width = layout[0];
+		int height = layout[1];
+		int x = layout[2];
+		int y = layout[3];
+		int railWidth = layout[4];
 		boolean inside = this.mouseX >= x && this.mouseX < x + width && this.mouseY >= y && this.mouseY < y + height;
 
 		if (this.mouseButtonClick == 1 && !inside) {
@@ -21573,21 +23569,31 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxBorder(x, width, y, height, 0);
 		this.getSurface().drawBoxBorder(x + 1, width - 2, y + 1, height - 2, UiSkin.GLASS_RIM);
 		this.getSurface().drawBoxAlpha(x + 2, y + 2, width - 4, 26, UiSkin.VOID_HEADER, 190);
-		this.getSurface().drawString("Advanced settings", x + 12, y + 18, UiSkin.GOLD_TITLE, UiSkin.FONT_BODY);
+		boolean voidSkin = useVoidscapeHudSkin();
+		if (voidSkin) {
+			this.getSurface().drawColoredStringCentered(x + width / 2, "Advanced Settings",
+				UiSkin.GOLD_TITLE, 0, UiSkin.FONT_TITLE, y + 19);
+		} else {
+			this.getSurface().drawString("Advanced settings", x + 12, y + 18,
+				UiSkin.GOLD_TITLE, UiSkin.FONT_BODY);
+		}
 
-		int closeX = x + width - 24;
-		boolean closeHover = this.mouseX >= closeX && this.mouseX < closeX + 18 && this.mouseY >= y + 6 && this.mouseY < y + 24;
-		UiSkin.closeButton(this.getSurface(), closeX, y + 6, 18, closeHover);
+		int closeSize = voidSkin ? 20 : 18;
+		int closeX = voidSkin ? x + width - closeSize - 6 : x + width - 24;
+		int closeY = voidSkin ? y + 4 : y + 6;
+		boolean closeHover = UiSkin.hit(closeX, closeY, closeSize, closeSize,
+			this.mouseX, this.mouseY);
+		UiSkin.closeButton(this.getSurface(), closeX, closeY, closeSize, closeHover);
 		if (closeHover && this.mouseButtonClick == 1) {
 			this.showAdvancedSettingsWindow = false;
 			this.mouseButtonClick = 0;
 			return;
 		}
 
-		int railX = x + 8;
-		int railY = y + 39;
+		int railX = layout[5];
+		int railY = layout[6];
 		this.getSurface().drawBoxAlpha(railX, railY - 5, railWidth, height - 48, UiSkin.VOID_HEADER, 196);
-		int categoryStep = tinyClassic ? 28 : 31;
+		int categoryStep = layout[7];
 		drawAdvancedCategory(railX + 6, railY, railWidth - 12, "Gameplay", ADVANCED_CATEGORY_GAMEPLAY);
 		drawAdvancedCategory(railX + 6, railY + categoryStep, railWidth - 12, "Loot", ADVANCED_CATEGORY_LOOT);
 		drawAdvancedCategory(railX + 6, railY + categoryStep * 2, railWidth - 12, "Visuals", ADVANCED_CATEGORY_VISUALS);
@@ -21599,9 +23605,9 @@ public final class mudclient implements Runnable {
 			drawAdvancedCategory(railX + 6, railY + categoryStep * 5, railWidth - 12, "Display", ADVANCED_CATEGORY_DISPLAY);
 		}
 
-		int contentX = x + railWidth + 18;
-		int contentY = y + 45;
-		int contentWidth = width - railWidth - 28;
+		int contentX = layout[8];
+		int contentY = layout[9];
+		int contentWidth = layout[10];
 		this.getSurface().drawBoxAlpha(contentX - 6, contentY - 12, contentWidth + 4, height - 58, UiSkin.VOID_BOX, 176);
 		drawAdvancedSettingsCategory(contentX, contentY, contentWidth);
 
@@ -21663,7 +23669,7 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Chat box", "Show bottom chat background/frame", C_CHAT_OVERLAY, ADVANCED_ACTION_CHAT_OVERLAY);
 				rowY = drawAdvancedToggle(x, rowY, width, "Auto message switch", "Jump to active message tabs", C_MESSAGE_TAB_SWITCH, 29);
 				rowY = drawAdvancedToggle(x, rowY, width, "Kill feed", "Show world kill messages", C_KILL_FEED, 31);
-				rowY = drawAdvancedToggle(x, rowY, width, "Name tags", "Show overhead name labels", C_NAME_CLAN_TAG_OVERLAY, 35);
+				rowY = drawAdvancedCycle(x, rowY, width, "Player labels", getOverheadPlayerLabelModeName(), 35);
 				rowY = drawAdvancedToggle(x, rowY, width, "Global friend block", "Hide global friend messages", C_BLOCK_GLOBAL_FRIEND, 41);
 				drawAdvancedToggle(x, rowY, width, "Country flag", "Show your chosen flag in global chat", C_GLOBAL_CHAT_COUNTRY_FLAGS, 56);
 				break;
@@ -21688,6 +23694,7 @@ public final class mudclient implements Runnable {
 				rowY = drawAdvancedToggle(x, rowY, width, "Inventory count", "Show bag total near inventory", C_INV_COUNT, 34);
 				rowY = drawAdvancedToggle(x, rowY, width, "Batch progress bar", "Show skilling batch progress", C_BATCH_PROGRESS_BAR, 24);
 				rowY = drawAdvancedToggle(x, rowY, width, "Side menu", "Use the side action overlay", C_SIDE_MENU_OVERLAY, 30);
+				rowY = drawAdvancedToggle(x, rowY, width, "Location plaque", "Show area and Wilderness danger", optionLocationPlaque, ADVANCED_ACTION_LOCATION_PLAQUE);
 				rowY = drawAdvancedToggle(x, rowY, width, "Click marker", "Show pending walk/action tile", optionPendingInputMarker, ADVANCED_ACTION_PENDING_INPUT_MARKER);
 				rowY = drawAdvancedCycle(x, rowY, width, "Screenshot", "Save F12", ADVANCED_ACTION_SCREENSHOT);
 				rowY = drawAdvancedCycle(x, rowY, width, "Fight menu", getFightMenuModeName(), 32);
@@ -21730,8 +23737,8 @@ public final class mudclient implements Runnable {
 
 	private int drawAdvancedToggle(int x, int y, int width, String label, String detail, boolean enabled, int action) {
 		boolean tinyClassic = voidscapeClassicWebSmallHud();
-		int rowHeight = tinyClassic ? 25 : 28;
-		int step = tinyClassic ? 28 : 32;
+		int rowHeight = advancedSettingsRowHeight(tinyClassic);
+		int step = advancedSettingsRowStep(tinyClassic);
 		int labelFont = tinyClassic ? 0 : 1;
 		boolean hover = this.mouseX >= x && this.mouseX < x + width && this.mouseY >= y - 11 && this.mouseY < y - 11 + rowHeight;
 		this.getSurface().drawBoxAlpha(x, y - 11, width, rowHeight, hover ? 0x2b2538 : 0x161a24, 216);
@@ -21758,24 +23765,51 @@ public final class mudclient implements Runnable {
 
 	private int drawAdvancedCycle(int x, int y, int width, String label, String value, int action) {
 		boolean tinyClassic = voidscapeClassicWebSmallHud();
-		int rowHeight = tinyClassic ? 25 : 28;
-		int step = tinyClassic ? 28 : 32;
+		int rowHeight = advancedSettingsRowHeight(tinyClassic);
+		int step = advancedSettingsRowStep(tinyClassic);
 		int labelFont = tinyClassic ? 0 : 1;
 		boolean hover = this.mouseX >= x && this.mouseX < x + width && this.mouseY >= y - 11 && this.mouseY < y - 11 + rowHeight;
 		this.getSurface().drawBoxAlpha(x, y - 11, width, rowHeight, hover ? 0x2b2538 : 0x161a24, 216);
 		this.getSurface().drawBoxBorder(x, width, y - 11, rowHeight, hover ? 0x7c63a8 : 0x3b3547);
 		this.getSurface().drawString(label, x + 8, y, 0xFFFFFF, labelFont);
-		int valueWidth = tinyClassic ? 74 : 82;
+		int minimumValueWidth = tinyClassic ? 74 : 82;
+		int valueWidth = minimumValueWidth;
+		if (useVoidscapeHudSkin()) {
+			int desiredValueWidth = Math.max(minimumValueWidth,
+				this.getSurface().stringWidth(labelFont, value) + 16);
+			int maximumValueWidth = Math.max(minimumValueWidth,
+				width - this.getSurface().stringWidth(labelFont, label) - 32);
+			valueWidth = Math.min(desiredValueWidth, maximumValueWidth);
+		}
 		int valueX = x + width - valueWidth - 8;
 		this.getSurface().drawBoxAlpha(valueX, y - 7, valueWidth, 18, 0x241a35, 230);
 		this.getSurface().drawBoxBorder(valueX, valueWidth, y - 7, 18, 0x8d6cd0);
-		this.getSurface().drawColoredStringCentered(valueX + valueWidth / 2, value, 0xFFFFFF, 0, 1, y + 7);
+		this.getSurface().drawColoredStringCentered(valueX + valueWidth / 2, value,
+			0xFFFFFF, 0, useVoidscapeHudSkin() ? labelFont : 1, y + 7);
 
 		if (hover && this.mouseButtonClick == 1) {
 			handleAdvancedSettingAction(action);
 			this.mouseButtonClick = 0;
 		}
 		return y + step;
+	}
+
+	private int advancedSettingsRowHeight(boolean tinyClassic) {
+		return advancedSettingsRowHeight(tinyClassic, this.advancedSettingsCategory);
+	}
+
+	private int advancedSettingsRowHeight(boolean tinyClassic, int category) {
+		return tinyClassic && category == ADVANCED_CATEGORY_INTERFACE
+			? 21 : tinyClassic ? 25 : 28;
+	}
+
+	private int advancedSettingsRowStep(boolean tinyClassic) {
+		return advancedSettingsRowStep(tinyClassic, this.advancedSettingsCategory);
+	}
+
+	private int advancedSettingsRowStep(boolean tinyClassic, int category) {
+		return tinyClassic && category == ADVANCED_CATEGORY_INTERFACE
+			? 23 : tinyClassic ? 28 : 32;
 	}
 
 	private void handleAdvancedSettingAction(int action) {
@@ -21839,6 +23873,10 @@ public final class mudclient implements Runnable {
 				}
 				savePendingInputMarkerSetting();
 				break;
+			case ADVANCED_ACTION_LOCATION_PLAQUE:
+				optionLocationPlaque = !optionLocationPlaque;
+				saveLocationPlaqueSetting();
+				break;
 			case ADVANCED_ACTION_CAMERA_INTERPOLATION:
 				toggleCameraInterpolation();
 				break;
@@ -21868,8 +23906,7 @@ public final class mudclient implements Runnable {
 				sendGameSetting(34, C_INV_COUNT ? 1 : 0);
 				break;
 			case 35:
-				C_NAME_CLAN_TAG_OVERLAY = !C_NAME_CLAN_TAG_OVERLAY;
-				sendGameSetting(35, C_NAME_CLAN_TAG_OVERLAY ? 1 : 0);
+				cycleOverheadPlayerLabelMode();
 				break;
 			case 41:
 				C_BLOCK_GLOBAL_FRIEND = !C_BLOCK_GLOBAL_FRIEND;
@@ -21952,6 +23989,22 @@ public final class mudclient implements Runnable {
 			default:
 				return "Show all";
 		}
+	}
+
+	private String getOverheadPlayerLabelModeName() {
+		switch (C_OVERHEAD_PLAYER_LABEL_MODE) {
+			case OVERHEAD_PLAYER_LABEL_NAMES_ONLY:
+				return "Names only";
+			case OVERHEAD_PLAYER_LABEL_HIDDEN:
+				return "Hide names + titles";
+			default:
+				return "Names + titles";
+		}
+	}
+
+	private void cycleOverheadPlayerLabelMode() {
+		C_OVERHEAD_PLAYER_LABEL_MODE = (C_OVERHEAD_PLAYER_LABEL_MODE + 1) % 3;
+		sendGameSetting(35, C_OVERHEAD_PLAYER_LABEL_MODE);
 	}
 
 	private String getFightMenuModeName() {
@@ -22511,10 +24564,7 @@ public final class mudclient implements Runnable {
 			return;
 		}
 		refreshVoidscapeCurrentAccountCache();
-		if (!isShowDialogBank() && !isVoidscapeRiftTeleportMenu()
-			&& !(voidscapeUseNativeAndroidMobileShell()
-				&& voidscapeNativeAndroidMobileShellBlocked())
-			&& !(voidscapeUseNativeAndroidMobileShell() && voidscapeNativeAndroidPanelOnLeft())) {
+		if (shouldDrawVoidscapeLocationPlaque()) {
 			drawVoidscapeLocationPlaque(); // plaque stays hidden while banking (per design)
 		}
 		if (!voidscapeUseMobilePanelShell() && !voidscapeUseNativeAndroidMobileShell()) {
@@ -22524,6 +24574,31 @@ public final class mudclient implements Runnable {
 				drawVoidscapeTopTabs();
 			}
 		}
+	}
+
+	private boolean voidscapeLocationPresentationAvailable() {
+		return useVoidscapeHudSkin()
+			&& !isShowDialogBank()
+			&& !isVoidscapeRiftTeleportMenu()
+			&& !this.showAdvancedSettingsWindow
+			&& this.showUiWildWarn != 1
+			&& !this.showDialogChristmasCracker
+			&& !isPkCatchingChooserTop()
+			&& !isPkCatchingTopModal()
+			&& !(voidscapeUseNativeAndroidMobileShell()
+				&& voidscapeNativeAndroidMobileShellBlocked())
+			&& !(voidscapeUseNativeAndroidMobileShell() && voidscapeNativeAndroidPanelOnLeft());
+	}
+
+	private boolean shouldDrawVoidscapeLocationPlaque() {
+		return optionLocationPlaque && voidscapeLocationPresentationAvailable();
+	}
+
+	private boolean shouldDrawVoidscapeWildernessFallback() {
+		return !optionLocationPlaque
+			&& inWild
+			&& this.voidscapeWildLevel > 0
+			&& voidscapeLocationPresentationAvailable();
 	}
 
 	private int voidscapeIconTabsSpan() {
@@ -22561,16 +24636,39 @@ public final class mudclient implements Runnable {
 	}
 
 	private boolean isVoidscapeRiftTeleportMenu() {
-		if (!this.optionsMenuShow || this.optionsMenuCount != 5) {
+		if (!this.optionsMenuShow) {
 			return false;
 		}
-		int destinationCount = 0;
-		destinationCount += hasVoidscapeOption("Void Enclave") ? 1 : 0;
-		destinationCount += hasVoidscapeOption("Edgeville") ? 1 : 0;
-		destinationCount += hasVoidscapeOption("Varrock") ? 1 : 0;
-		destinationCount += hasVoidscapeOption("Falador") ? 1 : 0;
-		destinationCount += hasVoidscapeOption("Ardougne") ? 1 : 0;
-		return destinationCount == 5 || destinationCount == 4 && hasVoidscapeOption("Stay here");
+		if (this.optionsMenuCount == 5) {
+			int destinationCount = 0;
+			destinationCount += hasVoidscapeOption("Void Enclave") ? 1 : 0;
+			destinationCount += hasVoidscapeOption("Edgeville") ? 1 : 0;
+			destinationCount += hasVoidscapeOption("Varrock") ? 1 : 0;
+			destinationCount += hasVoidscapeOption("Falador") ? 1 : 0;
+			destinationCount += hasVoidscapeOption("Ardougne") ? 1 : 0;
+			if (destinationCount == 5
+				|| destinationCount == 4 && hasVoidscapeOption("Stay here")) {
+				return true;
+			}
+		}
+		return hasExactVoidscapeOptions("Enter Void Arena", "Stay here")
+			|| hasExactVoidscapeOptions("Return to Void Enclave", "Stay here")
+			|| hasExactVoidscapeOptions("Enter the Void Dungeon", "Stay here")
+			|| hasExactVoidscapeOptions("Enter the Riftworks", "Stay here")
+			|| hasExactVoidscapeOptions("Enter the Riftworks",
+				"Resume at the Broken Menagerie", "Stay here")
+			|| hasExactVoidscapeOptions("Enter the Riftworks",
+				"Resume at the Broken Menagerie", "Resume at the Null Sanctum", "Stay here")
+			|| hasExactVoidscapeOptions("Leave the Void Dungeon", "Stay here")
+			|| hasExactVoidscapeOptions("Leave the arena", "Stay here");
+	}
+
+	private boolean hasExactVoidscapeOptions(String... optionText) {
+		if (this.optionsMenuCount != optionText.length) return false;
+		for (int i = 0; i < optionText.length; i++) {
+			if (!optionText[i].equals(this.optionsMenuText[i])) return false;
+		}
+		return true;
 	}
 
 	private boolean hasVoidscapeOption(String optionText) {
@@ -23017,7 +25115,11 @@ public final class mudclient implements Runnable {
 			if (voidscapeUseNativeAndroidMobileShell()) {
 				return voidscapeNativeAndroidDrawerDesiredHeight(Config.SKILLS_AND_QUESTS_TAB);
 			}
-			return voidscapeRightPanelBottomSafeY() - voidscapeRightPanelY() - 8;
+			int maxHeight = voidscapeRightPanelBottomSafeY() - voidscapeRightPanelY() - 8;
+			if (this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_SKILLS) {
+				return Math.min(voidscapeStatsNaturalPanelHeight(), maxHeight);
+			}
+			return maxHeight;
 		}
 		// Fallback estimate for legacy callers; the active player-info panel returns full height above.
 		int rightRows = voidscapeSkillVisibleRows();
@@ -23032,6 +25134,21 @@ public final class mudclient implements Runnable {
 		// Never reach into the chat tab row at the bottom of the screen.
 		int maxHeight = voidscapeRightPanelBottomSafeY() - voidscapeRightPanelY() - 8;
 		return Math.min(contentBottom + (voidscapeClassicWebSmallHud() ? 10 : 14), maxHeight);
+	}
+
+	private int voidscapeStatsNaturalPanelHeight() {
+		int toggleH = voidscapePlayerInfoToggleHeight();
+		int contentTop = voidscapeGlassRightPanelContentTop() + Math.max(0, toggleH - 24);
+		int topPad = voidscapeUseCompactStatsPanel() ? 6 : 8;
+		int sectionH = voidscapeSectionHeaderHeight();
+		int lineH = voidscapeStatsLineHeight();
+		int skillsH = voidscapeSkillVisibleRows() * voidscapeSkillRowHeight();
+		int contentH = topPad + sectionH - 1 + skillsH
+			+ 5 + lineH + 5 + sectionH + lineH * 3
+			+ 5 + voidscapeStatsFooterHeight();
+		// Ten pixels terminate the glass body and six more separate the detail card
+		// from that edge, matching the full-height calculation in the renderer.
+		return contentTop + contentH + 16;
 	}
 
 	private int voidscapeTabIndexFor(int tabId) {
@@ -23182,15 +25299,15 @@ public final class mudclient implements Runnable {
 		}
 		switch (voidscapePanelSizeClass()) {
 			case 0:
-				return 268;
+				return 304;
 			case 1:
-				return 276;
+				return 312;
 			case 2:
-				return 284;
+				return 320;
 			case 3:
-				return 292;
+				return 328;
 			default:
-				return 300;
+				return 336;
 		}
 	}
 
@@ -23530,27 +25647,29 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeLocationPlaqueHeight() {
+		if (inWild) {
+			return voidscapeCompactHud() ? 22 : 26;
+		}
 		return voidscapeCompactHud() ? 30 : 40;
 	}
 
 	private void drawVoidscapeLocationPlaque() {
 		int x = voidscapeLocationPlaqueX();
 		int y = voidscapeLocationPlaqueY();
+		boolean compact = voidscapeCompactHud();
 		int height = voidscapeLocationPlaqueHeight();
 		boolean haveLoc = this.localPlayer != null;
 		int worldX = 0;
 		int worldY = 0;
-		int floor = 0;
 		if (haveLoc) {
 			worldX = this.playerLocalX + this.midRegionBaseX;
 			worldY = this.playerLocalZ + this.midRegionBaseZ;
-			floor = worldY / 944;
 		}
 		String title;
 		int titleColor;
 		if (inWild) {
 			title = this.voidscapeWildLevel >= 30 ? "DEEP WILDERNESS" : "WILDERNESS";
-			titleColor = 0xF2B6A0;
+			titleColor = UiSkin.BAD;
 		} else {
 			String area = haveLoc ? voidscapeAreaName(worldX, worldY) : null;
 			title = area != null ? area.toUpperCase(Locale.ROOT) : "VOIDSCAPE";
@@ -23558,28 +25677,101 @@ public final class mudclient implements Runnable {
 		}
 		// Width adapts to the title so long names (DEEP WILDERNESS, BARBARIAN VILLAGE, ...)
 		// don't clip past the ornate end-caps; capped so it never reaches the top-tab row.
-		int baseWidth = voidscapeCompactHud() ? 120 : Math.min(170, Math.max(140, this.getGameWidth() / 4));
-		int maxWidth = voidscapeCompactHud() ? 230 : 280;
-		int width = Math.max(baseWidth, Math.min(maxWidth, this.getSurface().stringWidth(0, title) + 40));
-		drawVoidscapeSkinSprite("location-plaque.png", x, y, width, height);
+		int skullSize = compact ? 9 : 10;
+		int skullGap = compact ? 3 : 4;
+		int maxWidth = compact ? 230 : 280;
+		int width;
+		int textCenterX;
+		if (inWild) {
+			int textScale = 65;
+			String levelText = "Level " + this.voidscapeWildLevel;
+			int textWidth = Math.max(this.getSurface().scaledPlainStringWidth(0, title, textScale),
+				this.getSurface().scaledPlainStringWidth(0, levelText, textScale));
+			int leftPadding = compact ? 4 : 5;
+			int rightPadding = compact ? 5 : 6;
+			int baseWidth = compact ? 78 : 96;
+			width = Math.max(baseWidth, Math.min(maxWidth,
+				leftPadding + skullSize + skullGap + textWidth + rightPadding));
+
+			// Wilderness uses a clean danger box instead of the ornate location-plaque art.
+			this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.DANGER_HOVER, UiSkin.A_BUTTON);
+			this.getSurface().drawBorder(x, y, width, height, UiSkin.DANGER_GLYPH);
+			this.getSurface().drawLineHoriz(x + 2, y + 1, Math.max(1, width - 4), UiSkin.BAD);
+
+			int skullX = x + leftPadding;
+			int skullY = y + (height - skullSize) / 2;
+			this.getSurface().drawSpriteClipping(spriteSelect(GUIPARTS.SKULL.getDef()),
+				skullX, skullY, skullSize, skullSize, 0, 0, 0, false, 0, 1);
+			int textLeft = skullX + skullSize + skullGap;
+			int textRight = x + width - rightPadding;
+			textCenterX = textLeft + Math.max(1, textRight - textLeft) / 2;
+		} else {
+			int baseWidth = compact ? 120 : Math.min(170, Math.max(140, this.getGameWidth() / 4));
+			int titlePadding = 40;
+			width = Math.max(baseWidth,
+				Math.min(maxWidth, this.getSurface().stringWidth(0, title) + titlePadding));
+			drawVoidscapeSkinSprite("location-plaque.png", x, y, width, height);
+			textCenterX = x + width / 2;
+		}
 		// Town: just the location name (no coords), nudged down so it clears the plaque's top border.
 		// Wilderness: name + level (still no coords).
 		if (inWild && haveLoc) {
-			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0,
-				y + (voidscapeCompactHud() ? 13 : 16));
-			this.getSurface().drawColoredStringCentered(x + width / 2, "Level " + this.voidscapeWildLevel,
-				0x9F8DB7, 0, 0, y + (voidscapeCompactHud() ? 24 : 29));
+			int textScale = 65;
+			this.getSurface().drawScaledPlainStringCentered(textCenterX, title, titleColor, 0,
+				y + (compact ? 9 : 10), textScale);
+			this.getSurface().drawScaledPlainStringCentered(textCenterX, "Level " + this.voidscapeWildLevel,
+				UiSkin.TEXT_BODY, 0, y + (compact ? 18 : 21), textScale);
 		} else {
 			this.getSurface().drawColoredStringCentered(x + width / 2, title, titleColor, 0, 0,
-				y + (voidscapeCompactHud() ? 19 : 24));
+				y + (compact ? 19 : 24));
 		}
 	}
 
-	// Classic skin only: the void skin shows the wilderness level on the
-	// location plaque instead (its old duplicate bottom-right copy is gone).
-	private void drawWildernessLevelIndicator(int level) {
+	private void drawVoidscapeWildernessFallbackIndicator() {
+		if (!shouldDrawVoidscapeWildernessFallback()) {
+			return;
+		}
+		drawWildernessLevelIndicatorAt(this.voidscapeWildLevel,
+			voidscapeWildernessFallbackX(this.voidscapeWildLevel),
+			voidscapeWildernessFallbackY());
+	}
+
+	private int voidscapeWildernessFallbackX(int level) {
 		int x = this.getGameWidth() - 59;
-		int y = this.getGameHeight() - 56;
+		if (!voidscapeUseNativeAndroidMobileShell()) {
+			return x;
+		}
+		int gap = voidscapeNativeAndroidRailGap();
+		int[] leftRail = voidscapeNativeAndroidRailBandRect(true);
+		int[] rightRail = voidscapeNativeAndroidRailBandRect(false);
+		int labelWidth = Math.max(this.getSurface().stringWidth(1, "Wilderness"),
+			this.getSurface().stringWidth(1, "Level: " + level));
+		int indicatorWidth = Math.max(24, labelWidth);
+		int safeLeft = leftRail[0] + leftRail[2] + gap;
+		int safeRight = rightRail[0] - gap;
+		int minimumCenter = safeLeft + indicatorWidth / 2;
+		int maximumCenter = safeRight - indicatorWidth / 2;
+		int center = maximumCenter >= minimumCenter
+			? Math.max(minimumCenter, Math.min(this.getGameWidth() - 47, maximumCenter))
+			: safeLeft + Math.max(1, safeRight - safeLeft) / 2;
+		return Math.max(0, center - 12);
+	}
+
+	private int voidscapeWildernessFallbackY() {
+		int y = Math.min(this.getGameHeight() - 56, voidscapeChatTabTop() - 56);
+		if (voidscapeUseNativeAndroidMobileShell()) {
+			int[] chatLauncher = voidscapeNativeAndroidChatLauncherRect();
+			y = Math.min(y, chatLauncher[1] - voidscapeNativeAndroidRailGap() - 56);
+		}
+		return Math.max(64, y);
+	}
+
+	// Authentic keeps the original exact bottom-right coordinates.
+	private void drawWildernessLevelIndicator(int level) {
+		drawWildernessLevelIndicatorAt(level, this.getGameWidth() - 59, this.getGameHeight() - 56);
+	}
+
+	private void drawWildernessLevelIndicatorAt(int level, int x, int y) {
 		this.getSurface().drawSprite(spriteSelect(GUIPARTS.SKULL.getDef()), x, y);
 		this.getSurface().drawColoredStringCentered(x + 12, "Wilderness", 0xFFFF00, 0, 1, y + 36);
 		this.getSurface().drawColoredStringCentered(x + 12, "Level: " + level, 0xFFFF00, 0, 1, y + 49);
@@ -24302,7 +26494,7 @@ public final class mudclient implements Runnable {
 		if (index == 2) return "Quest";
 		if (index == 3) return "Global";
 		if (index == 4) return "PM";
-		return "SHOP";
+		return "Rpt";
 	}
 
 	private MessageTab voidscapeChatTabMessageTab(int index) {
@@ -24311,7 +26503,7 @@ public final class mudclient implements Runnable {
 		if (index == 2) return MessageTab.QUEST;
 		if (index == 3) return MessageTab.GLOBAL;
 		if (index == 4) return MessageTab.PRIVATE;
-		return null; // final tab is Shop (or the native Android keyboard), not a message tab
+		return null; // final tab is Report Abuse, not a message tab
 	}
 
 	private boolean voidscapeChatTabOpensKeyboard(int index) {
@@ -25012,7 +27204,7 @@ public final class mudclient implements Runnable {
 		int cell = voidscapeNativeAndroidRailCell();
 		int margin = voidscapeNativeAndroidEdgeMargin() * 2;
 		int width = Math.min(this.getGameWidth() - margin * 2, Math.max(cell * 5, 280));
-		int height = cell * 3;
+		int height = cell * 4;
 		return new int[]{(this.getGameWidth() - width) / 2,
 			(this.getGameHeight() - height) / 2, width, height};
 	}
@@ -25026,6 +27218,12 @@ public final class mudclient implements Runnable {
 	private int[] voidscapeNativeAndroidAccountLogoutRect() {
 		int[] modal = voidscapeNativeAndroidAccountSheetRect();
 		int cell = voidscapeNativeAndroidRailCell();
+		return new int[]{modal[0], modal[1] + cell * 3, modal[2], cell};
+	}
+
+	private int[] voidscapeNativeAndroidAccountDeletionRect() {
+		int[] modal = voidscapeNativeAndroidAccountSheetRect();
+		int cell = voidscapeNativeAndroidRailCell();
 		return new int[]{modal[0], modal[1] + cell * 2, modal[2], cell};
 	}
 
@@ -25037,7 +27235,7 @@ public final class mudclient implements Runnable {
 
 	private int[] voidscapeNativeAndroidLogoutConfirmRect() {
 		int[] account = voidscapeNativeAndroidAccountSheetRect();
-		return new int[]{account[0], account[1], account[2], account[3]};
+		return new int[]{account[0], account[1], account[2], voidscapeNativeAndroidRailCell() * 3};
 	}
 
 	private int[] voidscapeNativeAndroidLogoutCancelRect() {
@@ -25359,6 +27557,8 @@ public final class mudclient implements Runnable {
 		UiSkin.modal(this.getSurface(), modal[0], modal[1], modal[2], modal[3], "ACCOUNT");
 		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountReportRect(),
 			"Report a player", false);
+		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountDeletionRect(),
+			"Delete account data", false);
 		drawVoidscapeNativeAndroidActionRow(voidscapeNativeAndroidAccountLogoutRect(),
 			"Log out", true);
 		int[] close = voidscapeNativeAndroidAccountCloseRect();
@@ -25382,6 +27582,8 @@ public final class mudclient implements Runnable {
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountSheetRect());
 		line.append(" report=");
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountReportRect());
+		line.append(" deletion=");
+		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountDeletionRect());
 		line.append(" logout=");
 		appendAndroidSmokeRect(line, voidscapeNativeAndroidAccountLogoutRect());
 		line.append(" cancel=");
@@ -25441,6 +27643,9 @@ public final class mudclient implements Runnable {
 			if (!osConfig.F_SHOWING_KEYBOARD && this.clientPort != null) {
 				this.clientPort.drawKeyboard();
 			}
+		} else if (mouseInVoidscapeRect(voidscapeNativeAndroidAccountDeletionRect())) {
+			this.voidscapeNativeAndroidAccountSheetOpen = false;
+			openConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_DELETION_URL);
 		} else {
 			this.voidscapeNativeAndroidAccountSheetOpen = false;
 		}
@@ -25538,6 +27743,12 @@ public final class mudclient implements Runnable {
 			this.getSurface().drawBoxAlpha(r[0] + 6, r[1] + 6, Math.max(1, r[2] - 12),
 				Math.max(1, r[3] - 12), active ? 0x1D1028 : 0x0B0910, active ? 100 : 72);
 
+			int iconSize = Math.max(20, Math.min(this.getGameHeight() <= 520 ? 24 : 30, r[3] - 19));
+			String iconAsset = voidscapeChatTabIconAsset(i, active || over);
+			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(iconAsset, iconSize),
+				r[0] + (r[2] - iconSize) / 2, r[1] + (this.getGameHeight() <= 520 ? 5 : 6),
+				iconSize, iconSize);
+
 			if (voidscapeChatTabOpensKeyboard(i)) {
 				drawVoidscapeKeyboardGlyph(r[0] + r[2] / 2,
 					r[1] + (this.getGameHeight() <= 520 ? 17 : 22),
@@ -25547,18 +27758,10 @@ public final class mudclient implements Runnable {
 				continue;
 			}
 			if (i == VOIDSCAPE_CHAT_TAB_COUNT - 1) {
-				this.getSurface().drawBoxAlpha(r[0] + 5, r[1] + 5, Math.max(1, r[2] - 10),
-					Math.max(1, r[3] - 10), UiSkin.GOLD_LINE, UiSkin.A_BUTTON);
-				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "SHOP", UiSkin.GOLD_HOT, 0,
-					UiSkin.FONT_TITLE,
+				this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, "!", 0xFF4040, 0, 5,
 					r[1] + r[3] - (this.getGameHeight() <= 520 ? 8 : 10));
 				continue;
 			}
-			int iconSize = Math.max(20, Math.min(this.getGameHeight() <= 520 ? 24 : 30, r[3] - 19));
-			String iconAsset = voidscapeChatTabIconAsset(i, active || over);
-			drawVoidscapeSkinSprite(voidscapeSizedSkinAsset(iconAsset, iconSize),
-				r[0] + (r[2] - iconSize) / 2, r[1] + (this.getGameHeight() <= 520 ? 5 : 6),
-				iconSize, iconSize);
 			String label = fitVoidscapeText(voidscapeChatTabLabel(i), r[2] - 10, 0);
 			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label,
 				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, 0,
@@ -25589,11 +27792,9 @@ public final class mudclient implements Runnable {
 				: this.messageTabSelected == voidscapeChatTabMessageTab(i);
 			boolean over = this.mouseX >= r[0] && this.mouseX < r[0] + r[2]
 				&& this.mouseY >= r[1] && this.mouseY < r[1] + r[3];
-			boolean shop = i == VOIDSCAPE_CHAT_TAB_COUNT - 1 && !voidscapeChatTabOpensKeyboard(i);
 			this.getSurface().drawBoxAlpha(r[0], r[1], r[2], r[3],
-				shop ? UiSkin.GOLD_LINE : (active || over ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX),
-				shop ? (over ? UiSkin.A_TAB_ACTIVE : UiSkin.A_BUTTON)
-					: (active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 150)));
+				active || over ? UiSkin.PURPLE_SELECT : UiSkin.VOID_BOX,
+				active ? UiSkin.A_TAB_ACTIVE : (over ? UiSkin.A_HOVER_ROW : 150));
 			this.getSurface().drawLineHoriz(r[0], r[1], r[2], UiSkin.GLASS_RIM);
 			this.getSurface().drawLineHoriz(r[0], r[1] + r[3] - 1, r[2], UiSkin.VOID_LINE);
 			if (i > 0) {
@@ -25608,8 +27809,7 @@ public final class mudclient implements Runnable {
 			}
 			String label = fitVoidscapeText(voidscapeChatTabLabel(i), r[2] - 8, 0);
 			this.getSurface().drawColoredStringCentered(r[0] + r[2] / 2, label,
-				shop || active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0,
-				shop ? UiSkin.FONT_TITLE : UiSkin.FONT_SMALL,
+				active ? UiSkin.GOLD_HOT : getVoidscapeChatTabColor(i), 0, i == VOIDSCAPE_CHAT_TAB_COUNT - 1 ? 5 : 0,
 				r[1] + (voidscapeCompactHud() ? 21 : 24));
 		}
 		logAndroidSmokeChatTabLayout();
@@ -25797,7 +27997,9 @@ public final class mudclient implements Runnable {
 			} else {
 				this.voidscapeChatHidden = false;
 				resetVoidscapeAllChatDoubleClick();
-				openVoidscapeSubscriptionShop();
+				this.inputTextFinal = "";
+				this.inputTextCurrent = "";
+				this.reportAbuse_State = 1;
 			}
 			break;
 		}
@@ -25869,9 +28071,6 @@ public final class mudclient implements Runnable {
 	}
 
 	private int getVoidscapeChatTabColor(int index) {
-		if (index == VOIDSCAPE_CHAT_TAB_COUNT - 1 && !voidscapeChatTabOpensKeyboard(index)) {
-			return UiSkin.GOLD_HOT;
-		}
 		int color = UiSkin.TEXT_BODY;
 		if ((index == 0 && this.messageTabSelected == MessageTab.ALL)
 			|| (index == 1 && this.messageTabSelected == MessageTab.CHAT)
@@ -26124,9 +28323,6 @@ public final class mudclient implements Runnable {
 			return;
 		}
 
-		boolean compactStats = voidscapeUseCompactStatsPanel();
-		int statsHeaderY = contentY + (compactStats ? 6 : 8);
-		drawVoidscapeSectionHeader("STATS", innerX, statsHeaderY, innerW);
 		int combatLevel = this.localPlayer != null ? this.localPlayer.level : 0;
 		int totalLevel = 0;
 		long totalXp = 0;
@@ -26134,79 +28330,37 @@ public final class mudclient implements Runnable {
 			totalLevel += this.playerStatBase[i];
 			totalXp += this.playerExperience[i] & 0xffffffffL;
 		}
-		boolean nativeLandscapeStats = voidscapeUseNativeAndroidMobileShell()
-			&& this.getGameWidth() > this.getGameHeight();
-		int footerH = nativeLandscapeStats ? 0 : voidscapeStatsFooterHeight();
-		int footerY = footerH > 0 ? contentY + panelBodyH - footerH - 6 : -1;
-		int sectionH = voidscapeSectionHeaderHeight();
-		int statsY = statsHeaderY + sectionH - 1;
-		int lineH = voidscapeStatsLineHeight();
-		int statRows;
-		if (compactStats) {
-			int colGap = Math.max(8, voidscapeStatsColumnGap());
-			int colW = (innerW - colGap) / 2;
-			int rightX = innerX + colW + colGap;
-			drawVoidscapeStatLine(innerX, statsY, colW, "CB XP", formatXpRate(this.profileEffectiveCombatRateTenths), 0x6FE38A, 0);
-			drawVoidscapeStatLine(innerX, statsY + lineH, colW, "Skill", formatXpRate(this.profileEffectiveSkillingRateTenths), 0xC680FF, 0);
-			drawVoidscapeStatLine(innerX, statsY + lineH * 2, colW, "Lvl", Integer.toString(totalLevel), 0xE7DEBC, 0);
-			drawVoidscapeStatLine(rightX, statsY, colW, "XP", formatCompactLong(totalXp), 0xE7DEBC, 0);
-			drawVoidscapeStatLine(rightX, statsY + lineH, colW, "CB", Integer.toString(combatLevel), 0xE7DEBC, 0);
-			drawVoidscapeStatLine(rightX, statsY + lineH * 2, colW, "QP", Integer.toString(this.questPoints), 0x6FE38A, 0);
-			statRows = 3;
-		} else {
-			int colGap = Math.max(12, voidscapeStatsColumnGap());
-			int colW = (innerW - colGap) / 2;
-			int rightX = innerX + colW + colGap;
-			drawVoidscapeStatLine(innerX, statsY, colW, "Total Lvl", Integer.toString(totalLevel), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-			drawVoidscapeStatLine(rightX, statsY, colW, "Combat", Integer.toString(combatLevel), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-			drawVoidscapeStatLine(innerX, statsY + lineH, colW, "Total XP",
-				voidscapeStatsTotalXpValue(totalXp, colW, UiSkin.FONT_BODY), UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-			drawVoidscapeStatLine(rightX, statsY + lineH, colW, "Quests", Integer.toString(this.questPoints), UiSkin.GOOD, UiSkin.FONT_BODY);
-			drawVoidscapeStatNote(innerX, statsY + lineH * 2, innerW,
-				"XP rates  " + formatXpRate(this.profileEffectiveCombatRateTenths) + " combat - "
-					+ formatXpRate(this.profileEffectiveSkillingRateTenths) + " skilling");
-			statRows = 3;
-		}
-
-		int skillsHeaderY = statsY + lineH * statRows + (compactStats ? 4 : 6);
-		drawVoidscapeSectionHeader("SKILLS", innerX, skillsHeaderY, innerW);
-		int skillsY = skillsHeaderY + sectionH - 1;
-		int skillsBottomY = footerY > 0 ? footerY - 5 : y + height - 10;
-		int skillRows = voidscapeSkillVisibleRows();
-		int skillRowH = voidscapeSkillRowHeight();
-		int visibleSkillRows = Math.max(1, (skillsBottomY - skillsY) / Math.max(1, skillRowH));
-		if (skillsBottomY - skillsY >= skillRowH) {
-			// End the viewport on a row boundary so portrait never shows a clipped
-			// partial skill immediately above its pinned detail footer.
-			skillsBottomY = skillsY + visibleSkillRows * skillRowH;
-		}
-		int maxSkillScrollRows = Math.max(0, skillRows - visibleSkillRows);
-		this.voidscapeStatsSkillScrollRows = Math.max(0,
-			Math.min(this.voidscapeStatsSkillScrollRows, maxSkillScrollRows));
-		int scrolledSkillsY = skillsY - this.voidscapeStatsSkillScrollRows * skillRowH;
-		int hoveredSkill = findVoidscapeHoveredSkill(innerX, scrolledSkillsY, innerW);
-		int hoveredLockSkill = findVoidscapeHoveredSkillLock(innerX, scrolledSkillsY, innerW);
-		if (this.mouseY < skillsY || this.mouseY >= skillsBottomY) {
+		VoidscapeStatsLayout statsLayout = voidscapeStatsLayout(contentY, panelBodyH);
+		// Layout queries are also used by the read-only Workbench state endpoint.
+		// Persist clamping only on the production render path so observing state
+		// cannot change the player's scroll position while another tab is open.
+		this.voidscapeStatsSkillScrollRows = statsLayout.scrollRows;
+		drawVoidscapeSectionHeader("SKILLS", innerX, statsLayout.skillsHeaderY, innerW);
+		int hoveredSkill = findVoidscapeHoveredSkill(innerX, statsLayout.scrolledSkillsY, innerW);
+		int hoveredLockSkill = findVoidscapeHoveredSkillLock(innerX, statsLayout.scrolledSkillsY, innerW);
+		if (this.mouseY < statsLayout.skillsY || this.mouseY >= statsLayout.skillsBottomY) {
 			hoveredSkill = -1;
 			hoveredLockSkill = -1;
 		}
-		if (footerY > 0 || voidscapeUseNativeAndroidMobileShell()) {
-			UiSkin.pushClip(this.getSurface(), innerX - 3, skillsY - 1, innerW + 6,
-				Math.max(1, skillsBottomY - skillsY + 1));
-			drawVoidscapeSkillRows(innerX, scrolledSkillsY, innerW, hoveredSkill, hoveredLockSkill);
-			UiSkin.popClip(this.getSurface());
-			if (maxSkillScrollRows > 0) {
-				drawVoidscapeBestiaryScrollbar(innerX + innerW - 5, skillsY, 4,
-					Math.max(1, skillsBottomY - skillsY), skillRows * skillRowH,
-					this.voidscapeStatsSkillScrollRows * skillRowH);
-			}
-			if (footerY > 0) {
-				drawVoidscapeStatsFooter(innerX + 6, footerY, innerW - 12, footerH, hoveredSkill,
-					totalXp, totalLevel, combatLevel);
-			}
-		} else {
-			drawVoidscapeSkillRows(innerX, scrolledSkillsY, innerW, hoveredSkill, hoveredLockSkill);
+		UiSkin.pushClip(this.getSurface(), innerX - 3, statsLayout.skillsY - 1, innerW + 6,
+			Math.max(1, statsLayout.skillsBottomY - statsLayout.skillsY + 1));
+		drawVoidscapeSkillRows(innerX, statsLayout.scrolledSkillsY, innerW, hoveredSkill, hoveredLockSkill);
+		UiSkin.popClip(this.getSurface());
+		if (statsLayout.maxSkillScrollRows > 0) {
+			drawVoidscapeBestiaryScrollbar(innerX + innerW - 5, statsLayout.skillsY, 4,
+				Math.max(1, statsLayout.skillsBottomY - statsLayout.skillsY),
+				statsLayout.skillRows * statsLayout.skillRowH,
+				this.voidscapeStatsSkillScrollRows * statsLayout.skillRowH);
 		}
+		int infoFont = voidscapeUseDenseStatsDetails() ? UiSkin.FONT_SMALL : UiSkin.FONT_BODY;
+		drawVoidscapeStatLine(innerX, statsLayout.questY, innerW, "Quest Points",
+			Integer.toString(this.questPoints), UiSkin.GOOD, infoFont);
+		drawVoidscapeSectionHeader("EQUIPMENT STATUS", innerX, statsLayout.equipmentHeaderY, innerW);
+		drawVoidscapeEquipmentStatus(innerX, statsLayout.equipmentY, innerW,
+			statsLayout.lineH, infoFont);
+		drawVoidscapeStatsFooter(innerX + 6, statsLayout.footerY, innerW - 12,
+			statsLayout.footerH, hoveredSkill,
+			totalXp, totalLevel, combatLevel);
 
 		if (mustTrackMouse && hoveredLockSkill != -1 && this.mouseButtonClick == 1) {
 			toggleSkillExperienceLock(hoveredLockSkill);
@@ -27264,53 +29418,123 @@ public final class mudclient implements Runnable {
 		return voidscapeClassicWebSmallHud() ? 20 : 24;
 	}
 
+	private boolean voidscapeUseDenseStatsDetails() {
+		return voidscapeUseCompactStatsPanel()
+			|| (voidscapeUseNativeAndroidMobileShell()
+				&& this.getGameWidth() > this.getGameHeight());
+	}
+
 	private int voidscapeSectionHeaderHeight() {
-		return voidscapeUseCompactStatsPanel() ? 18 : 23;
+		return voidscapeUseDenseStatsDetails() ? 18 : 23;
 	}
 
 	private int voidscapeStatsLineHeight() {
-		return voidscapeUseCompactStatsPanel() ? 11 : 14;
+		return voidscapeUseDenseStatsDetails() ? 11 : 14;
 	}
 
 	private void drawVoidscapeSectionHeader(String label, int x, int y, int width) {
 		int height = voidscapeSectionHeaderHeight();
 		drawVoidscapeThreeSliceH("right-panel-section.png", x, y, width, height, 20, 0);
 		this.getSurface().drawColoredStringCentered(x + width / 2, label, UiSkin.GOLD_HEADER, 0, UiSkin.FONT_BODY,
-			y + (voidscapeUseCompactStatsPanel() ? 13 : 16));
-	}
-
-	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor) {
-		drawVoidscapeStatLine(x, y, width, label, value, valueColor, 0);
+			y + (voidscapeUseDenseStatsDetails() ? 13 : 16));
 	}
 
 	private void drawVoidscapeStatLine(int x, int y, int width, String label, String value, int valueColor, int font) {
 		int pad = voidscapeRightPanelListPad();
-		int baselineY = y + (voidscapeUseCompactStatsPanel() ? 9 : 10);
+		int baselineY = y + (voidscapeUseDenseStatsDetails() ? 9 : 10);
 		this.getSurface().drawString(label, x + pad, baselineY, UiSkin.TEXT_LABEL, font);
 		int valueWidth = this.getSurface().stringWidth(font, value);
 		this.getSurface().drawString(value, x + width - valueWidth - pad, baselineY, valueColor, font);
 	}
 
-	private void drawVoidscapeStatNote(int x, int y, int width, String value) {
-		int pad = voidscapeRightPanelListPad();
-		int baselineY = y + 9;
-		this.getSurface().drawString(fitVoidscapeText(value, width - pad * 2, UiSkin.FONT_SMALL),
-			x + pad, baselineY, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
-	}
-
-	private String voidscapeStatsTotalXpValue(long totalXp, int width, int font) {
-		String exact = formatExactLong(totalXp);
-		int pad = voidscapeRightPanelListPad();
-		int requiredWidth = this.getSurface().stringWidth(font, "Total XP")
-			+ this.getSurface().stringWidth(font, exact) + pad * 2 + 4;
-		if (voidscapePanelSizeClass() == 0 && requiredWidth > width) {
-			return formatCompactLong(totalXp);
-		}
-		return exact;
+	private void drawVoidscapeEquipmentStatus(int x, int y, int width, int lineH, int font) {
+		int columnGap = Math.max(6, voidscapeStatsColumnGap());
+		int columnWidth = (width - columnGap) / 2;
+		int rightX = x + columnWidth + columnGap;
+		drawVoidscapeStatLine(x, y, columnWidth, "Armour",
+			Integer.toString(this.playerStatEquipment[0]), UiSkin.GOLD_HOT, font);
+		drawVoidscapeStatLine(rightX, y, columnWidth, "Magic",
+			Integer.toString(this.playerStatEquipment[3]), UiSkin.GOLD_HOT, font);
+		drawVoidscapeStatLine(x, y + lineH, columnWidth,
+			voidscapeUseDenseStatsDetails() ? "Wpn Aim" : "Weapon Aim",
+			Integer.toString(this.playerStatEquipment[1]), UiSkin.GOLD_HOT, font);
+		drawVoidscapeStatLine(rightX, y + lineH, columnWidth, "Prayer",
+			Integer.toString(this.playerStatEquipment[4]), UiSkin.GOLD_HOT, font);
+		drawVoidscapeStatLine(x, y + lineH * 2, columnWidth,
+			voidscapeUseDenseStatsDetails() ? "Wpn Power" : "Weapon Power",
+			Integer.toString(this.playerStatEquipment[2]), UiSkin.GOLD_HOT, font);
 	}
 
 	private int voidscapeStatsFooterHeight() {
-		return voidscapeUseCompactStatsPanel() ? 0 : 52;
+		return voidscapeUseDenseStatsDetails() ? 44 : 58;
+	}
+
+	private static final class VoidscapeStatsLayout {
+		final int footerH;
+		final int footerY;
+		final int lineH;
+		final int equipmentHeaderY;
+		final int equipmentY;
+		final int questY;
+		final int skillsHeaderY;
+		final int skillsY;
+		final int skillsBottomY;
+		final int skillRows;
+		final int skillRowH;
+		final int scrollRows;
+		final int maxSkillScrollRows;
+		final int scrolledSkillsY;
+
+		VoidscapeStatsLayout(int footerH, int footerY, int lineH,
+				int equipmentHeaderY, int equipmentY, int questY, int skillsHeaderY,
+				int skillsY, int skillsBottomY, int skillRows, int skillRowH,
+				int scrollRows, int maxSkillScrollRows, int scrolledSkillsY) {
+			this.footerH = footerH;
+			this.footerY = footerY;
+			this.lineH = lineH;
+			this.equipmentHeaderY = equipmentHeaderY;
+			this.equipmentY = equipmentY;
+			this.questY = questY;
+			this.skillsHeaderY = skillsHeaderY;
+			this.skillsY = skillsY;
+			this.skillsBottomY = skillsBottomY;
+			this.skillRows = skillRows;
+			this.skillRowH = skillRowH;
+			this.scrollRows = scrollRows;
+			this.maxSkillScrollRows = maxSkillScrollRows;
+			this.scrolledSkillsY = scrolledSkillsY;
+		}
+	}
+
+	private VoidscapeStatsLayout voidscapeStatsLayout(int contentY, int panelBodyH) {
+		boolean compactStats = voidscapeUseCompactStatsPanel();
+		int footerH = voidscapeStatsFooterHeight();
+		int pinnedFooterY = contentY + panelBodyH - footerH - 6;
+		int sectionH = voidscapeSectionHeaderHeight();
+		int lineH = voidscapeStatsLineHeight();
+		int equipmentRows = 3;
+		int pinnedEquipmentHeaderY = pinnedFooterY - 5 - sectionH - equipmentRows * lineH;
+		int pinnedQuestY = pinnedEquipmentHeaderY - lineH - 5;
+		int skillsHeaderY = contentY + (compactStats ? 6 : 8);
+		int skillsY = skillsHeaderY + sectionH - 1;
+		int skillRows = voidscapeSkillVisibleRows();
+		int skillRowH = voidscapeSkillRowHeight();
+		int visibleSkillRows = Math.max(1,
+			(pinnedQuestY - 5 - skillsY) / Math.max(1, skillRowH));
+		visibleSkillRows = Math.min(skillRows, visibleSkillRows);
+		int skillsBottomY = skillsY + visibleSkillRows * skillRowH;
+		int questY = skillsBottomY + 5;
+		int equipmentHeaderY = questY + lineH + 5;
+		int equipmentY = equipmentHeaderY + sectionH - 1;
+		int footerY = equipmentHeaderY + sectionH + equipmentRows * lineH + 5;
+		int maxSkillScrollRows = Math.max(0, skillRows - visibleSkillRows);
+		int scrollRows = Math.max(0,
+			Math.min(this.voidscapeStatsSkillScrollRows, maxSkillScrollRows));
+		int scrolledSkillsY = skillsY - scrollRows * skillRowH;
+		return new VoidscapeStatsLayout(footerH, footerY, lineH,
+			equipmentHeaderY, equipmentY, questY, skillsHeaderY, skillsY,
+			skillsBottomY, skillRows, skillRowH, scrollRows, maxSkillScrollRows,
+			scrolledSkillsY);
 	}
 
 	private int voidscapeSkillColumn(int skill) {
@@ -27323,9 +29547,6 @@ public final class mudclient implements Runnable {
 	}
 
 	private int voidscapeSkillLeftColumnCount() {
-		if (voidscapeUseCompactStatsPanel()) {
-			return VOIDSCAPE_COMBAT_SKILLS;
-		}
 		return (skillCount + 1) / 2;
 	}
 
@@ -27418,7 +29639,7 @@ public final class mudclient implements Runnable {
 			for (int i = 0; i < skillCount; i++) {
 				int column = Math.min(1, Math.max(0, voidscapeSkillColumn(i)));
 				levelColumnWidth[column] = Math.max(levelColumnWidth[column],
-					this.getSurface().stringWidth(font, voidscapeSkillLevelText(i, false)));
+					this.getSurface().stringWidth(font, voidscapeSkillLevelText(i)));
 			}
 		}
 		for (int i = 0; i < skillCount; i++) {
@@ -27432,7 +29653,7 @@ public final class mudclient implements Runnable {
 			int current = this.playerStatCurrent[i];
 			int base = this.playerStatBase[i];
 			int nameColor = i == hoveredSkill ? UiSkin.GOLD_HOT : UiSkin.TEXT_BODY;
-			String level = voidscapeSkillLevelText(i, compactWeb);
+			String level = voidscapeSkillLevelText(i);
 			int levelColor;
 			if (compactWeb) {
 				levelColor = UiSkin.GOLD_HOT;
@@ -27459,9 +29680,7 @@ public final class mudclient implements Runnable {
 				int lockX = voidscapeSkillLockX(rowX, columnWidth, lockSize);
 				int lockY = rowY + Math.max(0, (rowH - lockSize) / 2);
 				boolean locked = isVoidscapeSkillExperienceLocked(i);
-				if (compactWeb || locked || hoveredSkill == i || hoveredLockSkill == i) {
-					drawVoidscapeSkillLockIcon(lockX, lockY, lockSize, locked, hoveredLockSkill == i);
-				}
+				drawVoidscapeSkillLockIcon(lockX, lockY, lockSize, locked, hoveredLockSkill == i);
 				levelRight = lockX - (compactWeb ? 1 : 3);
 			} else if (!compactWeb && columnReservesLock[column]) {
 				int lockSize = voidscapeSkillLockSize(rowH);
@@ -27475,23 +29694,12 @@ public final class mudclient implements Runnable {
 				: voidscapeUseNativeAndroidMobileShell() ? rowY + rowH / 2 + 5 : rowY + 13;
 			this.getSurface().drawString(fitVoidscapeText(name, nameW, font), nameX, textY, nameColor, font);
 			this.getSurface().drawString(level, levelX, textY, levelColor, font);
-			if (!compactWeb) {
-				int barX = nameX;
-				int barW = Math.max(1, levelRight - nameX);
-				drawVoidscapeSkillProgressBar(barX, rowY + rowH - 3, barW, 2, voidscapeSkillProgress(i));
-			}
 		}
 	}
 
-	private String voidscapeSkillLevelText(int skill, boolean compactWeb) {
+	private String voidscapeSkillLevelText(int skill) {
 		int current = this.playerStatCurrent[skill];
 		int base = this.playerStatBase[skill];
-		if (compactWeb) {
-			return current + "/" + base;
-		}
-		if (current == base) {
-			return base + "/" + S_PLAYER_LEVEL_LIMIT;
-		}
 		return current + "/" + base;
 	}
 
@@ -27567,28 +29775,28 @@ public final class mudclient implements Runnable {
 		final long xp;
 		final long nextXp;
 		final long toNext;
-		final int permille;
+		final boolean capped;
 
-		VoidscapeSkillProgress(long xp, long nextXp, long toNext, int permille) {
+		VoidscapeSkillProgress(long xp, long nextXp, long toNext, boolean capped) {
 			this.xp = xp;
 			this.nextXp = nextXp;
 			this.toNext = toNext;
-			this.permille = permille;
+			this.capped = capped;
 		}
 	}
 
 	private VoidscapeSkillProgress voidscapeSkillProgress(int skill) {
 		long xp = skill >= 0 && skill < this.playerExperience.length ? (this.playerExperience[skill] & 0xffffffffL) : 0L;
 		if (this.experienceArray == null || this.experienceArray.length == 0) {
-			return new VoidscapeSkillProgress(xp, 0L, 0L, 1000);
+			boolean capped = skill >= 0 && skill < this.playerStatBase.length
+				&& this.playerStatBase[skill] >= S_PLAYER_LEVEL_LIMIT;
+			return new VoidscapeSkillProgress(xp, 0L, 0L, capped);
 		}
 		int lastIndex = Math.min(S_PLAYER_LEVEL_LIMIT - 1, this.experienceArray.length - 1);
-		long previousXp = 0L;
 		long nextXp = this.experienceArray[0] & 0xffffffffL;
 		for (int level = 0; level < lastIndex; ++level) {
 			long threshold = this.experienceArray[level] & 0xffffffffL;
 			if (threshold <= xp) {
-				previousXp = threshold;
 				nextXp = this.experienceArray[level + 1] & 0xffffffffL;
 			} else {
 				break;
@@ -27598,23 +29806,9 @@ public final class mudclient implements Runnable {
 		boolean capped = xp >= capXp || (skill >= 0 && skill < this.playerStatBase.length
 			&& this.playerStatBase[skill] >= S_PLAYER_LEVEL_LIMIT);
 		if (capped) {
-			return new VoidscapeSkillProgress(xp, capXp, 0L, 1000);
+			return new VoidscapeSkillProgress(xp, capXp, 0L, true);
 		}
-		long span = Math.max(1L, nextXp - previousXp);
-		long gained = Math.max(0L, Math.min(span, xp - previousXp));
-		int permille = (int) Math.max(0L, Math.min(1000L, gained * 1000L / span));
-		return new VoidscapeSkillProgress(xp, nextXp, Math.max(0L, nextXp - xp), permille);
-	}
-
-	private void drawVoidscapeSkillProgressBar(int x, int y, int width, int height, VoidscapeSkillProgress progress) {
-		if (width <= 0 || height <= 0) {
-			return;
-		}
-		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.GLASS_SHEEN, 32);
-		int fillW = Math.max(0, Math.min(width, (int) ((long) width * progress.permille / 1000L)));
-		if (fillW > 0) {
-			this.getSurface().drawBoxAlpha(x, y, fillW, height, UiSkin.GLASS_RIM, 218);
-		}
+		return new VoidscapeSkillProgress(xp, nextXp, Math.max(0L, nextXp - xp), false);
 	}
 
 	private void drawVoidscapeStatsFooter(int x, int y, int width, int height, int hoveredSkill,
@@ -27622,30 +29816,41 @@ public final class mudclient implements Runnable {
 		this.getSurface().drawBoxAlpha(x, y, width, height, UiSkin.VOID_BOX, 218);
 		this.getSurface().drawBorder(x, y, width, height, UiSkin.VOID_LINE);
 		this.getSurface().drawLineHoriz(x + 1, y + 1, width - 2, UiSkin.PURPLE_EDGE);
-		int pad = 8;
+		boolean dense = voidscapeUseDenseStatsDetails();
+		int pad = dense ? 6 : 8;
+		int titleFont = dense ? UiSkin.FONT_SMALL : UiSkin.FONT_BODY;
+		int detailFont = UiSkin.FONT_SMALL;
+		int titleY = y + (dense ? 11 : 14);
+		int lineStep = dense ? 10 : 13;
 		if (hoveredSkill >= 0 && hoveredSkill < skillCount) {
 			VoidscapeSkillProgress progress = voidscapeSkillProgress(hoveredSkill);
-			String level = "level " + this.playerStatBase[hoveredSkill];
-			int levelWidth = this.getSurface().stringWidth(UiSkin.FONT_BODY, level);
-			this.getSurface().drawString(fitVoidscapeText(voidscapeSkillDisplayName(hoveredSkill),
-					width - pad * 3 - levelWidth, UiSkin.FONT_BODY),
-				x + pad, y + 14, UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
-			this.getSurface().drawString(level, x + width - pad - levelWidth, y + 14,
-				UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
-			String xpLine = "XP " + formatExactLong(progress.xp) + "  next " + formatExactLong(progress.nextXp);
-			this.getSurface().drawString(fitVoidscapeText(xpLine, width - pad * 2, UiSkin.FONT_SMALL),
-				x + pad, y + 27, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
-			this.getSurface().drawString(formatExactLong(progress.toNext) + " to go",
-				x + pad, y + 40, UiSkin.TEXT_LABEL, UiSkin.FONT_SMALL);
-			drawVoidscapeSkillProgressBar(x + pad, y + height - 5, width - pad * 2, 4, progress);
+			String level = "Level " + this.playerStatBase[hoveredSkill];
+			int levelWidth = this.getSurface().stringWidth(titleFont, level);
+			this.getSurface().drawString(fitVoidscapeText(voidscapeSkillDisplayName(hoveredSkill) + " skill",
+					width - pad * 3 - levelWidth, titleFont),
+				x + pad, titleY, UiSkin.GOLD_HEADER, titleFont);
+			this.getSurface().drawString(level, x + width - pad - levelWidth, titleY,
+				UiSkin.GOLD_HEADER, titleFont);
+			String nextLevel = progress.capped ? "Max" : formatExactLong(progress.nextXp);
+			this.getSurface().drawString(fitVoidscapeText("Total XP: " + formatExactLong(progress.xp),
+					width - pad * 2, detailFont),
+				x + pad, titleY + lineStep, UiSkin.TEXT_BODY, detailFont);
+			this.getSurface().drawString(fitVoidscapeText("Next level at: " + nextLevel,
+					width - pad * 2, detailFont),
+				x + pad, titleY + lineStep * 2, UiSkin.TEXT_LABEL, detailFont);
+			this.getSurface().drawString(fitVoidscapeText("XP to next level: " + formatExactLong(progress.toNext),
+					width - pad * 2, detailFont),
+				x + pad, titleY + lineStep * 3, UiSkin.TEXT_LABEL, detailFont);
 			return;
 		}
-		this.getSurface().drawString("Total XP " + formatExactLong(totalXp), x + pad, y + 14,
-			UiSkin.GOLD_HEADER, UiSkin.FONT_BODY);
-		this.getSurface().drawString("Skill total " + totalLevel, x + pad, y + 29,
-			UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
-		this.getSurface().drawString("Combat level " + combatLevel, x + pad, y + 44,
-			UiSkin.TEXT_BODY, UiSkin.FONT_BODY);
+		this.getSurface().drawString("Overall levels", x + pad, titleY,
+			UiSkin.GOLD_HEADER, titleFont);
+		this.getSurface().drawString("Total XP: " + formatExactLong(totalXp), x + pad,
+			titleY + lineStep, UiSkin.TEXT_BODY, detailFont);
+		this.getSurface().drawString("Skill total: " + totalLevel, x + pad,
+			titleY + lineStep * 2, UiSkin.TEXT_BODY, detailFont);
+		this.getSurface().drawString("Combat level: " + combatLevel, x + pad,
+			titleY + lineStep * 3, UiSkin.TEXT_BODY, detailFont);
 	}
 
 	private String voidscapeSkillDisplayName(int skill) {
@@ -27818,7 +30023,7 @@ public final class mudclient implements Runnable {
 		y += rowStep;
 		drawSettingsRow(baseX, boxWidth, y, "Path: @mag@" + getProfilePathName(), 0xFFFFFF);
 		y += rowStep;
-		drawSettingsRow(baseX, boxWidth, y, "Report Abuse: @red@Open", getSettingsRowColor(x, boxWidth, y));
+		drawSettingsRow(baseX, boxWidth, y, "Bonus: @gre@" + getProfilePathBonus(), 0xFFFFFF);
 
 		y = getSettingsSocialHeadingY(panelTop);
 		drawSettingsRow(baseX, boxWidth, y, "Social", 0x6F43BE);
@@ -28222,6 +30427,9 @@ public final class mudclient implements Runnable {
 				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 					"@whi@Game Look - @mag@" + getGameLookModeName(),
 					48, null, null);
+			this.panelSettings.setListEntry(this.controlSettingPanel, index++,
+				"@whi@Player Labels - @mag@" + getOverheadPlayerLabelModeName(),
+				35, null, null);
 			if (!authenticSettings && S_WANT_NATURE_RUNE_PROTECTION) {
 				this.panelSettings.setListEntry(this.controlSettingPanel, index++,
 					"@whi@Nat Rune Protection - " + (C_WANT_NATURE_RUNE_PROTECTION ? "@gre@On" : "@red@Off"),
@@ -28757,6 +30965,11 @@ public final class mudclient implements Runnable {
 			return;
 		}
 
+		if (settingIndex == 35 && this.mouseButtonClick == 1) {
+			cycleOverheadPlayerLabelMode();
+			return;
+		}
+
 		// camera mode - byte index 0
 		if (settingIndex == 0 && this.mouseButtonClick == 1) {
 			this.optionCameraModeAuto = !this.optionCameraModeAuto;
@@ -29145,18 +31358,6 @@ public final class mudclient implements Runnable {
 			&& this.mouseY > yFromTopDistance - 12 && this.mouseY < yFromTopDistance + 4
 			&& this.mouseButtonClick == 1) {
 			cycleDesktopScreenSizePreset();
-			return;
-		}
-
-		// Subscription, XP, and Path are informational. The following fourth
-		// profile row is the prominent Report Abuse replacement for the Shop tab.
-		yFromTopDistance += rowStep * 4;
-		if (this.mouseX > var6 && this.mouseX < var5 + var6
-			&& this.mouseY > yFromTopDistance - 12 && this.mouseY < yFromTopDistance + 4
-			&& this.mouseButtonClick == 1) {
-			this.inputTextFinal = "";
-			this.inputTextCurrent = "";
-			this.reportAbuse_State = 1;
 			return;
 		}
 
@@ -30405,7 +32606,7 @@ public final class mudclient implements Runnable {
 			getSurface().resize(this.gameWidth, this.gameHeight + 12);
 			this.getSurface().setClip(0, this.getGameWidth(), this.getGameHeight() + 12, 0);
 		this.scene.setMidpoints(this.halfGameHeight(), true, this.getGameWidth(), this.halfGameWidth(),
-			this.halfGameHeight(), this.m_qd, this.halfGameWidth());
+			this.halfGameHeight(), this.effectiveSceneProjectionShift(), this.halfGameWidth());
 
 		clientPort.resized();
 		int var3 = this.getSurface().width2 - 199;
@@ -30596,34 +32797,50 @@ public final class mudclient implements Runnable {
 	}
 
 	private void previousVoidscapeAppearanceHead() {
-		do {
-			do {
-				this.appearanceHeadType = (EntityHandler.animationCount() + (this.appearanceHeadType - 1))
-					% EntityHandler.animationCount();
-			}
-			while ((3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1);
-		} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-			& this.appearanceHeadGender * 4) == 0);
+		cycleVoidscapeAppearanceHead(-1);
 		this.appearanceHairStyle = 0;
 	}
 
 	private void nextVoidscapeAppearanceHead() {
-		do {
-			do {
-				this.appearanceHeadType = (1 + this.appearanceHeadType) % EntityHandler.animationCount();
-			}
-			while (1 != (3 & EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()));
-		} while ((EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-			& this.appearanceHeadGender * 4) == 0);
+		cycleVoidscapeAppearanceHead(1);
 		this.appearanceHairStyle = 0;
 	}
 
+	private void cycleVoidscapeAppearanceHead(int direction) {
+		int[] selectable = GeneratedLookPresets.selectableHeadIds();
+		if (selectable.length == 0) {
+			return;
+		}
+		int currentId = this.appearanceHeadType + 1;
+		int currentIndex = -1;
+		for (int index = 0; index < selectable.length; index++) {
+			if (selectable[index] == currentId) {
+				currentIndex = index;
+				break;
+			}
+		}
+		for (int attempt = 1; attempt <= selectable.length; attempt++) {
+			int index = Math.floorMod(currentIndex + direction * attempt, selectable.length);
+			int appearanceId = selectable[index];
+			AnimationDef definition = EntityHandler.getPlayerAppearanceDef(appearanceId);
+			if (definition != null && (definition.getGenderModel() & 3) == 1
+				&& (definition.getGenderModel() & this.appearanceHeadGender * 4) != 0) {
+				this.appearanceHeadType = appearanceId - 1;
+				return;
+			}
+		}
+	}
+
 	private void toggleVoidscapeAppearanceBodyType() {
-		for (this.appearanceHeadGender = 3 - this.appearanceHeadGender; (3
-			& EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()) != 1
-			|| (EntityHandler.getAnimationDef(this.appearanceHeadType).getGenderModel()
-			& this.appearanceHeadGender * 4) == 0; this.appearanceHeadType = (1
-			+ this.appearanceHeadType) % EntityHandler.animationCount()) {
+		this.appearanceHeadGender = 3 - this.appearanceHeadGender;
+		if (isPaperdollV2DesignerEvaluationVisible() && this.appearanceHairStyle > 0) {
+			applyPaperdollV2DesignerBaseProfile();
+			return;
+		}
+		AnimationDef selectedHead = selectedAppearanceHeadDefinition();
+		if (selectedHead == null || (selectedHead.getGenderModel() & 3) != 1
+			|| (selectedHead.getGenderModel() & this.appearanceHeadGender * 4) == 0) {
+			cycleVoidscapeAppearanceHead(1);
 		}
 
 		while ((3 & EntityHandler.getAnimationDef(this.appearanceBodyGender).getGenderModel()) != 2
@@ -30635,6 +32852,16 @@ public final class mudclient implements Runnable {
 	}
 
 	private void submitVoidscapeAppearance() {
+		if (this.paperdollV2DesignerSessionEligible
+			|| this.paperdollV2DesignerSessionBlockedReason.length() > 0) {
+			String blockedReason = this.paperdollV2DesignerSessionBlockedReason.length() > 0
+				? this.paperdollV2DesignerSessionBlockedReason
+				: paperdollV2DesignerHydrationBlockReason();
+			if (blockedReason.length() > 0) {
+				showPaperdollV2DesignerHydrationBlocked(blockedReason);
+				return;
+			}
+		}
 		this.packetHandler.getClientStream().newPacket(235);
 		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadGender);
 		this.packetHandler.getClientStream().bufferBits.putByte(this.appearanceHeadType);
@@ -30734,19 +32961,14 @@ public final class mudclient implements Runnable {
 					nextAppearanceCountry();
 				}
 
-				if (this.controlButtonAppearanceHairStyle1 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle1)) {
-				this.appearanceHairStyle = (Config.MAX_MODERN_HAIR_STYLE + 1 + this.appearanceHairStyle - 1)
-					% (Config.MAX_MODERN_HAIR_STYLE + 1);
-				if (this.appearanceHairStyle > 0) {
-					this.appearanceHeadType = MODERN_HAIR_BASE_HEAD_TYPE;
-				}
+			if (this.controlButtonAppearanceHairStyle1 >= 0
+				&& this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle1)) {
+				cyclePaperdollV2DesignerHairStyle(-1);
 			}
 
-			if (this.controlButtonAppearanceHairStyle2 >= 0 && this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle2)) {
-				this.appearanceHairStyle = (this.appearanceHairStyle + 1) % (Config.MAX_MODERN_HAIR_STYLE + 1);
-				if (this.appearanceHairStyle > 0) {
-					this.appearanceHeadType = MODERN_HAIR_BASE_HEAD_TYPE;
-				}
+			if (this.controlButtonAppearanceHairStyle2 >= 0
+				&& this.panelAppearance.isClicked(this.controlButtonAppearanceHairStyle2)) {
+				cyclePaperdollV2DesignerHairStyle(1);
 			}
 
 			if (this.panelAppearance.isClicked(this.controlButtonAppearanceAccept)) {
@@ -30761,6 +32983,7 @@ public final class mudclient implements Runnable {
 	private void handleGameInput() {
 		try {
 
+			expireDuelJournalRequestIfNeeded();
 			if (this.systemUpdate > 1) {
 				--this.systemUpdate;
 			}
@@ -31113,15 +33336,31 @@ public final class mudclient implements Runnable {
 
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
 						&& !this.showDialogFarmSim
-						&& !this.voidscapeSubscriptionShopOpen
+						&& !isPkCatchingChooserTop()
+						&& !(this.pkCatchingInterface != null && this.pkCatchingInterface.isModalVisible())
+						&& !(this.duelJournalInterface != null && this.duelJournalInterface.isVisible())
 						&& !this.showDialogChristmasCracker
 						&& this.showDialogVoidArenaDeathMatch) {
 						handleVoidArenaDeathMatchInput();
 					}
 
+					if (isPkCatchingTopModal()
+						&& (this.mouseButtonClick != 0 || this.currentMouseButtonDown != 0
+							|| this.lastMouseButtonDown != 0)) {
+						int button = this.mouseButtonClick != 0 ? this.mouseButtonClick
+							: this.lastMouseButtonDown != 0 ? this.lastMouseButtonDown
+							: this.currentMouseButtonDown;
+						this.pkCatchingInterface.handleClick(this.mouseX, this.mouseY, button);
+						this.currentMouseButtonDown = 0;
+						this.lastMouseButtonDown = 0;
+						this.mouseButtonClick = 0;
+					}
+
 					if (!this.isSleeping && !this.showDialogMessage && !this.showDialogServerMessage
 						&& !this.showDialogFarmSim
-						&& !this.voidscapeSubscriptionShopOpen
+						&& !isPkCatchingChooserTop()
+						&& !(this.pkCatchingInterface != null && this.pkCatchingInterface.isModalVisible())
+						&& !(this.duelJournalInterface != null && this.duelJournalInterface.isVisible())
 						&& !this.showDialogChristmasCracker
 						&& !this.showDialogVoidArenaDeathMatch) {
 						if (useVoidscapeHudSkin() && !useVoidscapeDesktopClassicChat()) {
@@ -31306,6 +33545,14 @@ public final class mudclient implements Runnable {
 						&& isFarmSimCloseHit(this.mouseX, this.mouseY)) {
 						closeFarmSimDialog();
 					}
+					if (this.duelJournalInterface != null && this.duelJournalInterface.isVisible()
+						&& (this.mouseButtonClick != 0 || this.currentMouseButtonDown != 0
+							|| this.lastMouseButtonDown != 0)) {
+						this.duelJournalInterface.handleClick(this.mouseX, this.mouseY, this.mouseButtonClick);
+						this.currentMouseButtonDown = 0;
+						this.lastMouseButtonDown = 0;
+						this.mouseButtonClick = 0;
+					}
 					if (this.showDialogChristmasCracker && this.mouseButtonClick == 1) {
 						handleChristmasCrackerDialogClickAt(this.mouseX, this.mouseY);
 						this.currentMouseButtonDown = 0;
@@ -31315,7 +33562,9 @@ public final class mudclient implements Runnable {
 					if (!this.showDialogMessage
 						&& !this.showDialogServerMessage
 						&& !this.showDialogFarmSim
-						&& !this.voidscapeSubscriptionShopOpen
+						&& !isPkCatchingChooserTop()
+						&& !(this.pkCatchingInterface != null && this.pkCatchingInterface.isModalVisible())
+						&& !(this.duelJournalInterface != null && this.duelJournalInterface.isVisible())
 						&& !this.showDialogChristmasCracker
 						&& !this.showDialogVoidArenaDeathMatch
 						&& mainComponent.checkMouseInput(getMouseX(), getMouseY(), getMouseButtonDown(),
@@ -31559,7 +33808,7 @@ public final class mudclient implements Runnable {
 			if (this.currentViewMode == GameMode.GAME && this.showDialogChristmasCracker) {
 				return;
 			}
-			if (this.currentViewMode == GameMode.GAME && this.voidscapeSubscriptionShopOpen) {
+			if (this.currentViewMode == GameMode.GAME && consumeDuelJournalKeyDown(key)) {
 				return;
 			}
 
@@ -31707,25 +33956,25 @@ public final class mudclient implements Runnable {
 				exitVoidscapeNativeAndroidAfkMode();
 				return true;
 			}
+			if (osConfig.F_SHOWING_KEYBOARD) {
+				this.voidscapeNativeAndroidInlineChatFocused = false;
+				clientPort.closeKeyboard();
+				return true;
+			}
+			// The PK simulator is painted above inputX and the world map. Consume
+			// Back here as well so hidden lower surfaces cannot win the gesture.
+			if (this.currentViewMode == GameMode.GAME && isPkCatchingTopModal()) {
+				this.pkCatchingInterface.closeModal();
+				return true;
+			}
 			if (this.currentViewMode == GameMode.GAME && this.inputX_Action != InputXAction.ACT_0) {
 				cancelInputX();
-				if (osConfig.F_SHOWING_KEYBOARD) {
-					clientPort.closeKeyboard();
-				}
 				return true;
 			}
 			if (this.worldMapPanel.isVisible()) {
 				this.worldMapPanel.setVisible(false);
-				if (osConfig.F_SHOWING_KEYBOARD) {
-					clientPort.closeKeyboard();
-				}
 				logAndroidSmokeWorldMapState("BACK_CLOSE");
 				return true;
-			}
-				if (osConfig.F_SHOWING_KEYBOARD) {
-					this.voidscapeNativeAndroidInlineChatFocused = false;
-					clientPort.closeKeyboard();
-					return true;
 			}
 				if (this.currentViewMode == GameMode.LOGIN
 				&& (this.loginScreenNumber == 1 || this.loginScreenNumber == 2 || this.loginScreenNumber == 4)) {
@@ -31737,9 +33986,8 @@ public final class mudclient implements Runnable {
 					return true;
 				}
 				// UI-STYLE-GUIDE §4.5: the modality table also drives Android back.
-			// Runs after the keyboard branch above (first back dismisses the
-			// keyboard, second back closes the modal — standard Android UX) and
-			// keeps the legacy inputX/world-map branches at the top intact.
+			// Runs after the keyboard, PK simulator, inputX, and world-map
+			// priority branches above.
 			if (this.currentViewMode == GameMode.GAME && closeTopVoidscapeModal()) {
 				return true;
 			}
@@ -31825,8 +34073,12 @@ public final class mudclient implements Runnable {
 			closeFarmSimDialog();
 			return true;
 		}
-		if (this.voidscapeSubscriptionShopOpen) {
-			closeVoidscapeSubscriptionShop();
+		if (isPkCatchingTopModal()) {
+			this.pkCatchingInterface.closeModal();
+			return true;
+		}
+		if (this.duelJournalInterface != null && this.duelJournalInterface.isVisible()) {
+			closeDuelJournal();
 			return true;
 		}
 		if (this.showUiWildWarn == 1) {
@@ -32043,6 +34295,32 @@ public final class mudclient implements Runnable {
 			return true;
 		}
 		return false;
+	}
+
+	private boolean isPkCatchingTopModal() {
+		return this.currentViewMode == GameMode.GAME
+			&& this.logoutTimeout == 0
+			&& this.deathScreenTimeout == 0
+			&& !this.showAppearanceChange
+			&& !this.showSetRecoveryQuestion
+			&& !this.showSetContactDetails
+			&& !this.isSleeping
+			&& this.world != null
+			&& this.world.playerAlive
+			&& !this.isCinematicHudHidden()
+			&& !this.showDialogChristmasCracker
+			&& !this.showDialogMessage
+			&& !this.showDialogServerMessage
+			&& !this.showDialogFarmSim
+			&& this.pkCatchingInterface != null
+			&& this.pkCatchingInterface.isModalVisible();
+	}
+
+	private boolean isPkCatchingChooserTop() {
+		return this.currentViewMode == GameMode.GAME
+			&& this.optionsMenuShow
+			&& this.pkCatchingInterface != null
+			&& this.pkCatchingInterface.matchesChooser(this.optionsMenuCount, this.optionsMenuText);
 	}
 
 	private boolean voidscapeLoginFieldClicked(int cx, int cy, int width, int height) {
@@ -32497,7 +34775,7 @@ public final class mudclient implements Runnable {
 					this.panelLogin.setText(this.controlLoginStatus2, "");
 					this.panelLogin.setFocus(this.controlLoginUser);
 				} else if (panelLoginWelcome.isClicked(loginButtonNewUser)) {
-					if (Config.isWeb()) {
+					if (Config.isWeb() || isAndroid()) {
 						if (hasConfiguredUrl(osConfig.VOIDSCAPE_PORTAL_ACCOUNT_URL)) {
 							openCreateAccountPortal();
 						} else {
@@ -34732,6 +37010,9 @@ public final class mudclient implements Runnable {
 	private void jumpToLogin() {
 		try {
 			exitVoidscapeNativeAndroidAfkMode();
+			this.duelProofHandshakeClient.reset();
+			resetDuelJournal();
+			if (this.pkCatchingInterface != null) this.pkCatchingInterface.reset();
 			clearAndroidForegroundReconnectState();
 			if (this.packetHandler != null) {
 				this.packetHandler.closeClientStream();
@@ -34748,10 +37029,6 @@ public final class mudclient implements Runnable {
 			this.optionsMenuShow = false;
 			this.topMouseMenuVisible = false;
 			this.showAdvancedSettingsWindow = false;
-			this.voidscapeSubscriptionShopOpen = false;
-			this.voidscapeSubscriptionShopStatus = "";
-			resetVoidscapeProfileSnapshot();
-			setCrackerCampaignRemaining(0);
 
 			this.systemUpdate = 0;
 			this.elixirTimer = 0;
@@ -34860,6 +37137,19 @@ public final class mudclient implements Runnable {
 				continue label0;
 			}
 
+			GeneratedAppearanceRegistry.Entry managed =
+				GeneratedAppearanceRegistry.findAuthenticByLegacyName(s);
+			if (managed != null) {
+				EntityHandler.getAnimationDef(animationIndex).number = managed.definition.getNumber();
+				if (animationNumber == managed.definition.getNumber()) {
+					animationNumber = nextAuthenticAnimationBase(animationNumber);
+				}
+				continue;
+			}
+			while (GeneratedAppearanceRegistry.isReservedBase(animationNumber)) {
+				animationNumber = nextAuthenticAnimationBase(animationNumber);
+			}
+
 			loadSprite(animationNumber, "entity", 15);
 			if (EntityHandler.getAnimationDef(animationIndex).hasA()) {
 				loadSprite(animationNumber + 15, "entity", 3);
@@ -34869,11 +37159,24 @@ public final class mudclient implements Runnable {
 				loadSprite(animationNumber + 18, "entity", 9);
 			}
 			EntityHandler.getAnimationDef(animationIndex).number = animationNumber;
-			animationNumber += 27;
-			if (animationNumber == 1998) {
-				animationNumber = 3300;
-			}
+			animationNumber = nextAuthenticAnimationBase(animationNumber);
 		}
+
+		for (GeneratedAppearanceRegistry.Entry managed : GeneratedAppearanceRegistry.authenticEntries()) {
+			int base = managed.definition.getNumber();
+			if (base < 0 || base + managed.frameCount > getSurface().sprites.length) {
+				throw new IllegalStateException("Managed appearance " + managed.key
+					+ " exceeds the authentic sprite array");
+			}
+			loadSprite(base, "entity", 15);
+			if (managed.definition.hasA()) loadSprite(base + 15, "entity", 3);
+			if (managed.definition.hasF()) loadSprite(base + 18, "entity", 9);
+		}
+	}
+
+	private int nextAuthenticAnimationBase(int animationNumber) {
+		int next = animationNumber + 27;
+		return next == 1998 ? 3300 : next;
 	}
 
 	private void loadGameConfig(boolean var1) {
@@ -35333,7 +37636,6 @@ public final class mudclient implements Runnable {
 						this.packetHandler.getClientStream().bufferBits.putByte(loginEncryptionVersion);
 						//TODO: This strips special chars to underscore. We may want to in the future allow special chars.
 						//this.packetHandler.getClientStream().bufferBits.putString(DataOperations.addCharacters(password, 20));
-
 						RSBuffer rsBuffer = new RSBuffer(500);
 						rsBuffer.putString(DataOperations.addCharacters(password, 20));
 						rsBuffer.encodeWithRSA(MiscFunctions.RSA_EXPONENT, MiscFunctions.RSA_MODULUS);
@@ -35673,6 +37975,7 @@ public final class mudclient implements Runnable {
 		try {
 
 			exitVoidscapeNativeAndroidAfkMode();
+			this.duelProofHandshakeClient.reset();
 			this.systemUpdate = 0;
 			this.elixirTimer = 0;
 			if (var1 <= 59) {
@@ -35901,8 +38204,10 @@ public final class mudclient implements Runnable {
 
 	private void resetGame(int var1) {
 		try {
-			boolean enteringGameFromLogin = this.currentViewMode == GameMode.LOGIN;
 			exitVoidscapeNativeAndroidAfkMode();
+			this.duelProofHandshakeClient.reset();
+			resetDuelJournal();
+			if (this.pkCatchingInterface != null) this.pkCatchingInterface.reset();
 			this.voidscapeNativeAndroidLastObservedMovementMillis = 0L;
 			this.voidscapeNativeAndroidLastObservedWorldX = Integer.MIN_VALUE;
 			this.voidscapeNativeAndroidLastObservedWorldZ = Integer.MIN_VALUE;
@@ -35911,25 +38216,7 @@ public final class mudclient implements Runnable {
 			this.loginScreenNumber = 0;
 			this.logoutTimeout = 0;
 
-			if (enteringGameFromLogin && isNativeAndroidClient()) {
-				// Successful login must retire the login editor itself, not just the
-				// currently visible IME. Clearing focus prevents the old password field
-				// from requesting it again; the unconditional close also cancels an
-				// Android show request that may still be queued while F_SHOWING_KEYBOARD
-				// is already false. Reconnects enter resetGame from GAME and retain their
-				// deferred in-game chat-keyboard contract.
-				if (this.panelLogin != null) {
-					this.panelLogin.setFocus(-1);
-				}
-				if (this.clientPort != null) {
-					this.clientPort.closeKeyboard();
-				}
-			}
 			this.currentViewMode = GameMode.GAME;
-			this.voidscapeSubscriptionShopOpen = false;
-			this.voidscapeSubscriptionShopStatus = "";
-			resetVoidscapeProfileSnapshot();
-			setCrackerCampaignRemaining(0);
 			this.clearInputString80((byte) -49);
 
 			for (NComponent n : mainComponent.subComponents())
@@ -36035,10 +38322,6 @@ public final class mudclient implements Runnable {
 			}
 
 			this.currentViewMode = GameMode.LOGIN;
-			this.voidscapeSubscriptionShopOpen = false;
-			this.voidscapeSubscriptionShopStatus = "";
-			resetVoidscapeProfileSnapshot();
-			setCrackerCampaignRemaining(0);
 
 
 		} catch (RuntimeException var3) {
@@ -36069,13 +38352,29 @@ public final class mudclient implements Runnable {
 	}
 
 	public final void sendCommandString(String var1) {
+		boolean duelJournalCommand = isDuelJournalCommand(var1);
+		boolean latestDuelJournalCommand = isLatestDuelJournalCommand(var1);
 		try {
+			if (duelJournalCommand) beginDuelJournalRequest(latestDuelJournalCommand);
 			this.packetHandler.getClientStream().newPacket(38);
 			this.packetHandler.getClientStream().bufferBits.putString(var1);
 			this.packetHandler.getClientStream().finishPacket();
 		} catch (RuntimeException var4) {
+			if (duelJournalCommand) clearDuelJournalRequestState();
 			throw GenUtil.makeThrowable(var4, "client.UC(" + (var1 != null ? "{...}" : "null") + ',' + "dummy" + ')');
 		}
+	}
+
+	private boolean isDuelJournalCommand(String command) {
+		if (command == null) return false;
+		String trimmed = command.trim();
+		return "duel".equalsIgnoreCase(trimmed)
+			|| (trimmed.length() > 4 && trimmed.regionMatches(true, 0, "duel", 0, 4)
+				&& Character.isWhitespace(trimmed.charAt(4)));
+	}
+
+	private boolean isLatestDuelJournalCommand(String command) {
+		return command != null && "duel".equalsIgnoreCase(command.trim());
 	}
 
 	private void sendLogout(int var1) {
@@ -36823,6 +39122,97 @@ public final class mudclient implements Runnable {
 		this.optionsMenuText[i] = t;
 	}
 
+	public boolean workbenchRiftTeleportVisible() {
+		return useVoidscapeDesktopClassicChat() && isVoidscapeRiftTeleportMenu();
+	}
+
+	public int workbenchRiftTeleportPanelX() { return voidscapeRiftPanelRect()[0]; }
+	public int workbenchRiftTeleportPanelY() { return voidscapeRiftPanelRect()[1]; }
+	public int workbenchRiftTeleportPanelWidth() { return voidscapeRiftPanelRect()[2]; }
+	public int workbenchRiftTeleportPanelHeight() { return voidscapeRiftPanelRect()[3]; }
+	public int workbenchRiftTeleportCloseX() { return voidscapeRiftCloseRect()[0]; }
+	public int workbenchRiftTeleportCloseY() { return voidscapeRiftCloseRect()[1]; }
+	public int workbenchRiftTeleportCloseWidth() { return voidscapeRiftCloseRect()[2]; }
+	public int workbenchRiftTeleportCloseHeight() { return voidscapeRiftCloseRect()[3]; }
+	public int workbenchRiftTeleportStayOption() { return voidscapeRiftStayOptionIndex(); }
+	public int workbenchRiftTeleportStayX() { return voidscapeRiftStayRect()[0]; }
+	public int workbenchRiftTeleportStayY() { return voidscapeRiftStayRect()[1]; }
+	public int workbenchRiftTeleportStayWidth() { return voidscapeRiftStayRect()[2]; }
+	public int workbenchRiftTeleportStayHeight() { return voidscapeRiftStayRect()[3]; }
+	public int workbenchRiftTeleportOptionCount() { return this.optionsMenuCount; }
+	public String workbenchRiftTeleportOptionLabel(int option) {
+		return option >= 0 && option < this.optionsMenuCount && this.optionsMenuText[option] != null
+			? this.optionsMenuText[option] : "";
+	}
+	public String workbenchRiftTeleportOptionCategory(int option) {
+		return voidscapeRiftOptionCategory(workbenchRiftTeleportOptionLabel(option));
+	}
+	public int workbenchRiftTeleportOptionX(int option) { return voidscapeRiftOptionRect(option)[0]; }
+	public int workbenchRiftTeleportOptionY(int option) { return voidscapeRiftOptionRect(option)[1]; }
+	public int workbenchRiftTeleportOptionWidth(int option) { return voidscapeRiftOptionRect(option)[2]; }
+	public int workbenchRiftTeleportOptionHeight(int option) { return voidscapeRiftOptionRect(option)[3]; }
+	public boolean workbenchRiftTeleportOptionHovered(int option) {
+		int[] rect = voidscapeRiftOptionRect(option);
+		return rect[0] >= 0 && UiSkin.hit(rect[0], rect[1], rect[2], rect[3], this.mouseX, this.mouseY);
+	}
+
+	public boolean workbenchTitleAwardVisible() {
+		return this.optionsMenuShow && isVoidscapeTitleAwardMenu();
+	}
+
+	public String workbenchTitleAwardId() {
+		if (!workbenchTitleAwardVisible()) return "";
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		return award == null ? "" : award.id;
+	}
+
+	public String workbenchTitleAwardDisplay() {
+		if (!workbenchTitleAwardVisible()) return "";
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		return award == null ? "" : award.display;
+	}
+
+	public int workbenchTitleAwardTier() {
+		if (!workbenchTitleAwardVisible()) return 0;
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		return award == null ? 0 : award.tier;
+	}
+
+	public String workbenchTitleAwardPosition() {
+		if (!workbenchTitleAwardVisible()) return "";
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		return award == null ? "" : award.position;
+	}
+
+	public String workbenchTitleAwardForm() {
+		if (!workbenchTitleAwardVisible()) return "";
+		VoidscapeTitleAwardMetadata award = voidscapeTitleAwardMetadata();
+		return award == null ? "" : award.form;
+	}
+
+	public int workbenchTitleAwardPanelX() { return voidscapeTitleAwardPanelRect()[0]; }
+	public int workbenchTitleAwardPanelY() { return voidscapeTitleAwardPanelRect()[1]; }
+	public int workbenchTitleAwardPanelWidth() { return voidscapeTitleAwardPanelRect()[2]; }
+	public int workbenchTitleAwardPanelHeight() { return voidscapeTitleAwardPanelRect()[3]; }
+	public int workbenchTitleAwardCloseX() { return voidscapeTitleAwardCloseRect()[0]; }
+	public int workbenchTitleAwardCloseY() { return voidscapeTitleAwardCloseRect()[1]; }
+	public int workbenchTitleAwardCloseWidth() { return voidscapeTitleAwardCloseRect()[2]; }
+	public int workbenchTitleAwardCloseHeight() { return voidscapeTitleAwardCloseRect()[3]; }
+	public int workbenchTitleAwardWearX() { return voidscapeTitleAwardButtonRect(true)[0]; }
+	public int workbenchTitleAwardWearY() { return voidscapeTitleAwardButtonRect(true)[1]; }
+	public int workbenchTitleAwardWearWidth() { return voidscapeTitleAwardButtonRect(true)[2]; }
+	public int workbenchTitleAwardWearHeight() { return voidscapeTitleAwardButtonRect(true)[3]; }
+	public int workbenchTitleAwardNotNowX() { return voidscapeTitleAwardButtonRect(false)[0]; }
+	public int workbenchTitleAwardNotNowY() { return voidscapeTitleAwardButtonRect(false)[1]; }
+	public int workbenchTitleAwardNotNowWidth() { return voidscapeTitleAwardButtonRect(false)[2]; }
+	public int workbenchTitleAwardNotNowHeight() { return voidscapeTitleAwardButtonRect(false)[3]; }
+	public int workbenchTitleAwardWearOption() {
+		return workbenchTitleAwardVisible() ? titleAwardOptionIndex("Wear it") : -1;
+	}
+	public int workbenchTitleAwardNotNowOption() {
+		return workbenchTitleAwardVisible() ? titleAwardOptionIndex("Not now") : -1;
+	}
+
 	public void setLoadingArea(boolean loading) {
 		this.loadingArea = loading;
 	}
@@ -37092,6 +39482,19 @@ public final class mudclient implements Runnable {
 	}
 
 	public void setShowAppearanceChange(boolean show) {
+		this.paperdollV2DesignerSessionEligible = false;
+		this.paperdollV2DesignerSessionBlockedReason = "";
+		if (show && isPaperdollV2DesignerEvaluationAvailable()
+			&& this.currentViewMode == GameMode.GAME
+			&& this.localPlayer != null && this.localPlayer.level >= 0) {
+			String reason = paperdollV2DesignerHydrationBlockReason();
+			if (reason.length() == 0) {
+				this.paperdollV2DesignerSessionEligible = true;
+			} else {
+				this.paperdollV2DesignerSessionBlockedReason = reason;
+				showPaperdollV2DesignerHydrationBlocked(reason);
+			}
+		}
 		this.showAppearanceChange = show;
 		if (show) {
 			// Rebuild the panel at the CURRENT window width so the clickable arrow
@@ -37115,7 +39518,10 @@ public final class mudclient implements Runnable {
 		if (this.showDialogMessage) return this.welcomeScreenShown ? "welcome" : "message";
 		if (this.showDialogServerMessage) return "serverMessage";
 		if (this.showDialogFarmSim) return "farmSim";
-		if (this.voidscapeSubscriptionShopOpen) return "subscriptionShop";
+		if (this.pkCatchingInterface != null && this.pkCatchingInterface.isModalVisible()) {
+			return this.pkCatchingInterface.getModalName();
+		}
+		if (this.duelJournalInterface != null && this.duelJournalInterface.isVisible()) return "duelJournal";
 		if (this.showUiWildWarn == 1) return "wildernessWarning";
 		if (this.showDialogTradeConfirm) return "tradeConfirm";
 		if (this.showDialogTrade) return "trade";
@@ -38194,7 +40600,8 @@ public final class mudclient implements Runnable {
 			if (!this.errorLoadingData) {
 
 				this.setFPS(getFPS(), (byte) 107); // Client FPS
-				this.setSurface(new MudClientGraphics(this.getGameWidth(), this.getGameHeight() + 12, 4501));
+				this.setSurface(new MudClientGraphics(this.getGameWidth(), this.getGameHeight() + 12,
+					GeneratedAppearanceRegistry.requiredSpriteCapacity(4501)));
 
 				clientPort.setTitle(Config.getServerName());
 				clientPort.setIconImage(Config.getServerName());
@@ -38225,6 +40632,14 @@ public final class mudclient implements Runnable {
 				pointInterface = new PointInterface(this);
 				pointsToGpInterface = new PointsToGpInterface(this);
 				doSkillInterface = new DoSkillInterface(this);
+				pkCatchingInterface = new PkCatchingInterface(this);
+				duelJournalInterface = new DuelJournalInterface(this,
+					new DuelJournalInterface.SelectionHandler() {
+						@Override
+						public void select(long duelId) {
+							sendCommandString("duel " + duelId);
+						}
+					});
 				if (S_ITEMS_ON_DEATH_MENU)
 					lostOnDeathInterface = new LostOnDeathInterface(this);
 				territorySignupInterface = new TerritorySignupInterface(this);
@@ -38355,9 +40770,9 @@ public final class mudclient implements Runnable {
 						this.loadEntitiesAuthentic();
 						if (!this.errorLoadingData) {
 							this.scene = new Scene(this.getSurface(), 25000, 50000, 1000);
-							this.scene.setMidpoints(this.halfGameHeight(), true, this.getGameWidth(),
-								this.halfGameWidth(), this.halfGameHeight(), this.m_qd,
-								this.halfGameWidth());
+								this.scene.setMidpoints(this.halfGameHeight(), true, this.getGameWidth(),
+									this.halfGameWidth(), this.halfGameHeight(), this.effectiveSceneProjectionShift(),
+									this.halfGameWidth());
 							this.scene.fogLandscapeDistance = 2400;
 							this.scene.fogEntityDistance = 2400;
 							this.scene.fogSmoothingStartDistance = 2300;
@@ -38390,9 +40805,9 @@ public final class mudclient implements Runnable {
 						this.loadSprites();
 						if (!this.errorLoadingData) {
 							this.scene = new Scene(this.getSurface(), 25000, 50000, 1000);
-							this.scene.setMidpoints(this.halfGameHeight(), true, this.getGameWidth(),
-								this.halfGameWidth(), this.halfGameHeight(), this.m_qd,
-								this.halfGameWidth());
+								this.scene.setMidpoints(this.halfGameHeight(), true, this.getGameWidth(),
+									this.halfGameWidth(), this.halfGameHeight(), this.effectiveSceneProjectionShift(),
+									this.halfGameWidth());
 							this.scene.fogLandscapeDistance = 2400;
 							this.scene.fogEntityDistance = 2400;
 							this.scene.fogSmoothingStartDistance = 2300;
@@ -39118,6 +41533,13 @@ public final class mudclient implements Runnable {
 		return gameHeight / 2;
 	}
 
+	private int effectiveSceneProjectionShift() {
+		return PaperdollV2Runtime.isRequested()
+			&& this.gameWidth == PaperdollV2Runtime.VIEWPORT_WIDTH
+			&& this.gameHeight == PaperdollV2Runtime.GAME_HEIGHT
+			? PaperdollV2Runtime.PROJECTION_SHIFT : this.m_qd;
+	}
+
 	private int[][] getAnimDirLayer_To_CharLayer() {
 		return animDirLayer_To_CharLayer;
 	}
@@ -39431,49 +41853,6 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
-	public boolean runAndroidSmokeCrackerCampaignFromInput() {
-		if (!isAndroidSmokeCrackerCampaignLoggingEnabled()
-			|| this.currentViewMode != GameMode.GAME) {
-			return false;
-		}
-
-		final String value = readAndroidSmokeCrackerCampaignCommand("cracker status");
-		if (value.startsWith(VOIDSCAPE_CRACKER_CAMPAIGN_PREFIX)) {
-			final boolean consumed = handleVoidscapeCrackerCampaignMessage(value);
-			System.out.println("ANDROID_SMOKE_CRACKER_CAMPAIGN"
-				+ " event=FIXTURE"
-				+ " protocol=" + Config.CLIENT_VERSION
-				+ " consumed=" + consumed
-				+ " remaining=" + this.crackerCampaignRemaining
-				+ " historyLeaks=" + crackerCampaignEnvelopeLeakCount());
-			return true;
-		}
-
-		this.sendCommandString(value);
-		System.out.println("ANDROID_SMOKE_CRACKER_CAMPAIGN"
-			+ " event=COMMAND"
-			+ " protocol=" + Config.CLIENT_VERSION
-			+ " value=" + androidSmokeLogToken(value));
-		return true;
-	}
-
-	private String readAndroidSmokeCrackerCampaignCommand(final String fallback) {
-		final File commandFile = getAndroidSmokeFile(
-			ANDROID_SMOKE_CRACKER_CAMPAIGN_COMMAND_FILE);
-		if (!commandFile.isFile()) {
-			return fallback;
-		}
-
-		try (BufferedReader reader = new BufferedReader(new FileReader(commandFile))) {
-			final String line = reader.readLine();
-			if (line != null && !line.trim().isEmpty()) {
-				return line.trim();
-			}
-		} catch (IOException ignored) {
-		}
-		return fallback;
-	}
-
 	private String readAndroidSmokePlayerCommand(final String fallback) {
 		final File commandFile = getAndroidSmokeFile(ANDROID_SMOKE_PLAYER_COMMAND_FILE);
 		if (!commandFile.isFile()) {
@@ -39582,134 +41961,6 @@ public final class mudclient implements Runnable {
 		return true;
 	}
 
-	public boolean workbenchOptionsMenuVisible() {
-		return this.optionsMenuShow;
-	}
-
-	public boolean workbenchSelectOptionsMenu(int option) {
-		if (!this.optionsMenuShow || option < 0 || option >= this.optionsMenuCount) {
-			return false;
-		}
-		sendOptionsMenuChoice(option);
-		return true;
-	}
-
-	public int workbenchInventoryCatalogCount(int catalogId) {
-		int count = 0;
-		for (int slot = 0; slot < this.inventoryItemCount; slot++) {
-			if (getInventoryItem(slot) != null && getInventoryItemID(slot) == catalogId) {
-				count += Math.max(1, getInventoryItemSize(slot));
-			}
-		}
-		return count;
-	}
-
-	public boolean workbenchSubscriptionShopVisible() {
-		return this.voidscapeSubscriptionShopOpen;
-	}
-
-	private int[] workbenchSubscriptionShopTabRect() {
-		if (this.currentViewMode != GameMode.GAME || !useVoidscapeHudSkin()
-			|| isNativeAndroidClient()) {
-			return null;
-		}
-		int shopTab = voidscapeChatTabCount() - 1;
-		if (useVoidscapeDesktopClassicChat()) {
-			int[] band = voidscapeChatTabBand(shopTab);
-			return new int[]{band[0], voidscapeChatTabStripY(),
-				band[1] - band[0], voidscapeChatTabStripHeight()};
-		}
-		if (voidscapeChatTabOpensKeyboard(shopTab)) {
-			return null;
-		}
-		return voidscapeChatTabRect(shopTab);
-	}
-
-	public boolean workbenchSubscriptionShopTabVisible() {
-		return workbenchSubscriptionShopTabRect() != null;
-	}
-
-	public int workbenchSubscriptionShopTabCenterX() {
-		int[] rect = workbenchSubscriptionShopTabRect();
-		return rect == null ? -1 : rect[0] + rect[2] / 2;
-	}
-
-	public int workbenchSubscriptionShopTabCenterY() {
-		int[] rect = workbenchSubscriptionShopTabRect();
-		return rect == null ? -1 : rect[1] + rect[3] / 2;
-	}
-
-	public int[] workbenchSubscriptionShopOutsidePoint() {
-		int[] dialog = voidscapeSubscriptionShopDialogRect();
-		int centerY = dialog[1] + dialog[3] / 2;
-		if (dialog[0] > 1) {
-			return new int[]{dialog[0] / 2, centerY};
-		}
-		int right = dialog[0] + dialog[2];
-		if (right < this.getGameWidth() - 1) {
-			return new int[]{right + (this.getGameWidth() - right) / 2, centerY};
-		}
-		return new int[]{this.getGameWidth() / 2, Math.max(0, dialog[1] / 2)};
-	}
-
-	public int workbenchSubscriptionShopItemId() {
-		return VOIDSCAPE_SUBSCRIPTION_CARD_ITEM_ID;
-	}
-
-	public int workbenchSubscriptionShopBuyCenterX() {
-		int[] rect = voidscapeSubscriptionShopBuyRect();
-		return rect[0] + rect[2] / 2;
-	}
-
-	public int workbenchSubscriptionShopBuyCenterY() {
-		int[] rect = voidscapeSubscriptionShopBuyRect();
-		return rect[1] + rect[3] / 2;
-	}
-
-	public int workbenchSubscriptionShopCloseCenterX() {
-		int[] rect = voidscapeSubscriptionShopCloseRect();
-		return rect[0] + rect[2] / 2;
-	}
-
-	public int workbenchSubscriptionShopCloseCenterY() {
-		int[] rect = voidscapeSubscriptionShopCloseRect();
-		return rect[1] + rect[3] / 2;
-	}
-
-	public int workbenchSubscriptionShopXCenterX() {
-		int[] rect = voidscapeSubscriptionShopXRect();
-		return rect[0] + rect[2] / 2;
-	}
-
-	public int workbenchSubscriptionShopXCenterY() {
-		int[] rect = voidscapeSubscriptionShopXRect();
-		return rect[1] + rect[3] / 2;
-	}
-
-	public boolean workbenchSubscriptionShopProfileAvailable() {
-		return this.profileStatsReceivedAt > 0;
-	}
-
-	public boolean workbenchSubscriptionShopSubscribed() {
-		return this.profileSubscribed;
-	}
-
-	public int workbenchSubscriptionShopCombatRateTenths() {
-		return this.profileEffectiveCombatRateTenths;
-	}
-
-	public int workbenchSubscriptionShopSkillingRateTenths() {
-		return this.profileEffectiveSkillingRateTenths;
-	}
-
-	public String workbenchSubscriptionShopStatus() {
-		return this.voidscapeSubscriptionShopStatus;
-	}
-
-	public void workbenchCloseSubscriptionShop() {
-		closeVoidscapeSubscriptionShop();
-	}
-
 	public boolean workbenchOpenVoidscapeChatTab(final String chatKey) {
 		if (chatKey == null) return false;
 		final String key = chatKey.trim().toLowerCase(Locale.ROOT).replace('_', '-');
@@ -39771,6 +42022,203 @@ public final class mudclient implements Runnable {
 		return false;
 	}
 
+	private int[] voidscapeCurrentStatsPanelMetrics() {
+		int x = voidscapeRightPanelX();
+		int y = voidscapeRightPanelY();
+		int width = voidscapeRightPanelWidth();
+		int height = voidscapeRightPanelHeight();
+		int inset = voidscapeRightPanelReadableInset();
+		int innerX = x + inset + voidscapeRightPanelBodyShift();
+		int innerW = width - inset * 2;
+		int toggleH = voidscapePlayerInfoToggleHeight();
+		int contentTop = voidscapeGlassRightPanelContentTop() + Math.max(0, toggleH - 24);
+		int contentY = y + contentTop;
+		int panelBodyH = Math.max(1, height - contentTop - 10);
+		return new int[]{innerX, innerW, contentY, panelBodyH};
+	}
+
+	private int[] voidscapeStatsSkillRowRect(int skill) {
+		if (skill < 0 || skill >= skillCount) {
+			return new int[]{-1, -1, 0, 0};
+		}
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		VoidscapeStatsLayout layout = voidscapeStatsLayout(panel[2], panel[3]);
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (panel[1] - columnGap) / 2;
+		int rowX = panel[0] + voidscapeSkillColumn(skill) * (columnWidth + columnGap);
+		int rowY = layout.scrolledSkillsY + voidscapeSkillRowIndex(skill) * layout.skillRowH;
+		return new int[]{rowX, rowY, columnWidth - 4, layout.skillRowH};
+	}
+
+	private int[] voidscapeStatsSkillLockTargetRect(int skill) {
+		if (!isVoidscapeSkillExperienceLockable(skill)) {
+			return new int[]{-1, -1, 0, 0};
+		}
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		VoidscapeStatsLayout layout = voidscapeStatsLayout(panel[2], panel[3]);
+		int columnGap = voidscapeStatsColumnGap();
+		int columnWidth = (panel[1] - columnGap) / 2;
+		int rowX = panel[0] + voidscapeSkillColumn(skill) * (columnWidth + columnGap);
+		int rowY = layout.scrolledSkillsY + voidscapeSkillRowIndex(skill) * layout.skillRowH;
+		if (voidscapeUseNativeAndroidMobileShell()) {
+			int touchWidth = Math.min(columnWidth, voidscapeAndroidTouchTarget(48));
+			return new int[]{rowX + columnWidth - touchWidth, rowY, touchWidth, layout.skillRowH};
+		}
+		int lockSize = voidscapeSkillLockSize(layout.skillRowH);
+		int lockX = voidscapeSkillLockX(rowX, columnWidth, lockSize);
+		int lockY = rowY + Math.max(0, (layout.skillRowH - lockSize) / 2);
+		return new int[]{lockX - 2, lockY - 2, lockSize + 4, lockSize + 4};
+	}
+
+	public boolean workbenchStatsVisible() {
+		return useVoidscapeHudSkin() && this.showUiTab == Config.SKILLS_AND_QUESTS_TAB
+			&& this.uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_SKILLS;
+	}
+
+	public int workbenchStatsSkillCount() {
+		return skillCount;
+	}
+
+	public String workbenchStatsSkillName(int skill) {
+		return voidscapeSkillDisplayName(skill);
+	}
+
+	public int workbenchStatsSkillCurrent(int skill) {
+		return skill >= 0 && skill < this.playerStatCurrent.length
+			? this.playerStatCurrent[skill] : 0;
+	}
+
+	public int workbenchStatsSkillBase(int skill) {
+		return skill >= 0 && skill < this.playerStatBase.length
+			? this.playerStatBase[skill] : 0;
+	}
+
+	public String workbenchStatsSkillLevelText(int skill) {
+		return skill >= 0 && skill < skillCount ? voidscapeSkillLevelText(skill) : "";
+	}
+
+	public boolean workbenchStatsSkillLockable(int skill) {
+		return isVoidscapeSkillExperienceLockable(skill);
+	}
+
+	public boolean workbenchStatsSkillLocked(int skill) {
+		return isVoidscapeSkillExperienceLocked(skill);
+	}
+
+	public int workbenchStatsSkillRowX(int skill) { return voidscapeStatsSkillRowRect(skill)[0]; }
+	public int workbenchStatsSkillRowY(int skill) { return voidscapeStatsSkillRowRect(skill)[1]; }
+	public int workbenchStatsSkillRowWidth(int skill) { return voidscapeStatsSkillRowRect(skill)[2]; }
+	public int workbenchStatsSkillRowHeight(int skill) { return voidscapeStatsSkillRowRect(skill)[3]; }
+	public int workbenchStatsSkillLockX(int skill) { return voidscapeStatsSkillLockTargetRect(skill)[0]; }
+	public int workbenchStatsSkillLockY(int skill) { return voidscapeStatsSkillLockTargetRect(skill)[1]; }
+	public int workbenchStatsSkillLockWidth(int skill) { return voidscapeStatsSkillLockTargetRect(skill)[2]; }
+	public int workbenchStatsSkillLockHeight(int skill) { return voidscapeStatsSkillLockTargetRect(skill)[3]; }
+
+	public boolean workbenchStatsSkillVisible(int skill) {
+		if (!workbenchStatsVisible() || skill < 0 || skill >= skillCount) return false;
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		VoidscapeStatsLayout layout = voidscapeStatsLayout(panel[2], panel[3]);
+		int rowY = layout.scrolledSkillsY + voidscapeSkillRowIndex(skill) * layout.skillRowH;
+		return rowY >= layout.skillsY && rowY + layout.skillRowH <= layout.skillsBottomY;
+	}
+
+	public int workbenchStatsHoveredSkill() {
+		if (!workbenchStatsVisible()) return -1;
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		VoidscapeStatsLayout layout = voidscapeStatsLayout(panel[2], panel[3]);
+		if (this.mouseY < layout.skillsY || this.mouseY >= layout.skillsBottomY) return -1;
+		return findVoidscapeHoveredSkill(panel[0], layout.scrolledSkillsY, panel[1]);
+	}
+
+	public int workbenchStatsScrollRows() {
+		if (!workbenchStatsVisible()) return this.voidscapeStatsSkillScrollRows;
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		return voidscapeStatsLayout(panel[2], panel[3]).scrollRows;
+	}
+
+	public int workbenchStatsFooterX() {
+		return voidscapeCurrentStatsPanelMetrics()[0] + 6;
+	}
+
+	public int workbenchStatsFooterY() {
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		return voidscapeStatsLayout(panel[2], panel[3]).footerY;
+	}
+
+	public int workbenchStatsFooterWidth() {
+		return voidscapeCurrentStatsPanelMetrics()[1] - 12;
+	}
+
+	public int workbenchStatsFooterHeight() {
+		int[] panel = voidscapeCurrentStatsPanelMetrics();
+		return voidscapeStatsLayout(panel[2], panel[3]).footerH;
+	}
+
+	public int workbenchStatsQuestPoints() {
+		return this.questPoints;
+	}
+
+	public int workbenchStatsEquipmentValue(int stat) {
+		return stat >= 0 && stat < this.playerStatEquipment.length
+			? this.playerStatEquipment[stat] : 0;
+	}
+
+	public boolean workbenchLocationPlaqueEnabled() {
+		return optionLocationPlaque;
+	}
+
+	public boolean workbenchLocationPlaqueRendered() {
+		return this.localPlayer != null && shouldDrawVoidscapeLocationPlaque();
+	}
+
+	public boolean workbenchWildernessFallbackRendered() {
+		return this.localPlayer != null && shouldDrawVoidscapeWildernessFallback();
+	}
+
+	public boolean workbenchInWilderness() {
+		return inWild;
+	}
+
+	public int workbenchWildernessLevel() {
+		return this.voidscapeWildLevel;
+	}
+
+	public boolean workbenchAdvancedSettingsVisible() {
+		return this.showAdvancedSettingsWindow;
+	}
+
+	public int workbenchAdvancedSettingsCategory() {
+		return this.advancedSettingsCategory;
+	}
+
+	public int workbenchAdvancedSettingsInterfaceCategoryCenterX() {
+		int[] layout = voidscapeAdvancedSettingsLayout();
+		return layout[5] + layout[4] / 2;
+	}
+
+	public int workbenchAdvancedSettingsInterfaceCategoryCenterY() {
+		int[] layout = voidscapeAdvancedSettingsLayout();
+		boolean tinyClassic = voidscapeClassicWebSmallHud();
+		int baseline = layout[6] + layout[7] * ADVANCED_CATEGORY_INTERFACE;
+		int height = tinyClassic ? 24 : 26;
+		return baseline - 11 + height / 2;
+	}
+
+	public int workbenchLocationPlaqueToggleCenterX() {
+		int[] layout = voidscapeAdvancedSettingsLayout();
+		return layout[8] + layout[10] / 2;
+	}
+
+	public int workbenchLocationPlaqueToggleCenterY() {
+		int[] layout = voidscapeAdvancedSettingsLayout();
+		boolean tinyClassic = voidscapeClassicWebSmallHud();
+		int step = advancedSettingsRowStep(tinyClassic, ADVANCED_CATEGORY_INTERFACE);
+		int height = advancedSettingsRowHeight(tinyClassic, ADVANCED_CATEGORY_INTERFACE);
+		// Inventory, batch and side-menu rows precede the plaque row.
+		int baseline = layout[9] + 22 + step * 3;
+		return baseline - 11 + height / 2;
+	}
+
 	public boolean workbenchOpenVoidscapeUiPanel(final String panelKey) {
 		if (panelKey == null) return false;
 		String key = panelKey.trim().toLowerCase(Locale.ROOT).replace('_', '-');
@@ -39797,8 +42245,6 @@ public final class mudclient implements Runnable {
 
 		this.topMouseMenuVisible = false;
 		this.optionsMenuShow = false;
-		this.voidscapeSubscriptionShopOpen = false;
-		this.voidscapeSubscriptionShopStatus = "";
 		this.showAdvancedSettingsWindow = false;
 		this.settingsAdvancedMode = false;
 		this.voidscapeAccountMenuOpen = false;
@@ -39829,13 +42275,6 @@ public final class mudclient implements Runnable {
 			this.voidscapeMobileSidePanelKey = "";
 			return workbenchFinishVoidscapeUiPanel();
 		}
-		if ("shop".equals(key) || "subscription-shop".equals(key) || "subscription".equals(key)) {
-			this.showUiTab = 0;
-			openVoidscapeSubscriptionShop();
-			this.mouseX = workbenchSubscriptionShopBuyCenterX();
-			this.mouseY = workbenchSubscriptionShopBuyCenterY();
-			return this.voidscapeSubscriptionShopOpen;
-		}
 		if ("options".equals(key) || "options-profile".equals(key) || "profile".equals(key)) {
 			this.showUiTab = Config.OPTIONS_TAB;
 			this.settingTab = SETTINGS_PROFILE_TAB;
@@ -39845,7 +42284,10 @@ public final class mudclient implements Runnable {
 			return workbenchFinishVoidscapeUiPanel();
 		}
 		if ("options-settings".equals(key) || "settings".equals(key) || "advanced-settings".equals(key)) {
-			this.showUiTab = Config.OPTIONS_TAB;
+			// Match the production Voidscape transition: its modal replaces the parent
+			// panel so translucent glass never stacks two text surfaces. Authentic-mode
+			// workbench captures retain their established parent-panel composition.
+			this.showUiTab = useVoidscapeHudSkin() ? 0 : Config.OPTIONS_TAB;
 			this.settingTab = SETTINGS_PROFILE_TAB;
 			this.showAdvancedSettingsWindow = true;
 			if (this.panelSettings != null) {
@@ -39987,25 +42429,6 @@ public final class mudclient implements Runnable {
 		this.lastMouseButtonDown = 0;
 		this.mouseButtonClick = 0;
 		return true;
-	}
-
-	public boolean workbenchMinimapVisible() {
-		return this.showUiTab == Config.MINIMAP_AND_COMPASS_TAB;
-	}
-
-	public boolean workbenchAppearancePromptVisible() {
-		return this.showAppearanceChange;
-	}
-
-	public boolean workbenchAcceptCurrentAppearance() {
-		if (!this.showAppearanceChange) return false;
-		submitVoidscapeAppearance();
-		return true;
-	}
-
-	public boolean workbenchVoidscapeUiClosed() {
-		return this.showUiTab == 0
-			&& (this.worldMapPanel == null || !this.worldMapPanel.isVisible());
 	}
 
 	public boolean workbenchBestiaryVisible() {
@@ -40506,15 +42929,16 @@ public final class mudclient implements Runnable {
 		if (this.showDialogChristmasCracker) {
 			return;
 		}
-		if (this.voidscapeSubscriptionShopOpen) {
-			return;
-		}
 		if (x > 1)
 			x += x;
 		else if (x < -1)
 			x -= (-x);
 		if (this.showDialogFarmSim) {
 			this.farmSimScrollPixels = Math.max(0, this.farmSimScrollPixels + x * 20);
+			return;
+		}
+		if (this.duelJournalInterface != null && this.duelJournalInterface.isVisible()) {
+			this.duelJournalInterface.handleWheel(x);
 			return;
 		}
 		// World-map auto-walker (slice 5): scroll wheel zooms about the cursor.
@@ -40524,7 +42948,7 @@ public final class mudclient implements Runnable {
 		}
 		if (showUiTab == Config.SKILLS_AND_QUESTS_TAB) { // Quest list.
 			if (uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_SKILLS
-				&& voidscapeUseNativeAndroidMobileShell()) {
+				&& useVoidscapeHudSkin()) {
 				voidscapeStatsSkillScrollRows = Math.max(0,
 					voidscapeStatsSkillScrollRows + x);
 			} else if (uiTabPlayerInfoSubTab == VOIDSCAPE_PLAYER_INFO_TAB_LOOT) {
@@ -40777,6 +43201,15 @@ public final class mudclient implements Runnable {
 
 	public void setHideNameTag(boolean b) {
 		C_NAME_CLAN_TAG_OVERLAY = b;
+	}
+
+	public void setOverheadPlayerLabelMode(int mode) {
+		C_OVERHEAD_PLAYER_LABEL_MODE = Math.max(OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES,
+			Math.min(OVERHEAD_PLAYER_LABEL_HIDDEN, mode));
+	}
+
+	public int workbenchOverheadPlayerLabelMode() {
+		return C_OVERHEAD_PLAYER_LABEL_MODE;
 	}
 
 	public void updateQuestRewards() {

@@ -2,6 +2,7 @@ package com.openrsc.server.util.rsc;
 
 import com.openrsc.server.constants.AppearanceId;
 import com.openrsc.server.constants.AppearanceId38;
+import com.openrsc.server.appearance.GeneratedLookPresets;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -154,6 +155,14 @@ public class AppearanceRetroConverter {
 	}};
 
 	public static Integer convert(int modernId) {
-		return map.getOrDefault(modernId, AppearanceId38.NOTHING.id());
+		Integer mapped = map.get(modernId);
+		if (mapped != null) {
+			return mapped;
+		}
+		GeneratedLookPresets.Entry look = GeneratedLookPresets.findManaged(modernId);
+		if (look != null) {
+			return map.getOrDefault(look.retroFallbackAppearanceId, AppearanceId38.NOTHING.id());
+		}
+		return AppearanceId38.NOTHING.id();
 	}
 }

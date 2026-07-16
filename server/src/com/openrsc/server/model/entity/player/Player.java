@@ -9,6 +9,7 @@ import com.openrsc.server.content.RestedExperience;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.content.voidarena.VoidArena;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.content.achievement.Achievement;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanInvite;
@@ -60,7 +61,6 @@ import com.openrsc.server.plugins.triggers.PlayerDeathDropTrigger;
 import com.openrsc.server.plugins.triggers.PlayerDeathTrigger;
 import com.openrsc.server.plugins.triggers.WineFermentTrigger;
 import com.openrsc.server.util.PidShuffler;
-import com.openrsc.server.util.PlayerEventStopper;
 import com.openrsc.server.util.UsernameChange;
 import com.openrsc.server.util.languages.PreferredLanguage;
 import com.openrsc.server.util.rsc.DataConversions;
@@ -97,7 +97,10 @@ public final class Player extends Mob {
 	private static final long VOID_SCOUT_OVERHEAD_NOTICE_INTERVAL_MILLIS = 10_000L;
 	public static final int XP_LOCK_CLIENT_VERSION = 10104;
 	private static final String XP_LOCK_MASK_CACHE_KEY = "xp_lock_mask";
-	private final UUID saveLifecycleId = SaveLifecycle.newId();
+	public static final String OVERHEAD_PLAYER_LABEL_MODE_CACHE_KEY = "setting_player_label_mode";
+	public static final int OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES = 0;
+	public static final int OVERHEAD_PLAYER_LABEL_NAMES_ONLY = 1;
+	public static final int OVERHEAD_PLAYER_LABEL_HIDDEN = 2;
 
 	// activity indicator for kitten to cat growth
 	// 100 trigger up a Kitten to cat event
@@ -317,7 +320,7 @@ public final class Player extends Mob {
 	/**
 	 * The current active batch
 	 */
-	private Batch batch;
+	private volatile Batch batch;
 	/**
 	 * The current active menu
 	 */
@@ -422,12 +425,13 @@ public final class Player extends Mob {
 
 	private Npc interactingNpc = null;
 	private int lastNpcKilledId = -1;
+	private volatile boolean isSaving = false;
 	private volatile boolean isLoggingOut = false;
-	private final SaveTicketTracker saveTickets = new SaveTicketTracker();
-	private final SaveReservationTracker saveReservation = new SaveReservationTracker();
-	private final PersistentSaveTracker persistentSave = new PersistentSaveTracker();
-	private final LogoutSaveTracker logoutSave = new LogoutSaveTracker();
-	private volatile CompletableFuture<Boolean> logoutSaveAttempt;
+	private boolean saveReserved = false;
+	private boolean saveRequestedAfterReservation = false;
+	private boolean logoutSaveRequestedAfterReservation = false;
+	private boolean forceSaveRequestedAfterReservation = false;
+	private boolean persistentSavePending = false;
 
 	public boolean isF2PWilderness() {
 		return WildernessRules.isF2PWilderness(getLocation());
@@ -892,83 +896,36 @@ public final class Player extends Mob {
 		getWorld().getServer().getGameEventHandler().add(chargeEvent);
 	}
 
-	public synchronized boolean isSaving() {
-		return saveTickets.hasPending();
+	public boolean isSaving() {
+		return isSaving;
 	}
 
-	public synchronized void setSaving(boolean saving) {
-		if (saving) {
-			saveTickets.reserve(false);
-		} else {
-			saveTickets.clear();
-		}
-	}
-
-	private synchronized void reserveSaveTicket(boolean logout) {
-		saveTickets.reserve(logout);
-	}
-
-	public synchronized void completeSaveTicket(boolean logout, boolean committed) {
-		saveTickets.complete(logout);
-		if (logout && committed) {
-			isLoggingOut = false;
-		}
-	}
-
-	/**
-	 * A save may write only while this exact Player object remains the world's active
-	 * instance for the account. Reconnects keep the same object and remain valid;
-	 * a fresh login replaces it and fences all delayed work from the old object.
-	 */
-	public boolean isCurrentSaveLifecycle(UUID lifecycleId) {
-		return lifecycleId != null
-			&& lifecycleId.equals(saveLifecycleId)
-			&& loggedIn()
-			&& !isRemoved()
-			&& getWorld().isCurrentPlayer(this);
-	}
-
-	public UUID getSaveLifecycleId() {
-		return saveLifecycleId;
-	}
-
-	public synchronized long getPersistentSaveGeneration() {
-		return persistentSave.getRequestedGeneration();
-	}
-
-	public synchronized boolean isLogoutSaveGenerationCurrent(UUID lifecycleId, long generation) {
-		return isCurrentSaveLifecycle(lifecycleId)
-			&& persistentSave.getRequestedGeneration() == generation;
+	public void setSaving(boolean saving) {
+		isSaving = saving;
 	}
 
 	public synchronized boolean tryReserveSave() {
-		if (saveReservation.isReserved() || isSaving() || isLoggingOut || isUnregistering()
-			|| !isCurrentSaveLifecycle(getSaveLifecycleId())) {
+		if (saveReserved || isSaving || isLoggingOut || isUnregistering() || !loggedIn() || isRemoved()) {
 			return false;
 		}
-		return saveReservation.reserve();
+		saveReserved = true;
+		return true;
 	}
 
 	public synchronized CompletableFuture<Boolean> saveReservedAsync() {
-		if (!saveReservation.isReserved()) {
+		if (!saveReserved) {
 			return CompletableFuture.completedFuture(false);
 		}
 		return enqueueSaveRequest(false, false, true);
 	}
 
 	public synchronized void releaseSaveReservation() {
-		if (!saveReservation.isReserved()) {
+		if (!saveReserved) {
 			return;
 		}
 
-		saveReservation.release();
-		final SaveReservationTracker.Intent deferred = saveReservation.deferredIntent();
-		if (deferred == null) {
-			return;
-		}
-		if (!deferred.logout) {
-			saveReservation.deferredEnqueued();
-			requestPersistentSave(getSaveLifecycleId());
+		saveReserved = false;
+		if (!saveRequestedAfterReservation) {
 			return;
 		}
 		if (!enqueueDeferredSaveAfterReservation()) {
@@ -977,11 +934,12 @@ public final class Player extends Mob {
 	}
 
 	private boolean enqueueDeferredSaveAfterReservation() {
-		final SaveReservationTracker.Intent intent = saveReservation.deferredIntent();
-		if (intent == null) {
+		if (!saveRequestedAfterReservation) {
 			return true;
 		}
-		final CompletableFuture<Boolean> result = enqueueSaveRequest(intent.logout, intent.force, false);
+		final boolean logout = logoutSaveRequestedAfterReservation;
+		final boolean force = forceSaveRequestedAfterReservation;
+		final CompletableFuture<Boolean> result = enqueueSaveRequest(logout, force, false);
 		if (result.isDone()) {
 			try {
 				if (!Boolean.TRUE.equals(result.getNow(false))) {
@@ -992,22 +950,19 @@ public final class Player extends Mob {
 			}
 		}
 
-		saveReservation.deferredEnqueued();
+		saveRequestedAfterReservation = false;
+		logoutSaveRequestedAfterReservation = false;
+		forceSaveRequestedAfterReservation = false;
 		return true;
 	}
 
 	private void retryDeferredSaveAfterReservation() {
 		getWorld().getServer().getGameEventHandler().add(new DelayedEvent(
-			getWorld(), Player.this, getConfig().GAME_TICK, "Deferred player save after reservation") {
+			getWorld(), null, getConfig().GAME_TICK, "Deferred player save after reservation") {
 			@Override
 			public void run() {
 				synchronized (Player.this) {
-					if (!isCurrentSaveLifecycle(Player.this.getSaveLifecycleId())) {
-						stop();
-						saveReservation.discardDeferred();
-						return;
-					}
-					if (saveReservation.isReserved() || !enqueueDeferredSaveAfterReservation()) {
+					if (saveReserved || !enqueueDeferredSaveAfterReservation()) {
 						setDelayTicks(1);
 						return;
 					}
@@ -1025,44 +980,6 @@ public final class Player extends Mob {
 		isLoggingOut = loggingOut;
 	}
 
-	public boolean beginLogoutPreparation() {
-		final Collection<GameTickEvent> eventsToStop;
-		synchronized (this) {
-			if (!isCurrentSaveLifecycle(getSaveLifecycleId()) || !logoutSave.beginPreparation()) {
-				return false;
-			}
-			isLoggingOut = true;
-			setBusy(true);
-			resetPath();
-			eventsToStop = getWorld().getServer().getGameEventHandler().getPlayerEvents(this);
-			synchronized (incomingPackets) {
-				incomingPackets.clear();
-				activePackets.clear();
-			}
-		}
-		final int stopFailures = PlayerEventStopper.stopOutsidePlayerLock(
-			this, eventsToStop, GameTickEvent::stop);
-		if (stopFailures > 0) {
-			LOGGER.error("Unable to stop {} pre-logout player event(s) for {}", stopFailures, getUsername());
-		}
-		return true;
-	}
-
-	public synchronized void completeLogoutSaveWorker() {
-		logoutSave.completed();
-		isLoggingOut = false;
-	}
-
-	public void finishLogoutPreparation() {
-		try {
-			RestedExperience.recordLogout(this);
-		} catch (final RuntimeException ex) {
-			LOGGER.error("Unable to record rested experience while preparing logout for " + getUsername(), ex);
-		} finally {
-			requestLogoutSave();
-		}
-	}
-
 	public void unsetChannel() {
 		channel = null;
 	}
@@ -1071,10 +988,16 @@ public final class Player extends Mob {
 		if (request == null || request.getChannel() == null) {
 			return false;
 		}
-		if (!loggedIn() || isRemoved() || isSaving() || isLoggingOut() || isUnregistering()) {
+		final boolean androidReconnectResume = isAndroidReconnectResume(request);
+		// A routine autosave must not turn an Android foreground reconnect into an
+		// ACCOUNT_LOGGEDIN response. Saving does not own the player's channel and
+		// ordinary gameplay already continues while that asynchronous snapshot is
+		// written, so rebinding the channel is safe. Logout/unregister saves remain
+		// protected by their explicit state flags below.
+		if (!loggedIn() || isRemoved() || (isSaving() && !androidReconnectResume)
+			|| isLoggingOut() || isUnregistering()) {
 			return false;
 		}
-		final boolean androidReconnectResume = isAndroidReconnectResume(request);
 		if (!getCurrentIP().equals(request.getIpAddress()) && !androidReconnectResume) {
 			return false;
 		}
@@ -1211,16 +1134,20 @@ public final class Player extends Mob {
 	}
 
 	public void interruptPlugins() {
-		try {
-			for (final PluginTask ownedPlugin : ownedPlugins) {
-				ownedPlugin.getScriptContext().setInterrupted(true);
-				final Npc npc = ownedPlugin.getScriptContext().getInteractingNpc();
-				if (npc != null) {
-					npc.setBusy(false);
-				}
+		final Batch activeBatch = getBatch();
+		if (activeBatch != null) {
+			activeBatch.clearGatherRepeat();
+		}
+		final List<PluginTask> plugins;
+		synchronized (ownedPlugins) {
+			plugins = new ArrayList<>(ownedPlugins);
+		}
+		for (final PluginTask ownedPlugin : plugins) {
+			ownedPlugin.getScriptContext().setInterrupted(true);
+			final Npc npc = ownedPlugin.getScriptContext().getInteractingNpc();
+			if (npc != null) {
+				npc.setBusy(false);
 			}
-		} catch (ConcurrentModificationException e) {
-			LOGGER.error(e);
 		}
 	}
 
@@ -1349,7 +1276,13 @@ public final class Player extends Mob {
 			return;
 		}
 
-		this.setUnregisterRequest(new UnregisterRequest(this, force, reason));
+		boolean arenaParticipant = getWorld() != null
+			&& getWorld().getVoidArena().isInActiveMatch(this);
+		if (arenaParticipant) {
+			getWorld().getVoidArena().noteDisconnect(this);
+		}
+		this.setUnregisterRequest(new UnregisterRequest(this,
+			arenaParticipant ? UnregisterForcefulness.FORCED : force, reason));
 	}
 
 	public void updateTotalPlayed() {
@@ -1642,6 +1575,15 @@ public final class Player extends Mob {
 
 	public String getCurrentIP() {
 		return currentIP;
+	}
+
+	public boolean isWebSocketConnection() {
+		Channel activeChannel = getChannel();
+		if (activeChannel == null || !activeChannel.hasAttr(RSCConnectionHandler.attachment)) {
+			return false;
+		}
+		ConnectionAttachment connection = activeChannel.attr(RSCConnectionHandler.attachment).get();
+		return connection != null && Boolean.TRUE.equals(connection.isWebSocket.get());
 	}
 
 	private void setCurrentIP(final String currentIP) {
@@ -2328,8 +2270,7 @@ public final class Player extends Mob {
 		// apply the non-combat skilling rate.
 		int[] skillIDs = {
 			Skill.ATTACK.id(), Skill.DEFENSE.id(), Skill.STRENGTH.id(), Skill.HITS.id(),
-			Skill.RANGED.id(), Skill.PRAYGOOD.id(), Skill.PRAYEVIL.id(), Skill.PRAYER.id(),
-			Skill.GOODMAGIC.id(), Skill.EVILMAGIC.id(), Skill.MAGIC.id()
+			Skill.RANGED.id(), Skill.GOODMAGIC.id(), Skill.EVILMAGIC.id(), Skill.MAGIC.id()
 		};
 		if (!DataConversions.inArray(skillIDs, skill)) {
 			multiplier = getConfig().SKILLING_EXP_RATE;
@@ -2560,14 +2501,8 @@ public final class Player extends Mob {
 		if (getConfig().WANT_OPENPK_POINTS) {
 			addOpenPkPoints(thisXp);
 		} else {
-			final int experienceBefore = getSkills().getExperience(skill);
 			getSkills().addExperience(skill,
 				RestedExperience.applyBonus(this, skill, thisXp, fromQuest));
-			final int awardedXp = Math.max(0,
-				getSkills().getExperience(skill) - experienceBefore);
-			if (useFatigue && !fromQuest && awardedXp > 0) {
-				getWorld().getCrackerCampaignService().onSkillingExperience(this, skill, awardedXp);
-			}
 		}
 
 		// packet order; fatigue update comes after XP update authentically.
@@ -2888,15 +2823,13 @@ public final class Player extends Mob {
 			skipTutorial();
 			return;
 		}
-		final UUID deathId = UUID.randomUUID();
-		final long deathOccurredAtMs = System.currentTimeMillis();
 
 		// Seems to never be set
 		final ProjectileEvent projectileEvent = getAttribute("projectile");
 		if (projectileEvent != null) projectileEvent.setCanceled(true);
 
 		getSettings().getAttackedBy().clear();
-		getCache().store("last_death", deathOccurredAtMs);
+		getCache().store("last_death", System.currentTimeMillis());
 
 		final Player player = mob instanceof Player ? (Player) mob : null;
 		getWorld().getBountyHunter().onPlayerDeath(this, player);
@@ -2905,10 +2838,9 @@ public final class Player extends Mob {
 			? activeScopedSafeDeathRespawn
 			: null;
 		final boolean safeDeath = voidArenaRespawn != null || safeDeathRespawn != null;
-		final PvpKillEvidence pvpKillEvidence = player == null ? null
-			: PvpKillEvidence.capture(deathId, deathOccurredAtMs,
-				deathPoint, deathInstanceId,
-				player, this, safeDeath);
+		if (!safeDeath && !deathPoint.onTutorialIsland()) {
+			PlayerTitle.recordUnsafeDeath(this);
+		}
 
 		if (player != null) {
 			player.message(String.format("You have defeated %s!", getUsername()));
@@ -2944,7 +2876,7 @@ public final class Player extends Mob {
 				getWorld().sendKilledUpdate(getUsernameHash(), player.getUsernameHash(), killTypeId);
 				player.incKills();
 				PlayerTitle.recordWildernessPlayerKill(player, this);
-				PlayerTitle.checkBronzeWeaponPlayerKill(player, isBronzeWeapon(player.getEquippedWeaponID()));
+				PlayerTitle.checkBronzeWeaponPlayerKill(player, this, isBronzeWeapon(player.getEquippedWeaponID()));
 				PlayerTitle.refreshAutomaticUnlocks(player);
 				incDeaths();
 				getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has PKed %s", getUsername())));
@@ -2977,7 +2909,8 @@ public final class Player extends Mob {
 		} else if (safeDeathRespawn != null) {
 			// Scoped mini-game safe death: plugin cleanup restores temporary state.
 			setAttribute(SAFE_DEATH_CLEANUP_PENDING_ATTRIBUTE, true);
-		} else if (getDuel().isDuelActive() || (player != null && player.getDuel().isDuelActive())) {
+		} else if (getDuel().hasDuelCombatStarted()
+			|| (player != null && player.getDuel().hasDuelCombatStarted())) {
 				getDuel().dropOnDeath();
 				 // disables duel spam in activity feed
 				 // if (player != null) getWorld().getServer().getGameLogger().addQuery(new LiveFeedLog(player, String.format("has just won a stake against <strong>%s</strong>", username)));
@@ -2992,7 +2925,7 @@ public final class Player extends Mob {
 		}
 
 		final PlayerDeathContext deathContext = new PlayerDeathContext(
-			deathId, deathPoint, deathInstanceId, mob, deathGroundItems, pvpKillEvidence);
+			deathPoint, deathInstanceId, mob, deathGroundItems);
 		getWorld().getServer().getPluginHandler().handlePlugin(
 			PlayerDeathDropTrigger.class, this, new Object[]{this, deathContext});
 
@@ -3011,7 +2944,6 @@ public final class Player extends Mob {
 		} else {
 			setLocation(Point.location(getConfig().RESPAWN_LOCATION_X, getConfig().RESPAWN_LOCATION_Y), true);
 		}
-
 		// Fire death cleanup hooks after drops used the death tile, but before the respawned
 		// player receives world state. Instanced content uses this to restore the normal phase.
 		getWorld().getServer().getPluginHandler().handlePlugin(
@@ -3031,6 +2963,7 @@ public final class Player extends Mob {
 			// OG RSC did not reset active prayers after death
 			// prayers.resetPrayers();
 			getSkills().normalize();
+			getWorld().getVoidArena().finishDeferredDmKingDeathRecovery(this);
 
 			if (party) getParty().sendParty();
 
@@ -3146,9 +3079,6 @@ public final class Player extends Mob {
 	}
 
 	public void addToPacketQueue(final Packet packet) {
-		if (isLoggingOut()) {
-			return;
-		}
 		updateClientActivity();
 		int packetID = packet.getID();
 
@@ -3161,13 +3091,9 @@ public final class Player extends Mob {
 	}
 
 	public void processTick() {
-		if (isLoggingOut()) {
-			getWorld().getServer().incrementLastEventsDuration(
-				getWorld().getServer().getGameEventHandler().runPlayerEvents(this));
-			return;
-		}
 		getWorld().getBountyHunter().onPlayerTick(this);
 		getWorld().getServer().incrementLastIncomingPacketsDuration(processIncomingPackets());
+		PlayerTitle.processPromptReply(this);
 		getWorld().getServer().incrementLastExecuteWalkToActionsDuration(
 			getWorld().getServer().getGameUpdater().executeWalkToActions(this));
 		getWorld().getServer().incrementLastEventsDuration(
@@ -3176,6 +3102,7 @@ public final class Player extends Mob {
 			getWorld().getServer().getGameUpdater().movePlayer(this));
 		getWorld().getServer().incrementLastProcessMessageQueuesDuration(
 			getWorld().getServer().getGameUpdater().processMessageQueue(this));
+		PlayerTitle.processPromptTick(this);
 	}
 
 	public void updatePosition() {
@@ -3216,7 +3143,7 @@ public final class Player extends Mob {
 		}
 
 		// Check isLoggedIn() because we don't want to unregister more than once
-		if (this.isUnregistering() && this.isLoggedIn() && !this.isLoggingOut()) {
+		if (this.isUnregistering() && this.isLoggedIn()) {
 			this.getWorld().unregisterPlayer(this);
 		}
 	}
@@ -3487,24 +3414,21 @@ public final class Player extends Mob {
 		if (getAttribute("dummyplayer", false) && !logout) {
 			return CompletableFuture.completedFuture(false);
 		}
-		if (!getAttribute("dummyplayer", false) && !isCurrentSaveLifecycle(getSaveLifecycleId())) {
+		if (saveReserved && !reservationOwner) {
+			saveRequestedAfterReservation = true;
+			logoutSaveRequestedAfterReservation |= logout;
+			forceSaveRequestedAfterReservation |= force;
 			return CompletableFuture.completedFuture(false);
 		}
-		if (saveReservation.deferIfReserved(reservationOwner, logout, force)) {
-			return CompletableFuture.completedFuture(false);
-		}
-		if (PersistentSaveTracker.shouldQueueForcedFollowUp(logout, force, isSaving())) {
-			requestPersistentSave(getSaveLifecycleId());
-			return CompletableFuture.completedFuture(false);
-		}
-		if ((logout && saveTickets.hasLogoutPending()) || (!logout && isSaving() && !force)) {
+		if ((!logout || isLoggingOut()) && isSaving() && !force) {
 			return CompletableFuture.completedFuture(false);
 		}
 
+		final boolean wasSaving = isSaving();
 		final boolean wasLoggingOut = isLoggingOut();
 		final PlayerSaveRequest request = new PlayerSaveRequest(getWorld().getServer(), this, logout);
 
-		reserveSaveTicket(logout);
+		setSaving(true);
 		if (logout) {
 			setLoggingOut(true);
 		}
@@ -3517,199 +3441,62 @@ public final class Player extends Mob {
 		}
 
 		if (!enqueued) {
-			completeSaveTicket(logout, false);
-			if (!logout && force) {
-				requestPersistentSave(getSaveLifecycleId());
+			request.rejectEnqueue();
+			if (!wasSaving) {
+				setSaving(false);
 			}
 			if (logout && !wasLoggingOut) {
 				setLoggingOut(false);
 			}
-			request.rejectEnqueue();
 		}
 		return request.getCompletionFuture();
 	}
 
 	public void requestPersistentSave() {
-		requestPersistentSave(getSaveLifecycleId());
-	}
-
-	public boolean requestPersistentSave(UUID lifecycleId) {
+		final CompletableFuture<Boolean> initialSave;
 		synchronized (this) {
-			if (!isCurrentSaveLifecycle(lifecycleId)) {
-				return false;
+			if (persistentSavePending) {
+				return;
 			}
-			if (!persistentSave.request()) {
-				return true;
-			}
+			persistentSavePending = true;
+			initialSave = enqueueSaveRequest(false, false, false);
+		}
 
-			final boolean installed = getWorld().getServer().getGameEventHandler().addOrUpdate(new DelayedEvent(
-				getWorld(), this, getConfig().GAME_TICK, "Persistent player save", DuplicationStrategy.ONE_PER_MOB) {
-			private CompletableFuture<Boolean> saveResult;
-			private long saveGeneration;
+		getWorld().getServer().getGameEventHandler().addOrUpdate(new DelayedEvent(
+			getWorld(), this, getConfig().GAME_TICK, "Persistent player save", DuplicationStrategy.ONE_PER_MOB) {
+			private CompletableFuture<Boolean> saveResult = initialSave;
 			private int failures = 0;
 
 			@Override
 			public void run() {
 				final Player owner = getOwner();
-				if (!owner.isCurrentSaveLifecycle(lifecycleId)) {
-					abandon();
+				if (!owner.loggedIn() || owner.isRemoved() || owner.isLoggingOut() || owner.isUnregistering()) {
+					finish();
 					return;
 				}
 
 				if (saveResult != null && !saveResult.isDone()) {
 					return;
 				}
+				if (saveResult != null && Boolean.TRUE.equals(saveResult.getNow(false))) {
+					finish();
+					return;
+				}
 
 				if (saveResult != null) {
-					boolean committed = false;
-					try {
-						committed = Boolean.TRUE.equals(saveResult.getNow(false));
-					} catch (final RuntimeException ignored) {
-						// A failed future follows the same bounded-backoff retry path.
-					}
-
-					synchronized (owner) {
-						final PersistentSaveTracker.Completion completion =
-							persistentSave.completeAttempt(saveGeneration, committed);
-						saveResult = null;
-						saveGeneration = 0;
-						if (completion == PersistentSaveTracker.Completion.QUIESCENT) {
-							stop();
-							persistentSave.workerStopped();
-							return;
-						}
-						if (completion == PersistentSaveTracker.Completion.RETRY) {
-							failures++;
-							setDelayTicks(Math.min(50, 1L << Math.min(failures, 5)));
-							return;
-						}
-						failures = 0;
-						setDelayTicks(1);
-					}
+					failures++;
+					setDelayTicks(Math.min(50, 1L << Math.min(failures, 5)));
 				}
-
-				synchronized (owner) {
-					if (!owner.isCurrentSaveLifecycle(lifecycleId)) {
-						abandon();
-						return;
-					}
-					saveGeneration = persistentSave.beginAttempt();
-					saveResult = owner.saveAsync(false, false);
-				}
+				saveResult = owner.saveAsync(false, false);
 			}
 
-			private void abandon() {
+			private void finish() {
 				synchronized (Player.this) {
-					stop();
-					persistentSave.abandonWorker();
+					persistentSavePending = false;
 				}
+				stop();
 			}
-			});
-
-			if (!installed) {
-				persistentSave.abandonWorker();
-			}
-			return installed;
-		}
-	}
-
-	private void requestLogoutSave() {
-		final UUID lifecycleId = getSaveLifecycleId();
-		synchronized (this) {
-			if (!isCurrentSaveLifecycle(lifecycleId) || !logoutSave.installWorker()) {
-				return;
-			}
-
-			try {
-				getWorld().getServer().getGameEventHandler().addOrUpdate(new DelayedEvent(
-				getWorld(), this, getConfig().GAME_TICK, "Logout player save", DuplicationStrategy.ONE_PER_MOB) {
-				@Override
-				public void run() {
-					final Player owner = getOwner();
-					if (!owner.isCurrentSaveLifecycle(lifecycleId)) {
-						synchronized (owner) {
-							stop();
-							logoutSave.abandoned();
-						}
-						return;
-					}
-					CompletableFuture<Boolean> saveResult = owner.getLogoutSaveAttempt();
-					if (saveResult == null) {
-						owner.currentOrStartLogoutSaveAttempt();
-						return;
-					}
-					if (!saveResult.isDone()) {
-						return;
-					}
-					boolean committed = false;
-					try {
-						committed = Boolean.TRUE.equals(saveResult.getNow(false));
-					} catch (final RuntimeException ignored) {
-						// Retry below.
-					}
-					if (committed) {
-						synchronized (owner) {
-							stop();
-							logoutSave.completed();
-						}
-						return;
-					}
-					synchronized (owner) {
-						owner.clearLogoutSaveAttempt(saveResult);
-						setDelayTicks(logoutSave.recordFailureDelayTicks());
-					}
-				}
-				});
-			} catch (final RuntimeException ex) {
-				LOGGER.error("Unable to install logout save worker for " + getUsername(), ex);
-				logoutSave.resetAfterInstallFailure();
-				isLoggingOut = false;
-				return;
-			}
-			// Queue the first ticket before returning so shutdown can drain it even if game ticks stop now.
-			currentOrStartLogoutSaveAttempt();
-		}
-	}
-
-	private synchronized CompletableFuture<Boolean> currentOrStartLogoutSaveAttempt() {
-		if (!isCurrentSaveLifecycle(getSaveLifecycleId())) {
-			return null;
-		}
-		if (logoutSaveAttempt != null && !logoutSaveAttempt.isDone()) {
-			return logoutSaveAttempt;
-		}
-		logoutSaveAttempt = enqueueSaveRequest(true, false, false);
-		return logoutSaveAttempt;
-	}
-
-	private synchronized CompletableFuture<Boolean> getLogoutSaveAttempt() {
-		return logoutSaveAttempt;
-	}
-
-	private synchronized void clearLogoutSaveAttempt(CompletableFuture<Boolean> completedAttempt) {
-		if (logoutSaveAttempt == completedAttempt) {
-			logoutSaveAttempt = null;
-		}
-	}
-
-	public boolean drainLogoutSaveForShutdown(long timeoutMillis) {
-		final UUID lifecycleId = getSaveLifecycleId();
-		return LogoutSaveDrainer.drain(new LogoutSaveDrainer.Port() {
-			@Override
-			public boolean isCurrent() {
-				return isCurrentSaveLifecycle(lifecycleId);
-			}
-
-			@Override
-			public CompletableFuture<Boolean> currentOrStartAttempt() {
-				synchronized (Player.this) {
-					if (logoutSaveAttempt != null && logoutSaveAttempt.isDone()) {
-						clearLogoutSaveAttempt(logoutSaveAttempt);
-					}
-					return currentOrStartLogoutSaveAttempt();
-				}
-			}
-		}, timeoutMillis);
+		});
 	}
 
 	public void logout() {
@@ -3757,6 +3544,7 @@ public final class Player extends Mob {
 		getCache().set("gnomeball_goals", getAttribute("gnomeball_goals", 0));
 		getCache().set("gnomeball_npc", getAttribute("gnomeball_npc", 0));
 
+		save(true, false);
 		LOGGER.info("Player save & logout request queued for " + this.getUsername());
 	}
 
@@ -3961,6 +3749,7 @@ public final class Player extends Mob {
 		if (!canEnterF2PWilderness(point)) {
 			return;
 		}
+		final Point previousLocation = getLocation();
 		if (teleported || getSkullType() == 2 || getSkullType() == 0) {
 			// Inappropriate place for this to be getting set at for skulls, to me.
 			getUpdateFlags().setAppearanceChanged(true);
@@ -3973,6 +3762,7 @@ public final class Player extends Mob {
 		}
 
 		super.setLocation(point, teleported);
+		VoidDungeonTraversalGrace.onLocationChanged(this, previousLocation, point);
 		unwieldF2PWildernessMembersItems();
 
 	}
@@ -4377,6 +4167,20 @@ public final class Player extends Mob {
 		}
 	}
 
+	public int getOverheadPlayerLabelMode() {
+		if (getCache().hasKey(OVERHEAD_PLAYER_LABEL_MODE_CACHE_KEY)) {
+			return Math.max(OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES,
+				Math.min(OVERHEAD_PLAYER_LABEL_HIDDEN,
+					getCache().getInt(OVERHEAD_PLAYER_LABEL_MODE_CACHE_KEY)));
+		}
+		if (getCache().hasKey("setting_floating_nametags")) {
+			return getCache().getBoolean("setting_floating_nametags")
+				? OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES
+				: OVERHEAD_PLAYER_LABEL_HIDDEN;
+		}
+		return OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES;
+	}
+
 	public Boolean getHideRoofs() {
 		if (getWorld().getServer().getConfig().SHOW_ROOF_TOGGLE) {
 			if (getCache().hasKey("setting_showroof")) {
@@ -4746,9 +4550,13 @@ public final class Player extends Mob {
 	}
 
 	public void addNpcKill(final Npc n, final boolean sendUpdate) {
-		int kills = getKillCache().containsKey(n.getID()) ? getKillCache().get(n.getID()) + 1 : 1;
+		final boolean firstKillOfType = !getKillCache().containsKey(n.getID());
+		int kills = firstKillOfType ? 1 : getKillCache().get(n.getID()) + 1;
 		getKillCache().put(n.getID(), kills);
 		setKillCacheUpdated(true);
+		if (firstKillOfType) {
+			PlayerTitle.recordHuntmasterKill(this, n);
+		}
 		PlayerTitle.refreshAutomaticUnlocks(this);
 		if (sendUpdate) message("Your " + n.getDef().getName() + " kill count is: @red@" + kills + "@whi@.");
 	}
@@ -5069,6 +4877,10 @@ public final class Player extends Mob {
 	}
 
 	public boolean groundItemTake(final GroundItem item) {
+		if (getWorld().getVoidArena().blocksGroundItemAction(this, item.getLocation())) {
+			return false;
+		}
+
 		Item itemFinal = new Item(item.getID(), item.getAmount(), item.getNoted());
 		if (item.getOwnerUsernameHash() == 0 || item.getAttribute("npcdrop", false)) {
 			itemFinal.setAttribute("npcdrop", true);
@@ -5498,12 +5310,7 @@ public final class Player extends Mob {
 	}
 
 	public boolean checkAndIncrementSaveAttempts() {
-		incrementSaveAttempts();
-		return false;
-	}
-
-	public void incrementSaveAttempts() {
-		saveAttempts++;
+		return saveAttempts++ > 3;
 	}
 
 	public int getSaveAttempts() {
@@ -5775,19 +5582,12 @@ public final class Player extends Mob {
 
 	public void updateDamageAndBlockedDamageTracking(Mob mob, int damage, int blockedDamage) {
 		UUID uuid = mob.getUUID();
-		final int safeDamage = Math.max(0, damage);
-		final int safeBlockedDamage = Math.max(0, blockedDamage);
-		if (safeDamage == 0 && safeBlockedDamage == 0) {
-			return;
-		}
 		if (trackedDamageFromMob.containsKey(uuid)) {
 			int oldDamage = trackedDamageFromMob.get(uuid).getLeft();
 			int oldBlockedDamage = trackedDamageFromMob.get(uuid).getRight();
-			trackedDamageFromMob.put(uuid, Pair.of(
-				PvpDamageTracking.saturatedNonnegativeAdd(oldDamage, safeDamage),
-				PvpDamageTracking.saturatedNonnegativeAdd(oldBlockedDamage, safeBlockedDamage)));
+			trackedDamageFromMob.put(uuid, Pair.of(oldDamage + damage, oldBlockedDamage + blockedDamage));
 		} else {
-			trackedDamageFromMob.put(uuid, Pair.of(safeDamage, safeBlockedDamage));
+			trackedDamageFromMob.put(uuid, Pair.of(damage, blockedDamage));
 		}
 	}
 

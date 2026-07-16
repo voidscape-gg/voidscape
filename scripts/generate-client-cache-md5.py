@@ -17,6 +17,7 @@ CLIENT_JAR = CLIENT_ROOT / "Open_RSC_Client.jar"
 # These files are created or overwritten per installation and must never be
 # distributed from a developer/release checkout.
 RUNTIME_BASENAMES = {
+    ".voidscape-sync-state.properties",
     "accounts.txt",
     "android_version.txt",
     "android_version_pk.txt",
@@ -36,6 +37,34 @@ RUNTIME_BASENAMES = {
     "voidscapelauncher.properties",
 }
 
+# Cache packers and launchers create or preserve scratch files locally. None of
+# them are release assets, even when they happen to sit below Client_Base/Cache.
+SCRATCH_BASENAMES = {".ds_store", "thumbs.db"}
+SCRATCH_SUFFIXES = (
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
+)
+
+
+def is_excluded_cache_file(path: Path) -> bool:
+    """Return whether a cache file is mutable runtime state or local scratch."""
+
+    basename = path.name.lower()
+    return (
+        basename in RUNTIME_BASENAMES
+        or basename in SCRATCH_BASENAMES
+        or basename.endswith(SCRATCH_SUFFIXES)
+    )
+
 
 def md5(path: Path) -> str:
     digest = hashlib.md5()  # noqa: S324 - required by the legacy updater format
@@ -51,9 +80,7 @@ def canonical_manifest() -> str:
 
     rows = [("Open_RSC_Client.jar", CLIENT_JAR)]
     for path in CACHE_ROOT.rglob("*"):
-        if not path.is_file() or path == MANIFEST:
-            continue
-        if path.name.lower() in RUNTIME_BASENAMES:
+        if not path.is_file() or path == MANIFEST or is_excluded_cache_file(path):
             continue
         relative = path.relative_to(CACHE_ROOT).as_posix()
         rows.append((relative, path))

@@ -2,14 +2,24 @@ package com.openrsc.server.content.voidarena;
 
 import com.openrsc.server.model.Point;
 
+import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+
 public final class VoidArenaConfig {
-	public static final String CURRENT_SEASON = "global";
+	public static final String LEGACY_SEASON = "LEGACY";
 	public static final int STARTING_RATING = 1200;
 	public static final int ELO_K_FACTOR = 32;
 	public static final int ELO_DIVISOR = 400;
 	public static final int CHALLENGE_TIMEOUT_MS = 60_000;
+	public static final int SETUP_TIMEOUT_MS = 120_000;
 	public static final int RATING_VISIBLE_MATCHES = 5;
 	public static final int RATING_DISPLAY_CLIENT_VERSION = 10106;
+	public static final long RATED_PAIR_COOLDOWN_MS = 30L * 60L * 1000L;
+	public static final int MAX_RATED_PAIR_RESULTS_PER_UTC_DAY = 3;
+	private static final DateTimeFormatter SEASON_FORMATTER =
+		DateTimeFormatter.ofPattern("uuuu-MM").withZone(ZoneOffset.UTC);
 
 	public static final int LOBBY_X = 600;
 	public static final int LOBBY_Y = 2914;
@@ -29,6 +39,23 @@ public final class VoidArenaConfig {
 
 	public static Point lobbyTile() {
 		return Point.location(LOBBY_X, LOBBY_Y);
+	}
+
+	public static String currentSeasonId() {
+		return seasonIdAt(System.currentTimeMillis());
+	}
+
+	public static String seasonIdAt(long epochMillis) {
+		return SEASON_FORMATTER.format(Instant.ofEpochMilli(epochMillis));
+	}
+
+	public static String previousSeasonId() {
+		return YearMonth.now(ZoneOffset.UTC).minusMonths(1).toString();
+	}
+
+	public static long currentSeasonStartMs() {
+		return YearMonth.now(ZoneOffset.UTC).atDay(1).atStartOfDay(ZoneOffset.UTC)
+			.toInstant().toEpochMilli();
 	}
 
 	public static Point exitTile() {

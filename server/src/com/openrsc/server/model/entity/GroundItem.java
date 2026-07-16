@@ -187,6 +187,13 @@ public class GroundItem extends Entity {
 		return ownerUsernameHash;
 	}
 
+	public void setOwner(Player owner) {
+		ownerUsernameHash = owner == null ? 0 : owner.getUsernameHash();
+		if (owner != null && owner.getIronMan() == IronmanMode.Transfer.id()) {
+			setAttribute("isTransferIronmanItem", true);
+		}
+	}
+
 	public boolean getNoted() {
 		return noted;
 	}

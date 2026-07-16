@@ -25,7 +25,6 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.PlayerSettings;
 import com.openrsc.server.util.SystemUtil;
 import com.openrsc.server.util.checked.CheckedRunnable;
-import com.openrsc.server.util.checked.CheckedSupplier;
 import com.openrsc.server.util.rsc.DataConversions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +39,7 @@ public abstract class GameDatabase {
 	/**
 	 * The asynchronous logger.
 	 */
-	private static final Logger LOGGER = LogManager.getLogger(GameDatabase.class);
+	private static final Logger LOGGER = LogManager.getLogger();
 	private static final String AUCTION_WORKBENCH_SELLER = "wb-fixture";
 	private static final String AUCTION_WORKBENCH_BUYER = "wb-buyer";
 	private static final String AUCTION_WORKBENCH_MARKER = "workbench-fixture";
@@ -156,26 +155,11 @@ public abstract class GameDatabase {
 
 	public abstract Long queryLoadGlobalCacheLong(String cacheKey) throws GameDatabaseException;
 
-	public abstract PortalCommerceEntitlement queryOldestPendingPortalCommerceEntitlement(int accountId)
-		throws GameDatabaseException;
-
-	public abstract PortalCommerceEntitlement queryPortalCommerceEntitlement(long entitlementId)
-		throws GameDatabaseException;
-
-	public abstract WorldAchievementRecord queryLoadWorldAchievementRecord(String seasonId,
-		String recordKey) throws GameDatabaseException;
-
-	public abstract WorldPkEvent queryLoadWorldPkEvent(String deathId) throws GameDatabaseException;
-
-	public abstract Long queryLoadLastQualifiedWorldPkPairTime(String seasonId,
-		int pairLowPlayerId, int pairHighPlayerId) throws GameDatabaseException;
-
-	public abstract WorldPkStreak queryLoadWorldPkStreak(String seasonId, int playerId)
-		throws GameDatabaseException;
-
 	public abstract String queryPlayerCacheOwner(String cacheKey) throws GameDatabaseException;
 
 	public abstract String queryPlayerCacheOwner(String cacheKey, String cacheValue) throws GameDatabaseException;
+
+	public abstract PlayerCacheOwner[] queryPlayerCacheOwners(String cacheKey, int limit) throws GameDatabaseException;
 
 	public abstract PlayerNpcKills[] queryLoadPlayerNpcKills(Player player) throws GameDatabaseException;
 
@@ -183,7 +167,8 @@ public abstract class GameDatabase {
 
 	public abstract VoidArenaStats queryLoadVoidArenaStats(int playerId, String seasonId) throws GameDatabaseException;
 
-	public abstract VoidArenaStats[] queryTopVoidArenaStats(String seasonId, int limit) throws GameDatabaseException;
+	public abstract VoidArenaStats[] queryTopVoidArenaStats(String seasonId, int minimumMatches,
+		int limit) throws GameDatabaseException;
 
 	public abstract int queryCountVoidArenaStats(String seasonId) throws GameDatabaseException;
 
@@ -192,6 +177,66 @@ public abstract class GameDatabase {
 	public abstract VoidArenaMatchRecord[] queryRecentVoidArenaMatchRecordsForPlayer(String seasonId, int playerId, int limit) throws GameDatabaseException;
 
 	public abstract int queryCountVoidArenaMatchRecords(String seasonId) throws GameDatabaseException;
+
+	public abstract int queryCountVoidArenaMatchSessions(String seasonId) throws GameDatabaseException;
+
+	public abstract int queryCountActiveVoidArenaMatchSessions(String seasonId)
+		throws GameDatabaseException;
+
+	public abstract VoidArenaMatchSessionRecord[] queryRecentVoidArenaMatchSessions(String seasonId,
+		int limit) throws GameDatabaseException;
+
+	public abstract VoidArenaMatchSessionRecord[] queryRecentVoidArenaMatchSessionsForPlayer(
+		String seasonId, int playerId, int limit) throws GameDatabaseException;
+
+	public abstract VoidArenaMatchSessionRecord queryVoidArenaMatchSession(String matchId)
+		throws GameDatabaseException;
+
+	public abstract VoidArenaPairAudit queryVoidArenaPairAudit(int playerAId, int playerBId,
+		long rollingCutoffMs, long utcDayStartMs) throws GameDatabaseException;
+
+	/**
+	 * Inserts a complete duel receipt. The caller must invoke this inside {@link #atomically}
+	 * so the header, participants, stakes, and swings commit or roll back together.
+	 */
+	public abstract long queryInsertDuelReceipt(DuelReceipt receipt) throws GameDatabaseException;
+
+	public abstract DuelReceiptHistoryEntry[] queryRecentDuelReceiptsForPlayer(int requesterPlayerId)
+		throws GameDatabaseException;
+
+	public abstract DuelReceiptDetail queryDuelReceiptDetail(long duelId, int requesterPlayerId)
+		throws GameDatabaseException;
+
+	/** Inserts the server-committed proof header and both participant rows. Caller wraps atomically. */
+	public abstract void queryInsertDuelProofAttempt(DuelProofAttemptRecord attempt)
+		throws GameDatabaseException;
+
+	public abstract void queryStoreDuelProofCommitments(String proofId, int firstId, byte[] firstCommit,
+		int secondId, byte[] secondCommit, long updatedAt) throws GameDatabaseException;
+
+	public abstract void queryStoreDuelProofReveals(String proofId, int firstId, byte[] firstSeed,
+		int secondId, byte[] secondSeed, byte[] finalLockHash, long updatedAt)
+		throws GameDatabaseException;
+
+	public abstract void queryLockDuelProofAttempt(String proofId, int firstId, byte[] firstAck,
+		int secondId, byte[] secondAck, long lockedAt) throws GameDatabaseException;
+
+	public abstract boolean queryMarkDuelProofAttemptCombat(String proofId, long startedAt)
+		throws GameDatabaseException;
+
+	/**
+	 * Stores an immutable terminal witness and links its COMBAT proof attempt to a receipt.
+	 * The caller must invoke this inside the same {@link #atomically} transaction, immediately
+	 * after {@link #queryInsertDuelReceipt}, so neither half can become visible alone.
+	 */
+	public abstract boolean queryVerifyDuelProofAttempt(String proofId, long duelId,
+		DuelProofWitnessRecord record) throws GameDatabaseException;
+
+	public abstract boolean queryAbortDuelProofAttempt(String proofId, long finishedAt, String reason)
+		throws GameDatabaseException;
+
+	public abstract int queryAbortOpenDuelProofAttempts(long finishedAt, String reason)
+		throws GameDatabaseException;
 
 	public abstract PlayerSkills[] queryLoadPlayerSkills(Player player, boolean isMax) throws GameDatabaseException, NoSuchElementException;
 
@@ -278,21 +323,11 @@ public abstract class GameDatabase {
 
 	public abstract void querySavePlayerCacheValue(int playerId, int type, String key, String value) throws GameDatabaseException;
 
+	public abstract int queryIncrementPlayerCacheInt(int playerId, int type, String key, int delta) throws GameDatabaseException;
+
 	public abstract void querySaveGlobalCacheInt(String cacheKey, int value) throws GameDatabaseException;
 
 	public abstract void querySaveGlobalCacheLong(String cacheKey, long value) throws GameDatabaseException;
-
-	public abstract int queryClaimPortalCommerceEntitlement(long entitlementId, int accountId,
-		int playerId, long catalogItemId, long claimedAtMs) throws GameDatabaseException;
-
-	public abstract int queryInsertWorldAchievementRecord(WorldAchievementRecord record)
-		throws GameDatabaseException;
-
-	public abstract int queryInsertWorldPkEvent(WorldPkEvent event) throws GameDatabaseException;
-
-	public abstract int queryInsertWorldPkStreak(WorldPkStreak streak) throws GameDatabaseException;
-
-	public abstract int queryUpdateWorldPkStreak(WorldPkStreak streak) throws GameDatabaseException;
 
 	public abstract void querySavePlayerNpcKills(int playerId, PlayerNpcKills[] kills) throws GameDatabaseException;
 
@@ -303,6 +338,15 @@ public abstract class GameDatabase {
 	public abstract int queryResetVoidArenaStats(String seasonId, int startingRating, long updatedAt) throws GameDatabaseException;
 
 	public abstract void queryAddVoidArenaMatchRecord(VoidArenaMatchRecord record) throws GameDatabaseException;
+
+	protected abstract void queryInsertActiveVoidArenaMatch(VoidArenaMatchSessionRecord record)
+		throws GameDatabaseException;
+
+	protected abstract boolean queryTransitionVoidArenaMatchToSettled(
+		VoidArenaMatchSessionRecord record) throws GameDatabaseException;
+
+	protected abstract int queryReconcileActiveVoidArenaMatches(long endedAtMs, String resultReason)
+		throws GameDatabaseException;
 
 	public abstract void querySavePlayerMaxSkills(int playerId, PlayerSkills[] maxSkillLevels) throws GameDatabaseException;
 
@@ -398,79 +442,101 @@ public abstract class GameDatabase {
 	}
 
 	public boolean atomically(CheckedRunnable<Exception> runnable) {
-		return atomicallyWithOutcome(runnable) == AtomicTransactionOutcome.COMMITTED;
+		try {
+			startTransaction();
+			runnable.run();
+			commitTransaction();
+			return true;
+		} catch(Exception ex) {
+			LOGGER.error("Error during atomically", ex);
+			try {
+				rollbackTransaction();
+				LOGGER.error("Rolling back transaction: ", ex);
+			} catch (final Exception rollbackTxEx) {
+				LOGGER.error("Failed to rollback transaction: " + rollbackTxEx);
+			}
+			return false;
+		}
 	}
 
-	public AtomicTransactionOutcome atomicallyWithOutcome(CheckedRunnable<Exception> runnable) {
-		return executeAtomicTransaction(this::startTransaction, runnable,
-			this::commitTransaction, this::rollbackTransaction);
-	}
-
-	static AtomicTransactionOutcome executeAtomicTransaction(CheckedRunnable<Exception> start,
-		CheckedRunnable<Exception> body, CheckedRunnable<Exception> commit,
-		CheckedRunnable<Exception> rollback) {
-		try {
-			start.run();
-		} catch (Exception startEx) {
-			LOGGER.error("Unable to start atomic transaction", startEx);
-			try {
-				rollback.run();
-				return AtomicTransactionOutcome.ROLLED_BACK;
-			} catch (Exception rollbackEx) {
-				LOGGER.error("Unable to establish rollback after transaction-start failure", rollbackEx);
-				return AtomicTransactionOutcome.UNKNOWN;
-			}
-		}
-
-		try {
-			body.run();
-		} catch (Exception bodyEx) {
-			LOGGER.error("Error during atomic transaction body", bodyEx);
-			try {
-				rollback.run();
-				return AtomicTransactionOutcome.ROLLED_BACK;
-			} catch (Exception rollbackEx) {
-				LOGGER.error("Unable to rollback failed atomic transaction", rollbackEx);
-				return AtomicTransactionOutcome.UNKNOWN;
-			}
-		}
-
-		try {
-			commit.run();
-			return AtomicTransactionOutcome.COMMITTED;
-		} catch (Exception commitEx) {
-			LOGGER.error("Atomic transaction COMMIT acknowledgement failed", commitEx);
-			try {
-				rollback.run();
-				return AtomicTransactionOutcome.COMMIT_UNCERTAIN;
-			} catch (Exception rollbackEx) {
-				LOGGER.error("Unable to rollback after uncertain COMMIT", rollbackEx);
-				return AtomicTransactionOutcome.UNKNOWN;
-			}
-		}
+	/** Persists the ACTIVE UUID row before a ranked session becomes visible in the world. */
+	public final boolean createActiveVoidArenaMatch(final VoidArenaMatchSessionRecord active) {
+		return atomically(() -> queryInsertActiveVoidArenaMatch(active));
 	}
 
 	/**
-	 * Resolves a lost COMMIT acknowledgement while the JDBC implementation still owns
-	 * its connection lock. The verifier must inspect durable operation-specific state
-	 * and return only COMMITTED, ROLLED_BACK, or UNKNOWN.
+	 * Claims an ACTIVE UUID exactly once, then writes both decisive stat copies in the same
+	 * transaction. Neutral outcomes deliberately never create or update ranked profiles.
 	 */
-	public AtomicTransactionOutcome atomicallySettled(CheckedRunnable<Exception> runnable,
-		CheckedSupplier<Exception, AtomicTransactionOutcome> verifier) {
-		final AtomicTransactionOutcome outcome = atomicallyWithOutcome(runnable);
-		if (outcome != AtomicTransactionOutcome.COMMIT_UNCERTAIN) {
-			return outcome;
-		}
-		try {
-			final AtomicTransactionOutcome verified = verifier.get();
-			if (verified == AtomicTransactionOutcome.COMMITTED
-				|| verified == AtomicTransactionOutcome.ROLLED_BACK) {
-				return verified;
+	public final VoidArenaSettlementStatus settleVoidArenaMatch(
+		final VoidArenaMatchSessionRecord settled, final VoidArenaStats playerAAfter,
+		final VoidArenaStats playerBAfter) {
+		final VoidArenaStats playerACopy = copyVoidArenaStats(playerAAfter);
+		final VoidArenaStats playerBCopy = copyVoidArenaStats(playerBAfter);
+		final boolean[] transitioned = {false};
+		final boolean committed = atomically(() -> {
+			transitioned[0] = queryTransitionVoidArenaMatchToSettled(settled);
+			if (!transitioned[0]) {
+				return;
 			}
-		} catch (Exception verifyEx) {
-			LOGGER.error("Unable to verify uncertain atomic COMMIT", verifyEx);
+			if (settled.isDecisive()) {
+				validateVoidArenaSettlementStats(settled, playerACopy, playerBCopy);
+				querySaveVoidArenaStats(playerACopy);
+				querySaveVoidArenaStats(playerBCopy);
+			}
+		});
+		if (!committed) {
+			return VoidArenaSettlementStatus.DATABASE_ERROR;
 		}
-		return AtomicTransactionOutcome.UNKNOWN;
+		return transitioned[0]
+			? VoidArenaSettlementStatus.SETTLED
+			: VoidArenaSettlementStatus.NOT_ACTIVE;
+	}
+
+	/** Returns the number reconciled, or -1 when the transaction failed. */
+	public final int reconcileActiveVoidArenaMatches(final long endedAtMs,
+		final String resultReason) {
+		final int[] reconciled = {0};
+		final boolean committed = atomically(() ->
+			reconciled[0] = queryReconcileActiveVoidArenaMatches(endedAtMs, resultReason));
+		return committed ? reconciled[0] : -1;
+	}
+
+	private VoidArenaStats copyVoidArenaStats(final VoidArenaStats source) {
+		if (source == null) {
+			return null;
+		}
+		final VoidArenaStats copy = new VoidArenaStats();
+		copy.seasonId = source.seasonId;
+		copy.playerId = source.playerId;
+		copy.username = source.username;
+		copy.rating = source.rating;
+		copy.wins = source.wins;
+		copy.losses = source.losses;
+		copy.disconnectLosses = source.disconnectLosses;
+		copy.resetCount = source.resetCount;
+		copy.updatedAt = source.updatedAt;
+		return copy;
+	}
+
+	private void validateVoidArenaSettlementStats(final VoidArenaMatchSessionRecord settled,
+		final VoidArenaStats playerAAfter, final VoidArenaStats playerBAfter) {
+		if (settled == null || playerAAfter == null || playerBAfter == null
+			|| settled.playerARatingAfter == null || settled.playerBRatingAfter == null
+			|| playerAAfter.playerId != settled.playerAId
+			|| playerBAfter.playerId != settled.playerBId
+			|| !Objects.equals(playerAAfter.seasonId, settled.seasonId)
+			|| !Objects.equals(playerBAfter.seasonId, settled.seasonId)
+			|| playerAAfter.rating != settled.playerARatingAfter
+			|| playerBAfter.rating != settled.playerBRatingAfter
+			|| playerAAfter.rating < 1 || playerBAfter.rating < 1
+			|| playerAAfter.wins < 0 || playerAAfter.losses < 0
+			|| playerAAfter.disconnectLosses < 0 || playerAAfter.resetCount < 0
+			|| playerBAfter.wins < 0 || playerBAfter.losses < 0
+			|| playerBAfter.disconnectLosses < 0 || playerBAfter.resetCount < 0) {
+			throw new GameDatabaseException(GameDatabase.class,
+				"Void Arena decisive settlement stats do not match the session");
+		}
 	}
 
 	// Creates a new player. If successful, will return the new player's ID. Otherwise, returns -1.

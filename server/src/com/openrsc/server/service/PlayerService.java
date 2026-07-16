@@ -85,9 +85,9 @@ public class PlayerService implements IPlayerService {
 		try {
 			if (!database.playerExists(player.getDatabaseID())) {
 				LOGGER.error("ERROR SAVING : PLAYER DOES NOT EXIST : {}", player.getUsername());
-				return applySaveOutcome(false, player::resetSaveAttempts, player::incrementSaveAttempts);
+				return player.checkAndIncrementSaveAttempts();
 			}
-			boolean databaseCommitted = database.atomically(() -> {
+			boolean realSuccess = database.atomically(() -> {
 				savePlayerBankPresets(player);
 				savePlayerInventory(player);
 				savePlayerEquipment(player);
@@ -102,38 +102,25 @@ public class PlayerService implements IPlayerService {
 				savePlayerSkills(player);
 				savePlayerSocial(player);
 			});
-			if (applySaveOutcome(databaseCommitted, player::resetSaveAttempts, player::incrementSaveAttempts)) {
+			if (realSuccess) {
 				if (null != player.getUsernameChangePending()) {
 					player.getUsernameChangePending().doChangeUsername();
 				}
-				return true;
+				player.resetSaveAttempts();
 			}
-			return false;
+			return realSuccess;
 		} catch (final Exception ex) {
 			if (player != null) {
 				LOGGER.error(
 					MessageFormat.format("Unable to save player to database: {}", player.getUsername()),
 					ex
 				);
-				return applySaveOutcome(false, player::resetSaveAttempts, player::incrementSaveAttempts);
+				return player.checkAndIncrementSaveAttempts();
 			} else {
 				LOGGER.error("Player reference lost and failed to save.", ex);
 				return false;
 			}
 		}
-	}
-
-	/**
-	 * Keeps retry bookkeeping separate from the externally visible commit result.
-	 * Exhausting retries must never be mistaken for a successful database write.
-	 */
-	static boolean applySaveOutcome(boolean databaseCommitted, Runnable onCommit, Runnable onFailure) {
-		if (databaseCommitted) {
-			onCommit.run();
-			return true;
-		}
-		onFailure.run();
-		return false;
 	}
 
 	@Override
@@ -218,15 +205,19 @@ public class PlayerService implements IPlayerService {
         player.getSettings().setGameSetting(PlayerSettings.GAME_SETTING_MOUSE_BUTTONS, playerData.oneMouse);
         player.getSettings().setGameSetting(PlayerSettings.GAME_SETTING_SOUND_EFFECTS, playerData.soundOff);
 
-        PlayerAppearance pa = new PlayerAppearance(
-                playerData.hairColour,
-                playerData.topColour,
-                playerData.trouserColour,
-                playerData.skinColour,
-                playerData.headSprite,
-                playerData.bodySprite,
-                playerData.hairStyle
-        );
+		boolean paperdollV2EvaluationAppearance = configuration.isPaperdollV2EvaluationEnabled()
+				&& player.isDev()
+				&& PlayerAppearance.isPaperdollV2EvaluationIdentity(playerData.hairStyle,
+					playerData.headSprite, playerData.bodySprite, playerData.male);
+		PlayerAppearance pa = paperdollV2EvaluationAppearance
+			? PlayerAppearance.forPaperdollV2Evaluation(
+				playerData.hairColour, playerData.topColour, playerData.trouserColour,
+				playerData.skinColour, playerData.headSprite, playerData.bodySprite,
+				playerData.hairStyle)
+			: new PlayerAppearance(
+				playerData.hairColour, playerData.topColour, playerData.trouserColour,
+				playerData.skinColour, playerData.headSprite, playerData.bodySprite,
+				playerData.hairStyle);
         if (!pa.isValid(player)) {
             pa = new PlayerAppearance(
                     PlayerAppearance.DEFAULT_HAIR_COLOUR,

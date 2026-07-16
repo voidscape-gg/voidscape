@@ -2,6 +2,7 @@ package com.openrsc.server.net.rsc;
 
 import com.openrsc.server.Server;
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.appearance.PaperdollV2EvaluationPolicy;
 import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanManager;
@@ -11,7 +12,6 @@ import com.openrsc.server.content.party.PartyManager;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.GlobalChatCountryFlags;
 import com.openrsc.server.content.DropTable;
-import com.openrsc.server.content.CrackerCampaignService;
 import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.database.struct.UsernameChangeType;
@@ -55,6 +55,7 @@ import java.util.Map.Entry;
  * Sends corresponding actions for use over the network layer
  * */
 public class ActionSender {
+	public static final int OVERHEAD_PLAYER_LABEL_MODE_CLIENT_VERSION = 10138;
 	/**
 	 * The asynchronous logger.
 	 */
@@ -72,8 +73,6 @@ public class ActionSender {
 	private static final Payload203Generator PAYLOAD_203_GENERATOR = new Payload203Generator();
 	private static final Payload235Generator PAYLOAD_235_GENERATOR = new Payload235Generator();
 	private static final PayloadCustomGenerator PAYLOAD_CUSTOM_GENERATOR = new PayloadCustomGenerator();
-	public static final int CRACKER_CAMPAIGN_STATE_CLIENT_VERSION = 10132;
-	private static final String CRACKER_CAMPAIGN_STATE_PREFIX = "@vscrackercampaign@v1|";
 
 	/**
 	 * Get respective generator
@@ -216,11 +215,30 @@ public class ActionSender {
 	 *
 	 * @param player
 	 */
-	public static void sendAppearanceScreen(Player player) {
+	public static boolean sendAppearanceScreen(Player player) {
+		String blockedReason = paperdollV2EvaluationAppearanceBlockReason(player);
+		if (blockedReason.length() > 0) {
+			player.setChangingAppearance(false);
+			player.message("Unequip plate or head-slot gear before opening the Appearance Studio.");
+			return false;
+		}
 		player.setChangingAppearance(true);
 		PlayerService.updateUnlockedPlayerSkins(player);
 		NoPayloadStruct struct = new NoPayloadStruct();
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_APPEARANCE_SCREEN, struct, player);
+		return true;
+	}
+
+	public static String paperdollV2EvaluationAppearanceBlockReason(Player player) {
+		return player == null ? "" : paperdollV2EvaluationAppearanceBlockReason(
+			player.getConfig().isPaperdollV2EvaluationEnabled(), player.isDev(),
+			player.getWornItems());
+	}
+
+	public static String paperdollV2EvaluationAppearanceBlockReason(
+		boolean evaluationEnabled, boolean developer, int[] worn) {
+		return PaperdollV2EvaluationPolicy.appearanceBlockReason(evaluationEnabled,
+			developer, worn);
 	}
 
 	/**
@@ -930,7 +948,9 @@ public class ActionSender {
 			customOptions.add(player.getFightModeSelectorToggle());
 			customOptions.add(player.getExperienceCounterToggle());
 			customOptions.add(player.getHideInventoryCount() ? 1 : 0);
-			customOptions.add(player.getHideNameTag() ? 1 : 0);
+			customOptions.add(player.getClientVersion() >= OVERHEAD_PLAYER_LABEL_MODE_CLIENT_VERSION
+				? player.getOverheadPlayerLabelMode()
+				: (player.getHideNameTag() ? 1 : 0));
 			customOptions.add(player.getPartyInviteSetting() ? 1 : 0);
 			customOptions.add(player.getAndroidInvToggle() ? 1 : 0);
 			customOptions.add(player.getShowNPCKC() ? 1 : 0);
@@ -1519,30 +1539,6 @@ public class ActionSender {
 		sendMessage(player, "@yel@" + messageSend);
 		sendMessage(player, "@gre@" + messageSend);
 		sendMessage(player, "@cya@" + messageSend);
-	}
-
-	public static boolean supportsCrackerCampaignState(Player player) {
-		return player != null && player.isUsingCustomClient()
-			&& supportsCrackerCampaignStateVersion(player.getClientVersion());
-	}
-
-	static boolean supportsCrackerCampaignStateVersion(int clientVersion) {
-		return clientVersion >= CRACKER_CAMPAIGN_STATE_CLIENT_VERSION;
-	}
-
-	static String crackerCampaignStateEnvelope(int remaining) {
-		final int safeRemaining = remaining >= 0
-			&& remaining <= CrackerCampaignService.MAX_REMAINING ? remaining : 0;
-		return CRACKER_CAMPAIGN_STATE_PREFIX + safeRemaining;
-	}
-
-	/** Sends a senderless hidden QUEST envelope through the existing message opcode. */
-	public static void sendCrackerCampaignState(Player player, int remaining) {
-		if (!supportsCrackerCampaignState(player)) {
-			return;
-		}
-		sendMessage(player, null, MessageType.QUEST,
-			crackerCampaignStateEnvelope(remaining), 0, null);
 	}
 
 	public static void sendMessage(Player player, String message) {
@@ -2407,7 +2403,7 @@ public class ActionSender {
 	}
 
 	static void sendLogin(Player player) {
-		boolean resumedSession = player.isReconnecting() && player.getWorld().isCurrentPlayer(player);
+		boolean resumedSession = player.isReconnecting() && player.getWorld().getPlayers().contains(player);
 		try {
 			if (player.getWorld().registerPlayer(player) || resumedSession) {
                 sendPrivacySettings(player);
@@ -2421,9 +2417,8 @@ public class ActionSender {
 				    sendMessage(player, null, MessageType.QUEST, "@mag@There is a Holiday Drop Event going on now! Type @gre@::drop@mag@ for more information.", 0, null);
                 }
 
-				sendGameSettings(player);
-				player.getWorld().getCrackerCampaignService().sendStateSnapshot(player);
-				sendWorldInfo(player);
+                sendGameSettings(player);
+					sendWorldInfo(player);
                 sendQuestInfo(player);
                 sendPlayerOnTutorial(player);
 				if (!resumedSession) {

@@ -2,7 +2,6 @@ package com.openrsc.server.plugins.authentic.commands;
 
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
-import com.openrsc.server.content.CrackerCampaignService;
 import com.openrsc.server.content.GuaranteedResources;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
@@ -77,7 +76,6 @@ public final class Admins implements CommandTrigger {
 	private static final int DROPWAVE_MAX_COUNT = 20;
 	private static final int DROPWAVE_MAX_RADIUS = 8;
 	private static final long DROPWAVE_COOLDOWN_MILLIS = 5000L;
-	private static final int CRACKER_CAMPAIGN_MAX_POOL = 1_000_000;
 
 	private Player petOwnerA;
 	private final HashMap<Long, Long> dropWaveLastUse = new HashMap<>();
@@ -128,8 +126,6 @@ public final class Admins implements CommandTrigger {
 			pathfindDebug(player, args);
 		} else if (command.equalsIgnoreCase("holidaydrop")) {
 			startHolidayDrop(player, command, args, false);
-		} else if (command.equalsIgnoreCase("cracker")) {
-			crackerCampaign(player, command, args);
 		} else if (command.equalsIgnoreCase("stopholidaydrop") || command.equalsIgnoreCase("cancelholidaydrop") || command.equalsIgnoreCase("christmasiscancelled")) {
 			stopHolidayDrop(player);
 		} else if (command.equalsIgnoreCase("cabbagehalloweendrop")) {
@@ -701,134 +697,6 @@ public final class Admins implements CommandTrigger {
 		newArgs[1] = String.format("%d", (minute + delay) % 60);
 		newArgs[2] = "1330"; // Halloween Cracker
 		startHolidayDrop(player, command,  newArgs, true);
-	}
-
-	private void crackerCampaign(Player player, String command, String[] args) {
-		if (!player.isOwner()) {
-			player.message(messagePrefix + "That command is owner-only.");
-			return;
-		}
-
-		final CrackerCampaignService campaign = player.getWorld().getCrackerCampaignService();
-		if (campaign == null) {
-			player.message(messagePrefix + "The cracker campaign service is unavailable.");
-			return;
-		}
-
-		if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("status"))) {
-			reportCrackerCampaignStatus(player, campaign.getState());
-			return;
-		}
-
-		final String amountArgument;
-		if (args.length == 1) {
-			amountArgument = args[0];
-		} else if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-			amountArgument = args[1];
-		} else {
-			crackerCampaignUsage(player, command);
-			return;
-		}
-
-		final int intendedRemaining;
-		try {
-			intendedRemaining = Integer.parseInt(amountArgument);
-		} catch (NumberFormatException ex) {
-			crackerCampaignUsage(player, command);
-			return;
-		}
-		if (intendedRemaining < 0 || intendedRemaining > CRACKER_CAMPAIGN_MAX_POOL) {
-			player.message(messagePrefix + "Remaining crackers must be from 0 through "
-				+ CRACKER_CAMPAIGN_MAX_POOL + ".");
-			return;
-		}
-
-		final CrackerCampaignService.State state = campaign.getState();
-		if (!state.isEnabled()) {
-			player.message(messagePrefix + "The cracker campaign is disabled by server configuration.");
-			return;
-		}
-
-		final CrackerCampaignService.SetResult result;
-		try {
-			result = campaign.setRemaining(intendedRemaining);
-		} catch (RuntimeException ex) {
-			LOGGER.error("Unable to set cracker campaign pool", ex);
-			auditCrackerCampaignSet(player, "failed_exception", intendedRemaining,
-				CrackerCampaignService.UNKNOWN_REMAINING, CrackerCampaignService.UNKNOWN_REMAINING);
-			player.message(messagePrefix + "The cracker campaign pool could not be saved. Check the server logs.");
-			return;
-		}
-
-		switch (result.getStatus()) {
-			case UPDATED:
-				auditCrackerCampaignSet(player, "updated", intendedRemaining,
-					result.getPreviousRemaining(), result.getRemaining());
-				player.message(messagePrefix + "Cracker campaign pool changed from "
-					+ displayCrackerCount(result.getPreviousRemaining()) + " to "
-					+ displayCrackerCount(result.getRemaining()) + "."
-					+ (result.getRemaining() == 0 ? " Awards are now off." : ""));
-				return;
-			case UNCHANGED:
-				auditCrackerCampaignSet(player, "unchanged", intendedRemaining,
-					result.getPreviousRemaining(), result.getRemaining());
-				player.message(messagePrefix + "Cracker campaign pool is already "
-					+ displayCrackerCount(result.getRemaining()) + "."
-					+ (result.getRemaining() == 0 ? " Awards are off." : ""));
-				return;
-			case FAILED:
-				auditCrackerCampaignSet(player, "failed", intendedRemaining,
-					result.getPreviousRemaining(), result.getRemaining());
-				player.message(messagePrefix + "The cracker campaign pool was not changed because the database write failed.");
-				return;
-			case UNCERTAIN:
-				auditCrackerCampaignSet(player, "uncertain", intendedRemaining,
-					result.getPreviousRemaining(), result.getRemaining());
-				player.message(messagePrefix + "The cracker campaign database result is uncertain. Do not retry; use ::cracker status first.");
-				return;
-			default:
-				auditCrackerCampaignSet(player, "failed_unknown", intendedRemaining,
-					result.getPreviousRemaining(), result.getRemaining());
-				player.message(messagePrefix + "The cracker campaign pool was not changed.");
-		}
-	}
-
-	private void reportCrackerCampaignStatus(Player player, CrackerCampaignService.State state) {
-		if (!state.isLoaded()) {
-			player.message(messagePrefix + "Cracker campaign status is unavailable because the durable pool could not be loaded.");
-			return;
-		}
-		if (!state.isEnabled()) {
-			player.message(messagePrefix + "Cracker campaign is disabled by server configuration"
-				+ " (persisted pool: " + displayCrackerCount(state.getRemaining()) + ").");
-			return;
-		}
-
-		player.message(messagePrefix + "Cracker campaign is "
-			+ (state.isActive() ? "active" : "inactive") + " with "
-			+ displayCrackerCount(state.getRemaining()) + " remaining; NPC kills 1/"
-			+ player.getConfig().CRACKER_CAMPAIGN_NPC_KILL_DENOMINATOR
-			+ ", skilling 1/" + player.getConfig().CRACKER_CAMPAIGN_SKILLING_DENOMINATOR + ".");
-	}
-
-	private void crackerCampaignUsage(Player player, String command) {
-		player.message(badSyntaxPrefix + command.toUpperCase()
-			+ " [status|0-" + CRACKER_CAMPAIGN_MAX_POOL + "|set 0-"
-			+ CRACKER_CAMPAIGN_MAX_POOL + "]");
-	}
-
-	private void auditCrackerCampaignSet(Player player, String status, int intendedRemaining,
-		int previousRemaining, int remaining) {
-		player.getWorld().getServer().getGameLogger().addQuery(new StaffLog(player, 21,
-			messagePrefix + "Cracker campaign set status=" + status
-				+ " intended=" + displayCrackerCount(intendedRemaining)
-				+ " previous=" + displayCrackerCount(previousRemaining)
-				+ " remaining=" + displayCrackerCount(remaining)));
-	}
-
-	private String displayCrackerCount(int remaining) {
-		return remaining == CrackerCampaignService.UNKNOWN_REMAINING
-			? "unknown" : Integer.toString(remaining);
 	}
 
 	private void startHolidayDrop(Player player, String command, String[] args, boolean allowMultiple) {
@@ -1567,20 +1435,20 @@ public final class Admins implements CommandTrigger {
 
 	private void queueChristmasCrackerFixture(Player player, String command, String[] args) {
 		if (args.length < 1 || args.length > 2) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [category-specific reward roll]");
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [reward roll 0-127]");
 			return;
 		}
 		try {
 			int categoryRoll = Integer.parseInt(args[0]);
 			int rewardRoll = args.length == 2 ? Integer.parseInt(args[1]) : 0;
 			if (!ChristmasCracker.queueAdminFixture(player, categoryRoll, rewardRoll)) {
-				player.message(badSyntaxPrefix + "Reward roll must be 0 for category 0-59, 0-127 (0-137 with custom sprites) for 60-79, or 0-9 for 80-99.");
+				player.message(badSyntaxPrefix + "Category roll must be 0-99 and reward roll must be 0-127.");
 				return;
 			}
 			player.message(messagePrefix + "Queued Christmas cracker fixture: category="
 				+ categoryRoll + ", reward=" + rewardRoll + ".");
 		} catch (NumberFormatException ex) {
-			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [category-specific reward roll]");
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [reward roll 0-127]");
 		}
 	}
 
@@ -3348,7 +3216,7 @@ public final class Admins implements CommandTrigger {
 
 	private void worldAnnouncementPreview(Player player, String command, String[] args) {
 		if (args.length < 1) {
-			worldAnnouncementPreviewUsage(player, command);
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
 			return;
 		}
 
@@ -3361,26 +3229,9 @@ public final class Admins implements CommandTrigger {
 			announcer.previewSkulledWildernessKill(player);
 		} else if (args[0].equalsIgnoreCase("newplayer") || args[0].equalsIgnoreCase("new")) {
 			announcer.previewNewPlayerJoined(player);
-		} else if (args[0].equalsIgnoreCase("firstskill")) {
-			announcer.previewFirstSkillLevel(player);
-		} else if (args[0].equalsIgnoreCase("qualifiedpk")) {
-			announcer.previewQualifiedWildernessKill(player);
-		} else if (args[0].equalsIgnoreCase("pk3")) {
-			announcer.previewPkStreakMilestone(player, 3);
-		} else if (args[0].equalsIgnoreCase("pk5")) {
-			announcer.previewPkStreakMilestone(player, 5);
-		} else if (args[0].equalsIgnoreCase("pk10")) {
-			announcer.previewPkStreakMilestone(player, 10);
-		} else if (args[0].equalsIgnoreCase("firstcracker")) {
-			announcer.previewFirstCampaignCracker(player);
 		} else {
-			worldAnnouncementPreviewUsage(player, command);
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [skill|total|pk|newplayer]");
 		}
-	}
-
-	private void worldAnnouncementPreviewUsage(Player player, String command) {
-		player.message(badSyntaxPrefix + command.toUpperCase()
-			+ " [skill|total|pk|newplayer|firstskill|qualifiedpk|pk3|pk5|pk10|firstcracker]");
 	}
 
 	private void npcRangedPlayer(Player player, String command, String[] args) {

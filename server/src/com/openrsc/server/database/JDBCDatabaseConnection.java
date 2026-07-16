@@ -1,14 +1,13 @@
 package com.openrsc.server.database;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class JDBCDatabaseConnection {
@@ -37,7 +36,7 @@ public abstract class JDBCDatabaseConnection {
     public ResultSet executeQuery(final String string) throws SQLException {
         connectionLock.lock();
         try {
-            return lockResultSet(getStatement().executeQuery(string));
+            return getStatement().executeQuery(string);
         } finally {
             connectionLock.unlock();
         }
@@ -62,86 +61,61 @@ public abstract class JDBCDatabaseConnection {
     public PreparedStatement prepareStatement(final String statement) throws SQLException {
         connectionLock.lock();
         try {
-            return lockPreparedStatement(getConnection().prepareStatement(statement));
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
     }
 
     public PreparedStatement prepareStatement(final String statement, final String[] generatedColumns) throws SQLException {
         connectionLock.lock();
         try {
-            return lockPreparedStatement(getConnection().prepareStatement(statement, generatedColumns));
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement, generatedColumns));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
     }
 
     public PreparedStatement prepareStatement(final String statement, final int returnKeys) throws SQLException {
         connectionLock.lock();
         try {
-            return lockPreparedStatement(getConnection().prepareStatement(statement, returnKeys));
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement, returnKeys));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
     }
 
     /**
-     * A statement may be prepared immediately before another thread begins an atomic
-     * transaction. Locking only prepareStatement() would still let that old statement
-     * execute on the shared JDBC connection between BEGIN and COMMIT. Proxy every JDBC
-     * call so pre-created statements and lazy ResultSets must acquire the same reentrant
-     * connection lock. Calls made by the transaction owner remain reentrant.
+     * The server uses one JDBC connection. Holding its reentrant lock until statement close
+     * covers parameter binding, execution, generated keys, and ResultSet consumption; locking
+     * only prepareStatement() allowed standalone queries to interleave into a transaction.
      */
-    private PreparedStatement lockPreparedStatement(final PreparedStatement statement) {
-        return lockedJdbcProxy(statement, PreparedStatement.class);
-    }
-
-    private ResultSet lockResultSet(final ResultSet resultSet) {
-        return lockedJdbcProxy(resultSet, ResultSet.class);
-    }
-
-    private <T> T lockedJdbcProxy(final T delegate, final Class<T> contract) {
-        if (delegate == null) {
-            return null;
-        }
-        if (Proxy.isProxyClass(delegate.getClass())) {
-            final InvocationHandler existing = Proxy.getInvocationHandler(delegate);
-            if (existing instanceof LockedJdbcInvocationHandler) {
-                return contract.cast(delegate);
-            }
-        }
-        return contract.cast(Proxy.newProxyInstance(
-            JDBCDatabaseConnection.class.getClassLoader(),
-            new Class<?>[] { contract },
-            new LockedJdbcInvocationHandler(delegate)));
-    }
-
-    private final class LockedJdbcInvocationHandler implements InvocationHandler {
-        private final Object delegate;
-
-        private LockedJdbcInvocationHandler(Object delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            connectionLock.lock();
-            try {
-                final Object result;
+    private PreparedStatement lockUntilClosed(final PreparedStatement delegate) {
+        final AtomicBoolean released = new AtomicBoolean(false);
+        return (PreparedStatement) Proxy.newProxyInstance(
+            PreparedStatement.class.getClassLoader(),
+            new Class<?>[]{PreparedStatement.class},
+            (proxy, method, args) -> {
+                if ("close".equals(method.getName())) {
+                    try {
+                        return method.invoke(delegate, args);
+                    } catch (InvocationTargetException ex) {
+                        throw ex.getCause();
+                    } finally {
+                        if (released.compareAndSet(false, true)) {
+                            connectionLock.unlock();
+                        }
+                    }
+                }
                 try {
-                    result = method.invoke(delegate, args);
+                    return method.invoke(delegate, args);
                 } catch (InvocationTargetException ex) {
                     throw ex.getCause();
                 }
-                if (result instanceof ResultSet) {
-                    return lockResultSet((ResultSet) result);
-                }
-                return result;
-            } finally {
-                connectionLock.unlock();
-            }
-        }
+            });
     }
 
     protected abstract Statement getStatement();

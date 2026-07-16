@@ -157,7 +157,7 @@ public final class GameStateUpdater {
 		}
 		if (!player.getAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, false)) {
 			player.setAttribute(OUTDATED_CLIENT_KICK_ATTRIBUTE, true);
-			ActionSender.sendSystemMessage(player, "Voidscape has been updated. Relaunch the launcher to download the new client.");
+			ActionSender.sendSystemMessage(player, "Voidscape has been updated. Update the app or launcher to download the new client.");
 			if (player.getClientLimitations().supportsSystemUpdateTimer) {
 				ActionSender.sendSystemUpdateTimer(player, (int) (OUTDATED_CLIENT_KICK_DELAY_MS / 1000L));
 			}
@@ -1098,6 +1098,10 @@ public final class GameStateUpdater {
 						}
 						if (player.getClientVersion() >= PlayerAppearance.MODERN_HAIR_CLIENT_VERSION) {
 							updatesMain.add((byte) appearance.getHairStyle());
+						}
+						if (player.getClientVersion() >= PlayerTitle.OVERHEAD_HONORIFIC_CLIENT_VERSION) {
+							updatesMain.add(PlayerTitle.activeHonorificOverhead(playerNeedingAppearanceUpdate));
+							updatesMain.add((byte) PlayerTitle.activeHonorificOverheadTier(playerNeedingAppearanceUpdate));
 						}
 					}
 				}

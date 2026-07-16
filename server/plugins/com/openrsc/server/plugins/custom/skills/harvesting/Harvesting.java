@@ -236,11 +236,7 @@ public final class Harvesting implements OpLocTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION){
-			repeat = Formulae.getRepeatTimes(player, Skill.HARVESTING.id());
-		}
-		startbatch(repeat);
+		startskillbatch(Skill.HARVESTING.id());
 		batchClipping(player, object, objName, prodEnum);
 	}
 
@@ -331,11 +327,7 @@ public final class Harvesting implements OpLocTrigger {
 
 		final int toolId = getTool(player, object);
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION){
-			repeat = Formulae.getRepeatTimes(player, Skill.HARVESTING.id());
-		}
-		startbatch(repeat);
+		startskillbatch(Skill.HARVESTING.id());
 		batchHarvest(player, toolId, object, def);
 	}
 

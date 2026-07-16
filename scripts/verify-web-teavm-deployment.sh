@@ -557,16 +557,38 @@ required_paths = [
     "favicon.png",
     "Cache/MD5.SUM",
 ]
-forbidden_fragments = (
+forbidden_runtime_basenames = {
     "accounts.txt",
     "credentials.txt",
     "uid.dat",
     "ip.txt",
     "port.txt",
     "config.txt",
+}
+scratch_basenames = {".ds_store", "thumbs.db"}
+forbidden_suffixes = (
     ".map",
     ".teavmdbg",
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
 )
+
+def is_forbidden_path(path: str) -> bool:
+    basename = path.rsplit("/", 1)[-1].lower()
+    return (
+        basename in forbidden_runtime_basenames
+        or basename in scratch_basenames
+        or basename.endswith(forbidden_suffixes)
+    )
 
 def safe_name(value: str) -> str:
     value = value.strip("/") or "root"
@@ -602,8 +624,8 @@ for entry in files:
     if not isinstance(path, str) or not path or path.startswith("/") or ".." in path.split("/"):
         errors.append(f"invalid manifest path: {path!r}")
         continue
-    if any(fragment in path for fragment in forbidden_fragments):
-        errors.append(f"manifest includes forbidden/debug/runtime path: {path}")
+    if is_forbidden_path(path):
+        errors.append(f"manifest includes forbidden/debug/runtime/scratch path: {path}")
     if not isinstance(size, int) or size <= 0:
         errors.append(f"manifest path {path} has invalid size {size!r}")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -660,16 +682,39 @@ timeout = float(sys.argv[3])
 insecure = sys.argv[4] == "1"
 results_path = Path(sys.argv[5])
 
-forbidden_fragments = (
+forbidden_runtime_basenames = {
     "accounts.txt",
     "credentials.txt",
     "uid.dat",
     "ip.txt",
     "port.txt",
     "config.txt",
+}
+scratch_basenames = {".ds_store", "thumbs.db"}
+forbidden_suffixes = (
     ".map",
     ".teavmdbg",
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
 )
+
+
+def is_forbidden_path(path: str) -> bool:
+    basename = path.rsplit("/", 1)[-1].lower()
+    return (
+        basename in forbidden_runtime_basenames
+        or basename in scratch_basenames
+        or basename.endswith(forbidden_suffixes)
+    )
 
 
 def write_artifact(artifact: dict[str, Any]) -> None:
@@ -724,8 +769,8 @@ for index, entry in enumerate(files):
         errors.append(f"manifest path is duplicated: {path}")
         continue
     seen.add(path)
-    if any(fragment in path for fragment in forbidden_fragments):
-        errors.append(f"manifest includes forbidden/debug/runtime path: {path}")
+    if is_forbidden_path(path):
+        errors.append(f"manifest includes forbidden/debug/runtime/scratch path: {path}")
         continue
     if not isinstance(expected_size, int) or expected_size <= 0:
         errors.append(f"manifest path {path} has invalid size {expected_size!r}")

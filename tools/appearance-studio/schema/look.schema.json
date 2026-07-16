@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-look/v1",
+  "title": "Voidscape compile-time appearance Look",
+  "type": "object",
+  "required": [
+    "schema", "key", "name", "status", "profile", "template",
+    "compile_target", "frame_profile", "base", "layers", "allocation",
+    "runtime", "compatibility", "preset", "art"
+  ],
+  "properties": {
+    "schema": {"const": "voidscape-look/v1"},
+    "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "name": {"type": "string", "minLength": 1},
+    "status": {"enum": ["proposed", "draft", "approved", "active"]},
+    "profile": {"const": "authentic"},
+    "template": {"const": "rsc-player-v1"},
+    "compile_target": {"const": "one-legacy-head-block"},
+    "frame_profile": {"const": "walk-combat-18"},
+    "base": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {"key": {"const": "locked-bald-head"}},
+      "additionalProperties": false
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["key", "kind", "manifest", "order"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "kind": {"enum": ["hair", "facial-hair"]},
+          "manifest": {"type": "string", "minLength": 1},
+          "order": {"type": "integer", "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    },
+    "allocation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["state", "appearance_id", "sprite_base", "reservation_size"],
+          "properties": {
+            "state": {"const": "unallocated"},
+            "appearance_id": {"type": "null"},
+            "sprite_base": {"type": "null"},
+            "reservation_size": {"const": 27}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["state", "appearance_id", "sprite_base", "reservation_size"],
+          "properties": {
+            "state": {"enum": ["proposed", "reserved", "active"]},
+            "appearance_id": {"type": "integer", "minimum": 1, "maximum": 256},
+            "sprite_base": {"type": "integer", "minimum": 0},
+            "reservation_size": {"const": 27}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "animation_name", "category", "char_colour", "blue_mask",
+        "gender_model", "has_a", "has_f", "paperdoll_slot"
+      ],
+      "properties": {
+        "animation_name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "category": {"const": "player"},
+        "char_colour": {"const": 1},
+        "blue_mask": {"const": 0},
+        "gender_model": {"enum": [5, 13]},
+        "has_a": {"const": true},
+        "has_f": {"const": false},
+        "paperdoll_slot": {"const": 0}
+      },
+      "additionalProperties": false
+    },
+    "compatibility": {
+      "type": "object",
+      "required": ["retro_fallback_appearance_id", "custom_sprites"],
+      "properties": {
+        "retro_fallback_appearance_id": {"const": 8},
+        "custom_sprites": {"const": "unsupported"}
+      },
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "allocation_approved": {"type": "boolean"},
+        "art_brief_approved": {"type": "boolean"},
+        "production_pixels_approved": {"type": "boolean"},
+        "studio_approved": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "preset": {
+      "type": "object",
+      "required": ["selectable", "hair_colour", "top_colour", "bottom_colour", "skin_colour"],
+      "properties": {
+        "selectable": {"type": "boolean"},
+        "hair_colour": {"type": ["integer", "null"], "minimum": 0},
+        "top_colour": {"type": ["integer", "null"], "minimum": 0},
+        "bottom_colour": {"type": ["integer", "null"], "minimum": 0},
+        "skin_colour": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "art": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["source_digest"],
+          "properties": {
+            "source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

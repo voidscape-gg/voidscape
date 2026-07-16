@@ -1,0 +1,25 @@
+Use case: precise-object-edit
+Asset type: corrected front directional source reference for a RuneScape Classic Cowboy Hat; not a final packed sprite
+
+Input images:
+- Image 1 is the edit target. Preserve its brim, band, centered buckle, front symmetry, leather colors, scale, padding, and blocky pixel treatment.
+- Image 2 is the authentic front-registration board. Continue respecting its straight-on camera elevation and compact face-safe hat proportions.
+
+Primary request:
+Change only the top contour of Image 1's crown and make the green backdrop perfectly uniform. Keep every other design element unchanged.
+
+Crown correction:
+- Replace the two tall separated top blocks with one low continuous cowboy crown silhouette.
+- Give the crown one very shallow centered crease: a subtle one-step dip, no more than roughly four percent of the crown height.
+- The outer crown shoulders may rise gently, but they must flow continuously into the shallow center crease.
+- The silhouette must read immediately as one soft pinched cowboy crown, never as cat ears, animal ears, horns, towers, two peaks, battlements, or a deep V notch.
+- Keep the crown compact and gently tapered. Do not make it taller, wider, tilted, rounded like a bowler, or pointed like a wizard hat.
+
+Invariants:
+- Preserve the broad nearly horizontal brim and its modest curls exactly.
+- Preserve the dark band and the single tiny centered muted-gold buckle exactly.
+- Preserve the exact straight-on front view, bilateral symmetry, overall scale, centering, and generous padding.
+- Preserve the chunky early RuneScape Classic-inspired pixel-source style.
+- Exactly one complete isolated hat; no head, face, hair, person, text, labels, neighboring views, shadow, reflection, glow, blur, antialiasing, or watermark.
+- Background must be one perfectly flat solid #00FF00 with no gradient, texture, noise, lighting variation, or floor plane.
+- Do not use #00FF00 inside the hat.

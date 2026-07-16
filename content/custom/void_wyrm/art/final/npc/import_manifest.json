@@ -1,0 +1,19 @@
+{
+  "format": "voidscape-void-wyrm-sheet-v1",
+  "sourceSheet": "content/custom/void_wyrm/art/source/generated/sheet-v1/variant_01.png",
+  "grid": {
+    "columns": 3,
+    "rows": 6
+  },
+  "frameCount": 18,
+  "walkingFrames": 15,
+  "walkingLogicalCanvas": [
+    226,
+    163
+  ],
+  "attackLogicalCanvas": [
+    335,
+    163
+  ],
+  "alpha": "binary"
+}

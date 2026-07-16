@@ -72,8 +72,6 @@ SMOKE_WORLD_MAP_FLAG="$APP_SMOKE_FILES/android-smoke-world-map.flag"
 SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
 SMOKE_AFK_FLAG="$APP_SMOKE_FILES/android-smoke-afk.flag"
 SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
-SMOKE_CRACKER_CAMPAIGN_FLAG="$APP_SMOKE_FILES/android-smoke-cracker-campaign.flag"
-SMOKE_CRACKER_CAMPAIGN_COMMAND_FILE="$APP_SMOKE_FILES/android-smoke-cracker-campaign-command.txt"
 SMOKE_APPEARANCE_PROMPT_FLAG="$APP_SMOKE_FILES/android-smoke-appearance-prompt.flag"
 SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
 SMOKE_LOGIN_FLAG="$APP_SMOKE_FILES/android-smoke-login.flag"
@@ -92,13 +90,13 @@ ONLY_AUTH_WORLD_MAP=0
 ONLY_AUTH_SETTINGS=0
 ONLY_AUTH_AFK=0
 ONLY_AUTH_GROUND_LOOT=0
-ONLY_AUTH_CRACKER_CAMPAIGN=0
 ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_PVP_STRESS=0
 ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
 ONLY_AUTH_CREDENTIALS=0
 ONLY_BOOTSTRAP=0
+ONLY_ACCOUNT_HANDOFF=0
 ORIGINAL_ACCELEROMETER_ROTATION=""
 ORIGINAL_USER_ROTATION=""
 ORIGINAL_WINDOW_ROTATION_MODE=""
@@ -118,6 +116,8 @@ AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
 AUTH_PORT="${ANDROID_SMOKE_AUTH_PORT:-43596}"
+ACCOUNT_HANDOFF_HOST="${ANDROID_SMOKE_ACCOUNT_HANDOFF_HOST:-}"
+ACCOUNT_HANDOFF_PORT="${ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT:-43596}"
 AUTH_DB="${ANDROID_SMOKE_AUTH_DB:-}"
 AUTH_USE_BUNDLED_ENDPOINT="${ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT:-0}"
 AUTH_EXISTING_USER_X_PCT="${ANDROID_SMOKE_AUTH_EXISTING_USER_X_PCT:-50}"
@@ -209,8 +209,6 @@ AUTH_GROUND_LOOT_ITEM_ID="${ANDROID_SMOKE_GROUND_LOOT_ITEM_ID:-93}"
 AUTH_GROUND_LOOT_ITEM_AMOUNT="${ANDROID_SMOKE_GROUND_LOOT_ITEM_AMOUNT:-1}"
 AUTH_GROUND_LOOT_PLAYER_X="${ANDROID_SMOKE_GROUND_LOOT_PLAYER_X:-23}"
 AUTH_GROUND_LOOT_PLAYER_Y="${ANDROID_SMOKE_GROUND_LOOT_PLAYER_Y:-25}"
-AUTH_CRACKER_CAMPAIGN_REMAINING="${ANDROID_SMOKE_CRACKER_CAMPAIGN_REMAINING:-1000}"
-AUTH_CRACKER_CAMPAIGN_HEALTH_ONLY="${ANDROID_SMOKE_CRACKER_CAMPAIGN_HEALTH_ONLY:-0}"
 AUTH_WILDERNESS_PLAYER_X="${ANDROID_SMOKE_WILDERNESS_PLAYER_X:-23}"
 AUTH_WILDERNESS_PLAYER_Y="${ANDROID_SMOKE_WILDERNESS_PLAYER_Y:-25}"
 AUTH_WILDERNESS_BOT_COUNT="${ANDROID_SMOKE_WILDERNESS_BOT_COUNT:-1}"
@@ -229,22 +227,10 @@ AUTH_PVP_STRESS_WALK_CLIENT_Y="${ANDROID_SMOKE_PVP_STRESS_WALK_CLIENT_Y:-92}"
 AUTH_FIXTURE_ITEM_ID_BASE="${ANDROID_SMOKE_FIXTURE_ITEM_ID_BASE:-1000000}"
 PENDING_SERVER_HOST=""
 PENDING_SERVER_PORT=""
-CRACKER_CAMPAIGN_POOL_KEY="void_cracker_pool_remaining"
-CRACKER_CAMPAIGN_FIXTURE_ACTIVE=0
-CRACKER_CAMPAIGN_POOL_SNAPSHOT=""
-CRACKER_CAMPAIGN_PLAYER_CACHE_SNAPSHOT=""
-CRACKER_CAMPAIGN_ORIGINAL_REMAINING=0
-CRACKER_CAMPAIGN_ORIGINAL_GROUP=""
-CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID=""
-CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID=0
-CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID=0
-CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE=""
-CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE=""
-CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT=0
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-afk] [--only-auth-ground-loot] [--only-auth-cracker-campaign] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-account-handoff] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-afk] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -259,19 +245,21 @@ Environment:
   ANDROID_SMOKE_AUTH_PASS          Optional game password for in-game/logout smoke
   ANDROID_SMOKE_AUTH_HOST          Optional auth smoke host, default: 10.0.2.2
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
+  ANDROID_SMOKE_ACCOUNT_HANDOFF_HOST Optional reachable server used only to load the login home for --only-account-handoff
+  ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT Optional account-handoff server port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
   ANDROID_SMOKE_LEAVE_LOGGED_IN=1  Leave --only-auth-login running in-game for manual testing
   ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT=1
                                     Optional: do not write the requested endpoint before auth smoke launch
   ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
   --only-bootstrap                 Focused offline bundled-cache install/repair/skip and endpoint smoke
+  --only-account-handoff           Focused Create Account portal URL smoke; no game server required
   --only-auth-credentials          Focused opt-in encrypted saved-login, persistence, and forget smoke
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
   --only-auth-chat-tabs            Focused split-rail mobile hub smoke in portrait and landscape
   --only-auth-chat-send            Focused inline composer, optional history filters, send, IME, and Back smoke
   --only-auth-afk                  Focused foreground low-resource AFK monitor entry, cadence, and resume smoke
-  --only-auth-cracker-campaign     Focused real-envelope portrait/landscape cracker HUD and fail-closed smoke
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
   ANDROID_SMOKE_NPC_ACTION         Expected shared NPC action, default: NPC_TALK_TO
   ANDROID_SMOKE_NPC_PLAYER_X       Optional DB x for NPC fixture, default: 23
@@ -342,8 +330,6 @@ Environment:
   --only-auth-pvp-stress requires ANDROID_SMOKE_AUTH_DB and verifies food/potion/spell/player target/walk-away input
   ANDROID_SMOKE_GROUND_LOOT_ITEM_ID Optional rare-beam fixture item id, default: 93 (Rune battle axe)
   ANDROID_SMOKE_GROUND_LOOT_PLAYER_X/Y Optional DB x/y for ground-loot fixture, default: 23,25
-  ANDROID_SMOKE_CRACKER_CAMPAIGN_REMAINING Positive owner-set count for HUD proof, default: 1000
-  ANDROID_SMOKE_CRACKER_CAMPAIGN_HEALTH_ONLY Set to 1 for login-screen telemetry/capture only; no DB mutation
   ANDROID_SMOKE_WILDERNESS_PLAYER_X/Y Optional DB x/y for player-target fixture, default: 23,25
   ANDROID_SMOKE_WILDERNESS_BOT_COUNT Optional cinematic player count, default: 1
   ANDROID_SMOKE_WILDERNESS_BOSS_ID   Optional cinematic anchor NPC id, default: 1 (Bob)
@@ -527,6 +513,10 @@ while [[ "$#" -gt 0 ]]; do
             ONLY_BOOTSTRAP=1
             shift
             ;;
+        --only-account-handoff)
+            ONLY_ACCOUNT_HANDOFF=1
+            shift
+            ;;
         --only-auth-camera)
             ONLY_AUTH_CAMERA=1
             shift
@@ -573,10 +563,6 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --only-auth-ground-loot)
             ONLY_AUTH_GROUND_LOOT=1
-            shift
-            ;;
-        --only-auth-cracker-campaign)
-            ONLY_AUTH_CRACKER_CAMPAIGN=1
             shift
             ;;
         --only-auth-wilderness-target)
@@ -846,20 +832,6 @@ disable_android_smoke_ground_loot() {
     remove_smoke_files "$SMOKE_GROUND_LOOT_FLAG"
 }
 
-enable_android_smoke_cracker_campaign() {
-    touch_smoke_file "$SMOKE_CRACKER_CAMPAIGN_FLAG"
-}
-
-disable_android_smoke_cracker_campaign() {
-    remove_smoke_files "$SMOKE_CRACKER_CAMPAIGN_FLAG" \
-        "$SMOKE_CRACKER_CAMPAIGN_COMMAND_FILE"
-}
-
-write_android_smoke_cracker_campaign_command() {
-    local value="$1"
-    write_smoke_file "$SMOKE_CRACKER_CAMPAIGN_COMMAND_FILE" "$value"
-}
-
 enable_android_smoke_appearance_prompt() {
     touch_smoke_file "$SMOKE_APPEARANCE_PROMPT_FLAG"
 }
@@ -1091,9 +1063,8 @@ disable_android_smoke_targets() {
 	disable_android_smoke_network
     disable_android_smoke_world_map
     disable_android_smoke_settings
-    disable_android_smoke_afk
+	disable_android_smoke_afk
     disable_android_smoke_ground_loot
-    disable_android_smoke_cracker_campaign
     disable_android_smoke_appearance_prompt
     disable_android_smoke_walk
     disable_android_smoke_login
@@ -1101,10 +1072,6 @@ disable_android_smoke_targets() {
 }
 
 android_smoke_cleanup() {
-    if [[ "$CRACKER_CAMPAIGN_FIXTURE_ACTIVE" -eq 1 ]] \
-        && declare -F restore_cracker_campaign_fixture >/dev/null 2>&1; then
-        restore_cracker_campaign_fixture || true
-    fi
     disable_android_smoke_targets
     restore_android_activity_policy
     restore_android_display_override
@@ -1476,167 +1443,6 @@ screenshot() {
     fi
 }
 
-cracker_campaign_viewport_is_unobstructed() {
-	local expected_orientation="$1"
-	local viewport_line="$2"
-	local physical_width="$3"
-	local physical_height="$4"
-	local surface_width surface_height ime_bottom keyboard_top
-	surface_width="$(extract_log_value "$viewport_line" surfaceW)"
-	surface_height="$(extract_log_value "$viewport_line" surfaceH)"
-	ime_bottom="$(extract_log_value "$viewport_line" imeBottom)"
-	keyboard_top="$(extract_log_value "$viewport_line" keyboardTop)"
-
-	[[ "$physical_width" =~ ^[0-9]+$ && "$physical_height" =~ ^[0-9]+$ \
-		&& "$surface_width" == "$physical_width" \
-		&& "$surface_height" == "$physical_height" \
-		&& "$ime_bottom" == "0" && "$keyboard_top" == "2147483647" ]] \
-		&& android_mobile_viewport_log_is_settled_for_surface \
-			"$viewport_line" "$physical_width" "$physical_height" \
-		&& android_mobile_viewport_log_matches_orientation \
-			"$expected_orientation" "$viewport_line"
-}
-
-wait_for_android_login_transition_ime_release() {
-	local expected_orientation="$1"
-	local timeout="${2:-20}"
-	local deadline=$((SECONDS + timeout))
-	local viewport_line="" hud_line="" physical_width physical_height clean_samples=0
-	assert_game_activity_for_input "cracker-campaign native login IME release" \
-		"cracker-campaign-login-ime-release-lost" || return 1
-	read -r physical_width physical_height < <(screen_size)
-	while (( SECONDS < deadline )); do
-		viewport_line="$(wait_for_android_mobile_viewport "$expected_orientation" 3 2>/dev/null || true)"
-		hud_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-			| grep 'ANDROID_SMOKE_CRACKER_CAMPAIGN event=HUD ' | tail -1 || true)"
-		if ! soft_keyboard_is_visible && [[ -n "$viewport_line" ]] \
-			&& cracker_campaign_viewport_is_unobstructed "$expected_orientation" \
-				"$viewport_line" "$physical_width" "$physical_height" \
-			&& [[ "$(extract_log_value "$hud_line" orientation)" == "$expected_orientation" \
-				&& "$(extract_log_value "$hud_line" ime)" == "false" \
-				&& "$(extract_log_value "$hud_line" keyboardTop)" == "-1" ]]; then
-			clean_samples=$((clean_samples + 1))
-			if (( clean_samples >= 3 )); then
-				printf 'appReleasedLoginIme=true\nstableSamples=%s\nactiveInputShown=false\nviewport=%s\nhud=%s\n' \
-					"$clean_samples" "$viewport_line" "$hud_line" \
-					> "$OUT_DIR/cracker-campaign-login-ime-release.txt"
-				echo "Verified native Android login transition released focus/IME without test Back input."
-				return 0
-			fi
-		else
-			clean_samples=0
-			rm -f "$(android_mobile_viewport_cache_file)"
-		fi
-		sleep 1
-	done
-	echo "ERROR: native Android login transition did not stably release its IME" >&2
-	[[ -n "$viewport_line" ]] && echo "$viewport_line" >&2
-	[[ -n "$hud_line" ]] && echo "$hud_line" >&2
-	"$ADB" shell dumpsys input_method 2>/dev/null | tr -d '\r' \
-		| grep -E 'mInputShown|mIsInputViewShown|inputShown' | tail -20 >&2 || true
-	return 1
-}
-
-assert_cracker_campaign_capture_ready() {
-    local expected_orientation="$1"
-    local viewport_line="" physical_width physical_height
-	local deadline=$((SECONDS + 30))
-	case "$expected_orientation" in
-		portrait|landscape) ;;
-		*)
-			echo "ERROR: invalid cracker-campaign capture orientation: $expected_orientation" >&2
-			return 1
-			;;
-	esac
-
-    if soft_keyboard_is_visible; then
-        echo "Android cracker capture dismissing the visible IME with Back."
-		CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT=$((CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT + 1))
-        rm -f "$(android_mobile_viewport_cache_file)"
-        "$ADB" shell input keyevent BACK >/dev/null || return 1
-    fi
-    wait_for_soft_keyboard_hidden 15 || return 1
-    assert_game_activity_for_input "cracker-campaign $expected_orientation capture" \
-        "cracker-campaign-lost-$expected_orientation" || return 1
-	read -r physical_width physical_height < <(screen_size)
-	while (( SECONDS < deadline )); do
-		if soft_keyboard_is_visible; then
-			echo "Android cracker capture re-dismissing an IME that raced the game transition."
-			CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT=$((CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT + 1))
-			rm -f "$(android_mobile_viewport_cache_file)"
-			"$ADB" shell input keyevent BACK >/dev/null || return 1
-			sleep 1
-			continue
-		fi
-		viewport_line="$(wait_for_android_mobile_viewport "$expected_orientation" 3 2>/dev/null || true)"
-		if [[ -n "$viewport_line" ]] \
-			&& cracker_campaign_viewport_is_unobstructed "$expected_orientation" \
-				"$viewport_line" "$physical_width" "$physical_height" \
-			&& assert_soft_keyboard_hidden; then
-			echo "Verified cracker-campaign $expected_orientation capture viewport is full and IME-free: $viewport_line"
-			return 0
-		fi
-		# A cached viewport with an IME inset cannot satisfy this gate and must
-		# not mask the fresh zero-inset log emitted when Android finishes hiding it.
-		rm -f "$(android_mobile_viewport_cache_file)"
-		sleep 1
-	done
-	echo "ERROR: cracker-campaign capture never reached a full, unobstructed $expected_orientation viewport" >&2
-	[[ -n "$viewport_line" ]] && echo "$viewport_line" >&2
-	return 1
-}
-
-strict_cracker_campaign_screenshot() {
-    local name="$1"
-    local expected_orientation="${2:?cracker-campaign capture orientation is required}"
-    local path="$OUT_DIR/$name.png"
-    local description size sha256
-    rm -f "$path" "$path.tmp"
-    assert_cracker_campaign_capture_ready "$expected_orientation" || return 1
-    screenshot "$name"
-    if [[ ! -s "$path" ]]; then
-        echo "ERROR: required cracker-campaign screenshot is absent or empty: $path" >&2
-        return 1
-    fi
-    if ! assert_soft_keyboard_hidden; then
-        rm -f "$path"
-        echo "ERROR: Android IME appeared during required cracker-campaign capture" >&2
-        return 1
-    fi
-    description="$(file -b "$path" 2>/dev/null || true)"
-    if [[ "$description" != *"PNG image data"* ]]; then
-        echo "ERROR: required cracker-campaign capture is not a PNG: $path ($description)" >&2
-        return 1
-    fi
-    size="$(wc -c < "$path" | tr -d ' ')"
-    sha256="$(shasum -a 256 "$path" | awk '{print $1}')"
-    printf 'capture=%s bytes=%s sha256=%s format=%s\n' \
-        "$name.png" "$size" "$sha256" "$description" \
-        >> "$OUT_DIR/cracker-campaign-captures.txt"
-    echo "Verified fresh required cracker-campaign screenshot: $name.png ($size bytes)"
-}
-
-prepare_cracker_campaign_evidence_dir() {
-    rm -f \
-        "$OUT_DIR/108a-auth-cracker-campaign-portrait.png" \
-        "$OUT_DIR/108b-auth-cracker-campaign-landscape.png" \
-        "$OUT_DIR/108c-auth-cracker-campaign-zero-hidden.png" \
-        "$OUT_DIR/108d-auth-cracker-campaign-malformed-hidden.png" \
-        "$OUT_DIR/107z-auth-cracker-campaign-login-health.png" \
-        "$OUT_DIR/cracker-campaign-renderer-telemetry.log" \
-        "$OUT_DIR/cracker-campaign-captures.txt" \
-        "$OUT_DIR/cracker-campaign-login-health.txt" \
-        "$OUT_DIR/cracker-campaign-login-ime-release.txt" \
-        "$OUT_DIR/cracker-campaign-fixture-before.txt" \
-        "$OUT_DIR/cracker-campaign-fixture-after.txt" \
-        "$OUT_DIR/cracker-campaign-pool-before.sql" \
-        "$OUT_DIR/cracker-campaign-pool-after.sql" \
-        "$OUT_DIR/cracker-campaign-player-cache-before.sql" \
-        "$OUT_DIR/cracker-campaign-player-cache-after.sql" \
-        "$OUT_DIR/cracker-campaign-authenticated.flag" \
-        "$OUT_DIR/cracker-campaign-explicit-logout.flag"
-}
-
 wait_for_text() {
     local text="$1"
     local timeout="${2:-30}"
@@ -1829,63 +1635,6 @@ wait_for_login_lengths() {
     return 1
 }
 
-wait_for_login_field_focus() {
-    local field="$1"
-    local timeout="${2:-6}"
-    local deadline=$((SECONDS + timeout))
-    local line focused
-    while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-            | grep "ANDROID_SMOKE_LOGIN_STATE " | tail -20 \
-            | grep "screen=2 " | tail -1 || true)"
-        focused="$(extract_log_value "$line" "${field}Focused")"
-        if [[ "$focused" == "true" ]]; then
-            return 0
-        fi
-        sleep 1
-    done
-    return 1
-}
-
-focus_login_field() {
-    local field="$1"
-    local target_prefix="$2"
-    local fallback_x_pct="$3"
-    local fallback_y_pct="$4"
-    local line client_x client_y attempt
-    for attempt in 1 2; do
-        line="$(wait_for_login_state 2 12 || true)"
-        client_x="$(extract_log_value "$line" "${target_prefix}X")"
-        client_y="$(extract_log_value "$line" "${target_prefix}Y")"
-        if [[ "$client_x" =~ ^[0-9]+$ && "$client_y" =~ ^[0-9]+$ ]]; then
-            echo "Android login $field at client $client_x,$client_y"
-            tap_client_xy "$client_x" "$client_y"
-        else
-            tap_pct "$fallback_x_pct" "$fallback_y_pct"
-        fi
-        if wait_for_login_field_focus "$field" 6; then
-            return 0
-        fi
-        echo "Android login $field focus tap was missed; retrying once."
-    done
-    echo "ERROR: Android login $field field did not receive focus" >&2
-    login_log_tail
-    return 1
-}
-
-replace_login_field() {
-    local field="$1"
-    local target_prefix="$2"
-    local fallback_x_pct="$3"
-    local fallback_y_pct="$4"
-    local value="$5"
-    focus_login_field "$field" "$target_prefix" "$fallback_x_pct" \
-        "$fallback_y_pct" || return 1
-    clear_focused_text_field
-    input_text_slow "$value"
-    sleep 1
-}
-
 wait_for_login_remember_state() {
 	local expected="$1"
 	local timeout="${2:-12}"
@@ -1961,24 +1710,69 @@ close_auth_intro_dialog_if_present() {
 }
 
 enter_auth_credentials() {
+    local line user_x user_y pass_x pass_y
+
     enable_android_smoke_login
-	replace_login_field user user "$AUTH_USERNAME_X_PCT" \
-		"$AUTH_USERNAME_Y_PCT" "$AUTH_USER" || return 1
+    line="$(wait_for_login_state 2 12 || true)"
+    user_x="$(extract_log_value "$line" userX)"
+    user_y="$(extract_log_value "$line" userY)"
+    pass_x="$(extract_log_value "$line" passX)"
+    pass_y="$(extract_log_value "$line" passY)"
+
+    if [[ "$user_x" =~ ^[0-9]+$ && "$user_y" =~ ^[0-9]+$ ]]; then
+        echo "Android login username at client $user_x,$user_y"
+        tap_client_xy "$user_x" "$user_y"
+    else
+        tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
+    fi
+    sleep 1
+    clear_focused_text_field
+    input_text_slow "$AUTH_USER"
+    sleep 1
 	if ! wait_for_login_lengths "${#AUTH_USER}" 0 5 true; then
 		echo "Android login username input was incomplete; retrying once."
-		replace_login_field user user "$AUTH_USERNAME_X_PCT" \
-			"$AUTH_USERNAME_Y_PCT" "$AUTH_USER" || return 1
-		wait_for_login_lengths "${#AUTH_USER}" 0 12 || return 1
+		if [[ "$user_x" =~ ^[0-9]+$ && "$user_y" =~ ^[0-9]+$ ]]; then
+			tap_client_xy "$user_x" "$user_y"
+		else
+			tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
+		fi
+		sleep 1
+		clear_focused_text_field
+		input_text_slow "$AUTH_USER"
+		sleep 1
+		wait_for_login_lengths "${#AUTH_USER}" 0 12 || exit 1
 	fi
-	replace_login_field pass pass "$AUTH_PASSWORD_X_PCT" \
-		"$AUTH_PASSWORD_Y_PCT" "$AUTH_PASS" || return 1
+	# Opening the IME can move the responsive portrait card after the username
+	# tap. Refresh password geometry only after that layout has settled.
+	line="$(wait_for_login_state 2 12 || true)"
+	pass_x="$(extract_log_value "$line" passX)"
+	pass_y="$(extract_log_value "$line" passY)"
+    if [[ "$pass_x" =~ ^[0-9]+$ && "$pass_y" =~ ^[0-9]+$ ]]; then
+        echo "Android login password at client $pass_x,$pass_y"
+        tap_client_xy "$pass_x" "$pass_y"
+    else
+        tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
+    fi
+    sleep 1
+    clear_focused_text_field
+    input_text_slow "$AUTH_PASS"
+    # adb text input does not require a visible IME; BACK can close GameActivity.
+    sleep 1
 	if ! wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 5 true; then
-		echo "Android login credential input was misrouted or incomplete; replacing both fields once."
-		replace_login_field user user "$AUTH_USERNAME_X_PCT" \
-			"$AUTH_USERNAME_Y_PCT" "$AUTH_USER" || return 1
-		replace_login_field pass pass "$AUTH_PASSWORD_X_PCT" \
-			"$AUTH_PASSWORD_Y_PCT" "$AUTH_PASS" || return 1
-		wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || return 1
+		echo "Android login password input was incomplete; retrying once."
+		line="$(wait_for_login_state 2 12 || true)"
+		pass_x="$(extract_log_value "$line" passX)"
+		pass_y="$(extract_log_value "$line" passY)"
+		if [[ "$pass_x" =~ ^[0-9]+$ && "$pass_y" =~ ^[0-9]+$ ]]; then
+			tap_client_xy "$pass_x" "$pass_y"
+		else
+			tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
+		fi
+		sleep 1
+		clear_focused_text_field
+		input_text_slow "$AUTH_PASS"
+		sleep 1
+		wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || exit 1
 	fi
 }
 
@@ -2010,6 +1804,35 @@ assert_resumed_activity() {
 
 	echo "ERROR: expected resumed activity containing $expected" >&2
 	grep -E "(mResumedActivity|topResumedActivity|mLastResumedActivity)" <<< "$activities" >&2 || true
+	return 1
+}
+
+wait_for_external_activity() {
+	local label="$1"
+	local timeout="${2:-15}"
+	local expected_url="${3:-}"
+	local deadline=$((SECONDS + timeout))
+	local activities resumed escaped_app_id
+	escaped_app_id="${APP_ID//./\\.}"
+	while (( SECONDS < deadline )); do
+		activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
+		resumed="$(grep -E '(mResumedActivity|topResumedActivity)[:=]' <<< "$activities" | head -1 || true)"
+		if [[ -n "$resumed" ]] && ! grep -Eq "${escaped_app_id}/" <<< "$resumed"; then
+			if [[ -n "$expected_url" ]] && ! grep -Fq "dat=$expected_url" <<< "$activities"; then
+				echo "ERROR: $label opened an external activity without the expected URL: $expected_url" >&2
+				grep -E 'Intent \{|mIntent=|intent=' <<< "$activities" | tail -20 >&2 || true
+				return 1
+			fi
+			echo "Verified external Android handoff for $label: $resumed"
+			if [[ -n "$expected_url" ]]; then
+				echo "Verified external Android URL for $label: $expected_url"
+			fi
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: $label did not hand off to an external Android activity" >&2
+	grep -E '(mResumedActivity|topResumedActivity|mLastResumedActivity)' <<< "${activities:-}" >&2 || true
 	return 1
 }
 
@@ -4009,240 +3832,6 @@ extract_log_value() {
     local line="$1"
     local key="$2"
     printf "%s\n" "$line" | tr ' ' '\n' | sed -n "s/^${key}=//p" | tail -1
-}
-
-cracker_campaign_log_tail() {
-    "$ADB" logcat -d -v raw 2>/dev/null \
-        | tr -d '\r' \
-        | grep "ANDROID_SMOKE_CRACKER_CAMPAIGN" \
-        | tail -80 >&2 || true
-}
-
-capture_cracker_campaign_telemetry() {
-    local stage="$1"
-    {
-        printf 'stage=%s\n' "$stage"
-        "$ADB" logcat -d -v raw 2>/dev/null \
-            | tr -d '\r' \
-            | grep "ANDROID_SMOKE_CRACKER_CAMPAIGN" || true
-    } >> "$OUT_DIR/cracker-campaign-renderer-telemetry.log"
-}
-
-wait_for_cracker_campaign_event() {
-    local event="$1"
-    local timeout="${2:-20}"
-    local deadline=$((SECONDS + timeout))
-    local line
-    while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-            | grep "ANDROID_SMOKE_CRACKER_CAMPAIGN event=$event " | tail -1 || true)"
-        if [[ -n "$line" ]]; then
-            printf '%s\n' "$line"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: timed out waiting for Android cracker campaign event=$event" >&2
-    cracker_campaign_log_tail
-    return 1
-}
-
-wait_for_cracker_campaign_envelope() {
-    local expected_remaining="$1"
-    local timeout="${2:-20}"
-    local deadline=$((SECONDS + timeout))
-    local line
-    while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-            | grep "ANDROID_SMOKE_CRACKER_CAMPAIGN event=ENVELOPE " \
-            | grep " remaining=$expected_remaining " | tail -1 || true)"
-        if [[ -n "$line" && "$(extract_log_value "$line" protocol)" == "10132" \
-            && "$(extract_log_value "$line" consumed)" == "true" \
-            && "$(extract_log_value "$line" historyLeaks)" == "0" ]]; then
-            echo "Verified Android consumed cracker campaign envelope: $line" >&2
-            printf '%s\n' "$line"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: timed out waiting for consumed Android cracker campaign remaining=$expected_remaining" >&2
-    cracker_campaign_log_tail
-    return 1
-}
-
-wait_for_cracker_campaign_hud() {
-    local expected_orientation="$1"
-    local expected_remaining="$2"
-    local expected_rendered="$3"
-    local timeout="${4:-30}"
-    local deadline=$((SECONDS + timeout))
-    local line
-    while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-            | grep "ANDROID_SMOKE_CRACKER_CAMPAIGN event=HUD " \
-            | grep " orientation=$expected_orientation " \
-            | grep " remaining=$expected_remaining " \
-            | grep " rendered=$expected_rendered " | tail -1 || true)"
-        if [[ -n "$line" ]]; then
-            printf '%s\n' "$line"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: timed out waiting for Android cracker HUD orientation=$expected_orientation remaining=$expected_remaining rendered=$expected_rendered" >&2
-    cracker_campaign_log_tail
-    return 1
-}
-
-cracker_campaign_expected_label() {
-    local remaining="$1"
-    local formatted
-    if (( remaining >= 1000000 )); then
-        formatted="$(printf '%d,%03d,%03d' "$((remaining / 1000000))" \
-            "$(((remaining / 1000) % 1000))" "$((remaining % 1000))")"
-    elif (( remaining >= 1000 )); then
-        formatted="$(printf '%d,%03d' "$((remaining / 1000))" "$((remaining % 1000))")"
-    else
-        formatted="$remaining"
-    fi
-    if (( remaining == 1 )); then
-        printf '%s cracker available\n' "$formatted"
-    else
-        printf '%s crackers available\n' "$formatted"
-    fi
-}
-
-assert_cracker_campaign_hud_geometry() {
-    local line="$1"
-    local expected_orientation="$2"
-    local expected_remaining="$3"
-    local expected_label
-    expected_label="$(cracker_campaign_expected_label "$expected_remaining")"
-    local key value
-    local -a numeric_keys=(x y width height iconX iconY iconWidth iconHeight killFeedY \
-        locationX locationY locationWidth locationHeight vitalsX vitalsY vitalsWidth vitalsHeight \
-        leftRailX leftRailY leftRailWidth leftRailHeight rightRailX rightRailY rightRailWidth \
-        rightRailHeight chatX chatY chatWidth chatHeight gameWidth gameHeight historyLeaks)
-    for key in "${numeric_keys[@]}"; do
-        value="$(extract_log_value "$line" "$key")"
-        if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
-            echo "ERROR: Android cracker HUD telemetry has invalid $key: $line" >&2
-            return 1
-        fi
-    done
-    local x y width height icon_x icon_y icon_width icon_height kill_feed_y
-    local game_width game_height
-    x="$(extract_log_value "$line" x)"
-    y="$(extract_log_value "$line" y)"
-    width="$(extract_log_value "$line" width)"
-    height="$(extract_log_value "$line" height)"
-    icon_x="$(extract_log_value "$line" iconX)"
-    icon_y="$(extract_log_value "$line" iconY)"
-    icon_width="$(extract_log_value "$line" iconWidth)"
-    icon_height="$(extract_log_value "$line" iconHeight)"
-    kill_feed_y="$(extract_log_value "$line" killFeedY)"
-    game_width="$(extract_log_value "$line" gameWidth)"
-    game_height="$(extract_log_value "$line" gameHeight)"
-    if [[ "$(extract_log_value "$line" protocol)" != "10132" \
-        || "$(extract_log_value "$line" orientation)" != "$expected_orientation" \
-        || "$(extract_log_value "$line" native)" != "true" \
-        || "$(extract_log_value "$line" ime)" != "false" \
-        || "$(extract_log_value "$line" keyboardTop)" != "-1" \
-        || "$(extract_log_value "$line" remaining)" != "$expected_remaining" \
-        || "$(extract_log_value "$line" rendered)" != "true" \
-        || "$(extract_log_value "$line" item)" != "575" \
-        || "$(extract_log_value "$line" iconDrawn)" != "true" \
-        || "$(extract_log_value "$line" historyLeaks)" != "0" \
-        || "$line" != *" label=\"$expected_label\""* ]]; then
-        echo "ERROR: Android cracker HUD identity/label contract failed: $line" >&2
-        return 1
-    fi
-    if (( x < 0 || y < 0 || width <= 0 || height <= 0 \
-        || x + width > game_width || y + height > game_height )); then
-        echo "ERROR: Android cracker plaque is outside the framebuffer: $line" >&2
-        return 1
-    fi
-    if (( icon_x < x || icon_y < y || icon_width <= 0 || icon_height <= 0 \
-        || icon_x + icon_width > x + width || icon_y + icon_height > y + height )); then
-        echo "ERROR: Android item-575 icon is not contained by its plaque: $line" >&2
-        return 1
-    fi
-    if (( kill_feed_y < y + height + 13 )); then
-        echo "ERROR: Android kill feed does not clear the cracker plaque by 13px: $line" >&2
-        return 1
-    fi
-
-    local obstacle ox oy ow oh
-    for obstacle in location vitals leftRail rightRail chat; do
-        case "$obstacle" in
-            location)
-                ox="$(extract_log_value "$line" locationX)"; oy="$(extract_log_value "$line" locationY)"
-                ow="$(extract_log_value "$line" locationWidth)"; oh="$(extract_log_value "$line" locationHeight)" ;;
-            vitals)
-                ox="$(extract_log_value "$line" vitalsX)"; oy="$(extract_log_value "$line" vitalsY)"
-                ow="$(extract_log_value "$line" vitalsWidth)"; oh="$(extract_log_value "$line" vitalsHeight)" ;;
-            leftRail)
-                ox="$(extract_log_value "$line" leftRailX)"; oy="$(extract_log_value "$line" leftRailY)"
-                ow="$(extract_log_value "$line" leftRailWidth)"; oh="$(extract_log_value "$line" leftRailHeight)" ;;
-            rightRail)
-                ox="$(extract_log_value "$line" rightRailX)"; oy="$(extract_log_value "$line" rightRailY)"
-                ow="$(extract_log_value "$line" rightRailWidth)"; oh="$(extract_log_value "$line" rightRailHeight)" ;;
-            chat)
-                ox="$(extract_log_value "$line" chatX)"; oy="$(extract_log_value "$line" chatY)"
-                ow="$(extract_log_value "$line" chatWidth)"; oh="$(extract_log_value "$line" chatHeight)" ;;
-        esac
-        if rects_overlap "$x" "$y" "$width" "$height" "$ox" "$oy" "$ow" "$oh"; then
-            echo "ERROR: Android cracker plaque overlaps $obstacle: $line" >&2
-            return 1
-        fi
-    done
-    echo "Verified native Android $expected_orientation cracker HUD geometry, exact label, item 575, and kill-feed clearance."
-}
-
-assert_cracker_campaign_hud_hidden() {
-    local line="$1"
-    if [[ "$(extract_log_value "$line" protocol)" != "10132" \
-        || "$(extract_log_value "$line" remaining)" != "0" \
-        || "$(extract_log_value "$line" rendered)" != "false" \
-        || "$(extract_log_value "$line" ime)" != "false" \
-        || "$(extract_log_value "$line" keyboardTop)" != "-1" \
-        || "$(extract_log_value "$line" iconDrawn)" != "false" \
-        || "$(extract_log_value "$line" historyLeaks)" != "0" \
-        || "$line" != *' label=""'* ]]; then
-        echo "ERROR: Android cracker HUD did not fail closed to hidden: $line" >&2
-        return 1
-    fi
-    echo "Verified native Android cracker HUD hidden with no message-history leak."
-}
-
-send_android_cracker_campaign_command() {
-    local remaining="$1"
-    local expected_token="cracker_${remaining}"
-    local line
-    write_android_smoke_cracker_campaign_command "cracker $remaining"
-    "$ADB" shell input keyevent 142
-    line="$(wait_for_cracker_campaign_event COMMAND 15)" || return 1
-    if [[ "$(extract_log_value "$line" protocol)" != "10132" \
-        || "$(extract_log_value "$line" value)" != "$expected_token" ]]; then
-        echo "ERROR: Android cracker campaign command fixture did not send '$expected_token': $line" >&2
-        return 1
-    fi
-    echo "Verified Android sent owner command through the shared packet path: $line"
-}
-
-inject_android_malformed_cracker_campaign_envelope() {
-    local line
-    write_android_smoke_cracker_campaign_command '@vscrackercampaign@v1|not-a-number'
-    "$ADB" shell input keyevent 142
-    line="$(wait_for_cracker_campaign_event FIXTURE 15)" || return 1
-    if [[ "$(extract_log_value "$line" protocol)" != "10132" \
-        || "$(extract_log_value "$line" consumed)" != "true" \
-        || "$(extract_log_value "$line" remaining)" != "0" \
-        || "$(extract_log_value "$line" historyLeaks)" != "0" ]]; then
-        echo "ERROR: malformed Android cracker envelope did not fail closed: $line" >&2
-        return 1
-    fi
-    echo "Verified malformed Android cracker envelope was consumed without rendering or chat leakage."
 }
 
 mobile_hub_log_tail() {
@@ -7050,7 +6639,7 @@ assert_android_logout_layout() {
 		return 1
 	fi
 
-	for field in account report logout cancel confirm; do
+	for field in account report deletion logout cancel confirm; do
 		rect="$(android_logout_rect_from_line "$line" "$field")" || return 1
 		read -r x y width height <<< "$rect"
 		if (( x + width > game_width || y + height > game_height )); then
@@ -7220,68 +6809,15 @@ wait_for_audio_cycle() {
 	wait_for_audio_event completed 0 20
 }
 
-wait_for_authenticated_logout_input_ready() {
-	local expected_orientation="${1:-auto}"
-	local require_cracker_hud="${2:-0}"
-	local width height orientation viewport_line hud_line
-	wait_for_activity_input_ready "GameActivity" 20 || return 1
-	if soft_keyboard_is_visible; then
-		"$ADB" shell input keyevent BACK >/dev/null || return 1
-		wait_for_soft_keyboard_hidden 15 || return 1
-	fi
-	assert_soft_keyboard_hidden || return 1
-	read -r width height < <(screen_size)
-	if [[ ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ ]]; then
-		echo "ERROR: cannot establish Android screen geometry before explicit logout" >&2
-		return 1
-	fi
-	if [[ "$expected_orientation" == "portrait" || "$expected_orientation" == "landscape" ]]; then
-		orientation="$expected_orientation"
-	elif (( width > height )); then
-		orientation=landscape
-	else
-		orientation=portrait
-	fi
-	viewport_line="$(wait_for_android_mobile_viewport "$orientation" 30)" || return 1
-	if ! cracker_campaign_viewport_is_unobstructed "$orientation" \
-		"$viewport_line" "$width" "$height"; then
-		echo "ERROR: Android renderer viewport is unsettled or IME-obstructed before explicit logout" >&2
-		echo "$viewport_line" >&2
-		return 1
-	fi
-	if [[ "$require_cracker_hud" == "1" ]]; then
-		hud_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
-			| grep 'ANDROID_SMOKE_CRACKER_CAMPAIGN event=HUD ' | tail -1 || true)"
-		if [[ "$(extract_log_value "$hud_line" orientation)" != "$orientation" \
-			|| "$(extract_log_value "$hud_line" native)" != "true" \
-			|| "$(extract_log_value "$hud_line" ime)" != "false" \
-			|| "$(extract_log_value "$hud_line" keyboardTop)" != "-1" ]]; then
-			echo "ERROR: current GAME HUD is not settled and IME-free before explicit logout" >&2
-			echo "$hud_line" >&2
-			return 1
-		fi
-	fi
-	wait_for_activity_input_ready "GameActivity" 10
-}
-
 logout_authenticated_smoke_session() {
-	local expected_orientation="${1:-auto}"
-	local require_cracker_hud="${2:-0}"
-	local line="" attempt
+	local line
 	enable_android_smoke_settings
-	for attempt in 1 2 3; do
-		wait_for_authenticated_logout_input_ready \
-			"$expected_orientation" "$require_cracker_hud" || continue
-		"$ADB" logcat -c || true
-		"$ADB" shell input keyevent 43
-		line="$(wait_for_any_settings_rendered 8)" && break
-		echo "Android explicit logout Account-open retry $attempt/3 after input-focus race." >&2
-		sleep 1
-	done
-	if [[ -z "$line" ]]; then
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	line="$(wait_for_any_settings_rendered 20)" || {
 		disable_android_smoke_settings
 		return 1
-	fi
+	}
 	assert_settings_logout_visible "$line" || {
 		disable_android_smoke_settings
 		return 1
@@ -7296,14 +6832,10 @@ logout_authenticated_smoke_session() {
 }
 
 graceful_cleanup_authenticated_smoke_session() {
-	local require_explicit_logout="${1:-0}"
-	local expected_orientation="${2:-auto}"
-	local require_cracker_hud="${3:-0}"
 	# Never force-stop a still-online Android fixture and then rewrite its DB row:
 	# the server intentionally retains that player for up to ten minutes. Bring
 	# the retained task forward and use the player-visible confirmed logout flow.
-	if [[ "$require_explicit_logout" != "1" && -n "$AUTH_DB" ]] \
-		&& wait_auth_offline 1 >/dev/null 2>&1; then
+	if [[ -n "$AUTH_DB" ]] && wait_auth_offline 1 >/dev/null 2>&1; then
 		return 0
 	fi
 	if ! is_resumed_activity "GameActivity"; then
@@ -7313,7 +6845,7 @@ graceful_cleanup_authenticated_smoke_session() {
 			return 1
 		}
 	fi
-	logout_authenticated_smoke_session "$expected_orientation" "$require_cracker_hud" || {
+	logout_authenticated_smoke_session || {
 		echo "ERROR: graceful authenticated smoke cleanup could not log out" >&2
 		return 1
 	}
@@ -7379,21 +6911,10 @@ select_inventory_item_for_use() {
     sleep 1
 }
 
-android_input_method_state_is_visible() {
-	local state="$1"
-	grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"
-}
-
-soft_keyboard_is_visible() {
-	local state
-	state="$("$ADB" shell dumpsys input_method 2>/dev/null | tr -d '\r')"
-	android_input_method_state_is_visible "$state"
-}
-
 assert_soft_keyboard_visible() {
-    local state
-    state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
-    if android_input_method_state_is_visible "$state"; then
+	local state
+	state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
+	if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
 		return 0
 	fi
 
@@ -7405,7 +6926,7 @@ assert_soft_keyboard_visible() {
 assert_soft_keyboard_hidden() {
 	local state
 	state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
-    if android_input_method_state_is_visible "$state"; then
+	if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
 		echo "ERROR: expected Android soft keyboard to be hidden" >&2
 		grep -E "mInputShown|mIsInputViewShown|inputShown" <<< "$state" >&2 || true
 		return 1
@@ -7419,7 +6940,7 @@ wait_for_soft_keyboard_visible() {
 	local state
 	while (( SECONDS < deadline )); do
 		state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
-        if android_input_method_state_is_visible "$state"; then
+		if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
 			echo "Verified Android soft keyboard is visible"
 			return 0
 		fi
@@ -7434,7 +6955,7 @@ wait_for_soft_keyboard_hidden() {
 	local state
 	while (( SECONDS < deadline )); do
 		state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
-        if ! android_input_method_state_is_visible "$state"; then
+		if ! grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
 			echo "Verified Android soft keyboard is hidden"
 			return 0
 		fi
@@ -7534,326 +7055,6 @@ update_auth_group() {
     safe_user="$(sql_escape "$AUTH_USER")"
     sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
         "update players set group_id=$group_id, online=0 where lower(username) = lower('$safe_user');"
-}
-
-read_sqlite_sequence() {
-    local table="$1"
-    sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select seq from sqlite_sequence where name='$(sql_escape "$table")' limit 1;"
-}
-
-restore_sqlite_sequence_exact() {
-    local table="$1"
-    local original_sequence="$2"
-    local max_id id_column="id"
-    if [[ "$table" == "player_cache" ]]; then
-        id_column="dbid"
-    fi
-    max_id="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select coalesce(max($id_column), 0) from $table;" 2>/dev/null || true)"
-    [[ "$max_id" =~ ^[0-9]+$ ]] || {
-        echo "ERROR: unable to read maximum id for $table" >&2
-        return 1
-    }
-    if [[ -z "$original_sequence" ]]; then
-        sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-            "delete from sqlite_sequence where name='$(sql_escape "$table")';"
-        return
-    fi
-    if [[ ! "$original_sequence" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: invalid original sqlite_sequence for $table" >&2
-        return 1
-    fi
-    if (( max_id > original_sequence )); then
-        echo "ERROR: cannot restore $table sqlite_sequence=$original_sequence; surviving max id is $max_id" >&2
-        return 1
-    fi
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        "delete from sqlite_sequence where name='$(sql_escape "$table")';
-         insert into sqlite_sequence(name, seq) values('$(sql_escape "$table")', $original_sequence);"
-}
-
-sqlite_sequence_state() {
-    local sequence="$1"
-    if [[ -z "$sequence" ]]; then
-        printf 'absent\n'
-    else
-        printf 'present:%s\n' "$sequence"
-    fi
-}
-
-cracker_campaign_run_authenticated() {
-	[[ -f "$OUT_DIR/cracker-campaign-authenticated.flag" ]]
-}
-
-cracker_campaign_explicit_logout_proven() {
-	[[ -f "$OUT_DIR/cracker-campaign-explicit-logout.flag" ]]
-}
-
-cracker_campaign_restore_authorized() {
-	! cracker_campaign_run_authenticated || cracker_campaign_explicit_logout_proven
-}
-
-record_cracker_campaign_restore_refusal() {
-	local reason="$1"
-	local logout_proven=false
-	cracker_campaign_explicit_logout_proven && logout_proven=true
-	printf 'poolRowsExact=not-checked\nplayerCacheRowsExact=not-checked\nplayerCacheTailRowsAfter=not-checked\nstaffTailRowsObserved=not-checked\nstaffTailRowsAfter=not-checked\nplayerCacheSequenceAfter=not-checked\nstaffLogsSequenceAfter=not-checked\nplayerCacheSequenceExact=false\nstaffLogsSequenceExact=false\nexplicitLogoutProven=%s\ndelayedReverify=false\nintegrity=not-checked\nrestoredGroup=not-checked\nrestoreRefusedReason=%s\nmanualRestoreRequired=true\n' \
-		"$logout_proven" "$reason" \
-		> "$OUT_DIR/cracker-campaign-fixture-after.txt"
-	CRACKER_CAMPAIGN_FIXTURE_ACTIVE=0
-}
-
-cracker_campaign_db_mutation_state() {
-	local safe_user safe_key
-	safe_user="$(sql_escape "$AUTH_USER")"
-	safe_key="$(sql_escape "$CRACKER_CAMPAIGN_POOL_KEY")"
-	sqlite3 -cmd '.timeout 5000' -noheader -separator '|' "$AUTH_DB" \
-		"select 'online', online from players where lower(username)=lower('$safe_user') limit 1;
-		 select 'cache', dbid, playerID, type, key, value from player_cache
-		   where playerID=$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID order by dbid;
-		 select 'pool', dbid, playerID, type, key, value from player_cache
-		   where playerID=0 and key='$safe_key' order by dbid;
-		 select 'playerSeq', coalesce((select seq from sqlite_sequence where name='player_cache'), -1);
-		 select 'staff', coalesce(max(id), 0),
-		   coalesce((select seq from sqlite_sequence where name='staff_logs'), -1) from staff_logs;"
-}
-
-wait_for_cracker_campaign_db_quiescence() {
-	local timeout="${1:-12}"
-	local deadline=$((SECONDS + timeout))
-	local previous="" current="" stable_samples=0
-	while (( SECONDS < deadline )); do
-		current="$(cracker_campaign_db_mutation_state 2>/dev/null || true)"
-		if [[ "$current" == online\|0$'\n'* || "$current" == online\|0 ]]; then
-			if [[ -n "$previous" && "$current" == "$previous" ]]; then
-				stable_samples=$((stable_samples + 1))
-				if (( stable_samples >= 2 )); then
-					echo "Verified explicit-logout DB save quiescence across three samples."
-					return 0
-				fi
-			else
-				stable_samples=0
-			fi
-		else
-			stable_samples=0
-		fi
-		previous="$current"
-		sleep 1
-	done
-	echo "ERROR: cracker-campaign DB did not quiesce after explicit logout" >&2
-	return 1
-}
-
-snapshot_cracker_campaign_fixture() {
-    local safe_key player_cache_rows
-    safe_key="$(sql_escape "$CRACKER_CAMPAIGN_POOL_KEY")"
-    CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID="$(read_auth_player_id)"
-    if [[ ! "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: unable to identify cracker-campaign QA player" >&2
-        return 1
-    fi
-    CRACKER_CAMPAIGN_POOL_SNAPSHOT="$OUT_DIR/cracker-campaign-pool-before.sql"
-    CRACKER_CAMPAIGN_PLAYER_CACHE_SNAPSHOT="$OUT_DIR/cracker-campaign-player-cache-before.sql"
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        ".mode insert player_cache" \
-        "select playerID, type, key, value, dbid from player_cache
-         where playerID=0 and key='$safe_key' order by dbid;" \
-        > "$CRACKER_CAMPAIGN_POOL_SNAPSHOT"
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        ".mode insert player_cache" \
-        "select playerID, type, key, value, dbid from player_cache
-         where playerID=$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID order by dbid;" \
-        > "$CRACKER_CAMPAIGN_PLAYER_CACHE_SNAPSHOT"
-    player_cache_rows="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select count(*) from player_cache
-         where playerID=$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID;")"
-    CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select coalesce(max(dbid), 0) from player_cache;")"
-    CRACKER_CAMPAIGN_ORIGINAL_REMAINING="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select coalesce((select cast(value as integer) from player_cache
-         where playerID=0 and key='$safe_key' order by dbid desc limit 1), 0);")"
-    CRACKER_CAMPAIGN_ORIGINAL_GROUP="$(read_auth_group)"
-    CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select coalesce(max(id), 0) from staff_logs;")"
-    CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE="$(read_sqlite_sequence player_cache)"
-    CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE="$(read_sqlite_sequence staff_logs)"
-    if [[ ! "$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" =~ ^[0-9]+$ \
-        || ! "$CRACKER_CAMPAIGN_ORIGINAL_GROUP" =~ ^[0-9]+$ \
-        || ! "$player_cache_rows" =~ ^[0-9]+$ \
-        || ! "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID" =~ ^[0-9]+$ \
-        || ! "$CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: unable to snapshot cracker-campaign DB fixture" >&2
-        return 1
-    fi
-    CRACKER_CAMPAIGN_FIXTURE_ACTIVE=1
-	printf 'database=%s\nuser=%s\nplayerID=%s\npoolKey=%s\noriginalRemaining=%s\noriginalGroup=%s\nplayerCacheRowsBefore=%s\nplayerCacheMaxIdBefore=%s\nplayerCacheSequenceBefore=%s\nstaffLogsSequenceBefore=%s\nstaffLogMaxIdBefore=%s\n' \
-	        "$AUTH_DB" "$AUTH_USER" "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID" \
-		"$CRACKER_CAMPAIGN_POOL_KEY" \
-		"$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" "$CRACKER_CAMPAIGN_ORIGINAL_GROUP" \
-		"$player_cache_rows" "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID" \
-		"$(sqlite_sequence_state "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE")" \
-		"$(sqlite_sequence_state "$CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE")" \
-		"$CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID" \
-        > "$OUT_DIR/cracker-campaign-fixture-before.txt"
-}
-
-wait_for_cracker_campaign_pool() {
-    local expected="$1"
-    local timeout="${2:-20}"
-    local deadline=$((SECONDS + timeout))
-    local safe_key current
-    safe_key="$(sql_escape "$CRACKER_CAMPAIGN_POOL_KEY")"
-    while (( SECONDS < deadline )); do
-        current="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-            "select coalesce((select cast(value as integer) from player_cache
-             where playerID=0 and key='$safe_key' order by dbid desc limit 1), 0);" \
-            2>/dev/null || true)"
-        if [[ "$current" == "$expected" ]]; then
-            echo "Verified durable cracker campaign pool=$expected"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: timed out waiting for durable cracker campaign pool=$expected" >&2
-    return 1
-}
-
-restore_cracker_campaign_fixture() {
-    if [[ "$CRACKER_CAMPAIGN_FIXTURE_ACTIVE" -ne 1 ]]; then
-        return 0
-    fi
-    local safe_key safe_user pool_restore_sql player_restore_sql status=0
-    local player_sequence_sql staff_sequence_sql
-    local audit_rows_before audit_rows_after cache_tail_rows_after
-    local pool_rows_exact=true player_cache_rows_exact=true
-    local player_cache_sequence_after staff_log_sequence_after
-    local player_cache_sequence_exact=true staff_log_sequence_exact=true
-    safe_key="$(sql_escape "$CRACKER_CAMPAIGN_POOL_KEY")"
-    safe_user="$(sql_escape "$AUTH_USER")"
-	if ! cracker_campaign_restore_authorized; then
-		"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
-		echo "ERROR: refusing cracker-campaign DB restoration without a proven explicit logout" >&2
-		record_cracker_campaign_restore_refusal explicit-logout-not-proven
-		return 1
-	fi
-    "$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
-	if ! wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" >/dev/null 2>&1; then
-		echo "ERROR: refusing cracker-campaign DB restoration while auth fixture is not confirmed offline" >&2
-		record_cracker_campaign_restore_refusal authenticated-player-not-offline
-		return 1
-	fi
-	if cracker_campaign_run_authenticated \
-		&& ! wait_for_cracker_campaign_db_quiescence 12; then
-		record_cracker_campaign_restore_refusal post-logout-save-not-quiescent
-		return 1
-	fi
-    # Both cracker command audit rows are queued through the 50ms async game
-    # logger. The player is offline, so a one-second drain leaves no producer
-    # that can enqueue another QA cracker command while cleanup runs.
-    sleep 1
-    audit_rows_before="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select count(*) from staff_logs
-         where id > $CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID;" \
-        2>/dev/null || true)"
-    [[ "$audit_rows_before" =~ ^[0-9]+$ ]] || audit_rows_before=-1
-    pool_restore_sql="$(<"$CRACKER_CAMPAIGN_POOL_SNAPSHOT")"
-    player_restore_sql="$(<"$CRACKER_CAMPAIGN_PLAYER_CACHE_SNAPSHOT")"
-    player_sequence_sql="delete from sqlite_sequence where name='player_cache';"
-    if [[ -n "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE" ]]; then
-        player_sequence_sql+=" insert into sqlite_sequence(name, seq) values('player_cache', $CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE);"
-    fi
-    staff_sequence_sql="delete from sqlite_sequence where name='staff_logs';"
-    if [[ -n "$CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE" ]]; then
-        staff_sequence_sql+=" insert into sqlite_sequence(name, seq) values('staff_logs', $CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE);"
-    fi
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        "begin immediate;
-         delete from player_cache where playerID=$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID;
-         delete from player_cache where playerID=0 and key='$safe_key';
-         delete from player_cache where dbid > $CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID;
-         $pool_restore_sql
-         $player_restore_sql
-         update players set group_id=$CRACKER_CAMPAIGN_ORIGINAL_GROUP, online=0
-           where lower(username)=lower('$safe_user');
-         delete from staff_logs where id > $CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID;
-         $player_sequence_sql
-         $staff_sequence_sql
-         commit;" || status=1
-	# An explicit logout should leave no live Player capable of a later save.
-	# Delay the authoritative comparison so any violated assumption is caught
-	# before fixtureRestored=true can be emitted.
-	sleep 3
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        ".mode insert player_cache" \
-        "select playerID, type, key, value, dbid from player_cache
-         where playerID=0 and key='$safe_key' order by dbid;" \
-        > "$OUT_DIR/cracker-campaign-pool-after.sql" || status=1
-    sqlite3 -cmd '.timeout 5000' "$AUTH_DB" \
-        ".mode insert player_cache" \
-        "select playerID, type, key, value, dbid from player_cache
-         where playerID=$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_ID order by dbid;" \
-        > "$OUT_DIR/cracker-campaign-player-cache-after.sql" || status=1
-    if ! cmp -s "$CRACKER_CAMPAIGN_POOL_SNAPSHOT" \
-        "$OUT_DIR/cracker-campaign-pool-after.sql"; then
-        echo "ERROR: cracker-campaign pool rows did not restore exactly" >&2
-        status=1
-		pool_rows_exact=false
-    fi
-    if ! cmp -s "$CRACKER_CAMPAIGN_PLAYER_CACHE_SNAPSHOT" \
-        "$OUT_DIR/cracker-campaign-player-cache-after.sql"; then
-        echo "ERROR: authenticated player_cache rows did not restore exactly" >&2
-        status=1
-        player_cache_rows_exact=false
-    fi
-    audit_rows_after="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select count(*) from staff_logs
-         where id > $CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_ID;" \
-        2>/dev/null || true)"
-    cache_tail_rows_after="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
-        "select count(*) from player_cache
-         where dbid > $CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_MAX_ID;" \
-        2>/dev/null || true)"
-    player_cache_sequence_after="$(read_sqlite_sequence player_cache)"
-    staff_log_sequence_after="$(read_sqlite_sequence staff_logs)"
-    if [[ "$audit_rows_after" != "0" ]]; then
-		echo "ERROR: isolated cracker-campaign staff-log tail remains after cleanup: $audit_rows_after" >&2
-        status=1
-    fi
-    if [[ "$cache_tail_rows_after" != "0" ]]; then
-        echo "ERROR: isolated cracker-campaign player_cache tail remains after cleanup: $cache_tail_rows_after" >&2
-        status=1
-    fi
-    if [[ "$player_cache_sequence_after" != \
-        "$CRACKER_CAMPAIGN_ORIGINAL_PLAYER_CACHE_SEQUENCE" ]]; then
-        echo "ERROR: player_cache sqlite_sequence did not restore exactly" >&2
-        status=1
-        player_cache_sequence_exact=false
-    fi
-    if [[ "$staff_log_sequence_after" != \
-        "$CRACKER_CAMPAIGN_ORIGINAL_STAFF_LOG_SEQUENCE" ]]; then
-        echo "ERROR: staff_logs sqlite_sequence did not restore exactly" >&2
-        status=1
-        staff_log_sequence_exact=false
-    fi
-    local integrity restored_group
-    integrity="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" 'pragma integrity_check;' || true)"
-    restored_group="$(read_auth_group || true)"
-    if [[ "$integrity" != "ok" || "$restored_group" != "$CRACKER_CAMPAIGN_ORIGINAL_GROUP" ]]; then
-        echo "ERROR: cracker-campaign DB cleanup failed integrity/group verification" >&2
-        status=1
-    fi
-	printf 'poolRowsExact=%s\nplayerCacheRowsExact=%s\nplayerCacheTailRowsAfter=%s\nstaffTailRowsObserved=%s\nstaffTailRowsAfter=%s\nplayerCacheSequenceAfter=%s\nstaffLogsSequenceAfter=%s\nplayerCacheSequenceExact=%s\nstaffLogsSequenceExact=%s\nexplicitLogoutProven=%s\ndelayedReverify=true\nintegrity=%s\nrestoredGroup=%s\n' \
-		"$pool_rows_exact" "$player_cache_rows_exact" "$cache_tail_rows_after" \
-		"$audit_rows_before" "$audit_rows_after" \
-		"$(sqlite_sequence_state "$player_cache_sequence_after")" \
-		"$(sqlite_sequence_state "$staff_log_sequence_after")" \
-        "$player_cache_sequence_exact" "$staff_log_sequence_exact" \
-		"$(cracker_campaign_explicit_logout_proven && echo true || echo not-required)" \
-		"$integrity" "$restored_group" \
-        > "$OUT_DIR/cracker-campaign-fixture-after.txt"
-    CRACKER_CAMPAIGN_FIXTURE_ACTIVE=0
-    return "$status"
 }
 
 read_auth_settings() {
@@ -10376,219 +9577,6 @@ run_authenticated_afk_smoke() {
 	return "$status"
 }
 
-cracker_campaign_health_db_state() {
-    local safe_user safe_key
-    safe_user="$(sql_escape "$AUTH_USER")"
-    safe_key="$(sql_escape "$CRACKER_CAMPAIGN_POOL_KEY")"
-    sqlite3 -cmd '.timeout 5000' -noheader -separator '|' "$AUTH_DB" \
-        "select group_id, online from players where lower(username)=lower('$safe_user') limit 1;
-         select coalesce((select value from player_cache where playerID=0 and key='$safe_key'
-           order by dbid desc limit 1), '0');
-         select coalesce(max(id), 0) from staff_logs;
-         select coalesce((select seq from sqlite_sequence where name='player_cache'), -1);
-         select coalesce((select seq from sqlite_sequence where name='staff_logs'), -1);" \
-        | tr '\n' ';'
-}
-
-run_authenticated_cracker_campaign_health_smoke() {
-    local before_db_state after_db_state login_line status=0
-    before_db_state="$(cracker_campaign_health_db_state)"
-    prepare_cracker_campaign_evidence_dir
-    (
-        set -e
-        force_android_portrait || exit 1
-        "$ADB" logcat -c || true
-        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
-        enable_android_smoke_cracker_campaign
-        enable_android_smoke_login
-        launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
-        force_android_portrait || exit 1
-        enable_android_smoke_cracker_campaign
-        enable_android_smoke_login
-        login_line="$(wait_for_login_state 0 30)" || exit 1
-        strict_cracker_campaign_screenshot \
-            107z-auth-cracker-campaign-login-health portrait || exit 1
-        assert_no_android_runtime_crash "during cracker-campaign login health preflight" || exit 1
-        printf 'protocol=10132\nloginTelemetry=%s\n' "$login_line" \
-            > "$OUT_DIR/cracker-campaign-login-health.txt"
-    ) || status=$?
-    "$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
-    disable_android_smoke_cracker_campaign
-    disable_android_smoke_login
-    after_db_state="$(cracker_campaign_health_db_state)"
-    if [[ "$after_db_state" != "$before_db_state" ]]; then
-        echo "ERROR: cracker-campaign health-only preflight changed DB state" >&2
-        status=1
-    fi
-    printf 'dbBefore=%s\ndbAfter=%s\ndbUnchanged=%s\nclientForceStopped=true\nhealthPassed=%s\n' \
-        "$before_db_state" "$after_db_state" \
-        "$([[ "$after_db_state" == "$before_db_state" ]] && echo true || echo false)" \
-        "$([[ "$status" -eq 0 ]] && echo true || echo false)" \
-        >> "$OUT_DIR/cracker-campaign-login-health.txt"
-    return "$status"
-}
-
-run_authenticated_cracker_campaign_smoke() {
-    preflight_auth_login_fixture
-    if [[ -z "$AUTH_DB" || ! -f "$AUTH_DB" ]]; then
-        echo "ERROR: --only-auth-cracker-campaign requires ANDROID_SMOKE_AUTH_DB" >&2
-        return 1
-    fi
-    if [[ ! "$AUTH_CRACKER_CAMPAIGN_REMAINING" =~ ^[0-9]+$ \
-        || "$AUTH_CRACKER_CAMPAIGN_REMAINING" -lt 1 \
-        || "$AUTH_CRACKER_CAMPAIGN_REMAINING" -gt 1000000 ]]; then
-        echo "ERROR: ANDROID_SMOKE_CRACKER_CAMPAIGN_REMAINING must be 1..1000000" >&2
-        return 1
-    fi
-    if ! grep -Eq 'CLIENT_VERSION[[:space:]]*=[[:space:]]*10132;' \
-        "$REPO_ROOT/Client_Base/src/orsc/Config.java"; then
-        echo "ERROR: Android cracker campaign smoke requires coordinated protocol 10132 source" >&2
-        return 1
-    fi
-	if [[ "$AUTH_CRACKER_CAMPAIGN_HEALTH_ONLY" == "1" ]]; then
-		run_authenticated_cracker_campaign_health_smoke
-		return
-	fi
-	if [[ "$AUTH_CRACKER_CAMPAIGN_HEALTH_ONLY" != "0" ]]; then
-		echo "ERROR: ANDROID_SMOKE_CRACKER_CAMPAIGN_HEALTH_ONLY must be 0 or 1" >&2
-		return 1
-	fi
-
-    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
-    prepare_cracker_campaign_evidence_dir
-    snapshot_cracker_campaign_fixture || return 1
-	CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT=0
-    update_auth_group 0
-    printf 'temporaryGroup=0\nproofRemaining=%s\n' \
-        "$AUTH_CRACKER_CAMPAIGN_REMAINING" \
-        >> "$OUT_DIR/cracker-campaign-fixture-before.txt"
-
-    local status=0 fixture_restored=true
-    (
-        set -e
-        force_android_portrait || {
-            echo "ERROR: Android cracker campaign smoke could not establish portrait" >&2
-            exit 1
-        }
-        "$ADB" logcat -c || true
-        "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
-        enable_android_smoke_cracker_campaign
-        launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
-        force_android_portrait || exit 1
-        enable_android_smoke_cracker_campaign
-        tap_existing_user_button
-        sleep 3
-        enter_auth_credentials
-        submit_login_and_wait || exit 1
-		touch "$OUT_DIR/cracker-campaign-authenticated.flag"
-        sleep 8
-		wait_for_android_login_transition_ime_release portrait 20 || exit 1
-        close_auth_intro_dialog_if_present
-        sleep 2
-		assert_cracker_campaign_capture_ready portrait || exit 1
-
-        local envelope_line hud_line hidden_line
-        "$ADB" logcat -c || true
-        enable_android_smoke_cracker_campaign
-        send_android_cracker_campaign_command "$AUTH_CRACKER_CAMPAIGN_REMAINING" || exit 1
-        wait_for_cracker_campaign_pool "$AUTH_CRACKER_CAMPAIGN_REMAINING" 20 || exit 1
-        envelope_line="$(wait_for_cracker_campaign_envelope \
-            "$AUTH_CRACKER_CAMPAIGN_REMAINING" 20)" || exit 1
-        hud_line="$(wait_for_cracker_campaign_hud portrait \
-            "$AUTH_CRACKER_CAMPAIGN_REMAINING" true 30)" || exit 1
-        assert_cracker_campaign_hud_geometry "$hud_line" portrait \
-            "$AUTH_CRACKER_CAMPAIGN_REMAINING" || exit 1
-        strict_cracker_campaign_screenshot \
-            108a-auth-cracker-campaign-portrait portrait || exit 1
-        capture_cracker_campaign_telemetry portrait-positive
-
-        "$ADB" logcat -c || true
-        force_android_landscape || {
-            echo "ERROR: Android cracker campaign smoke could not establish landscape" >&2
-            exit 1
-        }
-        assert_game_activity_for_input "cracker HUD landscape rotation" \
-            "cracker-campaign-lost-landscape" || exit 1
-        hud_line="$(wait_for_cracker_campaign_hud landscape \
-            "$AUTH_CRACKER_CAMPAIGN_REMAINING" true 30)" || exit 1
-        assert_cracker_campaign_hud_geometry "$hud_line" landscape \
-            "$AUTH_CRACKER_CAMPAIGN_REMAINING" || exit 1
-        strict_cracker_campaign_screenshot \
-            108b-auth-cracker-campaign-landscape landscape || exit 1
-        capture_cracker_campaign_telemetry landscape-positive
-
-        "$ADB" logcat -c || true
-        send_android_cracker_campaign_command 0 || exit 1
-        wait_for_cracker_campaign_pool 0 20 || exit 1
-        envelope_line="$(wait_for_cracker_campaign_envelope 0 20)" || exit 1
-        hidden_line="$(wait_for_cracker_campaign_hud landscape 0 false 30)" || exit 1
-        assert_cracker_campaign_hud_hidden "$hidden_line" || exit 1
-        strict_cracker_campaign_screenshot \
-            108c-auth-cracker-campaign-zero-hidden landscape || exit 1
-        capture_cracker_campaign_telemetry zero-hidden
-
-        "$ADB" logcat -c || true
-        inject_android_malformed_cracker_campaign_envelope || exit 1
-        hidden_line="$(wait_for_cracker_campaign_hud landscape 0 false 30)" || exit 1
-        assert_cracker_campaign_hud_hidden "$hidden_line" || exit 1
-        strict_cracker_campaign_screenshot \
-            108d-auth-cracker-campaign-malformed-hidden landscape || exit 1
-        capture_cracker_campaign_telemetry malformed-hidden
-		if (( CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT != 0 )); then
-			echo "ERROR: Android cracker evidence required test-only Back IME dismissals: $CRACKER_CAMPAIGN_CAPTURE_BACK_COUNT" >&2
-			exit 1
-		fi
-		printf 'captureBackDismissals=0\n' \
-			>> "$OUT_DIR/cracker-campaign-login-ime-release.txt"
-
-        # Restore the server's process-local cache before logout. Row identity and
-        # staff-log cleanup are restored exactly after the player is offline.
-        "$ADB" logcat -c || true
-        send_android_cracker_campaign_command \
-            "$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" || exit 1
-        wait_for_cracker_campaign_pool \
-            "$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" 20 || exit 1
-        wait_for_cracker_campaign_envelope \
-            "$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" 20 >/dev/null || exit 1
-        capture_cracker_campaign_telemetry server-cache-restored
-        force_android_portrait || true
-        logout_authenticated_smoke_session portrait 1 || exit 1
-		touch "$OUT_DIR/cracker-campaign-explicit-logout.flag"
-    ) || status=$?
-
-    if [[ "$status" -ne 0 ]] && cracker_campaign_run_authenticated; then
-        # Best-effort process-cache repair while the temporary owner session is
-        # still reachable; the exact DB restoration below always runs.
-        enable_android_smoke_cracker_campaign || true
-        write_android_smoke_cracker_campaign_command \
-            "cracker $CRACKER_CAMPAIGN_ORIGINAL_REMAINING" || true
-        "$ADB" shell input keyevent 142 >/dev/null 2>&1 || true
-        wait_for_cracker_campaign_pool \
-            "$CRACKER_CAMPAIGN_ORIGINAL_REMAINING" 10 >/dev/null 2>&1 || true
-    fi
-	if cracker_campaign_run_authenticated \
-		&& ! cracker_campaign_explicit_logout_proven; then
-		if graceful_cleanup_authenticated_smoke_session 1 portrait 1; then
-			touch "$OUT_DIR/cracker-campaign-explicit-logout.flag"
-		else
-			status=1
-		fi
-	fi
-    disable_android_smoke_cracker_campaign
-    if ! restore_cracker_campaign_fixture; then
-        status=1
-		fixture_restored=false
-    fi
-    "$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
-    force_android_portrait || true
-	printf 'clientForceStopped=true\nfixtureRestored=%s\ntestPassed=%s\n' \
-		"$fixture_restored" \
-		"$([[ "$status" -eq 0 ]] && echo true || echo false)" \
-        >> "$OUT_DIR/cracker-campaign-fixture-after.txt"
-    sleep 1
-    return "$status"
-}
-
 run_authenticated_ground_loot_smoke() {
     if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
         return
@@ -11145,8 +10133,40 @@ launch_to_login_home() {
 	dismiss_fullscreen_education
 }
 
+run_account_handoff_smoke() {
+	if [[ -n "$ACCOUNT_HANDOFF_HOST" ]]; then
+		if [[ ! "$ACCOUNT_HANDOFF_PORT" =~ ^[0-9]+$ ]] \
+			|| (( ACCOUNT_HANDOFF_PORT < 1 || ACCOUNT_HANDOFF_PORT > 65535 )); then
+			echo "ERROR: ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT must be between 1 and 65535" >&2
+			exit 1
+		fi
+		PENDING_SERVER_HOST="$ACCOUNT_HANDOFF_HOST"
+		PENDING_SERVER_PORT="$ACCOUNT_HANDOFF_PORT"
+	fi
+	enable_android_smoke_login
+	"$ADB" logcat -c || true
+	launch_to_login_home
+	local home_line
+	home_line="$(wait_for_login_state 0 20)" || exit 1
+	screenshot 00-account-home
+	tap_login_state_target 0 homeNew 8 || {
+		echo "ERROR: Create Account target was absent from Android login telemetry" >&2
+		login_log_tail
+		exit 1
+	}
+	wait_for_external_activity "Create Account portal" 15 \
+		"https://voidscape.gg/portal?auth=register" || exit 1
+	screenshot 01-create-account-portal-handoff
+	echo "Android Create Account handoff evidence written to $OUT_DIR"
+}
+
 if [[ "$ONLY_BOOTSTRAP" -eq 1 ]]; then
 	run_bootstrap_smoke
+	exit 0
+fi
+
+if [[ "$ONLY_ACCOUNT_HANDOFF" -eq 1 ]]; then
+	run_account_handoff_smoke
 	exit 0
 fi
 
@@ -11312,20 +10332,6 @@ if [[ "$ONLY_AUTH_GROUND_LOOT" -eq 1 ]]; then
     exit 0
 fi
 
-if [[ "$ONLY_AUTH_CRACKER_CAMPAIGN" -eq 1 ]]; then
-    if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
-        echo "ERROR: --only-auth-cracker-campaign requires ANDROID_SMOKE_AUTH_USER and ANDROID_SMOKE_AUTH_PASS" >&2
-        exit 1
-    fi
-    if [[ -z "$AUTH_DB" ]]; then
-        echo "ERROR: --only-auth-cracker-campaign requires ANDROID_SMOKE_AUTH_DB" >&2
-        exit 1
-    fi
-    run_authenticated_cracker_campaign_smoke
-    echo "Android cracker campaign HUD smoke evidence written to $OUT_DIR"
-    exit 0
-fi
-
 if [[ "$ONLY_AUTH_WILDERNESS_TARGET" -eq 1 ]]; then
     run_authenticated_wilderness_target_smoke
     echo "Android wilderness target smoke screenshots written to $OUT_DIR"
@@ -11414,19 +10420,20 @@ screenshot 15-saved-credentials-loaded
 "$ADB" shell input keyevent BACK
 sleep 1
 tap_pct 50 59
-sleep 4
+wait_for_external_activity "Recover account portal" 15 "https://voidscape.gg/portal?auth=recovery" || exit 1
 screenshot 16-recover-account-handoff
 
 "$ADB" shell input keyevent BACK
-sleep 1
+wait_for_login_state 2 10 || exit 1
+"$ADB" shell input keyevent BACK
+wait_for_login_state 0 10 || exit 1
 screenshot 17-existing-user-back-home
 tap_create_account_button
-wait_for_login_state 1 10 || exit 1
-sleep 1
-screenshot 18-create-account-form
+wait_for_external_activity "Create Account portal" 15 "https://voidscape.gg/portal?auth=register" || exit 1
+screenshot 18-create-account-portal-handoff
 
 "$ADB" shell input keyevent BACK
-sleep 1
+wait_for_login_state 0 10 || exit 1
 launch_to_login_home
 "$ADB" shell input keyevent HOME
 sleep 2

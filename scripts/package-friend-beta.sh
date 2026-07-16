@@ -174,9 +174,14 @@ client_version() {
 	}' "$REPO_ROOT/Client_Base/src/orsc/Config.java"
 }
 
-is_runtime_file() {
-	case "$(basename "$1")" in
-		accounts.txt|credentials.txt|uid.dat|ip.txt|port.txt|hideIp.txt|config.txt|client.properties|discord_inuse.txt|launcherSettings.conf|voidscapeLauncher.properties)
+is_excluded_cache_file() {
+	local basename_lower
+	basename_lower="$(basename "$1" | tr '[:upper:]' '[:lower:]')"
+	case "$basename_lower" in
+		.voidscape-sync-state.properties|accounts.txt|android_version.txt|android_version_pk.txt|client.properties|config.txt|credentials.txt|discord_inuse.txt|hideip.txt|ip.txt|launchersettings.conf|openpk.apk|openrsc.apk|openrsc.jar|open_rsc_client_dev.jar|port.txt|uid.dat|voidscapelauncher.properties)
+			return 0
+			;;
+		.ds_store|thumbs.db|*.bak|*.download|*.new|*.orig|*.part|*.predungeon|*.rej|*.swp|*.temp|*.tmp|*~)
 			return 0
 			;;
 		*)
@@ -214,7 +219,7 @@ cp "$CLIENT_JAR" "$UPDATE_DIR/Open_RSC_Client.jar"
 
 while IFS= read -r -d '' source; do
 	relative="${source#"$CLIENT_CACHE"/}"
-	if is_runtime_file "$relative"; then
+	if is_excluded_cache_file "$relative"; then
 		continue
 	fi
 	mkdir -p "$UPDATE_DIR/$(dirname "$relative")"

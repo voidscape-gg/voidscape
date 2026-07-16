@@ -1431,13 +1431,11 @@ async function runRuntimeModeSmoke(browser) {
 	    config: window.__voidscapePortalConfig,
 	    accountOpened: window.__voidscapeOpenClientUrl('voidscape:account'),
 	    recoveryOpened: window.__voidscapeOpenClientUrl('voidscape:recovery'),
-	    shopOpened: window.__voidscapeOpenClientUrl('voidscape:shop'),
     javascriptUrlOpened: window.__voidscapeOpenClientUrl('javascript:alert(1)'),
     opened: (window.__voidscapeOpenedUrls || []).slice()
   }));
-	  const expectedAccountUrl = new URL('/iphone-account/#account', baseUrl).href;
+	  const expectedAccountUrl = new URL('/iphone-account/?auth=register', baseUrl).href;
 	  const expectedRecoveryUrl = new URL('/iphone-recovery/', baseUrl).href;
-	  const expectedShopUrl = new URL('/portal#subscription-buy', baseUrl).href;
 	  assert(portalHandoff.profile && portalHandoff.profile.id === 'smoke' && portalHandoff.profile.namespaced === true,
 	    `profile query should select a namespaced web-client profile: ${JSON.stringify(portalHandoff)}`);
 	  assert(portalHandoff.endpoint && portalHandoff.endpoint.profile === 'smoke'
@@ -1449,16 +1447,11 @@ async function runRuntimeModeSmoke(browser) {
 	    `account portal URL should resolve from query config: ${JSON.stringify(portalHandoff)}`);
   assert(portalHandoff.config && portalHandoff.config.recoveryUrl === expectedRecoveryUrl,
     `recovery portal URL should resolve from query config: ${JSON.stringify(portalHandoff)}`);
-	  assert(portalHandoff.config && portalHandoff.config.shopUrl === expectedShopUrl,
-	    `shop portal URL should resolve from the allowlisted account portal: ${JSON.stringify(portalHandoff)}`);
   assert(portalHandoff.opened.some((entry) => entry.kind === 'account' && entry.target === '_self' && entry.url === expectedAccountUrl),
     `Create Account should navigate current tab to account portal: ${JSON.stringify(portalHandoff.opened)}`);
   assert(portalHandoff.opened.some((entry) => entry.kind === 'recovery' && entry.target === '_self' && entry.url === expectedRecoveryUrl),
     `Recover account should navigate current tab to recovery portal: ${JSON.stringify(portalHandoff.opened)}`);
-	  assert(portalHandoff.opened.some((entry) => entry.kind === 'shop' && entry.target === '_self' && entry.url === expectedShopUrl),
-	    `Shop should navigate the current tab to the subscription storefront: ${JSON.stringify(portalHandoff.opened)}`);
-	  assert(portalHandoff.accountOpened && portalHandoff.recoveryOpened && portalHandoff.shopOpened
-	      && !portalHandoff.javascriptUrlOpened,
+	  assert(portalHandoff.accountOpened && portalHandoff.recoveryOpened && !portalHandoff.javascriptUrlOpened,
 	    `portal resolver should open sentinels and reject unsafe URLs: ${JSON.stringify(portalHandoff)}`);
 	  await drain(page);
 

@@ -14,7 +14,7 @@ to resume from these two files alone. Keep every entry self-contained.
   archive). Also `blocked(<reason>)` and `wontfix(<reason>)`. A code TODO alone
   `confirms` only if it states the defect precisely enough to write a Verify recipe;
   otherwise seed as `reported`.
-- Severity: **P1** breaks core play, corrupts data, or blocks the launch (2026-07-11
+- Severity: **P1** breaks core play, corrupts data, or blocks the launch (2026-07-18
   per the portal's `PORTAL_LAUNCH_AT` default — Ryan to confirm) · **P2** a feature is
   broken · **P3** minor / workaround exists · **P4** cosmetic, seasonal, or speculative.
 - Every verified fix: one commit whose subject references the `VS-NNN` + a
@@ -26,69 +26,105 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-075 code and owner-authorized historical cleanup are complete.
-- **VS-075 cleanup authorization 2026-07-12:** worktree clean at `3fe8f9e8` and
-  `scripts/build.sh` green. Ryan explicitly approved deleting the mixed archived
-  journal file after the plain-language warning that this also removes roughly 6.5
-  hours of unrelated system history. Scope is exact and fail-closed: delete only the
-  archive whose recorded hash contains 521 vulnerable-PID entries, filter exactly 521
-  matching lines from the isolated syslog archive, retain no raw copy, then verify zero
-  incident indicators plus unchanged portal/game/database state.
-- **VS-075 cleanup result 2026-07-12:** the exact hash-pinned mixed journal archive was
-  deleted, removing 521 incident entries plus the explicitly accepted 22,163 unrelated
-  entries. Exactly 521 vulnerable-PID lines were filtered from the isolated syslog
-  archive, leaving 24,277 lines at the deterministic expected hash. The other journal
-  archive remained byte-identical; zero vulnerable-node journal entries and zero
-  matching syslog lines remain. Portal health/public readiness, SQLite integrity/
-  foreign keys, inactive/disabled game state, closed production ports, WSS `502`, and
-  public admin `404` all passed. No raw log copy was retained.
-- **Session preflight 2026-07-12 (VS-075):** branch
-  `codex/launch-rc-public-clean`; worktree clean at `fd18b62f`; pre-fix
-  `scripts/build.sh` green with 6.9 GiB free. Ryan approved proceeding to the next
-  recommended launch hardening item. Plan: reproduce the raw child-process leak in a
-  hermetic forced SQLite failure, sanitize only the portal SQLite error boundary, add a
-  no-secret regression, run the complete portal/build gates, deploy portal-only with
-  rollback, then remediate the already-written production journal exposure without
-  changing the game, database, signup records, email state, or ingress.
-- **VS-075 result 2026-07-12:** every portal SQLite child boundary now discards the
-  original error/command and emits only a fixed operation, bounded code, and allowlisted
-  summary before returning retryable `openrsc_db_unavailable`. The forced readonly
-  verification regression, portal API/schema/browser gates, and canonical build passed.
-  A reversible one-file portal deployment passed backup/restore, health, hash, admin-
-  boundary, and closed-world checks. The vulnerable PID's existing 522 journal entries
-  and 521 syslog lines were sealed into privileged archives without copying or deleting
-  them; destructive historical-log removal remains an explicit owner decision because
-  the affected journal file also contains unrelated system audit history.
-- **Session preflight 2026-07-12 (VS-076):** branch
-  `codex/launch-rc-public-clean`; worktree clean at `470fdeb7`; pre-fix
-  `scripts/build.sh` green. Ryan explicitly approved the narrow portal UX/error-copy
-  patch plus one resend to the single affected pending registrant. Plan: preserve the
-  scanner-resistant explicit POST, make the second click unmistakable, distinguish
-  retryable 5xx/network failures from invalid/expired tokens, run the full portal gates,
-  deploy only the portal app, then send and audit exactly one resend.
-- **VS-076 result 2026-07-12:** the email now labels its CTA as opening a verification
-  page and explicitly tells the player to press `Verify email` there; the page puts
-  that final action before the button. Network/5xx failures stay retryable, 410 remains
-  expired, and other 4xx responses remain invalid/used. Local and live Playwright
-  smokes passed. A reversible four-file portal-only deployment passed health, served
-  hash, public-admin `404`, artifact-integrity, database-restore, and closed-world
-  checks. Exactly one resend was delivered to the uniquely affected pending signup as
-  email event 427 in one provider attempt, with one queued/requested/sent audit chain.
-- **Session preflight 2026-07-12 (VS-074):** branch
-  `codex/launch-rc-public-clean`; worktree clean before triage; pre-fix
-  `scripts/build.sh` green. Real post-promotion signup reproduced the launch blocker:
-  delivered-email confirmation reached the OpenRSC character transaction, SQLite
-  rejected `BEGIN IMMEDIATE`/`INSERT INTO players` as read-only, the public UI reduced
-  the backend failure to “verification link invalid or already used,” and the bounded
-  verifier finished with the exact account still 401 and the requested name still
-  available. Game service remained inactive/disabled and public ingress closed.
-- **VS-074 result 2026-07-12:** corrected only the production SQLite runtime directory
-  from `root:voidscape 0750` to `0770`, then proved a service-user write/rollback with
-  clean integrity and foreign keys. The canonical verifier passed 606 checks and
-  created exactly one active verified portal account plus one linked player/stats/cache
-  row while the game remained inactive/disabled and TCP/WSS remained closed. Added an
-  idempotent packaged permission helper, hermetic regression test, package guard, and
-  operator documentation; portal API/schema suites and the canonical build are green.
+- **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-087):** branch
+  `codex/release-10139-integration`; tracked worktree clean at `abb2f7ca` and the
+  pre-change `scripts/build.sh` passes. Conclusive template evidence reproduces the
+  defect: `scripts/run-android-device-qa.sh` still tells a physical release tester to
+  create an account through the retired native form, while the release checklist and
+  Android contract require the Community-Rules-gated portal at
+  `https://voidscape.gg/portal?auth=register`. Scope is the generated physical-device
+  QA contract only; Android runtime behavior and live systems remain untouched.
+- **Session preflight 2026-07-16 (VS-085):** branch
+  `codex/release-10139-integration`; VS-084 is committed at `1e591ad1`. Release QA
+  found `Cache/video/Authentic_Sprites.orsc.bak` in the exact held TeaVM package, and
+  the old verifier accepted it because production hygiene covered runtime/debug files
+  but not editor/download scratch suffixes. The corrected dirty-tree package already
+  excludes the stale file and deep-verifies 538/538; isolate the packaging/verifier
+  contract, add mixed-case/symlink regression coverage, and preserve VS-086 portal
+  footer changes for their own commit.
+- **Session preflight 2026-07-16 (VS-084):** branch
+  `codex/release-10139-integration`; tracked worktree clean at
+  `28ee1df1667957935354e6ab28baea48b3ecdfe2`. The exact signed Play AAB v10 was
+  uploaded under managed publishing, but release QA proved its compiled Android
+  account URL is `/portal?auth=login`; the TeaVM default similarly derives
+  `/#account`, which the landing script redirects to sign-in. The launch portal's
+  actual rules-gated registration form is `/`. Google Play versionCode 10 is now
+  consumed, so the corrected candidate must use a higher versionCode and replace the
+  held Play change before publication. Pre-change build/release gates on this clean
+  commit were green; no production server, portal, web client, or Play rollout is live.
+- **Session preflight 2026-07-15 (VS-083):** branch `main`; the extensive approved
+  uncommitted feature tree remains in place, including existing VS-082 gathering
+  guards, earned-batching changes, headless-controller/voidbot work, and changes in
+  `WalkRequest.java`, `Player.java`, `Functions.java`, all three gathering plugins,
+  `scripts/build.sh`, `docs/BUGS.md`, and `docs/DIVERGENCE.md`. Preserve those hunks
+  and keep VS-083 changes narrowly attributable. Pre-change `scripts/build.sh` is
+  green. Ryan's real-client repro plus conclusive packet-path evidence establish that
+  a repeated scenery click emits `WALK_TO_ENTITY` before `OBJECT_COMMAND`; the busy
+  walk interrupts the gathering plugin, the command is then discarded, and the plugin
+  waits out its opening delay before exiting. Plan: distinguish entity prewalk from
+  explicit point-walk cancellation and add one coalesced same-target attempt buffer.
+- **Session preflight 2026-07-15 (VS-080 reopen):** branch `main`; the extensive
+  pre-existing dirty client/server/portal/Android/content tree remains in place.
+  Pre-change `scripts/build.sh` is green. Revert only VS-080 symbol serialization,
+  compatibility verification, cohort, portal-validation, test, and documentation
+  hunks; preserve every unrelated feature hunk. Replace the ambiguous launch error
+  with an explicit 8-20 letters-and-numbers-only message.
+- **Session preflight 2026-07-14 (VS-082):** branch `main`; the extensive existing
+  dirty tree and approved uncommitted headless-player feature remain in place. The
+  three authentic gathering plugins were clean before this fix; controller/voidbot
+  and the shared bug/divergence docs already carry the feature's uncommitted work, so
+  preserve unrelated hunks and do not create a commit that folds in that feature base.
+  The pre-change full build was green. Live Az event evidence reproduces the defect:
+  world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
+  two more logs arrived at the same node, and only response 5198 was accepted before
+  movement.
+- **Last session:** 2026-07-16 — VS-087 verified. The generated physical Android QA
+  report now requires the exact rules-gated registration route, Community Rules
+  acceptance, portal account/first-character creation, and a successful return to
+  Existing User login. Its validator rejects reports missing or changing the route,
+  so an older native-signup checklist cannot satisfy the release gate.
+- **Next action:** triage the public source-proof footer finding, then rebuild the exact
+  commit-bound release candidate.
+- **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
+  pre-existing dirty launch/headless/client/server tree remains uncommitted. The
+  approved headless-player feature base is itself untracked or modified, so these
+  safety corrections must remain isolated hunks with that feature base rather than
+  create commits that fold in unrelated work. Pre-change `scripts/build.sh` is green.
+- **Session preflight 2026-07-13 (VS-079):** branch `main`; Ryan confirmed the final
+  green `::duel` Journal result works great, closing VS-076. The extensive dirty Duel
+  Journal/proof feature tree remains uncommitted, so this tightly related correction
+  must stay with that feature base rather than create an isolated commit. Pre-change
+  `scripts/build.sh` is green. Code evidence reproduces the regression: the feature
+  replaced the inherited lower-combat-level-first rule with an unconditional 50/50
+  starter for proof and non-proof stake duels. Completed: context v3 commits both
+  displayed levels, lower level is deterministic, the committed starter bit applies
+  only to ties, and unequal/equal live proofs both settled `VERIFIED`.
+- **Session preflight 2026-07-13 (VS-077/VS-078):** branch `main`; Ryan live-verified
+  the VS-076 account-name fix and a real PC proof reached `VERIFIED`. The extensive
+  dirty feature tree remains, so these tightly related proof acceptance fixes stay
+  uncommitted with their feature base. Code and focused protocol tests are green; full
+  `scripts/build.sh` is green. Live adjacent-start timing and both allowed/no-retreat
+  gameplay paths passed; VS-077 and VS-078 are verified in the Fixed archive. Two fresh
+  cohort-10135 PC clients are running for Ryan's final Journal confirmation.
+- **Session preflight 2026-07-13 (VS-076):** branch `main`; VS-074/VS-075 build and
+  live verification were green before this report. The same extensive dirty-tree and
+  uncommitted Duel Journal/proof feature collision remains, so preserve unrelated
+  changes and do not create an isolated bug commit. Three consecutive real-PC No Magic
+  attempts created structurally valid proof contexts but aborted `STATE` before either
+  client commitment; the two-voidbot handshake still reaches `VERIFIED`. A temporary
+  seed-free field diagnostic is built into both relaunched PC clients to identify the
+  exact local context mismatch on the next attempt.
+- **Session preflight 2026-07-13 (VS-074/VS-075):** branch `main`; pre-change
+  `scripts/build.sh` green, including duel-proof crypto/client tests. The tree contains
+  extensive pre-existing feature, Android, portal, content, documentation, cache, and
+  runtime DB WIP. The Duel Journal/proof feature itself is still uncommitted, including
+  untracked `DuelJournalInterface.java` and the command/service sources, so an isolated
+  one-bug commit cannot be made without folding in that feature base; preserve all
+  unrelated hunks and leave these acceptance fixes uncommitted with the feature.
+  Result: VS-074 and VS-075 fixed and verified. The desktop production input route now
+  closes the modal, an active duel returns a bounded denial instead of an old receipt,
+  post-settlement reads select the new receipt, and the full build remains green.
 - **Session preflight 2026-07-09 (VS-061 multi-minute reopen):** branch `main`;
   `scripts/build.sh` and `scripts/build-android.sh --debug` green on the current tree.
   VS-073 lifecycle automation fix committed as `dc8fbefe`; its 35-second focused run
@@ -242,13 +278,27 @@ to resume from these two files alone. Keep every entry self-contained.
   gates relaxed) and the bigger small-screen layout (top tabs hidden while banking,
   9 cols, 3 bank + 3 inv rows at Classic). Still skipped: cert-mode deposit
   (want_cert_deposit is false anyway).
-- **Next action:** the prelaunch queue is complete; follow
-  `docs/LAUNCH-CRITICAL-CHECKLIST.md` at the final launch-day gate.
+- **Next action (top open confirmed, launch surfaces first):** VS-041 + VS-047 + VS-008
+  + VS-042 + VS-031 + VS-043 + VS-025 + VS-032 + **VS-003 (closed by Ryan's rulings +
+  server noted-on-death fix)** DONE 2026-07-03. **Ryan redirected 2026-07-03: the bug
+  loop's P3/P4 tail is DEPRIORITIZED in favor of the launch-readiness sweep
+  (docs/RELEASE-CHECKLIST.md, launch 2026-07-18)** — new findings still land in
+  Intake. When the loop resumes: VS-034 (deep diagnosis in its Log), VS-009, P4 tail,
+  Intake triage (canHold has two fresh datapoints). VS-002 deferred (needs MySQL env). Also: E2 (doors)
+  to unblock a quests wave. VS-003: await Ryan's ruling. NOTE: client version bumped to
+  10121 — a fielded 10120 client build will be version-rejected by the updated
+  dev/staging server (expected; the launcher updates clients).
 
 ---
 
 ## Intake — dump raw bug reports here
 
+- Headless Karamja traveller death recovery can strand a session in
+  `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
+  466/473/476, no coins or sellable starter sword, and an empty bank. The controller
+  never resumed movement, the server's movement timeout logged the account out eleven
+  minutes after death, and the one-shot local supervisor left a stale PID instead of
+  restarting it. Found during the VS-083 fleet-preservation check; triage separately.
 - Duel-confirm outside-click sends packet 230 (trade decline) instead of 197 (duel decline) — mudclient.java ~5446; the decline button correctly sends 197. Looks like copy-paste from trade confirm. Found during UI slice 9.
 - AuctionHouse.resetAllVariables() only runs from the private auctionClose(); the server-driven close (mudclient ~27846) and the new ESC close leave stale field state until next open. Found during UI slice 9.
 - handleAndroidBackButton dereferences worldMapPanel without a null check (safe today only because the field is final-initialized inline; getWebOverlayDialogName null-checks it defensively). Found during UI slice 9.
@@ -484,15 +534,6 @@ half-remembered is fine, triage will chase it down.)_
 - Verify: two concurrent voidbot sessions hitting the same scenery under the flag.
 - Log: 2026-07-02 seeded from survey.
 
-### VS-013 — voidbot can drop an NPC AoI frame under rapid region changes
-- Status: confirmed · Severity: P3 · Area: tooling (voidbot)
-- Evidence: `docs/bot-api.md` known limitation; mitigation = 3s recently-seen NPC cache
-  (`tools/voidbot/voidbotd.py` ~L330-344) + caller-side retries. Matters because it makes
-  the loop's own NPC-based verifications flaky.
-- Repro: rapid region-crossing walks while tracking NPCs.
-- Verify: stress walk shows no lost tracked NPCs (by server_index).
-- Log: 2026-07-02 seeded from survey.
-
 ### VS-014 — Gnome ball tackle think-bubble missing (disabled by FIXME)
 - Status: confirmed · Severity: P4 · Area: server-core
 - Evidence: `server/src/com/openrsc/server/model/entity/npc/NpcBehavior.java:357-358` —
@@ -634,7 +675,7 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
   disabled in voidscape presets.
 
 - Harvesting skill disabled on the launch preset (`want_harvesting: false`) — intended.
-- Bone-bury prayer XP rides `combat_exp_rate` (10×, i.e. 37.5/bone) — intended.
+- Prayer XP, including bone burial, uses `skilling_exp_rate` (1.5× base) — intended.
 - `bank-deposit-all` deposits wielded equipment too — intended.
 - Void Rush one-entry-per-IP — intended anti-abuse (QA consequence: this minigame is
   permanently untestable from a single-host fleet; needs manual/multi-host QA).
@@ -952,104 +993,284 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
 
-### VS-075 — SQLite child failures expose account fields in journald (FIXED)
-- Status: verified · Severity: P1 · Area: web-portal / security / production operations
-- Evidence: the VS-074 readonly-database failure propagated Node's raw `execFile`
-  rejection from `sqliteWriteJson`; its message and `cmd` contained the complete player-
-  creation SQL, so the global 500 logger wrote the account email, bcrypt hash/salt,
-  source IP, and query into journald and rsyslog.
-- Fix: SQLite read, write, strict-write, commerce, and write-lock boundaries now inspect
-  stderr only in memory and discard the original child error. Unknown child failures
-  log exactly a fixed allowlisted operation, a bounded numeric/symbolic code, and a
-  constant summary, then return `503 openrsc_db_unavailable`; known missing-binary,
-  schema, constraint, and commerce-conflict semantics remain distinct. No raw error,
-  message, command, stdout/stderr, database path, SQL, or query value is retained.
-- Verify: a one-shot SQLite shim forced readonly code 8 inside the real email-
-  verification transaction. Pre-fix, the API test stopped on the synthetic email in
-  the captured child command. Post-fix, the only failure record was 123 bytes with
-  `create_openrsc_player`, `8`, and `readonly_database`; exhaustive canaries for email,
-  username, password/token, bcrypt hash, IP, DB path, SQL, and sqlite command were
-  absent. The response was retryable, no partial account/player existed, and the same
-  token then succeeded. `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`,
-  local and production `--skip-signup` Playwright smokes, Node/shell syntax,
-  `git diff --check`, and `scripts/build.sh` passed.
-- Production: exactly `web/portal/dev-server.mjs` was swapped at
-  `/opt/voidscape/deployments/portal-sqlite-log-redaction-20260713T010651Z/` after a
-  coordinated portal/data/env/SQLite backup and clean restore check. Health is public-
-  ready with no issues, source remains `publication_pending`, public admin routes are
-  `404`, release hashes are unchanged, and the game remains inactive/disabled with
-  `43596`/`43496` closed and WSS `502`. While the vulnerable process was stopped,
-  journald and syslog were first rotated without deletion. After Ryan explicitly
-  approved the warned destructive cleanup, the hash-pinned incident journal archive was
-  deleted: 22,684 entries total, comprising 521 vulnerable-node entries and 22,163
-  unrelated entries. The other archive remained byte-identical. Exactly 521 matching
-  lines were atomically filtered from the isolated syslog archive, leaving 24,277 lines
-  at SHA-256 `390884e472bbfecdfdfb6b48c6cf6476e29fe94437ca964edba254d48ffb1439`.
-  Zero vulnerable-node journal entries and zero matching syslog lines remain; no raw
-  log was copied into evidence.
-- Log: 2026-07-12 split from VS-074, reproduced, fixed, locally verified, deployed, and
-  production-verified. Historical deletion/filtering was performed only after the
-  separate owner authorization, with exact hashes/counts and fail-closed checks before
-  mutation. Final safe evidence is `tmp/portal-sqlite-log-redaction-20260713T010651Z/`
-  and its matching remote deployment directory.
+### VS-087 — Physical Android release QA required retired native signup (FIXED)
+- Status: verified · Severity: P1 · Area: Android physical-device release QA
+- Root cause: the physical-device report generator retained the earlier native
+  username/password registration instructions after Android release builds moved to
+  browser-based, Community-Rules-gated registration. The generic report validator
+  could still accept an already-generated checklist containing that retired contract.
+- Fix: generated reports derive and expose `<portal>/portal?auth=register`, require
+  that exact browser handoff, Community Rules version `2026-07-16` acceptance,
+  portal account/first-character creation, return to the app, and Existing User login.
+  The validator now requires the registration URL field and rejects route drift.
+- Verified 2026-07-16: shell and Python syntax pass; the generated production report
+  contains `https://voidscape.gg/portal?auth=register` and no retired native-signup
+  wording; a completely filled fixture validates, while a copy changed to
+  `/portal?auth=login` fails with the exact expected-route error. Evidence is under
+  `tmp/vs087-android-device-qa-contract/`. The post-change `scripts/build.sh` passes.
 
-### VS-076 — Verification confirmation is easy to miss and misreports 5xx failures (FIXED)
-- Status: verified · Severity: P2 · Area: web-portal / launch surface / account UX
-- Evidence: the scanner-resistant flow deliberately made the email GET open a fragment
-  confirmation page and required an explicit POST, but neither the email CTA nor the
-  page made that second action unmistakable. The frontend also mapped the production
-  SQLite 500 from VS-074—and every network/5xx failure—to the invalid/already-used
-  message, prompting unnecessary resends instead of identifying temporary failure.
-- Fix: the email CTA is now `Open verification page`, the email and page both instruct
-  the player to press `Verify email`, and the page leads with `One last step` before the
-  button. Network/5xx failures retain the fragment token and display retryable
-  temporary-unavailable copy; 410 remains expired and other 4xx remains invalid/used.
-  Token format, explicit POST/scanner resistance, TTL, rate limits, and the account/
-  character transaction are unchanged.
-- Verify: syntax and launch guards, `scripts/test-portal-api.sh`,
-  `scripts/test-portal-schema.sh`, `git diff --check`, `scripts/build.sh`, and local plus
-  production `--skip-signup` Playwright smokes passed. The four-file portal-only swap at
-  `/opt/voidscape/deployments/portal-email-ux-20260713T004326Z/` has a coordinated
-  portal/data/env/SQLite backup and clean restore check; health is public-ready with no
-  issues, live hashes match, public admin routes are `404`, client/launcher/APK/
-  manifest hashes are unchanged, source is `publication_pending`, and the game remains
-  inactive/disabled with `43596`/`43496` closed and WSS `502`. Exactly one replacement
-  email was delivered to pending signup 31 as event 427, `sent` by Resend in one
-  attempt, with audit events 8061–8063 and no additional target event.
-- Log: 2026-07-12 triaged from Ryan's real flow, fixed within the approved portal-only
-  scope, and production-verified. The first deployment verifier correctly rolled code
-  back after its own strict-pipe `curl | grep -q` false positive; the corrected verifier
-  staged a fresh tree and completed without rollback. No game boot, ingress opening,
-  source publication, card/cracker action, or bulk resend occurred.
+### VS-085 — TeaVM package admitted editor/download scratch files (FIXED)
+- Status: verified · Severity: P1 · Area: TeaVM web packaging / deployment verification
+- Root cause: production packaging excluded source maps and a short runtime-file list
+  but copied arbitrary cache-tree scratch files. The deployment verifier used the same
+  narrow contract, so `Cache/video/Authentic_Sprites.orsc.bak` entered the exact held
+  package and its signed manifest without failing release QA.
+- Fix: packaging prunes and then rejects case-insensitive `.DS_Store`/`Thumbs.db`
+  basenames plus editor, merge, temporary, and partial-download suffixes from regular
+  files and symlinks before manifest generation. Static and deep hosted verification
+  apply the identical basename/suffix rules; legitimate names that merely contain a
+  token, such as `archive.bakery`, remain valid.
+- Verified 2026-07-16: the new verifier rejects the prior held package specifically for
+  its `.bak`; a newly packaged web root contains 538 manifest files with no scratch
+  path and passes 538/538 deep local verification. Focused unit fixtures prove
+  mixed-case basenames/suffixes and a `.ReJ` symlink are removed while
+  `archive.bakery` survives and remains in the manifest. Shell syntax, whitespace, and
+  the prior full build are green.
 
-### VS-074 — Production verified signup could not write the game SQLite database (FIXED)
-- Status: verified · Severity: P1 · Area: web-portal / production operations / launch surface
-- Evidence: the required real post-promotion signup delivered verification mail, but
-  character creation failed with SQLite error 8, “attempt to write a readonly
-  database.” The DB file was writable `voidscape:voidscape 0600`, but promotion left
-  its rollback-journal directory `root:voidscape 0750`; the portal service could read
-  the DB but could not create `voidscape.db-journal`. The UI showed the secondary
-  misleading invalid/used-link message, the verifier stayed at 401, and the requested
-  name remained available, proving there was no partial account or character.
-- Fix: production now uses `root:voidscape 0770` on `server/inc/sqlite/` while the DB
-  remains `voidscape:voidscape 0600`. The new idempotent
-  `scripts/prepare-production-sqlite-permissions.sh` enforces that least-privilege
-  contract and proves main-DB journal creation with a rolled-back table transaction.
-  Launch packaging carries the helper under `ops/database`, hashes it in the manifest,
-  and requires it in deployment/handoff docs before either service restarts.
-- Verify: the live service-user write/rollback probe passed with no schema residue;
-  SQLite integrity and foreign-key checks passed. Final evidence
-  `tmp/production-signup-20260713T001102Z/summary.json` passed 606 checks with zero
-  failures, proving the exact email active/verified and exactly one linked
-  `openrsc-sqlite-created` character. Exact player/maxstats/curstats/experience/
-  capped-experience/link counts are each one; public admin is 404; game service is
-  inactive/disabled; TCP `43596`/`43496` time out and WSS remains unavailable.
-  `tests/production-sqlite-permissions.sh`, `tests/launch-staging-guard-unit.sh`,
-  `scripts/test-portal-api.sh`, `scripts/test-portal-schema.sh`, `git diff --check`,
-  and `scripts/build.sh` all pass.
-- Log: 2026-07-12 triaged from the owner signup gate, reproduced without partial state,
-  corrected live with the single reversible directory-mode change, hardened in the
-  tracked deployment path, and production-verified while the world remained closed.
+### VS-084 — Android/web Create Account opened sign-in instead of registration (FIXED)
+- Status: verified · Severity: P1 · Area: Android APK / TeaVM web / portal launch
+- Root cause: native Android compiled Create Account against
+  `/portal?auth=login`, while TeaVM derived its default account handoff through the
+  legacy `#account` hash; both paths reached sign-in before the rules-gated signup.
+  Google Play versionCode 10 was already consumed by the held managed-publishing
+  submission containing that contract.
+- Fix: Android v11 / 1.0.10 compiles the canonical `/portal?auth=register` URL. The
+  portal maps GET/HEAD for that alias to `/?auth=register` with no-store semantics and
+  preserves only a valid referral token; TeaVM derives the same direct registration
+  handoff. Staging guards, documentation, web QA, and Android intent assertions share
+  the contract. Desktop packet registration and all gameplay/network behavior remain
+  unchanged.
+- Verified 2026-07-16: portal API and schema tests, 71/71 portal visual checks including
+  Community Rules acceptance and account creation, TeaVM build/controls, staging guard,
+  clean API35 bootstrap, and the focused API35 Create Account intent pass. The trusted
+  upload certificate signed v11 APK and AAB; APK and Play preflights verify client
+  cohort 10139, exact clean provenance, signer SHA-256, artifact hashes, target SDK,
+  and versionCode greater than 10. `scripts/build.sh`, syntax, and whitespace gates
+  pass. Managed publishing keeps Play non-public while the corrected v11 candidate
+  replaces v10 and the remaining release gates are completed.
+
+### VS-083 — Re-clicking a gathering node cancelled the attempt and dropped the input (FIXED)
+- Status: verified · Severity: P2 · Area: server gameplay / gathering input
+- Root cause: every ordinary scenery click sends `WALK_TO_ENTITY` immediately before
+  `OBJECT_COMMAND`. The busy-walk batching rule treated that interaction prelude as a
+  deliberate terrain click, interrupted the active gathering plugin, and then dropped
+  the semantic object command because the player was still busy for the remainder of
+  its opening delay.
+- Fix: active OpLoc Woodcutting, Fishing, and Mining batches bind their exact object id,
+  tile, and option. Their paired entity-walk prelude is held long enough for the object
+  command to validate; exact repeats coalesce in a one-slot buffer, mismatched targets
+  or options cancel, and any unpaired semantic input cancels. At an attempt boundary an
+  already-earned repeat consumes the click; only a click during the final earned
+  attempt creates one manual tail. Ground/point walks and explicit cancellation keep
+  VS-082's immediate post-delay interruption behavior. Voidbot object actions now emit
+  the real client's entity-walk prelude, so the contract is exercised over the wire.
+- Verified 2026-07-15: focused repeat-buffer Java tests, static integration contract
+  7/7, VS-082 interruption contract 3/3, packet-shape tests 3/3, all voidbot tests, all
+  headless-controller tests, `git diff --check`, and `scripts/build.sh` pass. On an
+  isolated rebuilt world, twenty rapid clicks produced exactly two openings and two
+  completed outcomes in each of Woodcutting, Fishing, and Mining; a point walk after a
+  queued click left each at one opening, zero outcomes, and unchanged XP. At level 10,
+  clicking during attempt one completed exactly the two earned attempts, while clicking
+  during the final earned attempt completed exactly three and never four. Evidence:
+  `tmp/vs083/live-check.log`. The existing first-login fleet was not restarted. This
+  fix remains uncommitted with the approved uncommitted skill-batching/headless-player
+  feature base it depends on.
+
+### VS-082 — Gather rotation was rejected while busy and repeated the same node (FIXED)
+- Status: verified · Severity: P2 · Area: headless controller / authentic gathering
+- Root cause: the first rotation implementation sent `WORLD_WALK_REQUEST` immediately
+  after a gather reward. That handler rejects a busy player with reason 6 without
+  interrupting the running plugin, so the original batch could keep harvesting the
+  same node. Woodcutting, Mining, and Fishing also lacked an interruption check after
+  their opening animation delay, leaving a race in which cancellation could still be
+  followed by another reward.
+- Fix: a successful output or XP change persists a rotation gate before sending a
+  one-tile `WALK_TO_POINT` cancellation. The controller then requires a fresh matching
+  world-route response and a real coordinate change before clearing the gate; rejected,
+  missing, wrong-target, or accepted-without-movement responses retry through bounded
+  packet bursts and a closed-gate backoff. All three gathering plugins now recheck
+  interruption immediately after their opening delay and before reward, depletion, or
+  XP logic. Voidbot exposes daemon-local route response sequence/time metadata so a
+  cached response cannot acknowledge a new request.
+- Verified 2026-07-14: controller 74/74, voidbot 57/57, gathering interruption contract
+  3/3, Python compile, `scripts/build.sh`, and scoped diff checks pass. On the rebuilt
+  local server Az produced three logs while moving
+  `(140,640) -> (139,639) -> (140,640) -> (139,639)`. Each observed reason-6 rejection
+  was followed by cancellation/retry and movement, with no additional output or XP at
+  the unchanged coordinate. Isolated staging was deployed from the hash-verified
+  launch bundle with a runtime rollback copy; all ten sessions and the controller are
+  active with `NRestarts=0`, zero units failed, and production remains
+  inactive/disabled. Post-deploy Az logged at `(140,640)`, moved after reason 6 without
+  another reward, logged at `(139,639)`, then moved again to `(139,640)`. The fix
+  remains uncommitted with the approved but uncommitted headless-player feature base.
+
+### VS-013 — voidbot's NPC smoothing cache was hidden from state safety callers (FIXED)
+- Status: verified · Severity: P3 · Area: tooling (voidbot) / headless controller
+- Root cause: the daemon already kept a three-second recently-seen NPC cache and used
+  it for NPC waits, but `state all` exposed only the exact raw AOI frame. The Karamja
+  controller therefore treated one known decoder-frame drop as a clear corridor.
+- Fix: raw `state npcs` remains unchanged; additive `state recent-npcs` and
+  `state all.recent_npcs` expose the same cache with its existing three-second expiry.
+  Karamja segment checks prefer that field and fall back to raw `npcs` for older
+  daemons/fixtures.
+- Verified 2026-07-14: focused regressions failed before the patch on a missing state
+  field and false-clear step, then proved cache inclusion, expiry after 3.1 seconds,
+  and a safe-stage hold during one raw-frame disappearance. Controller 68/68, voidbot
+  55/55, `scripts/build.sh`, and diff checks pass. The fix remains uncommitted with the
+  approved but uncommitted voidbot/headless feature base.
+
+### VS-081 — Karamja survival retries could stop before native combat retreat was legal (FIXED)
+- Status: verified · Severity: P1 · Area: headless-player controller
+- Root cause: `_walk_karamja_route_step` treated `stepMaxAttempts` as a total deadline
+  and entered the generic 30-second journey cooldown. Four one-second requests could
+  all be rejected by the server's first-three-round combat-retreat gate, stranding
+  Ultraz off-stage just before retreat became legal.
+- Fix: `stepMaxAttempts` now bounds and cycles the adjacent-tile candidate index while
+  retaining the one-command-per-interval throttle. Retries continue until a changed
+  coordinate proves movement; they never enter a generic journey block. Existing
+  safe-stage handling and travel-failure/death recovery remain higher priority.
+- Verified 2026-07-14: the focused regression failed pre-fix on
+  `karamja-step-timeout`, then proved six spaced stuck-position retries, bounded state,
+  zero journey cooldown, movement-proof reset, and respawn recovery. All 68 controller
+  tests and `scripts/build.sh` pass. The fix remains uncommitted with the approved but
+  uncommitted headless feature base rather than folding that feature into a bug commit.
+
+### VS-080 — Launch password error did not explicitly say symbols are forbidden (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / launch surface
+- Root cause: launch signup correctly limited the shared website/first-game password to
+  8-20 letters and numbers, but the error only repeated “letters and numbers” without
+  saying “only” or explicitly rejecting symbols. Players could reasonably read the
+  message as a length requirement and keep retrying a symbol-containing password.
+- Fix: every launch, Google-signup, character-create, and game-password-reset surface
+  now says letters and numbers only and explicitly says symbols and spaces are not
+  allowed. The approved but never-deployed symbol-password expansion was fully removed:
+  client serialization, server compatibility authentication, cohort `10137`, and its
+  focused gates/tests are gone. Existing website-only passwords still allow symbols,
+  older-account claims retain their tolerant current-password verification, and game
+  transport/authentication/schema remain unchanged on cohort `10136`.
+- Verified 2026-07-15: `scripts/test-portal-api.sh` proves valid alphanumeric values and
+  rejects valid-length symbol/space values with `invalid_game_password` across signup,
+  character creation, and reset. The isolated Playwright smoke typed `Bad!Pass1` and
+  observed both required policy phrases before completing the valid flow. Portal schema,
+  52 voidbot tests, `scripts/build.sh`, TeaVM packaging, Android debug build, JavaScript
+  and shell syntax, and scoped diff checks pass; generated clients report cohort `10136`.
+  Production deployed only the two current-live-derived copy files, backed up at
+  `/opt/voidscape/backups/vs080-password-copy-20260715T114000Z`. Public HTML/JavaScript
+  contain the new wording, `/api/health` returns 200, and the portal service is active;
+  the read-only live visual smoke's only failures are the older live page's unrelated
+  missing AGPL-source-link assertions. The fix remains uncommitted because the affected
+  files are intertwined with the extensive approved uncommitted feature tree.
+
+### VS-079 — Stake-duel initiative ignored the lower combat level (FIXED)
+- Status: verified · Severity: P2 · Area: server duel entry / melee-proof replay
+- Root cause: the first melee-proof implementation replaced the inherited
+  lower-combat-level-first rule with an unconditional 50/50 starter bit. A handler-only
+  correction would also have made terminal replay reject legitimate unequal-level
+  starters because combat level was not committed in proof context v2.
+- Fix: canonical context v3 commits and client-attests both displayed/base combat
+  levels. Proof and non-proof stake duels now select the lower level deterministically;
+  exact displayed-level ties use a canonical database-id coin. Proofs still consume
+  draw one for every duel so later RNG offsets remain stable, but ignore it when levels
+  differ. The terminal verifier independently re-derives the same starter.
+- Verified 2026-07-13: in live proof `6455fcfdc2b293a57d64f162e57740e2`,
+  canonical ordinal 1 / server index 0 was level 75 against ordinal 0's level 76 and
+  produced the first damage event; the v3 receipt settled `VERIFIED` with starter
+  ordinal 1. Equal-level control proof `399773a7d0c95f3cb446863a8878b6be`
+  committed 75/75, selected the coin's ordinal 1, and also settled `VERIFIED`.
+  Shared proof/client vectors, all 22 voidbot tests, `scripts/build.sh`, Android debug,
+  TeaVM packaging, Python compilation, and `git diff --check` pass. The correction
+  remains uncommitted with its already-uncommitted Duel Journal/proof feature base.
+
+### VS-076 — Real PC client cancelled valid melee-proof duels during the lock (FIXED)
+- Status: verified · Severity: P2 · Area: client/server duel-proof handshake
+- Root cause: the server committed stored account names such as `proofqa1`, while the
+  client normalized them to the RSC display form `Proofqa1` and incorrectly required
+  the raw context spelling to already equal that display form. This rejected the local
+  context before either client contributed entropy and aborted the attempt as `STATE`.
+- Fix: the shared client compares the non-empty base-37 canonical identities of the
+  committed and displayed names, preserving the identity binding while accepting normal
+  storage/display casing. The temporary field diagnostic was removed.
+- Verified 2026-07-13: Ryan confirmed the rebuilt real-PC duel and final green `::duel`
+  Journal card work great. Proof `c9b083c2e1589fa095221cc07d2408a7` reached
+  `VERIFIED` with both commitments, reveals, and ACKs populated; subsequent live proof,
+  retreat, settlement, focused tests, and the full build remained green.
+
+### VS-078 — Allowed proof-duel retreat was reported as verification failure (FIXED)
+- Status: verified · Severity: P2 · Area: duel retreat/proof client state
+- Root cause: a legal retreat reached generic `CombatEvent.resetCombat()` before proof
+  intent was classified, so the active proof went through `failCombat()` as
+  `ABORTED / STATE`. The client then retained a newest lock for a duel that deliberately
+  had no terminal receipt, which could reject empty `::duel` history or make the prior
+  completed receipt red. Stakes were always safe because offers are not removed until
+  death settlement.
+- Fix: the allowed-retreat path now performs a dedicated intentional
+  `COMBAT -> ABORTED / RETREAT` before generic reset, gives both players explicit
+  no-stake copy, and creates no receipt/witness/winner. Cohort 10135's bounded
+  `abort|...|retreat` control destroys only that terminal-less matching anchor and
+  falls back to the prior one; failure/cancellation anchors remain protected.
+- Verified 2026-07-13: a live one-coin-each No Magic duel retreated after the three-hit
+  gate. Both inventories remained at 50 coins; proof `4715e05fe8cf985d260068558144eea4`
+  persisted `ABORTED / RETREAT` with `duel_id NULL` and no witness or new receipt, both
+  clients received the no-stake message, and no verification-failure error was logged.
+  A second live duel with No Retreat selected rejected the walk with `You cannot
+  retreat from this duel!`, stayed in `COMBAT`, and later settled `VERIFIED`. The
+  anchor-retirement client test, voidbot control test, `scripts/build.sh`, and
+  `git diff --check` pass.
+
+### VS-077 — Melee proof added an avoidable final combat-start tick (FIXED)
+- Status: verified · Severity: P3 · Area: server duel-proof handshake/tick choreography
+- Root cause: successful proofs locked at roughly `created + 3839ms`, then waited for
+  a lock callback, approach action, separate `LOCKED -> COMBAT` write, and another
+  callback before visible start near `created + 5120ms`.
+- Fix: the normal approach overlaps the durable handshake. For an adjacent pair, after
+  both exact lock ACKs the existing `LOCKED` and `COMBAT` updates execute sequentially
+  in one atomic transaction; the game-thread callback revalidates state/context/items/
+  reachability/adjacency before direct entry. The old guarded walk and separate combat
+  marker remain the non-adjacent fallback. No commit, reveal, ACK, or durability stage
+  was removed.
+- Verified 2026-07-13: live proof `4715e05fe8cf985d260068558144eea4`
+  stored `created_at_ms=1783998584350` and identical
+  `locked_at_ms=started_at_ms=1783998588181`; both clients received `Commencing Duel!`
+  at 1783998588.827, about 4.47 seconds after the lock message rather than about 5.12.
+  The duel entered combat normally, and focused proof tests, `scripts/build.sh`, and
+  `git diff --check` pass.
+
+### VS-075 — ::duel during an active duel opened a stale receipt and could show false red (FIXED)
+- Status: verified · Severity: P2 · Area: server-command / client-ui
+- Root cause: an active duel has no completed receipt yet, so bare `::duel` selected the
+  prior history row. A retained lock from the active proof correctly made that old row
+  fail the newest-lock check, but the resulting red card looked like the current duel
+  had failed verification.
+- Fix: the service now rejects Journal reads across the full `isDuelActive()` lifecycle,
+  once before the asynchronous SQL read and again before delivery. Cohort `10134`
+  receives a bounded `blocked|duel_active` control that clears the pending client wait,
+  keeps the modal closed, and explains when to retry; legacy clients receive ordinary
+  game text. The proof verifier and retained-lock policy are unchanged.
+- Verified 2026-07-13: during a live two-voidbot duel, `::duel` returned exactly
+  `@vsduel@v2|<request>|blocked|duel_active` while combat continued. After settlement,
+  the same command returned a normal `begin..end` envelope selecting the newly completed
+  receipt `#3`. `scripts/build.sh` and `git diff --check` passed.
+- Log: filed from Ryan's live acceptance test and fixed the same day. This remains
+  uncommitted because the Duel Journal/proof feature base is itself uncommitted; folding
+  that base into an isolated bug commit would violate the collision boundary.
+
+### VS-074 — Duel Journal visible X did not reliably close the modal (FIXED)
+- Status: verified · Severity: P2 · Area: client-ui
+- Root cause: desktop mouse presses were queued for the later game tick; post-duel/death
+  input cleanup could clear `lastMouseButtonDown` before the Journal received its button,
+  leaving the rendered modal open. The original Workbench helper bypassed that production
+  route and masked the defect.
+- Fix: the PC mouse handler now gives the visible Journal synchronous first refusal and
+  delegates to the same `DuelJournalInterface.handleClick` hit-test used everywhere else.
+  The later tick path remains for other platforms. Workbench click injection now travels
+  through the production desktop handler instead of pre-consuming Journal clicks.
+- Verified 2026-07-13: the production-route Journal fixture opened with
+  `visible:true`; `/input/click` at its reported close center changed it to
+  `visible:false`. Reopening and sending Escape also changed it to `visible:false`.
+  Existing scaled-coordinate mapping was audited, `scripts/build.sh` and
+  `git diff --check` passed.
+- Log: filed from Ryan's live acceptance test and fixed the same day. This remains
+  uncommitted with the uncommitted feature base for the same collision reason as VS-075.
 
 ### VS-073 — Android lifecycle smoke waited for the wrong Settings tab (FIXED)
 - Status: verified · Severity: P2 · Area: Android APK QA

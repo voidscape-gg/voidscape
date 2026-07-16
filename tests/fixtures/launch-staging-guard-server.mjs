@@ -11,6 +11,7 @@ const adminStatus = Number(adminStatusText);
 const artifactPaths = [
 	"Open_RSC_Client.jar",
 	"MD5.SUM",
+	"video/Authentic_Sprites.orsc",
 	"video/Custom_Landscape.orsc",
 	"video/models.orsc",
 	"worldmap/plane-0.png",
@@ -44,8 +45,13 @@ const server = http.createServer(async (request, response) => {
 			launchSignupMode: true,
 			launch: { openAt: "2026-07-18T18:00:00.000Z" },
 			worldRules: {
-				registration: "portal-first",
-				packetRegistration: false,
+				registration: "hybrid",
+				webRegistration: "portal-first",
+				desktopRegistration: "packet",
+				nativeAndroidRegistration: "portal-first",
+				packetRegistration: true,
+				communityTermsVersion: "2026-07-16",
+				communityTermsUrl: "/community-rules",
 				memberWorld: true,
 				subscriptionGrantsMembers: false
 			},
@@ -75,7 +81,10 @@ const server = http.createServer(async (request, response) => {
 	}
 	if (url.pathname === "/api/accounts/register" && request.method === "POST") {
 		const body = await readJson(request);
-		if (String(body.password || "").includes("-")) {
+		if (body.termsAccepted !== true || body.termsVersion !== "2026-07-16") {
+			return json(response, 400, { error: "terms_acceptance_required" });
+		}
+		if (!/^[A-Za-z0-9]{8,20}$/.test(String(body.password || ""))) {
 			return json(response, 400, { error: "invalid_game_password" });
 		}
 		return json(response, 202, {

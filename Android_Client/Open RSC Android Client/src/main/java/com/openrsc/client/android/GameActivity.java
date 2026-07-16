@@ -29,6 +29,8 @@ import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -46,6 +48,8 @@ public class GameActivity extends Activity implements ClientPort {
 	private static final Object RETAINED_CLIENT_LOCK = new Object();
 	private static final int MAX_KEYBOARD_SHOW_ATTEMPTS = 3;
 	private static final long KEYBOARD_SHOW_RETRY_DELAY_MS = 120L;
+	private static final Object DUEL_PROOF_RANDOM_LOCK = new Object();
+	private static SecureRandom duelProofSecureRandom;
 	private static volatile mudclient retainedClient;
 	private static volatile GameActivity retainedClientOwner;
 	// Guarded by RETAINED_CLIENT_LOCK with the retained client/owner pair. These
@@ -524,6 +528,24 @@ public class GameActivity extends Activity implements ClientPort {
 	@Override
 	public CredentialStore getCredentialStore() {
 		return credentialStore;
+	}
+
+	@Override
+	public boolean fillSecureRandom(byte[] destination) {
+		if (destination == null || destination.length != 32) {
+			if (destination != null) Arrays.fill(destination, (byte) 0);
+			return false;
+		}
+		synchronized (DUEL_PROOF_RANDOM_LOCK) {
+			try {
+				if (duelProofSecureRandom == null) duelProofSecureRandom = new SecureRandom();
+				duelProofSecureRandom.nextBytes(destination);
+				return true;
+			} catch (RuntimeException ignored) {
+				Arrays.fill(destination, (byte) 0);
+				return false;
+			}
+		}
 	}
 
 	@Override

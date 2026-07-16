@@ -10,6 +10,13 @@ import com.openrsc.server.util.rsc.MessageType;
 
 public final class Logout implements PayloadProcessor<NoPayloadStruct, OpcodeIn> {
 	public void process(NoPayloadStruct payload, Player player) throws Exception {
+		if (player.getWorld().getVoidArena().isInActiveMatch(player)) {
+			player.getWorld().getVoidArena().noteDisconnect(player);
+			player.unregister(UnregisterForcefulness.FORCED,
+				"Player forfeited Void Arena match by logging out");
+			return;
+		}
+
 		if (player.canLogout()) {
 			player.getWorld().getServer().getPluginHandler().handlePlugin(PlayerLogoutTrigger.class, player, new Object[]{player});
 			player.unregister(UnregisterForcefulness.FAIL_IN_COMBAT, "Player logged out");

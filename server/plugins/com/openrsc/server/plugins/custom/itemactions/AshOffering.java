@@ -41,7 +41,10 @@ public class AshOffering implements UseLocTrigger {
 			offerAmount = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(offerAmount);
+		int prayerSkillId = player.getConfig().DIVIDED_GOOD_EVIL
+			? Skill.PRAYGOOD.id()
+			: Skill.PRAYER.id();
+		startskillbatch(offerAmount, prayerSkillId);
 		offerAsh(player, item.getCatalogId());
 	}
 

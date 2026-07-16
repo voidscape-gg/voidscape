@@ -167,7 +167,7 @@ server/
 │       ├── core.sqlite             # SQLite-format schema
 │       └── patches/, queries/      # SQLite equivalents
 │
-├── *.conf                          # Historical presets plus tracked secret-free voidscape-launch.conf; local.conf remains ignored
+├── *.conf                          # Server presets (preservation, default, 2001scape, rsccabbage, openpk, uranium, rsccoleslaw, connections, default)
 ├── globalrules.txt
 │
 ├── inc/                            # Runtime helper files (sqlite/ DB files, my.cnf, ant resources)
@@ -301,6 +301,7 @@ docs/
     ├── combat-system.md
     ├── content-pipeline.md
     ├── dynamic-wilderness-spawns.md
+    ├── headless-players.md
     ├── iphone-web-client.md
     ├── networking-protocol.md
     ├── persistence-db.md
@@ -311,19 +312,21 @@ docs/
     ├── scripting-plugins.md
     ├── subscription-cards.md
     ├── void-arena.md
-    ├── void-dungeon.md
     ├── void-island-starter.md
     ├── world-announcements.md
     └── world-tick-loop.md
 
 scripts/
 ├── build.sh                        # Compile server + plugins + client
-├── check-launch-config.mjs         # Fail-closed public launch config policy
-├── check-prelaunch-readiness.sh    # Aggregate non-device launch gate report
 ├── combat-sim.sh                   # Run local combat formula/cadence simulator
 ├── content.sh                      # Scaffold/report/validate custom content packs
+├── headless-player-helper.py       # Validate fleet roster/config/credentials and SQLite account proofs
+├── headless-players.sh             # Local ten-session + controller supervisor
+├── provision-headless-players.sh   # Register the ordinary fleet accounts without consuming first login
 ├── run-server.sh                   # Run server with voidscape's local.conf
 ├── run-client.sh                   # Run PC client
+├── run-headless-controller.sh      # Run the shared fleet activity controller
+├── run-headless-player.sh          # Run one ordinary account through voidbotd
 ├── run-workbench-client.sh         # Run PC client with local AI workbench endpoints
 ├── reset-db.sh                     # Wipe + reseed dev DB
 └── fetch-upstream-snapshot.sh      # Recreate upstream/openrsc-snapshot/
@@ -338,12 +341,19 @@ tools/
 ├── combat-sim/                     # Combat simulator used by tuning docs
 ├── content-studio/                 # Local browser GUI for the custom-content pipeline
 ├── generate-drop-table-report.py   # Drop-table report generator
+├── appearance-studio/              # Manifest-driven paperdoll compiler, browser editor, publisher, QA
+├── headless_players/               # Non-secret ten-account roster and activity controller
 ├── hairstyle-art/                  # Hair-art helper scripts
 ├── rsc-mapgen/                     # Vendored world-map PNG generator (mapgen.jar)
 ├── sheet2rsc/                      # Sprite-sheet → RSC frame conversion scripts
 ├── voidbot/                        # Headless game-interaction client (see `docs/bot-api.md`)
 ├── voidscape-content/              # Content-pack CLI, validators, and ChatGPT art brief
 └── voidscim-art/                   # Legacy item-icon/wielded-sprite pipeline, bridged by content.sh
+
+Deployment_Scripts/systemd/
+├── voidscape-headless.target       # Complete ten-account fleet target
+├── voidscape-headless@.service     # Hardened per-account voidbotd session
+└── voidscape-headless-controller.service # Shared activity controller
 
 memory/
 ├── MEMORY.md                       # Index — always loaded
@@ -358,6 +368,7 @@ memory/
 ├── content_pipeline.md
 ├── android_emulation.md
 ├── iphone_web_client.md
+├── headless_players.md
 ├── beta_deployments.md
 ├── discord_posting.md
 ├── prelaunch_priorities.md

@@ -10703,7 +10703,7 @@ body.features-lightbox-open {
 	background:
 		linear-gradient(90deg, rgba(3, 3, 5, 0.94) 0%, rgba(3, 3, 5, 0.72) 44%, rgba(3, 3, 5, 0.16) 76%),
 		linear-gradient(180deg, rgba(3, 3, 5, 0.1), #050507 98%),
-		url("assets/whitepaper/feature-void-dungeon-current.png") center top / cover no-repeat,
+		url("assets/whitepaper/feature-void-colossus-current.png") center top / cover no-repeat,
 		#050507;
 }
 
@@ -11295,7 +11295,7 @@ body.features-lightbox-open {
 		padding-top: 70px;
 		background:
 			linear-gradient(180deg, rgba(3, 3, 5, 0.55), #050507 92%),
-			url("assets/whitepaper/feature-void-dungeon-current.png") center top / cover no-repeat,
+			url("assets/whitepaper/feature-void-colossus-current.png") center top / cover no-repeat,
 			#050507;
 	}
 

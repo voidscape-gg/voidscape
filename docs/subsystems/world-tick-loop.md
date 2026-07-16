@@ -40,6 +40,10 @@ The 10ms scheduler is a **gate**; the actual game tick fires when accumulated el
 
 Each phase is benchmarked via `getServer().bench()`; lateness logged.
 
+### PK Catching Simulator tick discipline
+
+The simulator's temporary target is plugin-owned rather than ordinary roaming AI. Medium retains the exact classic 45/35/20 director; Hard plans longer diagonals, cutbacks, obstacle waypoints, and irregular runs; Trainer commits a reachable four-step segment, emits at most one adjacent collision-validated move every two ticks, then holds its endpoint. After combat release, the configured PvP reattack timer elapses before a twelve-tick exclusive pursuit window. The player event runs after incoming packets and normal walk-action execution, so the attack callback advances the same absolute attempt clock before scoring: tick `open + 12` can expire the attempt but can never catch. Miss recovery stops movement on the miss tick and the following tick; an absolute target attribute blocks recovery attack packets before they can arm a stale walk action, while a fresh packet on `miss + 2` lazily opens the next attempt. Trainer guidance is hidden during combat, immunity, and recovery and uses a committed endpoint plus the shared live PvP reach predicate rather than predicting on the client. Session identity guards, the logout trigger, and idempotent terminal cleanup ensure only the owning run can release its arena and NPC.
+
 ## World singleton
 
 `server/src/com/openrsc/server/model/world/World.java`.

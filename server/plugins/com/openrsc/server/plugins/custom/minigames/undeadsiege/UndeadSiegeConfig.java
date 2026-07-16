@@ -12,7 +12,6 @@ public final class UndeadSiegeConfig {
 	public static final int INTERMISSION_SECONDS = 30;
 	public static final int INTERMISSION_TICKS = 47;
 	public static final int MAX_LIVE_NPCS = 18;
-	public static final int INSTANCE_ID_START = 20000;
 	public static final int POINT_SHOP_PRICE_MODIFIER = 255;
 	public static final int NPC_STUCK_TICKS_BEFORE_REPOSITION = 4;
 	public static final int NPC_REPOSITION_MIN_RADIUS = 2;

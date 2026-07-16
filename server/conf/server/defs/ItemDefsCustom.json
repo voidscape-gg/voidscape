@@ -7338,6 +7338,29 @@
             "prayerBonus": 0,
             "basePrice": 40,
             "isNoteable": 1
+        },
+        {
+            "id": 1609,
+            "name": "Cowboy hat",
+            "description": "A rugged hat from the frontier.",
+            "command": "",
+            "isFemaleOnly": 0,
+            "isMembersOnly": 0,
+            "isStackable": 0,
+            "isUntradable": 0,
+            "isWearable": 1,
+            "appearanceID": 245,
+            "wearableID": 32,
+            "wearSlot": 5,
+            "requiredLevel": 0,
+            "requiredSkillID": 0,
+            "armourBonus": 0,
+            "weaponAimBonus": 0,
+            "weaponPowerBonus": 0,
+            "magicBonus": 0,
+            "prayerBonus": 0,
+            "basePrice": 1,
+            "isNoteable": 1
         }
     ]
 }

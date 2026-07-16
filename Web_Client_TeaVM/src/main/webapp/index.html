@@ -1720,13 +1720,14 @@
 				}
 			}
 
-			function portalShopUrl() {
+			function portalRegistrationUrlFromBase(base) {
+				var url = safePortalUrl(base || '/');
+				if (!url) return '';
 				try {
-					// SHOP is deliberately not derived from query/local-storage portal
-					// overrides. A shared link must not be able to turn the trusted in-game
-					// button into a cross-origin redirect.
-					var parsed = new URL('/portal', window.location.origin);
-					parsed.hash = 'subscription-buy';
+					var parsed = new URL(url);
+					parsed.hash = '';
+					parsed.search = '';
+					parsed.searchParams.set('auth', 'register');
 					return safePortalUrl(parsed.href);
 				} catch (error) {
 					return '';
@@ -1773,12 +1774,11 @@
 				}
 
 				if (!accountUrl) {
-					accountUrl = portalUrlFromBase(base, 'account');
+					accountUrl = portalRegistrationUrlFromBase(base);
 				}
 				if (!recoveryUrl) {
 					recoveryUrl = portalUrlFromBase(base, 'security');
 				}
-				var shopUrl = portalShopUrl();
 				if (source === 'query') {
 					storePortalUrl(portalAccountStorageKey, accountUrl);
 					storePortalUrl(portalRecoveryStorageKey, recoveryUrl);
@@ -1787,7 +1787,6 @@
 				window.__voidscapePortalConfig = {
 					accountUrl: accountUrl,
 					recoveryUrl: recoveryUrl,
-					shopUrl: shopUrl,
 					portalUrl: safePortalUrl(base),
 					source: source
 				};
@@ -1812,15 +1811,12 @@
 					kind = 'account';
 				} else if (text === 'voidscape:recovery') {
 					kind = 'recovery';
-				} else if (text === 'voidscape:shop') {
-					kind = 'shop';
 				}
 
 				var resolved = '';
 				if (kind) {
 					var config = configurePortalUrls();
-					resolved = kind === 'account' ? config.accountUrl
-						: kind === 'recovery' ? config.recoveryUrl : config.shopUrl;
+					resolved = kind === 'account' ? config.accountUrl : config.recoveryUrl;
 				} else {
 					resolved = safePortalUrl(text);
 				}
@@ -2291,12 +2287,9 @@
 					controlsHistory: controlsHistory,
 						ui: cloneForDiagnostics(window.__voidscapeUiState || null),
 						uiHistory: cloneForDiagnostics(window.__voidscapeUiHistory || null),
-					worldMap: cloneForDiagnostics(window.__voidscapeWorldMapState || null),
-					worldMapHistory: cloneForDiagnostics(window.__voidscapeWorldMapHistory || null),
-					crackerCampaignHud: cloneForDiagnostics(window.__voidscapeCrackerCampaignHudState || null),
-					crackerCampaignSmokeCommand: cloneForDiagnostics(window.__voidscapeCrackerCampaignSmokeCommandResult || null),
-					crackerCampaignSmokeInjection: cloneForDiagnostics(window.__voidscapeCrackerCampaignSmokeInjection || null),
-					scrollHistory: cloneForDiagnostics(window.__voidscapeScrollHistory || []),
+						worldMap: cloneForDiagnostics(window.__voidscapeWorldMapState || null),
+						worldMapHistory: cloneForDiagnostics(window.__voidscapeWorldMapHistory || null),
+						scrollHistory: cloneForDiagnostics(window.__voidscapeScrollHistory || []),
 						postResumeProof: cloneForDiagnostics(window.__voidscapePostResumeProof || postResumeProof),
 					input: {
 						queueLength: Array.isArray(window.__voidscapeInputQueue) ? window.__voidscapeInputQueue.length : null,
@@ -2346,9 +2339,6 @@
 						objectLine('uiHistory', snapshot.uiHistory),
 						objectLine('worldMap', snapshot.worldMap),
 						objectLine('worldMapHistory', snapshot.worldMapHistory),
-						objectLine('crackerCampaignHud', snapshot.crackerCampaignHud),
-						objectLine('crackerCampaignSmokeCommand', snapshot.crackerCampaignSmokeCommand),
-						objectLine('crackerCampaignSmokeInjection', snapshot.crackerCampaignSmokeInjection),
 						objectLine('scrollHistory', snapshot.scrollHistory),
 					objectLine('postResumeProof', snapshot.postResumeProof),
 					objectLine('input', snapshot.input),

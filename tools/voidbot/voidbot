@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # voidbot — headless game-interaction CLI. Talks to a running voidbotd.
-#   voidbot start --user U --pass P     # launch the daemon (backgrounds it)
-#   voidbot login --user U --pass P     # alias for start
+#   voidbot start --user U --password-file FILE  # launch daemon (backgrounds it)
+#   voidbot login --user U --pass P              # legacy alias/credential form
 #   voidbot <command> [args]            # send a command to the daemon
 #   voidbot stop                        # shut the daemon down
 # See docs/bot-api.md for the full command table.
@@ -22,17 +22,40 @@ case "${1:-}" in
     shift
     HOST="${VOIDBOT_HOST:-127.0.0.1}"
     GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
-    USER=""; PASS=""
+    USER=""; PASS=""; PASS_SET=0; PASSWORD_FILE=""; PASSWORD_FILE_SET=0
     while [ $# -gt 0 ]; do
       case "$1" in
         --user) USER="$2"; shift 2;;
-        --pass) PASS="$2"; shift 2;;
+        --pass) PASS="$2"; PASS_SET=1; shift 2;;
+        --password-file) PASSWORD_FILE="$2"; PASSWORD_FILE_SET=1; shift 2;;
         --game-port) GAME_PORT="$2"; shift 2;;
         --host) HOST="$2"; shift 2;;
         *) shift;;
       esac
     done
-    [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"start needs --user and --pass"}'; exit 2; }
+    [ -n "$USER" ] || { echo '{"ok":false,"error":"start needs --user"}'; exit 2; }
+    if [ "$PASS_SET" -eq 1 ] && [ "$PASSWORD_FILE_SET" -eq 1 ]; then
+      echo '{"ok":false,"error":"start accepts only one of --pass or --password-file"}'
+      exit 2
+    fi
+    if [ "$PASS_SET" -eq 0 ] && [ "$PASSWORD_FILE_SET" -eq 0 ]; then
+      echo '{"ok":false,"error":"start needs --pass or --password-file"}'
+      exit 2
+    fi
+    if [ "$PASS_SET" -eq 1 ] && [ -z "$PASS" ]; then
+      echo '{"ok":false,"error":"start needs a non-empty --pass"}'
+      exit 2
+    fi
+    if [ "$PASSWORD_FILE_SET" -eq 1 ] && [ -z "$PASSWORD_FILE" ]; then
+      echo '{"ok":false,"error":"start needs a non-empty --password-file path"}'
+      exit 2
+    fi
+    CREDENTIAL_ARGS=()
+    if [ "$PASSWORD_FILE_SET" -eq 1 ]; then
+      CREDENTIAL_ARGS+=(--password-file "$PASSWORD_FILE")
+    else
+      CREDENTIAL_ARGS+=(--pass "$PASS")
+    fi
     # Refuse if something already listens on the control port: blind-spawning here
     # orphans an uncontrollable logged-in session and the readiness ping below would
     # hit the OLD daemon and report false success. One-shot connect (not cli.py ping,
@@ -46,7 +69,7 @@ case "${1:-}" in
     # wrapper returns immediately (a backgrounded child sharing our stdout pipe
     # would otherwise keep $(voidbot start) blocked forever).
     nohup "$PY" "$HERE/voidbotd.py" --host "$HOST" --game-port "$GAME_PORT" \
-        --ctrl-port "$CTRL_PORT" --user "$USER" --pass "$PASS" \
+        --ctrl-port "$CTRL_PORT" --user "$USER" "${CREDENTIAL_ARGS[@]}" \
         --defs "$REPO/server/conf/server/defs" >"$LOG" 2>&1 </dev/null &
     DPID=$!
     disown 2>/dev/null || true
@@ -77,11 +100,12 @@ case "${1:-}" in
     shift
     HOST="${VOIDBOT_HOST:-127.0.0.1}"
     GAME_PORT="${VOIDBOT_GAME_PORT:-43596}"
-    USER=""; PASS=""; EMAIL=""; NO_EMAIL=0
+    USER=""; PASS=""; PASS_SET=0; PASSWORD_FILE=""; PASSWORD_FILE_SET=0; EMAIL=""; NO_EMAIL=0
     while [ $# -gt 0 ]; do
       case "$1" in
         --user) USER="$2"; shift 2;;
-        --pass) PASS="$2"; shift 2;;
+        --pass) PASS="$2"; PASS_SET=1; shift 2;;
+        --password-file) PASSWORD_FILE="$2"; PASSWORD_FILE_SET=1; shift 2;;
         --email) EMAIL="$2"; shift 2;;
         --no-email) NO_EMAIL=1; shift;;
         --game-port) GAME_PORT="$2"; shift 2;;
@@ -89,17 +113,34 @@ case "${1:-}" in
         *) shift;;
       esac
     done
-    [ -n "$USER" ] && [ -n "$PASS" ] || { echo '{"ok":false,"error":"register needs --user and --pass"}'; exit 2; }
+    [ -n "$USER" ] || { echo '{"ok":false,"error":"register needs --user"}'; exit 2; }
+    if [ "$PASS_SET" -eq 1 ] && [ "$PASSWORD_FILE_SET" -eq 1 ]; then
+      echo '{"ok":false,"error":"register accepts only one of --pass or --password-file"}'
+      exit 2
+    fi
+    if [ "$PASS_SET" -eq 0 ] && [ "$PASSWORD_FILE_SET" -eq 0 ]; then
+      echo '{"ok":false,"error":"register needs --pass or --password-file"}'
+      exit 2
+    fi
+    if [ "$PASS_SET" -eq 1 ] && [ -z "$PASS" ]; then
+      echo '{"ok":false,"error":"register needs a non-empty --pass"}'
+      exit 2
+    fi
+    if [ "$PASSWORD_FILE_SET" -eq 1 ] && [ -z "$PASSWORD_FILE" ]; then
+      echo '{"ok":false,"error":"register needs a non-empty --password-file path"}'
+      exit 2
+    fi
+    CREDENTIAL_ARGS=()
+    if [ "$PASSWORD_FILE_SET" -eq 1 ]; then
+      CREDENTIAL_ARGS+=(--password-file "$PASSWORD_FILE")
+    else
+      CREDENTIAL_ARGS+=(--pass "$PASS")
+    fi
     EXTRA=()
     [ "$NO_EMAIL" -eq 1 ] && EXTRA+=(--no-email)
     [ -n "$EMAIL" ] && EXTRA+=(--email "$EMAIL")
-    if [ "${#EXTRA[@]}" -gt 0 ]; then
-      exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
-          --user "$USER" --pass "$PASS" "${EXTRA[@]}"
-    else
-      exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
-          --user "$USER" --pass "$PASS"
-    fi
+    exec "$PY" "$HERE/voidbotd.py" --register --host "$HOST" --game-port "$GAME_PORT" \
+        --user "$USER" "${CREDENTIAL_ARGS[@]}" "${EXTRA[@]}"
     ;;
   stop)
     "$PY" "$HERE/cli.py" --ctrl-port "$CTRL_PORT" shutdown || true

@@ -1,0 +1,199 @@
+{
+  "generator": "tools/appearance-studio/proof_art/paperdoll_v2_hairstyles.py",
+  "generatorSha256": "df037fc1f07dab4f6f41466a8e71232838d3832427a06c56fb531755b67517f8",
+  "id": "mohawk",
+  "label": "Mohawk",
+  "masters": {
+    "combat-west": {
+      "fileSha256": "fd7f352119e17919b39dac2b60d1c1f3d65ea0e605b3dbb9d85fac8d28db64b8",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        74,
+        78,
+        88,
+        128,
+        136,
+        154,
+        164,
+        168
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        96,
+        255
+      ],
+      "occupiedPixels": 595,
+      "outsideAllowedPixels": 0,
+      "path": "masters/combat-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -15,
+        -14,
+        15,
+        15
+      ],
+      "rgbaSha256": "f1bf006f6722ddcd589e00f14a1f68387fec446f347e2f0dbf7bee7794d91b2a",
+      "scalpAttachmentPixels": 219
+    },
+    "north": {
+      "fileSha256": "e3c944c5599423a3f1a55f162a967addfee2b527b3f8ba9ee5dde57d944666cb",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        76,
+        82,
+        92,
+        132,
+        136,
+        148,
+        164,
+        168
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        96,
+        255
+      ],
+      "occupiedPixels": 259,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -13,
+        -7,
+        13,
+        12
+      ],
+      "rgbaSha256": "66e0c4b67f33efeaf34128c6c10373ddf8696edec6db157db5275c54d89ec1fe",
+      "scalpAttachmentPixels": 177
+    },
+    "north-west": {
+      "fileSha256": "6208a2e5491ca0d32fec12307d0d65d9eed02397e762662f50d5d3371173c1f2",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        74,
+        80,
+        90,
+        130,
+        134,
+        146,
+        162,
+        166
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        96,
+        255
+      ],
+      "occupiedPixels": 344,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -14,
+        -9,
+        13,
+        15
+      ],
+      "rgbaSha256": "09b1d6453fb12cf75a769a210991048fbc8519335308e0a81fdbe33c97ce086e",
+      "scalpAttachmentPixels": 209
+    },
+    "south": {
+      "fileSha256": "52b5aa9096ec6437da1e7d29b6e776a6e7d298b6f552ce26cc652d452209d116",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        76,
+        82,
+        92,
+        132,
+        136,
+        148,
+        164,
+        168
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        104,
+        255
+      ],
+      "occupiedPixels": 399,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -13,
+        -9,
+        13,
+        15
+      ],
+      "rgbaSha256": "f5a57012550ae68201ab1f38ed0091b1adb6373d5dcad4f0602cfa5c51bcd8dc",
+      "scalpAttachmentPixels": 318
+    },
+    "south-west": {
+      "fileSha256": "9a29043f1ea59cc004e10ecc02c551494f337fc57358957eaf34bc01289327d9",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        74,
+        80,
+        90,
+        130,
+        134,
+        146,
+        162,
+        166
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        96,
+        255
+      ],
+      "occupiedPixels": 397,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -14,
+        -9,
+        13,
+        14
+      ],
+      "rgbaSha256": "d1daf051ab60bb3c679f500ba5a5fda866de6517d38654d6cb29a456605b8d2c",
+      "scalpAttachmentPixels": 310
+    },
+    "west": {
+      "fileSha256": "ede85c99cf22e1ffd23e5b0fa91929bc68ffbb4afc016d806ac715ded51fb778",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        74,
+        78,
+        88,
+        128,
+        136,
+        154,
+        164,
+        168
+      ],
+      "nonzeroAlphaValues": [
+        56,
+        96,
+        255
+      ],
+      "occupiedPixels": 595,
+      "outsideAllowedPixels": 0,
+      "path": "masters/west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -15,
+        -14,
+        15,
+        15
+      ],
+      "rgbaSha256": "89a4723a9f15c7cc91dac5672a8b948a3b2a3bee81747ad0a44ffe9b12bf5033",
+      "scalpAttachmentPixels": 219
+    }
+  },
+  "rationale": "Narrow coherent ridge over visible shaved-side stubble; strong profile and rear stripe.",
+  "schema": "voidscape-paperdoll-v2-hairstyle-art/v1",
+  "source": "explicit-crown-relative-grayscale-pixel-geometry",
+  "template": "rsc-player-2x-v1",
+  "templateSha256": "d7400f68d450498434967e5ec2c6b6d8165b739a511271401d65b530c9d8b019"
+}

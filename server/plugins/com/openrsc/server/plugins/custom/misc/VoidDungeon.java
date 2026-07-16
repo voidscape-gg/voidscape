@@ -116,27 +116,16 @@ public class VoidDungeon implements OpLocTrigger, PlayerDeathDropTrigger, Player
 
 	@Override
 	public void onPlayerDeathDrop(Player player, PlayerDeathContext context) {
-		handleDeath(context.getDeathPoint(), () -> VoidDungeonAdmission.clear(player),
-			context::requestPersistence);
+		if (!context.getDeathPoint().inVoidDungeonUnderground()) {
+			return;
+		}
+		VoidDungeonAdmission.clear(player);
+		context.requestPersistence();
 	}
 
 	@Override
 	public boolean blockPlayerDeathDrop(Player player, PlayerDeathContext context) {
-		return shouldClearAdmissionOnDeath(context.getDeathPoint());
-	}
-
-	static boolean handleDeath(Point deathPoint, Runnable clearAdmission,
-		Runnable requestPersistence) {
-		if (!shouldClearAdmissionOnDeath(deathPoint)) {
-			return false;
-		}
-		clearAdmission.run();
-		requestPersistence.run();
-		return true;
-	}
-
-	static boolean shouldClearAdmissionOnDeath(Point deathPoint) {
-		return deathPoint != null && deathPoint.inVoidDungeonUnderground();
+		return context.getDeathPoint().inVoidDungeonUnderground();
 	}
 
 	@Override

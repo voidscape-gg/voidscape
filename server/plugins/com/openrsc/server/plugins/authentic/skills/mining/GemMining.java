@@ -117,10 +117,10 @@ public class GemMining implements OpLocTrigger, UseLocTrigger {
 		}
 
 		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.MINING.id());
+			startskillbatch(obj, Skill.MINING.id());
+		} else {
+			startbatch(repeat);
 		}
-
-		startbatch(repeat);
 		batchMining(player, obj, axeId, mineLvl);
 	}
 
@@ -130,6 +130,9 @@ public class GemMining implements OpLocTrigger, UseLocTrigger {
 		thinkbubble(new Item(pickBubbleId));
 		player.playerServerMessage(MessageType.QUEST, "You have a swing at the rock!");
 		delay(3);
+		if (ifinterrupted()) {
+			return;
+		}
 		if (config().WANT_FATIGUE) {
 			if (config().STOP_SKILLING_FATIGUED >= 1
 				&& player.getFatigue() >= player.MAX_FATIGUE) {

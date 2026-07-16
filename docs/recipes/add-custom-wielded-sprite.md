@@ -27,6 +27,15 @@ if (s.equals("yourname")) {
 ```
 
 Build (`scripts/build.sh`), run the client, grep stdout. Remove the println once you have the number.
+For a registered item, prefer the checked-in resolver instead of relying on the
+temporary print:
+
+```bash
+PYTHONPATH=tools/voidscim-art python3 -m voidscim validate-wielded \
+  --animation yourname \
+  --item-id YOUR_ITEM_ID \
+  --layout-only
+```
 
 You also need the `number` of the **existing** AnimationDef whose sprite shape you want to reuse — same trick.
 
@@ -88,6 +97,12 @@ Don't forget to copy each `frame_NN.png.json` sidecar alongside its recolored PN
 
 ## Step 4 — pack at the new slot
 
+> Legacy/manual path: keep this section for existing assets and diagnostics.
+> New paperdoll appearances should use `content/custom/<slug>/appearance.yaml`
+> plus Appearance Studio planning so the registry, both archives, checksum,
+> generated mappings, item definitions, and undo data cannot drift. Production
+> `appearance apply` remains gated until Gate 4 is approved.
+
 ```bash
 INPUTS=$(printf "out/recolored/frame_%02d.png," 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 | sed 's/,$//')
 python3 pack.py \
@@ -95,13 +110,42 @@ python3 pack.py \
   --start-index $NEW_BASE \
   --inputs "$INPUTS" \
   --commit
+
+# The server archive drives generated avatars and must receive the same worn block.
+python3 pack.py \
+  --archive ../../server/conf/server/data/Authentic_Sprites.orsc \
+  --start-index $NEW_BASE \
+  --inputs "$INPUTS" \
+  --commit
 ```
 
 `pack.py --commit` requires `Authentic_Sprites.orsc.bak` to exist — `cp` it before the first commit if needed.
+After packing, replace the `./video/Authentic_Sprites.orsc` row in
+`Client_Base/Cache/MD5.SUM` with the client archive's current MD5.
 
 ## Step 5 — set the JSON `appearanceID`
 
-Server-side, your item's `appearanceID` in `server/conf/server/defs/ItemDefsCustom.json` should equal your AnimationDef's runtime index in the `EntityHandler.animations` list (the position resulting from your `animations.add(...)` call). Use the void-scimitar pattern: append after the `S_WANT_CUSTOM_SPRITES` block, then JSON `appearanceID` = (count of preceding entries that load at runtime). For the Void Shortbow, that lands at 231 (one after the Void Scimitar's 230). Empirical verification: temporarily set the AnimationDef name to `"sword"` with a bright `charColour`; if the wielded shape becomes a tinted sword at the JSON ID you tried, you've got the right slot.
+Server-side, your item's `appearanceID` in `server/conf/server/defs/ItemDefsCustom.json`
+is **one-based**: it must equal the AnimationDef's zero-based runtime list index
+plus one. Use the void-scimitar pattern and append after the
+`S_WANT_CUSTOM_SPRITES` block: the Void Scimitar is runtime index `229` /
+appearance `230`, and the Void Shortbow is runtime index `230` / appearance
+`231`. Validate the contract and packed range directly:
+
+```bash
+PYTHONPATH=tools/voidscim-art python3 -m voidscim validate-wielded \
+  --animation yourname \
+  --item-id YOUR_ITEM_ID \
+  --archive Client_Base/Cache/video/Authentic_Sprites.orsc \
+  --expect-runtime-index YOUR_ZERO_BASED_INDEX \
+  --expect-appearance-id YOUR_ONE_BASED_APPEARANCE \
+  --expect-base $NEW_BASE
+```
+
+Run the same full validation against
+`server/conf/server/data/Authentic_Sprites.orsc`. A correctly named animation
+at the wrong appearance is still a broken wearable; do not infer this mapping
+from source comments alone.
 
 ## Step 6 — restart server (for JSON reload) + client
 

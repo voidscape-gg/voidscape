@@ -20,9 +20,7 @@ else
 fi
 
 BASELINE_JSON=""
-BASELINE_BUNNY_EARS_CACHE=""
-BASELINE_SCYTHE_CACHE=""
-MANAGED_IDS=(1 422 575 577 580 677 828 971 1156 1289)
+MANAGED_IDS=(1 422 575 577 580 677 828 971)
 
 vb() {
 	VOIDBOT_CTRL_PORT="$CTRL_PORT" "$VB" "$@"
@@ -85,45 +83,6 @@ queue_fixture() {
 	fi
 }
 
-cache_snapshot() {
-	local key="$1"
-	admin "::getcache $USER $key"
-	vb state messages | "$PY" -c '
-import json,re,sys
-key=sys.argv[1].lower()
-rows=[m.get("text","") for m in json.load(sys.stdin)["state"]["messages"] if key in m.get("text","").lower()]
-if not rows:
-    raise SystemExit("cache probe response missing for " + key)
-latest=rows[-1]
-if "does not have" in latest.lower():
-    print("absent")
-else:
-    match=re.search(r" has value (.*?) for cache key ", latest, re.I)
-    if not match:
-        raise SystemExit("unrecognized cache probe response: " + latest)
-    print("present\t" + match.group(1))
-' "$key"
-}
-
-expect_cache_present() {
-	local label="$1" key="$2" snapshot
-	snapshot="$(cache_snapshot "$key")"
-	if [[ "$snapshot" != $'present\t'* ]]; then
-		echo "FAIL $label: cache key $key was not set" >&2
-		exit 1
-	fi
-	echo "PASS $label"
-}
-
-restore_cache() {
-	local key="$1" snapshot="$2"
-	[ -n "$snapshot" ] || return 0
-	admin "::deletecache $USER $key"
-	if [[ "$snapshot" == $'present\t'* ]]; then
-		admin "::setcache $USER $key ${snapshot#*$'\t'}"
-	fi
-}
-
 open_and_expect() {
 	local label="$1" category_roll="$2" reward_roll="$3" reward_id="$4" message="$5"
 	local before after slot before_crackers after_crackers before_reward after_reward
@@ -182,8 +141,6 @@ cleanup() {
 			done
 		fi
 	fi
-	restore_cache "bunny_ears" "$BASELINE_BUNNY_EARS_CACHE"
-	restore_cache "scythe" "$BASELINE_SCYTHE_CACHE"
 	vb admin "::quit" >/dev/null 2>&1
 	vb stop >/dev/null 2>&1
 }
@@ -194,13 +151,11 @@ VOIDBOT_CTRL_PORT="$CTRL_PORT" VOIDBOT_GAME_PORT="$GAME_PORT" \
 	"$VB" start --user "$USER" --pass "$PASS" >/dev/null
 vb wait logged-in --timeout 20 >/dev/null
 BASELINE_JSON="$(inventory)"
-BASELINE_BUNNY_EARS_CACHE="$(cache_snapshot bunny_ears)"
-BASELINE_SCYTHE_CACHE="$(cache_snapshot scythe)"
 
-# Nine crackers cover five boundary probes, both added holiday rewards, a rapid
-# duplicate attempt, and a final full-inventory delivery check.
-admin "::item 575 9"
-expect_eq "fixture setup" "$(count_id 575 "$(inventory)")" "$(( $(count_id 575 "$BASELINE_JSON") + 9 ))"
+# Seven crackers cover five boundary probes, a rapid duplicate attempt, and a
+# final full-inventory delivery check.
+admin "::item 575 7"
+expect_eq "fixture setup" "$(count_id 575 "$(inventory)")" "$(( $(count_id 575 "$BASELINE_JSON") + 7 ))"
 
 open_and_expect_nothing
 sleep 6.1
@@ -211,12 +166,6 @@ sleep 6.1
 open_and_expect "80 enters the holiday-rare bucket" 80 0 422 "pumpkin"
 sleep 6.1
 open_and_expect "99 remains in the holiday-rare bucket" 99 7 971 "Santa's hat"
-sleep 6.1
-open_and_expect "holiday pool includes Bunny ears" 80 8 1156 "bunny ears"
-expect_cache_present "Bunny ears enables Thessalia replacement" "bunny_ears"
-sleep 6.1
-open_and_expect "holiday pool includes Scythe" 80 9 1289 "scythe"
-expect_cache_present "Scythe enables Thessalia replacement" "scythe"
 
 # Two crackers remain. Repeating the same slot immediately must consume only one
 # even though the second cracker shifts into that slot after the first removal.

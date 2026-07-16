@@ -842,9 +842,13 @@ public class PacketHandler {
 
 		if (mc.handleVoidscapeAccountAuthMessage(message)
 			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapePkCatchingMessage(message))
+			|| (sender == null && type == MessageType.QUEST
 				&& mc.handleVoidscapeChristmasCrackerMessage(message))
 			|| (sender == null && type == MessageType.QUEST
-				&& mc.handleVoidscapeCrackerCampaignMessage(message))
+				&& mc.handleVoidscapeDuelProofMessage(message))
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeDuelJournalMessage(message))
 			|| mc.handleVoidscapeFarmSimMessage(message)
 			|| mc.handleUndeadSiegeMessage(message)
 			|| mc.handleVoidArenaRatingMessage(message)) {
@@ -2291,7 +2295,7 @@ public class PacketHandler {
 		mc.setFightModeSelectorToggle(packetsIncoming.getUnsignedByte()); // 32
 		mc.setExperienceCounterToggle(packetsIncoming.getUnsignedByte()); // 33
 		mc.setHideInventoryCount(packetsIncoming.getUnsignedByte() == 1); // 34
-		mc.setHideNameTag(packetsIncoming.getUnsignedByte() == 1); // 35
+		mc.setOverheadPlayerLabelMode(packetsIncoming.getUnsignedByte()); // 35
 		packetsIncoming.getUnsignedByte(); // 36 — was party-invite block; parties removed, byte still consumed
 		mc.setAndroidInvToggle(packetsIncoming.getUnsignedByte() == 1); // 37
 		mc.setShowNPCKC(packetsIncoming.getUnsignedByte() == 1); // 38
@@ -2628,7 +2632,9 @@ public class PacketHandler {
 	}
 
 	private void showServerMessageDialog() {
-		mc.setServerMessage(packetsIncoming.readString());
+		String message = packetsIncoming.readString();
+		if (mc.shouldSuppressVoidscapePkCatchingLegacyBox(message)) return;
+		mc.setServerMessage(message);
 		mc.setShowDialogServerMessage(true);
 		mc.setServerMessageBoxTop(true);
 	}
@@ -2652,7 +2658,9 @@ public class PacketHandler {
 	}
 
 	private void showServerMessageDialogTwo() {
-		mc.setServerMessage(packetsIncoming.readString());
+		String message = packetsIncoming.readString();
+		if (mc.shouldSuppressVoidscapePkCatchingLegacyBox(message)) return;
+		mc.setServerMessage(message);
 		mc.setShowDialogServerMessage(true);
 		mc.setServerMessageBoxTop(false);
 	}
@@ -2954,6 +2962,10 @@ public class PacketHandler {
 						packetsIncoming.getUnsignedByte();
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION)
 						packetsIncoming.getUnsignedByte();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_HONORIFIC_CLIENT_VERSION) {
+						packetsIncoming.readString();
+						packetsIncoming.getUnsignedByte();
+					}
 				} else {
 					//packetsIncoming.getShort();
 
@@ -3008,6 +3020,16 @@ public class PacketHandler {
 						player.hairStyle = packetsIncoming.getUnsignedByte();
 					} else {
 						player.hairStyle = 0;
+					}
+					if (Config.CLIENT_VERSION >= Config.PLAYER_HONORIFIC_CLIENT_VERSION) {
+						player.honorific = packetsIncoming.readString();
+						if (player.honorific != null && player.honorific.length() == 0) {
+							player.honorific = null;
+						}
+						player.honorificTier = packetsIncoming.getUnsignedByte();
+					} else {
+						player.honorific = null;
+						player.honorificTier = 0;
 					}
 				}
 			} else if (updateType == 8) {
