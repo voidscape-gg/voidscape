@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-android.sh — build the Voidscape Android APK
+# build-android.sh — build the Voidscape Android APK or Play bundle
 
 set -euo pipefail
 
@@ -12,13 +12,15 @@ GRADLE_ARGS=()
 
 usage() {
     cat <<'EOF'
-Usage: scripts/build-android.sh [--debug|--release] [gradle args...]
+Usage: scripts/build-android.sh [--debug|--release|--play-release] [gradle args...]
 
 Options:
-  --debug      Build the debug APK. Default when no task is supplied.
-  --release    Build the release APK. Requires upload signing config unless
-               VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1 is set for local experiments.
-  -h, --help   Show this help.
+  --debug         Build the debug APK. Default when no task is supplied.
+  --release       Build the release APK. Requires upload signing config unless
+                  VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE=1 is set for local experiments.
+  --play-release  Build the signed release Android App Bundle for Google Play.
+                  Writes a stable voidscape.aab plus voidscape.aab.json metadata.
+  -h, --help      Show this help.
 
 Release signing can be supplied through environment:
   VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE=/path/to/voidscape-upload.jks
@@ -26,11 +28,15 @@ Release signing can be supplied through environment:
   VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD=...
 
 Release builds also require clean Android/shared-client inputs. For a local or
-staging artifact that must never be promoted, set:
+staging artifact that promotion checks must reject, set:
   VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1
 
 or matching Gradle properties:
   voidscape.android.uploadKeystore.file
+  voidscape.android.uploadKeystore.storePassword
+  voidscape.android.uploadKeystore.keyPassword
+
+On macOS, this script also checks Keychain services:
   voidscape.android.uploadKeystore.storePassword
   voidscape.android.uploadKeystore.keyPassword
 EOF
@@ -44,6 +50,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --release)
             GRADLE_ARGS=(assembleRelease)
+            shift
+            ;;
+        --play-release)
+            GRADLE_ARGS=(bundleRelease)
             shift
             ;;
         -h|--help)
@@ -63,6 +73,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Resolve the documented default before any helper expands the task array.
+# macOS still ships Bash 3.2, where expanding an empty array under `set -u`
+# raises an unbound-variable error even when the array was declared.
+if [[ "${#GRADLE_ARGS[@]}" -eq 0 ]]; then
+    GRADLE_ARGS=(assembleDebug)
+fi
 
 if [[ -z "${JAVA_HOME:-}" ]]; then
     if [[ -d /opt/homebrew/Cellar/openjdk@17 ]]; then
@@ -101,7 +118,7 @@ release_signing_requested() {
     local arg
     for arg in "${GRADLE_ARGS[@]}"; do
         case "$arg" in
-            *Release*)
+            assembleRelease|bundleRelease|*Release*)
                 return 0
                 ;;
         esac
@@ -111,6 +128,40 @@ release_signing_requested() {
 
 read_relevant_state() {
     python3 "$PROVENANCE_TOOL" state --repo-root "$REPO_ROOT" --format tsv
+}
+
+read_macos_keychain_password() {
+    local service_name="$1"
+    [[ "$(uname -s)" == "Darwin" ]] || return 1
+    command -v security >/dev/null 2>&1 || return 1
+    security find-generic-password -s "$service_name" -w 2>/dev/null
+}
+
+configure_macos_keychain_signing() {
+    local default_keystore store_password key_password loaded_from_keychain=0
+    default_keystore="$HOME/.voidscape/android-signing/voidscape-upload.jks"
+
+    if [[ -z "${VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE:-}" && -f "$default_keystore" ]]; then
+        export VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE="$default_keystore"
+    fi
+
+    if [[ -z "${VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD:-}" ]]; then
+        if store_password="$(read_macos_keychain_password "voidscape.android.uploadKeystore.storePassword")" && [[ -n "$store_password" ]]; then
+            export VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD="$store_password"
+            loaded_from_keychain=1
+        fi
+    fi
+
+    if [[ -z "${VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD:-}" ]]; then
+        if key_password="$(read_macos_keychain_password "voidscape.android.uploadKeystore.keyPassword")" && [[ -n "$key_password" ]]; then
+            export VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD="$key_password"
+            loaded_from_keychain=1
+        fi
+    fi
+
+    if [[ "$loaded_from_keychain" == "1" ]]; then
+        echo "Loaded Android upload signing config from macOS Keychain."
+    fi
 }
 
 if [[ ! -f "$PROVENANCE_TOOL" ]]; then
@@ -141,8 +192,8 @@ python3 "$PROVENANCE_TOOL" write \
     --dirty-release-override "$DIRTY_RELEASE_OVERRIDE" >/dev/null
 
 cd "$ANDROID_DIR"
-if [[ "${#GRADLE_ARGS[@]}" -eq 0 ]]; then
-    GRADLE_ARGS=(assembleDebug)
+if release_signing_requested && [[ "${VOIDSCAPE_ANDROID_ALLOW_UNSIGNED_RELEASE:-}" != "1" ]]; then
+    configure_macos_keychain_signing
 fi
 sh ./gradlew "${GRADLE_ARGS[@]}"
 
@@ -167,26 +218,52 @@ client_version() {
     }' "$REPO_ROOT/Client_Base/src/orsc/Config.java"
 }
 
-write_apk_metadata() {
-    local apk_path="$1"
+gradle_value() {
+    local key="$1"
+    awk -v key="$key" '
+        $1 == key {
+            value = $2
+            gsub(/"/, "", value)
+            print value
+            exit
+        }
+    ' "$ANDROID_DIR/Open RSC Android Client/build.gradle"
+}
+
+write_artifact_metadata() {
+    local artifact_path="$1"
     local build_type="$2"
-    local version sha size commit built_at
-    [[ -f "$apk_path" ]] || return 0
+    local artifact_type="$3"
+    local version sha size commit built_at application_id version_code version_name min_sdk target_sdk
+    [[ -f "$artifact_path" ]] || return 0
     version="$(client_version)"
     if [[ ! "$version" =~ ^[0-9]+$ ]]; then
         echo "ERROR: could not parse CLIENT_VERSION from Client_Base/src/orsc/Config.java." >&2
         exit 1
     fi
-    sha="$(shasum -a 256 "$apk_path" | awk '{print $1}')"
-    size="$(wc -c < "$apk_path" | tr -d ' ')"
+    application_id="$(gradle_value applicationId)"
+    version_code="$(gradle_value versionCode)"
+    version_name="$(gradle_value versionName)"
+    min_sdk="$(gradle_value minSdk)"
+    target_sdk="$(gradle_value targetSdk)"
+    if [[ ! "$version_code" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: could not parse Android versionCode from build.gradle." >&2
+        exit 1
+    fi
+    if [[ ! "$min_sdk" =~ ^[0-9]+$ || ! "$target_sdk" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: could not parse Android minSdk/targetSdk from build.gradle." >&2
+        exit 1
+    fi
+    sha="$(shasum -a 256 "$artifact_path" | awk '{print $1}')"
+    size="$(wc -c < "$artifact_path" | tr -d ' ')"
     commit="$SOURCE_COMMIT_BEFORE"
     built_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    python3 - "$apk_path.json" "$version" "$sha" "$size" "$built_at" "$commit" "$build_type" "$PROVENANCE_ASSET" <<'PY'
+    python3 - "$artifact_path.json" "$version" "$sha" "$size" "$built_at" "$commit" "$build_type" "$artifact_type" "$application_id" "$version_code" "$version_name" "$min_sdk" "$target_sdk" "$PROVENANCE_ASSET" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-meta_path, version, sha, size, built_at, commit, build_type, provenance_path = sys.argv[1:]
+meta_path, version, sha, size, built_at, commit, build_type, artifact_type, application_id, version_code, version_name, min_sdk, target_sdk, provenance_path = sys.argv[1:]
 provenance = json.loads(Path(provenance_path).read_text(encoding="utf-8"))
 metadata = {
     "clientVersion": int(version),
@@ -195,21 +272,42 @@ metadata = {
     "builtAt": built_at,
     "gitCommit": commit,
     "buildType": build_type,
-    "artifactType": "apk",
+    "artifactType": artifact_type,
+    "applicationId": application_id,
+    "versionCode": int(version_code),
+    "versionName": version_name,
+    "minSdk": int(min_sdk),
+    "targetSdk": int(target_sdk),
 }
 metadata.update(provenance)
 Path(meta_path).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 PY
-    echo "Wrote APK metadata: $apk_path.json"
+    echo "Wrote Android artifact metadata: $artifact_path.json"
+}
+
+copy_play_bundle() {
+    local bundle_dir="$ANDROID_DIR/Open RSC Android Client/build/outputs/bundle/release"
+    local source_bundle stable_bundle
+    source_bundle="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.aab' ! -name 'voidscape.aab' | sort | tail -1)"
+    if [[ -z "$source_bundle" || ! -f "$source_bundle" ]]; then
+        echo "ERROR: release app bundle not found in $bundle_dir" >&2
+        exit 1
+    fi
+    stable_bundle="$bundle_dir/voidscape.aab"
+    cp "$source_bundle" "$stable_bundle"
+    write_artifact_metadata "$stable_bundle" release android-app-bundle
 }
 
 for arg in "${GRADLE_ARGS[@]}"; do
     case "$arg" in
+        *bundleRelease*)
+            copy_play_bundle
+            ;;
         *Release*)
-            write_apk_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/release/voidscape.apk" release
+            write_artifact_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/release/voidscape.apk" release apk
             ;;
         *Debug*)
-            write_apk_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk" debug
+            write_artifact_metadata "$ANDROID_DIR/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk" debug apk
             ;;
     esac
 done

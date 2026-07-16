@@ -14,9 +14,11 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 
 import com.openrsc.android.render.InputImpl;
@@ -27,6 +29,8 @@ import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -41,7 +45,18 @@ import orsc.util.Utils;
 
 public class GameActivity extends Activity implements ClientPort {
 
-	private static mudclient retainedClient;
+	private static final Object RETAINED_CLIENT_LOCK = new Object();
+	private static final int MAX_KEYBOARD_SHOW_ATTEMPTS = 3;
+	private static final long KEYBOARD_SHOW_RETRY_DELAY_MS = 120L;
+	private static final Object DUEL_PROOF_RANDOM_LOCK = new Object();
+	private static SecureRandom duelProofSecureRandom;
+	private static volatile mudclient retainedClient;
+	private static volatile GameActivity retainedClientOwner;
+	// Guarded by RETAINED_CLIENT_LOCK with the retained client/owner pair. These
+	// survive Activity replacement so a rotation cannot erase a real background
+	// interval before the replacement Activity resumes the same game session.
+	private static boolean retainedClientBackgrounded;
+	private static long retainedClientBackgroundedAtMillis;
 	private static final int NETWORK_NONE = 0;
 	private static final int NETWORK_CELLULAR = 1;
 	private static final int NETWORK_WIFI = 2;
@@ -53,6 +68,7 @@ public class GameActivity extends Activity implements ClientPort {
 
 	private boolean loadedReceivers = false;
 	private volatile boolean appInBackground = false;
+	private volatile long backgroundedAtMillis = 0L;
 	private volatile long suppressReconnectOverlayUntilMillis = 0L;
 	private int batteryLevel;
 	private int batteryScale;
@@ -63,7 +79,13 @@ public class GameActivity extends Activity implements ClientPort {
 	private CredentialStore credentialStore = CredentialStore.unsupported();
 
     private boolean hadSideMenu;
-	private boolean keyboardShowing;
+	private final Object keyboardLock = new Object();
+	private volatile boolean keyboardRequested;
+	private volatile boolean keyboardShowing;
+	private boolean keyboardDismissRequested;
+	private boolean sideMenuHiddenForKeyboard;
+	private int keyboardRequestGeneration;
+	private int keyboardShowAttempts;
 	private Object backCallback;
 
 	final BroadcastReceiver batteryReceiver = new BatteryReceiver();
@@ -98,6 +120,7 @@ public class GameActivity extends Activity implements ClientPort {
 	    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+		configureMobileViewportWindow();
 		Utils.attach(this);
 		credentialStore = new AndroidCredentialStore(this);
 
@@ -119,22 +142,31 @@ public class GameActivity extends Activity implements ClientPort {
         };
         setContentView(gameView);
 
+		synchronized (RETAINED_CLIENT_LOCK) {
 			mudclient existingClient = retainedClient;
-		if (existingClient != null && existingClient.threadState >= 0 && existingClient.clientBaseThread != null
-			&& existingClient.clientBaseThread.isAlive()) {
-			setMudclient(existingClient);
+			if (existingClient != null && existingClient.threadState >= 0
+				&& existingClient.clientBaseThread != null
+				&& existingClient.clientBaseThread.isAlive()) {
+				setMudclient(existingClient);
+			} else {
+				setMudclient(new mudclient(this));
+				mudclient.packetHandler = new PacketHandler(mudclient);
+
+				if (mudclient.threadState >= 0) mudclient.threadState = 0;
+
+				mudclient.startMainThread();
+				retainedClient = mudclient;
+				retainedClientBackgrounded = false;
+				retainedClientBackgroundedAtMillis = 0L;
+			}
+			retainedClientOwner = this;
 			mudclient.clientPort = this;
-		} else {
-			setMudclient(new mudclient(this));
-			mudclient.packetHandler = new PacketHandler(mudclient);
-
-			if (mudclient.threadState >= 0) mudclient.threadState = 0;
-
-			mudclient.startMainThread();
-			retainedClient = mudclient;
+			appInBackground = retainedClientBackgrounded;
+			backgroundedAtMillis = retainedClientBackgroundedAtMillis;
 		}
 
-        setInputImpl(new InputImpl(mudclient, gameView));
+		setInputImpl(new InputImpl(mudclient, gameView));
+		gameView.refreshViewportMetrics();
 
 		//Utils.context = getApplicationContext();
 
@@ -143,6 +175,23 @@ public class GameActivity extends Activity implements ClientPort {
 		registerBackHandler();
 		setReceivers();
     }
+
+	private void configureMobileViewportWindow() {
+		Window window = getWindow();
+		window.setSoftInputMode(
+			WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+				| WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+		);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+			WindowManager.LayoutParams attributes = window.getAttributes();
+			attributes.layoutInDisplayCutoutMode =
+				WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+			window.setAttributes(attributes);
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			window.setDecorFitsSystemWindows(false);
+		}
+	}
 
 	@Override
 	protected void onDestroy() {
@@ -163,6 +212,18 @@ public class GameActivity extends Activity implements ClientPort {
 		if (client == null) {
 			return;
 		}
+		synchronized (RETAINED_CLIENT_LOCK) {
+			// A stale Activity may finish after a replacement has rebound the same
+			// retained client. Only the current owner may terminate that client.
+			if (retainedClient != client || retainedClientOwner != this) {
+				mudclient = null;
+				return;
+			}
+			retainedClientOwner = null;
+			retainedClient = null;
+			retainedClientBackgrounded = false;
+			retainedClientBackgroundedAtMillis = 0L;
+		}
 
 		client.threadState = -1;
 		try {
@@ -179,8 +240,8 @@ public class GameActivity extends Activity implements ClientPort {
 				Thread.currentThread().interrupt();
 			}
 		}
-		if (retainedClient == client) {
-			retainedClient = null;
+		if (client.clientPort == this) {
+			client.clientPort = null;
 		}
 		mudclient = null;
 	}
@@ -325,9 +386,28 @@ public class GameActivity extends Activity implements ClientPort {
 		}
 	}
 
-    @Override
+	@Override
 	protected void onPause() {
+		long now = System.currentTimeMillis();
+		boolean notifyClient = false;
 		appInBackground = true;
+		synchronized (RETAINED_CLIENT_LOCK) {
+			if (mudclient != null && retainedClient == mudclient
+				&& retainedClientOwner == this) {
+				if (!retainedClientBackgrounded
+					|| retainedClientBackgroundedAtMillis <= 0L) {
+					retainedClientBackgroundedAtMillis = now;
+				}
+				retainedClientBackgrounded = true;
+				backgroundedAtMillis = retainedClientBackgroundedAtMillis;
+				notifyClient = true;
+			} else {
+				backgroundedAtMillis = now;
+			}
+		}
+		if (notifyClient) {
+			mudclient.noteAndroidActivityPaused();
+		}
 		soundPlayer.suspendForBackground();
 		super.onPause();
 	}
@@ -336,11 +416,44 @@ public class GameActivity extends Activity implements ClientPort {
 	public void onResume() {
     	super.onResume();
 		soundPlayer.resumeForeground();
-		if (appInBackground) {
-			suppressReconnectOverlayUntilMillis = System.currentTimeMillis() + 15000L;
+		boolean resumedFromBackground = false;
+		long backgroundDuration = 0L;
+		synchronized (RETAINED_CLIENT_LOCK) {
+			if (mudclient != null && retainedClient == mudclient
+				&& retainedClientOwner == this) {
+				resumedFromBackground = retainedClientBackgrounded || appInBackground;
+				long backgroundStart = retainedClientBackgroundedAtMillis > 0L
+					? retainedClientBackgroundedAtMillis : backgroundedAtMillis;
+				if (resumedFromBackground && backgroundStart > 0L) {
+					backgroundDuration = Math.max(0L,
+						System.currentTimeMillis() - backgroundStart);
+				}
+				retainedClientBackgrounded = false;
+				retainedClientBackgroundedAtMillis = 0L;
+			}
+			backgroundedAtMillis = 0L;
+			appInBackground = false;
 		}
-		appInBackground = false;
+		if (resumedFromBackground) {
+			suppressReconnectOverlayUntilMillis = System.currentTimeMillis() + 15000L;
+			if (mudclient != null) {
+				mudclient.noteAndroidActivityResumedFromBackground(backgroundDuration);
+			}
+		}
 		refreshInteractiveState();
+	}
+
+	@Override
+	public boolean dispatchTouchEvent(MotionEvent event) {
+		if (mudclient != null && event != null) {
+			int action = event.getActionMasked();
+			if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_UP
+					|| action == MotionEvent.ACTION_CANCEL) {
+				mudclient.logAndroidSmokeTouchEvent("activity", action,
+					Math.round(event.getX()), Math.round(event.getY()), true, -1, -1);
+			}
+		}
+		return super.dispatchTouchEvent(event);
 	}
 
 	@Override
@@ -354,10 +467,18 @@ public class GameActivity extends Activity implements ClientPort {
 	}
 
 	@Override
+	public void setAfkMonitorActive(boolean active) {
+		soundPlayer.setAfkSuspended(active);
+	}
+
+	@Override
 	public void onWindowFocusChanged(boolean hasFocus) {
 		super.onWindowFocusChanged(hasFocus);
 		if (hasFocus) {
 			refreshInteractiveState();
+			if (keyboardRequested && !keyboardShowing) {
+				requestKeyboardOnUiThread();
+			}
 		}
 	}
 
@@ -365,6 +486,7 @@ public class GameActivity extends Activity implements ClientPort {
 		updateHideUi();
 		checkNetwork();
 		if (gameView != null) {
+			gameView.refreshViewportMetrics();
 			gameView.requestFocus();
 			gameView.postInvalidate();
 		}
@@ -406,6 +528,40 @@ public class GameActivity extends Activity implements ClientPort {
 	@Override
 	public CredentialStore getCredentialStore() {
 		return credentialStore;
+	}
+
+	@Override
+	public boolean fillSecureRandom(byte[] destination) {
+		if (destination == null || destination.length != 32) {
+			if (destination != null) Arrays.fill(destination, (byte) 0);
+			return false;
+		}
+		synchronized (DUEL_PROOF_RANDOM_LOCK) {
+			try {
+				if (duelProofSecureRandom == null) duelProofSecureRandom = new SecureRandom();
+				duelProofSecureRandom.nextBytes(destination);
+				return true;
+			} catch (RuntimeException ignored) {
+				Arrays.fill(destination, (byte) 0);
+				return false;
+			}
+		}
+	}
+
+	@Override
+	public int getTouchTargetClientPixels(int dp) {
+		if (gameView != null) {
+			return gameView.getTouchTargetClientPixels(dp);
+		}
+		return ClientPort.super.getTouchTargetClientPixels(dp);
+	}
+
+	@Override
+	public int getKeyboardTopClientPixel() {
+		if (gameView != null) {
+			return gameView.getKeyboardTopClientPixel();
+		}
+		return ClientPort.super.getKeyboardTopClientPixel();
 	}
 
 	@Override
@@ -517,39 +673,177 @@ public class GameActivity extends Activity implements ClientPort {
         this.inputImpl = inputImpl;
     }
 
-    public void drawKeyboard() {
-		if (gameView == null || mudclient == null) return;
-		if (keyboardShowing) {
+	public void drawKeyboard() {
+		if (gameView == null || mudclient == null || isFinishing() || isDestroyed()) {
 			return;
 		}
-        InputMethodManager imm = (InputMethodManager) this
-                .getSystemService(Context.INPUT_METHOD_SERVICE);
-		if (imm == null) return;
-	        gameView.requestFocus();
-	        gameView.post(() -> imm.showSoftInput(gameView, InputMethodManager.SHOW_IMPLICIT));
-	        keyboardShowing = true;
-	        osConfig.F_SHOWING_KEYBOARD = true;
-        if (Config.S_SIDE_MENU_TOGGLE) {
-        	hadSideMenu = mudclient.getOptionSideMenu();
-			mudclient.setOptionSideMenu(false);
+		synchronized (keyboardLock) {
+			if (keyboardRequested || keyboardShowing) {
+				return;
+			}
+			keyboardRequested = true;
+			keyboardDismissRequested = false;
+			keyboardShowAttempts = 0;
+			keyboardRequestGeneration++;
+			osConfig.F_SHOWING_KEYBOARD = true;
+			hideSideMenuForKeyboardLocked();
 		}
-    }
+		requestKeyboardOnUiThread();
+	}
 
-    public void closeKeyboard() {
-		if (gameView == null) return;
-		InputMethodManager imm = (InputMethodManager) getSystemService(Activity.INPUT_METHOD_SERVICE);
-		if (imm != null) {
-			imm.hideSoftInputFromWindow(gameView.getWindowToken(), 0);
+	private void requestKeyboardOnUiThread() {
+		runOnUiThread(() -> {
+			RSCBitmapSurfaceView view = gameView;
+			int requestGeneration;
+			synchronized (keyboardLock) {
+				if (!keyboardRequested || keyboardShowing || keyboardDismissRequested || view == null) {
+					return;
+				}
+				if (!view.isAttachedToWindow() || !view.hasWindowFocus()) {
+					// onWindowFocusChanged retries once the editor can connect to an IME.
+					return;
+				}
+				if (keyboardShowAttempts >= MAX_KEYBOARD_SHOW_ATTEMPTS) {
+					abandonKeyboardRequestLocked();
+					return;
+				}
+				keyboardShowAttempts++;
+				requestGeneration = keyboardRequestGeneration;
+			}
+
+			if (!view.requestFocus()) {
+				scheduleKeyboardRetry(view, requestGeneration);
+				return;
+			}
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (imm == null) {
+				synchronized (keyboardLock) {
+					if (requestGeneration == keyboardRequestGeneration) {
+						abandonKeyboardRequestLocked();
+					}
+				}
+				return;
+			}
+
+			imm.restartInput(view);
+			view.post(() -> {
+				synchronized (keyboardLock) {
+					if (!keyboardRequested || keyboardShowing || keyboardDismissRequested
+						|| requestGeneration != keyboardRequestGeneration) {
+						return;
+					}
+				}
+				if (!imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)) {
+					scheduleKeyboardRetry(view, requestGeneration);
+				}
+			});
+		});
+	}
+
+	private void scheduleKeyboardRetry(RSCBitmapSurfaceView view, int requestGeneration) {
+		view.postDelayed(() -> {
+			synchronized (keyboardLock) {
+				if (!keyboardRequested || keyboardShowing || keyboardDismissRequested
+					|| requestGeneration != keyboardRequestGeneration) {
+					return;
+				}
+			}
+			requestKeyboardOnUiThread();
+		}, KEYBOARD_SHOW_RETRY_DELAY_MS);
+	}
+
+	public void closeKeyboard() {
+		RSCBitmapSurfaceView view = gameView;
+		synchronized (keyboardLock) {
+			keyboardRequested = false;
+			keyboardDismissRequested = true;
+			keyboardShowAttempts = 0;
+			keyboardRequestGeneration++;
+			osConfig.F_SHOWING_KEYBOARD = false;
+			restoreSideMenuAfterKeyboardLocked();
 		}
-		keyboardShowing = false;
-        osConfig.F_SHOWING_KEYBOARD = false;
+		if (view == null) {
+			return;
+		}
+		runOnUiThread(() -> {
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (imm != null && view.isAttachedToWindow()) {
+				imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+			}
+		});
+	}
+
+	/** Called from the SurfaceView's window-inset listener on the UI thread. */
+	public void onImeVisibilityChanged(boolean visible) {
+		if (!isUiThread()) {
+			runOnUiThread(() -> onImeVisibilityChanged(visible));
+			return;
+		}
+		boolean reassertDismiss = false;
+		synchronized (keyboardLock) {
+			keyboardShowing = visible;
+			keyboardShowAttempts = 0;
+			if (visible) {
+				if (keyboardDismissRequested) {
+					reassertDismiss = true;
+				} else {
+					keyboardRequested = true;
+					osConfig.F_SHOWING_KEYBOARD = true;
+					hideSideMenuForKeyboardLocked();
+				}
+			} else {
+				keyboardRequested = false;
+				keyboardDismissRequested = false;
+				keyboardRequestGeneration++;
+				osConfig.F_SHOWING_KEYBOARD = false;
+				restoreSideMenuAfterKeyboardLocked();
+			}
+		}
+		if (reassertDismiss) {
+			// A previously accepted show request can race a later close.
+			// Reassert the close now that the IME has actually appeared.
+			RSCBitmapSurfaceView view = gameView;
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (view != null && imm != null && view.isAttachedToWindow()) {
+				view.post(() -> imm.hideSoftInputFromWindow(view.getWindowToken(), 0));
+			}
+		}
+	}
+
+	private boolean isUiThread() {
+		return android.os.Looper.myLooper() == android.os.Looper.getMainLooper();
+	}
+
+	private void abandonKeyboardRequestLocked() {
+		keyboardRequested = false;
+		keyboardDismissRequested = false;
+		keyboardShowAttempts = 0;
+		keyboardRequestGeneration++;
+		osConfig.F_SHOWING_KEYBOARD = false;
+		restoreSideMenuAfterKeyboardLocked();
+	}
+
+	private void hideSideMenuForKeyboardLocked() {
+		if (!Config.S_SIDE_MENU_TOGGLE || sideMenuHiddenForKeyboard || mudclient == null) {
+			return;
+		}
+		hadSideMenu = mudclient.getOptionSideMenu();
+		mudclient.setOptionSideMenu(false);
+		sideMenuHiddenForKeyboard = true;
+	}
+
+	private void restoreSideMenuAfterKeyboardLocked() {
+		if (!sideMenuHiddenForKeyboard) {
+			return;
+		}
 		if (Config.S_SIDE_MENU_TOGGLE && mudclient != null) {
 			mudclient.setOptionSideMenu(hadSideMenu);
 		}
-    }
+		sideMenuHiddenForKeyboard = false;
+	}
 
 	public boolean isKeyboardShowing() {
-		return keyboardShowing;
+		return keyboardRequested || keyboardShowing;
 	}
 
 	@Override

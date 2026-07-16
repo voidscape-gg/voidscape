@@ -51,10 +51,10 @@ android {
     compileSdk 36
     defaultConfig {
         applicationId "com.voidscape.gg"
-        minSdk 26
+        minSdk 23
         targetSdk 35
-        versionCode 4
-        versionName "1.0.3"
+		versionCode 8
+		versionName "1.0.7"
         multiDexEnabled false
     }
     signingConfigs {
@@ -89,6 +89,7 @@ android {
     }
     sourceSets {
         main.java.srcDirs += ['src/main/java', 'src/main/../../../../Client_Base/src']
+        main.java.srcDirs += ["${rootDir}/../Duel_Proof/src/main/java"]
         main.java.exclude 'tools/**'
         main.assets.srcDirs += [generatedAssetsDir, provenanceAssetsDir]
     }
@@ -112,7 +113,7 @@ tasks.register("verifyVoidscapeReleaseSigning") {
     doLast {
         if (!uploadSigningReady && !allowUnsignedRelease) {
             throw new GradleException(
-                "Voidscape release APK signing is not configured. Set " +
+                "Voidscape release artifact signing is not configured. Set " +
                     "VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE, " +
                     "VOIDSCAPE_ANDROID_UPLOAD_STORE_PASSWORD, and " +
                     "VOIDSCAPE_ANDROID_UPLOAD_KEY_PASSWORD, or matching " +

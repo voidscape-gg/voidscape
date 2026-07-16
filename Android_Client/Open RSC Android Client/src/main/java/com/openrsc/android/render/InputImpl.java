@@ -55,7 +55,9 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
     private int worldMapTouchStartY = 0;
     private final View view;
     private long lastScrollOrRotate;
-    private boolean clientTouchActive = false;
+	private boolean clientTouchActive = false;
+	private boolean christmasCrackerTouchActive = false;
+	private boolean pkCatchingTouchActive = false;
 
     @Override
     public boolean onDown(MotionEvent e) {
@@ -81,18 +83,35 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         if (osConfig.C_HOLD_AND_CHOOSE)
             return false;
         setMousePosition(e);
+		// Capture reconnect intent before publishing the legacy click pulse. The
+		// game thread may consume that pulse immediately; recording first lets a
+		// rail tap retain the pre-click state and therefore its intended final
+		// open/closed state for idempotent replay after reconnect.
+		mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
         mudclient.currentMouseButtonDown = 1;
         mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown;
-        mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
         mudclient.lastMouseAction = 0;
+		mudclient.logAndroidSmokeTouchEvent("single-tap-up", MotionEvent.ACTION_UP,
+			Math.round(e.getX()), Math.round(e.getY()), true, mudclient.mouseX, mudclient.mouseY);
         return true;
     }
 
-    @Override
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (mudclient.topMouseMenuVisible) {
-            return true;
-        }
+	@Override
+	public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+		setMousePosition(e2);
+		if (distanceY > 1) distanceY = 1;
+		if (distanceY < -1) distanceY = -1;
+		if (mudclient.isDuelJournalVisible()) {
+			int dir = osConfig.C_SWIPE_TO_SCROLL_MODE == 2 ? -1 : 1;
+			mudclient.routeDuelJournalScroll((int) (dir * distanceY));
+			mudclient.currentMouseButtonDown = 0;
+			mudclient.lastMouseButtonDown = 0;
+			mudclient.mouseButtonClick = 0;
+			return true;
+		}
+		if (mudclient.topMouseMenuVisible) {
+			return true;
+		}
 
         if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) {
             setMousePosition(e2);
@@ -103,19 +122,17 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
             return true;
         }
 
-        if (distanceY > 1)
-            distanceY = 1;
-        if (distanceY < -1)
-            distanceY = -1;
-
-        lastScrollOrRotate = System.currentTimeMillis();
+		lastScrollOrRotate = System.currentTimeMillis();
 
 		boolean inScrollable = isInScrollableInterface();
+		int firstX = screenToClientX(e1.getX());
 		int firstY = screenToClientY(e1.getY());
 		int secondY = screenToClientY(e2.getY());
 		boolean touchedMessagePanelArea = mudclient.getGameHeight() + 12 - Math.max(secondY, firstY) <= 130;
-		boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected) && touchedMessagePanelArea;
-		boolean shouldRouteSwipeToScroll = inScrollable || scrollableMessagePanel || mudclient.showUiTab != 0;
+		boolean openHudSwipe = mudclient.shouldRouteAndroidSwipeToOpenHud(firstX, firstY);
+		boolean scrollableMessagePanel = mudclient.hasScroll(mudclient.messageTabSelected)
+			&& (touchedMessagePanelArea || openHudSwipe);
+		boolean shouldRouteSwipeToScroll = inScrollable || scrollableMessagePanel || openHudSwipe;
 		int beforeCameraRotation = mudclient.cameraRotation;
 		int beforeCameraPitch = mudclient.cameraPitch;
 		int beforeLastZoom = osConfig.C_LAST_ZOOM;
@@ -143,7 +160,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 			}
 		}
 		if (shouldRouteSwipeToScroll) {
-			if (osConfig.C_SWIPE_TO_SCROLL_MODE != 0) {
+			// World swipe preferences must never make an open native drawer
+			// inaccessible. "Unset" disables world/message-area swipe scrolling,
+			// but a gesture that starts inside the attached HUD always scrolls in
+			// the natural direction; the explicit Invert preference still applies.
+			if (openHudSwipe || osConfig.C_SWIPE_TO_SCROLL_MODE != 0) {
 				int dir = osConfig.C_SWIPE_TO_SCROLL_MODE == 2 ? -1 : 1;
 				mudclient.runScroll((int) (dir * distanceY));
 			}
@@ -178,9 +199,18 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         return false;
     }
 
-    @Override
-    public boolean onKey(View v, int keyCode, KeyEvent event) {
-        if (osConfig.C_VOLUME_FUNCTION == 0) {
+	@Override
+	public boolean onKey(View v, int keyCode, KeyEvent event) {
+		if (mudclient.isDuelJournalVisible()) {
+			if (event.getAction() == KeyEvent.ACTION_DOWN) {
+				mudclient.consumeDuelJournalKeyDown(
+					keyCode == KeyEvent.KEYCODE_ESCAPE ? 27 : event.getUnicodeChar());
+			} else {
+				mudclient.clearDuelJournalHeldNavigationState();
+			}
+			return true;
+		}
+		if (osConfig.C_VOLUME_FUNCTION == 0) {
             if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
                 mudclient.keyLeft = event.getAction() == KeyEvent.ACTION_DOWN;
                 return true;
@@ -301,10 +331,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         return true;
     }
 
-    private void handleAndroidKeyInput(int key) {
-        if (key == 0) {
-            return;
-        }
+	private void handleAndroidKeyInput(int key) {
+		if (key == 0) {
+			return;
+		}
+		if (mudclient.consumeDuelJournalKeyDown(key)) return;
 
         boolean hitInputFilter = false;
 
@@ -340,7 +371,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
         }
     }
 
-    public void checkSpecialKeys(int keyCode, String chars) {
+	public void checkSpecialKeys(int keyCode, String chars) {
+		if (mudclient.isDuelJournalVisible()) {
+			mudclient.clearDuelJournalHeldNavigationState();
+			return;
+		}
 		if (keyCode == KeyEvent.KEYCODE_F1 || (chars != null && chars.equalsIgnoreCase("¹"))) {
 			mudclient.interlace = !mudclient.interlace;
 		}
@@ -404,8 +439,16 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 	public boolean onTouch(View v, MotionEvent e) {
 		int action = e.getActionMasked();
+		boolean insideViewport = action == MotionEvent.ACTION_DOWN
+			? isInsideClientViewport(e.getX(), e.getY()) : clientTouchActive;
+		if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_UP
+				|| action == MotionEvent.ACTION_CANCEL) {
+			mudclient.logAndroidSmokeTouchEvent("view", action,
+				Math.round(e.getX()), Math.round(e.getY()), insideViewport,
+				screenToClientX(e.getX()), screenToClientY(e.getY()));
+		}
 		if (action == MotionEvent.ACTION_DOWN) {
-			clientTouchActive = isInsideClientViewport(e.getX(), e.getY());
+			clientTouchActive = insideViewport;
 		}
 		if (!clientTouchActive) {
 			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
@@ -416,6 +459,39 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 		setMousePosition(e);
 		mudclient.lastMouseAction = 0;
+		if (mudclient.consumeNativeAndroidAfkTouchAt(
+				mudclient.mouseX, mudclient.mouseY, action)) {
+			return finishTouch(action, true);
+		}
+		if (!christmasCrackerTouchActive && mudclient.isChristmasCrackerDialogVisible()) {
+			boolean activatesControl = action == MotionEvent.ACTION_DOWN
+				|| action == MotionEvent.ACTION_BUTTON_PRESS;
+			boolean primary = !isMouseEvent(e) || !isSecondaryMouseAction(e);
+			if (activatesControl) {
+				mudclient.consumeChristmasCrackerPointerAt(mudclient.mouseX, mudclient.mouseY, primary);
+				christmasCrackerTouchActive = true;
+			}
+			return finishTouch(action, true);
+		}
+		if (christmasCrackerTouchActive || mudclient.isChristmasCrackerDialogVisible()) {
+			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+				christmasCrackerTouchActive = false;
+			}
+			return finishTouch(action, true);
+		}
+		if (!pkCatchingTouchActive
+				&& (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_BUTTON_PRESS)) {
+			boolean primary = !isMouseEvent(e) || !isSecondaryMouseAction(e);
+			pkCatchingTouchActive = mudclient.consumePkCatchingPointerAt(
+				mudclient.mouseX, mudclient.mouseY, primary);
+		}
+		if (pkCatchingTouchActive) {
+			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+					|| action == MotionEvent.ACTION_BUTTON_RELEASE) {
+				pkCatchingTouchActive = false;
+			}
+			return finishTouch(action, true);
+		}
 		scaleGestureDetector.onTouchEvent(e);
 
 		if (e.getPointerCount() > 1) {
@@ -442,6 +518,12 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 		}
 
 		if (handleWorldMapTouch(e)) {
+			return finishTouch(action, true);
+		}
+
+		if (action == MotionEvent.ACTION_UP
+				&& mudclient.consumeNativeAndroidChatTouchAt(
+					mudclient.mouseX, mudclient.mouseY)) {
 			return finishTouch(action, true);
 		}
 
@@ -474,6 +556,9 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 						}
 						mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
 						mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 1;
+						mudclient.logAndroidSmokeTouchEvent("fallback-tap-up", action,
+							Math.round(e.getX()), Math.round(e.getY()), true,
+							mudclient.mouseX, mudclient.mouseY);
 						break;
 					case MotionEvent.ACTION_DOWN:
 						mudclient.lastMouseButtonDown = mudclient.currentMouseButtonDown = 0;
@@ -523,6 +608,11 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 			if (worldMapTouchMoved || action == MotionEvent.ACTION_CANCEL) {
 				mudclient.currentMouseButtonDown = 0;
 			} else {
+				// The map is expensive enough to render that a short Android DOWN/UP
+				// pair can land entirely between client frames. Keep the ordinary
+				// button pulse for mouse-style state, but also latch the completed tap
+				// for the shared map handler to consume exactly once.
+				mudclient.recordAndroidTap(mudclient.mouseX, mudclient.mouseY);
 				mudclient.currentMouseButtonDown = 1;
 				view.postDelayed(() -> {
 					if (mudclient.worldMapPanel == null || !mudclient.worldMapPanel.isVisible()) {
@@ -565,6 +655,8 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 
 	private void resetTouchState() {
 		clientTouchActive = false;
+		christmasCrackerTouchActive = false;
+		pkCatchingTouchActive = false;
 		worldMapTouchActive = false;
 		clearRightClickState();
 	}
@@ -607,16 +699,17 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 	}
 
 	private boolean isInScrollableInterface() {
-		return (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse.isVisible())
-			|| mudclient.onlineList.isVisible()
-			|| (Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface.isVisible())
-			|| (Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface.isVisible())
-			|| mudclient.experienceConfigInterface.isVisible()
-			|| mudclient.ironmanInterface.isVisible()
-			|| mudclient.achievementInterface.isVisible()
-			|| (Config.S_WANT_SKILL_MENUS && mudclient.doSkillInterface.isVisible())
-			|| (Config.S_ITEMS_ON_DEATH_MENU && mudclient.lostOnDeathInterface.isVisible())
-			|| mudclient.territorySignupInterface.isVisible()
+		return mudclient.isDuelJournalVisible()
+			|| (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse != null && mudclient.auctionHouse.isVisible())
+			|| (mudclient.onlineList != null && mudclient.onlineList.isVisible())
+			|| (Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface != null && mudclient.skillGuideInterface.isVisible())
+			|| (Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface != null && mudclient.questGuideInterface.isVisible())
+			|| (mudclient.experienceConfigInterface != null && mudclient.experienceConfigInterface.isVisible())
+			|| (mudclient.ironmanInterface != null && mudclient.ironmanInterface.isVisible())
+			|| (mudclient.achievementInterface != null && mudclient.achievementInterface.isVisible())
+			|| (Config.S_WANT_SKILL_MENUS && mudclient.doSkillInterface != null && mudclient.doSkillInterface.isVisible())
+			|| (Config.S_ITEMS_ON_DEATH_MENU && mudclient.lostOnDeathInterface != null && mudclient.lostOnDeathInterface.isVisible())
+			|| (mudclient.territorySignupInterface != null && mudclient.territorySignupInterface.isVisible())
 			|| mudclient.isShowDialogBank();
 	}
 
@@ -665,10 +758,13 @@ public class InputImpl implements OnGestureListener, OnKeyListener, OnTouchListe
 	}
 
 	private AndroidClientViewport.Transform getClientTransform() {
-		int surfaceWidth = Math.max(1, Math.round(getWidth()));
-		int surfaceHeight = Math.max(1, Math.round(getHeight()));
 		int gameWidth = Math.max(1, mudclient.getGameWidth());
 		int gameFullHeight = Math.max(1, mudclient.getGameHeight() + 12);
+		if (view instanceof RSCBitmapSurfaceView) {
+			return ((RSCBitmapSurfaceView) view).getClientTransform(gameWidth, gameFullHeight);
+		}
+		int surfaceWidth = Math.max(1, Math.round(getWidth()));
+		int surfaceHeight = Math.max(1, Math.round(getHeight()));
 		return AndroidClientViewport.transform(surfaceWidth, surfaceHeight, gameWidth, gameFullHeight);
 	}
 

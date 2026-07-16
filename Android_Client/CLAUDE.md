@@ -4,8 +4,8 @@ Android shell around `Client_Base/`. The wrapper is now Voidscape-branded and su
 
 - Build: Gradle (`Open RSC Android Client/build.gradle`).
 - Entry: `src/main/java/com/openrsc/client/android/GameActivity.java` (implements `ClientPort`).
-- SDK: minSDK 26, target SDK 35, compile SDK 36.
-- Output: `voidscape.apk`.
+- SDK: minSDK 23, target SDK 35, compile SDK 36.
+- Output: `voidscape.apk` for APK builds; `build/outputs/bundle/release/voidscape.aab` for Google Play.
 - Script: `../scripts/build-android.sh` selects JDK 17 and runs Gradle.
 
 Shared logic lives in `Client_Base/`. Bumping `Client_Base/Config.CLIENT_VERSION` requires APK rebuild — Android has no separate version pin.

@@ -70,10 +70,12 @@ SMOKE_AUDIO_FLAG="$APP_SMOKE_FILES/android-smoke-audio.flag"
 SMOKE_NETWORK_FLAG="$APP_SMOKE_FILES/android-smoke-network.flag"
 SMOKE_WORLD_MAP_FLAG="$APP_SMOKE_FILES/android-smoke-world-map.flag"
 SMOKE_SETTINGS_FLAG="$APP_SMOKE_FILES/android-smoke-settings.flag"
+SMOKE_AFK_FLAG="$APP_SMOKE_FILES/android-smoke-afk.flag"
 SMOKE_GROUND_LOOT_FLAG="$APP_SMOKE_FILES/android-smoke-ground-loot.flag"
 SMOKE_APPEARANCE_PROMPT_FLAG="$APP_SMOKE_FILES/android-smoke-appearance-prompt.flag"
 SMOKE_WALK_FLAG="$APP_SMOKE_FILES/android-smoke-walk.flag"
 SMOKE_LOGIN_FLAG="$APP_SMOKE_FILES/android-smoke-login.flag"
+SMOKE_LIFECYCLE_RECONNECT_HOLD_FLAG="$APP_FILES/android-smoke-lifecycle-reconnect-hold.flag"
 BUILD=1
 INSTALL=1
 ONLY_AUTH_CAMERA=0
@@ -86,6 +88,7 @@ ONLY_AUTH_EQUIPMENT=0
 ONLY_AUTH_MAGIC_PRAYER=0
 ONLY_AUTH_WORLD_MAP=0
 ONLY_AUTH_SETTINGS=0
+ONLY_AUTH_AFK=0
 ONLY_AUTH_GROUND_LOOT=0
 ONLY_AUTH_WILDERNESS_TARGET=0
 ONLY_AUTH_PVP_STRESS=0
@@ -95,10 +98,19 @@ ONLY_AUTH_CREDENTIALS=0
 ONLY_BOOTSTRAP=0
 ORIGINAL_ACCELEROMETER_ROTATION=""
 ORIGINAL_USER_ROTATION=""
+ORIGINAL_WINDOW_ROTATION_MODE=""
+ORIGINAL_WINDOW_ROTATION=""
+ORIGINAL_IGNORE_ORIENTATION_REQUEST=""
 ROTATION_STATE_SAVED=0
+ORIGINAL_WM_SIZE_OVERRIDE=""
+ORIGINAL_WM_DENSITY_OVERRIDE=""
+DISPLAY_OVERRIDE_STATE_SAVED=0
+SHOP_ACTION_VIEWPORT_LINE=""
 ORIGINAL_WIFI_STATE=""
 ORIGINAL_MOBILE_DATA_STATE=""
 NETWORK_STATE_SAVED=0
+ORIGINAL_ALWAYS_FINISH_ACTIVITIES=""
+ACTIVITY_POLICY_STATE_SAVED=0
 AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
@@ -155,22 +167,13 @@ AUTH_ZOOM_DRAG_DURATION_MS="${ANDROID_SMOKE_ZOOM_DRAG_DURATION_MS:-700}"
 AUTH_ZOOM_MANUAL_PINCH_SECONDS="${ANDROID_SMOKE_MANUAL_PINCH_SECONDS:-0}"
 AUTH_ZOOM_REQUIRE_PINCH="${ANDROID_SMOKE_REQUIRE_PINCH:-0}"
 AUTH_LIFECYCLE_BACKGROUND_SECONDS="${ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS:-35}"
+AUTH_LIFECYCLE_INTENT_BACKGROUND_SECONDS="${ANDROID_SMOKE_LIFECYCLE_INTENT_BACKGROUND_SECONDS:-12}"
+AUTH_LIFECYCLE_NETWORK_LOSS="${ANDROID_SMOKE_LIFECYCLE_NETWORK_LOSS:-auto}"
+AUTH_LIFECYCLE_RECREATE_ACTIVITY="${ANDROID_SMOKE_LIFECYCLE_RECREATE_ACTIVITY:-1}"
+REQUIRE_NONZERO_INSET="${ANDROID_SMOKE_REQUIRE_NONZERO_INSET:-0}"
 AUTH_OFFLINE_TIMEOUT="${ANDROID_SMOKE_AUTH_OFFLINE_TIMEOUT:-135}"
 INPUT_CHAR_DELAY="${ANDROID_SMOKE_INPUT_CHAR_DELAY:-0.2}"
-AUTH_CHAT_TAB_Y="${ANDROID_SMOKE_CHAT_TAB_Y:-}"
-AUTH_CHAT_TAB_SEQUENCE="${ANDROID_SMOKE_CHAT_TAB_SEQUENCE:-CHAT,QUEST,GLOBAL,PRIVATE,ALL}"
-AUTH_CHAT_TAB_ALL_X="${ANDROID_SMOKE_CHAT_TAB_ALL_X:-35}"
-AUTH_CHAT_TAB_CHAT_X="${ANDROID_SMOKE_CHAT_TAB_CHAT_X:-84}"
-AUTH_CHAT_TAB_QUEST_X="${ANDROID_SMOKE_CHAT_TAB_QUEST_X:-133}"
-AUTH_CHAT_TAB_GLOBAL_X="${ANDROID_SMOKE_CHAT_TAB_GLOBAL_X:-182}"
-AUTH_CHAT_TAB_PRIVATE_X="${ANDROID_SMOKE_CHAT_TAB_PRIVATE_X:-231}"
-AUTH_CHAT_TAB_REPORT_X="${ANDROID_SMOKE_CHAT_TAB_REPORT_X:-281}"
-AUTH_CHAT_TAB_KEYBOARD_X="${ANDROID_SMOKE_CHAT_TAB_KEYBOARD_X:-281}"
 AUTH_CHAT_MESSAGE="${ANDROID_SMOKE_CHAT_MESSAGE:-androidchat}"
-AUTH_CHAT_KEYBOARD_X="${ANDROID_SMOKE_CHAT_KEYBOARD_X:-291}"
-AUTH_CHAT_KEYBOARD_Y="${ANDROID_SMOKE_CHAT_KEYBOARD_Y:-19}"
-AUTH_CHAT_ENTRY_X="${ANDROID_SMOKE_CHAT_ENTRY_X:-256}"
-AUTH_CHAT_ENTRY_Y="${ANDROID_SMOKE_CHAT_ENTRY_Y:-147}"
 AUTH_BANK_OBJECT_ID="${ANDROID_SMOKE_BANK_OBJECT_ID:-942}"
 AUTH_BANK_OBJECT_ACTION="${ANDROID_SMOKE_BANK_OBJECT_ACTION:-OBJECT_COMMAND1}"
 AUTH_BANK_PLAYER_X="${ANDROID_SMOKE_BANK_PLAYER_X:-210}"
@@ -183,7 +186,7 @@ AUTH_BANK_SCROLL_DURATION_MS="${ANDROID_SMOKE_BANK_SCROLL_DURATION_MS:-700}"
 AUTH_BANK_ITEM_ID="${ANDROID_SMOKE_BANK_ITEM_ID:-10}"
 AUTH_BANK_ITEM_AMOUNT="${ANDROID_SMOKE_BANK_ITEM_AMOUNT:-200}"
 AUTH_BANK_INVENTORY_AMOUNT="${ANDROID_SMOKE_BANK_INVENTORY_AMOUNT:-20}"
-AUTH_BANK_FIXTURE_BANK_SLOTS="${ANDROID_SMOKE_BANK_FIXTURE_BANK_SLOTS:-192}"
+AUTH_BANK_FIXTURE_BANK_SLOTS="${ANDROID_SMOKE_BANK_FIXTURE_BANK_SLOTS:-241}"
 AUTH_BANK_FIXTURE_START_ITEM_ID="${ANDROID_SMOKE_BANK_FIXTURE_START_ITEM_ID:-11}"
 AUTH_SHOP_NPC_ID="${ANDROID_SMOKE_SHOP_NPC_ID:-185}"
 AUTH_SHOP_NPC_ACTION="${ANDROID_SMOKE_SHOP_NPC_ACTION:-NPC_COMMAND1}"
@@ -224,7 +227,7 @@ PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-afk] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -240,6 +243,7 @@ Environment:
   ANDROID_SMOKE_AUTH_HOST          Optional auth smoke host, default: 10.0.2.2
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
+  ANDROID_SMOKE_LEAVE_LOGGED_IN=1  Leave --only-auth-login running in-game for manual testing
   ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT=1
                                     Optional: do not write the requested endpoint before auth smoke launch
   ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
@@ -247,6 +251,9 @@ Environment:
   --only-auth-credentials          Focused opt-in encrypted saved-login, persistence, and forget smoke
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
+  --only-auth-chat-tabs            Focused split-rail mobile hub smoke in portrait and landscape
+  --only-auth-chat-send            Focused inline composer, optional history filters, send, IME, and Back smoke
+  --only-auth-afk                  Focused foreground low-resource AFK monitor entry, cadence, and resume smoke
   ANDROID_SMOKE_NPC_ID             Optional in-game NPC id for tap proof, default: 839
   ANDROID_SMOKE_NPC_ACTION         Expected shared NPC action, default: NPC_TALK_TO
   ANDROID_SMOKE_NPC_PLAYER_X       Optional DB x for NPC fixture, default: 23
@@ -285,13 +292,12 @@ Environment:
   ANDROID_SMOKE_MANUAL_PINCH_SECONDS Optional physical-device manual pinch window, default: 0
   ANDROID_SMOKE_REQUIRE_PINCH         Set to 1 with a manual pinch window to require real pinch telemetry
   ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS Optional --only-auth-lifecycle HOME wait, default: 35
+  ANDROID_SMOKE_LIFECYCLE_INTENT_BACKGROUND_SECONDS Optional additional reconnect-intent waits, default: 12 (minimum: 10)
+  ANDROID_SMOKE_LIFECYCLE_NETWORK_LOSS Optional unrelated-loss stale-intent coverage: auto, 0, or 1; auto runs on emulators
+  ANDROID_SMOKE_LIFECYCLE_RECREATE_ACTIVITY Set to 0 to skip safely-restored Don't keep activities coverage, default: 1
+  ANDROID_SMOKE_REQUIRE_NONZERO_INSET Set to 1 to require a cutout/system-bar inset in lifecycle viewport assertions
   ANDROID_SMOKE_AUTH_OFFLINE_TIMEOUT  Optional auth DB offline wait, default: 135
-  ANDROID_SMOKE_CHAT_TAB_Y           Optional chat tab client y; default is computed from the current framebuffer height
-  ANDROID_SMOKE_CHAT_TAB_SEQUENCE    Optional comma-separated tabs, default: CHAT,QUEST,GLOBAL,PRIVATE,ALL
-  ANDROID_SMOKE_CHAT_TAB_*_X         Optional tab client x overrides for ALL/CHAT/QUEST/GLOBAL/PRIVATE/REPORT/KEYBOARD
   ANDROID_SMOKE_CHAT_MESSAGE         Optional in-game chat message, default: androidchat
-  ANDROID_SMOKE_CHAT_KEYBOARD_X/Y    Optional legacy keyboard toggle fallback coordinate, default: 291,19
-  ANDROID_SMOKE_CHAT_ENTRY_X/Y       Optional keyboard-open chat entry coordinate, default: 256,147
   ANDROID_SMOKE_BANK_OBJECT_ID       Optional bank chest object id, default: 942
   ANDROID_SMOKE_BANK_OBJECT_ACTION   Expected bank chest action, default: OBJECT_COMMAND1
   ANDROID_SMOKE_BANK_PLAYER_X/Y      Optional DB x/y for bank fixture, default: 210,440
@@ -541,6 +547,10 @@ while [[ "$#" -gt 0 ]]; do
             ONLY_AUTH_SETTINGS=1
             shift
             ;;
+        --only-auth-afk)
+            ONLY_AUTH_AFK=1
+            shift
+            ;;
         --only-auth-ground-loot)
             ONLY_AUTH_GROUND_LOOT=1
             shift
@@ -581,12 +591,40 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+if [[ "$REQUIRE_NONZERO_INSET" != "0" && "$REQUIRE_NONZERO_INSET" != "1" ]]; then
+	echo "ERROR: ANDROID_SMOKE_REQUIRE_NONZERO_INSET must be 0 or 1" >&2
+	exit 1
+fi
+
+if [[ ! "$AUTH_LIFECYCLE_BACKGROUND_SECONDS" =~ ^[0-9]+$ \
+	|| "$AUTH_LIFECYCLE_BACKGROUND_SECONDS" -lt 10 ]]; then
+	echo "ERROR: ANDROID_SMOKE_LIFECYCLE_BACKGROUND_SECONDS must be an integer >= 10" >&2
+	exit 1
+fi
+if [[ ! "$AUTH_LIFECYCLE_INTENT_BACKGROUND_SECONDS" =~ ^[0-9]+$ \
+	|| "$AUTH_LIFECYCLE_INTENT_BACKGROUND_SECONDS" -lt 10 ]]; then
+	echo "ERROR: ANDROID_SMOKE_LIFECYCLE_INTENT_BACKGROUND_SECONDS must be an integer >= 10" >&2
+	exit 1
+fi
+if [[ "$AUTH_LIFECYCLE_NETWORK_LOSS" != "auto" \
+	&& "$AUTH_LIFECYCLE_NETWORK_LOSS" != "0" \
+	&& "$AUTH_LIFECYCLE_NETWORK_LOSS" != "1" ]]; then
+	echo "ERROR: ANDROID_SMOKE_LIFECYCLE_NETWORK_LOSS must be auto, 0, or 1" >&2
+	exit 1
+fi
+if [[ "$AUTH_LIFECYCLE_RECREATE_ACTIVITY" != "0" \
+	&& "$AUTH_LIFECYCLE_RECREATE_ACTIVITY" != "1" ]]; then
+	echo "ERROR: ANDROID_SMOKE_LIFECYCLE_RECREATE_ACTIVITY must be 0 or 1" >&2
+	exit 1
+fi
+
 if [[ -z "$ADB" || ! -x "$ADB" ]]; then
     echo "ERROR: adb not found. Set ANDROID_HOME, ANDROID_SDK_ROOT, ANDROID_SMOKE_ADB, or Android_Client/local.properties sdk.dir." >&2
     exit 1
 fi
 
 mkdir -p "$OUT_DIR"
+rm -f "$OUT_DIR/.android-mobile-viewport.log"
 ensure_sqlite3_command
 
 if [[ "$BUILD" -eq 1 ]]; then
@@ -767,6 +805,15 @@ disable_android_smoke_settings() {
     remove_smoke_files "$SMOKE_SETTINGS_FLAG"
 }
 
+enable_android_smoke_afk() {
+	touch_smoke_file "$SMOKE_AFK_FLAG"
+	touch_smoke_file "$SMOKE_SETTINGS_FLAG"
+}
+
+disable_android_smoke_afk() {
+	remove_smoke_files "$SMOKE_AFK_FLAG" "$SMOKE_SETTINGS_FLAG"
+}
+
 enable_android_smoke_ground_loot() {
     touch_smoke_file "$SMOKE_GROUND_LOOT_FLAG"
 }
@@ -791,12 +838,26 @@ disable_android_smoke_login() {
     remove_smoke_files "$SMOKE_LOGIN_FLAG"
 }
 
+enable_android_smoke_lifecycle_reconnect_hold() {
+	"$ADB" shell run-as "$APP_ID" touch "$SMOKE_LIFECYCLE_RECONNECT_HOLD_FLAG"
+}
+
+disable_android_smoke_lifecycle_reconnect_hold() {
+	"$ADB" shell run-as "$APP_ID" rm -f "$SMOKE_LIFECYCLE_RECONNECT_HOLD_FLAG" \
+		>/dev/null 2>&1 || true
+}
+
 save_android_rotation() {
     if [[ "$ROTATION_STATE_SAVED" == "1" ]]; then
         return 0
     fi
     ORIGINAL_ACCELEROMETER_ROTATION="$("$ADB" shell settings get system accelerometer_rotation 2>/dev/null | tr -d '\r' | tail -1 || true)"
     ORIGINAL_USER_ROTATION="$("$ADB" shell settings get system user_rotation 2>/dev/null | tr -d '\r' | tail -1 || true)"
+	read -r ORIGINAL_WINDOW_ROTATION_MODE ORIGINAL_WINDOW_ROTATION < <(
+		"$ADB" shell cmd window user-rotation 2>/dev/null | tr -d '\r' | tail -1
+	)
+	ORIGINAL_IGNORE_ORIENTATION_REQUEST="$("$ADB" shell cmd window get-ignore-orientation-request 2>/dev/null \
+		| tr -d '\r' | sed -nE 's/.*ignoreOrientationRequest (true|false).*/\1/p' | tail -1)"
     ROTATION_STATE_SAVED=1
 }
 
@@ -804,22 +865,61 @@ restore_android_rotation() {
     if [[ "$ROTATION_STATE_SAVED" != "1" ]]; then
         return 0
     fi
-    if [[ "$ORIGINAL_ACCELEROMETER_ROTATION" == "1" ]]; then
-        "$ADB" shell cmd window set-user-rotation free >/dev/null 2>&1 || true
-    elif [[ -n "$ORIGINAL_USER_ROTATION" && "$ORIGINAL_USER_ROTATION" != "null" ]]; then
-        "$ADB" shell cmd window set-user-rotation lock "$ORIGINAL_USER_ROTATION" >/dev/null 2>&1 || true
-    fi
+	if [[ "$ORIGINAL_WINDOW_ROTATION_MODE" == "free" ]]; then
+		"$ADB" shell cmd window user-rotation free >/dev/null 2>&1 || true
+	elif [[ "$ORIGINAL_WINDOW_ROTATION_MODE" == "lock" \
+		&& "$ORIGINAL_WINDOW_ROTATION" =~ ^[0-3]$ ]]; then
+		"$ADB" shell cmd window user-rotation lock "$ORIGINAL_WINDOW_ROTATION" >/dev/null 2>&1 || true
+	elif [[ "$ORIGINAL_ACCELEROMETER_ROTATION" == "1" ]]; then
+		"$ADB" shell cmd window user-rotation free >/dev/null 2>&1 || true
+	elif [[ -n "$ORIGINAL_USER_ROTATION" && "$ORIGINAL_USER_ROTATION" != "null" ]]; then
+		"$ADB" shell cmd window user-rotation lock "$ORIGINAL_USER_ROTATION" >/dev/null 2>&1 || true
+	fi
     if [[ -n "$ORIGINAL_ACCELEROMETER_ROTATION" && "$ORIGINAL_ACCELEROMETER_ROTATION" != "null" ]]; then
         "$ADB" shell settings put system accelerometer_rotation "$ORIGINAL_ACCELEROMETER_ROTATION" >/dev/null 2>&1 || true
     fi
     if [[ -n "$ORIGINAL_USER_ROTATION" && "$ORIGINAL_USER_ROTATION" != "null" ]]; then
         "$ADB" shell settings put system user_rotation "$ORIGINAL_USER_ROTATION" >/dev/null 2>&1 || true
     fi
+	if [[ "$ORIGINAL_IGNORE_ORIENTATION_REQUEST" == "true" \
+		|| "$ORIGINAL_IGNORE_ORIENTATION_REQUEST" == "false" ]]; then
+		"$ADB" shell cmd window set-ignore-orientation-request \
+			"$ORIGINAL_IGNORE_ORIENTATION_REQUEST" >/dev/null 2>&1 || true
+	fi
+}
+
+save_android_display_override() {
+    if [[ "$DISPLAY_OVERRIDE_STATE_SAVED" == "1" ]]; then
+        return 0
+    fi
+    ORIGINAL_WM_SIZE_OVERRIDE="$("$ADB" shell wm size 2>/dev/null | tr -d '\r' \
+        | sed -nE 's/^Override size: ([0-9]+x[0-9]+).*$/\1/p' | tail -1)"
+    ORIGINAL_WM_DENSITY_OVERRIDE="$("$ADB" shell wm density 2>/dev/null | tr -d '\r' \
+        | sed -nE 's/^Override density: ([0-9]+).*$/\1/p' | tail -1)"
+    DISPLAY_OVERRIDE_STATE_SAVED=1
+}
+
+restore_android_display_override() {
+    if [[ "$DISPLAY_OVERRIDE_STATE_SAVED" != "1" ]]; then
+        return 0
+    fi
+    if [[ -n "$ORIGINAL_WM_SIZE_OVERRIDE" ]]; then
+        "$ADB" shell wm size "$ORIGINAL_WM_SIZE_OVERRIDE" >/dev/null 2>&1 || true
+    else
+        "$ADB" shell wm size reset >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$ORIGINAL_WM_DENSITY_OVERRIDE" ]]; then
+        "$ADB" shell wm density "$ORIGINAL_WM_DENSITY_OVERRIDE" >/dev/null 2>&1 || true
+    else
+        "$ADB" shell wm density reset >/dev/null 2>&1 || true
+    fi
+    DISPLAY_OVERRIDE_STATE_SAVED=0
 }
 
 wait_for_screen_orientation() {
     local expected="$1"
     local timeout="${2:-20}"
+    local quiet="${3:-0}"
     local deadline=$((SECONDS + timeout))
     local width height orientation
 
@@ -838,7 +938,9 @@ wait_for_screen_orientation() {
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for Android screen orientation=$expected; last size=${width:-?}x${height:-?}" >&2
+    if [[ "$quiet" != "1" ]]; then
+        echo "ERROR: timed out waiting for Android screen orientation=$expected; last size=${width:-?}x${height:-?}" >&2
+    fi
     return 1
 }
 
@@ -851,19 +953,23 @@ force_android_rotation() {
     fi
 
     save_android_rotation
-    "$ADB" shell cmd window set-user-rotation lock "$rotation" >/dev/null 2>&1 || true
+	# The Android activities intentionally use fullSensor. Ignore that request only
+	# for the test window so the emulator can be locked deterministically.
+	"$ADB" shell cmd window set-ignore-orientation-request true >/dev/null 2>&1 || true
+	"$ADB" shell cmd window user-rotation lock "$rotation" >/dev/null 2>&1 || true
     "$ADB" shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || return 1
     "$ADB" shell settings put system user_rotation "$rotation" >/dev/null 2>&1 || return 1
-    if wait_for_screen_orientation "$expected_orientation" 8; then
+    if wait_for_screen_orientation "$expected_orientation" 12 1; then
         return 0
     fi
 
     for attempt in 1 2; do
         "$ADB" emu rotate >/dev/null 2>&1 || true
-        if wait_for_screen_orientation "$expected_orientation" 8; then
+        if wait_for_screen_orientation "$expected_orientation" 8 1; then
             return 0
         fi
     done
+    echo "ERROR: unable to force Android screen orientation=$expected_orientation" >&2
     return 1
 }
 
@@ -907,6 +1013,29 @@ restore_android_network_state() {
 	NETWORK_STATE_SAVED=0
 }
 
+save_android_activity_policy() {
+	if [[ "$ACTIVITY_POLICY_STATE_SAVED" -eq 1 ]]; then
+		return 0
+	fi
+	ORIGINAL_ALWAYS_FINISH_ACTIVITIES="$("$ADB" shell settings get global \
+		always_finish_activities 2>/dev/null | tr -d '\r' | tail -1 || true)"
+	ACTIVITY_POLICY_STATE_SAVED=1
+}
+
+restore_android_activity_policy() {
+	if [[ "$ACTIVITY_POLICY_STATE_SAVED" -ne 1 ]]; then
+		return 0
+	fi
+	if [[ -z "$ORIGINAL_ALWAYS_FINISH_ACTIVITIES" \
+		|| "$ORIGINAL_ALWAYS_FINISH_ACTIVITIES" == "null" ]]; then
+		"$ADB" shell settings delete global always_finish_activities >/dev/null 2>&1 || true
+	else
+		"$ADB" shell settings put global always_finish_activities \
+			"$ORIGINAL_ALWAYS_FINISH_ACTIVITIES" >/dev/null 2>&1 || true
+	fi
+	ACTIVITY_POLICY_STATE_SAVED=0
+}
+
 disable_android_smoke_targets() {
     disable_android_smoke_npc_targets
     disable_android_smoke_player_targets
@@ -924,14 +1053,18 @@ disable_android_smoke_targets() {
 	disable_android_smoke_network
     disable_android_smoke_world_map
     disable_android_smoke_settings
+	disable_android_smoke_afk
     disable_android_smoke_ground_loot
     disable_android_smoke_appearance_prompt
     disable_android_smoke_walk
     disable_android_smoke_login
+	disable_android_smoke_lifecycle_reconnect_hold
 }
 
 android_smoke_cleanup() {
     disable_android_smoke_targets
+    restore_android_activity_policy
+    restore_android_display_override
     restore_android_rotation
 	restore_android_network_state
 }
@@ -1033,16 +1166,164 @@ android_viewport_target_for_size() {
     }'
 }
 
+android_mobile_viewport_cache_file() {
+    printf '%s\n' "$OUT_DIR/.android-mobile-viewport.log"
+}
+
+cache_android_mobile_viewport_line() {
+    local line="$1"
+    local cache_file
+    [[ -n "$line" ]] || return 1
+    cache_file="$(android_mobile_viewport_cache_file)"
+    printf '%s\n' "$line" > "$cache_file"
+}
+
+android_mobile_viewport_log_is_settled_for_surface() {
+    local line="$1"
+    local current_surface_width="$2"
+    local current_surface_height="$3"
+    local surface_width surface_height content_width content_height
+    local inset_left inset_top inset_right inset_bottom logical_width logical_height scale
+    local expected_content_width expected_content_height expected_width expected_height orientation capped
+
+    surface_width="$(extract_log_value "$line" surfaceW)"
+    surface_height="$(extract_log_value "$line" surfaceH)"
+    content_width="$(extract_log_value "$line" contentW)"
+    content_height="$(extract_log_value "$line" contentH)"
+    inset_left="$(extract_log_value "$line" insetL)"
+    inset_top="$(extract_log_value "$line" insetT)"
+    inset_right="$(extract_log_value "$line" insetR)"
+    inset_bottom="$(extract_log_value "$line" insetB)"
+    logical_width="$(extract_log_value "$line" logicalW)"
+    logical_height="$(extract_log_value "$line" logicalH)"
+    scale="$(extract_log_value "$line" scale)"
+
+    [[ "$surface_width" =~ ^[0-9]+$ && "$surface_width" -gt 0 \
+        && "$surface_height" =~ ^[0-9]+$ && "$surface_height" -gt 0 \
+        && "$content_width" =~ ^[0-9]+$ && "$content_width" -gt 0 \
+        && "$content_height" =~ ^[0-9]+$ && "$content_height" -gt 0 \
+        && "$inset_left" =~ ^[0-9]+$ && "$inset_top" =~ ^[0-9]+$ \
+        && "$inset_right" =~ ^[0-9]+$ && "$inset_bottom" =~ ^[0-9]+$ \
+        && "$logical_width" =~ ^[0-9]+$ && "$logical_width" -gt 0 \
+        && "$logical_height" =~ ^[0-9]+$ && "$logical_height" -gt 0 ]] || return 1
+    is_positive_log_number "$scale" || return 1
+
+    [[ "$surface_width" -eq "$current_surface_width" \
+        && "$surface_height" -eq "$current_surface_height" ]] || return 1
+    expected_content_width=$((surface_width - inset_left - inset_right))
+    expected_content_height=$((surface_height - inset_top - inset_bottom))
+    (( expected_content_width < 1 )) && expected_content_width=1
+    (( expected_content_height < 1 )) && expected_content_height=1
+    [[ "$content_width" -eq "$expected_content_width" \
+        && "$content_height" -eq "$expected_content_height" ]] || return 1
+
+    read -r expected_width expected_height orientation capped \
+        < <(android_viewport_target_for_size "$content_width" "$content_height")
+    [[ "$logical_width" -eq "$expected_width" && "$logical_height" -eq "$expected_height" ]] || return 1
+
+    awk -v cw="$content_width" -v ch="$content_height" \
+        -v lw="$logical_width" -v lh="$logical_height" -v actual="$scale" 'BEGIN {
+        expectedX = cw / lw;
+        expectedY = ch / lh;
+        expected = expectedX < expectedY ? expectedX : expectedY;
+        difference = actual - expected;
+        if (difference < 0) difference = -difference;
+        tolerance = expected * 0.001;
+        if (tolerance < 0.001) tolerance = 0.001;
+        exit !(difference <= tolerance);
+    }'
+}
+
+latest_settled_android_mobile_viewport() {
+    local surface_width="$1"
+    local surface_height="$2"
+    local line line_surface_width line_surface_height matching_line
+    local cache_file
+    local saw_current_surface=0
+    local deadline=$((SECONDS + 3))
+
+    while :; do
+        matching_line=""
+        saw_current_surface=0
+        while IFS= read -r line; do
+            line_surface_width="$(extract_log_value "$line" surfaceW)"
+            line_surface_height="$(extract_log_value "$line" surfaceH)"
+            if [[ "$line_surface_width" == "$surface_width" \
+                && "$line_surface_height" == "$surface_height" ]]; then
+                # Only the newest record for this surface can be considered
+                # settled; a newer resize record invalidates older geometry.
+                saw_current_surface=1
+                matching_line=""
+                if android_mobile_viewport_log_is_settled_for_surface \
+                    "$line" "$surface_width" "$surface_height"; then
+                    matching_line="$line"
+                fi
+            fi
+        done < <("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_MOBILE_VIEWPORT " \
+            | tail -30 || true)
+
+        if [[ -n "$matching_line" ]]; then
+            cache_android_mobile_viewport_line "$matching_line"
+            printf '%s\n' "$matching_line"
+            return 0
+        fi
+        if [[ "$saw_current_surface" -eq 0 || "$SECONDS" -ge "$deadline" ]]; then
+            break
+        fi
+        sleep 1
+    done
+
+    # A clear logcat is common between focused assertions. Reuse only a cache
+    # that still matches the current adb surface and a fully settled target.
+    [[ "$saw_current_surface" -eq 0 ]] || return 1
+
+    cache_file="$(android_mobile_viewport_cache_file)"
+    if [[ -s "$cache_file" ]]; then
+        line="$(tail -1 "$cache_file")"
+        if android_mobile_viewport_log_is_settled_for_surface \
+            "$line" "$surface_width" "$surface_height"; then
+            printf '%s\n' "$line"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 client_xy_to_screen_xy() {
     local client_x="$1"
     local client_y="$2"
-    local width height target_width target_full_height orientation capped x y
+    local width height target_width target_full_height orientation capped x y viewport_line
+    local content_width content_height inset_left inset_top logical_width logical_height scale
     read -r width height < <(screen_size)
     if [[ -z "${width:-}" || -z "${height:-}" ]]; then
         echo "ERROR: could not determine Android screen size for client input" >&2
         return 1
     fi
 
+    viewport_line="$(latest_settled_android_mobile_viewport "$width" "$height" || true)"
+    if [[ -n "$viewport_line" ]]; then
+        content_width="$(extract_log_value "$viewport_line" contentW)"
+        content_height="$(extract_log_value "$viewport_line" contentH)"
+        inset_left="$(extract_log_value "$viewport_line" insetL)"
+        inset_top="$(extract_log_value "$viewport_line" insetT)"
+        logical_width="$(extract_log_value "$viewport_line" logicalW)"
+        logical_height="$(extract_log_value "$viewport_line" logicalH)"
+        scale="$(extract_log_value "$viewport_line" scale)"
+        read -r x y < <(awk -v cw="$content_width" -v ch="$content_height" \
+            -v il="$inset_left" -v it="$inset_top" \
+            -v lw="$logical_width" -v lh="$logical_height" \
+            -v scale="$scale" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
+            ox = il + (cw - lw * scale) / 2;
+            oy = it + (ch - lh * scale) / 2;
+            printf "%d %d\n", ox + cx * scale + 0.5, oy + cy * scale + 0.5;
+        }')
+        echo "$x $y"
+        return 0
+    fi
+
+    # Pre-telemetry fallback for wrapper/loading states and older APKs.
     read -r target_width target_full_height orientation capped < <(android_viewport_target_for_size "$width" "$height")
     read -r x y < <(awk -v sw="$width" -v sh="$height" -v gw="$target_width" -v gh="$target_full_height" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
         scaleX=sw/gw;
@@ -1053,6 +1334,61 @@ client_xy_to_screen_xy() {
         printf "%d %d\n", ox + cx*scale + 0.5, oy + cy*scale + 0.5;
     }')
     echo "$x $y"
+}
+
+client_xy_to_screen_xy_from_viewport() {
+    local client_x="$1"
+    local client_y="$2"
+    local viewport_line="$3"
+    local surface_width surface_height content_width content_height
+    local inset_left inset_top logical_width logical_height scale x y
+
+    surface_width="$(extract_log_value "$viewport_line" surfaceW)"
+    surface_height="$(extract_log_value "$viewport_line" surfaceH)"
+    content_width="$(extract_log_value "$viewport_line" contentW)"
+    content_height="$(extract_log_value "$viewport_line" contentH)"
+    inset_left="$(extract_log_value "$viewport_line" insetL)"
+    inset_top="$(extract_log_value "$viewport_line" insetT)"
+    logical_width="$(extract_log_value "$viewport_line" logicalW)"
+    logical_height="$(extract_log_value "$viewport_line" logicalH)"
+    scale="$(extract_log_value "$viewport_line" scale)"
+
+    if [[ ! "$client_x" =~ ^[0-9]+$ || ! "$client_y" =~ ^[0-9]+$ \
+        || ! "$surface_width" =~ ^[0-9]+$ || ! "$surface_height" =~ ^[0-9]+$ \
+        || ! "$logical_width" =~ ^[0-9]+$ || ! "$logical_height" =~ ^[0-9]+$ \
+        || "$client_x" -ge "$logical_width" || "$client_y" -ge "$logical_height" ]] \
+        || ! is_positive_log_number "$scale" \
+        || ! android_mobile_viewport_log_is_settled_for_surface \
+            "$viewport_line" "$surface_width" "$surface_height"; then
+        echo "ERROR: cannot map client input from unsettled Android viewport telemetry" >&2
+        echo "$viewport_line" >&2
+        return 1
+    fi
+
+    read -r x y < <(awk -v cw="$content_width" -v ch="$content_height" \
+        -v il="$inset_left" -v it="$inset_top" \
+        -v lw="$logical_width" -v lh="$logical_height" \
+        -v scale="$scale" -v cx="$client_x" -v cy="$client_y" 'BEGIN {
+        ox = il + (cw - lw * scale) / 2;
+        oy = it + (ch - lh * scale) / 2;
+        printf "%d %d\n", ox + cx * scale + 0.5, oy + cy * scale + 0.5;
+    }')
+    if [[ ! "$x" =~ ^[0-9]+$ || ! "$y" =~ ^[0-9]+$ \
+        || "$x" -ge "$surface_width" || "$y" -ge "$surface_height" ]]; then
+        echo "ERROR: Android telemetry mapped client $client_x,$client_y outside surface ${surface_width}x${surface_height}: ${x:-?},${y:-?}" >&2
+        return 1
+    fi
+    echo "$x $y"
+}
+
+tap_client_xy_from_viewport() {
+    local client_x="$1"
+    local client_y="$2"
+    local viewport_line="$3"
+    local x y
+    read -r x y < <(client_xy_to_screen_xy_from_viewport \
+        "$client_x" "$client_y" "$viewport_line") || return 1
+    "$ADB" shell input tap "$x" "$y"
 }
 
 tap_client_xy() {
@@ -1086,6 +1422,10 @@ swipe_client_xy() {
 
 screenshot() {
     local name="$1"
+	# SurfaceView composition can expose the transition frame immediately after
+	# a telemetry-triggered action/rotation. Let one rendered frame settle so QA
+	# artifacts certify the final UI instead of a partially composed buffer.
+	sleep 0.35
     if adb_screencap_to_file "$OUT_DIR/$name.png"; then
         echo "Saved $OUT_DIR/$name.png"
     else
@@ -1263,6 +1603,7 @@ wait_for_login_lengths() {
     local expected_user_length="$1"
     local expected_pass_length="$2"
     local timeout="${3:-10}"
+	local quiet="${4:-false}"
     local deadline=$((SECONDS + timeout))
     local line user_length pass_length
 
@@ -1277,8 +1618,10 @@ wait_for_login_lengths() {
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for Android login text lengths user=$expected_user_length pass=$expected_pass_length" >&2
-    login_log_tail
+	if [[ "$quiet" != "true" ]]; then
+		echo "ERROR: timed out waiting for Android login text lengths user=$expected_user_length pass=$expected_pass_length" >&2
+		login_log_tail
+	fi
     return 1
 }
 
@@ -1347,6 +1690,11 @@ close_auth_intro_dialog_if_present() {
 	close_welcome_dialog_if_present 4
 	accept_appearance_prompt_if_present 10
 	close_welcome_dialog_if_present 10
+	# Tutorial landing sends a separate server-message modal after the ordinary
+	# welcome/appearance overlays. Android Back follows the shared modal priority
+	# table and closes it without relying on a device-specific tap coordinate.
+	"$ADB" shell input keyevent BACK
+	sleep 2
 	disable_android_smoke_settings
 	disable_android_smoke_appearance_prompt
 }
@@ -1371,7 +1719,24 @@ enter_auth_credentials() {
     clear_focused_text_field
     input_text_slow "$AUTH_USER"
     sleep 1
-    wait_for_login_lengths "${#AUTH_USER}" 0 12 || exit 1
+	if ! wait_for_login_lengths "${#AUTH_USER}" 0 5 true; then
+		echo "Android login username input was incomplete; retrying once."
+		if [[ "$user_x" =~ ^[0-9]+$ && "$user_y" =~ ^[0-9]+$ ]]; then
+			tap_client_xy "$user_x" "$user_y"
+		else
+			tap_pct "$AUTH_USERNAME_X_PCT" "$AUTH_USERNAME_Y_PCT"
+		fi
+		sleep 1
+		clear_focused_text_field
+		input_text_slow "$AUTH_USER"
+		sleep 1
+		wait_for_login_lengths "${#AUTH_USER}" 0 12 || exit 1
+	fi
+	# Opening the IME can move the responsive portrait card after the username
+	# tap. Refresh password geometry only after that layout has settled.
+	line="$(wait_for_login_state 2 12 || true)"
+	pass_x="$(extract_log_value "$line" passX)"
+	pass_y="$(extract_log_value "$line" passY)"
     if [[ "$pass_x" =~ ^[0-9]+$ && "$pass_y" =~ ^[0-9]+$ ]]; then
         echo "Android login password at client $pass_x,$pass_y"
         tap_client_xy "$pass_x" "$pass_y"
@@ -1383,7 +1748,22 @@ enter_auth_credentials() {
     input_text_slow "$AUTH_PASS"
     # adb text input does not require a visible IME; BACK can close GameActivity.
     sleep 1
-    wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || exit 1
+	if ! wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 5 true; then
+		echo "Android login password input was incomplete; retrying once."
+		line="$(wait_for_login_state 2 12 || true)"
+		pass_x="$(extract_log_value "$line" passX)"
+		pass_y="$(extract_log_value "$line" passY)"
+		if [[ "$pass_x" =~ ^[0-9]+$ && "$pass_y" =~ ^[0-9]+$ ]]; then
+			tap_client_xy "$pass_x" "$pass_y"
+		else
+			tap_pct "$AUTH_PASSWORD_X_PCT" "$AUTH_PASSWORD_Y_PCT"
+		fi
+		sleep 1
+		clear_focused_text_field
+		input_text_slow "$AUTH_PASS"
+		sleep 1
+		wait_for_login_lengths "${#AUTH_USER}" "${#AUTH_PASS}" 12 || exit 1
+	fi
 }
 
 submit_login_and_wait() {
@@ -1441,6 +1821,31 @@ is_resumed_activity() {
 	activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
 	local escaped_app_id="${APP_ID//./\\.}"
 	grep -Eq "(^|[[:space:]])(mResumedActivity|topResumedActivity)[:=].*${escaped_app_id}/.*${expected}" <<< "$activities"
+}
+
+is_focused_activity() {
+	local expected="$1"
+	local activities
+	activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
+	local escaped_app_id="${APP_ID//./\\.}"
+	grep -Eq "(^|[[:space:]])mCurrentFocus=.*${escaped_app_id}/.*${expected}" <<< "$activities"
+}
+
+wait_for_activity_input_ready() {
+	local expected="$1"
+	local timeout="${2:-20}"
+	local deadline=$((SECONDS + timeout))
+
+	while (( SECONDS < deadline )); do
+		if is_resumed_activity "$expected" && is_focused_activity "$expected"; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: $expected did not become resumed and input-focused" >&2
+	assert_resumed_activity "$expected" || true
+	return 1
 }
 
 wait_for_resumed_activity() {
@@ -1878,6 +2283,10 @@ run_authenticated_login_smoke() {
 	}
 	assert_game_activity_for_input "auth login screenshot" "03-auth-login-lost-game-activity" || exit 1
 	screenshot 03-auth-post-login
+	if [[ "${ANDROID_SMOKE_LEAVE_LOGGED_IN:-0}" == "1" ]]; then
+		echo "Android auth/login left running in-game for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
+		return 0
+	fi
 
 	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
@@ -1965,7 +2374,217 @@ run_authenticated_credential_smoke() {
 	echo "Android encrypted credential smoke passed for $AUTH_USER"
 }
 
+android_log_count_fixed() {
+	local needle="$1"
+	"$ADB" logcat -d -v raw 2>/dev/null \
+		| tr -d '\r' \
+		| grep -F -c "$needle" || true
+}
+
+wait_for_reconnect_touch_pair_exactly_once() {
+	local expected_x="$1"
+	local expected_y="$2"
+	local timeout="${3:-45}"
+	local deadline=$((SECONDS + timeout))
+	local queued_count replay_count queued_line replay_line queued_x queued_y replay_x replay_y order_ok
+	# The pre-background viewport and the rebound Activity can differ by a safe
+	# inset while Android transfers window ownership. The production whitelist
+	# has already proven the mapped point is inside the requested launcher/rail;
+	# keep this comparison to half a touch target and require queue/replay to be
+	# exactly identical below.
+	local mapping_tolerance=32
+
+	while (( SECONDS < deadline )); do
+		queued_count="$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-queued ')"
+		replay_count="$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-replay ')"
+		if (( queued_count > 1 || replay_count > 1 )); then
+			break
+		fi
+		if [[ "$queued_count" == "1" && "$replay_count" == "1" ]]; then
+			# Require a short quiet window so a late duplicate cannot pass a
+			# transient exactly-once observation.
+			sleep 2
+			queued_count="$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-queued ')"
+			replay_count="$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-replay ')"
+			break
+		fi
+		sleep 1
+	done
+
+	if [[ "$queued_count" != "1" || "$replay_count" != "1" ]]; then
+		echo "ERROR: foreground intent expected exactly one reconnect queue/replay; queued=${queued_count:-0} replay=${replay_count:-0}" >&2
+		"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep -E 'ANDROID_SMOKE_TOUCH|ANDROID_SMOKE_HUB_ACTION|login response:|Lost connection' \
+			| tail -80 >&2 || true
+		return 1
+	fi
+
+	queued_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep -F 'ANDROID_SMOKE_TOUCH stage=reconnect-queued ' | tail -1 || true)"
+	replay_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep -F 'ANDROID_SMOKE_TOUCH stage=reconnect-replay ' | tail -1 || true)"
+	queued_x="$(extract_log_value "$queued_line" clientX)"
+	queued_y="$(extract_log_value "$queued_line" clientY)"
+	replay_x="$(extract_log_value "$replay_line" clientX)"
+	replay_y="$(extract_log_value "$replay_line" clientY)"
+	order_ok="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| awk '/ANDROID_SMOKE_TOUCH stage=reconnect-queued / { queued=NR }
+			/ANDROID_SMOKE_TOUCH stage=reconnect-replay / { replay=NR }
+			END { print (queued > 0 && replay > queued) ? "true" : "false" }')"
+	if [[ ! "$queued_x" =~ ^[0-9]+$ || ! "$queued_y" =~ ^[0-9]+$ \
+		|| ! "$replay_x" =~ ^[0-9]+$ || ! "$replay_y" =~ ^[0-9]+$ \
+		|| "$queued_x" != "$replay_x" || "$queued_y" != "$replay_y" \
+		|| "$order_ok" != "true" ]] \
+		|| (( queued_x < expected_x - mapping_tolerance || queued_x > expected_x + mapping_tolerance \
+			|| queued_y < expected_y - mapping_tolerance || queued_y > expected_y + mapping_tolerance )); then
+		echo "ERROR: reconnect queue/replay did not preserve renderer point $expected_x,$expected_y (allowing ${mapping_tolerance}px viewport settling)" >&2
+		echo "$queued_line" >&2
+		echo "$replay_line" >&2
+		return 1
+	fi
+	echo "Verified exactly-once foreground intent queue/replay at renderer point $expected_x,$expected_y."
+}
+
+assert_android_post_resume_hud_unblocked() {
+	local expected_orientation="$1"
+	local timeout="${2:-30}"
+	local deadline=$((SECONDS + timeout))
+	local welcome_line visible_surface
+	while (( SECONDS < deadline )); do
+		welcome_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep 'ANDROID_SMOKE_WELCOME_DIALOG ' | tail -1 || true)"
+		if [[ -n "$welcome_line" ]]; then
+			echo "ERROR: welcome modal reappeared and blocked the post-resume HUD" >&2
+			echo "$welcome_line" >&2
+			return 1
+		fi
+		visible_surface="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep -E 'ANDROID_SMOKE_HUB_LAYOUT |ANDROID_SMOKE_CHAT_LAYOUT open=true ' \
+			| tail -1 || true)"
+		if [[ -n "$visible_surface" ]]; then
+			sleep 2
+			welcome_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+				| grep 'ANDROID_SMOKE_WELCOME_DIALOG ' | tail -1 || true)"
+			if [[ -n "$welcome_line" ]]; then
+				echo "ERROR: welcome modal appeared after the post-resume HUD became visible" >&2
+				echo "$welcome_line" >&2
+				return 1
+			fi
+			echo "Verified post-resume HUD is renderer-visible with no welcome/server modal blocking it."
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: post-resume HUD never became renderer-visible; a server/message modal may be blocking it" >&2
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep -E 'ANDROID_SMOKE_(WELCOME_DIALOG|HUB_LAYOUT|CHAT_LAYOUT)|login response:|Lost connection' \
+		| tail -100 >&2 || true
+	return 1
+}
+
+lifecycle_background_in_android_settings() {
+	local seconds="$1"
+	local label="$2"
+	local output
+	output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
+	if ! grep -q 'Status: ok' <<< "$output"; then
+		echo "ERROR: Android lifecycle smoke could not switch to Settings for $label" >&2
+		echo "$output" >&2
+		return 1
+	fi
+	wait_for_audio_event stop-all 0 15 || return 1
+	echo "Android lifecycle smoke backgrounded in Settings for ${seconds}s ($label)"
+	sleep "$seconds"
+	if [[ -n "$AUTH_DB" ]]; then
+		wait_auth_online 5 || {
+			echo "ERROR: Android lifecycle session disconnected while backgrounded for $label" >&2
+			return 1
+		}
+	fi
+}
+
+resume_game_task_with_client_tap() {
+	local client_x="$1"
+	local client_y="$2"
+	local viewport_line="$3"
+	local output screen_x screen_y mapped_point
+	mapped_point="$(client_xy_to_screen_xy_from_viewport \
+		"$client_x" "$client_y" "$viewport_line")" || return 1
+	read -r screen_x screen_y <<< "$mapped_point" || return 1
+	if [[ ! "$screen_x" =~ ^[0-9]+$ || ! "$screen_y" =~ ^[0-9]+$ ]]; then
+		echo "ERROR: renderer point $client_x,$client_y did not map to a physical tap" >&2
+		return 1
+	fi
+	# Dispatch the task switch and first ACTION_DOWN/UP in one device-shell
+	# command without `am start -W`: -W waits for launch completion, which can
+	# also give a fast retained-session handshake enough time to finish before
+	# the intended first foreground tap exists. The short device-side delay lets
+	# GameActivity own the input window while keeping the game-thread reconnect
+	# in progress. The focused lifecycle run installs an app-private QA hold,
+	# so 400ms gives GameActivity time to own focus while remaining inside it.
+	if ! output="$("$ADB" shell "am start -n \
+		'$APP_ID/com.openrsc.android.updater.ApplicationUpdater' >/dev/null \
+		&& sleep 0.4 && input tap '$screen_x' '$screen_y'" 2>&1)"; then
+		echo "ERROR: Android lifecycle smoke could not foreground the game task" >&2
+		echo "$output" >&2
+		return 1
+	fi
+}
+
+wait_for_quiet_lost_connection() {
+	local timeout="${1:-20}"
+	local deadline=$((SECONDS + timeout))
+	while (( SECONDS < deadline )); do
+		if "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep -q '^Lost connection$'; then
+			return 0
+		fi
+		sleep 1
+	done
+	return 1
+}
+
+should_attempt_lifecycle_network_loss() {
+	if [[ "$AUTH_LIFECYCLE_NETWORK_LOSS" == "1" ]]; then
+		return 0
+	fi
+	if [[ "$AUTH_LIFECYCLE_NETWORK_LOSS" == "0" ]]; then
+		return 1
+	fi
+	[[ "$("$ADB" shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r')" == "1" ]]
+}
+
+enable_android_dont_keep_activities() {
+	save_android_activity_policy
+	"$ADB" shell settings put global always_finish_activities 1 >/dev/null 2>&1 || return 1
+	local deadline=$((SECONDS + 8))
+	local state
+	while (( SECONDS < deadline )); do
+		state="$("$ADB" shell settings get global always_finish_activities \
+			2>/dev/null | tr -d '\r' | tail -1)"
+		if [[ "$state" == "1" ]]; then
+			return 0
+		fi
+		sleep 1
+	done
+	return 1
+}
+
+resumed_game_activity_token() {
+	local escaped_app_id="${APP_ID//./\\.}"
+	"$ADB" shell dumpsys activity activities 2>/dev/null | tr -d '\r' \
+		| sed -nE "/(mResumedActivity|topResumedActivity).*${escaped_app_id}\/.*GameActivity/s/.*ActivityRecord\\{([^ ]+).*/\\1/p" \
+		| tail -1
+}
+
 run_authenticated_lifecycle_smoke() {
+	local status=0
+	(
+	if [[ "$ONLY_AUTH_LIFECYCLE" -eq 1 ]]; then
+		enable_android_smoke_lifecycle_reconnect_hold
+	else
+		disable_android_smoke_lifecycle_reconnect_hold
+	fi
 	preflight_auth_login_fixture
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 
@@ -1977,8 +2596,15 @@ run_authenticated_lifecycle_smoke() {
 	}
 	"$ADB" logcat -c || true
 	enable_android_smoke_audio
+	enable_android_smoke_chat_tabs
 
 	launch_authenticated_endpoint
+	# uiautomator can restore the emulator's pre-smoke rotation after it taps the
+	# native launcher. Reassert the lifecycle baseline once GameActivity owns input.
+	force_android_portrait || {
+		echo "ERROR: Android lifecycle smoke lost portrait rotation after launch" >&2
+		exit 1
+	}
 	enable_android_smoke_audio
 	wait_for_selected_server "$AUTH_HOST" "$AUTH_PORT" 30 || exit 1
 	screenshot 00-lifecycle-login-home
@@ -2000,29 +2626,26 @@ run_authenticated_lifecycle_smoke() {
 	assert_game_activity_for_input "lifecycle game HUD" "03-lifecycle-lost-before-hud" || exit 1
 	screenshot 03-lifecycle-game-hud
 
-	local viewport_settings_row viewport_camera viewport_mouse viewport_sound viewport_expected_camera viewport_expected_mouse viewport_line
-	local viewport_screen_width viewport_screen_height viewport_first_orientation viewport_second_orientation
+	local viewport_settings_row viewport_camera viewport_mouse viewport_sound viewport_expected_camera viewport_expected_mouse viewport_line viewport_mobile_line viewport_closed_hub_line
+	local viewport_first_orientation="portrait"
+	local viewport_second_orientation="landscape"
 	viewport_settings_row="$(read_auth_settings)"
 	read -r viewport_camera viewport_mouse viewport_sound <<< "$viewport_settings_row"
 	viewport_expected_camera="$([[ "$viewport_camera" == "1" ]] && echo true || echo false)"
 	viewport_expected_mouse="$([[ "$viewport_mouse" == "1" ]] && echo true || echo false)"
+	viewport_mobile_line="$(wait_for_android_mobile_viewport "$viewport_first_orientation" 30)" || exit 1
 	enable_android_smoke_settings
 	"$ADB" logcat -c || true
 	"$ADB" shell input keyevent 43
-	read -r viewport_screen_width viewport_screen_height < <(screen_size)
-	if (( viewport_screen_width > viewport_screen_height )); then
-		viewport_first_orientation="landscape"
-		viewport_second_orientation="portrait"
-	else
-		viewport_first_orientation="portrait"
-		viewport_second_orientation="landscape"
-	fi
 	viewport_line="$(wait_for_viewport_settings_state "$viewport_first_orientation" "$viewport_expected_camera" "$viewport_expected_mouse" 30)" || exit 1
-	assert_android_viewport_from_log "$viewport_first_orientation" "$viewport_line" || exit 1
+	assert_android_mobile_viewport_from_log "$viewport_first_orientation" "$viewport_mobile_line" "$viewport_line" || exit 1
 	assert_settings_logout_visible "$viewport_line" || exit 1
 	screenshot "03a-lifecycle-${viewport_first_orientation}-viewport-settings"
-	"$ADB" shell input keyevent 43
-	sleep 2
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent BACK
+	viewport_closed_hub_line="$(wait_for_mobile_hub_panel "$viewport_first_orientation" none none 20)" || exit 1
+	assert_mobile_hub_layout "$viewport_closed_hub_line" "$viewport_mobile_line" \
+		"$viewport_first_orientation" none none || exit 1
 
 	"$ADB" logcat -c || true
 	if [[ "$viewport_second_orientation" == "landscape" ]]; then
@@ -2034,44 +2657,267 @@ run_authenticated_lifecycle_smoke() {
 		exit 1
 	}
 	assert_game_activity_for_input "lifecycle $viewport_second_orientation viewport" "03b-lifecycle-lost-${viewport_second_orientation}" || exit 1
+	viewport_mobile_line="$(wait_for_android_mobile_viewport "$viewport_second_orientation" 30)" || exit 1
+	assert_no_android_runtime_crash "after lifecycle $viewport_second_orientation rotation" || {
+		screenshot "03b-lifecycle-${viewport_second_orientation}-rotation-crash" || true
+		exit 1
+	}
 	"$ADB" logcat -c || true
 	"$ADB" shell input keyevent 43
 	viewport_line="$(wait_for_viewport_settings_state "$viewport_second_orientation" "$viewport_expected_camera" "$viewport_expected_mouse" 30)" || exit 1
-	assert_android_viewport_from_log "$viewport_second_orientation" "$viewport_line" || exit 1
+	assert_android_mobile_viewport_from_log "$viewport_second_orientation" "$viewport_mobile_line" "$viewport_line" || exit 1
 	assert_settings_logout_visible "$viewport_line" || exit 1
 	screenshot "03b-lifecycle-${viewport_second_orientation}-viewport-settings"
-	"$ADB" shell input keyevent 43
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent BACK
+	viewport_closed_hub_line="$(wait_for_mobile_hub_panel "$viewport_second_orientation" none none 20)" || exit 1
+	assert_mobile_hub_layout "$viewport_closed_hub_line" "$viewport_mobile_line" \
+		"$viewport_second_orientation" none none || exit 1
 	disable_android_smoke_settings
 	force_android_portrait || {
 		echo "ERROR: Android lifecycle smoke could not restore portrait rotation after viewport checks" >&2
 		exit 1
 	}
-
-	local settings_launch_output
-	"$ADB" logcat -c || true
-	settings_launch_output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
-	if ! grep -q "Status: ok" <<< "$settings_launch_output"; then
-		echo "ERROR: Android lifecycle smoke could not switch to Android Settings" >&2
-		echo "$settings_launch_output" >&2
+	viewport_mobile_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+	assert_no_android_runtime_crash "after lifecycle portrait restore" || {
+		screenshot 03c-lifecycle-portrait-restore-crash || true
 		exit 1
-	fi
-	wait_for_audio_event stop-all 0 15 || exit 1
-	echo "Android lifecycle smoke switched to Android Settings for ${AUTH_LIFECYCLE_BACKGROUND_SECONDS}s"
-	sleep "$AUTH_LIFECYCLE_BACKGROUND_SECONDS"
-	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
+	}
+
+	# Capture the first post-resume intent from renderer telemetry before leaving
+	# the game. On return it is injected immediately, before any logcat/dumpsys
+	# polling can let a fast retained-session reconnect swallow the tap.
+	local resume_marker resume_viewport_line resume_chat_line resume_chat_x resume_chat_y
+	local resume_chat_log_baseline
+	resume_marker="resumeqa$(date +%s)$RANDOM"
+	resume_chat_log_baseline="$(read_auth_chat_log_max_id)" || exit 1
+	enable_android_smoke_chat_send
+	resume_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+	resume_chat_line="$(wait_for_native_chat_layout false "" false 20)" || exit 1
+	read -r resume_chat_x resume_chat_y \
+		<<< "$(native_chat_launcher_client_point_from_line "$resume_chat_line")" || exit 1
+
+	"$ADB" logcat -c || true
+	lifecycle_background_in_android_settings "$AUTH_LIFECYCLE_BACKGROUND_SECONDS" \
+		"first post-resume Chat intent" || exit 1
+	resume_game_task_with_client_tap "$resume_chat_x" "$resume_chat_y" \
+		"$resume_viewport_line" || exit 1
 	wait_for_resumed_activity "GameActivity" 20 || {
 		assert_resumed_activity "GameActivity" || true
 		screenshot 04-lifecycle-resume-failed || true
 		exit 1
 	}
+	wait_for_activity_input_ready "GameActivity" 20 || {
+		screenshot 04-lifecycle-input-focus-failed || true
+		exit 1
+	}
 	wait_for_audio_event resume 0 15 || exit 1
 	wait_auth_online 20 || exit 1
-	sleep 2
+	wait_for_reconnect_touch_pair_exactly_once "$resume_chat_x" "$resume_chat_y" 45 || exit 1
+	assert_android_post_resume_hud_unblocked portrait 30 || exit 1
 	assert_no_android_runtime_crash "after launcher resume" || {
 		screenshot 04-lifecycle-resume-crash || true
 		exit 1
 	}
 	screenshot 04-lifecycle-after-resume
+
+	resume_chat_line="$(wait_for_native_chat_layout true "" false 45)" || exit 1
+	assert_native_chat_layout "$resume_chat_line" "$resume_viewport_line" true || exit 1
+	# The queued launcher replay is itself the assertion here. Leave Chat open so
+	# the next cycle can prove a Compose press made during reconnect survives the
+	# retained model reset instead of being silently closed.
+	screenshot 04a-lifecycle-first-chat-intent-open
+
+	local compose_viewport_line compose_chat_line compose_x compose_y
+	compose_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+	compose_chat_line="$(wait_for_native_chat_layout true "" false 20)" || exit 1
+	read -r compose_x compose_y \
+		<<< "$(native_chat_rect_client_point_from_line "$compose_chat_line" compose)" || exit 1
+	"$ADB" logcat -c || true
+	lifecycle_background_in_android_settings "$AUTH_LIFECYCLE_INTENT_BACKGROUND_SECONDS" \
+		"open Chat then Compose during reconnect" || exit 1
+	resume_game_task_with_client_tap "$compose_x" "$compose_y" \
+		"$compose_viewport_line" || exit 1
+	wait_for_resumed_activity "GameActivity" 20 || exit 1
+	wait_for_activity_input_ready "GameActivity" 20 || exit 1
+	wait_for_audio_event resume 0 15 || exit 1
+	wait_for_successful_login 45 || exit 1
+	wait_auth_online 20 || exit 1
+	assert_android_post_resume_hud_unblocked portrait 30 || exit 1
+	wait_for_reconnect_touch_pair_exactly_once "$compose_x" "$compose_y" 45 || exit 1
+	compose_chat_line="$(wait_for_native_chat_layout true "" true 30)" || exit 1
+	assert_native_chat_layout "$compose_chat_line" "$compose_viewport_line" true || exit 1
+	assert_soft_keyboard_visible || exit 1
+	input_text "$resume_marker"
+	"$ADB" shell input keyevent ENTER
+	wait_for_chat_send "$resume_marker" 20 || exit 1
+	wait_auth_chat_logged "$resume_marker" "$resume_chat_log_baseline" 30 || exit 1
+	assert_no_android_runtime_crash "after Compose-during-reconnect roundtrip" || exit 1
+	screenshot 04b-lifecycle-compose-during-reconnect
+	"$ADB" shell input keyevent BACK
+	compose_chat_line="$(wait_for_native_chat_layout true "" false 20)" || exit 1
+	"$ADB" shell input keyevent BACK
+	wait_for_native_chat_layout false "" false 20 >/dev/null || exit 1
+
+	# A rail press has toggle semantics during normal play. During reconnect the
+	# deferred intent must therefore restore the desired final state exactly once,
+	# never apply a second toggle that closes the requested drawer.
+	local rail_viewport_line rail_hub_line rail_active_line rail_x rail_y
+	rail_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+	rail_hub_line="$(wait_for_mobile_hub_panel portrait none none 20)" || exit 1
+	read -r rail_x rail_y \
+		<<< "$(mobile_hub_control_client_point_from_layout "$rail_hub_line" INVENTORY)" || exit 1
+	"$ADB" logcat -c || true
+	lifecycle_background_in_android_settings "$AUTH_LIFECYCLE_INTENT_BACKGROUND_SECONDS" \
+		"Inventory rail desired-state replay" || exit 1
+	resume_game_task_with_client_tap "$rail_x" "$rail_y" "$rail_viewport_line" || exit 1
+	wait_for_resumed_activity "GameActivity" 20 || exit 1
+	wait_for_activity_input_ready "GameActivity" 20 || exit 1
+	wait_for_audio_event resume 0 15 || exit 1
+	wait_auth_online 20 || exit 1
+	wait_for_reconnect_touch_pair_exactly_once "$rail_x" "$rail_y" 45 || exit 1
+	assert_android_post_resume_hud_unblocked portrait 30 || exit 1
+	wait_for_mobile_hub_action INVENTORY inventory right 20 >/dev/null || exit 1
+	assert_no_mobile_hub_world_or_chat_fallthrough INVENTORY 2 || exit 1
+	rail_active_line="$(wait_for_mobile_hub_panel portrait inventory right 20)" || exit 1
+	assert_mobile_hub_layout "$rail_active_line" "$rail_viewport_line" \
+		portrait inventory right || exit 1
+	assert_no_android_runtime_crash "after Inventory reconnect intent" || exit 1
+	screenshot 04c-lifecycle-rail-intent
+	"$ADB" shell input keyevent BACK
+	wait_for_mobile_hub_panel portrait none none 20 >/dev/null || exit 1
+
+	# Short app switches do not request the proactive retained-session handshake.
+	# Their first rail tap must be ordinary input, with no stale reconnect intent
+	# left behind for a later, unrelated foreground connection loss.
+	local stale_viewport_line stale_hub_line stale_x stale_y stale_action_count stale_replay_count
+	stale_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+	stale_hub_line="$(wait_for_mobile_hub_panel portrait none none 20)" || exit 1
+	read -r stale_x stale_y \
+		<<< "$(mobile_hub_control_client_point_from_layout "$stale_hub_line" MAGIC)" || exit 1
+	"$ADB" logcat -c || true
+	lifecycle_background_in_android_settings 2 "short switch without proactive reconnect" || exit 1
+	resume_game_task_with_client_tap "$stale_x" "$stale_y" "$stale_viewport_line" || exit 1
+	wait_for_resumed_activity "GameActivity" 20 || exit 1
+	wait_for_activity_input_ready "GameActivity" 20 || exit 1
+	wait_for_audio_event resume 0 15 || exit 1
+	wait_for_mobile_hub_action MAGIC magic right 20 >/dev/null || exit 1
+	assert_no_mobile_hub_fallthrough MAGIC 2 || exit 1
+	if [[ "$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-queued ')" != "0" ]]; then
+		echo "ERROR: short app switch incorrectly queued a reconnect intent" >&2
+		exit 1
+	fi
+	"$ADB" shell input keyevent BACK
+	wait_for_mobile_hub_panel portrait none none 20 >/dev/null || exit 1
+
+	if should_attempt_lifecycle_network_loss; then
+		local network_loss_observed=false
+		disable_android_network_for_bootstrap
+		if wait_for_quiet_lost_connection 20; then
+			network_loss_observed=true
+		fi
+		restore_android_network_state
+		# A transport can report the failed write just after connectivity returns.
+		# Include that bounded late edge instead of carrying an unnoticed reconnect
+		# into the Activity-recreation case that follows.
+		if [[ "$network_loss_observed" == "false" ]] \
+			&& wait_for_quiet_lost_connection 5; then
+			network_loss_observed=true
+		fi
+		if [[ "$network_loss_observed" == "true" ]]; then
+			wait_for_successful_login 60 || exit 1
+			wait_auth_online 20 || exit 1
+			sleep 2
+			stale_replay_count="$(android_log_count_fixed 'ANDROID_SMOKE_TOUCH stage=reconnect-replay ')"
+			stale_action_count="$(android_log_count_fixed 'ANDROID_SMOKE_HUB_ACTION control=MAGIC ')"
+			if [[ "$stale_replay_count" != "0" || "$stale_action_count" != "1" ]]; then
+				echo "ERROR: unrelated network reconnect replayed a stale MAGIC intent; replay=$stale_replay_count actions=$stale_action_count" >&2
+				exit 1
+			fi
+			wait_for_mobile_hub_panel portrait none none 20 >/dev/null || exit 1
+			echo "Verified unrelated foreground connection loss did not replay the short-switch MAGIC tap."
+		else
+			if [[ "$AUTH_LIFECYCLE_NETWORK_LOSS" == "1" ]]; then
+				echo "ERROR: requested unrelated-loss coverage could not revoke the live TCP connection" >&2
+				exit 1
+			fi
+			echo "WARNING: emulator network controls did not revoke the live TCP connection; unrelated-loss replay coverage was not deterministic on this transport." >&2
+		fi
+	else
+		echo "Android unrelated-loss stale-intent coverage disabled for this device."
+	fi
+	assert_no_android_runtime_crash "after stale reconnect-intent coverage" || exit 1
+	screenshot 04d-lifecycle-stale-intent
+
+	# Exercise real Activity destruction without killing the process or its game
+	# session. The global developer option is captured and restored even if the
+	# assertion exits early (android_smoke_cleanup owns the final safeguard).
+	if [[ "$AUTH_LIFECYCLE_RECREATE_ACTIVITY" == "1" ]]; then
+		local old_activity_token new_activity_token recreate_marker recreate_baseline
+		local recreate_viewport_line recreate_chat_line recreate_activity_count recreate_settings_output
+		old_activity_token="$(resumed_game_activity_token)"
+		if [[ -z "$old_activity_token" ]]; then
+			echo "ERROR: could not identify the retained GameActivity before recreation" >&2
+			exit 1
+		fi
+		if enable_android_dont_keep_activities; then
+			recreate_marker="activityqa$(date +%s)$RANDOM"
+			recreate_baseline="$(read_auth_chat_log_max_id)" || exit 1
+			"$ADB" logcat -c || true
+			recreate_settings_output="$("$ADB" shell am start -W -a android.settings.SETTINGS 2>&1)"
+			if ! grep -q 'Status: ok' <<< "$recreate_settings_output"; then
+				echo "ERROR: could not background GameActivity for recreation" >&2
+				exit 1
+			fi
+			wait_for_audio_event stop-all 0 15 || exit 1
+			sleep 3
+			"$ADB" shell am start -n \
+				"$APP_ID/com.openrsc.android.updater.ApplicationUpdater" >/dev/null
+			if ! wait_for_resumed_activity "GameActivity" 8; then
+				wait_for_wrapper_ready || exit 1
+				tap_play_button
+				ensure_game_activity_from_wrapper 60 || exit 1
+			fi
+			restore_android_activity_policy
+			wait_for_activity_input_ready "GameActivity" 20 || exit 1
+			wait_for_audio_event resume 0 15 || exit 1
+			wait_auth_online 20 || exit 1
+			new_activity_token="$(resumed_game_activity_token)"
+			if [[ -z "$new_activity_token" || "$new_activity_token" == "$old_activity_token" ]]; then
+				echo "ERROR: Don't keep activities did not replace GameActivity; before=$old_activity_token after=${new_activity_token:-missing}" >&2
+				exit 1
+			fi
+			recreate_activity_count="$("$ADB" shell dumpsys activity activities | tr -d '\r' \
+				| sed -nE '/Hist[[:space:]]+#[0-9]+: ActivityRecord.*GameActivity/s/.*ActivityRecord\{([^ ]+).*/\1/p' \
+				| sort -u | awk 'END { print NR + 0 }')"
+			if [[ "$recreate_activity_count" != "1" ]]; then
+				echo "ERROR: Activity recreation left $recreate_activity_count GameActivity history records" >&2
+				exit 1
+			fi
+			assert_android_post_resume_hud_unblocked portrait 30 || exit 1
+			recreate_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+			recreate_chat_line="$(wait_for_native_chat_layout false "" false 20)" || exit 1
+			tap_native_chat_launcher_from_line "$recreate_chat_line" || exit 1
+			recreate_chat_line="$(wait_for_native_chat_layout true "" false 20)" || exit 1
+			tap_native_chat_rect_from_line "$recreate_chat_line" compose || exit 1
+			recreate_chat_line="$(wait_for_native_chat_layout true "" true 30)" || exit 1
+			assert_native_chat_layout "$recreate_chat_line" "$recreate_viewport_line" true || exit 1
+			input_text "$recreate_marker"
+			"$ADB" shell input keyevent ENTER
+			wait_for_chat_send "$recreate_marker" 20 || exit 1
+			wait_auth_chat_logged "$recreate_marker" "$recreate_baseline" 30 || exit 1
+			"$ADB" shell input keyevent BACK
+			wait_for_native_chat_layout true "" false 20 >/dev/null || exit 1
+			"$ADB" shell input keyevent BACK
+			wait_for_native_chat_layout false "" false 20 >/dev/null || exit 1
+			echo "Verified retained session/input after GameActivity recreation ($old_activity_token -> $new_activity_token)."
+			screenshot 04e-lifecycle-activity-recreated
+		else
+			restore_android_activity_policy
+			echo "WARNING: device did not expose a live Don't keep activities policy; retained Activity recreation coverage skipped." >&2
+		fi
+	fi
+	disable_android_smoke_chat_send
 
 	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
 	"$ADB" shell am start -n $APP_ID/com.openrsc.android.updater.ApplicationUpdater >/dev/null
@@ -2080,11 +2926,22 @@ run_authenticated_lifecycle_smoke() {
 		screenshot 05-lifecycle-relaunch-failed || true
 		exit 1
 	}
+	wait_auth_online 20 || exit 1
 	sleep 3
 	assert_no_android_runtime_crash "after duplicate launcher relaunch" || {
 		screenshot 05-lifecycle-relaunch-crash || true
 		exit 1
 	}
+	local game_activity_count
+	game_activity_count="$("$ADB" shell dumpsys activity activities | tr -d '\r' \
+		| sed -nE '/Hist[[:space:]]+#[0-9]+: ActivityRecord.*GameActivity/s/.*ActivityRecord\{([^ ]+).*/\1/p' \
+		| sort -u | awk 'END { print NR + 0 }')"
+	if [[ "$game_activity_count" != "1" ]]; then
+		echo "ERROR: duplicate launcher produced $game_activity_count GameActivity history records" >&2
+		"$ADB" shell dumpsys activity activities | grep -E 'Hist|GameActivity' >&2 || true
+		exit 1
+	fi
+	echo "Verified duplicate launcher retained exactly one GameActivity"
 	screenshot 05-lifecycle-after-duplicate-relaunch
 
 	local settings_row settings_camera settings_mouse settings_sound expected_camera expected_mouse
@@ -2092,7 +2949,7 @@ run_authenticated_lifecycle_smoke() {
 	read -r settings_camera settings_mouse settings_sound <<< "$settings_row"
 	expected_camera="$([[ "$settings_camera" == "1" ]] && echo true || echo false)"
 	expected_mouse="$([[ "$settings_mouse" == "1" ]] && echo true || echo false)"
-	local settings_line logout_x logout_y
+	local settings_line
 	enable_android_smoke_settings
 	"$ADB" logcat -c || true
 	"$ADB" shell input keyevent 43
@@ -2100,9 +2957,7 @@ run_authenticated_lifecycle_smoke() {
 	assert_settings_logout_visible "$settings_line" || exit 1
 	sleep 2
 	screenshot 06-lifecycle-settings-open
-	logout_x="$(log_int_or_default "$settings_line" logoutX 385)"
-	logout_y="$(log_int_or_default "$settings_line" logoutY 293)"
-	tap_client_xy "$logout_x" "$logout_y"
+	complete_android_account_logout_from_settings_line "$settings_line" "06-lifecycle" || exit 1
 	sleep 10
 	disable_android_smoke_settings
 	assert_no_android_runtime_crash "after lifecycle logout" || {
@@ -2136,7 +2991,21 @@ run_authenticated_lifecycle_smoke() {
 	"$ADB" shell am force-stop $APP_ID || true
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
 	disable_android_smoke_audio
+	disable_android_smoke_chat_tabs
+	disable_android_smoke_lifecycle_reconnect_hold
 	echo "Android auth/lifecycle smoke passed for $AUTH_USER on $AUTH_HOST:$AUTH_PORT"
+	) || status=$?
+
+	disable_android_smoke_lifecycle_reconnect_hold
+	if [[ "$status" -ne 0 ]]; then
+		graceful_cleanup_authenticated_smoke_session || status=1
+	fi
+	disable_android_smoke_audio
+	disable_android_smoke_chat_tabs
+	if wait_auth_offline 2 >/dev/null 2>&1; then
+		"$ADB" shell am force-stop "$APP_ID" || true
+	fi
+	return "$status"
 }
 
 wait_for_npc_target() {
@@ -2523,120 +3392,353 @@ assert_one_finger_zoom_unchanged() {
 	echo "Verified Android one-finger gesture left zoom unchanged."
 }
 
-wait_for_chat_tab() {
-    local expected="$1"
-    local timeout="${2:-15}"
+native_chat_log_tail() {
+    "$ADB" logcat -d -v raw 2>/dev/null \
+        | tr -d '\r' \
+		| grep -E "ANDROID_SMOKE_(CHAT_(LAYOUT|SEND)|TOUCH) |ANDROID_MOBILE_VIEWPORT|VOIDSCAPE_NETWORK_WRITER" \
+		| tail -100 >&2 || true
+}
+
+wait_for_native_chat_layout() {
+    local expected_open="$1"
+    local expected_channel="${2:-}"
+    local expected_ime="${3:-}"
+    local timeout="${4:-15}"
     local deadline=$((SECONDS + timeout))
-    local line
+    local line open channel ime keyboard_top
 
     while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB " | tail -1 || true)"
-        if [[ "$line" =~ after=([^[:space:]]+) ]] && [[ "${BASH_REMATCH[1]}" == "$expected" ]]; then
-            echo "Verified Android chat tab: $line"
+        line="$("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_SMOKE_CHAT_LAYOUT " \
+            | tail -1 || true)"
+        open="$(extract_log_value "$line" open)"
+        channel="$(extract_log_value "$line" channel)"
+        ime="$(extract_log_value "$line" ime)"
+        keyboard_top="$(extract_log_value "$line" keyboardTop)"
+        if [[ "$open" == "$expected_open" \
+            && ( -z "$expected_channel" || "$channel" == "$expected_channel" ) \
+            && ( -z "$expected_ime" || "$ime" == "$expected_ime" ) \
+            && ( "$expected_ime" != "true" \
+                || "$keyboard_top" =~ ^[0-9]+$ ) ]]; then
+            printf '%s\n' "$line"
             return 0
         fi
         sleep 1
     done
 
-    echo "ERROR: timed out waiting for Android chat tab $expected" >&2
-    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB" | tail -30 >&2 || true
+    echo "ERROR: timed out waiting for native Android chat layout open=$expected_open channel=${expected_channel:-any} ime=${expected_ime:-any}" >&2
+    native_chat_log_tail
     return 1
 }
 
-chat_tab_layout_key() {
-    local label
-    label="$(printf "%s" "$1" | tr '[:lower:]' '[:upper:]')"
-    case "$label" in
-        PM) echo "PRIVATE" ;;
-        RPT) echo "REPORT" ;;
-        KEY) echo "KEYBOARD" ;;
-        *) echo "$label" ;;
-    esac
-}
-
-wait_for_chat_tab_layout() {
-    local timeout="${1:-8}"
-    local deadline=$((SECONDS + timeout))
-    local line
-
-    while (( SECONDS < deadline )); do
-        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB_LAYOUT " | tail -1 || true)"
-        if [[ -n "$line" ]]; then
-            echo "$line"
-            return 0
+native_chat_rect_from_payload() {
+    local label="$1"
+    local payload="$2"
+    local expected_state="${3:-positive}"
+    local x y width height
+    IFS=',' read -r x y width height <<< "$payload"
+    if [[ ! "$x" =~ ^[0-9]+$ || ! "$y" =~ ^[0-9]+$ \
+        || ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid native Android chat rect for $label: ${payload:-missing}" >&2
+        return 1
+    fi
+    if [[ "$expected_state" == "zero" ]]; then
+        if (( x != 0 || y != 0 || width != 0 || height != 0 )); then
+            echo "ERROR: closed native Android chat $label must be 0,0,0,0: $payload" >&2
+            return 1
         fi
-        sleep 1
-    done
-
-    echo "ERROR: timed out waiting for Android chat tab layout" >&2
-    "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB" | tail -30 >&2 || true
-    return 1
+    elif (( width <= 0 || height <= 0 )); then
+        echo "ERROR: open native Android chat $label must have positive dimensions: $payload" >&2
+        return 1
+    fi
+    printf '%s %s %s %s\n' "$x" "$y" "$width" "$height"
 }
 
-chat_tab_layout_rect() {
-    local tab="$1"
-    local timeout="${2:-8}"
-    local line field payload label x y width height key
-    line="$(wait_for_chat_tab_layout "$timeout")" || return 1
-
-    for field in $line; do
-        [[ "$field" == tab[0-9]=* ]] || continue
-        payload="${field#*=}"
-        IFS=',' read -r label x y width height <<< "$payload"
-        key="$(chat_tab_layout_key "$label")"
-        if [[ "$key" == "$tab" ]]; then
-            printf "%s %s %s %s\n" "$x" "$y" "$width" "$height"
-            return 0
-        fi
-    done
-
-    echo "ERROR: Android chat tab layout did not include $tab: $line" >&2
-    return 1
+native_chat_layout_rect_from_line() {
+    local line="$1"
+    local field="$2"
+    local expected_state="${3:-positive}"
+    local payload
+    payload="$(extract_log_value "$line" "$field")"
+    native_chat_rect_from_payload "$field" "$payload" "$expected_state" || {
+        echo "$line" >&2
+        return 1
+    }
 }
 
-chat_tab_client_x() {
-    local tab="$1"
-    case "$tab" in
-        ALL) echo "$AUTH_CHAT_TAB_ALL_X" ;;
-        CHAT) echo "$AUTH_CHAT_TAB_CHAT_X" ;;
-        QUEST) echo "$AUTH_CHAT_TAB_QUEST_X" ;;
-        GLOBAL) echo "$AUTH_CHAT_TAB_GLOBAL_X" ;;
-        PRIVATE) echo "$AUTH_CHAT_TAB_PRIVATE_X" ;;
-        REPORT) echo "$AUTH_CHAT_TAB_REPORT_X" ;;
-        KEYBOARD) echo "$AUTH_CHAT_TAB_KEYBOARD_X" ;;
+native_chat_filter_rect_from_line() {
+    local line="$1"
+    local filter="$2"
+    local expected_state="${3:-positive}"
+    local payload occurrences
+    occurrences="$(printf '%s\n' "$line" | tr ' ' '\n' | grep -Ec "^filter=${filter}:" || true)"
+    if [[ "$occurrences" != "1" ]]; then
+        echo "ERROR: native Android chat reported $occurrences $filter filters instead of 1" >&2
+        echo "$line" >&2
+        return 1
+    fi
+    payload="$(printf '%s\n' "$line" \
+        | tr ' ' '\n' \
+        | sed -nE "s/^filter=${filter}:([^[:space:]]+)$/\\1/p" \
+        | tail -1)"
+    native_chat_rect_from_payload "filter-$filter" "$payload" "$expected_state" || {
+        echo "$line" >&2
+        return 1
+    }
+}
+
+native_chat_channel_for_filter() {
+    case "$1" in
+        ALL) echo ALL ;;
+        PUBLIC) echo CHAT ;;
+        QUEST) echo QUEST ;;
+        GLOBAL) echo GLOBAL ;;
+        PM) echo PRIVATE ;;
         *)
-            echo "ERROR: unknown Android chat tab '$tab'" >&2
+            echo "ERROR: unknown native Android chat filter '$1'" >&2
             return 1
             ;;
     esac
 }
 
-chat_tab_client_y() {
-    if [[ -n "${AUTH_CHAT_TAB_Y:-}" ]]; then
-        echo "$AUTH_CHAT_TAB_Y"
-        return
+assert_native_chat_rect_in_bounds() {
+    local label="$1"
+    local rect="$2"
+    local logical_width="$3"
+    local logical_height="$4"
+    local x y width height
+    read -r x y width height <<< "$rect"
+    if (( x < 0 || y < 0 || x + width > logical_width || y + height > logical_height )); then
+        echo "ERROR: native Android chat $label is outside ${logical_width}x${logical_height}: $rect" >&2
+        return 1
     fi
-
-    local width height target_width target_full_height orientation capped
-    read -r width height < <(screen_size)
-    read -r target_width target_full_height orientation capped < <(android_viewport_target_for_size "$width" "$height")
-    # Compact Android-profile chat tabs are 32px tall and start at gameHeight - 28.
-    echo $((target_full_height - 12))
 }
 
-tap_chat_tab() {
-    local tab="$1"
-    local client_x client_y rect rect_x rect_y rect_w rect_h
-    if rect="$(chat_tab_layout_rect "$tab" 5 2>/dev/null)"; then
-        read -r rect_x rect_y rect_w rect_h <<< "$rect"
-        client_x=$((rect_x + rect_w / 2))
-        client_y=$((rect_y + rect_h / 2))
-    else
-        client_x="$(chat_tab_client_x "$tab")" || return 1
-        client_y="$(chat_tab_client_y)"
+assert_native_chat_rect_contained() {
+    local label="$1"
+    local rect="$2"
+    local container_label="$3"
+    local container="$4"
+    local x y width height container_x container_y container_width container_height
+    read -r x y width height <<< "$rect"
+    read -r container_x container_y container_width container_height <<< "$container"
+    if (( x < container_x || y < container_y \
+        || x + width > container_x + container_width \
+        || y + height > container_y + container_height )); then
+        echo "ERROR: native Android chat $label is not contained by $container_label: $rect inside $container" >&2
+        return 1
     fi
-    echo "Android chat tab $tab at client $client_x,$client_y"
-    tap_client_xy "$client_x" "$client_y"
+}
+
+assert_native_chat_touch_target() {
+    local label="$1"
+    local rect="$2"
+    local target48="$3"
+    local scale="$4"
+    local density="$5"
+    local x y width height
+    read -r x y width height <<< "$rect"
+    if (( width < target48 || height < target48 )); then
+        echo "ERROR: native Android chat $label ${width}x${height} is below target48=$target48" >&2
+        return 1
+    fi
+    assert_client_rect_extent_at_least_dp "chat-$label" width "$width" "$scale" "$density" 48 || return 1
+    assert_client_rect_extent_at_least_dp "chat-$label" height "$height" "$scale" "$density" 48 || return 1
+}
+
+assert_native_chat_layout() {
+    local line="$1"
+    local viewport_line="$2"
+    local expected_open="$3"
+    local open inline_focused channel ime keyboard_top target48 draft_length
+    local logical_width logical_height viewport_touch48 scale density
+    local launcher history inline sheet composer compose entry rect filter filter_count
+    local entry_x entry_y entry_width entry_height
+    local compose_x compose_y compose_width compose_height
+    local -a filters=(ALL PUBLIC QUEST GLOBAL PM)
+
+    open="$(extract_log_value "$line" open)"
+    inline_focused="$(extract_log_value "$line" inlineFocused)"
+    channel="$(extract_log_value "$line" channel)"
+    ime="$(extract_log_value "$line" ime)"
+    keyboard_top="$(extract_log_value "$line" keyboardTop)"
+    target48="$(extract_log_value "$line" target48)"
+    draft_length="$(extract_log_value "$line" draftLength)"
+    logical_width="$(extract_log_value "$viewport_line" logicalW)"
+    logical_height="$(extract_log_value "$viewport_line" logicalH)"
+    viewport_touch48="$(extract_log_value "$viewport_line" touch48)"
+    scale="$(extract_log_value "$viewport_line" scale)"
+    density="$(extract_log_value "$viewport_line" density)"
+
+    if [[ "$open" != "$expected_open" \
+        || ( "$inline_focused" != "true" && "$inline_focused" != "false" ) \
+        || ( "$ime" != "true" && "$ime" != "false" ) \
+        || ( "$ime" == "true" && ! "$keyboard_top" =~ ^[0-9]+$ ) ]]; then
+        echo "ERROR: unexpected native Android chat open/IME state: $line" >&2
+        return 1
+    fi
+    case "$channel" in
+        ALL|CHAT|QUEST|GLOBAL|PRIVATE) ;;
+        *)
+            echo "ERROR: native Android chat reported invalid channel '$channel': $line" >&2
+            return 1
+            ;;
+    esac
+    if [[ ! "$target48" =~ ^[0-9]+$ || "$target48" -le 0 \
+        || ! "$viewport_touch48" =~ ^[0-9]+$ || "$viewport_touch48" -le 0 \
+        || "$target48" -ne "$viewport_touch48" \
+        || ! "$draft_length" =~ ^[0-9]+$ \
+        || ! "$logical_width" =~ ^[0-9]+$ || "$logical_width" -le 0 \
+        || ! "$logical_height" =~ ^[0-9]+$ || "$logical_height" -le 0 ]]; then
+        echo "ERROR: native Android chat/viewport telemetry is incomplete or inconsistent" >&2
+        echo "$line" >&2
+        echo "$viewport_line" >&2
+        return 1
+    fi
+    if ! is_positive_log_number "$scale" || ! is_positive_log_number "$density"; then
+        echo "ERROR: native Android chat needs positive viewport scale/density: $viewport_line" >&2
+        return 1
+    fi
+
+    launcher="$(native_chat_layout_rect_from_line "$line" launcher positive)" || return 1
+    history="$(native_chat_layout_rect_from_line "$line" history positive)" || return 1
+    inline="$(native_chat_layout_rect_from_line "$line" inline positive)" || return 1
+    assert_native_chat_rect_in_bounds launcher "$launcher" "$logical_width" "$logical_height" || return 1
+    assert_native_chat_touch_target launcher "$launcher" "$target48" "$scale" "$density" || return 1
+    assert_native_chat_rect_in_bounds history "$history" "$logical_width" "$logical_height" || return 1
+    assert_native_chat_rect_contained history "$history" launcher "$launcher" || return 1
+    assert_native_chat_touch_target history "$history" "$target48" "$scale" "$density" || return 1
+    assert_native_chat_rect_in_bounds inline "$inline" "$logical_width" "$logical_height" || return 1
+    assert_native_chat_rect_contained inline "$inline" launcher "$launcher" || return 1
+    assert_native_chat_touch_target inline "$inline" "$target48" "$scale" "$density" || return 1
+
+    if [[ "$ime" == "true" && "$inline_focused" == "true" ]]; then
+        local launcher_x launcher_y launcher_width launcher_height
+        read -r launcher_x launcher_y launcher_width launcher_height <<< "$launcher"
+        if (( launcher_y + launcher_height > keyboard_top )); then
+            echo "ERROR: native Android inline chat is covered by the IME: launcher=$launcher keyboardTop=$keyboard_top" >&2
+            return 1
+        fi
+    fi
+
+    filter_count="$(printf '%s\n' "$line" | tr ' ' '\n' | grep -c '^filter=' || true)"
+    if [[ "$filter_count" != "5" ]]; then
+        echo "ERROR: native Android chat reported $filter_count filters instead of 5: $line" >&2
+        return 1
+    fi
+
+    if [[ "$expected_open" == "true" ]]; then
+        if [[ "$inline_focused" != "false" ]]; then
+            echo "ERROR: native Android history sheet cannot also own inline focus: $line" >&2
+            return 1
+        fi
+        sheet="$(native_chat_layout_rect_from_line "$line" sheet positive)" || return 1
+        composer="$(native_chat_layout_rect_from_line "$line" composer positive)" || return 1
+        compose="$(native_chat_layout_rect_from_line "$line" compose positive)" || return 1
+        entry="$(native_chat_layout_rect_from_line "$line" entry positive)" || return 1
+        assert_native_chat_rect_in_bounds sheet "$sheet" "$logical_width" "$logical_height" || return 1
+        for filter in "${filters[@]}"; do
+            rect="$(native_chat_filter_rect_from_line "$line" "$filter" positive)" || return 1
+            assert_native_chat_rect_in_bounds "filter-$filter" "$rect" "$logical_width" "$logical_height" || return 1
+            assert_native_chat_rect_contained "filter-$filter" "$rect" sheet "$sheet" || return 1
+            assert_native_chat_touch_target "filter-$filter" "$rect" "$target48" "$scale" "$density" || return 1
+        done
+        assert_native_chat_rect_in_bounds composer "$composer" "$logical_width" "$logical_height" || return 1
+        assert_native_chat_rect_contained composer "$composer" sheet "$sheet" || return 1
+        assert_native_chat_touch_target composer "$composer" "$target48" "$scale" "$density" || return 1
+        assert_native_chat_rect_in_bounds compose "$compose" "$logical_width" "$logical_height" || return 1
+        assert_native_chat_rect_contained compose "$compose" composer "$composer" || return 1
+        assert_native_chat_touch_target compose "$compose" "$target48" "$scale" "$density" || return 1
+        assert_native_chat_rect_in_bounds entry "$entry" "$logical_width" "$logical_height" || return 1
+        assert_native_chat_rect_contained entry "$entry" composer "$composer" || return 1
+        read -r entry_x entry_y entry_width entry_height <<< "$entry"
+        if (( entry_height != 14 )); then
+            echo "ERROR: native Android chat entry visual must remain 14 client px tall inside its composer target: $entry" >&2
+            return 1
+        fi
+        read -r compose_x compose_y compose_width compose_height <<< "$compose"
+		if [[ "$ime" == "true" ]] && (( compose_y + compose_height > keyboard_top )); then
+			echo "ERROR: native Android chat composer is covered by the IME: composer=$composer keyboardTop=$keyboard_top" >&2
+			return 1
+		fi
+        if rects_overlap "$entry_x" "$entry_y" "$entry_width" "$entry_height" \
+            "$compose_x" "$compose_y" "$compose_width" "$compose_height"; then
+            echo "ERROR: native Android chat entry overlaps its compose action: entry=$entry compose=$compose" >&2
+            return 1
+        fi
+    else
+        native_chat_layout_rect_from_line "$line" sheet zero >/dev/null || return 1
+        for filter in "${filters[@]}"; do
+            native_chat_filter_rect_from_line "$line" "$filter" zero >/dev/null || return 1
+        done
+        native_chat_layout_rect_from_line "$line" composer zero >/dev/null || return 1
+        native_chat_layout_rect_from_line "$line" compose zero >/dev/null || return 1
+        if [[ "$inline_focused" == "true" ]]; then
+            entry="$(native_chat_layout_rect_from_line "$line" entry positive)" || return 1
+            assert_native_chat_rect_in_bounds entry "$entry" "$logical_width" "$logical_height" || return 1
+            assert_native_chat_rect_contained entry "$entry" inline "$inline" || return 1
+        else
+            native_chat_layout_rect_from_line "$line" entry zero >/dev/null || return 1
+        fi
+    fi
+
+    echo "Verified native Android chat layout open=$open inlineFocused=$inline_focused channel=$channel ime=$ime with logged, in-bounds 48dp controls."
+}
+
+tap_native_chat_launcher_from_line() {
+    local line="$1"
+    local rect x y width height
+    rect="$(native_chat_layout_rect_from_line "$line" history positive)" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android native chat history at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
+native_chat_launcher_client_point_from_line() {
+	local line="$1"
+	local rect x y width height
+	rect="$(native_chat_layout_rect_from_line "$line" history positive)" || return 1
+	read -r x y width height <<< "$rect"
+	echo "$((x + width / 2)) $((y + height / 2))"
+}
+
+tap_native_chat_inline_from_line() {
+    local line="$1"
+    local rect x y width height
+    rect="$(native_chat_layout_rect_from_line "$line" inline positive)" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android native inline chat field at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
+native_chat_rect_client_point_from_line() {
+	local line="$1"
+	local field="$2"
+	local rect x y width height
+	rect="$(native_chat_layout_rect_from_line "$line" "$field" positive)" || return 1
+	read -r x y width height <<< "$rect"
+	echo "$((x + width / 2)) $((y + height / 2))"
+}
+
+tap_native_chat_filter_from_line() {
+    local line="$1"
+    local filter="$2"
+    local rect x y width height
+    rect="$(native_chat_filter_rect_from_line "$line" "$filter" positive)" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android native chat filter $filter at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
+tap_native_chat_rect_from_line() {
+    local line="$1"
+    local field="$2"
+    local rect x y width height
+    rect="$(native_chat_layout_rect_from_line "$line" "$field" positive)" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android native chat $field at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy $((x + width / 2)) $((y + height / 2))
 }
 
 chat_message_log_token() {
@@ -2664,10 +3766,1039 @@ wait_for_chat_send() {
     return 1
 }
 
+assert_single_chat_send() {
+    local expected="$1"
+    local expected_token expected_length count line message length
+    expected_token="$(chat_message_log_token "$expected")"
+    expected_length="${#expected}"
+    count="$("$ADB" logcat -d -v raw 2>/dev/null \
+        | tr -d '\r' \
+        | grep -c "ANDROID_SMOKE_CHAT_SEND " || true)"
+    line="$("$ADB" logcat -d -v raw 2>/dev/null \
+        | tr -d '\r' \
+        | grep "ANDROID_SMOKE_CHAT_SEND " \
+        | tail -1 || true)"
+    message="$(extract_log_value "$line" message)"
+    length="$(extract_log_value "$line" length)"
+    if [[ "$count" != "1" || "$message" != "$expected_token" \
+        || "$length" != "$expected_length" ]]; then
+        echo "ERROR: expected exactly one native Android chat send for '$expected_token' (length=$expected_length); count=$count" >&2
+        native_chat_log_tail
+        return 1
+    fi
+    echo "Verified exactly one native Android chat send: $line"
+}
+
 extract_log_value() {
     local line="$1"
     local key="$2"
     printf "%s\n" "$line" | tr ' ' '\n' | sed -n "s/^${key}=//p" | tail -1
+}
+
+mobile_hub_log_tail() {
+    "$ADB" logcat -d -v raw 2>/dev/null \
+        | tr -d '\r' \
+        | grep -E "ANDROID_SMOKE_HUB_(LAYOUT|ACTION)" \
+        | tail -60 >&2 || true
+}
+
+mobile_hub_expected_panel() {
+    case "$1" in
+        STATS) echo stats ;;
+        MAP) echo map ;;
+        SOCIAL) echo social ;;
+        SETTINGS) echo settings ;;
+        INVENTORY) echo inventory ;;
+        MAGIC) echo magic ;;
+        PRAYER) echo prayer ;;
+        *)
+            echo "ERROR: unknown Android mobile hub control '$1'" >&2
+            return 1
+            ;;
+    esac
+}
+
+mobile_hub_expected_side() {
+    case "$1" in
+        STATS|MAP|SOCIAL|SETTINGS) echo left ;;
+        INVENTORY|MAGIC|PRAYER) echo right ;;
+        *)
+            echo "ERROR: unknown Android mobile hub control '$1'" >&2
+            return 1
+            ;;
+    esac
+}
+
+wait_for_mobile_hub_layout() {
+    local expected_orientation="$1"
+    local timeout="${2:-20}"
+    local deadline=$((SECONDS + timeout))
+    local line orientation logical generation
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_SMOKE_HUB_LAYOUT " \
+            | grep "orientation=$expected_orientation " \
+            | tail -1 || true)"
+        orientation="$(extract_log_value "$line" orientation)"
+        logical="$(extract_log_value "$line" logical)"
+        generation="$(extract_log_value "$line" generation)"
+        if [[ "$orientation" == "$expected_orientation" \
+            && "$logical" =~ ^[0-9]+x[0-9]+$ \
+            && "$generation" =~ ^[0-9]+$ ]]; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android mobile hub orientation=$expected_orientation" >&2
+    mobile_hub_log_tail
+    return 1
+}
+
+mobile_hub_rect_from_payload() {
+    local label="$1"
+    local payload="$2"
+    local allow_empty="${3:-0}"
+    local x y width height
+    payload="${payload#<}"
+    payload="${payload%>}"
+    IFS=',' read -r x y width height <<< "$payload"
+    if [[ ! "$x" =~ ^[0-9]+$ || ! "$y" =~ ^[0-9]+$ \
+        || ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid Android mobile hub rect for $label: ${payload:-missing}" >&2
+        return 1
+    fi
+    if [[ "$allow_empty" == "1" ]]; then
+        if (( (width == 0) != (height == 0) )); then
+            echo "ERROR: Android mobile hub $label has a partially empty rect: $payload" >&2
+            return 1
+        fi
+    elif (( width <= 0 || height <= 0 )); then
+        echo "ERROR: Android mobile hub $label must have positive dimensions: $payload" >&2
+        return 1
+    fi
+    printf "%s %s %s %s\n" "$x" "$y" "$width" "$height"
+}
+
+mobile_hub_layout_rect_from_line() {
+    local line="$1"
+    local field="$2"
+    local allow_empty="${3:-0}"
+    local payload
+    payload="$(extract_log_value "$line" "$field")"
+    mobile_hub_rect_from_payload "$field" "$payload" "$allow_empty" || {
+        echo "$line" >&2
+        return 1
+    }
+}
+
+mobile_hub_target_rect_from_line() {
+    local line="$1"
+    local key="$2"
+    local payload
+    payload="$(printf '%s\n' "$line" \
+        | tr ' ' '\n' \
+        | sed -nE "s/^target=<?${key}:([^>]*)>?$/\\1/p" \
+        | tail -1)"
+    mobile_hub_rect_from_payload "target-$key" "$payload" 0 || {
+        echo "$line" >&2
+        return 1
+    }
+}
+
+mobile_hub_target_occurrences() {
+    local line="$1"
+    local key="$2"
+    printf '%s\n' "$line" \
+        | tr ' ' '\n' \
+        | grep -Ec "^target=<?${key}:" || true
+}
+
+mobile_stats_subtab_expected_name() {
+    case "$1" in
+        STATS) echo stats ;;
+        QUESTS) echo quests ;;
+        LOOT) echo loot ;;
+        BEASTS) echo beasts ;;
+        *)
+            echo "ERROR: unknown Android Stats subtab '$1'" >&2
+            return 1
+            ;;
+    esac
+}
+
+mobile_stats_subtab_target_rect_from_line() {
+    local line="$1"
+    local key="$2"
+    local payload
+    payload="$(printf '%s\n' "$line" \
+        | tr ' ' '\n' \
+        | sed -nE "s/^playerInfoTarget=<?${key}:([^>]*)>?$/\\1/p" \
+        | tail -1)"
+    mobile_hub_rect_from_payload "player-info-$key" "$payload" 0 || {
+        echo "$line" >&2
+        return 1
+    }
+}
+
+mobile_stats_subtab_target_occurrences() {
+    local line="$1"
+    local key="$2"
+    printf '%s\n' "$line" \
+        | tr ' ' '\n' \
+        | grep -Ec "^playerInfoTarget=<?${key}:" || true
+}
+
+wait_for_mobile_stats_subtab() {
+    local expected_key="$1"
+    local timeout="${2:-15}"
+    local expected_name deadline line active
+    expected_name="$(mobile_stats_subtab_expected_name "$expected_key")" || return 1
+    deadline=$((SECONDS + timeout))
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_SMOKE_HUB_LAYOUT " \
+            | grep "orientation=portrait " \
+            | grep "panel=stats " \
+            | tail -1 || true)"
+        active="$(extract_log_value "$line" playerInfoSubTab)"
+        if [[ "$active" == "$expected_name" ]]; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: Android Stats drawer did not select subtab=$expected_name" >&2
+    mobile_hub_log_tail
+    return 1
+}
+
+assert_mobile_stats_subtab_layout() {
+    local line="$1"
+    local viewport_line="$2"
+    local expected_key="$3"
+    local expected_name active panel side orientation touch48 scale density
+    local player_info_tab_h quest_row_h bestiary_row_h bestiary_control_h
+    local drawer_rect quest_viewport bestiary_field
+    local drawer_x drawer_y drawer_width drawer_height
+    local quest_x quest_y quest_width quest_height
+    local field_x field_y field_width field_height
+    local key occurrences rect x y width height seen_index seen_count=0
+    local -a keys=(STATS QUESTS LOOT BEASTS)
+    local -a seen_x=() seen_y=() seen_width=() seen_height=()
+
+    expected_name="$(mobile_stats_subtab_expected_name "$expected_key")" || return 1
+    active="$(extract_log_value "$line" playerInfoSubTab)"
+    panel="$(extract_log_value "$line" panel)"
+    side="$(extract_log_value "$line" panelSide)"
+    orientation="$(extract_log_value "$line" orientation)"
+    touch48="$(extract_log_value "$viewport_line" touch48)"
+    scale="$(extract_log_value "$viewport_line" scale)"
+    density="$(extract_log_value "$viewport_line" density)"
+    player_info_tab_h="$(extract_log_value "$line" playerInfoTabH)"
+    quest_row_h="$(extract_log_value "$line" questRowH)"
+    bestiary_row_h="$(extract_log_value "$line" bestiaryRowH)"
+    bestiary_control_h="$(extract_log_value "$line" bestiaryControlH)"
+
+    if [[ "$orientation" != "portrait" || "$panel" != "stats" || "$side" != "left" \
+        || "$active" != "$expected_name" ]]; then
+        echo "ERROR: Android Stats subtab expected portrait stats/left/$expected_name: $line" >&2
+        return 1
+    fi
+    if [[ ! "$touch48" =~ ^[0-9]+$ || "$touch48" -le 0 ]] \
+        || ! is_positive_log_number "$scale" || ! is_positive_log_number "$density"; then
+        echo "ERROR: Android Stats subtab needs valid physical viewport telemetry: $viewport_line" >&2
+        return 1
+    fi
+
+    local metric value
+    for metric in playerInfoTabH questRowH bestiaryRowH bestiaryControlH; do
+        case "$metric" in
+            playerInfoTabH) value="$player_info_tab_h" ;;
+            questRowH) value="$quest_row_h" ;;
+            bestiaryRowH) value="$bestiary_row_h" ;;
+            bestiaryControlH) value="$bestiary_control_h" ;;
+        esac
+        if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < touch48 )); then
+            echo "ERROR: Android Stats $metric=$value is below touch48=$touch48" >&2
+            return 1
+        fi
+        assert_client_rect_extent_at_least_dp "stats-$metric" height \
+            "$value" "$scale" "$density" 48 || return 1
+    done
+
+    drawer_rect="$(mobile_hub_layout_rect_from_line "$line" drawer)" || return 1
+    quest_viewport="$(mobile_hub_layout_rect_from_line "$line" questViewport)" || return 1
+    bestiary_field="$(mobile_hub_layout_rect_from_line "$line" bestiaryField)" || return 1
+    read -r drawer_x drawer_y drawer_width drawer_height <<< "$drawer_rect"
+    read -r quest_x quest_y quest_width quest_height <<< "$quest_viewport"
+    read -r field_x field_y field_width field_height <<< "$bestiary_field"
+
+    if (( quest_x < drawer_x || quest_y < drawer_y \
+        || quest_x + quest_width > drawer_x + drawer_width \
+        || quest_y + quest_height > drawer_y + drawer_height \
+        || quest_height < quest_row_h )); then
+        echo "ERROR: Android Quest viewport is outside its drawer or cannot show one touch row: quest=$quest_viewport drawer=$drawer_rect" >&2
+        return 1
+    fi
+    if (( field_x < drawer_x || field_y < drawer_y \
+        || field_x + field_width > drawer_x + drawer_width \
+        || field_y + field_height > drawer_y + drawer_height \
+        || field_height != bestiary_control_h || field_height < bestiary_row_h )); then
+        echo "ERROR: Android Bestiary field/control geometry is outside its drawer or below its row target: field=$bestiary_field drawer=$drawer_rect" >&2
+        return 1
+    fi
+    assert_client_rect_extent_at_least_dp "stats-quest-viewport" width \
+        "$quest_width" "$scale" "$density" 48 || return 1
+    assert_client_rect_extent_at_least_dp "stats-bestiary-control" width \
+        "$field_width" "$scale" "$density" 48 || return 1
+    assert_client_rect_extent_at_least_dp "stats-bestiary-control" height \
+        "$field_height" "$scale" "$density" 48 || return 1
+
+    for key in "${keys[@]}"; do
+        occurrences="$(mobile_stats_subtab_target_occurrences "$line" "$key")"
+        if [[ "$occurrences" != "1" ]]; then
+            echo "ERROR: Android Stats reported $occurrences target records for $key instead of 1" >&2
+            return 1
+        fi
+        rect="$(mobile_stats_subtab_target_rect_from_line "$line" "$key")" || return 1
+        read -r x y width height <<< "$rect"
+        if (( x < drawer_x || y < drawer_y \
+            || x + width > drawer_x + drawer_width \
+            || y + height > drawer_y + drawer_height \
+            || width < touch48 || height < touch48 \
+            || height != player_info_tab_h )); then
+            echo "ERROR: Android Stats $key target is outside the drawer or below 48dp: target=$rect drawer=$drawer_rect" >&2
+            return 1
+        fi
+        for ((seen_index = 0; seen_index < seen_count; seen_index++)); do
+            if rects_overlap "$x" "$y" "$width" "$height" \
+                "${seen_x[seen_index]}" "${seen_y[seen_index]}" \
+                "${seen_width[seen_index]}" "${seen_height[seen_index]}"; then
+                echo "ERROR: Android Stats subtab targets overlap at $key" >&2
+                return 1
+            fi
+        done
+        seen_x[seen_count]="$x"
+        seen_y[seen_count]="$y"
+        seen_width[seen_count]="$width"
+        seen_height[seen_count]="$height"
+        seen_count=$((seen_count + 1))
+        assert_client_rect_extent_at_least_dp "stats-subtab-$key" width \
+            "$width" "$scale" "$density" 48 || return 1
+        assert_client_rect_extent_at_least_dp "stats-subtab-$key" height \
+            "$height" "$scale" "$density" 48 || return 1
+    done
+
+    echo "Verified native Android Stats subtab=$expected_name with drawer-contained, physical 48dp tabs/rows/controls."
+}
+
+tap_mobile_stats_subtab_from_layout() {
+    local line="$1"
+    local key="$2"
+    local viewport_line="$3"
+    local rect x y width height
+    rect="$(mobile_stats_subtab_target_rect_from_line "$line" "$key")" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android Stats subtab $key at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy_from_viewport $((x + width / 2)) $((y + height / 2)) \
+        "$viewport_line"
+}
+
+rects_overlap() {
+    local ax="$1" ay="$2" aw="$3" ah="$4"
+    local bx="$5" by="$6" bw="$7" bh="$8"
+    (( ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by ))
+}
+
+assert_client_rect_extent_at_least_dp() {
+    local label="$1"
+    local dimension="$2"
+    local client_pixels="$3"
+    local scale="$4"
+    local density="$5"
+    local requested_dp="${6:-48}"
+    awk -v label="$label" -v dimension="$dimension" -v pixels="$client_pixels" -v scale="$scale" \
+        -v density="$density" -v requested="$requested_dp" 'BEGIN {
+        achieved = pixels * scale / density;
+        if (achieved + 0.05 < requested) {
+            printf "ERROR: Android %s is only %.3fdp in %s (%d client px, scale=%s density=%s)\n", label, achieved, dimension, pixels, scale, density > "/dev/stderr";
+            exit 1;
+        }
+        printf "Verified Android %s %s: clientPx=%d achievedDp=%.3f\n", label, dimension, pixels, achieved;
+    }'
+}
+
+assert_mobile_hub_layout() {
+    local line="$1"
+    local viewport_line="$2"
+    local expected_orientation="$3"
+    local expected_panel="$4"
+    local expected_side="$5"
+    local orientation generation logical panel panel_side target48
+    local inventory_columns inventory_rows magic_list_h magic_row_h stats_row_h
+    local player_info_tab_h social_tab_h settings_tab_h expected_inventory_columns expected_inventory_rows expected_magic_rows
+    local logical_width logical_height viewport_width viewport_height touch48 scale density
+    local left_rect right_rect chat_rect drawer_rect connector_rect
+    local left_x left_y left_width left_height right_x right_y right_width right_height
+    local chat_x chat_y chat_width chat_height drawer_x drawer_y drawer_width drawer_height
+    local connector_x connector_y connector_width connector_height anchor_key anchor_center_y
+    local key expected_control_side rail_x rail_y rail_width rail_height rect x y width height
+    local seen_index seen_count=0 target_count=0 occurrences adjacency_limit gap
+    local -a keys=(STATS MAP SOCIAL SETTINGS INVENTORY MAGIC PRAYER)
+    local -a seen_x=() seen_y=() seen_width=() seen_height=()
+
+    orientation="$(extract_log_value "$line" orientation)"
+    generation="$(extract_log_value "$line" generation)"
+    logical="$(extract_log_value "$line" logical)"
+    panel="$(extract_log_value "$line" panel)"
+    panel_side="$(extract_log_value "$line" panelSide)"
+    target48="$(extract_log_value "$line" target48)"
+    inventory_columns="$(extract_log_value "$line" inventoryColumns)"
+    inventory_rows="$(extract_log_value "$line" inventoryRows)"
+    magic_list_h="$(extract_log_value "$line" magicListH)"
+    magic_row_h="$(extract_log_value "$line" magicRowH)"
+    stats_row_h="$(extract_log_value "$line" statsRowH)"
+    player_info_tab_h="$(extract_log_value "$line" playerInfoTabH)"
+    social_tab_h="$(extract_log_value "$line" socialTabH)"
+    settings_tab_h="$(extract_log_value "$line" settingsTabH)"
+    IFS='x' read -r logical_width logical_height <<< "$logical"
+    viewport_width="$(extract_log_value "$viewport_line" logicalW)"
+    viewport_height="$(extract_log_value "$viewport_line" logicalH)"
+    touch48="$(extract_log_value "$viewport_line" touch48)"
+    scale="$(extract_log_value "$viewport_line" scale)"
+    density="$(extract_log_value "$viewport_line" density)"
+
+    if [[ "$orientation" != "$expected_orientation" || ! "$generation" =~ ^[0-9]+$ \
+        || ! "$logical_width" =~ ^[0-9]+$ || ! "$logical_height" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: unexpected Android mobile hub orientation/generation/logical size: $line" >&2
+        return 1
+    fi
+    if [[ "$panel" != "$expected_panel" || "$panel_side" != "$expected_side" ]]; then
+        echo "ERROR: Android mobile hub expected panel=$expected_panel panelSide=$expected_side: $line" >&2
+        return 1
+    fi
+    if (( logical_width <= 0 || logical_height <= 0 )) \
+        || [[ ! "$viewport_width" =~ ^[0-9]+$ || ! "$viewport_height" =~ ^[0-9]+$ \
+            || ! "$touch48" =~ ^[0-9]+$ || "$touch48" -le 0 ]]; then
+        echo "ERROR: Android mobile hub/viewport telemetry has an invalid dimension" >&2
+        echo "$line" >&2
+        echo "$viewport_line" >&2
+        return 1
+    fi
+    if ! is_positive_log_number "$scale" || ! is_positive_log_number "$density"; then
+        echo "ERROR: Android mobile hub needs positive viewport scale/density: $viewport_line" >&2
+        return 1
+    fi
+    if (( logical_width != viewport_width || logical_height != viewport_height )); then
+        echo "ERROR: Android mobile hub/client viewport mismatch: hub=${logical_width}x${logical_height} viewport=${viewport_width}x${viewport_height}" >&2
+        return 1
+    fi
+    adjacency_limit="$touch48"
+    if [[ -n "$target48" ]]; then
+        if [[ ! "$target48" =~ ^[0-9]+$ || "$target48" -le 0 ]]; then
+            echo "ERROR: Android mobile hub target48 metadata is invalid: $target48" >&2
+            return 1
+        fi
+        if (( target48 != touch48 )); then
+            echo "ERROR: Android mobile hub target48=$target48 differs from viewport touch48=$touch48" >&2
+            return 1
+        fi
+        adjacency_limit="$target48"
+    fi
+    if [[ "$expected_orientation" == "portrait" ]]; then
+        expected_inventory_columns=5
+        expected_inventory_rows=6
+        expected_magic_rows=4
+    else
+        expected_inventory_columns=6
+        expected_inventory_rows=5
+        expected_magic_rows=3
+    fi
+    if [[ "$inventory_columns" != "$expected_inventory_columns" \
+        || "$inventory_rows" != "$expected_inventory_rows" ]]; then
+        echo "ERROR: Android $expected_orientation inventory expected ${expected_inventory_columns}x${expected_inventory_rows}, got ${inventory_columns}x${inventory_rows}" >&2
+        return 1
+    fi
+    local mobile_dimension mobile_value
+    for mobile_dimension in magicRowH statsRowH playerInfoTabH socialTabH settingsTabH; do
+        case "$mobile_dimension" in
+            magicRowH) mobile_value="$magic_row_h" ;;
+            statsRowH) mobile_value="$stats_row_h" ;;
+            playerInfoTabH) mobile_value="$player_info_tab_h" ;;
+            socialTabH) mobile_value="$social_tab_h" ;;
+            settingsTabH) mobile_value="$settings_tab_h" ;;
+        esac
+        if [[ ! "$mobile_value" =~ ^[0-9]+$ ]] || (( mobile_value < touch48 )); then
+            echo "ERROR: Android hub $mobile_dimension=$mobile_value is below touch48=$touch48" >&2
+            return 1
+        fi
+    done
+    if [[ ! "$magic_list_h" =~ ^[0-9]+$ ]] \
+        || (( magic_list_h != magic_row_h * expected_magic_rows )); then
+        echo "ERROR: Android $expected_orientation Magic/Prayer viewport expected $expected_magic_rows touch rows, got listH=$magic_list_h rowH=$magic_row_h" >&2
+        return 1
+    fi
+
+    left_rect="$(mobile_hub_layout_rect_from_line "$line" left)" || return 1
+    right_rect="$(mobile_hub_layout_rect_from_line "$line" right)" || return 1
+    chat_rect="$(mobile_hub_layout_rect_from_line "$line" chat)" || return 1
+    drawer_rect="$(mobile_hub_layout_rect_from_line "$line" drawer 1)" || return 1
+    connector_rect="$(mobile_hub_layout_rect_from_line "$line" connector 1)" || return 1
+    read -r left_x left_y left_width left_height <<< "$left_rect"
+    read -r right_x right_y right_width right_height <<< "$right_rect"
+    read -r chat_x chat_y chat_width chat_height <<< "$chat_rect"
+    read -r drawer_x drawer_y drawer_width drawer_height <<< "$drawer_rect"
+    read -r connector_x connector_y connector_width connector_height <<< "$connector_rect"
+
+    local layout_label layout_x layout_y layout_width layout_height
+    for layout_label in left right chat; do
+        case "$layout_label" in
+            left) read -r layout_x layout_y layout_width layout_height <<< "$left_rect" ;;
+            right) read -r layout_x layout_y layout_width layout_height <<< "$right_rect" ;;
+            chat) read -r layout_x layout_y layout_width layout_height <<< "$chat_rect" ;;
+        esac
+        if (( layout_x + layout_width > logical_width || layout_y + layout_height > logical_height )); then
+            echo "ERROR: Android mobile hub $layout_label is outside logical bounds: $layout_x $layout_y $layout_width $layout_height" >&2
+            return 1
+        fi
+    done
+    if rects_overlap "$left_x" "$left_y" "$left_width" "$left_height" \
+        "$right_x" "$right_y" "$right_width" "$right_height"; then
+        echo "ERROR: Android mobile hub left and right rails overlap" >&2
+        return 1
+    fi
+
+    for key in "${keys[@]}"; do
+        occurrences="$(mobile_hub_target_occurrences "$line" "$key")"
+        if [[ "$occurrences" != "1" ]]; then
+            echo "ERROR: Android mobile hub reported $occurrences target records for $key instead of 1" >&2
+            return 1
+        fi
+        target_count=$((target_count + occurrences))
+        expected_control_side="$(mobile_hub_expected_side "$key")" || return 1
+        if [[ "$expected_control_side" == "left" ]]; then
+            rail_x="$left_x"
+            rail_y="$left_y"
+            rail_width="$left_width"
+            rail_height="$left_height"
+        else
+            rail_x="$right_x"
+            rail_y="$right_y"
+            rail_width="$right_width"
+            rail_height="$right_height"
+        fi
+        rect="$(mobile_hub_target_rect_from_line "$line" "$key")" || return 1
+        read -r x y width height <<< "$rect"
+        if (( x < rail_x || y < rail_y || x + width > rail_x + rail_width \
+            || y + height > rail_y + rail_height || x + width > logical_width \
+            || y + height > logical_height )); then
+            echo "ERROR: Android mobile hub $key is outside its $expected_control_side rail/logical bounds: $rect" >&2
+            return 1
+        fi
+        for ((seen_index = 0; seen_index < seen_count; seen_index++)); do
+            if rects_overlap "$x" "$y" "$width" "$height" \
+                "${seen_x[seen_index]}" "${seen_y[seen_index]}" \
+                "${seen_width[seen_index]}" "${seen_height[seen_index]}"; then
+                echo "ERROR: Android mobile hub targets overlap at $key" >&2
+                return 1
+            fi
+        done
+        if rects_overlap "$x" "$y" "$width" "$height" \
+            "$chat_x" "$chat_y" "$chat_width" "$chat_height"; then
+            echo "ERROR: Android mobile hub $key overlaps the chat control" >&2
+            return 1
+        fi
+        seen_x[seen_count]="$x"
+        seen_y[seen_count]="$y"
+        seen_width[seen_count]="$width"
+        seen_height[seen_count]="$height"
+        seen_count=$((seen_count + 1))
+        if (( width < touch48 || height < touch48 )); then
+            echo "ERROR: Android mobile hub $key ${width}x${height} is below touch48=$touch48 on one axis" >&2
+            return 1
+        fi
+        assert_client_rect_extent_at_least_dp "hub-$key" width "$width" "$scale" "$density" 48 || return 1
+        assert_client_rect_extent_at_least_dp "hub-$key" height "$height" "$scale" "$density" 48 || return 1
+    done
+
+    if (( target_count != 7 )); then
+        echo "ERROR: Android mobile hub reported $target_count required targets instead of 7" >&2
+        return 1
+    fi
+    occurrences="$(printf '%s\n' "$line" | tr ' ' '\n' | grep -Ec '^target=' || true)"
+    if [[ "$occurrences" != "7" ]]; then
+        echo "ERROR: Android mobile hub reported $occurrences total target records instead of 7" >&2
+        return 1
+    fi
+
+    if [[ "$expected_panel" == "none" ]]; then
+        if [[ "$expected_side" != "none" || "$drawer_width" != "0" || "$drawer_height" != "0" \
+            || "$connector_width" != "0" || "$connector_height" != "0" ]]; then
+            echo "ERROR: Android mobile hub closed state must use panelSide=none and empty drawer/connector rects: $line" >&2
+            return 1
+        fi
+    else
+        if (( drawer_width <= 0 || drawer_height <= 0 \
+            || drawer_x + drawer_width > logical_width \
+            || drawer_y + drawer_height > logical_height )); then
+            echo "ERROR: Android mobile hub open drawer is outside logical bounds: $drawer_rect" >&2
+            return 1
+        fi
+        if [[ "$expected_side" == "left" ]]; then
+            if (( drawer_x < left_x + left_width )); then
+                echo "ERROR: Android mobile hub left drawer overlaps or opens outside its left rail: $drawer_rect" >&2
+                return 1
+            fi
+            gap=$((drawer_x - (left_x + left_width)))
+        elif [[ "$expected_side" == "right" ]]; then
+            if (( drawer_x + drawer_width > right_x )); then
+                echo "ERROR: Android mobile hub right drawer overlaps or opens outside its right rail: $drawer_rect" >&2
+                return 1
+            fi
+            gap=$((right_x - (drawer_x + drawer_width)))
+        else
+            echo "ERROR: Android mobile hub open panel has invalid side '$expected_side'" >&2
+            return 1
+        fi
+        if (( gap < 0 || gap > adjacency_limit )); then
+            echo "ERROR: Android mobile hub $expected_side drawer gap=$gap is not adjacent (limit=$adjacency_limit)" >&2
+            return 1
+        fi
+        case "$expected_panel" in
+            stats) anchor_key=STATS ;;
+            map) anchor_key=MAP ;;
+            social) anchor_key=SOCIAL ;;
+            settings) anchor_key=SETTINGS ;;
+            inventory) anchor_key=INVENTORY ;;
+            magic) anchor_key=MAGIC ;;
+            prayer) anchor_key=PRAYER ;;
+            *) echo "ERROR: Android mobile hub has unknown open panel '$expected_panel'" >&2; return 1 ;;
+        esac
+        rect="$(mobile_hub_target_rect_from_line "$line" "$anchor_key")" || return 1
+        read -r x y width height <<< "$rect"
+        anchor_center_y=$((y + height / 2))
+        if (( anchor_center_y < drawer_y || anchor_center_y >= drawer_y + drawer_height )); then
+            echo "ERROR: Android mobile hub $expected_panel drawer is detached vertically from $anchor_key: drawer=$drawer_rect target=$rect" >&2
+            return 1
+        fi
+        if (( connector_width <= 0 || connector_height <= 0 \
+            || connector_x < 0 || connector_y < drawer_y \
+            || connector_x + connector_width > logical_width \
+            || connector_y + connector_height > drawer_y + drawer_height )); then
+            echo "ERROR: Android mobile hub connector is missing/outside drawer bounds: $connector_rect drawer=$drawer_rect" >&2
+            return 1
+        fi
+        if [[ "$expected_side" == "left" ]]; then
+            if (( connector_x > left_x + left_width \
+                || connector_x + connector_width < drawer_x )); then
+                echo "ERROR: Android left drawer connector does not bridge rail and drawer: $connector_rect" >&2
+                return 1
+            fi
+        else
+            if (( connector_x > drawer_x + drawer_width \
+                || connector_x + connector_width < right_x )); then
+                echo "ERROR: Android right drawer connector does not bridge drawer and rail: $connector_rect" >&2
+                return 1
+            fi
+        fi
+        if [[ "$expected_orientation" == "portrait" ]] \
+            && (( drawer_height * 100 > logical_height * 70 )); then
+            echo "ERROR: Android portrait $expected_panel drawer is an overlong skyscraper: $drawer_height/$logical_height" >&2
+            return 1
+        fi
+        if [[ "$expected_orientation" == "landscape" ]] \
+            && (( drawer_height * 100 > logical_height * 82 )); then
+            echo "ERROR: Android landscape $expected_panel drawer consumes too much height: $drawer_height/$logical_height" >&2
+            return 1
+        fi
+    fi
+
+    echo "Verified Android $expected_orientation split-rail hub geometry, seven controls, and panel=$expected_panel/$expected_side."
+}
+
+tap_mobile_hub_control_from_layout() {
+    local line="$1"
+    local key="$2"
+    local viewport_line="$3"
+    local rect x y width height
+    rect="$(mobile_hub_target_rect_from_line "$line" "$key")" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android mobile hub $key at client $((x + width / 2)),$((y + height / 2))"
+    # Keep the entire focused assertion on the renderer's settled viewport.
+    # Some emulators briefly return the previous orientation from screencap
+    # between landscape frames, which must not redirect a rail tap.
+    tap_client_xy_from_viewport $((x + width / 2)) $((y + height / 2)) \
+        "$viewport_line"
+}
+
+mobile_hub_control_client_point_from_layout() {
+	local line="$1"
+	local key="$2"
+	local rect x y width height
+	rect="$(mobile_hub_target_rect_from_line "$line" "$key")" || return 1
+	read -r x y width height <<< "$rect"
+	echo "$((x + width / 2)) $((y + height / 2))"
+}
+
+tap_mobile_hub_connector_from_layout() {
+    local line="$1"
+    local viewport_line="$2"
+    local rect x y width height
+    rect="$(mobile_hub_layout_rect_from_line "$line" connector)" || return 1
+    read -r x y width height <<< "$rect"
+    echo "Android mobile hub connector at client $((x + width / 2)),$((y + height / 2))"
+    tap_client_xy_from_viewport $((x + width / 2)) $((y + height / 2)) \
+        "$viewport_line"
+}
+
+assert_no_mobile_hub_connector_fallthrough() {
+    local label="$1"
+    local timeout="${2:-2}"
+    local deadline=$((SECONDS + timeout))
+    local line
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+            | grep -E 'ANDROID_SMOKE_(WALK_ACTION|CHAT_TAB|HUB_ACTION)' \
+            | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "ERROR: Android $label connector tap fell through or changed destination: $line" >&2
+            return 1
+        fi
+        sleep 1
+    done
+    echo "Verified Android $label connector consumes its full rail-to-drawer bridge."
+}
+
+swipe_mobile_hub_drawer_up() {
+    local line="$1"
+    local rect x y width height
+    rect="$(mobile_hub_layout_rect_from_line "$line" drawer)" || return 1
+    read -r x y width height <<< "$rect"
+    swipe_client_xy $((x + width / 2)) $((y + height * 2 / 3)) \
+        $((x + width / 2)) $((y + height / 3)) 700
+}
+
+wait_for_mobile_hub_stats_scroll() {
+    local expected_orientation="$1"
+    local timeout="${2:-15}"
+    local deadline=$((SECONDS + timeout))
+    local line scroll
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+            | grep "ANDROID_SMOKE_HUB_LAYOUT " \
+            | grep "orientation=$expected_orientation " \
+            | grep "panel=stats " | tail -1 || true)"
+        scroll="$(extract_log_value "$line" statsScroll)"
+        if [[ "$scroll" =~ ^[0-9]+$ ]] && (( scroll > 0 )); then
+            echo "Verified Android $expected_orientation Stats drawer swipe scroll=$scroll"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "ERROR: Android $expected_orientation Stats drawer did not scroll" >&2
+    mobile_hub_log_tail
+    return 1
+}
+
+wait_for_mobile_hub_action() {
+    local expected_key="$1"
+    local expected_panel="$2"
+    local expected_side="$3"
+    local timeout="${4:-15}"
+    local deadline=$((SECONDS + timeout))
+    local line control panel side
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_SMOKE_HUB_ACTION control=$expected_key " \
+            | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            control="$(extract_log_value "$line" control)"
+            panel="$(extract_log_value "$line" panel)"
+            side="$(extract_log_value "$line" side)"
+            if [[ "$control" == "$expected_key" && "$panel" == "$expected_panel" \
+                && "$side" == "$expected_side" ]]; then
+                echo "$line"
+                return 0
+            fi
+            echo "ERROR: Android mobile hub action did not match its expected state" >&2
+            echo "expected control=$expected_key panel=$expected_panel side=$expected_side" >&2
+            echo "$line" >&2
+            return 1
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android mobile hub action control=$expected_key" >&2
+    mobile_hub_log_tail
+    return 1
+}
+
+wait_for_mobile_hub_panel() {
+    local expected_orientation="$1"
+    local expected_panel="$2"
+    local expected_side="$3"
+    local timeout="${4:-12}"
+    local deadline=$((SECONDS + timeout))
+    local line panel side
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null \
+            | tr -d '\r' \
+            | grep "ANDROID_SMOKE_HUB_LAYOUT " \
+            | grep "orientation=$expected_orientation " \
+            | tail -1 || true)"
+        panel="$(extract_log_value "$line" panel)"
+        side="$(extract_log_value "$line" panelSide)"
+        if [[ "$panel" == "$expected_panel" && "$side" == "$expected_side" ]]; then
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "ERROR: Android mobile hub did not settle panel=$expected_panel panelSide=$expected_side" >&2
+    mobile_hub_log_tail
+    return 1
+}
+
+assert_no_mobile_hub_fallthrough() {
+    local expected_key="$1"
+    local timeout="${2:-2}"
+    local deadline=$((SECONDS + timeout))
+    local walk_line chat_line action_count
+    while (( SECONDS < deadline )); do
+        walk_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_WALK_ACTION " | tail -1 || true)"
+        chat_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_CHAT_TAB " | tail -1 || true)"
+        if [[ -n "$walk_line" || -n "$chat_line" ]]; then
+            echo "ERROR: Android mobile hub $expected_key tap fell through" >&2
+            [[ -n "$walk_line" ]] && echo "$walk_line" >&2
+            [[ -n "$chat_line" ]] && echo "$chat_line" >&2
+            return 1
+        fi
+        sleep 1
+    done
+    action_count="$("$ADB" logcat -d -v raw 2>/dev/null \
+        | tr -d '\r' \
+        | grep -c "ANDROID_SMOKE_HUB_ACTION control=$expected_key " || true)"
+    if [[ "$action_count" != "1" ]]; then
+        echo "ERROR: Android mobile hub $expected_key tap logged $action_count actions instead of 1" >&2
+        mobile_hub_log_tail
+        return 1
+    fi
+    echo "Verified Android mobile hub $expected_key consumed one tap without world/chat fallthrough."
+}
+
+assert_no_mobile_hub_world_or_chat_fallthrough() {
+	local expected_key="$1"
+	local timeout="${2:-2}"
+	local deadline=$((SECONDS + timeout))
+	local walk_line chat_line
+	while (( SECONDS < deadline )); do
+		walk_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep 'ANDROID_SMOKE_WALK_ACTION ' | tail -1 || true)"
+		chat_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep 'ANDROID_SMOKE_CHAT_TAB ' | tail -1 || true)"
+		if [[ -n "$walk_line" || -n "$chat_line" ]]; then
+			echo "ERROR: Android mobile hub $expected_key reconnect intent fell through" >&2
+			[[ -n "$walk_line" ]] && echo "$walk_line" >&2
+			[[ -n "$chat_line" ]] && echo "$chat_line" >&2
+			return 1
+		fi
+		sleep 1
+	done
+	echo "Verified Android mobile hub $expected_key reconnect intent had no world/chat fallthrough."
+}
+
+assert_no_android_walk_action_logged() {
+    local timeout="${1:-2}"
+    local deadline=$((SECONDS + timeout))
+    local line
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_WALK_ACTION " | tail -1 || true)"
+        if [[ -n "$line" ]]; then
+            echo "ERROR: Android UI tap fell through to a world walk: $line" >&2
+            return 1
+        fi
+        sleep 1
+    done
+    echo "Verified Android UI tap did not fall through to a world walk."
+}
+
+mobile_viewport_log_tail() {
+	"$ADB" logcat -d -v raw 2>/dev/null \
+		| tr -d '\r' \
+		| grep "ANDROID_MOBILE_VIEWPORT " \
+		| tail -30 >&2 || true
+}
+
+is_positive_log_number() {
+	local value="$1"
+	awk -v value="$value" 'BEGIN {
+		if (value !~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$/) exit 1;
+		exit !((value + 0) > 0);
+	}'
+}
+
+android_mobile_viewport_log_matches_orientation() {
+	local expected_orientation="$1"
+	local line="$2"
+	local content_width content_height logical_width logical_height
+
+	content_width="$(extract_log_value "$line" contentW)"
+	content_height="$(extract_log_value "$line" contentH)"
+	logical_width="$(extract_log_value "$line" logicalW)"
+	logical_height="$(extract_log_value "$line" logicalH)"
+	[[ "$content_width" =~ ^[0-9]+$ && "$content_width" -gt 0 \
+		&& "$content_height" =~ ^[0-9]+$ && "$content_height" -gt 0 \
+		&& "$logical_width" =~ ^[0-9]+$ && "$logical_width" -gt 0 \
+		&& "$logical_height" =~ ^[0-9]+$ && "$logical_height" -gt 0 ]] || return 1
+
+	if [[ "$expected_orientation" == "portrait" ]]; then
+		(( content_height > content_width && logical_height > logical_width ))
+	else
+		(( content_width > content_height && logical_width > logical_height ))
+	fi
+}
+
+wait_for_android_mobile_viewport() {
+	local expected_orientation="$1"
+	local timeout="${2:-30}"
+	local deadline=$((SECONDS + timeout))
+	local matching_line surface_width surface_height
+
+	while (( SECONDS < deadline )); do
+		read -r surface_width surface_height < <(screen_size)
+		matching_line="$(latest_settled_android_mobile_viewport \
+			"$surface_width" "$surface_height" || true)"
+		if [[ -n "$matching_line" ]] \
+			&& android_mobile_viewport_log_matches_orientation "$expected_orientation" "$matching_line"; then
+			cache_android_mobile_viewport_line "$matching_line"
+			printf '%s\n' "$matching_line"
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: timed out waiting for renderer-reported Android $expected_orientation mobile viewport" >&2
+	mobile_viewport_log_tail
+	return 1
+}
+
+assert_android_touch_target_conversion() {
+	local requested_dp="$1"
+	local client_pixels="$2"
+	local scale="$3"
+	local density="$4"
+
+	awk -v requested="$requested_dp" -v pixels="$client_pixels" -v scale="$scale" -v density="$density" 'BEGIN {
+		# Java uses ceil(dp * density / scale). Allow a small tolerance only for
+		# decimal float logging at an exact integer boundary.
+		tolerance = 0.05;
+		clientPixelDp = scale / density;
+		achieved = pixels * clientPixelDp;
+		previous = (pixels - 1) * clientPixelDp;
+		if (achieved + tolerance < requested) {
+			printf "ERROR: Android %ddp target converts to only %.3fdp (%d client px, scale=%s density=%s)\n", requested, achieved, pixels, scale, density > "/dev/stderr";
+			exit 1;
+		}
+		if (pixels > 1 && previous >= requested + tolerance) {
+			printf "ERROR: Android %ddp target conversion is not minimally rounded up (%d client px, previous=%.3fdp)\n", requested, pixels, previous > "/dev/stderr";
+			exit 1;
+		}
+		printf "Verified Android %ddp target: clientPx=%d achievedDp=%.3f\n", requested, pixels, achieved;
+	}'
+}
+
+assert_android_mobile_viewport_from_log() {
+	local expected_orientation="$1"
+	local line="$2"
+	local client_line="$3"
+	local surface_width surface_height content_width content_height
+	local inset_left inset_top inset_right inset_bottom logical_width logical_height
+	local scale density touch44 touch48 client_width client_game_height client_full_height
+	local expected_content_width expected_content_height inset_total
+
+	surface_width="$(extract_log_value "$line" surfaceW)"
+	surface_height="$(extract_log_value "$line" surfaceH)"
+	content_width="$(extract_log_value "$line" contentW)"
+	content_height="$(extract_log_value "$line" contentH)"
+	inset_left="$(extract_log_value "$line" insetL)"
+	inset_top="$(extract_log_value "$line" insetT)"
+	inset_right="$(extract_log_value "$line" insetR)"
+	inset_bottom="$(extract_log_value "$line" insetB)"
+	logical_width="$(extract_log_value "$line" logicalW)"
+	logical_height="$(extract_log_value "$line" logicalH)"
+	scale="$(extract_log_value "$line" scale)"
+	density="$(extract_log_value "$line" density)"
+	touch44="$(extract_log_value "$line" touch44)"
+	touch48="$(extract_log_value "$line" touch48)"
+
+	if [[ ! "$surface_width" =~ ^[0-9]+$ || "$surface_width" -le 0 \
+		|| ! "$surface_height" =~ ^[0-9]+$ || "$surface_height" -le 0 \
+		|| ! "$content_width" =~ ^[0-9]+$ || "$content_width" -le 0 \
+		|| ! "$content_height" =~ ^[0-9]+$ || "$content_height" -le 0 \
+		|| ! "$logical_width" =~ ^[0-9]+$ || "$logical_width" -le 0 \
+		|| ! "$logical_height" =~ ^[0-9]+$ || "$logical_height" -le 0 \
+		|| ! "$touch44" =~ ^[0-9]+$ || "$touch44" -le 0 \
+		|| ! "$touch48" =~ ^[0-9]+$ || "$touch48" -le 0 ]]; then
+		echo "ERROR: Android mobile viewport log has missing/non-positive dimensions or touch targets: $line" >&2
+		mobile_viewport_log_tail
+		return 1
+	fi
+	if [[ ! "$inset_left" =~ ^[0-9]+$ || ! "$inset_top" =~ ^[0-9]+$ \
+		|| ! "$inset_right" =~ ^[0-9]+$ || ! "$inset_bottom" =~ ^[0-9]+$ ]]; then
+		echo "ERROR: Android mobile viewport log has missing/negative insets: $line" >&2
+		mobile_viewport_log_tail
+		return 1
+	fi
+	if ! is_positive_log_number "$scale" || ! is_positive_log_number "$density"; then
+		echo "ERROR: Android mobile viewport log has non-positive scale/density: $line" >&2
+		mobile_viewport_log_tail
+		return 1
+	fi
+
+	expected_content_width=$((surface_width - inset_left - inset_right))
+	expected_content_height=$((surface_height - inset_top - inset_bottom))
+	(( expected_content_width < 1 )) && expected_content_width=1
+	(( expected_content_height < 1 )) && expected_content_height=1
+	if [[ "$content_width" -ne "$expected_content_width" || "$content_height" -ne "$expected_content_height" ]]; then
+		echo "ERROR: Android safe content ${content_width}x${content_height} does not match surface ${surface_width}x${surface_height} minus insets ${inset_left},${inset_top},${inset_right},${inset_bottom}" >&2
+		return 1
+	fi
+
+	if ! android_mobile_viewport_log_matches_orientation "$expected_orientation" "$line"; then
+		echo "ERROR: renderer-reported Android viewport does not match expected $expected_orientation orientation: $line" >&2
+		return 1
+	fi
+
+	client_width="$(extract_log_value "$client_line" gameWidth)"
+	client_game_height="$(extract_log_value "$client_line" gameHeight)"
+	if [[ ! "$client_width" =~ ^[0-9]+$ || ! "$client_game_height" =~ ^[0-9]+$ ]]; then
+		echo "ERROR: Android client settings log did not include its current viewport: $client_line" >&2
+		return 1
+	fi
+	client_full_height=$((client_game_height + 12))
+	if [[ "$logical_width" -ne "$client_width" || "$logical_height" -ne "$client_full_height" ]]; then
+		echo "ERROR: Android renderer/client viewport mismatch: renderer=${logical_width}x${logical_height} client=${client_width}x${client_full_height}" >&2
+		return 1
+	fi
+
+	inset_total=$((inset_left + inset_top + inset_right + inset_bottom))
+	if [[ "$REQUIRE_NONZERO_INSET" == "1" && "$inset_total" -eq 0 ]]; then
+		echo "ERROR: ANDROID_SMOKE_REQUIRE_NONZERO_INSET=1 but renderer reported no safe-area inset: $line" >&2
+		return 1
+	fi
+
+	assert_android_touch_target_conversion 44 "$touch44" "$scale" "$density" || return 1
+	assert_android_touch_target_conversion 48 "$touch48" "$scale" "$density" || return 1
+	echo "Verified Android $expected_orientation mobile viewport: surface=${surface_width}x${surface_height} content=${content_width}x${content_height} insets=${inset_left},${inset_top},${inset_right},${inset_bottom} logical=${logical_width}x${logical_height} scale=$scale density=$density"
 }
 
 log_int_or_default() {
@@ -2683,54 +4814,21 @@ log_int_or_default() {
     fi
 }
 
-assert_android_viewport_from_log() {
-    local expected_orientation="$1"
-    local line="$2"
-    local target_width game_height target_full_height surface_width surface_height
-    local expected_width expected_full_height formula_orientation expected_capped
-
-    target_width="$(extract_log_value "$line" gameWidth)"
-    game_height="$(extract_log_value "$line" gameHeight)"
-    if [[ ! "$target_width" =~ ^[0-9]+$ || ! "$game_height" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: Android settings log did not include gameWidth/gameHeight: $line" >&2
-        settings_log_tail
-        return 1
-    fi
-
-    target_full_height=$((game_height + 12))
-    read -r surface_width surface_height < <(screen_size)
-    read -r expected_width expected_full_height formula_orientation expected_capped < <(android_viewport_target_for_size "$surface_width" "$surface_height")
-
-    if [[ "$formula_orientation" != "$expected_orientation" ]]; then
-        echo "ERROR: Android screen ${surface_width}x${surface_height} produced $formula_orientation, expected $expected_orientation" >&2
-        settings_log_tail
-        return 1
-    fi
-    if [[ "$target_width" != "$expected_width" || "$target_full_height" != "$expected_full_height" ]]; then
-        echo "ERROR: Android applied viewport mismatch: got ${target_width}x${target_full_height}, expected ${expected_width}x${expected_full_height}" >&2
-        settings_log_tail
-        return 1
-    fi
-
-    echo "Verified Android $expected_orientation applied viewport: target=${target_width}x${target_full_height} screen=${surface_width}x${surface_height}"
-}
-
 android_viewport_log_matches() {
     local expected_orientation="$1"
     local line="$2"
-    local target_width game_height target_full_height surface_width surface_height
-    local expected_width expected_full_height formula_orientation expected_capped
+    local target_width game_height target_full_height
 
     target_width="$(extract_log_value "$line" gameWidth)"
     game_height="$(extract_log_value "$line" gameHeight)"
     [[ "$target_width" =~ ^[0-9]+$ && "$game_height" =~ ^[0-9]+$ ]] || return 1
 
     target_full_height=$((game_height + 12))
-    read -r surface_width surface_height < <(screen_size)
-    read -r expected_width expected_full_height formula_orientation expected_capped < <(android_viewport_target_for_size "$surface_width" "$surface_height")
-    [[ "$formula_orientation" == "$expected_orientation" \
-        && "$target_width" == "$expected_width" \
-        && "$target_full_height" == "$expected_full_height" ]]
+    if [[ "$expected_orientation" == "portrait" ]]; then
+        (( target_full_height > target_width ))
+    else
+        (( target_width > target_full_height ))
+    fi
 }
 
 wait_for_viewport_settings_state() {
@@ -2888,13 +4986,16 @@ shop_log_tail() {
 
 wait_for_shop_open() {
     local timeout="${1:-20}"
+    local expected_orientation="${2:-}"
     local deadline=$((SECONDS + timeout))
-    local line items
+    local line items orientation
 
     while (( SECONDS < deadline )); do
         line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_SHOP_OPEN " | tail -1 || true)"
         items="$(extract_log_value "$line" items)"
-        if [[ "$items" =~ ^[0-9]+$ ]] && (( items > 0 )); then
+        orientation="$(extract_log_value "$line" orientation)"
+        if [[ "$items" =~ ^[0-9]+$ ]] && (( items > 0 )) \
+            && { [[ -z "$expected_orientation" ]] || [[ "$orientation" == "$expected_orientation" ]]; }; then
             echo "Verified Android shop open: $line" >&2
             echo "$line"
             return 0
@@ -2905,6 +5006,60 @@ wait_for_shop_open() {
     echo "ERROR: timed out waiting for Android shop open" >&2
     shop_log_tail
     return 1
+}
+
+assert_native_shop_layout() {
+    local line="$1"
+    local expected_orientation="$2"
+    local expected_amount_rows="${3:-}"
+    local layout orientation target targets action_layout amount_columns amount_rows
+    local grid_columns grid_rows slot_min_w slot_min_h amount_min_w amount_min_h contained separated
+
+    layout="$(extract_log_value "$line" layout)"
+    orientation="$(extract_log_value "$line" orientation)"
+    target="$(extract_log_value "$line" target48)"
+    targets="$(extract_log_value "$line" targets48)"
+    action_layout="$(extract_log_value "$line" actionLayout)"
+    amount_columns="$(extract_log_value "$line" amountColumns)"
+    amount_rows="$(extract_log_value "$line" amountRows)"
+    grid_columns="$(extract_log_value "$line" gridColumns)"
+    grid_rows="$(extract_log_value "$line" gridRows)"
+    slot_min_w="$(extract_log_value "$line" slotMinW)"
+    slot_min_h="$(extract_log_value "$line" slotMinH)"
+    amount_min_w="$(extract_log_value "$line" amountMinW)"
+    amount_min_h="$(extract_log_value "$line" amountMinH)"
+    contained="$(extract_log_value "$line" contained)"
+    separated="$(extract_log_value "$line" separated)"
+
+    if [[ "$layout" != "native" || "$orientation" != "$expected_orientation" \
+        || "$targets" != "true" || "$contained" != "true" || "$separated" != "true" \
+        || "$grid_columns" != "8" || "$grid_rows" != "5" \
+        || ! "$target" =~ ^[0-9]+$ || "$target" -le 0 \
+        || ! "$slot_min_w" =~ ^[0-9]+$ || "$slot_min_w" -lt "$target" \
+        || ! "$slot_min_h" =~ ^[0-9]+$ || "$slot_min_h" -lt "$target" \
+        || ! "$amount_min_w" =~ ^[0-9]+$ || "$amount_min_w" -lt "$target" \
+        || ! "$amount_min_h" =~ ^[0-9]+$ || "$amount_min_h" -lt "$target" ]]; then
+        echo "ERROR: Android $expected_orientation shop failed native 48dp/containment geometry: $line" >&2
+        return 1
+    fi
+    if [[ "$expected_orientation" == "landscape" && "$action_layout" != "side" ]]; then
+        echo "ERROR: Android landscape shop fell back to the grid-collapsing stacked layout: $line" >&2
+        return 1
+    fi
+    if [[ "$expected_orientation" == "portrait" && "$action_layout" != "stacked" ]]; then
+        echo "ERROR: Android portrait shop expected stacked actions: $line" >&2
+        return 1
+    fi
+    if [[ -n "$expected_amount_rows" && "$amount_rows" != "$expected_amount_rows" ]]; then
+        echo "ERROR: Android $expected_orientation shop expected amountRows=$expected_amount_rows, got $amount_rows: $line" >&2
+        return 1
+    fi
+    if [[ "$expected_amount_rows" == "2" && "$amount_columns" != "3" ]]; then
+        echo "ERROR: Android narrow-landscape shop expected wrapped 3x2 action groups: $line" >&2
+        return 1
+    fi
+
+    echo "Verified Android $expected_orientation shop geometry: actionLayout=$action_layout amounts=${amount_columns}x${amount_rows} slotMin=${slot_min_w}x${slot_min_h} amountMin=${amount_min_w}x${amount_min_h} target48=$target"
 }
 
 wait_for_shop_selected_owned() {
@@ -2971,6 +5126,46 @@ wait_for_shop_action() {
     return 1
 }
 
+tap_shop_action_with_retry() {
+    local expected="$1"
+    local line="$2"
+    local orientation action_key action_x action_y attempt
+    local screen_width screen_height viewport_line
+    orientation="$(extract_log_value "$line" orientation)"
+    if [[ "$expected" == "BUY" ]]; then
+        action_key="buy1"
+    else
+        action_key="sell1"
+    fi
+
+    for attempt in 1 2 3; do
+        action_x="$(log_int_or_default "$line" "${action_key}X" 1)"
+        action_y="$(log_int_or_default "$line" "${action_key}Y" 1)"
+        read -r screen_width screen_height < <(screen_size)
+        viewport_line="$(latest_settled_android_mobile_viewport "$screen_width" "$screen_height" || true)"
+        if [[ -n "$viewport_line" ]]; then
+            SHOP_ACTION_VIEWPORT_LINE="$viewport_line"
+        elif [[ -n "$SHOP_ACTION_VIEWPORT_LINE" \
+            && "$(extract_log_value "$SHOP_ACTION_VIEWPORT_LINE" surfaceW)" == "$screen_width" \
+            && "$(extract_log_value "$SHOP_ACTION_VIEWPORT_LINE" surfaceH)" == "$screen_height" ]]; then
+            viewport_line="$SHOP_ACTION_VIEWPORT_LINE"
+        fi
+        "$ADB" logcat -c || true
+        if [[ -n "$viewport_line" ]]; then
+            tap_client_xy_from_viewport "$action_x" "$action_y" "$viewport_line"
+        else
+            tap_client_xy "$action_x" "$action_y"
+        fi
+        if wait_for_shop_action "$expected" 7; then
+            return 0
+        fi
+        line="$(wait_for_shop_open 10 "$orientation")" || return 1
+    done
+
+    echo "ERROR: Android shop $expected target did not activate after 3 renderer-coordinate taps" >&2
+    return 1
+}
+
 bank_log_tail() {
     "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK" | tail -40 >&2 || true
 }
@@ -3019,6 +5214,121 @@ wait_for_bank_search() {
     echo "ERROR: timed out waiting for Android bank search '$expected_token'" >&2
     bank_log_tail
     return 1
+}
+
+wait_for_bank_search_focus() {
+    local expected="$1"
+    local timeout="${2:-20}"
+    local deadline=$((SECONDS + timeout))
+    local line focused
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK_OPEN " | tail -1 || true)"
+        focused="$(extract_log_value "$line" searchFocused)"
+        if [[ -n "$line" && "$focused" == "$expected" ]]; then
+            echo "Verified Android bank search focus=$expected: $line" >&2
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android bank search focus=$expected" >&2
+    bank_log_tail
+    return 1
+}
+
+wait_for_bank_page() {
+    local expected="$1"
+    local timeout="${2:-20}"
+    local deadline=$((SECONDS + timeout))
+    local line page
+
+    while (( SECONDS < deadline )); do
+        line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_BANK_OPEN " | tail -1 || true)"
+        page="$(extract_log_value "$line" bankPage)"
+        if [[ -n "$line" && "$page" == "$expected" ]]; then
+            echo "Verified Android bank page=$expected: $line" >&2
+            echo "$line"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for Android bank page=$expected" >&2
+    bank_log_tail
+    return 1
+}
+
+assert_void_glass_bank_touch_geometry() {
+    local line="$1"
+    local touch_target bank_items panel_x panel_y panel_w panel_h
+    local tab_count tab_columns tab_rows tab_w tab_h tab0_x tab0_y tab_last_x tab_last_y
+    local dimension value
+
+    touch_target="$(extract_log_value "$line" touchTarget)"
+    bank_items="$(extract_log_value "$line" bankItems)"
+    panel_x="$(extract_log_value "$line" panelX)"
+    panel_y="$(extract_log_value "$line" panelY)"
+    panel_w="$(extract_log_value "$line" panelW)"
+    panel_h="$(extract_log_value "$line" panelH)"
+    tab_count="$(extract_log_value "$line" tabCount)"
+    tab_columns="$(extract_log_value "$line" tabColumns)"
+    tab_rows="$(extract_log_value "$line" tabRows)"
+    tab_w="$(extract_log_value "$line" tabW)"
+    tab_h="$(extract_log_value "$line" tabH)"
+    tab0_x="$(extract_log_value "$line" tab0X)"
+    tab0_y="$(extract_log_value "$line" tab0Y)"
+    tab_last_x="$(extract_log_value "$line" tabLastX)"
+    tab_last_y="$(extract_log_value "$line" tabLastY)"
+
+    if [[ ! "$touch_target" =~ ^[0-9]+$ || "$touch_target" -le 0 ]]; then
+        echo "ERROR: Void Glass bank omitted its native touch target: $line" >&2
+        return 1
+    fi
+    if (( AUTH_BANK_FIXTURE_BANK_SLOTS > 240 )) \
+        && [[ ! "$bank_items" =~ ^[0-9]+$ || "$bank_items" -le 240 ]]; then
+        echo "ERROR: over-cap bank fixture was not exposed by the client: expected>${240}, bankItems=$bank_items" >&2
+        echo "$line" >&2
+        return 1
+    fi
+    for dimension in searchH cellW cellH closeW closeH loadoutW actionH menuRowH; do
+        value="$(extract_log_value "$line" "$dimension")"
+        if [[ ! "$value" =~ ^[0-9]+$ || "$value" -lt "$touch_target" ]]; then
+            echo "ERROR: Void Glass bank $dimension=$value is below touchTarget=$touch_target" >&2
+            echo "$line" >&2
+            return 1
+        fi
+    done
+
+    if [[ "$bank_items" =~ ^[0-9]+$ && "$bank_items" -gt 240 ]]; then
+        if [[ "$tab_count" != "7" ]]; then
+            echo "ERROR: over-cap Void Glass bank exposes tabCount=$tab_count instead of seven tabs" >&2
+            echo "$line" >&2
+            return 1
+        fi
+        for value in "$panel_x" "$panel_y" "$panel_w" "$panel_h" "$tab_columns" "$tab_rows" \
+            "$tab_w" "$tab_h" "$tab0_x" "$tab0_y" "$tab_last_x" "$tab_last_y"; do
+            [[ "$value" =~ ^-?[0-9]+$ ]] || {
+                echo "ERROR: malformed Void Glass bank tab geometry: $line" >&2
+                return 1
+            }
+        done
+        if (( tab_columns < 1 || tab_rows < 1 || tab_columns * tab_rows < tab_count \
+            || tab_w < touch_target || tab_h < touch_target \
+            || tab0_x - tab_w / 2 < panel_x \
+            || tab0_x + (tab_w + 1) / 2 > panel_x + panel_w \
+            || tab_last_x - tab_w / 2 < panel_x \
+            || tab_last_x + (tab_w + 1) / 2 > panel_x + panel_w \
+            || tab0_y - tab_h / 2 < panel_y \
+            || tab_last_y + (tab_h + 1) / 2 > panel_y + panel_h )); then
+            echo "ERROR: Void Glass seven-tab layout is clipped or undersized" >&2
+            echo "$line" >&2
+            return 1
+        fi
+    fi
+
+    echo "Verified Android Void Glass touch geometry: touch=$touch_target tabs=${tab_count}/${tab_columns}x${tab_rows} tab=${tab_w}x${tab_h}"
 }
 
 wait_for_bank_scroll() {
@@ -3439,6 +5749,47 @@ wait_for_equipment_tab() {
     return 1
 }
 
+assert_equipment_touch_geometry() {
+    local expected_orientation="$1"
+    local equipment_line="$2"
+    local viewport_line="$3"
+    local tab_height slot_width slot_height touch48 scale density dimension value
+
+    tab_height="$(extract_log_value "$equipment_line" tabHeight)"
+    slot_width="$(extract_log_value "$equipment_line" slotWidth)"
+    slot_height="$(extract_log_value "$equipment_line" slotHeight)"
+    touch48="$(extract_log_value "$viewport_line" touch48)"
+    scale="$(extract_log_value "$viewport_line" scale)"
+    density="$(extract_log_value "$viewport_line" density)"
+
+    if [[ ! "$touch48" =~ ^[0-9]+$ || "$touch48" -le 0 ]] \
+        || ! is_positive_log_number "$scale" \
+        || ! is_positive_log_number "$density"; then
+        echo "ERROR: Android $expected_orientation equipment geometry needs valid physical touch telemetry" >&2
+        echo "$equipment_line" >&2
+        echo "$viewport_line" >&2
+        return 1
+    fi
+
+    for dimension in tabHeight slotWidth slotHeight; do
+        case "$dimension" in
+            tabHeight) value="$tab_height" ;;
+            slotWidth) value="$slot_width" ;;
+            slotHeight) value="$slot_height" ;;
+        esac
+        if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < touch48 )); then
+            echo "ERROR: Android $expected_orientation equipment $dimension=$value is below physical touch48=$touch48" >&2
+            echo "$equipment_line" >&2
+            return 1
+        fi
+        assert_client_rect_extent_at_least_dp \
+            "equipment-$expected_orientation-$dimension" "$dimension" \
+            "$value" "$scale" "$density" 48 || return 1
+    done
+
+    echo "Verified Android $expected_orientation equipment touch geometry: tabHeight=$tab_height slot=${slot_width}x${slot_height} touch48=$touch48"
+}
+
 wait_for_equipment_count() {
     local expected_count="$1"
     local timeout="${2:-20}"
@@ -3690,6 +6041,53 @@ wait_for_world_map_rendered() {
     return 1
 }
 
+assert_world_map_touch_layout() {
+    local line="$1"
+    local layout game_width game_height win_width win_height content_height
+    local target min_width min_height targets inside overlap
+
+    layout="$(extract_log_value "$line" layout)"
+    game_width="$(extract_log_value "$line" gameWidth)"
+    game_height="$(extract_log_value "$line" gameHeight)"
+    win_width="$(extract_log_value "$line" winW)"
+    win_height="$(extract_log_value "$line" winH)"
+    content_height="$(extract_log_value "$line" contentH)"
+    target="$(extract_log_value "$line" target48)"
+    min_width="$(extract_log_value "$line" targetMinW)"
+    min_height="$(extract_log_value "$line" targetMinH)"
+    targets="$(extract_log_value "$line" targets48)"
+    inside="$(extract_log_value "$line" controlsInside)"
+    overlap="$(extract_log_value "$line" controlsOverlap)"
+
+    if [[ "$layout" != "native" || ! "$target" =~ ^[0-9]+$ || "$target" -le 0 ]]; then
+        echo "ERROR: Android World Map did not report a native physical touch layout: $line" >&2
+        return 1
+    fi
+    if [[ ! "$min_width" =~ ^[0-9]+$ || ! "$min_height" =~ ^[0-9]+$ \
+        || "$min_width" -lt "$target" || "$min_height" -lt "$target" \
+        || "$targets" != "true" ]]; then
+        echo "ERROR: Android World Map control is below physical 48dp target=$target: $line" >&2
+        return 1
+    fi
+    if [[ "$inside" != "true" || "$overlap" != "false" ]]; then
+        echo "ERROR: Android World Map controls escape or overlap their safe frame: $line" >&2
+        return 1
+    fi
+    if [[ ! "$content_height" =~ ^[0-9]+$ || "$content_height" -lt "$target" ]]; then
+        echo "ERROR: Android World Map leaves less than one touch row for map content: $line" >&2
+        return 1
+    fi
+    if [[ "$game_height" =~ ^[0-9]+$ && "$game_width" =~ ^[0-9]+$ \
+        && "$win_height" =~ ^[0-9]+$ && "$win_width" =~ ^[0-9]+$ \
+        && "$game_height" -gt "$game_width" \
+        && $((win_height * 100)) -gt $((win_width * 140)) ]]; then
+        echo "ERROR: Android portrait World Map is an overlong skyscraper: $line" >&2
+        return 1
+    fi
+
+    echo "Verified Android World Map native touch geometry: target=$target min=${min_width}x${min_height}." >&2
+}
+
 wait_for_world_map_button() {
     local timeout="${1:-20}"
     local deadline=$((SECONDS + timeout))
@@ -3865,6 +6263,139 @@ settings_log_tail() {
     "$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_SETTINGS" | tail -60 >&2 || true
 }
 
+afk_log_tail() {
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep "ANDROID_SMOKE_AFK" | tail -60 >&2 || true
+}
+
+wait_for_afk_settings_target() {
+	local expected_active="${1:-false}"
+	local timeout="${2:-20}"
+	local deadline=$((SECONDS + timeout))
+	local line active
+
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep "ANDROID_SMOKE_AFK_SETTINGS " | tail -1 || true)"
+		active="$(extract_log_value "$line" active)"
+		if [[ "$active" == "$expected_active" ]]; then
+			echo "$line"
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: timed out waiting for Android AFK settings target active=$expected_active" >&2
+	afk_log_tail
+	return 1
+}
+
+assert_afk_settings_target() {
+	local line="$1"
+	local expected_active="${2:-false}"
+	local x y width height active
+	x="$(extract_log_value "$line" x)"
+	y="$(extract_log_value "$line" y)"
+	width="$(extract_log_value "$line" w)"
+	height="$(extract_log_value "$line" h)"
+	active="$(extract_log_value "$line" active)"
+
+	if [[ "$active" != "$expected_active" \
+		|| ! "$x" =~ ^[0-9]+$ || ! "$y" =~ ^[0-9]+$ \
+		|| ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ \
+		|| "$width" -lt 48 || "$height" -lt 48 ]]; then
+		echo "ERROR: invalid Android AFK settings target (minimum 48dp): $line" >&2
+		return 1
+	fi
+}
+
+tap_afk_settings_target_from_line() {
+	local line="$1"
+	local x y width height
+	x="$(extract_log_value "$line" x)"
+	y="$(extract_log_value "$line" y)"
+	width="$(extract_log_value "$line" w)"
+	height="$(extract_log_value "$line" h)"
+	tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
+wait_for_afk_state() {
+	local expected_active="$1"
+	local timeout="${2:-20}"
+	local minimum_render_count="${3:--1}"
+	local deadline=$((SECONDS + timeout))
+	local line active render_count
+
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep "ANDROID_SMOKE_AFK active=$expected_active " | tail -1 || true)"
+		active="$(extract_log_value "$line" active)"
+		render_count="$(extract_log_value "$line" renderCount)"
+		if [[ "$active" == "$expected_active" ]]; then
+			if [[ "$minimum_render_count" -lt 0 \
+				|| ( "$render_count" =~ ^[0-9]+$ && "$render_count" -gt "$minimum_render_count" ) ]]; then
+				echo "$line"
+				return 0
+			fi
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: timed out waiting for Android AFK active=$expected_active renderCount>$minimum_render_count" >&2
+	afk_log_tail
+	return 1
+}
+
+assert_afk_monitor_state() {
+	local line="$1"
+	local expected_active="$2"
+	local active resume_x resume_y resume_width resume_height hits prayer
+	local hits_current hits_max prayer_current prayer_max xp elapsed remaining render_count
+	active="$(extract_log_value "$line" active)"
+	if [[ "$active" != "$expected_active" ]]; then
+		echo "ERROR: Android AFK state mismatch; expected active=$expected_active: $line" >&2
+		return 1
+	fi
+	if [[ "$expected_active" != "true" ]]; then
+		return 0
+	fi
+
+	resume_x="$(extract_log_value "$line" resumeX)"
+	resume_y="$(extract_log_value "$line" resumeY)"
+	resume_width="$(extract_log_value "$line" resumeW)"
+	resume_height="$(extract_log_value "$line" resumeH)"
+	hits="$(extract_log_value "$line" hits)"
+	prayer="$(extract_log_value "$line" prayer)"
+	xp="$(extract_log_value "$line" xp)"
+	elapsed="$(extract_log_value "$line" elapsedMs)"
+	remaining="$(extract_log_value "$line" approxRemainingMs)"
+	render_count="$(extract_log_value "$line" renderCount)"
+	IFS=/ read -r hits_current hits_max <<< "$hits"
+	IFS=/ read -r prayer_current prayer_max <<< "$prayer"
+
+	if [[ ! "$resume_x" =~ ^[0-9]+$ || ! "$resume_y" =~ ^[0-9]+$ \
+		|| ! "$resume_width" =~ ^[0-9]+$ || ! "$resume_height" =~ ^[0-9]+$ \
+		|| "$resume_width" -lt 48 || "$resume_height" -lt 48 \
+		|| ! "$hits_current" =~ ^[0-9]+$ || ! "$hits_max" =~ ^[0-9]+$ || "$hits_max" -le 0 \
+		|| ! "$prayer_current" =~ ^[0-9]+$ || ! "$prayer_max" =~ ^[0-9]+$ || "$prayer_max" -le 0 \
+		|| ! "$xp" =~ ^[0-9]+$ || ! "$elapsed" =~ ^[0-9]+$ \
+		|| ! "$remaining" =~ ^[0-9]+$ || ! "$render_count" =~ ^[0-9]+$ \
+		|| "$render_count" -le 0 ]]; then
+		echo "ERROR: Android AFK monitor telemetry or 48dp Resume target is invalid: $line" >&2
+		return 1
+	fi
+}
+
+tap_afk_resume_from_line() {
+	local line="$1"
+	local x y width height
+	x="$(extract_log_value "$line" resumeX)"
+	y="$(extract_log_value "$line" resumeY)"
+	width="$(extract_log_value "$line" resumeW)"
+	height="$(extract_log_value "$line" resumeH)"
+	tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
 wait_for_settings_state() {
     local expected_camera="$1"
     local expected_mouse="$2"
@@ -3936,7 +6467,8 @@ wait_for_settings_tab_rendered() {
 
 assert_settings_logout_visible() {
     local line="$1"
-    local logout_visible logout_placement logout_top logout_bottom chat_tab_top panel_y panel_bottom game_height
+    local logout_visible logout_placement logout_top logout_bottom chat_tab_top panel_y panel_bottom game_height tab_height
+	local native_account_row=0
     logout_visible="$(extract_log_value "$line" logoutVisible)"
     logout_placement="$(extract_log_value "$line" logoutPlacement)"
     logout_top="$(extract_log_value "$line" logoutTop)"
@@ -3945,6 +6477,7 @@ assert_settings_logout_visible() {
     panel_y="$(extract_log_value "$line" panelY)"
     panel_bottom="$(extract_log_value "$line" panelBottom)"
     game_height="$(extract_log_value "$line" gameHeight)"
+	tab_height="$(extract_log_value "$line" tabHeight)"
 
     if [[ "$logout_visible" != "true" ]]; then
         echo "ERROR: Android settings logout is not visible: $line" >&2
@@ -3970,7 +6503,11 @@ assert_settings_logout_visible() {
         fi
         return 0
     fi
-    if (( logout_bottom > chat_tab_top - 4 )); then
+	if [[ "$tab_height" =~ ^[0-9]+$ ]] \
+		&& (( tab_height > 25 && tab_height == logout_bottom - logout_top )); then
+		native_account_row=1
+	fi
+    if (( native_account_row == 0 && logout_bottom > chat_tab_top - 4 )); then
         echo "ERROR: Android settings logout overlaps chat dock: logoutBottom=$logout_bottom chatTabTop=$chat_tab_top" >&2
         settings_log_tail
         return 1
@@ -3986,13 +6523,183 @@ tap_settings_logout() {
     local expected_camera="$1"
     local expected_mouse="$2"
     local timeout="${3:-20}"
-    local line logout_x logout_y
+    local screenshot_prefix="${4:-}"
+    local line
 
     line="$(wait_for_settings_rendered "$expected_camera" "$expected_mouse" "$timeout")" || return 1
     assert_settings_logout_visible "$line" || return 1
-    logout_x="$(log_int_or_default "$line" logoutX 385)"
-    logout_y="$(log_int_or_default "$line" logoutY 293)"
-    tap_client_xy "$logout_x" "$logout_y"
+    complete_android_account_logout_from_settings_line "$line" "$screenshot_prefix"
+}
+
+android_logout_log_tail() {
+	"$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep "ANDROID_SMOKE_LOGOUT " | tail -40 >&2 || true
+}
+
+wait_for_android_logout_event() {
+	local expected_event="$1"
+	local timeout="${2:-15}"
+	local deadline=$((SECONDS + timeout))
+	local line event source
+
+	while (( SECONDS < deadline )); do
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep "ANDROID_SMOKE_LOGOUT event=$expected_event " | tail -1 || true)"
+		event="$(extract_log_value "$line" event)"
+		source="$(extract_log_value "$line" source)"
+		if [[ "$event" == "$expected_event" && "$source" == "account" ]]; then
+			echo "$line"
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "ERROR: timed out waiting for Android Account/logout event=$expected_event source=account" >&2
+	android_logout_log_tail
+	return 1
+}
+
+android_logout_rect_from_line() {
+	local line="$1"
+	local field="$2"
+	local payload x y width height
+	payload="$(extract_log_value "$line" "$field")"
+	IFS=',' read -r x y width height <<< "$payload"
+	if [[ ! "$x" =~ ^[0-9]+$ || ! "$y" =~ ^[0-9]+$ \
+		|| ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ \
+		|| "$width" -le 0 || "$height" -le 0 ]]; then
+		echo "ERROR: invalid Android Account/logout $field rect: ${payload:-missing}" >&2
+		echo "$line" >&2
+		return 1
+	fi
+	printf '%s %s %s %s\n' "$x" "$y" "$width" "$height"
+}
+
+assert_android_logout_layout() {
+	local line="$1"
+	local expected_account_open="$2"
+	local expected_confirm_open="$3"
+	local account_open confirm_open overlay_top blocking_surface target48 game_width game_height
+	local field rect x y width height
+
+	account_open="$(extract_log_value "$line" accountOpen)"
+	confirm_open="$(extract_log_value "$line" confirmOpen)"
+	overlay_top="$(extract_log_value "$line" overlayTop)"
+	blocking_surface="$(extract_log_value "$line" blockingSurface)"
+	target48="$(extract_log_value "$line" target48)"
+	game_width="$(extract_log_value "$line" gameWidth)"
+	game_height="$(extract_log_value "$line" gameHeight)"
+	if [[ "$account_open" != "$expected_account_open" \
+		|| "$confirm_open" != "$expected_confirm_open" \
+		|| "$overlay_top" != "true" || "$blocking_surface" != "none" \
+		|| ! "$target48" =~ ^[0-9]+$ || "$target48" -le 0 \
+		|| ! "$game_width" =~ ^[0-9]+$ || "$game_width" -le 0 \
+		|| ! "$game_height" =~ ^[0-9]+$ || "$game_height" -le 0 ]]; then
+		echo "ERROR: Android Account/logout state or viewport telemetry is invalid" >&2
+		echo "$line" >&2
+		return 1
+	fi
+
+	for field in account report logout cancel confirm; do
+		rect="$(android_logout_rect_from_line "$line" "$field")" || return 1
+		read -r x y width height <<< "$rect"
+		if (( x + width > game_width || y + height > game_height )); then
+			echo "ERROR: Android Account/logout $field rect is outside ${game_width}x${game_height}: $rect" >&2
+			return 1
+		fi
+		if [[ "$field" != "account" ]] && (( height < target48 )); then
+			echo "ERROR: Android Account/logout $field height=$height is below target48=$target48" >&2
+			return 1
+		fi
+	done
+	return 0
+}
+
+tap_android_logout_rect_from_line() {
+	local line="$1"
+	local field="$2"
+	local rect x y width height
+	rect="$(android_logout_rect_from_line "$line" "$field")" || return 1
+	read -r x y width height <<< "$rect"
+	tap_client_xy $((x + width / 2)) $((y + height / 2))
+}
+
+assert_auth_still_online_for_account_logout() {
+	local phase="$1"
+	if [[ -z "$AUTH_DB" ]]; then
+		return 0
+	fi
+	if ! wait_auth_online 5; then
+		echo "ERROR: Android session disconnected during Account/logout phase: $phase" >&2
+		return 1
+	fi
+	echo "Verified Android session remains online during Account/logout phase: $phase"
+}
+
+complete_android_account_logout_from_settings_line() {
+	local line="$1"
+	local screenshot_prefix="${2:-}"
+	local placement logout_x logout_y logout_top logout_bottom
+	local event_line
+
+	placement="$(extract_log_value "$line" logoutPlacement)"
+	logout_x="$(extract_log_value "$line" logoutX)"
+	logout_y="$(extract_log_value "$line" logoutY)"
+	logout_top="$(extract_log_value "$line" logoutTop)"
+	logout_bottom="$(extract_log_value "$line" logoutBottom)"
+	if [[ "$placement" != "settings" \
+		|| ! "$logout_x" =~ ^[0-9]+$ || ! "$logout_y" =~ ^[0-9]+$ \
+		|| ! "$logout_top" =~ ^[0-9]+$ || ! "$logout_bottom" =~ ^[0-9]+$ ]]; then
+		echo "ERROR: Android Account control telemetry is incomplete or not settings-hosted: $line" >&2
+		return 1
+	fi
+	if (( logout_bottom <= logout_top )); then
+		echo "ERROR: Android Account/logout geometry is invalid: $line" >&2
+		return 1
+	fi
+
+	"$ADB" logcat -c || true
+	tap_client_xy "$logout_x" "$logout_y"
+	event_line="$(wait_for_android_logout_event request 15)" || return 1
+	assert_android_logout_layout "$event_line" true false || return 1
+	echo "Verified Android Account/logout event: $event_line"
+	assert_auth_still_online_for_account_logout "Account sheet open" || return 1
+	if [[ -n "$screenshot_prefix" ]]; then
+		screenshot "${screenshot_prefix}-account-open"
+	fi
+
+	"$ADB" logcat -c || true
+	tap_android_logout_rect_from_line "$event_line" logout || return 1
+	event_line="$(wait_for_android_logout_event confirm-request 15)" || return 1
+	assert_android_logout_layout "$event_line" true true || return 1
+	echo "Verified Android Account/logout event: $event_line"
+	assert_auth_still_online_for_account_logout "confirmation pending" || return 1
+	if [[ -n "$screenshot_prefix" ]]; then
+		screenshot "${screenshot_prefix}-logout-confirmation"
+	fi
+
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent BACK
+	event_line="$(wait_for_android_logout_event cancel 15)" || return 1
+	assert_android_logout_layout "$event_line" true false || return 1
+	echo "Verified Android Account/logout event: $event_line"
+	assert_auth_still_online_for_account_logout "confirmation cancelled with Back" || return 1
+	if [[ -n "$screenshot_prefix" ]]; then
+		screenshot "${screenshot_prefix}-logout-cancelled"
+	fi
+
+	"$ADB" logcat -c || true
+	tap_android_logout_rect_from_line "$event_line" logout || return 1
+	event_line="$(wait_for_android_logout_event confirm-request 15)" || return 1
+	assert_android_logout_layout "$event_line" true true || return 1
+	echo "Verified Android Account/logout event: $event_line"
+	assert_auth_still_online_for_account_logout "confirmation reopened" || return 1
+
+	"$ADB" logcat -c || true
+	tap_android_logout_rect_from_line "$event_line" confirm || return 1
+	event_line="$(wait_for_android_logout_event confirm 15)" || return 1
+	assert_android_logout_layout "$event_line" true true || return 1
+	echo "Verified Android Account/logout event: $event_line"
 }
 
 wait_for_any_settings_rendered() {
@@ -4023,7 +6730,8 @@ wait_for_network_writer_count() {
 	local deadline=$((SECONDS + timeout))
 	local line active
 	while (( SECONDS < deadline )); do
-		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "VOIDSCAPE_NETWORK_WRITER event=stop " | tail -1 || true)"
+		line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep -E "VOIDSCAPE_NETWORK_WRITER event=(start|stop) " | tail -1 || true)"
 		active="$(extract_log_value "$line" active)"
 		if [[ "$active" == "$expected" ]]; then
 			echo "Verified Android network writer cleanup: $line"
@@ -4063,7 +6771,7 @@ wait_for_audio_cycle() {
 }
 
 logout_authenticated_smoke_session() {
-	local line logout_x logout_y
+	local line
 	enable_android_smoke_settings
 	"$ADB" logcat -c || true
 	"$ADB" shell input keyevent 43
@@ -4075,12 +6783,34 @@ logout_authenticated_smoke_session() {
 		disable_android_smoke_settings
 		return 1
 	}
-	logout_x="$(log_int_or_default "$line" logoutX 385)"
-	logout_y="$(log_int_or_default "$line" logoutY 293)"
-	tap_client_xy "$logout_x" "$logout_y"
+	complete_android_account_logout_from_settings_line "$line" || {
+		disable_android_smoke_settings
+		return 1
+	}
 	disable_android_smoke_settings
 	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || return 1
 	wait_for_network_writer_count 0 20
+}
+
+graceful_cleanup_authenticated_smoke_session() {
+	# Never force-stop a still-online Android fixture and then rewrite its DB row:
+	# the server intentionally retains that player for up to ten minutes. Bring
+	# the retained task forward and use the player-visible confirmed logout flow.
+	if [[ -n "$AUTH_DB" ]] && wait_auth_offline 1 >/dev/null 2>&1; then
+		return 0
+	fi
+	if ! is_resumed_activity "GameActivity"; then
+		"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" >/dev/null 2>&1 || true
+		wait_for_resumed_activity "GameActivity" 20 || {
+			echo "ERROR: could not foreground GameActivity for graceful smoke cleanup" >&2
+			return 1
+		}
+	fi
+	logout_authenticated_smoke_session || {
+		echo "ERROR: graceful authenticated smoke cleanup could not log out" >&2
+		return 1
+	}
+	return 0
 }
 
 wait_for_auth_settings_row() {
@@ -4110,6 +6840,17 @@ wait_for_auth_settings_row() {
 }
 
 tap_inventory_tab() {
+	local line rect x y width height
+	line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+		| grep "ANDROID_SMOKE_HUB_LAYOUT " | tail -1 || true)"
+	if [[ -n "$line" ]]; then
+		rect="$(mobile_hub_target_rect_from_line "$line" INVENTORY 2>/dev/null || true)"
+		if [[ -n "$rect" ]]; then
+			read -r x y width height <<< "$rect"
+			tap_client_xy $((x + width / 2)) $((y + height / 2))
+			return
+		fi
+	fi
     tap_client_xy 493 19
 }
 
@@ -4152,6 +6893,36 @@ assert_soft_keyboard_hidden() {
 		return 1
 	fi
 	return 0
+}
+
+wait_for_soft_keyboard_visible() {
+	local timeout="${1:-15}"
+	local deadline=$((SECONDS + timeout))
+	local state
+	while (( SECONDS < deadline )); do
+		state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
+		if grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
+			echo "Verified Android soft keyboard is visible"
+			return 0
+		fi
+		sleep 1
+	done
+	assert_soft_keyboard_visible
+}
+
+wait_for_soft_keyboard_hidden() {
+	local timeout="${1:-15}"
+	local deadline=$((SECONDS + timeout))
+	local state
+	while (( SECONDS < deadline )); do
+		state="$("$ADB" shell dumpsys input_method | tr -d '\r')"
+		if ! grep -Eq "mInputShown=true|(^|[[:space:]])inputShown=true" <<< "$state"; then
+			echo "Verified Android soft keyboard is hidden"
+			return 0
+		fi
+		sleep 1
+	done
+	assert_soft_keyboard_hidden
 }
 
 sql_escape() {
@@ -4811,6 +7582,48 @@ wait_auth_online() {
     return 1
 }
 
+wait_auth_chat_logged() {
+	local expected_message="$1"
+	local baseline_id="${2:-0}"
+	local timeout="${3:-30}"
+	local deadline=$((SECONDS + timeout))
+	local safe_user safe_message count
+	safe_user="$(sql_escape "$AUTH_USER")"
+	safe_message="$(sql_escape "$expected_message")"
+	while (( SECONDS < deadline )); do
+		count="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+			"select count(*) from chat_logs where id > $baseline_id and lower(sender)=lower('$safe_user') and lower(message)=lower('$safe_message');" 2>/dev/null || true)"
+		if [[ "$count" =~ ^[0-9]+$ ]] && (( count > 1 )); then
+			echo "ERROR: server persisted post-resume chat marker '$expected_message' $count times" >&2
+			return 1
+		fi
+		if [[ "$count" == "1" ]]; then
+			# Let the asynchronous logger settle so a duplicate send cannot arrive
+			# immediately after the first successful query.
+			sleep 2
+			count="$(sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+				"select count(*) from chat_logs where id > $baseline_id and lower(sender)=lower('$safe_user') and lower(message)=lower('$safe_message');" 2>/dev/null || true)"
+			if [[ "$count" == "1" ]]; then
+				echo "Verified exactly one post-resume client/server round trip in chat_logs: $expected_message"
+				return 0
+			fi
+			echo "ERROR: post-resume chat marker '$expected_message' settled at count=${count:-unknown}" >&2
+			return 1
+		fi
+		sleep 1
+	done
+	echo "ERROR: server did not persist post-resume chat marker '$expected_message'" >&2
+	return 1
+}
+
+read_auth_chat_log_max_id() {
+	if [[ -z "$AUTH_DB" || ! -f "$AUTH_DB" ]]; then
+		return 1
+	fi
+	sqlite3 -cmd '.timeout 5000' -noheader "$AUTH_DB" \
+		"select coalesce(max(id), 0) from chat_logs;"
+}
+
 wait_auth_position() {
     local expected_x="$1"
     local expected_y="$2"
@@ -4894,11 +7707,19 @@ run_authenticated_logout_smoke() {
 	tap_pct 38 61
 	sleep 8
 	screenshot 34-auth-after-terrain-tap
-	tap_pct 60 6
-	sleep 2
+	enable_android_smoke_settings
+	"$ADB" logcat -c || true
+	"$ADB" shell input keyevent 43
+	local settings_line
+	settings_line="$(wait_for_any_settings_rendered 20)" || exit 1
+	assert_settings_logout_visible "$settings_line" || exit 1
 	screenshot 35-auth-settings-open
-	tap_pct 67 85
+	complete_android_account_logout_from_settings_line "$settings_line" "35-auth" || exit 1
 	sleep 10
+	disable_android_smoke_settings
+	if [[ -n "$AUTH_DB" ]]; then
+		wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
+	fi
     screenshot 36-auth-after-logout-login-home
     tap_existing_user_button
     sleep 3
@@ -5203,7 +8024,7 @@ run_authenticated_context_menu_smoke() {
 	    enter_auth_credentials
 	    submit_login_and_wait || exit 1
 	    sleep 8
-	    close_welcome_dialog_if_present 8
+	    close_auth_intro_dialog_if_present
 	    wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
         screenshot 50-auth-before-context-long-press
         long_press_npc_target "$AUTH_NPC_ID" 1200 || exit 1
@@ -5433,13 +8254,11 @@ run_authenticated_chat_tab_smoke() {
     fi
 
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
-    local original_position="" original_x="" original_y="" original_online="" status
-    if [[ -n "$AUTH_DB" ]]; then
-        original_position="$(read_auth_position)"
-        read -r original_x original_y original_online <<< "$original_position"
-        echo "Android chat tab smoke moving $AUTH_USER from $original_x,$original_y to $AUTH_NPC_PLAYER_X,$AUTH_NPC_PLAYER_Y"
-        update_auth_position "$AUTH_NPC_PLAYER_X" "$AUTH_NPC_PLAYER_Y"
-    fi
+    local status
+    force_android_portrait || {
+        echo "ERROR: Android mobile hub smoke could not force portrait rotation" >&2
+        return 1
+    }
 
     status=0
     (
@@ -5447,44 +8266,161 @@ run_authenticated_chat_tab_smoke() {
         "$ADB" logcat -c || true
         "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_chat_tabs
-        enable_android_smoke_npc_targets
+        enable_android_smoke_walk
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+		# uiautomator can restore the emulator's pre-smoke rotation after tapping
+		# the native launcher. Reassert portrait once the shared client owns input.
+        force_android_portrait || exit 1
         enable_android_smoke_chat_tabs
-        enable_android_smoke_npc_targets
+        enable_android_smoke_walk
         tap_existing_user_button
         sleep 3
-	    enter_auth_credentials
-	    submit_login_and_wait || exit 1
-	    sleep 8
-	    close_welcome_dialog_if_present 8
-	    wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
-	    screenshot 60-auth-before-chat-tabs
+		enter_auth_credentials
+		submit_login_and_wait || exit 1
+		sleep 8
+		close_auth_intro_dialog_if_present
+		sleep 2
 
-        local raw_tabs tab screenshot_index
-        IFS=',' read -ra raw_tabs <<< "$AUTH_CHAT_TAB_SEQUENCE"
-        screenshot_index=61
-        for tab in "${raw_tabs[@]}"; do
-            tab="${tab//[[:space:]]/}"
-            tab="$(printf "%s" "$tab" | tr '[:lower:]' '[:upper:]')"
-            [[ -n "$tab" ]] || continue
-            "$ADB" logcat -c || true
-            tap_chat_tab "$tab"
-            wait_for_chat_tab "$tab" 15 || exit 1
-            sleep 1
-            screenshot "$(printf '%02d-auth-chat-tab-%s' "$screenshot_index" "$(echo "$tab" | tr '[:upper:]' '[:lower:]')")"
-            screenshot_index=$((screenshot_index + 1))
-        done
-    ) || status=$?
+		local portrait_viewport_line portrait_hub_line active_hub_line
+		local landscape_viewport_line landscape_hub_line action_line
+		local key expected_panel expected_side current_panel current_side subtab
+		local -a hub_keys=(STATS MAP SOCIAL SETTINGS INVENTORY MAGIC PRAYER)
+		local -a stats_subtabs=(QUESTS LOOT BEASTS)
+		portrait_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+		portrait_hub_line="$(wait_for_mobile_hub_layout portrait 30)" || exit 1
+		current_panel="$(extract_log_value "$portrait_hub_line" panel)"
+		current_side="$(extract_log_value "$portrait_hub_line" panelSide)"
+		assert_mobile_hub_layout "$portrait_hub_line" "$portrait_viewport_line" \
+			portrait "$current_panel" "$current_side" || exit 1
+		screenshot 60a-auth-mobile-hub-portrait
 
-    disable_android_smoke_chat_tabs
-    disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
-    if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
-        update_auth_position "$original_x" "$original_y" || true
-    fi
-    sleep 1
-    return "$status"
+		for key in "${hub_keys[@]}"; do
+			expected_panel="$(mobile_hub_expected_panel "$key")" || exit 1
+			expected_side="$(mobile_hub_expected_side "$key")" || exit 1
+			"$ADB" logcat -c || true
+			tap_mobile_hub_control_from_layout "$portrait_hub_line" "$key" \
+				"$portrait_viewport_line" || exit 1
+			action_line="$(wait_for_mobile_hub_action "$key" "$expected_panel" "$expected_side" 20)" || exit 1
+			echo "Verified Android portrait mobile hub action: $action_line"
+			active_hub_line="$(wait_for_mobile_hub_panel portrait "$expected_panel" "$expected_side" 15)" || exit 1
+			assert_mobile_hub_layout "$active_hub_line" "$portrait_viewport_line" \
+				portrait "$expected_panel" "$expected_side" || exit 1
+			assert_no_mobile_hub_fallthrough "$key" 2 || exit 1
+			portrait_hub_line="$active_hub_line"
+			sleep 1
+			screenshot "60b-auth-mobile-hub-portrait-$(echo "$key" | tr '[:upper:]' '[:lower:]')"
+			if [[ "$key" == "STATS" ]]; then
+				for subtab in "${stats_subtabs[@]}"; do
+					"$ADB" logcat -c || true
+					tap_mobile_stats_subtab_from_layout "$active_hub_line" "$subtab" \
+						"$portrait_viewport_line" || exit 1
+					active_hub_line="$(wait_for_mobile_stats_subtab "$subtab" 20)" || exit 1
+					assert_mobile_stats_subtab_layout "$active_hub_line" \
+						"$portrait_viewport_line" "$subtab" || exit 1
+					case "$subtab" in
+						QUESTS) screenshot 60ba-auth-mobile-hub-portrait-quests ;;
+						LOOT) screenshot 60bb-auth-mobile-hub-portrait-loot ;;
+						BEASTS) screenshot 60bc-auth-mobile-hub-portrait-beasts ;;
+					esac
+				done
+				"$ADB" logcat -c || true
+				tap_mobile_stats_subtab_from_layout "$active_hub_line" STATS \
+					"$portrait_viewport_line" || exit 1
+				active_hub_line="$(wait_for_mobile_stats_subtab STATS 20)" || exit 1
+				assert_mobile_stats_subtab_layout "$active_hub_line" \
+					"$portrait_viewport_line" STATS || exit 1
+				portrait_hub_line="$active_hub_line"
+				screenshot 60bd-auth-mobile-hub-portrait-stats-returned
+				"$ADB" logcat -c || true
+				swipe_mobile_hub_drawer_up "$active_hub_line" || exit 1
+				wait_for_mobile_hub_stats_scroll portrait 15 || exit 1
+				screenshot 60b-auth-mobile-hub-portrait-stats-scrolled
+			fi
+			if [[ "$key" == "STATS" || "$key" == "INVENTORY" ]]; then
+				"$ADB" logcat -c || true
+				tap_mobile_hub_connector_from_layout "$active_hub_line" "$portrait_viewport_line" || exit 1
+				wait_for_mobile_hub_panel portrait "$expected_panel" "$expected_side" 10 >/dev/null || exit 1
+				assert_no_mobile_hub_connector_fallthrough "portrait-$expected_side" 2 || exit 1
+			fi
+		done
+		screenshot 60c-auth-mobile-hub-portrait-all-panels-reachable
+
+		"$ADB" logcat -c || true
+		force_android_landscape || {
+			echo "ERROR: Android mobile hub smoke could not force landscape rotation" >&2
+			exit 1
+		}
+		assert_game_activity_for_input "mobile hub landscape rotation" "mobile-hub-lost-landscape" || exit 1
+		landscape_viewport_line="$(wait_for_android_mobile_viewport landscape 30)" || exit 1
+		# Rotation can draw one final portrait frame after the pre-rotation log clear.
+		# Preserve the settled viewport in the telemetry cache, then clear transient
+		# geometry before requiring a landscape split-rail record.
+		"$ADB" logcat -c || true
+		landscape_hub_line="$(wait_for_mobile_hub_layout landscape 30)" || exit 1
+		current_panel="$(extract_log_value "$landscape_hub_line" panel)"
+		current_side="$(extract_log_value "$landscape_hub_line" panelSide)"
+		assert_mobile_hub_layout "$landscape_hub_line" "$landscape_viewport_line" \
+			landscape "$current_panel" "$current_side" || exit 1
+		screenshot 60d-auth-mobile-hub-landscape
+
+		for key in "${hub_keys[@]}"; do
+			expected_panel="$(mobile_hub_expected_panel "$key")" || exit 1
+			expected_side="$(mobile_hub_expected_side "$key")" || exit 1
+			"$ADB" logcat -c || true
+			tap_mobile_hub_control_from_layout "$landscape_hub_line" "$key" \
+				"$landscape_viewport_line" || exit 1
+			action_line="$(wait_for_mobile_hub_action "$key" "$expected_panel" "$expected_side" 20)" || exit 1
+			echo "Verified Android landscape mobile hub action: $action_line"
+			active_hub_line="$(wait_for_mobile_hub_panel landscape "$expected_panel" "$expected_side" 15)" || exit 1
+			assert_mobile_hub_layout "$active_hub_line" "$landscape_viewport_line" \
+				landscape "$expected_panel" "$expected_side" || exit 1
+			assert_no_mobile_hub_fallthrough "$key" 2 || exit 1
+			landscape_hub_line="$active_hub_line"
+			sleep 1
+			screenshot "60e-auth-mobile-hub-landscape-$(echo "$key" | tr '[:upper:]' '[:lower:]')"
+			if [[ "$key" == "STATS" ]]; then
+				"$ADB" logcat -c || true
+				swipe_mobile_hub_drawer_up "$active_hub_line" || exit 1
+				wait_for_mobile_hub_stats_scroll landscape 15 || exit 1
+				screenshot 60e-auth-mobile-hub-landscape-stats-scrolled
+			fi
+			if [[ "$key" == "STATS" || "$key" == "INVENTORY" ]]; then
+				"$ADB" logcat -c || true
+				tap_mobile_hub_connector_from_layout "$active_hub_line" "$landscape_viewport_line" || exit 1
+				wait_for_mobile_hub_panel landscape "$expected_panel" "$expected_side" 10 >/dev/null || exit 1
+				assert_no_mobile_hub_connector_fallthrough "landscape-$expected_side" 2 || exit 1
+			fi
+		done
+		screenshot 60f-auth-mobile-hub-landscape-all-panels-reachable
+
+		"$ADB" logcat -c || true
+		force_android_portrait || {
+			echo "ERROR: Android mobile hub smoke could not restore portrait rotation" >&2
+			exit 1
+		}
+		portrait_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+		"$ADB" logcat -c || true
+		portrait_hub_line="$(wait_for_mobile_hub_layout portrait 30)" || exit 1
+		current_panel="$(extract_log_value "$portrait_hub_line" panel)"
+		current_side="$(extract_log_value "$portrait_hub_line" panelSide)"
+		assert_mobile_hub_layout "$portrait_hub_line" "$portrait_viewport_line" \
+			portrait "$current_panel" "$current_side" || exit 1
+		assert_no_android_runtime_crash "after mobile hub portrait restore" || exit 1
+		screenshot 60g-auth-mobile-hub-portrait-restored
+		logout_authenticated_smoke_session || exit 1
+	) || status=$?
+
+	if ! graceful_cleanup_authenticated_smoke_session; then
+		status=1
+	fi
+	disable_android_smoke_chat_tabs
+	disable_android_smoke_walk
+	if wait_auth_offline 2 >/dev/null 2>&1; then
+		"$ADB" shell am force-stop $APP_ID || true
+	fi
+	force_android_portrait || true
+	sleep 1
+	return "$status"
 }
 
 run_authenticated_chat_send_smoke() {
@@ -5504,6 +8440,10 @@ run_authenticated_chat_send_smoke() {
     status=0
     (
         set -e
+        force_android_portrait || {
+            echo "ERROR: Android native chat smoke could not force portrait rotation" >&2
+            exit 1
+        }
         "$ADB" logcat -c || true
         "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_chat_send
@@ -5516,35 +8456,79 @@ run_authenticated_chat_send_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         wait_for_npc_target "$AUTH_NPC_ID" 30 >/dev/null || exit 1
-        screenshot 65-auth-before-chat-send
-        if tap_chat_tab KEYBOARD; then
-            echo "Opened Android keyboard from bottom chat keyboard tab"
-        else
-            echo "WARNING: keyboard tab layout unavailable; using legacy keyboard coordinate fallback" >&2
-            tap_client_xy "$AUTH_CHAT_KEYBOARD_X" "$AUTH_CHAT_KEYBOARD_Y"
-        fi
-        sleep 2
-        assert_soft_keyboard_visible || exit 1
-        screenshot 66-auth-chat-keyboard-open
-        tap_client_xy "$AUTH_CHAT_ENTRY_X" "$AUTH_CHAT_ENTRY_Y"
-        sleep 1
-        "$ADB" logcat -c || true
-        input_text "$AUTH_CHAT_MESSAGE"
-        "$ADB" shell input keyevent ENTER
-        wait_for_chat_send "$AUTH_CHAT_MESSAGE" 20 || exit 1
-        sleep 2
-        screenshot 67-auth-after-chat-send
-    ) || status=$?
 
-    disable_android_smoke_chat_send
-    disable_android_smoke_npc_targets
-    "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
-    if [[ -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
-        update_auth_position "$original_x" "$original_y" || true
-    fi
+		local viewport_line chat_line filter expected_channel current_channel
+        local -a filters=(ALL PUBLIC QUEST GLOBAL PM)
+        viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+		chat_line="$(wait_for_native_chat_layout false "" false 20)" || exit 1
+		assert_native_chat_layout "$chat_line" "$viewport_line" false || exit 1
+		current_channel="$(extract_log_value "$chat_line" channel)"
+		screenshot 65-auth-native-chat-collapsed
+
+		"$ADB" logcat -c || true
+		tap_native_chat_inline_from_line "$chat_line" || exit 1
+		chat_line="$(wait_for_native_chat_layout false "$current_channel" true 20)" || exit 1
+		assert_native_chat_layout "$chat_line" "$viewport_line" false || exit 1
+		assert_soft_keyboard_visible || exit 1
+		screenshot 65a-auth-native-chat-inline-keyboard
+		"$ADB" logcat -c || true
+		input_text "$AUTH_CHAT_MESSAGE"
+		"$ADB" shell input keyevent ENTER
+		wait_for_chat_send "$AUTH_CHAT_MESSAGE" 20 || exit 1
+		sleep 2
+		assert_single_chat_send "$AUTH_CHAT_MESSAGE" || exit 1
+		screenshot 65b-auth-native-chat-inline-after-send
+
+		"$ADB" logcat -c || true
+		"$ADB" shell input keyevent BACK
+		sleep 2
+		assert_soft_keyboard_hidden || exit 1
+		chat_line="$(wait_for_native_chat_layout false "$current_channel" false 20)" || exit 1
+		assert_native_chat_layout "$chat_line" "$viewport_line" false || exit 1
+		screenshot 65c-auth-native-chat-inline-dismissed
+
+		"$ADB" logcat -c || true
+		tap_native_chat_launcher_from_line "$chat_line" || exit 1
+		chat_line="$(wait_for_native_chat_layout true "$current_channel" false 20)" || exit 1
+		assert_native_chat_layout "$chat_line" "$viewport_line" true || exit 1
+		screenshot 66-auth-native-chat-history-open
+
+		for filter in "${filters[@]}"; do
+            expected_channel="$(native_chat_channel_for_filter "$filter")" || exit 1
+            "$ADB" logcat -c || true
+            tap_native_chat_filter_from_line "$chat_line" "$filter" || exit 1
+            chat_line="$(wait_for_native_chat_layout true "$expected_channel" false 20)" || exit 1
+            assert_native_chat_layout "$chat_line" "$viewport_line" true || exit 1
+            current_channel="$expected_channel"
+			echo "Verified native Android chat filter $filter selected channel=$current_channel"
+		done
+		screenshot 67-auth-native-chat-all-filters
+
+		"$ADB" logcat -c || true
+		"$ADB" shell input keyevent BACK
+		chat_line="$(wait_for_native_chat_layout false "$current_channel" false 20)" || exit 1
+		assert_native_chat_layout "$chat_line" "$viewport_line" false || exit 1
+		assert_soft_keyboard_hidden || exit 1
+		assert_no_android_runtime_crash "after native chat sheet smoke" || exit 1
+		screenshot 67a-auth-native-chat-history-collapsed-by-back
+		logout_authenticated_smoke_session || exit 1
+	) || status=$?
+
+	local cleanup_offline=true
+	if ! graceful_cleanup_authenticated_smoke_session; then
+		status=1
+		cleanup_offline=false
+	fi
+	disable_android_smoke_chat_send
+	disable_android_smoke_npc_targets
+	if [[ "$cleanup_offline" == "true" ]]; then
+		"$ADB" shell am force-stop $APP_ID || true
+	fi
+	if [[ "$cleanup_offline" == "true" && -n "$AUTH_DB" && -n "$original_x" && -n "$original_y" ]]; then
+		update_auth_position "$original_x" "$original_y" || true
+	fi
     sleep 1
     return "$status"
 }
@@ -5578,9 +8562,20 @@ run_authenticated_bank_smoke() {
         set -e
         "$ADB" logcat -c || true
         "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+        force_android_portrait || {
+            echo "ERROR: Android bank smoke could not establish its portrait baseline" >&2
+            exit 1
+        }
         enable_android_smoke_bank
         enable_android_smoke_object_targets
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+        # uiautomator may restore the emulator's pre-smoke rotation while it
+        # taps the native launcher, so reassert portrait after GameActivity owns
+        # the display and before reading any login target geometry.
+        force_android_portrait || {
+            echo "ERROR: Android bank smoke lost portrait after launch" >&2
+            exit 1
+        }
         enable_android_smoke_bank
         enable_android_smoke_object_targets
         tap_existing_user_button
@@ -5588,7 +8583,7 @@ run_authenticated_bank_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         "$ADB" logcat -c || true
         local bank_object_coords bank_object_x bank_object_y
         bank_object_coords="$(wait_for_stable_object_target "$AUTH_BANK_OBJECT_ID" 30)" || exit 1
@@ -5603,6 +8598,7 @@ run_authenticated_bank_smoke() {
         local close_x close_y
         local loadouts_x loadouts_y loadout_save_x loadout_save_y loadout_load_x loadout_load_y
         local confirm_save_x confirm_save_y scroll_x scroll_start_y scroll_end_y panel_line modal_line
+        local bank_items tab_count tab0_x tab0_y tab_last_x tab_last_y
 
         bank_line="$(wait_for_bank_open 30)" || exit 1
         bank_renderer="$(extract_log_value "$bank_line" renderer)"
@@ -5631,9 +8627,37 @@ run_authenticated_bank_smoke() {
         confirm_save_y="$(log_int_or_default "$bank_line" confirmSaveY 271)"
         screenshot 69-auth-bank-open
 
-        tap_client_xy "$search_x" "$search_y"
-        sleep 1
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            assert_void_glass_bank_touch_geometry "$bank_line" || exit 1
+            bank_items="$(log_int_or_default "$bank_line" bankItems 0)"
+            tab_count="$(log_int_or_default "$bank_line" tabCount 0)"
+            if (( bank_items > 240 && tab_count == 7 )); then
+                tab0_x="$(log_int_or_default "$bank_line" tab0X -1)"
+                tab0_y="$(log_int_or_default "$bank_line" tab0Y -1)"
+                tab_last_x="$(log_int_or_default "$bank_line" tabLastX -1)"
+                tab_last_y="$(log_int_or_default "$bank_line" tabLastY -1)"
+                "$ADB" logcat -c || true
+                tap_client_xy "$tab_last_x" "$tab_last_y"
+                wait_for_bank_page 6 20 >/dev/null || exit 1
+                screenshot 69a-auth-bank-last-page
+                bank_line="$(wait_for_bank_open 5)" || exit 1
+                tab0_x="$(log_int_or_default "$bank_line" tab0X "$tab0_x")"
+                tab0_y="$(log_int_or_default "$bank_line" tab0Y "$tab0_y")"
+                "$ADB" logcat -c || true
+                tap_client_xy "$tab0_x" "$tab0_y"
+                wait_for_bank_page 0 20 >/dev/null || exit 1
+                bank_line="$(wait_for_bank_open 5)" || exit 1
+            fi
+        fi
+
         "$ADB" logcat -c || true
+        tap_client_xy "$search_x" "$search_y"
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            wait_for_bank_search_focus true 20 >/dev/null || exit 1
+            # ADB text injection works without an IME; this OS-level gate proves
+            # that a player's ordinary search tap actually summoned the keyboard.
+            wait_for_soft_keyboard_visible 15 || exit 1
+        fi
         input_text "$AUTH_BANK_SEARCH_TEXT"
         wait_for_bank_search "$AUTH_BANK_SEARCH_TEXT" 20 >/dev/null || exit 1
         sleep 1
@@ -5642,9 +8666,29 @@ run_authenticated_bank_smoke() {
         bank_line="$(wait_for_bank_open 5)" || exit 1
         search_clear_x="$(log_int_or_default "$bank_line" searchClearX "$search_clear_x")"
         search_clear_y="$(log_int_or_default "$bank_line" searchClearY "$search_clear_y")"
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            "$ADB" shell input keyevent BACK
+            wait_for_soft_keyboard_hidden 15 || exit 1
+            bank_line="$(wait_for_bank_search_focus true 10)" || exit 1
+            if [[ "$(extract_log_value "$bank_line" search)" != "$(chat_message_log_token "$AUTH_BANK_SEARCH_TEXT")" ]]; then
+                echo "ERROR: Android Back changed or dismissed the active bank search" >&2
+                echo "$bank_line" >&2
+                exit 1
+            fi
+            # The focused field stays active after keyboard Back and can summon
+            # the IME again with one ordinary tap.
+            tap_client_xy "$search_x" "$search_y"
+            wait_for_soft_keyboard_visible 15 || exit 1
+        fi
         "$ADB" logcat -c || true
         tap_client_xy "$search_clear_x" "$search_clear_y"
         wait_for_bank_search "" 20 >/dev/null || exit 1
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            wait_for_bank_search_focus true 10 >/dev/null || exit 1
+            assert_soft_keyboard_visible || exit 1
+            "$ADB" shell input keyevent BACK
+            wait_for_soft_keyboard_hidden 15 || exit 1
+        fi
         sleep 1
 
         "$ADB" logcat -c || true
@@ -5734,9 +8778,18 @@ run_authenticated_bank_smoke() {
         bank_line="$(wait_for_bank_open 5)" || exit 1
         close_x="$(log_int_or_default "$bank_line" closeX "$close_x")"
         close_y="$(log_int_or_default "$bank_line" closeY "$close_y")"
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            "$ADB" logcat -c || true
+            tap_client_xy "$search_x" "$search_y"
+            wait_for_bank_search_focus true 20 >/dev/null || exit 1
+            wait_for_soft_keyboard_visible 15 || exit 1
+        fi
         "$ADB" logcat -c || true
         tap_client_xy "$close_x" "$close_y"
         wait_for_bank_action CLOSE 20 || exit 1
+        if [[ "$bank_renderer" == "voidGlass" ]]; then
+            wait_for_soft_keyboard_hidden 15 || exit 1
+        fi
         sleep 1
         screenshot 79-auth-bank-closed
 
@@ -5764,8 +8817,14 @@ run_authenticated_shop_smoke() {
         return
     fi
 
+    force_android_portrait || {
+        echo "ERROR: Android shop smoke could not establish portrait baseline" >&2
+        return 1
+    }
+
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local original_position original_x original_y original_online player_id status
+    local emulator_flag use_narrow_override
     original_position="$(read_auth_position)"
     read -r original_x original_y original_online <<< "$original_position"
     player_id="$(read_auth_player_id)"
@@ -5775,6 +8834,12 @@ run_authenticated_shop_smoke() {
     echo "Android shop smoke seeding coins in inventory slot 0 x$AUTH_SHOP_COIN_AMOUNT"
     seed_auth_inventory_slot "$player_id" 0 10 "$AUTH_SHOP_COIN_AMOUNT"
 
+    save_android_display_override
+    emulator_flag="$("$ADB" shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r' | tail -1)"
+    use_narrow_override=0
+    if [[ "$emulator_flag" == "1" ]]; then
+        use_narrow_override=1
+    fi
     status=0
     (
         set -e
@@ -5793,22 +8858,40 @@ run_authenticated_shop_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
         wait_for_npc_target "$AUTH_SHOP_NPC_ID" 30 >/dev/null || exit 1
         screenshot 79-auth-before-shop-open
-        long_press_npc_target "$AUTH_SHOP_NPC_ID" 1200 || exit 1
 
-        local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index
-        menu_values="$(wait_for_context_menu 15)" || exit 1
+        local menu_values menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y menu_index shop_menu_attempt
+        menu_index=""
+        for shop_menu_attempt in 1 2 3; do
+            # NPCs and the automatic camera can both move while a hold is in
+            # progress. The configured Android hold threshold is 250ms, so a
+            # 500ms press is deliberate without leaving enough time for the
+            # renderer-reported target to drift a full hit box.
+            "$ADB" logcat -c || true
+            long_press_npc_target "$AUTH_SHOP_NPC_ID" 500 || continue
+            menu_values="$(wait_for_context_menu 8)" || continue
+            if menu_index="$(wait_for_context_menu_action_index "$AUTH_SHOP_NPC_ACTION" 4)"; then
+                break
+            fi
+            menu_index=""
+            "$ADB" shell input keyevent BACK || true
+            sleep 1
+        done
+        if [[ -z "$menu_index" ]]; then
+            echo "ERROR: Android shop could not open NPC action $AUTH_SHOP_NPC_ACTION after 3 fresh target holds" >&2
+            exit 1
+        fi
         read -r menu_x menu_y menu_width menu_height menu_items first_action menu_mouse_x menu_mouse_y <<< "$menu_values"
-        menu_index="$(wait_for_context_menu_action_index "$AUTH_SHOP_NPC_ACTION" 10)" || exit 1
         tap_context_menu_item "$menu_x" "$menu_y" "$menu_width" "$menu_height" "$menu_items" "$menu_index" || exit 1
         wait_for_context_menu_action "$AUTH_SHOP_NPC_ACTION" 20 || exit 1
         wait_for_npc_action "$AUTH_SHOP_NPC_ID" "$AUTH_SHOP_NPC_ACTION" 20 || exit 1
 
         local shop_line shop_x shop_y slot_x slot_y buy_x buy_y sell_x sell_y
-        shop_line="$(wait_for_shop_open 30)" || exit 1
+        shop_line="$(wait_for_shop_open 30 portrait)" || exit 1
+        assert_native_shop_layout "$shop_line" portrait || exit 1
         screenshot 80-auth-shop-open
         shop_x="$(log_int_or_default "$shop_line" shopX 52)"
         shop_y="$(log_int_or_default "$shop_line" shopY 50)"
@@ -5825,27 +8908,74 @@ run_authenticated_shop_smoke() {
         sleep 1
         screenshot 81-auth-shop-selected
 
-        "$ADB" logcat -c || true
-        tap_client_xy "$buy_x" "$buy_y"
-        wait_for_shop_action BUY 20 || exit 1
-        wait_for_shop_selected_owned "$AUTH_SHOP_BUY_SLOT" 25 || exit 1
+        tap_shop_action_with_retry BUY "$shop_line" || exit 1
+        shop_line="$(wait_for_shop_selected_owned "$AUTH_SHOP_BUY_SLOT" 25)" || exit 1
         sleep 1
         screenshot 82-auth-shop-buy
 
-        "$ADB" logcat -c || true
-        tap_client_xy "$sell_x" "$sell_y"
-        wait_for_shop_action SELL 20 || exit 1
+        tap_shop_action_with_retry SELL "$shop_line" || exit 1
         sleep 2
         screenshot 83-auth-shop-sell
 
         "$ADB" logcat -c || true
         swipe_client_xy 256 170 256 80 500
-        shop_line="$(wait_for_shop_open 15)" || exit 1
+        shop_line="$(wait_for_shop_open 15 portrait)" || exit 1
+        assert_native_shop_layout "$shop_line" portrait || exit 1
         sleep 1
         screenshot 84-auth-shop-no-scroll
 
+        # Exercise the pressure case that previously selected the tall portrait
+        # stack in landscape and crushed the fixed five-row item grid. Keep
+        # physical-device smoke non-mutating; the emulator receives a temporary
+        # roughly 571dp-wide landscape profile and must use wrapped 3x2 side
+        # action groups.
+        local expected_landscape_amount_rows=""
+        if [[ "$use_narrow_override" == "1" ]]; then
+            # 720x1000 at the AVD's native density represents a common narrow
+            # phone without relying on a synthetic density change that a
+            # retained Activity may observe in two configuration phases.
+            "$ADB" shell wm size 720x1000 >/dev/null
+            expected_landscape_amount_rows=2
+        fi
+        force_android_landscape || exit 1
+        # Rotation dispatches several inset/surface snapshots. Let the final
+        # edge-to-edge viewport settle before accepting shop geometry.
+        sleep 5
+        shop_line="$(wait_for_shop_open 30 landscape)" || exit 1
+        assert_native_shop_layout "$shop_line" landscape "$expected_landscape_amount_rows" || exit 1
+        screenshot 85-auth-shop-narrow-landscape
+
+        buy_x="$(log_int_or_default "$shop_line" buy1X 376)"
+        buy_y="$(log_int_or_default "$shop_line" buy1Y 260)"
+        sell_x="$(log_int_or_default "$shop_line" sell1X 376)"
+        sell_y="$(log_int_or_default "$shop_line" sell1Y 285)"
+        tap_shop_action_with_retry BUY "$shop_line" || exit 1
+        shop_line="$(wait_for_shop_selected_owned "$AUTH_SHOP_BUY_SLOT" 25)" || exit 1
+        tap_shop_action_with_retry SELL "$shop_line" || exit 1
+        sleep 1
+        screenshot 86-auth-shop-narrow-landscape-actions
+
+        shop_line="$(wait_for_shop_open 15 landscape)" || exit 1
+        local close_x close_y
+        close_x="$(log_int_or_default "$shop_line" closeX 500)"
+        close_y="$(log_int_or_default "$shop_line" closeY 24)"
+        if [[ -n "$SHOP_ACTION_VIEWPORT_LINE" ]]; then
+            tap_client_xy_from_viewport "$close_x" "$close_y" "$SHOP_ACTION_VIEWPORT_LINE"
+        else
+            tap_client_xy "$close_x" "$close_y"
+        fi
+        sleep 2
+        force_android_portrait || exit 1
+		if [[ "$use_narrow_override" == "1" ]]; then
+			restore_android_display_override
+			sleep 5
+		fi
+
 		logout_authenticated_smoke_session || exit 1
     ) || status=$?
+
+    restore_android_display_override
+    force_android_portrait || true
 
     disable_android_smoke_shop
     disable_android_smoke_npc_targets
@@ -5866,6 +8996,11 @@ run_authenticated_equipment_smoke() {
         return
     fi
 
+    force_android_portrait || {
+        echo "ERROR: Android equipment smoke could not force portrait rotation" >&2
+        return 1
+    }
+
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
     local player_id status
     player_id="$(read_auth_player_id)"
@@ -5882,16 +9017,26 @@ run_authenticated_equipment_smoke() {
         "$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
         enable_android_smoke_inventory_targets
         enable_android_smoke_equipment
+		enable_android_smoke_chat_tabs
         launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+        # The wrapper transition may restore a previous emulator rotation.
+        # Reassert portrait before the shared client starts receiving input.
+        force_android_portrait || exit 1
         enable_android_smoke_inventory_targets
         enable_android_smoke_equipment
+		enable_android_smoke_chat_tabs
         tap_existing_user_button
         sleep 3
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
+
+        local portrait_viewport_line landscape_viewport_line
+        local equipment_line equipment_tab_x equipment_tab_y
+        local equipped_line equipped_slot_x equipped_slot_y
+        portrait_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
         tap_inventory_tab
         wait_for_inventory_target "$AUTH_EQUIPMENT_INVENTORY_SLOT" 30 >/dev/null || exit 1
         screenshot 85-auth-before-equipment-equip
@@ -5899,43 +9044,54 @@ run_authenticated_equipment_smoke() {
         "$ADB" logcat -c || true
         tap_inventory_slot "$AUTH_EQUIPMENT_INVENTORY_SLOT" || exit 1
         wait_for_inventory_action "$AUTH_EQUIPMENT_INVENTORY_SLOT" "ITEM_EQUIP_FROM_INVENTORY" 20 || exit 1
+        wait_for_inventory_equipped_state "$AUTH_EQUIPMENT_INVENTORY_SLOT" true 20 || exit 1
+        wait_for_equipment_count 1 20 || exit 1
+
+        # Require the native inventory/equipment tabs; falling back to an
+        # inventory-only unequip would leave the new drawer geometry untested.
+        equipment_line="$(wait_for_equipment_tab 0 20)" || exit 1
+        equipment_tab_x="$(log_int_or_default "$equipment_line" equipmentTabX 325)"
+        equipment_tab_y="$(log_int_or_default "$equipment_line" equipmentTabY 280)"
+        "$ADB" logcat -c || true
+        tap_client_xy "$equipment_tab_x" "$equipment_tab_y"
+        equipment_line="$(wait_for_equipment_tab 1 20)" || exit 1
+        assert_equipment_touch_geometry portrait "$equipment_line" "$portrait_viewport_line" || exit 1
+        equipped_line="$(wait_for_equipped_item "$AUTH_EQUIPMENT_ITEM_ID" 20)" || exit 1
+        sleep 1
+        screenshot 86a-auth-equipment-drawer-portrait
+
+        "$ADB" logcat -c || true
+        force_android_landscape || {
+            echo "ERROR: Android equipment smoke could not force landscape rotation" >&2
+            exit 1
+        }
+        assert_game_activity_for_input "equipment landscape rotation" "equipment-lost-landscape" || exit 1
+        landscape_viewport_line="$(wait_for_android_mobile_viewport landscape 30)" || exit 1
+        equipment_line="$(wait_for_equipment_tab 1 20)" || exit 1
+        assert_equipment_touch_geometry landscape "$equipment_line" "$landscape_viewport_line" || exit 1
+        equipped_line="$(wait_for_equipped_item "$AUTH_EQUIPMENT_ITEM_ID" 20)" || exit 1
+        equipped_slot_x="$(log_int_or_default "$equipped_line" clientX 386)"
+        equipped_slot_y="$(log_int_or_default "$equipped_line" clientY 120)"
+        sleep 1
+        screenshot 86b-auth-equipment-drawer-landscape
+
+        "$ADB" logcat -c || true
+        tap_client_xy "$equipped_slot_x" "$equipped_slot_y"
+        wait_for_equipment_action UNEQUIP_FROM_EQUIPMENT 20 || exit 1
+        wait_for_equipment_count 0 20 || exit 1
         sleep 2
+        screenshot 87-auth-after-equipment-unequip-landscape
 
-        local equipment_line equipment_tab_x equipment_tab_y equipped_line equipped_slot_x equipped_slot_y
-        equipment_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' | grep "ANDROID_SMOKE_EQUIPMENT_TAB " | tail -1 || true)"
-        if [[ "$(extract_log_value "$equipment_line" tab)" != "0" ]]; then
-            equipment_line=""
-        fi
-        if [[ -n "$equipment_line" ]]; then
-            equipment_tab_x="$(log_int_or_default "$equipment_line" equipmentTabX 325)"
-            equipment_tab_y="$(log_int_or_default "$equipment_line" equipmentTabY 280)"
-            "$ADB" logcat -c || true
-            tap_client_xy "$equipment_tab_x" "$equipment_tab_y"
-            wait_for_equipment_tab 1 20 >/dev/null || exit 1
-            equipped_line="$(wait_for_equipped_item "$AUTH_EQUIPMENT_ITEM_ID" 20)" || exit 1
-            equipped_slot_x="$(log_int_or_default "$equipped_line" clientX 386)"
-            equipped_slot_y="$(log_int_or_default "$equipped_line" clientY 120)"
-            sleep 1
-            screenshot 86-auth-equipment-tab-open
-
-            "$ADB" logcat -c || true
-            tap_client_xy "$equipped_slot_x" "$equipped_slot_y"
-            wait_for_equipment_action UNEQUIP_FROM_EQUIPMENT 20 || exit 1
-            wait_for_equipment_count 0 20 || exit 1
-            sleep 2
-            screenshot 87-auth-after-equipment-unequip
-        else
-            wait_for_inventory_equipped_state "$AUTH_EQUIPMENT_INVENTORY_SLOT" true 20 || exit 1
-            sleep 1
-            screenshot 86-auth-inventory-equipped
-
-            "$ADB" logcat -c || true
-            tap_inventory_slot "$AUTH_EQUIPMENT_INVENTORY_SLOT" || exit 1
-            wait_for_inventory_action "$AUTH_EQUIPMENT_INVENTORY_SLOT" "ITEM_UNEQUIP_FROM_INVENTORY" 20 || exit 1
-            wait_for_inventory_equipped_state "$AUTH_EQUIPMENT_INVENTORY_SLOT" false 20 || exit 1
-            sleep 2
-            screenshot 87-auth-after-inventory-unequip
-        fi
+        "$ADB" logcat -c || true
+        force_android_portrait || {
+            echo "ERROR: Android equipment smoke could not restore portrait rotation" >&2
+            exit 1
+        }
+        assert_game_activity_for_input "equipment portrait restore" "equipment-lost-portrait-restore" || exit 1
+        portrait_viewport_line="$(wait_for_android_mobile_viewport portrait 30)" || exit 1
+        equipment_line="$(wait_for_equipment_tab 1 20)" || exit 1
+        assert_equipment_touch_geometry portrait "$equipment_line" "$portrait_viewport_line" || exit 1
+        assert_no_android_runtime_crash "after equipment portrait restore" || exit 1
 
         "$ADB" shell am force-stop $APP_ID || true
         wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
@@ -5943,10 +9099,12 @@ run_authenticated_equipment_smoke() {
 
     disable_android_smoke_inventory_targets
     disable_android_smoke_equipment
+	disable_android_smoke_chat_tabs
     "$ADB" shell am force-stop $APP_ID || true
     wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
     restore_auth_inventory "$player_id" || true
     restore_auth_equipment "$player_id" || true
+    force_android_portrait || true
     sleep 1
     return "$status"
 }
@@ -6105,21 +9263,39 @@ run_authenticated_world_map_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
+		force_android_portrait || exit 1
 
         local map_line before_zoom after_zoom before_pan_x before_pan_y
+        local zoom_in_x zoom_in_y search_x search_y close_x close_y
         map_line="$(open_world_map_from_hud)" || exit 1
-        wait_for_world_map_rendered 8 >/dev/null 2>&1 || sleep 1
+        map_line="$(wait_for_world_map_rendered 20)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
         sleep 1
         screenshot 94-auth-world-map-open
 
+        force_android_landscape || exit 1
+        wait_for_android_mobile_viewport landscape 30 >/dev/null || exit 1
+        map_line="$(wait_for_world_map_rendered 30)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
+        sleep 1
+        screenshot 94a-auth-world-map-landscape
+
+        force_android_portrait || exit 1
+        wait_for_android_mobile_viewport portrait 30 >/dev/null || exit 1
+        map_line="$(wait_for_world_map_rendered 30)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
+
         before_zoom="$(log_int_or_default "$map_line" zoom 0)"
         after_zoom=$((before_zoom + 1))
+        zoom_in_x="$(log_int_or_default "$map_line" zoomInX -1)"
+        zoom_in_y="$(log_int_or_default "$map_line" zoomInY -1)"
         "$ADB" logcat -c || true
-        "$ADB" shell input keyevent 70
+        tap_client_xy "$zoom_in_x" "$zoom_in_y"
         wait_for_world_map_zoom "$after_zoom" 20 || exit 1
-        wait_for_world_map_rendered 8 >/dev/null 2>&1 || sleep 1
+        map_line="$(wait_for_world_map_rendered 20)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
         sleep 1
         screenshot 95-auth-world-map-zoomed
 
@@ -6132,9 +9308,12 @@ run_authenticated_world_map_smoke() {
         wait_for_world_map_rendered 8 >/dev/null 2>&1 || sleep 1
         sleep 1
         screenshot 96-auth-world-map-panned
-
+        map_line="$(wait_for_world_map_rendered 20)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
+        search_x="$(log_int_or_default "$map_line" searchX -1)"
+        search_y="$(log_int_or_default "$map_line" searchY -1)"
         "$ADB" logcat -c || true
-        "$ADB" shell input keyevent 47
+        tap_client_xy "$search_x" "$search_y"
         wait_for_world_map_search_focus true 20 >/dev/null || exit 1
         input_text "$AUTH_WORLD_MAP_SEARCH_TEXT"
         "$ADB" shell input keyevent ENTER
@@ -6142,9 +9321,12 @@ run_authenticated_world_map_smoke() {
         wait_for_world_map_rendered 8 >/dev/null 2>&1 || sleep 1
         sleep 1
         screenshot 97-auth-world-map-search
-
+        map_line="$(wait_for_world_map_rendered 20)" || exit 1
+        assert_world_map_touch_layout "$map_line" || exit 1
+        close_x="$(log_int_or_default "$map_line" closeX -1)"
+        close_y="$(log_int_or_default "$map_line" closeY -1)"
         "$ADB" logcat -c || true
-        "$ADB" shell input keyevent BACK
+        tap_client_xy "$close_x" "$close_y"
         wait_for_world_map_closed 20 || exit 1
         sleep 1
         screenshot 98-auth-world-map-closed
@@ -6187,7 +9369,7 @@ run_authenticated_settings_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
 
         "$ADB" logcat -c || true
@@ -6211,7 +9393,7 @@ run_authenticated_settings_smoke() {
         sleep 1
         screenshot 100-auth-settings-changed
 
-        tap_settings_logout false true 20 || exit 1
+        tap_settings_logout false true 20 "100-auth-settings" || exit 1
         sleep 10
         wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || exit 1
         wait_for_auth_settings_row 0 1 "$original_sound" 45 || exit 1
@@ -6224,7 +9406,7 @@ run_authenticated_settings_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
 
         "$ADB" logcat -c || true
@@ -6236,17 +9418,124 @@ run_authenticated_settings_smoke() {
         sleep 1
         screenshot 101-auth-settings-reloaded
 
-        tap_settings_logout false true 20 || exit 1
+        tap_settings_logout false true 20 "101-auth-settings" || exit 1
         sleep 10
         wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
-    ) || status=$?
+	) || status=$?
 
-    disable_android_smoke_settings
-    "$ADB" shell am force-stop $APP_ID || true
-    wait_auth_offline "$AUTH_OFFLINE_TIMEOUT" || true
-    update_auth_settings "$original_camera" "$original_mouse" "$original_sound" || true
-    sleep 1
+	local cleanup_offline=true
+	if ! graceful_cleanup_authenticated_smoke_session; then
+		status=1
+		cleanup_offline=false
+	fi
+	disable_android_smoke_settings
+	if [[ "$cleanup_offline" == "true" ]]; then
+		"$ADB" shell am force-stop $APP_ID || true
+		update_auth_settings "$original_camera" "$original_mouse" "$original_sound" || true
+	fi
+	sleep 1
     return "$status"
+}
+
+run_authenticated_afk_smoke() {
+	if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+		return
+	fi
+
+	wait_auth_offline "$AUTH_OFFLINE_TIMEOUT"
+	local status=0
+	(
+		set -e
+		force_android_portrait || {
+			echo "ERROR: Android AFK smoke could not establish portrait orientation" >&2
+			exit 1
+		}
+		"$ADB" logcat -c || true
+		"$ADB" shell "run-as $APP_ID rm -f $APP_FILES/credentials.txt" 2>/dev/null || true
+		enable_android_smoke_afk
+		launch_game_with_endpoint "$AUTH_HOST" "$AUTH_PORT"
+		force_android_portrait || exit 1
+		enable_android_smoke_afk
+		tap_existing_user_button
+		sleep 3
+		enter_auth_credentials
+		submit_login_and_wait || exit 1
+		sleep 8
+		close_auth_intro_dialog_if_present
+		sleep 2
+
+		local settings_line first_line second_line resumed_line
+		local first_count second_count render_delta first_elapsed second_elapsed
+		enable_android_smoke_afk
+		"$ADB" logcat -c || true
+		"$ADB" shell input keyevent 43
+		settings_line="$(wait_for_afk_settings_target false 30)" || exit 1
+		assert_afk_settings_target "$settings_line" false || exit 1
+		echo "Verified Android AFK Settings entry target: $settings_line"
+		screenshot 101a-auth-afk-settings-entry
+
+		"$ADB" logcat -c || true
+		tap_afk_settings_target_from_line "$settings_line" || exit 1
+		first_line="$(wait_for_afk_state true 20)" || exit 1
+		assert_afk_monitor_state "$first_line" true || exit 1
+		first_count="$(extract_log_value "$first_line" renderCount)"
+		first_elapsed="$(extract_log_value "$first_line" elapsedMs)"
+		echo "Verified Android AFK monitor entry: $first_line"
+		screenshot 101b-auth-afk-monitor-active
+		first_line="$(wait_for_afk_state true 6 "$first_count")" || exit 1
+		assert_afk_monitor_state "$first_line" true || exit 1
+		first_count="$(extract_log_value "$first_line" renderCount)"
+		first_elapsed="$(extract_log_value "$first_line" elapsedMs)"
+
+		# The monitor deliberately redraws at a low cadence while networking and
+		# combat updates continue. Two seconds should advance it, but never by a
+		# frame-rate-sized amount.
+		sleep 2
+		second_line="$(wait_for_afk_state true 6 "$first_count")" || exit 1
+		assert_afk_monitor_state "$second_line" true || exit 1
+		second_count="$(extract_log_value "$second_line" renderCount)"
+		second_elapsed="$(extract_log_value "$second_line" elapsedMs)"
+		render_delta=$((second_count - first_count))
+		if (( render_delta < 1 || render_delta > 6 || second_elapsed <= first_elapsed )); then
+			echo "ERROR: Android AFK monitor cadence is not low-rate/progressive: first='$first_line' second='$second_line'" >&2
+			exit 1
+		fi
+		echo "Verified Android AFK monitor low redraw cadence: renderDelta=$render_delta elapsed=${first_elapsed}->${second_elapsed}ms"
+		screenshot 101c-auth-afk-monitor-progressed
+
+		"$ADB" logcat -c || true
+		tap_afk_resume_from_line "$second_line" || exit 1
+		resumed_line="$(wait_for_afk_state false 20)" || exit 1
+		assert_afk_monitor_state "$resumed_line" false || exit 1
+		echo "Verified Android AFK monitor Resume: $resumed_line"
+		assert_no_android_runtime_crash "after AFK monitor resume" || exit 1
+		sleep 1
+		screenshot 101d-auth-afk-resumed
+		logout_authenticated_smoke_session || exit 1
+	) || status=$?
+
+	if [[ "$status" -ne 0 ]]; then
+		local cleanup_afk_line
+		cleanup_afk_line="$("$ADB" logcat -d -v raw 2>/dev/null | tr -d '\r' \
+			| grep "ANDROID_SMOKE_AFK active=true " | tail -1 || true)"
+		if [[ -n "$cleanup_afk_line" ]]; then
+			tap_afk_resume_from_line "$cleanup_afk_line" >/dev/null 2>&1 || \
+				"$ADB" shell input keyevent BACK >/dev/null 2>&1 || true
+			sleep 1
+		fi
+	fi
+	local cleanup_offline=true
+	if [[ "$status" -ne 0 ]] && ! graceful_cleanup_authenticated_smoke_session; then
+		status=1
+		cleanup_offline=false
+	fi
+	disable_android_smoke_afk
+	if [[ "$cleanup_offline" == "true" ]]; then
+		"$ADB" shell am force-stop $APP_ID || true
+	fi
+	force_android_portrait || true
+	sleep 1
+	return "$status"
 }
 
 run_authenticated_ground_loot_smoke() {
@@ -6475,7 +9764,7 @@ run_authenticated_pvp_stress_smoke() {
         enter_auth_credentials
         submit_login_and_wait || exit 1
         sleep 8
-        close_welcome_dialog_if_present 8
+        close_auth_intro_dialog_if_present
         sleep 2
         screenshot 115-auth-pvp-stress-ready
 
@@ -6812,7 +10101,7 @@ if [[ "$ONLY_AUTH_CHAT_TABS" -eq 1 ]]; then
         exit 1
     fi
     run_authenticated_chat_tab_smoke
-    echo "Android chat tab smoke screenshots written to $OUT_DIR"
+    echo "Android mobile hub smoke screenshots written to $OUT_DIR"
     exit 0
 fi
 
@@ -6904,6 +10193,16 @@ if [[ "$ONLY_AUTH_SETTINGS" -eq 1 ]]; then
     run_authenticated_settings_smoke
     echo "Android settings smoke screenshots written to $OUT_DIR"
     exit 0
+fi
+
+if [[ "$ONLY_AUTH_AFK" -eq 1 ]]; then
+	if [[ -z "$AUTH_USER" || -z "$AUTH_PASS" ]]; then
+		echo "ERROR: --only-auth-afk requires ANDROID_SMOKE_AUTH_USER and ANDROID_SMOKE_AUTH_PASS" >&2
+		exit 1
+	fi
+	run_authenticated_afk_smoke
+	echo "Android AFK monitor smoke screenshots written to $OUT_DIR"
+	exit 0
 fi
 
 if [[ "$ONLY_AUTH_GROUND_LOOT" -eq 1 ]]; then
@@ -7039,6 +10338,11 @@ screenshot 22-resume-existing-user-typed
 sleep 1
 
 run_authenticated_logout_smoke
+if [[ -n "$AUTH_USER" && -n "$AUTH_PASS" ]]; then
+	# App switching without a disconnect is a release contract, not an optional
+	# focused check. Keep it in the canonical full authenticated gate as well.
+	run_authenticated_lifecycle_smoke
+fi
 run_authenticated_npc_smoke
 run_authenticated_object_smoke
 run_authenticated_inventory_smoke
@@ -7056,6 +10360,7 @@ run_authenticated_equipment_smoke
 run_authenticated_magic_prayer_smoke
 run_authenticated_world_map_smoke
 run_authenticated_settings_smoke
+run_authenticated_afk_smoke
 run_authenticated_ground_loot_smoke
 run_authenticated_wilderness_target_smoke
 run_authenticated_pvp_stress_smoke

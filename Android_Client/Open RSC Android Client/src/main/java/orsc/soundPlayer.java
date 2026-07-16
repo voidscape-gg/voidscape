@@ -13,7 +13,8 @@ public class soundPlayer {
 	private static final String ANDROID_SMOKE_AUDIO_FLAG = "android-smoke-audio.flag";
 	private static final Object LOCK = new Object();
 	private static final Set<MediaPlayer> ACTIVE_PLAYERS = new LinkedHashSet<>();
-	private static boolean suspended;
+	private static boolean backgroundSuspended;
+	private static boolean afkSuspended;
 
     public static void playSoundFile(String key) {
 		MediaPlayer player = null;
@@ -44,7 +45,7 @@ public class soundPlayer {
 
 			MediaPlayer evicted = null;
 			synchronized (LOCK) {
-				if (suspended) {
+				if (isSuspendedLocked()) {
 					releaseDirect(ownedPlayer);
 					return;
 				}
@@ -70,7 +71,7 @@ public class soundPlayer {
 	private static void startPreparedPlayer(MediaPlayer player) {
 		boolean release = false;
 		synchronized (LOCK) {
-			if (suspended || !ACTIVE_PLAYERS.contains(player)) {
+			if (isSuspendedLocked() || !ACTIVE_PLAYERS.contains(player)) {
 				release = true;
 			} else {
 				try {
@@ -84,7 +85,7 @@ public class soundPlayer {
 			}
 		}
 		if (release) {
-			releasePlayer(player, suspended ? "suspended" : "start-error");
+			releasePlayer(player, isSuspended() ? "suspended" : "start-error");
 		}
 	}
 
@@ -128,16 +129,43 @@ public class soundPlayer {
 
 	public static void suspendForBackground() {
 		synchronized (LOCK) {
-			suspended = true;
+			backgroundSuspended = true;
 		}
 		stopAll();
 	}
 
 	public static void resumeForeground() {
 		synchronized (LOCK) {
-			suspended = false;
-			logSmokeLocked("resume");
+			backgroundSuspended = false;
+			logSmokeLocked(isSuspendedLocked() ? "resume-afk-suspended" : "resume");
 		}
+	}
+
+	public static void setAfkSuspended(boolean suspended) {
+		boolean stopPlayers = false;
+		synchronized (LOCK) {
+			if (afkSuspended == suspended) {
+				return;
+			}
+			afkSuspended = suspended;
+			stopPlayers = suspended;
+			if (!stopPlayers) {
+				logSmokeLocked(isSuspendedLocked() ? "afk-resume-background-suspended" : "afk-resume");
+			}
+		}
+		if (stopPlayers) {
+			stopAll();
+		}
+	}
+
+	private static boolean isSuspended() {
+		synchronized (LOCK) {
+			return isSuspendedLocked();
+		}
+	}
+
+	private static boolean isSuspendedLocked() {
+		return backgroundSuspended || afkSuspended;
 	}
 
 	private static void logSmokeLocked(String event) {
