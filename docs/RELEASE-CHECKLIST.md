@@ -71,8 +71,8 @@ For a held release candidate, complete the local build, packaging, and evidence 
 - [ ] Existing-account login tested after migration.
 - [ ] Player save/logout/relogin tested.
 - [ ] Any prelaunch entitlement cohort is frozen from an authoritative source, stored outside Git with a timestamp/count/SHA-256, and reconciled before and after cutover without recording player identities in release evidence.
-- [ ] Every eligible prelaunch account is preserved with exactly one intended entitlement, while QA, headless, banned, disposable, and test accounts are excluded unless explicitly approved.
-- [ ] The free-card entitlement is idempotent: available, claimed, full-inventory, repeat-claim, and linked-character cases are verified without double minting or losing the reservation.
+- [ ] The reward unit is explicit (for example, per account or per character), every eligible unit is preserved with exactly one intended entitlement, and QA, headless, banned, disposable, and test identities are excluded unless explicitly approved.
+- [ ] The free-card entitlement is idempotent: available, claimed, full-inventory, repeat-claim, linked-character, and character-create/delete cases are verified without double minting or losing a promised reward.
 
 ## Server smoke test
 

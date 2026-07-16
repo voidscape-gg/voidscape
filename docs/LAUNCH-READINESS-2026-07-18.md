@@ -39,7 +39,7 @@ database contents, signing material, or private source/history in this file.
 
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-07-16 | Preserve the complete eligible pre-signed-player cohort and grant exactly one free starter subscription card entitlement per eligible account. | The owner reports 190 eligible pre-signups so far; this is a protected launch obligation, not test data. |
+| 2026-07-16 | Preserve the complete eligible pre-signed-player cohort and grant exactly one free starter subscription card entitlement to every character under each qualifying account. | The owner reports 190 eligible pre-signups so far. The benefit is per character: a qualifying account with ten characters must receive ten cards, one on each character. |
 | 2026-07-16 | Treat 190 as a baseline count, not the final freeze count. | More eligible signups may arrive before the cutover. The freeze-time snapshot is authoritative. |
 | 2026-07-16 | Keep the optional ten-player headless fleet disabled and outside the launch critical path. | It adds accounts, credentials, persistence, and recovery complexity without being needed to open. |
 | 2026-07-16 | Keep the already-reviewed Play v11 AAB if its uploaded bytes and Android-input provenance are proven; do not rebuild it merely for server/portal-only changes. | A needless rebuild consumes a new versionCode and review cycle without changing Android behavior. |
@@ -63,18 +63,27 @@ snapshot containing the owner-approved eligible `founders[]` records and the mat
 portal-account/game-reward relationships. Store the protected snapshot outside Git and
 record only aggregate counts, its timestamp, schema/version, and SHA-256 here.
 
+The roster decides which parent accounts qualify; it does **not** determine the final
+number of cards. The card count is the number of eligible characters under those
+qualifying accounts. A qualifying account with ten characters is owed ten cards, with
+one independently claimable card marker on each character.
+
 There are currently three reward mechanisms and they must not be confused:
 
 1. An account-bound starter-card marker for a founder already linked to a portal
-   account. This is the preferred base-reward route.
+   account. The current implementation permits only one claim for the whole account,
+   so it does not yet satisfy the per-character promise.
 2. A legacy one-time signup code for an eligible founder who is not account-linked at
-   freeze time. This is a bearer credential and must remain private.
+   freeze time. This is a bearer credential, currently grants only one card, and must
+   remain private.
 3. A separate native-launch reward. This is not part of the 190-player pre-signup
    promise and must be counted separately.
 
-Every eligible founder must have exactly one base-reward route: account marker or
-legacy code, never neither and never both. Referral and native-launch rewards are
-separate bonuses and do not satisfy or duplicate that base promise.
+Every eligible founder must have exactly one qualification route: linked account or a
+controlled legacy-account claim, never neither and never both. After qualification,
+every eligible character under that account must have exactly one starter-card marker,
+never zero and never more than one. Referral and native-launch rewards are separate
+bonuses and do not satisfy or duplicate that per-character promise.
 
 - [x] Name the implementation's authoritative source for cohort eligibility:
   production portal `founders[]`; have the owner approve its freeze-time contents.
@@ -86,10 +95,13 @@ separate bonuses and do not satisfy or duplicate that base promise.
 - [ ] Exclude QA, headless, disposable, banned, and test accounts unless the owner
   explicitly approves an exception.
 - [ ] Preserve every eligible portal/game identity through the launch reset.
-- [ ] Give every eligible founder exactly one available base-reward route: an
-  account-bound starter-card marker or a private legacy signup code.
-- [ ] Give no ineligible account a starter-card marker.
-- [ ] Prove there are no founders with zero or multiple base-reward routes.
+- [ ] Give every eligible founder exactly one account-qualification route: a linked
+  account or a controlled private legacy claim.
+- [ ] Give every eligible character under every qualifying account exactly one
+  available starter-card marker.
+- [ ] Give no character under an ineligible account a starter-card marker.
+- [ ] Prove there are no eligible characters with zero or multiple starter-card
+  markers.
 - [ ] Count referral and native-launch rewards separately from the founder base reward.
 - [ ] Prove every retained ordinary player has ordinary rank unless separately
   approved as staff.
@@ -98,9 +110,12 @@ separate bonuses and do not satisfy or duplicate that base promise.
 - [ ] Prove a successful vendor claim changes the marker from available to claimed and
   mints exactly one physical card.
 - [ ] Prove a full inventory leaves the marker available and mints no card.
-- [ ] Prove a second claim cannot mint a second free card.
-- [ ] Prove another character linked to the same portal account sees the same
-  account-wide entitlement/subscription state.
+- [ ] Prove a second claim by the same character cannot mint a second free card.
+- [ ] Prove every other character linked to the same qualifying account has its own
+  independent card marker and can claim exactly once.
+- [ ] Decide and test how characters created after the roster freeze qualify. If new
+  characters qualify, prevent delete/recreate churn from becoming an unlimited-card
+  generator.
 - [ ] Stop portal/game writes, then back up and restore-test the production portal JSON
   store and game database as one coordinated, hash-matched set.
 - [ ] Make production portal startup fail closed if an existing store is missing or
@@ -119,11 +134,13 @@ Freeze evidence:
 | Eligible `founders[]` count | Must equal final frozen count (currently expected baseline `190`) |
 | Unique canonical email count | Must equal eligible founder count |
 | Unique normalized founder-name count | Must equal eligible founder count |
-| Account-bound base rewards | `PENDING` |
-| Legacy-code base rewards | `PENDING` |
-| Account-bound + legacy-code base rewards | Must equal eligible founder count |
-| Founders with zero base-reward routes | Must be `0` |
-| Founders with multiple base-reward routes | Must be `0` |
+| Linked-account qualification routes | `PENDING` |
+| Controlled legacy qualification routes | `PENDING` |
+| Linked + legacy qualification routes | Must equal eligible founder count |
+| Eligible character count | `PENDING` (this, not `190`, determines cards owed) |
+| Available + claimed per-character starter markers | Must equal eligible character count |
+| Eligible characters with zero starter markers | Must be `0` |
+| Eligible characters with multiple starter markers | Must be `0` |
 | Ineligible entitlement count | Must be `0` |
 | Approved referral reward codes | `PENDING` (reported separately) |
 | Approved native-launch rewards | `PENDING` (reported separately) |
@@ -148,7 +165,7 @@ Freeze evidence:
 | Public portal boundary | Codex + operator | BLOCKED | Exact packaged tree; Nginx include installed; all-origin forbidden-path probes `404`; hosted allowed paths and ranges pass. |
 | Portal account flows | Codex + human | PENDING | Signup, rules acceptance, verification, login, recovery, character create/delete, logout, data-deletion link, and email delivery pass against final candidate. |
 | Pre-signed-player cohort | Owner + Codex + operator | BLOCKED | Every protected-cohort checkbox and count/hash reconciliation above passes. |
-| Reward/reset safety | Codex + owner | BLOCKED | Replace the current broad reset behavior with an owner-approved frozen roster; prove one base route per eligible founder, preserve claimed state where intended, and add focused automated tests. |
+| Reward/reset safety | Codex + owner | BLOCKED | Replace the current account-wide/code-only grant behavior and broad reset with an owner-approved frozen roster and one marker per eligible character; prove ten characters receive ten independent cards, preserve claimed state where intended, and add focused automated tests. |
 | Database choice and permissions | Owner + operator | PENDING | Explicit SQLite/MariaDB decision; integrity/foreign keys, permissions, capacity, and exactly-one-writer proof. |
 | Coordinated backup and rollback | Operator + owner | PENDING | Portal/game writes quiesced; paired hashed off-host backup restored successfully in isolation; objective rollback triggers recorded. |
 | Desktop and launcher | Human + Codex | PENDING | Exact candidate fresh install, update, repair, offline behavior, login, gameplay, save, logout, and relogin. |
@@ -240,3 +257,7 @@ or physical-device requirements.
 - 2026-07-16: identified production portal `founders[]` as the current eligibility
   roster, made portal JSON plus game DB a paired backup unit, separated the three
   reward routes, and added exact zero/double-reward reconciliation gates.
+- 2026-07-16: owner clarified that the promised free card is per character, not per
+  founder or parent account. A qualifying ten-character account is owed ten cards;
+  the current account-global marker and single-use legacy code do not yet meet this
+  contract.
