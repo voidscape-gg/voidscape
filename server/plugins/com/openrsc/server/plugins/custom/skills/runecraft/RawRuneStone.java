@@ -31,12 +31,7 @@ public class RawRuneStone implements OpLocTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			repeat = player.getCarriedItems().getInventory().getFreeSlots();
-		}
-
-		startbatch(repeat);
+		startskillbatch(player.getCarriedItems().getInventory().getFreeSlots(), Skill.MINING.id());
 		batchRuneStone(player);
 	}
 

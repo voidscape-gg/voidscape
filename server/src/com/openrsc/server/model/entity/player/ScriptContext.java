@@ -434,9 +434,13 @@ public class ScriptContext {
 
 		// Check to see if a batch is running and if so,
 		// kill it.
-		if (getBatch() != null) {
-			if (batch.isShowingBar()) {
-				batch.stop();
+		final Batch endingBatch = getBatch();
+		if (endingBatch != null) {
+			endingBatch.clearGatherRepeat();
+			endingBatch.stop();
+			final Player contextPlayer = getContextPlayer();
+			if (contextPlayer != null && contextPlayer.getBatch() == endingBatch) {
+				contextPlayer.setBatch(null);
 			}
 			this.batch = null;
 		}

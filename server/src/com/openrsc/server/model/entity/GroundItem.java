@@ -150,11 +150,9 @@ public class GroundItem extends Entity {
 	public boolean isInvisibleTo(final Player player) {
 		if (belongsTo(player))
 			return false;
-		if (!WildernessRules.canUseItemAt(
+		if (!WildernessRules.canAppearAsGroundLoot(
 			getWorld().getServer().getConfig().MEMBER_WORLD,
-			getLocation(),
-			getDef(),
-			getID()))
+			getDef()))
 			return true;
 		if (getDef().isUntradable())
 			return true;
@@ -187,6 +185,13 @@ public class GroundItem extends Entity {
 
 	public long getOwnerUsernameHash() {
 		return ownerUsernameHash;
+	}
+
+	public void setOwner(Player owner) {
+		ownerUsernameHash = owner == null ? 0 : owner.getUsernameHash();
+		if (owner != null && owner.getIronMan() == IronmanMode.Transfer.id()) {
+			setAttribute("isTransferIronmanItem", true);
+		}
 	}
 
 	public boolean getNoted() {

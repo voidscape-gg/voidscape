@@ -34,8 +34,8 @@ public final class Formulae {
 	private static final int[] gemDropIDs = {ItemId.NOTHING.id(), ItemId.UNCUT_SAPPHIRE.id(), ItemId.UNCUT_EMERALD.id(),
 		ItemId.UNCUT_RUBY.id(), ItemId.UNCUT_DIAMOND.id(), ItemId.LOOP_KEY_HALF.id(), ItemId.TOOTH_KEY_HALF.id(), ItemId.NOTHING_REROLL.id()};
 	private static final int[] gemDropWeights = {63, 32, 16, 8, 4, 2, 2, 1}; //128
-	private static final int[] rareDropIDs = {ItemId.NOTHING.id(), ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id()};
-	private static final int[] rareDropWeights = {124, 4}; //128
+	private static final int[] rareDropIDs = {ItemId.NOTHING.id()};
+	private static final int[] rareDropWeights = {128}; //128
 	public static final int[] throwingIDs = {ItemId.IRON_THROWING_KNIFE.id(), ItemId.BRONZE_THROWING_KNIFE.id(),
 		ItemId.STEEL_THROWING_KNIFE.id(), ItemId.MITHRIL_THROWING_KNIFE.id(), ItemId.ADAMANTITE_THROWING_KNIFE.id(),
 		ItemId.RUNE_THROWING_KNIFE.id(), ItemId.BLACK_THROWING_KNIFE.id(), ItemId.BRONZE_THROWING_DART.id(),
@@ -212,6 +212,10 @@ public final class Formulae {
 	 * Should the spell cast or fail?
 	 */
 	public static boolean castSpell(SpellDef def, int magicLevel, int magicEquip) {
+		return castSpell(def, magicLevel, magicEquip, 1.0D);
+	}
+
+	public static boolean castSpell(SpellDef def, int magicLevel, int magicEquip, double accuracyMultiplier) {
 		int levelDiff = magicLevel - def.getReqLevel();
 
 		if (magicEquip >= 30 && levelDiff >= 5)
@@ -230,7 +234,13 @@ public final class Formulae {
 		if (levelDiff >= 10) {
 			return true;
 		}
-		return DataConversions.random(0, (levelDiff + 2) * 2) != 0;
+		int rollMax = (levelDiff + 2) * 2;
+		if (accuracyMultiplier == 1.0D) {
+			return DataConversions.random(0, rollMax) != 0;
+		}
+		double adjustedRollWeight = rollMax * Math.max(0.0D, accuracyMultiplier);
+		double adjustedSuccessChance = adjustedRollWeight / (adjustedRollWeight + 1.0D);
+		return DataConversions.getRandom().nextDouble() < adjustedSuccessChance;
 	}
 
 	/**
@@ -659,33 +669,6 @@ public final class Formulae {
 	 */
 	public static boolean loseArrow(int damage) {
 		return DataConversions.random(0, 6) != 0;
-	}
-
-	public static int getRepeatTimes(Player player, int skill) {
-		int maxStat = player.getSkills().getMaxStat(skill); // Number of time repeats is based on your highest level using this method
-		if (maxStat <= 10)
-			return 10;
-		if (maxStat <= 19)
-			return 12;
-		if (maxStat <= 29)
-			return 14;
-		if (maxStat <= 39)
-			return 16;
-		if (maxStat <= 49)
-			return 20;
-		if (maxStat <= 59)
-			return 24;
-		if (maxStat <= 69)
-			return 32;
-		if (maxStat <= 79)
-			return 40;
-		if (maxStat <= 89)
-			return 48;
-		if (maxStat <= 95)
-			return 56;
-		if (maxStat <= 99)
-			return 64;
-		return 1000;
 	}
 
 	/**

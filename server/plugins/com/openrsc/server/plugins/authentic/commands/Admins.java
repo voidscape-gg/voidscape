@@ -39,6 +39,7 @@ import com.openrsc.server.model.struct.EquipRequest.RequestType;
 import com.openrsc.server.model.struct.UnequipRequest;
 import com.openrsc.server.model.world.region.TileValue;
 import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.plugins.authentic.misc.ChristmasCracker;
 import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushConfig;
 import com.openrsc.server.plugins.custom.minigames.voidrush.VoidRushMinigame;
 import com.openrsc.server.plugins.triggers.CommandTrigger;
@@ -169,6 +170,8 @@ public final class Admins implements CommandTrigger {
 			openAuctionHouse(player, args);
 		} else if (command.equalsIgnoreCase("workbenchauctionfixture") || command.equalsIgnoreCase("workbenchahfixture")) {
 			seedWorkbenchAuctionHouseFixture(player);
+		} else if (command.equalsIgnoreCase("workbenchcracker") || command.equalsIgnoreCase("crackerfixture")) {
+			queueChristmasCrackerFixture(player, command, args);
 		} else if (command.equalsIgnoreCase("wildhobdebug") || command.equalsIgnoreCase("wildhobgoblin")) {
 			wildernessHobgoblinDebug(player, command, args);
 		} else if (command.equalsIgnoreCase("balancereport") || command.equalsIgnoreCase("balancestats")) {
@@ -1427,6 +1430,25 @@ public final class Admins implements CommandTrigger {
 		} catch (GameDatabaseException e) {
 			player.message(messagePrefix + "Database Error! (Could not seed Auction House workbench fixture). Check the logs.");
 			LOGGER.error(e);
+		}
+	}
+
+	private void queueChristmasCrackerFixture(Player player, String command, String[] args) {
+		if (args.length < 1 || args.length > 2) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [reward roll 0-127]");
+			return;
+		}
+		try {
+			int categoryRoll = Integer.parseInt(args[0]);
+			int rewardRoll = args.length == 2 ? Integer.parseInt(args[1]) : 0;
+			if (!ChristmasCracker.queueAdminFixture(player, categoryRoll, rewardRoll)) {
+				player.message(badSyntaxPrefix + "Category roll must be 0-99 and reward roll must be 0-127.");
+				return;
+			}
+			player.message(messagePrefix + "Queued Christmas cracker fixture: category="
+				+ categoryRoll + ", reward=" + rewardRoll + ".");
+		} catch (NumberFormatException ex) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [category roll 0-99] [reward roll 0-127]");
 		}
 	}
 

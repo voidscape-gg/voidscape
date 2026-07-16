@@ -1,6 +1,7 @@
 package com.openrsc.server.event.rsc.impl;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.entity.Mob;
@@ -39,6 +40,13 @@ public class StatRestorationEvent extends GameTickEvent {
 		if (getOwner() == null || isPlayerAbsent || isNpcAbsent) {
 			stop();
 			return;
+		}
+		if (getOwner().isPlayer()) {
+			final Player player = (Player) getOwner();
+			final DuelProofSession proofSession = player.getDuel().getProofSession();
+			if (proofSession != null && proofSession.blocksExternalDamage()) {
+				return;
+			}
 		}
 
 		boolean restoredStats = false;

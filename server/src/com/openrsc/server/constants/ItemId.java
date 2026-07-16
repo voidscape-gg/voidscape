@@ -1668,12 +1668,13 @@ public enum ItemId {
 	BRIGHT_ASHES(1605),
 	SACRED_ASHES(1606),
 	BLESSED_ASHES(1607),
-	VOID_ASHES(1608);
+	VOID_ASHES(1608),
+	COWBOY_HAT(1609);
 
 	private int itemId;
 
 	public static final int maxAuthentic = 1289;
-	public static final int maxCustom = 1608;
+	public static final int maxCustom = 1609;
 
 	private static final Map<Integer, ItemId> byId = new HashMap<Integer, ItemId>();
 	private static final Map<String, ItemId> byName = new HashMap<String, ItemId>();
@@ -1688,6 +1689,8 @@ public enum ItemId {
 				}
 			}
 		}
+		// Keep the historical enum name while accepting the current display identity.
+		byName.put(sanitizeName("VOID_SCEPTRE"), VOID_MACE);
 	}
 
 	public static ItemId getById(Integer id) {

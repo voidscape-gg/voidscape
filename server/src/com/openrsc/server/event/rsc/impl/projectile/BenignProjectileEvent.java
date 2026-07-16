@@ -40,6 +40,10 @@ public class BenignProjectileEvent extends SingleTickEvent {
 		}
 	}
 
+	protected final boolean canImpact() {
+		return !canceled && caster.sharesInstanceWith(opponent);
+	}
+
 	public void setCanceled(boolean b) {
 		canceled = b;
 	}

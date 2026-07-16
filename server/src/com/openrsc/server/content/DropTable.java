@@ -261,12 +261,9 @@ public class DropTable {
 				else if (drop.type == dropType.ITEM) {
 					if (drop.weight == 0) continue;
 					ItemDefinition def = owner.getWorld().getServer().getEntityHandler().getItemDef(drop.id);
-					if (!WildernessRules.canUseItemAt(
-						owner.getWorld().getServer().getConfig().MEMBER_WORLD,
-						owner.getLocation(),
-						def,
-						drop.id)) {
-						continue; // Members only item on a free world
+					if (!WildernessRules.canAppearAsGroundLoot(
+						owner.getWorld().getServer().getConfig().MEMBER_WORLD, def)) {
+						continue; // Members-only item on a non-members world.
 					}
 					if (drop.id == ItemId.UNHOLY_SYMBOL_MOULD.id()) {
 						if (owner.wantUnholySymbols()) {

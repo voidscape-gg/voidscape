@@ -11,6 +11,9 @@ public final class VoidSubscription {
 	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
 	public static final int STARTER_CARD_AVAILABLE = 1;
 	public static final int STARTER_CARD_CLAIMED = 2;
+	public static final String LAUNCH_CARD_CACHE_KEY = "launch_24h_card";
+	public static final int LAUNCH_CARD_AVAILABLE = 1;
+	public static final int LAUNCH_CARD_CLAIMED = 2;
 	public static final String SIGNUP_CODE_CACHE_PREFIX = "signup_code:";
 	public static final int SIGNUP_CODE_AVAILABLE = 1;
 	public static final int SIGNUP_CODE_REDEEMED = 2;
@@ -97,9 +100,6 @@ public final class VoidSubscription {
 			|| skill == Skill.STRENGTH.id()
 			|| skill == Skill.HITS.id()
 			|| skill == Skill.RANGED.id()
-			|| skill == Skill.PRAYGOOD.id()
-			|| skill == Skill.PRAYEVIL.id()
-			|| skill == Skill.PRAYER.id()
 			|| skill == Skill.GOODMAGIC.id()
 			|| skill == Skill.EVILMAGIC.id()
 			|| skill == Skill.MAGIC.id();

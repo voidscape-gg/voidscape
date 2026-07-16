@@ -226,7 +226,8 @@ public class Region {
 				return null;
 			}
 			for (final Npc npc : npcs.get(location)) {
-				if (observer == null || !npc.isInvisibleTo(observer)) {
+				if (observer == null
+					|| (npc.sharesInstanceWith(observer) && !npc.isInvisibleTo(observer))) {
 					return npc;
 				}
 			}
@@ -240,7 +241,8 @@ public class Region {
 				return null;
 			}
 			for (final Player player : players.get(location)) {
-				if ((observer == null || !player.isInvisibleTo(observer))
+				if ((observer == null
+						|| (player.sharesInstanceWith(observer) && !player.isInvisibleTo(observer)))
 					&& (observer == null || (!includeSelf || player.equals(observer)))) {
 					return player;
 				}
@@ -261,6 +263,7 @@ public class Region {
 		return items.get(location)
 				.stream()
 				.filter(item -> id == item.getID())
+				.filter(item -> observer == null || item.sharesInstanceWith(observer))
 				.filter(item -> observer == null || !item.isInvisibleTo(observer))
 				.findFirst()
 				.orElse(null);

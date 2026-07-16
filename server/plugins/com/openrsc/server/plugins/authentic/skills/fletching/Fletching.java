@@ -178,7 +178,7 @@ public class Fletching implements UseInvTrigger {
 			repeat = 5;
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchFeathers(player, feathers, attachment, resultID, experience);
 	}
 
@@ -250,7 +250,7 @@ public class Fletching implements UseInvTrigger {
 			repeat = 5;
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchArrowheads(player, headlessArrows, arrowHeads, headDef);
 	}
 
@@ -322,7 +322,7 @@ public class Fletching implements UseInvTrigger {
 			repeat = Math.min(bowtimes, stringtimes);
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchStringing(player, bow, bowString, stringDef);
 	}
 
@@ -420,7 +420,7 @@ public class Fletching implements UseInvTrigger {
 			repeat = player.getCarriedItems().getInventory().countId(log.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchLogCutting(player, log, id, reqLvl, exp, cutMessage, shaftAmount);
 	}
 
@@ -484,7 +484,7 @@ public class Fletching implements UseInvTrigger {
 			repeat = player.getCarriedItems().getInventory().countId(pearlID, Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchPearlCutting(player, pearl, amount);
 	}
 
@@ -531,7 +531,7 @@ public class Fletching implements UseInvTrigger {
 		if (config().BATCH_PROGRESSION) {
 			repeat = 5;
 		}
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.FLETCHING.id());
 		batchBolts(player, bolts, tips);
 	}
 

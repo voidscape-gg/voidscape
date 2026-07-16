@@ -128,6 +128,30 @@ public class RegionManager {
 		return localItems;
 	}
 
+	/**
+	 * Returns a defensive snapshot of ground items in the supplied world-space bounds.
+	 */
+	public Collection<GroundItem> getGroundItemsInBounds(final int minX, final int minY,
+											 final int maxX, final int maxY, final int instanceId) {
+		final LinkedHashSet<GroundItem> items = new LinkedHashSet<>();
+		final int minRegionX = minX / Constants.REGION_SIZE;
+		final int maxRegionX = maxX / Constants.REGION_SIZE;
+		final int minRegionY = minY / Constants.REGION_SIZE;
+		final int maxRegionY = maxY / Constants.REGION_SIZE;
+		for (int regionX = minRegionX; regionX <= maxRegionX; regionX++) {
+			for (int regionY = minRegionY; regionY <= maxRegionY; regionY++) {
+				for (final GroundItem item : getRegionFromSectorCoordinates(regionX, regionY).getGroundItems()) {
+					final Point location = item.getLocation();
+					if (!item.isRemoved() && location != null && item.getInstanceId() == instanceId
+						&& location.inBounds(minX, minY, maxX, maxY)) {
+						items.add(item);
+					}
+				}
+			}
+		}
+		return items;
+	}
+
 	private Point getViewLocation(final Entity entity) {
 		if (entity instanceof Player) {
 			return ((Player) entity).getViewLocation();

@@ -19,6 +19,8 @@ import com.openrsc.server.model.world.World;
 import com.openrsc.server.plugins.*;
 import com.openrsc.server.plugins.io.PluginJarLoader;
 import com.openrsc.server.plugins.triggers.KillNpcTrigger;
+import com.openrsc.server.plugins.triggers.PlayerDeathDropTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
 import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 import com.openrsc.server.util.NamedThreadFactory;
 import org.apache.commons.lang3.ClassUtils;
@@ -215,7 +217,7 @@ public final class PluginHandler implements IPluginHandler {
                         final boolean shouldBlock = (Boolean) method.invoke(trigger, data);
                         if (shouldBlock) {
                             shouldBlockDefault = true;
-                            if (shouldInvokePluginActionImmediately(triggerType, data)) {
+                            if (shouldInvokePluginActionImmediately(triggerType, trigger, data)) {
                                 invokePluginActionImmediately(triggerType, trigger, data);
                             } else {
                                 invokePluginAction(triggerType, owner, trigger, data, walkToAction);
@@ -229,7 +231,11 @@ public final class PluginHandler implements IPluginHandler {
 
             try {
                 if (!shouldBlockDefault) {
-                    invokePluginAction(triggerType, owner, defaultHandler, data, walkToAction);
+                    if (triggerType == PlayerDeathDropTrigger.class) {
+                        invokePluginActionImmediately(triggerType, defaultHandler, data);
+                    } else {
+                        invokePluginAction(triggerType, owner, defaultHandler, data, walkToAction);
+                    }
                 }
             } catch (final Exception e) {
                 LOGGER.error("Error while handling shouldBlockDefault false plugin: " + simpleName, e);
@@ -239,8 +245,14 @@ public final class PluginHandler implements IPluginHandler {
         }
     }
 
-    private boolean shouldInvokePluginActionImmediately(Class<?> triggerType, Object[] data) {
+    private boolean shouldInvokePluginActionImmediately(Class<?> triggerType, Object trigger, Object[] data) {
+        if (triggerType == PlayerDeathDropTrigger.class) {
+            return true;
+        }
         if (triggerType == PlayerLogoutTrigger.class) {
+            return true;
+        }
+        if (triggerType == PlayerLoginTrigger.class && trigger instanceof ImmediatePlayerLogin) {
             return true;
         }
         if (triggerType == KillNpcTrigger.class && data != null && data.length > 1 && data[1] instanceof Npc) {

@@ -1,6 +1,7 @@
 package com.openrsc.server.content;
 
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.external.NPCDef;
@@ -277,14 +278,22 @@ public final class FarmSim {
 				addExpected(expected, boneDrop, projectedKills);
 			}
 
-			if (killSample.voidKeyEligibleCount > 0 && worldAllowsItem(player, ItemId.VOID_KEY.id())) {
-				NPCDef def = player.getWorld().getServer().getEntityHandler().getNpcDef(npcId);
-				int combat = def == null ? 0 : def.combatLevel;
-				int denominator = Math.max(128, 1200 - combat * 6);
-				addExpected(expected, ItemId.VOID_KEY.id(), killSample.voidKeyEligibleCount * scale / denominator);
-			}
+				if (killSample.voidKeyEligibleCount > 0 && worldAllowsItem(player, ItemId.VOID_KEY.id())) {
+					NPCDef def = player.getWorld().getServer().getEntityHandler().getNpcDef(npcId);
+					int combat = def == null ? 0 : def.combatLevel;
+					int denominator = Math.max(128, 1200 - combat * 6);
+					addExpected(expected, ItemId.VOID_KEY.id(), killSample.voidKeyEligibleCount * scale / denominator);
+				}
 
-			DropTable dropTable = player.getWorld().getNpcDrops().getDropTable(npcId);
+					NpcDrops.DragonWeaponRareDropProfile dragonRareProfile =
+						player.getWorld().getNpcDrops().getDragonWeaponRareDropProfile(npcId);
+					if (dragonRareProfile != null) {
+						for (Map.Entry<Integer, Integer> rareEntry : dragonRareProfile.getItemDropDenominators().entrySet()) {
+							addFixedChanceExpected(expected, player, rareEntry.getKey(), projectedKills, rareEntry.getValue());
+						}
+					}
+
+				DropTable dropTable = player.getWorld().getNpcDrops().getDropTable(npcId);
 			if (dropTable == null) {
 				continue;
 			}
@@ -468,6 +477,14 @@ public final class FarmSim {
 			amount *= VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER;
 		}
 		return amount;
+	}
+
+	private static void addFixedChanceExpected(
+		Map<Integer, Double> expected, Player player, int itemId, double projectedKills, int denominator
+	) {
+		if (worldAllowsItem(player, itemId)) {
+			addExpected(expected, itemId, projectedKills / denominator);
+		}
 	}
 
 	private static void addExpected(Map<Integer, Double> expected, int itemId, double amount) {

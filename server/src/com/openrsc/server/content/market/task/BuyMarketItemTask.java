@@ -132,7 +132,7 @@ public class BuyMarketItemTask extends MarketTask {
 				return;
 			}
 			recordAuctionBuyReceipt(finalItem, deliveryItem, finalAmount, toInventory, finalAuctionPrice, finalTax);
-			PlayerTitle.recordAuctionHouseSale(playerBuyer, finalSeller);
+			PlayerTitle.recordAuctionHouseSale(playerBuyer, finalSeller, finalAuctionPrice);
 
 			if (toInventory) {
 				ActionSender.sendBox(playerBuyer, "@gre@[Auction House - Success] % @whi@ The item has been added to your inventory.", false);

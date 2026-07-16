@@ -3,7 +3,6 @@ package com.openrsc.server.plugins.custom.minigames;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
-import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.event.rsc.impl.combat.scripts.all.VoidKnightBoss;
@@ -80,7 +79,7 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	private static final int LOW_HITS_KITE_THRESHOLD = 50;
 	private static final int RANDOM_KITE_CHANCE = 25;
 	private static final int DRAGON_PIECE_CHANCE = 32;
-	private static final int VOID_GEAR_CHANCE = 64;
+	private static final int VOID_GEAR_CHANCE = 1024;
 	private static final int RUPTURE_WARNING_TICKS = 2;
 	private static final int RUPTURE_ACTIVE_TICKS = 1;
 	private static final int RUPTURE_RADIUS = 1;
@@ -115,21 +114,16 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 	};
 
 	private static final WeightedItem[] VOID_KNIGHT_DRAGON_REWARDS = {
-		new WeightedItem(ItemId.DRAGON_SWORD_HILT.id(), 6),
-		new WeightedItem(ItemId.DRAGON_SWORD_BLADE.id(), 5),
-		new WeightedItem(ItemId.DRAGON_SWORD_TIP.id(), 6),
-		new WeightedItem(ItemId.RIGHT_HALF_DRAGON_SQUARE_SHIELD.id(), 4),
-		new WeightedItem(ItemId.LEFT_HALF_DRAGON_SQUARE_SHIELD.id(), 3),
 		new WeightedItem(ItemId.DRAGON_BAR.id(), 4),
 		new WeightedItem(ItemId.CHIPPED_DRAGON_SCALE.id(), 4),
 		new WeightedItem(ItemId.DRAGON_METAL_CHAIN.id(), 4)
 	};
 
 	private static final WeightedItem[] VOID_KNIGHT_VOID_REWARDS = {
-		new WeightedItem(ItemId.VOID_SCIMITAR.id(), 3),
-		new WeightedItem(ItemId.VOID_BOW.id(), 4),
-		new WeightedItem(ItemId.VOID_AMULET.id(), 5),
-		new WeightedItem(ItemId.VOID_MACE.id(), 4)
+		new WeightedItem(ItemId.VOID_SCIMITAR.id(), 1),
+		new WeightedItem(ItemId.VOID_BOW.id(), 1),
+		new WeightedItem(ItemId.VOID_AMULET.id(), 1),
+		new WeightedItem(ItemId.VOID_MACE.id(), 1)
 	};
 
 	private static final Reward[] VOID_KNIGHT_SUPPLY_REWARDS = {
@@ -926,7 +920,6 @@ public final class DeathMatchArena implements TalkNpcTrigger, OpNpcTrigger, Atta
 			event.stop();
 			if (player.loggedIn()) {
 				recordVoidKnightKill(player, knight);
-				PlayerTitle.unlock(player, PlayerTitle.VOIDBANE);
 				broadcastWin(player);
 				player.message("You defeat the Void Knight.");
 				ActionSender.sendSound(player, "victory");

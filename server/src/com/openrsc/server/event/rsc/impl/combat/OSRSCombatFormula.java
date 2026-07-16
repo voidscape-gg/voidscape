@@ -148,9 +148,17 @@ public class OSRSCombatFormula {
 		}
 
 		public static int doMeleeDamage(final Mob attacker, final Mob defender) {
+			return doMeleeHit(attacker, defender).getDamage();
+		}
+
+		/**
+		 * Resolves one melee swing and returns both the final accuracy result and damage.
+		 * The roll order is kept identical to {@link #doMeleeDamage}.
+		 */
+		public static MeleeHitResult doMeleeHit(final Mob attacker, final Mob defender) {
 			// Break out early if it's a weak mob.
 			if (attacker.isNpc() && attacker.getSkills().getLevel(Skill.STRENGTH.id()) < 5)
-				return 0;
+				return new MeleeHitResult(false, 0);
 
 			final double hitChance = calcHitChance(attacker, defender);
 
@@ -174,7 +182,8 @@ public class OSRSCombatFormula {
 				}
 			}
 
-			return applyPlayerAttackDamageFloor(attacker, defender, isHit ? damage : 0);
+			return new MeleeHitResult(isHit,
+				applyPlayerAttackDamageFloor(attacker, defender, isHit ? damage : 0));
 		}
 	}
 

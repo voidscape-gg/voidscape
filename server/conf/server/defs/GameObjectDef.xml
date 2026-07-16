@@ -14430,4 +14430,26 @@
     <groundItemVar>0</groundItemVar>
     <objectModel>void_portal_arch</objectModel>
   </GameObjectDef>
+  <GameObjectDef>
+    <name>Void watchtower</name>
+    <description>A shattered sentry tower holding a cold violet beacon</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>2</width>
+    <height>2</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>void_watchtower</objectModel>
+  </GameObjectDef>
+  <GameObjectDef>
+    <name>Void market shelter</name>
+    <description>A patched shelter where Enclave survivors trade supplies</description>
+    <command1>WalkTo</command1>
+    <command2>Examine</command2>
+    <type>0</type>
+    <width>3</width>
+    <height>2</height>
+    <groundItemVar>0</groundItemVar>
+    <objectModel>void_market_shelter</objectModel>
+  </GameObjectDef>
 </GameObjectDef-array>

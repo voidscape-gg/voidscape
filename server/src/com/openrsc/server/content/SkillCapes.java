@@ -7,10 +7,7 @@ import com.openrsc.server.util.rsc.DataConversions;
 public class SkillCapes {
 
 	public static boolean shouldActivate(Player player, ItemId cape, boolean parameter) {
-		if (!player.getConfig().WANT_CUSTOM_SPRITES || player.getConfig().WANT_OPENPK_POINTS)
-			return false;
-
-		if (!player.getCarriedItems().getEquipment().hasEquipped(cape.id()))
+		if (!canActivate(player, cape))
 			return false;
 
 		switch (cape) {
@@ -25,10 +22,7 @@ public class SkillCapes {
 	}
 
 	public static boolean shouldActivate(Player player, ItemId cape) {
-		if (!player.getConfig().WANT_CUSTOM_SPRITES || player.getConfig().WANT_OPENPK_POINTS)
-			return false;
-
-		if (!player.getCarriedItems().getEquipment().hasEquipped(cape.id()))
+		if (!canActivate(player, cape))
 			return false;
 
 		switch (cape) {
@@ -60,10 +54,7 @@ public class SkillCapes {
 	}
 
 	public static int shouldActivateInt(Player player, ItemId cape) {
-		if (!player.getConfig().WANT_CUSTOM_SPRITES || player.getConfig().WANT_OPENPK_POINTS)
-			return -1;
-
-		if (!player.getCarriedItems().getEquipment().hasEquipped(cape.id()))
+		if (!canActivate(player, cape))
 			return -1;
 
 		switch (cape) {
@@ -72,6 +63,13 @@ public class SkillCapes {
 		}
 
 		return -1;
+	}
+
+	/** Returns whether the equipped cape is eligible to make its normal activation roll. */
+	public static boolean canActivate(final Player player, final ItemId cape) {
+		return player != null && cape != null && player.getConfig().WANT_CUSTOM_SPRITES
+			&& !player.getConfig().WANT_OPENPK_POINTS
+			&& player.getCarriedItems().getEquipment().hasEquipped(cape.id());
 	}
 
 	private static boolean attackCape(boolean isHit) {

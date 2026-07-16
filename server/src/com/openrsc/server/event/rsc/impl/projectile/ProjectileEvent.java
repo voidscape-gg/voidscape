@@ -14,6 +14,8 @@ import com.openrsc.server.model.states.CombatState;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 
+import java.util.UUID;
+
 public class ProjectileEvent extends SingleTickEvent {
 
 	Mob caster, opponent;
@@ -22,6 +24,7 @@ public class ProjectileEvent extends SingleTickEvent {
 	protected int type;
 	boolean canceled;
 	boolean shouldChase;
+	private final UUID voidArenaSessionId;
 
 	public ProjectileEvent(World world, Mob caster, Mob opponent, int damage, int type) {
 		this(world, caster, opponent, damage, type, true);
@@ -47,6 +50,7 @@ public class ProjectileEvent extends SingleTickEvent {
 		this.type = type;
 		this.shouldChase = setChasing;
 		this.attackerMaxHit = attackerMaxHit;
+		this.voidArenaSessionId = world.getVoidArena().projectileSessionId(caster, opponent);
 
 		sendProjectile(caster, opponent);
 		if (caster.isPlayer() && opponent.isPlayer()) {
@@ -67,7 +71,7 @@ public class ProjectileEvent extends SingleTickEvent {
 
 	@Override
 	public void action() {
-		if (!canceled && caster.withinRange(opponent, 15)) {// maybe this will
+		if (canImpact() && caster.withinRange(opponent, 15)) {// maybe this will
 			// cancel the damage
 			// out on death
 			projectileDamage();
@@ -80,6 +84,11 @@ public class ProjectileEvent extends SingleTickEvent {
 				}
 			}
 		}
+	}
+
+	protected final boolean canImpact() {
+		return !canceled && caster.sharesInstanceWith(opponent)
+			&& getWorld().getVoidArena().canProjectileImpact(caster, opponent, voidArenaSessionId);
 	}
 
 	private void recoilDamage(Player opponent, Mob caster, int damage) {

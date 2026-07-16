@@ -1,6 +1,7 @@
 package com.openrsc.server.avatargenerator;
 
 import com.openrsc.server.avatargenerator.AvatarFormat.*;
+import com.openrsc.server.appearance.GeneratedAppearanceRegistry;
 import com.openrsc.server.constants.Constants;
 import com.openrsc.server.model.PlayerAppearance;
 import com.openrsc.server.model.world.World;
@@ -712,8 +713,18 @@ public final class AvatarGenerator {
 					animationNumber = 3300;
 				}
 			}
+			for (GeneratedAppearanceRegistry.Entry managed : GeneratedAppearanceRegistry.authenticEntries()) {
+				int base = managed.definition.getNumber();
+				if (base < 0 || base + managed.frameCount > sprites.length) {
+					throw new IOException("Managed avatar appearance " + managed.key
+						+ " exceeds the authentic sprite array");
+				}
+				loadSprite(spritesArchive, base, 15);
+				if (managed.definition.hasA()) loadSprite(spritesArchive, base + 15, 3);
+				if (managed.definition.hasF()) loadSprite(spritesArchive, base + 18, 9);
+			}
 		} catch (IOException ioe) {
-			throw new ExceptionInInitializerError();
+			throw new ExceptionInInitializerError(ioe);
 		}
 
 
@@ -760,6 +771,9 @@ public final class AvatarGenerator {
 			this.wornItems = wornItems;
 			this.pixels = new int[Constants.AVATAR_WIDTH * Constants.AVATAR_HEIGHT];
 
+			if (this.world.getServer().getConfig().WANT_CUSTOM_SPRITES && containsManagedAppearance(wornItems)) {
+				throw new IOException("Managed authentic appearances are unsupported with custom sprites");
+			}
 			if (this.world.getServer().getConfig().WANT_CUSTOM_SPRITES)
 				drawPlayer();
 			else
@@ -778,17 +792,18 @@ public final class AvatarGenerator {
 		private void drawPlayer(int x, int y, int scaleX, int scaleY, int unknown) {
 			for (int k2 = 0; k2 < 12; k2++) {
 				int l2 = Constants.npcAnimationArray[0][k2];
-				int animationIndex = wornItems[l2] - 1;
-				if (animationIndex >= 0) {
+				int appearanceId = wornItems[l2];
+				AnimationDef animation = resolveAuthenticAppearance(appearanceId);
+				if (animation != null) {
 					int k4 = 0;
 					int i5 = 0;
 					int ANGLE = 1;
-					int k5 = ANGLE + animations.get(animationIndex).getNumber();
+					int k5 = ANGLE + animation.getNumber();
 					k4 = (k4 * scaleX) / sprites[k5].getSomething1();
 					i5 = (i5 * scaleY) / sprites[k5].getSomething2();
-					int l5 = (scaleX * sprites[k5].getSomething1()) / sprites[animations.get(animationIndex).getNumber()].getSomething1();
+					int l5 = (scaleX * sprites[k5].getSomething1()) / sprites[animation.getNumber()].getSomething1();
 					k4 -= (l5 - scaleX) / 2;
-					int colour = animations.get(animationIndex).getGrayMask();
+					int colour = animation.getGrayMask();
 					int skinColour = Constants.characterSkinColours[appearance.getSkinColour()];
 					if (colour == 1)
 						colour = Constants.characterHairColours[appearance.getHairColour()];
@@ -799,6 +814,21 @@ public final class AvatarGenerator {
 					spriteClip4(x + k4, y + i5, l5, scaleY, k5, colour, skinColour, unknown, false);
 				}
 			}
+		}
+
+		private static boolean containsManagedAppearance(int[] wornItems) {
+			for (int appearanceId : wornItems) {
+				if (GeneratedAppearanceRegistry.isManaged(appearanceId)) return true;
+			}
+			return false;
+		}
+
+		private static AnimationDef resolveAuthenticAppearance(int appearanceId) {
+			GeneratedAppearanceRegistry.Entry managed = GeneratedAppearanceRegistry.findAuthentic(appearanceId);
+			if (managed != null) return managed.definition;
+			int animationIndex = appearanceId - 1;
+			return animationIndex >= 0 && animationIndex < animations.size()
+				? animations.get(animationIndex) : null;
 		}
 		/// A helper function for rendering
 		void spriteClip4(int i, int j, int k, int l, int i1, int overlay, int k1, int l1, boolean flag) {

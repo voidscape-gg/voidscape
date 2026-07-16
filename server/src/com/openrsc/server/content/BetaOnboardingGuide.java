@@ -427,7 +427,7 @@ public final class BetaOnboardingGuide {
 			+ "@whi@Coords: Enclave @gre@113 314@whi@, Dungeon @gre@112 296@whi@, Arena @gre@600 2914@whi@.%"
 			+ "@whi@Coords: Void Knight @gre@984 667@whi@, Arena rift @gre@113 321@whi@.% %"
 			+ "@whi@Items: Subscription card @gre@1602@whi@, Void Key @gre@1601@whi@.%"
-			+ "@whi@Items: Void Scimitar @gre@1593@whi@, Void Bow @gre@1594@whi@, Void Amulet @gre@1595@whi@, Void Mace @gre@1596@whi@.";
+			+ "@whi@Items: Void Scimitar @gre@1593@whi@, Void Bow @gre@1594@whi@, Void Amulet @gre@1595@whi@, Void Sceptre @gre@1596@whi@.";
 	}
 
 	private static final class Destination {

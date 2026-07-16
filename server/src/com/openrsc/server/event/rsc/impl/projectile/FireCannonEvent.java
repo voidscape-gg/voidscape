@@ -2,6 +2,7 @@ package com.openrsc.server.event.rsc.impl.projectile;
 
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.PathValidation;
@@ -42,6 +43,10 @@ public class FireCannonEvent extends GameTickEvent {
 
 	@Override
 	public void run() {
+		final DuelProofSession proofSession = this.player.getDuel().getProofSession();
+		if (proofSession != null && proofSession.blocksExternalDamage()) {
+			return;
+		}
 		if (++this.shots >= MAX_SHOTS) {
 			this.player.resetCannonEvent();
 			return;

@@ -138,7 +138,6 @@ public class RangeEvent extends GameTickEvent {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);
 				return;
 			}
-			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
 		} else {
 			if (pluginHandler.handlePlugin(PlayerRangeNpcTrigger.class, getPlayerOwner(), new Object[]{getOwner(), target})) {
 				reset(ProjectileFailureReason.HANDLED_BY_PLUGIN);
@@ -163,6 +162,11 @@ public class RangeEvent extends GameTickEvent {
 			ActionSender.sendSound(player, "outofammo");
 			reset(ProjectileFailureReason.OUT_OF_AMMO);
 			return;
+		}
+		if (target.isPlayer()) {
+			Player playerTarget = (Player) target;
+			WildernessRules.markVoidDungeonPvp(player, playerTarget);
+			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
 		}
 
 		boolean skillCape = SkillCapes.shouldActivate(player, ItemId.RANGED_CAPE);

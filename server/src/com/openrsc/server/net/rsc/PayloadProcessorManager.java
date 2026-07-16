@@ -4,6 +4,7 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.handlers.*;
 import com.openrsc.server.net.rsc.struct.AbstractStruct;
+import com.openrsc.server.plugins.Batch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,6 +170,7 @@ public class PayloadProcessorManager {
 						player.sendVoidScoutBlockedMessage("You can't do that while scouting.");
 						return true;
 					}
+					cancelUnpairedGatherEntityPrelude(player, payload.getOpcode());
 					checkIfShouldCancelMenu(player, payload.getOpcode());
 					method.invoke(processor, payload, player); //processor.process(payload, player);
 				}
@@ -178,6 +180,21 @@ public class PayloadProcessorManager {
 			return true;
 		}
 		return false;
+	}
+
+	private static void cancelUnpairedGatherEntityPrelude(
+		Player player, OpcodeIn opcode
+	) {
+		final Batch batch = player.getBatch();
+		if (batch == null || !batch.isAwaitingGatherObjectCommand()) {
+			return;
+		}
+		if (opcode == OpcodeIn.WALK_TO_ENTITY
+			|| opcode == OpcodeIn.OBJECT_COMMAND
+			|| opcode == OpcodeIn.OBJECT_COMMAND2) {
+			return;
+		}
+		player.interruptPlugins();
 	}
 
 	private static boolean isVoidScoutAllowed(final OpcodeIn opcode) {

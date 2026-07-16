@@ -49,7 +49,7 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 
 	private void checkReservedCard(Player player, Npc npc) {
 		synchronized (CLAIM_LOCK) {
-			if (claimStarterCard(player)) {
+			if (claimStarterCard(player) || claimLaunchSubscriptionCard(player)) {
 				return;
 			}
 		}
@@ -106,6 +106,42 @@ public final class VoidSubscriptionVendor implements TalkNpcTrigger, OpNpcTrigge
 		player.getWorld().getServer().getGameLogger().addQuery(
 			new GenericLog(player.getWorld(), player.getUsername()
 				+ " claimed a starter subscription card from the Lumbridge vendor."));
+		player.save(false, true);
+		return true;
+	}
+
+	private boolean claimLaunchSubscriptionCard(Player player) {
+		if (player == null || !player.getCache().hasKey(VoidSubscription.LAUNCH_CARD_CACHE_KEY)) {
+			return false;
+		}
+
+		final int claimState;
+		try {
+			claimState = player.getCache().getInt(VoidSubscription.LAUNCH_CARD_CACHE_KEY);
+		} catch (RuntimeException ex) {
+			player.getCache().remove(VoidSubscription.LAUNCH_CARD_CACHE_KEY);
+			return false;
+		}
+		if (claimState != VoidSubscription.LAUNCH_CARD_AVAILABLE) {
+			return false;
+		}
+
+		if (player.getCarriedItems().getInventory().getFreeSlots() <= 0) {
+			player.message("@mag@Your subscription card is ready, but you need a free inventory slot.");
+			return true;
+		}
+
+		if (!grantSubscriptionCard(player, "subscription_vendor", "grant=launch_24h_card")) {
+			player.message("@or1@The vendor could not hand over the card. Try again shortly.");
+			return true;
+		}
+		player.getCache().set(VoidSubscription.LAUNCH_CARD_CACHE_KEY, VoidSubscription.LAUNCH_CARD_CLAIMED);
+		ActionSender.sendInventory(player);
+		player.message("@mag@The vendor hands you your launch subscription card.");
+		player.message("@whi@Redeem it when you're ready to start your 7 days of subscription time.");
+		player.getWorld().getServer().getGameLogger().addQuery(
+			new GenericLog(player.getWorld(), player.getUsername()
+				+ " claimed a launch subscription card from the Lumbridge vendor."));
 		player.save(false, true);
 		return true;
 	}

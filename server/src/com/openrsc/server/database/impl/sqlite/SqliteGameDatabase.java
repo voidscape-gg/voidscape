@@ -73,31 +73,30 @@ public class SqliteGameDatabase extends MySqlGameDatabase {
     public void savePlayerBank(final int playerId, final PlayerBank[] bank) throws GameDatabaseException {
         withErrorHandling(() -> {
             emptyBank(playerId);
-            PreparedStatement statement = getConnection().prepareStatement(mySqlQueries.save_BankAdd);
-            PreparedStatement statement2 = getConnection().prepareStatement(mySqlQueries.save_ItemCreate);
-            if (bank.length > 0) {
-                int slot = 0;
-                for (final PlayerBank item : bank) {
-                    statement.setInt(1, playerId);
-                    statement.setLong(2, item.itemId);
-                    statement.setInt(3, slot++);
-                    statement.addBatch();
+            try (PreparedStatement statement = getConnection().prepareStatement(mySqlQueries.save_BankAdd);
+                 PreparedStatement statement2 = getConnection().prepareStatement(mySqlQueries.save_ItemCreate)) {
+                if (bank.length > 0) {
+                    int slot = 0;
+                    for (final PlayerBank item : bank) {
+                        statement.setInt(1, playerId);
+                        statement.setLong(2, item.itemId);
+                        statement.setInt(3, slot++);
+                        statement.addBatch();
 
-                    statement2.setLong(1, item.itemId);
-                    statement2.setInt(2, item.itemStatus.getCatalogId());
-                    statement2.setInt(3, item.itemStatus.getAmount());
-                    statement2.setInt(4, item.itemStatus.getNoted() ? 1 : 0);
-                    statement2.setInt(5, 0);
-                    statement2.setInt(6, item.itemStatus.getDurability());
-                    statement2.setString(7, item.itemStatus.getKillLog());
-                    statement2.addBatch();
+                        statement2.setLong(1, item.itemId);
+                        statement2.setInt(2, item.itemStatus.getCatalogId());
+                        statement2.setInt(3, item.itemStatus.getAmount());
+                        statement2.setInt(4, item.itemStatus.getNoted() ? 1 : 0);
+                        statement2.setInt(5, 0);
+                        statement2.setInt(6, item.itemStatus.getDurability());
+                        statement2.setString(7, item.itemStatus.getKillLog());
+                        statement2.addBatch();
+                    }
+
+                    statement.executeBatch();
+                    statement2.executeBatch();
                 }
-
-                statement.executeBatch();
-                statement2.executeBatch();
             }
-            statement.close();
-            statement2.close();
         });
     }
 
@@ -105,29 +104,27 @@ public class SqliteGameDatabase extends MySqlGameDatabase {
     public void savePlayerInventory(int playerId, PlayerInventory[] inventory) throws GameDatabaseException {
         withErrorHandling(() -> {
             emptyInventory(playerId);
-            PreparedStatement statement = getConnection().prepareStatement(mySqlQueries.save_InventoryAdd);
-            PreparedStatement statement2 = getConnection().prepareStatement(mySqlQueries.save_ItemCreate);
+            try (PreparedStatement statement = getConnection().prepareStatement(mySqlQueries.save_InventoryAdd);
+                 PreparedStatement statement2 = getConnection().prepareStatement(mySqlQueries.save_ItemCreate)) {
+                for (final PlayerInventory item : inventory) {
+                    statement.setInt(1, playerId);
+                    statement.setLong(2, item.itemId);
+                    statement.setInt(3, item.slot);
+                    statement.addBatch();
 
-            for (final PlayerInventory item : inventory) {
-                statement.setInt(1, playerId);
-                statement.setLong(2, item.itemId);
-                statement.setInt(3, item.slot);
-                statement.addBatch();
+                    statement2.setLong(1, item.itemId);
+                    statement2.setInt(2, item.catalogID);
+                    statement2.setInt(3, item.amount);
+                    statement2.setInt(4, item.noted ? 1 : 0);
+                    statement2.setInt(5, item.wielded ? 1 : 0);
+                    statement2.setInt(6, item.durability);
+                    statement2.setString(7, item.killLog);
+                    statement2.addBatch();
+                }
 
-                statement2.setLong(1, item.itemId);
-                statement2.setInt(2, item.catalogID);
-                statement2.setInt(3, item.amount);
-                statement2.setInt(4, item.noted ? 1 : 0);
-                statement2.setInt(5, item.wielded ? 1 : 0);
-                statement2.setInt(6, item.durability);
-                statement2.setString(7, item.killLog);
-                statement2.addBatch();
+                statement.executeBatch();
+                statement2.executeBatch();
             }
-
-            statement.executeBatch();
-            statement2.executeBatch();
-            statement.close();
-            statement2.close();
         });
     }
 

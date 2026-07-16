@@ -2,6 +2,8 @@ package com.openrsc.server.net.rsc;
 
 import com.openrsc.server.Server;
 import com.openrsc.server.constants.ItemId;
+import com.openrsc.server.appearance.PaperdollV2EvaluationPolicy;
+import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.content.clan.Clan;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.clan.ClanPlayer;
@@ -53,6 +55,7 @@ import java.util.Map.Entry;
  * Sends corresponding actions for use over the network layer
  * */
 public class ActionSender {
+	public static final int OVERHEAD_PLAYER_LABEL_MODE_CLIENT_VERSION = 10138;
 	/**
 	 * The asynchronous logger.
 	 */
@@ -212,11 +215,30 @@ public class ActionSender {
 	 *
 	 * @param player
 	 */
-	public static void sendAppearanceScreen(Player player) {
+	public static boolean sendAppearanceScreen(Player player) {
+		String blockedReason = paperdollV2EvaluationAppearanceBlockReason(player);
+		if (blockedReason.length() > 0) {
+			player.setChangingAppearance(false);
+			player.message("Unequip plate or head-slot gear before opening the Appearance Studio.");
+			return false;
+		}
 		player.setChangingAppearance(true);
 		PlayerService.updateUnlockedPlayerSkins(player);
 		NoPayloadStruct struct = new NoPayloadStruct();
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_APPEARANCE_SCREEN, struct, player);
+		return true;
+	}
+
+	public static String paperdollV2EvaluationAppearanceBlockReason(Player player) {
+		return player == null ? "" : paperdollV2EvaluationAppearanceBlockReason(
+			player.getConfig().isPaperdollV2EvaluationEnabled(), player.isDev(),
+			player.getWornItems());
+	}
+
+	public static String paperdollV2EvaluationAppearanceBlockReason(
+		boolean evaluationEnabled, boolean developer, int[] worn) {
+		return PaperdollV2EvaluationPolicy.appearanceBlockReason(evaluationEnabled,
+			developer, worn);
 	}
 
 	/**
@@ -633,6 +655,8 @@ public class ActionSender {
 			}
 		}
 
+		addBestiaryDragonWeaponRareDrops(player, npcId, drops);
+
 		Collections.sort(drops, Comparator
 			.comparingDouble((BestiaryStruct.DropEntry drop) ->
 				drop.denominator <= 0 ? 0.0D : (double) drop.numerator / (double) drop.denominator).reversed()
@@ -642,6 +666,31 @@ public class ActionSender {
 		struct.entries = new BestiaryStruct.NpcEntry[] { npcEntry };
 
 		tryFinalizeAndSendPacket(OpcodeOut.SEND_BESTIARY, struct, player);
+	}
+
+	private static void addBestiaryDragonWeaponRareDrops(Player player, int npcId, List<BestiaryStruct.DropEntry> drops) {
+		NpcDrops.DragonWeaponRareDropProfile profile =
+			player.getWorld().getNpcDrops().getDragonWeaponRareDropProfile(npcId);
+		if (profile == null) {
+			return;
+		}
+		for (Entry<Integer, Integer> entry : profile.getItemDropDenominators().entrySet()) {
+			addBestiaryFixedChanceDrop(player, drops, entry.getKey(), 1, entry.getValue());
+		}
+	}
+
+	private static void addBestiaryFixedChanceDrop(
+		Player player, List<BestiaryStruct.DropEntry> drops, int itemId, long amount, long denominator
+	) {
+		if (!bestiaryWorldAllowsDrop(player, itemId)) {
+			return;
+		}
+		BestiaryStruct.DropEntry drop = new BestiaryStruct.DropEntry();
+		drop.itemId = itemId;
+		drop.amount = amount;
+		drop.numerator = 1L;
+		drop.denominator = denominator;
+		drops.add(drop);
 	}
 
 	private static int bestiaryBoneDrop(Player player, int npcId) {
@@ -899,7 +948,9 @@ public class ActionSender {
 			customOptions.add(player.getFightModeSelectorToggle());
 			customOptions.add(player.getExperienceCounterToggle());
 			customOptions.add(player.getHideInventoryCount() ? 1 : 0);
-			customOptions.add(player.getHideNameTag() ? 1 : 0);
+			customOptions.add(player.getClientVersion() >= OVERHEAD_PLAYER_LABEL_MODE_CLIENT_VERSION
+				? player.getOverheadPlayerLabelMode()
+				: (player.getHideNameTag() ? 1 : 0));
 			customOptions.add(player.getPartyInviteSetting() ? 1 : 0);
 			customOptions.add(player.getAndroidInvToggle() ? 1 : 0);
 			customOptions.add(player.getShowNPCKC() ? 1 : 0);

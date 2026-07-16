@@ -6,11 +6,16 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
 import com.openrsc.server.content.SkillCapes;
 import com.openrsc.server.content.VoidContent;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.model.entity.Mob;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.util.rsc.DataConversions;
+import com.voidscape.duelproof.DuelProofMeleeInput;
+import com.voidscape.duelproof.DuelProofMeleeResult;
+import com.voidscape.duelproof.DuelProofMeleeSwing;
+import com.voidscape.duelproof.DuelProofSpec;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,7 +86,8 @@ public class CombatFormula {
 	public static int calculateMagicDamage(final double spellPower, final Mob source, final Mob victim) {
 		//Given that melee max hit is fractional, it was likely that spell power values ending in "5" were supposed to hit their max hit more often.
 		//TODO: More research to see if that was the case. For now, we can just make it uniform after flooring.
-		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(spellPower) + 1);
+		final double effectiveSpellPower = spellPower * VoidContent.voidSceptreMagicMultiplier(source, victim);
+		final int damage = DataConversions.getRandom().nextInt((int)Math.floor(effectiveSpellPower) + 1);
 		return applyMagicDamageReduction(damage, source, victim);
 	}
 
@@ -188,6 +194,16 @@ public class CombatFormula {
 	 * @return The amount to hit.
 	 */
 	public static int doMeleeDamage(final Mob source, final Mob victim) {
+		return doMeleeHit(source, victim).getDamage();
+	}
+
+	/**
+	 * Resolves one melee swing while retaining the final accuracy result.
+	 *
+	 * This method intentionally follows the same RNG path as {@link #doMeleeDamage};
+	 * callers that need only damage should continue using that compatibility method.
+	 */
+	public static MeleeHitResult doMeleeHit(final Mob source, final Mob victim) {
 		final boolean isPvpMelee = source instanceof Player && victim instanceof Player;
 		boolean isHit = calculateMeleeAccuracy(source, victim);
 		boolean wasHit = isHit;
@@ -236,7 +252,62 @@ public class CombatFormula {
 
 		//LOGGER.info(source + " " + (isHit ? "hit" : "missed") + " " + victim + ", Damage: " + damage);
 
-		return applyPlayerAttackDamageFloor(source, victim, isHit ? damage : 0);
+		return new MeleeHitResult(isHit, applyPlayerAttackDamageFloor(source, victim, isHit ? damage : 0));
+	}
+
+	/** Resolves one proof-eligible PvP swing entirely through the committed replay stream. */
+	public static MeleeHitResult doMeleeHit(final Player source, final Player victim,
+											 final DuelProofSession proofSession) {
+		if (source == null || victim == null || proofSession == null || source == victim) {
+			throw new IllegalArgumentException("verified melee requires two players and a proof session");
+		}
+		final DuelProofMeleeInput input = new DuelProofMeleeInput(
+			source.getCombatStyle(),
+			victim.getCombatStyle(),
+			source.getSkills().getLevel(Skill.ATTACK.id()),
+			source.getSkills().getLevel(Skill.STRENGTH.id()),
+			victim.getSkills().getLevel(Skill.DEFENSE.id()),
+			prayerTier(source, Prayers.CLARITY_OF_THOUGHT, Prayers.IMPROVED_REFLEXES,
+				Prayers.INCREDIBLE_REFLEXES),
+			prayerTier(source, Prayers.BURST_OF_STRENGTH, Prayers.SUPERHUMAN_STRENGTH,
+				Prayers.ULTIMATE_STRENGTH),
+			prayerTier(victim, Prayers.THICK_SKIN, Prayers.ROCK_SKIN, Prayers.STEEL_SKIN),
+			source.getWeaponAimPoints(),
+			source.getWeaponPowerPoints(),
+			victim.getArmourPoints(),
+			SkillCapes.canActivate(source, ATTACK_CAPE),
+			SkillCapes.canActivate(source, STRENGTH_CAPE),
+			SkillCapes.canActivate(victim, DEFENSE_CAPE)
+		);
+		final DuelProofMeleeSwing swing = proofSession.resolveMeleeSwing(source, victim, input);
+		final DuelProofMeleeResult result = swing.getResult();
+
+		if (result.isAttackCapePreventedZero()) {
+			source.message("@red@Your Attack cape has prevented a zero hit");
+		}
+		if (result.isHit()) {
+			victim.updateDamageAndBlockedDamageTracking(source,
+				result.getDamageBeforeDefenceCape(), result.getBlockedDamage());
+		}
+		if (result.isStrengthCapeActivated()) {
+			source.message("@ora@Your Strength cape has granted you a critical hit");
+		}
+		mirrorPvpMeleeMomentum(source, victim, swing.hasMomentumAfter());
+		return new MeleeHitResult(result.isHit(), result.getDamage());
+	}
+
+	private static int prayerTier(final Player player, final int lowPrayer,
+								  final int middlePrayer, final int highPrayer) {
+		if (player.getPrayers().isPrayerActivated(highPrayer)) {
+			return DuelProofSpec.PRAYER_TIER_HIGH;
+		}
+		if (player.getPrayers().isPrayerActivated(middlePrayer)) {
+			return DuelProofSpec.PRAYER_TIER_MIDDLE;
+		}
+		if (player.getPrayers().isPrayerActivated(lowPrayer)) {
+			return DuelProofSpec.PRAYER_TIER_LOW;
+		}
+		return DuelProofSpec.PRAYER_TIER_NONE;
 	}
 
 	private static int rollMeleeDamage(final Mob source, final Mob victim, final boolean hasMomentum) {
@@ -425,6 +496,17 @@ public class CombatFormula {
 		}
 	}
 
+	/** Mirrors proof-owned momentum into the legacy attributes used after the duel ends. */
+	private static void mirrorPvpMeleeMomentum(final Mob source, final Mob victim,
+										 final boolean active) {
+		if (!active) {
+			clearPvpMeleeMomentum(source);
+			return;
+		}
+		source.setAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE, victim.getUUID());
+		source.setAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE, PVP_MELEE_MOMENTUM_MAX_STACKS);
+	}
+
 	private static int getTargetAdjustedMeleeMaxHit(final Mob source, final Mob victim) {
 		final int maxRoll = getMeleeDamage(source, victim);
 		if (maxRoll <= 0) {
@@ -452,7 +534,8 @@ public class CombatFormula {
 		return applyMagicDamageReduction((int)Math.floor(spellPower), null, victim);
 	}
 
-	private static void clearPvpMeleeMomentum(final Mob source) {
+	/** Clears carry-over PvP melee momentum before a newly agreed fight begins. */
+	public static void clearPvpMeleeMomentum(final Mob source) {
 		source.removeAttribute(PVP_MELEE_MOMENTUM_TARGET_ATTRIBUTE);
 		source.removeAttribute(PVP_MELEE_MOMENTUM_STACKS_ATTRIBUTE);
 	}
@@ -522,9 +605,6 @@ public class CombatFormula {
 			return 1.0D;
 		}
 		final Player player = (Player) attacker;
-		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_MACE.id())) {
-			return VoidContent.VOID_MACE_MELEE_MULTIPLIER;
-		}
 		if (player.getCarriedItems().getEquipment().hasEquipped(VOID_SCIMITAR.id())) {
 			return VoidContent.VOID_SCIMITAR_MELEE_MULTIPLIER;
 		}

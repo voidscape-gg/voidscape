@@ -23,7 +23,8 @@ public enum InterfaceOptions {
 	ACCOUNT_VALIDATE(15),
 	BESTIARY_REQUEST(16),
 	XP_LOCK(17),
-	VOID_ARENA(18);
+	VOID_ARENA(18),
+	DUEL_PROOF(19);
 
 	private int option;
 

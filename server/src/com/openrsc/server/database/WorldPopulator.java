@@ -305,9 +305,11 @@ public final class WorldPopulator {
 				if (getWorld().getServer().getConfig().WANT_VOID_ENCLAVE) {
 					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidEnclave.json", type);
 				}
-					if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON) {
-						loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidDungeon.json", type);
-					}
+				if (getWorld().getServer().getConfig().WANT_VOID_DUNGEON
+					&& !getWorld().getServer().getConfig().WANT_CUSTOM_LANDSCAPE) {
+					// The custom landscape bakes these walls for matching collision and minimap.
+					loadGameObjLocs(getWorld().getServer().getConfig().CONFIG_DIR + "/defs/locs/BoundaryLocsVoidDungeon.json", type);
+				}
 				return;
 			}
 			case Scenery: {

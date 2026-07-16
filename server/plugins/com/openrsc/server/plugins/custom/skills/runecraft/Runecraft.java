@@ -476,7 +476,7 @@ public class Runecraft implements OpLocTrigger, UseLocTrigger, UseInvTrigger {
 
 		int repeat = player.getCarriedItems().getInventory().countId(ItemId.RUNE_STONE.id(), Optional.of(false));
 		if (repeat <= 0) return;
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchChisel(player, chisel);
 	}
 
@@ -506,7 +506,7 @@ public class Runecraft implements OpLocTrigger, UseLocTrigger, UseInvTrigger {
 	private void imbueTalisman(Player player, Item rune) {
 		int repeat = player.getCarriedItems().getInventory().countId(ItemId.UNCHARGED_TALISMAN.id(), Optional.of(false));
 		if (repeat <= 0) return;
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.RUNECRAFT.id());
 		batchImbue(player, rune);
 	}
 

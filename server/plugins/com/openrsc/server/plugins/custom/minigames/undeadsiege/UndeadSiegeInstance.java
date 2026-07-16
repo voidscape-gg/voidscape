@@ -3,7 +3,6 @@ package com.openrsc.server.plugins.custom.minigames.undeadsiege;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.NpcId;
 import com.openrsc.server.constants.Skill;
-import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.arena.ArenaKitSnapshot;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
@@ -891,7 +890,6 @@ public final class UndeadSiegeInstance {
 			giveOrDrop(player, new Item(ItemId.AIR_RUNE.id(), 120));
 			giveOrDrop(player, new Item(ItemId.FIRE_RUNE.id(), 100));
 			giveOrDrop(player, new Item(ItemId.DEATH_RUNE.id(), 25));
-			PlayerTitle.unlock(player, PlayerTitle.GRAVEWALKER);
 		}
 		player.playerServerMessage(MessageType.QUEST,
 			"@mag@" + UndeadSiegeConfig.NAME + ": @whi@payout for wave " + completedWave + " complete.");

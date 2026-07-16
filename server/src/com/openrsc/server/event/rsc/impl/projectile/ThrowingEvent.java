@@ -15,6 +15,7 @@ import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Projectile;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.plugins.triggers.PlayerRangeNpcTrigger;
@@ -128,7 +129,6 @@ public class ThrowingEvent extends GameTickEvent {
 				player.resetRange();
 				return;
 			}
-			player.getWorld().getBountyHunter().onPvPAttack(player, (Player) target);
 		}
 
 		if (throwingID == -1) {
@@ -167,6 +167,11 @@ public class ThrowingEvent extends GameTickEvent {
 			}
 			Item toRemove = new Item(rangeType.getCatalogId(), 1, false, rangeType.getItemId());
 			player.getCarriedItems().remove(toRemove);
+		}
+		if (target.isPlayer()) {
+			Player playerTarget = (Player) target;
+			WildernessRules.markVoidDungeonPvp(player, playerTarget);
+			player.getWorld().getBountyHunter().onPvPAttack(player, playerTarget);
 		}
 
 		/*if (!getPlayerOwner().getLocation().isMembersWild()) {

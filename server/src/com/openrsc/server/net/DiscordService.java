@@ -15,6 +15,7 @@ import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.util.MessageFilterType;
 import com.openrsc.server.util.ServerAwareThreadFactory;
 import com.openrsc.server.util.rsc.MessageType;
+import com.openrsc.server.util.rsc.StringUtil;
 import com.vdurmont.emoji.EmojiParser;
 import net.dv8tion.jda.api.AccountType;
 import net.dv8tion.jda.api.JDA;
@@ -48,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 
 public class DiscordService implements Runnable{
 	private static final int WATCHLIST_MAX_SIZE = 10;
+	private static final String REDACTED_IP_LITERAL = "[redacted-ip]";
 	private ScheduledExecutorService scheduledExecutor;
 
 	private final Queue<String> staffCommandRequests = new ConcurrentLinkedQueue<String>();
@@ -450,17 +452,61 @@ public class DiscordService implements Runnable{
 
 	public void staffCommandLog(final Player player, final String command) {
 		DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Calendar calendar = Calendar.getInstance();
+		Calendar calendar = Calendar.getInstance();
 		final String commandMessage = String.format("%s %s %s %s: %s used command: %s",
 				"[" + dateFormat.format(calendar.getTime()) +  "]",
 				"[" + player.getWorld().getServer().getConfig().SERVER_NAME + "]",
 				Group.getGlobalMessageName(player.getGroupID()),
 				player.getUsername(),
 				"[X: " + player.getX() + ", Y: " + player.getY() + "]",
-				command
+				redactIpLiterals(command)
 		);
 
 		staffCommandSendToDiscord(commandMessage);
+	}
+
+	private static String redactIpLiterals(final String text) {
+		if (text == null || text.length() == 0) {
+			return text;
+		}
+
+		String[] tokens = text.split(" ", -1);
+		boolean changed = false;
+		for (int i = 0; i < tokens.length; i++) {
+			String redacted = redactIpToken(tokens[i]);
+			if (!redacted.equals(tokens[i])) {
+				tokens[i] = redacted;
+				changed = true;
+			}
+		}
+
+		return changed ? String.join(" ", tokens) : text;
+	}
+
+	private static String redactIpToken(final String token) {
+		int start = 0;
+		int end = token.length();
+		while (start < end && isIpWrapperPunctuation(token.charAt(start))) {
+			start++;
+		}
+		while (end > start && isIpWrapperPunctuation(token.charAt(end - 1))) {
+			end--;
+		}
+		if (start == end) {
+			return token;
+		}
+
+		String candidate = token.substring(start, end);
+		if (!StringUtil.isIPv4Address(candidate) && !StringUtil.isIPv6Address(candidate)) {
+			return token;
+		}
+
+		return token.substring(0, start) + REDACTED_IP_LITERAL + token.substring(end);
+	}
+
+	private static boolean isIpWrapperPunctuation(final char ch) {
+		return ch == ',' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']'
+			|| ch == '{' || ch == '}' || ch == '<' || ch == '>' || ch == '"' || ch == '\'';
 	}
 
 	private void staffCommandSendToDiscord(final String message) {

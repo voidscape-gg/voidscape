@@ -205,15 +205,19 @@ public class PlayerService implements IPlayerService {
         player.getSettings().setGameSetting(PlayerSettings.GAME_SETTING_MOUSE_BUTTONS, playerData.oneMouse);
         player.getSettings().setGameSetting(PlayerSettings.GAME_SETTING_SOUND_EFFECTS, playerData.soundOff);
 
-        PlayerAppearance pa = new PlayerAppearance(
-                playerData.hairColour,
-                playerData.topColour,
-                playerData.trouserColour,
-                playerData.skinColour,
-                playerData.headSprite,
-                playerData.bodySprite,
-                playerData.hairStyle
-        );
+		boolean paperdollV2EvaluationAppearance = configuration.isPaperdollV2EvaluationEnabled()
+				&& player.isDev()
+				&& PlayerAppearance.isPaperdollV2EvaluationIdentity(playerData.hairStyle,
+					playerData.headSprite, playerData.bodySprite, playerData.male);
+		PlayerAppearance pa = paperdollV2EvaluationAppearance
+			? PlayerAppearance.forPaperdollV2Evaluation(
+				playerData.hairColour, playerData.topColour, playerData.trouserColour,
+				playerData.skinColour, playerData.headSprite, playerData.bodySprite,
+				playerData.hairStyle)
+			: new PlayerAppearance(
+				playerData.hairColour, playerData.topColour, playerData.trouserColour,
+				playerData.skinColour, playerData.headSprite, playerData.bodySprite,
+				playerData.hairStyle);
         if (!pa.isValid(player)) {
             pa = new PlayerAppearance(
                     PlayerAppearance.DEFAULT_HAIR_COLOUR,

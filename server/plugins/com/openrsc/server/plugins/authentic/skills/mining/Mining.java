@@ -213,11 +213,11 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 			return;
 		}
 
-		if(config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.MINING.id());
+		if (config().BATCH_PROGRESSION) {
+			startskillbatch(rock, Skill.MINING.id());
+		} else {
+			startbatch(repeat);
 		}
-
-		startbatch(repeat);
 		batchMining(player, rock, def, axeId, mineLvl);
 	}
 
@@ -227,6 +227,9 @@ public final class Mining implements OpLocTrigger, UseLocTrigger {
 		thinkbubble(new Item(pickBubbleId)); // authentic to only show the original pickaxe sprite
 		player.playerServerMessage(MessageType.QUEST, "You swing your pick at the rock...");
 		delay(3);
+		if (ifinterrupted()) {
+			return;
+		}
 
 		final Item ore = new Item(def.getOreId());
 		if (config().WANT_FATIGUE) {

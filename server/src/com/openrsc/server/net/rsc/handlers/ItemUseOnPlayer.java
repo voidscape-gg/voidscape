@@ -32,6 +32,11 @@ public class ItemUseOnPlayer implements PayloadProcessor<ItemOnMobStruct, Opcode
 			player.message("Nothing interesting happens");
 			return;
 		}
+		if (!player.sharesInstanceWith(affectedPlayer)) {
+			player.message("You cannot reach that player.");
+			player.resetPath();
+			return;
+		}
 		if (!affectedPlayer.canBeReattacked()) {
 			player.resetPath();
 			return;
@@ -46,7 +51,8 @@ public class ItemUseOnPlayer implements PayloadProcessor<ItemOnMobStruct, Opcode
 			public void executeInternal() {
 				getPlayer().resetPath();
 				getPlayer().resetFollowing();
-				if (!getPlayer().getCarriedItems().getInventory().contains(item)
+				if (!getPlayer().sharesInstanceWith(affectedPlayer)
+					|| !getPlayer().getCarriedItems().getInventory().contains(item)
 					|| !getPlayer().canReach(affectedPlayer) || getPlayer().isBusy()
 					|| getPlayer().isRanging()) {
 					return;

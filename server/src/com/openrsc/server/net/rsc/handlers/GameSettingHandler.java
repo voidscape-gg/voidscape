@@ -72,7 +72,13 @@ public final class GameSettingHandler implements PayloadProcessor<GameSettingStr
 			} else if (idx == 34) {
 				player.getCache().store("setting_inventory_count", value == 1);
 			} else if (idx == 35) {
-				player.getCache().store("setting_floating_nametags", value == 1);
+				if (player.getClientVersion() >= ActionSender.OVERHEAD_PLAYER_LABEL_MODE_CLIENT_VERSION) {
+					int mode = Math.max(Player.OVERHEAD_PLAYER_LABEL_NAMES_AND_TITLES,
+						Math.min(Player.OVERHEAD_PLAYER_LABEL_HIDDEN, payload.value));
+					player.getCache().set(Player.OVERHEAD_PLAYER_LABEL_MODE_CACHE_KEY, mode);
+				} else {
+					player.getCache().store("setting_floating_nametags", value == 1);
+				}
 			} else if (idx == 36) {
 				player.getCache().store("party_block_invites", value == 1);
 			} else if (idx == 37) {

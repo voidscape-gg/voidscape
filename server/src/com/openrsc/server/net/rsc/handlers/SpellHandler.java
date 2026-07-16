@@ -1,8 +1,10 @@
 package com.openrsc.server.net.rsc.handlers;
 
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.SkillCapes;
+import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.content.voidarena.VoidArena;
 import com.openrsc.server.database.impl.mysql.queries.logging.GenericLog;
 import com.openrsc.server.event.MiniEvent;
@@ -234,8 +236,14 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean spellSuccessCheck(Player player, SpellDef spell) {
+		return spellSuccessCheck(player, spell, null);
+	}
+
+	private boolean spellSuccessCheck(Player player, SpellDef spell, Mob affectedMob) {
 		// Check for failed spell.
-		if (!Formulae.castSpell(spell, player.getSkills().getLevel(getMagicId(player, spell)), player.getMagicPoints())) {
+		double accuracyMultiplier = VoidContent.voidSceptreMagicMultiplier(player, affectedMob);
+		if (!Formulae.castSpell(spell, player.getSkills().getLevel(getMagicId(player, spell)),
+			player.getMagicPoints(), accuracyMultiplier)) {
 			player.message("The spell fails! You may try again in 20 seconds");
 			player.playSound("spellfail");
 			player.setSpellFail();
@@ -246,6 +254,18 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	public void process(SpellStruct payload, Player player) throws Exception {
+		OpcodeIn opcode = payload.getOpcode();
+		if (opcode == null)
+			return;
+		if (opcode == OpcodeIn.CAST_ON_GROUND_ITEM) {
+			final Point location = Point.location(payload.targetCoord.getX(), payload.targetCoord.getY());
+			if (player.getWorld().getVoidArena().blocksGroundItemAction(player, location)) {
+				player.message("You cannot use ground items in the Void Arena.");
+				player.resetPath();
+				return;
+			}
+		}
+
 		if ((player.isBusy() && !player.inCombat()) || player.isRanging()) {
 			return;
 		}
@@ -253,15 +273,33 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			return;
 		}
 
-		OpcodeIn opcode = payload.getOpcode();
-
-		if (opcode == null)
-			return;
-
 		if (opcode == OpcodeIn.CAST_ON_INVENTORY_ITEM
 			&& (player.getTrade().isTradeActive() || (player.getDuel().isDuelActive() && !player.inCombat()))) {
 			// prevent of changing inventory items via magic during trade & duels windows
 			return;
+		}
+
+		if (opcode == OpcodeIn.PLAYER_CAST_PVP) {
+			Player affectedPlayer = player.getWorld().getPlayer(payload.targetIndex);
+			if (affectedPlayer == null) {
+				player.resetPath();
+				return;
+			}
+			if (!player.sharesInstanceWith(affectedPlayer)) {
+				player.message("You cannot reach that target.");
+				player.resetPath();
+				return;
+			}
+			if (affectedPlayer == player) {
+				player.message("You can't attack yourself");
+				player.resetPath();
+				return;
+			}
+			if (!WildernessRules.canAttackVoidDungeonPvp(player, affectedPlayer)) {
+				player.message(WildernessRules.voidDungeonPvpMessage());
+				player.resetPath();
+				return;
+			}
 		}
 
 		player.resetAllExceptDueling();
@@ -320,7 +358,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 					if (spell == null) {
 						return;
 					}
-					if (!spellSuccessCheck(player, spell)) {
+					if (!spellSuccessCheck(player, spell, affectedNpc)) {
 						return;
 					}
 
@@ -454,7 +492,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 				return;
 			}
 
-			if (!spellSuccessCheck(player, spell)) {
+			Mob accuracyTarget = opcode == OpcodeIn.CAST_ON_NPC
+				? player.getWorld().getNpc(payload.targetIndex)
+				: null;
+			if (!spellSuccessCheck(player, spell, accuracyTarget)) {
 				return;
 			}
 
@@ -563,6 +604,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean checkCastOnPlayer(Player player, Player affectedPlayer, Spells spellEnum) {
+		if (!player.sharesInstanceWith(affectedPlayer)) {
+			player.message("You cannot reach that target.");
+			return true;
+		}
 		// Duel with "No Magic" selected.
 		if (player.getDuel().isDuelActive() && player.getDuel().getDuelSetting(1)) {
 			player.message("Magic cannot be used during this duel!");
@@ -575,6 +620,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 				player.message(voidArenaAttack.message);
 			}
 			return !voidArenaAttack.allowed;
+		}
+		if (!WildernessRules.canAttackVoidDungeonPvp(player, affectedPlayer)) {
+			player.message(WildernessRules.voidDungeonPvpMessage());
+			return true;
 		}
 
 		// Note: Blocking magic casts near mage arena is inauthentic
@@ -596,6 +645,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean checkCastOnNpc(Player player, Npc affectedNpc, SpellDef spell) {
+		if (!player.sharesInstanceWith(affectedNpc)) {
+			player.message("You cannot reach that target.");
+			return true;
+		}
 		NpcInteraction interaction = NpcInteraction.NPC_CAST_SPELL;
 
 		// Demon Slayer
@@ -647,7 +700,16 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private void finalizeMobSpell(Player player, SpellDef spell, Mob affectedMob, String message) {
-		finalizeSpell(player, spell, message, shouldAwardMobSpellExperience(player, affectedMob));
+		finalizeMobSpell(player, spell, affectedMob, message, shouldAwardMobSpellExperience(player, affectedMob));
+	}
+
+	private void finalizeMobSpell(Player player, SpellDef spell, Mob affectedMob, String message, boolean giveExp) {
+		if (affectedMob.isPlayer()) {
+			WildernessRules.markVoidDungeonPvp(player, (Player) affectedMob);
+		}
+		boolean recordTitleProgress = !(affectedMob instanceof Npc)
+			|| !player.getWorld().getVoidArena().shouldSuppressDmKingNpcXp((Npc) affectedMob);
+		finalizeSpell(player, spell, message, giveExp, recordTitleProgress);
 	}
 
 	private boolean shouldAwardMobSpellExperience(Player player, Mob affectedMob) {
@@ -661,6 +723,11 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	public static void finalizeSpell(Player player, SpellDef spell, String message, boolean giveExp) {
+		finalizeSpell(player, spell, message, giveExp, true);
+	}
+
+	private static void finalizeSpell(Player player, SpellDef spell, String message,
+		boolean giveExp, boolean recordTitleProgress) {
 		player.lastCast = System.currentTimeMillis();
 		player.playSound("spellok");
 		// don't display a message if message is null (example superheat)
@@ -668,7 +735,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			player.playerServerMessage(MessageType.QUEST, message.trim().isEmpty() ? "Cast spell successfully" : message);
 			}
 			if (giveExp) player.incExp(getMagicId(player, spell), spell.getExp(), true);
-			PlayerTitle.recordSpellCast(player);
+			if (recordTitleProgress) PlayerTitle.recordSpellCast(player);
 			player.setCastTimer();
 		}
 
@@ -1196,6 +1263,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 		player.setWalkToAction(new WalkToPointAction(player, affectedItem.getLocation(), 4) {
 			public void executeInternal() {
 				getPlayer().resetPath();
+				if (getPlayer().getWorld().getVoidArena()
+					.blocksGroundItemAction(getPlayer(), affectedItem.getLocation())) {
+					return;
+				}
 				if (!canCast(getPlayer()) || getPlayer().getViewArea().getVisibleGroundItem(affectedItem.getID(), getLocation(), getPlayer()) == null || affectedItem.isRemoved()) {
 					return;
 				}
@@ -1339,6 +1410,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							return;
 						}
 
+						if (getPlayer().getWorld().getVoidArena()
+							.blocksGroundItemAction(getPlayer(), affectedItem.getLocation())) {
+							return;
+						}
 						if (!checkAndRemoveRunes(getPlayer(), spell)) {
 							return;
 						}
@@ -1366,6 +1441,10 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private void handleMobCast(final Player player, final Mob affectedMob, Spells spellEnum, int spellType) {
+		if (!player.sharesInstanceWith(affectedMob)) {
+			player.message("You cannot reach that target.");
+			return;
+		}
 		if (player.getDuel().isDuelActive() && affectedMob.isPlayer()) {
 			Player aff = (Player) affectedMob;
 			if (!player.getDuel().getDuelRecipient().getUsername().toLowerCase()
@@ -1406,11 +1485,18 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 			player.message("You cannot do that whilst fighting!");
 			return;
 		}
+		if (affectedMob.isNpc()) {
+			VoidDungeonTraversalGrace.clear(player);
+		}
 
 		final int spellRange = player.getConfig().SPELL_RANGE_DISTANCE;
 		player.setFollowing(affectedMob, spellRange);
 		player.setWalkToAction(new WalkToMobAction(player, affectedMob, spellRange, false, ActionType.ATTACKMAGIC) {
 			public void executeInternal() {
+				if (!getPlayer().sharesInstanceWith(affectedMob)) {
+					getPlayer().resetPath();
+					return;
+				}
 				if (!PathValidation.checkPath(getPlayer().getWorld(), getPlayer().getLocation(), affectedMob.getLocation())) {
 					getPlayer().playerServerMessage(MessageType.QUEST, "I can't get a clear shot from here");
 					getPlayer().resetPath();
@@ -1750,7 +1836,7 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 							godSpellObject(getPlayer(), affectedMob, spellEnum);
 						}
 						getPlayer().getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(getPlayer().getWorld(), getPlayer(), affectedMob, CombatFormula.calculateGodSpellDamage(getPlayer(), affectedMob), 1, setChasing));
-						finalizeSpell(getPlayer(), spell, DEFAULT, giveExp && shouldAwardMobSpellExperience(getPlayer(), affectedMob));
+						finalizeMobSpell(getPlayer(), spell, affectedMob, DEFAULT, giveExp && shouldAwardMobSpellExperience(getPlayer(), affectedMob));
 						break;
 
 					case CHILL_BOLT:

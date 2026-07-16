@@ -5,9 +5,12 @@ import com.openrsc.server.content.VoidPath;
 import com.openrsc.server.content.VoidVeteranTour;
 import com.openrsc.server.model.entity.npc.Npc;
 import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.plugins.shared.PlayerTitleMenu;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 
+import static com.openrsc.server.plugins.Functions.multi;
 import static com.openrsc.server.plugins.Functions.npcsay;
+import static com.openrsc.server.plugins.Functions.say;
 
 public final class VoidHerald implements TalkNpcTrigger {
 
@@ -36,9 +39,20 @@ public final class VoidHerald implements TalkNpcTrigger {
 	}
 
 	private void handleActivityMenu(Player player, Npc npc) {
-		npcsay(player, npc,
-			"The deeper Void trials are not open yet.",
-			"For now, the nearby rift leads only to the Void Arena.");
+		npcsay(player, npc, "I keep the realm's title register as well as its notices.");
+		int option = multi(player, npc, false,
+			"Manage my titles and honorifics.",
+			"What Void activities are open?",
+			"Never mind.");
+		if (option == 0) {
+			say(player, npc, "Manage my titles and honorifics.");
+			PlayerTitleMenu.openManage(player);
+		} else if (option == 1) {
+			say(player, npc, "What Void activities are open?");
+			npcsay(player, npc,
+				"The deeper Void trials are not open yet.",
+				"For now, the nearby rift leads only to the Void Arena.");
+		}
 	}
 
 }

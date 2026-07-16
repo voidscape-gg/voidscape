@@ -1,6 +1,7 @@
 package com.openrsc.server.content.announcements;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidSubscription;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -53,9 +54,13 @@ public final class WorldAnnouncementService {
 
 	public void announceSkulledWildernessKill(Player killer, Player killed) {
 		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
-		if (!world.getServer().getConfig().WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS) return;
 		if (killer == null || killed == null) return;
 		if (!killed.getLocation().inWilderness()) return;
+		if (PlayerTitle.activeHonorific(killed) != null) {
+			announce(honorificWildernessKillMessage(killer, killed), false);
+			return;
+		}
+		if (!world.getServer().getConfig().WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS) return;
 		if (!killed.isSkulled()) return;
 
 		announce(skulledWildernessKillMessage(killer, killed), false);
@@ -110,6 +115,37 @@ public final class WorldAnnouncementService {
 		announce(uniqueTitleTransferMessage(player, titleName, previousOwner), false);
 	}
 
+	public void announceSupremeTitleClaim(Player player, String titleName) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (player == null || titleName == null || titleName.isEmpty()) return;
+		announce("@mag@[Void Herald] @whi@Let it be known: " + player.getUsername()
+			+ ", @red@" + titleName + "@whi@.", false);
+	}
+
+	public void announceSainthood(Player player) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS || player == null) return;
+		announce("@mag@[Void Herald] @whi@Let it be known: @red@Saint " + player.getUsername()
+			+ "@whi@ walks among us.", false);
+	}
+
+	public void announceContestedOfficeClaim(String claimantName, String titleName, String prefixForm) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (claimantName == null || claimantName.isEmpty() || titleName == null || titleName.isEmpty()) return;
+		String claimant = prefixForm == null || prefixForm.isEmpty()
+			? claimantName : prefixForm + " " + claimantName;
+		announce("@mag@[Void Herald] @whi@" + claimant + " has claimed @yel@" + titleName + "@whi@.", false);
+	}
+
+	public void announceClosedContestedPeriod(String titleName, String prefixForm, String owner,
+				int score, int period) {
+		if (!world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
+		if (owner == null || owner.isEmpty()) return;
+		String styledOwner = prefixForm == null || prefixForm.isEmpty() ? owner : prefixForm + " " + owner;
+		String scoreText = score > 0 ? " with " + String.format("%,d", score) : "";
+		announce("@mag@[Void Herald] @whi@All hail @yel@" + styledOwner + "@whi@, holder of "
+			+ titleName + " for " + formatPeriod(period) + scoreText + ".", false);
+	}
+
 	private void announce(String message, boolean force) {
 		if (!force && !world.getServer().getConfig().WANT_WORLD_ANNOUNCEMENTS) return;
 		world.sendWorldMessage(message);
@@ -132,14 +168,19 @@ public final class WorldAnnouncementService {
 			+ " in level-" + wildernessLevel + " Wilderness.";
 	}
 
+	private String honorificWildernessKillMessage(Player killer, Player killed) {
+		return "@mag@[Wilderness] @whi@" + killer.getUsername() + " has slain @red@"
+			+ PlayerTitle.styledName(killed) + "@whi@ in the Wilderness!";
+	}
+
 	private String newPlayerJoinedMessage(Player player) {
 		return "@mag@[Void Herald] @gre@Welcome @whi@" + player.getUsername()
 			+ "@gre@ to Voidscape. @whi@This is their first time in the world.";
 	}
 
 	private String uniqueTitleClaimMessage(Player player, String titleName) {
-		return "@mag@[Void Herald] @whi@" + player.getUsername()
-			+ " has claimed a @yel@unique title@whi@: @yel@" + titleName + "@whi@!";
+		return "@mag@[Void Herald] @whi@Let it be known: " + player.getUsername()
+			+ ", @yel@" + titleName + "@whi@.";
 	}
 
 	private String uniqueTitleTransferMessage(Player player, String titleName, String previousOwner) {
@@ -186,5 +227,10 @@ public final class WorldAnnouncementService {
 			if (word.length() > 1) formatted.append(word.substring(1));
 		}
 		return formatted.toString();
+	}
+
+	private String formatPeriod(int period) {
+		String value = String.valueOf(period);
+		return value.length() == 6 ? value.substring(0, 4) + "-" + value.substring(4) : value;
 	}
 }

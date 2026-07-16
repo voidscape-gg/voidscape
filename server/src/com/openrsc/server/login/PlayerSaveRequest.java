@@ -2,7 +2,6 @@ package com.openrsc.server.login;
 
 import com.openrsc.server.Server;
 import com.openrsc.server.content.RestedExperience;
-import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.world.World;
@@ -10,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Used to verify save players on the Login thread
@@ -23,6 +23,7 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 	private final Server server;
 	private final Player player;
 	private final boolean logout;
+	private final CompletableFuture<Boolean> completion = new CompletableFuture<>();
 
 	public PlayerSaveRequest(final Server server, final Player player, boolean logout) {
 		this.server = server;
@@ -38,36 +39,43 @@ public class PlayerSaveRequest extends LoginExecutorProcess {
 		return server;
 	}
 
+	public CompletableFuture<Boolean> getCompletionFuture() {
+		return completion;
+	}
+
+	public void rejectEnqueue() {
+		completion.complete(false);
+	}
+
 	protected void processInternal() {
 //		LOGGER.info("Saved player " + player.getUsername() + "");
-		if (player.getAttribute("dummyplayer", false)) {
-			if (this.logout) {
-				logoutSaveSuccess();
-			}
-			getPlayer().setSaving(false);
-			if (this.logout) {
-				getPlayer().setLoggingOut(false);
-			}
-			return;
-		}
+		boolean transactionSucceeded = false;
 		try {
+			if (player.getAttribute("dummyplayer", false)) {
+				transactionSucceeded = true;
+				if (this.logout) {
+					logoutSaveSuccess();
+				}
+				return;
+			}
 			if (this.logout) {
 				RestedExperience.recordLogout(player);
 			}
-			boolean success = getServer().getPlayerService().savePlayer(player);
-			if (success && this.logout) {
+			final boolean saveAccepted = getServer().getPlayerService().savePlayer(player);
+			transactionSucceeded = saveAccepted && getPlayer().getSaveAttempts() == 0;
+			if (saveAccepted && this.logout) {
 				logoutSaveSuccess();
 			}
-			getPlayer().setSaving(false);
-			if (this.logout) {
-				getPlayer().setLoggingOut(false);
-			}
-		} catch (final GameDatabaseException ex) {
+		} catch (final Exception ex) {
 			LOGGER.error("Error saving the player, phantom player may have extra login count on their IP address now...! Have a look at this Exception:", ex);
+		} finally {
 			if (getPlayer() != null) {
 				getPlayer().setSaving(false);
-				getPlayer().setLoggingOut(false);
+				if (this.logout) {
+					getPlayer().setLoggingOut(false);
+				}
 			}
+			completion.complete(transactionSucceeded);
 		}
 	}
 

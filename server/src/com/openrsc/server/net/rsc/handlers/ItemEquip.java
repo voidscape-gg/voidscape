@@ -1,5 +1,6 @@
 package com.openrsc.server.net.rsc.handlers;
 
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.struct.EquipRequest;
 import com.openrsc.server.net.rsc.PayloadProcessor;
@@ -83,6 +84,11 @@ public final class ItemEquip implements PayloadProcessor<EquipStruct, OpcodeIn> 
 
 	public static boolean passCheck(Player player, OpcodeIn opcode) {
 		if (opcode == null || (player.isBusy() && !player.inCombat())) {
+			return false;
+		}
+		final DuelProofSession proofSession = player.getDuel().getProofSession();
+		if (proofSession != null && proofSession.blocksExternalDamage()) {
+			player.message("Your equipment is locked for this verified melee duel.");
 			return false;
 		}
 		else if (player.getDuel().isDuelActive() && player.getDuel().getDuelSetting(3)) {

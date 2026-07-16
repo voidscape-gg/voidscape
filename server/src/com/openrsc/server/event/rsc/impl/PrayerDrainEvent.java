@@ -1,6 +1,7 @@
 package com.openrsc.server.event.rsc.impl;
 
 import com.openrsc.server.constants.Skill;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.external.EntityHandler;
@@ -21,6 +22,10 @@ public class PrayerDrainEvent extends GameTickEvent {
 	public void run() {
 		if (player.isRemoved()) {
 			stop();
+			return;
+		}
+		final DuelProofSession proofSession = player.getDuel().getProofSession();
+		if (proofSession != null && proofSession.isPreCombat()) {
 			return;
 		}
 

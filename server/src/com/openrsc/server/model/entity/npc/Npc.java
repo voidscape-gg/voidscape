@@ -7,6 +7,7 @@ import com.openrsc.server.content.EnchantedCrowns;
 import com.openrsc.server.content.FarmSim;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.VoidContent;
+import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.ItemProvenanceEvent;
 import com.openrsc.server.event.DelayedEvent;
@@ -58,6 +59,8 @@ public class Npc extends Mob {
 	private static final Map<Integer, Integer> WILDERNESS_RESPAWN_SECONDS = createWildernessRespawnSeconds();
 
 	private long healTimer = 0;
+	private Point deathDropDestination;
+	private int deathDropInstanceId;
 	private boolean shouldRespawn = true;
 	private boolean isRespawning = false;
 	private boolean executedAggroScript = false;
@@ -370,6 +373,7 @@ public class Npc extends Mob {
 			remove();
 			return;
 		}
+		VoidDungeonTraversalGrace.armAfterKill(owner, this);
 
 		owner.getWorld().getServer().getPluginHandler().handlePlugin(KillNpcTrigger.class, owner, new Object[]{owner, this});
 		if (shouldSuppressDefaultDeathRewards()) {
@@ -413,7 +417,6 @@ public class Npc extends Mob {
 		ActionSender.sendSound(owner, "victory");
 		owner.getWorld().getServer().getAchievementSystem().checkAndIncSlayNpcTasks(owner, this);
 		owner.incNpcKills();
-		PlayerTitle.checkGiantKiller(owner, getDef().combatLevel);
 		BalanceTelemetry.recordNpcKill(owner, this);
 		FarmSim.recordNpcKill(owner, this);
 
@@ -465,9 +468,7 @@ public class Npc extends Mob {
 			}
 
 			if (!destroyBones) {
-				GroundItem groundItem = new GroundItem(
-					owner.getWorld(), bones, getX(), getY(), 1, owner
-				);
+				GroundItem groundItem = createDeathGroundItem(owner, bones, 1, false);
 				groundItem.setAttribute("npcdrop", true);
 				getWorld().registerItem(groundItem);
 				recordNpcDrop(owner, bones, 1, false, false, "ground");
@@ -484,7 +485,10 @@ public class Npc extends Mob {
 		/* 4. Roll wilderness-only training bonus drops. */
 		rollWildernessBonusDrop(owner);
 
-		/* 5. Get the rest of the mob's drops. */
+		/* 5. Roll drop-only dragon weapon rares. */
+		rollDragonWeaponRareDrops(owner);
+
+		/* 6. Get the rest of the mob's drops. */
 		DropTable drops = getWorld().npcDrops.getDropTable(this.getID());
 		if (drops == null) {
 			// Some enemies have no drops
@@ -494,7 +498,7 @@ public class Npc extends Mob {
 		}
 		drops = drops.clone(drops.getDescription());
 
-		/* 6. Drop items that should always drop, that are not bones. */
+		/* 7. Drop items that should always drop, that are not bones. */
 		ArrayList<Item> invariableItems = drops.invariableItems(owner);
 		for (Item item : invariableItems) {
 			if (!worldAllowsDrop(item)) {
@@ -508,14 +512,14 @@ public class Npc extends Mob {
 					amount = (int) (amount * VoidContent.VOID_AMULET_STACKABLE_DROP_MULTIPLIER);
 				}
 			}
-			GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), amount, owner);
+			GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), amount, item.getNoted());
 			groundItem.setAttribute("npcdrop", true);
 			markRareDropBeam(groundItem, item);
 			owner.getWorld().registerItem(groundItem);
 			recordNpcDrop(owner, item.getCatalogId(), amount, item.getNoted(), isRareDrop(item), "ground");
 		}
 
-		/* 7. Roll for drops. */
+		/* 8. Roll for drops. */
 		boolean ringOfWealth = false;
 		if (getConfig().WANT_NEW_RARE_DROP_TABLES) {
 			ringOfWealth = owner.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_WEALTH.id());
@@ -541,6 +545,27 @@ public class Npc extends Mob {
 
 	public boolean shouldSuppressDefaultDeathRewards() {
 		return getAttribute(SUPPRESS_DEFAULT_DEATH_ATTRIBUTE, false);
+	}
+
+	public void setDeathDropDestination(Point destination, int instanceId) {
+		if (destination == null || instanceId < 0) {
+			throw new IllegalArgumentException("NPC death-drop destination is invalid");
+		}
+		deathDropDestination = Point.location(destination.getX(), destination.getY());
+		deathDropInstanceId = instanceId;
+	}
+
+	public boolean hasDeathDropDestination() {
+		return deathDropDestination != null;
+	}
+
+	private GroundItem createDeathGroundItem(Player owner, int itemId, int amount, boolean noted) {
+		Point destination = deathDropDestination == null ? getLocation() : deathDropDestination;
+		int instanceId = deathDropDestination == null ? getInstanceId() : deathDropInstanceId;
+		GroundItem groundItem = new GroundItem(owner.getWorld(), itemId,
+			destination.getX(), destination.getY(), amount, owner, noted);
+		groundItem.setInstanceId(instanceId);
+		return groundItem;
 	}
 
 	public boolean shouldForceChaseTarget() {
@@ -579,7 +604,7 @@ public class Npc extends Mob {
 
 		Item item = new Item(ItemId.VOID_KEY.id(), 1);
 		item.setAttribute(DropTable.RARE_DROP_ATTRIBUTE, true);
-		GroundItem groundItem = new GroundItem(owner.getWorld(), item.getCatalogId(), getX(), getY(), 1, owner);
+		GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), 1, item.getNoted());
 		groundItem.setAttribute("npcdrop", true);
 		markRareDropBeam(groundItem, item);
 		getWorld().registerItem(groundItem);
@@ -596,6 +621,35 @@ public class Npc extends Mob {
 
 	private int getVoidKeyDropDenominator() {
 		return Math.max(128, 1200 - getDef().combatLevel * 6);
+	}
+
+	private void rollDragonWeaponRareDrops(Player owner) {
+		NpcDrops.DragonWeaponRareDropProfile profile =
+			getWorld().getNpcDrops().getDragonWeaponRareDropProfile(this.getID());
+		if (owner == null || profile == null) {
+			return;
+		}
+
+		for (Map.Entry<Integer, Integer> entry : profile.getItemDropDenominators().entrySet()) {
+			rollDragonWeaponRareDrop(owner, entry.getKey(), entry.getValue());
+		}
+	}
+
+	private void rollDragonWeaponRareDrop(Player owner, int itemId, int denominator) {
+		if (DataConversions.random(1, denominator) != 1) {
+			return;
+		}
+
+		Item item = new Item(itemId, 1);
+		item.setAttribute(DropTable.RARE_DROP_ATTRIBUTE, true);
+		if (!worldAllowsDrop(item)) {
+			return;
+		}
+		if (getWorld().getServer().getEntityHandler().getItemDef(itemId).isStackable()) {
+			dropStackItem(item, owner);
+		} else {
+			dropStandardItem(item, owner);
+		}
 	}
 
 	private void rollWildernessBonusDrop(Player owner) {
@@ -632,14 +686,12 @@ public class Npc extends Mob {
 			// world does not allow drop
 			return false;
 		}
-        // No p2p drops on f2p world/f2p wilderness. On openrsc we can just drop nothing.
-        // In OSRS, they have a different f2p drop instead usually, but there wouldn't be data on this for RSC.
-        return WildernessRules.canUseItemAt(
+		// Members loot can be carried out of F2P Wilderness, but true F2P worlds
+		// still suppress it because the item is unavailable on that world.
+		return WildernessRules.canAppearAsGroundLoot(
 			getWorld().getServer().getConfig().MEMBER_WORLD,
-			getLocation(),
-			item.getDef(getWorld()),
-			item.getCatalogId());
-    }
+			item.getDef(getWorld()));
+	}
 
 	private int getBoneTier(int boneId) {
 		switch(ItemId.getById(boneId)) {
@@ -684,7 +736,7 @@ public class Npc extends Mob {
 			ArrayList<Item> kbdSpecificLoot = getWorld().getNpcDrops().getKbdTableCustom().rollItem(ringOfWealth, owner);
 			if (kbdSpecificLoot != null) {
 				for (Item item : kbdSpecificLoot) {
-					GroundItem groundItem = new GroundItem(getWorld(), item.getCatalogId(), getX(), getY(), item.getAmount(), owner);
+					GroundItem groundItem = createDeathGroundItem(owner, item.getCatalogId(), item.getAmount(), item.getNoted());
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
@@ -782,12 +834,12 @@ public class Npc extends Mob {
 			}
 		});
 
-		if (DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
+		if (!hasDeathDropDestination() && DropTable.handleRingOfAvarice(owner, new Item(dropID, amount))) {
 			recordNpcDrop(owner, dropID, amount, item.getNoted(), isRareDrop(item), "inventory_avarice");
 			return;
 		}
 
-		GroundItem groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner);
+		GroundItem groundItem = createDeathGroundItem(owner, dropID, amount, item.getNoted());
 		groundItem.setAttribute("npcdrop", true);
 		markRareDropBeam(groundItem, item);
 		getWorld().registerItem(groundItem);
@@ -814,12 +866,10 @@ public class Npc extends Mob {
 		else amount = 1;
 		for (int count = 0; count < loop; count++) {
 			if (dropID != ItemId.NOTHING.id()
-				&& !WildernessRules.canUseItemAt(
+				&& !WildernessRules.canAppearAsGroundLoot(
 					getConfig().MEMBER_WORLD,
-					getLocation(),
-					getWorld().getServer().getEntityHandler().getItemDef(dropID),
-					dropID)) {
-				continue; // Members item on a non-members world.
+					getWorld().getServer().getEntityHandler().getItemDef(dropID))) {
+				continue; // Members-only item on a non-members world.
 			} else if (dropID != ItemId.NOTHING.id()) {
 				boolean destroyHerbs = false;
 				if (Formulae.isUnidHerb(new Item(dropID)) && EnchantedCrowns.shouldActivate(owner, ItemId.CROWN_OF_THE_HERBALIST)) {
@@ -829,7 +879,7 @@ public class Npc extends Mob {
 				}
 
 				if (!destroyHerbs) {
-					groundItem = new GroundItem(owner.getWorld(), dropID, getX(), getY(), amount, owner, item.getNoted());
+					groundItem = createDeathGroundItem(owner, dropID, amount, item.getNoted());
 					groundItem.setAttribute("npcdrop", true);
 					markRareDropBeam(groundItem, item);
 					getWorld().registerItem(groundItem);
@@ -861,8 +911,11 @@ public class Npc extends Mob {
 	}
 
 	private void recordNpcDrop(Player owner, int itemId, int amount, boolean noted, boolean rare, String destination) {
-		if (owner != null && itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
-			PlayerTitle.checkDragonMediumDrop(owner);
+		if (owner != null) {
+			if (itemId == ItemId.DRAGON_MEDIUM_HELMET.id()) {
+				PlayerTitle.checkDragonMediumDrop(owner);
+			}
+			PlayerTitle.recordVoidNpcDrop(owner, itemId);
 		}
 		BalanceTelemetry.recordNpcDrop(owner, this, itemId, amount, rare);
 		owner.addBestiaryDrop(getID(), itemId, amount);

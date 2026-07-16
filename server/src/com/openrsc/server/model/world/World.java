@@ -8,6 +8,7 @@ import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.GlobalChatCountryFlags;
+import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
 import com.openrsc.server.content.minigame.combatodyssey.CombatOdysseyData;
@@ -69,6 +70,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
@@ -78,6 +80,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	 */
 	private static final Logger LOGGER = LogManager.getLogger();
 	private static final int NPC_CAPACITY = 5000;
+	private final AtomicInteger nextInstanceId = new AtomicInteger(1);
 
 	/**
 	 * Avatar generator upon logout save to PNG.
@@ -167,6 +170,11 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 			godSpellsStart = 60;
 			godSpellsMax = 60;
 		}
+	}
+
+	/** Allocate a server-wide private phase id. Zero is reserved for the shared world. */
+	public int allocateInstanceId() {
+		return nextInstanceId.getAndIncrement();
 	}
 
 	/**
@@ -733,6 +741,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 				player.addCharge(player.getCache().getLong("charge_remaining"));
 				player.setChargeTimer(player.getCache().getLong("charge_remaining"));
 			}
+
+			// Login catch-up: titles qualified for while offline (or via thresholds added
+			// later) unlock now instead of waiting for the next level-up or ::titles.
+			PlayerTitle.refreshAutomaticUnlocks(player);
 
 			worldAnnouncementService.announceNewPlayerJoined(player);
 

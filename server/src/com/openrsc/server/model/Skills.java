@@ -4,6 +4,7 @@ import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.ProgressionMilestones;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.impl.mysql.queries.logging.LiveFeedLog;
 import com.openrsc.server.database.struct.PlayerExperience;
@@ -321,6 +322,7 @@ public class Skills {
 				}
 				sendUpdate(skill);
 				ProgressionMilestones.handleLevelUp(player, skill, oldLevel, newLevel, oldTotalLevel, newTotalLevel);
+				SkillBatching.notifyLimitIncrease(player, skill, oldLevel, newLevel, skillName);
 				PlayerTitle.refreshAutomaticUnlocks(player);
 			}
 

@@ -54,12 +54,18 @@ public class JDBCPatchApplier extends PatchApplier {
                     Pair.of("patchName", fileName),
                     Pair.of("runDate", LocalDate.now().format(dateTimeFormatter))
             );
-            PreparedStatement statement = connection.prepareStatement(markPatchExecutedQuery);
-            statement.executeUpdate();
+            executePatchMarker(connection, markPatchExecutedQuery);
             executePostPatchScripts(fileName);
         } catch (SQLException ex) {
             LOGGER.error("Failed to mark " + fileName + " as executed...");
             LOGGER.catching(ex);
+        }
+    }
+
+    static void executePatchMarker(JDBCDatabaseConnection connection, String query)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            statement.executeUpdate();
         }
     }
 

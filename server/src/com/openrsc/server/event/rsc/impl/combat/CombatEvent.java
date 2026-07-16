@@ -4,6 +4,9 @@ import com.openrsc.server.constants.Constants;
 import com.openrsc.server.constants.ItemId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.constants.Skills;
+import com.openrsc.server.content.dueljournal.DuelJournalSession;
+import com.openrsc.server.content.duelproof.DuelProofService;
+import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.DuplicationStrategy;
 import com.openrsc.server.event.rsc.GameTickEvent;
 import com.openrsc.server.model.container.Item;
@@ -14,24 +17,33 @@ import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.model.entity.player.Prayers;
 import com.openrsc.server.model.entity.update.Damage;
 import com.openrsc.server.model.states.CombatState;
+import com.openrsc.server.model.world.WildernessRules;
 import com.openrsc.server.model.world.World;
 import com.openrsc.server.net.rsc.ActionSender;
 import com.openrsc.server.util.PidShuffler;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.Formulae;
+import com.voidscape.duelproof.DuelProofSpec;
 
 public class CombatEvent extends GameTickEvent {
 
 	private final Mob attackerMob, defenderMob;
+	private final DuelProofSession proofSession;
 	private int roundNumber = 0;
 	boolean isPvPCombat = false;
 	boolean forceTwoTickRounds = false;
 	private int[] poisonedWeapons = {ItemId.POISONED_BRONZE_DAGGER.id(), ItemId.POISONED_IRON_DAGGER.id(), ItemId.POISONED_STEEL_DAGGER.id(), ItemId.POISONED_BLACK_DAGGER.id(), ItemId.POISONED_MITHRIL_DAGGER.id(), ItemId.POISONED_ADAMANTITE_DAGGER.id(), ItemId.POISONED_RUNE_DAGGER.id(), ItemId.POISONED_DRAGON_DAGGER.id()};
 
 	public CombatEvent(World world, Mob attacker, Mob defender) {
+		this(world, attacker, defender, null);
+	}
+
+	public CombatEvent(World world, Mob attacker, Mob defender,
+					   final DuelProofSession proofSession) {
 		super(world, null, 0, "Combat Event", DuplicationStrategy.ONE_PER_MOB);
 		this.attackerMob = attacker;
 		this.defenderMob = defender;
+		this.proofSession = proofSession;
 		//Reset retreat timers so it is possible to use spells if a retreating enemy attacks someone new before their timer expires.
 		attackerMob.resetRanAwayTimer();
 		defenderMob.resetRanAwayTimer();
@@ -165,7 +177,9 @@ public class CombatEvent extends GameTickEvent {
 			target.setLastCombatState(CombatState.ERROR);
 			resetCombat();
 		} else {
-			if (hitter.isPlayer() && hitter.getConfig().WANT_POISON_NPCS && checkPoisonousWeapons(hitter) && target.getCurrentPoisonPower() < 10 && DataConversions.random(1, 50) == 1) {
+			if (hitter.isPlayer() && target.isNpc() && hitter.getConfig().WANT_POISON_NPCS
+				&& checkPoisonousWeapons(hitter) && target.getCurrentPoisonPower() < 10
+				&& DataConversions.random(1, 50) == 1) {
 				target.setPoisonDamage(60);
 				target.startPoisonEvent();
 				((Player) hitter).message("@gr3@You @gr2@have @gr1@poisioned @gr2@the " + ((Npc) target).getDef().name + "!");
@@ -178,40 +192,168 @@ public class CombatEvent extends GameTickEvent {
 			}
 
 			//if(hitter.isNpc() && target.isPlayer() || target.isNpc() && hitter.isPlayer()) {
+			final int combatStyle = hitter.isPlayer() ? ((Player) hitter).getCombatStyle() : -1;
+			final MeleeHitResult meleeHit;
 			int damage;
 			int attackerMaxHit;
-			if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
-				damage = OSRSCombatFormula.Melee.doMeleeDamage(hitter, target);
-				attackerMaxHit = OSRSCombatFormula.Melee.calculateMaxHit(hitter, target);
-			} else {
-				damage = CombatFormula.doMeleeDamage(hitter, target);
-				attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
+			try {
+				if (proofSession != null) {
+					if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
+						|| !hitter.isPlayer() || !target.isPlayer()) {
+						throw new IllegalStateException("proof combat left classic player melee");
+					}
+					meleeHit = CombatFormula.doMeleeHit((Player) hitter, (Player) target,
+						proofSession);
+					damage = meleeHit.getDamage();
+					attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
+				} else if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
+					meleeHit = OSRSCombatFormula.Melee.doMeleeHit(hitter, target);
+					damage = meleeHit.getDamage();
+					attackerMaxHit = OSRSCombatFormula.Melee.calculateMaxHit(hitter, target);
+				} else {
+					meleeHit = CombatFormula.doMeleeHit(hitter, target);
+					damage = meleeHit.getDamage();
+					attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
+				}
+
+				if (isPvPCombat && hitter.isPlayer() && target.isPlayer()) {
+					final Player playerHitter = (Player) hitter;
+					final DuelJournalSession journal = playerHitter.getDuel().getJournalSession();
+					if (journal != null && playerHitter.getDuel().isDueling()
+						&& playerHitter.getDuel().getDuelRecipient() == target) {
+						journal.recordMeleeSwing(playerHitter, combatStyle, meleeHit.isHit(), damage);
+					}
+				}
+
+				if (isPvPCombat) {
+					WildernessRules.markVoidDungeonPvp((Player) hitter, (Player) target);
+				}
+			} catch (final RuntimeException proofFailure) {
+				if (proofSession == null) {
+					throw proofFailure;
+				}
+				try {
+					DuelProofService.failCombat(proofSession, proofFailure);
+				} finally {
+					resetCombat();
+				}
+				return;
+			}
+
+			final int reflectedDamage = target.isPlayer()
+				? calculateRingOfRecoilDamage((Player) target, damage) : 0;
+			if (proofSession != null) {
+				final int targetHits = target.getLevel(Skill.HITS.id());
+				final int hitterHits = hitter.getLevel(Skill.HITS.id());
+				final boolean directLethal = targetHits > 0 && damage >= targetHits;
+				final boolean recoilLethal = !directLethal && reflectedDamage > 0
+					&& hitterHits > 0 && reflectedDamage >= hitterHits;
+				if (directLethal || recoilLethal) {
+					final Player winner = (Player) (directLethal ? hitter : target);
+					final Player loser = (Player) (directLethal ? target : hitter);
+					final int terminalCause = directLethal
+						? DuelProofSpec.TERMINAL_CAUSE_DIRECT_MELEE
+						: DuelProofSpec.TERMINAL_CAUSE_RECOIL;
+					final DuelJournalSession journal = winner.getDuel().getJournalSession();
+					if (!DuelProofService.captureTerminal(proofSession, winner, loser,
+						terminalCause, journal)) {
+						resetCombat();
+						return;
+					}
+				}
 			}
 
 			inflictDamage(hitter, target, damage, attackerMaxHit);
-			if (target.isPlayer()) {
-				if (((Player)target).getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_RECOIL.id())) {
-					int reflectedDamage = damage/10 + ((damage > 0) ? 1 : 0);
-					if (reflectedDamage == 0)
-						return;
-
-					if (((Player) target).getCache().hasKey("ringofrecoil")) {
-						int ringCheck = ((Player) target).getCache().getInt("ringofrecoil");
-						if (getWorld().getServer().getConfig().RING_OF_RECOIL_LIMIT - ringCheck <= reflectedDamage) {
-							reflectedDamage = getWorld().getServer().getConfig().RING_OF_RECOIL_LIMIT - ringCheck;
-							((Player) target).getCache().remove("ringofrecoil");
-							((Player) target).getCarriedItems().shatter(new Item(ItemId.RING_OF_RECOIL.id()));
-						} else {
-							((Player) target).getCache().set("ringofrecoil", ringCheck + reflectedDamage);
-						}
-					} else {
-						((Player) target).getCache().put("ringofrecoil", reflectedDamage);
-						((Player) target).message("You start a new ring of recoil");
+			// A direct lethal hit has already completed and reset the duel. Never let
+			// the old stack apply recoil to the winner after settlement.
+			if (target.getLevel(Skill.HITS.id()) <= 0) {
+				return;
+			}
+			if (target.isPlayer() && reflectedDamage > 0
+				&& ((Player) target).getCarriedItems().getEquipment()
+					.hasEquipped(ItemId.RING_OF_RECOIL.id())) {
+				try {
+					applyRingOfRecoil((Player) target, hitter, reflectedDamage);
+				} catch (final RuntimeException recoilFailure) {
+					if (proofSession == null) {
+						throw recoilFailure;
 					}
-					inflictDamage(target, hitter, reflectedDamage);
+					try {
+						DuelProofService.failCombat(proofSession, recoilFailure);
+					} finally {
+						resetCombat();
+					}
 				}
 			}
 		}
+	}
+
+	private int calculateRingOfRecoilDamage(final Player reflector, final int damage) {
+		if (reflector == null || damage <= 0
+			|| !reflector.getCarriedItems().getEquipment().hasEquipped(ItemId.RING_OF_RECOIL.id())) {
+			return 0;
+		}
+		final int used = reflector.getCache().hasKey("ringofrecoil")
+			? reflector.getCache().getInt("ringofrecoil") : 0;
+		final int remaining = Math.max(0,
+			getWorld().getServer().getConfig().RING_OF_RECOIL_LIMIT - used);
+		return Math.min(damage / 10 + 1, remaining);
+	}
+
+	private void applyRingOfRecoil(final Player reflector, final Mob hitter,
+								   final int reflectedDamage) {
+		if (reflectedDamage <= 0) {
+			return;
+		}
+		final boolean freshRing = !reflector.getCache().hasKey("ringofrecoil");
+		final int used = freshRing ? 0 : reflector.getCache().getInt("ringofrecoil");
+		final int remaining = Math.max(0,
+			getWorld().getServer().getConfig().RING_OF_RECOIL_LIMIT - used);
+		final int appliedDamage = Math.min(reflectedDamage, remaining);
+		if (appliedDamage <= 0) {
+			return;
+		}
+		if (appliedDamage >= remaining) {
+			shatterEquippedRecoil(reflector);
+			reflector.getCache().remove("ringofrecoil");
+		} else {
+			reflector.getCache().set("ringofrecoil", used + appliedDamage);
+			if (freshRing) {
+				reflector.message("You start a new ring of recoil");
+			}
+		}
+		inflictDamage(reflector, hitter, appliedDamage);
+	}
+
+	/** Removes the worn ring itself, even on classic worlds where worn items live in inventory. */
+	private void shatterEquippedRecoil(final Player reflector) {
+		Item wornRing = null;
+		if (reflector.getConfig().WANT_EQUIPMENT_TAB) {
+			wornRing = reflector.getCarriedItems().getEquipment().getRingItem();
+			if (wornRing != null && wornRing.getCatalogId() == ItemId.RING_OF_RECOIL.id()
+				&& reflector.getCarriedItems().getEquipment().remove(wornRing, 1) != -1) {
+				reflector.message("Your Ring of recoil shatters");
+				return;
+			}
+		} else {
+			final java.util.List<Item> inventory = reflector.getCarriedItems()
+				.getInventory().getItems();
+			synchronized (inventory) {
+				for (final Item item : inventory) {
+					if (item != null && item.getCatalogId() == ItemId.RING_OF_RECOIL.id()
+						&& item.isWielded()) {
+						wornRing = item;
+						break;
+					}
+				}
+				if (wornRing != null
+					&& reflector.getCarriedItems().getInventory().remove(wornRing, true) != -1) {
+					reflector.message("Your Ring of recoil shatters");
+					return;
+				}
+			}
+		}
+		throw new IllegalStateException("equipped ring of recoil could not be shattered");
 	}
 
 	private boolean checkPoisonousWeapons(Mob hitter) {
@@ -239,7 +381,9 @@ public class CombatEvent extends GameTickEvent {
 				// If the hitter is an NPC, we want to check and execute their combat script
 				// However if the player has the paralyze prayer on, we just want to return
 				// so that the NPC is stopped from damaging the player.
-				if (targetPlayer.getPrayers().isPrayerActivated(Prayers.PARALYZE_MONSTER)) {
+				if (targetPlayer.getPrayers().isPrayerActivated(Prayers.PARALYZE_MONSTER)
+					&& !(hitter instanceof Npc
+						&& hitter.getWorld().getVoidArena().isDmKingChallengeNpc((Npc) hitter))) {
 					return;
 				} else {
 					hitter.getWorld().getServer().getCombatScriptLoader().checkAndExecuteCombatScript(hitter, target);
@@ -375,14 +519,15 @@ public class CombatEvent extends GameTickEvent {
 	private boolean combatCanContinue() {
 		boolean removed = attackerMob.isRemoved() || defenderMob.isRemoved();
 		boolean nextToVictim = attackerMob.getLocation().equals(defenderMob.getLocation());
+		boolean sameInstance = attackerMob.sharesInstanceWith(defenderMob);
 		if (defenderMob.isNpc() && attackerMob.isNpc()) {
-			return !removed && nextToVictim && running;
+			return !removed && sameInstance && nextToVictim && running;
 		}
 		boolean bothLoggedIn = (attackerMob.isPlayer() && ((Player) attackerMob).loggedIn())
 			|| (defenderMob.isPlayer() && ((Player) defenderMob).loggedIn());
 		boolean respawning = (attackerMob.isNpc() && ((Npc)attackerMob).isRespawning())
 			|| (defenderMob.isNpc() && ((Npc)defenderMob).isRespawning());
-		return bothLoggedIn && !removed && !respawning && nextToVictim && running;
+		return bothLoggedIn && !removed && !respawning && sameInstance && nextToVictim && running;
 	}
 
 	public Mob getAttacker() {

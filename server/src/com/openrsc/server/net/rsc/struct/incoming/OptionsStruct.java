@@ -19,4 +19,5 @@ public class OptionsStruct extends AbstractStruct<OpcodeIn> {
 	public String tag;
 	public String player;
 	public String password;
+	public String duelProof;
 }

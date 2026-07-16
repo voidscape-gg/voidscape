@@ -22,12 +22,14 @@ import com.openrsc.server.plugins.triggers.AttackPlayerTrigger;
 import com.openrsc.server.plugins.triggers.CommandTrigger;
 import com.openrsc.server.plugins.triggers.OpNpcTrigger;
 import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
 import com.openrsc.server.plugins.triggers.PlayerRangeNpcTrigger;
 import com.openrsc.server.plugins.triggers.PlayerRangePlayerTrigger;
 import com.openrsc.server.plugins.triggers.SpellNpcTrigger;
 import com.openrsc.server.plugins.triggers.SpellPlayerTrigger;
 import com.openrsc.server.plugins.triggers.TalkNpcTrigger;
 import com.openrsc.server.util.rsc.CollisionFlag;
+import com.openrsc.server.util.rsc.MessageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,21 +37,28 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.openrsc.server.plugins.Functions.multi;
 import static com.openrsc.server.plugins.Functions.npcsay;
 
 public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigger,
-		AttackPlayerTrigger, OpNpcTrigger, PlayerLoginTrigger, PlayerRangeNpcTrigger, PlayerRangePlayerTrigger,
+		AttackPlayerTrigger, OpNpcTrigger, PlayerLoginTrigger, PlayerLogoutTrigger,
+		PlayerRangeNpcTrigger, PlayerRangePlayerTrigger,
 		SpellNpcTrigger, SpellPlayerTrigger, TalkNpcTrigger {
 	private static final Logger LOGGER = LogManager.getLogger(PkCatchingSimulator.class);
 	private static final int TRAINER_NPC_ID = 840;
@@ -60,6 +69,12 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 	private static final String HIGHSCORE_COMMAND = "Highscore";
 	private static final String OWNER_ATTRIBUTE = "pkcatchsim_owner";
 	private static final String COMBAT_ACTIVE_ATTRIBUTE = "pkcatchsim_combat_active";
+	private static final String RUNNING_ATTRIBUTE = "pkcatchsim_running";
+	private static final String ATTACK_BLOCKED_UNTIL_ATTRIBUTE =
+		"pkcatchsim_attack_blocked_until";
+	private static final String CLIENT_PREFIX = "@vspkcatch@v1";
+	private static final int CLIENT_METADATA_MIN_VERSION = 10139;
+	private static final AtomicLong CLIENT_ID_SEQUENCE = new AtomicLong(System.currentTimeMillis());
 	private static final HighscoreTable HIGHSCORES = new HighscoreTable();
 
 	private static final int BASE_ARENA_MIN_X = 344;
@@ -75,9 +90,13 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		new ArenaSlot(1, 48, 0),
 		new ArenaSlot(2, 96, 0)
 	};
-	private static final int CATCH_DISTANCE = 2;
+	private static final int RUNNER_PRESSURE_DISTANCE = 2;
 	private static final int SESSION_SECONDS = 5 * 60;
 	private static final int PVP_RETREAT_UNLOCK_SWINGS = 3;
+	private static final int ATTEMPT_WINDOW_TICKS = 12;
+	private static final int MISS_RECOVERY_TICKS = 2;
+	private static final int TRAINER_MOVE_INTERVAL_TICKS = 2;
+	private static final int TRAINER_ROUTE_STEPS = 4;
 
 	private static final int TREE_OBJECT_ID = 0;
 	private static final int ROCK_OBJECT_ID = 98;
@@ -129,16 +148,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 
 	@Override
 	public void onPlayerLogin(Player player) {
-		CatchSession staleSession = sessions.remove(player.getUsernameHash());
-		if (staleSession != null) {
-			if (staleSession.event != null) {
-				staleSession.event.stop();
-			}
-			try {
-				staleSession.cleanup();
-			} finally {
-				releaseArenaSlot(staleSession);
-			}
+		CatchSession staleSession = sessions.get(player.getUsernameHash());
+		if (staleSession != null && sessions.remove(player.getUsernameHash(), staleSession)) {
+			stopAndCleanupSession(staleSession);
 		}
 
 		player.resetCombatEvent();
@@ -150,8 +162,26 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		player.resetFollowing();
 		player.removeAttribute(COMBAT_ACTIVE_ATTRIBUTE);
 		ActionSender.sendSystemUpdateTimer(player, 0);
+		sendClientClear(player, staleSession == null ? 0L : staleSession.sessionId,
+			staleSession == null ? nextClientId() : staleSession.generationId);
 		player.teleport(TRAINER_X, TRAINER_Y, true);
 		player.message("You are returned from the PK Catching Simulator.");
+	}
+
+	@Override
+	public boolean blockPlayerLogout(Player player) {
+		return sessions.containsKey(player.getUsernameHash());
+	}
+
+	@Override
+	public void onPlayerLogout(Player player) {
+		CatchSession session = sessions.get(player.getUsernameHash());
+		if (session == null || !sessions.remove(player.getUsernameHash(), session)) {
+			return;
+		}
+		sendClientClear(player, session.sessionId, session.generationId);
+		ActionSender.sendSystemUpdateTimer(player, 0);
+		stopAndCleanupSession(session);
 	}
 
 	@Override
@@ -174,13 +204,31 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			finishSession(player, existing, false, "", false);
 		}
 
-		npcsay(player, npc, "Start a five minute catching drill?");
-		int choice = multi(player, npc, "Start the drill", "Not yet");
-		if (choice != 0) {
+		long chooserGeneration = nextClientId();
+		sendClientMetadata(player, "chooser|" + chooserGeneration);
+		npcsay(player, npc, "Choose a five minute catching drill.");
+		int choice = multi(player, npc,
+			"Easy / Trainer (unranked)",
+			"Medium (classic ranked)",
+			"Hard (ranked)");
+		if (choice == -1) {
+			sendClientClear(player, 0L, chooserGeneration);
+			return;
+		}
+
+		SessionMode mode;
+		if (choice == 0) {
+			mode = SessionMode.TRAINER;
+		} else if (choice == 1) {
+			mode = SessionMode.CLASSIC;
+		} else if (choice == 2) {
+			mode = SessionMode.HARD;
+		} else {
+			sendClientClear(player, 0L, chooserGeneration);
 			npcsay(player, npc, "Come back when you're ready.");
 			return;
 		}
-		startSession(player);
+		startSession(player, mode, chooserGeneration);
 	}
 
 	@Override
@@ -214,8 +262,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		// The simulator owns attacks on this temporary target. A valid catch
 		// enters a simulator-only PvP-style combat event: no XP, HP loss, or drops.
 		long tick = player.getWorld().getServer().getCurrentTick();
-		if (session.isLocked(tick)) {
-			if (tick - session.lastCatchTick > 1) {
+		session.advanceAttemptPhase(tick);
+		if (!session.canScoreCatch(tick)) {
+			if (session.isLocked(tick) && tick - session.lastCatchTick > 1) {
 				player.message("Wait for the combat lock to end.");
 			}
 			return;
@@ -294,11 +343,13 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 	}
 
-	private void startSession(Player player) {
+	private void startSession(Player player, SessionMode mode, long chooserGeneration) {
 		World world = player.getWorld();
 		Point returnPoint = player.getLocation();
-		ArenaSlot slot = reserveArenaSlot(player.getUsernameHash());
+		long sessionId = nextClientId();
+		ArenaSlot slot = reserveArenaSlot(sessionId);
 		if (slot == null) {
+			sendClientClear(player, 0L, chooserGeneration);
 			player.message("All PK Catching Simulator arenas are busy. Try again in a moment.");
 			return;
 		}
@@ -313,11 +364,14 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		target.setShouldRespawn(false);
 		target.setBusy(true);
 		target.setAttribute(OWNER_ATTRIBUTE, player.getUsernameHash());
+		target.setAttribute(RUNNING_ATTRIBUTE, false);
+		target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
 		world.registerNpc(target);
 
 		long startTick = world.getServer().getCurrentTick();
 		int durationTicks = (int)Math.ceil((SESSION_SECONDS * 1000.0) / player.getConfig().GAME_TICK);
-		CatchSession session = new CatchSession(player, target, slot, returnPoint, startTick, startTick + durationTicks);
+		CatchSession session = new CatchSession(player, target, slot, returnPoint, startTick,
+			startTick + durationTicks, mode, sessionId, chooserGeneration);
 		session.prepareArenaTiles();
 		session.addArenaWalls();
 		session.addObstacles();
@@ -327,6 +381,8 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		session.event = event;
 		world.getServer().getGameEventHandler().add(event);
 
+		sendClientMetadata(player, "start|" + sessionId + "|" + chooserGeneration + "|"
+			+ mode.wireName + "|" + durationTicks);
 		player.message("PK Catching Simulator started.");
 		player.message("Practice arena " + (slot.id + 1) + " assigned.");
 		player.message("Stay one tile behind the target and re-attack after each lock.");
@@ -367,11 +423,11 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		return false;
 	}
 
-	private synchronized ArenaSlot reserveArenaSlot(long ownerHash) {
+	private synchronized ArenaSlot reserveArenaSlot(long sessionId) {
 		for (ArenaSlot slot : ARENA_SLOTS) {
 			Long currentOwner = occupiedArenaSlots.get(slot.id);
-			if (currentOwner == null || currentOwner.longValue() == ownerHash) {
-				occupiedArenaSlots.put(slot.id, ownerHash);
+			if (currentOwner == null) {
+				occupiedArenaSlots.put(slot.id, sessionId);
 				return slot;
 			}
 		}
@@ -383,21 +439,17 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			return;
 		}
 		Long currentOwner = occupiedArenaSlots.get(session.slot.id);
-		if (currentOwner != null && currentOwner.longValue() == session.player.getUsernameHash()) {
-			occupiedArenaSlots.remove(session.slot.id);
+		if (currentOwner != null && currentOwner.longValue() == session.sessionId) {
+			occupiedArenaSlots.remove(session.slot.id, currentOwner);
 		}
 	}
 
 	private void finishSession(Player player, CatchSession session, boolean completed, String message, boolean teleportBack) {
-		sessions.remove(player.getUsernameHash());
-		if (session.event != null) {
-			session.event.stop();
+		if (session == null || !sessions.remove(player.getUsernameHash(), session)) {
+			return;
 		}
-		try {
-			session.cleanup();
-		} finally {
-			releaseArenaSlot(session);
-		}
+		sendClientClear(player, session.sessionId, session.generationId);
+		stopAndCleanupSession(session);
 		player.setBusy(false);
 		player.resetPath();
 		player.resetFollowing();
@@ -414,10 +466,86 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 	}
 
+	private void stopAndCleanupSession(CatchSession session) {
+		if (session == null) {
+			return;
+		}
+		if (session.event != null) {
+			session.event.stop();
+		}
+		if (session.combatEvent != null) {
+			session.combatEvent.stop();
+		}
+		try {
+			session.cleanup(true);
+		} finally {
+			releaseArenaSlot(session);
+		}
+	}
+
+	private void cleanupOrphanedSession(CatchSession session) {
+		if (session == null) {
+			return;
+		}
+		if (session.event != null) {
+			session.event.stop();
+		}
+		if (session.combatEvent != null) {
+			session.combatEvent.stop();
+		}
+		// If a newer run now owns the player's map entry, tear down only the
+		// orphan's target/arena resources and do not reset the newer run's player.
+		boolean clearPlayerState = sessions.get(session.player.getUsernameHash()) == null;
+		try {
+			session.cleanup(clearPlayerState);
+		} finally {
+			releaseArenaSlot(session);
+		}
+	}
+
+	private boolean ownsSession(CatchSession session) {
+		return session != null && sessions.get(session.player.getUsernameHash()) == session;
+	}
+
 	private static int distance(Point a, Point b) {
 		int x = Math.abs(a.getX() - b.getX());
 		int y = Math.abs(a.getY() - b.getY());
 		return Math.max(x, y);
+	}
+
+	private static long nextClientId() {
+		long value = CLIENT_ID_SEQUENCE.incrementAndGet() & Long.MAX_VALUE;
+		return value == 0L ? 1L : value;
+	}
+
+	private static boolean supportsClientMetadata(Player player) {
+		return player != null && player.loggedIn() && player.isUsingCustomClient()
+			&& player.getClientVersion() >= CLIENT_METADATA_MIN_VERSION;
+	}
+
+	private static void sendClientMetadata(Player player, String state) {
+		if (!supportsClientMetadata(player) || state == null || state.length() == 0) {
+			return;
+		}
+		ActionSender.sendMessage(player, null, MessageType.QUEST, CLIENT_PREFIX + "|" + state, 0, null);
+	}
+
+	private static void sendClientClear(Player player, long sessionId, long generationId) {
+		sendClientMetadata(player, "clear|" + sessionId + "|" + generationId);
+	}
+
+	private enum SessionMode {
+		TRAINER("trainer", false),
+		CLASSIC("classic", true),
+		HARD("hard", true);
+
+		private final String wireName;
+		private final boolean ranked;
+
+		SessionMode(String wireName, boolean ranked) {
+			this.wireName = wireName;
+			this.ranked = ranked;
+		}
 	}
 
 	private enum Difficulty {
@@ -436,6 +564,97 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 	}
 
+	enum AttemptPhase {
+		OPENING,
+		COMBAT,
+		REATTACK_LOCK,
+		PURSUIT,
+		MISS_RECOVERY
+	}
+
+	enum AttemptTransition {
+		NONE,
+		OPENED,
+		MISSED,
+		RESUMED
+	}
+
+	private enum TrainerGuide {
+		HIDDEN("hidden"),
+		DESTINATION("destination"),
+		ATTACK("attack");
+
+		private final String wireName;
+
+		TrainerGuide(String wireName) {
+			this.wireName = wireName;
+		}
+	}
+
+	static final class AttemptClock {
+		private AttemptPhase phase = AttemptPhase.OPENING;
+		private long openTick = -1;
+		private long deadlineTick = -1;
+		private long recoveryUntilTick = -1;
+
+		AttemptPhase getPhase() {
+			return phase;
+		}
+
+		long getOpenTick() {
+			return openTick;
+		}
+
+		long getDeadlineTick() {
+			return deadlineTick;
+		}
+
+		long getRecoveryUntilTick() {
+			return recoveryUntilTick;
+		}
+
+		void enterCombat() {
+			phase = AttemptPhase.COMBAT;
+		}
+
+		void release(long tick, int reattackTicks) {
+			openTick = tick + Math.max(0, reattackTicks);
+			deadlineTick = openTick + ATTEMPT_WINDOW_TICKS;
+			recoveryUntilTick = -1;
+			phase = tick >= openTick ? AttemptPhase.PURSUIT : AttemptPhase.REATTACK_LOCK;
+		}
+
+		AttemptTransition advance(long tick) {
+			boolean opened = false;
+			if (phase == AttemptPhase.REATTACK_LOCK && tick >= openTick) {
+				phase = AttemptPhase.PURSUIT;
+				opened = true;
+			}
+			if (phase == AttemptPhase.PURSUIT && tick >= deadlineTick) {
+				phase = AttemptPhase.MISS_RECOVERY;
+				recoveryUntilTick = tick + MISS_RECOVERY_TICKS;
+				return AttemptTransition.MISSED;
+			}
+			if (phase == AttemptPhase.MISS_RECOVERY && tick >= recoveryUntilTick) {
+				phase = AttemptPhase.PURSUIT;
+				openTick = tick;
+				deadlineTick = tick + ATTEMPT_WINDOW_TICKS;
+				recoveryUntilTick = -1;
+				return AttemptTransition.RESUMED;
+			}
+			return opened ? AttemptTransition.OPENED : AttemptTransition.NONE;
+		}
+
+		boolean canScoreCatch(long tick) {
+			return phase == AttemptPhase.OPENING
+				|| (phase == AttemptPhase.PURSUIT && tick >= openTick && tick < deadlineTick);
+		}
+
+		boolean targetMayMove() {
+			return phase == AttemptPhase.REATTACK_LOCK || phase == AttemptPhase.PURSUIT;
+		}
+	}
+
 	private enum RunnerTactic {
 		KITE,
 		STRAIGHT,
@@ -445,6 +664,18 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		OBSTACLE,
 		CENTER
 	}
+
+	private enum HardRunType {
+		DIAGONAL,
+		CUTBACK,
+		OBSTACLE,
+		CRAZY
+	}
+
+	private static final int[][] COMPASS_HEADINGS = new int[][] {
+		{ 0, 1 }, { 1, 1 }, { 1, 0 }, { 1, -1 },
+		{ 0, -1 }, { -1, -1 }, { -1, 0 }, { -1, 1 }
+	};
 
 	private final class CatchSimulatorEvent extends GameTickEvent {
 		private final Player player;
@@ -460,6 +691,10 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		public void run() {
 			if (getDelayTicks() == 0) {
 				setDelayTicks(1);
+			}
+			if (!ownsSession(session)) {
+				cleanupOrphanedSession(session);
+				return;
 			}
 
 			if (!player.loggedIn() || player.isRemoved()) {
@@ -483,16 +718,18 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				return;
 			}
 
+			session.advanceAttemptPhase(tick);
 			session.samplePosition(tick);
 			session.enforceCombatLock(tick);
-			// Attack clicks become WalkToMobAction instances before the player
-			// reaches the NPC, so far/late clicks can be scored server-side.
-			session.inspectAttackAction(tick);
+			// Preserve the first attack click for reaction/trail metrics. Catch
+			// authority remains the executed WalkToMobAction callback.
+			session.observeAttackAction(tick);
 			session.releaseCombatLock(tick);
 
 			if (!session.isLocked(tick)) {
 				session.moveTarget(tick);
 			}
+			session.sendHudAndGuide(tick);
 		}
 	}
 
@@ -502,6 +739,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		private final ArenaSlot slot;
 		private final Point returnPoint;
 		private final Random random;
+		private final SessionMode mode;
+		private final long sessionId;
+		private final long generationId;
 		private final long endTick;
 		private final List<PlacedObstacle> obstacles = new ArrayList<PlacedObstacle>();
 		private final Map<Integer, Byte> savedTileMasks = new HashMap<Integer, Byte>();
@@ -515,9 +755,12 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		private RunnerTactic runnerTactic = RunnerTactic.KITE;
 		private long tacticUntilTick = -1;
 		private Point tacticGoal;
+		private final Deque<Point> trainerRoute = new ArrayDeque<Point>();
+		private Point trainerWaypoint;
 		private boolean targetRunningStarted;
 		private int repeatedDirectionTicks;
 		private long lockReleasedTick = -1;
+		private final AttemptClock attemptClock = new AttemptClock();
 		private PkCatchingCombatEvent combatEvent;
 		private boolean combatRoundActive;
 		private boolean hasReleasedLock;
@@ -534,6 +777,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		private int totalDistance;
 		private int oneTileTicks;
 		private int exactTrailTicks;
+		private int trailSamples;
 		private int consecutiveTrailTicks;
 		private int badPathTicks;
 		private int reactionSamples;
@@ -542,15 +786,29 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		private int misses;
 		private int currentStreak;
 		private int bestStreak;
+		private boolean cleanedUp;
+		private HardRunType hardRunType;
+		private int hardHeadingX;
+		private int hardHeadingY;
+		private int hardTicksRemaining;
+		private int hardMicrosegmentsRemaining;
+		private int hardMicrosegmentTicksRemaining;
+		private Point hardWaypoint;
 
-		private CatchSession(Player player, Npc target, ArenaSlot slot, Point returnPoint, long startTick, long endTick) {
+		private CatchSession(Player player, Npc target, ArenaSlot slot, Point returnPoint, long startTick,
+							 long endTick, SessionMode mode, long sessionId, long generationId) {
 			this.player = player;
 			this.target = target;
 			this.slot = slot;
 			this.returnPoint = returnPoint;
 			this.random = new Random(player.getUsernameHash() ^ startTick);
+			this.mode = mode;
+			this.sessionId = sessionId;
+			this.generationId = generationId;
 			this.endTick = endTick;
-			this.difficulty = rollDifficulty();
+			this.difficulty = mode == SessionMode.HARD
+				? Difficulty.HARD
+				: (mode == SessionMode.TRAINER ? Difficulty.EASY : rollDifficulty());
 			this.nextMoveTick = startTick + 1;
 			this.previousTargetLocation = target.getLocation();
 		}
@@ -560,10 +818,14 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 
 		private void startPvpStyleCombatRound(long tick) {
+			if (!ownsSession(this)) {
+				return;
+			}
 			// Simulate RSC PvP combat against a server-side training actor.
 			// The actor is rendered as an NPC, but only this simulator owns its
 			// combat state; it never enters normal NPC damage, XP, loot, or AI.
 			forceClearSimulatedCombat();
+			clearTrainerRoute();
 			player.setBusy(false);
 			target.setBusy(false);
 			player.resetPath();
@@ -572,6 +834,8 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			target.resetFollowing();
 			player.setWalkToAction(null);
 			target.setAttribute(COMBAT_ACTIVE_ATTRIBUTE, true);
+			target.setAttribute(RUNNING_ATTRIBUTE, false);
+			target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
 			player.setAttribute(COMBAT_ACTIVE_ATTRIBUTE, true);
 			player.resetRanAwayTimer();
 			target.resetRanAwayTimer();
@@ -588,7 +852,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			target.setCombatTimer();
 
 			combatRoundActive = true;
+			attemptClock.enterCombat();
 			hasReleasedLock = false;
+			sendHudAndGuide(tick);
 			combatEvent = new PkCatchingCombatEvent(player.getWorld());
 			player.getWorld().getServer().getGameEventHandler().add(combatEvent);
 		}
@@ -669,6 +935,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 					// would otherwise start moving it before the first catch.
 					target.resetPath();
 					target.setBusy(true);
+				} else if (attemptClock.getPhase() == AttemptPhase.MISS_RECOVERY) {
+					target.resetPath();
+					target.setBusy(true);
 				} else {
 					target.setBusy(false);
 				}
@@ -686,21 +955,96 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 
 		private void finishCombatRound(long tick) {
-			if (!combatRoundActive) {
+			if (!combatRoundActive || !ownsSession(this)) {
 				return;
 			}
 			combatRoundActive = false;
 			forceClearSimulatedCombat();
 			player.setBusy(false);
 			target.setBusy(false);
-			difficulty = rollDifficulty();
-			lockReleasedTick = tick;
+			if (mode == SessionMode.HARD) {
+				difficulty = Difficulty.HARD;
+				resetHardRunPlan();
+			} else if (mode == SessionMode.TRAINER) {
+				difficulty = Difficulty.EASY;
+			} else {
+				difficulty = rollDifficulty();
+			}
+			attemptClock.release(tick, player.getConfig().PVP_REATTACK_TIMER);
+			lockReleasedTick = attemptClock.getOpenTick();
 			hasReleasedLock = true;
 			targetRunningStarted = true;
+			target.setAttribute(RUNNING_ATTRIBUTE, true);
+			target.setAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE,
+				Long.valueOf(attemptClock.getOpenTick()));
 			player.setRanAwayTimer();
 			target.setRanAwayTimer();
 			nextMoveTick = tick;
-			chooseRunnerTactic(tick, target.getLocation(), true);
+			if (mode == SessionMode.TRAINER) {
+				beginTrainerPursuit(tick);
+			} else if (mode != SessionMode.HARD) {
+				chooseRunnerTactic(tick, target.getLocation(), true);
+			}
+		}
+
+		private void advanceAttemptPhase(long tick) {
+			AttemptTransition transition = attemptClock.advance(tick);
+			if (transition == AttemptTransition.OPENED) {
+				target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
+				if (mode == SessionMode.TRAINER) {
+					beginTrainerPursuit(tick);
+				}
+			} else if (transition == AttemptTransition.MISSED) {
+				beginMissRecovery();
+			} else if (transition == AttemptTransition.RESUMED) {
+				resumeAfterMiss(tick);
+			}
+		}
+
+		private boolean canScoreCatch(long tick) {
+			return attemptClock.canScoreCatch(tick);
+		}
+
+		private void beginMissRecovery() {
+			long recoveryUntilTick = attemptClock.getRecoveryUntilTick();
+			clearTrainerRoute();
+			consecutiveTrailTicks = 0;
+			consecutiveBadPathTicks = 0;
+			target.setAttribute(RUNNING_ATTRIBUTE, false);
+			target.setAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE,
+				Long.valueOf(recoveryUntilTick));
+			target.resetPath();
+			target.resetFollowing();
+			target.setBusy(true);
+			cancelPendingPursuit();
+			recordMiss("You missed");
+			nextMoveTick = recoveryUntilTick;
+		}
+
+		private void resumeAfterMiss(long tick) {
+			lockReleasedTick = tick;
+			target.setBusy(false);
+			target.setAttribute(RUNNING_ATTRIBUTE, true);
+			target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
+			nextMoveTick = tick;
+			if (mode == SessionMode.TRAINER) {
+				beginTrainerPursuit(tick);
+			} else if (mode == SessionMode.HARD) {
+				resetHardRunPlan();
+			} else {
+				chooseRunnerTactic(tick, target.getLocation(), true);
+			}
+		}
+
+		private void cancelPendingPursuit() {
+			player.setWalkToAction(null);
+			player.resetFollowing();
+			player.cancelAutoWalk();
+			player.resetPath();
+			observedAttackAction = null;
+			pendingAttackAction = null;
+			pendingAttackHadGoodTrail = false;
+			pendingAttackTick = -1;
 		}
 
 		private final class PkCatchingCombatEvent extends GameTickEvent {
@@ -712,6 +1056,10 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 
 			@Override
 			public void run() {
+				if (!ownsSession(CatchSession.this)) {
+					stop();
+					return;
+				}
 				long tick = getWorld().getServer().getCurrentTick();
 				if (!canContinueCombatRound()) {
 					stop();
@@ -744,7 +1092,8 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			}
 
 			private boolean canContinueCombatRound() {
-				return player.loggedIn()
+				return ownsSession(CatchSession.this)
+					&& player.loggedIn()
 					&& !player.isRemoved()
 					&& !target.isRemoved()
 					&& player.getOpponent() == target
@@ -772,7 +1121,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			return Difficulty.HARD;
 		}
 
-		private void inspectAttackAction(long tick) {
+		private void observeAttackAction(long tick) {
 			WalkToAction action = player.getWalkToAction();
 			if (action == null || !(action instanceof WalkToMobAction)) {
 				return;
@@ -789,37 +1138,29 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				pendingAttackHadGoodTrail = isGoodTrail();
 				pendingAttackTick = tick;
 			}
-
-			if (isWithinPvpCatchReach()) {
-				if (isLocked(tick)) {
-					player.setWalkToAction(null);
-					if (tick - lastCatchTick > 1) {
-						player.message("Wait for the combat lock to end.");
-					}
-					return;
-				}
-
-				player.setWalkToAction(null);
-				player.resetPath();
-				player.resetFollowing();
-
-				recordCatch(tick, pendingAttackHadGoodTrail || isGoodTrail());
-				startPvpStyleCombatRound(tick);
-			}
-		}
-
-		private boolean isWithinPvpCatchReach() {
-			Point targetPoint = target.getLocation();
-			return isWithinPvpCatchReach(player.getLocation(), targetPoint)
-				|| isWithinPvpCatchReach(player.getWalkingQueue().getNextMovement(), targetPoint);
-		}
-
-		private boolean isWithinPvpCatchReach(Point playerPoint, Point targetPoint) {
-			return playerPoint.withinRange(targetPoint, CATCH_DISTANCE);
 		}
 
 		private void showScoreboard(boolean completed) {
-			ActionSender.sendBox(player, buildRoundScoreboard(player, catches, completed), true);
+			HighscoreSnapshot snapshot = null;
+			if (mode.ranked) {
+				snapshot = completed
+					? HIGHSCORES.record(player, mode, catches, 0)
+					: HIGHSCORES.snapshot(player, mode, 0);
+			}
+			sendResultMetadata(completed, snapshot);
+			ActionSender.sendBox(player, buildRoundScoreboard(this, completed, snapshot), true);
+		}
+
+		private void sendResultMetadata(boolean completed, HighscoreSnapshot snapshot) {
+			int rank = snapshot == null ? -1 : snapshot.playerRank;
+			int personalBest = snapshot == null || snapshot.playerBest == null
+				? -1 : snapshot.playerBest.catches;
+			boolean newBest = snapshot != null && snapshot.newPersonalBest;
+			sendClientMetadata(player, "result|" + sessionId + "|" + mode.wireName + "|"
+				+ (completed ? 1 : 0) + "|" + catches + "|" + currentStreak + "|" + bestStreak
+				+ "|" + exactTrailTicks + "|" + trailSamples
+				+ "|" + totalReactionTicks + "|" + reactionSamples
+				+ "|" + rank + "|" + personalBest + "|" + (newBest ? 1 : 0));
 		}
 
 		private boolean wasGoodTrailOnPendingAttempt() {
@@ -831,6 +1172,64 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			return previousTargetLocation != null && player.getLocation().equals(previousTargetLocation);
 		}
 
+		private TrainerGuide trainerGuide(long tick) {
+			if (mode != SessionMode.TRAINER || !ownsSession(this)) {
+				return TrainerGuide.HIDDEN;
+			}
+			AttemptPhase phase = attemptClock.getPhase();
+			if (phase == AttemptPhase.COMBAT || phase == AttemptPhase.REATTACK_LOCK
+					|| phase == AttemptPhase.MISS_RECOVERY) {
+				return TrainerGuide.HIDDEN;
+			}
+			if (attemptClock.canScoreCatch(tick)
+					&& WalkToMobAction.isWithinInteractionReach(player, target,
+						player.getConfig().PVP_CATCHING_DISTANCE, true)) {
+				return TrainerGuide.ATTACK;
+			}
+			Point destination = trainerGuideDestination();
+			return destination != null && !player.getLocation().equals(destination)
+				? TrainerGuide.DESTINATION : TrainerGuide.HIDDEN;
+		}
+
+		private Point trainerGuideDestination() {
+			return attemptClock.getPhase() == AttemptPhase.OPENING
+				? target.getLocation() : trainerWaypoint;
+		}
+
+		private void sendHudAndGuide(long tick) {
+			TrainerGuide guide = trainerGuide(tick);
+			sendHud(tick, guide);
+			if (mode == SessionMode.TRAINER) {
+				sendTrainerGuide(guide);
+			}
+		}
+
+		private void sendHud(long tick, TrainerGuide guide) {
+			if (!ownsSession(this)) {
+				return;
+			}
+			long remaining = Math.max(0L, endTick - tick);
+			Point destination = guide == TrainerGuide.DESTINATION
+				? trainerGuideDestination() : null;
+			boolean hintActive = destination != null;
+			int hintX = hintActive ? destination.getX() : -1;
+			int hintY = hintActive ? destination.getY() : -1;
+			sendClientMetadata(player, "hud|" + sessionId + "|" + mode.wireName + "|" + remaining
+				+ "|" + catches + "|" + currentStreak + "|" + bestStreak
+				+ "|" + exactTrailTicks + "|" + trailSamples
+				+ "|" + totalReactionTicks + "|" + reactionSamples
+				+ "|" + (hintActive ? 1 : 0) + "|" + hintX + "|" + hintY);
+		}
+
+		private void sendTrainerGuide(TrainerGuide guide) {
+			Point destination = guide == TrainerGuide.DESTINATION
+				? trainerGuideDestination() : null;
+			int x = destination == null ? -1 : destination.getX();
+			int y = destination == null ? -1 : destination.getY();
+			sendClientMetadata(player, "guide|" + sessionId + "|" + guide.wireName
+				+ "|" + x + "|" + y);
+		}
+
 		private void recordCatch(long tick, boolean goodTrail) {
 			lastCatchTick = tick;
 			catches++;
@@ -840,6 +1239,10 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				totalReactionTicks += Math.max(0, (int)(pendingAttackTick - lockReleasedTick));
 				reactionSamples++;
 			}
+			observedAttackAction = null;
+			pendingAttackAction = null;
+			pendingAttackHadGoodTrail = false;
+			pendingAttackTick = -1;
 			player.message("Good catch");
 			targetSay(goodTrail ? GOOD_TRAIL_LINES : GOOD_CATCH_LINES);
 			if (goodTrail) {
@@ -850,6 +1253,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		private void recordMiss(String feedback) {
 			misses++;
 			currentStreak = 0;
+			observedAttackAction = null;
 			pendingAttackAction = null;
 			pendingAttackHadGoodTrail = false;
 			pendingAttackTick = -1;
@@ -867,9 +1271,11 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				oneTileTicks++;
 			}
 
-			if (!targetRunningStarted) {
+			if (!targetRunningStarted || isLocked(tick)
+					|| attemptClock.getPhase() == AttemptPhase.MISS_RECOVERY) {
 				return;
 			}
+			trailSamples++;
 
 			if (isGoodTrail()) {
 				exactTrailTicks++;
@@ -897,15 +1303,28 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		}
 
 		private void moveTarget(long tick) {
-			if (!targetRunningStarted || tick < nextMoveTick || !target.finishedPath()) {
+			if (!targetRunningStarted || !attemptClock.targetMayMove()
+				|| tick < nextMoveTick || !target.finishedPath()) {
 				return;
 			}
-			nextMoveTick = tick + difficulty.moveEveryTicks;
 
 			Point current = target.getLocation();
-			chooseRunnerTactic(tick, current, false);
-			Point next = chooseNextTargetTile(current);
+			Point next;
+			if (mode == SessionMode.TRAINER) {
+				nextMoveTick = tick + TRAINER_MOVE_INTERVAL_TICKS;
+				next = chooseTrainerNextTargetTile(current);
+			} else if (mode == SessionMode.HARD) {
+				nextMoveTick = tick + difficulty.moveEveryTicks;
+				next = chooseHardNextTargetTile(current);
+			} else {
+				nextMoveTick = tick + difficulty.moveEveryTicks;
+				chooseRunnerTactic(tick, current, false);
+				next = chooseNextTargetTile(current);
+			}
 			if (next == null || next.equals(current)) {
+				if (mode != SessionMode.TRAINER) {
+					target.setAttribute(RUNNING_ATTRIBUTE, false);
+				}
 				return;
 			}
 
@@ -924,6 +1343,154 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			target.face(next);
 			target.resetSpriteChanged();
 			target.setLocation(next, false);
+			if (mode != SessionMode.TRAINER) {
+				target.setAttribute(RUNNING_ATTRIBUTE, true);
+			}
+		}
+
+		private void beginTrainerPursuit(long tick) {
+			clearTrainerRoute();
+			buildTrainerSegment();
+			nextMoveTick = tick;
+		}
+
+		private void clearTrainerRoute() {
+			trainerRoute.clear();
+			trainerWaypoint = null;
+			if (mode == SessionMode.TRAINER) {
+				target.setAttribute(RUNNING_ATTRIBUTE, false);
+			}
+		}
+
+		private void buildTrainerSegment() {
+			Point start = target.getLocation();
+			List<Point> bestRoute = null;
+			int bestScore = Integer.MIN_VALUE;
+			int rotation = random.nextInt(COMPASS_HEADINGS.length);
+
+			for (int headingOffset = 0; headingOffset < COMPASS_HEADINGS.length; headingOffset++) {
+				int headingIndex = (rotation + headingOffset) % COMPASS_HEADINGS.length;
+				for (int turn : new int[] {0, -1, 1}) {
+					List<Point> candidateRoute = buildTrainerCandidate(start, headingIndex, turn);
+					if (candidateRoute.isEmpty()) {
+						continue;
+					}
+					Point endpoint = candidateRoute.get(candidateRoute.size() - 1);
+					if (distance(endpoint, player.getLocation())
+							< distance(start, player.getLocation())) {
+						continue;
+					}
+					int playerPath = staticPlayerPathDistance(
+						player.getLocation(), endpoint, ATTEMPT_WINDOW_TICKS - 1);
+					if (playerPath < 0) {
+						continue;
+					}
+					int score = candidateRoute.size() * 100
+						+ distance(endpoint, player.getLocation()) * 4
+						+ (turn == 0 ? 8 : 0);
+					if (score > bestScore || (score == bestScore && random.nextBoolean())) {
+						bestScore = score;
+						bestRoute = candidateRoute;
+					}
+				}
+			}
+
+			if (bestRoute != null) {
+				trainerRoute.addAll(bestRoute);
+				trainerWaypoint = bestRoute.get(bestRoute.size() - 1);
+			} else if (staticPlayerPathDistance(
+					player.getLocation(), start, ATTEMPT_WINDOW_TICKS - 1) >= 0) {
+				// Never publish an unreachable guess. If no useful segment fits,
+				// hold the runner and coach the real current tile.
+				trainerWaypoint = start;
+			}
+			target.setAttribute(RUNNING_ATTRIBUTE, !trainerRoute.isEmpty());
+		}
+
+		private List<Point> buildTrainerCandidate(Point start, int headingIndex, int turn) {
+			List<Point> route = new ArrayList<Point>();
+			Map<Integer, Boolean> visited = new HashMap<Integer, Boolean>();
+			visited.put(tileKey(start.getX(), start.getY()), Boolean.TRUE);
+			Point cursor = start;
+			for (int step = 0; step < TRAINER_ROUTE_STEPS; step++) {
+				int stepHeading = headingIndex;
+				if (step >= 2) {
+					stepHeading = (headingIndex + turn + COMPASS_HEADINGS.length)
+						% COMPASS_HEADINGS.length;
+				}
+				int[] heading = COMPASS_HEADINGS[stepHeading];
+				Point next = Point.location(
+					cursor.getX() + heading[0], cursor.getY() + heading[1]);
+				int key = tileKey(next.getX(), next.getY());
+				if (visited.containsKey(key) || !isTrainerPlannedStepValid(cursor, next)) {
+					break;
+				}
+				route.add(next);
+				visited.put(key, Boolean.TRUE);
+				cursor = next;
+			}
+			return route;
+		}
+
+		private boolean isTrainerPlannedStepValid(Point current, Point candidate) {
+			return !candidate.equals(player.getLocation())
+				&& isInsideArenaWalkTile(candidate)
+				&& !isBlockedTile(candidate)
+				&& PathValidation.checkAdjacentStatic(player.getWorld(),
+					current.getX(), current.getY(), candidate.getX(), candidate.getY());
+		}
+
+		private int staticPlayerPathDistance(Point start, Point goal, int maxTicks) {
+			if (start.equals(goal)) {
+				return 0;
+			}
+			Deque<Point> frontier = new ArrayDeque<Point>();
+			Map<Integer, Integer> distances = new HashMap<Integer, Integer>();
+			frontier.addLast(start);
+			distances.put(tileKey(start.getX(), start.getY()), Integer.valueOf(0));
+			while (!frontier.isEmpty()) {
+				Point current = frontier.removeFirst();
+				int currentDistance = distances.get(
+					tileKey(current.getX(), current.getY())).intValue();
+				if (currentDistance >= maxTicks) {
+					continue;
+				}
+				for (int[] heading : COMPASS_HEADINGS) {
+					Point next = Point.location(
+						current.getX() + heading[0], current.getY() + heading[1]);
+					int key = tileKey(next.getX(), next.getY());
+					if (distances.containsKey(key) || !isInsideArenaWalkTile(next)
+							|| isBlockedTile(next)
+							|| !PathValidation.checkAdjacentStatic(player.getWorld(),
+								current.getX(), current.getY(), next.getX(), next.getY())) {
+						continue;
+					}
+					int nextDistance = currentDistance + 1;
+					if (next.equals(goal)) {
+						return nextDistance;
+					}
+					distances.put(key, Integer.valueOf(nextDistance));
+					frontier.addLast(next);
+				}
+			}
+			return -1;
+		}
+
+		private Point chooseTrainerNextTargetTile(Point current) {
+			if (trainerRoute.isEmpty()) {
+				return null;
+			}
+			Point next = trainerRoute.peekFirst();
+			if (!canTargetStep(current, next)) {
+				// The promise became invalid against live occupancy. Replace it,
+				// but deliberately do not emit a surprise replacement step now.
+				clearTrainerRoute();
+				buildTrainerSegment();
+				return null;
+			}
+			trainerRoute.removeFirst();
+			target.setAttribute(RUNNING_ATTRIBUTE, !trainerRoute.isEmpty());
+			return next;
 		}
 
 		private Point chooseNextTargetTile(Point current) {
@@ -977,6 +1544,260 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			return best.get(random.nextInt(best.size()));
 		}
 
+		private Point chooseHardNextTargetTile(Point current) {
+			if (hardRunType == null && !beginHardRunPlan(current)) {
+				return chooseNextTargetTile(current);
+			}
+
+			Point candidate = null;
+			switch (hardRunType) {
+				case DIAGONAL:
+				case CUTBACK:
+					candidate = Point.location(current.getX() + hardHeadingX, current.getY() + hardHeadingY);
+					break;
+				case OBSTACLE:
+					candidate = chooseHardWaypointStep(current);
+					break;
+				case CRAZY:
+					if (hardMicrosegmentTicksRemaining <= 0 && !startNextCrazyMicrosegment(current)) {
+						break;
+					}
+					candidate = Point.location(current.getX() + hardHeadingX, current.getY() + hardHeadingY);
+					break;
+				default:
+					break;
+			}
+
+			// Hard plans are intentions, never movement authority. Revalidate the
+			// emitted one-tile step against the live arena and collision state.
+			if (candidate == null || !canTargetStep(current, candidate)) {
+				resetHardRunPlan();
+				return chooseNextTargetTile(current);
+			}
+
+			advanceHardRunPlan(candidate);
+			return candidate;
+		}
+
+		private boolean beginHardRunPlan(Point current) {
+			resetHardRunPlan();
+			int roll = random.nextInt(100);
+			if (roll < 40) {
+				hardRunType = HardRunType.DIAGONAL;
+				hardTicksRemaining = 4 + random.nextInt(5);
+				return chooseHardDiagonalHeading(current);
+			}
+			if (roll < 65) {
+				hardRunType = HardRunType.CUTBACK;
+				hardTicksRemaining = 2 + random.nextInt(3);
+				return chooseHardCutbackHeading(current);
+			}
+			if (roll < 85) {
+				hardRunType = HardRunType.OBSTACLE;
+				hardTicksRemaining = 5 + random.nextInt(6);
+				hardWaypoint = chooseHardObstacleWaypoint(current);
+				return hardWaypoint != null;
+			}
+
+			hardRunType = HardRunType.CRAZY;
+			hardMicrosegmentsRemaining = 4 + random.nextInt(4);
+			return startNextCrazyMicrosegment(current);
+		}
+
+		private boolean chooseHardDiagonalHeading(Point current) {
+			List<int[]> best = new ArrayList<int[]>();
+			int bestScore = Integer.MIN_VALUE;
+			for (int[] heading : COMPASS_HEADINGS) {
+				if (heading[0] == 0 || heading[1] == 0) {
+					continue;
+				}
+				Point candidate = Point.location(current.getX() + heading[0], current.getY() + heading[1]);
+				if (!canTargetStep(current, candidate)) {
+					continue;
+				}
+				int score = distance(candidate, player.getLocation()) * 10;
+				if (heading[0] == targetDirectionX || heading[1] == targetDirectionY) {
+					score += 3;
+				}
+				if (score > bestScore) {
+					best.clear();
+					bestScore = score;
+				}
+				if (score == bestScore) {
+					best.add(heading);
+				}
+			}
+			if (best.isEmpty()) {
+				return false;
+			}
+			int[] heading = best.get(random.nextInt(best.size()));
+			hardHeadingX = heading[0];
+			hardHeadingY = heading[1];
+			return true;
+		}
+
+		private boolean chooseHardCutbackHeading(Point current) {
+			int currentIndex = compassHeadingIndex(targetDirectionX, targetDirectionY);
+			List<int[]> choices = new ArrayList<int[]>();
+			int[] offsets = new int[] { 3, 4, 5 };
+			for (int offset : offsets) {
+				int[] heading = COMPASS_HEADINGS[(currentIndex + offset) % COMPASS_HEADINGS.length];
+				Point candidate = Point.location(current.getX() + heading[0], current.getY() + heading[1]);
+				if (canTargetStep(current, candidate)) {
+					choices.add(heading);
+				}
+			}
+			if (choices.isEmpty()) {
+				return false;
+			}
+			int[] heading = choices.get(random.nextInt(choices.size()));
+			hardHeadingX = heading[0];
+			hardHeadingY = heading[1];
+			return true;
+		}
+
+		private int compassHeadingIndex(int dx, int dy) {
+			for (int i = 0; i < COMPASS_HEADINGS.length; i++) {
+				if (COMPASS_HEADINGS[i][0] == dx && COMPASS_HEADINGS[i][1] == dy) {
+					return i;
+				}
+			}
+			return 2;
+		}
+
+		private Point chooseHardObstacleWaypoint(Point current) {
+			List<Point> candidates = obstacleRingWaypoints(current, 1);
+			if (candidates.isEmpty()) {
+				candidates = obstacleRingWaypoints(current, 2);
+			}
+			if (candidates.isEmpty()) {
+				return null;
+			}
+			return candidates.get(random.nextInt(candidates.size()));
+		}
+
+		private List<Point> obstacleRingWaypoints(Point current, int radius) {
+			List<Point> candidates = new ArrayList<Point>();
+			for (PlacedObstacle obstacle : obstacles) {
+				if (obstacle.object.getID() == ARENA_WALL_OBJECT_ID) {
+					continue;
+				}
+				Point obstaclePoint = obstacle.object.getLocation();
+				for (int dx = -radius; dx <= radius; dx++) {
+					for (int dy = -radius; dy <= radius; dy++) {
+						if (Math.max(Math.abs(dx), Math.abs(dy)) != radius) {
+							continue;
+						}
+						Point waypoint = Point.location(obstaclePoint.getX() + dx, obstaclePoint.getY() + dy);
+						int waypointDistance = distance(current, waypoint);
+						if (waypointDistance < 5 || waypointDistance > 10 || !isInsideArenaWalkTile(waypoint)
+								|| isBlockedTile(waypoint) || waypoint.equals(player.getLocation())) {
+							continue;
+						}
+						if (!candidates.contains(waypoint)) {
+							candidates.add(waypoint);
+						}
+					}
+				}
+			}
+			return candidates;
+		}
+
+		private Point chooseHardWaypointStep(Point current) {
+			if (hardWaypoint == null || current.equals(hardWaypoint)) {
+				return null;
+			}
+			List<Point> best = new ArrayList<Point>();
+			int bestScore = Integer.MIN_VALUE;
+			for (int[] heading : COMPASS_HEADINGS) {
+				Point candidate = Point.location(current.getX() + heading[0], current.getY() + heading[1]);
+				if (!canTargetStep(current, candidate)) {
+					continue;
+				}
+				int score = goalProgressScore(current, candidate, hardWaypoint) * 30
+					+ distance(candidate, player.getLocation()) * 2;
+				if (heading[0] != 0 && heading[1] != 0) {
+					score += 3;
+				}
+				if (candidate.equals(previousTargetLocation)) {
+					score -= 12;
+				}
+				if (score > bestScore) {
+					best.clear();
+					bestScore = score;
+				}
+				if (score == bestScore) {
+					best.add(candidate);
+				}
+			}
+			return best.isEmpty() ? null : best.get(random.nextInt(best.size()));
+		}
+
+		private boolean startNextCrazyMicrosegment(Point current) {
+			if (hardMicrosegmentsRemaining <= 0) {
+				return false;
+			}
+			List<int[]> choices = new ArrayList<int[]>();
+			for (int[] heading : COMPASS_HEADINGS) {
+				if (heading[0] == hardHeadingX && heading[1] == hardHeadingY) {
+					continue;
+				}
+				Point candidate = Point.location(current.getX() + heading[0], current.getY() + heading[1]);
+				if (!canTargetStep(current, candidate)) {
+					continue;
+				}
+				choices.add(heading);
+				if (heading[0] != 0 && heading[1] != 0) {
+					choices.add(heading);
+				}
+			}
+			if (choices.isEmpty()) {
+				return false;
+			}
+			int[] heading = choices.get(random.nextInt(choices.size()));
+			hardHeadingX = heading[0];
+			hardHeadingY = heading[1];
+			hardMicrosegmentTicksRemaining = 1 + random.nextInt(2);
+			hardMicrosegmentsRemaining--;
+			return true;
+		}
+
+		private void advanceHardRunPlan(Point emitted) {
+			switch (hardRunType) {
+				case DIAGONAL:
+				case CUTBACK:
+					hardTicksRemaining--;
+					if (hardTicksRemaining <= 0) {
+						resetHardRunPlan();
+					}
+					break;
+				case OBSTACLE:
+					hardTicksRemaining--;
+					if (hardTicksRemaining <= 0 || emitted.equals(hardWaypoint)) {
+						resetHardRunPlan();
+					}
+					break;
+				case CRAZY:
+					hardMicrosegmentTicksRemaining--;
+					if (hardMicrosegmentTicksRemaining <= 0 && hardMicrosegmentsRemaining <= 0) {
+						resetHardRunPlan();
+					}
+					break;
+				default:
+					break;
+			}
+		}
+
+		private void resetHardRunPlan() {
+			hardRunType = null;
+			hardHeadingX = 0;
+			hardHeadingY = 0;
+			hardTicksRemaining = 0;
+			hardMicrosegmentsRemaining = 0;
+			hardMicrosegmentTicksRemaining = 0;
+			hardWaypoint = null;
+		}
+
 		private void chooseRunnerTactic(long tick, Point current, boolean force) {
 			if (!force && tick < tacticUntilTick) {
 				return;
@@ -987,7 +1808,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			int roll = random.nextInt(100);
 			if (edgeDistance <= 2 && roll < 75) {
 				runnerTactic = RunnerTactic.CENTER;
-			} else if (playerDistance <= CATCH_DISTANCE) {
+			} else if (playerDistance <= RUNNER_PRESSURE_DISTANCE) {
 				if (roll < 35) {
 					runnerTactic = RunnerTactic.CUTBACK;
 				} else if (roll < 65) {
@@ -1088,7 +1909,7 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 					break;
 				case CUTBACK:
 					score += (dx == -targetDirectionX || dy == -targetDirectionY) ? 24 : -8;
-					score += distance(candidate, player.getLocation()) <= CATCH_DISTANCE + 1 ? 8 : 0;
+					score += distance(candidate, player.getLocation()) <= RUNNER_PRESSURE_DISTANCE + 1 ? 8 : 0;
 					break;
 				case CORNER:
 				case CENTER:
@@ -1254,7 +2075,17 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			obstacles.add(new PlacedObstacle(object));
 		}
 
-		private void cleanup() {
+		private synchronized void cleanup(boolean clearPlayerState) {
+			if (cleanedUp) {
+				return;
+			}
+			cleanedUp = true;
+			if (clearPlayerState) {
+				sendClientClear(player, sessionId, generationId);
+			}
+			if (clearPlayerState && player.loggedIn()) {
+				ActionSender.sendSystemUpdateTimer(player, 0);
+			}
 			World world = player.getWorld();
 			for (PlacedObstacle obstacle : obstacles) {
 				if (!obstacle.object.isRemoved()) {
@@ -1269,9 +2100,16 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 				world.getTile(x, y).traversalMask = entry.getValue();
 			}
 			savedTileMasks.clear();
+			clearTrainerRoute();
 			combatRoundActive = false;
-			forceClearSimulatedCombat();
-			player.resetRanAwayTimer();
+			target.setAttribute(RUNNING_ATTRIBUTE, false);
+			target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
+			if (clearPlayerState) {
+				forceClearSimulatedCombat();
+				player.resetRanAwayTimer();
+			} else {
+				clearOrphanTargetState();
+			}
 			target.resetRanAwayTimer();
 
 			if (target != null && player.getWorld().hasNpc(target)) {
@@ -1279,32 +2117,110 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			}
 		}
 
+		private void clearOrphanTargetState() {
+			if (combatEvent != null) {
+				combatEvent.stop();
+				combatEvent = null;
+			}
+			if (target.getCombatEvent() != null) {
+				target.getCombatEvent().stop();
+				target.setCombatEvent(null);
+			}
+			if (target.getOpponent() == player) {
+				target.setOpponent(null);
+			}
+			target.setLastOpponent(null);
+			target.setHitsMade(0);
+			target.resetFollowing();
+			target.removeAttribute(COMBAT_ACTIVE_ATTRIBUTE);
+			target.removeAttribute(RUNNING_ATTRIBUTE);
+			target.removeAttribute(ATTACK_BLOCKED_UNTIL_ATTRIBUTE);
+			if (target.getSprite() > 7) {
+				target.setSprite(4);
+			}
+			target.setBusy(false);
+		}
+
 	}
 
 	private void showHighscores(Player player) {
-		HighscoreSnapshot snapshot = HIGHSCORES.snapshot(player, 10);
+		HighscoreBoardsSnapshot boards = HIGHSCORES.snapshotBoards(player, 10);
+		sendLeaderboardMetadata(player, boards);
 		StringBuilder builder = new StringBuilder();
 		builder.append("PK Catching Simulator Highscores% %");
-		appendPersonalRank(builder, snapshot);
-		appendLeaderboard(builder, snapshot.top, 10, "Top 10 best catchers:");
+		builder.append("@yel@Medium (classic)@whi@%");
+		appendCompactPersonalRank(builder, boards.medium);
+		appendLeaderboard(builder, boards.medium.top, 3, "Top 3 Medium catchers:");
+		builder.append("%@red@Hard@whi@%");
+		appendCompactPersonalRank(builder, boards.hard);
+		appendLeaderboard(builder, boards.hard.top, 3, "Top 3 Hard catchers:");
 		ActionSender.sendBox(player, builder.toString(), true);
 	}
 
-	private String buildRoundScoreboard(Player player, int catches, boolean completed) {
-		HighscoreSnapshot snapshot = completed
-			? HIGHSCORES.record(player, catches, 0)
-			: HIGHSCORES.snapshot(player, 0);
+	private void sendLeaderboardMetadata(Player player, HighscoreBoardsSnapshot boards) {
+		long transferId = nextClientId();
+		long generationId = nextClientId();
+		sendClientMetadata(player, "leaderboard-begin|" + transferId + "|" + generationId
+			+ "|" + boards.medium.top.size() + "|" + boards.hard.top.size()
+			+ "|" + boards.medium.playerRank + "|" + personalBestCatches(boards.medium)
+			+ "|" + boards.hard.playerRank + "|" + personalBestCatches(boards.hard));
+		sendLeaderboardRows(player, transferId, SessionMode.CLASSIC, boards.medium);
+		sendLeaderboardRows(player, transferId, SessionMode.HARD, boards.hard);
+		sendClientMetadata(player, "leaderboard-end|" + transferId);
+	}
 
+	private void sendLeaderboardRows(Player player, long transferId, SessionMode mode,
+								 HighscoreSnapshot snapshot) {
+		for (int i = 0; i < snapshot.top.size(); i++) {
+			HighscoreEntry entry = snapshot.top.get(i);
+			sendClientMetadata(player, "leaderboard-row|" + transferId + "|" + mode.wireName + "|"
+				+ (i + 1) + "|" + entry.usernameHash + "|" + sanitizeProtocolText(entry.username, 24)
+				+ "|" + entry.catches + "|"
+				+ (entry.usernameHash == player.getUsernameHash() ? 1 : 0));
+		}
+	}
+
+	private static int personalBestCatches(HighscoreSnapshot snapshot) {
+		return snapshot.playerBest == null ? -1 : snapshot.playerBest.catches;
+	}
+
+	private String buildRoundScoreboard(CatchSession session, boolean completed, HighscoreSnapshot snapshot) {
 		StringBuilder builder = new StringBuilder();
+		// Keep this exact leading signature for the glass client's legacy-box
+		// suppression, then add the selected mode on its own fallback line.
 		builder.append("PK Catching Simulator% %");
-		builder.append("Catches this round: @gre@").append(formatCatches(catches)).append("@whi@%");
-		appendPersonalBest(builder, snapshot);
-		if (completed) {
-			builder.append(snapshot.newPersonalBest ? "@yel@New personal best!@whi@%" : "Full 5 minute score recorded.%");
+		builder.append("Mode: ").append(session.mode.wireName).append("%");
+		builder.append("Catches this round: @gre@").append(formatCatches(session.catches)).append("@whi@%");
+		builder.append("Best streak: @gre@").append(session.bestStreak).append("@whi@%");
+		builder.append("Trail accuracy: @gre@").append(formatPercentage(session.exactTrailTicks, session.trailSamples))
+			.append("@whi@%");
+		builder.append("Average reaction: @gre@").append(formatAverage(session.totalReactionTicks, session.reactionSamples))
+			.append(" ticks@whi@%");
+		if (!session.mode.ranked) {
+			builder.append("Trainer rounds are unranked.%");
 		} else {
-			builder.append("Finish all 5 minutes to enter the leaderboard.%");
+			appendPersonalBest(builder, snapshot);
+			if (completed) {
+				builder.append(snapshot.newPersonalBest ? "@yel@New personal best!@whi@%" : "Full 5 minute score recorded.%");
+			} else {
+				builder.append("Finish all 5 minutes to enter the leaderboard.%");
+			}
 		}
 		return builder.toString();
+	}
+
+	private static String formatPercentage(int numerator, int denominator) {
+		if (denominator <= 0) {
+			return "0%";
+		}
+		return ((numerator * 100) / denominator) + "%";
+	}
+
+	private static String formatAverage(int total, int samples) {
+		if (samples <= 0) {
+			return "0.0";
+		}
+		return String.format(java.util.Locale.ENGLISH, "%.1f", total / (double)samples);
 	}
 
 	private void appendPersonalBest(StringBuilder builder, HighscoreSnapshot snapshot) {
@@ -1317,10 +2233,9 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			.append("@whi@%");
 	}
 
-	private void appendPersonalRank(StringBuilder builder, HighscoreSnapshot snapshot) {
+	private void appendCompactPersonalRank(StringBuilder builder, HighscoreSnapshot snapshot) {
 		if (snapshot.playerBest == null) {
 			builder.append("Your rank: @red@Unranked@whi@%");
-			builder.append("Finish a full 5 minute round to place.%");
 			return;
 		}
 		builder.append("Your rank: @yel@#")
@@ -1359,11 +2274,29 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 		return value.replace('%', ' ').replace('@', ' ').replace('|', ' ');
 	}
 
-	private static final class HighscoreTable {
-		private static final File FILE = new File("conf/server/data/pk_catching_sim_highscores.properties");
+	private static String sanitizeProtocolText(String value, int maxLength) {
+		String sanitized = sanitizeBoxText(value).replace('\n', ' ').replace('\r', ' ');
+		return sanitized.length() <= maxLength ? sanitized : sanitized.substring(0, maxLength);
+	}
 
-		private synchronized HighscoreSnapshot record(Player player, int catches, int topCount) {
-			Map<Long, HighscoreEntry> entries = load();
+	private static final class HighscoreTable {
+		private static final File DEFAULT_FILE = new File("conf/server/data/pk_catching_sim_highscores.properties");
+		private static final String SCHEMA_VERSION_KEY = "schema_version";
+		private static final String MEDIUM_PREFIX = "medium.";
+		private static final String HARD_PREFIX = "hard.";
+		private final File file;
+
+		private HighscoreTable() {
+			this(DEFAULT_FILE);
+		}
+
+		private HighscoreTable(File file) {
+			this.file = file;
+		}
+
+		private synchronized HighscoreSnapshot record(Player player, SessionMode mode, int catches, int topCount) {
+			HighscoreData data = load();
+			Map<Long, HighscoreEntry> entries = entriesFor(data, mode);
 			long usernameHash = player.getUsernameHash();
 			HighscoreEntry previous = entries.get(usernameHash);
 			String username = sanitizeBoxText(player.getUsername());
@@ -1371,17 +2304,36 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 
 			if (updated) {
 				entries.put(usernameHash, new HighscoreEntry(usernameHash, username, catches));
-				save(entries);
+				save(data);
 			} else if (!previous.username.equals(username)) {
 				entries.put(usernameHash, new HighscoreEntry(usernameHash, username, previous.catches));
-				save(entries);
+				save(data);
 			}
 
 			return snapshot(entries, usernameHash, topCount, updated);
 		}
 
-		private synchronized HighscoreSnapshot snapshot(Player player, int topCount) {
-			return snapshot(load(), player.getUsernameHash(), topCount, false);
+		private synchronized HighscoreSnapshot snapshot(Player player, SessionMode mode, int topCount) {
+			HighscoreData data = load();
+			return snapshot(entriesFor(data, mode), player.getUsernameHash(), topCount, false);
+		}
+
+		private synchronized HighscoreBoardsSnapshot snapshotBoards(Player player, int topCount) {
+			HighscoreData data = load();
+			long usernameHash = player.getUsernameHash();
+			return new HighscoreBoardsSnapshot(
+				snapshot(data.medium, usernameHash, topCount, false),
+				snapshot(data.hard, usernameHash, topCount, false));
+		}
+
+		private Map<Long, HighscoreEntry> entriesFor(HighscoreData data, SessionMode mode) {
+			if (mode == SessionMode.CLASSIC) {
+				return data.medium;
+			}
+			if (mode == SessionMode.HARD) {
+				return data.hard;
+			}
+			throw new IllegalArgumentException("Trainer runs do not have a leaderboard");
 		}
 
 		private HighscoreSnapshot snapshot(Map<Long, HighscoreEntry> entries, long usernameHash, int topCount, boolean updated) {
@@ -1415,54 +2367,202 @@ public final class PkCatchingSimulator implements CommandTrigger, AttackNpcTrigg
 			return new HighscoreSnapshot(playerBest, rank, top, updated);
 		}
 
-		private Map<Long, HighscoreEntry> load() {
-			Map<Long, HighscoreEntry> entries = new HashMap<Long, HighscoreEntry>();
-			if (!FILE.isFile()) {
-				return entries;
+		private HighscoreData load() {
+			HighscoreData data = new HighscoreData();
+			if (!file.isFile()) {
+				return data;
 			}
 
 			Properties properties = new Properties();
-			try (FileInputStream input = new FileInputStream(FILE)) {
+			try (FileInputStream input = new FileInputStream(file)) {
 				properties.load(input);
 			} catch (IOException ex) {
 				LOGGER.warn("Unable to load PK catching highscores", ex);
-				return entries;
+				return data;
 			}
+			data.needsMigration = !"2".equals(properties.getProperty(SCHEMA_VERSION_KEY));
 
+			// Versioned entries win over legacy numeric keys if both exist.
 			for (String key : properties.stringPropertyNames()) {
-				try {
-					long usernameHash = Long.parseLong(key);
-					String value = properties.getProperty(key, "");
-					int separator = value.indexOf('|');
-					int catches = Integer.parseInt(separator >= 0 ? value.substring(0, separator) : value);
-					String username = separator >= 0 ? value.substring(separator + 1) : Long.toString(usernameHash);
-					if (catches >= 0) {
-						entries.put(usernameHash, new HighscoreEntry(usernameHash, sanitizeBoxText(username), catches));
+				if (isOwnedScoreKey(key, MEDIUM_PREFIX)) {
+					if (!loadNamespacedEntry(data.medium, key, MEDIUM_PREFIX, properties.getProperty(key, ""))) {
+						data.needsMigration = true;
 					}
-				} catch (NumberFormatException ex) {
-					LOGGER.warn("Ignoring invalid PK catching highscore entry: {}", key);
+				} else if (isOwnedScoreKey(key, HARD_PREFIX)) {
+					if (!loadNamespacedEntry(data.hard, key, HARD_PREFIX, properties.getProperty(key, ""))) {
+						data.needsMigration = true;
+					}
+				} else if (key.startsWith(MEDIUM_PREFIX) || key.startsWith(HARD_PREFIX)) {
+					// Non-numeric namespaced keys are not score rows and may be
+					// forward-compatible extension data, so preserve them verbatim.
+					data.preserved.setProperty(key, properties.getProperty(key, ""));
 				}
 			}
-			return entries;
+			for (String key : properties.stringPropertyNames()) {
+				if (SCHEMA_VERSION_KEY.equals(key) || key.startsWith(MEDIUM_PREFIX) || key.startsWith(HARD_PREFIX)) {
+					continue;
+				}
+				if (isNumericKey(key)) {
+					data.needsMigration = true;
+					try {
+						long usernameHash = Long.parseLong(key);
+						HighscoreEntry entry = parseEntry(usernameHash, properties.getProperty(key, ""));
+						if (entry != null && !data.medium.containsKey(usernameHash)) {
+							data.medium.put(usernameHash, entry);
+						}
+					} catch (NumberFormatException ex) {
+						LOGGER.warn("Ignoring invalid legacy PK catching highscore entry: {}", key);
+					}
+				} else {
+					data.preserved.setProperty(key, properties.getProperty(key, ""));
+				}
+			}
+			if (data.needsMigration && save(data)) {
+				data.needsMigration = false;
+			}
+			return data;
 		}
 
-		private void save(Map<Long, HighscoreEntry> entries) {
-			File parent = FILE.getParentFile();
+		private boolean isOwnedScoreKey(String key, String prefix) {
+			return key.startsWith(prefix) && isNumericKey(key.substring(prefix.length()));
+		}
+
+		private boolean loadNamespacedEntry(Map<Long, HighscoreEntry> entries, String key, String prefix, String value) {
+			try {
+				long usernameHash = Long.parseLong(key.substring(prefix.length()));
+				HighscoreEntry entry = parseEntry(usernameHash, value);
+				if (entry != null) {
+					entries.put(usernameHash, entry);
+					return true;
+				}
+			} catch (NumberFormatException ex) {
+				LOGGER.warn("Ignoring invalid PK catching highscore entry: {}", key);
+			}
+			return false;
+		}
+
+		private HighscoreEntry parseEntry(long usernameHash, String value) {
+			try {
+				int separator = value.indexOf('|');
+				int catches = Integer.parseInt(separator >= 0 ? value.substring(0, separator) : value);
+				if (catches < 0) {
+					return null;
+				}
+				String username = separator >= 0 ? value.substring(separator + 1) : Long.toString(usernameHash);
+				return new HighscoreEntry(usernameHash, sanitizeBoxText(username), catches);
+			} catch (NumberFormatException ex) {
+				return null;
+			}
+		}
+
+		private boolean isNumericKey(String key) {
+			if (key == null || key.length() == 0) {
+				return false;
+			}
+			int index = key.charAt(0) == '-' ? 1 : 0;
+			if (index == key.length()) {
+				return false;
+			}
+			for (; index < key.length(); index++) {
+				if (!Character.isDigit(key.charAt(index))) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private boolean save(HighscoreData data) {
+			File parent = file.getParentFile();
+			if (parent == null) {
+				parent = file.getAbsoluteFile().getParentFile();
+			}
 			if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
 				LOGGER.warn("Unable to create PK catching highscore directory: {}", parent.getAbsolutePath());
-				return;
+				return false;
 			}
 
 			Properties properties = new Properties();
-			for (HighscoreEntry entry : entries.values()) {
-				properties.setProperty(Long.toString(entry.usernameHash), entry.catches + "|" + sanitizeBoxText(entry.username));
+			properties.putAll(data.preserved);
+			properties.setProperty(SCHEMA_VERSION_KEY, "2");
+			for (HighscoreEntry entry : data.medium.values()) {
+				properties.setProperty(MEDIUM_PREFIX + entry.usernameHash,
+					entry.catches + "|" + sanitizeBoxText(entry.username));
+			}
+			for (HighscoreEntry entry : data.hard.values()) {
+				properties.setProperty(HARD_PREFIX + entry.usernameHash,
+					entry.catches + "|" + sanitizeBoxText(entry.username));
 			}
 
-			try (FileOutputStream output = new FileOutputStream(FILE)) {
+			File temp = null;
+			boolean saved = false;
+			try {
+				temp = File.createTempFile(file.getName() + ".", ".tmp", parent);
+				try (FileOutputStream output = new FileOutputStream(temp)) {
 				properties.store(output, "PK Catching Simulator highscores");
+					output.getFD().sync();
+				}
+				try {
+					Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE,
+						StandardCopyOption.REPLACE_EXISTING);
+				} catch (AtomicMoveNotSupportedException ex) {
+					replaceNonAtomicallyPreservingOriginal(temp, parent);
+				}
+				temp = null;
+				saved = true;
 			} catch (IOException ex) {
 				LOGGER.warn("Unable to save PK catching highscores", ex);
+			} finally {
+				if (temp != null && temp.exists() && !temp.delete()) {
+					LOGGER.warn("Unable to remove temporary PK catching highscore file: {}", temp.getAbsolutePath());
+				}
 			}
+			return saved;
+		}
+
+		private void replaceNonAtomicallyPreservingOriginal(File replacement, File parent) throws IOException {
+			boolean hadOriginal = file.exists();
+			File backup = null;
+			try {
+				if (hadOriginal) {
+					backup = File.createTempFile(file.getName() + ".backup.", ".tmp", parent);
+					Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+				}
+				try {
+					Files.move(replacement.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+				} catch (IOException replaceFailure) {
+					try {
+						if (hadOriginal && backup != null) {
+							Files.copy(backup.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+						} else {
+							Files.deleteIfExists(file.toPath());
+						}
+					} catch (IOException restoreFailure) {
+						replaceFailure.addSuppressed(restoreFailure);
+					}
+					throw replaceFailure;
+				}
+			} finally {
+				if (backup != null && backup.exists() && !backup.delete()) {
+					LOGGER.warn("Unable to remove PK catching highscore backup: {}", backup.getAbsolutePath());
+				}
+			}
+		}
+	}
+
+	private static final class HighscoreData {
+		private final Map<Long, HighscoreEntry> medium = new HashMap<Long, HighscoreEntry>();
+		private final Map<Long, HighscoreEntry> hard = new HashMap<Long, HighscoreEntry>();
+		private final Properties preserved = new Properties();
+		private boolean needsMigration;
+	}
+
+	private static final class HighscoreBoardsSnapshot {
+		private final HighscoreSnapshot medium;
+		private final HighscoreSnapshot hard;
+
+		private HighscoreBoardsSnapshot(HighscoreSnapshot medium, HighscoreSnapshot hard) {
+			this.medium = medium;
+			this.hard = hard;
 		}
 	}
 

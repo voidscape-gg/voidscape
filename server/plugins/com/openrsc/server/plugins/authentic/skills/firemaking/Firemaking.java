@@ -72,12 +72,7 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.FIREMAKING.id());
-		}
-
-		startbatch(repeat);
+		startskillbatch(Skill.FIREMAKING.id());
 		batchFiremaking(player, gItem, def);
 
 	}
@@ -164,12 +159,7 @@ public class Firemaking implements UseObjTrigger, UseInvTrigger {
 			return;
 		}
 
-		int repeat = 1;
-		if (config().BATCH_PROGRESSION) {
-			repeat = Formulae.getRepeatTimes(player, Skill.FIREMAKING.id());
-		}
-
-		startbatch(repeat);
+		startskillbatch(Skill.FIREMAKING.id());
 		batchCustomFiremaking(player, gItem, def);
 	}
 

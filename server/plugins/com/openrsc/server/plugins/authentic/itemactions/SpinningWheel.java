@@ -54,7 +54,7 @@ public class SpinningWheel implements UseLocTrigger {
 
 		String resultString = "You " + verb + " the " + consumedItem + " into a " + producedItem;
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchSpin(player, item, resultString, produceID, requiredLevel, experience);
 	}
 

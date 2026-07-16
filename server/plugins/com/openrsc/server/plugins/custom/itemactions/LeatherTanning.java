@@ -163,7 +163,7 @@ public class LeatherTanning implements UseInvTrigger,
 			repeat = player.getCarriedItems().getInventory().countId(treatedHide.getCatalogId(), Optional.of(false));
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchTanningHide(treatedHide, player);
 	}
 
@@ -209,7 +209,7 @@ public class LeatherTanning implements UseInvTrigger,
 			);
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.CRAFTING.id());
 		batchTreatedHide(player, hide);
 	}
 

@@ -31,6 +31,16 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 		return player.isBusy() || player.isRanging() || player.accessingBank() || player.getDuel().isDuelActive() || player.inCombat();
 	}
 
+	private boolean instancesBlockTrade(Player player, Player affectedPlayer) {
+		if (affectedPlayer == null || player.sharesInstanceWith(affectedPlayer)) {
+			return false;
+		}
+		player.message("You cannot reach that player.");
+		player.getTrade().resetAll();
+		affectedPlayer.getTrade().resetAll();
+		return true;
+	}
+
 	private boolean voidArenaBlocksTrade(Player player, Player affectedPlayer) {
 		if (player != null && player.getWorld() != null
 			&& player.getWorld().getVoidArena().isInActiveMatch(player)) {
@@ -89,6 +99,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				}
 
 				if (affectedPlayer == null) {
+					return;
+				}
+				if (instancesBlockTrade(player, affectedPlayer)) {
 					return;
 				}
 				if (voidArenaBlocksTrade(player, affectedPlayer)) {
@@ -216,6 +229,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ACCEPTED_INIT_TRADE_REQUEST:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (instancesBlockTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (voidArenaBlocksTrade(player, affectedPlayer)) {
 					return;
 				}
@@ -256,6 +272,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ADDED_ITEMS_TO_TRADE_OFFER:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (instancesBlockTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (voidArenaBlocksTrade(player, affectedPlayer)) {
 					return;
 				}
@@ -349,6 +368,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_DECLINED_TRADE:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (instancesBlockTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (voidArenaBlocksTrade(player, affectedPlayer)) {
 					return;
 				}
@@ -364,6 +386,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 				break;
 			case PLAYER_ACCEPTED_TRADE:
 				affectedPlayer = player.getTrade().getTradeRecipient();
+				if (instancesBlockTrade(player, affectedPlayer)) {
+					return;
+				}
 				if (voidArenaBlocksTrade(player, affectedPlayer)) {
 					return;
 				}
@@ -386,6 +411,9 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 	}
 
 	private void performTrade(Player player, Player affectedPlayer) {
+		if (instancesBlockTrade(player, affectedPlayer)) {
+			return;
+		}
 		List<Item> myOffer = player.getTrade().getTradeOffer().getItems();
 		List<Item> theirOffer = affectedPlayer.getTrade().getTradeOffer().getItems();
 		boolean updateOwnAppearance = false, updateOtherAppearance = false;

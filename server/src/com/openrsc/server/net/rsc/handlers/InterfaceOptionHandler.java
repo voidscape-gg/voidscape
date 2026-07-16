@@ -10,6 +10,7 @@ import com.openrsc.server.content.party.Party;
 import com.openrsc.server.content.party.PartyInvite;
 import com.openrsc.server.content.party.PartyPlayer;
 import com.openrsc.server.content.party.PartyRank;
+import com.openrsc.server.content.duelproof.DuelProofService;
 import com.openrsc.server.database.GameDatabaseException;
 import com.openrsc.server.database.struct.PlayerLoginData;
 import com.openrsc.server.model.container.BankPreset;
@@ -129,6 +130,9 @@ public class InterfaceOptionHandler implements PayloadProcessor<OptionsStruct, O
 				break;
 			case VOID_ARENA:
 				handleVoidArena(player, payload);
+				break;
+			case DUEL_PROOF:
+				DuelProofService.handleClientMessage(player, payload.duelProof);
 				break;
 		}
 	}

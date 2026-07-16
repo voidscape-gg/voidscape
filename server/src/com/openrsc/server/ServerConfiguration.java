@@ -2,6 +2,7 @@ package com.openrsc.server;
 
 import com.google.common.collect.ImmutableList;
 import com.openrsc.server.database.DatabaseType;
+import com.openrsc.server.appearance.PaperdollV2EvaluationPolicy;
 import com.openrsc.server.util.EntityList;
 import com.openrsc.server.util.SystemUtil;
 import com.openrsc.server.util.YMLReader;
@@ -9,6 +10,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.*;
+import java.net.InetSocketAddress;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -17,6 +21,7 @@ import java.util.Optional;
 public class ServerConfiguration {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+	private static final String EXPLICIT_CONFIG_ONLY_PROPERTY = "voidscape.config.explicitOnly";
 
 
 	public boolean DEBUG = false; // enables print out of the config being sent to the client
@@ -37,11 +42,14 @@ public class ServerConfiguration {
 	public int WORLD_NUMBER;
 	public int CLIENT_VERSION;
 	public boolean ENFORCE_CUSTOM_CLIENT_VERSION;
+	/** Production remains zero; six is accepted only by the guarded QA launcher. */
+	public int PAPERDOLL_V2_EVALUATION_HAIR_STYLE_MAX;
 	public int MAX_PLAYERS;
 	public int MAX_PLAYERS_PER_IP;
 	public int SESSION_ID_SENDER_TIMER;
 	int SERVER_PORT;
 	int WS_SERVER_PORT;
+	String SERVER_BIND_ADDRESS = "";
 	public boolean WANT_FEATURE_WEBSOCKETS;
 	int IDLE_TIMER;
 	int IDLE_TIMER_SUBSCRIBER;
@@ -105,7 +113,9 @@ public class ServerConfiguration {
 	public boolean WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS;
 	public boolean WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS;
 	public boolean WANT_BETA_ONBOARDING_GUIDE;
+	public String LAUNCH_SUBSCRIPTION_CARD_UNTIL;
 	public boolean PRODUCTION_COMMAND_LOCKDOWN;
+	public boolean VOID_ARENA_ALLOW_AMBIGUOUS_PROXY_RANKED;
 	public boolean FOG_TOGGLE;
 	public boolean GROUND_ITEM_TOGGLE;
 	public boolean GROUND_ITEM_NAMES;
@@ -437,6 +447,8 @@ public class ServerConfiguration {
 		ENFORCE_CUSTOM_CLIENT_VERSION = tryReadBool("enforce_custom_client_version").orElse(true);
 		SERVER_PORT = tryReadInt("server_port").orElse(43594);
 		WS_SERVER_PORT = tryReadInt("ws_server_port").orElse(43494);
+		SERVER_BIND_ADDRESS = validateServerBindAddress(
+			tryReadString("server_bind_address").orElse(""));
 		WANT_FEATURE_WEBSOCKETS = tryReadBool("want_feature_websockets").orElse(true);
 		if (WS_SERVER_PORT == SERVER_PORT) {
 			// Disable port sharing of Websockets & TCP port
@@ -458,6 +470,8 @@ public class ServerConfiguration {
 		MAX_PLAYERS_PER_IP = tryReadInt("max_players_per_ip").orElse(10);
 		SESSION_ID_SENDER_TIMER = tryReadInt("session_id_sender_timer").orElse(640);
 		AVATAR_GENERATOR = tryReadBool("avatar_generator").orElse(false);
+		PAPERDOLL_V2_EVALUATION_HAIR_STYLE_MAX =
+			tryReadInt("paperdoll_v2_evaluation_hair_style_max").orElse(0);
 		MEMBER_WORLD = tryReadBool("member_world").orElse(true);
 		WANT_PCAP_LOGGING = tryReadBool("want_pcap_logging").orElse(false);
 		PERF_TELEMETRY = tryReadBool("perf_telemetry").orElse(false);
@@ -611,7 +625,13 @@ public class ServerConfiguration {
 		WANT_WORLD_SKULLED_PK_ANNOUNCEMENTS = tryReadBool("want_world_skulled_pk_announcements").orElse(false);
 		WANT_WORLD_NEW_PLAYER_ANNOUNCEMENTS = tryReadBool("want_world_new_player_announcements").orElse(false);
 		WANT_BETA_ONBOARDING_GUIDE = tryReadBool("want_beta_onboarding_guide").orElse(false);
+		LAUNCH_SUBSCRIPTION_CARD_UNTIL = firstNonNullEnv(
+			"VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL",
+			tryReadString("launch_subscription_card_until").orElse("")
+		);
 		PRODUCTION_COMMAND_LOCKDOWN = tryReadBool("production_command_lockdown").orElse(false);
+		VOID_ARENA_ALLOW_AMBIGUOUS_PROXY_RANKED = tryReadBool(
+			"void_arena_allow_ambiguous_proxy_ranked").orElse(false);
 		SIDE_MENU_TOGGLE = tryReadBool("side_menu_toggle").orElse(false);
 		INVENTORY_COUNT_TOGGLE = tryReadBool("inventory_count_toggle").orElse(false);
 		AUTO_MESSAGE_SWITCH_TOGGLE = tryReadBool("auto_message_switch_toggle").orElse(false);
@@ -809,6 +829,46 @@ public class ServerConfiguration {
 		ARMY_OF_OBSCURITY = tryReadBool("army_of_obscurity").orElse(false);
 
 		// adminIp = Arrays.asList(ADMIN_IP.split(","));
+		validatePaperdollV2EvaluationPolicy();
+	}
+
+	private void validatePaperdollV2EvaluationPolicy() throws IOException {
+		boolean jvmGate = Boolean.getBoolean("voidscape.paperdollV2.evaluationServer");
+		int maximum = PAPERDOLL_V2_EVALUATION_HAIR_STYLE_MAX;
+		String rejection = paperdollV2EvaluationConfigurationRejectionReason(maximum,
+			jvmGate, DB_TYPE, DB_NAME, PRODUCTION_COMMAND_LOCKDOWN, AVATAR_GENERATOR,
+			CHARACTER_CREATION_MODE);
+		if (rejection.length() > 0) throw new IOException(rejection);
+		if (!paperdollV2EvaluationConfigurationEnabled(maximum, jvmGate, DB_TYPE,
+			DB_NAME, PRODUCTION_COMMAND_LOCKDOWN, AVATAR_GENERATOR,
+			CHARACTER_CREATION_MODE)) return;
+		LOGGER.warn("Paperdoll V2 QA evaluation policy active: database={}, maximum={}, "
+			+ "productionMaximum=0", DB_NAME, maximum);
+	}
+
+	public static String paperdollV2EvaluationConfigurationRejectionReason(int maximum,
+		boolean jvmGate, DatabaseType databaseType, String databaseName,
+		boolean productionCommandLockdown, boolean avatarGenerator,
+		int characterCreationMode) {
+		return PaperdollV2EvaluationPolicy.configurationRejectionReason(maximum,
+			jvmGate, databaseType, databaseName, productionCommandLockdown,
+			avatarGenerator, characterCreationMode);
+	}
+
+	public static boolean paperdollV2EvaluationConfigurationEnabled(int maximum,
+		boolean jvmGate, DatabaseType databaseType, String databaseName,
+		boolean productionCommandLockdown, boolean avatarGenerator,
+		int characterCreationMode) {
+		return PaperdollV2EvaluationPolicy.configurationEnabled(maximum, jvmGate,
+			databaseType, databaseName, productionCommandLockdown, avatarGenerator,
+			characterCreationMode);
+	}
+
+	public boolean isPaperdollV2EvaluationEnabled() {
+		return paperdollV2EvaluationConfigurationEnabled(
+			PAPERDOLL_V2_EVALUATION_HAIR_STYLE_MAX,
+			Boolean.getBoolean("voidscape.paperdollV2.evaluationServer"), DB_TYPE, DB_NAME,
+			PRODUCTION_COMMAND_LOCKDOWN, AVATAR_GENERATOR, CHARACTER_CREATION_MODE);
 	}
 
 	public boolean requiresClientUpdate(final int clientVersion) {
@@ -821,7 +881,52 @@ public class ServerConfiguration {
 		return WANT_CUSTOM_SPRITES;
 	}
 
-	protected static String loadServerProps(YMLReader reader, String defaultFile) {
+	public boolean isLaunchSubscriptionCardActive() {
+		final String until = LAUNCH_SUBSCRIPTION_CARD_UNTIL == null ? "" : LAUNCH_SUBSCRIPTION_CARD_UNTIL.trim();
+		if (until.isEmpty()) {
+			return false;
+		}
+		try {
+			return Instant.parse(until).toEpochMilli() > System.currentTimeMillis();
+		} catch (DateTimeParseException ex) {
+			LOGGER.error("launch_subscription_card_until must be an ISO-8601 UTC timestamp, got {}", until);
+			return false;
+		}
+	}
+
+	static String validateServerBindAddress(String configuredAddress) throws IOException {
+		if (configuredAddress == null) {
+			throw new IOException("server_bind_address must be empty or the literal 127.0.0.1");
+		}
+		final String normalizedAddress = configuredAddress.trim();
+		if (normalizedAddress.isEmpty() || "127.0.0.1".equals(normalizedAddress)) {
+			return normalizedAddress;
+		}
+		throw new IOException("server_bind_address must be empty or the literal 127.0.0.1");
+	}
+
+	InetSocketAddress bindAddressForPort(int port) {
+		if (SERVER_BIND_ADDRESS.isEmpty()) {
+			return new InetSocketAddress(port);
+		}
+		return new InetSocketAddress("127.0.0.1", port);
+	}
+
+	protected static String loadServerProps(YMLReader reader, String defaultFile) throws IOException {
+		if (Boolean.getBoolean(EXPLICIT_CONFIG_ONLY_PROPERTY)) {
+			if (defaultFile == null || defaultFile.trim().isEmpty()) {
+				throw new IOException("Explicit server configuration file was not provided");
+			}
+			try {
+				reader.loadFromYML(defaultFile);
+				LOGGER.info("Loaded explicit server configuration from " + defaultFile);
+				return defaultFile;
+			} catch (IOException ex) {
+				throw new IOException("Explicit server configuration file not found or unreadable: "
+					+ defaultFile, ex);
+			}
+		}
+
 		// Always try to load from local.conf first.
 		try {
 			reader.loadFromYML("local.conf");

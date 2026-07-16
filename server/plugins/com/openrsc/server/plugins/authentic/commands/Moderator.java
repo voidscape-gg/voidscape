@@ -1321,12 +1321,15 @@ public final class Moderator implements CommandTrigger {
 			return;
 		}
 
+		if (!ActionSender.sendAppearanceScreen(targetPlayer)) {
+			player.message(messagePrefix + targetPlayer.getUsername()
+				+ " must expose their base head, shirt, and pants first");
+			return;
+		}
 		player.message(messagePrefix + targetPlayer.getUsername() + " has been sent the change appearance screen");
 		if (targetPlayer.getUsernameHash() != player.getUsernameHash() && !player.isInvisibleTo(targetPlayer)) {
 			targetPlayer.message(messagePrefix + "A staff member has sent you the change appearance screen");
 		}
-		targetPlayer.setChangingAppearance(true);
-		ActionSender.sendAppearanceScreen(targetPlayer);
 	}
 
 	private void summonAllPlayers(Player player, String command, String[] args) {

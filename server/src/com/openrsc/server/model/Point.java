@@ -1,5 +1,6 @@
 package com.openrsc.server.model;
 
+import com.openrsc.server.content.voiddungeon.VoidDungeonLayout;
 import com.openrsc.server.model.entity.WildernessLocation;
 import com.openrsc.server.model.entity.WildernessLocation.WildState;
 import com.openrsc.server.model.world.Area;
@@ -75,6 +76,10 @@ public class Point {
 
 		else if (inVoidArena()) {
 			return "Void Arena";
+		}
+
+		else if (inVoidDungeonUnderground()) {
+			return "Void Dungeon";
 		}
 
 		else if (inTutorialLanding()) {
@@ -315,6 +320,14 @@ public class Point {
 			|| inBounds(592, 2897, 598, 2909)
 			|| inBounds(600, 2897, 606, 2909)
 			|| inBounds(608, 2897, 614, 2909);
+	}
+
+	public boolean inVoidDungeonUnderground() {
+		return inVoidDungeonUnderground(x, y);
+	}
+
+	public static boolean inVoidDungeonUnderground(int x, int y) {
+		return VoidDungeonLayout.contains(x, y);
 	}
 
 	public boolean onTutorialIsland() {

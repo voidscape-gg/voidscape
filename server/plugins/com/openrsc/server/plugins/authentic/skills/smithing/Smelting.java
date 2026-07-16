@@ -5,6 +5,7 @@ import com.openrsc.server.constants.Quests;
 import com.openrsc.server.constants.SceneryId;
 import com.openrsc.server.constants.Skill;
 import com.openrsc.server.content.SkillCapes;
+import com.openrsc.server.content.SkillBatching;
 import com.openrsc.server.external.Gauntlets;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.Point;
@@ -18,6 +19,7 @@ import com.openrsc.server.plugins.triggers.UseLocTrigger;
 import com.openrsc.server.util.rsc.DataConversions;
 import com.openrsc.server.util.rsc.MessageType;
 
+import java.util.ArrayList;
 import java.util.Optional;
 
 import static com.openrsc.server.plugins.Functions.*;
@@ -37,7 +39,7 @@ public class Smelting implements UseLocTrigger {
 						repeat = player.getCarriedItems().getInventory().countId(item.getCatalogId(), Optional.of(false));
 					}
 
-					startbatch(repeat);
+					startskillbatch(repeat, Skill.SMITHING.id());
 					handleCannonBallSmelting(player);
 				} else { // No mould
 					player.message("you heat the steel bar");
@@ -230,7 +232,7 @@ public class Smelting implements UseLocTrigger {
 			return;
 		}
 
-		startbatch(repeat);
+		startskillbatch(repeat, Skill.SMITHING.id());
 		batchSmelt(player, item, smelt);
 	}
 
@@ -239,25 +241,31 @@ public class Smelting implements UseLocTrigger {
 			return 1;
 		}
 
-		int maximumSmeltCount = getMaximumSmeltCount(player, smelt);
+		int maximumSmeltCount = Math.min(getMaximumSmeltCount(player, smelt),
+			SkillBatching.limitForSkill(player, Skill.SMITHING.id()));
 		if (maximumSmeltCount <= 1) {
 			return 1;
 		}
 
 		player.message("How many would you like to smelt?");
-		int option = multi(player, "Smelt 1", "Smelt 5", "Smelt 10", "Smelt All", "Cancel");
-		switch (option) {
-			case 0:
-				return 1;
-			case 1:
-				return Math.min(5, maximumSmeltCount);
-			case 2:
-				return Math.min(10, maximumSmeltCount);
-			case 3:
-				return maximumSmeltCount;
-			default:
-				return -1;
+		ArrayList<String> options = new ArrayList<>();
+		ArrayList<Integer> amounts = new ArrayList<>();
+		options.add("Smelt 1");
+		amounts.add(1);
+		if (maximumSmeltCount > 5) {
+			options.add("Smelt 5");
+			amounts.add(5);
 		}
+		if (maximumSmeltCount > 10) {
+			options.add("Smelt 10");
+			amounts.add(10);
+		}
+		options.add("Smelt max (" + maximumSmeltCount + ")");
+		amounts.add(maximumSmeltCount);
+		options.add("Cancel");
+
+		int option = multi(player, options.toArray(new String[0]));
+		return option >= 0 && option < amounts.size() ? amounts.get(option) : -1;
 	}
 
 	private int getMaximumSmeltCount(Player player, Smelt smelt) {

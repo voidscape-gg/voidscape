@@ -1,5 +1,6 @@
 <project default="compile_core" basedir=".">
     <property name="src" location="src"/>
+    <property name="duel_proof_src" location="../Duel_Proof/src/main/java"/>
     <property name="build" location="build"/>
     <property name="lib" location="lib"/>
     <property name="jar" location="core.jar"/>
@@ -35,7 +36,7 @@
         <delete file="${jar}"/>
         <delete dir="${build}"/>
         <mkdir dir="${build}"/>
-        <javac srcdir="${src}" destdir="${build}" debug="on" includeantruntime="false" target="${javac.target}"
+        <javac srcdir="${src}:${duel_proof_src}" destdir="${build}" debug="on" includeantruntime="false" target="${javac.target}"
                source="${javac.source}" encoding="UTF-8">
             <classpath>
                 <pathelement location="${lib}/commons-lang3-3.12.0.jar"/>
@@ -81,6 +82,8 @@
 
     <property name="confFile" value="default" />
     <property name="coloredLogging" value="false" />
+    <property name="explicitConfig" value="false" />
+    <property name="paperdollV2EvaluationServer" value="false" />
     <target name="runserverzgc">
         <!-- java 17+ recommended for mature ZGC implementation (generational ZGC is default on 23+) -->
         <echo message="Using JVM 17+ launch arguments"/>
@@ -91,6 +94,8 @@
             <!-- NewSize dropped (ignored by ZGC); gc log rotates 5x20MB for tick-spike attribution.
                  1g floor / 2g cap fits the 4GB prod VPS alongside portal+nginx; ZGC uncommits above it -->
             <jvmarg line="-Xms1g -Xmx2g -Xdiag -XX:+UseZGC -Xlog:gc*,safepoint:file=logs/gc.log:time,uptime,level,tags:filecount=5,filesize=20m -DcoloredLogging=${coloredLogging}"/>
+            <jvmarg value="-Dvoidscape.config.explicitOnly=${explicitConfig}"/>
+            <jvmarg value="-Dvoidscape.paperdollV2.evaluationServer=${paperdollV2EvaluationServer}"/>
             <classpath>
                 <pathelement location="${lib}/disruptor-3.3.0.jar"/>
                 <pathelement location="${lib}/log4j-api-2.17.0.jar"/>
@@ -121,6 +126,8 @@
                  young gen into ~17ms pauses every ~12s); MaxGCPauseMillis lowered so G1 sizes for
                  short pauses; ExplicitGCInvokesConcurrent guards against library System.gc() stalls -->
             <jvmarg line="-XX:+IgnoreUnrecognizedVMOptions -Xdiag -XX:+UseG1GC -XX:MaxGCPauseMillis=30 -XX:+ExplicitGCInvokesConcurrent -Xlog:gc*,safepoint:file=logs/gc.log:time,uptime,level,tags:filecount=5,filesize=20m -DcoloredLogging=${coloredLogging}"/>
+            <jvmarg value="-Dvoidscape.config.explicitOnly=${explicitConfig}"/>
+            <jvmarg value="-Dvoidscape.paperdollV2.evaluationServer=${paperdollV2EvaluationServer}"/>
             <classpath>
                 <pathelement location="${lib}/disruptor-3.3.0.jar"/>
                 <pathelement location="${lib}/log4j-api-2.17.0.jar"/>

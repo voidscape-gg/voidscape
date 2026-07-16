@@ -5,6 +5,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class JDBCDatabaseConnection {
@@ -58,28 +61,61 @@ public abstract class JDBCDatabaseConnection {
     public PreparedStatement prepareStatement(final String statement) throws SQLException {
         connectionLock.lock();
         try {
-            return getConnection().prepareStatement(statement);
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
     }
 
     public PreparedStatement prepareStatement(final String statement, final String[] generatedColumns) throws SQLException {
         connectionLock.lock();
         try {
-            return getConnection().prepareStatement(statement, generatedColumns);
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement, generatedColumns));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
     }
 
     public PreparedStatement prepareStatement(final String statement, final int returnKeys) throws SQLException {
         connectionLock.lock();
         try {
-            return getConnection().prepareStatement(statement, returnKeys);
-        } finally {
+            return lockUntilClosed(getConnection().prepareStatement(statement, returnKeys));
+        } catch (SQLException | RuntimeException ex) {
             connectionLock.unlock();
+            throw ex;
         }
+    }
+
+    /**
+     * The server uses one JDBC connection. Holding its reentrant lock until statement close
+     * covers parameter binding, execution, generated keys, and ResultSet consumption; locking
+     * only prepareStatement() allowed standalone queries to interleave into a transaction.
+     */
+    private PreparedStatement lockUntilClosed(final PreparedStatement delegate) {
+        final AtomicBoolean released = new AtomicBoolean(false);
+        return (PreparedStatement) Proxy.newProxyInstance(
+            PreparedStatement.class.getClassLoader(),
+            new Class<?>[]{PreparedStatement.class},
+            (proxy, method, args) -> {
+                if ("close".equals(method.getName())) {
+                    try {
+                        return method.invoke(delegate, args);
+                    } catch (InvocationTargetException ex) {
+                        throw ex.getCause();
+                    } finally {
+                        if (released.compareAndSet(false, true)) {
+                            connectionLock.unlock();
+                        }
+                    }
+                }
+                try {
+                    return method.invoke(delegate, args);
+                } catch (InvocationTargetException ex) {
+                    throw ex.getCause();
+                }
+            });
     }
 
     protected abstract Statement getStatement();

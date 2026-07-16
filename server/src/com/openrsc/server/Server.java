@@ -13,6 +13,7 @@ import com.openrsc.server.database.impl.mysql.MySqlGameLogger;
 import com.openrsc.server.database.impl.sqlite.SqliteGameDatabase;
 import com.openrsc.server.database.patches.JDBCPatchApplier;
 import com.openrsc.server.database.patches.PatchApplier;
+import com.openrsc.server.database.struct.VoidArenaMatchSessionRecord;
 import com.openrsc.server.event.custom.DailyShutdownEvent;
 import com.openrsc.server.event.custom.HourlyResetEvent;
 import com.openrsc.server.event.rsc.FinitePeriodicEvent;
@@ -53,7 +54,6 @@ import javax.net.ssl.SSLException;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.cert.*;
@@ -103,6 +103,7 @@ public class Server implements Runnable {
 	private EventLoopGroup bossGroup;
 	private EventLoopGroup workerGroupWs;
 	private EventLoopGroup bossGroupWs;
+	private final Object lifecycleLock = new Object();
 
 	private volatile AtomicBoolean running = new AtomicBoolean(false);
 	private boolean restarting = false;
@@ -326,6 +327,9 @@ public class Server implements Runnable {
 	public void checkShutdown() {
 		if (isShuttingDown()) {
 			stop();
+			if (isRunning()) {
+				return;
+			}
 			if (isRestarting()) {
 				start();
 				restarting = false;
@@ -335,6 +339,12 @@ public class Server implements Runnable {
 	}
 
 	public void start() {
+		synchronized (lifecycleLock) {
+			startWhileLifecycleLocked();
+		}
+	}
+
+	private void startWhileLifecycleLocked() {
 		synchronized (running) {
 			try {
 				if (isRunning()) {
@@ -374,6 +384,32 @@ public class Server implements Runnable {
 					SystemUtil.exit(1);
 			}
 
+				final int reconciledVoidArenaMatches = getDatabase().reconcileActiveVoidArenaMatches(
+					System.currentTimeMillis(),
+					VoidArenaMatchSessionRecord.REASON_SERVER_RESTART_NO_CONTEST);
+				if (reconciledVoidArenaMatches < 0) {
+					LOGGER.error("Unable to reconcile unfinished ranked Void Arena sessions");
+					SystemUtil.exit(1);
+				}
+				if (reconciledVoidArenaMatches > 0) {
+					LOGGER.warn("Marked {} unfinished ranked Void Arena session(s) no-contest after startup",
+						reconciledVoidArenaMatches);
+				}
+
+				final int[] reconciledDuelProofAttempts = {0};
+				final long reconciliationTime = System.currentTimeMillis();
+				final boolean duelProofReconciled = getDatabase().atomically(() ->
+					reconciledDuelProofAttempts[0] = getDatabase().queryAbortOpenDuelProofAttempts(
+						reconciliationTime, "SERVER_RESTART"));
+				if (!duelProofReconciled) {
+					LOGGER.error("Unable to reconcile unfinished duel-proof attempts");
+					SystemUtil.exit(1);
+				}
+				if (reconciledDuelProofAttempts[0] > 0) {
+					LOGGER.warn("Marked {} unfinished duel-proof attempt(s) aborted after startup",
+						reconciledDuelProofAttempts[0]);
+				}
+
 				PidShuffler.init();
 
 				if (getConfig().LOAD_PRERENDERED_SLEEPWORDS) {
@@ -411,6 +447,7 @@ public class Server implements Runnable {
 				LOGGER.info("Loading Plugins...");
 				getPluginHandler().load();
 				LOGGER.info("Plugins Completed");
+				getWorld().getVoidArena().startSeasonMaintenance();
 
 				/*LOGGER.info("Loading Achievements...");
 				getAchievementSystem().load();
@@ -501,7 +538,8 @@ public class Server implements Runnable {
 					bootstrap.childOption(ChannelOption.SO_SNDBUF, 10000);
 					try {
 						getPluginHandler().handlePlugin(StartupTrigger.class);
-						serverChannel = bootstrap.bind(new InetSocketAddress(getConfig().SERVER_PORT)).sync();
+						serverChannel = bootstrap.bind(
+							getConfig().bindAddressForPort(getConfig().SERVER_PORT)).sync();
 						LOGGER.info("Game world is now online on port {}!", box(getConfig().SERVER_PORT));
 						LOGGER.info("RSA exponent: " + Crypto.getPublicExponent());
 						LOGGER.info("RSA modulus: " + Crypto.getPublicModulus());
@@ -545,9 +583,11 @@ public class Server implements Runnable {
 
 					try {
 						getPluginHandler().handlePlugin(StartupTrigger.class);
-						serverChannel = bootstrap.bind(new InetSocketAddress(getConfig().SERVER_PORT)).sync();
+						serverChannel = bootstrap.bind(
+							getConfig().bindAddressForPort(getConfig().SERVER_PORT)).sync();
 						LOGGER.info("Game world is now online on TCP port {}!", box(getConfig().SERVER_PORT));
-						serverChannelWs = bootstrapWs.bind(new InetSocketAddress(getConfig().WS_SERVER_PORT)).sync();
+						serverChannelWs = bootstrapWs.bind(
+							getConfig().bindAddressForPort(getConfig().WS_SERVER_PORT)).sync();
 						LOGGER.info("Game world is now online on  WS port {}! (webclient only)", box(getConfig().WS_SERVER_PORT));
 						LOGGER.info("RSA exponent: " + Crypto.getPublicExponent());
 						LOGGER.info("RSA modulus: " + Crypto.getPublicModulus());
@@ -571,29 +611,52 @@ public class Server implements Runnable {
 	}
 
 	public void stop() {
+		synchronized (lifecycleLock) {
+			final ScheduledExecutorService executorToStop;
+			synchronized (running) {
+				try {
+					if (!isRunning()) {
+						return;
+					}
+					LOGGER.info("Server stop requested");
+					if (!getWorld().getVoidArena().prepareForShutdown()) {
+						LOGGER.fatal("Server stop aborted: a known Void Arena result is not durable");
+						if (shutdownEvent != null) {
+							shutdownEvent.stop();
+						}
+						shutdownEvent = null;
+						shuttingDown = false;
+						restarting = false;
+						return;
+					}
+					getWorld().unloadPlayers();
+
+					executorToStop = scheduledExecutor;
+					executorToStop.shutdown();
+				} catch (final Throwable t) {
+					LOGGER.error("Exception during Server stop()", t);
+					SystemUtil.exit(1);
+					return;
+				}
+			}
+
+			// The game task also synchronizes on running. Awaiting it while holding that
+			// monitor guarantees a one-minute shutdown stall whenever a tick is queued.
+			final boolean interrupted = awaitGameExecutorTermination(executorToStop);
+			finishStopWhileLifecycleLocked();
+			if (interrupted) {
+				Thread.currentThread().interrupt();
+			}
+		}
+	}
+
+	private void finishStopWhileLifecycleLocked() {
 		synchronized (running) {
 			try {
-				if (!isRunning()) {
-					return;
-			}
-				LOGGER.info("Server stop requested");
-				getWorld().unloadPlayers();
-
-				scheduledExecutor.shutdown();
-				try {
-					final boolean terminationResult = scheduledExecutor.awaitTermination(1, TimeUnit.MINUTES);
-					if (!terminationResult) {
-						LOGGER.error("Server thread termination failed");
-						List<Runnable> skippedTasks = scheduledExecutor.shutdownNow();
-						LOGGER.error("{} task(s) never commenced execution, forcing shutdown", skippedTasks.size());
-					}
-			} catch (final InterruptedException e) {
-					LOGGER.error("Exception during task shutdown", e);
-			}
 				getLoginExecutor().stop();
 				if (getDiscordService() != null) {
 					getDiscordService().stop();
-			}
+				}
 				getGameLogger().stop();
 				getGameUpdater().unload();
 				getGameEventHandler().unload();
@@ -637,7 +700,7 @@ public class Server implements Runnable {
 				// Don't remove this server from the active servers list if we are just restarting.
 				if (!isRestarting()) {
 					serversList.remove(this.getName());
-			}
+				}
 
 				running.set(false);
 
@@ -647,6 +710,43 @@ public class Server implements Runnable {
 				SystemUtil.exit(1);
 			}
 		}
+	}
+
+	private boolean awaitGameExecutorTermination(final ScheduledExecutorService executor) {
+		boolean interrupted = false;
+		boolean forceShutdown = false;
+		try {
+			forceShutdown = !executor.awaitTermination(1, TimeUnit.MINUTES);
+			if (forceShutdown) {
+				LOGGER.error("Server thread termination failed; forcing shutdown");
+			}
+		} catch (final InterruptedException e) {
+			interrupted = true;
+			forceShutdown = true;
+			LOGGER.error("Interrupted while waiting for the server thread; forcing shutdown", e);
+		}
+
+		if (!forceShutdown) {
+			return interrupted;
+		}
+
+		final List<Runnable> skippedTasks = executor.shutdownNow();
+		LOGGER.error("{} task(s) never commenced execution", skippedTasks.size());
+		final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (!executor.isTerminated()) {
+			final long remaining = deadline - System.nanoTime();
+			if (remaining <= 0) {
+				LOGGER.fatal("Server thread did not terminate after forced shutdown; refusing unsafe teardown");
+				SystemUtil.exit(1);
+				return interrupted;
+			}
+			try {
+				executor.awaitTermination(remaining, TimeUnit.NANOSECONDS);
+			} catch (final InterruptedException e) {
+				interrupted = true;
+			}
+		}
+		return interrupted;
 	}
 
 	public long bench(final Runnable r) {

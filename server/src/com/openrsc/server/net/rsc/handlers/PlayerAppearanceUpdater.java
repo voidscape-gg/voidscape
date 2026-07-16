@@ -19,6 +19,26 @@ import com.openrsc.server.net.rsc.enums.OpcodeIn;
 import com.openrsc.server.net.rsc.struct.incoming.PlayerAppearanceStruct;
 
 public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanceStruct, OpcodeIn> {
+	public static int decodeUnsignedAppearanceId(byte encodedAppearanceId) {
+		return (encodedAppearanceId & 0xFF) + 1;
+	}
+
+	public static String paperdollV2EvaluationRejectionReason(boolean evaluationEnabled,
+		boolean developer, int clientVersion, int headRestrictions, int hairStyle,
+		int headSprite, int bodySprite) {
+		if (hairStyle <= 0) return "";
+		if (!evaluationEnabled) return "evaluation-server-disabled";
+		if (!developer) return "developer-role-required";
+		if (clientVersion < PlayerAppearance.MODERN_HAIR_CLIENT_VERSION) {
+			return "modern-hair-client-required";
+		}
+		if (headRestrictions != 1 && headRestrictions != 2) {
+			return "invalid-gender-restriction";
+		}
+		boolean male = headRestrictions == 1;
+		return PlayerAppearance.isPaperdollV2EvaluationIdentity(hairStyle,
+			headSprite, bodySprite, male) ? "" : "selector-base-identity-mismatch";
+	}
 
 	public void process(PlayerAppearanceStruct payload, Player player) throws Exception {
 
@@ -64,17 +84,33 @@ public class PlayerAppearanceUpdater implements PayloadProcessor<PlayerAppearanc
 		int ironmanMode = payload.ironmanMode; // custom protocol
 		int isOneXp = payload.isOneXp; // custom protocol
 
-		int headSprite = headType + 1;
+		// This existing wire byte contains appearanceId - 1. Decode it unsigned so
+		// stable selectable head IDs can use the full legacy range 1 through 256.
+		int headSprite = decodeUnsignedAppearanceId(headType);
 		int bodySprite = bodyType + 1;
+		boolean maleAppearance = headRestrictions == 1;
+		boolean positiveHairStyle = hairStyle > 0;
+		String evaluationRejection = paperdollV2EvaluationRejectionReason(
+			player.getConfig().isPaperdollV2EvaluationEnabled(), player.isDev(),
+			player.getClientVersion(), headRestrictions, hairStyle, headSprite, bodySprite);
+		if (evaluationRejection.length() > 0) {
+			player.setSuspiciousPlayer(true,
+				"player selected unavailable Paperdoll V2 evaluation appearance: "
+					+ evaluationRejection);
+			return;
+		}
 
-		PlayerAppearance appearance = new PlayerAppearance(hairColour,
-			topColour, trouserColour, skinColour, headSprite, bodySprite, hairStyle);
+		PlayerAppearance appearance = positiveHairStyle
+			? PlayerAppearance.forPaperdollV2Evaluation(hairColour, topColour,
+				trouserColour, skinColour, headSprite, bodySprite, hairStyle)
+			: new PlayerAppearance(hairColour, topColour, trouserColour,
+				skinColour, headSprite, bodySprite, hairStyle);
 		if (!appearance.isValid(player)) {
 			player.setSuspiciousPlayer(true, "player invalid appearance");
 			return;
 		}
 
-		player.setMale(headRestrictions == 1);
+		player.setMale(maleAppearance);
 
 		if (player.isMale()) {
 			if (player.getConfig().WANT_EQUIPMENT_TAB) {

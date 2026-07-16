@@ -13228,8 +13228,8 @@
         {
             "id": 575,
             "name": "Christmas cracker",
-            "description": "Use on another player to pull it",
-            "command": "",
+            "description": "Open it for a chance at a festive prize",
+            "command": "Open",
             "isFemaleOnly": 0,
             "isMembersOnly": 0,
             "isStackable": 0,

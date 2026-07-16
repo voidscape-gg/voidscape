@@ -2,6 +2,7 @@ package com.openrsc.server.plugins;
 
 import com.openrsc.server.event.SingleEvent;
 import com.openrsc.server.model.Point;
+import com.openrsc.server.model.entity.GameObject;
 import com.openrsc.server.model.entity.npc.NpcInteraction;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.ActionSender;
@@ -13,8 +14,9 @@ public class Batch {
 	private int totalBatch;
 	private int delay;
 	private boolean showingBar = false;
-	private boolean completed;
+	private volatile boolean completed;
 	private Point location;
+	private final GatherRepeatBuffer gatherRepeatBuffer = new GatherRepeatBuffer();
 
 	/**
 	 * Creates a new instance of a Batch bar.
@@ -34,6 +36,7 @@ public class Batch {
 		this.delay = getPlayer().getConfig().GAME_TICK * 3;
 		this.totalBatch = totalBatch;
 		this.completed = false;
+		this.gatherRepeatBuffer.reset();
 	}
 
 	/**
@@ -51,6 +54,8 @@ public class Batch {
 	 * Gives it 3 ticks to close
 	 */
 	public void stop() {
+		this.completed = true;
+		this.gatherRepeatBuffer.reset();
 		if (wantBatching() && isShowingBar()) {
 			getPlayer().getWorld().getServer().getGameEventHandler().add(
 				new SingleEvent(getPlayer().getWorld(), null, getDelay(), "Close Batch Bar") {
@@ -62,7 +67,6 @@ public class Batch {
 			);
 			this.showingBar = false;
 		}
-		this.completed = true;
 	}
 
 	/**
@@ -84,6 +88,18 @@ public class Batch {
 			return;
 		}
 		incrementBatch();
+		final GatherRepeatBuffer.AttemptBoundary boundary =
+			gatherRepeatBuffer.resolveAttemptBoundary(
+				getCurrentBatchProgress(), getTotalBatch());
+		if (boundary.startsManualTail()) {
+			if (wantBatching() && isShowingBar()) {
+				ActionSender.sendRemoveProgressBar(getPlayer());
+				this.showingBar = false;
+			}
+			this.current = boundary.getCurrentProgress();
+			this.totalBatch = boundary.getTotalBatch();
+			return;
+		}
 		if (wantBatching() && isShowingBar()) ActionSender.sendUpdateProgressBar(getPlayer(), getCurrentBatchProgress());
 		if (getCurrentBatchProgress() == getTotalBatch()) {
 			stop();
@@ -99,6 +115,35 @@ public class Batch {
 	public boolean isFirstInBatch() { return current == 0; }
 	public boolean isShowingBar() { return showingBar; }
 	public boolean isComplete() { return completed; }
+	public boolean supportsGatherRepeat() {
+		return !completed && gatherRepeatBuffer.isBound();
+	}
+
+	public boolean expectGatherObjectCommand() {
+		return !completed && gatherRepeatBuffer.expectObjectCommand();
+	}
+
+	public boolean isAwaitingGatherObjectCommand() {
+		return !completed && gatherRepeatBuffer.isAwaitingObjectCommand();
+	}
+
+	public void bindObjectInteraction(GameObject object, int option) {
+		if (object == null || completed) {
+			return;
+		}
+		gatherRepeatBuffer.bind(object.getID(), object.getX(), object.getY(), option);
+	}
+
+	public boolean queueGatherRepeat(GameObject object, int option) {
+		return object != null
+			&& !completed
+			&& gatherRepeatBuffer.queueIfMatches(
+				object.getID(), object.getX(), object.getY(), option);
+	}
+
+	public void clearGatherRepeat() {
+		gatherRepeatBuffer.clearPending();
+	}
 
 	public void setLocation(Point location) {
 		this.location = location;
