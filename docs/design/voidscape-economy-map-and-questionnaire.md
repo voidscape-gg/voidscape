@@ -105,7 +105,7 @@ Current implementation:
   - Entry fee: `100,000` coins.
   - Arrival: `(72,3252)`.
   - Exit rifts: `(72,3250)`, `(68,3204)`, `(68,2308)`, and `(78,2251)`.
-  - Return: `(112,297)`.
+  - Return: `(111,297)` on the open tile west of the rift footprint.
 - Void Dungeon NPCs:
   - `853` Void Knight.
   - `854` Void Spider.
@@ -142,10 +142,10 @@ Define "Void" as a PvM branch:
 
 | Item | ID | Current role | Issue | Recommendation |
 |---|---:|---|---|---|
-| Void Scimitar | 1593 | Untradable, 70 Attack, strong melee stats, magic bonus | Could become PvP/staking power creep if special effects are global | Anti-Void melee weapon only |
+| Void Scimitar | 1593 | Tradable, 70 Attack + 70 Magic, +55 aim/power | Could become PvP/staking power creep if special effects are global | 1.15x accuracy/damage against Void NPCs only |
 | Void Shortbow | 1594 | Tradable, 80 Ranged, needs no arrows only against Void NPCs | No-arrow ranged can harm arrow economy if global | Preserve current Void-only ammo waiver |
-| Void Amulet | 1595 | Tradable, boosts stackable Void NPC drops by 1.5x | Biggest economy-risk item if global | Keep boost restricted to Void NPCs only |
-| Void Mace | 1596 | Tradable, 60 Attack/Strength, crush-style weapon | Needs a real niche | Anti-Void crush weapon only |
+| Void Amulet | 1595 | Tradable, Power Amulet base stats, boosts stackable Void NPC drops by 1.5x | Biggest economy-risk item if global | Keep boost restricted to Void NPCs only |
+| Void Sceptre | 1596 | Tradable, 60 Magic, neutral base stats | Must not become PvP or alchemy automation | 1.15x spell accuracy roll and power against Void NPCs only |
 | Void Key | 1601 | Tradable key for Void Chest | Good bridge item | Keep as tradeable Wilderness/PvM bridge |
 | Subscription card | 1602 | Tradable one-week account subscription | Good low-friction model | Keep subscription per account and card tradable |
 | Void Sparrow | 1603 | Tradable Wilderness scouting utility | Good utility item, not direct power | Keep as rare utility; decide source |
@@ -268,6 +268,7 @@ Current role:
 - Uses runes.
 - Arcanist path accelerates Magic below 50.
 - Void Dungeon drops chaos, death, blood, and soul runes.
+- Void Sceptre improves ordinary combat-spell reliability and power only against Void NPCs; it does not autocast, batch alchemy, or save runes.
 
 Recommended economy role:
 
@@ -621,7 +622,7 @@ Use this format when reviewing:
      - [ ] Modify:
 
 8. Void gear tradability:
-   - Recommendation: keep most Void gear tradable, but decide whether Void Scimitar should remain untradable.
+   - Approved implementation: all four Void gear pieces are tradable.
    - Options:
      - [ ] Make all Void gear tradable
      - [ ] Keep current mixed model
@@ -637,8 +638,8 @@ Use this format when reviewing:
      - [ ] Reject
      - [ ] Modify:
 
-10. Void Mace `1596`:
-   - Recommendation: anti-Void crush weapon; good against tougher Void monsters.
+10. Void Sceptre `1596`:
+   - Approved implementation: Magic 60 weapon with a 1.15x success-roll and spell-power bonus against Void NPCs only.
    - Options:
      - [ ] Approve
      - [ ] Reject
@@ -827,7 +828,7 @@ These were the approved first implementation slices.
 2. Add a shared `isVoidNpc` helper/policy.
 3. Restrict Void Amulet global boost to Void NPCs.
 4. Restrict/retune Void Bow ammo behavior.
-5. Add Void-only item bonuses for Scimitar, Mace, Bow, and Amulet.
+5. Add Void-only item bonuses for Scimitar, Sceptre, Bow, and Amulet.
 6. Retune Void Dungeon and Void Chest drops toward approved economy shape.
 7. Add/adjust Void Sparrow source if approved.
 8. Add beta admin report presets for Void economy telemetry.

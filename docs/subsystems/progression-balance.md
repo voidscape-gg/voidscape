@@ -2,6 +2,28 @@
 
 Voidscape keeps global XP rates simple and familiar, then layers rewards and telemetry around them so tuning can be based on beta behavior.
 
+## Earned Skill Batching
+
+When `batch_progression` is enabled, repeated XP-granting actions use the permanent base level of their governing skill. Temporary boosts and drains never change the limit.
+
+| Base level | Batch limit |
+|---:|---:|
+| 1-9 | 1 |
+| 10-19 | 2 |
+| 20-29 | 3 |
+| 30-39 | 4 |
+| 40-49 | 5 |
+| 50-59 | 7 |
+| 60-69 | 10 |
+| 70-79 | 14 |
+| 80-89 | 18 |
+| 90-98 | 24 |
+| 99+ | 30 |
+
+Gathering, production, Prayer offerings, Runecraft, and Harvesting-related processing all use the same central policy. Resource-limited actions take the lower of the earned limit and the available materials, and quantity menus show that real maximum. Level-ups announce newly unlocked limits.
+
+Inventory chores that award no skill XP remain utility batches, including filling containers, collecting sand/soil/fruit/wool, no-XP food preparation, fat trimming, Apothecary processing, Dragonstone charging, and seasonal present collection. Mining also preserves its original pickaxe-dependent retry count when `batch_progression` is disabled. This policy changes no XP values, success chances, depletion rules, packets, clients, or persistence.
+
 ## Starter Path Boosts
 
 `server/src/com/openrsc/server/content/VoidPath.java` owns the one-time Void Island path choice. The selected path grants 2x XP only while each boosted skill is below level 50:

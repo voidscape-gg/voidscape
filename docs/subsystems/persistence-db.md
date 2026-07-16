@@ -117,6 +117,33 @@ Triggers:
 
 Typical save size: ~2–3 KB per player (player row ~500B, inventory ~224B, bank ~1.5KB, equipment ~104B, skills ~171B).
 
+## Duel journal receipts
+
+Completed stake duels use four append-only receipt tables in both MySQL and SQLite:
+
+- `duel_receipts` — generated receipt id plus combat start and completion timestamps.
+- `duel_receipt_participants` — the two player ids, usernames captured at duel time, and the winner flag; its `(player_id, duel_id)` index backs private history.
+- `duel_receipt_stakes` — both accepted offers by owner, offer slot, catalog id, amount, and noted state.
+- `duel_receipt_swings` — both participants' numbered melee swings with the combat mode, hit/miss flag, and resolved damage.
+
+The in-memory journal starts at actual duel combat entry, not at the offer screen. An ordinary ineligible duel validates and inserts the completed receipt off the game thread in one `database.atomically(...)` transaction. An eligible proof duel freezes the same receipt before lethal damage, transfers the stakes only after that freeze succeeds, then atomically inserts the receipt, inserts its immutable witness, links the proof id, and advances `COMBAT -> VERIFIED`; neither half is visible if that transaction rolls back. Completion is guarded so the same session cannot produce a second receipt. The `2026_07_13_add_duel_receipts.sql` migrations create empty tables only: the game has not opened, and there is deliberately no backfill or reconstruction of earlier duels.
+
+Reads are also privacy-scoped in SQL. Recent history is limited to ten rows joined through the requesting player's participant row; a detail id must pass that same participant join. Both offers are returned, but the swing query additionally requires `actor_player_id = requesterPlayerId`, so a participant can inspect only their own hit sequence and modes even though the durable receipt retains both sides for their respective private views.
+
+## Duel proof attempts
+
+The duel-proof migrations add the same proof tables to MySQL/MariaDB and SQLite, with no backfill because the game has not opened:
+
+- `duel_proof_attempts` — 128-bit lowercase proof id, version tuple, canonical context-v3 bytes/hash, server commitment and seed, final lock hash, lifecycle timestamps, status, and abort reason. Context v3 binds both identities, displayed/base combat levels, final rules, starting combat/HP/recoil state, normalized equipment, and both accepted stake lists.
+- `duel_proof_attempt_participants` — canonical ordinal, player id/username, client commitment, private client seed, and final-lock ACK hash for each of the two players.
+- `duel_proof_witnesses` — one immutable, size-bounded canonical witness-v2 per verified attempt: context v3, all three seed openings, per-swing replay tape, starter, exact draw/swing count, winner, terminal cause, and completion timestamp. `2026_07_13_finalize_duel_proofs.sql` adds this table plus the receipt link and `VERIFIED` status support.
+
+The guarded lifecycle is `SERVER_COMMITTED -> CLIENT_COMMITTED -> CLIENT_REVEALED -> LOCKED -> COMBAT -> VERIFIED`; any unfinished open state can transition to `ABORTED`. Each stage updates both participant material and the parent status inside one `database.atomically(...)` transaction, and the game thread advances or sends the next control only after that transaction reports success. In particular, players remain frozen and no combat event, start message, or stake-transfer flag is created until `LOCKED -> COMBAT` commits. Startup synchronously marks every unfinished open attempt `ABORTED / SERVER_RESTART` after migrations and refuses to continue if reconciliation cannot commit.
+
+During combat, the server derives one private replay stream from the durable server seed plus both canonical client seeds. Draw one is always retained to keep the stream stable; it selects the starter only on an equal displayed-level tie, while unequal levels deterministically select the lower participant. Every covered classic-melee draw is retained with the formula inputs in memory. Committed equipment and formula-relevant Attack/Strength/Defence state are frozen; styles and permitted prayer toggles/tiers remain dynamic and are recorded per swing. On a direct-melee or recoil terminal, the game thread builds the self-contained witness before applying lethal damage, then independently replays every HP change and capacity-bounded recoil from the committed starting state, including direct-kill recoil suppression. It requires the exact terminal winner/cause/time, every receipt swing, both participant identities, and every committed stake row to match. A 256 KiB / 4,096-swing cap fails closed. Only the post-payout atomic receipt+witness transaction makes the attempt `VERIFIED`; a database failure cannot create a green receipt.
+
+Before contributing entropy, an honest client receives and validates context-v3 chunks and attests the locally visible subset of its own state, both displayed combat levels, the displayed opponent identity, and both displayed stake offers. During that retained login session, the client separately keeps up to 16 seed-free lock anchors; bare latest-receipt verification must match the newest anchor exactly, so mutable server history cannot substitute another internally consistent proof id without turning the card red. Those anchors are client memory rather than database state and are wiped at login/logout/reconnect, after which historical receipts rely on the self-contained witness. After verification, these tables contain revealed server/client seed material and both participants' technical formula inputs, so production database access and backups are security-sensitive. Participant-authorized receipt reads may transiently deliver the full witness to the local verifier even though the ordinary UI exposes only the requester's swing/style rows; an instrumented client can inspect those bytes. The proof verifies deterministic RNG and HP/recoil replay conditional on committed static context and the server-recorded dynamic style/prayer tape. It does not cryptographically establish that every recorded dynamic toggle was the exact live action, make a malicious client report honestly, or provide an external append-only transparency log capable of exposing selective abort/omission/deletion. There is deliberately no public log, website verifier, or pre-launch backfill.
+
 ## Static game data — where to edit what
 
 **Items** — `server/conf/server/defs/`:

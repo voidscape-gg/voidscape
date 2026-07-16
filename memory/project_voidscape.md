@@ -25,8 +25,9 @@ Voidscape is a **private RuneScape Classic server**, hard-forked from OpenRSC Co
    device QA gates apply.
 Preferred working rhythm: fix bugs / add a feature → durable-state update → session
 clear is fine at any time. Sessions should lean on the ledger/memory, not on pasted
-handoffs. (A launch-readiness sweep of docs/RELEASE-CHECKLIST.md was queued 2026-07-03
-ahead of phase 1's tail — launch target 2026-07-11.)
+	handoffs. (A launch-readiness sweep of docs/RELEASE-CHECKLIST.md was queued 2026-07-03
+	ahead of phase 1's tail. The public launch was moved one week to 2026-07-18 at
+	18:00 UTC on 2026-07-10.)
 
 **Why this matters for future sessions:** the foundation phase is done. The next session should NOT be re-bootstrapping or re-exploring the codebase — that work is captured in `docs/`. It should be doing real work.
 

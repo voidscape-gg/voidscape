@@ -90,6 +90,7 @@ scripts/run-client.sh         # run PC client against local server
 scripts/run-launcher.sh       # build + run the Voidscape desktop launcher
 scripts/smoke-launcher-prelaunch.sh # screenshot-backed desktop launcher smoke
 scripts/run-workbench-client.sh # run PC client with local AI workbench endpoints
+scripts/headless-demo.sh plan # inspect the isolated first-login fleet demo contract
 scripts/smoke-pc-client-prelaunch.sh # screenshot-backed desktop Java client smoke
 scripts/run-portal.sh         # run website/account portal with local prototype API
 scripts/content.sh            # scaffold/report/validate custom content packs and art tooling
@@ -109,7 +110,7 @@ scripts/check-web-teavm-iphone-final-release.py # audit final hosted + physical 
 scripts/smoke-web-teavm-iphone.sh # Chrome iPhone-emulation login/post-login smoke
 scripts/smoke-web-teavm-iphone-controls.sh # synthetic iPhone control-regression smoke
 scripts/smoke-web-teavm-iphone-https-wss.sh # local HTTPS/same-host WSS proxy smoke
-scripts/build-android.sh      # build Android APK; requires Android SDK
+scripts/build-android.sh      # build Android APK / Play AAB; requires Android SDK
 scripts/android-smoke.sh      # build/install Android APK and capture emulator QA screenshots
 scripts/run-android-device-qa.sh # write physical Android QA report templates
 scripts/validate-android-device-qa-report.py # validate filled physical Android QA reports
@@ -150,8 +151,13 @@ Build Android client:
 # or Homebrew android-commandlinetools at /opt/homebrew/share/android-commandlinetools.
 scripts/build-android.sh --debug
 
-# Release APKs require upload signing config through environment or Gradle properties.
+# Release APKs require upload signing config through environment, Gradle properties,
+# or the local macOS Keychain services documented in ~/.voidscape/android-signing.
 scripts/build-android.sh --release
+
+# Google Play release bundle; upload the generated voidscape.aab.
+scripts/build-android.sh --play-release
+scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config server/preservation.conf
 ```
 
 Android emulator visual smoke:
@@ -181,6 +187,19 @@ AVD_NAME=voidscape_small_api35 scripts/android-smoke.sh --no-build --only-auth-l
 AVD_NAME=voidscape_tablet_api35 scripts/android-smoke.sh --no-build --only-auth-lifecycle --out /tmp/voidscape-android-tablet-lifecycle
 ```
 
+Android promo recording:
+```bash
+# With a local server running and the promo character already logged into the
+# visible Android emulator, record the guided silent portrait/landscape session.
+scripts/record-android-promo.sh --player wbtest
+
+# List the five shots or capture one short machine-verifiable proof clip.
+scripts/record-android-promo.sh --list-shots
+scripts/record-android-promo.sh --clip landscape-hud --auto-stop 3 --skip-cracker-prep --no-montage --out /tmp/android-promo-proof
+```
+
+The promo recorder uses the emulator framebuffer rather than the macOS window, emits silent H.264 MP4 clips plus a 16:9 rough cut, and restores its temporary 1080p display/orientation settings. Cracker preparation is local-only and requires the Android debug client to be connected to `10.0.2.2` plus a separate local admin account; pass `--skip-cracker-prep` when the character already has crackers.
+
 Run PC client:
 ```bash
 cd Client_Base
@@ -198,6 +217,17 @@ scripts/run-client.sh --user StepAlt --pass stepalt
 
 # Workbench mode exposes loopback screenshot/state/input endpoints for visual QA.
 scripts/run-workbench-client.sh --user StepAlt --pass stepalt --workbench-port 18787
+```
+
+For the disposable headless-fleet first-login replay, prepare the isolated world,
+open a workbench observer on game port `43606`, then start the fleet. Full lifecycle
+and safety invariants are in `docs/subsystems/headless-players.md`.
+
+```bash
+scripts/headless-demo.sh prepare
+scripts/run-workbench-client.sh --host 127.0.0.1 --port 43606 --workbench-port 18788 \
+  --user wbtest --pass "$VOIDSCAPE_WBTEST_PASSWORD"
+scripts/headless-demo.sh fleet-start --stagger 3
 ```
 
 Desktop Java prelaunch visual smoke:

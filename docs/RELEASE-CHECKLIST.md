@@ -26,7 +26,9 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 ## Build
 
 - [ ] `scripts/build.sh` passes.
+- [ ] Void Arena focused gates pass independently: `scripts/test-void-arena-ranked-policy-java.sh`, `python3 scripts/test-void-arena-ranked-persistence.py`, `scripts/test-jdbc-transaction-lock-java.sh`, `scripts/test-void-arena-kit-snapshot-java.sh`, and `scripts/test-void-arena-sir-policy-java.sh`.
 - [ ] Android, if shipping APK publicly: `scripts/build-android.sh --release` passes on JDK 17 with upload signing configured; debug APKs are only for internal QA/emulator smoke.
+- [ ] Android, if shipping through Google Play: `scripts/build-android.sh --play-release` passes, `scripts/check-android-play-release.sh --aab "Android_Client/Open RSC Android Client/build/outputs/bundle/release/voidscape.aab" --server-config <target-server.conf>` passes, and the Play `versionCode` is greater than the live artifact.
 - [ ] Generated client/server cache assets are intentionally committed when they are part of the release.
 - [ ] Build artifacts remain untracked: `server/*.jar`, `Client_Base/Open_RSC_Client.jar`, `PC_Launcher/OpenRSC.jar`.
 
@@ -41,6 +43,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] `want_beta_onboarding_guide: false` for public launch unless this is an explicitly trusted beta window.
 - [ ] `want_void_colossus: false` and `want_void_dungeon: false` for launch unless those systems have a dedicated release pass.
 - [ ] `production_command_lockdown: true` for public launch, then verified with owner and non-owner staff accounts.
+- [ ] `void_arena_allow_ambiguous_proxy_ranked: false` in staging/production; the launch package and verifier both enforce it.
 - [ ] XP rates and hit-XP timing flags are intentional and documented.
 - [ ] `restrict_item_id` allows the current custom item range.
 - [ ] `want_pcap_logging` is off unless actively debugging packet capture.
@@ -50,6 +53,9 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 
 - [ ] Fresh DB import path is tested: `scripts/reset-db.sh` for dev, or the production import procedure in `docs/OPERATIONS.md`.
 - [ ] Required addon tables exist: bank presets, auction house, item status fields, and any active feature tables.
+- [ ] Both SQLite and MariaDB migrations create the constrained `voidarena_ranked_match_sessions` lifecycle table and relabel old `global` Void Arena stats/matches as read-only `LEGACY`.
+- [ ] Void Arena persistence fixtures prove `ACTIVE` creation, exactly-once terminal settlement, atomic zero-sum rating/stats, neutral draw/no-contest rows, cross-season pair limits, and startup orphan reconciliation.
+- [ ] Exactly one live game-server JVM owns the game DB; old/new and blue/green game-server processes never overlap on that DB during deploy or rollback.
 - [ ] Migrations are idempotent or safe to apply once.
 - [ ] Backup taken before migration or public test.
 - [ ] Account creation and login tested on a clean player.
@@ -60,11 +66,27 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 ## Server smoke test
 
 - [ ] `scripts/run-server.sh` boots without fatal errors.
+- [ ] A staging restart reconciles any fixture orphaned ranked `ACTIVE` session as `SERVER_RESTART_NO_CONTEST`; a graceful stop records `SERVER_SHUTDOWN_NO_CONTEST`, and neither changes rating/W-L.
 - [ ] Server reports the expected TCP and WebSocket ports.
 - [ ] Entity definitions load without JSON/XML errors.
 - [ ] Plugin handler loads without missing critical content.
 - [ ] PERF telemetry, if enabled, shows zero skipped ticks at idle.
 - [ ] `scripts/perf-smoke.sh` passes when a logged-in local client is available.
+
+## Portal account smoke test
+
+- [ ] `scripts/test-portal-api.sh` and `scripts/test-portal-schema.sh` pass against the release source.
+- [ ] `scripts/smoke-portal-prelaunch-visual.sh` passes at desktop and mobile widths against the staged portal.
+- [ ] Signed-out `/portal` and `/portal#dashboard` show only account access; no dashboard, roster, account email, or private navigation flashes before session validation.
+- [ ] A valid login opens `/portal#dashboard`; trying to log in while already authenticated is rejected until logout.
+- [ ] Logout revokes the server session, clears browser state, returns to `/`, restores signup/download content, and a subsequent dashboard deep link shows sign-in only.
+- [ ] Password recovery by email and by character username returns the same generic success response; the username path shows only a masked email hint.
+- [ ] An email-verification link opens a fragment-based confirmation screen; a scanner-style `GET` redirects without creating the account, and only the explicit confirmation `POST` creates it.
+- [ ] An emailed reset link works once, expires on schedule, stores no plaintext token, changes only the website password, and revokes all portal sessions, reset tokens, and recovery codes.
+- [ ] Recovery-code reset works once, does not mark an unverified email verified, and also leaves the player signed out for a clean login.
+- [ ] Recovery-code rotation requires the current website password, or a recent passwordless federated login.
+- [ ] A portal-created linked character can reset its game password only while offline and after website-password confirmation; wrong-account, imported/unlinked, online, stale-owner, helper-failure, and rate-limit cases leave the game row unchanged.
+- [ ] `PORTAL_EMAIL_VERIFICATION_REQUIRED=1`, Resend delivery, `PORTAL_PUBLIC_ORIGIN`, the game-password helper classpath, and all recovery limits match `docs/CONFIG-MATRIX.md` in the deployed env.
 
 ## Client smoke test
 
@@ -94,6 +116,7 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] iPhone web, if shipping: `scripts/package-web-teavm.sh` produces the static web root, writes `voidscape-web-build.json`, and excludes runtime cache files (`accounts.txt`, `credentials.txt`, `uid.dat`, `ip.txt`, `port.txt`, `config.txt`).
 - [ ] iPhone web, if shipping: `scripts/verify-web-teavm-deployment.sh https://<host>/ --expected-build-manifest dist/web-teavm/voidscape-web-build.json --deep-manifest` passes against the uploaded HTTPS static root, proving required assets, hosted build-manifest hash/size checks, `buildManifestMatchesExpected: true`, `deepManifestChecked: true`, `deepManifestVerifiedCount == deepManifestFileCount`, `cachePolicyChecked: true`, `cachePolicyFailureCount: 0`, expected iPhone web-client hooks including copied diagnostics, `controlsHistory`, custom-HUD `uiHistory`, scroll-routing `scrollHistory`, `postResumeProof`, mobile endpoint state, icon validity, and no exposed runtime/debug files.
 - [ ] iPhone web, if shipping: reverse proxy follows `docs/recipes/deploy-iphone-web-client.md` or an equivalent HTTPS/WSS setup, with `ws_server_port` not publicly exposed unless intentionally serving WSS directly.
+- [ ] iPhone web, if shipping: proxied WSS with a non-public server-observed peer is confirmed ranked-denied and unranked-capable while `void_arena_allow_ambiguous_proxy_ranked: false`; browser ranked is advertised only when direct WSS exposes the player's public peer or a separately reviewed trusted origin-IP path exists.
 - [ ] iPhone web, if shipping: production launch URL configures the intended account and recovery portal flows with `portal`, `portalAccountUrl`, or `portalRecoveryUrl`; copied diagnostics show the expected `snapshot.portal`, and `resetPortal=1` clears stale tester portal URLs.
 - [ ] iPhone web, if shipping: `scripts/verify-web-teavm-deployment.sh https://<host>/ --expected-build-manifest dist/web-teavm/voidscape-web-build.json --deep-manifest --smoke --user <qa-user> --pass <qa-pass>` or `scripts/verify-web-teavm-deployment.sh https://<host>/ --expected-build-manifest dist/web-teavm/voidscape-web-build.json --deep-manifest --ws wss://<host>/<path> --smoke --user <qa-user> --pass <qa-pass>` passes against the uploaded HTTPS/WSS deployment, and its `summary.json` records `smokeRan: true`, `smokePassed: true`, `allowHttp: false`, `insecureTls: false`, `allowDebug: false`, and `allowInsecureWs: false`.
 - [ ] iPhone web, if shipping: WSS connects from Safari without mixed-content errors, using same-host `wss://<host>:443/` or explicit `?host=&port=` / `?ws=` settings; Home Screen relaunch with only `?mobile=1` preserves the saved endpoint, and `?endpoint=reset` clears it.
@@ -110,16 +133,26 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Ordinary Void Rifts route only between the approved hubs: Void Enclave, Edgeville, Varrock, Falador, and Ardougne.
 - [ ] Starter-area Void Rift at `139 636` shows the same approved hub list and does not offer Lumbridge.
 - [ ] Void Arena can be entered only from the Void Enclave rift, and `::arena enter` tells players to use that rift instead of teleporting them.
+- [ ] Ranked Void Arena eligibility accepts permanent 99 Attack/Strength/Defense without requiring 99 Hits; current boosts/drains and pre-potting do not alter eligibility, and ranked combat still awards normal combat XP.
+- [ ] Ranked setup expires after 120 seconds, rejects either poisoned participant, rechecks admission on final confirmation, and requires the fixed F2P/prayer/ranged/magic rules.
+- [ ] Ranked pair controls reject the same public IPv4 address and same public IPv6 `/64`, fail closed for proxy-ambiguous WebSocket origins while allowing unranked fallback, enforce one decisive result per rolling 30 minutes and three per UTC day across rollover, and do not charge draws/no-contests.
+- [ ] Ranked death updates W-L/Elo exactly once, participant disconnect is an immediate forfeit, ten-minute timeout is a durable neutral draw, and the rating floor remains strict zero-sum even when the transferred delta is zero.
+- [ ] `::arena season` reports the current UTC `YYYY-MM` season and prior champion; `::arena audit recent 25`, `::arena audit <player> 25`, and `::arena audit legacy 25` show the expected immutable lifecycle rows without exposing a manual reset path.
+- [ ] Two voidbot sessions complete challenge/setup/accept/confirm and observe `state arena` plus `wait arena-setup`, `wait arena-confirm`, `wait arena-started`, and `wait arena-ended`; cage boundaries, cross-cage attacks/projectiles, teleport/trade blocking, ground-item cleanup, and safe death all hold.
+- [ ] Sir Charles starts only for eligible, unpoisoned players; uses exactly 21 fish, four strength-potion doses, 100 legal-cadence Fire Blasts, and finite 99 Prayer while taking at most one main action per tick; exhausted magic/prayer fall back cleanly, the player can legally use the cage altar, and Sir Charles never does.
+- [ ] Sir Charles victory/loss/timeout/logout/shutdown/login-recovery paths restore the exact pre-fight inventory/equipment snapshot and clear its marker only after durable restore; corrupt/unpersistable recovery fails closed.
+- [ ] Sir Charles produces no combat XP, Elo, loot, item loss, economy reward, or title progress; his atomic global W/L record and post-fight finite-supply summary remain correct. Voidbot `state combat-events`, `events --since <sequence>`, and `prayer-on`/`prayer-off` provide evidence without UI input.
 - [ ] World-map saved slots persist per account locally and use auto-walk, not teleport.
 - [ ] Void Enclave safe zone blocks PvP and amenities work: bank, altar, healing pool, waystones, store.
-- [ ] Release-disabled content remains closed: Void Dungeon entrance, Void Colossus entrance, Void Knight ladder, Void Rush, and Undead Siege all deny public entry.
+- [ ] Release-disabled content remains closed: Void Colossus entrance, Void Knight ladder, Void Rush, and Undead Siege all deny public entry.
+- [ ] Void Dungeon follows its release gate: when enabled, entry costs 100,000 coins until an underground death, all three floors and maps work, PvP is 1v1-only, and no fourth floor or Void Wyrm path is exposed; when disabled, entry and stale underground logins fail closed.
 - [ ] Void chest requires a Void Key and rolls rewards.
 - [ ] Auction House opens, lists, buys, cancels, collects, and handles expiry.
 - [ ] Player titles command opens the achievement board and active title appears beside the overhead name.
 - [ ] Karamja Fishmonger notes supported raw/cooked fish without cooking them.
 - [ ] Desktop and Android `Create Account` open in-client username/password character creation, then prefill Existing User; their recovery buttons still open the portal. Web `/play` keeps Create Account/recovery portal-first, and launch configs keep packet registration enabled with email disabled.
 - [ ] Lumbridge Subscription Vendor grants one reserved starter subscription card per linked account, does not open a shop, marks the portal reward as claimed, and redeemed cards apply the intended account-wide XP rates.
-- [ ] PK Catching Simulator starts, scores, `::leave` exits, and highscores persist.
+- [ ] PK Catching Simulator shows the three-card chooser; Trainer is unranked with a stable reachable destination, two-tick pacing, and exact `ATTACK NOW`; Medium preserves classic movement; Hard produces sustained expert routes; all modes reject tick-12 late catches, report `You missed`, stop for two ticks, and resume cleanly; `::leave` exits, logout releases the arena, and separate Medium/Hard highscores persist and tab correctly.
 - [ ] Void Rush starts with bots, eliminates players, rewards one winner, and cleans up.
 - [ ] Dragon sword components drop/source/assemble as intended.
 - [ ] Custom items render in inventory and when wielded.
@@ -153,8 +186,9 @@ Use this before any player-facing test, public weekend, or real launch. The goal
 - [ ] Prelaunch portal signup is backed by production persistence, creates linked game characters, and disables/redirects client packet registration.
 - [ ] Public `/api/health.config.publicReady` is `true`, `abuseHashSaltConfigured` is `true`, and `issues` is empty; endpoint output exposes only booleans, never secret values.
 - [ ] Hosted launch staging verifier passes against the deployed portal, web client, WSS endpoint, and deployed server config:
-  `scripts/verify-launch-staging.mjs --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws wss://<portal-host>/play/ws/ --server-config <deployed-server.conf> --run-signup`
+  `scripts/verify-launch-staging.mjs --portal-url https://<portal-host>/ --web-url https://<portal-host>/play/ --ws wss://<portal-host>/play/ws/ --server-config <deployed-server.conf> --connections-config <deployed-connections.conf> --skip-signup`; use `--run-signup` only for the separate isolated-DB mutation rehearsal.
 - [ ] Recovery-code password reset is tested, old sessions are revoked, and support knows the fallback path for players without codes.
+- [ ] Older native-account claim is tested with a real backfill fixture: wrong game passwords are throttled without globally locking the username, email confirmation is explicit and one-use, game credentials/ownership markers and active subscription time stay unchanged, and staff has a no-auto-merge fallback for collisions or lost game passwords.
 - [ ] Starter-card abuse controls have a stable hash salt, tuned IP bucket limit, and staff review/grant process.
 - [ ] Staff account tools are protected by production identity/RBAC, not the local `PORTAL_ADMIN_TOKEN` prototype guard.
 - [ ] Google OAuth and subscription-card payment checkout/webhooks are wired or intentionally disabled with clear player-facing copy.

@@ -194,6 +194,8 @@ Useful item examples:
 ::item 1602 1        # subscription card
 ::item 1593 1        # Void Scimitar
 ::item 1594 1        # Void Shortbow
+::item 1595 1        # Void Amulet
+::item 1596 1        # Void Sceptre
 ::item 1601 1        # Void Key
 ```
 
@@ -260,7 +262,7 @@ Use exact coordinates with `::goto <x> <y>`.
 | Void Knight boss ladder | `122 313` | Climb down from Enclave to boss chamber. |
 | Void Knight chamber | `984 667` | Attack the Void Knight to start the solo fight. |
 | Wilderness hobgoblins | `217 255` | Dynamic spawns and faster respawns. |
-| PK Catching Trainer | `214 437` | Five-minute catching drill and highscores. |
+| PK Catching Trainer | `214 437` | Five-minute Trainer, Medium, and Hard catching drills plus separate ranked boards. |
 | Varrock area | `214 632` | General smoke testing. |
 | Draynor area | `122 509` | General smoke testing. |
 | Falador area | `304 542` | General smoke testing. |
@@ -283,7 +285,7 @@ Ask each tester to try a few of these instead of everyone doing the same route.
 | Dynamic wilderness spawns | Stand at `(217,255)`, use `::wildhobdebug 4` or real unique IPs, and watch for the purple area message. |
 | World announcements | Use preview commands, then test a real skulled Wilderness kill if multiple players are available. |
 | Void Enclave boss | Enter from `(122,313)`, attack the Void Knight, test mechanics, death/logout cleanup, and rewards. |
-| PK Catching Simulator | Talk to the trainer at `(214,437)`, finish or `::leave`, and check highscores. |
+| PK Catching Simulator | Talk to the trainer at `(214,437)`. Confirm the three-card start screen; Trainer shows the exact follow tile and stays unranked; Medium matches the old mixed run; Hard sustains diagonals/cutbacks/obstacle routes. Finish or `::leave`, check both highscore tabs, then log out during a run and confirm the arena is reusable. |
 | Void Rush | Queue normally through the Void Herald or use `::voidrushbots 10` for a bot-backed run. |
 | Launcher | Confirm animation quality, Play button states, update status text, close/minimize, and social buttons. |
 

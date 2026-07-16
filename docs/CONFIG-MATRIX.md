@@ -2,16 +2,21 @@
 
 This file records the intended shape of Voidscape configs so `server/local.conf` does not become tribal knowledge. `server/local.conf` is ignored, but its important values should not be mysterious.
 
+The machine-checked launch subset lives in `scripts/launch-config-contract.json`.
+`scripts/package-launch-staging.sh` applies it to a secret-free base preset, and
+the hosted verifier rejects missing, changed, or duplicate contract keys.
+
 ## Current decision points
 
 | Concern | Current local value | Release target | Notes |
 |---|---:|---:|---|
-| Client version | `10126` | `10126` until next client-visible change | Must match `Client_Base/src/orsc/Config.java`. |
+| Client version | `10139` | Match the released client | Must match `Client_Base/src/orsc/Config.java`. |
 | Member world | `true` | Hybrid, P2P-enabled | Launch decision: keep `member_world: true`, but make the early game feel F2P/classic and gate higher-value content through requirements, risk, cost, or location. |
 | Server port | `43596` | TBD | `scripts/run-client.sh` reads local server port automatically. |
 | Android public host | `5.161.114.251` | Final DNS name before broad release | Current APK one-tap Play target; replace hardcoded IP when the stable domain is ready. |
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
 | DB backend | Usually SQLite locally | MariaDB recommended for public | See `docs/OPERATIONS.md`. |
+| Game DB writer topology | One local game-server JVM | Exactly one live game-server JVM per game DB | Ranked admission/settlement and startup reconciliation assume a single game-server writer. Never overlap old/new or blue/green game-server processes on the same DB. |
 | Custom content gate | `want_void_enclave: true` | likely `true` | Many Voidscape systems are loaded under this gate. |
 | Release-disabled Void boss/dungeon gates | `want_void_colossus: false`, `want_void_dungeon: false` | `false` until deliberately launched | Public traversal should not expose Colossus or Void Dungeon content before their release pass. |
 | Custom landscape | expected `true` | likely `true` | Required for Void Island, Enclave, arenas, and map edits. |
@@ -26,7 +31,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `server_name` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `server_name_welcome` | `Voidscape` | `Voidscape` | `Voidscape` | `server/local.conf` |
 | `welcome_text` | Voidscape-specific | Voidscape-specific | Launch copy | `server/local.conf` |
-| `client_version` | `10126` | Match client | Match client | Server conf + `Config.java` |
+| `client_version` | `10139` | Match client | Match client | Server conf + `Config.java` |
 | `enforce_custom_client_version` | `true` | `true` | `true` | Server conf |
 | `want_email` | `false` for the launch preset | `false` | `false` | Desktop and Android in-client character creation asks only for username/password. The web portal may still collect email for web accounts. |
 | `want_packet_register` | `true` for the launch preset, `false` when omitted | `true` | `true` | Enables desktop and native Android in-client character creation through the existing register packet. `/play` web signup remains portal-first. |
@@ -37,12 +42,36 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 |---|---|---|---|---|
 | `PORTAL_OPENRSC_DB` | `server/inc/sqlite/voidscape.db` when testing | staging DB bridge path or service DSN | production account/game write path | Local scaffold uses a SQLite file path; production should use the real portal/game persistence boundary. |
 | `PORTAL_ADMIN_TOKEN` | explicit local secret | secret manager | replace with staff identity/RBAC | Enables `/api/admin/*`; unset means admin endpoints return `admin_not_configured`. |
-| `PORTAL_STARTER_IP_DAILY_LIMIT` | `10` default, tests use `2` | tune from beta traffic | tune with logs and support policy | Limits only free starter-card grants from the same non-local IP bucket; accounts still register. |
+| `PORTAL_SIGNUP_IP_HOURLY_LIMIT` / `PORTAL_SIGNUP_IP_DAILY_LIMIT` | launch mode `3` / `5`; otherwise `10` / `10` | `3` / `5` | `3` / `5` | Caps completed account creation and code-only founder reservations per non-local IP. Pending verification sends use their own counters and do not consume completed-signup velocity. |
+| `PORTAL_SIGNUP_SUBNET_HOURLY_LIMIT` / `PORTAL_SIGNUP_SUBNET_DAILY_LIMIT` | launch mode `20` / `50`; otherwise `0` / `0` | `20` / `50` | `20` / `50` | IPv4 `/24` cap for completed launch signups and code-only founder reservations; `0` disables it outside launch mode. |
+| Initial launch-signup character | bypass repeat-character velocity | same | same | The first character created as part of an accepted signup bypasses the account/IP/subnet and proxy character-velocity caps. It still enforces the targeted IP blocklist, reserved/duplicate name checks, configured game DB, and transactional max-10 roster control; an initial-signup marker excludes it from later repeat-character counts. |
+| `PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT` / `PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT` | launch mode `5` / `10`; otherwise `10` / `10` | `5` / `10` | `5` / `10` | Caps additional real character creation per portal account before the separate 10-slot roster cap. |
+| `PORTAL_CHARACTER_IP_HOURLY_LIMIT` / `PORTAL_CHARACTER_IP_DAILY_LIMIT` | launch mode `10` / `20`; otherwise `10` / `10` | `10` / `20` | `10` / `20` | Caps additional real OpenRSC character creation per non-local IP. |
+| `PORTAL_CHARACTER_SUBNET_HOURLY_LIMIT` / `PORTAL_CHARACTER_SUBNET_DAILY_LIMIT` | launch mode `50` / `100`; otherwise `0` / `0` | `50` / `100` | `50` / `100` | IPv4 `/24` cap for additional character creation; `0` disables it outside launch mode. |
+| `PORTAL_BLOCKED_IP_CIDRS` | unset | targeted `/32` or CIDR list | targeted `/32` or CIDR list | Rejects configured non-local IPv4 ranges with `403 ip_blocked`; use `/32` entries for exact-IP blocks. |
+| `PORTAL_PROXY_IP_CIDRS` / `PORTAL_PROXY_SIGNUP_IP_DAILY_LIMIT` / `PORTAL_PROXY_CHARACTER_IP_DAILY_LIMIT` | unset / `1` / `1` | targeted list / `1` / `1` | targeted list / `1` / `1` | Applies tighter proxy/VPN overrides to completed signup and additional-character IP checks. Each override is the upper bound for both the hourly and daily IP check; the initial signup character still bypasses repeat-character velocity. |
+| `PORTAL_LOGIN_IP_FAILURE_LIMIT` / `PORTAL_LOGIN_EMAIL_FAILURE_LIMIT` | `10` / `20` | tune from beta traffic | tune from incident traffic | Throttles password-login failures by source IP and by target account email before password verification. |
+| `PORTAL_RECOVERY_FAILURE_LIMIT` / `PORTAL_RECOVERY_FAILURE_WINDOW_MINUTES` | `10` / `15` | tune from beta traffic | tune from incident traffic | Throttles bad recovery-code attempts by source IP and by target account email. |
+| `PORTAL_PASSWORD_RESET_TTL_MINUTES` | `30` | `30` | `30` | Lifetime of a hashed, one-use emailed website-password reset token; minimum accepted value is 5 minutes. |
+| `PORTAL_PASSWORD_RESET_IP_LIMIT` / `PORTAL_PASSWORD_RESET_ACCOUNT_LIMIT` / `PORTAL_PASSWORD_RESET_WINDOW_MINUTES` | `5` / `3` / `60` | same, then tune from logs | same, then tune from logs | Throttles recovery-email requests while keeping known and unknown identifiers externally indistinguishable. |
+| `PORTAL_LEGACY_CLAIM_TTL_MINUTES` | `30` | `30` | `30` | Lifetime of a hashed, one-use email token for claiming a passwordless native-account backfill; minimum accepted value is 5 minutes. |
+| `PORTAL_LEGACY_CLAIM_IP_LIMIT` / `PORTAL_LEGACY_CLAIM_CHARACTER_LIMIT` / `PORTAL_LEGACY_CLAIM_WINDOW_MINUTES` | `10` / `5` / `60` | same, then tune from logs | same, then tune from logs | Caps current-game-password claim attempts globally per source IP and per source-IP/character pair, so one hostile IP cannot lock the rightful owner out. Failed proofs count; completion failures also use the general recovery-failure throttle. |
+| `PORTAL_SENSITIVE_ACTION_WINDOW_MINUTES` | `10` | `10` | `10` | Maximum age of a passwordless federated login before recovery-code rotation or game-password reset needs fresh authentication. Password accounts always confirm the current website password. |
+| `PORTAL_GAME_PASSWORD_RESET_LIMIT` / `PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES` | `5` / `60` | same | same | Per-IP and per-account attempt cap for authenticated character game-password changes. Failed step-up authentication and offline checks count. |
+| `PORTAL_GAME_PASSWORD_HELPER_CLASSPATH` / `PORTAL_JAVA_BIN` | `server/core.jar` / `java` | packaged helper jar / Java runtime | `/opt/voidscape/server/portal-password-helper.jar` / `java` | Runs only the canonical OpenRSC bcrypt-compatible password helper over stdin in production, without coupling portal deploys to the full game jar. Password changes and older-account claims fail closed if the helper or ownership guard is unavailable. |
+| `PORTAL_CAPTCHA_REQUIRED` / `PORTAL_CAPTCHA_SIGNUP_REQUIRED` | unset | optional Turnstile | enable during abuse/ad bursts | Requires CAPTCHA for founder reservations plus password/Google signup when `PORTAL_CAPTCHA_SITE_KEY` and `PORTAL_CAPTCHA_SECRET` are set. |
+| `PORTAL_CAPTCHA_CHARACTER_REQUIRED` | unset | optional | optional incident clamp | Extends CAPTCHA to authenticated real character creation. |
+| `PORTAL_STARTER_IP_DAILY_LIMIT` | `0` disabled | keep disabled unless copy changes | keep disabled unless copy changes | Accepted promo accounts receive starter cards by default; abuse should be blocked before signup/character creation. Positive values intentionally re-enable card-review mode. |
 | `PORTAL_ABUSE_HASH_SALT` | dev-only value | stable private secret | stable private secret | Rotating it loses the ability to compare old abuse-signal hashes. |
 | Google OAuth/provider config | hidden unless configured | optional later | optional later | Leave `PORTAL_GOOGLE_CLIENT_ID` unset for launch unless intentionally enabling Google Identity Services; redirect-style `/api/oauth/google/*` remains a placeholder. |
 | Payment provider config | none | sandbox checkout/webhooks | live checkout/webhooks | Production subscription-card checkout currently returns `501` until a provider is wired. |
 | `PORTAL_PUBLIC_MODE` | optional | `1` for public rehearsal | `1` | Locks the portal to public-safe landing/account surfaces plus token-gated admin endpoints. |
-| `PORTAL_LAUNCH_SIGNUP_MODE` | optional | `1` for ad-flow rehearsal | `1` for ads | Turns public mode into account-first signup: creates the web account, first linked OpenRSC character, one used roster slot, and starter-card reservation in one flow. Requires `PORTAL_OPENRSC_DB` for real launch use. |
+| `PORTAL_LAUNCH_SIGNUP_MODE` | optional | `1` for ad-flow rehearsal | `1` for ads | Turns public mode into account-first signup. With email verification enabled, creation is deferred until the verification link is consumed; otherwise it creates the web account, first linked OpenRSC character, one used roster slot, and starter-card reservation in one flow. Requires `PORTAL_OPENRSC_DB` for real launch use. |
+| `PORTAL_EMAIL_VERIFICATION_REQUIRED` | unset unless testing | `1` for public rehearsal | `1` | Verified email remains required for public password signup; the account, first character, and starter card are created only after explicit email verification. Requires configured email delivery. |
+| `PORTAL_EMAIL_VERIFICATION_TTL_HOURS` | `48` | `48` | `48` | Pending signup verification-link lifetime. |
+| `PORTAL_EMAIL_VERIFICATION_IP_LIMIT` / `PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT` / `PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES` | `3` / `3` / `60` | `3` / `3` / `60` | `3` / `3` / `60` | Independently caps initial and resend verification requests per source IP and per canonical email. `POST /api/accounts/verify-email/resend` returns the same accepted response whether a live pending signup exists, apart from a generic rate-limit response. These sends do not count as completed signups. |
+| `PORTAL_PUBLIC_ORIGIN` | optional local URL | staging HTTPS origin | `https://voidscape.gg` | Canonical origin for emails, public download metadata, and launcher manifests; required when public email verification is enabled. |
+| `PORTAL_LAUNCH_FREE_CARD_HOURS` | `24` | `24` | `24` | Number of hours after `PORTAL_LAUNCH_AT` that new portal accounts still receive a starter Subscription card marker. Existing prelaunch markers are unaffected. |
 | `PORTAL_WEB_CLIENT_URL` | `https://voidscape.gg/play/` | release URL | release URL | Browser-client URL used by release account surfaces/API metadata; the prelaunch landing mentions platform support but keeps the main CTA on reservation. |
 
 ## World rules
@@ -50,9 +79,11 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | Key | Dev/local | Staging | Production | Release note |
 |---|---:|---:|---:|---|
 | `game_tick` | `640` | `640` | `640` | Authentic RSC combat/movement feel. |
+| `milliseconds_between_casts` | `1900` | `1900` | `1900` | Explicit three-tick spell cadence used by players and Sir Charles; older presets' `milliseconds_between_spells` spelling is not the runtime key. |
 | `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
 | `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
 | `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
+| `launch_subscription_card_until` | unset unless testing native packet registration | launch + 24h UTC | `2026-07-19T18:00:00Z` for July 18 launch | Optional server-side cutoff for native packet-created accounts to receive a `launch_24h_card` vendor marker. Env `VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL` overrides it. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |
 | `aggro_range` | `4` | `4` | `4` | Voidscape default aggressive-NPC scan radius; authentic presets remain at the Java/default 1-tile behavior unless configured otherwise. |
@@ -62,6 +93,7 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 | `member_world` | `true` currently | `true` | `true` | Hybrid launch: P2P-enabled world with F2P-feeling early progression and controlled access to stronger content. This is a global server rule shared by launcher, Android, and web clients, not a per-player subscription flag. |
 | `is_localhost_restricted` | `false` | `true` or IP-gated | `true` or IP-gated | Local-only convenience should not leak accidentally. |
 | `production_command_lockdown` | `true` for prelaunch/public rehearsal | `true` | `true` | Non-owner staff keep moderation/read-only support commands, but economy/account/world/server-runtime/debug commands are owner-only. |
+| `void_arena_allow_ambiguous_proxy_ranked` | `true` only for isolated local WebSocket QA | `false` | `false` | A non-public server-observed WebSocket peer is normally a reverse proxy, so ranked admission fails closed while unranked remains available. Keep this false outside isolated development; browser ranked requires a direct public peer or a future reviewed trusted-origin propagation path. |
 | `want_email` | `false` for launch preset and staging bundle | `false` | `false` | Keeps desktop/native Android character creation email-free; portal web accounts remain separate. |
 | `want_packet_register` | `true` for launch preset and staging bundle; Java default remains `false` when omitted | `true` | `true` | Enables desktop/native Android in-client character creation while web `/play` continues to use portal signup. |
 
@@ -91,6 +123,8 @@ This file records the intended shape of Voidscape configs so `server/local.conf`
 
 ## Client-visible changes that require version review
 
+Current official custom-client cohort: `10139`.
+
 Bump `Client_Base/src/orsc/Config.java` `CLIENT_VERSION` and matching server `client_version` when changing:
 
 - opcodes or payload shape
@@ -109,10 +143,10 @@ These are positional in many loaders. Keep server and client append order aligne
 
 | Type | Current high-water mark | Notes |
 |---|---:|---|
-| Custom item ids | `1608` | Void ashes are current high-water mark. |
+| Custom item ids | `1609` | Cowboy hat is current high-water mark. |
 | Custom NPC ids | `868` | Void Archivist is current high-water mark. |
-| Custom scenery ids | `1311` | Void portal arch is current high-water mark. |
-| Custom client version | `10126` | Current working tree value. |
+| Custom scenery ids | `1313` | Void market shelter is current high-water mark. |
+| Custom client version | `10139` | Current working tree value. |
 
 ## Pre-release config sign-off
 
@@ -123,6 +157,7 @@ These are positional in many loaders. Keep server and client append order aligne
 - [x] Rift travel policy decided: ordinary Void Rifts form a five-hub network (Void Enclave, Edgeville, Varrock, Falador, Ardougne), with Lumbridge left to Home teleport and world-map autowalk/saved walks as the broad traversal QoL.
 - [x] Launch command policy decided: enable `production_command_lockdown: true`; keep moderation/read-only staff support available and make high-risk staff/dev commands owner-only.
 - [ ] Production database selected.
+- [ ] Deployment topology guarantees exactly one live game-server JVM per game DB, with no rolling or blue/green writer overlap.
 - [ ] Public host/ports selected.
 - [ ] Client update/cache distribution path selected.
 - [ ] Discord/community links selected.

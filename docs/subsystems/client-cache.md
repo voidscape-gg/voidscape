@@ -35,7 +35,7 @@ Single source of truth for all client platforms. Both PC_Client and Android_Clie
 Package structure:
 - `src/orsc/mudclient.java` — main game loop (80+ fields). Rendering, networking, entity updates, UI panels.
 - `src/orsc/Config.java` — static constants:
-  - `CLIENT_VERSION = 10126`
+  - `CLIENT_VERSION = 10139`
   - `SERVER_IP`, `SERVER_PORT`
   - Feature flags (`C_EXPERIENCE_DROPS`, `C_CUSTOM_UI`, …)
   - Server-defined config (`S_PLAYER_LEVEL_LIMIT`, `S_WANT_SKILL_MENUS`, …)
@@ -159,7 +159,7 @@ Sync mechanism: **manual, ordinal-dependent**.
 
 There is no codegen and no shared schema. Devs must keep both files aligned manually.
 
-`CLIENT_VERSION = 10126` in `Config.java` is checked by the server at login. Bump manually when protocol or client-visible cache changes; mismatch -> rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
+`CLIENT_VERSION = 10139` in `Config.java` is checked by the server at login. Bump manually when protocol or client-visible cache changes; mismatch -> rejection. Keep the server `client_version` in each active `.conf` aligned with this value.
 
 ## Build outputs
 
@@ -199,7 +199,7 @@ Recompile Client_Base.
 ## Pitfalls / non-obvious
 
 1. **Opcode ordinal desync.** Server OpcodeOut transmitted by ordinal; client must use identical ordering. Always append, never insert mid-list. Same applies to OpcodeIn.
-2. **Silent version mismatch.** `CLIENT_VERSION = 10126` is not auto-bumped. If you change protocol or client-visible cache but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
+2. **Silent version mismatch.** `CLIENT_VERSION = 10139` is not auto-bumped. If you change protocol or client-visible cache but forget to bump, server may accept the connection but corrupt state. Check server logs for version checks.
 3. **Cache directory is CWD-relative.** `./Cache` relative to the working directory at launch — not the JAR location. Running from different dirs picks up different caches. Use absolute path or `--dir`.
 4. **Android inherits Client_Base wholesale.** No separate Android opcode tracking. Bumping Client_Base requires APK rebuild.
 5. **Android packages cache from the repo at build time.** Keep `Client_Base/Cache` populated before building the APK; local runtime files are excluded from packaging by Gradle.

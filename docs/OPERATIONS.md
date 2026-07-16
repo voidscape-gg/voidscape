@@ -22,7 +22,14 @@ scripts/package-launch-staging.sh \
   --ws-url wss://<staging-host>/play/ws/
 ```
 
-The package includes a generated `server/local.launch-staging.conf`, `portal/portal.env.staging`, the `/play` static root, a staging-configured launcher, and an Android APK rebuilt with the staging game host. If a remote target is ready, add `--rsync-target user@host:/opt/voidscape-staging` to sync the bundle.
+The package includes a generated `server/local.launch-staging.conf`, the non-secret
+headless-player runtime and systemd units, `portal/portal.env.staging`, the `/play`
+static root, a staging-configured launcher, and an Android APK rebuilt with the
+staging game host. The generated server config enables the fleet's banking,
+fatigue, and bank-note wire contract. If a remote target is ready, add
+`--rsync-target user@host:/opt/voidscape-staging` to sync the bundle; follow its
+`DEPLOYMENT.md` to place the fleet trees under `/opt/voidscape` and install the
+units without bundling credentials.
 
 ```bash
 scripts/verify-launch-staging.mjs \
@@ -30,10 +37,17 @@ scripts/verify-launch-staging.mjs \
   --web-url https://<staging-host>/play/ \
   --ws wss://<staging-host>/play/ws/ \
   --server-config <copy-of-deployed-server.conf> \
-  --run-signup
+  --connections-config <copy-of-deployed-connections.conf> \
+  --skip-signup
 ```
 
-The verifier checks durable portal storage, the OpenRSC DB bridge, web portal-first registration metadata, desktop/native packet registration enabled with email disabled, command lockdown in the deployed server config, hidden Google by default, disabled payment checkout, a real account-first signup, and the uploaded `/play` package against `dist/web-teavm/voidscape-web-build.json` or the package's `play/voidscape-web-build.json`.
+The verifier checks durable portal storage, the OpenRSC DB bridge, web portal-first
+registration metadata, the exact duplicate-free launch server-config contract,
+the deployed SQLite connection type, hidden Google by default, disabled payment
+checkout, and the uploaded `/play` package against
+`dist/web-teavm/voidscape-web-build.json` or the package's
+`play/voidscape-web-build.json`. Use `--run-signup` instead only against an
+isolated staging database when creating one real account and character is intended.
 
 ## Current public host layout
 
@@ -46,9 +60,11 @@ Runtime paths:
 | Game/source root | `/opt/voidscape` |
 | Game server config | `/opt/voidscape/server/local.conf` |
 | Game jars | `/opt/voidscape/server/core.jar`, `/opt/voidscape/server/plugins.jar` |
+| Portal password helper | `/opt/voidscape/server/portal-password-helper.jar` |
 | Game SQLite DB | `/opt/voidscape/server/inc/sqlite/voidscape.db` |
 | Portal root | `/opt/voidscape/web/portal` |
 | Portal env | `/etc/voidscape/portal.env` |
+| Headless credentials/receipts | `/etc/voidscape/headless-players` (encrypted off-host backup only) |
 | Portal data | `/var/lib/voidscape-portal` |
 | Nginx web root | `/var/www/html` |
 | Web client `/play/` root | `/var/www/html/play` |
@@ -62,6 +78,7 @@ Services and ports:
 | Purpose | Value |
 |---|---|
 | Game server | `voidscape.service` |
+| Headless player fleet | `voidscape-headless.target`, `voidscape-headless@*.service`, `voidscape-headless-controller.service` |
 | Portal | `voidscape-portal.service` |
 | Reverse proxy | `nginx.service` |
 | Integrity export | `voidscape-integrity-export.service` / timer |
@@ -72,7 +89,7 @@ Services and ports:
 
 Deploy notes:
 
-- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files.
+- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files. Back up `/etc/voidscape/headless-players` as a separate encrypted off-host artifact paired with the same database snapshot; never put its plaintext files in the ordinary server tarball.
 - Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
 - `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
 - For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
@@ -89,6 +106,12 @@ scripts/run-client.sh
 ```
 
 `scripts/run-server.sh` always runs `server/local.conf`. For staging or production, keep the actual deployed config outside Git, but keep its intended values mirrored in `docs/CONFIG-MATRIX.md`.
+
+Run exactly one live game-server JVM against a game database. The in-process JDBC
+transaction lock, ranked admission state, and startup reconciliation do not provide
+cross-process ownership. Never overlap old/new or blue/green game-server writers on
+the same DB: stop the old JVM completely before starting its replacement. A standby
+may share a DB backup, but must not open the live DB until it becomes the sole server.
 
 Useful local stop pattern:
 
@@ -240,7 +263,7 @@ That derives `https://<portal-host>/#account` and `https://<portal-host>/#securi
 
 For real-device troubleshooting without Safari dev tools, append `&diag=1` or `&debug=1` to the launch URL. The `i` toggle opens a live diagnostics panel with endpoint, effective WebSocket URL, standalone mode, viewport, canvas framebuffer/CSS size, keyboard freeze state, lifecycle resume counters, input hints, current and portrait/landscape-history hit-tested mobile overlay control rectangles, shared-client local player tile/camera state, shared UI/custom HUD state including `blockingDialog` / `blockingDialogName`, bounded custom HUD `uiHistory`, bounded scroll-routing `scrollHistory`, and recent JavaScript/console/resource errors. The `copy` button copies the same report as JSON, and if Safari blocks clipboard access it changes to `select` and opens a selectable JSON field instead. In-game overlay controls should stay reachable, hit-tested, 44px-class where they are buttons, and clear of the top HUD, bottom HUD, and blocking game dialogs in both portrait and landscape before final copy. Final iPhone QA should tap the custom HUD `All`, `Chat`, `Quest`, and `Private` chat tabs, open every top HUD panel, swipe-scroll an opened top panel, close a panel, then copy diagnostics so `uiHistory` and `scrollHistory` record those interactions. The same data is available from `window.__voidscapeCollectDiagnostics()`.
 
-The game server must have `want_feature_websockets: true`. Either terminate TLS at a reverse proxy and forward to `ws_server_port`, or configure `ssl_server_cert_path` / `ssl_server_key_path` in `server/connections.conf` so the Netty WebSocket port can serve WSS directly. Before sharing the link, verify the hosted static root:
+The game server must have `want_feature_websockets: true`. Either terminate TLS at a reverse proxy and forward to `ws_server_port`, or configure `ssl_server_cert_path` / `ssl_server_key_path` in `server/connections.conf` so the Netty WebSocket port can serve WSS directly. Keep `void_arena_allow_ambiguous_proxy_ranked: false` in staging and production. With that fail-closed setting, a WebSocket whose server-observed peer is loopback/private/non-public (the normal reverse-proxy shape) may use unranked Void Arena but is denied ranked admission because the public source IP cannot be verified. Browser ranked currently requires direct WSS where Netty observes the player's public peer; a future trusted origin-IP propagation path must receive a separate security review before replacing this gate. The `true` override is only for isolated local WebSocket QA. Before sharing the link, verify the hosted static root:
 
 ```bash
 scripts/verify-web-teavm-deployment.sh https://<host>/ --expected-build-manifest dist/web-teavm/voidscape-web-build.json --deep-manifest
@@ -296,6 +319,287 @@ When shipping a beta server update, deploy the runtime and migrations as one uni
 - Restart the server and watch the runner log until database patches finish and the game port opens.
 - Verify both the public game port and the launcher manifest before sending testers back in.
 
+## Headless fleet deployment and recovery
+
+The launch bundle contains only non-secret runtime files and the three systemd
+units. It never contains `/etc/voidscape/headless-players`. Before installing or
+starting the fleet, read `docs/subsystems/headless-players.md` and meet all of these
+host prerequisites:
+
+- The ordinary `voidscape` service group and controller account already exist.
+- Ten static, nologin `voidscape-headless-<profile>` users exist with primary group
+  `voidscape`. The unit deliberately does not use `DynamicUser=`.
+- `/etc/voidscape/headless-players` is root-owned mode 0700; every password and
+  receipt below it is root-owned mode 0600.
+- Both installed service units retain `LimitCORE=0`. Do not start a unit with an
+  override that permits core dumps.
+- The active fleet config has `right_click_bank: true`, `want_fatigue: false`, and
+  `want_bank_notes: true`.
+- The selected game-server service is already running and healthy. The fleet target
+  deliberately does not start `voidscape.service` or any staging-world unit.
+- `scripts/provision-headless-players.sh` is used only with the active SQLite store.
+  It rejects another `db_type`, an unavailable read-only database/password helper,
+  or ambiguous account state before generating or registering anything. A
+  MariaDB/MySQL target needs a separately reviewed migration/provisioning plan.
+
+Create the exact static users once on a systemd host (run as root):
+
+```bash
+set -euo pipefail
+
+fail() {
+  printf 'headless service-user check failed: %s\n' "$*" >&2
+  exit 1
+}
+
+voidscape_group="$(getent group voidscape)"
+[[ "$voidscape_group" != *$'\n'* ]] || fail 'duplicate voidscape group entries'
+IFS=: read -r group_name _ voidscape_gid _ <<<"$voidscape_group"
+[[ "$group_name" == voidscape && "$voidscape_gid" =~ ^[0-9]+$ ]] ||
+  fail 'missing or invalid voidscape group'
+uid_min="$(awk '$1 == "UID_MIN" { print $2; exit }' /etc/login.defs)"
+[[ "$uid_min" =~ ^[0-9]+$ ]] || fail 'could not read UID_MIN'
+nologin_shell="$(command -v nologin)"
+[[ -n "$nologin_shell" ]] || fail 'nologin shell is unavailable'
+
+for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
+  account="voidscape-headless-$profile"
+  if ! getent passwd "$account" >/dev/null; then
+    useradd --system --no-create-home --home-dir /nonexistent \
+      --shell "$nologin_shell" --gid "$voidscape_gid" "$account"
+  fi
+
+  passwd_entry="$(getent passwd "$account")"
+  [[ "$passwd_entry" != *$'\n'* ]] || fail "$account has duplicate passwd entries"
+  IFS=: read -r found_name _ uid gid _ home shell <<<"$passwd_entry"
+  [[ "$found_name" == "$account" ]] || fail "$account has the wrong account name"
+  [[ "$uid" =~ ^[0-9]+$ && "$uid" -gt 0 && "$uid" -lt "$uid_min" ]] ||
+    fail "$account does not have a non-root system UID"
+  [[ "$gid" == "$voidscape_gid" ]] || fail "$account has the wrong primary group"
+  [[ "$home" == /nonexistent ]] || fail "$account has the wrong home directory"
+  [[ "${shell##*/}" == nologin ]] || fail "$account does not use a nologin shell"
+  [[ "$(id -Gn "$account")" == voidscape ]] ||
+    fail "$account belongs to a group other than voidscape"
+done
+install -d -o root -g voidscape -m 0710 /etc/voidscape
+install -d -o root -g root -m 0700 /etc/voidscape/headless-players
+```
+
+The units default to the production paths, ports, and current client version. To
+attach them to an existing isolated staging world without touching the disabled
+production service, create a non-secret `/etc/voidscape/headless.env` before
+`daemon-reload`:
+
+```bash
+set -euo pipefail
+selected_config=/opt/voidscape-staging/server/local.conf
+
+# Root validates the real selected-world config before copying its three required
+# values into a service-readable contract. Do not copy any other config keys.
+python3 /opt/voidscape/scripts/headless-player-helper.py \
+  check-fleet-runtime-config --path "$selected_config" >/dev/null
+install -d -o root -g voidscape -m 0710 /etc/voidscape
+install -o root -g voidscape -m 0640 /dev/null \
+  /etc/voidscape/headless-runtime.conf
+cat >/etc/voidscape/headless-runtime.conf <<'EOF'
+right_click_bank: true
+want_fatigue: false
+want_bank_notes: true
+EOF
+python3 /opt/voidscape/scripts/headless-player-helper.py \
+  check-fleet-runtime-config \
+  --path /etc/voidscape/headless-runtime.conf >/dev/null
+
+install -o root -g root -m 0644 /dev/null /etc/voidscape/headless.env
+install -d -o root -g voidscape -m 0750 /opt/voidscape/headless-defs
+for name in GameObjectDef.xml ItemDefs.json ItemDefsCustom.json; do
+  install -o root -g voidscape -m 0640 \
+    "/opt/voidscape-staging/server/conf/server/defs/$name" \
+    "/opt/voidscape/headless-defs/$name"
+done
+cat >/etc/voidscape/headless.env <<'EOF'
+HEADLESS_SERVER_CONFIG=/etc/voidscape/headless-runtime.conf
+HEADLESS_GAME_PORT=43696
+HEADLESS_DEFS_DIR=/opt/voidscape/headless-defs
+VOIDBOT_BASED_CONFIG_DATA=85
+VOIDBOT_CLIENT_VERSION=10132
+EOF
+```
+
+`/etc/voidscape` must remain root-owned, group-`voidscape`, mode 0710: the group gets
+path traversal but cannot list the directory. The credential subtree remains
+root-owned mode 0700, and unrelated secret files remain root-owned mode 0600.
+`/etc/voidscape/headless-runtime.conf` must remain root-owned, group-`voidscape`, mode
+0640, and contain only the three shown keys. Root must first verify those exact values
+in the real selected-world config; the minimal file is a runtime contract, not an
+independent source of truth. Point `HEADLESS_SERVER_CONFIG` at the minimal file because
+the static player users must not traverse a private staging tree. Use
+the actual selected world's TCP port and exact `client_version`; these values are
+operational metadata, never credentials. Copy only the three definitions consumed
+by voidbot and use the selected world's exact `based_config_data`; do not add the
+service users to a private staging-server group. Omit the override file for the
+packaged production defaults.
+
+Copy the packaged `scripts/`, `tools/voidbot/`, `tools/headless_players/`, and
+`server/conf/server/defs/` trees into their matching paths below `/opt/voidscape`.
+Install the three `Deployment_Scripts/systemd/voidscape-headless*` files in
+`/etc/systemd/system`, then run:
+
+```bash
+systemctl daemon-reload
+systemctl cat voidscape-headless@.service voidscape-headless-controller.service
+systemctl show voidscape-headless@fireee.service \
+  voidscape-headless-controller.service --property=LimitCORE
+```
+
+Both `LimitCORE` values must be `0`. During the loopback-only registration
+maintenance window, provision the ordinary accounts against the active SQLite DB,
+restore the normal registration settings, restart the game server, take the paired
+database/credential backups below, and only then enable the target:
+
+```bash
+cd /opt/voidscape
+HEADLESS_CREDENTIAL_DIR=/etc/voidscape/headless-players \
+  HEADLESS_SERVER_CONFIG=/opt/voidscape-staging/server/local.conf \
+  HEADLESS_CONNECTIONS_CONFIG=/opt/voidscape-staging/server/connections.conf \
+  HEADLESS_DATABASE=/opt/voidscape-staging/server/inc/sqlite/voidscape.db \
+  HEADLESS_PASSWORD_HELPER_CLASSPATH=/opt/voidscape-staging/server/portal-password-helper.jar \
+  HEADLESS_GAME_HOST=127.0.0.1 \
+  HEADLESS_GAME_PORT=43696 \
+  VOIDBOT_CLIENT_VERSION=10132 \
+  scripts/provision-headless-players.sh
+```
+
+Those are the complete inputs for the example staging world. Replace every path,
+port, and version together when selecting another world; do not let deployed
+provisioning inherit repository defaults or `/etc/voidscape/headless.env` by
+accident. The config and connections paths above are the real root-readable world
+files, not the minimal runtime contract used by the per-player services.
+
+After the paired database and encrypted credential backups in the next subsection
+have succeeded and been verified, enable the target:
+
+```bash
+systemctl enable --now voidscape-headless.target
+systemctl --no-pager --full status voidscape-headless.target \
+  'voidscape-headless@*.service' voidscape-headless-controller.service
+```
+
+### Encrypted credential backup and restore
+
+Back up the active account database and credential directory as a matched recovery
+set after initial provisioning, after any credential rotation, and before fleet or
+database deployment. The credential archive must be encrypted before it leaves the
+pipe and stored off-host. Never write a plaintext tar, include it in `dist/`, or put
+password/receipt contents in shell arguments, logs, tickets, or chat. This example
+uses `age`; replace the destination with an approved off-host mount or encrypted
+backup sink:
+
+```bash
+set -euo pipefail
+
+systemctl stop voidscape-headless.target
+
+roster=/opt/voidscape/tools/headless_players/roster.json
+server_config=/opt/voidscape-staging/server/local.conf
+connections_config=/opt/voidscape-staging/server/connections.conf
+database=/opt/voidscape-staging/server/inc/sqlite/voidscape.db
+python3 /opt/voidscape/scripts/headless-player-helper.py \
+  check-sqlite-roster-offline \
+  --roster "$roster" \
+  --connections-config "$connections_config" \
+  --server-config "$server_config" \
+  --database "$database" >/dev/null
+
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+archive="/mnt/offsite-encrypted/voidscape-headless-$stamp.tar.age"
+db_backup="/mnt/offsite-encrypted/voidscape-headless-$stamp.sqlite"
+sqlite3 "$database" ".backup '$db_backup'"
+test -s "$db_backup"
+
+credential_members=()
+for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
+  credential_members+=("headless-players/$profile.password")
+  credential_members+=("headless-players/$profile.provisioned")
+done
+tar --numeric-owner -C /etc/voidscape -cf - "${credential_members[@]}" |
+  age --encrypt --recipient '<AGE_RECIPIENT>' > "$archive"
+test -s "$archive"
+
+member_list="$(mktemp)"
+trap 'rm -f "$member_list"' EXIT
+age --decrypt --identity /root/.config/age/keys.txt "$archive" |
+  tar -tf - >"$member_list"
+[[ "$(wc -l <"$member_list")" -eq 20 ]] || {
+  echo 'credential archive does not contain exactly 20 members' >&2
+  exit 1
+}
+for member in "${credential_members[@]}"; do
+  count="$(awk -v expected="$member" '$0 == expected { n++ } END { print n + 0 }' \
+    "$member_list")"
+  [[ "$count" -eq 1 ]] || {
+    printf 'credential archive member count is not one: %s\n' "$member" >&2
+    exit 1
+  }
+done
+```
+
+Record the encrypted archive identifier beside the matching SQLite `.backup` or
+MariaDB dump identifier. Restoring credentials without their matching account rows,
+or restoring account rows without their receipt-bound credentials, must fail closed.
+The target stop and `check-sqlite-roster-offline` gate are mandatory before the
+SQLite snapshot: a snapshot containing any fleet row with `online = 1` is not a
+valid new recovery point. Store the database snapshot in an approved protected
+backup sink; encrypt it separately when that sink does not provide encryption at
+rest.
+
+To restore, first preserve the current state as another gated, encrypted recovery
+set. Keep both the fleet and selected game server stopped while restoring the
+database snapshot and paired archive, then reapply permissions:
+
+```bash
+set -euo pipefail
+systemctl disable --now voidscape-headless.target
+systemctl stop voidscape-staging.service
+# Restore /mnt/offsite-encrypted/<paired-database-snapshot>.sqlite to the selected
+# SQLite database while the game server remains stopped.
+age --decrypt --identity /root/.config/age/keys.txt \
+  /mnt/offsite-encrypted/<paired-headless-archive>.tar.age |
+  tar --extract --file - --directory /etc/voidscape
+chown -R root:root /etc/voidscape/headless-players
+find /etc/voidscape/headless-players -type d -exec chmod 0700 {} +
+find /etc/voidscape/headless-players -type f -exec chmod 0600 {} +
+cd /opt/voidscape
+python3 scripts/headless-player-helper.py check-sqlite-roster-offline \
+  --roster tools/headless_players/roster.json \
+  --connections-config /opt/voidscape-staging/server/connections.conf \
+  --server-config /opt/voidscape-staging/server/local.conf \
+  --database /opt/voidscape-staging/server/inc/sqlite/voidscape.db >/dev/null
+HEADLESS_CREDENTIAL_DIR=/etc/voidscape/headless-players \
+  HEADLESS_SERVER_CONFIG=/opt/voidscape-staging/server/local.conf \
+  HEADLESS_CONNECTIONS_CONFIG=/opt/voidscape-staging/server/connections.conf \
+  HEADLESS_DATABASE=/opt/voidscape-staging/server/inc/sqlite/voidscape.db \
+  HEADLESS_PASSWORD_HELPER_CLASSPATH=/opt/voidscape-staging/server/portal-password-helper.jar \
+  HEADLESS_GAME_HOST=127.0.0.1 \
+  HEADLESS_GAME_PORT=43696 \
+  VOIDBOT_CLIENT_VERSION=10132 \
+  scripts/provision-headless-players.sh
+systemctl start voidscape-staging.service
+# Wait for the selected game server's normal health check to pass.
+systemctl enable --now voidscape-headless.target
+```
+
+The final provisioning pass verifies every receipt against the restored SQLite row
+and canonical password hash without consuming first-login state. Stop on any online,
+duplicate, missing-helper, mismatched-password, stale-receipt, or permission error.
+Do not clear an `online` flag with SQL. If and only if an older snapshot predates the
+offline gate and fails solely because fleet rows contain stale `online = 1` values,
+leave `voidscape-headless.target` disabled, start the selected game server alone so
+its normal startup reconciliation clears stale flags, then stop that game server and
+rerun `check-sqlite-roster-offline`. Only after that gate and provisioning verification
+both pass may the game server be started, health-checked, and the fleet enabled. Any
+other gate failure requires investigation rather than this legacy reconciliation.
+
 ## Config files
 
 | File | Purpose | Git status |
@@ -350,6 +654,63 @@ Server boot runs `JDBCPatchApplier`. Before a player-facing update:
 - Boot staging once against a copy.
 - Confirm login, save, logout, and relogin.
 - Confirm feature tables that came from addons or patches exist.
+
+### Void Arena ranked operations
+
+The July 15 hardening patch relabels old Void Arena `global` stats/matches as
+`LEGACY` and creates `voidarena_ranked_match_sessions`. Verify both changes on a
+staging copy before opening ranked play. Current seasons are UTC months named
+`YYYY-MM`; rollover happens automatically at `00:00 UTC` on the first of the month.
+The prior champion finalizes automatically after the short rollover grace period.
+`::arena season reset`, `confirm`, and `finalize` are deliberately non-mutating.
+
+Each ranked fight must have one durable `ACTIVE` session before either player enters
+the cage. Normal death/forfeit settlement atomically writes the terminal session,
+both ratings, and both aggregate records. A graceful stop calls the arena shutdown
+path and records active fights as shutdown no-contests. If the process dies before
+that path runs, normal server boot reconciles every orphaned `ACTIVE` row as a restart
+no-contest before players can create new ranked state. Do not edit or delete active
+rows to make an audit look clean, and do not award rating manually after a restart.
+
+This lifecycle is single-writer. Exactly one live game-server JVM may use the game
+DB; do not run rolling or blue/green game-server overlap. A second JVM's startup
+reconciliation can close the first JVM's live `ACTIVE` rows as restart no-contests,
+and the per-JVM admission locks cannot enforce pair limits across processes.
+
+Read-only administrator checks:
+
+```text
+::arena season
+::arena audit recent 25
+::arena audit <player name> 25
+::arena audit legacy 25
+```
+
+The current-season audit includes active, decisive, draw, shutdown-no-contest, and
+restart-no-contest sessions. Investigate any unexpected `ACTIVE` row after a clean
+stop/start, repeated settlement/database errors, or a mismatch between a terminal
+session and aggregate stats before reopening ranked play. Pair abuse checks are
+durable and cross season rollover: death/forfeit permits one rated decisive result
+per pair per rolling 30 minutes and three per UTC day; timeout draws and no-contests
+do not consume those allowances.
+
+Sir Charles persists the player's original inventory/equipment snapshot before
+applying the temporary kit. Normal terminal, graceful-shutdown, and login-recovery
+paths restore it before clearing the marker. If logs report a corrupt snapshot or a
+failed durable restore, leave the account offline, preserve the database and logs,
+and investigate the saved marker; never clear it or reconstruct the player's kit by
+guessing.
+
+Run the focused storage and policy gates directly when validating a database/runtime
+change; `scripts/build.sh` runs the same checks as part of the canonical build:
+
+```bash
+scripts/test-void-arena-ranked-policy-java.sh
+python3 scripts/test-void-arena-ranked-persistence.py
+scripts/test-jdbc-transaction-lock-java.sh
+scripts/test-void-arena-kit-snapshot-java.sh
+scripts/test-void-arena-sir-policy-java.sh
+```
 
 ## Logs and telemetry
 
@@ -467,7 +828,7 @@ scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id
 1. Finish and commit the code/content slice.
 2. Run `docs/RELEASE-CHECKLIST.md`.
 3. Build with `scripts/build.sh`.
-4. Back up the database.
+4. Back up the database and, when the headless fleet is provisioned, create its paired encrypted off-host credential/receipt backup.
 5. Deploy server/client/cache artifacts.
 6. Boot server and watch logs.
 7. Smoke-test with a real client.
@@ -475,12 +836,13 @@ scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id
 
 ## Rollback procedure
 
-1. Stop the server.
+1. Stop `voidscape-headless.target` when provisioned, then stop the server.
 2. Restore the previous known-good code/cache/client artifacts.
 3. Restore the DB backup if the failed release applied migrations or corrupted state.
-4. Boot server.
-5. Log in with a test account.
-6. Announce status if players were affected.
+4. If the rollback changed fleet account rows or credentials, restore the paired encrypted headless credential backup while the target is stopped, pass the explicit SQLite offline gate, and rerun its fail-closed provisioning verification. A legacy snapshot with stale online flags must use the game-server-only reconciliation sequence above; never edit the flags directly.
+5. Boot the server; only after its health checks pass may the headless target start.
+6. Log in with a test account.
+7. Announce status if players were affected.
 
 Prefer a boring rollback over trying to patch live state while players are online.
 

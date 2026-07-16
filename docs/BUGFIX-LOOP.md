@@ -65,7 +65,7 @@ For each raw report in the Intake section:
 
 Work `confirmed` bugs by severity P1 → P4; skip `blocked`. Within a severity, two
 groups: launch-surface bugs first (web portal, desktop client, TeaVM web client —
-launch is 2026-07-11, per the portal's `PORTAL_LAUNCH_AT` default), then everything
+launch is 2026-07-18, per the portal's `PORTAL_LAUNCH_AT` default), then everything
 else; within each group, oldest ID first.
 
 If no workable `confirmed` bugs remain: attempt repro on `reported` entries (same

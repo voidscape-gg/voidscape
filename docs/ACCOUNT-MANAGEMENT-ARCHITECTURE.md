@@ -66,6 +66,17 @@ Constraints:
 - `ip_hash`
 - `user_agent_hash`
 
+### `web_password_reset_tokens`
+
+- `account_id`
+- `token_hash`
+- `request_ip_hash`
+- `identifier_type`: `email`, `username`
+- `status`: `pending`, `used`, `revoked`, `expired`
+- `expires_at`, `used_at`, `revoked_at`
+
+Only the hash is durable. The raw token exists briefly inside the sealed email event and is placed in the URL fragment so link scanners do not consume it with an HTTP request.
+
 ### `web_account_characters`
 
 - `account_id`
@@ -97,7 +108,7 @@ The current schema draft lives in `web/portal/schema/`:
 - `sqlite/001_web_accounts.sql`
 - `mysql/001_web_accounts.sql`
 
-It is intentionally portal-owned reference SQL and is not auto-applied by the OpenRSC server. The schema adds `web_account_identities`, `web_character_link_challenges`, `web_founder_reservations`, `web_founder_referrals`, `web_audit_events`, and `web_abuse_signals` alongside the core account/session/character/entitlement tables. `scripts/test-portal-schema.sh` applies the SQLite variant and verifies the important constraints, including roster slots `0-9`, unique linked `player_id`, unique Google identity links, and unique active founder names.
+It is intentionally portal-owned reference SQL and is not auto-applied by the OpenRSC server. The schema adds identities, hashed sessions, recovery codes, password-reset tokens, character links/challenges, founder records, entitlements, audit events, and abuse signals. `scripts/test-portal-schema.sh` applies the SQLite variant and verifies the important ownership, status, token-uniqueness, and roster-slot constraints.
 
 ## Compatibility Strategy
 
@@ -111,7 +122,7 @@ Phase 1 keeps game login untouched and splits signup by surface:
 
 Launch decision: `member_world` stays globally enabled on the server for every client surface. Subscription cards are an account-wide XP/card incentive, not a per-player P2P unlock. The server config remains the source of truth for F2P/P2P restrictions, so launcher, Android, and web clients do not need separate membership logic.
 
-The shared game client uses the original packet registration form for desktop and native Android `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Web `/play` keeps its portal account sentinel for account creation, and recovery still points to `https://voidscape.gg/#security` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
+The shared game client uses the original packet registration form for desktop and native Android `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Web `/play` keeps its portal account sentinel for account creation, while client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
 
 Starter-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. `starter_card:<webAccountId> = 1` means waiting at the Lumbridge vendor, `2` means claimed, and staff revoke only clears an unclaimed waiting marker.
 
@@ -183,19 +194,22 @@ It currently proves:
 - public launch-signup mode (`PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1`) that exposes the safe account path while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden
 - starter-card reward state for the free weekly subscription card
 - public site payloads for status, XP rates, news, downloads, highscores, market intel, and activity feed
-- web account registration/login flow
+- web account registration/login flow with required public password-signup email verification, a 48-hour pending-signup lifetime, and scanner-safe explicit confirmation
 - local dev Google sign-in flow and launch-mode Google Identity Services ID-token signup that store a `google` provider identity and return a normal portal bearer session
 - `scrypt` password hashing with per-password salts
 - bearer sessions stored server-side as token hashes
-- local account security controls for password rotation, hashed recovery-code generation, and ending other active sessions
-- local recovery-code password reset through `POST /api/accounts/recover-password`; a valid code is consumed, all old sessions are revoked, the password hash is rotated, and a fresh bearer session is issued
+- account security controls for password rotation, password-confirmed recovery-code generation, and ending other active sessions
+- email-or-character-username recovery through `POST /api/accounts/password-reset/request`, with generic responses, a masked hint for matched usernames, hashed one-use tokens, and per-IP/per-account request limits
+- website-password completion through `POST /api/accounts/password-reset/complete` and recovery-code fallback through `POST /api/accounts/recover-password`; both revoke every session and recovery credential and require a clean sign-in afterward
+- authenticated, stepped-up game-password changes for offline portal-created linked characters, using the canonical OpenRSC bcrypt compatibility format and transactionally rechecking ownership/offline state
 - server-side 10-character roster cap
 - character-state API responses shaped for the portal
-- launch-mode account registration that creates the requested first character as a real linked OpenRSC save immediately when `PORTAL_OPENRSC_DB` is configured, using the same username and password as the starter game login
+- launch-mode account registration that creates the requested first character as a real linked OpenRSC save after email verification when `PORTAL_OPENRSC_DB` is configured, using the same username and password as the starter game login
 - OpenRSC SQLite-backed character creation through `POST /api/characters` when `PORTAL_OPENRSC_DB` is configured; the endpoint creates the normal `players`, `curstats`, `maxstats`, `experience`, and `capped_experience` rows, then stores the created player id in the local portal roster state
 - local character link challenges with hashed one-time codes and a dev simulation path
 - account-wide subscription-card redemption state
-- starter-card abuse controls that store salted hashes for IP/email/identity signals, keep suspicious new accounts active, and withhold only the free starter card for staff review after repeated non-local IP grants
+- separate salted-signal velocity controls for completed signup, verification sends, and additional character creation, with targeted exact-IP blocks and proxy overrides
+- starter-card abuse controls that keep accepted accounts active and default the IP review threshold off, while preserving optional staff-review mode
 - token-gated local staff endpoints for account lookup, status changes, subscription grants/clears, starter-card grants/revokes, and session revocation
 - explicit `501` stubs for redirect-style Google OAuth and subscription-card payment checkout
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
@@ -203,15 +217,22 @@ It currently proves:
 
 It does not yet prove:
 
-- production email verification
-- Cloudflare Turnstile or rate limits
 - production-safe OpenRSC character ownership/linking
 - production OpenRSC database writes outside the local SQLite dev bridge
 - real in-game `::link` command handling or signed game-server verification callback
 - production Google OAuth redirect/callback handling
 - production payment checkout/webhook handling
-- production email-delivered password reset or account-recovery support queue
 - production staff identity/RBAC beyond the local bearer-token guard
+
+### Registration and character-creation friction
+
+Public password signup keeps verified email mandatory. A pending signup lasts 48 hours by default; the account, first game character, and starter-card marker do not exist until the player explicitly posts the scanner-safe fragment token. `POST /api/accounts/verify-email/resend` is enumeration-safe: absent, expired, and live pending emails receive the same accepted response unless a generic rate limit fires. Initial and resend sends share independent limits of 3 requests per hour per source IP and 3 per hour per canonical email through `PORTAL_EMAIL_VERIFICATION_IP_LIMIT`, `PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT`, and `PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES=60`.
+
+Verification-request signals are separate from completed-signup signals. Sending or resending verification mail does not consume completed signup velocity; a password signup is recorded against that velocity only when verification creates the account. Launch defaults allow 3 completed signups per hour and 5 per day from one non-local IP, plus 20 per hour and 50 per day from one IPv4 `/24`.
+
+The first game character created inside an accepted launch signup bypasses repeat-character account, IP, subnet, and proxy velocity gates. It still fails on a targeted blocked IP, a reserved or duplicate portal/game name, a missing game DB bridge, or the transactionally checked 10-character roster cap. Its successful creation is recorded with an initial-signup marker and excluded from later repeat-character rolling counts. Additional character defaults are 5/hour and 10/day per account, 10/hour and 20/day per non-local IP, and 50/hour and 100/day per IPv4 `/24`.
+
+`PORTAL_BLOCKED_IP_CIDRS` remains the targeted blocklist; use `/32` entries for exact IPv4 addresses. `PORTAL_PROXY_IP_CIDRS` remains the targeted high-risk list, with `PORTAL_PROXY_SIGNUP_IP_DAILY_LIMIT` and `PORTAL_PROXY_CHARACTER_IP_DAILY_LIMIT` applying tighter bounds to both hourly and daily IP checks. These targeted controls do not replace the global launch defaults.
 
 ### Starter-card abuse policy
 
@@ -221,9 +242,9 @@ The free subscription card is protected at the reward boundary rather than by ad
 - one canonical email per web account, with common alias normalization
 - one Google provider subject per linked Google account
 - salted abuse-signal hashes for signup IP, email, and identity
-- a configurable daily limit for starter-card grants from the same non-local IP bucket
+- an optional daily limit for starter-card grants from the same non-local IP bucket, disabled by default
 
-When the IP bucket limit is exceeded, the account remains `active`; only the free starter card is marked as review-required and not mirrored into the OpenRSC `starter_card:<webAccountId>` cache. Staff can inspect the hashed signal history and grant the card manually if the cluster is legitimate.
+When operators intentionally set a positive IP bucket limit and it is exceeded, the account remains `active`; only the free starter card is marked as review-required and not mirrored into the OpenRSC `starter_card:<webAccountId>` cache. Staff can inspect the hashed signal history and grant the card manually if the cluster is legitimate.
 
 This keeps the normal launch path low friction while preventing throwaway accounts from reliably minting unlimited free subscription cards.
 
@@ -231,11 +252,13 @@ This keeps the normal launch path low friction while preventing throwaway accoun
 
 The low-friction recovery path is:
 
-1. The player signs in while they still have access and generates one-time recovery codes.
-2. If they later lose the password, `POST /api/accounts/recover-password` verifies a code hash plus canonical email, consumes that code, rotates the `scrypt` password hash, revokes old sessions, and returns a new session.
-3. If they lose both login and recovery codes, staff support must verify evidence out of band and then use the admin API to review/lock, revoke sessions, or restore access.
+1. A signed-out player enters either the account email or a portal-owned character username. The API always returns an accepted response; a matched username receives a masked hint only when a deliverable reset email was actually queued. Synthetic and unknown usernames never display a fake destination.
+2. The portal sends a one-use website-password reset link to the account email. Completion rotates the `scrypt` password, marks the email verified by possession, revokes all sessions/reset tokens/recovery codes, and returns to sign-in without creating a synthetic session.
+3. A previously generated recovery code is the offline fallback. It is consumed once and performs the same credential/session revocation, but possession of a code alone does not mark email verified.
+4. Character game passwords are separate. A signed-in owner confirms the website password (or has a recent passwordless federated session), selects an offline portal-created linked character, and changes only that `players.pass` value.
+5. A passwordless account created by native-player backfill uses the separate signed-out claim path. The player proves the current game password, chooses a real email and new website password, then explicitly confirms a hashed one-use email token. Completion rechecks the latest game credential fingerprint and `web_account_id` while holding a short SQLite write lock through the portal-store save, upgrades the same portal account in place, revokes portal recovery/session material, and never changes `players.pass`, its salt, character ownership, active subscription time, or starter-card entitlements. Backfill migrates any legacy `char_sub:<playerId>` expiry to `acct_sub:<accountId>` before the new ownership marker makes account-level lookup authoritative.
 
-Production still needs email delivery, redirect-style Google OAuth if that provider flow is wanted, and a staff identity/RBAC layer before this becomes an internet-facing recovery system.
+Staff support remains the last resort for a player who has lost email/recovery access, does not know the older character's current game password, or needs an email collision reviewed. Claims never merge portal accounts automatically. Production still needs staff identity/RBAC beyond the local admin-token guard.
 
 ### Read-only OpenRSC snapshot endpoint
 
@@ -254,7 +277,7 @@ It does not authenticate ownership or mutate game data. Production account linki
 
 ### Local OpenRSC character creation
 
-When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 letter/number `gamePassword`; the public launch form uses an 8-20 letter/number password because that first password is also the initial game login. The dev server stores that password using the legacy salted hash format accepted by `DataConversions.checkPassword`, inserts the normal player and skill rows, stamps the created player cache with `web_account_id`, snapshots the created character back through the existing OpenRSC read path, and records the created `playerId` in local portal roster state.
+When `PORTAL_OPENRSC_DB` points at a local SQLite game database, `POST /api/characters` creates a real game character instead of only a local preview. Because the current PC client still logs in with `character name + character password`, the request must include a 4-20 letter/number `gamePassword`; the public launch form uses an 8-20 letter/number password because that first password is also the initial game login. The signup's initial character bypasses repeat-character velocity but retains the targeted IP block, name, DB, and max-10 controls described above; later `POST /api/characters` requests use the account/IP/subnet limits. `PortalPasswordHasher` applies OpenRSC's compatibility `SHA-512(salt + MD5(password))` prehash and bcrypt `$2y$10$` format without putting plaintext credentials in process arguments. The bridge inserts the normal player and skill rows, stamps `web_account_id`, snapshots the character, and records the linked `playerId` in portal state.
 
 This is deliberately still a local bridge. It does not bypass Void Island starter-path onboarding, does not implement a web-account character picker in the client, and does not create production Google/OAuth account records in OpenRSC.
 

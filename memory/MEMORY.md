@@ -9,6 +9,8 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Android: emulation QA](android_emulation.md) — AVD roles and current headless screenshot gotchas
 - [Beta deployments](beta_deployments.md) — VPS beta deploy paths, runtime/migration sync, checks
 - [Content pipeline](content_pipeline.md) — custom content/art starts with scripts/content.sh packs and validation
+- [Custom wearables](custom_wearables.md) — one-based appearance IDs, dual archives, preset and noteability gotchas
+- [Christmas cracker reel](christmas_cracker.md) — 60/20/20 server roll, trusted v1 envelope, shared reel/Workbench QA invariants
 - [Discord posting](discord_posting.md) — canonical VoidBot command for bug-feed/release-note posts
 - [iPhone web client](iphone_web_client.md) — TeaVM mobile status, HUD direction, chat/world-map blockers; next chat handoff: `docs/iphone-web-client-next-chat-context.md`
 - [Prelaunch readiness](prelaunch_readiness.md) — portal policy/countdown/account-manager slice done; remaining live/client gates
@@ -19,3 +21,6 @@ This file is always loaded into context. Keep entries one line, under 150 charac
 - [Feedback: bugfix autonomy](feedback_bugfix_autonomy.md) — run the bug-fix/QA loop straight through, no per-fix approval pauses
 - [Perf pass 2](project_perf_pass2.md) — 2026-07-03 tick-loop pass: results, do-not-break invariants (NPC event parking, inline events, WAL), next wall = update generation
 - [Prelaunch priorities](prelaunch_priorities.md) — agreed work order: exploit sweep → device QA → bug triage → golden-path QA → soak → jar deploy
+- [Duel proof](duel_proof.md) — approved melee-only commit/reveal design, privacy limits, slice status, and remaining gates
+- [Headless players](headless_players.md) — ordinary-account fleet lifecycle, route, credential, and systemd invariants
+- [Player titles V2](player_titles_v2.md) — 64-row main-loop catalog, two worn slots, glass ceremony, Court, and 10137 tail
