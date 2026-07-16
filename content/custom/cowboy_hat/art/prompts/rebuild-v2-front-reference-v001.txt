@@ -1,0 +1,35 @@
+Use case: stylized-concept
+Asset type: single directional source reference for a RuneScape Classic wearable; this is not a final packed sprite
+
+Input images:
+- Image 1 is the user-approved Cowboy Hat identity board. Preserve its brown leather, broad curled brim, dark band, tiny muted-gold buckle, chunky silhouette, and overall frontier character.
+- Image 2 is a strict authentic RuneScape Classic front-registration board. Its quadrants are: top-left bald head only; top-right wizard hat only; bottom-left the real head-plus-wizard render order; bottom-right the real head-plus-party-hat render order. Use it only for exact straight-on camera elevation, apparent head scale, brim height, and the face-safe lower opening. Do not copy either authentic hat's pointy design or colors.
+
+Primary request:
+Generate exactly one isolated Cowboy Hat viewed perfectly straight-on from the front. It must be a new, cleaner directional reference for Image 1's design, corrected to fit the authentic front geometry demonstrated by Image 2.
+
+Subject and geometry:
+- Compact, gently tapered brown leather crown; substantially lower than the old tall front concept.
+- One shallow centered crown crease. Do not create a deep V-shaped notch.
+- The crown silhouette must read as one cowboy crown, never as two ears, horns, cat ears, or two separate peaks.
+- Broad, nearly horizontal brim extending clearly beyond both sides of the crown, with modest upward curls only at the far ends.
+- Keep the lower center of the brim shallow and face-safe, echoing the open front registration in Image 2; no opaque panel hanging over the face.
+- Dark leather band and one very small muted-gold buckle centered at the front.
+- Perfectly centered and bilaterally symmetric front view. No three-quarter turn, tilt, top-down view, or perspective skew.
+
+Style and palette:
+- Chunky early RuneScape Classic-inspired pixel source art with a strong tiny-sprite silhouette.
+- Hard blocky pixel edges, flat shading, no more than eight intended colors.
+- Near-black outline; dark, mid, and warm brown leather shades; very dark brown band; muted gold buckle.
+- Preserve readable separation between crown, band, buckle, and brim after aggressive reduction.
+
+Composition and backdrop:
+- Exactly one complete hat centered in a square image.
+- At least 25 percent empty padding on every side; the hat must not touch or approach any edge.
+- Perfectly uniform solid #00FF00 chroma-key background.
+
+Constraints:
+- Hat only: no head, face, hair, person, mannequin, body, hands, scenery, floor, text, labels, borders, neighboring views, or extra objects.
+- No cast shadow, contact shadow, reflection, glow, background texture, gradient, lighting variation, transparency, soft edge, antialiasing, blur, or watermark.
+- Do not use #00FF00 anywhere inside the hat.
+- Do not reproduce the rejected 6x3 worksheet or generate animation frames.

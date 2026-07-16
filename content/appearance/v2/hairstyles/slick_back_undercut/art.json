@@ -1,0 +1,199 @@
+{
+  "generator": "tools/appearance-studio/proof_art/paperdoll_v2_hairstyles.py",
+  "generatorSha256": "df037fc1f07dab4f6f41466a8e71232838d3832427a06c56fb531755b67517f8",
+  "id": "slick_back_undercut",
+  "label": "Slick-back Undercut",
+  "masters": {
+    "combat-west": {
+      "fileSha256": "d38ec10f620daa12463275a54ea6d61699ffd076488c07bbd30ebff1ea2f2a4d",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        90,
+        116,
+        162,
+        204,
+        216,
+        232,
+        246
+      ],
+      "nonzeroAlphaValues": [
+        160,
+        168,
+        255
+      ],
+      "occupiedPixels": 480,
+      "outsideAllowedPixels": 0,
+      "path": "masters/combat-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -18,
+        -6,
+        13,
+        18
+      ],
+      "rgbaSha256": "685933f71f66de8c169fb8d7ce53f1d1da411e47d27e328d171ce7d687fc583f",
+      "scalpAttachmentPixels": 264
+    },
+    "north": {
+      "fileSha256": "6846b2028a79d8158d8293cae1b16aa689b45a39e3683a6d27c42d850be4c602",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        96,
+        102,
+        132,
+        166,
+        216,
+        224,
+        238,
+        250
+      ],
+      "nonzeroAlphaValues": [
+        136,
+        176,
+        255
+      ],
+      "occupiedPixels": 596,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -18,
+        -6,
+        17,
+        18
+      ],
+      "rgbaSha256": "327b3038a2edc4e486f47fb88f46b187503bc03d38f0a9abf3b378a2218c41fc",
+      "scalpAttachmentPixels": 228
+    },
+    "north-west": {
+      "fileSha256": "79b017263cbc5d054a35ad6950a4fae546552745e42b8feb47122a195ab3060c",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        72,
+        92,
+        118,
+        162,
+        206,
+        216,
+        232,
+        246
+      ],
+      "nonzeroAlphaValues": [
+        160,
+        168,
+        255
+      ],
+      "occupiedPixels": 510,
+      "outsideAllowedPixels": 0,
+      "path": "masters/north-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -17,
+        -6,
+        13,
+        19
+      ],
+      "rgbaSha256": "1290ce2e5414fb02ea20ce766688b9148843251bd2864e541015440952a8176f",
+      "scalpAttachmentPixels": 276
+    },
+    "south": {
+      "fileSha256": "c9681ec2706911db0d59cf4b6b93b12f6e2e253a85f4f5e0abb638c65f17422f",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        72,
+        92,
+        118,
+        162,
+        206,
+        212,
+        228,
+        242
+      ],
+      "nonzeroAlphaValues": [
+        160,
+        168,
+        255
+      ],
+      "occupiedPixels": 609,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -15,
+        -6,
+        16,
+        19
+      ],
+      "rgbaSha256": "1980fc1073ea44b5f03868ff62187a637a3ec5bed5d2222d5b03ff6f892be2fd",
+      "scalpAttachmentPixels": 446
+    },
+    "south-west": {
+      "fileSha256": "684a22644c95b9e2b404df218e200dd606480b5f68c1aa647faf6b6f05587290",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        72,
+        92,
+        118,
+        162,
+        206,
+        212,
+        228,
+        242
+      ],
+      "nonzeroAlphaValues": [
+        160,
+        168,
+        255
+      ],
+      "occupiedPixels": 621,
+      "outsideAllowedPixels": 0,
+      "path": "masters/south-west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -16,
+        -6,
+        15,
+        19
+      ],
+      "rgbaSha256": "82360875ad887934cbc463994140076c55d68bfcc742246ad05a198b60765bbc",
+      "scalpAttachmentPixels": 439
+    },
+    "west": {
+      "fileSha256": "1fb4e8d124574ff5640f63c39b198dd3278682980c99ec265f52ba02fe3ac5d6",
+      "fourConnectedComponents": 1,
+      "grayscaleValues": [
+        70,
+        90,
+        116,
+        162,
+        204,
+        216,
+        232,
+        246
+      ],
+      "nonzeroAlphaValues": [
+        160,
+        168,
+        255
+      ],
+      "occupiedPixels": 480,
+      "outsideAllowedPixels": 0,
+      "path": "masters/west.png",
+      "protectedAnatomyPixels": 0,
+      "relativeAlphaBoundsInclusive": [
+        -18,
+        -6,
+        13,
+        18
+      ],
+      "rgbaSha256": "08c0c85628a225193ebedf71e04cb218c476dfae366c947b4f243c089e00fa11",
+      "scalpAttachmentPixels": 264
+    }
+  },
+  "rationale": "Low swept top mass with directional highlight bands over a connected faded undercut.",
+  "schema": "voidscape-paperdoll-v2-hairstyle-art/v1",
+  "source": "explicit-crown-relative-grayscale-pixel-geometry",
+  "template": "rsc-player-2x-v1",
+  "templateSha256": "d7400f68d450498434967e5ec2c6b6d8165b739a511271401d65b530c9d8b019"
+}

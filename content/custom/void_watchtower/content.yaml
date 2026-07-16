@@ -1,0 +1,39 @@
+# Voidscape content pack.
+
+schema: voidscape-content/v1
+kind: model
+slug: void_watchtower
+name: "Void watchtower"
+description: "An original ruined four-pier sentry tower with an open fractured lookout and restrained Void beacon."
+status: integrated
+
+gameplay:
+  like: "Void monolith"
+  notes: "Integrated as nonblocking decorative scenery id 1312 with model void_watchtower and a two-by-two, type-zero definition; no custom interaction or collision behavior."
+
+art:
+  style_brief: "../../../tools/voidscape-content/templates/voidscape-art-brief.md"
+  source_dir: "art/source"
+  working_dir: "art/working"
+  final_dir: "art/final"
+  selected_concept: "art/source/void_watchtower.obj"
+
+integration:
+  server_defs:
+    - "server/conf/server/defs/GameObjectDef.xml"
+  client_defs:
+    - "Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java"
+  cache_files:
+    - "Client_Base/Cache/video/models.orsc"
+  spawn_files:
+    - "server/conf/server/defs/locs/SceneryLocsVoidEnclave.json"
+  drop_files: []
+  client_version_bump_required: true
+
+rollout:
+  beta_package_required: false
+  test_notes:
+    - "Import with Blender Z-up axis mapping, scale 128, and double-sided OB3 face fills."
+    - "Integrated as void_watchtower.ob3 at the three approved outer-corner placements: (100,302), (124,302), and (125,325)."
+    - "Check the open center and missing platform sections against player readability from all four camera quadrants."
+    - "Confirm the violet beacon remains an accent rather than overpowering the Rift."

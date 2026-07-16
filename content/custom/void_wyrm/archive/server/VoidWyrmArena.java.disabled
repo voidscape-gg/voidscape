@@ -1,0 +1,419 @@
+package com.openrsc.server.plugins.custom.minigames.voidwyrm;
+
+import com.google.inject.Inject;
+import com.openrsc.server.constants.NpcId;
+import com.openrsc.server.event.DelayedEvent;
+import com.openrsc.server.external.NPCLoc;
+import com.openrsc.server.model.Point;
+import com.openrsc.server.model.entity.GameObject;
+import com.openrsc.server.model.entity.GroundItem;
+import com.openrsc.server.model.entity.npc.Npc;
+import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.PlayerDeathContext;
+import com.openrsc.server.model.world.World;
+import com.openrsc.server.plugins.ImmediatePlayerLogin;
+import com.openrsc.server.plugins.custom.misc.VoidDungeonAdmission;
+import com.openrsc.server.plugins.triggers.AttackNpcTrigger;
+import com.openrsc.server.plugins.triggers.KillNpcTrigger;
+import com.openrsc.server.plugins.triggers.OpLocTrigger;
+import com.openrsc.server.plugins.triggers.PlayerDeathDropTrigger;
+import com.openrsc.server.plugins.triggers.PlayerDeathTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLoginTrigger;
+import com.openrsc.server.plugins.triggers.PlayerLogoutTrigger;
+import com.openrsc.server.plugins.triggers.PlayerRangeNpcTrigger;
+import com.openrsc.server.plugins.triggers.SpellNpcTrigger;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static com.openrsc.server.plugins.Functions.delay;
+import static com.openrsc.server.plugins.Functions.displayTeleportBubble;
+import static com.openrsc.server.plugins.Functions.multi;
+
+/** Owns each player's private, repeatable Void Wyrm fight. */
+public final class VoidWyrmArena implements OpLocTrigger, KillNpcTrigger,
+	PlayerLoginTrigger, PlayerLogoutTrigger, PlayerDeathTrigger, PlayerDeathDropTrigger,
+	AttackNpcTrigger, PlayerRangeNpcTrigger, SpellNpcTrigger, ImmediatePlayerLogin {
+
+	private final Map<Long, Session> playerSessions = new ConcurrentHashMap<>();
+	private final Map<Integer, Session> instanceSessions = new ConcurrentHashMap<>();
+	private final Map<UUID, Session> bossSessions = new ConcurrentHashMap<>();
+
+	@Inject
+	private World world;
+
+	@Override
+	public boolean blockOpLoc(Player player, GameObject obj, String command) {
+		return isBossGate(obj);
+	}
+
+	@Override
+	public void onOpLoc(Player player, GameObject obj, String command) {
+		if (!player.atObject(obj)) {
+			return;
+		}
+		Session session = playerSessions.get(player.getUsernameHash());
+		if (session != null && isActiveParticipant(player, session)) {
+			exitThroughGate(player, obj, session);
+			return;
+		}
+		if (session != null || player.getInstanceId() != 0) {
+			if (session != null) {
+				closeSession(session, player, true);
+			} else {
+				clearPlayerState(player);
+				player.teleport(VoidWyrmConfig.SHARED_RETURN_X, VoidWyrmConfig.SHARED_RETURN_Y, true);
+			}
+			player.message("The unstable Wyrm phase collapses around you.");
+			return;
+		}
+		enterThroughGate(player, obj);
+	}
+
+	private void enterThroughGate(Player player, GameObject gate) {
+		if (!VoidDungeonAdmission.isAdmitted(player)) {
+			player.message("The obelisk rejects you. The surface rift must admit you first.");
+			return;
+		}
+		if (player.inCombat()) {
+			player.message("You cannot bind the obelisk while fighting.");
+			return;
+		}
+
+		final Point origin = snapshot(player);
+		player.message("The obelisk can bind one challenger to the Void Wyrm.");
+		if (multi(player, "Face the Void Wyrm alone", "Step away") != 0
+			|| !canContinueGateTravel(player, gate, origin, 0)) {
+			return;
+		}
+
+		player.message("The obelisk tears open a private fold in the dungeon.");
+		displayTeleportBubble(player, player.getX(), player.getY(), false);
+		delay(2);
+		if (!canContinueGateTravel(player, gate, origin, 0)) {
+			messageIfPresent(player, "The private fold collapses before you can enter.");
+			return;
+		}
+		startSession(player);
+	}
+
+	private void exitThroughGate(Player player, GameObject gate, Session session) {
+		if (player.inCombat()) {
+			player.message("You cannot release the Wyrm's binding while fighting.");
+			return;
+		}
+		final Point origin = snapshot(player);
+		if (multi(player, "Leave the private fight", "Stay and fight") != 0
+			|| !canContinueGateTravel(player, gate, origin, session.instanceId)
+			|| !isActiveParticipant(player, session)) {
+			return;
+		}
+		displayTeleportBubble(player, player.getX(), player.getY(), false);
+		delay(2);
+		if (!canContinueGateTravel(player, gate, origin, session.instanceId)
+			|| !isActiveParticipant(player, session)) {
+			messageIfPresent(player, "The obelisk's binding snaps back into place.");
+			return;
+		}
+		closeSession(session, player, true);
+		player.message("The obelisk returns you to the shared antechamber.");
+	}
+
+	private synchronized void startSession(Player player) {
+		if (playerSessions.containsKey(player.getUsernameHash())
+			|| player.getInstanceId() != 0
+			|| !VoidDungeonAdmission.isAdmitted(player)) {
+			return;
+		}
+		int instanceId = world.allocateInstanceId();
+		Session session = new Session(player.getUsernameHash(), instanceId);
+		playerSessions.put(session.ownerHash, session);
+		instanceSessions.put(instanceId, session);
+
+		player.teleport(VoidWyrmConfig.PLAYER_LANDING_X, VoidWyrmConfig.PLAYER_LANDING_Y, true);
+		player.setInstanceId(instanceId);
+		world.getServer().getGameEventHandler().add(
+			new VoidWyrmSessionGuardEvent(world, session, this));
+		spawnBoss(session, player);
+		player.message("The dungeon falls silent. No other player can enter this fight.");
+	}
+
+	private synchronized void spawnBoss(Session session, Player owner) {
+		if (session.closed || !isActiveParticipant(owner, session)) {
+			return;
+		}
+		NPCLoc loc = new NPCLoc(NpcId.VOID_WYRM.id(),
+			VoidWyrmConfig.BOSS_X, VoidWyrmConfig.BOSS_Y,
+			102, 138, 1305, 1368);
+		Npc boss = new Npc(world, loc);
+		boss.setShouldRespawn(false);
+		boss.setInstanceId(session.instanceId);
+		boss.setAttribute("void_wyrm_boss", true);
+		boss.setAttribute(Npc.FORCE_CHASE_ATTRIBUTE, true);
+		boss.setDeathDropDestination(VoidWyrmConfig.sharedDropPoint(), 0);
+		world.registerNpc(boss);
+		boss.face(owner.getX(), owner.getY());
+		boss.setChasing(owner);
+		session.boss = boss;
+		bossSessions.put(boss.getUUID(), session);
+		world.getServer().getGameEventHandler().add(new VoidWyrmBossEvent(world, boss, this));
+	}
+
+	private synchronized void closeSession(Session session, Player player, boolean relocate) {
+		if (session == null || session.closed) {
+			return;
+		}
+		session.closed = true;
+		session.generation++;
+		playerSessions.remove(session.ownerHash, session);
+		instanceSessions.remove(session.instanceId, session);
+		Npc boss = session.boss;
+		session.boss = null;
+		if (boss != null) {
+			bossSessions.remove(boss.getUUID(), session);
+			if (!boss.isRemoved()) {
+				boss.setShouldRespawn(false);
+				world.unregisterNpc(boss);
+			}
+		}
+
+		if (player != null && player.getInstanceId() == session.instanceId) {
+			clearPlayerState(player);
+			if (relocate) {
+				player.teleport(VoidWyrmConfig.SHARED_RETURN_X,
+					VoidWyrmConfig.SHARED_RETURN_Y, true);
+			}
+		}
+	}
+
+	private void clearPlayerState(Player player) {
+		player.resetCombatEvent();
+		player.setLastOpponent(null);
+		player.resetFollowing();
+		player.resetPath();
+		player.setBusy(false);
+		player.setInstanceId(0);
+	}
+
+	@Override
+	public boolean blockKillNpc(Player player, Npc npc) {
+		return isWyrm(npc);
+	}
+
+	@Override
+	public void onKillNpc(Player player, Npc npc) {
+		Session session = npc == null ? null : bossSessions.remove(npc.getUUID());
+		if (session == null || session.closed || session.boss != npc
+			|| player == null || player.getUsernameHash() != session.ownerHash) {
+			return;
+		}
+		session.boss = null;
+		final int generation = ++session.generation;
+		player.message("@mag@The Void Wyrm falls. Its owner-bound loot is cast into the shared antechamber.");
+		world.getServer().getGameEventHandler().add(new DelayedEvent(world, null,
+			VoidWyrmConfig.RESPAWN_DELAY_MS, "Void Wyrm Respawn") {
+			@Override
+			public void run() {
+				Player owner = world.getPlayer(session.ownerHash);
+				boolean currentSession = !session.closed
+					&& session.generation == generation
+					&& instanceSessions.get(session.instanceId) == session;
+				if (currentSession && isActiveParticipant(owner, session)
+					&& VoidDungeonAdmission.isAdmitted(owner)) {
+					spawnBoss(session, owner);
+					owner.message("The Void Wyrm reforms from the fractures in the floor.");
+				} else if (currentSession) {
+					closeFromBoundaryFailure(session, owner);
+				}
+				stop();
+			}
+		});
+	}
+
+	@Override
+	public boolean blockPlayerDeathDrop(Player player, PlayerDeathContext context) {
+		Session session = player == null ? null : playerSessions.get(player.getUsernameHash());
+		return session != null
+			&& context.getDeathInstanceId() == session.instanceId
+			&& VoidWyrmConfig.isArena(context.getDeathPoint());
+	}
+
+	@Override
+	public void onPlayerDeathDrop(Player player, PlayerDeathContext context) {
+		if (!blockPlayerDeathDrop(player, context)) {
+			return;
+		}
+		Session session = playerSessions.get(player.getUsernameHash());
+		Point destination = VoidWyrmConfig.sharedDropPoint();
+		for (GroundItem item : context.getGroundItems()) {
+			if (item != null && !item.isRemoved()) {
+				item.setOwner(player);
+				item.setLocation(destination);
+				item.setInstanceId(0);
+			}
+		}
+		// This hook runs inline during killedBy(), before the shared respawn location is
+		// published. Clear the private phase here rather than racing the later death hook.
+		closeSession(session, player, false);
+	}
+
+	@Override
+	public boolean blockPlayerDeath(Player player) {
+		return player != null && playerSessions.containsKey(player.getUsernameHash());
+	}
+
+	@Override
+	public void onPlayerDeath(Player player) {
+		Session session = player == null ? null : playerSessions.get(player.getUsernameHash());
+		if (session != null) {
+			closeSession(session, player, false);
+		}
+	}
+
+	@Override
+	public boolean blockPlayerLogout(Player player) {
+		return player != null && playerSessions.containsKey(player.getUsernameHash());
+	}
+
+	@Override
+	public void onPlayerLogout(Player player) {
+		Session session = player == null ? null : playerSessions.get(player.getUsernameHash());
+		if (session != null) {
+			closeSession(session, player, true);
+		}
+	}
+
+	@Override
+	public boolean blockPlayerLogin(Player player) {
+		return player != null && player.getConfig().WANT_VOID_DUNGEON
+			&& (playerSessions.containsKey(player.getUsernameHash())
+				|| VoidWyrmConfig.isArena(player.getLocation()));
+	}
+
+	@Override
+	public void onPlayerLogin(Player player) {
+		if (player == null || !player.getConfig().WANT_VOID_DUNGEON) {
+			return;
+		}
+		Session session = player == null ? null : playerSessions.get(player.getUsernameHash());
+		if (session != null) {
+			closeSession(session, player, false);
+		}
+		if (session != null || VoidWyrmConfig.isArena(player.getLocation())) {
+			clearPlayerState(player);
+			player.setInitialLocation(Point.location(
+				VoidWyrmConfig.SHARED_RETURN_X, VoidWyrmConfig.SHARED_RETURN_Y));
+		}
+	}
+
+	@Override
+	public boolean blockAttackNpc(Player player, Npc npc) {
+		return shouldDenyBossAction(player, npc);
+	}
+
+	@Override
+	public void onAttackNpc(Player player, Npc npc) {
+		denyBossAction(player);
+	}
+
+	@Override
+	public boolean blockPlayerRangeNpc(Player player, Npc npc) {
+		return shouldDenyBossAction(player, npc);
+	}
+
+	@Override
+	public void onPlayerRangeNpc(Player player, Npc npc) {
+		denyBossAction(player);
+	}
+
+	@Override
+	public boolean blockSpellNpc(Player player, Npc npc) {
+		return shouldDenyBossAction(player, npc);
+	}
+
+	@Override
+	public void onSpellNpc(Player player, Npc npc) {
+		denyBossAction(player);
+	}
+
+	private boolean shouldDenyBossAction(Player player, Npc npc) {
+		if (!isWyrm(npc)) {
+			return false;
+		}
+		Session session = bossSessions.get(npc.getUUID());
+		return session == null || session.boss != npc || !isActiveParticipant(player, session);
+	}
+
+	private void denyBossAction(Player player) {
+		if (player != null) {
+			player.message("That Void Wyrm belongs to another private fight.");
+		}
+	}
+
+	boolean isActiveParticipant(Player player, Session session) {
+		return player != null && session != null && !session.closed
+			&& player.loggedIn() && !player.isRemoved() && !player.isLoggingOut()
+			&& !player.isUnregistering() && !player.killed
+			&& player.getUsernameHash() == session.ownerHash
+			&& player.getInstanceId() == session.instanceId
+			&& playerSessions.get(session.ownerHash) == session
+			&& instanceSessions.get(session.instanceId) == session
+			&& VoidWyrmConfig.isArena(player.getLocation());
+	}
+
+	Session sessionForBoss(Npc boss) {
+		return boss == null ? null : bossSessions.get(boss.getUUID());
+	}
+
+	Player ownerFor(Session session) {
+		return session == null ? null : world.getPlayer(session.ownerHash);
+	}
+
+	void closeFromBoundaryFailure(Session session, Player player) {
+		boolean relocate = session != null && player != null
+			&& player.getInstanceId() == session.instanceId
+			&& VoidWyrmConfig.isArena(player.getLocation());
+		closeSession(session, player, relocate);
+	}
+
+	private boolean canContinueGateTravel(Player player, GameObject gate,
+			Point origin, int expectedInstanceId) {
+		return player.loggedIn() && !player.isRemoved() && !player.isLoggingOut()
+			&& !player.isUnregistering() && !player.killed && !player.inCombat()
+			&& player.getInstanceId() == expectedInstanceId
+			&& player.getX() == origin.getX() && player.getY() == origin.getY()
+			&& player.atObject(gate) && isBossGate(gate);
+	}
+
+	private Point snapshot(Player player) {
+		return Point.location(player.getX(), player.getY());
+	}
+
+	private boolean isBossGate(GameObject obj) {
+		return obj != null && VoidWyrmConfig.isBossGate(obj.getID(), obj.getX(), obj.getY());
+	}
+
+	private boolean isWyrm(Npc npc) {
+		return npc != null && npc.getID() == NpcId.VOID_WYRM.id();
+	}
+
+	private void messageIfPresent(Player player, String message) {
+		if (player.loggedIn() && !player.isRemoved() && !player.isUnregistering()) {
+			player.message(message);
+		}
+	}
+
+	static final class Session {
+		final long ownerHash;
+		final int instanceId;
+		volatile Npc boss;
+		volatile boolean closed;
+		volatile int generation;
+
+		Session(long ownerHash, int instanceId) {
+			this.ownerHash = ownerHash;
+			this.instanceId = instanceId;
+		}
+	}
+}

@@ -1,0 +1,15 @@
+Use the supplied authentic RuneScape Classic wizard-hat, medium-helmet, and
+partyhat reference grids as strict scale and perspective references.
+
+Create a design study for one classic brown frontier cowboy hat: pinched crown,
+broad slightly curled brim, dark leather band, and one tiny muted-gold buckle.
+Show five isolated orthographic game-sprite views: front, front three-quarter,
+side, rear three-quarter, and rear. Use a pure #00FF00 background with generous
+separation.
+
+Show only the hat: no head, person, UI, text, labels, shadows, scenery, or extra
+objects. Match RuneScape Classic's chunky filled pixel-art language and tiny
+silhouette proportions. Use hard pixel edges, no antialiasing, no gradients,
+no soft transparency, and no modern OSRS or painted styling. Use no more than
+eight flat colors. This is directional source material, not a pack-ready
+animation sheet; do not invent animation frames or alter the reference layout.

@@ -1,0 +1,38 @@
+# Voidscape content pack.
+
+schema: voidscape-content/v1
+kind: model
+slug: void_market_shelter
+name: "Void market shelter"
+description: "An original open-sided quartermaster shelter with a patched violet canopy, low supplies, and hanging Rift charms."
+status: integrated
+
+gameplay:
+  like: "decorative market shelter"
+  notes: "Scenery id 1313; nonblocking type-0 decorative 3x2 placement at Void Enclave (102,317), direction 0."
+
+art:
+  style_brief: "../../../tools/voidscape-content/templates/voidscape-art-brief.md"
+  source_dir: "art/source"
+  working_dir: "art/working"
+  final_dir: "art/final"
+  selected_concept: "art/source/void_market_shelter.obj"
+
+integration:
+  server_defs:
+    - "server/conf/server/defs/GameObjectDef.xml"
+  client_defs:
+    - "Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java"
+  cache_files:
+    - "Client_Base/Cache/video/models.orsc"
+  spawn_files:
+    - "server/conf/server/defs/locs/SceneryLocsVoidEnclave.json"
+  drop_files: []
+  client_version_bump_required: true
+
+rollout:
+  beta_package_required: false
+  test_notes:
+    - "Imported as model name void_market_shelter with Blender Z-up mapping, scale 128, centered and grounded coordinates, and double-sided OB3 fills."
+    - "Integrated as nonblocking type 0, width 3, height 2; this mesh has no solid floor or full-height wall."
+    - "Verify the central player sight corridor, low counter, torn canopy edge, and both violet charms from four camera quadrants."

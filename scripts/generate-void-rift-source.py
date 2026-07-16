@@ -24,11 +24,11 @@ MTL_PATH = SOURCE_DIR / "void_rift_structure.mtl"
 
 # Insertion order is also the stable order in the generated MTL.
 MATERIALS: dict[str, tuple[int, int, int]] = {
-    "rift_core": (18, 8, 28),
-    "voidstone_dark": (37, 33, 47),
-    "gunmetal": (55, 55, 66),
-    "bruised_violet": (73, 40, 91),
-    "rift_violet": (101, 52, 123),
+    "rift_core": (32, 8, 48),
+    "voidstone_dark": (64, 56, 72),
+    "gunmetal": (96, 88, 104),
+    "bruised_violet": (128, 56, 152),
+    "rift_violet": (184, 96, 216),
 }
 
 
@@ -83,13 +83,16 @@ class SupportSpec:
 
 
 SUPPORTS = (
-    SupportSpec(4.0, True, 2.31, 8.0, 1.0, 1.00, 0.52, -0.26),
-    SupportSpec(64.0, False, 1.36, 27.0, -1.0, 0.92, -0.38, 0.42),
-    SupportSpec(126.0, True, 2.24, 49.0, -1.0, 1.06, -0.45, -0.28),
-    SupportSpec(184.0, False, 1.52, 3.0, 1.0, 1.02, 0.36, -0.48),
-    SupportSpec(244.0, True, 2.36, 36.0, 1.0, 0.96, 0.47, 0.31),
-    SupportSpec(305.0, False, 1.23, 18.0, -1.0, 1.08, -0.41, -0.37),
+    SupportSpec(4.0, True, 1.92, 8.0, 1.0, 1.00, 0.42, -0.24),
+    SupportSpec(64.0, False, 0.89, 27.0, -1.0, 0.92, -0.34, 0.38),
+    SupportSpec(126.0, True, 1.78, 49.0, -1.0, 1.06, -0.39, -0.25),
+    SupportSpec(184.0, False, 1.03, 3.0, 1.0, 1.02, 0.32, -0.42),
+    SupportSpec(244.0, True, 1.94, 36.0, 1.0, 0.96, 0.40, 0.28),
+    SupportSpec(305.0, False, 0.78, 18.0, -1.0, 1.08, -0.36, -0.33),
 )
+
+RIFT_TEAR_GROUP = "upright_rift_tear"
+RIFT_TEAR_ROTATION_DEGREES = 25.0
 
 
 def polar(radius: float, angle: float, z: float) -> tuple[float, float, float]:
@@ -100,9 +103,9 @@ def add_segmented_plinth(mesh: Mesh) -> None:
     """Add twelve separated, uneven wedge blocks around the Rift basin."""
     count = 12
     angle_jitter = (-0.006, 0.004, -0.003, 0.007, -0.005, 0.002) * 2
-    outer_radii = (0.86, 0.89, 0.84, 0.88, 0.85, 0.90, 0.87, 0.83, 0.89, 0.85, 0.88, 0.84)
-    inner_radii = (0.49, 0.51, 0.48, 0.50, 0.47, 0.52, 0.49, 0.48, 0.51, 0.47, 0.50, 0.49)
-    top_heights = (0.115, 0.145, 0.105, 0.135, 0.120, 0.155, 0.110, 0.130, 0.150, 0.100, 0.140, 0.125)
+    outer_radii = (0.94, 0.96, 0.92, 0.95, 0.93, 0.96, 0.94, 0.92, 0.95, 0.93, 0.96, 0.92)
+    inner_radii = (0.63, 0.65, 0.62, 0.64, 0.63, 0.66, 0.64, 0.62, 0.65, 0.63, 0.66, 0.62)
+    top_heights = (0.175, 0.205, 0.165, 0.195, 0.180, 0.220, 0.170, 0.190, 0.215, 0.160, 0.200, 0.180)
     gap = math.radians(3.2)
     segment_span = math.tau / count
 
@@ -157,30 +160,172 @@ def add_recessed_core(mesh: Mesh) -> None:
     """Add a broad, filled picking surface inside the plinth."""
     group = "recessed_rift_core"
     segments = 24
-    radius = 0.495
-    center = mesh.vertex(0.0, 0.0, 0.026)
+    radius = 0.585
+    center = mesh.vertex(0.0, 0.0, 0.035)
     rim = [
-        mesh.vertex(*polar(radius, math.tau * index / segments, 0.026))
+        mesh.vertex(*polar(radius, math.tau * index / segments, 0.035))
         for index in range(segments)
     ]
     for index in range(segments):
         mesh.triangle(center, rim[index], rim[(index + 1) % segments], "rift_core", group)
 
 
+def add_segmented_inner_lip(mesh: Mesh) -> None:
+    """Frame the recessed aperture with a broken, luminous inner bevel."""
+    group = "segmented_inner_lip"
+    segments = 16
+    gap = math.radians(1.5)
+    segment_span = math.tau / segments
+    inner_radius = 0.580
+    outer_radius = 0.660
+
+    for index in range(segments):
+        center = index * segment_span
+        start = center - (segment_span - gap) / 2.0
+        end = center + (segment_span - gap) / 2.0
+        inner_height = 0.052 + 0.004 * math.sin(index * 1.3)
+        outer_height = 0.152 + 0.012 * math.cos(index * 1.1 + 0.2)
+        inner_start = mesh.vertex(*polar(inner_radius, start, inner_height))
+        outer_start = mesh.vertex(*polar(outer_radius, start, outer_height))
+        outer_end = mesh.vertex(*polar(outer_radius, end, outer_height))
+        inner_end = mesh.vertex(*polar(inner_radius, end, inner_height))
+
+        if index % 4 == 0:
+            material = "rift_violet"
+        elif index % 2 == 0:
+            material = "bruised_violet"
+        else:
+            material = "gunmetal"
+        mesh.quad(
+            inner_start,
+            outer_start,
+            outer_end,
+            inner_end,
+            material,
+            group,
+            flip_diagonal=index % 2 == 1,
+        )
+
+
+def add_upright_rift_tear(mesh: Mesh) -> None:
+    """Add a closed jagged Rift tear that remains legible above the basin."""
+    # Coordinates are (horizontal, height) in the tear's local upright plane,
+    # ordered clockwise when viewed from its front. The inner loop follows the
+    # outer fractures without overlapping the broken violet border.
+    outer_loop = (
+        (-0.050, 0.080),
+        (-0.200, 0.280),
+        (-0.330, 0.600),
+        (-0.240, 0.920),
+        (-0.270, 1.080),
+        (-0.100, 1.230),
+        (0.040, 1.330),
+        (0.100, 1.140),
+        (0.280, 0.950),
+        (0.310, 0.670),
+        (0.220, 0.400),
+        (0.090, 0.170),
+    )
+    inner_loop = (
+        (-0.020, 0.160),
+        (-0.130, 0.330),
+        (-0.250, 0.610),
+        (-0.170, 0.900),
+        (-0.180, 1.040),
+        (-0.070, 1.150),
+        (0.025, 1.240),
+        (0.040, 1.080),
+        (0.190, 0.900),
+        (0.230, 0.670),
+        (0.150, 0.430),
+        (0.060, 0.240),
+    )
+    half_depth = 0.120
+    rotation = math.radians(RIFT_TEAR_ROTATION_DEGREES)
+    cos_rotation = math.cos(rotation)
+    sin_rotation = math.sin(rotation)
+
+    def tear_vertex(horizontal: float, depth: float, height: float) -> int:
+        x = horizontal * cos_rotation - depth * sin_rotation
+        y = horizontal * sin_rotation + depth * cos_rotation
+        return mesh.vertex(x, y, height)
+
+    front_outer = [tear_vertex(horizontal, half_depth, height) for horizontal, height in outer_loop]
+    front_inner = [tear_vertex(horizontal, half_depth, height) for horizontal, height in inner_loop]
+    back_outer = [tear_vertex(horizontal, -half_depth, height) for horizontal, height in outer_loop]
+    back_inner = [tear_vertex(horizontal, -half_depth, height) for horizontal, height in inner_loop]
+    inner_center_height = sum(height for _horizontal, height in inner_loop) / len(inner_loop)
+    inner_center_horizontal = sum(horizontal for horizontal, _height in inner_loop) / len(inner_loop)
+    front_center = tear_vertex(inner_center_horizontal, half_depth, inner_center_height)
+    back_center = tear_vertex(inner_center_horizontal, -half_depth, inner_center_height)
+
+    segments = len(outer_loop)
+    accent_segments = {1, 5, 9}
+    for index in range(segments):
+        next_index = (index + 1) % segments
+        border_material = "rift_violet" if index in accent_segments else "bruised_violet"
+
+        # Front and back are distinct caps, not coplanar duplicates. Their
+        # opposite winding keeps both broad faces available to scene lighting.
+        mesh.quad(
+            front_outer[index],
+            front_outer[next_index],
+            front_inner[next_index],
+            front_inner[index],
+            border_material,
+            RIFT_TEAR_GROUP,
+            flip_diagonal=index % 2 == 1,
+        )
+        mesh.triangle(
+            front_center,
+            front_inner[index],
+            front_inner[next_index],
+            "rift_core",
+            RIFT_TEAR_GROUP,
+        )
+        mesh.quad(
+            back_outer[next_index],
+            back_outer[index],
+            back_inner[index],
+            back_inner[next_index],
+            border_material,
+            RIFT_TEAR_GROUP,
+            flip_diagonal=index % 2 == 0,
+        )
+        mesh.triangle(
+            back_center,
+            back_inner[next_index],
+            back_inner[index],
+            "rift_core",
+            RIFT_TEAR_GROUP,
+        )
+
+        thickness_material = "gunmetal" if index % 2 == 0 else "voidstone_dark"
+        mesh.quad(
+            front_outer[index],
+            back_outer[index],
+            back_outer[next_index],
+            front_outer[next_index],
+            thickness_material,
+            RIFT_TEAR_GROUP,
+            flip_diagonal=index % 3 == 0,
+        )
+
+
 def support_rings(spec: SupportSpec) -> tuple[tuple[float, float, float, float, float], ...]:
     """Return (z, radius, tangent offset, radial half-width, tangent half-width)."""
     if spec.crown_rib:
         return (
-            (0.078, 0.655, 0.000, 0.165, 0.145),
-            (0.690, 0.575, 0.018 * spec.tangent_direction, 0.145, 0.122),
-            (1.445, 0.420, -0.012 * spec.tangent_direction, 0.105, 0.082),
-            (spec.top_z, 0.245, 0.045 * spec.tangent_direction, 0.047, 0.035),
+            (0.118, 0.760, 0.000, 0.200, 0.160),
+            (0.560, 0.790, 0.024 * spec.tangent_direction, 0.180, 0.140),
+            (1.100, 0.770, -0.018 * spec.tangent_direction, 0.150, 0.108),
+            (spec.top_z, 0.690, 0.052 * spec.tangent_direction, 0.130, 0.098),
         )
     return (
-        (0.078, 0.645, 0.000, 0.170, 0.142),
-        (0.445, 0.590, -0.012 * spec.tangent_direction, 0.142, 0.112),
-        (0.895, 0.535, 0.018 * spec.tangent_direction, 0.092, 0.072),
-        (spec.top_z, 0.475, 0.050 * spec.tangent_direction, 0.038, 0.030),
+        (0.118, 0.760, 0.000, 0.200, 0.160),
+        (0.350, 0.790, -0.016 * spec.tangent_direction, 0.170, 0.135),
+        (0.620, 0.770, 0.024 * spec.tangent_direction, 0.135, 0.100),
+        (spec.top_z, 0.700, 0.056 * spec.tangent_direction, 0.112, 0.084),
     )
 
 
@@ -219,26 +364,33 @@ def add_support(mesh: Mesh, index: int, spec: SupportSpec) -> None:
             ring.append(mesh.vertex(x, y, vertex_z))
         rings.append(ring)
 
-    side_palette = (
-        "gunmetal",
-        "voidstone_dark",
-        "bruised_violet",
-        "voidstone_dark",
-        "gunmetal",
-        "rift_violet",
-    )
+    # Assign each continuous side strip by its physical relationship to the
+    # aperture. The palette therefore stays stable through every layer and on
+    # every support: shadowed stone faces outward, metal catches the tangent
+    # edges, and bruised violet marks the inward faces touched by the Rift.
+    side_materials = []
+    for side in range(sides):
+        face_theta = phase + math.tau * (side + 0.5) / sides
+        radial_component = math.cos(face_theta)
+        tangent_component = math.sin(face_theta)
+        if abs(tangent_component) > abs(radial_component):
+            side_materials.append("gunmetal")
+        elif radial_component > 0.0:
+            side_materials.append("voidstone_dark")
+        else:
+            side_materials.append("bruised_violet")
+
     for layer in range(len(rings) - 1):
         lower = rings[layer]
         upper = rings[layer + 1]
         for side in range(sides):
             next_side = (side + 1) % sides
-            material = side_palette[(side + index + layer) % len(side_palette)]
             mesh.quad(
                 lower[side],
                 lower[next_side],
                 upper[next_side],
                 upper[side],
-                material,
+                side_materials[side],
                 group,
                 flip_diagonal=(side + layer + index) % 2 == 1,
             )
@@ -266,6 +418,8 @@ def build_mesh() -> Mesh:
     mesh = Mesh()
     add_segmented_plinth(mesh)
     add_recessed_core(mesh)
+    add_segmented_inner_lip(mesh)
+    add_upright_rift_tear(mesh)
     for index, support in enumerate(SUPPORTS):
         add_support(mesh, index, support)
     validate_mesh(mesh)
@@ -305,11 +459,11 @@ def validate_mesh(mesh: Mesh) -> None:
         raise ValueError(f"mesh has {len(degenerate)} degenerate triangles")
 
     x_bounds, y_bounds, z_bounds = mesh_bounds(mesh)
-    if max(abs(x_bounds[0]), abs(x_bounds[1]), abs(y_bounds[0]), abs(y_bounds[1])) > 0.900001:
-        raise ValueError(f"XY footprint exceeds +/-0.90 tiles: x={x_bounds}, y={y_bounds}")
+    if max(abs(x_bounds[0]), abs(x_bounds[1]), abs(y_bounds[0]), abs(y_bounds[1])) > 0.980001:
+        raise ValueError(f"XY footprint exceeds +/-0.98 tiles: x={x_bounds}, y={y_bounds}")
     height = z_bounds[1] - z_bounds[0]
-    if not 2.2 <= height <= 2.5:
-        raise ValueError(f"expected model height of 2.2-2.5 tiles, got {height:.6f}")
+    if not 1.75 <= height <= 2.05:
+        raise ValueError(f"expected model height of 1.75-2.05 tiles, got {height:.6f}")
 
     support_groups = {face.group for face in mesh.faces if face.group.startswith("support_")}
     crown_groups = {group for group in support_groups if group.endswith("crown_rib")}
@@ -318,6 +472,65 @@ def validate_mesh(mesh: Mesh) -> None:
     core_faces = [face for face in mesh.faces if face.group == "recessed_rift_core"]
     if len(core_faces) != 24 or any(face.material != "rift_core" for face in core_faces):
         raise ValueError("recessed core must be a filled 24-triangle near-black surface")
+    lip_faces = [face for face in mesh.faces if face.group == "segmented_inner_lip"]
+    lip_materials = Counter(face.material for face in lip_faces)
+    if len(lip_faces) != 32 or lip_materials != Counter(
+        {"rift_violet": 8, "bruised_violet": 8, "gunmetal": 16}
+    ):
+        raise ValueError("inner lip must contain sixteen deterministic broken bevel segments")
+
+    tear_faces = [face for face in mesh.faces if face.group == RIFT_TEAR_GROUP]
+    tear_materials = Counter(face.material for face in tear_faces)
+    expected_tear_materials = Counter(
+        {
+            "rift_core": 24,
+            "voidstone_dark": 12,
+            "gunmetal": 12,
+            "bruised_violet": 36,
+            "rift_violet": 12,
+        }
+    )
+    if len(tear_faces) != 96 or tear_materials != expected_tear_materials:
+        raise ValueError("upright Rift tear must contain 96 deterministic material-assigned faces")
+
+    tear_indices = {index for face in tear_faces for index in face.indices}
+    if len(tear_indices) != 50:
+        raise ValueError(f"upright Rift tear must use 50 vertices, got {len(tear_indices)}")
+    tear_vertices = [mesh.vertices[index - 1] for index in tear_indices]
+    rotation = math.radians(RIFT_TEAR_ROTATION_DEGREES)
+    cos_rotation = math.cos(rotation)
+    sin_rotation = math.sin(rotation)
+    local_horizontal = [x * cos_rotation + y * sin_rotation for x, y, _z in tear_vertices]
+    local_depth = [-x * sin_rotation + y * cos_rotation for x, y, _z in tear_vertices]
+    tear_width = max(local_horizontal) - min(local_horizontal)
+    tear_depth = max(local_depth) - min(local_depth)
+    tear_min_z = min(z for _x, _y, z in tear_vertices)
+    tear_max_z = max(z for _x, _y, z in tear_vertices)
+    tear_max_radius = max(math.hypot(x, y) for x, y, _z in tear_vertices)
+    if not 0.60 <= tear_width <= 0.70:
+        raise ValueError(f"upright Rift tear width must be 0.60-0.70 tiles, got {tear_width:.6f}")
+    if not 0.20 <= tear_depth <= 0.26:
+        raise ValueError(f"upright Rift tear depth must be 0.20-0.26 tiles, got {tear_depth:.6f}")
+    if not 0.07 <= tear_min_z <= 0.10 or not 1.25 <= tear_max_z <= 1.35:
+        raise ValueError(
+            f"upright Rift tear height bounds are invalid: z=[{tear_min_z:.6f}, {tear_max_z:.6f}]"
+        )
+    if tear_max_radius >= 0.585:
+        raise ValueError(f"upright Rift tear escapes the ground core: radius={tear_max_radius:.6f}")
+
+    tear_edge_counts: Counter[tuple[int, int]] = Counter()
+    for face in tear_faces:
+        a, b, c = face.indices
+        tear_edge_counts.update(
+            (
+                tuple(sorted((a, b))),
+                tuple(sorted((b, c))),
+                tuple(sorted((c, a))),
+            )
+        )
+    non_manifold_edges = [edge for edge, count in tear_edge_counts.items() if count != 2]
+    if non_manifold_edges:
+        raise ValueError(f"upright Rift tear is not closed: {len(non_manifold_edges)} invalid edges")
 
 
 def format_float(value: float) -> str:

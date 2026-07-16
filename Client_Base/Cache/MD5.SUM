@@ -46,11 +46,11 @@ ce46f289ef98e9d6d118938c1aa7b75e *./ip.txt
 08a9b8693c1c3ce49fd327977f837abf *./port.txt
 d41d8cd98f00b204e9800998ecf8427e *./uid.dat
 6cdb4549a7813f54a3473564a3231399 *./video/Authentic_Landscape.orsc
-6d852451a0e8d70ebe071e8936b50727 *./video/Authentic_Sprites.orsc
-35310d3decce70d5e86e4aac7e5cabd4 *./video/Custom_Landscape.orsc
+fe2abee0cf9cfcd80186c50e905b81fd *./video/Authentic_Sprites.orsc
+d83337672152a72aee3ac0bde9d73359 *./video/Custom_Landscape.orsc
 0170a577d58b8a4d3dc8d0f7483cd68e *./video/Custom_Sprites.osar
 4445d7d9c1535a6f47a09ef33c02c15f *./video/library.orsc
-37cac7250e03b310b72d45b08b352a29 *./video/models.orsc
+1c957873d1b80a5371d211fd90811cc8 *./video/models.orsc
 c95ded5d48c3a78c5a267e0301160367 *./video/spritepacks/Menus.osar
 4b02345508d80ce07b5bab1399628cce *./voidscape/ui/skin/chat-all.png
 11302038239693a1911a96e33d328894 *./voidscape/ui/skin/chat-all-16.png
@@ -203,3 +203,7 @@ a9e03c4dae573c7ca8d9dfccda582356 *./voidscape/ui/skin/top-stats-bars-20.png
 fde6374ed4c0abbff0ffdf0db9c983ba *./voidscape/ui/skin/top-stats-bars-36.png
 f56b5356a1123dae2a3cff3c0904817c *./voidscape/ui/skin/top-stats-bars-40.png
 b8fb5a5a97781104540e8847165c08bd *./voidscape/ui/skin/top-stats-bars-42.png
+42645a3caf0f2f7dc3ac91f797b5c84c *./worldmap/plane-0.png
+4ef68f399a14de947562d69dfb370c16 *./worldmap/plane-1.png
+455396210d2549ad09fb7e1bf2911a25 *./worldmap/plane-2.png
+567f6d47b174d575eab3e7964a2d0826 *./worldmap/plane-3.png

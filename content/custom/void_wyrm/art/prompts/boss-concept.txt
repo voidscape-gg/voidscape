@@ -1,0 +1,25 @@
+Use case: stylized-concept
+Asset type: RuneScape Classic boss concept board for later sprite production
+Primary request: Create three genuinely different concepts for the Void Wyrm,
+the solo final boss of a Wilderness dungeon. Present them as a clean horizontal
+triptych with the left, center, and right creatures fully separated.
+Subject: A low-slung ancient wyrm with heavy forelimbs, an obsidian-armoured
+body, a broken crown of bone-like horns, cyan light glowing from its eyes and
+mouth, and restrained magenta fissures through its armour. It should feel like
+a creature formed around a collapsed void rift, not an ordinary dragon recolor.
+Style/medium: Chunky filled late-1990s RuneScape Classic pixel-art concept,
+strong dark outline, limited palette, hard-edged shading, deliberately simple
+forms, readable when reduced to a roughly 105x200 sprite canvas.
+Composition/framing: Three full-body three-quarter views at equal scale on one
+flat neutral charcoal background, generous separation and padding, feet and
+tail fully visible. Left concept should be broad and plated; center should be
+leaner and serpentine; right should be ancient and crown-heavy.
+Lighting/mood: Clear neutral studio lighting; ominous without hiding details.
+Color palette: Obsidian, charcoal, bone, cyan core light, restrained magenta
+cracks. Keep cyan and magenta as accents rather than covering the whole body.
+Constraints: Each design must have a clean silhouette, two visible forelimbs,
+a practical side profile, and anatomy that can be redrawn consistently from
+five directions and in a side-view attack animation.
+Avoid: scenery, floor shadows, smoke, transparent body parts, particle clouds,
+photorealism, modern OSRS or RS3 rendering, painterly gradients, tiny spikes,
+fine filigree, labels, numbers, UI, text, logos, and watermarks.

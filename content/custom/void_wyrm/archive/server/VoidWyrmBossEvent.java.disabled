@@ -1,0 +1,170 @@
+package com.openrsc.server.plugins.custom.minigames.voidwyrm;
+
+import com.openrsc.server.constants.Skill;
+import com.openrsc.server.event.DelayedEvent;
+import com.openrsc.server.event.rsc.DuplicationStrategy;
+import com.openrsc.server.event.rsc.GameTickEvent;
+import com.openrsc.server.event.rsc.impl.projectile.ProjectileEvent;
+import com.openrsc.server.model.Point;
+import com.openrsc.server.model.entity.npc.Npc;
+import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.entity.player.Prayers;
+import com.openrsc.server.model.entity.update.ChatMessage;
+import com.openrsc.server.model.entity.update.Damage;
+import com.openrsc.server.model.world.World;
+import com.openrsc.server.net.rsc.ActionSender;
+import com.openrsc.server.util.rsc.DataConversions;
+
+/** Three-phase offense controller layered on top of the Wyrm's normal melee combat. */
+final class VoidWyrmBossEvent extends GameTickEvent {
+	private static final int VOID_BREATH_PROJECTILE = 7;
+	private static final int NULL_ROAR_PROJECTILE = 8;
+
+	private final Npc boss;
+	private final VoidWyrmArena arena;
+	private long nextBreathTick;
+	private long nextFractureTick;
+	private long nextRoarTick;
+	private int announcedPhase = 1;
+
+	VoidWyrmBossEvent(World world, Npc boss, VoidWyrmArena arena) {
+		super(world, null, 1, "Void Wyrm Boss AI", DuplicationStrategy.ALLOW_MULTIPLE);
+		this.boss = boss;
+		this.arena = arena;
+		long tick = world.getServer().getCurrentTick();
+		nextBreathTick = tick + 6;
+		nextFractureTick = tick + 10;
+		nextRoarTick = tick + 14;
+	}
+
+	@Override
+	public void run() {
+		VoidWyrmArena.Session session = arena.sessionForBoss(boss);
+		Player owner = arena.ownerFor(session);
+		if (boss == null || boss.isRemoved()
+			|| boss.getSkills().getLevel(Skill.HITS.id()) <= 0) {
+			stop();
+			return;
+		}
+		if (!arena.isActiveParticipant(owner, session)) {
+			arena.closeFromBoundaryFailure(session, owner);
+			stop();
+			return;
+		}
+
+		if (!boss.inCombat() && !boss.isChasing()) {
+			boss.setChasing(owner);
+		}
+		int phase = phase();
+		announcePhase(owner, phase);
+		long tick = getWorld().getServer().getCurrentTick();
+		if (tick >= nextBreathTick) {
+			voidBreath(owner, phase);
+			nextBreathTick = tick + DataConversions.random(
+				phase == 1 ? 8 : phase == 2 ? 6 : 4,
+				phase == 1 ? 10 : phase == 2 ? 8 : 6);
+		}
+		if (phase >= 2 && tick >= nextFractureTick) {
+			markFracture(owner, session, phase);
+			nextFractureTick = tick + DataConversions.random(phase == 2 ? 11 : 8,
+				phase == 2 ? 14 : 11);
+		}
+		if (phase == 3 && tick >= nextRoarTick) {
+			nullRoar(owner);
+			nextRoarTick = tick + DataConversions.random(12, 16);
+		}
+		setDelayTicks(1);
+	}
+
+	private int phase() {
+		int hits = boss.getSkills().getLevel(Skill.HITS.id());
+		int maxHits = boss.getSkills().getMaxStat(Skill.HITS.id());
+		if (hits * 3 > maxHits * 2) {
+			return 1;
+		}
+		if (hits * 3 > maxHits) {
+			return 2;
+		}
+		return 3;
+	}
+
+	private void announcePhase(Player owner, int phase) {
+		if (phase <= announcedPhase) {
+			return;
+		}
+		announcedPhase = phase;
+		if (phase == 2) {
+			boss.getUpdateFlags().setChatMessage(new ChatMessage(boss,
+				"The floor fractures beneath your feet!", owner));
+			owner.message("@mag@Move away when the Wyrm marks the ground beneath you.");
+		} else {
+			boss.getUpdateFlags().setChatMessage(new ChatMessage(boss,
+				"Your prayers will vanish into the null!", owner));
+			owner.message("@mag@The wounded Wyrm's breath and fractures intensify.");
+		}
+	}
+
+	private void voidBreath(Player target, int phase) {
+		int maxDamage = phase == 1 ? 8 : phase == 2 ? 11 : 14;
+		int damage = DataConversions.random(0, maxDamage);
+		if (target.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
+			damage /= 2;
+		}
+		boss.getUpdateFlags().setChatMessage(new ChatMessage(boss,
+			phase == 3 ? "Be consumed by the null!" : "The void hungers!", target));
+		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(
+			getWorld(), boss, target, damage, VOID_BREATH_PROJECTILE, true));
+	}
+
+	private void markFracture(Player target, VoidWyrmArena.Session session, int phase) {
+		final Point marked = Point.location(target.getX(), target.getY());
+		target.message("@mag@The ground beneath you begins to fracture. Move!");
+		getWorld().getServer().getGameEventHandler().add(new DelayedEvent(getWorld(), null,
+			getWorld().getServer().getConfig().GAME_TICK * 2L, "Void Wyrm Fracture") {
+			@Override
+			public void run() {
+				Player owner = arena.ownerFor(session);
+				if (arena.isActiveParticipant(owner, session)
+					&& session.boss == boss && !boss.isRemoved()
+					&& owner.getLocation().withinRange(marked, 1)) {
+					int damage = DataConversions.random(phase == 2 ? 8 : 12,
+						phase == 2 ? 14 : 18);
+					if (owner.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
+						damage /= 2;
+					}
+					applyDirectDamage(owner, damage, 18);
+					owner.message("@mag@The marked ground erupts in void energy.");
+				}
+				stop();
+			}
+		});
+	}
+
+	private void nullRoar(Player target) {
+		int prayer = target.getSkills().getLevel(Skill.PRAYER.id());
+		int drain = Math.min(prayer, DataConversions.random(5, 9));
+		if (drain > 0) {
+			target.getSkills().setLevel(Skill.PRAYER.id(), prayer - drain, true);
+		}
+		boss.getUpdateFlags().setChatMessage(new ChatMessage(boss,
+			"The null answers my roar!", target));
+		target.message("@mag@The Wyrm's roar drains " + drain + " Prayer.");
+		getWorld().getServer().getGameEventHandler().add(new ProjectileEvent(
+			getWorld(), boss, target, DataConversions.random(0, 6),
+			NULL_ROAR_PROJECTILE, true));
+	}
+
+	private void applyDirectDamage(Player target, int damage, int maxHit) {
+		int actual = Math.min(Math.max(damage, 0),
+			target.getSkills().getLevel(Skill.HITS.id()));
+		target.getSkills().subtractLevel(Skill.HITS.id(), actual, false);
+		target.getUpdateFlags().setDamage(new Damage(target, actual).withHitFeedback(boss, maxHit));
+		ActionSender.sendStat(target, Skill.HITS.id());
+		ActionSender.sendSound(target, actual > 0 ? "combat2b" : "combat2a");
+		if (target.getSkills().getLevel(Skill.HITS.id()) <= 0) {
+			target.killedBy(boss);
+		} else {
+			target.checkRingOfLife(boss);
+		}
+	}
+}

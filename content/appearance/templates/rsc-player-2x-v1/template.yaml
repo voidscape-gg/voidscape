@@ -1,0 +1,120 @@
+schema: voidscape-paperdoll-v2-template/v1
+key: rsc-player-2x-v1
+frame_count: 18
+scale: 2
+source_template:
+  path: content/appearance/templates/rsc-player-v1/template.yaml
+  sha256: 636fbad37576feef7ab8f801563745fc5ab9fb6deb2830a852829a6ea4f99b03
+logical_canvases:
+  walk: [128, 204]
+  combat: [168, 204]
+groups:
+  - {master: north, offsets: [0, 1, 2], canvas: walk, crowns: [[64, 18], [64, 18], [64, 18]]}
+  - {master: north-west, offsets: [3, 4, 5], canvas: walk, crowns: [[60, 18], [60, 18], [60, 18]]}
+  - {master: west, offsets: [6, 7, 8], canvas: walk, crowns: [[62, 18], [62, 18], [62, 18]]}
+  - {master: south-west, offsets: [9, 10, 11], canvas: walk, crowns: [[60, 18], [60, 18], [60, 18]]}
+  - {master: south, offsets: [12, 13, 14], canvas: walk, crowns: [[64, 18], [64, 18], [64, 18]]}
+  - {master: combat-west, offsets: [15, 16, 17], canvas: combat, crowns: [[32, 18], [42, 18], [54, 18]]}
+runtime_mirrors:
+  south-east: south-west
+  east: west
+  north-east: north-west
+  combat-b: combat-west
+coordinate_convention:
+  landmarks: crown-relative-scaled-integer
+  masks: nearest-neighbor-2x-plus-upper-hair-envelope
+  phase_translation: doubled-crown-delta
+upper_hair_envelopes:
+  north: [[-10, -18], [10, -18], [26, -6], [24, 8], [-24, 8], [-26, -6]]
+  north-west: [[-22, -18], [-4, -18], [28, -4], [26, 8], [-26, 8], [-28, -4]]
+  west: [[-24, -18], [-8, -18], [28, -6], [26, 8], [-24, 8], [-28, -4]]
+  south-west: [[-26, -16], [-12, -18], [22, -18], [28, -4], [24, 8], [-26, 8]]
+  south: [[-12, -18], [12, -18], [28, -4], [24, 8], [-24, 8], [-28, -4]]
+  combat-west: [[-24, -18], [-8, -18], [28, -6], [26, 8], [-24, 8], [-28, -4]]
+pose_profiles:
+  north:
+    visual_pose: front
+    landmarks: {forehead: [0, 10], face_center: [0, 18], nose_tip: [0, 22], upper_lip: [0, 28], chin: [0, 34], ear: null, occiput: [0, 14], neck: [0, 34], nape: [0, 32]}
+    masks:
+      face_clearance: {workspace_path: guides/north/masks/face_clearance.png, pixels_sha256: 5c4f3dc5cc9610bea4803a8dbbc0e1886a4b380c38b8d0df537e853b6172c606}
+      facial_hair_allowed: {workspace_path: guides/north/masks/facial_hair_allowed.png, pixels_sha256: a17d6cb65f9470239d4fef48b81fc4c951f057667dfed9f22b68c87612f1dab0}
+      hair_allowed: {workspace_path: guides/north/masks/hair_allowed.png, pixels_sha256: 1dfb845ef0c5721509b03df726dd1903a67e6a76b879d551d19526ee8e126cd8}
+      nape_tail: null
+      neck_clearance: {workspace_path: guides/north/masks/neck_clearance.png, pixels_sha256: 6081298bf10438e6292fe51e4d710238da04b9e0c5c806fc55761130fbcf6ec8}
+      protected_anatomy: {workspace_path: guides/north/masks/protected_anatomy.png, pixels_sha256: ee50907c002d0f4f32b5669dda5b7b2870d49a506e03ae37bcc8c9351813d488}
+      scalp_attachment: {workspace_path: guides/north/masks/scalp_attachment.png, pixels_sha256: bf138349f4d681efad19751cc1e933f5e32f02823843dbf41ec001e2f3eae1d2}
+      upper_lip_attachment: {workspace_path: guides/north/masks/upper_lip_attachment.png, pixels_sha256: 09c2acd82f965b156b5683b262849f05917be62897a34168a1f331a4f3468549}
+  north-west:
+    visual_pose: three-quarter-front
+    landmarks: {forehead: [8, 10], face_center: [10, 18], nose_tip: [16, 22], upper_lip: [10, 28], chin: [2, 34], ear: [-12, 18], occiput: [-12, 16], neck: [2, 34], nape: [-10, 30]}
+    masks:
+      face_clearance: {workspace_path: guides/north-west/masks/face_clearance.png, pixels_sha256: 2b8e2bba4019aaf5d6c3e1c2644d744c07c3acbc5c575023c01ae8bd34f0da46}
+      facial_hair_allowed: {workspace_path: guides/north-west/masks/facial_hair_allowed.png, pixels_sha256: 55d3cfedb54bef27e9ce23dcb92805e625d55fe6056440b1cf5b239ce182b45e}
+      hair_allowed: {workspace_path: guides/north-west/masks/hair_allowed.png, pixels_sha256: 3ddca04bce94ab86eec813ac216774ef8a8866e2f2e7e0ee1564b83679348cbd}
+      nape_tail: {workspace_path: guides/north-west/masks/nape_tail.png, pixels_sha256: c08887bfd4cfbbbef74ba0618d49b56a2cf30153e692c48ce2790e60192841ac}
+      neck_clearance: {workspace_path: guides/north-west/masks/neck_clearance.png, pixels_sha256: dc9848d733fd297fc9fd7bb7c02164e5e66ac296aad90b62dbd117c87e89b343}
+      protected_anatomy: {workspace_path: guides/north-west/masks/protected_anatomy.png, pixels_sha256: df8520e14dbb0840c5fd40bd3f8166d916b6decfddf90a05b3716c31e2c203ef}
+      scalp_attachment: {workspace_path: guides/north-west/masks/scalp_attachment.png, pixels_sha256: 0af4902ede22454fa4ec7dc9b15637d37eb55b4b60639273b8a798725fe9f6b2}
+      upper_lip_attachment: {workspace_path: guides/north-west/masks/upper_lip_attachment.png, pixels_sha256: 72bef33e713c24f67b627bd46abe31fbc081e4511f5af0958a621b527b6e12e5}
+  west:
+    visual_pose: profile
+    landmarks: {forehead: [6, 10], face_center: [8, 16], nose_tip: [14, 18], upper_lip: [6, 24], chin: [-2, 28], ear: [-6, 16], occiput: [-14, 14], neck: [-2, 28], nape: [-14, 26]}
+    masks:
+      face_clearance: {workspace_path: guides/west/masks/face_clearance.png, pixels_sha256: 16cc411da385d178fa0c149e1fd932bcca7dff11edf1ef7d37d85ce5f94fe3f4}
+      facial_hair_allowed: {workspace_path: guides/west/masks/facial_hair_allowed.png, pixels_sha256: 96fa516880997dee83f438b408886431f782b47a0165bdf58a080ac08c63a80b}
+      hair_allowed: {workspace_path: guides/west/masks/hair_allowed.png, pixels_sha256: ff820a72c8c206fa5e175ee89433f6d0d17356829e01f73c920f941c8727bdeb}
+      nape_tail: {workspace_path: guides/west/masks/nape_tail.png, pixels_sha256: 3dd53bd3459fb0f45c99ed76ccf54d29d609126008fa4aae8e3072ca97fed775}
+      neck_clearance: {workspace_path: guides/west/masks/neck_clearance.png, pixels_sha256: 51e78077234c581e65478339f912cb2e5c1d4d37640400e05d61e9fb53fcfebf}
+      protected_anatomy: {workspace_path: guides/west/masks/protected_anatomy.png, pixels_sha256: 74d3231311f7741e874c26ed810468a08f6d40146398b9f773c02a00d17ecb68}
+      scalp_attachment: {workspace_path: guides/west/masks/scalp_attachment.png, pixels_sha256: c2a69c10ab84e28b192f3e8dce4ee3d1a44605c4a8f21b52b26a70cbbfbe10b2}
+      upper_lip_attachment: {workspace_path: guides/west/masks/upper_lip_attachment.png, pixels_sha256: 7cae5488ef45204162588f91766690ef45fbcfc8d806e07f7aa99003dbfbf512}
+  south-west:
+    visual_pose: three-quarter-rear
+    landmarks: {forehead: null, face_center: null, nose_tip: null, upper_lip: null, chin: [0, 28], ear: [14, 16], occiput: [-8, 16], neck: [0, 28], nape: [-2, 28]}
+    masks:
+      face_clearance: null
+      facial_hair_allowed: null
+      hair_allowed: {workspace_path: guides/south-west/masks/hair_allowed.png, pixels_sha256: 0638432a5ae735360cfd066ad0d7ab6797ae82300b21d93b4c9210c3b936871a}
+      nape_tail: {workspace_path: guides/south-west/masks/nape_tail.png, pixels_sha256: 2496387f4f72309bea435ce26dd488154d54c4f4887a938e1c5e10b1724c23bb}
+      neck_clearance: {workspace_path: guides/south-west/masks/neck_clearance.png, pixels_sha256: 72058878f6ab363e950910369f6e53c20aacba7469e86be7177dd5db37c52dec}
+      protected_anatomy: {workspace_path: guides/south-west/masks/protected_anatomy.png, pixels_sha256: 1ff8a8410751c96d253e92a5f59b7b0fa940bd8bb96de7654ef42ed06eb67ead}
+      scalp_attachment: {workspace_path: guides/south-west/masks/scalp_attachment.png, pixels_sha256: 0a8b4754ecc7669faa6d532dec71cc17a80d8f183228a2b6f5661f896b0f95e0}
+      upper_lip_attachment: null
+  south:
+    visual_pose: rear
+    landmarks: {forehead: null, face_center: null, nose_tip: null, upper_lip: null, chin: [0, 30], ear: null, occiput: [0, 16], neck: [0, 30], nape: [0, 30]}
+    masks:
+      face_clearance: null
+      facial_hair_allowed: null
+      hair_allowed: {workspace_path: guides/south/masks/hair_allowed.png, pixels_sha256: 71519001d05c1b2e96101c03fb25a0affaf5d412f0a6976cf96b63e1d252d403}
+      nape_tail: {workspace_path: guides/south/masks/nape_tail.png, pixels_sha256: 156aa1b0970a4babed0a540c59d594713a4e2c0241a9135959af195a5619b5df}
+      neck_clearance: {workspace_path: guides/south/masks/neck_clearance.png, pixels_sha256: e26a1c8ac258539dccabffbd5873dba5b376841ea06ad1995f548c57673d5f26}
+      protected_anatomy: {workspace_path: guides/south/masks/protected_anatomy.png, pixels_sha256: 1ff8a8410751c96d253e92a5f59b7b0fa940bd8bb96de7654ef42ed06eb67ead}
+      scalp_attachment: {workspace_path: guides/south/masks/scalp_attachment.png, pixels_sha256: a7997e313bd79b06bb2a1245292360676947beb35d7e968b95ce8a68bc8c06b5}
+      upper_lip_attachment: null
+  combat-west:
+    visual_pose: combat-profile
+    landmarks: {forehead: [6, 10], face_center: [8, 16], nose_tip: [14, 18], upper_lip: [6, 24], chin: [-2, 28], ear: [-6, 16], occiput: [-14, 14], neck: [-2, 28], nape: [-14, 26]}
+    masks:
+      face_clearance: {workspace_path: guides/combat-west/masks/face_clearance.png, pixels_sha256: 7df32b63a043ccf3bd09f32d2d62bb06cbed03220050c29b7c5a939d96102e34}
+      facial_hair_allowed: {workspace_path: guides/combat-west/masks/facial_hair_allowed.png, pixels_sha256: 750ed0e839fbaf797ac783dff05e5214bd813513dbda6bc00b868374d84d1c28}
+      hair_allowed: {workspace_path: guides/combat-west/masks/hair_allowed.png, pixels_sha256: 4d9ad184aa39796f50f48910de676f2bf45e290e7d6d84022f8497be892d11c8}
+      nape_tail: {workspace_path: guides/combat-west/masks/nape_tail.png, pixels_sha256: 3c08bfe3ed5bc6dbd0bbbead3688181937084b2dcf093a444eac21c9a84ff0f8}
+      neck_clearance: {workspace_path: guides/combat-west/masks/neck_clearance.png, pixels_sha256: 1e624369975fe3c09f91e3528d2222c6bcc4ac7b06f2d37d0d9fbb3967992a71}
+      protected_anatomy: {workspace_path: guides/combat-west/masks/protected_anatomy.png, pixels_sha256: 31751453c9a914f0e60eea02c1a7ebee8853b81c50ca9d1d44cdcbf064dd579c}
+      scalp_attachment: {workspace_path: guides/combat-west/masks/scalp_attachment.png, pixels_sha256: 0b0d07f598b1c05204c13a57d35721a988bb6ca08e19b6619d95d1f6046309a2}
+      upper_lip_attachment: {workspace_path: guides/combat-west/masks/upper_lip_attachment.png, pixels_sha256: 84b4685192c77d1ab0eaf3182cc3b36b15d003b735ea891c30b437e8bbcd11f7}
+derived_masks:
+  algorithm: nearest-neighbor-2x-plus-upper-hair-envelope
+  tree_sha256: 5f30960f67f7f02ca3799bfd4c8b0e8b708594e0d9d5ab517d184f37d0b0208f
+preview:
+  width: 176
+  height: 224
+  draw_x: 24
+  draw_y: 4
+  draw_width: 128
+  draw_height: 204
+palette:
+  preserve_rgba: true
+  arbitrary_grayscale: true
+  tint_roles: [skin, hair, facial-hair, top, bottom, primary, secondary, fixed]

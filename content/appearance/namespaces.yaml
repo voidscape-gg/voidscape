@@ -1,0 +1,45 @@
+schema: voidscape-sprite-namespaces/v1
+
+# Fixed consumers in the authentic client. The inventory command also reads
+# every numeric ZIP member, so undocumented or sparse entries remain occupied.
+fixed_consumers:
+  - key: media
+    start: 2000
+    end: 2099
+    source: Client_Base/src/orsc/mudclient.java
+  - key: utility
+    start: 2100
+    end: 2149
+    source: Client_Base/src/orsc/mudclient.java
+  - key: items
+    start: 2150
+    end: 3149
+    source: Client_Base/src/orsc/mudclient.java
+  - key: logo
+    start: 3150
+    end: 3159
+    source: Client_Base/src/orsc/mudclient.java
+  - key: projectiles
+    start: 3160
+    end: 3172
+    source: Client_Base/src/orsc/mudclient.java
+  - key: textures_and_following_globals
+    start: 3225
+    end: 3299
+    source: Client_Base/src/orsc/mudclient.java
+  - key: legacy_entity_second_bank
+    start: 3300
+    end: 3704
+    source: Client_Base/src/orsc/mudclient.java
+  - key: avatar_wolfmask_reservation
+    start: 1944
+    end: 1970
+    source: server/src/com/openrsc/server/avatargenerator/AvatarGenerator.java
+  - key: avatar_dragonfullhelm_reservation
+    start: 1971
+    end: 1997
+    source: server/src/com/openrsc/server/avatargenerator/AvatarGenerator.java
+
+runtime_capacities:
+  client: 4501
+  avatar_generator: 4000

@@ -1,0 +1,57 @@
+schema: voidscape-appearance-registry/v1
+profile: authentic
+reservation_size: 27
+
+# Approved managed namespace. Individual 27-slot blocks are owned only by
+# explicit registry entries; reserved entries do not enter runtime tables.
+managed_namespace:
+  status: approved
+  base: 3705
+  end: 3974
+  reservation_count: 10
+  capacity_required: 3975
+
+entries:
+  - key: cowboy_hat
+    state: adopted
+    kind: hat
+    appearance_id: 245
+    animation_name: cowboyhat
+    category: equipment
+    char_colour: 0
+    blue_mask: 0
+    gender_model: 0
+    has_a: true
+    has_f: false
+    paperdoll_slot: 5
+    sprite_base: 1890
+    frame_count: 18
+    item_id: 1609
+    manifest: content/custom/cowboy_hat/appearance.yaml
+
+  - key: future_mullet_mustache
+    state: reserved
+    kind: look
+    appearance_id: 247
+    animation_name: mulletmustache
+    category: player
+    char_colour: 1
+    blue_mask: 0
+    gender_model: 5
+    has_a: true
+    has_f: false
+    paperdoll_slot: 0
+    sprite_base: 3705
+    frame_count: 18
+    manifest: content/appearance/proposals/future_mullet_mustache.yaml
+
+external_reservations:
+  - key: void_wyrm
+    state: reserved
+    owner: archived-void-wyrm
+    appearance_id: 246
+    animation_name: voidwyrm
+    sprite_base: 1917
+    frame_count: 18
+
+tombstones: []

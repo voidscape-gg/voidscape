@@ -1,0 +1,37 @@
+package com.openrsc.server.plugins.custom.minigames.voidwyrm;
+
+import com.openrsc.server.event.rsc.DuplicationStrategy;
+import com.openrsc.server.event.rsc.GameTickEvent;
+import com.openrsc.server.model.entity.player.Player;
+import com.openrsc.server.model.world.World;
+import com.openrsc.server.plugins.custom.misc.VoidDungeonAdmission;
+
+/** Keeps a private Wyrm phase bounded even while no boss exists between kills. */
+final class VoidWyrmSessionGuardEvent extends GameTickEvent {
+	private final VoidWyrmArena.Session session;
+	private final VoidWyrmArena arena;
+
+	VoidWyrmSessionGuardEvent(World world, VoidWyrmArena.Session session, VoidWyrmArena arena) {
+		super(world, null, 1, "Void Wyrm Session Guard", DuplicationStrategy.ALLOW_MULTIPLE);
+		this.session = session;
+		this.arena = arena;
+	}
+
+	@Override
+	public void run() {
+		if (session.closed) {
+			stop();
+			return;
+		}
+
+		Player owner = arena.ownerFor(session);
+		if (!arena.isActiveParticipant(owner, session)
+			|| !VoidDungeonAdmission.isAdmitted(owner)) {
+			arena.closeFromBoundaryFailure(session, owner);
+			stop();
+			return;
+		}
+
+		setDelayTicks(1);
+	}
+}

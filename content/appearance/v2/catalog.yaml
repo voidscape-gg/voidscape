@@ -1,0 +1,409 @@
+schema: voidscape-paperdoll-v2-catalog/v1
+shipping: false
+defaultEnabled: false
+
+template:
+  path: content/appearance/templates/rsc-player-2x-v1/template.yaml
+  sha256: d7400f68d450498434967e5ec2c6b6d8165b739a511271401d65b530c9d8b019
+
+selectorNamespace:
+  field: hairStyle
+  classicId: 0
+  minimum: 0
+  maximum: 255
+  stabilityPolicy: never-reuse
+
+authenticArchives:
+  client: Client_Base/Cache/video/Authentic_Sprites.orsc
+  server: server/conf/server/data/Authentic_Sprites.orsc
+
+baseProfiles:
+  - id: male
+    label: Male base
+    gender: male
+    legacyIdentity: {headAppearanceId: 8, bodyAppearanceId: 2, legsAppearanceId: 3}
+    sources:
+      head: {type: template-reference, reference: head4}
+      body: {type: template-reference, reference: body}
+      legs: {type: template-reference, reference: legs}
+    eligibility:
+      state: qa-ready
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for the PC Paperdoll V2 collection.
+        - Production activation remains final-owner-gated; Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: female
+    label: Female base
+    gender: female
+    legacyIdentity: {headAppearanceId: 8, bodyAppearanceId: 5, legsAppearanceId: 3}
+    sources:
+      head: {type: template-reference, reference: head4}
+      body:
+        type: authentic-archive
+        spriteBase: 108
+        entrySha256:
+          - e2a849b2e3e014c7944a73caf36802595677ebb8aa6f8c3d7f6cab73f3d79b8d
+          - a48d1f9972dda200b1fab32f413f39f90eb0e560c19a45174a26a8e148d56ee2
+          - aaacaf67746a6b5cf6d463c68101256bbf4dd8c7bb6967a244d2320f6da92a68
+          - b02f993e3c2cd67c05502e7f51109313ef0b1ca1cdf49107da84d75a9d3d9928
+          - ce3168f3e5c33d9551cb5e4d683f5234469b60e5d49ee947d02d976788a3f038
+          - 0ae8011f1c5f310933f5e90ca70cf02aa40008834dc7f817b945a58373a2b970
+          - 40552e81c7ea2aaff5935464f521d9f706e1c83ff510d5497c7b7054354b95b4
+          - 72b3dad5894c991319a5f732c7ec73fd3c4d7a9593e31850e7a2edfaf5889bfd
+          - b798d7792b4f6d377b1fc56a805d71742433bb5a6064cb6436bb4d07187c5098
+          - 61d45b04013091dc87eb14078a27c48a6cd1ab2c55cedf5e275e7fef8031fbb0
+          - ad269d4fc07f7f8eb312593d278ab72d204348099e638e6d785a67c7f90068a3
+          - 6a1f38d3238936778c2f1724bbeaee1ccc7629364b1fed1a16e064bdbec59c14
+          - 4de4abddee6cb7f38cf27a6af649ff2fe13b312c96a2b74afcabfc69c5592289
+          - c4bef3a233e5011721b82704191ed84eb36cc54198a8f7b0ccca9174f7334520
+          - 67b505be224e7c6a616c8e8dd10cc236c4eb08d6a1bc1e6c2c9ec6e4df750338
+          - c345e2f0f8e29b9cd56dc79c44b5e1272aaf5ee311700b3389c0336decd2d826
+          - d9bc8e19a62f9aacc90308d027c1874b6d75c2f6385b587098e91a655b071267
+          - c49b7ccfbe56fd45dac1bcfa7ed89851a1afbd98959699b453fca6330f8650aa
+      legs: {type: template-reference, reference: legs}
+    eligibility:
+      state: qa-ready
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for the PC Paperdoll V2 collection.
+        - Production activation remains final-owner-gated; Android and TeaVM V2 remain disabled or compile-only.
+
+hairstyles:
+  - id: rare_spikes
+    label: Rare high spikes
+    selectorId: 1
+    assetId: hair_rare_spikes
+    source:
+      directory: content/appearance/v2/hairstyles/rare_spikes/masters
+      masterSha256:
+        north: a192ffd5e745b4e724dafa020806216a6226b31a132329ebe7a27bc9655746d5
+        north-west: 8d9437325b327932c28ed96fa690424c0eb6a8b0ceb00810697f5a8c4e0d5d8e
+        west: 6b35e2afd39b9181f636084ae5446eea26d2429f08d32380ba8df5ff6c7d115f
+        south-west: b2c32853dbd064fd6e060a0835883e67b012c1282137738644f1bb6798e390cb
+        south: 431e5f57c1c990cd78c2a8cc5ea7cce9d7dc4d2992c79cd13bf874c2704353b5
+        combat-west: f02bbda5c6c8283d8802448b0fbfca5995e2838950ad929069a14b9ed08c9dff
+    tintRole: hair
+    validation:
+      allowedMask: hair_allowed
+      requiredAttachment: scalp_attachment
+      connectivity: 4
+      maxComponents: 1
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: faded_buzzcut
+    label: Faded buzzcut
+    selectorId: 2
+    assetId: hair_faded_buzzcut
+    source:
+      directory: content/appearance/v2/hairstyles/faded_buzzcut/masters
+      masterSha256:
+        north: ca96275601b1d162a1a6e9222a182c2b5cac6a6f3fcbeaeed60681c8a61bdda5
+        north-west: 19b07b81e6c1e21552c9e5f0aa5546ec11ca4d7de21b080a405609b87a84972b
+        west: 797907058dfb3978f1784f300dd8bd60ef30f79ee2f690a9b9c6d47629c747fa
+        south-west: 6160d81752f32fa5f85e78e5c506c81a55a5e38ba16a27cb21e2ca45627befb9
+        south: 75419d3db35f475d406b199b1fd90ba416eb36a69e0143d897c77374496762b5
+        combat-west: 9f6118b032d46dbb5ea9456f60cd1d7865307e239622216083eed457b4f32712
+    tintRole: hair
+    validation: {allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: mohawk
+    label: Mohawk
+    selectorId: 3
+    assetId: hair_mohawk
+    source:
+      directory: content/appearance/v2/hairstyles/mohawk/masters
+      masterSha256:
+        north: e3c944c5599423a3f1a55f162a967addfee2b527b3f8ba9ee5dde57d944666cb
+        north-west: 6208a2e5491ca0d32fec12307d0d65d9eed02397e762662f50d5d3371173c1f2
+        west: ede85c99cf22e1ffd23e5b0fa91929bc68ffbb4afc016d806ac715ded51fb778
+        south-west: 9a29043f1ea59cc004e10ecc02c551494f337fc57358957eaf34bc01289327d9
+        south: 52b5aa9096ec6437da1e7d29b6e776a6e7d298b6f552ce26cc652d452209d116
+        combat-west: fd7f352119e17919b39dac2b60d1c1f3d65ea0e605b3dbb9d85fac8d28db64b8
+    tintRole: hair
+    validation: {allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: textured_crop
+    label: Textured crop
+    selectorId: 4
+    assetId: hair_textured_crop
+    source:
+      directory: content/appearance/v2/hairstyles/textured_crop/masters
+      masterSha256:
+        north: 9489e75438da9802dcd8046483cec4e9bf495bf57572a3d3f878be216bfdf50e
+        north-west: f49576daf1fcc0a68c9f2b9a974fc4d4bb604952892037ce6ec587d9904d5cd3
+        west: 076d1e9b0a69c2438dd75b2559d7aba3b211ea9c1b11ef6f94ba96779313e83b
+        south-west: baa0f73a6c99364f6f02b8eaeff5fe655a2ceacd35a172ac55b5abb7af9f520f
+        south: d334c0b654458ada067bae7e71caa6897885f3435a693fcab0a0d7a139152823
+        combat-west: 50c5967ab13b2dc4086c30270943004e8fe7c9bd34d07e04d028be0ff73ef101
+    tintRole: hair
+    validation: {allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: slick_back_undercut
+    label: Slick-back undercut
+    selectorId: 5
+    assetId: hair_slick_back_undercut
+    source:
+      directory: content/appearance/v2/hairstyles/slick_back_undercut/masters
+      masterSha256:
+        north: 6846b2028a79d8158d8293cae1b16aa689b45a39e3683a6d27c42d850be4c602
+        north-west: 79b017263cbc5d054a35ad6950a4fae546552745e42b8feb47122a195ab3060c
+        west: 1fb4e8d124574ff5640f63c39b198dd3278682980c99ec265f52ba02fe3ac5d6
+        south-west: 684a22644c95b9e2b404df218e200dd606480b5f68c1aa647faf6b6f05587290
+        south: c9681ec2706911db0d59cf4b6b93b12f6e2e253a85f4f5e0abb638c65f17422f
+        combat-west: d38ec10f620daa12463275a54ea6d61699ffd076488c07bbd30ebff1ea2f2a4d
+    tintRole: hair
+    validation: {allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+  - id: high_topknot
+    label: High topknot
+    selectorId: 6
+    assetId: hair_high_topknot
+    source:
+      directory: content/appearance/v2/hairstyles/high_topknot/masters
+      masterSha256:
+        north: 83a5f59c08dfa88f8ce656a3c2882f12b57b957350ba214c7804c6f15da03937
+        north-west: a1b3b4e17c512aa3c44681fcd62faa3f86fdbd4a0e6422ba67e685e1e003f7c6
+        west: 172e1b4dbddf74b6d957b0090ca8dd66a4bfca70b513f53a3bc3a220b7250825
+        south-west: 66d2ecb969a46a7db304daae9ba8aab4655c08f39faa6307aebb6cb55cfe2d9c
+        south: af60a381f8ae43a52e2640cb19b429e6288e037e13148bccd40e92249f450897
+        combat-west: 6915bca6ca7b80faa3ab53deb79cc48034bbd101eb6b6f35c6c0bfb1a944d857
+    tintRole: hair
+    validation: {allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    eligibility:
+      state: qa-ready
+      baseProfiles: [male, female]
+      platforms: [pc]
+      reasons:
+        - Deterministic validation and independent visual QA passed for both PC base profiles.
+        - Production activation remains final-owner-gated; nonzero hats use legacy fallback.
+        - Android and TeaVM V2 remain disabled or compile-only.
+
+stackGeneration:
+  controlPattern: "{base}_control"
+  nativeBasePattern: "{base}_native_base"
+  hairstylePattern: "{base}_{style}"
+
+qaCases:
+  - id: male_control
+    baseProfile: male
+    stack: male_control
+    selectorId: 0
+    requiredAssets: [male_legacy_head, male_legacy_body, male_legacy_legs]
+    maskRules: []
+    comparisonStack: null
+    tintDiagnostics: false
+    oracleScope: pack-only-full
+
+  - id: male_native_base
+    baseProfile: male
+    stack: male_native_base
+    selectorId: null
+    requiredAssets: [male_native_head, male_native_body, male_native_legs]
+    maskRules: []
+    comparisonStack: male_control
+    tintDiagnostics: false
+    oracleScope: native-slots-0-1-2
+
+  - id: female_control
+    baseProfile: female
+    stack: female_control
+    selectorId: 0
+    requiredAssets: [female_legacy_head, female_legacy_body, female_legacy_legs]
+    maskRules: []
+    comparisonStack: null
+    tintDiagnostics: false
+    oracleScope: pack-only-full
+
+  - id: female_native_base
+    baseProfile: female
+    stack: female_native_base
+    selectorId: null
+    requiredAssets: [female_native_head, female_native_body, female_native_legs]
+    maskRules: []
+    comparisonStack: female_control
+    tintDiagnostics: false
+    oracleScope: native-slots-0-1-2
+
+  - id: male_rare_spikes
+    baseProfile: male
+    stack: male_rare_spikes
+    selectorId: 1
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_rare_spikes]
+    maskRules:
+      - {asset: hair_rare_spikes, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_rare_spikes
+    baseProfile: female
+    stack: female_rare_spikes
+    selectorId: 1
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_rare_spikes]
+    maskRules:
+      - {asset: hair_rare_spikes, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: male_faded_buzzcut
+    baseProfile: male
+    stack: male_faded_buzzcut
+    selectorId: 2
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_faded_buzzcut]
+    maskRules:
+      - {asset: hair_faded_buzzcut, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_faded_buzzcut
+    baseProfile: female
+    stack: female_faded_buzzcut
+    selectorId: 2
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_faded_buzzcut]
+    maskRules:
+      - {asset: hair_faded_buzzcut, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: male_mohawk
+    baseProfile: male
+    stack: male_mohawk
+    selectorId: 3
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_mohawk]
+    maskRules:
+      - {asset: hair_mohawk, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_mohawk
+    baseProfile: female
+    stack: female_mohawk
+    selectorId: 3
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_mohawk]
+    maskRules:
+      - {asset: hair_mohawk, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: male_textured_crop
+    baseProfile: male
+    stack: male_textured_crop
+    selectorId: 4
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_textured_crop]
+    maskRules:
+      - {asset: hair_textured_crop, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_textured_crop
+    baseProfile: female
+    stack: female_textured_crop
+    selectorId: 4
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_textured_crop]
+    maskRules:
+      - {asset: hair_textured_crop, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: male_slick_back_undercut
+    baseProfile: male
+    stack: male_slick_back_undercut
+    selectorId: 5
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_slick_back_undercut]
+    maskRules:
+      - {asset: hair_slick_back_undercut, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_slick_back_undercut
+    baseProfile: female
+    stack: female_slick_back_undercut
+    selectorId: 5
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_slick_back_undercut]
+    maskRules:
+      - {asset: hair_slick_back_undercut, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: male_high_topknot
+    baseProfile: male
+    stack: male_high_topknot
+    selectorId: 6
+    requiredAssets: [male_native_head, male_native_body, male_native_legs, hair_high_topknot]
+    maskRules:
+      - {asset: hair_high_topknot, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: male_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+  - id: female_high_topknot
+    baseProfile: female
+    stack: female_high_topknot
+    selectorId: 6
+    requiredAssets: [female_native_head, female_native_body, female_native_legs, hair_high_topknot]
+    maskRules:
+      - {asset: hair_high_topknot, allowedMask: hair_allowed, requiredAttachment: scalp_attachment, connectivity: 4, maxComponents: 1}
+    comparisonStack: female_control
+    tintDiagnostics: true
+    oracleScope: native-slots-0-1-2
+
+hatOcclusionPolicy:
+  strategy: explicit-first-match
+  rules:
+    - id: no_hat
+      match: {hatAppearanceIds: [0]}
+      action: allow-v2
+      reason: No headwear can occlude native hair.
+    - id: unsupported_hat
+      match: {anyNonzeroHat: true}
+      action: fallback-legacy
+      reason: Per-hat native occlusion masks are not approved yet.

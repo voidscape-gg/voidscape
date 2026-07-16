@@ -1,0 +1,38 @@
+# Flat colors for the original Voidscape Void watchtower source mesh.
+# Textures, UVs, transparency, and external assets are intentionally absent.
+
+newmtl deep_void
+Ka 0.0000 0.0000 0.0000
+Kd 0.1059 0.0824 0.1294
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl voidstone_dark
+Ka 0.0000 0.0000 0.0000
+Kd 0.2039 0.1882 0.2353
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl voidstone_edge
+Ka 0.0000 0.0000 0.0000
+Kd 0.3059 0.2784 0.3451
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl gunmetal
+Ka 0.0000 0.0000 0.0000
+Kd 0.3961 0.3686 0.4314
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl bruised_violet
+Ka 0.0000 0.0000 0.0000
+Kd 0.4941 0.2314 0.5804
+Ks 0.0000 0.0000 0.0000
+illum 1
+
+newmtl beacon_violet
+Ka 0.0000 0.0000 0.0000
+Kd 0.7216 0.3804 0.8471
+Ks 0.0000 0.0000 0.0000
+illum 1
