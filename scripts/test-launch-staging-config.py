@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -230,7 +231,37 @@ class LaunchStagingConfigTest(unittest.TestCase):
         self.assertIn(
             'location ~ "^/(?!\\.well-known(?:/|$))(?:.*/)?\\."', package
         )
-        self.assertIn('location ~* "^/(?!assets/).+\\.', package)
+        self.assertIn('location ~* "^/[^/]+\\.mjs$"', package)
+        self.assertIn('location ~* "^/[^/]+\\.md$"', package)
+        snippet = package.split(
+            'cat > "$OUTPUT_DIR/ops/nginx/'
+            'voidscape-admin-public-block.location.conf"',
+            1,
+        )[1].split("\nEOF", 1)[0]
+        nginx_regexes = re.findall(
+            r'location ~\*? "([^"]+)" \{ return 404; \}', snippet
+        )
+        self.assertNotIn(
+            "location = /api/launcher/manifest.properties", snippet
+        )
+        self.assertNotIn("location ^~ /api/launcher/", snippet)
+        self.assertNotIn("location /api/launcher/", snippet)
+        self.assertTrue(
+            any(re.match(pattern, "/dev-server.mjs") for pattern in nginx_regexes)
+        )
+        self.assertTrue(
+            any(re.match(pattern, "/commerce-smoke.mjs") for pattern in nginx_regexes)
+        )
+        for public_path in (
+            "/api/launcher/manifest.properties",
+            "/styles.css",
+            "/landing.js",
+            "/assets/loot-editor-data.json",
+        ):
+            self.assertFalse(
+                any(re.match(pattern, public_path) for pattern in nginx_regexes),
+                public_path,
+            )
         self.assertGreaterEqual(package.count('--public-origin "https://'), 3)
         self.assertGreaterEqual(
             package.count("install -o root -g voidscape -m 0600"), 2

@@ -27,6 +27,20 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** VS-090 — founder starter card is account-wide instead of per character.
+- **Session preflight 2026-07-16 (VS-092):** branch
+  `codex/release-10139-integration`; VS-089 is committed and fully verified at
+  `6d70d5ee`, the worktree was clean at `6b4db905`, and its pre-change
+  `scripts/build.sh` passes. Ryan explicitly authorized emergency production portal
+  containment. The live Nginx snippet is already included by both public TLS server
+  blocks, but it contains only the older `/api/admin/` denial; status-only HEAD probes
+  confirm root backend `.mjs`, README, schema SQL, and build metadata still return
+  HTTP 200 on all three public origins. Pre-deploy inspection caught that VS-089's
+  proposed generic source-extension regex also includes `.properties`, so installing
+  it unchanged would intercept the legitimate
+  `/api/launcher/manifest.properties` route before the portal proxy. Plan: deploy a
+  backed-up, syntax-tested narrow containment rule that blocks root `.mjs`, README,
+  schemas, build metadata, and dotfiles while preserving the launcher manifest and
+  normal portal/play routes; then correct and verify the packaged template.
 - **Session preflight 2026-07-16 (VS-090):** branch
   `codex/release-10139-integration`; VS-089 is committed at `6d70d5ee`, readiness is
   recorded through `d9c0ec17`, the worktree is clean, and `scripts/build.sh` passes.
@@ -116,13 +130,16 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — Intake triage promoted the owner-confirmed
-  per-character reward defect to VS-090 and the protected-roster fail-open load defect
-  to VS-091. VS-090 is active; code evidence and the existing second-character
-  regression test establish the account-global behavior without a live claim.
-- **Next action:** obtain the three VS-090 reward-policy decisions named in its entry,
-  then implement the per-character ledger one bug at a time. Keep VS-091 queued next.
-  Do not deploy, push, or publish without separate authorization.
+- **Last session:** 2026-07-16 — completed owner-authorized VS-092 production
+  containment. The active Nginx state and access logs were backed up, the narrow rule
+  passed syntax validation and reload, and all three public origins passed the
+  69-request matrix and canonical hosted verifier without breaking the launcher
+  manifest, portal, or play page. The corrected repository template and regression
+  coverage pass the full build.
+- **Next action:** resume VS-090 by obtaining or applying the recorded owner policy for
+  deletion/recreation, native-launch stacking, and legacy bearer-code accounting;
+  implement and verify the per-character founder entitlement, then work VS-091. Do not
+  push, publish source, or deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -1080,6 +1097,35 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-092 — Emergency Nginx containment template overblocks the launcher manifest (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / nginx / release operations
+- Root cause: VS-089's generated Nginx source-extension denial included
+  `.properties`, so installing it unchanged would have intercepted the legitimate
+  `/api/launcher/manifest.properties` update channel before the portal proxy. The
+  defect was caught during the owner-authorized production-containment preflight,
+  before the unsafe rule was installed.
+- Fix: the generated boundary now denies only root runtime `.mjs` and documentation
+  `.md` files, hidden path segments except `.well-known`, schema paths, and exact
+  private build-contract metadata. Regression coverage proves those rules reject the
+  private runtime/support paths without matching the launcher manifest, public CSS,
+  JavaScript, or JSON assets. Production received the same narrow rule after backing
+  up its active snippet, site configuration, Nginx configuration, and access logs to
+  `/opt/voidscape/backups/vs092-portal-containment-20260716T184849Z`; the installed
+  snippet SHA-256 is
+  `a21ee841e920ba62ab15290d33e9861a903005a4bc9d44ba8e0622e40b3f7e5a`.
+- Verified 2026-07-16: `nginx -t`, reload, and service health passed. A 69-request
+  matrix across the apex, `www`, and sslip origins returned 404 for runtime `.mjs`,
+  README/schema/metadata, hidden, encoded, traversal-like, and admin paths while the
+  landing page, privacy page, CSS, favicon, public JSON asset, `/play/`, public APIs,
+  and `/api/launcher/manifest.properties` remained healthy. The canonical hosted
+  static-boundary verifier, focused packaging/config tests, portal API/schema suites,
+  and full `scripts/build.sh` passed. Available access logs showed no successful body
+  GET of backend `.mjs`, schema SQL, or build metadata; the only successful forbidden
+  body retrievals were two README requests, and no credential exposure was
+  established. The public visual smoke reached the portal and failed only its existing
+  AGPL source-link launch assertions, unrelated to this containment. No game,
+  database, client, Play Store, or source publication occurred.
 
 ### VS-089 — Portal static fallback exposes private runtime/source files (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / release packaging / source hygiene

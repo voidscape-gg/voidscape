@@ -610,7 +610,8 @@ location ^~ /api/admin/ {
 # and the release packager omits every file here except the required runtime and
 # metadata inputs.
 location ~ "^/(?!\.well-known(?:/|$))(?:.*/)?\." { return 404; }
-location ~* "^/(?!assets/).+\.(?:cjs|conf|env|gradle|java|json|kt|kts|lock|map|md|mjs|properties|py|sh|sql|toml|ts|tsx|xml|ya?ml)(?:/|$)" { return 404; }
+location ~* "^/[^/]+\.mjs$" { return 404; }
+location ~* "^/[^/]+\.md$" { return 404; }
 location = /dev-server.mjs { return 404; }
 location = /api-smoke.mjs { return 404; }
 location = /README.md { return 404; }

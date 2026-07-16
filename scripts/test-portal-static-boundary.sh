@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-static.XXXXXX")"
 PORTAL_ROOT="$TMP_ROOT/portal"
+ARTIFACT_ROOT="$TMP_ROOT/artifacts"
+CLIENT_JAR="$ARTIFACT_ROOT/Open_RSC_Client.jar"
+LAUNCHER_JAR="$ARTIFACT_ROOT/VoidscapeLauncher.jar"
+CLIENT_CACHE="$ARTIFACT_ROOT/Cache"
 PORTS=( $(python3 - <<'PY'
 import socket
 
@@ -37,9 +41,15 @@ python3 "$SCRIPT_DIR/package-portal-runtime.py" \
 	--repo-root "$REPO_ROOT" \
 	--target "$PORTAL_ROOT"
 cp web/portal/build-meta.json "$PORTAL_ROOT/build-meta.json"
+mkdir -p "$CLIENT_CACHE"
+touch "$CLIENT_JAR" "$LAUNCHER_JAR" "$CLIENT_CACHE/config85.jag"
 
 for index in 0 1 2; do
 	PORT="${PORTS[$index]}" PORTAL_DATA_DIR="$TMP_ROOT/data-$index" \
+		PORTAL_PC_CLIENT_JAR="$CLIENT_JAR" \
+		PORTAL_CLIENT_CACHE_DIR="$CLIENT_CACHE" \
+		PORTAL_LAUNCHER_JAR="$LAUNCHER_JAR" \
+		PORTAL_CLIENT_VERSION=10139 \
 		node "$PORTAL_ROOT/dev-server.mjs" >"$TMP_ROOT/portal-$index.log" 2>&1 &
 	PIDS+=("$!")
 done
@@ -95,7 +105,7 @@ expect_status 404 /dev-server.mjs -X POST
 
 for path in \
 	/dev-server.mjs /%64ev-server.mjs /%2564ev-server.mjs /DEV-SERVER.MJS \
-	'/dev-server.mjs?probe=1' /% /api-smoke.mjs /README.md \
+	'/dev-server.mjs?probe=1' /% /api-smoke.mjs /commerce-smoke.mjs /README.md \
 	/schema /schema/sqlite/001_web_accounts.sql /build-meta.json \
 	/public-static-contract.json /.env /.git/config /unknown.js /unknown.sql \
 	/unknown.json /assets/private.mjs /assets/private.json /assets/ \

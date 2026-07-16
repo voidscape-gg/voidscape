@@ -204,7 +204,11 @@ async function verifyPortalHealth() {
 async function verifyPublicStaticBoundary() {
 	for (const publicBase of args.adminPublicUrls) {
 		const label = new URL(publicBase).host;
-		for (const path of ["/styles.css", "/assets/favicon.png"]) {
+		for (const path of [
+			"/styles.css",
+			"/assets/favicon.png",
+			"/api/launcher/manifest.properties"
+		]) {
 			const response = await requestStatusOnly(path, publicBase);
 			assertCheck(`public static file available on ${label}: ${path}`, response.status === 200, `HTTP ${response.status}`);
 		}
@@ -214,7 +218,9 @@ async function verifyPublicStaticBoundary() {
 			"/%2564ev-server.mjs",
 			"/DEV-SERVER.MJS",
 			"/api-smoke.mjs",
+			"/commerce-smoke.mjs",
 			"/README.md",
+			"/schema/README.md",
 			"/schema/sqlite/001_web_accounts.sql",
 			"/schema%2fsqlite%2f001_web_accounts.sql",
 			"/build-meta.json",

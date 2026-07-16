@@ -27,6 +27,25 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Production portal containment preserves the launcher update channel
+
+Emergency production containment now blocks root backend `.mjs` and documentation
+files, schemas, private build metadata, hidden paths, and public admin routes without
+matching `/api/launcher/manifest.properties` or ordinary public assets. Pre-deploy
+review caught and removed VS-089's overbroad `.properties` denial before it reached
+production. The active Nginx state and logs were backed up at
+`/opt/voidscape/backups/vs092-portal-containment-20260716T184849Z`; the installed
+snippet has SHA-256
+`a21ee841e920ba62ab15290d33e9861a903005a4bc9d44ba8e0622e40b3f7e5a`.
+Nginx syntax/reload checks, a 69-request matrix on the apex, `www`, and sslip origins,
+the canonical hosted verifier, portal API/schema tests, focused regressions, and
+`scripts/build.sh` pass. Available logs showed no successful body GET of backend
+`.mjs`, schema SQL, or build metadata; only two README body requests succeeded, with
+no established credential exposure. This changes only Nginx/release verification; no
+game, database, client, Play Store, or source deployment occurred. The backed-up live
+snippet remains the operational rollback point, although restoring it would reopen the
+contained exposure.
+
 ### 2026-07-16 - Launch profile preserves the tested Voidscape world
 
 The machine-checked launch config now freezes every established player-facing difference from its secret-free preservation base instead of relying on ignored `server/local.conf` values. In addition to the existing custom landscape, Enclave, Rift, rates, banking, and production-safety gates, the contract explicitly keeps Voidscape's graphics/XP/inventory toggles, batching and Drop-X, numeric menu labels, direct global chat and country flags, Auction House, four announcement families, right-click Trade, improved shaft yields, melee/ranged successful-hit XP, avatar generation, and telemetry window; Dungeon and Colossus remain launch-disabled, command lockdown remains enabled, and secrets remain absent. A focused regression locks the reviewed profile. Fresh servers with avatar generation enabled now create the ignored avatar runtime directory before writing and fail clearly if it is unusable; generated deployment instructions also prepare the production directory with service ownership. Exact held 10139 desktop/web/APK/AAB asset hashing proved the Rift model and custom landscape were never missing, while the failing rehearsal was a stale 10125 candidate plus a preservation-derived local config. The corrected loopback rehearsal loaded 1,680 custom-landscape regions, 26 Enclave locs, seven Rift locs, the Auction NPC and Market service; Workbench captures under `tmp/release-candidate-10139-local/{corrected-workbench,final-fixed-workbench}/screenshots/` show the Enclave/Rift terrain and restored XP-drop setting, and a logout from a server with no pre-existing `avatars/` directory created a valid 64x102 PNG. Config tests, hosted config-only verification under `tmp/vs088-generated-config-verification/`, the avatar file-store test, and `scripts/build.sh` pass. This changes server configuration, fresh-install avatar output handling, release tests, and operator documentation only: cohort 10139, packets, opcodes, schemas, cache assets, desktop/TeaVM/APK/AAB client bytes, and live systems are unchanged. Reversibility is removing the expanded contract and avatar-directory preparation, which would restore preservation-default drift and fresh-install avatar write failures.
